@@ -1,0 +1,22 @@
+{
+  "name": "okresni-masina",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "tsc --build",
+    "db:generate": "npm run db:generate --workspace=packages/db",
+    "db:migrate:local": "npm run db:migrate:local --workspace=apps/api"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

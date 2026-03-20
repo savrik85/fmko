@@ -1,0 +1,9 @@
+name = "okresni-masina-api"
+main = "src/index.ts"
+compatibility_date = "2025-03-14"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "okresni-masina-db"
+database_id = "local"
+migrations_dir = "../../packages/db/drizzle"
