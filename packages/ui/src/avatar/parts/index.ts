@@ -1,0 +1,9 @@
+export { Head } from "./heads";
+export { Eyes } from "./eyes";
+export { Nose } from "./noses";
+export { Mouth } from "./mouths";
+export { Ears } from "./ears";
+export { Body } from "./bodies";
+export { Hair } from "./hair";
+export { FacialHair } from "./facial-hair";
+export { Glasses } from "./glasses";
