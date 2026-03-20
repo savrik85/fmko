@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  /* === Barevná paleta === */
+  --color-pitch-400: #3A7A3A;
+  --color-pitch-500: #2D5F2D;
+  --color-pitch-600: #1E4A1E;
+  --color-gold-400: #D4B445;
+  --color-gold-500: #C4A035;
+  --color-gold-600: #A88A2A;
+  --color-card-red: #D94032;
+  --color-card-yellow: #F5C542;
+  --color-paper: #F5F0E8;
+  --color-muted: #8B8578;
+
+  /* === Typografie === */
+  --font-heading: "Barlow Condensed", ui-sans-serif, sans-serif;
+  --font-body: "Inter", ui-sans-serif, sans-serif;
+  --font-commentary: "JetBrains Mono", ui-monospace, monospace;
+
+  /* === Zaoblení === */
+  --radius-card: 12px;
+
+  /* === Stíny === */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* === Google Fonts === */
+@import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+
+/* === Base styles === */
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-paper);
+  color: #1a1a1a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular numbers for stats */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
