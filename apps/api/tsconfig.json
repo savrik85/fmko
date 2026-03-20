@@ -1,14 +1,22 @@
 {
-  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "outDir": "dist",
-    "rootDir": "src",
-    "composite": true,
-    "types": ["@cloudflare/workers-types"]
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "types": ["@cloudflare/workers-types"],
+    "paths": {
+      "@okresni-masina/shared": ["../../packages/shared/src/index.ts"],
+      "@okresni-masina/shared/*": ["../../packages/shared/src/*"],
+      "@okresni-masina/db": ["../../packages/db/src/index.ts"],
+      "@okresni-masina/db/*": ["../../packages/db/src/*"]
+    }
   },
-  "include": ["src"],
-  "references": [
-    { "path": "../../packages/shared" },
-    { "path": "../../packages/db" }
-  ]
+  "include": ["src"]
 }
