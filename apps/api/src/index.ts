@@ -1,5 +1,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { auth } from "./routes/auth";
+import { villagesRouter } from "./routes/villages";
+import { teamsRouter } from "./routes/teams";
 
 export type Bindings = {
   DB: D1Database;
@@ -24,35 +27,10 @@ app.get("/health", (c) => {
   return c.json({ status: "ok" });
 });
 
-// Seed data routes (read from R2)
-app.get("/api/seed/villages", async (c) => {
-  const cached = await c.env.CACHE_KV.get("seed:villages");
-  if (cached) return c.json(JSON.parse(cached));
-
-  const obj = await c.env.SEED_DATA.get("villages.json");
-  if (!obj) return c.json({ error: "Villages data not found" }, 404);
-
-  const data = await obj.text();
-  await c.env.CACHE_KV.put("seed:villages", data, { expirationTtl: 86400 });
-  return c.json(JSON.parse(data));
-});
-
-app.get("/api/seed/surnames/:regionCode", async (c) => {
-  const obj = await c.env.SEED_DATA.get("surnames_by_region.json");
-  if (!obj) return c.json({ error: "Surnames data not found" }, 404);
-
-  const data = JSON.parse(await obj.text());
-  const regionCode = c.req.param("regionCode");
-  const region = data[regionCode];
-  if (!region) return c.json({ error: "Region not found" }, 404);
-  return c.json(region);
-});
-
-app.get("/api/seed/firstnames", async (c) => {
-  const obj = await c.env.SEED_DATA.get("firstnames_by_decade.json");
-  if (!obj) return c.json({ error: "Firstnames data not found" }, 404);
-  return c.json(JSON.parse(await obj.text()));
-});
+// Routes
+app.route("/auth", auth);
+app.route("/api/villages", villagesRouter);
+app.route("/api/teams", teamsRouter);
 
 // Scheduled handler (cron trigger for between-round simulation)
 export default {
