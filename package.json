@@ -6,14 +6,17 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=apps/api",
+    "dev": "turbo dev",
+    "dev:api": "npm run dev --workspace=apps/api",
     "dev:web": "npm run dev --workspace=apps/web",
-    "build": "npm run build --workspaces --if-present",
-    "typecheck": "tsc --build",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
     "db:generate": "npm run db:generate --workspace=packages/db",
-    "db:migrate:local": "npm run db:migrate:local --workspace=apps/api"
+    "db:migrate:local": "npm run db:migrate:local --workspace=apps/api",
+    "seed:upload": "node scripts/upload-seed.mjs"
   },
   "devDependencies": {
+    "turbo": "^2.4.0",
     "typescript": "^5.7.0"
   },
   "engines": {

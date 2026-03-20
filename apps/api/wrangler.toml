@@ -2,8 +2,27 @@ name = "okresni-masina-api"
 main = "src/index.ts"
 compatibility_date = "2025-03-14"
 
+# D1 Database
 [[d1_databases]]
 binding = "DB"
 database_name = "okresni-masina-db"
 database_id = "local"
 migrations_dir = "../../packages/db/drizzle"
+
+# KV Namespaces — session, cache, leaderboardy
+[[kv_namespaces]]
+binding = "SESSION_KV"
+id = "local"
+
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "local"
+
+# R2 Bucket — seed data (obce, jména), avatary
+[[r2_buckets]]
+binding = "SEED_DATA"
+bucket_name = "okresni-masina-seed"
+
+# Cron Triggers — mezikolová simulace
+[triggers]
+crons = ["0 6 * * *"]  # Každý den v 6:00 UTC
