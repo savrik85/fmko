@@ -1,0 +1,143 @@
+"""
+FMK-27: Křestní jména dle ročníku narození.
+
+Generuje vážené sady křestních jmen pro každou dekádu.
+Data vychází z veřejných statistik ČSÚ o oblíbenosti jmen.
+
+Výstup: data/seed/firstnames_by_decade.json
+"""
+
+import json
+from pathlib import Path
+
+OUTPUT_DIR = Path(__file__).parent.parent.parent / "data" / "seed"
+
+# Mužská křestní jména vážená dle dekády narození
+# Váhy = přibližná relativní četnost v dané dekádě
+MALE_FIRSTNAMES = {
+    "1960s": {
+        "Jiří": 0.08, "Jan": 0.07, "Petr": 0.06, "Josef": 0.06,
+        "Jaroslav": 0.05, "Milan": 0.05, "Karel": 0.05, "Miroslav": 0.05,
+        "Zdeněk": 0.04, "František": 0.04, "Vladimír": 0.04, "Václav": 0.04,
+        "Pavel": 0.04, "Stanislav": 0.03, "Ladislav": 0.03, "Bohumil": 0.03,
+        "Ivan": 0.03, "Rudolf": 0.02, "Oldřich": 0.02, "Lubomír": 0.02,
+        "Antonín": 0.02, "Miloslav": 0.02, "Vlastimil": 0.02, "Jindřich": 0.02,
+        "Jaromír": 0.02, "Bedřich": 0.01, "Bohuslav": 0.01, "Otakar": 0.01,
+    },
+    "1970s": {
+        "Petr": 0.08, "Jan": 0.07, "Martin": 0.06, "Jiří": 0.06,
+        "Pavel": 0.05, "Miroslav": 0.05, "Jaroslav": 0.05, "Milan": 0.04,
+        "Tomáš": 0.04, "Karel": 0.04, "Josef": 0.04, "Zdeněk": 0.04,
+        "Vladimír": 0.03, "Stanislav": 0.03, "Roman": 0.03, "Michal": 0.03,
+        "Radek": 0.03, "David": 0.02, "Václav": 0.02, "Aleš": 0.02,
+        "Ladislav": 0.02, "Luboš": 0.02, "Robert": 0.02, "Marek": 0.02,
+        "Lubomír": 0.02, "Dušan": 0.01, "Ivo": 0.01, "Kamil": 0.01,
+    },
+    "1980s": {
+        "Jan": 0.08, "Petr": 0.07, "Martin": 0.07, "Tomáš": 0.06,
+        "Pavel": 0.05, "Michal": 0.05, "David": 0.05, "Jiří": 0.04,
+        "Lukáš": 0.04, "Roman": 0.04, "Radek": 0.03, "Miroslav": 0.03,
+        "Marek": 0.03, "Jakub": 0.03, "Ondřej": 0.03, "Filip": 0.03,
+        "Robert": 0.02, "Milan": 0.02, "Aleš": 0.02, "Karel": 0.02,
+        "Daniel": 0.02, "Zdeněk": 0.02, "Kamil": 0.02, "Libor": 0.02,
+        "Josef": 0.01, "Stanislav": 0.01, "René": 0.01, "Igor": 0.01,
+    },
+    "1990s": {
+        "Jan": 0.09, "Tomáš": 0.07, "Martin": 0.06, "Jakub": 0.06,
+        "David": 0.06, "Lukáš": 0.05, "Ondřej": 0.05, "Michal": 0.05,
+        "Filip": 0.04, "Adam": 0.04, "Petr": 0.04, "Daniel": 0.04,
+        "Marek": 0.03, "Vojtěch": 0.03, "Pavel": 0.03, "Matěj": 0.03,
+        "Dominik": 0.03, "Jiří": 0.02, "Patrik": 0.02, "Štěpán": 0.02,
+        "Radek": 0.02, "Roman": 0.02, "Robert": 0.01, "Aleš": 0.01,
+        "Kamil": 0.01, "Tadeáš": 0.01, "Kryštof": 0.01, "Šimon": 0.01,
+    },
+    "2000s": {
+        "Jakub": 0.08, "Jan": 0.07, "Tomáš": 0.06, "Adam": 0.06,
+        "Matěj": 0.06, "Ondřej": 0.05, "Filip": 0.05, "Vojtěch": 0.05,
+        "Lukáš": 0.04, "David": 0.04, "Daniel": 0.04, "Dominik": 0.04,
+        "Martin": 0.03, "Šimon": 0.03, "Kryštof": 0.03, "Štěpán": 0.03,
+        "Michal": 0.03, "Patrik": 0.02, "Marek": 0.02, "Petr": 0.02,
+        "Tadeáš": 0.02, "Jiří": 0.02, "Pavel": 0.01, "Radek": 0.01,
+        "Aleš": 0.01, "Samuel": 0.01, "Tobias": 0.01, "Oliver": 0.01,
+    },
+    "2010s": {
+        "Jakub": 0.07, "Jan": 0.07, "Adam": 0.06, "Tomáš": 0.05,
+        "Vojtěch": 0.05, "Filip": 0.05, "Matěj": 0.05, "Ondřej": 0.04,
+        "Šimon": 0.04, "Lukáš": 0.04, "David": 0.04, "Daniel": 0.04,
+        "Dominik": 0.03, "Matyáš": 0.03, "Kryštof": 0.03, "Štěpán": 0.03,
+        "Martin": 0.03, "Michal": 0.02, "Samuel": 0.02, "Oliver": 0.02,
+        "Tobias": 0.02, "Tadeáš": 0.02, "Patrik": 0.02, "Marek": 0.02,
+        "Petr": 0.01, "Jiří": 0.01, "Theodor": 0.01, "Sebastian": 0.01,
+    },
+}
+
+# Ženská jména (pro budoucí použití — partnerky, matky)
+FEMALE_FIRSTNAMES = {
+    "1960s": {
+        "Jana": 0.08, "Marie": 0.07, "Eva": 0.06, "Hana": 0.05,
+        "Věra": 0.05, "Jiřina": 0.05, "Ludmila": 0.04, "Helena": 0.04,
+        "Alena": 0.04, "Jaroslava": 0.04, "Miroslava": 0.03, "Božena": 0.03,
+        "Zdeňka": 0.03, "Vlasta": 0.03, "Marta": 0.03, "Milada": 0.02,
+        "Jarmila": 0.02, "Libuše": 0.02, "Růžena": 0.02, "Anna": 0.02,
+    },
+    "1970s": {
+        "Jana": 0.08, "Eva": 0.07, "Petra": 0.06, "Hana": 0.06,
+        "Lenka": 0.05, "Martina": 0.05, "Alena": 0.04, "Iveta": 0.04,
+        "Marie": 0.04, "Helena": 0.03, "Věra": 0.03, "Monika": 0.03,
+        "Marcela": 0.03, "Dana": 0.03, "Jitka": 0.03, "Ivana": 0.03,
+        "Renata": 0.02, "Gabriela": 0.02, "Zuzana": 0.02, "Andrea": 0.02,
+    },
+    "1980s": {
+        "Petra": 0.07, "Jana": 0.07, "Lenka": 0.06, "Lucie": 0.06,
+        "Martina": 0.05, "Kateřina": 0.05, "Hana": 0.04, "Eva": 0.04,
+        "Monika": 0.04, "Zuzana": 0.04, "Andrea": 0.03, "Veronika": 0.03,
+        "Michaela": 0.03, "Gabriela": 0.03, "Markéta": 0.03, "Pavlína": 0.03,
+        "Tereza": 0.03, "Iveta": 0.02, "Dana": 0.02, "Simona": 0.02,
+    },
+    "1990s": {
+        "Tereza": 0.07, "Kateřina": 0.07, "Lucie": 0.06, "Petra": 0.05,
+        "Veronika": 0.05, "Michaela": 0.05, "Markéta": 0.04, "Jana": 0.04,
+        "Kristýna": 0.04, "Nikola": 0.04, "Barbora": 0.03, "Pavlína": 0.03,
+        "Lenka": 0.03, "Andrea": 0.03, "Monika": 0.03, "Anna": 0.03,
+        "Klára": 0.02, "Adéla": 0.02, "Simona": 0.02, "Denisa": 0.02,
+    },
+    "2000s": {
+        "Tereza": 0.07, "Anna": 0.06, "Kristýna": 0.06, "Kateřina": 0.05,
+        "Lucie": 0.05, "Barbora": 0.05, "Eliška": 0.05, "Adéla": 0.04,
+        "Veronika": 0.04, "Klára": 0.04, "Nikola": 0.03, "Natálie": 0.03,
+        "Markéta": 0.03, "Michaela": 0.03, "Karolína": 0.03, "Petra": 0.03,
+        "Nela": 0.02, "Simona": 0.02, "Denisa": 0.02, "Sára": 0.02,
+    },
+    "2010s": {
+        "Eliška": 0.07, "Anna": 0.06, "Tereza": 0.05, "Adéla": 0.05,
+        "Natálie": 0.05, "Barbora": 0.05, "Karolína": 0.04, "Nela": 0.04,
+        "Klára": 0.04, "Kristýna": 0.04, "Lucie": 0.03, "Sára": 0.03,
+        "Kateřina": 0.03, "Veronika": 0.03, "Ema": 0.03, "Sofie": 0.03,
+        "Markéta": 0.03, "Viktorie": 0.02, "Julie": 0.02, "Ella": 0.02,
+    },
+}
+
+
+def main():
+    print("Generuji křestní jména dle dekády...")
+
+    output = {
+        "male": MALE_FIRSTNAMES,
+        "female": FEMALE_FIRSTNAMES,
+    }
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = OUTPUT_DIR / "firstnames_by_decade.json"
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+
+    print(f"Hotovo! Uloženo do {output_path}")
+    for gender, decades in output.items():
+        print(f"  {gender}: {len(decades)} dekád")
+        for decade, names in decades.items():
+            print(f"    {decade}: {len(names)} jmen")
+
+
+if __name__ == "__main__":
+    main()
