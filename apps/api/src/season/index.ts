@@ -8,3 +8,5 @@ export { simulateTraining } from "./training";
 export type { TrainingType, TrainingApproach, TrainingPlan, TrainingResult } from "./training";
 export { generateSponsors, calculateMatchIncome, calculateMatchExpenses, calculateMonthlyBudget } from "./economy";
 export type { Sponsor, MatchIncome, MatchDayExpenses, MonthlyBudget } from "./economy";
+export { generateNamingOffers, generateArenaOffers } from "./naming-rights";
+export type { NamingType, NamingRightsOffer, ArenaRightsOffer } from "./naming-rights";
