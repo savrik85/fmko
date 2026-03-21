@@ -237,7 +237,7 @@ export function generatePlayer(
     ears: rng.int(1, 4),
     hair: hairStyle,
     hairColor,
-    skinTone: rng.pick(SKIN_TONES),
+    skinTone: rng.weighted({ light: 0.45, medium_light: 0.40, medium: 0.12, medium_dark: 0.02, dark: 0.01 }),
     facialHair: rng.pick(FACIAL_HAIR),
     glasses: rng.pick(GLASSES),
     accessories: [],
