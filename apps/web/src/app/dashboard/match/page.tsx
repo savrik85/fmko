@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, type Player } from "@/lib/api";
 import { SmsRoulette, type SmsMessage } from "@/components/match/sms-roulette";
 import { LiveMatch } from "@/components/match/live-match";
 
@@ -26,24 +26,39 @@ export default function MatchPage() {
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
 
   // Load absences on mount
-  useState(() => {
+  useEffect(() => {
     if (!teamId) return;
-    apiFetch<Array<{ firstName: string; lastName: string; nickname: string; position: string; available: boolean; absence: { reason: string; emoji: string; smsText: string } | null }>>(`/api/teams/${teamId}/absences`)
+    apiFetch<Array<{ id: string; firstName: string; lastName: string; nickname: string; position: string; available: boolean; absence: { reason: string; emoji: string; smsText: string } | null }>>(`/api/teams/${teamId}/absences`)
       .then((data) => {
         const messages: SmsMessage[] = data.map((p) => ({
           playerName: `${p.firstName} ${p.lastName}`,
           nickname: p.nickname || null,
           status: p.available ? "available" as const : "unavailable" as const,
           message: p.available
-            ? ["Jasně, tam budu.", "Jo.", "Počítej se mnou.", "👍"][Math.floor(Math.random() * 4)]
+            ? ["Jasně, tam budu.", "Jo.", "Počítej se mnou.", "\u{1F44D}"][Math.floor(Math.random() * 4)]
             : p.absence?.smsText ?? "Nemůžu.",
           avatarInitial: p.firstName[0],
         }));
         setSmsMessages(messages);
         setPhase("sms");
       })
-      .catch(() => setPhase("sms"));
-  });
+      .catch(() => {
+        // Fallback: load players and treat all as available
+        apiFetch<Player[]>(`/api/teams/${teamId}/players`)
+          .then((players) => {
+            const messages: SmsMessage[] = players.map((p) => ({
+              playerName: `${p.first_name} ${p.last_name}`,
+              nickname: p.nickname || null,
+              status: "available" as const,
+              message: ["Jasně, tam budu.", "Jo.", "Počítej se mnou.", "\u{1F44D}"][Math.floor(Math.random() * 4)],
+              avatarInitial: p.first_name[0],
+            }));
+            setSmsMessages(messages);
+            setPhase("sms");
+          })
+          .catch(() => setPhase("sms"));
+      });
+  }, [teamId]);
 
   async function handleSimulate() {
     if (!teamId) return;
