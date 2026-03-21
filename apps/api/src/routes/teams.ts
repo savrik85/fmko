@@ -14,18 +14,14 @@ import { generateSquad } from "../generators/player";
 import { generateNickname } from "../generators/nickname";
 import { generateRelationships } from "../generators/relationships";
 import { generateDescription } from "../generators/description-generator";
+import { generateFieldSkills, generateGKSkills, generateHiddenTalent, calculateOverallRating } from "../skills/generator";
+import { generateSeasonCalendar } from "../season/calendar";
+import { generateSchedule, totalRounds } from "../league/schedule";
 
 const teamsRouter = new Hono<{ Bindings: Bindings }>();
 
 function uuid(): string {
   return crypto.randomUUID();
-}
-
-function overallRating(position: string, skills: Record<string, number>): number {
-  if (position === "GK") return Math.round((skills.goalkeeping * 2 + skills.defense + skills.passing) / 4);
-  if (position === "DEF") return Math.round((skills.defense * 2 + skills.heading + skills.speed) / 4);
-  if (position === "MID") return Math.round((skills.technique + skills.passing * 2 + skills.speed) / 4);
-  return Math.round((skills.shooting * 2 + skills.speed + skills.technique) / 4);
 }
 
 // POST /api/teams
@@ -98,31 +94,47 @@ teamsRouter.post("/", async (c) => {
   const squad = generateSquad(rng, villageInfo, surnameData, firstnameData);
   const usedNicknames = new Set<string>();
   const playerIds: string[] = [];
+  const villageSize = village.size as string;
 
   for (const player of squad) {
     const nickname = generateNickname(rng, player, usedNicknames) ?? "";
     const pid = uuid();
     playerIds.push(pid);
 
-    const skills = { speed: player.speed, technique: player.technique, shooting: player.shooting, passing: player.passing, heading: player.heading, defense: player.defense, goalkeeping: player.goalkeeping };
-    const physical = { stamina: player.stamina, strength: player.strength, injuryProneness: player.injuryProneness };
-    const personality = { discipline: player.discipline, patriotism: player.patriotism, alcohol: player.alcohol, temper: player.temper };
-    const lifeContext = { occupation: player.occupation, condition: player.condition, morale: player.morale };
-    const rating = overallRating(player.position, skills);
+    // Skill v2: 0-100 s talent capem
+    const isGK = player.position === "GK";
+    const fieldSkills = !isGK ? generateFieldSkills(rng, player.position as "DEF" | "MID" | "FWD", villageSize, player.age) : null;
+    const gkSkills = isGK ? generateGKSkills(rng, villageSize, player.age) : null;
+    const hiddenTalent = generateHiddenTalent(rng, villageSize);
+
+    // Skills JSON — current values for display (backward compatible)
+    const skillsCurrent = isGK
+      ? { speed: 0, technique: 0, shooting: 0, passing: gkSkills!.distribution.current, heading: 0, defense: 0, goalkeeping: gkSkills!.reflexes.current }
+      : { speed: fieldSkills!.speed.current, technique: fieldSkills!.technique.current, shooting: fieldSkills!.shooting.current, passing: fieldSkills!.passing.current, heading: fieldSkills!.heading.current, defense: fieldSkills!.defense.current, goalkeeping: 0 };
+
+    const physical = { stamina: isGK ? (gkSkills!.strength.current) : fieldSkills!.stamina.current, strength: isGK ? gkSkills!.strength.current : fieldSkills!.strength.current, injuryProneness: rng.int(10, 80) };
+    const personality = { discipline: rng.int(10, 90), patriotism: rng.int(20, 90), alcohol: rng.int(5, 85), temper: rng.int(10, 80) };
+    const lifeContext = { occupation: player.occupation, condition: 100, morale: 50 + rng.int(-15, 15) };
+    const rating = calculateOverallRating(player.position, isGK ? gkSkills! : fieldSkills!, hiddenTalent);
+
+    // Full skills JSON with maxPotential (stored in skills_max)
+    const skillsMax = isGK ? gkSkills : fieldSkills;
 
     const description = generateDescription(rng, {
       firstName: player.firstName, lastName: player.lastName, nickname,
       age: player.age, position: player.position, occupation: player.occupation,
-      bodyType: player.bodyType, alcohol: player.alcohol, discipline: player.discipline,
-      speed: player.speed, shooting: player.shooting, technique: player.technique,
-      patriotism: player.patriotism,
+      bodyType: player.bodyType, alcohol: personality.alcohol, discipline: personality.discipline,
+      speed: skillsCurrent.speed, shooting: skillsCurrent.shooting, technique: skillsCurrent.technique,
+      patriotism: personality.patriotism,
     });
 
     await c.env.DB.prepare(
-      "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(pid, teamId, player.firstName, player.lastName, nickname, player.age, player.position, rating,
-      JSON.stringify(skills), JSON.stringify(physical), JSON.stringify(personality),
-      JSON.stringify(lifeContext), JSON.stringify(player.avatarConfig), description).run();
+      JSON.stringify(skillsCurrent), JSON.stringify(physical), JSON.stringify(personality),
+      JSON.stringify(lifeContext), JSON.stringify(player.avatarConfig), description,
+      JSON.stringify(skillsMax), hiddenTalent, isGK ? (gkSkills!.experience.current) : (fieldSkills!.experience.current),
+    ).run();
   }
 
   // Relationships
@@ -133,7 +145,33 @@ teamsRouter.post("/", async (c) => {
     ).bind(uuid(), playerIds[rel.playerAIndex], playerIds[rel.playerBIndex], rel.type).run();
   }
 
-  return c.json({ id: teamId, name: body.name, village: village.name, playersCount: squad.length }, 201);
+  // Generate league + AI teams
+  const leagueId = uuid();
+  const leagueName = `Okresní přebor ${village.district as string}`;
+
+  await c.env.DB.prepare(
+    "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget, league_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind("__update__", "", "", "", "", "", 0, "").run().catch(() => {});
+
+  // Update player team with league
+  // Create league (reuse matches table for schedule later)
+  const numTeams = 14;
+  const rounds = totalRounds(numTeams);
+
+  // For now: store league info as simple metadata
+  // Full league generation (AI teams + calendar) happens when first match is requested
+  await c.env.DB.prepare(
+    "UPDATE teams SET league_id = ? WHERE id = ?"
+  ).bind(leagueId, teamId).run();
+
+  return c.json({
+    id: teamId,
+    name: body.name,
+    village: village.name,
+    playersCount: squad.length,
+    leagueId,
+    leagueName,
+  }, 201);
 });
 
 // GET /api/teams/:id
