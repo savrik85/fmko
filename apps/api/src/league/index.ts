@@ -6,3 +6,5 @@ export { generateSchedule, totalRounds } from "./schedule";
 export type { ScheduledMatch } from "./schedule";
 export { calculateStandings } from "./standings";
 export type { StandingEntry } from "./standings";
+export { calculatePromotions, getPromotionEffects } from "./promotion";
+export type { LeagueLevel, PromotionResult, SeasonEndEffect } from "./promotion";
