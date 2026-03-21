@@ -2,68 +2,90 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { apiFetch } from "@/lib/api";
 
-interface TeamContextValue {
+interface AuthState {
+  token: string | null;
+  userId: string | null;
+  email: string | null;
   teamId: string | null;
   teamName: string | null;
-  setTeam: (id: string, name: string) => void;
-  clearTeam: () => void;
   isLoading: boolean;
+}
+
+interface TeamContextValue extends AuthState {
+  login: (token: string, user: { id: string; email: string; teamId: string | null; teamName: string | null }) => void;
+  setTeam: (id: string, name: string) => void;
+  logout: () => void;
 }
 
 const TeamContext = createContext<TeamContextValue | null>(null);
 
-const STORAGE_KEY = "om_team_id";
-const STORAGE_NAME_KEY = "om_team_name";
-
-const PUBLIC_PATHS = ["/", "/onboarding"];
+const STORAGE_TOKEN = "om_token";
+const PUBLIC_PATHS = ["/", "/login", "/register"];
 
 export function TeamProvider({ children }: { children: ReactNode }) {
-  const [teamId, setTeamId] = useState<string | null>(null);
-  const [teamName, setTeamName] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [state, setState] = useState<AuthState>({
+    token: null, userId: null, email: null, teamId: null, teamName: null, isLoading: true,
+  });
   const router = useRouter();
   const pathname = usePathname();
 
-  // Load from localStorage on mount
+  // Load token on mount, verify with /auth/me
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    const storedName = localStorage.getItem(STORAGE_NAME_KEY);
-    if (stored) {
-      setTeamId(stored);
-      setTeamName(storedName);
+    const stored = localStorage.getItem(STORAGE_TOKEN);
+    if (!stored) {
+      setState((s) => ({ ...s, isLoading: false }));
+      return;
     }
-    setIsLoading(false);
+
+    apiFetch<{ id: string; email: string; teamId: string | null; teamName: string | null }>("/auth/me", {
+      headers: { Authorization: `Bearer ${stored}` },
+    })
+      .then((user) => {
+        setState({
+          token: stored, userId: user.id, email: user.email,
+          teamId: user.teamId, teamName: user.teamName, isLoading: false,
+        });
+      })
+      .catch(() => {
+        localStorage.removeItem(STORAGE_TOKEN);
+        setState({ token: null, userId: null, email: null, teamId: null, teamName: null, isLoading: false });
+      });
   }, []);
 
   // Redirect logic
   useEffect(() => {
-    if (isLoading) return;
-
+    if (state.isLoading) return;
     const isPublic = PUBLIC_PATHS.includes(pathname);
-    const isOnboarding = pathname.startsWith("/onboarding") || pathname.startsWith("/create");
+    const isOnboarding = pathname.startsWith("/onboarding");
 
-    if (!teamId && !isPublic && !isOnboarding) {
+    if (!state.token && !isPublic) {
+      router.replace("/login");
+    } else if (state.token && !state.teamId && !isOnboarding && !isPublic) {
       router.replace("/onboarding");
     }
-  }, [teamId, isLoading, pathname, router]);
+  }, [state.token, state.teamId, state.isLoading, pathname, router]);
 
-  function setTeam(id: string, name: string) {
-    setTeamId(id);
-    setTeamName(name);
-    localStorage.setItem(STORAGE_KEY, id);
-    localStorage.setItem(STORAGE_NAME_KEY, name);
+  function login(token: string, user: { id: string; email: string; teamId: string | null; teamName: string | null }) {
+    localStorage.setItem(STORAGE_TOKEN, token);
+    setState({ token, userId: user.id, email: user.email, teamId: user.teamId, teamName: user.teamName, isLoading: false });
   }
 
-  function clearTeam() {
-    setTeamId(null);
-    setTeamName(null);
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(STORAGE_NAME_KEY);
+  function setTeam(id: string, name: string) {
+    setState((s) => ({ ...s, teamId: id, teamName: name }));
+  }
+
+  function logout() {
+    const t = state.token;
+    if (t) apiFetch("/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${t}` } }).catch(() => {});
+    localStorage.removeItem(STORAGE_TOKEN);
+    setState({ token: null, userId: null, email: null, teamId: null, teamName: null, isLoading: false });
+    router.replace("/login");
   }
 
   return (
-    <TeamContext.Provider value={{ teamId, teamName, setTeam, clearTeam, isLoading }}>
+    <TeamContext.Provider value={{ ...state, login, setTeam, logout }}>
       {children}
     </TeamContext.Provider>
   );

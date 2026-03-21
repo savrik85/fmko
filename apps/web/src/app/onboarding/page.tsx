@@ -34,7 +34,7 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(1);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
-  const { setTeam } = useTeam();
+  const { token, setTeam } = useTeam();
   const router = useRouter();
 
   const [state, setState] = useState<OnboardingState>({
@@ -53,9 +53,12 @@ export default function OnboardingPage() {
 
     try {
       // Create team via API
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const result = await apiFetch<{ id: string; name: string }>("/api/teams", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           villageId: state.village.id,
           name: teamName,

@@ -30,12 +30,20 @@ export default function Home() {
         </p>
       </div>
 
-      <Link
-        href="/onboarding"
-        className="bg-pitch-500 hover:bg-pitch-400 text-white font-heading text-xl font-bold px-10 py-5 rounded-card shadow-card hover:shadow-hover transition-all mb-12 inline-block"
-      >
-        Založit tým
-      </Link>
+      <div className="flex flex-col sm:flex-row gap-3 mb-12">
+        <Link
+          href="/register"
+          className="bg-pitch-500 hover:bg-pitch-400 text-white font-heading text-xl font-bold px-10 py-5 rounded-card shadow-card hover:shadow-hover transition-all"
+        >
+          Založit tým
+        </Link>
+        <Link
+          href="/login"
+          className="bg-white hover:bg-gray-50 text-pitch-500 border border-pitch-500/20 font-heading text-xl font-bold px-10 py-5 rounded-card shadow-card hover:shadow-hover transition-all"
+        >
+          Přihlásit se
+        </Link>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl w-full">
         <FeatureCard emoji="&#128104;&#8205;&#129456;" title="Generované postavy" desc="Každý hráč má příběh, přezdívku a vlastní avatar" />

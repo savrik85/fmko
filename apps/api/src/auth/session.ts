@@ -8,9 +8,9 @@ import type { Bindings } from "../index";
 const SESSION_TTL = 60 * 60 * 24 * 30; // 30 days
 
 export interface Session {
-  userId: number;
+  userId: string;
   email: string;
-  teamId: number | null;
+  teamId: string | null;
   createdAt: string;
 }
 
@@ -28,9 +28,9 @@ function generateToken(): string {
  */
 export async function createSession(
   kv: KVNamespace,
-  userId: number,
+  userId: string,
   email: string,
-  teamId: number | null,
+  teamId: string | null,
 ): Promise<string> {
   const token = generateToken();
   const session: Session = {

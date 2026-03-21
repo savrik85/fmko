@@ -42,12 +42,24 @@ teamsRouter.post("/", async (c) => {
   if (!village) return c.json({ error: "Village not found" }, 404);
 
   const teamId = uuid();
-  const userId = uuid();
 
-  // Temp user (no auth in Sprint 1)
-  await c.env.DB.prepare(
-    "INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)"
-  ).bind(userId, `user-${teamId}@temp.local`, "no-auth-sprint1").run();
+  // Get userId from auth token (or allow anonymous for now)
+  let userId: string | null = null;
+  const authHeader = c.req.header("Authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    const { getSession } = await import("../auth/session");
+    const session = await getSession(c.env.SESSION_KV, token);
+    if (session) userId = String(session.userId);
+  }
+
+  if (!userId) {
+    // Fallback: create anonymous user
+    userId = uuid();
+    await c.env.DB.prepare(
+      "INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)"
+    ).bind(userId, `anon-${teamId}@temp.local`, "anonymous").run();
+  }
 
   const budget = (village.population as number) > 5000 ? 80000
     : (village.population as number) > 1000 ? 40000 : 20000;

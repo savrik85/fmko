@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { authRouter } from "./routes/auth";
 import { villagesRouter } from "./routes/villages";
 import { teamsRouter } from "./routes/teams";
 import { matchesRouter } from "./routes/matches";
@@ -21,6 +22,7 @@ app.use("*", cors({ origin: "*" }));
 app.get("/", (c) => c.json({ name: "Okresní Mašina API", version: "0.2.0" }));
 app.get("/health", (c) => c.json({ status: "ok" }));
 
+app.route("/auth", authRouter);
 app.route("/api/villages", villagesRouter);
 app.route("/api/teams", teamsRouter);
 app.route("/api", matchesRouter);
