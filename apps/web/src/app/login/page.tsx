@@ -36,92 +36,71 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex">
-      {/* Left panel — branding (desktop only) */}
-      <div className="hidden lg:flex lg:w-[45%] bg-pitch-700 relative items-center justify-center overflow-hidden">
-        <div className="hero-gradient absolute inset-0" />
-        <div className="relative z-10 p-12 text-center">
-          <div className="text-display text-white/90 mb-4">Okresní<br />Mašina</div>
-          <p className="text-white/50 text-lg max-w-xs mx-auto leading-relaxed">
-            Postav si tým z místních borců. Řeš kocoviny, rodinné obědy a příbuzenské vazby.
-          </p>
-          <div className="mt-12 flex justify-center gap-6 text-white/30">
-            <div className="text-center">
-              <div className="text-3xl font-heading font-bold text-white/50">310</div>
-              <div className="text-xs mt-1">obcí</div>
-            </div>
-            <div className="w-px bg-white/10" />
-            <div className="text-center">
-              <div className="text-3xl font-heading font-bold text-white/50">60+</div>
-              <div className="text-xs mt-1">komentářů</div>
-            </div>
-            <div className="w-px bg-white/10" />
-            <div className="text-center">
-              <div className="text-3xl font-heading font-bold text-white/50">31k</div>
-              <div className="text-xs mt-1">avatarů</div>
-            </div>
+    <main className="min-h-screen bg-pitch-800 flex items-center justify-center p-4">
+      {/* Central card */}
+      <div className="w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-10 animate-slide-up">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-pitch-500 mb-4 shadow-lg">
+            <span className="text-3xl">&#9917;</span>
           </div>
+          <h1 className="text-display text-white tracking-tight">PRALES</h1>
+          <p className="text-pitch-300/60 text-sm mt-2">Fotbalový manažer z českého okresu</p>
         </div>
-        {/* Decorative grass stripe */}
-        <div className="absolute bottom-0 left-0 right-0 h-2 bg-pitch-400/30" />
-      </div>
 
-      {/* Right panel — form */}
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-sm animate-slide-up">
-          {/* Mobile logo */}
-          <div className="lg:hidden text-center mb-10">
-            <div className="text-h1 text-pitch-500 uppercase">Prales</div>
-          </div>
-
-          <h2 className="text-h2 text-ink mb-1">Vítej zpátky</h2>
-          <p className="text-muted mb-8">Přihlas se ke svému týmu</p>
+        {/* Form card */}
+        <div className="bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] rounded-2xl p-8 animate-slide-up" style={{ animationDelay: "100ms" }}>
+          <h2 className="text-white text-xl font-semibold mb-1">Vítej zpátky</h2>
+          <p className="text-white/40 text-sm mb-8">Přihlas se ke svému týmu</p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="input-label">Email</label>
+              <label className="block text-white/50 text-xs font-semibold tracking-wide uppercase mb-2">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="tvuj@email.cz"
                 required
-                className="input"
+                className="w-full px-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-white placeholder:text-white/20 focus:border-pitch-400 focus:bg-white/[0.08] focus:outline-none focus:ring-2 focus:ring-pitch-400/20 transition-all"
               />
             </div>
 
             <div>
-              <label className="input-label">Heslo</label>
+              <label className="block text-white/50 text-xs font-semibold tracking-wide uppercase mb-2">Heslo</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Tvoje heslo"
                 required
-                className="input"
+                className="w-full px-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-white placeholder:text-white/20 focus:border-pitch-400 focus:bg-white/[0.08] focus:outline-none focus:ring-2 focus:ring-pitch-400/20 transition-all"
               />
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 text-card-red text-sm bg-card-red/5 px-4 py-3 rounded-md">
-                <span>&#9888;</span> {error}
+              <div className="flex items-center gap-2 text-red-300 text-sm bg-red-500/10 border border-red-500/20 px-4 py-3 rounded-xl">
+                &#9888; {error}
               </div>
             )}
 
-            <button type="submit" disabled={loading} className="btn btn-primary btn-lg w-full">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 bg-pitch-500 hover:bg-pitch-400 disabled:opacity-40 text-white font-heading font-bold text-lg rounded-xl shadow-lg shadow-pitch-500/20 hover:shadow-pitch-400/30 transition-all active:scale-[0.98]"
+            >
               {loading ? "Přihlašuji..." : "Přihlásit se"}
             </button>
           </form>
-
-          <div className="divider my-8" />
-
-          <p className="text-center text-sm text-muted">
-            Nemáš účet?{" "}
-            <Link href="/register" className="text-pitch-500 font-semibold hover:underline">
-              Zaregistrovat se
-            </Link>
-          </p>
         </div>
+
+        {/* Footer */}
+        <p className="text-center text-sm text-white/30 mt-6 animate-slide-up" style={{ animationDelay: "200ms" }}>
+          Nemáš účet?{" "}
+          <Link href="/register" className="text-pitch-300 font-semibold hover:text-pitch-200 transition-colors">
+            Zaregistrovat se
+          </Link>
+        </p>
       </div>
     </main>
   );
