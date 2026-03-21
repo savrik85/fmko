@@ -22,6 +22,8 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Okresní Mašina — Fotbalový Manažer",
   description: "Online fotbalový manažer z českého okresu",
+  viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
+  themeColor: "#2D5F2D",
 };
 
 export default function RootLayout({

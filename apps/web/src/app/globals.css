@@ -39,3 +39,32 @@ body {
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* Touch targets — min 44px for mobile */
+@media (pointer: coarse) {
+  button, a, [role="button"] {
+    min-height: 44px;
+  }
+}
+
+/* Slide-in animation for cards */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Safe area for notched phones */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Prevent overscroll bounce on iOS */
+html {
+  overscroll-behavior: none;
+}
