@@ -7,24 +7,29 @@ import { apiFetch } from "@/lib/api";
 type Village = {
   id: string;
   name: string;
-  code?: string;
   district: string;
-  district_code?: string;
   region: string;
-  region_code?: string;
   population: number;
   size: string;
-  category?: string;
-  pitch_type?: string;
-  base_budget?: number;
 };
 
-function getSizeLabel(size: string): { label: string; color: string } {
+function getSizeBadge(size: string): { label: string; emoji: string; bg: string; text: string } {
   switch (size) {
-    case "hamlet": return { label: "Hardcore", color: "text-card-red" };
-    case "village": return { label: "Výzva", color: "text-gold-600" };
-    case "town": return { label: "Dobrý start", color: "text-pitch-400" };
-    default: return { label: "Easy", color: "text-pitch-300" };
+    case "hamlet": return { label: "Hardcore", emoji: "\u{1F525}", bg: "bg-card-red/10", text: "text-card-red" };
+    case "village": return { label: "Výzva", emoji: "\u2B50", bg: "bg-gold-500/10", text: "text-gold-600" };
+    case "town": return { label: "Dobrý start", emoji: "\u2705", bg: "bg-pitch-500/8", text: "text-pitch-500" };
+    default: return { label: "Easy", emoji: "\u{1F7E2}", bg: "bg-pitch-100", text: "text-pitch-400" };
+  }
+}
+
+function getSizeIcon(size: string): string {
+  switch (size) {
+    case "hamlet": return "\u{1F3D5}";  // camping (vesnice)
+    case "village": return "\u{1F3E0}"; // house (obec)
+    case "town": return "\u{1F3D8}";    // houses (městys)
+    case "small_city": return "\u{1F3EB}"; // school (malé město)
+    case "city": return "\u{1F3D9}";    // cityscape (město)
+    default: return "\u{1F3DF}";
   }
 }
 
@@ -60,24 +65,25 @@ export function StepLocation({ onSelect }: Props) {
 
   return (
     <div className="flex-1 flex flex-col p-5 sm:p-8 w-full max-w-5xl mx-auto">
-      {/* Header row */}
+      {/* Header + filters */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
         <div>
           <p className="text-label mb-2">Krok 1 ze 3</p>
           <h2 className="text-h1 text-ink">Kde hraješ?</h2>
-          <p className="text-muted mt-1">Vyber obec, kde založíš svůj tým</p>
+          <p className="text-muted mt-1">Klikni na obec kde chceš založit tým</p>
         </div>
 
-        {/* Filters inline on desktop */}
         <div className="flex gap-3 sm:items-center">
-          <div className="relative flex-1 sm:w-56">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-light text-sm">&#128269;</span>
+          <div className="relative flex-1 sm:w-60">
+            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-light" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
             <input
               type="text"
               placeholder="Hledat obec..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="input pl-10 !py-2.5 text-sm"
+              className="input !py-2.5 pl-10 text-sm"
             />
           </div>
           <select
@@ -93,15 +99,23 @@ export function StepLocation({ onSelect }: Props) {
         </div>
       </div>
 
+      {/* Count */}
+      {!loading && (
+        <p className="text-xs text-muted mb-3">
+          {filteredVillages.length} {filteredVillages.length === 1 ? "obec" : filteredVillages.length < 5 ? "obce" : "obcí"}
+        </p>
+      )}
+
       {/* Village grid */}
       {loading ? (
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center py-20">
           <div className="w-8 h-8 border-3 border-pitch-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {filteredVillages.slice(0, 60).map((v) => {
-            const s = getSizeLabel(v.size);
+            const badge = getSizeBadge(v.size);
+            const icon = getSizeIcon(v.size);
             return (
               <button
                 key={v.id}
@@ -109,22 +123,22 @@ export function StepLocation({ onSelect }: Props) {
                   id: v.id, name: v.name, district: v.district,
                   region: v.region, population: v.population, size: v.size,
                 })}
-                className="card card-hover p-3.5 text-left flex items-center gap-3"
+                className="group bg-surface rounded-xl p-3 text-left flex items-center gap-3 border border-transparent hover:border-pitch-400/30 hover:shadow-hover transition-all active:scale-[0.99]"
               >
-                <div className="w-9 h-9 rounded-lg bg-pitch-500/8 flex items-center justify-center shrink-0">
-                  <span className="font-heading font-bold text-pitch-500 text-sm">{v.name[0]}</span>
-                </div>
+                <span className="text-xl shrink-0 w-8 text-center">{icon}</span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-ink text-sm truncate">{v.name}</div>
-                  <div className="text-xs text-muted truncate">{v.district} &middot; {v.population.toLocaleString("cs")}</div>
+                  <div className="font-semibold text-ink text-sm truncate group-hover:text-pitch-600 transition-colors">{v.name}</div>
+                  <div className="text-xs text-muted truncate">{v.district} &middot; {v.population.toLocaleString("cs")} obyv.</div>
                 </div>
-                <span className={`text-[10px] font-heading font-bold shrink-0 ${s.color}`}>{s.label}</span>
+                <span className={`text-[10px] font-heading font-bold px-2 py-1 rounded-md shrink-0 ${badge.bg} ${badge.text}`}>
+                  {badge.label}
+                </span>
               </button>
             );
           })}
 
-          {filteredVillages.length === 0 && !loading && (
-            <p className="col-span-full text-center text-muted py-12">Žádná obec nenalezena</p>
+          {filteredVillages.length === 0 && (
+            <p className="col-span-full text-center text-muted py-16">Žádná obec nenalezena</p>
           )}
         </div>
       )}
