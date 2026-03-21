@@ -91,13 +91,15 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col">
-      {/* Progress bar */}
-      <div className="h-1 bg-gray-200">
-        <div
-          className="h-full bg-pitch-500 transition-all duration-500"
-          style={{ width: `${(step / 3) * 100}%` }}
-        />
+    <main className="min-h-screen flex flex-col bg-paper">
+      {/* Header with progress */}
+      <div className="bg-pitch-800 px-5 py-3 flex items-center justify-between">
+        <span className="font-heading font-bold text-white/80 text-sm tracking-wide uppercase">Prales</span>
+        <div className="flex items-center gap-2">
+          {[1, 2, 3].map((s) => (
+            <div key={s} className={`w-8 h-1.5 rounded-full transition-all ${s <= step ? "bg-pitch-400" : "bg-white/10"}`} />
+          ))}
+        </div>
       </div>
 
       <div className="flex-1 flex flex-col">
