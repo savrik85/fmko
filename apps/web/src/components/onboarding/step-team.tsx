@@ -111,11 +111,7 @@ export function StepTeam({ village, teamName: initialName, primaryColor: initial
       <div className="bg-white rounded-card shadow-card p-4 mb-6">
         <div className="font-heading font-bold text-lg">{teamName}</div>
         <div className="text-sm text-muted">
-          {village.name} &middot; {village.population.toLocaleString("cs")} obyvatel &middot;{" "}
-          {village.pitchType === "hlinak" ? "Hlinkak" : village.pitchType === "trava" ? "Trava" : "Umelka"}
-        </div>
-        <div className="text-sm text-muted">
-          Rozpočet: {village.baseBudget.toLocaleString("cs")} Kč &middot; Okresní přebor {village.district}
+          {village.name} &middot; {village.population.toLocaleString("cs")} obyvatel &middot; {village.district}
         </div>
       </div>
 

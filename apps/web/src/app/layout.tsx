@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Barlow_Condensed, JetBrains_Mono } from "next/font/google";
+import { TeamProvider } from "@/context/team-context";
 import "./globals.css";
 
 const inter = Inter({
@@ -33,7 +34,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="cs" className={`${inter.variable} ${barlowCondensed.variable} ${jetbrainsMono.variable}`}>
-      <body className="min-h-screen">{children}</body>
+      <body className="min-h-screen"><TeamProvider>{children}</TeamProvider></body>
     </html>
   );
 }
