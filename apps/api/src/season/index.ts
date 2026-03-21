@@ -14,3 +14,5 @@ export { generateSeasonCalendar, getLineupDeadline } from "./calendar";
 export type { CalendarEntry, SeasonCalendar } from "./calendar";
 export { processDailyTick } from "./daily-tick";
 export type { DailyTickResult, DailyTickContext } from "./daily-tick";
+export { getSeasonalEventsForWeek, generateNewspaperArticle } from "./seasonal-events";
+export type { SeasonalEventType, SeasonalEventDef } from "./seasonal-events";
