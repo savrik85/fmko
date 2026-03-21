@@ -72,7 +72,7 @@ export default function SquadPage() {
 
       {selected && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={() => setSelected(null)}>
-          <div className="bg-paper w-full sm:max-w-md sm:rounded-card rounded-t-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-paper w-full sm:max-w-2xl sm:rounded-card rounded-t-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
 
             {/* Hero header s avatarem */}
             <div className="relative rounded-t-2xl sm:rounded-t-card overflow-hidden" style={{ backgroundColor: color }}>
@@ -162,20 +162,24 @@ export default function SquadPage() {
               </div>
             </div>
 
-            {/* Fotbalové skilly */}
-            <div className="px-5 py-4 space-y-2">
-              <div className="text-xs text-muted uppercase font-heading font-bold mb-1">Fotbalové dovednosti</div>
-              <StatBar label="Rychlost" value={selected.skills?.speed ?? 0} max={100} />
-              <StatBar label="Technika" value={selected.skills?.technique ?? 0} max={100} />
-              <StatBar label="Střelba" value={selected.skills?.shooting ?? 0} max={100} />
-              <StatBar label="Přihrávky" value={selected.skills?.passing ?? 0} max={100} />
-              <StatBar label="Hlavičky" value={selected.skills?.heading ?? 0} max={100} />
-              <StatBar label="Obrana" value={selected.skills?.defense ?? 0} max={100} />
-              {selected.position === "GK" && <StatBar label="Brankář" value={selected.skills?.goalkeeping ?? 0} max={100} />}
+            {/* Fotbalové skilly — 2 sloupce na desktopu */}
+            <div className="px-5 py-4">
+              <div className="text-xs text-muted uppercase font-heading font-bold mb-2">Fotbalové dovednosti</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                <StatBar label="Rychlost" value={selected.skills?.speed ?? 0} max={100} />
+                <StatBar label="Technika" value={selected.skills?.technique ?? 0} max={100} />
+                <StatBar label="Střelba" value={selected.skills?.shooting ?? 0} max={100} />
+                <StatBar label="Přihrávky" value={selected.skills?.passing ?? 0} max={100} />
+                <StatBar label="Hlavičky" value={selected.skills?.heading ?? 0} max={100} />
+                <StatBar label="Obrana" value={selected.skills?.defense ?? 0} max={100} />
+                {selected.position === "GK" && <StatBar label="Brankář" value={selected.skills?.goalkeeping ?? 0} max={100} />}
+              </div>
 
-              <div className="text-xs text-muted uppercase font-heading font-bold mt-4 mb-1">Fyzické</div>
-              <StatBar label="Kondice" value={selected.physical?.stamina ?? 0} max={100} />
-              <StatBar label="Síla" value={selected.physical?.strength ?? 0} max={100} />
+              <div className="text-xs text-muted uppercase font-heading font-bold mt-4 mb-2">Fyzické</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                <StatBar label="Kondice" value={selected.physical?.stamina ?? 0} max={100} />
+                <StatBar label="Síla" value={selected.physical?.strength ?? 0} max={100} />
+              </div>
             </div>
 
             <div className="p-5 pt-0">
