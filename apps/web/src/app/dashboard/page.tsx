@@ -1,80 +1,53 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { useTeam } from "@/context/team-context";
+import { apiFetch, type Team, type Player } from "@/lib/api";
 import { Card, CardBody } from "@/components/ui";
 
-// Mock data — in real app from API
-const MOCK_TEAM = {
-  name: "SK Prachatice",
-  village: "Prachatice",
-  league: "Okresní přebor Prachatice",
-  position: 3,
-  totalTeams: 14,
-  budget: 42350,
-  nextMatch: {
-    opponent: "Sokol Netolice",
-    round: 8,
-    isHome: true,
-    date: "Neděle 14:00",
-  },
-  squadStatus: {
-    total: 20,
-    fit: 16,
-    injured: 2,
-    suspended: 1,
-    lowMorale: 1,
-  },
-};
-
-const MOCK_EVENTS = [
-  { emoji: "\u{1F37A}", text: "Milan Černý nebude v neděli — kocovina po pátku", time: "Dnes" },
-  { emoji: "\u{1F4B0}", text: "Řeznictví Novák prodloužilo sponzoring na další sezónu", time: "Včera" },
-  { emoji: "\u{1F915}", text: "Petr Dvořák si na tréninku natáhl sval — chybí 2 kola", time: "Středa" },
-  { emoji: "\u{1F44B}", text: "Z dorostu postoupil Jakub Svoboda (17). Nadšený mladík!", time: "Pondělí" },
-];
-
 export default function DashboardPage() {
-  const team = MOCK_TEAM;
+  const { teamId } = useTeam();
+  const [team, setTeam] = useState<Team | null>(null);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!teamId) return;
+    Promise.all([
+      apiFetch<Team>(`/api/teams/${teamId}`),
+      apiFetch<Player[]>(`/api/teams/${teamId}/players`),
+    ]).then(([t, p]) => {
+      setTeam(t);
+      setPlayers(p);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [teamId]);
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[50vh]">
+        <div className="w-8 h-8 border-3 border-pitch-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!team) return <div className="p-6">Tým nenalezen.</div>;
+
+  const fitCount = players.filter((p) => (p.physical?.stamina ?? 0) > 3).length;
+  const injuredCount = players.length - fitCount;
 
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-4">
       {/* Team header */}
-      <div className="bg-pitch-500 text-white rounded-card p-5">
+      <div className="rounded-card p-5 text-white" style={{ backgroundColor: team.primary_color || "#2D5F2D" }}>
         <h1 className="font-heading text-2xl font-bold">{team.name}</h1>
         <div className="text-white/70 text-sm mt-1">
-          {team.league} &middot; {team.position}. místo
+          {team.village_name} &middot; {team.district}
         </div>
         <div className="text-white/70 text-sm">
-          Rozpočet: {team.budget.toLocaleString("cs")} Kč
+          Rozpočet: {(team.budget ?? 0).toLocaleString("cs")} Kč &middot; {players.length} hráčů
         </div>
       </div>
-
-      {/* Next match */}
-      <Card hover>
-        <CardBody>
-          <div className="text-xs text-muted uppercase font-heading font-bold mb-2">
-            Příští zápas &middot; {team.nextMatch.round}. kolo
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="font-heading font-bold text-lg">
-                {team.nextMatch.isHome ? team.name : team.nextMatch.opponent}
-              </div>
-              <div className="text-muted text-sm">vs</div>
-              <div className="font-heading font-bold text-lg">
-                {team.nextMatch.isHome ? team.nextMatch.opponent : team.name}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="font-heading font-bold text-pitch-500 text-lg">
-                {team.nextMatch.date}
-              </div>
-              <div className="text-xs text-muted">
-                {team.nextMatch.isHome ? "Domácí" : "Venku"}
-              </div>
-            </div>
-          </div>
-        </CardBody>
-      </Card>
 
       {/* Squad status */}
       <Card>
@@ -82,34 +55,64 @@ export default function DashboardPage() {
           <div className="text-xs text-muted uppercase font-heading font-bold mb-3">
             Stav kádru
           </div>
-          <div className="grid grid-cols-4 gap-3 text-center">
-            <StatusItem value={team.squadStatus.fit} label="Fit" color="text-pitch-500" />
-            <StatusItem value={team.squadStatus.injured} label="Zraněno" color="text-card-red" />
-            <StatusItem value={team.squadStatus.suspended} label="Trest" color="text-card-yellow" />
-            <StatusItem value={team.squadStatus.lowMorale} label="Demotiv." color="text-muted" />
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <StatusItem value={players.length} label="Celkem" color="text-pitch-500" />
+            <StatusItem value={fitCount} label="Fit" color="text-pitch-500" />
+            <StatusItem value={injuredCount} label="Mimo" color="text-card-red" />
           </div>
         </CardBody>
       </Card>
 
-      {/* Event feed */}
+      {/* Top players */}
       <Card>
         <CardBody>
           <div className="text-xs text-muted uppercase font-heading font-bold mb-3">
-            Co se děje
+            Nejlepší hráči
           </div>
-          <div className="space-y-3">
-            {MOCK_EVENTS.map((event, i) => (
-              <div key={i} className="flex gap-3 items-start">
-                <span className="text-lg shrink-0">{event.emoji}</span>
+          <div className="space-y-2">
+            {[...players].sort((a, b) => b.overall_rating - a.overall_rating).slice(0, 5).map((p) => (
+              <div key={p.id} className="flex items-center gap-3">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs"
+                  style={{ backgroundColor: team.primary_color || "#2D5F2D" }}
+                >
+                  {p.first_name[0]}
+                </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm">{event.text}</p>
-                  <p className="text-xs text-muted mt-0.5">{event.time}</p>
+                  <div className="text-sm font-medium truncate">
+                    {p.first_name} {p.last_name}
+                    {p.nickname && <span className="text-gold-500 ml-1">&bdquo;{p.nickname}&ldquo;</span>}
+                  </div>
+                  <div className="text-xs text-muted">{p.position} &middot; {p.age} let</div>
+                </div>
+                <div className="font-heading font-bold tabular-nums" style={{ color: team.primary_color || "#2D5F2D" }}>
+                  {p.overall_rating}
                 </div>
               </div>
             ))}
           </div>
         </CardBody>
       </Card>
+
+      {/* Quick links */}
+      <div className="grid grid-cols-2 gap-3">
+        <a href="/dashboard/squad" className="bg-white rounded-card shadow-card p-4 text-center hover:shadow-hover transition-all">
+          <div className="text-2xl mb-1">&#128101;</div>
+          <div className="font-heading font-bold text-sm">Kádr</div>
+        </a>
+        <a href="/dashboard/match" className="bg-white rounded-card shadow-card p-4 text-center hover:shadow-hover transition-all">
+          <div className="text-2xl mb-1">&#9917;</div>
+          <div className="font-heading font-bold text-sm">Zápas</div>
+        </a>
+        <a href="/dashboard/table" className="bg-white rounded-card shadow-card p-4 text-center hover:shadow-hover transition-all">
+          <div className="text-2xl mb-1">&#128202;</div>
+          <div className="font-heading font-bold text-sm">Tabulka</div>
+        </a>
+        <a href="/dashboard/squad" className="bg-white rounded-card shadow-card p-4 text-center hover:shadow-hover transition-all">
+          <div className="text-2xl mb-1">&#127947;</div>
+          <div className="font-heading font-bold text-sm">Tréninky</div>
+        </a>
+      </div>
     </div>
   );
 }
