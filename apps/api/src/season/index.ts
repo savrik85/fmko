@@ -4,3 +4,7 @@ export { tryGraduateYouth, youthMonthlyCost } from "./youth";
 export type { YouthInvestment, YouthConfig, YouthGraduate } from "./youth";
 export { checkRandomArrivals, performRecruitment } from "./recruitment";
 export type { RecruitmentAction, RecruitmentResult, RandomArrival } from "./recruitment";
+export { simulateTraining } from "./training";
+export type { TrainingType, TrainingApproach, TrainingPlan, TrainingResult } from "./training";
+export { generateSponsors, calculateMatchIncome, calculateMatchExpenses, calculateMonthlyBudget } from "./economy";
+export type { Sponsor, MatchIncome, MatchDayExpenses, MonthlyBudget } from "./economy";
