@@ -19,7 +19,7 @@ const app = new Hono<{ Bindings: Bindings }>();
 
 app.use("*", cors({ origin: "*" }));
 
-app.get("/", (c) => c.json({ name: "Okresní Mašina API", version: "0.2.0" }));
+app.get("/", (c) => c.json({ name: "Prales API", version: "0.2.0" }));
 app.get("/health", (c) => c.json({ status: "ok" }));
 
 app.route("/auth", authRouter);

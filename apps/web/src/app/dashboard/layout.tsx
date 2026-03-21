@@ -14,7 +14,7 @@ export default function DashboardLayout({
     <div className="min-h-screen pb-20 sm:pb-0">
       {/* Desktop sidebar */}
       <aside className="hidden sm:fixed sm:flex sm:flex-col sm:left-0 sm:top-0 sm:bottom-0 sm:w-56 sm:bg-pitch-600 sm:text-white sm:p-4">
-        <div className="font-heading text-xl font-bold mb-8 mt-2">Okresní Mašina</div>
+        <div className="font-heading text-xl font-bold mb-8 mt-2">Prales</div>
         <nav className="space-y-1 flex-1">
           <SidebarLink href="/dashboard" label="Domů" icon={"\u{1F3DF}"} />
           <SidebarLink href="/dashboard/squad" label="Kádr" icon={"\u{1F465}"} />

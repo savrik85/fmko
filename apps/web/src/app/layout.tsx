@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Inter, Barlow_Condensed, JetBrains_Mono } from "next/font/google";
+import { DM_Sans, Barlow_Condensed, JetBrains_Mono } from "next/font/google";
 import { TeamProvider } from "@/context/team-context";
 import "./globals.css";
 
-const inter = Inter({
+const dmSans = DM_Sans({
   subsets: ["latin", "latin-ext"],
   variable: "--font-body",
 });
@@ -21,10 +21,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Okresní Mašina — Fotbalový Manažer",
+  title: "Prales — Fotbalový Manažer",
   description: "Online fotbalový manažer z českého okresu",
-  viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
-  themeColor: "#2D5F2D",
 };
 
 export default function RootLayout({
@@ -33,7 +31,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="cs" className={`${inter.variable} ${barlowCondensed.variable} ${jetbrainsMono.variable}`}>
+    <html lang="cs" className={`${dmSans.variable} ${barlowCondensed.variable} ${jetbrainsMono.variable}`}>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="theme-color" content="#153615" />
+      </head>
       <body className="min-h-screen"><TeamProvider>{children}</TeamProvider></body>
     </html>
   );

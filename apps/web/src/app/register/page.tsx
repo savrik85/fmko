@@ -19,7 +19,6 @@ export default function RegisterPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     try {
       const result = await apiFetch<{
         token: string;
@@ -29,7 +28,6 @@ export default function RegisterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, displayName }),
       });
-
       login(result.token, { id: result.user.id, email: result.user.email, teamId: null, teamName: null });
       router.push("/onboarding");
     } catch (err) {
@@ -39,70 +37,81 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="text-4xl mb-2">&#9917;</div>
-          <h1 className="font-heading text-3xl font-extrabold text-pitch-500">Okresní Mašina</h1>
-          <p className="text-muted mt-1">Vytvoř si účet</p>
+    <main className="min-h-screen flex">
+      {/* Left panel — branding (desktop only) */}
+      <div className="hidden lg:flex lg:w-[45%] bg-pitch-700 relative items-center justify-center overflow-hidden">
+        <div className="hero-gradient absolute inset-0" />
+        <div className="relative z-10 p-12 text-center">
+          <div className="text-display text-white/90 mb-4">Prales</div>
+          <p className="text-white/50 text-lg max-w-xs mx-auto leading-relaxed">
+            Fotbalový manažer zasazený do autentického prostředí českého amatérského fotbalu.
+          </p>
+
+          <div className="mt-10 space-y-3 flex flex-col items-center">
+            <FeaturePill icon="&#9917;" text="Generované kádry s přezdívkami" />
+            <FeaturePill icon="&#128251;" text="Komentáře ve stylu obecního rozhlasu" />
+            <FeaturePill icon="&#127866;" text="Kocoviny, rodinné obědy, výmluvy" />
+          </div>
         </div>
+        <div className="absolute bottom-0 left-0 right-0 h-2 bg-pitch-400/30" />
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-muted block mb-1">Jméno</label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Jak ti říkají"
-              required
-              className="w-full px-4 py-3 rounded-card border border-gray-200 focus:border-pitch-500 focus:outline-none"
-            />
+      {/* Right panel — form */}
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="w-full max-w-sm animate-slide-up">
+          <div className="lg:hidden text-center mb-10">
+            <div className="text-h1 text-pitch-500 uppercase">Prales</div>
+            <p className="text-muted text-sm mt-1">Fotbalový manažer z českého okresu</p>
           </div>
 
-          <div>
-            <label className="text-sm font-medium text-muted block mb-1">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tvuj@email.cz"
-              required
-              className="w-full px-4 py-3 rounded-card border border-gray-200 focus:border-pitch-500 focus:outline-none"
-            />
-          </div>
+          <h2 className="text-h2 text-ink mb-1">Vytvoř si účet</h2>
+          <p className="text-muted mb-8">Za minutu budeš mít svůj tým</p>
 
-          <div>
-            <label className="text-sm font-medium text-muted block mb-1">Heslo</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Alespoň 6 znaků"
-              required
-              minLength={6}
-              className="w-full px-4 py-3 rounded-card border border-gray-200 focus:border-pitch-500 focus:outline-none"
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="input-label">Jméno</label>
+              <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Jak ti říkají" required className="input" />
+            </div>
+            <div>
+              <label className="input-label">Email</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="tvuj@email.cz" required className="input" />
+            </div>
+            <div>
+              <label className="input-label">Heslo</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                placeholder="Alespoň 6 znaků" required minLength={6} className="input" />
+            </div>
 
-          {error && <p className="text-card-red text-sm">{error}</p>}
+            {error && (
+              <div className="flex items-center gap-2 text-card-red text-sm bg-card-red/5 px-4 py-3 rounded-md">
+                &#9888; {error}
+              </div>
+            )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-pitch-500 hover:bg-pitch-400 disabled:bg-gray-300 text-white font-heading text-lg font-bold py-3 rounded-card shadow-card transition-all"
-          >
-            {loading ? "Registruji..." : "Zaregistrovat se"}
-          </button>
-        </form>
+            <button type="submit" disabled={loading} className="btn btn-primary btn-lg w-full">
+              {loading ? "Registruji..." : "Založit účet a začít hrát"}
+            </button>
+          </form>
 
-        <p className="text-center text-sm text-muted mt-6">
-          Už máš účet?{" "}
-          <Link href="/login" className="text-pitch-500 font-medium hover:underline">
-            Přihlásit se
-          </Link>
-        </p>
+          <div className="divider my-8" />
+
+          <p className="text-center text-sm text-muted">
+            Už máš účet?{" "}
+            <Link href="/login" className="text-pitch-500 font-semibold hover:underline">Přihlásit se</Link>
+          </p>
+        </div>
       </div>
     </main>
+  );
+}
+
+function FeaturePill({ icon, text }: { icon: string; text: string }) {
+  return (
+    <div className="inline-flex items-center gap-3 bg-white/5 backdrop-blur px-5 py-3 rounded-full text-white/70 text-sm">
+      <span>{icon}</span>
+      <span>{text}</span>
+    </div>
   );
 }
