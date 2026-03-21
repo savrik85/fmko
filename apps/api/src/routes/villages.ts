@@ -1,5 +1,5 @@
 /**
- * Villages API routes: list, filter by region/district.
+ * Sprint 1: Villages API — raw SQL on D1.
  */
 
 import { Hono } from "hono";
@@ -7,68 +7,44 @@ import type { Bindings } from "../index";
 
 const villagesRouter = new Hono<{ Bindings: Bindings }>();
 
+// GET /api/villages — list with optional filters
 villagesRouter.get("/", async (c) => {
-  // Try cache first
-  const cacheKey = "api:villages";
-  const cached = await c.env.CACHE_KV.get(cacheKey);
-  if (cached) return c.json(JSON.parse(cached));
-
-  // Load from R2
-  const obj = await c.env.SEED_DATA.get("villages.json");
-  if (!obj) return c.json({ error: "Villages data not found" }, 404);
-
-  const allVillages = JSON.parse(await obj.text()) as Array<Record<string, unknown>>;
-
-  // Filter by query params
   const region = c.req.query("region");
   const district = c.req.query("district");
-  const search = c.req.query("q")?.toLowerCase();
+  const search = c.req.query("search");
 
-  let filtered = allVillages;
+  let sql = "SELECT * FROM villages";
+  const params: string[] = [];
+  const conditions: string[] = [];
+
   if (region) {
-    filtered = filtered.filter((v) => v.region_code === region || v.region === region);
+    conditions.push("region = ?");
+    params.push(region);
   }
   if (district) {
-    filtered = filtered.filter((v) => v.district_code === district || v.district === district);
+    conditions.push("district = ?");
+    params.push(district);
   }
   if (search) {
-    filtered = filtered.filter((v) => (v.name as string).toLowerCase().includes(search));
+    conditions.push("name LIKE ?");
+    params.push(`%${search}%`);
   }
 
-  // Cache full list for 1 hour
-  if (!region && !district && !search) {
-    await c.env.CACHE_KV.put(cacheKey, JSON.stringify(filtered), { expirationTtl: 3600 });
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
   }
+  sql += " ORDER BY name";
 
-  return c.json(filtered);
+  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  return c.json(result.results);
 });
 
-// Get unique regions
-villagesRouter.get("/regions", async (c) => {
-  const obj = await c.env.SEED_DATA.get("villages.json");
-  if (!obj) return c.json({ error: "Villages data not found" }, 404);
-
-  const villages = JSON.parse(await obj.text()) as Array<{ region: string; region_code: string }>;
-  const regions = [...new Map(villages.map((v) => [v.region_code, { code: v.region_code, name: v.region }])).values()];
-  regions.sort((a, b) => a.name.localeCompare(b.name, "cs"));
-
-  return c.json(regions);
-});
-
-// Get districts for a region
-villagesRouter.get("/districts", async (c) => {
-  const region = c.req.query("region");
-  if (!region) return c.json({ error: "Missing region parameter" }, 400);
-
-  const obj = await c.env.SEED_DATA.get("villages.json");
-  if (!obj) return c.json({ error: "Villages data not found" }, 404);
-
-  const villages = JSON.parse(await obj.text()) as Array<{ region_code: string; district: string; district_code: string }>;
-  const filtered = villages.filter((v) => v.region_code === region);
-  const districts = [...new Map(filtered.map((v) => [v.district_code, { code: v.district_code, name: v.district }])).values()];
-  districts.sort((a, b) => a.name.localeCompare(b.name, "cs"));
-
-  return c.json(districts);
+// GET /api/villages/:id — detail
+villagesRouter.get("/:id", async (c) => {
+  const id = c.req.param("id");
+  const result = await c.env.DB.prepare("SELECT * FROM villages WHERE id = ?").bind(id).first();
+  if (!result) return c.json({ error: "Village not found" }, 404);
+  return c.json(result);
 });
 
 export { villagesRouter };

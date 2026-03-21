@@ -7,7 +7,7 @@ compatibility_date = "2025-03-14"
 binding = "DB"
 database_name = "okresni-masina-db"
 database_id = "local"
-migrations_dir = "../../packages/db/drizzle"
+migrations_dir = "migrations"
 
 # KV Namespaces — session, cache, leaderboardy
 [[kv_namespaces]]
