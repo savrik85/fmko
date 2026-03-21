@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
+import { PlayerAvatar } from "@okresni-masina/ui/avatar";
 import { StatBar } from "@/components/ui";
 
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
@@ -49,7 +50,11 @@ export default function SquadPage() {
       <div className="space-y-2">
         {sorted.map((p) => (
           <button key={p.id} onClick={() => setSelected(p)} className="w-full bg-white rounded-card shadow-card hover:shadow-hover p-4 text-left transition-all flex gap-3 items-center">
-            <div className="w-11 h-11 rounded-full shrink-0 flex items-center justify-center text-white font-heading font-bold" style={{ backgroundColor: color }}>{p.first_name[0]}</div>
+            {p.avatar ? (
+              <div className="w-11 h-11 shrink-0"><PlayerAvatar config={p.avatar as any} size="sm" jerseyColor={color} /></div>
+            ) : (
+              <div className="w-11 h-11 rounded-full shrink-0 flex items-center justify-center text-white font-heading font-bold" style={{ backgroundColor: color }}>{p.first_name[0]}</div>
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-1.5">
                 <span className="font-heading font-bold truncate">{p.first_name} {p.last_name}</span>

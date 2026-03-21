@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
+import { PlayerAvatar } from "@okresni-masina/ui/avatar";
 import { Card, CardBody } from "@/components/ui";
 
 export default function DashboardPage() {
@@ -72,12 +73,11 @@ export default function DashboardPage() {
           <div className="space-y-2">
             {[...players].sort((a, b) => b.overall_rating - a.overall_rating).slice(0, 5).map((p) => (
               <div key={p.id} className="flex items-center gap-3">
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs"
-                  style={{ backgroundColor: team.primary_color || "#2D5F2D" }}
-                >
-                  {p.first_name[0]}
-                </div>
+                {p.avatar ? (
+                  <div className="w-8 h-8 shrink-0"><PlayerAvatar config={p.avatar as any} size="sm" jerseyColor={team.primary_color || "#2D5F2D"} /></div>
+                ) : (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: team.primary_color || "#2D5F2D" }}>{p.first_name[0]}</div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">
                     {p.first_name} {p.last_name}
