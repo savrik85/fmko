@@ -49,7 +49,7 @@ export default function SquadPage() {
 
       <div className="space-y-2">
         {sorted.map((p) => (
-          <button key={p.id} onClick={() => setSelected(p)} className="w-full bg-white rounded-card shadow-card hover:shadow-hover p-4 text-left transition-all flex gap-3 items-center">
+          <button key={p.id} onClick={() => setSelected(p)} className="card card-hover w-full p-4 text-left flex gap-3 items-center">
             {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
               <FaceAvatar faceConfig={p.avatar} size={44} />
             ) : (
@@ -91,7 +91,7 @@ export default function SquadPage() {
 
                 {/* Jméno + přezdívka */}
                 <div className="text-center text-white">
-                  <div className="font-heading text-2xl font-bold">
+                  <div className="text-h2 text-white">
                     {selected.first_name} {selected.last_name}
                   </div>
                   {selected.nickname && (

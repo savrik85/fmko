@@ -52,7 +52,7 @@ export default function TablePage() {
           <a href="/dashboard/match"><Button>Hrát zápas</Button></a>
         </Card>
       ) : (
-        <div className="bg-white rounded-card shadow-card overflow-hidden">
+        <div className="card overflow-hidden">
           <div className="grid grid-cols-[2rem_1fr_2rem_2rem_2rem_2rem_3rem_2.5rem_4rem] gap-1 px-3 py-2 bg-gray-50 border-b border-gray-200 text-[10px] text-muted font-heading font-bold">
             <div className="text-center">#</div>
             <div>Tým</div>

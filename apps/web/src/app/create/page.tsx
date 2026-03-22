@@ -52,9 +52,7 @@ export default function CreatePage() {
 
   return (
     <main className="min-h-screen p-6 max-w-lg mx-auto">
-      <h1 className="font-heading text-3xl font-bold text-pitch-500 mb-6">
-        Založit tým
-      </h1>
+      <h1 className="text-h1 text-pitch-500 mb-6">Založit tým</h1>
 
       {/* Step 1: Select village */}
       {!selectedVillage ? (
@@ -71,7 +69,7 @@ export default function CreatePage() {
               <button
                 key={v.id}
                 onClick={() => { setSelectedVillage(v); setTeamName(`SK ${v.name}`); }}
-                className="w-full bg-white rounded-card shadow-card p-4 text-left hover:shadow-hover transition-all"
+                className="card card-hover w-full p-4 text-left"
               >
                 <div className="font-heading font-bold">{v.name}</div>
                 <div className="text-sm text-muted">{v.district} &middot; {v.population.toLocaleString("cs")} obyv. &middot; {v.size}</div>

@@ -95,15 +95,13 @@ export default function MatchPage() {
 
       {phase === "lineup" && (
         <div className="flex-1 flex flex-col p-6 max-w-lg mx-auto w-full justify-center text-center">
-          <h2 className="font-heading text-3xl font-bold text-pitch-500 mb-2">Sestava připravena</h2>
+          <h2 className="text-h1 text-pitch-500 mb-2">Sestava připravena</h2>
           <p className="text-muted mb-8">
             {smsMessages.filter((m) => m.status === "available").length} hráčů dostupných
           </p>
           <div className="flex gap-3">
-            <button onClick={() => setPhase("sms")} className="flex-1 py-3 rounded-card bg-gray-100 text-muted font-heading font-bold">Zpět</button>
-            <button onClick={handleSimulate} className="flex-1 py-3 rounded-card bg-pitch-500 text-white font-heading font-bold hover:bg-pitch-400 transition-colors">
-              Hrát zápas!
-            </button>
+            <Button variant="ghost" size="lg" onClick={() => setPhase("sms")} className="flex-1">Zpět</Button>
+            <Button size="lg" onClick={handleSimulate} className="flex-1">Hrát zápas!</Button>
           </div>
         </div>
       )}
@@ -135,7 +133,7 @@ export default function MatchPage() {
 
       {phase === "pub" && matchResult && (
         <div className="flex-1 bg-amber-950 text-amber-100 p-6 flex flex-col max-w-lg mx-auto w-full">
-          <h2 className="font-heading text-3xl font-bold text-amber-200 mb-1">Hospoda</h2>
+          <h2 className="text-h1 text-amber-200 mb-1">Hospoda</h2>
           <p className="text-amber-400 text-sm mb-6">Po zápase</p>
           <div className="bg-amber-900/50 rounded-card p-5 text-center mb-6">
             <div className="font-heading font-extrabold text-4xl text-amber-100 tabular-nums">

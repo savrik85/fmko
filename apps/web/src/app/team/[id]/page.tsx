@@ -47,7 +47,7 @@ export default function TeamPage() {
     <main className="min-h-screen">
       {/* Team header */}
       <div className="p-6 text-white" style={{ backgroundColor: team.primary_color }}>
-        <h1 className="font-heading text-3xl font-bold">{team.name}</h1>
+        <h1 className="text-h1 text-white">{team.name}</h1>
         <p className="text-white/70">{team.village_name} &middot; {team.district}</p>
         <p className="text-white/70 text-sm">Rozpočet: {team.budget.toLocaleString("cs")} Kč &middot; {players.length} hráčů</p>
       </div>
@@ -75,7 +75,7 @@ export default function TeamPage() {
             <button
               key={player.id}
               onClick={() => setSelected(player)}
-              className="w-full bg-white rounded-card shadow-card hover:shadow-hover p-4 text-left transition-all flex gap-3 items-center"
+              className="card card-hover w-full p-4 text-left flex gap-3 items-center"
             >
               <div
                 className="w-11 h-11 rounded-full shrink-0 flex items-center justify-center text-white font-heading font-bold"
@@ -116,7 +116,7 @@ export default function TeamPage() {
             <div className="p-5 text-white rounded-t-2xl sm:rounded-t-card" style={{ backgroundColor: team.primary_color }}>
               <div className="flex justify-between items-start">
                 <div>
-                  <div className="font-heading text-2xl font-bold">{selected.first_name} {selected.last_name}</div>
+                  <div className="text-h2 text-white">{selected.first_name} {selected.last_name}</div>
                   {selected.nickname && <div className="text-white/70">&bdquo;{selected.nickname}&ldquo;</div>}
                   <div className="text-white/70 text-sm mt-1">{selected.age} let &middot; {selected.lifeContext.occupation}</div>
                 </div>

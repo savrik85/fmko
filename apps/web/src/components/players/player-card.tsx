@@ -63,7 +63,7 @@ export function PlayerCardCompact({ player, onClick }: { player: PlayerCardData;
   return (
     <button
       onClick={onClick}
-      className="w-full bg-white rounded-card shadow-card hover:shadow-hover p-4 text-left transition-all flex gap-3 items-center"
+      className="card card-hover w-full p-4 text-left flex gap-3 items-center"
     >
       {/* Avatar placeholder */}
       <div
@@ -117,7 +117,7 @@ export function PlayerCardFull({ player, onClose }: { player: PlayerCardData; on
         <div className="p-5 text-white rounded-t-2xl sm:rounded-t-card" style={{ backgroundColor: player.primaryColor }}>
           <div className="flex justify-between items-start">
             <div>
-              <div className="font-heading text-2xl font-bold">
+              <div className="text-h2 text-white">
                 {player.firstName} {player.lastName}
               </div>
               {player.nickname && (
