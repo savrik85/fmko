@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
+import { Spinner, Card, Button } from "@/components/ui";
 
 interface Standing {
   pos: number;
@@ -37,21 +38,19 @@ export default function TablePage() {
       .catch(() => setLoading(false));
   }, [teamId]);
 
-  if (loading) return <div className="p-6 flex justify-center min-h-[50vh] items-center"><div className="w-8 h-8 border-3 border-pitch-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
 
   return (
-    <div className="p-4 sm:p-6 max-w-3xl mx-auto">
-      <h1 className="font-heading text-2xl font-bold text-pitch-500 mb-1">{leagueName || "Tabulka"}</h1>
+    <div className="page-container">
+      <h1 className="text-h1 text-pitch-500 mb-1">{leagueName || "Tabulka"}</h1>
       <p className="text-sm text-muted mb-4">{standings.length > 0 ? `${standings[0].played} odehraných kol` : "Zatím žádné zápasy"}</p>
 
       {standings.length === 0 ? (
-        <div className="bg-white rounded-card shadow-card p-8 text-center text-muted">
+        <Card className="p-8 text-center text-muted">
           <p className="text-lg mb-2">Zatím žádné výsledky</p>
-          <p className="text-sm">Odehraj první zápas!</p>
-          <a href="/dashboard/match" className="mt-4 inline-block bg-pitch-500 text-white font-heading font-bold px-6 py-3 rounded-card hover:bg-pitch-400 transition-colors">
-            Hrát zápas
-          </a>
-        </div>
+          <p className="text-sm mb-4">Odehraj první zápas!</p>
+          <a href="/dashboard/match"><Button>Hrát zápas</Button></a>
+        </Card>
       ) : (
         <div className="bg-white rounded-card shadow-card overflow-hidden">
           <div className="grid grid-cols-[2rem_1fr_2rem_2rem_2rem_2rem_3rem_2.5rem_4rem] gap-1 px-3 py-2 bg-gray-50 border-b border-gray-200 text-[10px] text-muted font-heading font-bold">

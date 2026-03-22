@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { StatBar } from "@/components/ui";
+import { StatBar, Spinner, SectionLabel, PositionBadge, Modal, Button } from "@/components/ui";
 
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
@@ -26,7 +26,7 @@ export default function SquadPage() {
     ]).then(([t, p]) => { setTeam(t); setPlayers(p); setLoading(false); });
   }, [teamId]);
 
-  if (loading) return <div className="p-6 flex justify-center min-h-[50vh] items-center"><div className="w-8 h-8 border-3 border-pitch-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
   if (!team) return <div className="p-6">Tým nenalezen.</div>;
 
   const color = team.primary_color || "#2D5F2D";
@@ -34,8 +34,8 @@ export default function SquadPage() {
   const sorted = [...filtered].sort((a, b) => POS_ORDER[a.position] - POS_ORDER[b.position] || b.overall_rating - a.overall_rating);
 
   return (
-    <div className="p-4 sm:p-6 max-w-3xl mx-auto">
-      <h1 className="font-heading text-2xl font-bold text-pitch-500 mb-4">Kádr ({players.length})</h1>
+    <div className="page-container">
+      <h1 className="text-h1 text-pitch-500 mb-4">Kádr ({players.length})</h1>
 
       <div className="flex gap-2 mb-4">
         {(["all", "GK", "DEF", "MID", "FWD"] as PosFilter[]).map((pos) => (
@@ -137,7 +137,7 @@ export default function SquadPage() {
 
             {/* Osobnostní traits jako popisné labely */}
             <div className="px-5 py-3 border-b border-gray-100">
-              <div className="text-xs text-muted uppercase font-heading font-bold mb-2">Charakter</div>
+              <SectionLabel>Charakter</SectionLabel>
               <div className="flex flex-wrap gap-2">
                 <TraitBadge value={selected.personality?.discipline ?? 50} label="Disciplína" icon="&#128221;" />
                 <TraitBadge value={selected.personality?.patriotism ?? 50} label="Patriotismus" icon="&#127463;" />
@@ -162,7 +162,7 @@ export default function SquadPage() {
 
             {/* Fotbalové skilly — 2 sloupce na desktopu */}
             <div className="px-5 py-4">
-              <div className="text-xs text-muted uppercase font-heading font-bold mb-2">Fotbalové dovednosti</div>
+              <SectionLabel>Fotbalové dovednosti</SectionLabel>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                 <StatBar label="Rychlost" value={selected.skills?.speed ?? 0} max={100} />
                 <StatBar label="Technika" value={selected.skills?.technique ?? 0} max={100} />
@@ -173,7 +173,7 @@ export default function SquadPage() {
                 {selected.position === "GK" && <StatBar label="Brankář" value={selected.skills?.goalkeeping ?? 0} max={100} />}
               </div>
 
-              <div className="text-xs text-muted uppercase font-heading font-bold mt-4 mb-2">Fyzické</div>
+              <SectionLabel>Fyzické</SectionLabel>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                 <StatBar label="Kondice" value={selected.physical?.stamina ?? 0} max={100} />
                 <StatBar label="Síla" value={selected.physical?.strength ?? 0} max={100} />

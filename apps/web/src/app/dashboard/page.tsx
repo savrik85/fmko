@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { Card, CardBody } from "@/components/ui";
+import { Card, CardBody, Spinner, SectionLabel, PositionBadge } from "@/components/ui";
 
 export default function DashboardPage() {
   const { teamId } = useTeam();
@@ -18,48 +18,32 @@ export default function DashboardPage() {
       apiFetch<Team>(`/api/teams/${teamId}`),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
     ]).then(([t, p]) => {
-      setTeam(t);
-      setPlayers(p);
-      setLoading(false);
+      setTeam(t); setPlayers(p); setLoading(false);
     }).catch(() => setLoading(false));
   }, [teamId]);
 
-  if (loading) {
-    return (
-      <div className="p-6 flex items-center justify-center min-h-[50vh]">
-        <div className="w-8 h-8 border-3 border-pitch-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (!team) return <div className="p-6">Tým nenalezen.</div>;
+  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (!team) return <div className="page-container">Tým nenalezen.</div>;
 
   const fitCount = players.filter((p) => (p.physical?.stamina ?? 0) > 3).length;
-  const injuredCount = players.length - fitCount;
 
   return (
-    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-4">
+    <div className="page-container space-y-4">
       {/* Team header */}
-      <div className="rounded-card p-5 text-white" style={{ backgroundColor: team.primary_color || "#2D5F2D" }}>
-        <h1 className="font-heading text-2xl font-bold">{team.name}</h1>
-        <div className="text-white/70 text-sm mt-1">
-          {team.village_name} &middot; {team.district}
-        </div>
-        <div className="text-white/70 text-sm">
-          Rozpočet: {(team.budget ?? 0).toLocaleString("cs")} Kč &middot; {players.length} hráčů
-        </div>
+      <div className="hero-gradient rounded-card p-6 text-white" style={{ backgroundColor: team.primary_color || "#2D5F2D" }}>
+        <h1 className="text-h1 text-white">{team.name}</h1>
+        <p className="text-white/70 text-sm mt-1">{team.village_name} &middot; {team.district}</p>
+        <p className="text-white/70 text-sm">Rozpočet: {(team.budget ?? 0).toLocaleString("cs")} Kč &middot; {players.length} hráčů</p>
       </div>
 
       {/* Squad status */}
       <Card>
         <CardBody>
-          <div className="text-xs text-muted uppercase font-heading font-bold mb-3">
-            Stav kádru
-          </div>
-          <div className="grid grid-cols-3 gap-3 text-center">
+          <SectionLabel>Stav kádru</SectionLabel>
+          <div className="grid grid-cols-3 gap-4 text-center">
             <StatusItem value={players.length} label="Celkem" color="text-pitch-500" />
             <StatusItem value={fitCount} label="Fit" color="text-pitch-500" />
-            <StatusItem value={injuredCount} label="Mimo" color="text-card-red" />
+            <StatusItem value={players.length - fitCount} label="Mimo" color="text-card-red" />
           </div>
         </CardBody>
       </Card>
@@ -67,25 +51,26 @@ export default function DashboardPage() {
       {/* Top players */}
       <Card>
         <CardBody>
-          <div className="text-xs text-muted uppercase font-heading font-bold mb-3">
-            Nejlepší hráči
-          </div>
-          <div className="space-y-2">
+          <SectionLabel>Nejlepší hráči</SectionLabel>
+          <div className="space-y-3">
             {[...players].sort((a, b) => b.overall_rating - a.overall_rating).slice(0, 5).map((p) => (
               <div key={p.id} className="flex items-center gap-3">
                 {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
-                  <FaceAvatar faceConfig={p.avatar} size={32} />
+                  <FaceAvatar faceConfig={p.avatar} size={36} />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-pitch-500 flex items-center justify-center text-white text-xs font-bold">{p.first_name[0]}</div>
+                  <div className="w-9 h-9 rounded-full bg-pitch-500 flex items-center justify-center text-white text-xs font-bold shrink-0">{p.first_name[0]}</div>
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">
                     {p.first_name} {p.last_name}
                     {p.nickname && <span className="text-gold-500 ml-1">&bdquo;{p.nickname}&ldquo;</span>}
                   </div>
-                  <div className="text-xs text-muted">{p.position} &middot; {p.age} let</div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <PositionBadge position={p.position} />
+                    <span className="text-xs text-muted">{p.age} let</span>
+                  </div>
                 </div>
-                <div className="font-heading font-bold tabular-nums" style={{ color: team.primary_color || "#2D5F2D" }}>
+                <div className={`font-heading font-bold text-lg tabular-nums ${p.overall_rating >= 70 ? "rating-gold" : p.overall_rating >= 50 ? "rating-good" : "rating-avg"}`}>
                   {p.overall_rating}
                 </div>
               </div>
@@ -96,22 +81,19 @@ export default function DashboardPage() {
 
       {/* Quick links */}
       <div className="grid grid-cols-2 gap-3">
-        <a href="/dashboard/squad" className="bg-white rounded-card shadow-card p-4 text-center hover:shadow-hover transition-all">
-          <div className="text-2xl mb-1">&#128101;</div>
-          <div className="font-heading font-bold text-sm">Kádr</div>
-        </a>
-        <a href="/dashboard/match" className="bg-white rounded-card shadow-card p-4 text-center hover:shadow-hover transition-all">
-          <div className="text-2xl mb-1">&#9917;</div>
-          <div className="font-heading font-bold text-sm">Zápas</div>
-        </a>
-        <a href="/dashboard/table" className="bg-white rounded-card shadow-card p-4 text-center hover:shadow-hover transition-all">
-          <div className="text-2xl mb-1">&#128202;</div>
-          <div className="font-heading font-bold text-sm">Tabulka</div>
-        </a>
-        <a href="/dashboard/squad" className="bg-white rounded-card shadow-card p-4 text-center hover:shadow-hover transition-all">
-          <div className="text-2xl mb-1">&#127947;</div>
-          <div className="font-heading font-bold text-sm">Tréninky</div>
-        </a>
+        {[
+          { href: "/dashboard/squad", icon: "\u{1F465}", label: "Kádr" },
+          { href: "/dashboard/match", icon: "\u26BD", label: "Zápas" },
+          { href: "/dashboard/table", icon: "\u{1F4CA}", label: "Tabulka" },
+          { href: "/dashboard/squad", icon: "\u{1F3CB}", label: "Tréninky" },
+        ].map((link) => (
+          <a key={link.href + link.label} href={link.href}>
+            <Card hover className="p-4 text-center">
+              <div className="text-2xl mb-1">{link.icon}</div>
+              <div className="text-h3">{link.label}</div>
+            </Card>
+          </a>
+        ))}
       </div>
     </div>
   );
