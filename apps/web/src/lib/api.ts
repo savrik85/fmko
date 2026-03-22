@@ -33,6 +33,9 @@ export interface Team {
   budget: number;
   reputation: number;
   league_id?: string;
+  jersey_pattern?: string;
+  badge_pattern?: string;
+  stadium_name?: string;
 }
 
 export interface Player {

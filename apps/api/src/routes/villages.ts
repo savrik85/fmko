@@ -39,6 +39,37 @@ villagesRouter.get("/", async (c) => {
   return c.json(result.results);
 });
 
+// GET /api/villages/stats — player counts per village/district/region
+villagesRouter.get("/stats", async (c) => {
+  // Count human teams (non-AI) per village
+  const perVillage = await c.env.DB.prepare(
+    "SELECT village_id, COUNT(*) as cnt FROM teams WHERE user_id != 'ai' GROUP BY village_id"
+  ).all();
+  const villageCounts: Record<string, number> = {};
+  for (const r of perVillage.results) {
+    villageCounts[r.village_id as string] = r.cnt as number;
+  }
+
+  // Count per district and region
+  const perDistrict = await c.env.DB.prepare(
+    "SELECT v.district, COUNT(*) as cnt FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id != 'ai' GROUP BY v.district"
+  ).all();
+  const districtCounts: Record<string, number> = {};
+  for (const r of perDistrict.results) {
+    districtCounts[r.district as string] = r.cnt as number;
+  }
+
+  const perRegion = await c.env.DB.prepare(
+    "SELECT v.region, COUNT(*) as cnt FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id != 'ai' GROUP BY v.region"
+  ).all();
+  const regionCounts: Record<string, number> = {};
+  for (const r of perRegion.results) {
+    regionCounts[r.region as string] = r.cnt as number;
+  }
+
+  return c.json({ villageCounts, districtCounts, regionCounts });
+});
+
 // GET /api/villages/:id — detail
 villagesRouter.get("/:id", async (c) => {
   const id = c.req.param("id");

@@ -9,3 +9,5 @@ export { Modal } from "./modal";
 export { SectionLabel } from "./section-label";
 export { PositionBadge, PositionDot } from "./position-badge";
 export { EntityLink } from "./entity-link";
+export { BadgePreview } from "./badge-preview";
+export type { BadgePattern } from "./badge-preview";

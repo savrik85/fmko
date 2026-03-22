@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch, type Team, type Player } from "@/lib/api";
-import { Spinner, SectionLabel, EntityLink } from "@/components/ui";
+import { Spinner, SectionLabel, EntityLink, BadgePreview } from "@/components/ui";
+import type { BadgePattern } from "@/components/ui";
 import { PlayerCardCompact } from "@/components/players/player-card";
 
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
@@ -78,9 +79,13 @@ export default function TeamPage() {
 
           <div className="flex items-start gap-5">
             {/* Team color badge */}
-            <div className="shrink-0 w-16 h-16 rounded-xl bg-white/15 border-2 border-white/20 flex items-center justify-center">
-              <div className="w-10 h-10 rounded-lg" style={{ backgroundColor: team.secondary_color || "#fff" }} />
-            </div>
+            <BadgePreview
+              primary={team.primary_color || "#2D5F2D"}
+              secondary={team.secondary_color || "#FFFFFF"}
+              pattern={(team.badge_pattern as BadgePattern) || "shield"}
+              initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
+              size={64}
+            />
 
             {/* Info */}
             <div className="flex-1 min-w-0 pt-0.5">

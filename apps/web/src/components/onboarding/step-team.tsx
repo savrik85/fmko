@@ -5,16 +5,21 @@ import type { VillageSelection } from "@/app/onboarding/page";
 
 const COLORS = [
   { hex: "#2D5F2D", name: "Zelená" },
+  { hex: "#16A34A", name: "Světle zelená" },
   { hex: "#D94032", name: "Červená" },
+  { hex: "#9F1239", name: "Vínová" },
   { hex: "#2563EB", name: "Modrá" },
-  { hex: "#F59E0B", name: "Žlutá" },
-  { hex: "#7C3AED", name: "Fialová" },
-  { hex: "#0891B2", name: "Tyrkysová" },
   { hex: "#1D4ED8", name: "Tmavě modrá" },
+  { hex: "#3B82F6", name: "Světle modrá" },
+  { hex: "#06B6D4", name: "Tyrkysová" },
+  { hex: "#F59E0B", name: "Žlutá" },
+  { hex: "#F97316", name: "Oranžová" },
+  { hex: "#7C3AED", name: "Fialová" },
+  { hex: "#EC4899", name: "Růžová" },
   { hex: "#047857", name: "Smaragdová" },
   { hex: "#B45309", name: "Hnědá" },
+  { hex: "#78716C", name: "Šedá" },
   { hex: "#1A1A1A", name: "Černá" },
-  { hex: "#DC2626", name: "Tmavě červená" },
   { hex: "#FFFFFF", name: "Bílá" },
 ];
 
@@ -27,23 +32,49 @@ interface SponsorOffer {
   extra?: string;
 }
 
+const SPONSOR_POOL = [
+  { type: "autoservis", template: (s: string) => `Autoservis ${s}`, teamTemplate: (s: string) => `SK Autoservis ${s}`, bonus: 25000, extra: "Požadavek: top 8 v tabulce" },
+  { type: "reznictvi", template: (s: string) => `Řeznictví ${s}`, teamTemplate: (s: string, v: string) => `FK Řeznictví ${s} ${v}`, bonus: 15000 },
+  { type: "hospoda", template: (s: string) => `Hospoda U ${s}ů`, teamTemplate: (s: string, v: string) => `TJ U ${s}ů ${v}`, bonus: 8000, extra: "Pivo po zápase zdarma" },
+  { type: "stavebniny", template: (s: string) => `Stavebniny ${s}`, teamTemplate: (s: string) => `FC Stavebniny ${s}`, bonus: 20000, extra: "Požadavek: vyhrát pohár" },
+  { type: "zemedelstvi", template: (s: string) => `Zemědělství ${s}`, teamTemplate: (s: string, v: string) => `SK ${s} ${v}`, bonus: 12000 },
+  { type: "pila", template: (s: string) => `Pila ${s}`, teamTemplate: (s: string, v: string) => `TJ Pila ${s} ${v}`, bonus: 18000 },
+  { type: "potraviny", template: (s: string) => `Potraviny ${s}`, teamTemplate: (s: string, v: string) => `FK Potraviny ${s} ${v}`, bonus: 10000, extra: "Občerstvení pro tým zdarma" },
+  { type: "truhlarna", template: (s: string) => `Truhlárna ${s}`, teamTemplate: (s: string) => `SK Truhlárna ${s}`, bonus: 14000 },
+  { type: "autodoprava", template: (s: string) => `Autodoprava ${s}`, teamTemplate: (s: string) => `FC Autodoprava ${s}`, bonus: 22000, extra: "Doprava na venkovní zápasy" },
+  { type: "kominiky", template: (s: string) => `Kominictví ${s}`, teamTemplate: (s: string, v: string) => `TJ ${s} ${v}`, bonus: 9000 },
+];
+
+const SURNAME_POOL = [
+  "Novotný", "Kuchař", "Dvořák", "Procházka", "Kovář", "Sedláček",
+  "Horák", "Veselý", "Marek", "Pokorný", "Jelínek", "Fiala",
+  "Bartoš", "Kolář", "Svoboda", "Němec", "Černý", "Hájek",
+];
+
 function generateSponsors(villageName: string): SponsorOffer[] {
-  const surnames = ["Novotný", "Kuchař", "Dvořák", "Procházka", "Kovář", "Sedláček"];
-  const picked = surnames.sort(() => Math.random() - 0.5).slice(0, 3);
-  return [
-    { name: `Autoservis ${picked[0]}`, teamName: `SK Autoservis ${picked[0]}`, bonus: 25000, extra: "Požadavek: top 8 v tabulce" },
-    { name: `Řeznictví ${picked[1]}`, teamName: `FK Řeznictví ${picked[1]} ${villageName}`, bonus: 15000 },
-    { name: `Hospoda U ${picked[2]}ů`, teamName: `TJ U ${picked[2]}ů ${villageName}`, bonus: 8000, extra: "Pivo po zápase zdarma" },
-  ];
+  const names = [...SURNAME_POOL].sort(() => Math.random() - 0.5);
+  const sponsors = [...SPONSOR_POOL].sort(() => Math.random() - 0.5).slice(0, 3);
+  return sponsors.map((sp, i) => ({
+    name: sp.template(names[i]),
+    teamName: sp.teamTemplate(names[i], villageName),
+    bonus: sp.bonus,
+    extra: sp.extra,
+  }));
 }
 
 function generateStadiumSponsors(): Array<{ name: string; bonus: number }> {
-  const surnames = ["Kuchař", "Kovář", "Dvořák", "Sedláček", "Novotný"];
-  const picked = surnames.sort(() => Math.random() - 0.5).slice(0, 2);
-  return [
-    { name: `${picked[0]} Arena`, bonus: 5000 },
-    { name: `${picked[1]} Stadion`, bonus: 3000 },
-  ];
+  const names = [...SURNAME_POOL].sort(() => Math.random() - 0.5);
+  const templates = [
+    (s: string) => ({ name: `${s} Arena`, bonus: 5000 }),
+    (s: string) => ({ name: `${s} Stadion`, bonus: 3000 }),
+    (s: string) => ({ name: `Stadion ${s}`, bonus: 4000 }),
+    (s: string) => ({ name: `${s} Park`, bonus: 6000 }),
+  ].sort(() => Math.random() - 0.5);
+  return [templates[0](names[0]), templates[1](names[1])];
+}
+
+function formatMoney(amount: number): string {
+  return amount.toLocaleString("cs") + " Kč";
 }
 
 /* ═══════════════════════════════════════
@@ -260,9 +291,9 @@ export function StepTeam({ village, teamName: initialName, primaryColor: initial
             <p className="text-label mb-3">Název klubu</p>
             <div className="grid grid-cols-3 gap-2 mb-4">
               {([
-                { key: "classic" as const, icon: "\u{1F3DB}", label: "Klasický", desc: "Tradice" },
-                { key: "sponsor" as const, icon: "\u{1F4B0}", label: "Sponzorský", desc: "Peníze navíc" },
-                { key: "custom" as const, icon: "\u270F\uFE0F", label: "Vlastní", desc: "Tvůj výběr" },
+                { key: "classic" as const, icon: "\u{1F3DB}", label: "Klasický", desc: "Tradiční prefix + název obce" },
+                { key: "sponsor" as const, icon: "\u{1F4B0}", label: "Sponzorský", desc: "Místní sponzor v názvu = peníze navíc" },
+                { key: "custom" as const, icon: "\u270F\uFE0F", label: "Vlastní", desc: "Napiš si vlastní název klubu" },
               ]).map((opt) => (
                 <button key={opt.key} onClick={() => setNamingChoice(opt.key)}
                   className={`p-3 rounded-xl text-center transition-all border-2 ${namingChoice === opt.key ? "border-pitch-500 bg-pitch-500/5" : "border-transparent bg-surface hover:border-pitch-500/20"}`}>
@@ -297,8 +328,8 @@ export function StepTeam({ village, teamName: initialName, primaryColor: initial
                       {s.extra && <div className="text-xs text-muted">{s.extra}</div>}
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="text-sm font-heading font-bold text-gold-600">+{(s.bonus / 1000).toFixed(0)}k</div>
-                      <div className="text-[10px] text-muted">Kč/sez.</div>
+                      <div className="text-sm font-heading font-bold text-gold-600">+{formatMoney(s.bonus)}</div>
+                      <div className="text-[10px] text-muted">/sezóna</div>
                     </div>
                   </button>
                 ))}
@@ -316,8 +347,8 @@ export function StepTeam({ village, teamName: initialName, primaryColor: initial
             <div className="flex gap-6">
               <div>
                 <div className="text-xs text-muted mb-2">Hlavní</div>
-                <div className="flex gap-1.5 flex-wrap max-w-[210px]">
-                  {COLORS.filter((c) => c.hex !== "#FFFFFF").map((c) => (
+                <div className="flex gap-1.5 flex-wrap max-w-[200px]">
+                  {COLORS.map((c) => (
                     <button key={`p-${c.hex}`} onClick={() => setPrimaryColor(c.hex)} title={c.name}
                       className={`w-7 h-7 rounded-md transition-all hover:scale-110 ${primaryColor === c.hex ? "ring-2 ring-pitch-500 ring-offset-1 scale-110" : ""}`}
                       style={{ backgroundColor: c.hex }} />
@@ -326,7 +357,7 @@ export function StepTeam({ village, teamName: initialName, primaryColor: initial
               </div>
               <div>
                 <div className="text-xs text-muted mb-2">Doplňková</div>
-                <div className="flex gap-1.5 flex-wrap max-w-[210px]">
+                <div className="flex gap-1.5 flex-wrap max-w-[200px]">
                   {COLORS.map((c) => (
                     <button key={`s-${c.hex}`} onClick={() => setSecondaryColor(c.hex)} title={c.name}
                       className={`w-7 h-7 rounded-md transition-all hover:scale-110 ${c.hex === "#FFFFFF" ? "border border-gray-200" : ""} ${secondaryColor === c.hex ? "ring-2 ring-pitch-500 ring-offset-1 scale-110" : ""}`}
@@ -374,14 +405,15 @@ export function StepTeam({ village, teamName: initialName, primaryColor: initial
             <p className="text-label mb-3">Stadion</p>
             <div className="grid grid-cols-3 gap-2 mb-3">
               {([
-                { key: "classic" as const, icon: "\u{1F3DF}", label: "Klasický" },
-                { key: "sponsor" as const, icon: "\u{1F4B0}", label: "Sponzorský" },
-                { key: "custom" as const, icon: "\u270F\uFE0F", label: "Vlastní" },
+                { key: "classic" as const, icon: "\u{1F3DF}", label: "Klasický", desc: "Typický název hřiště" },
+                { key: "sponsor" as const, icon: "\u{1F4B0}", label: "Sponzorský", desc: "Pojmenuj stadion po sponzorovi" },
+                { key: "custom" as const, icon: "\u270F\uFE0F", label: "Vlastní", desc: "Napiš vlastní název" },
               ]).map((opt) => (
                 <button key={opt.key} onClick={() => setStadiumChoice(opt.key)}
                   className={`p-2.5 rounded-xl text-center transition-all border-2 ${stadiumChoice === opt.key ? "border-pitch-500 bg-pitch-500/5" : "border-transparent bg-surface hover:border-pitch-500/20"}`}>
                   <div className="text-lg mb-0.5">{opt.icon}</div>
                   <div className="text-xs font-semibold">{opt.label}</div>
+                  {"desc" in opt && <div className="text-[10px] text-muted">{(opt as { desc: string }).desc}</div>}
                 </button>
               ))}
             </div>
@@ -401,7 +433,7 @@ export function StepTeam({ village, teamName: initialName, primaryColor: initial
                   <button key={i} onClick={() => setSelectedStadiumSponsor(i)}
                     className={`w-full p-3 rounded-xl text-left transition-all border-2 flex items-center justify-between ${selectedStadiumSponsor === i ? "border-gold-500 bg-gold-500/5" : "border-transparent bg-surface hover:border-gold-500/20"}`}>
                     <span className="font-semibold text-sm">{s.name}</span>
-                    <span className="text-sm font-heading font-bold text-gold-600">+{(s.bonus / 1000).toFixed(0)}k Kč/sez.</span>
+                    <span className="text-sm font-heading font-bold text-gold-600">+{formatMoney(s.bonus)}/sez.</span>
                   </button>
                 ))}
               </div>
@@ -438,7 +470,7 @@ export function StepTeam({ village, teamName: initialName, primaryColor: initial
               )}
               {namingChoice === "sponsor" && selectedSponsor !== null && (
                 <div className="mt-2 inline-flex items-center gap-1 text-xs font-heading font-bold text-gold-600 bg-gold-500/10 px-3 py-1 rounded-full">
-                  +{(sponsors[selectedSponsor].bonus / 1000).toFixed(0)}k Kč/sezóna
+                  +{formatMoney(sponsors[selectedSponsor].bonus)}/sezóna
                 </div>
               )}
             </div>

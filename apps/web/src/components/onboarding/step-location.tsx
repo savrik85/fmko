@@ -14,23 +14,20 @@ type Village = {
   size: string;
 };
 
-function getSizeBadge(size: string): { label: string; emoji: string; bg: string; text: string } {
-  switch (size) {
-    case "hamlet": return { label: "Hardcore", emoji: "\u{1F525}", bg: "bg-card-red/10", text: "text-card-red" };
-    case "village": return { label: "Výzva", emoji: "\u2B50", bg: "bg-gold-500/10", text: "text-gold-600" };
-    case "town": return { label: "Dobrý start", emoji: "\u2705", bg: "bg-pitch-500/8", text: "text-pitch-500" };
-    default: return { label: "Easy", emoji: "\u{1F7E2}", bg: "bg-pitch-100", text: "text-pitch-400" };
-  }
-}
+type Stats = {
+  villageCounts: Record<string, number>;
+  districtCounts: Record<string, number>;
+  regionCounts: Record<string, number>;
+};
 
-function getSizeIcon(size: string): string {
+type Step = "region" | "district" | "village";
+
+function getSizeBadge(size: string): { label: string; bg: string; text: string } {
   switch (size) {
-    case "hamlet": return "\u{1F3D5}";  // camping (vesnice)
-    case "village": return "\u{1F3E0}"; // house (obec)
-    case "town": return "\u{1F3D8}";    // houses (městys)
-    case "small_city": return "\u{1F3EB}"; // school (malé město)
-    case "city": return "\u{1F3D9}";    // cityscape (město)
-    default: return "\u{1F3DF}";
+    case "hamlet": return { label: "Hardcore", bg: "bg-card-red/10", text: "text-card-red" };
+    case "village": return { label: "Výzva", bg: "bg-gold-500/10", text: "text-gold-600" };
+    case "town": return { label: "Dobrý start", bg: "bg-pitch-500/8", text: "text-pitch-500" };
+    default: return { label: "Easy", bg: "bg-pitch-100", text: "text-pitch-400" };
   }
 }
 
@@ -40,114 +37,173 @@ interface Props {
 
 export function StepLocation({ onSelect }: Props) {
   const [villages, setVillages] = useState<Village[]>([]);
+  const [stats, setStats] = useState<Stats>({ villageCounts: {}, districtCounts: {}, regionCounts: {} });
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [step, setStep] = useState<Step>("region");
   const [selectedRegion, setSelectedRegion] = useState("");
+  const [selectedDistrict, setSelectedDistrict] = useState("");
 
   useEffect(() => {
-    apiFetch<Village[]>("/api/villages")
-      .then((data) => { setVillages(data); setLoading(false); })
-      .catch(() => setLoading(false));
+    Promise.all([
+      apiFetch<Village[]>("/api/villages"),
+      apiFetch<Stats>("/api/villages/stats").catch(() => ({ villageCounts: {}, districtCounts: {}, regionCounts: {} })),
+    ]).then(([v, s]) => {
+      setVillages(v);
+      setStats(s);
+      setLoading(false);
+    });
   }, []);
 
-  const regions = useMemo(() =>
-    [...new Set(villages.map((v) => v.region))].sort((a, b) => a.localeCompare(b, "cs")),
-  [villages]);
-
-  const filteredVillages = useMemo(() => {
-    let result = villages;
-    if (selectedRegion) result = result.filter((v) => v.region === selectedRegion);
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter((v) => v.name.toLowerCase().includes(q));
+  // Derived data
+  const regions = useMemo(() => {
+    const map = new Map<string, { count: number; villages: number }>();
+    for (const v of villages) {
+      const existing = map.get(v.region) || { count: 0, villages: 0 };
+      existing.villages++;
+      map.set(v.region, existing);
     }
-    return result.sort((a, b) => a.name.localeCompare(b.name, "cs"));
-  }, [villages, selectedRegion, search]);
+    return [...map.entries()]
+      .map(([name, data]) => ({
+        name,
+        villages: data.villages,
+        players: stats.regionCounts[name] ?? 0,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "cs"));
+  }, [villages, stats]);
+
+  const districts = useMemo(() => {
+    if (!selectedRegion) return [];
+    const map = new Map<string, number>();
+    for (const v of villages) {
+      if (v.region !== selectedRegion) continue;
+      map.set(v.district, (map.get(v.district) ?? 0) + 1);
+    }
+    return [...map.entries()]
+      .map(([name, villageCount]) => ({
+        name,
+        villages: villageCount,
+        players: stats.districtCounts[name] ?? 0,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "cs"));
+  }, [villages, selectedRegion, stats]);
+
+  const districtVillages = useMemo(() => {
+    if (!selectedDistrict) return [];
+    return villages
+      .filter((v) => v.district === selectedDistrict)
+      .sort((a, b) => a.name.localeCompare(b.name, "cs"));
+  }, [villages, selectedDistrict]);
+
+  function handleRegion(region: string) {
+    setSelectedRegion(region);
+    setStep("district");
+  }
+
+  function handleDistrict(district: string) {
+    setSelectedDistrict(district);
+    setStep("village");
+  }
+
+  function handleBack() {
+    if (step === "village") { setStep("district"); setSelectedDistrict(""); }
+    else if (step === "district") { setStep("region"); setSelectedRegion(""); }
+  }
+
+  const breadcrumb = step === "region" ? "Vyber kraj" : step === "district" ? selectedRegion : `${selectedRegion} › ${selectedDistrict}`;
 
   return (
-    <div className="flex-1 flex flex-col p-5 sm:p-8 w-full max-w-5xl mx-auto">
-      {/* Header + filters */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
-        <div>
-          <p className="text-label mb-2">Krok 1 ze 4</p>
-          <h2 className="text-h1 text-ink">Kde hraješ?</h2>
-          <p className="text-muted mt-1">Klikni na obec kde chceš založit tým</p>
-        </div>
-
-        <div className="flex gap-3 sm:items-center">
-          <div className="relative flex-1 sm:w-60">
-            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-light" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Hledat obec..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="input !py-2.5 pl-10 text-sm"
-            />
-          </div>
-          <select
-            value={selectedRegion}
-            onChange={(e) => setSelectedRegion(e.target.value)}
-            className="select"
-          >
-            <option value="">Všechny kraje</option>
-            {regions.map((r) => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-        </div>
+    <div className="flex-1 flex flex-col p-5 sm:p-8 w-full max-w-3xl mx-auto">
+      <div className="mb-6">
+        <p className="text-label mb-2">Krok 1 ze 4</p>
+        <h2 className="text-h1 text-ink">Kde hraješ?</h2>
+        <p className="text-muted mt-1">{breadcrumb}</p>
       </div>
 
-      {/* Count */}
-      {!loading && (
-        <p className="text-xs text-muted mb-3">
-          {filteredVillages.length} {filteredVillages.length === 1 ? "obec" : filteredVillages.length < 5 ? "obce" : "obcí"}
-        </p>
+      {step !== "region" && (
+        <button onClick={handleBack} className="btn btn-ghost btn-sm mb-4 -ml-2 self-start">
+          &#8592; Zpět
+        </button>
       )}
 
-      {/* Village grid */}
       {loading ? (
-        <div className="flex-1 flex items-center justify-center py-20">
-          <Spinner />
+        <div className="flex-1 flex items-center justify-center py-20"><Spinner /></div>
+      ) : step === "region" ? (
+        /* ═══ Region selection ═══ */
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {regions.map((r) => (
+            <button
+              key={r.name}
+              onClick={() => handleRegion(r.name)}
+              className="card card-hover p-4 text-left flex items-center justify-between"
+            >
+              <div>
+                <div className="font-heading font-bold text-base">{r.name}</div>
+                <div className="text-sm text-muted">{r.villages} obcí</div>
+              </div>
+              <div className="text-right">
+                <div className={`font-heading font-bold text-lg ${r.players > 0 ? "text-pitch-500" : "text-muted-light"}`}>{r.players}</div>
+                <div className="text-[10px] text-muted">hráčů</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : step === "district" ? (
+        /* ═══ District selection ═══ */
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {districts.map((d) => (
+            <button
+              key={d.name}
+              onClick={() => handleDistrict(d.name)}
+              className="card card-hover p-4 text-left flex items-center justify-between"
+            >
+              <div>
+                <div className="font-heading font-bold text-base">{d.name}</div>
+                <div className="text-sm text-muted">{d.villages} obcí</div>
+              </div>
+              <div className="text-right">
+                <div className={`font-heading font-bold text-lg ${d.players > 0 ? "text-pitch-500" : "text-muted-light"}`}>{d.players}</div>
+                <div className="text-[10px] text-muted">hráčů</div>
+              </div>
+            </button>
+          ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {filteredVillages.slice(0, 60).map((v) => {
-            const badge = getSizeBadge(v.size);
-            const icon = getSizeIcon(v.size);
-            return (
-              <button
-                key={v.id}
-                onClick={() => onSelect({
-                  id: v.id, name: v.name, district: v.district,
-                  region: v.region, population: v.population, size: v.size,
-                })}
-                className="group bg-surface rounded-xl p-3 text-left flex items-center gap-3 border border-transparent hover:border-pitch-400/30 hover:shadow-hover transition-all active:scale-[0.99]"
-              >
-                <span className="text-xl shrink-0 w-8 text-center">{icon}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-ink text-sm truncate group-hover:text-pitch-600 transition-colors">{v.name}</div>
-                  <div className="text-xs text-muted truncate">{v.district} &middot; {v.population.toLocaleString("cs")} obyv.</div>
-                </div>
-                <span className={`text-[10px] font-heading font-bold px-2 py-1 rounded-md shrink-0 ${badge.bg} ${badge.text}`}>
-                  {badge.label}
-                </span>
-              </button>
-            );
-          })}
-
-          {filteredVillages.length === 0 && (
-            <p className="col-span-full text-center text-muted py-16">Žádná obec nenalezena</p>
-          )}
-        </div>
-      )}
-
-      {filteredVillages.length > 60 && (
-        <p className="text-center text-muted py-3 text-xs">
-          Zobrazeno 60 z {filteredVillages.length}. Upřesni hledání.
-        </p>
+        /* ═══ Village selection ═══ */
+        <>
+          <p className="text-sm text-muted mb-3">{districtVillages.length} obcí v okrese {selectedDistrict}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {districtVillages.map((v) => {
+              const badge = getSizeBadge(v.size);
+              const playerCount = stats.villageCounts[v.id] ?? 0;
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => onSelect({
+                    id: v.id, name: v.name, district: v.district,
+                    region: v.region, population: v.population, size: v.size,
+                  })}
+                  className="card card-hover p-4 text-left flex items-center gap-3"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="font-heading font-bold text-base truncate">{v.name}</div>
+                    <div className="text-sm text-muted">{v.population.toLocaleString("cs")} obyvatel</div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {playerCount > 0 && (
+                      <div className="text-center">
+                        <div className="font-heading font-bold text-pitch-500 text-sm">{playerCount}</div>
+                        <div className="text-[9px] text-muted">hráčů</div>
+                      </div>
+                    )}
+                    <span className={`text-[10px] font-heading font-bold px-2 py-1 rounded-md ${badge.bg} ${badge.text}`}>
+                      {badge.label}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );

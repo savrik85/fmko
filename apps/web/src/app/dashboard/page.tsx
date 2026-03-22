@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { Card, CardBody, Spinner, SectionLabel, PositionBadge, EntityLink } from "@/components/ui";
+import { Card, CardBody, Spinner, SectionLabel, PositionBadge, EntityLink, BadgePreview } from "@/components/ui";
+import type { BadgePattern } from "@/components/ui";
 
 export default function DashboardPage() {
   const { teamId } = useTeam();
@@ -30,10 +31,19 @@ export default function DashboardPage() {
   return (
     <div className="page-container space-y-4">
       {/* Team header */}
-      <div className="hero-gradient rounded-card p-6 text-white" style={{ backgroundColor: team.primary_color || "#2D5F2D" }}>
-        <h1 className="text-h1 text-white">{team.name}</h1>
-        <p className="text-white/70 text-sm mt-1">{team.village_name} &middot; {team.district}</p>
-        <p className="text-white/70 text-sm">Rozpočet: {(team.budget ?? 0).toLocaleString("cs")} Kč &middot; {players.length} hráčů</p>
+      <div className="hero-gradient rounded-card p-6 text-white flex items-center gap-5" style={{ backgroundColor: team.primary_color || "#2D5F2D" }}>
+        <BadgePreview
+          primary={team.primary_color || "#2D5F2D"}
+          secondary={team.secondary_color || "#FFFFFF"}
+          pattern={(team.badge_pattern as BadgePattern) || "shield"}
+          initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
+          size={64}
+        />
+        <div>
+          <h1 className="text-h1 text-white">{team.name}</h1>
+          <p className="text-white/90 text-sm mt-1">{team.village_name} &middot; {team.district}</p>
+          <p className="text-white/70 text-sm">Rozpočet: {(team.budget ?? 0).toLocaleString("cs")} Kč &middot; {players.length} hráčů</p>
+        </div>
       </div>
 
       {/* Squad status */}

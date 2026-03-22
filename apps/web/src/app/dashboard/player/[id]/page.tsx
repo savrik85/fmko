@@ -5,7 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { apiFetch, type Player, type Team } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { PositionBadge, SectionLabel, EntityLink, Spinner } from "@/components/ui";
+import { PositionBadge, SectionLabel, EntityLink, Spinner, BadgePreview } from "@/components/ui";
+import type { BadgePattern } from "@/components/ui";
 
 /* ── Helpers ── */
 
@@ -215,7 +216,13 @@ export default function PlayerDetailPage() {
             <div className="card p-4 sm:p-5">
               <SectionLabel>Tým</SectionLabel>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg shrink-0" style={{ backgroundColor: color }} />
+                <BadgePreview
+                  primary={team.primary_color || "#2D5F2D"}
+                  secondary={team.secondary_color || "#FFFFFF"}
+                  pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                  initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
+                  size={40}
+                />
                 <div>
                   <div className="font-heading font-bold">
                     <EntityLink type="team" id={team.id}>{team.name}</EntityLink>
