@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { DM_Sans, Barlow_Condensed, JetBrains_Mono } from "next/font/google";
+import { Outfit, Barlow_Condensed, JetBrains_Mono } from "next/font/google";
 import { TeamProvider } from "@/context/team-context";
 import "./globals.css";
 
-const dmSans = DM_Sans({
+const outfit = Outfit({
   subsets: ["latin", "latin-ext"],
   variable: "--font-body",
+  weight: ["400", "500", "600", "700"],
 });
 
 const barlowCondensed = Barlow_Condensed({
@@ -31,7 +32,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="cs" className={`${dmSans.variable} ${barlowCondensed.variable} ${jetbrainsMono.variable}`}>
+    <html lang="cs" className={`${outfit.variable} ${barlowCondensed.variable} ${jetbrainsMono.variable}`}>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#153615" />

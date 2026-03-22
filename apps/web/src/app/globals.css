@@ -41,7 +41,7 @@
 
   /* ── Typography ── */
   --font-heading: "Barlow Condensed", "Impact", ui-sans-serif, sans-serif;
-  --font-body: "DM Sans", ui-sans-serif, sans-serif;
+  --font-body: "Outfit", ui-sans-serif, sans-serif;
   --font-commentary: "JetBrains Mono", ui-monospace, monospace;
 
   /* ── Radius ── */
@@ -69,12 +69,13 @@ html {
 
 body {
   font-family: var(--font-body);
+  font-weight: 450;
   background-color: var(--color-paper);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  line-height: 1.5;
-  letter-spacing: -0.01em;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
 }
 
 /* Subtle paper noise texture */
