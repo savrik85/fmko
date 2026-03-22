@@ -141,12 +141,12 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
       </div>
 
       {/* Name + nickname */}
-      <div className="text-center px-3 pb-1.5">
-        <div className="font-heading font-bold text-[0.85rem] text-ink leading-tight truncate">
+      <div className="text-center px-3 pb-2">
+        <div className="font-heading font-bold text-sm text-ink leading-tight truncate">
           {player.first_name} {player.last_name}
         </div>
         {player.nickname && (
-          <div className="text-[0.75rem] mt-0.5 font-medium truncate" style={{ color: teamColor }}>
+          <div className="text-xs mt-0.5 font-medium truncate" style={{ color: teamColor }}>
             &bdquo;{player.nickname}&ldquo;
           </div>
         )}
@@ -158,18 +158,18 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
       {/* Top 3 stats — revealed with delay */}
       <div className="px-3 py-2">
         {topStats.map((stat, i) => (
-          <div key={stat.label} className="flex items-center gap-2 py-0.5">
-            <span className="text-[10px] text-muted w-7 text-right font-heading font-semibold">{stat.label}</span>
-            <div className="flex-1 h-1 bg-black/[0.04] rounded-full overflow-hidden">
+          <div key={stat.label} className="flex items-center gap-2 py-1">
+            <span className="text-xs text-muted w-8 text-right font-heading font-semibold">{stat.label}</span>
+            <div className="flex-1 h-1.5 bg-black/[0.04] rounded-full overflow-hidden">
               <div className="h-full rounded-full transition-all duration-700"
                 style={{
                   width: phase === "rating" ? `${stat.value}%` : "0%",
                   backgroundColor: teamColor,
-                  opacity: 0.6 - i * 0.15,
+                  opacity: 0.7 - i * 0.12,
                   transitionDelay: `${i * 100}ms`,
                 }} />
             </div>
-            <span className={`text-[10px] tabular-nums font-heading font-bold w-5 text-right transition-opacity duration-500 ${phase === "rating" ? "opacity-100" : "opacity-0"}`}
+            <span className={`text-xs tabular-nums font-heading font-bold w-6 text-right transition-opacity duration-500 ${phase === "rating" ? "opacity-100" : "opacity-0"}`}
               style={{ color: teamColor, transitionDelay: `${i * 100 + 200}ms` }}>
               {stat.value}
             </span>
@@ -177,17 +177,14 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
         ))}
       </div>
 
-      {/* Info line — age, height, weight, occupation */}
-      <div className="px-3 pb-2.5 flex items-center justify-center gap-1.5 text-[10px] text-muted flex-wrap">
-        <span>{player.age} let</span>
-        {player.physical?.height && (
-          <><span>&middot;</span><span>{player.physical.height} cm</span></>
-        )}
-        {player.physical?.weight && (
-          <><span>&middot;</span><span>{player.physical.weight} kg</span></>
-        )}
-        <span>&middot;</span>
-        <span className="truncate">{player.lifeContext?.occupation ?? ""}</span>
+      {/* Info — 2 rows: physical + occupation */}
+      <div className="px-3 pb-3 text-center text-xs text-muted space-y-0.5">
+        <div>
+          {player.age} let
+          {player.physical?.height ? ` \u00B7 ${player.physical.height} cm` : ""}
+          {player.physical?.weight ? ` \u00B7 ${player.physical.weight} kg` : ""}
+        </div>
+        <div className="truncate">{player.lifeContext?.occupation ?? ""}</div>
       </div>
     </div>
   );
