@@ -15,24 +15,15 @@ export function FaceAvatar({ faceConfig, size = 80, className = "" }: FaceAvatar
   useEffect(() => {
     if (!containerRef.current || !faceConfig) return;
 
-    while (containerRef.current.firstChild) {
-      containerRef.current.removeChild(containerRef.current.firstChild);
+    const inner = containerRef.current.querySelector(".face-inner");
+    if (!inner) return;
+
+    while (inner.firstChild) {
+      inner.removeChild(inner.firstChild);
     }
 
     try {
-      // Render at larger size so we can crop to head
-      display(containerRef.current, faceConfig as any, { width: 200, height: 300 });
-
-      // Adjust SVG viewBox to crop to just the head (centered)
-      const svg = containerRef.current.querySelector("svg");
-      if (svg) {
-        // facesjs default viewBox is "0 0 400 600"
-        // Head+shoulders: x:50-350 y:30-370 (centered, showing full face)
-        svg.setAttribute("viewBox", "50 30 300 340");
-        svg.style.width = `${size}px`;
-        svg.style.height = `${size}px`;
-        svg.style.display = "block";
-      }
+      display(inner as HTMLDivElement, faceConfig as any, { width: size * 2.2, height: size * 3.3 });
     } catch {
       // Fallback
     }
@@ -43,6 +34,16 @@ export function FaceAvatar({ faceConfig, size = 80, className = "" }: FaceAvatar
       ref={containerRef}
       className={`rounded-full overflow-hidden bg-gray-50 shrink-0 ${className}`}
       style={{ width: size, height: size }}
-    />
+    >
+      {/* Inner div is larger than container, positioned so head is centered in the circle */}
+      <div
+        className="face-inner"
+        style={{
+          width: size * 2.2,
+          height: size * 3.3,
+          transform: `translate(-${size * 0.6}px, -${size * 0.15}px)`,
+        }}
+      />
+    </div>
   );
 }
