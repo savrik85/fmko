@@ -233,6 +233,25 @@ body::before {
 .badge-gold { background: rgba(196,160,53,0.1); color: var(--color-gold-600); }
 .badge-danger { background: rgba(217,64,50,0.08); color: var(--color-card-red); }
 
+/* Position colors — consistent across entire app */
+.pos-gk { --pos-color: #E88D0C; --pos-bg: rgba(232,141,12,0.1); }
+.pos-def { --pos-color: #2563EB; --pos-bg: rgba(37,99,235,0.1); }
+.pos-mid { --pos-color: #16A34A; --pos-bg: rgba(22,163,74,0.1); }
+.pos-fwd { --pos-color: #DC2626; --pos-bg: rgba(220,38,38,0.1); }
+
+.pos-badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 6px;
+  font-family: var(--font-heading); font-weight: 700;
+  font-size: 0.625rem; letter-spacing: 0.06em; text-transform: uppercase;
+  background: var(--pos-bg); color: var(--pos-color);
+}
+
+.pos-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--pos-color);
+}
+
 /* ═══════════════════════════════════════════════
    MODAL / BOTTOM SHEET
    ═══════════════════════════════════════════════ */

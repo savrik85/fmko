@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import type { Player } from "@/lib/api";
+import { PlayerAvatar } from "@okresni-masina/ui/avatar";
+import type { AvatarConfig } from "@okresni-masina/shared";
 
 interface RevealCardProps {
   player: Player;
@@ -11,157 +13,181 @@ interface RevealCardProps {
 }
 
 const POS_SHORT: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
-const POS_FULL: Record<string, string> = { GK: "Brankář", DEF: "Obránce", MID: "Záložník", FWD: "Útočník" };
+const POS_CSS: Record<string, string> = { GK: "pos-gk", DEF: "pos-def", MID: "pos-mid", FWD: "pos-fwd" };
 
 function getRatingColor(rating: number): string {
-  if (rating >= 70) return "#C4A035"; // gold
-  if (rating >= 50) return "#3A7A3A"; // green
-  if (rating >= 30) return "#8B8578"; // muted
-  return "#D94032"; // red
+  if (rating >= 70) return "#C4A035";
+  if (rating >= 50) return "#3A7A3A";
+  if (rating >= 30) return "#8B8578";
+  return "#D94032";
 }
 
-function getTopStat(player: Player): { label: string; value: number } | null {
+function getTopStats(player: Player): Array<{ label: string; value: number }> {
   const skills = player.skills;
-  if (!skills) return null;
-  const entries = Object.entries(skills).filter(([, v]) => typeof v === "number") as [string, number][];
-  if (entries.length === 0) return null;
-  entries.sort((a, b) => b[1] - a[1]);
+  if (!skills) return [];
   const labels: Record<string, string> = {
     speed: "RYC", technique: "TEC", shooting: "STŘ", passing: "PŘI",
     heading: "HLA", defense: "OBR", goalkeeping: "BRA",
   };
-  return { label: labels[entries[0][0]] ?? entries[0][0], value: entries[0][1] };
+  return Object.entries(skills)
+    .filter(([, v]) => typeof v === "number")
+    .map(([k, v]) => ({ label: labels[k] ?? k, value: v as number }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 3);
 }
 
 /**
  * FIFA-style player reveal card.
- * Reusable pro: onboarding reveal, nový dorostenec, přestup, balíček.
+ *
+ * Fáze animace:
+ * 1. hidden — tmavá karta se spinnerem
+ * 2. flipping — karta se otáčí (3D flip)
+ * 3. revealed — viditelná karta BEZ ratingu
+ * 4. rating — rating se animovaně "napočítá"
  */
 export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: RevealCardProps) {
-  const [phase, setPhase] = useState<"hidden" | "flipping" | "revealed">("hidden");
+  const [phase, setPhase] = useState<"hidden" | "flipping" | "revealed" | "rating">("hidden");
+  const [displayRating, setDisplayRating] = useState(0);
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase("flipping"), delay);
-    const t2 = setTimeout(() => {
-      setPhase("revealed");
-      onRevealed?.();
-    }, delay + 600);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [delay, onRevealed]);
+    const t2 = setTimeout(() => setPhase("revealed"), delay + 600);
+    const t3 = setTimeout(() => setPhase("rating"), delay + 1000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [delay]);
+
+  // Animate rating count-up
+  useEffect(() => {
+    if (phase !== "rating") return;
+    const target = player.overall_rating;
+    const duration = 600;
+    const steps = 15;
+    const stepTime = duration / steps;
+    let step = 0;
+
+    const interval = setInterval(() => {
+      step++;
+      const progress = step / steps;
+      // Ease-out
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayRating(Math.round(target * eased));
+
+      if (step >= steps) {
+        clearInterval(interval);
+        setDisplayRating(target);
+        onRevealed?.();
+      }
+    }, stepTime);
+
+    return () => clearInterval(interval);
+  }, [phase, player.overall_rating, onRevealed]);
 
   const ratingColor = getRatingColor(player.overall_rating);
-  const topStat = getTopStat(player);
+  const topStats = getTopStats(player);
+  const hasAvatar = player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 0;
 
+  // Phase: hidden
   if (phase === "hidden") {
     return (
-      <div className="w-full aspect-[3/4] rounded-2xl bg-pitch-800 border border-pitch-700 flex items-center justify-center">
-        <div className="w-10 h-10 rounded-full border-3 border-pitch-500 border-t-transparent animate-spin" />
+      <div className="w-full aspect-[3/4] rounded-2xl flex items-center justify-center"
+        style={{ background: "linear-gradient(145deg, #0d220d 0%, #153615 100%)", border: "1px solid rgba(45,95,45,0.3)" }}>
+        <div className="text-center">
+          <div className="w-8 h-8 rounded-full border-2 border-pitch-500/40 border-t-pitch-400 animate-spin mx-auto mb-2" />
+          <span className="text-pitch-500/40 text-[10px] font-heading uppercase tracking-wider">Odhaluji...</span>
+        </div>
       </div>
     );
   }
 
   return (
     <div
-      className={`w-full rounded-2xl overflow-hidden shadow-lg transition-all duration-500 ${
+      className={`w-full rounded-2xl overflow-hidden transition-all duration-500 ${
         phase === "flipping" ? "animate-[cardFlip_0.6s_ease-out]" : ""
-      }`}
+      } ${phase === "rating" ? "animate-[cardGlow_0.8s_ease-out]" : ""}`}
       style={{
-        background: `linear-gradient(165deg, ${teamColor}18 0%, ${teamColor}08 40%, #FFFFFF 100%)`,
-        border: `1px solid ${teamColor}20`,
+        background: `linear-gradient(165deg, ${teamColor}15 0%, #FFFFFF 50%, ${teamColor}08 100%)`,
+        border: `1px solid ${teamColor}18`,
+        boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
       }}
     >
-      {/* Top bar with position + rating */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <span className="text-[10px] font-heading font-bold tracking-widest uppercase px-2 py-0.5 rounded"
-          style={{ backgroundColor: `${teamColor}15`, color: teamColor }}>
+      {/* Top bar: position badge + rating area */}
+      <div className="flex items-start justify-between px-3 pt-3 pb-1">
+        <span className={`pos-badge ${POS_CSS[player.position] ?? ""}`}>
           {POS_SHORT[player.position]}
         </span>
-        <div className="text-right">
-          <span className="font-heading font-[800] text-3xl leading-none tabular-nums" style={{ color: ratingColor }}>
-            {player.overall_rating}
-          </span>
+
+        {/* Rating — hidden until phase=rating */}
+        <div className="text-right min-w-[2.5rem]">
+          {(phase === "rating") ? (
+            <span className="font-heading font-[800] text-[2rem] leading-none tabular-nums transition-all"
+              style={{ color: ratingColor }}>
+              {displayRating}
+            </span>
+          ) : (
+            <span className="font-heading font-[800] text-[2rem] leading-none tabular-nums text-black/5">
+              ?
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Avatar area */}
-      <div className="flex justify-center py-3">
-        <div className="w-20 h-20 rounded-full flex items-center justify-center text-white font-heading font-bold text-3xl shadow-inner"
-          style={{ backgroundColor: teamColor }}>
-          {player.first_name[0]}
-        </div>
+      {/* Avatar */}
+      <div className="flex justify-center py-2">
+        {hasAvatar ? (
+          <div className="w-[72px] h-[72px]">
+            <PlayerAvatar config={player.avatar as unknown as AvatarConfig} size="md" jerseyColor={teamColor} />
+          </div>
+        ) : (
+          <div className="w-16 h-16 rounded-full flex items-center justify-center text-white font-heading font-bold text-2xl"
+            style={{ backgroundColor: teamColor }}>
+            {player.first_name[0]}
+          </div>
+        )}
       </div>
 
-      {/* Name */}
-      <div className="text-center px-4 pb-2">
-        <div className="font-heading font-bold text-base text-ink leading-tight">
+      {/* Name + nickname */}
+      <div className="text-center px-3 pb-1.5">
+        <div className="font-heading font-bold text-[0.85rem] text-ink leading-tight truncate">
           {player.first_name} {player.last_name}
         </div>
         {player.nickname && (
-          <div className="text-sm mt-0.5" style={{ color: teamColor }}>&bdquo;{player.nickname}&ldquo;</div>
+          <div className="text-[0.75rem] mt-0.5 font-medium truncate" style={{ color: teamColor }}>
+            &bdquo;{player.nickname}&ldquo;
+          </div>
         )}
       </div>
 
       {/* Divider */}
-      <div className="mx-4 h-px" style={{ backgroundColor: `${teamColor}15` }} />
+      <div className="mx-3 h-px" style={{ backgroundColor: `${teamColor}10` }} />
 
-      {/* Info strip */}
-      <div className="flex items-center justify-center gap-3 py-2.5 text-xs text-muted">
+      {/* Top 3 stats — revealed with delay */}
+      <div className="px-3 py-2">
+        {topStats.map((stat, i) => (
+          <div key={stat.label} className="flex items-center gap-2 py-0.5">
+            <span className="text-[10px] text-muted w-7 text-right font-heading font-semibold">{stat.label}</span>
+            <div className="flex-1 h-1 bg-black/[0.04] rounded-full overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: phase === "rating" ? `${stat.value}%` : "0%",
+                  backgroundColor: teamColor,
+                  opacity: 0.6 - i * 0.15,
+                  transitionDelay: `${i * 100}ms`,
+                }} />
+            </div>
+            <span className={`text-[10px] tabular-nums font-heading font-bold w-5 text-right transition-opacity duration-500 ${phase === "rating" ? "opacity-100" : "opacity-0"}`}
+              style={{ color: teamColor, transitionDelay: `${i * 100 + 200}ms` }}>
+              {stat.value}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Info line */}
+      <div className="px-3 pb-2.5 flex items-center justify-center gap-1.5 text-[10px] text-muted">
         <span>{player.age} let</span>
-        <span className="w-1 h-1 rounded-full bg-muted-light" />
-        <span>{player.lifeContext?.occupation ?? "—"}</span>
-        {topStat && (
-          <>
-            <span className="w-1 h-1 rounded-full bg-muted-light" />
-            <span className="font-heading font-bold" style={{ color: teamColor }}>{topStat.label} {topStat.value}</span>
-          </>
-        )}
+        <span>&middot;</span>
+        <span className="truncate">{player.lifeContext?.occupation ?? ""}</span>
       </div>
-
-      {/* Description */}
-      <div className="px-4 pb-4">
-        <p className="text-xs text-muted leading-relaxed text-center italic">
-          {player.description}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Grid reveal — postupně odkrývá kartičky.
- */
-export function PlayerRevealGrid({
-  players,
-  teamColor,
-  revealInterval = 400,
-  onAllRevealed,
-}: {
-  players: Player[];
-  teamColor: string;
-  revealInterval?: number;
-  onAllRevealed?: () => void;
-}) {
-  const [revealedCount, setRevealedCount] = useState(0);
-
-  useEffect(() => {
-    if (revealedCount >= players.length) {
-      onAllRevealed?.();
-      return;
-    }
-    const t = setTimeout(() => setRevealedCount((c) => c + 1), revealInterval);
-    return () => clearTimeout(t);
-  }, [revealedCount, players.length, revealInterval, onAllRevealed]);
-
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-      {players.map((player, i) => (
-        <PlayerRevealCard
-          key={player.id || i}
-          player={player}
-          teamColor={teamColor}
-          delay={i < revealedCount ? 0 : 100}
-        />
-      ))}
     </div>
   );
 }
