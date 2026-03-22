@@ -8,3 +8,4 @@ export { ErrorBox } from "./error-box";
 export { Modal } from "./modal";
 export { SectionLabel } from "./section-label";
 export { PositionBadge, PositionDot } from "./position-badge";
+export { EntityLink } from "./entity-link";

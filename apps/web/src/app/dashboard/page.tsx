@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { Card, CardBody, Spinner, SectionLabel, PositionBadge } from "@/components/ui";
+import { Card, CardBody, Spinner, SectionLabel, PositionBadge, EntityLink } from "@/components/ui";
 
 export default function DashboardPage() {
   const { teamId } = useTeam();
@@ -62,7 +62,7 @@ export default function DashboardPage() {
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">
-                    {p.first_name} {p.last_name}
+                    <EntityLink type="player" id={p.id}>{p.first_name} {p.last_name}</EntityLink>
                     {p.nickname && <span className="text-gold-500 ml-1">&bdquo;{p.nickname}&ldquo;</span>}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">

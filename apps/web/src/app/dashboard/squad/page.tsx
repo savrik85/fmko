@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { StatBar, Spinner, SectionLabel, PositionBadge, Modal, Button } from "@/components/ui";
+import { StatBar, Spinner, SectionLabel, PositionBadge, Modal, Button, EntityLink } from "@/components/ui";
 
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
@@ -57,7 +57,7 @@ export default function SquadPage() {
             )}
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-1.5">
-                <span className="font-heading font-bold truncate">{p.first_name} {p.last_name}</span>
+                <EntityLink type="player" id={p.id} className="font-heading font-bold truncate">{p.first_name} {p.last_name}</EntityLink>
                 {p.nickname && <span className="text-xs text-gold-500 shrink-0">&bdquo;{p.nickname}&ldquo;</span>}
               </div>
               <div className="text-xs text-muted mt-0.5">
