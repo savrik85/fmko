@@ -190,7 +190,19 @@ teamsRouter.post("/", async (c) => {
       ? { speed: 0, technique: 0, shooting: 0, passing: gkSkills!.distribution.current, heading: 0, defense: 0, goalkeeping: gkSkills!.reflexes.current }
       : { speed: fieldSkills!.speed.current, technique: fieldSkills!.technique.current, shooting: fieldSkills!.shooting.current, passing: fieldSkills!.passing.current, heading: fieldSkills!.heading.current, defense: fieldSkills!.defense.current, goalkeeping: 0 };
 
-    const physical = { stamina: isGK ? (gkSkills!.strength.current) : fieldSkills!.stamina.current, strength: isGK ? gkSkills!.strength.current : fieldSkills!.strength.current, injuryProneness: rng.int(10, 80) };
+    // Height & weight based on position + bodyType
+    const baseHeight = player.position === "GK" ? 185 : player.position === "DEF" ? 180 : player.position === "FWD" ? 178 : 176;
+    const height = baseHeight + rng.int(-8, 8);
+    const baseWeight = player.bodyType === "obese" ? 100 : player.bodyType === "stocky" ? 88 : player.bodyType === "thin" ? 68 : player.bodyType === "athletic" ? 78 : 80;
+    const weight = baseWeight + rng.int(-5, 8);
+
+    const physical = {
+      stamina: isGK ? (gkSkills!.strength.current) : fieldSkills!.stamina.current,
+      strength: isGK ? gkSkills!.strength.current : fieldSkills!.strength.current,
+      injuryProneness: rng.int(10, 80),
+      height,
+      weight,
+    };
     const personality = { discipline: rng.int(10, 90), patriotism: rng.int(20, 90), alcohol: rng.int(5, 85), temper: rng.int(10, 80) };
     const lifeContext = { occupation: player.occupation, condition: 100, morale: 50 + rng.int(-15, 15) };
     const rating = calculateOverallRating(player.position, isGK ? gkSkills! : fieldSkills!, hiddenTalent);

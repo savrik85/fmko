@@ -177,9 +177,15 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
         ))}
       </div>
 
-      {/* Info line */}
-      <div className="px-3 pb-2.5 flex items-center justify-center gap-1.5 text-[10px] text-muted">
+      {/* Info line — age, height, weight, occupation */}
+      <div className="px-3 pb-2.5 flex items-center justify-center gap-1.5 text-[10px] text-muted flex-wrap">
         <span>{player.age} let</span>
+        {player.physical?.height && (
+          <><span>&middot;</span><span>{player.physical.height} cm</span></>
+        )}
+        {player.physical?.weight && (
+          <><span>&middot;</span><span>{player.physical.weight} kg</span></>
+        )}
         <span>&middot;</span>
         <span className="truncate">{player.lifeContext?.occupation ?? ""}</span>
       </div>
