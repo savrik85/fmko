@@ -24,7 +24,8 @@
       "Bash(npx wrangler:*)",
       "mcp__plugin_linear_linear__save_comment",
       "Bash(curl -s http://localhost:3000/dashboard/match)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(node:*)"
     ]
   }
 }

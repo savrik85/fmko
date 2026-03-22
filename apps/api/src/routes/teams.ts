@@ -15,7 +15,6 @@ import { generateNickname } from "../generators/nickname";
 import { generateRelationships } from "../generators/relationships";
 import { generateDescription } from "../generators/description-generator";
 import { generateFieldSkills, generateGKSkills, generateHiddenTalent, calculateOverallRating } from "../skills/generator";
-import { generate as generateFace } from "facesjs";
 import { generateSeasonCalendar } from "../season/calendar";
 import { generateSchedule, totalRounds } from "../league/schedule";
 
@@ -26,36 +25,62 @@ function uuid(): string {
 }
 
 /**
- * Generate a facesjs config that matches player attributes.
- * - race: always "white" (Czech amateur football)
- * - Older players: more likely bald/gray hair
- * - Body type affects face fatness
+ * Generate a facesjs-compatible config on the server.
+ * No DOM needed — just a JSON object that facesjs display() can render on the client.
  */
 function generatePlayerFace(player: { age: number; bodyType: string }): Record<string, unknown> {
-  const face = generateFace({ race: "white" });
+  const r = () => Math.random();
+  const pick = <T,>(arr: T[]): T => arr[Math.floor(r() * arr.length)];
 
-  // Age-based hair adjustments
-  if (player.age > 45) {
-    face.hair = { id: "bald" } as any;
-  } else if (player.age > 38 && Math.random() < 0.5) {
-    face.hair = { id: "bald" } as any;
-  }
+  // Skin colors — white/European range
+  const skinColors = ["#f2d6cb", "#ddb7a0", "#c89583", "#e8c4a0", "#f5d5c0", "#d4a882", "#eabd93"];
+  // Hair colors
+  const hairColors = ["#1a1a1a", "#3b2214", "#5b3a1a", "#8b6e3e", "#d4a843", "#a0330a", "#8e8e8e"];
 
-  // Older players: gray/white hair color
-  if (player.age > 40 && face.hair) {
-    (face.hair as any).color = "#999999";
-  } else if (player.age > 50 && face.hair) {
-    (face.hair as any).color = "#CCCCCC";
-  }
+  const headIds = ["head1", "head2", "head3", "head4", "head5", "head6", "head7", "head8", "head9", "head10"];
+  const eyeIds = ["eye1", "eye2", "eye3", "eye4", "eye5", "eye6", "eye7", "eye8"];
+  const noseIds = ["nose1", "nose2", "nose3", "nose4", "nose5", "nose6", "nose7", "nose8"];
+  const mouthIds = ["mouth1", "mouth2", "mouth3", "mouth4", "mouth5", "mouth6"];
+  const hairIds = ["hair1", "hair2", "hair3", "hair4", "hair5", "hair6", "hair7", "hair8", "hair9", "hair10", "hair11", "hair12"];
+  const earIds = ["ear1", "ear2", "ear3", "ear4"];
 
-  // Body type → face fatness
-  if (player.bodyType === "obese" || player.bodyType === "stocky") {
-    (face.head as any).fatness = 0.8 + Math.random() * 0.2;
-  } else if (player.bodyType === "thin") {
-    (face.head as any).fatness = 0.1 + Math.random() * 0.2;
-  }
+  // Fatness based on body type
+  let fatness = 0.3 + r() * 0.4;
+  if (player.bodyType === "obese") fatness = 0.7 + r() * 0.3;
+  else if (player.bodyType === "stocky") fatness = 0.55 + r() * 0.25;
+  else if (player.bodyType === "thin") fatness = 0.05 + r() * 0.2;
+  else if (player.bodyType === "athletic") fatness = 0.2 + r() * 0.2;
 
-  return face as Record<string, unknown>;
+  // Hair: older → bald/gray
+  let hairId = pick(hairIds);
+  let hairColor = pick(hairColors);
+  const hasBaldChance = player.age > 45 ? 0.7 : player.age > 38 ? 0.4 : player.age > 32 ? 0.15 : 0;
+  if (r() < hasBaldChance) hairId = "none";
+  if (player.age > 42) hairColor = r() < 0.5 ? "#8e8e8e" : "#b0b0b0";
+  if (player.age > 50) hairColor = "#c0c0c0";
+
+  const skinColor = pick(skinColors);
+
+  return {
+    fatness,
+    teamColors: ["#2D5F2D", "#FFFFFF", "#1E4A1E"],
+    hairBg: { id: hairId === "none" ? "none" : "hairBg1" },
+    body: { id: pick(["body1", "body2", "body3"]), color: skinColor, size: 0.95 + r() * 0.1 },
+    jersey: { id: "jersey" },
+    ear: { id: pick(earIds), size: 0.6 + r() * 0.4 },
+    head: { id: pick(headIds), shave: "rgba(0,0,0,0)", fatness },
+    eyeLine: { id: pick(["line1", "line2", "line3", "line4"]) },
+    smileLine: { id: pick(["line1", "line2", "line3"]), size: 0.8 + r() * 0.4 },
+    miscLine: { id: "none" },
+    facialHair: { id: player.age > 20 && r() < 0.4 ? pick(["beard1", "beard2", "beard3", "beard4"]) : "none" },
+    eye: { id: pick(eyeIds), angle: -5 + r() * 10 },
+    eyebrow: { id: pick(["eyebrow1", "eyebrow2", "eyebrow3", "eyebrow4"]), angle: -5 + r() * 10 },
+    hair: { id: hairId, color: hairColor, flip: r() < 0.5 },
+    mouth: { id: pick(mouthIds), flip: r() < 0.5 },
+    nose: { id: pick(noseIds), flip: r() < 0.5, size: 0.7 + r() * 0.6 },
+    glasses: { id: r() < 0.08 ? pick(["glasses1", "glasses2"]) : "none" },
+    accessories: { id: "none" },
+  };
 }
 
 // POST /api/teams
@@ -178,7 +203,7 @@ teamsRouter.post("/", async (c) => {
       "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(pid, teamId, player.firstName, player.lastName, nickname, player.age, player.position, rating,
       JSON.stringify(skillsCurrent), JSON.stringify(physical), JSON.stringify(personality),
-      JSON.stringify(generatePlayerFace(player)), description,
+      JSON.stringify(lifeContext), JSON.stringify(generatePlayerFace(player)), description,
       JSON.stringify(skillsMax), hiddenTalent, isGK ? (gkSkills!.experience.current) : (fieldSkills!.experience.current),
     ).run();
   }
