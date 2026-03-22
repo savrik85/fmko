@@ -26,8 +26,9 @@ export function FaceAvatar({ faceConfig, size = 80, className = "" }: FaceAvatar
       // Adjust SVG viewBox to crop to just the head (centered)
       const svg = containerRef.current.querySelector("svg");
       if (svg) {
-        // facesjs default viewBox is "0 0 400 600" — head is roughly at x:100-300 y:0-280
-        svg.setAttribute("viewBox", "80 0 240 280");
+        // facesjs default viewBox is "0 0 400 600"
+        // Head+shoulders: x:50-350 y:30-370 (centered, showing full face)
+        svg.setAttribute("viewBox", "50 30 300 340");
         svg.style.width = `${size}px`;
         svg.style.height = `${size}px`;
         svg.style.display = "block";
