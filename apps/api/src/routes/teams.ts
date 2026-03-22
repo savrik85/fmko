@@ -273,9 +273,45 @@ teamsRouter.post("/", async (c) => {
       JSON.stringify(body.managerAvatar ?? {})).run().catch(() => {});
   }
 
-  // ── Generate league with AI teams ──
-  const leagueId = uuid();
+  // ── League: join existing or create new ──
   const district = village.district as string;
+
+  // Check if a league already exists in this district
+  const existingLeague = await c.env.DB.prepare(
+    "SELECT t.league_id FROM teams t JOIN villages v ON t.village_id = v.id WHERE v.district = ? AND t.league_id IS NOT NULL LIMIT 1"
+  ).bind(district).first<{ league_id: string }>();
+
+  if (existingLeague?.league_id) {
+    // ── JOIN existing league: replace a random AI team ──
+    const aiTeam = await c.env.DB.prepare(
+      "SELECT id FROM teams WHERE league_id = ? AND user_id = 'ai' ORDER BY RANDOM() LIMIT 1"
+    ).bind(existingLeague.league_id).first<{ id: string }>();
+
+    if (aiTeam) {
+      // Delete AI team's players and relationships
+      const aiPlayers = await c.env.DB.prepare("SELECT id FROM players WHERE team_id = ?").bind(aiTeam.id).all();
+      for (const ap of aiPlayers.results) {
+        await c.env.DB.prepare("DELETE FROM relationships WHERE player_a_id = ? OR player_b_id = ?").bind(ap.id, ap.id).run();
+      }
+      await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(aiTeam.id).run();
+      await c.env.DB.prepare("DELETE FROM teams WHERE id = ?").bind(aiTeam.id).run();
+    }
+
+    // Set league on player team
+    await c.env.DB.prepare("UPDATE teams SET league_id = ? WHERE id = ?").bind(existingLeague.league_id, teamId).run();
+
+    return c.json({
+      id: teamId,
+      name: body.name,
+      village: village.name,
+      playersCount: squad.length,
+      leagueId: existingLeague.league_id,
+      leagueName: `Okresní přebor ${district}`,
+    }, 201);
+  }
+
+  // ── CREATE new league ──
+  const leagueId = uuid();
 
   // Get all villages in same district for AI teams
   const districtVillages = await c.env.DB.prepare(
