@@ -15,35 +15,24 @@ export function FaceAvatar({ faceConfig, size = 80, className = "" }: FaceAvatar
   useEffect(() => {
     if (!containerRef.current || !faceConfig) return;
 
-    const inner = containerRef.current.querySelector(".face-inner");
-    if (!inner) return;
-
-    while (inner.firstChild) {
-      inner.removeChild(inner.firstChild);
+    while (containerRef.current.firstChild) {
+      containerRef.current.removeChild(containerRef.current.firstChild);
     }
 
     try {
-      display(inner as HTMLDivElement, faceConfig as any, { width: size * 2.2, height: size * 3.3 });
+      // Let facesjs render at its natural aspect ratio
+      display(containerRef.current, faceConfig as any, { width: size, height: size * 1.3 });
     } catch {
       // Fallback
     }
   }, [faceConfig, size]);
 
+  // No rounded-full, no overflow hidden — just let facesjs render naturally
   return (
     <div
       ref={containerRef}
-      className={`rounded-full overflow-hidden bg-gray-50 shrink-0 ${className}`}
-      style={{ width: size, height: size }}
-    >
-      {/* Inner div is larger than container, positioned so head is centered in the circle */}
-      <div
-        className="face-inner"
-        style={{
-          width: size * 2.2,
-          height: size * 3.3,
-          transform: `translate(-${size * 0.6}px, -${size * 0.15}px)`,
-        }}
-      />
-    </div>
+      className={`shrink-0 ${className}`}
+      style={{ width: size, height: size * 1.3 }}
+    />
   );
 }
