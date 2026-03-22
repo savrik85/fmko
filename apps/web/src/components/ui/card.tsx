@@ -1,15 +1,17 @@
 import React from "react";
 
+type CardVariant = "default" | "dark";
+
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  variant?: CardVariant;
   hover?: boolean;
 }
 
-export function Card({ hover = false, className = "", children, ...props }: CardProps) {
+export function Card({ variant = "default", hover = false, className = "", children, ...props }: CardProps) {
+  const base = variant === "dark" ? "card-dark" : "card";
+  const hoverClass = hover ? "card-hover" : "";
   return (
-    <div
-      className={`bg-white rounded-card shadow-card ${hover ? "hover:shadow-hover transition-shadow cursor-pointer" : ""} ${className}`}
-      {...props}
-    >
+    <div className={`${base} ${hoverClass} ${className}`} {...props}>
       {children}
     </div>
   );

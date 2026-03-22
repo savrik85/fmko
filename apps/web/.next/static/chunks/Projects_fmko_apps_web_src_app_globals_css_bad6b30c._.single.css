@@ -230,6 +230,10 @@
     --color-muted-light: #b5afa5;
     --color-ink: #1a1714;
     --color-ink-light: #3d3830;
+    --color-rating-gold: #c4a035;
+    --color-rating-good: #3a7a3a;
+    --color-rating-avg: #8b8578;
+    --color-rating-poor: #d94032;
     --font-heading: "Barlow Condensed", "Impact", ui-sans-serif, sans-serif;
     --font-body: "DM Sans", ui-sans-serif, sans-serif;
     --font-commentary: "JetBrains Mono", ui-monospace, monospace;
@@ -761,40 +765,6 @@
 
   .col-span-full {
     grid-column: 1 / -1;
-  }
-
-  .container {
-    width: 100%;
-  }
-
-  @media (min-width: 40rem) {
-    .container {
-      max-width: 40rem;
-    }
-  }
-
-  @media (min-width: 48rem) {
-    .container {
-      max-width: 48rem;
-    }
-  }
-
-  @media (min-width: 64rem) {
-    .container {
-      max-width: 64rem;
-    }
-  }
-
-  @media (min-width: 80rem) {
-    .container {
-      max-width: 80rem;
-    }
-  }
-
-  @media (min-width: 96rem) {
-    .container {
-      max-width: 96rem;
-    }
   }
 
   .-mx-2 {
@@ -2155,10 +2125,6 @@
 
   .text-\[8px\] {
     font-size: 8px;
-  }
-
-  .text-\[9px\] {
-    font-size: 9px;
   }
 
   .text-\[10px\] {
@@ -3636,6 +3602,141 @@ body:before {
   font-weight: 600;
 }
 
+.bg-auth {
+  background: linear-gradient(145deg, #061106 0%, #0d2a0d 30%, #122412 60%, #1a1410 100%);
+}
+
+.input-dark {
+  width: 100%;
+  font-size: 1rem;
+  font-family: var(--font-body);
+  color: #fff;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, .05);
+  border: 1px solid rgba(255, 255, 255, .07);
+  outline: none;
+  padding: 16px;
+  transition: all .2s;
+}
+
+.input-dark::placeholder {
+  color: rgba(255, 255, 255, .15);
+}
+
+.input-dark:hover {
+  border-color: rgba(255, 255, 255, .12);
+}
+
+.input-dark:focus {
+  background: rgba(255, 255, 255, .07);
+  border-color: rgba(58, 122, 58, .5);
+  box-shadow: 0 0 0 2px rgba(58, 122, 58, .15);
+}
+
+.input-label-dark {
+  font-family: var(--font-heading);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .4);
+  margin-bottom: 8px;
+  font-size: .7rem;
+  font-weight: 600;
+  display: block;
+}
+
+.btn-primary-dark {
+  background: linear-gradient(135deg, var(--color-pitch-400) 0%, var(--color-pitch-500) 50%, var(--color-pitch-600) 100%);
+  color: #fff;
+  box-shadow: inset 0 1px rgba(255, 255, 255, .1), 0 8px 24px rgba(45, 95, 45, .2);
+}
+
+.btn-primary-dark:hover {
+  filter: brightness(1.05);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .15), 0 8px 32px rgba(45, 95, 45, .3);
+}
+
+.card-dark {
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid rgba(255, 255, 255, .06);
+}
+
+.divider-dark {
+  background: rgba(255, 255, 255, .06);
+  height: 1px;
+}
+
+.error-box {
+  border-radius: var(--radius-md);
+  color: var(--color-card-red);
+  background: rgba(217, 64, 50, .06);
+  border: 1px solid rgba(217, 64, 50, .12);
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  font-size: .875rem;
+  display: flex;
+}
+
+.error-box-dark {
+  border-radius: var(--radius-md);
+  color: #fca5a5;
+  background: rgba(239, 68, 68, .08);
+  border: 1px solid rgba(239, 68, 68, .1);
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  font-size: .875rem;
+  display: flex;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  border: 3px solid var(--color-pitch-500);
+  border-top-color: rgba(0, 0, 0, 0);
+  border-radius: 50%;
+  animation: .7s linear infinite spin;
+}
+
+.spinner-sm {
+  border-width: 2px;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.spinner-md {
+  width: 2rem;
+  height: 2rem;
+}
+
+.spinner-lg {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.rating-gold {
+  color: var(--color-rating-gold);
+}
+
+.rating-good {
+  color: var(--color-rating-good);
+}
+
+.rating-avg {
+  color: var(--color-rating-avg);
+}
+
+.rating-poor {
+  color: var(--color-rating-poor);
+}
+
 @property --tw-translate-x {
   syntax: "*";
   inherits: false;
@@ -3968,12 +4069,6 @@ body:before {
 @property --tw-duration {
   syntax: "*";
   inherits: false
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @keyframes bounce {

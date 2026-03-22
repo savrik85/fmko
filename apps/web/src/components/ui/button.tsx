@@ -1,7 +1,7 @@
 import React from "react";
 
-type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
-type ButtonSize = "sm" | "md" | "lg";
+type ButtonVariant = "primary" | "primary-dark" | "secondary" | "danger" | "ghost";
+type ButtonSize = "sm" | "md" | "lg" | "xl";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -9,16 +9,18 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants: Record<ButtonVariant, string> = {
-  primary: "bg-pitch-500 hover:bg-pitch-400 text-white shadow-card hover:shadow-hover",
-  secondary: "bg-white hover:bg-gray-50 text-pitch-500 border border-pitch-500/20 shadow-card",
-  danger: "bg-card-red hover:bg-red-600 text-white shadow-card",
-  ghost: "bg-transparent hover:bg-black/5 text-pitch-500",
+  primary: "btn-primary",
+  "primary-dark": "btn-primary-dark",
+  secondary: "btn-secondary",
+  danger: "btn-primary", // btn base + override
+  ghost: "btn-ghost",
 };
 
 const sizes: Record<ButtonSize, string> = {
-  sm: "px-3 py-1.5 text-sm",
-  md: "px-5 py-2.5 text-base",
-  lg: "px-8 py-4 text-lg",
+  sm: "btn-sm",
+  md: "btn-md",
+  lg: "btn-lg",
+  xl: "btn-xl",
 };
 
 export function Button({
@@ -30,7 +32,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`font-heading font-bold rounded-card transition-all inline-flex items-center justify-center ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`btn ${variants[variant]} ${sizes[size]} ${className}`}
       {...props}
     >
       {children}
