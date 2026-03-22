@@ -14,10 +14,10 @@ function uuid(): string { return crypto.randomUUID(); }
 
 // POST /auth/register
 authRouter.post("/register", async (c) => {
-  const body = await c.req.json<{ email: string; password: string; displayName: string }>();
+  const body = await c.req.json<{ email: string; password: string }>();
 
-  if (!body.email || !body.password || !body.displayName) {
-    return c.json({ error: "Vyplň email, heslo a jméno" }, 400);
+  if (!body.email || !body.password) {
+    return c.json({ error: "Vyplň email a heslo" }, 400);
   }
   if (body.password.length < 6) {
     return c.json({ error: "Heslo musí mít alespoň 6 znaků" }, 400);
@@ -39,17 +39,11 @@ authRouter.post("/register", async (c) => {
     "INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)"
   ).bind(userId, body.email.toLowerCase(), passwordHash).run();
 
-  // Try to save display_name if column exists (after migration 0006)
-  await c.env.DB.prepare(
-    "UPDATE users SET display_name = ? WHERE id = ?"
-  ).bind(body.displayName, userId).run().catch(() => {});
-
-  // Create session
   const token = await createSession(c.env.SESSION_KV, userId, body.email.toLowerCase(), null);
 
   return c.json({
     token,
-    user: { id: userId, email: body.email.toLowerCase(), displayName: body.displayName, teamId: null },
+    user: { id: userId, email: body.email.toLowerCase(), teamId: null },
   }, 201);
 });
 

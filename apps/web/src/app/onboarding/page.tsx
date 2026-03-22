@@ -55,7 +55,7 @@ export default function OnboardingPage() {
     players: [],
   });
 
-  async function handleCreateTeam(teamName: string, primary: string, secondary: string) {
+  async function handleCreateTeam(teamName: string, primary: string, secondary: string, jerseyPattern?: string, badgePattern?: string, stadiumName?: string) {
     if (!state.village) return;
     setCreating(true);
     setError("");
@@ -75,6 +75,9 @@ export default function OnboardingPage() {
           managerName: state.managerName || undefined,
           managerBackstory: state.managerBackstory || undefined,
           managerAvatar: state.managerAvatar || undefined,
+          jerseyPattern: jerseyPattern || undefined,
+          badgePattern: badgePattern || undefined,
+          stadiumName: stadiumName || undefined,
         }),
       });
 

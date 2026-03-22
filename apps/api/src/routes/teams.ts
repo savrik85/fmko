@@ -10,14 +10,15 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
-import { generateSquad } from "../generators/player";
+import { generateSquad, type GeneratedPlayer } from "../generators/player";
 import { generateNickname } from "../generators/nickname";
 import { generateRelationships } from "../generators/relationships";
 import { generateDescription } from "../generators/description-generator";
 import { generateFieldSkills, generateGKSkills, generateHiddenTalent, calculateOverallRating } from "../skills/generator";
 import { generateSeasonCalendar } from "../season/calendar";
 import { pickOccupation } from "../generators/occupations";
-import { generateSchedule, totalRounds } from "../league/schedule";
+import { totalRounds } from "../league/schedule";
+import { generateLeague } from "../league/league-generator";
 import { applyManagerModifiers } from "../generators/manager-effects";
 import type { ManagerBackstory } from "@okresni-masina/shared";
 
@@ -103,6 +104,9 @@ teamsRouter.post("/", async (c) => {
     managerName?: string;
     managerBackstory?: ManagerBackstory;
     managerAvatar?: Record<string, unknown>;
+    jerseyPattern?: string;
+    badgePattern?: string;
+    stadiumName?: string;
   }>();
 
   if (!body.villageId || !body.name) {
@@ -137,9 +141,10 @@ teamsRouter.post("/", async (c) => {
     : (village.population as number) > 1000 ? 40000 : 20000;
 
   await c.env.DB.prepare(
-    "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget, jersey_pattern, badge_pattern, stadium_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   ).bind(teamId, userId, body.villageId, body.name,
-    body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFFFFF", budget).run();
+    body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFFFFF", budget,
+    body.jerseyPattern ?? "solid", body.badgePattern ?? "shield", body.stadiumName ?? null).run();
 
   // Generate squad
   const rng = createRng(Date.now());
@@ -268,24 +273,119 @@ teamsRouter.post("/", async (c) => {
       JSON.stringify(body.managerAvatar ?? {})).run().catch(() => {});
   }
 
-  // Generate league + AI teams
+  // ── Generate league with AI teams ──
   const leagueId = uuid();
-  const leagueName = `Okresní přebor ${village.district as string}`;
+  const district = village.district as string;
 
-  await c.env.DB.prepare(
-    "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget, league_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  ).bind("__update__", "", "", "", "", "", 0, "").run().catch(() => {});
+  // Get all villages in same district for AI teams
+  const districtVillages = await c.env.DB.prepare(
+    "SELECT id as code, name, district, region as region_code, population, size as category FROM villages WHERE district = ? AND id != ?"
+  ).bind(district, body.villageId).all();
 
-  // Update player team with league
-  // Create league (reuse matches table for schedule later)
-  const numTeams = 14;
-  const rounds = totalRounds(numTeams);
+  const playerVillage = {
+    name: village.name as string,
+    code: body.villageId,
+    region_code: village.region as string || "CZ020",
+    category: villageInfo.category,
+    population: village.population as number,
+  };
 
-  // For now: store league info as simple metadata
-  // Full league generation (AI teams + calendar) happens when first match is requested
+  const leagueSetup = generateLeague(
+    rng,
+    body.name,
+    playerVillage,
+    districtVillages.results.map((v) => ({
+      name: v.name as string,
+      code: v.code as string,
+      region_code: v.region_code as string || "CZ020",
+      category: (v.category as string) === "hamlet" ? "vesnice"
+        : (v.category as string) === "village" ? "obec"
+        : (v.category as string) === "town" ? "mestys" : "mesto",
+      population: v.population as number,
+    })),
+    surnameData.surnames,
+    { male: firstnameData.male },
+    district,
+  );
+
+  // Set league on player team
   await c.env.DB.prepare(
     "UPDATE teams SET league_id = ? WHERE id = ?"
   ).bind(leagueId, teamId).run();
+
+  // Insert AI teams + their players into DB
+  for (const lt of leagueSetup.teams) {
+    if (lt.isPlayer) continue; // Skip player team — already inserted
+
+    const aiTeamId = uuid();
+    const aiVillage = districtVillages.results.find((v) => v.code === lt.villageCode);
+    const aiVillageId = aiVillage?.code as string ?? body.villageId;
+    const aiBudget = (aiVillage?.population as number ?? 500) > 5000 ? 80000
+      : (aiVillage?.population as number ?? 500) > 1000 ? 40000 : 20000;
+
+    await c.env.DB.prepare(
+      "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget, league_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(aiTeamId, "ai", aiVillageId, lt.teamName, lt.primaryColor, lt.secondaryColor, aiBudget, leagueId).run();
+
+    // Insert AI players
+    if (lt.aiTeam?.squad) {
+      const aiPlayerIds: string[] = [];
+      for (const ap of lt.aiTeam.squad) {
+        const apId = uuid();
+        aiPlayerIds.push(apId);
+        const apNickname = (ap as GeneratedPlayer & { nickname?: string | null }).nickname ?? "";
+        const isGK = ap.position === "GK";
+        const apFieldSkills = !isGK ? generateFieldSkills(rng, ap.position as "DEF" | "MID" | "FWD", villageSize, ap.age) : null;
+        const apGkSkills = isGK ? generateGKSkills(rng, villageSize, ap.age) : null;
+        const apHiddenTalent = generateHiddenTalent(rng, villageSize);
+
+        const apSkills = isGK
+          ? { speed: 0, technique: 0, shooting: 0, passing: apGkSkills!.distribution.current, heading: 0, defense: 0, goalkeeping: apGkSkills!.reflexes.current }
+          : { speed: apFieldSkills!.speed.current, technique: apFieldSkills!.technique.current, shooting: apFieldSkills!.shooting.current, passing: apFieldSkills!.passing.current, heading: apFieldSkills!.heading.current, defense: apFieldSkills!.defense.current, goalkeeping: 0 };
+
+        const apHeight = (ap.position === "GK" ? 185 : ap.position === "DEF" ? 180 : ap.position === "FWD" ? 178 : 176) + rng.int(-8, 8);
+        const apBaseWeight = ap.bodyType === "obese" ? 100 : ap.bodyType === "stocky" ? 88 : ap.bodyType === "thin" ? 68 : ap.bodyType === "athletic" ? 78 : 80;
+        const apWeight = apBaseWeight + rng.int(-5, 8);
+
+        const apPhysical = {
+          stamina: isGK ? apGkSkills!.strength.current : apFieldSkills!.stamina.current,
+          strength: isGK ? apGkSkills!.strength.current : apFieldSkills!.strength.current,
+          injuryProneness: rng.int(10, 80), height: apHeight, weight: apWeight,
+        };
+        const apPersonality = { discipline: rng.int(10, 90), patriotism: rng.int(20, 90), alcohol: rng.int(5, 85), temper: rng.int(10, 80) };
+        const apOcc = pickOccupation(rng, villageSize, ap.age);
+        const apLifeContext = { occupation: apOcc.name, condition: 100, morale: 50 + rng.int(-15, 15) };
+        const apRating = calculateOverallRating(ap.position, isGK ? apGkSkills! : apFieldSkills!, apHiddenTalent);
+        const apDescription = generateDescription(rng, {
+          firstName: ap.firstName, lastName: ap.lastName, nickname: apNickname,
+          age: ap.age, position: ap.position, occupation: apOcc.name,
+          bodyType: ap.bodyType, alcohol: apPersonality.alcohol, discipline: apPersonality.discipline,
+          speed: apSkills.speed, shooting: apSkills.shooting, technique: apSkills.technique,
+          patriotism: apPersonality.patriotism,
+        });
+
+        await c.env.DB.prepare(
+          "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(apId, aiTeamId, ap.firstName, ap.lastName, apNickname, ap.age, ap.position, apRating,
+          JSON.stringify(apSkills), JSON.stringify(apPhysical), JSON.stringify(apPersonality),
+          JSON.stringify(apLifeContext), JSON.stringify(generatePlayerFace(ap)), apDescription,
+          JSON.stringify(isGK ? apGkSkills : apFieldSkills), apHiddenTalent,
+          isGK ? apGkSkills!.experience.current : apFieldSkills!.experience.current,
+        ).run();
+      }
+
+      // AI team relationships
+      if (lt.aiTeam.relationships) {
+        for (const rel of lt.aiTeam.relationships) {
+          if (rel.playerAIndex < aiPlayerIds.length && rel.playerBIndex < aiPlayerIds.length) {
+            await c.env.DB.prepare(
+              "INSERT INTO relationships (id, player_a_id, player_b_id, type) VALUES (?, ?, ?, ?)"
+            ).bind(uuid(), aiPlayerIds[rel.playerAIndex], aiPlayerIds[rel.playerBIndex], rel.type).run();
+          }
+        }
+      }
+    }
+  }
 
   return c.json({
     id: teamId,
@@ -293,7 +393,7 @@ teamsRouter.post("/", async (c) => {
     village: village.name,
     playersCount: squad.length,
     leagueId,
-    leagueName,
+    leagueName: leagueSetup.name,
   }, 201);
 });
 

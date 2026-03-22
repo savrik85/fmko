@@ -10,7 +10,6 @@ import { Button, Input, ErrorBox } from "@/components/ui";
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useTeam();
@@ -27,7 +26,7 @@ export default function RegisterPage() {
       }>("/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, displayName }),
+        body: JSON.stringify({ email, password }),
       });
       login(result.token, { id: result.user.id, email: result.user.email, teamId: null, teamName: null });
       router.push("/onboarding");
@@ -58,9 +57,6 @@ export default function RegisterPage() {
           <p className="text-white/40 text-sm mb-8">Za minutu budeš mít svůj tým</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input variant="dark" label="Jméno" type="text" value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)} placeholder="Jak ti říkají" required />
-
             <Input variant="dark" label="Email" type="email" value={email}
               onChange={(e) => setEmail(e.target.value)} placeholder="tvuj@email.cz" required />
 

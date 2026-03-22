@@ -29,7 +29,10 @@
       "Bash(grep:*)",
       "Bash(team)",
       "Bash(village\" id={id}> — FM-style zelený:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "mcp__plugin_serena_serena__list_dir",
+      "Bash(npx next:*)",
+      "Bash(ls /Users/savrik/Projects/fmko/apps/web/src/app/dashboard/player/[id]/page.tsx)"
     ]
   }
 }

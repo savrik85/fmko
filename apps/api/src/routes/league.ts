@@ -1,5 +1,5 @@
 /**
- * League API routes — standings, results.
+ * League API routes — standings from real DB data.
  */
 
 import { Hono } from "hono";
@@ -7,7 +7,7 @@ import type { Bindings } from "../index";
 
 const leagueRouter = new Hono<{ Bindings: Bindings }>();
 
-// GET /api/teams/:teamId/standings — mock standings for team's league
+// GET /api/teams/:teamId/standings — real standings from DB
 leagueRouter.get("/teams/:teamId/standings", async (c) => {
   const teamId = c.req.param("teamId");
 
@@ -16,48 +16,90 @@ leagueRouter.get("/teams/:teamId/standings", async (c) => {
   ).bind(teamId).first<Record<string, unknown>>();
   if (!team) return c.json({ error: "Team not found" }, 404);
 
-  // Get matches for this team
+  const leagueId = team.league_id as string | null;
+  if (!leagueId) return c.json({ leagueName: "", standings: [] });
+
+  // Get all teams in league
+  const leagueTeams = await c.env.DB.prepare(
+    "SELECT t.id, t.name, v.name as village_name FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.league_id = ? ORDER BY t.name"
+  ).bind(leagueId).all();
+
+  const teamIds = leagueTeams.results.map((t) => t.id as string);
+  const teamNames = Object.fromEntries(leagueTeams.results.map((t) => [t.id, t.name as string]));
+
+  // Get all simulated matches in this league
+  const placeholders = teamIds.map(() => "?").join(",");
   const matches = await c.env.DB.prepare(
-    "SELECT * FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated' ORDER BY simulated_at DESC"
-  ).bind(teamId, teamId).all();
+    `SELECT * FROM matches WHERE status = 'simulated' AND (home_team_id IN (${placeholders}) OR away_team_id IN (${placeholders}))`
+  ).bind(...teamIds, ...teamIds).all().catch(() => ({ results: [] }));
 
-  // Calculate player team stats from real matches
-  let wins = 0, draws = 0, losses = 0, gf = 0, ga = 0;
-  const form: string[] = [];
-
-  for (const m of matches.results) {
-    const isHome = m.home_team_id === teamId;
-    const hs = m.home_score as number;
-    const as_ = m.away_score as number;
-    const myScore = isHome ? hs : as_;
-    const theirScore = isHome ? as_ : hs;
-
-    gf += myScore;
-    ga += theirScore;
-    if (myScore > theirScore) { wins++; form.push("W"); }
-    else if (myScore < theirScore) { losses++; form.push("L"); }
-    else { draws++; form.push("D"); }
+  // Calculate standings
+  const stats: Record<string, { wins: number; draws: number; losses: number; gf: number; ga: number; form: string[] }> = {};
+  for (const tid of teamIds) {
+    stats[tid] = { wins: 0, draws: 0, losses: 0, gf: 0, ga: 0, form: [] };
   }
 
-  const played = wins + draws + losses;
-  const points = wins * 3 + draws;
+  for (const m of matches.results) {
+    const homeId = m.home_team_id as string;
+    const awayId = m.away_team_id as string;
+    const hs = m.home_score as number;
+    const as_ = m.away_score as number;
 
-  // Generate fake standings with player team included
-  const fakeTeams = [
-    { teamId: null as string | null, team: "SK Lhenice", played: played + 1, wins: wins + 1, draws, losses, gf: gf + 3, ga, points: points + 3, form: ["W", ...form.slice(0, 4)] },
-    { teamId: teamId, team: team.name as string, played, wins, draws, losses, gf, ga, points, form: form.slice(0, 5), isPlayer: true },
-    { teamId: null as string | null, team: "Sokol Netolice", played: Math.max(played, 1), wins: Math.max(wins - 1, 0), draws: draws + 1, losses: losses + 1, gf: gf - 1, ga: ga + 2, points: Math.max(points - 3, 0), form: ["D", "L", "W", "W", "L"] },
-    { teamId: null as string | null, team: "TJ Husinec", played: Math.max(played, 1), wins: Math.max(wins - 1, 0), draws, losses: losses + 1, gf: gf - 2, ga: ga + 1, points: Math.max(points - 4, 0), form: ["L", "W", "L", "W", "D"] },
-    { teamId: null as string | null, team: "FK Čkyně", played: Math.max(played, 1), wins: Math.max(wins - 2, 0), draws: draws + 1, losses: losses + 1, gf: gf - 3, ga: ga + 3, points: Math.max(points - 6, 0), form: ["L", "D", "L", "W", "L"] },
-  ];
+    if (!stats[homeId] || !stats[awayId]) continue;
 
-  // Sort by points
-  fakeTeams.sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga));
+    stats[homeId].gf += hs;
+    stats[homeId].ga += as_;
+    stats[awayId].gf += as_;
+    stats[awayId].ga += hs;
 
-  const standings = fakeTeams.map((t, i) => ({
-    pos: i + 1,
-    ...t,
-  }));
+    if (hs > as_) {
+      stats[homeId].wins++;
+      stats[homeId].form.push("W");
+      stats[awayId].losses++;
+      stats[awayId].form.push("L");
+    } else if (hs < as_) {
+      stats[awayId].wins++;
+      stats[awayId].form.push("W");
+      stats[homeId].losses++;
+      stats[homeId].form.push("L");
+    } else {
+      stats[homeId].draws++;
+      stats[homeId].form.push("D");
+      stats[awayId].draws++;
+      stats[awayId].form.push("D");
+    }
+  }
+
+  // Build standings array
+  const standings = teamIds.map((tid) => {
+    const s = stats[tid];
+    const played = s.wins + s.draws + s.losses;
+    return {
+      teamId: tid,
+      team: teamNames[tid],
+      played,
+      wins: s.wins,
+      draws: s.draws,
+      losses: s.losses,
+      gf: s.gf,
+      ga: s.ga,
+      points: s.wins * 3 + s.draws,
+      form: s.form.slice(-5).reverse(),
+      isPlayer: tid === teamId,
+    };
+  });
+
+  // Sort: points DESC, goal diff DESC, goals for DESC
+  standings.sort((a, b) => {
+    const pd = b.points - a.points;
+    if (pd !== 0) return pd;
+    const gd = (b.gf - b.ga) - (a.gf - a.ga);
+    if (gd !== 0) return gd;
+    return b.gf - a.gf;
+  });
+
+  // Assign positions
+  standings.forEach((s, i) => { (s as Record<string, unknown>).pos = i + 1; });
 
   return c.json({
     leagueName: `Okresní přebor ${team.district}`,
