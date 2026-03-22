@@ -40,6 +40,27 @@ const TEMPLATES: Array<(ctx: DescContext) => string | null> = [
   (ctx) => ctx.occupation === "Zemědělec" ? `Celý týden na poli, v neděli na hřišti. A večer v hospodě.` : null,
   (ctx) => ctx.occupation === "Kuchař" ? `Vaří pro celý tým po zápase. Jeho guláš je legendární.` : null,
 
+  // Nová vesnická povolání
+  (ctx) => ctx.occupation === "Včelař" ? `Včely ho naučily trpělivosti. Na hřišti čeká na svoji chvíli.` : null,
+  (ctx) => ctx.occupation === "Myslivec" ? `Střílí přesně — na hřišti i na posedu. V kabině voní lesem.` : null,
+  (ctx) => ctx.occupation === "Hajný" ? `Zná každý strom v lese a každou díru v obraně soupeře.` : null,
+  (ctx) => ctx.occupation === "Kovář" ? `Ruce jako lopaty. Když fouká do autu, míč letí na druhou stranu hřiště.` : null,
+  (ctx) => ctx.occupation === "Chovatel" ? `Vstává ve čtyři ráno ke kravám. V neděli ve dvanáct k fotbalu. Rozdíl nepozná.` : null,
+  (ctx) => ctx.occupation === "Dřevorubec" ? `Motorovku ovládá líp než míč, ale v soubojích je neprůstřelný.` : null,
+  (ctx) => ctx.occupation === "Kombajnér" ? `V sezoně ho nevidíš. Mimo sezonu je king.` : null,
+  (ctx) => ctx.occupation === "Lesní dělník" ? `Po týdnu v lese je rád za každou lidskou společnost. I za rozhodčího.` : null,
+  (ctx) => ctx.occupation === "Správce rybníka" ? `Trpělivý jako rybář. Čeká na příležitost a pak udeří.` : null,
+  (ctx) => ctx.occupation === "Hospodský" ? `Zná všechny v okresu. A všichni znají jeho pivo.` : null,
+  (ctx) => ctx.occupation === "Sezonní dělník" ? `Kde je práce, tam je on. Kde je fotbal, tam taky.` : null,
+  (ctx) => ctx.occupation === "Chalupář" ? `O víkendu opravuje chalupu, v neděli opravuje obranu.` : null,
+  (ctx) => ctx.occupation === "Automechanik" ? `Auta rozebírá a skládá. S obranou soupeře dělá to samé.` : null,
+  (ctx) => ctx.occupation === "Instalatér" ? `Když teče, volají jeho. Ať už doma nebo na hřišti.` : null,
+  (ctx) => ctx.occupation === "Pokrývač" ? `Nebojí se výšek. Ani vysokých míčů.` : null,
+  (ctx) => ctx.occupation === "Svářeč" ? `Jiskry létají v práci i na hřišti.` : null,
+  (ctx) => ctx.occupation === "Řidič kamionu" ? `Celý týden za volantem, v neděli za míčem. Obojí řídí.` : null,
+  (ctx) => ctx.occupation === "Nezaměstnaný" ? `Času má dost. Motivace je horší.` : null,
+  (ctx) => ctx.occupation === "Podnikatel" ? `V podnikání riskuje, na hřišti taky. Občas to vyjde.` : null,
+
   // Personality-based
   (ctx) => ctx.alcohol >= 16 ? `Páteční hospoda je pro něj povinná. Nedělní zápas volitelný.` : null,
   (ctx) => ctx.alcohol >= 14 ? `S pivem v ruce se cítí lépe než s míčem.` : null,

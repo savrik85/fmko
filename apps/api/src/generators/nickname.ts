@@ -95,6 +95,20 @@ const OCCUPATION_NICKNAMES: Record<string, string[]> = {
   "Záchranář": ["Doktor", "Záchranka"],
   "Správce hřiště": ["Správa", "Kustod"],
   "Důchodce": ["Děda", "Veterán", "Fotr"],
+  // Nová vesnická povolání
+  "Dřevorubec": ["Pila", "Špalek", "Kmen", "Sekera"],
+  "Včelař": ["Medvěd", "Včelka", "Žihadlo", "Plástev"],
+  "Chovatel": ["Prasák", "Farmář", "Kravař", "Dojič"],
+  "Kombajnér": ["Kombajn", "Žnec", "Mlátička"],
+  "Myslivec": ["Lovčí", "Brok", "Kulovnice", "Střelec"],
+  "Kovář": ["Kladivo", "Kovadlina", "Podkova", "Železo"],
+  "Hajný": ["Šumavák", "Revírník", "Lesňák", "Stráž"],
+  "Správce rybníka": ["Kapr", "Rybář", "Sumec", "Hráz"],
+  "Sadař": ["Jablko", "Švestka", "Ovocňák"],
+  "Sezonní dělník": ["Brigádník", "Nádeník", "Melouch"],
+  "Chalupář": ["Chalupník", "Víkendář", "Samotář"],
+  // Městská povolání
+  "Strojní inženýr": ["Inženýr", "Stroj", "Turbína"],
 };
 
 // 3. Přezdívky ze stavby těla
