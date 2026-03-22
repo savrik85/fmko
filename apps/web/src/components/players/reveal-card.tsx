@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { Player } from "@/lib/api";
-import { PlayerAvatar } from "@okresni-masina/ui/avatar";
-import type { AvatarConfig } from "@okresni-masina/shared";
+import { FaceAvatar } from "./face-avatar";
 
 interface RevealCardProps {
   player: Player;
@@ -84,7 +83,6 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
 
   const ratingColor = getRatingColor(player.overall_rating);
   const topStats = getTopStats(player);
-  const hasAvatar = player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 0;
 
   // Phase: hidden
   if (phase === "hidden") {
@@ -131,18 +129,12 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
         </div>
       </div>
 
-      {/* Avatar */}
+      {/* Avatar — facesjs */}
       <div className="flex justify-center py-2">
-        {hasAvatar ? (
-          <div className="w-[72px] h-[72px]">
-            <PlayerAvatar config={player.avatar as unknown as AvatarConfig} size="md" jerseyColor={teamColor} />
-          </div>
-        ) : (
-          <div className="w-16 h-16 rounded-full flex items-center justify-center text-white font-heading font-bold text-2xl"
-            style={{ backgroundColor: teamColor }}>
-            {player.first_name[0]}
-          </div>
-        )}
+        <FaceAvatar
+          seed={`${player.first_name}${player.last_name}${player.age}`}
+          size={72}
+        />
       </div>
 
       {/* Name + nickname */}

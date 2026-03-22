@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
-import { PlayerAvatar } from "@okresni-masina/ui/avatar";
+import { FaceAvatar } from "@/components/players/face-avatar";
 import { StatBar } from "@/components/ui";
 
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
@@ -50,11 +50,7 @@ export default function SquadPage() {
       <div className="space-y-2">
         {sorted.map((p) => (
           <button key={p.id} onClick={() => setSelected(p)} className="w-full bg-white rounded-card shadow-card hover:shadow-hover p-4 text-left transition-all flex gap-3 items-center">
-            {p.avatar ? (
-              <div className="w-11 h-11 shrink-0"><PlayerAvatar config={p.avatar as any} size="sm" jerseyColor={color} /></div>
-            ) : (
-              <div className="w-11 h-11 rounded-full shrink-0 flex items-center justify-center text-white font-heading font-bold" style={{ backgroundColor: color }}>{p.first_name[0]}</div>
-            )}
+            <FaceAvatar seed={`${p.first_name}${p.last_name}${p.age}`} size={44} />
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-1.5">
                 <span className="font-heading font-bold truncate">{p.first_name} {p.last_name}</span>
@@ -81,14 +77,8 @@ export default function SquadPage() {
 
               <div className="flex flex-col items-center pt-6 pb-5 px-5">
                 {/* Velký avatar */}
-                <div className="w-32 h-32 mb-3">
-                  {selected.avatar ? (
-                    <PlayerAvatar config={selected.avatar as any} size="lg" jerseyColor={color} />
-                  ) : (
-                    <div className="w-32 h-32 rounded-full bg-white/20 flex items-center justify-center text-white font-heading font-bold text-5xl">
-                      {selected.first_name[0]}
-                    </div>
-                  )}
+                <div className="w-28 h-28 mb-3 rounded-full overflow-hidden ring-4 ring-white/20">
+                  <FaceAvatar seed={`${selected.first_name}${selected.last_name}${selected.age}`} size={112} />
                 </div>
 
                 {/* Jméno + přezdívka */}
