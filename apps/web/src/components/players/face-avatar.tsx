@@ -10,29 +10,41 @@ interface FaceAvatarProps {
 }
 
 export function FaceAvatar({ faceConfig, size = 80, className = "" }: FaceAvatarProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const outerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+
+  const visibleHeight = size * 1.2;
+  const renderHeight = size * 1.6;
 
   useEffect(() => {
-    if (!containerRef.current || !faceConfig) return;
+    if (!innerRef.current || !faceConfig) return;
 
-    while (containerRef.current.firstChild) {
-      containerRef.current.removeChild(containerRef.current.firstChild);
+    while (innerRef.current.firstChild) {
+      innerRef.current.removeChild(innerRef.current.firstChild);
     }
 
     try {
-      // Let facesjs render at its natural aspect ratio
-      display(containerRef.current, faceConfig as any, { width: size, height: size * 1.3 });
+      display(innerRef.current, faceConfig as any, { width: size, height: renderHeight });
     } catch {
       // Fallback
     }
-  }, [faceConfig, size]);
+  }, [faceConfig, size, renderHeight]);
 
-  // No rounded-full, no overflow hidden — just let facesjs render naturally
+  // Render face taller, then clip vertically to center the actual face
   return (
     <div
-      ref={containerRef}
-      className={`shrink-0 ${className}`}
-      style={{ width: size, height: size * 1.3 }}
-    />
+      ref={outerRef}
+      className={`shrink-0 overflow-hidden ${className}`}
+      style={{ width: size, height: visibleHeight }}
+    >
+      <div
+        ref={innerRef}
+        style={{
+          width: size,
+          height: renderHeight,
+          marginTop: -(renderHeight - visibleHeight) * 0.35,
+        }}
+      />
+    </div>
   );
 }
