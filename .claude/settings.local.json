@@ -28,7 +28,8 @@
       "Bash(node:*)",
       "Bash(grep:*)",
       "Bash(team)",
-      "Bash(village\" id={id}> — FM-style zelený:*)"
+      "Bash(village\" id={id}> — FM-style zelený:*)",
+      "Bash(git rm:*)"
     ]
   }
 }

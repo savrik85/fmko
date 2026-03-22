@@ -66,15 +66,11 @@ const POSITION_DISTRIBUTION: Record<PlayerPosition, number> = {
   FWD: 5,
 };
 
-const OCCUPATIONS = [
-  "Řidič kamionu", "Zedník", "Tesař", "Instalatér", "Elektrikář",
-  "Mechanik", "Řezník", "Pekař", "Hospodský", "Prodavač",
-  "Zemědělec", "Traktorista", "Lesní dělník", "Skladník",
-  "Hasič", "Policista", "Učitel", "Účetní", "Programátor",
-  "Úředník", "Poštovní doručovatel", "Svářeč", "Malíř pokojů",
-  "Automechanik", "Student", "Nezaměstnaný", "Podnikatel",
-  "Kuchař", "Číšník", "Truhlář", "Pokrývač", "Strojní inženýr",
-  "Záchranář", "Správce hřiště", "Důchodce",
+// Occupations are now in occupations.ts — imported by teams route
+// Kept as fallback only
+const FALLBACK_OCCUPATIONS = [
+  "Zedník", "Tesař", "Zemědělec", "Řezník", "Hospodský",
+  "Automechanik", "Skladník", "Prodavač", "Nezaměstnaný",
 ];
 
 const BODY_TYPES: BodyType[] = ["thin", "athletic", "normal", "stocky", "obese"];
@@ -243,7 +239,7 @@ export function generatePlayer(
     accessories: [],
   };
 
-  const occupation = age < 18 ? "Student" : age > 60 ? "Důchodce" : rng.pick(OCCUPATIONS);
+  const occupation = age < 18 ? "Student" : age > 60 ? "Důchodce" : rng.pick(FALLBACK_OCCUPATIONS);
 
   return {
     firstName,

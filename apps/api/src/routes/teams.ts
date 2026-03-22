@@ -16,6 +16,7 @@ import { generateRelationships } from "../generators/relationships";
 import { generateDescription } from "../generators/description-generator";
 import { generateFieldSkills, generateGKSkills, generateHiddenTalent, calculateOverallRating } from "../skills/generator";
 import { generateSeasonCalendar } from "../season/calendar";
+import { pickOccupation } from "../generators/occupations";
 import { generateSchedule, totalRounds } from "../league/schedule";
 
 const teamsRouter = new Hono<{ Bindings: Bindings }>();
@@ -204,7 +205,9 @@ teamsRouter.post("/", async (c) => {
       weight,
     };
     const personality = { discipline: rng.int(10, 90), patriotism: rng.int(20, 90), alcohol: rng.int(5, 85), temper: rng.int(10, 80) };
-    const lifeContext = { occupation: player.occupation, condition: 100, morale: 50 + rng.int(-15, 15) };
+    // Pick occupation based on village size
+    const occ = pickOccupation(rng, villageSize, player.age);
+    const lifeContext = { occupation: occ.name, condition: 100, morale: 50 + rng.int(-15, 15) };
     const rating = calculateOverallRating(player.position, isGK ? gkSkills! : fieldSkills!, hiddenTalent);
 
     // Full skills JSON with maxPotential (stored in skills_max)
@@ -212,7 +215,7 @@ teamsRouter.post("/", async (c) => {
 
     const description = generateDescription(rng, {
       firstName: player.firstName, lastName: player.lastName, nickname,
-      age: player.age, position: player.position, occupation: player.occupation,
+      age: player.age, position: player.position, occupation: occ.name,
       bodyType: player.bodyType, alcohol: personality.alcohol, discipline: personality.discipline,
       speed: skillsCurrent.speed, shooting: skillsCurrent.shooting, technique: skillsCurrent.technique,
       patriotism: personality.patriotism,

@@ -1,176 +1,222 @@
 /**
- * Systém absencí hráčů — generování důvodů proč hráč nepřijde na zápas.
+ * Systém absencí — profesní, osobní, absurdní, zdravotní, kocovina.
  *
- * Každý hráč má % šanci na absenci dle svých atributů a kontextu.
+ * Pravděpodobnost a typ absence závisí na:
+ * - discipline → celková šance na absenci
+ * - morale → osobní důvody (nízká = hledá výmluvy)
+ * - patriotism → loajalita k týmu (nízký = snáz chybí)
+ * - alcohol → kocovina
+ * - age + stamina + injuryProneness → zdravotní
+ * - occupation.overtimeRisk → profesní
  */
 
 import type { Rng } from "../generators/rng";
-import type { GeneratedPlayer } from "../generators/player";
+import { getOccupationByName, type Occupation } from "../generators/occupations";
 
 export interface AbsenceResult {
   playerIndex: number;
+  category: "professional" | "personal" | "absurd" | "health" | "hangover";
   reason: string;
   emoji: string;
   smsText: string;
 }
 
-interface AbsenceRule {
-  reason: string;
-  emoji: string;
-  /** Base probability (0-1) */
-  baseProb: number;
-  /** Calculate weight modifier from player attributes */
-  weight: (player: GeneratedPlayer) => number;
-  /** SMS templates for this reason */
-  smsTemplates: string[];
+interface PlayerForAbsence {
+  firstName: string;
+  lastName: string;
+  age: number;
+  occupation: string;
+  discipline: number;    // 0-100
+  patriotism: number;    // 0-100
+  alcohol: number;       // 0-100
+  temper: number;        // 0-100
+  morale: number;        // 0-100
+  stamina: number;       // 0-100
+  injuryProneness: number; // 0-100
 }
 
-const ABSENCE_RULES: AbsenceRule[] = [
-  {
-    reason: "Kocovina",
-    emoji: "\u{1F37A}",
-    baseProb: 0.08,
-    weight: (p) => p.alcohol / 20 * 1.5 + (20 - p.discipline) / 20 * 0.5,
-    smsTemplates: [
-      "Sorry trenere, neni mi dobr... vcera to bylo silny",
-      "Dneska to nepujde. Vcera jsme to s klukama trochu pretahli",
-      "Nemuzuu... hlava mi tresti. Priste urcite",
-      "Trenere omlouvam se, mam zaludecni chripku (pivo)",
-    ],
-  },
-  {
-    reason: "Rodinný oběd",
-    emoji: "\u{1F356}",
-    baseProb: 0.06,
-    weight: (p) => (p.age > 30 ? 1.3 : 0.8) * (20 - p.patriotism) / 20,
-    smsTemplates: [
-      "Dneska nemuzem, mame rodinnej obed u tchyne",
-      "Zenská mi nedovoli. Mame narozeniny u svagra",
-      "Dneska fakt nejde, slibil sem rodine ze budem doma",
-      "Sorry, dneska zabijacka u taty. Priste si to vynahradim",
-    ],
-  },
-  {
-    reason: "Brigáda / přesčas",
-    emoji: "\u{1F3D7}",
-    baseProb: 0.05,
-    weight: (p) => {
-      const hardJobs = ["Zedník", "Tesař", "Řidič kamionu", "Skladník", "Pokrývač"];
-      return hardJobs.includes(p.occupation) ? 1.5 : 0.7;
-    },
-    smsTemplates: [
-      "Mam prescas, sef me nechce pustit",
-      "Musim na brigadu, potrebuju penize na opravu auta",
-      "Dneska delam, nenasli nahradnika",
-      "Sezona, musim sklizet. Priste budu",
-    ],
-  },
-  {
-    reason: "Nemá odvoz",
-    emoji: "\u{1F697}",
-    baseProb: 0.04,
-    weight: (p) => p.age < 20 ? 1.5 : p.age > 45 ? 0.3 : 0.6,
-    smsTemplates: [
-      "Nemam jak prijet, auto nejde",
-      "Dneska mi nikdo nemuze svist",
-      "Ujel mi bus a dalsi jede az vecer",
-      "Auto ma zenská, nemam odvoz",
-    ],
-  },
-  {
-    reason: "Hlídání dětí",
-    emoji: "\u{1F476}",
-    baseProb: 0.04,
-    weight: (p) => p.age >= 25 && p.age <= 40 ? 1.2 : 0.3,
-    smsTemplates: [
-      "Musim hlidat malou, zenská ma sluzbu",
-      "Deti jsou nemocny, musim byt doma",
-      "Trenere nemuzem, maly mi prinesl ze skolky chripku",
-    ],
-  },
-  {
-    reason: "Rybářské závody",
-    emoji: "\u{1F3A3}",
-    baseProb: 0.02,
-    weight: (p) => p.age > 35 ? 1.5 : 0.5,
-    smsTemplates: [
-      "Dneska mam rybarsky zavody, uz sem prihlasenej",
-      "Jedu na ryby s kamosema, uz to neslo odrikat",
-    ],
-  },
-  {
-    reason: "Rozchod",
-    emoji: "\u{1F494}",
-    baseProb: 0.01,
-    weight: (p) => p.age < 30 ? 1.5 : 0.5,
-    smsTemplates: [
-      "Nemam naladu na nic. Dala mi kopacky",
-      "Dneska fakt ne... mam osobni problemy",
-    ],
-  },
-  {
-    reason: "Zranění z práce",
-    emoji: "\u{1F9B4}",
-    baseProb: 0.03,
-    weight: (p) => {
-      const riskyJobs = ["Zedník", "Tesař", "Lesní dělník", "Pokrývač", "Svářeč"];
-      return riskyJobs.includes(p.occupation) ? 1.5 : 0.5;
-    },
-    smsTemplates: [
-      "Spadl sem ze stfechy, koleno v haji",
-      "Vrazil sem si do ruky kladivem, nemuzem chytit mic",
-      "Natah sem si zada pri praci, nemuzem se ohnout",
-    ],
-  },
-  {
-    reason: "Zapomněl",
-    emoji: "\u{1F4FA}",
-    baseProb: 0.02,
-    weight: (p) => (20 - p.discipline) / 20 * 1.5,
-    smsTemplates: [
-      "Jee to je dneska?? Sorry uplne sem zapomel",
-      "Ty vole ja sem myslel ze hrajem az pristi tyden",
-    ],
-  },
-  {
-    reason: "Simulování",
-    emoji: "\u{1F912}",
-    baseProb: 0.02,
-    weight: (p) => (20 - p.discipline) / 20 * 0.8 + p.temper / 20 * 0.5,
-    smsTemplates: [
-      "Nemuzem, bolí me koleno (asi)",
-      "Mam nachlazenej, radsi zustanem doma",
-      "Necitim se dobre, radeji ne",
-    ],
-  },
+// ═══════════════════════════════════════════════
+// OSOBNÍ VÝMLUVY (univerzální, vážené dle atributů)
+// ═══════════════════════════════════════════════
+
+const PERSONAL_EXCUSES = [
+  // Rodina (vyšší šance pro starší, ženatý věk)
+  { text: "Manželka mě nepustila, sorry", emoji: "\u{1F46B}", minAge: 25 },
+  { text: "Tchýně má narozeniny, musel jsem slíbit že přijdu", emoji: "\u{1F382}", minAge: 28 },
+  { text: "Malej je nemocnej, musím ho hlídat", emoji: "\u{1F476}", minAge: 24 },
+  { text: "Musím na rodičák do školky", emoji: "\u{1F3EB}", minAge: 25 },
+  { text: "Ženská mi dala ultimátum — buď fotbal nebo ona. Ještě přemýšlím", emoji: "\u{1F494}", minAge: 20 },
+  { text: "Dcera má vystoupení ve škole, slíbil jsem že přijdu", emoji: "\u{1F3AD}", minAge: 28 },
+  { text: "Rodinnej oběd u rodičů, nemůžu to zrušit", emoji: "\u{1F356}", minAge: 0 },
+
+  // Zdraví
+  { text: "Bolí mě záda od včerejška, nemůžu se ohnout", emoji: "\u{1F915}", minAge: 30 },
+  { text: "Mám doktora, nemohl jsem to přeobjednat", emoji: "\u{1F3E5}", minAge: 0 },
+  { text: "Chytil jsem chřipku, nechci nakazit celej tým", emoji: "\u{1F912}", minAge: 0 },
+
+  // Logistika
+  { text: "Nemám odvoz, auto je v servisu od pátku", emoji: "\u{1F697}", minAge: 0 },
+  { text: "Ujel mi bus a další jede až za dvě hodiny", emoji: "\u{1F68C}", minAge: 0 },
+
+  // Zapomnětlivost
+  { text: "Zapomněl jsem, myslel jsem že hrajeme příští týden", emoji: "\u{1F937}", minAge: 0 },
+  { text: "Hele já se omlouvám ale fakt jsem si to nespojil", emoji: "\u{1F644}", minAge: 0 },
+
+  // Vztahy
+  { text: "Slíbil jsem ženský že jedeme do IKEA, nemůžu to zrušit", emoji: "\u{1F6D2}", minAge: 22 },
+  { text: "Musím pomoct stěhovat kamarádovi, slíbil jsem to už třikrát", emoji: "\u{1F4E6}", minAge: 0 },
+];
+
+// ═══════════════════════════════════════════════
+// ABSURDNÍ VÝMLUVY (český vesnický humor)
+// ═══════════════════════════════════════════════
+
+const ABSURD_EXCUSES = [
+  { text: "Zamkl jsem se v garáži a nikdo není doma", emoji: "\u{1F512}" },
+  { text: "Musím hlídat kozu, utekla sousedům a žere mi zahradu", emoji: "\u{1F410}" },
+  { text: "Přijeli příbuzní z Kanady, neviděl jsem je 15 let, nemůžu odejít", emoji: "\u{2708}" },
+  { text: "Slíbil jsem dědovi že mu pomůžu vyčistit studnu", emoji: "\u{1F4A7}" },
+  { text: "Našel jsem houby a musím je hned zpracovat, jinak se zkazí", emoji: "\u{1F344}" },
+  { text: "Spadl mi strom na plot a utečou slepice", emoji: "\u{1F333}" },
+  { text: "Dostal jsem lístky na hokej, sorry ale tohle se neodmítá", emoji: "\u{1F3D2}" },
+  { text: "Musím odvézt tchána na houby, hrozil že jinak nepůjčí přívěs", emoji: "\u{1F698}" },
+  { text: "Pes sežral klíče od auta, čekám až je... vrátí", emoji: "\u{1F436}" },
+  { text: "Montér na parabolu přijede jen dneska mezi 8 a 17", emoji: "\u{1F4E1}" },
+  { text: "Svědek na svatbě bratrance, nemůžu odmítnout", emoji: "\u{1F492}" },
+  { text: "Musím natřít plot, barva schne jen do patnácti stupňů", emoji: "\u{1F3A8}" },
+  { text: "Soused mi vrací vrtačku a slíbil jsem mu za to pomoct se střechou", emoji: "\u{1F527}" },
+  { text: "Žena mi vyhodila kopačky z okna. Doslova. Hledám je v křoví", emoji: "\u{1F462}" },
+  { text: "Zateklo mi do sklepa, musím to vylejvat kbelíkem", emoji: "\u{1FAA3}" },
+  { text: "Musím opravit záchod, ženská řekla že dokud nebude fungovat, nikam nejdu", emoji: "\u{1F6BD}" },
+  { text: "Chytil jsem sumce a nemůžu ho nechat v autě", emoji: "\u{1F41F}" },
+  { text: "Klíště. Musím k doktorovi. Asi. Pro jistotu", emoji: "\u{1FAB2}" },
+  { text: "Babička volala že jí nefunguje televize a neumí přepnout vstup", emoji: "\u{1F4FA}" },
+  { text: "Musím vyzvednout traktůrek ze servisu, jinak mi ho prodaj", emoji: "\u{1F69C}" },
+];
+
+// ═══════════════════════════════════════════════
+// KOCOVINA
+// ═══════════════════════════════════════════════
+
+const HANGOVER_EXCUSES = [
+  { text: "Sorry trenere, není mi dobře... včera to bylo silný", emoji: "\u{1F37A}" },
+  { text: "Nemůžuuu... hlava mi třeští. Příště určitě", emoji: "\u{1F635}" },
+  { text: "Neni mi dobře, asi jsem něco špatného snědl (nepil)", emoji: "\u{1F922}" },
+  { text: "Včera jsme to s klukama trochu přetáhli... omlouvám se", emoji: "\u{1F943}" },
+  { text: "Trenere omlouvám se, mám žaludeční chřipku (pivo)", emoji: "\u{1F912}" },
+  { text: "Dneska to fakt nepůjde. Včera byla zabijačka", emoji: "\u{1F37B}" },
+];
+
+// ═══════════════════════════════════════════════
+// ZDRAVOTNÍ
+// ═══════════════════════════════════════════════
+
+const HEALTH_EXCUSES = [
+  { text: "Koleno mě zase kleplo, asi ne", emoji: "\u{1F9B5}" },
+  { text: "Natáhl jsem si sval na tréninku, bolí to jak čert", emoji: "\u{1F4AA}" },
+  { text: "Záda úplně ztuhlý, nemůžu se ani otočit", emoji: "\u{1F615}" },
+  { text: "Kotník mi otekl, asi jsem si ho podvrtl v práci", emoji: "\u{1F97E}" },
+  { text: "Mám ten zánět šlach zas, doktor říkal klid", emoji: "\u{1FA7A}" },
 ];
 
 /**
- * Determine which players are absent for a given round.
+ * Generate absences for a squad before a match.
  *
- * @returns Array of absences with reasons and SMS text
+ * Pravděpodobnost a typ závisí na charakteru hráče:
+ * - discipline → celková šance (nízká = víc absencí)
+ * - morale → osobní důvody (nízká = víc výmluv)
+ * - patriotism → loajalita (nízký = snáz chybí)
+ * - alcohol → kocovina
+ * - age + stamina + injuryProneness → zdravotní
+ * - occupation → profesní
  */
 export function generateAbsences(
   rng: Rng,
-  squad: GeneratedPlayer[],
+  squad: PlayerForAbsence[],
 ): AbsenceResult[] {
   const absences: AbsenceResult[] = [];
 
   for (let i = 0; i < squad.length; i++) {
-    const player = squad[i];
+    const p = squad[i];
 
-    for (const rule of ABSENCE_RULES) {
-      const prob = rule.baseProb * rule.weight(player);
-      if (rng.random() < prob) {
-        absences.push({
-          playerIndex: i,
-          reason: rule.reason,
-          emoji: rule.emoji,
-          smsText: rng.pick(rule.smsTemplates),
-        });
-        break; // Max one absence reason per player
+    // Celková šance na absenci — discipline je klíčový faktor
+    // discipline 100 → 5% šance, discipline 0 → 25% šance
+    // patriotism snižuje šanci (loajální hráč chodí vždycky)
+    // morale snižuje šanci (spokojený hráč chce hrát)
+    const disciplineFactor = (100 - p.discipline) / 100;
+    const patriotismFactor = (100 - p.patriotism) / 200; // Menší vliv
+    const moraleFactor = (100 - p.morale) / 300; // Ještě menší vliv
+    const baseChance = 0.04 + disciplineFactor * 0.16 + patriotismFactor * 0.05 + moraleFactor * 0.03;
+
+    if (rng.random() > baseChance) continue; // Přijde!
+
+    // Vyber kategorii výmluvy — váhy závisí na atributech
+    const occupation = getOccupationByName(p.occupation);
+
+    const weights: Record<string, number> = {
+      // Profesní: vyšší když povolání má vysoký overtimeRisk
+      professional: 0.25 + (occupation?.overtimeRisk ?? 0.2) * 0.3,
+
+      // Osobní: vyšší když nízká morálka nebo nízký patriotismus
+      personal: 0.30 + (100 - p.morale) / 100 * 0.15,
+
+      // Absurdní: vyšší když nízká disciplína + vyšší alkohol (nespolehlivý typy)
+      absurd: 0.08 + (100 - p.discipline) / 100 * 0.08 + p.alcohol / 100 * 0.05,
+
+      // Zdravotní: vyšší u starších, nízká kondice, vysoká injury proneness
+      health: 0.05 + (p.age > 35 ? 0.08 : 0) + (p.age > 40 ? 0.08 : 0)
+        + (100 - p.stamina) / 100 * 0.06 + p.injuryProneness / 100 * 0.05,
+
+      // Kocovina: závisí hlavně na alcohol atributu
+      hangover: p.alcohol > 60 ? 0.15 : p.alcohol > 40 ? 0.08 : 0.02,
+    };
+
+    const category = rng.weighted(weights) as AbsenceResult["category"];
+
+    let smsText: string;
+    let emoji: string;
+
+    switch (category) {
+      case "professional": {
+        const excuses = occupation?.excuses ?? ["Musím do práce, nemůžu přijít"];
+        smsText = rng.pick(excuses);
+        emoji = "\u{1F3D7}"; // construction
+        break;
+      }
+      case "personal": {
+        const applicable = PERSONAL_EXCUSES.filter((e) => p.age >= e.minAge);
+        const pick = rng.pick(applicable.length > 0 ? applicable : PERSONAL_EXCUSES);
+        smsText = pick.text;
+        emoji = pick.emoji;
+        break;
+      }
+      case "absurd": {
+        const pick = rng.pick(ABSURD_EXCUSES);
+        smsText = pick.text;
+        emoji = pick.emoji;
+        break;
+      }
+      case "health": {
+        const pick = rng.pick(HEALTH_EXCUSES);
+        smsText = pick.text;
+        emoji = pick.emoji;
+        break;
+      }
+      case "hangover": {
+        const pick = rng.pick(HANGOVER_EXCUSES);
+        smsText = pick.text;
+        emoji = pick.emoji;
+        break;
       }
     }
+
+    absences.push({
+      playerIndex: i,
+      category,
+      reason: category === "professional" ? "Práce" : category === "personal" ? "Osobní" : category === "absurd" ? "Jiné" : category === "health" ? "Zdraví" : "Kocovina",
+      emoji,
+      smsText,
+    });
   }
 
   return absences;
