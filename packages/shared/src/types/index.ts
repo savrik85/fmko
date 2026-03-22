@@ -14,3 +14,4 @@ export type { Match, MatchStatus, MatchEvent, EventType } from "./match.js";
 export type { Sponsor, SponsorType } from "./sponsor.js";
 export type { GameEvent, GameEventType } from "./event.js";
 export type { User } from "./user.js";
+export type { Manager, ManagerBackstory } from "./manager.js";

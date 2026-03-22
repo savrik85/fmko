@@ -50,6 +50,7 @@ export default function PlayerDetailPage() {
 
   const [player, setPlayer] = useState<Player | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -57,12 +58,18 @@ export default function PlayerDetailPage() {
     Promise.all([
       apiFetch<Player>(`/api/teams/${teamId}/players/${playerId}`),
       apiFetch<Team>(`/api/teams/${teamId}`),
-    ]).then(([p, t]) => {
+      apiFetch<Player[]>(`/api/teams/${teamId}/players`),
+    ]).then(([p, t, all]) => {
       setPlayer(p);
       setTeam(t);
+      setAllPlayers(all);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [teamId, playerId]);
+
+  const currentIndex = allPlayers.findIndex((p) => p.id === playerId);
+  const prevPlayer = allPlayers.length > 1 ? allPlayers[(currentIndex - 1 + allPlayers.length) % allPlayers.length] : null;
+  const nextPlayer = allPlayers.length > 1 ? allPlayers[(currentIndex + 1) % allPlayers.length] : null;
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>;
   if (!player || !team) return <div className="page-container">Hráč nenalezen.</div>;
@@ -76,9 +83,32 @@ export default function PlayerDetailPage() {
       {/* ═══ Hero header ═══ */}
       <div className="hero-gradient text-white" style={{ backgroundColor: color }}>
         <div className="page-container py-5">
-          <button onClick={() => router.back()} className="text-white/60 hover:text-white text-sm mb-4 flex items-center gap-1 transition-colors">
-            &#8592; Zpět
-          </button>
+          <div className="flex items-center justify-between mb-4">
+            <button onClick={() => router.back()} className="text-white/60 hover:text-white text-sm flex items-center gap-1 transition-colors">
+              &#8592; Zpět
+            </button>
+
+            {/* Prev / Next navigation */}
+            {allPlayers.length > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => prevPlayer && router.push(`/dashboard/player/${prevPlayer.id}`)}
+                  className="w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+                >
+                  &#9664;
+                </button>
+                <span className="text-white/50 text-xs font-heading tabular-nums px-1">
+                  {currentIndex + 1}/{allPlayers.length}
+                </span>
+                <button
+                  onClick={() => nextPlayer && router.push(`/dashboard/player/${nextPlayer.id}`)}
+                  className="w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+                >
+                  &#9654;
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="flex items-start gap-5">
             {/* Avatar */}

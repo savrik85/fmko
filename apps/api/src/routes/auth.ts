@@ -39,6 +39,11 @@ authRouter.post("/register", async (c) => {
     "INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)"
   ).bind(userId, body.email.toLowerCase(), passwordHash).run();
 
+  // Try to save display_name if column exists (after migration 0006)
+  await c.env.DB.prepare(
+    "UPDATE users SET display_name = ? WHERE id = ?"
+  ).bind(body.displayName, userId).run().catch(() => {});
+
   // Create session
   const token = await createSession(c.env.SESSION_KV, userId, body.email.toLowerCase(), null);
 

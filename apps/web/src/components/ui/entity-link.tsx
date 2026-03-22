@@ -12,7 +12,7 @@ interface EntityLinkProps {
 
 const ROUTES: Record<EntityType, string> = {
   player: "/dashboard/player",
-  team: "/team",
+  team: "/dashboard/team",
   village: "/village",
 };
 

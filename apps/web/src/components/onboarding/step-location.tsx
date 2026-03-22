@@ -69,7 +69,7 @@ export function StepLocation({ onSelect }: Props) {
       {/* Header + filters */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
         <div>
-          <p className="text-label mb-2">Krok 1 ze 3</p>
+          <p className="text-label mb-2">Krok 1 ze 4</p>
           <h2 className="text-h1 text-ink">Kde hraješ?</h2>
           <p className="text-muted mt-1">Klikni na obec kde chceš založit tým</p>
         </div>

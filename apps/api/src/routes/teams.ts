@@ -18,6 +18,8 @@ import { generateFieldSkills, generateGKSkills, generateHiddenTalent, calculateO
 import { generateSeasonCalendar } from "../season/calendar";
 import { pickOccupation } from "../generators/occupations";
 import { generateSchedule, totalRounds } from "../league/schedule";
+import { applyManagerModifiers } from "../generators/manager-effects";
+import type { ManagerBackstory } from "@okresni-masina/shared";
 
 const teamsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -98,6 +100,9 @@ teamsRouter.post("/", async (c) => {
     name: string;
     primaryColor?: string;
     secondaryColor?: string;
+    managerName?: string;
+    managerBackstory?: ManagerBackstory;
+    managerAvatar?: Record<string, unknown>;
   }>();
 
   if (!body.villageId || !body.name) {
@@ -175,6 +180,11 @@ teamsRouter.post("/", async (c) => {
   const playerIds: string[] = [];
   const villageSize = village.size as string;
 
+  // Apply manager backstory effects to squad
+  const managerMods = body.managerBackstory
+    ? applyManagerModifiers(squad, body.managerBackstory, rng)
+    : null;
+
   for (const player of squad) {
     const nickname = generateNickname(rng, player, usedNicknames) ?? "";
     const pid = uuid();
@@ -204,10 +214,18 @@ teamsRouter.post("/", async (c) => {
       height,
       weight,
     };
-    const personality = { discipline: rng.int(10, 90), patriotism: rng.int(20, 90), alcohol: rng.int(5, 85), temper: rng.int(10, 80) };
+    const playerIndex = squad.indexOf(player);
+    const pMod = managerMods?.personalityMods[playerIndex];
+    const personality = {
+      discipline: Math.min(100, rng.int(10, 90) + (pMod?.discipline ?? 0)),
+      patriotism: Math.min(100, rng.int(20, 90) + (pMod?.patriotism ?? 0)),
+      alcohol: rng.int(5, 85),
+      temper: rng.int(10, 80),
+    };
     // Pick occupation based on village size
     const occ = pickOccupation(rng, villageSize, player.age);
-    const lifeContext = { occupation: occ.name, condition: 100, morale: 50 + rng.int(-15, 15) };
+    const baseMorale = 50 + rng.int(-15, 15) + (managerMods?.moraleMods[playerIndex] ?? 0);
+    const lifeContext = { occupation: occ.name, condition: 100, morale: Math.max(10, Math.min(90, baseMorale)) };
     const rating = calculateOverallRating(player.position, isGK ? gkSkills! : fieldSkills!, hiddenTalent);
 
     // Full skills JSON with maxPotential (stored in skills_max)
@@ -232,10 +250,22 @@ teamsRouter.post("/", async (c) => {
 
   // Relationships
   const rels = generateRelationships(rng, squad, villageInfo);
+  // Add manager backstory extra relationships
+  if (managerMods?.extraRelationships) {
+    rels.push(...managerMods.extraRelationships);
+  }
   for (const rel of rels) {
     await c.env.DB.prepare(
       "INSERT INTO relationships (id, player_a_id, player_b_id, type) VALUES (?, ?, ?, ?)"
     ).bind(uuid(), playerIds[rel.playerAIndex], playerIds[rel.playerBIndex], rel.type).run();
+  }
+
+  // Create manager profile (graceful — table may not exist before migration 0006)
+  if (body.managerName && body.managerBackstory) {
+    await c.env.DB.prepare(
+      "INSERT INTO managers (id, user_id, team_id, name, backstory, avatar) VALUES (?, ?, ?, ?, ?, ?)"
+    ).bind(uuid(), userId, teamId, body.managerName, body.managerBackstory,
+      JSON.stringify(body.managerAvatar ?? {})).run().catch(() => {});
   }
 
   // Generate league + AI teams
@@ -306,6 +336,18 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     lifeContext: JSON.parse(row.life_context as string),
     avatar: JSON.parse(row.avatar as string),
   });
+});
+
+// GET /api/teams/:id/league-teams — all teams in same league
+teamsRouter.get("/:id/league-teams", async (c) => {
+  const team = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?")
+    .bind(c.req.param("id")).first<{ league_id: string }>();
+  if (!team?.league_id) return c.json([]);
+
+  const result = await c.env.DB.prepare(
+    "SELECT t.id, t.name, t.primary_color, t.secondary_color, v.name as village_name, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.league_id = ? ORDER BY t.name"
+  ).bind(team.league_id).all();
+  return c.json(result.results);
 });
 
 // GET /api/teams/:id/relationships

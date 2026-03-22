@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { Spinner } from "@/components/ui";
-import { PlayerCardCompact, PlayerCardFull } from "@/components/players/player-card";
+import { PlayerCardCompact } from "@/components/players/player-card";
 
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
@@ -15,7 +15,6 @@ export default function SquadPage() {
   const [team, setTeam] = useState<Team | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [filter, setFilter] = useState<PosFilter>("all");
-  const [selected, setSelected] = useState<Player | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,7 +36,6 @@ export default function SquadPage() {
     <div className="page-container">
       <h1 className="text-h1 text-pitch-500 mb-4">Kádr ({players.length})</h1>
 
-      {/* Position filter */}
       <div className="flex gap-2 mb-4">
         {(["all", "GK", "DEF", "MID", "FWD"] as PosFilter[]).map((pos) => (
           <button key={pos} onClick={() => setFilter(pos)}
@@ -48,26 +46,11 @@ export default function SquadPage() {
         ))}
       </div>
 
-      {/* Player list */}
       <div className="space-y-2">
         {sorted.map((p) => (
-          <PlayerCardCompact
-            key={p.id}
-            player={p}
-            teamColor={color}
-            onClick={() => setSelected(p)}
-          />
+          <PlayerCardCompact key={p.id} player={p} teamColor={color} />
         ))}
       </div>
-
-      {/* Player detail modal */}
-      {selected && (
-        <PlayerCardFull
-          player={selected}
-          teamColor={color}
-          onClose={() => setSelected(null)}
-        />
-      )}
     </div>
   );
 }

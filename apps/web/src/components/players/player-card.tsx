@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { Modal, PositionBadge } from "@/components/ui";
-import type { Player, Team } from "@/lib/api";
+import { PositionBadge } from "@/components/ui";
+import type { Player } from "@/lib/api";
 
 /* ── Helpers ── */
 
@@ -42,19 +43,17 @@ function traitLevel(value: number): { label: string; color: string } {
 export function PlayerCardCompact({
   player,
   teamColor,
-  onClick,
 }: {
   player: Player;
   teamColor: string;
-  onClick?: () => void;
 }) {
   const cond = conditionLabel(player.lifeContext?.condition ?? 100);
   const hasAvatar = player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2;
 
   return (
-    <button
-      onClick={onClick}
-      className="card card-hover w-full p-4 text-left flex gap-3 items-center"
+    <Link
+      href={`/dashboard/player/${player.id}`}
+      className="card card-hover w-full p-4 text-left flex gap-3 items-center block"
     >
       {/* Avatar */}
       <div className="w-11 h-11 shrink-0 flex items-center justify-center">
@@ -95,11 +94,9 @@ export function PlayerCardCompact({
           {player.overall_rating}
         </div>
       </div>
-    </button>
+    </Link>
   );
 }
-
-/* ── FM-style attribute row ── */
 
 function AttrRow({ label, value }: { label: string; value: number }) {
   return (

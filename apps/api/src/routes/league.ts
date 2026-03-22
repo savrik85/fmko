@@ -44,11 +44,11 @@ leagueRouter.get("/teams/:teamId/standings", async (c) => {
 
   // Generate fake standings with player team included
   const fakeTeams = [
-    { team: "SK Lhenice", played: played + 1, wins: wins + 1, draws, losses, gf: gf + 3, ga, points: points + 3, form: ["W", ...form.slice(0, 4)] },
-    { team: team.name as string, played, wins, draws, losses, gf, ga, points, form: form.slice(0, 5), isPlayer: true },
-    { team: "Sokol Netolice", played: Math.max(played, 1), wins: Math.max(wins - 1, 0), draws: draws + 1, losses: losses + 1, gf: gf - 1, ga: ga + 2, points: Math.max(points - 3, 0), form: ["D", "L", "W", "W", "L"] },
-    { team: "TJ Husinec", played: Math.max(played, 1), wins: Math.max(wins - 1, 0), draws, losses: losses + 1, gf: gf - 2, ga: ga + 1, points: Math.max(points - 4, 0), form: ["L", "W", "L", "W", "D"] },
-    { team: "FK Čkyně", played: Math.max(played, 1), wins: Math.max(wins - 2, 0), draws: draws + 1, losses: losses + 1, gf: gf - 3, ga: ga + 3, points: Math.max(points - 6, 0), form: ["L", "D", "L", "W", "L"] },
+    { teamId: null as string | null, team: "SK Lhenice", played: played + 1, wins: wins + 1, draws, losses, gf: gf + 3, ga, points: points + 3, form: ["W", ...form.slice(0, 4)] },
+    { teamId: teamId, team: team.name as string, played, wins, draws, losses, gf, ga, points, form: form.slice(0, 5), isPlayer: true },
+    { teamId: null as string | null, team: "Sokol Netolice", played: Math.max(played, 1), wins: Math.max(wins - 1, 0), draws: draws + 1, losses: losses + 1, gf: gf - 1, ga: ga + 2, points: Math.max(points - 3, 0), form: ["D", "L", "W", "W", "L"] },
+    { teamId: null as string | null, team: "TJ Husinec", played: Math.max(played, 1), wins: Math.max(wins - 1, 0), draws, losses: losses + 1, gf: gf - 2, ga: ga + 1, points: Math.max(points - 4, 0), form: ["L", "W", "L", "W", "D"] },
+    { teamId: null as string | null, team: "FK Čkyně", played: Math.max(played, 1), wins: Math.max(wins - 2, 0), draws: draws + 1, losses: losses + 1, gf: gf - 3, ga: ga + 3, points: Math.max(points - 6, 0), form: ["L", "D", "L", "W", "L"] },
   ];
 
   // Sort by points

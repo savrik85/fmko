@@ -32,6 +32,7 @@ export interface Team {
   secondary_color: string;
   budget: number;
   reputation: number;
+  league_id?: string;
 }
 
 export interface Player {

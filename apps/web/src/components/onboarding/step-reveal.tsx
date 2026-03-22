@@ -38,7 +38,7 @@ export function StepReveal({ teamName, primaryColor, players, onComplete }: Prop
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <p className="text-label mb-2">Krok 3 ze 3</p>
+          <p className="text-label mb-2">Krok 4 ze 4</p>
           <h2 className="text-h1 text-ink">{teamName}</h2>
           <p className="text-muted mt-1">
             {isComplete

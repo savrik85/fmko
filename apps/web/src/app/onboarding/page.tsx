@@ -4,13 +4,18 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Player } from "@/lib/api";
-import { Spinner, ErrorBox } from "@/components/ui";
+import { Spinner } from "@/components/ui";
 import { StepLocation } from "@/components/onboarding/step-location";
+import { StepManager } from "@/components/onboarding/step-manager";
 import { StepTeam } from "@/components/onboarding/step-team";
 import { StepReveal } from "@/components/onboarding/step-reveal";
+import type { ManagerBackstory } from "@okresni-masina/shared";
 
 interface OnboardingState {
   village: VillageSelection | null;
+  managerName: string;
+  managerBackstory: ManagerBackstory | null;
+  managerAvatar: Record<string, unknown> | null;
   teamName: string;
   primaryColor: string;
   secondaryColor: string;
@@ -40,6 +45,9 @@ export default function OnboardingPage() {
 
   const [state, setState] = useState<OnboardingState>({
     village: null,
+    managerName: "",
+    managerBackstory: null,
+    managerAvatar: null,
     teamName: "",
     primaryColor: "#2D5F2D",
     secondaryColor: "#FFFFFF",
@@ -53,7 +61,6 @@ export default function OnboardingPage() {
     setError("");
 
     try {
-      // Create team via API
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
@@ -65,13 +72,13 @@ export default function OnboardingPage() {
           name: teamName,
           primaryColor: primary,
           secondaryColor: secondary,
+          managerName: state.managerName || undefined,
+          managerBackstory: state.managerBackstory || undefined,
+          managerAvatar: state.managerAvatar || undefined,
         }),
       });
 
-      // Fetch generated players
       const players = await apiFetch<Player[]>(`/api/teams/${result.id}/players`);
-
-      // Save team
       setTeam(result.id, result.name);
 
       setState((s) => ({
@@ -83,7 +90,7 @@ export default function OnboardingPage() {
         players,
       }));
 
-      setStep(3);
+      setStep(4);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -97,13 +104,14 @@ export default function OnboardingPage() {
       <div className="bg-pitch-800 px-5 py-3 flex items-center justify-between">
         <span className="font-heading font-bold text-white/80 text-sm tracking-wide uppercase">Prales</span>
         <div className="flex items-center gap-2">
-          {[1, 2, 3].map((s) => (
+          {[1, 2, 3, 4].map((s) => (
             <div key={s} className={`w-8 h-1.5 rounded-full transition-all ${s <= step ? "bg-pitch-400" : "bg-white/10"}`} />
           ))}
         </div>
       </div>
 
       <div className="flex-1 flex flex-col">
+        {/* Step 1: Location */}
         {step === 1 && (
           <StepLocation
             onSelect={(village) => {
@@ -117,14 +125,33 @@ export default function OnboardingPage() {
           />
         )}
 
+        {/* Step 2: Manager profile */}
         {step === 2 && state.village && (
+          <StepManager
+            villageName={state.village.name}
+            initialName=""
+            onBack={() => setStep(1)}
+            onSubmit={(name, backstory, avatar) => {
+              setState((s) => ({
+                ...s,
+                managerName: name,
+                managerBackstory: backstory,
+                managerAvatar: avatar,
+              }));
+              setStep(3);
+            }}
+          />
+        )}
+
+        {/* Step 3: Team */}
+        {step === 3 && state.village && (
           <>
             <StepTeam
               village={state.village}
               teamName={state.teamName}
               primaryColor={state.primaryColor}
               secondaryColor={state.secondaryColor}
-              onBack={() => setStep(1)}
+              onBack={() => setStep(2)}
               onSubmit={handleCreateTeam}
             />
             {creating && (
@@ -143,7 +170,8 @@ export default function OnboardingPage() {
           </>
         )}
 
-        {step === 3 && state.createdTeamId && (
+        {/* Step 4: Reveal */}
+        {step === 4 && state.createdTeamId && (
           <StepReveal
             village={state.village!}
             teamName={state.teamName}

@@ -66,7 +66,7 @@ export function StepTeam({ village, teamName: initialName, primaryColor: initial
       <button onClick={onBack} className="btn btn-ghost btn-sm mb-4 -ml-2">&#8592; Zpět</button>
 
       <div className="mb-6">
-        <p className="text-label mb-2">Krok 2 ze 3</p>
+        <p className="text-label mb-2">Krok 3 ze 4</p>
         <h2 className="text-h1 text-ink">Tvůj tým</h2>
         <p className="text-muted mt-1">{village.name}, {village.district}</p>
       </div>
