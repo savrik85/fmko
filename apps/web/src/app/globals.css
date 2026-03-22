@@ -462,3 +462,21 @@ body::before {
 .rating-good { color: var(--color-rating-good); }
 .rating-avg  { color: var(--color-rating-avg); }
 .rating-poor { color: var(--color-rating-poor); }
+
+/* ═══════════════════════════════════════════════
+   ENTITY LINK (FM-style clickable names)
+   ═══════════════════════════════════════════════ */
+
+.entity-link {
+  color: var(--color-pitch-500);
+  text-decoration: underline;
+  text-decoration-color: var(--color-pitch-500);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.entity-link:hover {
+  color: var(--color-pitch-400);
+  text-decoration-thickness: 2px;
+}

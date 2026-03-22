@@ -1694,7 +1694,7 @@ function PlayerRevealCard(param) {
         },
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "flex items-start justify-between px-3 pt-3 pb-1",
+                className: "flex items-start justify-between px-4 pt-4 pb-1",
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                         className: "pos-badge ".concat((_POS_CSS_player_position = POS_CSS[player.position]) !== null && _POS_CSS_player_position !== void 0 ? _POS_CSS_player_position : ""),
@@ -1705,9 +1705,9 @@ function PlayerRevealCard(param) {
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "text-right min-w-[2.5rem]",
+                        className: "text-right min-w-[3rem]",
                         children: phase === "rating" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                            className: "font-heading font-[800] text-[2rem] leading-none tabular-nums transition-all",
+                            className: "font-heading font-[800] text-4xl leading-none tabular-nums transition-all",
                             style: {
                                 color: ratingColor
                             },
@@ -1717,7 +1717,7 @@ function PlayerRevealCard(param) {
                             lineNumber: 120,
                             columnNumber: 13
                         }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                            className: "font-heading font-[800] text-[2rem] leading-none tabular-nums text-black/5",
+                            className: "font-heading font-[800] text-4xl leading-none tabular-nums text-black/5",
                             children: "?"
                         }, void 0, false, {
                             fileName: "[project]/Projects/fmko/apps/web/src/components/players/reveal-card.tsx",
@@ -1736,16 +1736,16 @@ function PlayerRevealCard(param) {
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "flex justify-center py-2",
+                className: "flex justify-center py-3",
                 children: player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$apps$2f$web$2f$src$2f$components$2f$players$2f$face$2d$avatar$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["FaceAvatar"], {
                     faceConfig: player.avatar,
-                    size: 72
+                    size: 88
                 }, void 0, false, {
                     fileName: "[project]/Projects/fmko/apps/web/src/components/players/reveal-card.tsx",
                     lineNumber: 135,
                     columnNumber: 11
                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                    className: "w-[72px] h-[72px] rounded-full flex items-center justify-center text-white font-heading font-bold text-2xl",
+                    className: "w-[88px] h-[88px] rounded-full flex items-center justify-center text-white font-heading font-bold text-3xl",
                     style: {
                         backgroundColor: teamColor
                     },
@@ -1761,10 +1761,10 @@ function PlayerRevealCard(param) {
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "text-center px-3 pb-1.5",
+                className: "text-center px-4 pb-2",
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "font-heading font-bold text-[0.85rem] text-ink leading-tight truncate",
+                        className: "font-heading font-bold text-base text-ink leading-tight truncate",
                         children: [
                             player.first_name,
                             " ",
@@ -1776,7 +1776,7 @@ function PlayerRevealCard(param) {
                         columnNumber: 9
                     }, this),
                     player.nickname && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "text-[0.75rem] mt-0.5 font-medium truncate",
+                        className: "text-sm mt-0.5 font-medium truncate",
                         style: {
                             color: teamColor
                         },
@@ -1797,7 +1797,7 @@ function PlayerRevealCard(param) {
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "mx-3 h-px",
+                className: "mx-4 h-px",
                 style: {
                     backgroundColor: "".concat(teamColor, "10")
                 }
@@ -1807,12 +1807,12 @@ function PlayerRevealCard(param) {
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "px-3 py-2",
+                className: "px-4 py-3",
                 children: topStats.map((stat, i)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "flex items-center gap-2 py-0.5",
+                        className: "flex items-center gap-2.5 py-1",
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                className: "text-[10px] text-muted w-7 text-right font-heading font-semibold",
+                                className: "text-sm text-muted w-9 text-right font-heading font-semibold",
                                 children: stat.label
                             }, void 0, false, {
                                 fileName: "[project]/Projects/fmko/apps/web/src/components/players/reveal-card.tsx",
@@ -1820,13 +1820,13 @@ function PlayerRevealCard(param) {
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex-1 h-1 bg-black/[0.04] rounded-full overflow-hidden",
+                                className: "flex-1 h-2 bg-black/[0.04] rounded-full overflow-hidden",
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                     className: "h-full rounded-full transition-all duration-700",
                                     style: {
                                         width: phase === "rating" ? "".concat(stat.value, "%") : "0%",
                                         backgroundColor: teamColor,
-                                        opacity: 0.6 - i * 0.15,
+                                        opacity: 0.7 - i * 0.12,
                                         transitionDelay: "".concat(i * 100, "ms")
                                     }
                                 }, void 0, false, {
@@ -1840,7 +1840,7 @@ function PlayerRevealCard(param) {
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                className: "text-[10px] tabular-nums font-heading font-bold w-5 text-right transition-opacity duration-500 ".concat(phase === "rating" ? "opacity-100" : "opacity-0"),
+                                className: "text-sm tabular-nums font-heading font-bold w-7 text-right transition-opacity duration-500 ".concat(phase === "rating" ? "opacity-100" : "opacity-0"),
                                 style: {
                                     color: teamColor,
                                     transitionDelay: "".concat(i * 100 + 200, "ms")
@@ -1863,73 +1863,26 @@ function PlayerRevealCard(param) {
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "px-3 pb-2.5 flex items-center justify-center gap-1.5 text-[10px] text-muted flex-wrap",
+                className: "px-4 pb-4 text-center text-sm text-muted space-y-0.5",
                 children: [
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         children: [
                             player.age,
-                            " let"
+                            " let",
+                            ((_player_physical = player.physical) === null || _player_physical === void 0 ? void 0 : _player_physical.height) ? " · ".concat(player.physical.height, " cm") : "",
+                            ((_player_physical1 = player.physical) === null || _player_physical1 === void 0 ? void 0 : _player_physical1.weight) ? " · ".concat(player.physical.weight, " kg") : ""
                         ]
                     }, void 0, true, {
                         fileName: "[project]/Projects/fmko/apps/web/src/components/players/reveal-card.tsx",
                         lineNumber: 182,
                         columnNumber: 9
                     }, this),
-                    ((_player_physical = player.physical) === null || _player_physical === void 0 ? void 0 : _player_physical.height) && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                children: "·"
-                            }, void 0, false, {
-                                fileName: "[project]/Projects/fmko/apps/web/src/components/players/reveal-card.tsx",
-                                lineNumber: 184,
-                                columnNumber: 13
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                children: [
-                                    player.physical.height,
-                                    " cm"
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/Projects/fmko/apps/web/src/components/players/reveal-card.tsx",
-                                lineNumber: 184,
-                                columnNumber: 34
-                            }, this)
-                        ]
-                    }, void 0, true),
-                    ((_player_physical1 = player.physical) === null || _player_physical1 === void 0 ? void 0 : _player_physical1.weight) && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                children: "·"
-                            }, void 0, false, {
-                                fileName: "[project]/Projects/fmko/apps/web/src/components/players/reveal-card.tsx",
-                                lineNumber: 187,
-                                columnNumber: 13
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                children: [
-                                    player.physical.weight,
-                                    " kg"
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/Projects/fmko/apps/web/src/components/players/reveal-card.tsx",
-                                lineNumber: 187,
-                                columnNumber: 34
-                            }, this)
-                        ]
-                    }, void 0, true),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                        children: "·"
-                    }, void 0, false, {
-                        fileName: "[project]/Projects/fmko/apps/web/src/components/players/reveal-card.tsx",
-                        lineNumber: 189,
-                        columnNumber: 9
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                        className: "truncate",
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$Projects$2f$fmko$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "font-medium truncate",
                         children: (_player_lifeContext_occupation = (_player_lifeContext = player.lifeContext) === null || _player_lifeContext === void 0 ? void 0 : _player_lifeContext.occupation) !== null && _player_lifeContext_occupation !== void 0 ? _player_lifeContext_occupation : ""
                     }, void 0, false, {
                         fileName: "[project]/Projects/fmko/apps/web/src/components/players/reveal-card.tsx",
-                        lineNumber: 190,
+                        lineNumber: 187,
                         columnNumber: 9
                     }, this)
                 ]

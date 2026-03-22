@@ -109,20 +109,20 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
       }}
     >
       {/* Top bar: position badge + rating area */}
-      <div className="flex items-start justify-between px-3 pt-3 pb-1">
+      <div className="flex items-start justify-between px-4 pt-4 pb-1">
         <span className={`pos-badge ${POS_CSS[player.position] ?? ""}`}>
           {POS_SHORT[player.position]}
         </span>
 
         {/* Rating — hidden until phase=rating */}
-        <div className="text-right min-w-[2.5rem]">
+        <div className="text-right min-w-[3rem]">
           {(phase === "rating") ? (
-            <span className="font-heading font-[800] text-[2rem] leading-none tabular-nums transition-all"
+            <span className="font-heading font-[800] text-4xl leading-none tabular-nums transition-all"
               style={{ color: ratingColor }}>
               {displayRating}
             </span>
           ) : (
-            <span className="font-heading font-[800] text-[2rem] leading-none tabular-nums text-black/5">
+            <span className="font-heading font-[800] text-4xl leading-none tabular-nums text-black/5">
               ?
             </span>
           )}
@@ -130,37 +130,37 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
       </div>
 
       {/* Avatar — facesjs from DB */}
-      <div className="flex justify-center py-2">
+      <div className="flex justify-center py-3">
         {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
-          <FaceAvatar faceConfig={player.avatar} size={72} />
+          <FaceAvatar faceConfig={player.avatar} size={88} />
         ) : (
-          <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center text-white font-heading font-bold text-2xl" style={{ backgroundColor: teamColor }}>
+          <div className="w-[88px] h-[88px] rounded-full flex items-center justify-center text-white font-heading font-bold text-3xl" style={{ backgroundColor: teamColor }}>
             {player.first_name[0]}
           </div>
         )}
       </div>
 
       {/* Name + nickname */}
-      <div className="text-center px-3 pb-2">
-        <div className="font-heading font-bold text-sm text-ink leading-tight truncate">
+      <div className="text-center px-4 pb-2">
+        <div className="font-heading font-bold text-base text-ink leading-tight truncate">
           {player.first_name} {player.last_name}
         </div>
         {player.nickname && (
-          <div className="text-xs mt-0.5 font-medium truncate" style={{ color: teamColor }}>
+          <div className="text-sm mt-0.5 font-medium truncate" style={{ color: teamColor }}>
             &bdquo;{player.nickname}&ldquo;
           </div>
         )}
       </div>
 
       {/* Divider */}
-      <div className="mx-3 h-px" style={{ backgroundColor: `${teamColor}10` }} />
+      <div className="mx-4 h-px" style={{ backgroundColor: `${teamColor}10` }} />
 
       {/* Top 3 stats — revealed with delay */}
-      <div className="px-3 py-2">
+      <div className="px-4 py-3">
         {topStats.map((stat, i) => (
-          <div key={stat.label} className="flex items-center gap-2 py-1">
-            <span className="text-xs text-muted w-8 text-right font-heading font-semibold">{stat.label}</span>
-            <div className="flex-1 h-1.5 bg-black/[0.04] rounded-full overflow-hidden">
+          <div key={stat.label} className="flex items-center gap-2.5 py-1">
+            <span className="text-sm text-muted w-9 text-right font-heading font-semibold">{stat.label}</span>
+            <div className="flex-1 h-2 bg-black/[0.04] rounded-full overflow-hidden">
               <div className="h-full rounded-full transition-all duration-700"
                 style={{
                   width: phase === "rating" ? `${stat.value}%` : "0%",
@@ -169,7 +169,7 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
                   transitionDelay: `${i * 100}ms`,
                 }} />
             </div>
-            <span className={`text-xs tabular-nums font-heading font-bold w-6 text-right transition-opacity duration-500 ${phase === "rating" ? "opacity-100" : "opacity-0"}`}
+            <span className={`text-sm tabular-nums font-heading font-bold w-7 text-right transition-opacity duration-500 ${phase === "rating" ? "opacity-100" : "opacity-0"}`}
               style={{ color: teamColor, transitionDelay: `${i * 100 + 200}ms` }}>
               {stat.value}
             </span>
@@ -178,13 +178,13 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
       </div>
 
       {/* Info — 2 rows: physical + occupation */}
-      <div className="px-3 pb-3 text-center text-xs text-muted space-y-0.5">
+      <div className="px-4 pb-4 text-center text-sm text-muted space-y-0.5">
         <div>
           {player.age} let
           {player.physical?.height ? ` \u00B7 ${player.physical.height} cm` : ""}
           {player.physical?.weight ? ` \u00B7 ${player.physical.weight} kg` : ""}
         </div>
-        <div className="truncate">{player.lifeContext?.occupation ?? ""}</div>
+        <div className="font-medium truncate">{player.lifeContext?.occupation ?? ""}</div>
       </div>
     </div>
   );
