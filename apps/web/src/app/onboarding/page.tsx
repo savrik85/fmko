@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Player } from "@/lib/api";
+import { Spinner, ErrorBox } from "@/components/ui";
 import { StepLocation } from "@/components/onboarding/step-location";
 import { StepTeam } from "@/components/onboarding/step-team";
 import { StepReveal } from "@/components/onboarding/step-reveal";
@@ -129,7 +130,7 @@ export default function OnboardingPage() {
             {creating && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                 <div className="bg-white rounded-card p-8 text-center">
-                  <div className="w-8 h-8 border-3 border-pitch-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                  <Spinner />
                   <p className="font-heading font-bold text-pitch-500">Generuji tým...</p>
                 </div>
               </div>

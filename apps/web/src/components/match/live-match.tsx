@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Spinner } from "@/components/ui";
 
 interface MatchEvent {
   minute: number;
@@ -112,7 +113,7 @@ export function LiveMatch({ homeTeam, awayTeam, events, onComplete }: Props) {
 
           {!isComplete && (
             <div className="text-center py-4">
-              <div className="inline-block w-5 h-5 border-2 border-pitch-500 border-t-transparent rounded-full animate-spin" />
+              <Spinner size="sm" />
             </div>
           )}
         </div>

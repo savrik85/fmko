@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import type { VillageSelection } from "@/app/onboarding/page";
 import { apiFetch } from "@/lib/api";
+import { Spinner } from "@/components/ui";
 
 type Village = {
   id: string;
@@ -109,7 +110,7 @@ export function StepLocation({ onSelect }: Props) {
       {/* Village grid */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-3 border-pitch-500 border-t-transparent rounded-full animate-spin" />
+          <Spinner />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">

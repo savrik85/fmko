@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { apiFetch, type Team, type Player } from "@/lib/api";
-import { StatBar } from "@/components/ui";
+import { StatBar, Spinner, PositionBadge, SectionLabel } from "@/components/ui";
 
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
@@ -33,7 +33,7 @@ export default function TeamPage() {
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-3 border-pitch-500 border-t-transparent rounded-full animate-spin" />
+        <Spinner />
       </main>
     );
   }

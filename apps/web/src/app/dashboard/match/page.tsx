@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Player } from "@/lib/api";
+import { Spinner, Button } from "@/components/ui";
 import { SmsRoulette, type SmsMessage } from "@/components/match/sms-roulette";
 import { LiveMatch } from "@/components/match/live-match";
 
@@ -80,7 +81,7 @@ export default function MatchPage() {
   }
 
   if (phase === "loading") {
-    return <div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-3 border-pitch-500 border-t-transparent rounded-full animate-spin" /></div>;
+    return <div className="flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
   }
 
   return (
@@ -109,7 +110,7 @@ export default function MatchPage() {
 
       {phase === "simulating" && (
         <div className="flex-1 flex flex-col items-center justify-center">
-          <div className="w-10 h-10 border-3 border-pitch-500 border-t-transparent rounded-full animate-spin mb-4" />
+          <Spinner size="lg" />
           <p className="font-heading font-bold text-pitch-500">Simuluji zápas...</p>
         </div>
       )}
