@@ -32,53 +32,60 @@ function generatePlayerFace(player: { age: number; bodyType: string }): Record<s
   const r = () => Math.random();
   const pick = <T,>(arr: T[]): T => arr[Math.floor(r() * arr.length)];
 
-  // Skin colors — white/European range
-  const skinColors = ["#f2d6cb", "#ddb7a0", "#c89583", "#e8c4a0", "#f5d5c0", "#d4a882", "#eabd93"];
-  // Hair colors
-  const hairColors = ["#1a1a1a", "#3b2214", "#5b3a1a", "#8b6e3e", "#d4a843", "#a0330a", "#8e8e8e"];
+  // Skin colors — white/European only
+  const skinColors = ["#f2d6cb", "#ddb7a0", "#e8c4a0", "#f5d5c0", "#d4a882", "#eabd93", "#f0c8a8"];
+  // Hair colors — European
+  const hairColors = ["#1a1a1a", "#3b2214", "#5b3a1a", "#8b6e3e", "#d4a843", "#a0330a"];
 
-  const headIds = ["head1", "head2", "head3", "head4", "head5", "head6", "head7", "head8", "head9", "head10"];
-  const eyeIds = ["eye1", "eye2", "eye3", "eye4", "eye5", "eye6", "eye7", "eye8"];
-  const noseIds = ["nose1", "nose2", "nose3", "nose4", "nose5", "nose6", "nose7", "nose8"];
-  const mouthIds = ["mouth1", "mouth2", "mouth3", "mouth4", "mouth5", "mouth6"];
-  const hairIds = ["hair1", "hair2", "hair3", "hair4", "hair5", "hair6", "hair7", "hair8", "hair9", "hair10", "hair11", "hair12"];
-  const earIds = ["ear1", "ear2", "ear3", "ear4"];
+  // Real facesjs IDs (verified from generate() output)
+  const headIds = ["head1", "head3", "head6", "head8", "head9", "head10", "head11", "head13"];
+  const eyeIds = ["eye1", "eye3", "eye6", "eye9", "eye11", "eye13", "eye16"];
+  const noseIds = ["nose1", "nose2", "nose6", "nose9", "nose13", "nose14", "honker", "pinocchio"];
+  const mouthIds = ["mouth", "mouth2", "mouth3", "mouth5", "smile3", "smile4", "straight", "closed"];
+  const hairIds = ["short-fade", "tall-fade", "crop-fade2", "fauxhawk-fade", "spike4", "curly", "shaggy1", "emo", "short-bald"];
+  const earIds = ["ear1", "ear2", "ear3"];
+  const eyebrowIds = ["eyebrow2", "eyebrow3", "eyebrow4", "eyebrow7", "eyebrow10", "eyebrow13", "eyebrow14", "eyebrow16", "eyebrow20"];
+  const facialHairIds = ["none", "none", "none", "goatee3", "goatee4", "goatee6", "goatee15", "fullgoatee2", "goatee-thin-stache"];
 
   // Fatness based on body type
   let fatness = 0.3 + r() * 0.4;
   if (player.bodyType === "obese") fatness = 0.7 + r() * 0.3;
   else if (player.bodyType === "stocky") fatness = 0.55 + r() * 0.25;
   else if (player.bodyType === "thin") fatness = 0.05 + r() * 0.2;
-  else if (player.bodyType === "athletic") fatness = 0.2 + r() * 0.2;
+  else if (player.bodyType === "athletic") fatness = 0.15 + r() * 0.2;
 
   // Hair: older → bald/gray
   let hairId = pick(hairIds);
   let hairColor = pick(hairColors);
-  const hasBaldChance = player.age > 45 ? 0.7 : player.age > 38 ? 0.4 : player.age > 32 ? 0.15 : 0;
-  if (r() < hasBaldChance) hairId = "none";
+  if (player.age > 45 && r() < 0.6) hairId = "short-bald";
+  else if (player.age > 38 && r() < 0.35) hairId = "short-bald";
   if (player.age > 42) hairColor = r() < 0.5 ? "#8e8e8e" : "#b0b0b0";
   if (player.age > 50) hairColor = "#c0c0c0";
+
+  // Facial hair — more likely for older players
+  let facialHairId = "none";
+  if (player.age > 20 && r() < 0.35) facialHairId = pick(facialHairIds);
 
   const skinColor = pick(skinColors);
 
   return {
     fatness,
     teamColors: ["#2D5F2D", "#FFFFFF", "#1E4A1E"],
-    hairBg: { id: hairId === "none" ? "none" : "hairBg1" },
-    body: { id: pick(["body1", "body2", "body3"]), color: skinColor, size: 0.95 + r() * 0.1 },
+    hairBg: { id: "none" },
+    body: { id: pick(["body", "body2", "body3", "body5"]), color: skinColor, size: 0.95 + r() * 0.1 },
     jersey: { id: "jersey" },
     ear: { id: pick(earIds), size: 0.6 + r() * 0.4 },
     head: { id: pick(headIds), shave: "rgba(0,0,0,0)", fatness },
     eyeLine: { id: pick(["line1", "line2", "line3", "line4"]) },
     smileLine: { id: pick(["line1", "line2", "line3"]), size: 0.8 + r() * 0.4 },
     miscLine: { id: "none" },
-    facialHair: { id: player.age > 20 && r() < 0.4 ? pick(["beard1", "beard2", "beard3", "beard4"]) : "none" },
-    eye: { id: pick(eyeIds), angle: -5 + r() * 10 },
-    eyebrow: { id: pick(["eyebrow1", "eyebrow2", "eyebrow3", "eyebrow4"]), angle: -5 + r() * 10 },
+    facialHair: { id: facialHairId },
+    eye: { id: pick(eyeIds), angle: -4 + r() * 8 },
+    eyebrow: { id: pick(eyebrowIds), angle: -4 + r() * 8 },
     hair: { id: hairId, color: hairColor, flip: r() < 0.5 },
     mouth: { id: pick(mouthIds), flip: r() < 0.5 },
     nose: { id: pick(noseIds), flip: r() < 0.5, size: 0.7 + r() * 0.6 },
-    glasses: { id: r() < 0.08 ? pick(["glasses1", "glasses2"]) : "none" },
+    glasses: { id: r() < 0.08 ? "glasses1" : "none" },
     accessories: { id: "none" },
   };
 }
