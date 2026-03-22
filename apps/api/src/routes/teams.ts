@@ -15,6 +15,7 @@ import { generateNickname } from "../generators/nickname";
 import { generateRelationships } from "../generators/relationships";
 import { generateDescription } from "../generators/description-generator";
 import { generateFieldSkills, generateGKSkills, generateHiddenTalent, calculateOverallRating } from "../skills/generator";
+import { generate as generateFace } from "facesjs";
 import { generateSeasonCalendar } from "../season/calendar";
 import { generateSchedule, totalRounds } from "../league/schedule";
 
@@ -22,6 +23,39 @@ const teamsRouter = new Hono<{ Bindings: Bindings }>();
 
 function uuid(): string {
   return crypto.randomUUID();
+}
+
+/**
+ * Generate a facesjs config that matches player attributes.
+ * - race: always "white" (Czech amateur football)
+ * - Older players: more likely bald/gray hair
+ * - Body type affects face fatness
+ */
+function generatePlayerFace(player: { age: number; bodyType: string }): Record<string, unknown> {
+  const face = generateFace({ race: "white" });
+
+  // Age-based hair adjustments
+  if (player.age > 45) {
+    face.hair = { id: "bald" } as any;
+  } else if (player.age > 38 && Math.random() < 0.5) {
+    face.hair = { id: "bald" } as any;
+  }
+
+  // Older players: gray/white hair color
+  if (player.age > 40 && face.hair) {
+    (face.hair as any).color = "#999999";
+  } else if (player.age > 50 && face.hair) {
+    (face.hair as any).color = "#CCCCCC";
+  }
+
+  // Body type → face fatness
+  if (player.bodyType === "obese" || player.bodyType === "stocky") {
+    (face.head as any).fatness = 0.8 + Math.random() * 0.2;
+  } else if (player.bodyType === "thin") {
+    (face.head as any).fatness = 0.1 + Math.random() * 0.2;
+  }
+
+  return face as Record<string, unknown>;
 }
 
 // POST /api/teams
@@ -144,7 +178,7 @@ teamsRouter.post("/", async (c) => {
       "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(pid, teamId, player.firstName, player.lastName, nickname, player.age, player.position, rating,
       JSON.stringify(skillsCurrent), JSON.stringify(physical), JSON.stringify(personality),
-      JSON.stringify(lifeContext), JSON.stringify(player.avatarConfig), description,
+      JSON.stringify(generatePlayerFace(player)), description,
       JSON.stringify(skillsMax), hiddenTalent, isGK ? (gkSkills!.experience.current) : (fieldSkills!.experience.current),
     ).run();
   }

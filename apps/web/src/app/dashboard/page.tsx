@@ -73,7 +73,11 @@ export default function DashboardPage() {
           <div className="space-y-2">
             {[...players].sort((a, b) => b.overall_rating - a.overall_rating).slice(0, 5).map((p) => (
               <div key={p.id} className="flex items-center gap-3">
-                <FaceAvatar seed={`${p.first_name}${p.last_name}${p.age}`} size={32} />
+                {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
+                  <FaceAvatar faceConfig={p.avatar} size={32} />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-pitch-500 flex items-center justify-center text-white text-xs font-bold">{p.first_name[0]}</div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">
                     {p.first_name} {p.last_name}

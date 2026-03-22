@@ -1,60 +1,43 @@
 "use client";
 
-import { useEffect, useRef, useMemo } from "react";
-import { display, generate } from "facesjs";
+import { useEffect, useRef } from "react";
+import { display } from "facesjs";
 
 interface FaceAvatarProps {
-  seed: string;
+  /** Face config JSON from DB (generated on server at player creation) */
+  faceConfig: Record<string, unknown>;
   size?: number;
   className?: string;
 }
 
-/** Simple hash from string to deterministic number */
-function hashSeed(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
-
 /**
- * Football Manager-style face avatar using facesjs.
- * Deterministic — same seed = same face.
+ * Football Manager-style face avatar.
+ * Renders a pre-generated face config from the database.
+ * Face is generated ONCE on the server when player is created
+ * and stored in the avatar column — so it's always the same.
  */
-export function FaceAvatar({ seed, size = 80, className = "" }: FaceAvatarProps) {
+export function FaceAvatar({ faceConfig, size = 80, className = "" }: FaceAvatarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Generate face config once per seed (deterministic via overrides)
-  const face = useMemo(() => {
-    const h = hashSeed(seed);
-    // Use hash to create deterministic but varied faces
-    const baseFace = generate({ race: "white" });
-
-    // Override with deterministic values based on seed hash
-    // facesjs generates random faces but we want consistent ones per player
-    // So we generate once and memoize by seed
-    return baseFace;
-  }, [seed]);
-
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !faceConfig) return;
 
-    // Clear previous render
+    // Clear previous
     while (containerRef.current.firstChild) {
       containerRef.current.removeChild(containerRef.current.firstChild);
     }
 
-    // Render SVG into container
-    display(containerRef.current, face, { width: size, height: size });
-  }, [face, size]);
+    try {
+      display(containerRef.current, faceConfig as any, { width: size, height: size });
+    } catch {
+      // Fallback — pokud config je starý formát
+    }
+  }, [faceConfig, size]);
 
   return (
     <div
       ref={containerRef}
-      className={`rounded-full overflow-hidden bg-gray-100 shrink-0 ${className}`}
+      className={`rounded-full overflow-hidden bg-gray-50 shrink-0 ${className}`}
       style={{ width: size, height: size }}
     />
   );

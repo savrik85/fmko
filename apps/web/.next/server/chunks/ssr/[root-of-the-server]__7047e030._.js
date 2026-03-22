@@ -116,12 +116,12 @@ function RootLayout({ children }) {
             children: children
         }, void 0, false, {
             fileName: "[project]/Projects/fmko/apps/web/src/app/layout.tsx",
-            lineNumber: 36,
+            lineNumber: 37,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/Projects/fmko/apps/web/src/app/layout.tsx",
-        lineNumber: 35,
+        lineNumber: 36,
         columnNumber: 5
     }, this);
 }

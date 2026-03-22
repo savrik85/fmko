@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__plugin_linear_linear__list_projects",
+      "mcp__plugin_linear_linear__get_project",
+      "mcp__plugin_linear_linear__list_issues",
+      "mcp__plugin_linear_linear__get_issue",
+      "Bash(npm install:*)",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(find:*)",
+      "Bash(npx tsc:*)",
+      "mcp__plugin_linear_linear__save_issue",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "WebFetch(domain:www.czso.cz)",
+      "WebFetch(domain:csu.gov.cz)",
+      "WebFetch(domain:data.gov.cz)",
+      "WebFetch(domain:apl2.czso.cz)",
+      "Bash(python3:*)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(pkill -f \"yarn\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "mcp__plugin_linear_linear__list_cycles",
+      "Bash(npx wrangler:*)",
+      "mcp__plugin_linear_linear__save_comment",
+      "Bash(curl -s http://localhost:3000/dashboard/match)",
+      "Bash(curl:*)"
+    ]
+  }
+}

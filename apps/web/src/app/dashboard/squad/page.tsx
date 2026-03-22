@@ -50,7 +50,11 @@ export default function SquadPage() {
       <div className="space-y-2">
         {sorted.map((p) => (
           <button key={p.id} onClick={() => setSelected(p)} className="w-full bg-white rounded-card shadow-card hover:shadow-hover p-4 text-left transition-all flex gap-3 items-center">
-            <FaceAvatar seed={`${p.first_name}${p.last_name}${p.age}`} size={44} />
+            {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
+              <FaceAvatar faceConfig={p.avatar} size={44} />
+            ) : (
+              <div className="w-11 h-11 rounded-full bg-pitch-500 flex items-center justify-center text-white font-bold">{p.first_name[0]}</div>
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-1.5">
                 <span className="font-heading font-bold truncate">{p.first_name} {p.last_name}</span>
@@ -78,7 +82,11 @@ export default function SquadPage() {
               <div className="flex flex-col items-center pt-6 pb-5 px-5">
                 {/* Velký avatar */}
                 <div className="w-28 h-28 mb-3 rounded-full overflow-hidden ring-4 ring-white/20">
-                  <FaceAvatar seed={`${selected.first_name}${selected.last_name}${selected.age}`} size={112} />
+                  {selected.avatar && typeof selected.avatar === "object" && Object.keys(selected.avatar).length > 2 ? (
+                    <FaceAvatar faceConfig={selected.avatar} size={112} />
+                  ) : (
+                    <div className="w-28 h-28 rounded-full bg-white/20 flex items-center justify-center text-white font-heading font-bold text-5xl">{selected.first_name[0]}</div>
+                  )}
                 </div>
 
                 {/* Jméno + přezdívka */}

@@ -129,12 +129,15 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
         </div>
       </div>
 
-      {/* Avatar — facesjs */}
+      {/* Avatar — facesjs from DB */}
       <div className="flex justify-center py-2">
-        <FaceAvatar
-          seed={`${player.first_name}${player.last_name}${player.age}`}
-          size={72}
-        />
+        {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
+          <FaceAvatar faceConfig={player.avatar} size={72} />
+        ) : (
+          <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center text-white font-heading font-bold text-2xl" style={{ backgroundColor: teamColor }}>
+            {player.first_name[0]}
+          </div>
+        )}
       </div>
 
       {/* Name + nickname */}

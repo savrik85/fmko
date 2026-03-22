@@ -2,7 +2,8 @@
   "pages": {
     "/_not-found/page": [
       "static/chunks/[root-of-the-server]__8de97f82._.css",
-      "static/chunks/f8ff4_next_dist_178e7c71._.js",
+      "static/chunks/f8ff4_next_1bef2d36._.js",
+      "static/chunks/Projects_fmko_apps_web_src_9ef80b44._.js",
       "static/chunks/Projects_fmko_apps_web_src_app_layout_tsx_90383ae6._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_ca995f09._.js",
       "static/chunks/f8ff4_next_dist_compiled_react-dom_ba640edb._.js",
