@@ -1,12 +1,12 @@
 /**
- * FMK-18: Match runner — orchestruje simulaci zápasu pro multiplayer.
- *
- * Volán z cron triggeru v čase zápasu.
- * 1. Najde všechny scheduled matches pro tento tick
- * 2. Pro každý match: zkontroluje lineup, případně auto-lineup
- * 3. Spustí simulaci (engine/simulation.ts)
- * 4. Uloží výsledky do DB
+ * Match runner — orchestruje plnou simulaci zápasu.
+ * Volán z daily-tick nebo cron triggeru.
  */
+
+import { simulateMatch } from "../engine/simulation";
+import { generateMatchCommentary } from "../engine/commentary";
+import { createRng } from "../generators/rng";
+import type { MatchPlayer, TeamSetup, Weather } from "../engine/types";
 
 export interface MatchRunResult {
   matchId: string;
@@ -16,92 +16,171 @@ export interface MatchRunResult {
   matchType: "pvp" | "pve_home" | "pve_away" | "ai_vs_ai";
 }
 
-/**
- * Run all matches scheduled for a given calendar entry.
- *
- * This is the main entry point called by the cron worker.
- * In production, this queries D1 for scheduled matches,
- * loads lineups, runs simulation, and saves results.
- */
 export async function runScheduledMatches(
   db: D1Database,
   calendarId: string,
 ): Promise<MatchRunResult[]> {
   const results: MatchRunResult[] = [];
 
-  // 1. Find all matches for this calendar entry
   const matches = await db.prepare(
     "SELECT * FROM matches WHERE calendar_id = ? AND status = 'lineups_open'"
   ).bind(calendarId).all();
+
+  // Pick weather for the whole round
+  const weathers: Weather[] = ["sunny", "cloudy", "rain", "wind", "snow"];
+  const weatherWeights = [30, 30, 20, 15, 5];
+  const weatherRoll = Math.random() * 100;
+  let cumulative = 0;
+  let weather: Weather = "cloudy";
+  for (let i = 0; i < weathers.length; i++) {
+    cumulative += weatherWeights[i];
+    if (weatherRoll < cumulative) { weather = weathers[i]; break; }
+  }
 
   for (const match of matches.results) {
     const matchId = match.id as string;
     const homeTeamId = match.home_team_id as string;
     const awayTeamId = match.away_team_id as string;
 
-    // 2. Check lineups exist, generate auto if missing
-    let homeLineup = await db.prepare(
-      "SELECT * FROM lineups WHERE team_id = ? AND calendar_id = ?"
-    ).bind(homeTeamId, calendarId).first();
+    try {
+      // Ensure lineups exist
+      const hasHomeLineup = await db.prepare(
+        "SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?"
+      ).bind(homeTeamId, calendarId).first();
+      if (!hasHomeLineup) await createAutoLineup(db, homeTeamId, calendarId);
 
-    let awayLineup = await db.prepare(
-      "SELECT * FROM lineups WHERE team_id = ? AND calendar_id = ?"
-    ).bind(awayTeamId, calendarId).first();
+      const hasAwayLineup = await db.prepare(
+        "SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?"
+      ).bind(awayTeamId, calendarId).first();
+      if (!hasAwayLineup) await createAutoLineup(db, awayTeamId, calendarId);
 
-    // Auto-lineup for teams without submitted lineup
-    if (!homeLineup) {
-      homeLineup = await createAutoLineup(db, homeTeamId, calendarId);
+      // Determine match type
+      const homeTeam = await db.prepare("SELECT name, user_id FROM teams WHERE id = ?").bind(homeTeamId).first<Record<string, unknown>>();
+      const awayTeam = await db.prepare("SELECT name, user_id FROM teams WHERE id = ?").bind(awayTeamId).first<Record<string, unknown>>();
+      const homeIsHuman = homeTeam?.user_id !== "ai";
+      const awayIsHuman = awayTeam?.user_id !== "ai";
+      const matchType: MatchRunResult["matchType"] = homeIsHuman && awayIsHuman ? "pvp"
+        : homeIsHuman ? "pve_home" : awayIsHuman ? "pve_away" : "ai_vs_ai";
+
+      // Build match players from DB
+      const homeLineup = await buildMatchPlayers(db, homeTeamId);
+      const awayLineup = await buildMatchPlayers(db, awayTeamId);
+
+      const homeSubs = homeLineup.splice(11);
+      const awaySubs = awayLineup.splice(11);
+
+      const homeSetup: TeamSetup = {
+        teamId: 1,
+        teamName: (homeTeam?.name as string) ?? "Domácí",
+        lineup: homeLineup,
+        subs: homeSubs,
+        tactic: "balanced",
+      };
+      const awaySetup: TeamSetup = {
+        teamId: 2,
+        teamName: (awayTeam?.name as string) ?? "Hosté",
+        lineup: awayLineup,
+        subs: awaySubs,
+        tactic: "balanced",
+      };
+
+      // Simulate
+      const rng = createRng(Date.now() + matchId.charCodeAt(0));
+      const result = simulateMatch(rng, {
+        home: homeSetup,
+        away: awaySetup,
+        weather,
+        isHomeAdvantage: true,
+      });
+
+      // Generate commentary
+      const commentary = generateMatchCommentary(
+        rng,
+        result.events,
+        homeSetup.teamName,
+        awaySetup.teamName,
+      );
+
+      // Save results with events + commentary
+      await db.prepare(
+        `UPDATE matches SET status = 'simulated', home_score = ?, away_score = ?,
+         events = ?, commentary = ?, simulated_at = datetime('now') WHERE id = ?`
+      ).bind(
+        result.homeScore, result.awayScore,
+        JSON.stringify(result.events), JSON.stringify(commentary),
+        matchId,
+      ).run();
+
+      // Player stats update — TODO: integrate with updatePlayerStats when season tracking is ready
+
+      results.push({
+        matchId,
+        homeScore: result.homeScore,
+        awayScore: result.awayScore,
+        eventsCount: result.events.length,
+        matchType,
+      });
+    } catch (e) {
+      console.error(`[MatchRunner] Failed to simulate match ${matchId}:`, e);
     }
-    if (!awayLineup) {
-      awayLineup = await createAutoLineup(db, awayTeamId, calendarId);
-    }
-
-    // 3. Determine match type
-    const homeTeam = await db.prepare("SELECT * FROM teams WHERE id = ?").bind(homeTeamId).first();
-    const awayTeam = await db.prepare("SELECT * FROM teams WHERE id = ?").bind(awayTeamId).first();
-    const homeIsHuman = !!(homeTeam?.user_id);
-    const awayIsHuman = !!(awayTeam?.user_id);
-    const matchType = homeIsHuman && awayIsHuman ? "pvp" as const
-      : homeIsHuman ? "pve_home" as const
-      : awayIsHuman ? "pve_away" as const
-      : "ai_vs_ai" as const;
-
-    // 4. Simulate match (simplified — full simulation uses engine/simulation.ts)
-    // For now: random score based on team strength
-    const homeRating = await getTeamAvgRating(db, homeTeamId);
-    const awayRating = await getTeamAvgRating(db, awayTeamId);
-
-    const homeAdvantage = 3; // Home team bonus
-    const homeExpected = (homeRating + homeAdvantage) / (homeRating + homeAdvantage + awayRating);
-
-    const homeScore = Math.floor(Math.random() * 4 * homeExpected + Math.random());
-    const awayScore = Math.floor(Math.random() * 4 * (1 - homeExpected) + Math.random());
-
-    // 5. Save results
-    await db.prepare(
-      "UPDATE matches SET status = 'simulated', home_score = ?, away_score = ?, simulated_at = datetime('now') WHERE id = ?"
-    ).bind(homeScore, awayScore, matchId).run();
-
-    results.push({ matchId, homeScore, awayScore, eventsCount: 0, matchType });
   }
 
   return results;
 }
 
-async function getTeamAvgRating(db: D1Database, teamId: string): Promise<number> {
-  const result = await db.prepare(
-    "SELECT AVG(overall_rating) as avg_rating FROM players WHERE team_id = ?"
-  ).bind(teamId).first<{ avg_rating: number }>();
-  return result?.avg_rating ?? 30;
+async function buildMatchPlayers(db: D1Database, teamId: string): Promise<MatchPlayer[]> {
+  const rows = await db.prepare(
+    "SELECT * FROM players WHERE team_id = ? ORDER BY overall_rating DESC LIMIT 16"
+  ).bind(teamId).all();
+
+  let idCounter = 1;
+  return rows.results.map((row) => {
+    const skills = JSON.parse(row.skills as string);
+    const personality = JSON.parse(row.personality as string);
+    const lifeContext = JSON.parse(row.life_context as string);
+    const physical = row.physical ? JSON.parse(row.physical as string) : {};
+
+    return {
+      id: idCounter++,
+      firstName: row.first_name as string,
+      lastName: row.last_name as string,
+      nickname: (row.nickname as string) || null,
+      position: row.position as "GK" | "DEF" | "MID" | "FWD",
+      speed: skills.speed ?? 50,
+      technique: skills.technique ?? 50,
+      shooting: skills.shooting ?? 50,
+      passing: skills.passing ?? 50,
+      heading: skills.heading ?? 50,
+      defense: skills.defense ?? 50,
+      goalkeeping: skills.goalkeeping ?? 50,
+      stamina: physical.stamina ?? skills.stamina ?? 50,
+      strength: physical.strength ?? skills.strength ?? 50,
+      vision: skills.vision ?? 50,
+      creativity: skills.creativity ?? 50,
+      setPieces: skills.setPieces ?? 50,
+      discipline: personality.discipline ?? 50,
+      alcohol: personality.alcohol ?? 30,
+      temper: personality.temper ?? 40,
+      leadership: personality.leadership ?? 30,
+      workRate: personality.workRate ?? 50,
+      aggression: personality.aggression ?? 40,
+      consistency: personality.consistency ?? 50,
+      clutch: personality.clutch ?? 50,
+      preferredFoot: physical.preferredFoot ?? "right",
+      preferredSide: physical.preferredSide ?? "center",
+      condition: lifeContext.condition ?? 100,
+      morale: lifeContext.morale ?? 50,
+    };
+  });
 }
 
 async function createAutoLineup(
   db: D1Database,
   teamId: string,
   calendarId: string,
-): Promise<Record<string, unknown>> {
+): Promise<void> {
   const players = await db.prepare(
-    "SELECT id, position, overall_rating FROM players WHERE team_id = ? ORDER BY overall_rating DESC LIMIT 11"
+    "SELECT id, position FROM players WHERE team_id = ? ORDER BY overall_rating DESC LIMIT 11"
   ).bind(teamId).all();
 
   const lineupData = players.results.map((p) => ({
@@ -112,6 +191,4 @@ async function createAutoLineup(
   await db.prepare(
     "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto) VALUES (?, ?, ?, '4-4-2', 'balanced', ?, 1)"
   ).bind(lineupId, teamId, calendarId, JSON.stringify(lineupData)).run();
-
-  return { id: lineupId, team_id: teamId, calendar_id: calendarId };
 }

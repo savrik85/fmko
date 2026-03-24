@@ -59,7 +59,8 @@
       "Bash(for t:*)",
       "Bash(do npx:*)",
       "Bash(echo \"FAILED: $t\")",
-      "Bash(echo \"OK: $t\" done)"
+      "Bash(echo \"OK: $t\" done)",
+      "Bash(ls:*)"
     ]
   }
 }

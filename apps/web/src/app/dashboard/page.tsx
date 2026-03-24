@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -29,12 +30,21 @@ interface ScheduleMatch {
   isHome: boolean;
 }
 
+interface UnseenMatch {
+  matchId: string;
+  opponent: string;
+  round: number;
+  isHome: boolean;
+}
+
 export default function DashboardPage() {
   const { teamId } = useTeam();
+  const router = useRouter();
   const [team, setTeam] = useState<Team | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [matches, setMatches] = useState<ScheduleMatch[]>([]);
+  const [unseen, setUnseen] = useState<UnseenMatch | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,17 +54,57 @@ export default function DashboardPage() {
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
       apiFetch<{ standings: Standing[] }>(`/api/teams/${teamId}/standings`).catch(() => ({ standings: [] })),
       apiFetch<{ matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`).catch(() => ({ matches: [] })),
-    ]).then(([t, p, s, m]) => {
+      apiFetch<UnseenMatch | null>(`/api/teams/${teamId}/unseen-match`).catch(() => null),
+    ]).then(([t, p, s, m, u]) => {
       setTeam(t);
       setPlayers(p);
       setStandings(s.standings);
       setMatches(m.matches);
+      setUnseen(u);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [teamId]);
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
   if (!team) return <div className="page-container">Tým nenalezen.</div>;
+
+  // Unseen match overlay
+  if (unseen) {
+    return (
+      <div className="page-container flex items-center justify-center min-h-[60vh]">
+        <div className="card p-8 sm:p-12 text-center max-w-md w-full">
+          <div className="text-6xl mb-4">⚽</div>
+          <h2 className="font-heading font-extrabold text-2xl text-ink mb-2">
+            {unseen.round}. kolo
+          </h2>
+          <p className="text-lg text-muted mb-6">
+            {unseen.isHome ? "Domácí zápas" : "Venku"} proti <span className="font-bold text-ink">{unseen.opponent}</span>
+          </p>
+          <div className="flex flex-col gap-3">
+            <Link
+              href={`/dashboard/match/${unseen.matchId}/replay`}
+              className="btn btn-primary btn-lg w-full"
+            >
+              Sledovat zápas
+            </Link>
+            <button
+              onClick={async () => {
+                await apiFetch(`/api/matches/${unseen.matchId}/mark-seen`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ teamId }),
+                });
+                setUnseen(null);
+              }}
+              className="btn btn-lg w-full bg-surface text-muted hover:text-ink"
+            >
+              Přeskočit
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const fitCount = players.filter((p) => (p.physical?.stamina ?? 0) > 3).length;
   const nextMatch = matches.find((m) => m.status !== "simulated");

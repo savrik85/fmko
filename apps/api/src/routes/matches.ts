@@ -511,4 +511,46 @@ matchesRouter.get("/matches/:id", async (c) => {
   });
 });
 
+// GET /api/teams/:teamId/unseen-match — najde nejstarší nepřečtený zápas
+matchesRouter.get("/teams/:teamId/unseen-match", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  const row = await c.env.DB.prepare(
+    `SELECT m.id, m.round, m.home_team_id, m.away_team_id,
+     t1.name as home_name, t2.name as away_name
+     FROM matches m
+     JOIN teams t1 ON m.home_team_id = t1.id
+     JOIN teams t2 ON m.away_team_id = t2.id
+     WHERE m.status = 'simulated'
+     AND ((m.home_team_id = ? AND m.home_seen_at IS NULL)
+       OR (m.away_team_id = ? AND m.away_seen_at IS NULL))
+     ORDER BY m.simulated_at ASC LIMIT 1`
+  ).bind(teamId, teamId).first<Record<string, unknown>>();
+
+  if (!row) return c.json(null);
+
+  const isHome = row.home_team_id === teamId;
+  return c.json({
+    matchId: row.id,
+    opponent: isHome ? row.away_name : row.home_name,
+    round: row.round,
+    isHome,
+  });
+});
+
+// POST /api/matches/:id/mark-seen — označí zápas jako přečtený
+matchesRouter.post("/matches/:id/mark-seen", async (c) => {
+  const matchId = c.req.param("id");
+  const body = await c.req.json<{ teamId: string }>().catch(() => ({ teamId: "" }));
+
+  const match = await c.env.DB.prepare("SELECT home_team_id, away_team_id FROM matches WHERE id = ?")
+    .bind(matchId).first<Record<string, unknown>>();
+  if (!match) return c.json({ error: "Match not found" }, 404);
+
+  const col = match.home_team_id === body.teamId ? "home_seen_at" : "away_seen_at";
+  await c.env.DB.prepare(`UPDATE matches SET ${col} = datetime('now') WHERE id = ?`).bind(matchId).run();
+
+  return c.json({ ok: true });
+});
+
 export { matchesRouter };
