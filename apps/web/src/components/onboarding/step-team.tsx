@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { apiFetch } from "@/lib/api";
 import type { VillageSelection } from "@/app/onboarding/page";
 
 const COLORS = [
@@ -28,49 +29,20 @@ type NamingChoice = "classic" | "sponsor" | "custom";
 interface SponsorOffer {
   name: string;
   teamName: string;
-  bonus: number;
-  extra?: string;
+  seasonBonus: number;
+  type: string;
+  tradeoffs: {
+    benefits: string[];
+    negatives: string[];
+  };
 }
 
-const SPONSOR_POOL = [
-  { type: "autoservis", template: (s: string) => `Autoservis ${s}`, teamTemplate: (s: string) => `SK Autoservis ${s}`, bonus: 25000, extra: "Požadavek: top 8 v tabulce" },
-  { type: "reznictvi", template: (s: string) => `Řeznictví ${s}`, teamTemplate: (s: string, v: string) => `FK Řeznictví ${s} ${v}`, bonus: 15000 },
-  { type: "hospoda", template: (s: string) => `Hospoda U ${s}ů`, teamTemplate: (s: string, v: string) => `TJ U ${s}ů ${v}`, bonus: 8000, extra: "Pivo po zápase zdarma" },
-  { type: "stavebniny", template: (s: string) => `Stavebniny ${s}`, teamTemplate: (s: string) => `FC Stavebniny ${s}`, bonus: 20000, extra: "Požadavek: vyhrát pohár" },
-  { type: "zemedelstvi", template: (s: string) => `Zemědělství ${s}`, teamTemplate: (s: string, v: string) => `SK ${s} ${v}`, bonus: 12000 },
-  { type: "pila", template: (s: string) => `Pila ${s}`, teamTemplate: (s: string, v: string) => `TJ Pila ${s} ${v}`, bonus: 18000 },
-  { type: "potraviny", template: (s: string) => `Potraviny ${s}`, teamTemplate: (s: string, v: string) => `FK Potraviny ${s} ${v}`, bonus: 10000, extra: "Občerstvení pro tým zdarma" },
-  { type: "truhlarna", template: (s: string) => `Truhlárna ${s}`, teamTemplate: (s: string) => `SK Truhlárna ${s}`, bonus: 14000 },
-  { type: "autodoprava", template: (s: string) => `Autodoprava ${s}`, teamTemplate: (s: string) => `FC Autodoprava ${s}`, bonus: 22000, extra: "Doprava na venkovní zápasy" },
-  { type: "kominiky", template: (s: string) => `Kominictví ${s}`, teamTemplate: (s: string, v: string) => `TJ ${s} ${v}`, bonus: 9000 },
-];
-
-const SURNAME_POOL = [
-  "Novotný", "Kuchař", "Dvořák", "Procházka", "Kovář", "Sedláček",
-  "Horák", "Veselý", "Marek", "Pokorný", "Jelínek", "Fiala",
-  "Bartoš", "Kolář", "Svoboda", "Němec", "Černý", "Hájek",
-];
-
-function generateSponsors(villageName: string): SponsorOffer[] {
-  const names = [...SURNAME_POOL].sort(() => Math.random() - 0.5);
-  const sponsors = [...SPONSOR_POOL].sort(() => Math.random() - 0.5).slice(0, 3);
-  return sponsors.map((sp, i) => ({
-    name: sp.template(names[i]),
-    teamName: sp.teamTemplate(names[i], villageName),
-    bonus: sp.bonus,
-    extra: sp.extra,
+function deriveStadiumSponsors(teamSponsors: SponsorOffer[]): Array<{ name: string; seasonBonus: number }> {
+  if (teamSponsors.length === 0) return [];
+  return teamSponsors.slice(0, 2).map((s) => ({
+    name: `${s.name} Arena`,
+    seasonBonus: Math.round(s.seasonBonus * 0.3),
   }));
-}
-
-function generateStadiumSponsors(): Array<{ name: string; bonus: number }> {
-  const names = [...SURNAME_POOL].sort(() => Math.random() - 0.5);
-  const templates = [
-    (s: string) => ({ name: `${s} Arena`, bonus: 5000 }),
-    (s: string) => ({ name: `${s} Stadion`, bonus: 3000 }),
-    (s: string) => ({ name: `Stadion ${s}`, bonus: 4000 }),
-    (s: string) => ({ name: `${s} Park`, bonus: 6000 }),
-  ].sort(() => Math.random() - 0.5);
-  return [templates[0](names[0]), templates[1](names[1])];
 }
 
 function formatMoney(amount: number): string {
@@ -240,37 +212,16 @@ interface Props {
   primaryColor: string;
   secondaryColor: string;
   onBack: () => void;
-  onSubmit: (teamName: string, primary: string, secondary: string, jerseyPattern: string, badgePattern: string, stadiumName: string) => void;
+  onSubmit: (teamName: string, primary: string, secondary: string, jerseyPattern?: string, badgePattern?: string) => void;
 }
 
-export function StepTeam({ village, teamName: initialName, primaryColor: initialPrimary, secondaryColor: initialSecondary, onBack, onSubmit }: Props) {
-  const [namingChoice, setNamingChoice] = useState<NamingChoice>("classic");
-  const [teamName, setTeamName] = useState(initialName);
-  const [customName, setCustomName] = useState("");
-  const [selectedSponsor, setSelectedSponsor] = useState<number | null>(null);
+export function StepTeam({ village, teamName, primaryColor: initialPrimary, secondaryColor: initialSecondary, onBack, onSubmit }: Props) {
   const [primaryColor, setPrimaryColor] = useState(initialPrimary);
   const [secondaryColor, setSecondaryColor] = useState(initialSecondary);
   const [jerseyPattern, setJerseyPattern] = useState<JerseyPattern>("solid");
   const [badgePattern, setBadgePattern] = useState<BadgePattern>("shield");
 
-  // Stadium
-  const [stadiumChoice, setStadiumChoice] = useState<NamingChoice>("classic");
-  const [stadiumName, setStadiumName] = useState(`Sportovní areál ${village.name}`);
-  const [customStadium, setCustomStadium] = useState("");
-  const [selectedStadiumSponsor, setSelectedStadiumSponsor] = useState<number | null>(null);
-
-  const sponsors = useMemo(() => generateSponsors(village.name), [village.name]);
-  const stadiumSponsors = useMemo(() => generateStadiumSponsors(), []);
-
-  const displayName = namingChoice === "sponsor" && selectedSponsor !== null
-    ? sponsors[selectedSponsor].teamName
-    : namingChoice === "custom" ? (customName || "Můj tým") : teamName;
-
-  const displayStadium = stadiumChoice === "sponsor" && selectedStadiumSponsor !== null
-    ? stadiumSponsors[selectedStadiumSponsor].name
-    : stadiumChoice === "custom" ? (customStadium || "Můj stadion") : stadiumName;
-
-  // Initials for badge
+  const displayName = teamName;
   const initials = displayName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
 
   return (
@@ -278,202 +229,85 @@ export function StepTeam({ village, teamName: initialName, primaryColor: initial
       <button onClick={onBack} className="btn btn-ghost btn-sm mb-4 -ml-2">&#8592; Zpět</button>
 
       <div className="mb-6">
-        <p className="text-label mb-2">Krok 3 ze 4</p>
-        <h2 className="text-h1 text-ink">Tvůj tým</h2>
-        <p className="text-muted mt-1">{village.name}, {village.district}</p>
+        <p className="text-label mb-2">Krok 4 ze 5</p>
+        <h2 className="text-h1 text-ink">Vzhled týmu</h2>
+        <p className="text-muted mt-1">{displayName}</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8">
-        <div className="space-y-8">
-
-          {/* 1. Název klubu */}
-          <div>
-            <p className="text-label mb-3">Název klubu</p>
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              {([
-                { key: "classic" as const, icon: "\u{1F3DB}", label: "Klasický", desc: "Tradiční prefix + název obce" },
-                { key: "sponsor" as const, icon: "\u{1F4B0}", label: "Sponzorský", desc: "Místní sponzor v názvu = peníze navíc" },
-                { key: "custom" as const, icon: "\u270F\uFE0F", label: "Vlastní", desc: "Napiš si vlastní název klubu" },
-              ]).map((opt) => (
-                <button key={opt.key} onClick={() => setNamingChoice(opt.key)}
-                  className={`p-3 rounded-xl text-center transition-all border-2 ${namingChoice === opt.key ? "border-pitch-500 bg-pitch-500/5" : "border-transparent bg-surface hover:border-pitch-500/20"}`}>
-                  <div className="text-xl mb-1">{opt.icon}</div>
-                  <div className="text-sm font-semibold">{opt.label}</div>
-                  <div className="text-[10px] text-muted">{opt.desc}</div>
-                </button>
-              ))}
-            </div>
-            {namingChoice === "classic" && (
-              <div className="grid grid-cols-4 gap-1.5">
-                {["SK", "FK", "TJ", "Sokol", "Slavoj", "Spartak", "Jiskra", "FC"].map((prefix) => {
-                  const name = `${prefix} ${village.name}`;
-                  return (
-                    <button key={prefix} onClick={() => setTeamName(name)}
-                      className={`py-2 px-3 rounded-lg text-sm font-medium transition-all ${teamName === name ? "bg-pitch-500 text-white" : "bg-surface hover:bg-pitch-50 text-ink-light"}`}>
-                      {prefix}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {namingChoice === "sponsor" && (
-              <div className="space-y-2">
-                {sponsors.map((s, i) => (
-                  <button key={i} onClick={() => setSelectedSponsor(i)}
-                    className={`w-full p-3 rounded-xl text-left transition-all border-2 flex items-start gap-3 ${selectedSponsor === i ? "border-gold-500 bg-gold-500/5" : "border-transparent bg-surface hover:border-gold-500/20"}`}>
-                    <span className="text-lg mt-0.5">{i === 0 ? "\u{1F527}" : i === 1 ? "\u{1F356}" : "\u{1F37A}"}</span>
-                    <div className="flex-1">
-                      <div className="font-semibold text-sm">{s.name}</div>
-                      <div className="text-xs text-muted mt-0.5">&bdquo;{s.teamName}&ldquo;</div>
-                      {s.extra && <div className="text-xs text-muted">{s.extra}</div>}
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-sm font-heading font-bold text-gold-600">+{formatMoney(s.bonus)}</div>
-                      <div className="text-[10px] text-muted">/sezóna</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-            {namingChoice === "custom" && (
-              <input type="text" value={customName} onChange={(e) => setCustomName(e.target.value)}
-                placeholder="Dynamo Kebab, FC Kocouři..." maxLength={30} className="input" />
-            )}
-          </div>
-
-          {/* 2. Barvy dresu */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-6">
+        <div className="space-y-6">
+          {/* Barvy */}
           <div>
             <p className="text-label mb-3">Barvy dresu</p>
             <div className="flex gap-6">
               <div>
-                <div className="text-xs text-muted mb-2">Hlavní</div>
-                <div className="flex gap-1.5 flex-wrap max-w-[200px]">
+                <p className="text-xs text-muted mb-2">Hlavní</p>
+                <div className="flex flex-wrap gap-1.5">
                   {COLORS.map((c) => (
-                    <button key={`p-${c.hex}`} onClick={() => setPrimaryColor(c.hex)} title={c.name}
-                      className={`w-7 h-7 rounded-md transition-all hover:scale-110 ${primaryColor === c.hex ? "ring-2 ring-pitch-500 ring-offset-1 scale-110" : ""}`}
-                      style={{ backgroundColor: c.hex }} />
+                    <button key={`p-${c.hex}`} onClick={() => setPrimaryColor(c.hex)}
+                      className={`w-7 h-7 rounded-full border-2 transition-transform ${primaryColor === c.hex ? "border-ink scale-110" : "border-transparent hover:scale-105"}`}
+                      style={{ backgroundColor: c.hex }} title={c.name} />
                   ))}
                 </div>
               </div>
               <div>
-                <div className="text-xs text-muted mb-2">Doplňková</div>
-                <div className="flex gap-1.5 flex-wrap max-w-[200px]">
+                <p className="text-xs text-muted mb-2">Doplňková</p>
+                <div className="flex flex-wrap gap-1.5">
                   {COLORS.map((c) => (
-                    <button key={`s-${c.hex}`} onClick={() => setSecondaryColor(c.hex)} title={c.name}
-                      className={`w-7 h-7 rounded-md transition-all hover:scale-110 ${c.hex === "#FFFFFF" ? "border border-gray-200" : ""} ${secondaryColor === c.hex ? "ring-2 ring-pitch-500 ring-offset-1 scale-110" : ""}`}
-                      style={{ backgroundColor: c.hex }} />
+                    <button key={`s-${c.hex}`} onClick={() => setSecondaryColor(c.hex)}
+                      className={`w-7 h-7 rounded-full border-2 transition-transform ${secondaryColor === c.hex ? "border-ink scale-110" : "border-transparent hover:scale-105"}`}
+                      style={{ backgroundColor: c.hex }} title={c.name} />
                   ))}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* 3. Vzor dresu */}
+          {/* Vzor dresu */}
           <div>
             <p className="text-label mb-3">Vzor dresu</p>
-            <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               {JERSEY_PATTERNS.map((jp) => (
                 <button key={jp.id} onClick={() => setJerseyPattern(jp.id)}
-                  className={`p-2 rounded-xl text-center transition-all border-2 ${jerseyPattern === jp.id ? "border-pitch-500 bg-pitch-500/5" : "border-transparent bg-surface hover:border-pitch-500/20"}`}>
-                  <div className="flex justify-center mb-1">
-                    <JerseyPreview primary={primaryColor} secondary={secondaryColor} pattern={jp.id} size={40} />
-                  </div>
-                  <div className="text-[9px] font-medium text-ink-light leading-tight">{jp.label}</div>
+                  className={`p-1.5 rounded-lg transition-all border-2 flex flex-col items-center ${jerseyPattern === jp.id ? "border-pitch-500 bg-pitch-500/5" : "border-transparent bg-surface hover:border-pitch-500/20"}`}>
+                  <JerseyPreview primary={primaryColor} secondary={secondaryColor} pattern={jp.id} size={40} />
+                  <span className="text-[9px] text-muted mt-1">{jp.label}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* 4. Znak klubu */}
+          {/* Znak klubu */}
           <div>
             <p className="text-label mb-3">Znak klubu</p>
             <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
               {BADGE_PATTERNS.map((bp) => (
                 <button key={bp.id} onClick={() => setBadgePattern(bp.id)}
-                  className={`p-2 rounded-xl text-center transition-all border-2 ${badgePattern === bp.id ? "border-pitch-500 bg-pitch-500/5" : "border-transparent bg-surface hover:border-pitch-500/20"}`}>
-                  <div className="flex justify-center mb-1">
-                    <BadgePreview primary={primaryColor} secondary={secondaryColor} pattern={bp.id} initials={initials} size={36} />
-                  </div>
-                  <div className="text-[9px] font-medium text-ink-light leading-tight">{bp.label}</div>
+                  className={`p-2 rounded-lg transition-all border-2 flex flex-col items-center ${badgePattern === bp.id ? "border-pitch-500 bg-pitch-500/5" : "border-transparent bg-surface hover:border-pitch-500/20"}`}>
+                  <BadgePreview primary={primaryColor} secondary={secondaryColor} pattern={bp.id} initials={initials} size={36} />
+                  <span className="text-[9px] text-muted mt-1">{bp.label}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* 5. Stadion */}
-          <div>
-            <p className="text-label mb-3">Stadion</p>
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              {([
-                { key: "classic" as const, icon: "\u{1F3DF}", label: "Klasický", desc: "Typický název hřiště" },
-                { key: "sponsor" as const, icon: "\u{1F4B0}", label: "Sponzorský", desc: "Pojmenuj stadion po sponzorovi" },
-                { key: "custom" as const, icon: "\u270F\uFE0F", label: "Vlastní", desc: "Napiš vlastní název" },
-              ]).map((opt) => (
-                <button key={opt.key} onClick={() => setStadiumChoice(opt.key)}
-                  className={`p-2.5 rounded-xl text-center transition-all border-2 ${stadiumChoice === opt.key ? "border-pitch-500 bg-pitch-500/5" : "border-transparent bg-surface hover:border-pitch-500/20"}`}>
-                  <div className="text-lg mb-0.5">{opt.icon}</div>
-                  <div className="text-xs font-semibold">{opt.label}</div>
-                  {"desc" in opt && <div className="text-[10px] text-muted">{(opt as { desc: string }).desc}</div>}
-                </button>
-              ))}
-            </div>
-            {stadiumChoice === "classic" && (
-              <div className="grid grid-cols-2 gap-1.5">
-                {[`Sportovní areál ${village.name}`, "Stadion Na Hřišti", "Hřiště Pod Lipami", `Sokolovna ${village.name}`].map((name) => (
-                  <button key={name} onClick={() => setStadiumName(name)}
-                    className={`py-2 px-3 rounded-lg text-xs font-medium transition-all ${stadiumName === name ? "bg-pitch-500 text-white" : "bg-surface hover:bg-pitch-50 text-ink-light"}`}>
-                    {name}
-                  </button>
-                ))}
-              </div>
-            )}
-            {stadiumChoice === "sponsor" && (
-              <div className="space-y-2">
-                {stadiumSponsors.map((s, i) => (
-                  <button key={i} onClick={() => setSelectedStadiumSponsor(i)}
-                    className={`w-full p-3 rounded-xl text-left transition-all border-2 flex items-center justify-between ${selectedStadiumSponsor === i ? "border-gold-500 bg-gold-500/5" : "border-transparent bg-surface hover:border-gold-500/20"}`}>
-                    <span className="font-semibold text-sm">{s.name}</span>
-                    <span className="text-sm font-heading font-bold text-gold-600">+{formatMoney(s.bonus)}/sez.</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {stadiumChoice === "custom" && (
-              <input type="text" value={customStadium} onChange={(e) => setCustomStadium(e.target.value)}
-                placeholder="Název vašeho stadionu..." maxLength={40} className="input" />
-            )}
-          </div>
-          {/* ── Submit ── */}
           <button
-            onClick={() => onSubmit(displayName, primaryColor, secondaryColor, jerseyPattern, badgePattern, displayStadium)}
-            disabled={!displayName.trim() || (namingChoice === "sponsor" && selectedSponsor === null)}
-            className="btn btn-primary btn-xl w-full"
+            onClick={() => onSubmit(displayName, primaryColor, secondaryColor, jerseyPattern, badgePattern)}
+            className="btn btn-primary btn-lg w-full"
           >
-            Založit tým
+            Vytvořit tým!
           </button>
         </div>
 
-        {/* ══ Right — sticky preview ══ */}
-        <div className="hidden lg:block">
-          <div className="sticky top-8">
-            <div className="card p-6 text-center">
-              <div className="flex justify-center mb-2">
-                <JerseyPreview primary={primaryColor} secondary={secondaryColor} pattern={jerseyPattern} size={150} />
-              </div>
-              <div className="flex justify-center mb-3">
-                <BadgePreview primary={primaryColor} secondary={secondaryColor} pattern={badgePattern} initials={initials} size={52} />
-              </div>
-              <div className="font-heading font-bold text-lg text-ink leading-tight">{displayName}</div>
-              <div className="text-xs text-muted mt-1">{village.name} &middot; {village.district}</div>
-              {displayStadium && (
-                <div className="text-xs text-muted mt-1">{"\u{1F3DF}"} {displayStadium}</div>
-              )}
-              {namingChoice === "sponsor" && selectedSponsor !== null && (
-                <div className="mt-2 inline-flex items-center gap-1 text-xs font-heading font-bold text-gold-600 bg-gold-500/10 px-3 py-1 rounded-full">
-                  +{formatMoney(sponsors[selectedSponsor].bonus)}/sezóna
-                </div>
-              )}
+        {/* Preview */}
+        <div className="lg:sticky lg:top-8 self-start">
+          <div className="card p-6 text-center">
+            <JerseyPreview primary={primaryColor} secondary={secondaryColor} pattern={jerseyPattern} size={140} />
+            <div className="mt-3">
+              <BadgePreview primary={primaryColor} secondary={secondaryColor} pattern={badgePattern} initials={initials} size={48} />
             </div>
+            <div className="font-heading font-bold text-lg mt-2">{displayName}</div>
+            <div className="text-sm text-muted">{village.name} &middot; {village.district}</div>
           </div>
         </div>
       </div>

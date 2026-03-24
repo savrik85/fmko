@@ -3,12 +3,16 @@ import type { MatchEvent, EventType } from "@okresni-masina/shared";
 export type Tactic = "offensive" | "balanced" | "defensive" | "long_ball";
 export type Weather = "sunny" | "cloudy" | "rain" | "wind" | "snow";
 
+export type PreferredFoot = "left" | "right" | "both";
+export type PreferredSide = "left" | "center" | "right" | "any";
+
 export interface MatchPlayer {
   id: number;
   firstName: string;
   lastName: string;
   nickname: string | null;
   position: "GK" | "DEF" | "MID" | "FWD";
+  // Core skills
   speed: number;
   technique: number;
   shooting: number;
@@ -18,10 +22,23 @@ export interface MatchPlayer {
   goalkeeping: number;
   stamina: number;
   strength: number;
+  // New skills
+  creativity: number;
+  setPieces: number;
+  // Personality
   discipline: number;
   alcohol: number;
   temper: number;
-  condition: number; // Mutable during match — starts at player's condition
+  leadership: number;
+  workRate: number;
+  aggression: number;
+  consistency: number;  // hidden from UI
+  clutch: number;       // hidden from UI
+  // Positioning
+  preferredFoot: PreferredFoot;
+  preferredSide: PreferredSide;
+  // Mutable state
+  condition: number;
   morale: number;
 }
 

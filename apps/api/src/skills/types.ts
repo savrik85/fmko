@@ -7,7 +7,10 @@ export interface SkillValue {
   maxPotential: number;  // 0-100, skryté
 }
 
-/** Terénní hráč — 10 skillů */
+export type PreferredFoot = "left" | "right" | "both";
+export type PreferredSide = "left" | "center" | "right" | "any";
+
+/** Terénní hráč — 12 skillů */
 export interface FieldSkills {
   speed: SkillValue;
   stamina: SkillValue;
@@ -18,6 +21,8 @@ export interface FieldSkills {
   heading: SkillValue;
   defense: SkillValue;
   vision: SkillValue;
+  creativity: SkillValue;
+  setPieces: SkillValue;
   experience: SkillValue;
 }
 
@@ -48,9 +53,9 @@ export interface VisibleSkill {
 /** Position weights for overall rating */
 export const POSITION_WEIGHTS: Record<string, Record<string, number>> = {
   GK: { reflexes: 3, positioning: 3, rushing: 2, catching: 3, kicking: 1, distribution: 1, strength: 1, reach: 2, communication: 2, experience: 2 },
-  DEF: { speed: 1, stamina: 2, strength: 3, technique: 1, shooting: 0.5, passing: 2, heading: 3, defense: 3, vision: 2, experience: 2 },
-  MID: { speed: 2, stamina: 3, strength: 1, technique: 2, shooting: 1.5, passing: 3, heading: 1, defense: 1.5, vision: 3, experience: 2 },
-  FWD: { speed: 3, stamina: 1.5, strength: 1.5, technique: 3, shooting: 3, passing: 2, heading: 2, defense: 0.5, vision: 2, experience: 1.5 },
+  DEF: { speed: 1, stamina: 2, strength: 3, technique: 1, shooting: 0.5, passing: 2, heading: 3, defense: 3, vision: 2, creativity: 0.5, setPieces: 0.5, experience: 2 },
+  MID: { speed: 2, stamina: 3, strength: 1, technique: 2, shooting: 1.5, passing: 3, heading: 1, defense: 1.5, vision: 3, creativity: 2, setPieces: 1, experience: 2 },
+  FWD: { speed: 3, stamina: 1.5, strength: 1.5, technique: 3, shooting: 3, passing: 2, heading: 2, defense: 0.5, vision: 2, creativity: 1.5, setPieces: 0.5, experience: 1.5 },
 };
 
 /** Skill level ranges by league level */

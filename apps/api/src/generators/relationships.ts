@@ -138,5 +138,41 @@ export function generateRelationships(
     }
   }
 
+  // Step 6: Neighbors (same residence — injected externally if available)
+  // This is handled after relationship generation in teams.ts where residences are known
+
+  // Step 7: Drinking buddies (both high alcohol)
+  for (let a = 0; a < squad.length; a++) {
+    for (let b = a + 1; b < squad.length; b++) {
+      if (usedPairs.has(pairKey(a, b))) continue;
+      if (squad[a].alcohol >= 12 && squad[b].alcohol >= 12 && rng.random() < 0.25) {
+        addRelation(a, b, "drinking_buddies", rng.int(35, 65));
+        break; // max 1 pair per loop
+      }
+    }
+  }
+
+  // Step 7: Mentor-pupil (old experienced + young talent)
+  const mentors = squad.map((p, i) => ({ i, age: p.age })).filter((p) => p.age >= 32);
+  const pupils = squad.map((p, i) => ({ i, age: p.age })).filter((p) => p.age <= 22);
+  if (mentors.length > 0 && pupils.length > 0 && rng.random() < 0.4) {
+    const m = mentors[rng.int(0, mentors.length - 1)];
+    const p = pupils[rng.int(0, pupils.length - 1)];
+    if (!usedPairs.has(pairKey(m.i, p.i))) {
+      addRelation(m.i, p.i, "mentor_pupil", rng.int(40, 70));
+    }
+  }
+
+  // Step 8: Rivals (random, rare — tension in dressing room)
+  if (rng.random() < 0.20) {
+    const a = rng.int(0, squad.length - 1);
+    let b = rng.int(0, squad.length - 1);
+    let tries = 0;
+    while (b === a && tries < 5) { b = rng.int(0, squad.length - 1); tries++; }
+    if (a !== b && !usedPairs.has(pairKey(a, b))) {
+      addRelation(a, b, "rivals", rng.int(20, 50));
+    }
+  }
+
   return relationships;
 }

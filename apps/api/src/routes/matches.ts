@@ -10,6 +10,8 @@ import { simulateMatch } from "../engine/simulation";
 import { generateMatchCommentary } from "../engine/commentary";
 import type { GeneratedPlayer } from "../generators/player";
 import type { TeamSetup, Tactic, Weather } from "../engine/types";
+import { extractStatsFromEvents, updatePlayerStats } from "../stats/update-stats";
+import { generateMatchWeather } from "../season/weather";
 
 const matchesRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -43,6 +45,7 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
       position: r.position as string,
       overall_rating: r.overall_rating as number,
       skills: JSON.parse(r.skills as string),
+      physical: r.physical ? JSON.parse(r.physical as string) : {},
       personality: JSON.parse(r.personality as string),
       lifeContext: JSON.parse(r.life_context as string),
     };
@@ -64,6 +67,13 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
     temper: p.personality.temper, occupation: p.lifeContext.occupation,
     bodyType: "normal" as const, avatarConfig: {} as any,
     condition: p.lifeContext.condition ?? 100, morale: p.lifeContext.morale ?? 50,
+    preferredFoot: (p as any).physical?.preferredFoot ?? "right",
+    preferredSide: (p as any).physical?.preferredSide ?? "center",
+    leadership: p.personality.leadership ?? 30,
+    workRate: p.personality.workRate ?? 50,
+    aggression: p.personality.aggression ?? 40,
+    consistency: p.personality.consistency ?? 50,
+    clutch: p.personality.clutch ?? 50,
   }));
 
   const absences = generateAbsences(rng, generatedPlayers);
@@ -84,10 +94,21 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
       shooting: p.skills.shooting, passing: p.skills.passing,
       heading: p.skills.heading, defense: p.skills.defense,
       goalkeeping: p.skills.goalkeeping,
-      stamina: p.skills.speed, strength: p.skills.defense,
+      stamina: p.physical?.stamina ?? p.skills.speed,
+      strength: p.physical?.strength ?? p.skills.defense,
+      creativity: p.skills.creativity ?? 0,
+      setPieces: p.skills.setPieces ?? 0,
       discipline: p.personality.discipline, alcohol: p.personality.alcohol,
       temper: p.personality.temper,
-      condition: 100, morale: 60,
+      leadership: p.personality.leadership ?? 30,
+      workRate: p.personality.workRate ?? 50,
+      aggression: p.personality.aggression ?? 40,
+      consistency: p.personality.consistency ?? 50,
+      clutch: p.personality.clutch ?? 50,
+      preferredFoot: p.physical?.preferredFoot ?? "right",
+      preferredSide: p.physical?.preferredSide ?? "center",
+      condition: p.lifeContext?.condition ?? 100,
+      morale: p.lifeContext?.morale ?? 60,
     }));
 
   const homeLineup = buildMatchPlayers(availablePlayers, 11);
@@ -115,7 +136,7 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
   const result = simulateMatch(rng, {
     home: { teamId: 1, teamName: team.name as string, lineup: homeLineup, subs: homeSubs, tactic },
     away: { teamId: 2, teamName: opponentName, lineup: awayLineup, subs: [], tactic: rng.pick(["balanced", "defensive", "offensive"] as Tactic[]) },
-    weather: rng.pick(["sunny", "cloudy", "rain"] as Weather[]),
+    weather: generateMatchWeather(null, Date.now()).weather,
     isHomeAdvantage: true,
   });
 
@@ -128,6 +149,25 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
     "INSERT INTO matches (id, home_team_id, away_team_id, home_score, away_score, status, events, commentary, simulated_at) VALUES (?, ?, ?, ?, ?, 'simulated', ?, ?, datetime('now'))"
   ).bind(matchId, teamId, "ai-opponent", result.homeScore, result.awayScore,
     JSON.stringify(result.events), JSON.stringify(commentary)).run();
+
+  // Update player stats
+  const season = await c.env.DB.prepare(
+    "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+  ).first<{ id: string }>().catch(() => null);
+
+  if (season) {
+    // Build engine ID → DB player ID map (engine uses index-based IDs from homeLineup)
+    const playerIdMap = new Map<number, string>();
+    const starterDbIds: string[] = [];
+    availablePlayers.slice(0, 11).forEach((p, _i) => {
+      playerIdMap.set(p.id as number, String(p.id));
+      starterDbIds.push(String(p.id));
+    });
+
+    const statsUpdates = extractStatsFromEvents(result.events, playerIdMap, starterDbIds, {});
+    const isCleanSheet = result.awayScore === 0;
+    await updatePlayerStats(c.env.DB, season.id, teamId, statsUpdates, isCleanSheet).catch(() => {});
+  }
 
   return c.json({
     matchId,
@@ -170,6 +210,10 @@ matchesRouter.get("/teams/:teamId/absences", async (c) => {
       temper: personality.temper, occupation: lifeContext.occupation,
       bodyType: "normal" as const, avatarConfig: {} as any,
       condition: lifeContext.condition ?? 100, morale: lifeContext.morale ?? 50,
+      preferredFoot: "right" as const, preferredSide: "center" as const,
+      leadership: personality.leadership ?? 30, workRate: personality.workRate ?? 50,
+      aggression: personality.aggression ?? 40, consistency: personality.consistency ?? 50,
+      clutch: personality.clutch ?? 50,
     };
   });
 
@@ -186,15 +230,283 @@ matchesRouter.get("/teams/:teamId/absences", async (c) => {
   })));
 });
 
+// GET /api/teams/:teamId/match-preview/:matchId — detailed match preview with team comparison
+matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const matchId = c.req.param("matchId");
+
+  // Get match info
+  const match = await c.env.DB.prepare(
+    `SELECT m.*, sc.scheduled_at, sc.game_week
+     FROM matches m LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
+     WHERE m.id = ?`
+  ).bind(matchId).first<Record<string, unknown>>();
+  if (!match) return c.json({ error: "Match not found" }, 404);
+
+  const homeId = match.home_team_id as string;
+  const awayId = match.away_team_id as string;
+
+  // Get both teams with village info
+  const [homeTeam, awayTeam] = await Promise.all([
+    c.env.DB.prepare("SELECT t.*, v.name as village_name FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
+      .bind(homeId).first<Record<string, unknown>>(),
+    c.env.DB.prepare("SELECT t.*, v.name as village_name FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
+      .bind(awayId).first<Record<string, unknown>>(),
+  ]);
+  if (!homeTeam || !awayTeam) return c.json({ error: "Team not found" }, 404);
+
+  // Get league standings for positions + form
+  const leagueId = match.league_id as string;
+  const allTeams = await c.env.DB.prepare("SELECT id FROM teams WHERE league_id = ?").bind(leagueId).all();
+  const tIds = allTeams.results.map((t) => t.id as string);
+  const ph = tIds.map(() => "?").join(",");
+  const leagueMatches = await c.env.DB.prepare(
+    `SELECT home_team_id, away_team_id, home_score, away_score FROM matches WHERE status = 'simulated' AND league_id = ?`
+  ).bind(leagueId).all().catch(() => ({ results: [] }));
+
+  // Calculate standings
+  const stats: Record<string, { w: number; d: number; l: number; gf: number; ga: number; form: string[] }> = {};
+  for (const tid of tIds) stats[tid] = { w: 0, d: 0, l: 0, gf: 0, ga: 0, form: [] };
+  for (const m of leagueMatches.results) {
+    const hid = m.home_team_id as string, aid = m.away_team_id as string;
+    const hs = m.home_score as number, as_ = m.away_score as number;
+    if (!stats[hid] || !stats[aid]) continue;
+    stats[hid].gf += hs; stats[hid].ga += as_; stats[aid].gf += as_; stats[aid].ga += hs;
+    if (hs > as_) { stats[hid].w++; stats[hid].form.push("W"); stats[aid].l++; stats[aid].form.push("L"); }
+    else if (hs < as_) { stats[aid].w++; stats[aid].form.push("W"); stats[hid].l++; stats[hid].form.push("L"); }
+    else { stats[hid].d++; stats[hid].form.push("D"); stats[aid].d++; stats[aid].form.push("D"); }
+  }
+
+  const sorted = tIds.map((tid) => {
+    const s = stats[tid]; const pts = s.w * 3 + s.d;
+    return { id: tid, pts, gd: s.gf - s.ga, gf: s.gf, played: s.w + s.d + s.l, form: s.form.slice(-5).reverse() };
+  }).sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
+  const posMap = new Map(sorted.map((t, i) => [t.id, i + 1]));
+
+  // Get players + managers for both teams
+  const [homePlayers, awayPlayers, homeManager, awayManager] = await Promise.all([
+    c.env.DB.prepare("SELECT id, first_name, last_name, age, position, overall_rating, physical FROM players WHERE team_id = ? ORDER BY CASE position WHEN 'GK' THEN 0 WHEN 'DEF' THEN 1 WHEN 'MID' THEN 2 WHEN 'FWD' THEN 3 END, overall_rating DESC")
+      .bind(homeId).all(),
+    c.env.DB.prepare("SELECT id, first_name, last_name, age, position, overall_rating, physical FROM players WHERE team_id = ? ORDER BY CASE position WHEN 'GK' THEN 0 WHEN 'DEF' THEN 1 WHEN 'MID' THEN 2 WHEN 'FWD' THEN 3 END, overall_rating DESC")
+      .bind(awayId).all(),
+    c.env.DB.prepare("SELECT name, avatar FROM managers WHERE team_id = ? LIMIT 1")
+      .bind(homeId).first<{ name: string; avatar: string }>().catch(() => null),
+    c.env.DB.prepare("SELECT name, avatar FROM managers WHERE team_id = ? LIMIT 1")
+      .bind(awayId).first<{ name: string; avatar: string }>().catch(() => null),
+  ]);
+
+  const mapTeam = (team: Record<string, unknown>, players: typeof homePlayers, manager: { name: string; avatar: string } | null) => {
+    const tid = team.id as string;
+    const s = stats[tid] || { w: 0, d: 0, l: 0, gf: 0, ga: 0, form: [] };
+    return {
+      id: tid,
+      name: team.name as string,
+      primaryColor: team.primary_color as string || "#2D5F2D",
+      secondaryColor: team.secondary_color as string || "#FFFFFF",
+      badgePattern: team.badge_pattern as string || "shield",
+      isAi: team.user_id === "ai",
+      isPlayer: tid === teamId,
+      position: posMap.get(tid) ?? 0,
+      points: s.w * 3 + s.d,
+      played: s.w + s.d + s.l,
+      wins: s.w, draws: s.d, losses: s.l,
+      goalsFor: s.gf, goalsAgainst: s.ga,
+      form: s.form.slice(-5),
+      trainingType: team.training_type as string | null,
+      manager: manager ? { name: manager.name, avatar: JSON.parse(manager.avatar) } : null,
+      squad: players.results.map((p) => {
+        const phys = typeof p.physical === "string" ? JSON.parse(p.physical) : (p.physical || {});
+        return {
+          id: p.id as string,
+          name: `${p.first_name} ${p.last_name}`,
+          position: p.position as string,
+          rating: p.overall_rating as number,
+          age: p.age as number,
+          height: phys.height as number | undefined,
+          weight: phys.weight as number | undefined,
+          foot: (phys.preferredFoot as string) || "right",
+        };
+      }),
+      avgRating: players.results.length > 0
+        ? Math.round(players.results.reduce((sum, p) => sum + (p.overall_rating as number), 0) / players.results.length)
+        : 0,
+      squadSize: players.results.length,
+    };
+  };
+
+  // Stadium of home team (where the match is played)
+  const stadium = await c.env.DB.prepare(
+    "SELECT capacity, pitch_condition, pitch_type FROM stadiums WHERE team_id = ?"
+  ).bind(homeId).first<{ capacity: number; pitch_condition: number; pitch_type: string }>().catch(() => null);
+
+  // Weather forecast
+  const { generateForecast } = await import("../season/weather");
+  const schedAt = (match.scheduled_at ?? match.created_at) as string | null;
+  const forecast = generateForecast(schedAt, matchId.charCodeAt(0) + matchId.charCodeAt(1));
+
+  return c.json({
+    matchId,
+    round: match.round,
+    scheduledAt: schedAt,
+    isHome: homeId === teamId,
+    home: mapTeam(homeTeam, homePlayers, homeManager),
+    away: mapTeam(awayTeam, awayPlayers, awayManager),
+    venue: {
+      name: (homeTeam.stadium_name as string) || `Hřiště ${homeTeam.name}`,
+      capacity: stadium?.capacity ?? 0,
+      pitchCondition: stadium?.pitch_condition ?? 50,
+      pitchType: stadium?.pitch_type ?? "natural",
+    },
+    weather: {
+      icon: forecast.icon,
+      expected: forecast.expected,
+      temperature: forecast.temperature,
+      description: forecast.description,
+    },
+  });
+});
+
+// GET /api/teams/:teamId/schedule — rozpis zápasů (odehrané + nadcházející)
+matchesRouter.get("/teams/:teamId/schedule", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  // Get team's league
+  const team = await c.env.DB.prepare(
+    "SELECT t.name, t.league_id FROM teams t WHERE t.id = ?"
+  ).bind(teamId).first<{ name: string; league_id: string | null }>();
+  if (!team) return c.json({ error: "Team not found" }, 404);
+  if (!team.league_id) return c.json({ matches: [], leagueName: "" });
+
+  // Get league info
+  const league = await c.env.DB.prepare(
+    "SELECT l.name, s.number as season_number FROM leagues l JOIN seasons s ON l.season_id = s.id WHERE l.id = ?"
+  ).bind(team.league_id).first<{ name: string; season_number: number }>().catch(() => null);
+
+  // Get all matches involving this team
+  const result = await c.env.DB.prepare(
+    `SELECT m.*,
+       ht.name as home_name, ht.primary_color as home_color, ht.secondary_color as home_secondary, ht.badge_pattern as home_badge, ht.user_id as home_user_id,
+       at.name as away_name, at.primary_color as away_color, at.secondary_color as away_secondary, at.badge_pattern as away_badge, at.user_id as away_user_id,
+       sc.scheduled_at, sc.game_week
+     FROM matches m
+     JOIN teams ht ON m.home_team_id = ht.id
+     JOIN teams at ON m.away_team_id = at.id
+     LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
+     WHERE (m.home_team_id = ? OR m.away_team_id = ?)
+     ORDER BY COALESCE(m.round, sc.game_week, 999), sc.scheduled_at ASC`
+  ).bind(teamId, teamId).all().catch(() => ({ results: [] }));
+
+  const matches = result.results.map((row) => ({
+    id: row.id,
+    round: row.round,
+    status: row.status,
+    homeTeamId: row.home_team_id,
+    homeName: row.home_name,
+    homeColor: row.home_color || "#2D5F2D",
+    homeSecondary: row.home_secondary || "#FFFFFF",
+    homeBadge: row.home_badge || "shield",
+    homeScore: row.home_score,
+    awayTeamId: row.away_team_id,
+    awayName: row.away_name,
+    awayColor: row.away_color || "#2D5F2D",
+    awaySecondary: row.away_secondary || "#FFFFFF",
+    awayBadge: row.away_badge || "shield",
+    awayScore: row.away_score,
+    scheduledAt: row.scheduled_at || row.simulated_at || row.created_at,
+    gameWeek: row.game_week,
+    isHome: row.home_team_id === teamId,
+    simulatedAt: row.simulated_at,
+  }));
+
+  return c.json({
+    leagueName: league?.name ?? "Liga",
+    season: league?.season_number ?? 1,
+    matches,
+  });
+});
+
+// GET /api/teams/:teamId/league-schedule — full league schedule by rounds
+matchesRouter.get("/teams/:teamId/league-schedule", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  const team = await c.env.DB.prepare(
+    "SELECT league_id FROM teams WHERE id = ?"
+  ).bind(teamId).first<{ league_id: string | null }>();
+  if (!team?.league_id) return c.json({ rounds: [], leagueName: "" });
+
+  const league = await c.env.DB.prepare(
+    "SELECT l.name, s.number as season_number FROM leagues l JOIN seasons s ON l.season_id = s.id WHERE l.id = ?"
+  ).bind(team.league_id).first<{ name: string; season_number: number }>().catch(() => null);
+
+  const result = await c.env.DB.prepare(
+    `SELECT m.id, m.round, m.status, m.home_score, m.away_score,
+       m.home_team_id, m.away_team_id,
+       ht.name as home_name, ht.primary_color as home_color, ht.secondary_color as home_secondary, ht.badge_pattern as home_badge,
+       at.name as away_name, at.primary_color as away_color, at.secondary_color as away_secondary, at.badge_pattern as away_badge,
+       sc.scheduled_at, sc.game_week
+     FROM matches m
+     JOIN teams ht ON m.home_team_id = ht.id
+     JOIN teams at ON m.away_team_id = at.id
+     LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
+     WHERE m.league_id = ?
+     ORDER BY COALESCE(m.round, sc.game_week, 999), ht.name`
+  ).bind(team.league_id).all().catch(() => ({ results: [] }));
+
+  // Group by round
+  const roundsMap = new Map<number, Array<Record<string, unknown>>>();
+  for (const row of result.results) {
+    const round = (row.round as number) ?? (row.game_week as number) ?? 0;
+    if (!roundsMap.has(round)) roundsMap.set(round, []);
+    roundsMap.get(round)!.push(row);
+  }
+
+  const rounds = Array.from(roundsMap.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([round, matches]) => ({
+      round,
+      scheduledAt: matches[0]?.scheduled_at as string | null,
+      matches: matches.map((row) => ({
+        id: row.id,
+        status: row.status,
+        homeTeamId: row.home_team_id,
+        homeName: row.home_name,
+        homeColor: row.home_color || "#2D5F2D",
+        homeSecondary: row.home_secondary || "#FFFFFF",
+        homeBadge: row.home_badge || "shield",
+        homeScore: row.home_score,
+        awayTeamId: row.away_team_id,
+        awayName: row.away_name,
+        awayColor: row.away_color || "#2D5F2D",
+        awaySecondary: row.away_secondary || "#FFFFFF",
+        awayBadge: row.away_badge || "shield",
+        awayScore: row.away_score,
+      })),
+    }));
+
+  return c.json({
+    leagueName: league?.name ?? "Liga",
+    season: league?.season_number ?? 1,
+    rounds,
+  });
+});
+
 // GET /api/matches/:id — detail zápasu
 matchesRouter.get("/matches/:id", async (c) => {
-  const row = await c.env.DB.prepare("SELECT * FROM matches WHERE id = ?")
-    .bind(c.req.param("id")).first<Record<string, unknown>>();
+  const row = await c.env.DB.prepare(
+    `SELECT m.*,
+       ht.name as home_name, ht.primary_color as home_color, ht.badge_pattern as home_badge, ht.secondary_color as home_secondary,
+       at.name as away_name, at.primary_color as away_color, at.badge_pattern as away_badge, at.secondary_color as away_secondary
+     FROM matches m
+     LEFT JOIN teams ht ON m.home_team_id = ht.id
+     LEFT JOIN teams at ON m.away_team_id = at.id
+     WHERE m.id = ?`
+  ).bind(c.req.param("id")).first<Record<string, unknown>>();
   if (!row) return c.json({ error: "Match not found" }, 404);
   return c.json({
     ...row,
     events: JSON.parse((row.events as string) ?? "[]"),
     commentary: JSON.parse((row.commentary as string) ?? "[]"),
+    player_ratings: JSON.parse((row.player_ratings as string) ?? "{}"),
   });
 });
 

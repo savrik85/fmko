@@ -12,5 +12,14 @@ export interface Manager {
   name: string;
   backstory: ManagerBackstory;
   avatar: Record<string, unknown>;
+  age?: number;
+  coaching?: number;
+  motivation?: number;
+  tactics?: number;
+  youthDevelopment?: number;
+  discipline?: number;
+  reputation?: number;
+  bio?: string;
+  birthplace?: string;
   createdAt: string;
 }

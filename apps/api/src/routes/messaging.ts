@@ -1,0 +1,318 @@
+/**
+ * Messaging API — in-game phone / SMS system.
+ * Konverzace: "Kabina" (skupinový), 1:1 hráči, 1:1 manažeři, systém.
+ */
+
+import { Hono } from "hono";
+import type { Bindings } from "../index";
+
+const messagingRouter = new Hono<{ Bindings: Bindings }>();
+
+function uuid(): string {
+  return crypto.randomUUID();
+}
+
+// GET /api/teams/:teamId/conversations — seznam konverzací
+messagingRouter.get("/teams/:teamId/conversations", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  let result = await c.env.DB.prepare(
+    `SELECT * FROM conversations WHERE team_id = ? ORDER BY pinned DESC, last_message_at DESC`
+  ).bind(teamId).all().catch(() => ({ results: [] }));
+
+  // Auto-init conversations if none exist
+  if (result.results.length === 0) {
+    const players = await c.env.DB.prepare(
+      "SELECT id, first_name, last_name, nickname, avatar FROM players WHERE team_id = ?"
+    ).bind(teamId).all().catch(() => ({ results: [] }));
+
+    if (players.results.length > 0) {
+      const playerData = players.results.map((p) => ({
+        id: p.id as string,
+        firstName: p.first_name as string,
+        lastName: p.last_name as string,
+        nickname: (p.nickname as string) || undefined,
+        avatar: p.avatar as string,
+      }));
+      await initTeamConversations(c.env.DB, teamId, playerData).catch(() => {});
+
+      result = await c.env.DB.prepare(
+        `SELECT * FROM conversations WHERE team_id = ? ORDER BY pinned DESC, last_message_at DESC`
+      ).bind(teamId).all().catch(() => ({ results: [] }));
+    }
+  }
+
+  const convs = result.results.map((row) => ({
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    participantId: row.participant_id,
+    participantAvatar: row.participant_avatar ? JSON.parse(row.participant_avatar as string) : null,
+    lastMessageText: row.last_message_text,
+    lastMessageAt: row.last_message_at,
+    unreadCount: row.unread_count,
+    pinned: row.pinned === 1,
+  }));
+
+  return c.json(convs);
+});
+
+// GET /api/teams/:teamId/conversations/:convId — zprávy v konverzaci
+messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
+  const convId = c.req.param("convId");
+  const limit = Number(c.req.query("limit") || "50");
+  const before = c.req.query("before"); // cursor pagination
+
+  let query = "SELECT * FROM messages WHERE conversation_id = ?";
+  const binds: unknown[] = [convId];
+
+  if (before) {
+    query += " AND sent_at < ?";
+    binds.push(before);
+  }
+
+  query += " ORDER BY sent_at DESC LIMIT ?";
+  binds.push(limit);
+
+  const result = await c.env.DB.prepare(query).bind(...binds).all().catch(() => ({ results: [] }));
+
+  const messages = result.results.map((row) => ({
+    id: row.id,
+    senderType: row.sender_type,
+    senderId: row.sender_id,
+    senderName: row.sender_name,
+    body: row.body,
+    metadata: row.metadata ? JSON.parse(row.metadata as string) : null,
+    sentAt: row.sent_at,
+    read: row.read === 1,
+  })).reverse(); // chronological order
+
+  // Mark as read
+  await c.env.DB.prepare(
+    "UPDATE messages SET read = 1 WHERE conversation_id = ? AND read = 0"
+  ).bind(convId).run().catch(() => {});
+  await c.env.DB.prepare(
+    "UPDATE conversations SET unread_count = 0 WHERE id = ?"
+  ).bind(convId).run().catch(() => {});
+
+  return c.json(messages);
+});
+
+// POST /api/teams/:teamId/conversations/:convId — odeslat zprávu
+messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const convId = c.req.param("convId");
+  const body = await c.req.json<{ body: string }>();
+
+  if (!body.body?.trim()) return c.json({ error: "Empty message" }, 400);
+
+  // Get team name for sender
+  const team = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
+    .bind(teamId).first<{ name: string }>();
+  const senderName = team?.name ?? "Trenér";
+
+  const msgId = uuid();
+  const now = new Date().toISOString();
+
+  await c.env.DB.prepare(
+    "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at, read) VALUES (?, ?, 'user', ?, ?, ?, ?, 1)"
+  ).bind(msgId, convId, teamId, senderName, body.body.trim(), now).run();
+
+  // Update conversation
+  const trimmedText = body.body.trim().slice(0, 100);
+  await c.env.DB.prepare(
+    "UPDATE conversations SET last_message_text = ?, last_message_at = ? WHERE id = ?"
+  ).bind(trimmedText, now, convId).run();
+
+  // If manager conversation, deliver to the other side
+  const conv = await c.env.DB.prepare(
+    "SELECT type, participant_id FROM conversations WHERE id = ?"
+  ).bind(convId).first<{ type: string; participant_id: string | null }>().catch(() => null);
+
+  if (conv?.type === "manager" && conv.participant_id) {
+    const otherTeamId = conv.participant_id;
+
+    // Get or create conversation on the other side
+    let otherConv = await c.env.DB.prepare(
+      "SELECT id FROM conversations WHERE team_id = ? AND type = 'manager' AND participant_id = ?"
+    ).bind(otherTeamId, teamId).first<{ id: string }>().catch(() => null);
+
+    if (!otherConv) {
+      // Create conversation on recipient's side
+      const myManager = await c.env.DB.prepare(
+        "SELECT name, avatar FROM managers WHERE team_id = ?"
+      ).bind(teamId).first<{ name: string; avatar: string }>().catch(() => null);
+
+      const otherConvId = uuid();
+      const title = myManager?.name ?? senderName;
+      const avatar = myManager?.avatar ?? "{}";
+
+      await c.env.DB.prepare(
+        "INSERT INTO conversations (id, team_id, type, title, participant_id, participant_avatar, last_message_text, last_message_at, unread_count, created_at) VALUES (?, ?, 'manager', ?, ?, ?, ?, ?, 1, ?)"
+      ).bind(otherConvId, otherTeamId, title, teamId, avatar, trimmedText, now, now).run();
+
+      otherConv = { id: otherConvId };
+    } else {
+      // Update existing conversation
+      await c.env.DB.prepare(
+        "UPDATE conversations SET last_message_text = ?, last_message_at = ?, unread_count = unread_count + 1 WHERE id = ?"
+      ).bind(trimmedText, now, otherConv.id).run();
+    }
+
+    // Insert message copy on recipient's side
+    await c.env.DB.prepare(
+      "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at, read) VALUES (?, ?, 'manager', ?, ?, ?, ?, 0)"
+    ).bind(uuid(), otherConv.id, teamId, senderName, body.body.trim(), now).run();
+  }
+
+  return c.json({ id: msgId, sentAt: now });
+});
+
+// GET /api/teams/:teamId/unread-count — celkový počet nepřečtených
+messagingRouter.get("/teams/:teamId/unread-count", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  const row = await c.env.DB.prepare(
+    "SELECT COALESCE(SUM(unread_count), 0) as total FROM conversations WHERE team_id = ?"
+  ).bind(teamId).first<{ total: number }>().catch(() => null);
+
+  return c.json({ unread: row?.total ?? 0 });
+});
+
+// POST /api/teams/:teamId/mark-read/:convId — označit jako přečtené
+messagingRouter.post("/teams/:teamId/mark-read/:convId", async (c) => {
+  const convId = c.req.param("convId");
+
+  await c.env.DB.prepare(
+    "UPDATE messages SET read = 1 WHERE conversation_id = ? AND read = 0"
+  ).bind(convId).run().catch(() => {});
+  await c.env.DB.prepare(
+    "UPDATE conversations SET unread_count = 0 WHERE id = ?"
+  ).bind(convId).run().catch(() => {});
+
+  return c.json({ ok: true });
+});
+
+// POST /api/teams/:teamId/conversation-with/:otherTeamId — get or create manager-to-manager conversation
+messagingRouter.post("/teams/:teamId/conversation-with/:otherTeamId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const otherTeamId = c.req.param("otherTeamId");
+
+  // Check if conversation already exists
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM conversations WHERE team_id = ? AND type = 'manager' AND participant_id = ?"
+  ).bind(teamId, otherTeamId).first<{ id: string }>().catch(() => null);
+
+  if (existing) return c.json({ conversationId: existing.id });
+
+  // Get other team info + manager
+  const otherTeam = await c.env.DB.prepare(
+    "SELECT t.name, t.user_id FROM teams t WHERE t.id = ?"
+  ).bind(otherTeamId).first<{ name: string; user_id: string }>().catch(() => null);
+
+  if (!otherTeam || otherTeam.user_id === "ai") return c.json({ error: "Not a player team" }, 400);
+
+  const otherManager = await c.env.DB.prepare(
+    "SELECT name, avatar FROM managers WHERE team_id = ?"
+  ).bind(otherTeamId).first<{ name: string; avatar: string }>().catch(() => null);
+
+  const title = otherManager?.name ?? otherTeam.name;
+  const avatar = otherManager?.avatar ?? "{}";
+  const now = new Date().toISOString();
+  const convId = uuid();
+
+  await c.env.DB.prepare(
+    "INSERT INTO conversations (id, team_id, type, title, participant_id, participant_avatar, last_message_at, unread_count, created_at) VALUES (?, ?, 'manager', ?, ?, ?, ?, 0, ?)"
+  ).bind(convId, teamId, title, otherTeamId, avatar, now, now).run();
+
+  return c.json({ conversationId: convId });
+});
+
+// POST /api/teams/:teamId/init-conversations — seed conversations for existing team
+messagingRouter.post("/teams/:teamId/init-conversations", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  // Check if already has conversations
+  const existing = await c.env.DB.prepare(
+    "SELECT COUNT(*) as cnt FROM conversations WHERE team_id = ?"
+  ).bind(teamId).first<{ cnt: number }>().catch(() => null);
+
+  if (existing && existing.cnt > 0) return c.json({ ok: true, message: "Already initialized" });
+
+  // Get players
+  const players = await c.env.DB.prepare(
+    "SELECT id, first_name, last_name, nickname, avatar FROM players WHERE team_id = ?"
+  ).bind(teamId).all().catch(() => ({ results: [] }));
+
+  const playerData = players.results.map((p) => ({
+    id: p.id as string,
+    firstName: p.first_name as string,
+    lastName: p.last_name as string,
+    nickname: (p.nickname as string) || undefined,
+    avatar: p.avatar as string,
+  }));
+
+  await initTeamConversations(c.env.DB, teamId, playerData);
+
+  return c.json({ ok: true, conversations: playerData.length + 1 });
+});
+
+// ── Helper: create conversation + initial messages for a new team ──
+
+export async function initTeamConversations(
+  db: D1Database,
+  teamId: string,
+  players: Array<{ id: string; firstName: string; lastName: string; nickname?: string; avatar: string }>,
+) {
+  const now = new Date().toISOString();
+
+  // 1. Skupinový chat "Kabina" (pinned)
+  const groupId = uuid();
+  await db.prepare(
+    "INSERT INTO conversations (id, team_id, type, title, pinned, last_message_text, last_message_at, unread_count, created_at) VALUES (?, ?, 'squad_group', 'Kabina', 1, ?, ?, 1, ?)"
+  ).bind(groupId, teamId, "Vítejte v kabině! ⚽", now, now).run();
+
+  await db.prepare(
+    "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at, read) VALUES (?, ?, 'system', 'Systém', ?, ?, 0)"
+  ).bind(uuid(), groupId, "Vítejte v kabině! Tady se řeší docházka na zápasy a všechno důležité. ⚽", now, now).run();
+
+  // 2. Konverzace s každým hráčem
+  for (const p of players) {
+    const name = p.nickname
+      ? `${p.firstName} ${p.lastName} „${p.nickname}"`
+      : `${p.firstName} ${p.lastName}`;
+
+    const convId = uuid();
+    const greeting = pickGreeting(p.firstName);
+
+    await db.prepare(
+      "INSERT INTO conversations (id, team_id, type, title, participant_id, participant_avatar, last_message_text, last_message_at, unread_count, created_at) VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 1, ?)"
+    ).bind(convId, teamId, name, p.id, p.avatar, greeting.slice(0, 100), now, now).run();
+
+    await db.prepare(
+      "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at, read) VALUES (?, ?, 'player', ?, ?, ?, ?, 0)"
+    ).bind(uuid(), convId, p.id, p.firstName, greeting, now).run();
+  }
+}
+
+const GREETINGS = [
+  "Ahoj šéfe! Těším se na sezónu! 💪",
+  "Čau trenére! Kdy je první trénink?",
+  "Ahoj! Jsem připravenej makat.",
+  "Zdravím! Doufám že budu hrát víc než minule.",
+  "Čau! Co budeme trénovat jako první?",
+  "Ahoj šéfe, počítej se mnou na všechno!",
+  "Nazdar! Jsem fit a připravenej.",
+  "Ahoj! Těším se na novou sezónu.",
+  "Čau trenére, snad to letos vyjde!",
+  "Ahoj! Kdy začínáme?",
+];
+
+function pickGreeting(firstName: string): string {
+  // deterministic pick based on name
+  let hash = 0;
+  for (let i = 0; i < firstName.length; i++) hash = ((hash << 5) - hash + firstName.charCodeAt(i)) | 0;
+  return GREETINGS[Math.abs(hash) % GREETINGS.length];
+}
+
+export { messagingRouter };

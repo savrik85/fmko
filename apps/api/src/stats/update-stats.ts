@@ -1,0 +1,103 @@
+/**
+ * Aktualizace hráčských statistik po odehraném zápase.
+ * Projde match events a inkrementuje goals/assists/cards v player_stats.
+ */
+
+import type { MatchEvent } from "@okresni-masina/shared";
+
+interface StatsUpdate {
+  playerId: string;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCards: number;
+  appeared: boolean;
+  minutesPlayed: number;
+  rating: number;
+}
+
+/**
+ * Zpracuje match eventy a vrátí stats updaty per hráč.
+ * playerIdMap mapuje match engine ID (number) → DB player ID (string).
+ */
+export function extractStatsFromEvents(
+  events: MatchEvent[],
+  playerIdMap: Map<number, string>,
+  allPlayerIds: string[],
+  playerRatings: Record<string, number>,
+): StatsUpdate[] {
+  const stats = new Map<string, StatsUpdate>();
+
+  // Init all players who appeared
+  for (const pid of allPlayerIds) {
+    stats.set(pid, {
+      playerId: pid,
+      goals: 0,
+      assists: 0,
+      yellowCards: 0,
+      redCards: 0,
+      appeared: true,
+      minutesPlayed: 90,
+      rating: playerRatings[pid] ?? 6.0,
+    });
+  }
+
+  for (const event of events) {
+    const pid = playerIdMap.get(event.playerId);
+    if (!pid) continue;
+    const s = stats.get(pid);
+    if (!s) continue;
+
+    switch (event.type) {
+      case "goal":
+        s.goals++;
+        break;
+      case "card":
+        if (event.detail === "red") {
+          s.redCards++;
+        } else {
+          s.yellowCards++;
+        }
+        break;
+      case "substitution":
+        // Player subbed off — reduce minutes
+        s.minutesPlayed = event.minute;
+        break;
+    }
+  }
+
+  return [...stats.values()];
+}
+
+/**
+ * Upsert player stats do DB.
+ */
+export async function updatePlayerStats(
+  db: D1Database,
+  seasonId: string,
+  teamId: string,
+  updates: StatsUpdate[],
+  isCleanSheet: boolean,
+): Promise<void> {
+  for (const u of updates) {
+    // Try insert, on conflict update
+    await db.prepare(
+      `INSERT INTO player_stats (id, player_id, team_id, season_id, appearances, goals, assists, yellow_cards, red_cards, minutes_played, avg_rating, clean_sheets)
+       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(player_id, season_id) DO UPDATE SET
+         appearances = appearances + 1,
+         goals = goals + ?,
+         assists = assists + ?,
+         yellow_cards = yellow_cards + ?,
+         red_cards = red_cards + ?,
+         minutes_played = minutes_played + ?,
+         avg_rating = (avg_rating * appearances + ?) / (appearances + 1),
+         clean_sheets = clean_sheets + ?`
+    ).bind(
+      crypto.randomUUID(), u.playerId, teamId, seasonId,
+      u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0,
+      // ON CONFLICT values:
+      u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0,
+    ).run().catch(() => {});
+  }
+}

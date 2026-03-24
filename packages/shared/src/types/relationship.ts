@@ -3,7 +3,11 @@ export type RelationshipType =
   | "father_son"
   | "in_laws"
   | "classmates"
-  | "coworkers";
+  | "coworkers"
+  | "neighbors"
+  | "drinking_buddies"
+  | "rivals"
+  | "mentor_pupil";
 
 export interface Relationship {
   id: number;

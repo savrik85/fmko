@@ -32,7 +32,28 @@
       "Bash(git rm:*)",
       "mcp__plugin_serena_serena__list_dir",
       "Bash(npx next:*)",
-      "Bash(ls /Users/savrik/Projects/fmko/apps/web/src/app/dashboard/player/[id]/page.tsx)"
+      "Bash(ls /Users/savrik/Projects/fmko/apps/web/src/app/dashboard/player/[id]/page.tsx)",
+      "Bash(xargs ls:*)",
+      "Bash(/tmp/audit.txt:*)",
+      "Read(//tmp/**)",
+      "WebFetch(domain:www.prijmeni.cz)",
+      "WebSearch",
+      "WebFetch(domain:www.firmy.cz)",
+      "WebFetch(domain:katalog.sluzby.cz)",
+      "WebFetch(domain:cz.kompass.com)",
+      "mcp__plugin_serena_serena__get_symbols_overview",
+      "mcp__plugin_serena_serena__activate_project",
+      "mcp__plugin_serena_serena__search_for_pattern",
+      "mcp__plugin_serena_serena__find_symbol",
+      "Bash(npm run:*)",
+      "Bash(sqlite3 .wrangler/state/v3/d1/DATABASE)",
+      "Bash(cd:*)",
+      "Bash(for f:*)",
+      "Bash(do sed:*)",
+      "Bash(done)",
+      "Bash(sqlite3 /Users/savrik/Projects/fmko/apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite \"PRAGMA table_info\\(seasons\\);\")",
+      "Bash(sqlite3:*)",
+      "Bash(ls /Users/savrik/Projects/fmko/apps/web/src/app/dashboard/match/[id]/page.tsx)"
     ]
   }
 }

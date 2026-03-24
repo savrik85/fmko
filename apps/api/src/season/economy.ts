@@ -3,6 +3,7 @@
  */
 
 import type { Rng } from "../generators/rng";
+import { getDistrictDataFromDB, resolveSponsorName } from "../data/districts";
 
 export interface Sponsor {
   name: string;
@@ -72,44 +73,51 @@ const SURNAME_GENITIVES: Record<string, string> = {
 
 /**
  * Generate sponsors for a team.
+ * Uses district-specific real sponsors when available, falls back to generic templates.
  */
-export function generateSponsors(
+export async function generateSponsors(
   rng: Rng,
   villageCategory: string,
   reputation: number,
-): Sponsor[] {
+  district?: string,
+  db?: D1Database,
+): Promise<Sponsor[]> {
   const count = villageCategory === "vesnice" ? rng.int(1, 2)
     : villageCategory === "obec" ? rng.int(1, 3)
     : rng.int(2, 3);
 
+  const districtData = db && district
+    ? await getDistrictDataFromDB(db, district)
+    : { surnames: {}, sponsors: [] };
+
+  const pool = districtData.sponsors.length > 0 ? districtData.sponsors : [
+    { name: "Řeznictví {surname}", type: "řeznictví", monthlyRange: [500, 1500] as [number, number], winBonus: [100, 300] as [number, number] },
+    { name: "Autoservis {surname}", type: "autoservis", monthlyRange: [600, 1800] as [number, number], winBonus: [100, 350] as [number, number] },
+    { name: "Hospoda U {surname}", type: "hospoda", monthlyRange: [400, 1200] as [number, number], winBonus: [50, 200] as [number, number] },
+    { name: "Potraviny {surname}", type: "potraviny", monthlyRange: [800, 2000] as [number, number], winBonus: [150, 400] as [number, number] },
+    { name: "Obecní úřad", type: "obec", monthlyRange: [800, 2500] as [number, number], winBonus: [200, 500] as [number, number] },
+  ];
+
+  const hasReal = districtData.sponsors.length > 0;
+  const repMod = reputation / 50;
   const sponsors: Sponsor[] = [];
-  const usedTemplates = new Set<number>();
+  const usedIndices = new Set<number>();
 
   for (let i = 0; i < count; i++) {
-    let templateIdx: number;
+    let idx: number;
     do {
-      templateIdx = rng.int(0, SPONSOR_TEMPLATES.length - 1);
-    } while (usedTemplates.has(templateIdx) && usedTemplates.size < SPONSOR_TEMPLATES.length);
-    usedTemplates.add(templateIdx);
+      idx = rng.int(0, pool.length - 1);
+    } while (usedIndices.has(idx) && usedIndices.size < pool.length);
+    usedIndices.add(idx);
 
-    const template = SPONSOR_TEMPLATES[templateIdx];
-    const surname = rng.pick(COMMON_SURNAMES);
-    const genitive = SURNAME_GENITIVES[surname] ?? surname + "ů";
+    const s = pool[idx];
+    const name = hasReal ? s.name : resolveSponsorName(s.name, districtData.surnames, rng);
 
-    const name = template.template
-      .replace("{surname}", surname)
-      .replace("{surname_genitive}", genitive);
-
-    // Amount based on category and reputation
-    const baseAmount = villageCategory === "vesnice" ? rng.int(300, 1000)
-      : villageCategory === "obec" ? rng.int(500, 2000)
-      : rng.int(1000, 5000);
-
-    const repMod = reputation / 50;
+    const baseAmount = rng.int(s.monthlyRange[0], s.monthlyRange[1]);
     const monthlyAmount = Math.round(baseAmount * repMod);
-    const winBonus = Math.round(monthlyAmount * rng.int(10, 30) / 100);
+    const winBonus = rng.int(s.winBonus[0], s.winBonus[1]);
 
-    sponsors.push({ name, type: template.type, monthlyAmount, winBonus });
+    sponsors.push({ name, type: s.type, monthlyAmount, winBonus });
   }
 
   return sponsors;

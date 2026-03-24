@@ -4,6 +4,7 @@ import type {
   BodyType,
   AvatarConfig,
 } from "@okresni-masina/shared";
+import type { PreferredFoot, PreferredSide } from "../skills/types";
 
 // Seed data types
 interface SurnameData {
@@ -46,6 +47,14 @@ export interface GeneratedPlayer {
   avatarConfig: AvatarConfig;
   condition: number;
   morale: number;
+  // New attributes
+  preferredFoot: PreferredFoot;
+  preferredSide: PreferredSide;
+  leadership: number;
+  workRate: number;
+  aggression: number;
+  consistency: number;
+  clutch: number;
 }
 
 // Průměrná kvalita hráčů dle kategorie obce
@@ -241,6 +250,69 @@ export function generatePlayer(
 
   const occupation = age < 18 ? "Student" : age > 60 ? "Důchodce" : rng.pick(FALLBACK_OCCUPATIONS);
 
+  // ── New attributes ──
+
+  // Preferred foot: right 70%, left 20%, both 10%
+  const footRoll = rng.int(0, 100);
+  const preferredFoot: PreferredFoot = footRoll < 70 ? "right" : footRoll < 90 ? "left" : "both";
+
+  // Preferred side: depends on position + foot
+  const preferredSide: PreferredSide = (() => {
+    if (position === "GK") return "center" as PreferredSide;
+    const leftBonus = preferredFoot === "left" ? 20 : 0;
+    const rightBonus = preferredFoot === "right" ? 10 : 0;
+    const weights: Record<string, Record<PreferredSide, number>> = {
+      DEF: { left: 25 + leftBonus, center: 45, right: 25 + rightBonus, any: 5 },
+      MID: { left: 25 + leftBonus, center: 25, right: 25 + rightBonus, any: 25 },
+      FWD: { left: 20 + leftBonus, center: 40, right: 20 + rightBonus, any: 20 },
+    };
+    return rng.weighted(weights[position] ?? weights.MID) as PreferredSide;
+  })();
+
+  // Leadership: age + occupation + discipline
+  const LEADERSHIP_OCCUPATIONS: Record<string, number> = {
+    "Hospodský": 15, "Hasič": 10, "Policista": 10, "Učitel": 8, "Starosta": 12, "Trenér mládeže": 10,
+  };
+  const leadershipBase = rng.int(10, 50)
+    + Math.max(0, (age - 25) * 2)
+    + (LEADERSHIP_OCCUPATIONS[occupation] ?? 0)
+    + Math.round(discipline * 1.5); // discipline is 1-20, so *1.5 gives 0-30
+  const leadership = Math.min(100, Math.max(1, leadershipBase));
+
+  // Work rate: position + physical jobs + alcohol penalty
+  const PHYSICAL_OCCUPATIONS = ["Zemědělec", "Zedník", "Dřevorubec", "Kovář", "Řezník", "Hasič", "Automechanik"];
+  const workRateBase = rng.int(20, 70)
+    + (position === "DEF" ? 10 : position === "MID" ? 5 : position === "FWD" ? -5 : 0)
+    + (PHYSICAL_OCCUPATIONS.includes(occupation) ? 10 : 0)
+    - (age > 35 ? (age - 35) * 3 : 0)
+    - (alcohol > 14 ? (alcohol - 14) * 2 : 0); // alcohol 1-20
+  const workRate = Math.min(100, Math.max(1, workRateBase));
+
+  // Aggression: bodyType + occupation + temper
+  const AGGRESSIVE_OCCUPATIONS: Record<string, number> = {
+    "Řezník": 15, "Kovář": 15, "Dřevorubec": 10, "Zedník": 10, "Hasič": 8, "Zemědělec": 8,
+  };
+  const aggressionBase = rng.int(15, 65)
+    + (bodyType === "stocky" ? 15 : bodyType === "athletic" ? 10 : bodyType === "thin" ? -10 : 0)
+    + (AGGRESSIVE_OCCUPATIONS[occupation] ?? 0)
+    + Math.round(temper); // temper 1-20
+    + (position === "DEF" ? 10 : position === "FWD" ? 5 : position === "GK" ? -10 : 0);
+  const aggression = Math.min(100, Math.max(1, aggressionBase));
+
+  // Consistency (hidden): experience-like, discipline helps
+  const consistencyBase = rng.int(20, 80)
+    + Math.round((age > 25 ? Math.min(30, (age - 20) * 2) : 0)) // experience proxy
+    - Math.round(alcohol * 1) // alcohol 1-20
+    + Math.round(discipline * 1); // discipline 1-20
+  const consistency = Math.min(100, Math.max(1, consistencyBase));
+
+  // Clutch (hidden): intentionally unpredictable
+  const CLUTCH_OCCUPATIONS: Record<string, number> = {
+    "Hasič": 10, "Záchranář": 10, "Policista": 8, "Chirurg": 12,
+  };
+  const clutch = Math.min(100, Math.max(1,
+    rng.int(10, 90) + (CLUTCH_OCCUPATIONS[occupation] ?? 0)));
+
   return {
     firstName,
     lastName,
@@ -265,6 +337,13 @@ export function generatePlayer(
     avatarConfig,
     condition: 100,
     morale: 50 + rng.int(-10, 10),
+    preferredFoot,
+    preferredSide,
+    leadership,
+    workRate,
+    aggression,
+    consistency,
+    clutch,
   };
 }
 

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Player } from "@/lib/api";
 import { Spinner } from "@/components/ui";
 import { StepLocation } from "@/components/onboarding/step-location";
 import { StepManager } from "@/components/onboarding/step-manager";
+import { StepClubName } from "@/components/onboarding/step-club-name";
 import { StepTeam } from "@/components/onboarding/step-team";
 import { StepReveal } from "@/components/onboarding/step-reveal";
 import type { ManagerBackstory } from "@okresni-masina/shared";
@@ -17,6 +18,15 @@ interface OnboardingState {
   managerBackstory: ManagerBackstory | null;
   managerAvatar: Record<string, unknown> | null;
   teamName: string;
+  stadiumName: string;
+  sponsor?: {
+    name: string;
+    type: string;
+    seasonBonus: number;
+    seasons: number;
+    terminationFee: number;
+    isNamingRights: boolean;
+  };
   primaryColor: string;
   secondaryColor: string;
   createdTeamId: string | null;
@@ -36,26 +46,59 @@ export interface VillageSelection {
   baseBudget?: number;
 }
 
+const EMPTY_STATE: OnboardingState = {
+  village: null, managerName: "", managerBackstory: null, managerAvatar: null,
+  teamName: "", stadiumName: "", sponsor: undefined,
+  primaryColor: "#2D5F2D", secondaryColor: "#FFFFFF", createdTeamId: null, players: [],
+};
+
+function restoreOnboarding(): { step: number; state: OnboardingState } {
+  if (typeof window === "undefined") return { step: 1, state: EMPTY_STATE };
+
+  const savedState = sessionStorage.getItem("onboarding_state");
+  const savedStep = sessionStorage.getItem("onboarding_step");
+
+  if (!savedState || !savedStep) return { step: 1, state: EMPTY_STATE };
+
+  let parsed: OnboardingState;
+  try { parsed = JSON.parse(savedState); } catch { return { step: 1, state: EMPTY_STATE }; }
+
+  // If team was already created, start fresh
+  if (parsed.createdTeamId) {
+    sessionStorage.removeItem("onboarding_step");
+    sessionStorage.removeItem("onboarding_state");
+    return { step: 1, state: EMPTY_STATE };
+  }
+
+  // Validate step has required data — if not, fall back to the highest valid step
+  const requestedStep = Number(savedStep) || 1;
+  let validStep = 1;
+  if (parsed.village) validStep = 2;
+  if (validStep >= 2 && parsed.managerName) validStep = 3;
+  if (validStep >= 3 && parsed.teamName) validStep = 4;
+
+  return { step: Math.min(requestedStep, validStep), state: parsed };
+}
+
 export default function OnboardingPage() {
-  const [step, setStep] = useState(1);
+  const restored = restoreOnboarding();
+  const [step, setStep] = useState(restored.step);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const { token, setTeam } = useTeam();
   const router = useRouter();
 
-  const [state, setState] = useState<OnboardingState>({
-    village: null,
-    managerName: "",
-    managerBackstory: null,
-    managerAvatar: null,
-    teamName: "",
-    primaryColor: "#2D5F2D",
-    secondaryColor: "#FFFFFF",
-    createdTeamId: null,
-    players: [],
-  });
+  const [state, setState] = useState<OnboardingState>(restored.state);
 
-  async function handleCreateTeam(teamName: string, primary: string, secondary: string, jerseyPattern?: string, badgePattern?: string, stadiumName?: string) {
+  // Persist step + state to sessionStorage (but not step 5 / completed state)
+  useEffect(() => {
+    if (step < 5 && !state.createdTeamId) {
+      sessionStorage.setItem("onboarding_step", String(step));
+      sessionStorage.setItem("onboarding_state", JSON.stringify(state));
+    }
+  }, [step, state]);
+
+  async function handleCreateTeam(teamName: string, primary: string, secondary: string, jerseyPattern?: string, badgePattern?: string) {
     if (!state.village) return;
     setCreating(true);
     setError("");
@@ -77,12 +120,17 @@ export default function OnboardingPage() {
           managerAvatar: state.managerAvatar || undefined,
           jerseyPattern: jerseyPattern || undefined,
           badgePattern: badgePattern || undefined,
-          stadiumName: stadiumName || undefined,
+          stadiumName: state.stadiumName || undefined,
+          sponsor: state.sponsor || undefined,
         }),
       });
 
       const players = await apiFetch<Player[]>(`/api/teams/${result.id}/players`);
       setTeam(result.id, result.name);
+
+      // Clear onboarding persistence — done
+      sessionStorage.removeItem("onboarding_step");
+      sessionStorage.removeItem("onboarding_state");
 
       setState((s) => ({
         ...s,
@@ -93,7 +141,7 @@ export default function OnboardingPage() {
         players,
       }));
 
-      setStep(4);
+      setStep(5);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -107,7 +155,7 @@ export default function OnboardingPage() {
       <div className="bg-pitch-800 px-5 py-3 flex items-center justify-between">
         <span className="font-heading font-bold text-white/80 text-sm tracking-wide uppercase">Prales</span>
         <div className="flex items-center gap-2">
-          {[1, 2, 3, 4].map((s) => (
+          {[1, 2, 3, 4, 5].map((s) => (
             <div key={s} className={`w-8 h-1.5 rounded-full transition-all ${s <= step ? "bg-pitch-400" : "bg-white/10"}`} />
           ))}
         </div>
@@ -146,15 +194,33 @@ export default function OnboardingPage() {
           />
         )}
 
-        {/* Step 3: Team */}
+        {/* Step 3: Club name + sponsor */}
         {step === 3 && state.village && (
+          <StepClubName
+            village={state.village}
+            initialTeamName={state.teamName}
+            onBack={() => setStep(2)}
+            onSubmit={(data) => {
+              setState((s) => ({
+                ...s,
+                teamName: data.teamName,
+                stadiumName: data.stadiumName,
+                sponsor: data.sponsor,
+              }));
+              setStep(4);
+            }}
+          />
+        )}
+
+        {/* Step 4: Visual (colors, jersey, badge) */}
+        {step === 4 && state.village && (
           <>
             <StepTeam
               village={state.village}
               teamName={state.teamName}
               primaryColor={state.primaryColor}
               secondaryColor={state.secondaryColor}
-              onBack={() => setStep(2)}
+              onBack={() => setStep(3)}
               onSubmit={handleCreateTeam}
             />
             {creating && (
@@ -173,8 +239,8 @@ export default function OnboardingPage() {
           </>
         )}
 
-        {/* Step 4: Reveal */}
-        {step === 4 && state.createdTeamId && (
+        {/* Step 5: Reveal */}
+        {step === 5 && state.createdTeamId && (
           <StepReveal
             village={state.village!}
             teamName={state.teamName}

@@ -15,7 +15,7 @@ import { getOccupationByName, type Occupation } from "../generators/occupations"
 
 export interface AbsenceResult {
   playerIndex: number;
-  category: "professional" | "personal" | "absurd" | "health" | "hangover";
+  category: "professional" | "personal" | "absurd" | "health" | "hangover" | "commute";
   reason: string;
   emoji: string;
   smsText: string;
@@ -33,6 +33,7 @@ interface PlayerForAbsence {
   morale: number;        // 0-100
   stamina: number;       // 0-100
   injuryProneness: number; // 0-100
+  commuteKm?: number;    // distance to ground — 0 = local
 }
 
 // ═══════════════════════════════════════════════
@@ -119,6 +120,16 @@ const HEALTH_EXCUSES = [
   { text: "Mám ten zánět šlach zas, doktor říkal klid", emoji: "\u{1FA7A}" },
 ];
 
+const COMMUTE_EXCUSES = [
+  { text: "Auto se porouchalo cestou na zápas", emoji: "\u{1F697}" },
+  { text: "Nestihl jsem to, na silnici byla nehoda a stálo se", emoji: "\u{1F6A7}" },
+  { text: "Zmeškal jsem autobus a další jede až za hodinu", emoji: "\u{1F68C}" },
+  { text: "Nemám odvoz, nikdo nejede mým směrem", emoji: "\u{1F6B6}" },
+  { text: "Musím jet přes dvě vesnice a silnice je rozkopaná", emoji: "\u{1F6A7}" },
+  { text: "Dneska to nestíhám, je to daleko a mám ještě směnu", emoji: "\u23F0" },
+  { text: "Kolega co mě veze onemocněl, nemám jak se dostat", emoji: "\u{1F912}" },
+];
+
 /**
  * Generate absences for a squad before a match.
  *
@@ -146,7 +157,8 @@ export function generateAbsences(
     const disciplineFactor = (100 - p.discipline) / 100;
     const patriotismFactor = (100 - p.patriotism) / 200; // Menší vliv
     const moraleFactor = (100 - p.morale) / 300; // Ještě menší vliv
-    const baseChance = 0.04 + disciplineFactor * 0.16 + patriotismFactor * 0.05 + moraleFactor * 0.03;
+    const commuteFactor = Math.min(0.08, (p.commuteKm ?? 0) * 0.003); // 10km → +3%, 25km → +7.5%
+    const baseChance = 0.04 + disciplineFactor * 0.16 + patriotismFactor * 0.05 + moraleFactor * 0.03 + commuteFactor;
 
     if (rng.random() > baseChance) continue; // Přijde!
 
@@ -169,6 +181,9 @@ export function generateAbsences(
 
       // Kocovina: závisí hlavně na alcohol atributu
       hangover: p.alcohol > 60 ? 0.15 : p.alcohol > 40 ? 0.08 : 0.02,
+
+      // Doprava: vyšší pro dojíždějící hráče
+      commute: (p.commuteKm ?? 0) > 5 ? 0.10 + (p.commuteKm ?? 0) * 0.005 : 0,
     };
 
     const category = rng.weighted(weights) as AbsenceResult["category"];
@@ -208,12 +223,23 @@ export function generateAbsences(
         emoji = pick.emoji;
         break;
       }
+      case "commute": {
+        const pick = rng.pick(COMMUTE_EXCUSES);
+        smsText = pick.text;
+        emoji = pick.emoji;
+        break;
+      }
     }
+
+    const CATEGORY_LABELS: Record<string, string> = {
+      professional: "Práce", personal: "Osobní", absurd: "Jiné",
+      health: "Zdraví", hangover: "Kocovina", commute: "Doprava",
+    };
 
     absences.push({
       playerIndex: i,
       category,
-      reason: category === "professional" ? "Práce" : category === "personal" ? "Osobní" : category === "absurd" ? "Jiné" : category === "health" ? "Zdraví" : "Kocovina",
+      reason: CATEGORY_LABELS[category] ?? category,
       emoji,
       smsText,
     });

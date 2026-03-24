@@ -38,6 +38,14 @@ const ABSENCE_REASONS = [
   "Dovolená",
 ];
 
+const COMMUTE_ABSENCE_REASONS = [
+  "Nestihl to — daleko dojíždí",
+  "Auto se porouchalo cestou",
+  "Nechtělo se mu jet tak daleko v dešti",
+  "Zmeškal autobus",
+  "Říkal že cesta za to nestojí",
+];
+
 const TRAINING_EFFECTS: Record<TrainingType, string[]> = {
   conditioning: ["stamina", "speed", "strength"],
   technique: ["technique", "shooting", "passing"],
@@ -47,11 +55,13 @@ const TRAINING_EFFECTS: Record<TrainingType, string[]> = {
 
 /**
  * Simulate training attendance for one session.
+ * commuteKms: optional array of commute distances per player index.
  */
 function simulateAttendance(
   rng: Rng,
   squad: GeneratedPlayer[],
   approach: TrainingApproach,
+  commuteKms?: number[],
 ): TrainingAttendance[] {
   return squad.map((player, i) => {
     // Base attendance from discipline
@@ -70,16 +80,28 @@ function simulateAttendance(
     // Morale: low morale = less motivated
     if (player.morale < 30) attendProb -= 0.15;
 
+    // Commute: farther players attend less
+    const km = commuteKms?.[i] ?? 0;
+    if (km > 0) {
+      // 5km → -3%, 10km → -7%, 15km → -12%, 20km → -17%, 25km+ → -22%
+      attendProb -= Math.min(0.22, km * 0.008);
+    }
+
     attendProb = Math.max(0.1, Math.min(0.95, attendProb));
 
     if (rng.random() < attendProb) {
       return { playerIndex: i, attended: true };
     }
 
+    // Commuters more likely to have commute-specific excuse
+    const reason = km > 10 && rng.random() < 0.4
+      ? rng.pick(COMMUTE_ABSENCE_REASONS)
+      : rng.pick(ABSENCE_REASONS);
+
     return {
       playerIndex: i,
       attended: false,
-      reason: rng.pick(ABSENCE_REASONS),
+      reason,
     };
   });
 }
@@ -91,6 +113,8 @@ export function simulateTraining(
   rng: Rng,
   squad: GeneratedPlayer[],
   plan: TrainingPlan,
+  commuteKms?: number[],
+  equipmentMultiplier: number = 1.0,
 ): TrainingResult {
   const allAttendance: TrainingAttendance[] = [];
   const attendanceCounts = new Map<number, number>();
@@ -121,7 +145,7 @@ export function simulateTraining(
     const attr = rng.pick(affectedAttrs);
 
     // Small chance of improvement per week
-    const improveChance = 0.08 * sessions;
+    const improveChance = 0.08 * sessions * equipmentMultiplier;
     if (rng.random() < improveChance) {
       const current = player[attr as keyof GeneratedPlayer] as number;
       if (current < 20) {

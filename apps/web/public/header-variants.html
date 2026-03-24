@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Návrhy hlavičky - vyber variantu</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Barlow Condensed', sans-serif; background: #1a1a1a; color: #fff; padding: 40px; }
+  h1 { font-size: 32px; margin-bottom: 40px; text-align: center; color: #aaa; font-weight: 600; }
+  .variant { margin-bottom: 60px; border: 2px solid #333; border-radius: 12px; overflow: hidden; }
+  .variant-label { background: #222; padding: 12px 20px; font-size: 18px; color: #888; display: flex; justify-content: space-between; align-items: center; }
+  .variant-label span { color: #666; font-size: 14px; }
+  .preview { display: flex; min-height: 500px; }
+
+  /* Sidebar */
+  .sidebar { width: 48px; background: #141e14; display: flex; flex-direction: column; align-items: center; padding-top: 56px; gap: 4px; }
+  .sidebar .icon { width: 36px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 16px; border-radius: 6px; color: rgba(255,255,255,0.3); }
+  .sidebar .icon.active { background: rgba(255,255,255,0.1); color: #fff; position: relative; }
+  .sidebar .icon.active::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 3px; height: 16px; background: #4ade80; border-radius: 0 3px 3px 0; }
+  .sidebar .sep { width: 24px; height: 1px; background: rgba(255,255,255,0.05); margin: 4px 0; }
+
+  /* Main area */
+  .main { flex: 1; display: flex; flex-direction: column; background: #f5f0eb; }
+
+  /* Top bar (shared) */
+  .topbar { height: 56px; background: #1e2d1e; display: flex; align-items: center; padding: 0 20px; gap: 12px; }
+  .topbar .nav-btn { width: 28px; height: 28px; background: none; border: none; color: rgba(255,255,255,0.35); font-size: 12px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+  .topbar .sep { width: 1px; height: 20px; background: rgba(255,255,255,0.1); }
+  .topbar .title { font-size: 20px; font-weight: 700; color: #fff; }
+  .topbar .subtitle { font-size: 13px; color: rgba(255,255,255,0.3); margin-left: 8px; }
+
+  /* Content area */
+  .content { flex: 1; padding: 20px; }
+  .card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .card + .card { margin-top: 16px; }
+  .card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #999; margin-bottom: 12px; font-weight: 700; }
+  .card-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; color: #333; border-bottom: 1px solid #f0f0f0; }
+  .card-row:last-child { border: none; }
+  .card-row .label { color: #888; font-weight: 600; }
+  .card-row .value { font-weight: 700; }
+
+  /* ═══ VARIANTA 1: Barevný pruh pod topbarem ═══ */
+  .v1-header { background: linear-gradient(135deg, #2D5F2D, #3a7a3a); padding: 16px 20px; display: flex; align-items: center; gap: 16px; position: relative; overflow: hidden; }
+  .v1-header::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 40%, rgba(0,0,0,0.15) 100%); pointer-events: none; }
+  .v1-badge { width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; color: rgba(255,255,255,0.8); z-index: 1; }
+  .v1-info { z-index: 1; }
+  .v1-info .name { font-size: 22px; font-weight: 800; color: #fff; }
+  .v1-info .sub { font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 2px; }
+  .v1-right { margin-left: auto; display: flex; gap: 16px; z-index: 1; }
+  .v1-stat { text-align: center; background: rgba(255,255,255,0.1); border-radius: 10px; padding: 8px 14px; }
+  .v1-stat .num { font-size: 22px; font-weight: 800; line-height: 1; }
+  .v1-stat .lbl { font-size: 10px; color: rgba(255,255,255,0.5); text-transform: uppercase; margin-top: 2px; }
+
+  /* ═══ VARIANTA 2: Čistý FM — jen topbar, content rovnou ═══ */
+  .v2-topbar { height: 56px; background: #1e2d1e; display: flex; align-items: center; padding: 0 20px; gap: 12px; }
+  .v2-topbar .badge { width: 32px; height: 32px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: rgba(255,255,255,0.6); }
+  .v2-topbar .title { font-size: 20px; font-weight: 700; color: #fff; }
+  .v2-topbar .team { font-size: 12px; color: rgba(255,255,255,0.25); }
+  .v2-topbar .right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  .v2-topbar .stat { font-size: 12px; color: rgba(255,255,255,0.4); }
+  .v2-topbar .stat b { color: rgba(255,255,255,0.7); }
+
+  /* ═══ VARIANTA 3: Tenký barevný pruh + bílá info karta ═══ */
+  .v3-accent { height: 4px; background: linear-gradient(90deg, #2D5F2D, #4a9a4a); }
+  .v3-info { background: #fff; padding: 16px 20px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #e8e0d8; }
+  .v3-badge2 { width: 40px; height: 40px; border-radius: 50%; background: #2D5F2D; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; color: #fff; }
+  .v3-info .name { font-size: 18px; font-weight: 800; color: #2D5F2D; }
+  .v3-info .sub { font-size: 12px; color: #999; margin-top: 1px; }
+  .v3-info .right { margin-left: auto; display: flex; gap: 20px; }
+  .v3-info .stat { text-align: center; }
+  .v3-info .stat .num { font-size: 20px; font-weight: 800; color: #2D5F2D; line-height: 1; }
+  .v3-info .stat .lbl { font-size: 10px; color: #aaa; text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<h1>Vyber variantu jednotné hlavičky</h1>
+
+<!-- ═══════════════════════════════════════════ VARIANTA 1 ═══ -->
+<div class="variant">
+  <div class="variant-label">Varianta 1 — Barevný hero pruh <span>Barva týmu, badge, info, statistiky</span></div>
+  <div class="preview">
+    <div class="sidebar">
+      <div class="icon active">🏠</div>
+      <div class="icon">📱</div>
+      <div class="icon">📰</div>
+      <div class="sep"></div>
+      <div class="icon">👥</div>
+      <div class="icon">🏋</div>
+      <div class="icon">🤝</div>
+      <div class="icon">💰</div>
+      <div class="sep"></div>
+      <div class="icon">⚽</div>
+      <div class="icon">🏆</div>
+      <div class="icon">📊</div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <button class="nav-btn">◀</button>
+        <button class="nav-btn">▶</button>
+        <div class="sep"></div>
+        <span class="title">Domů</span>
+        <span class="subtitle">FK Rumburaci</span>
+      </div>
+      <div class="v1-header">
+        <div class="v1-badge">R</div>
+        <div class="v1-info">
+          <div class="name">FK Rumburaci</div>
+          <div class="sub">Buk · Prachatice</div>
+        </div>
+        <div class="v1-right">
+          <div class="v1-stat"><div class="num">3.</div><div class="lbl">Místo</div></div>
+          <div class="v1-stat"><div class="num">24</div><div class="lbl">Body</div></div>
+          <div class="v1-stat"><div class="num">18</div><div class="lbl">Hráčů</div></div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="card">
+          <div class="card-title">Stav kádru</div>
+          <div class="card-row"><span class="label">Celkem</span><span class="value">18</span></div>
+          <div class="card-row"><span class="label">Fit</span><span class="value" style="color:#2D5F2D">15</span></div>
+          <div class="card-row"><span class="label">Zranění</span><span class="value" style="color:#c44">3</span></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Další zápas</div>
+          <div class="card-row"><span class="label">Soupeř</span><span class="value">TJ Sokol Vacov</span></div>
+          <div class="card-row"><span class="label">Kolo</span><span class="value">12. kolo</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ VARIANTA 2 ═══ -->
+<div class="variant">
+  <div class="variant-label">Varianta 2 — Čistý FM styl <span>Všechno v tmavém topbaru, content rovnou pod ním</span></div>
+  <div class="preview">
+    <div class="sidebar">
+      <div class="icon active">🏠</div>
+      <div class="icon">📱</div>
+      <div class="icon">📰</div>
+      <div class="sep"></div>
+      <div class="icon">👥</div>
+      <div class="icon">🏋</div>
+      <div class="icon">🤝</div>
+      <div class="icon">💰</div>
+      <div class="sep"></div>
+      <div class="icon">⚽</div>
+      <div class="icon">🏆</div>
+      <div class="icon">📊</div>
+    </div>
+    <div class="main">
+      <div class="v2-topbar">
+        <button class="nav-btn">◀</button>
+        <button class="nav-btn">▶</button>
+        <div class="sep"></div>
+        <div class="badge">R</div>
+        <div>
+          <div class="title">Domů</div>
+          <div class="team">FK Rumburaci · Buk</div>
+        </div>
+        <div class="right">
+          <div class="stat"><b>3.</b> místo</div>
+          <div class="stat"><b>24</b> bodů</div>
+          <div class="stat" style="color: rgba(255,255,255,0.2);">Sezóna 1 · Den 84</div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="card">
+          <div class="card-title">Stav kádru</div>
+          <div class="card-row"><span class="label">Celkem</span><span class="value">18</span></div>
+          <div class="card-row"><span class="label">Fit</span><span class="value" style="color:#2D5F2D">15</span></div>
+          <div class="card-row"><span class="label">Zranění</span><span class="value" style="color:#c44">3</span></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Další zápas</div>
+          <div class="card-row"><span class="label">Soupeř</span><span class="value">TJ Sokol Vacov</span></div>
+          <div class="card-row"><span class="label">Kolo</span><span class="value">12. kolo</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ VARIANTA 3 ═══ -->
+<div class="variant">
+  <div class="variant-label">Varianta 3 — Accent pruh + bílá info karta <span>Tenký barevný pruh, bílý panel s info</span></div>
+  <div class="preview">
+    <div class="sidebar">
+      <div class="icon active">🏠</div>
+      <div class="icon">📱</div>
+      <div class="icon">📰</div>
+      <div class="sep"></div>
+      <div class="icon">👥</div>
+      <div class="icon">🏋</div>
+      <div class="icon">🤝</div>
+      <div class="icon">💰</div>
+      <div class="sep"></div>
+      <div class="icon">⚽</div>
+      <div class="icon">🏆</div>
+      <div class="icon">📊</div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <button class="nav-btn">◀</button>
+        <button class="nav-btn">▶</button>
+        <div class="sep"></div>
+        <span class="title">Domů</span>
+      </div>
+      <div class="v3-accent"></div>
+      <div class="v3-info">
+        <div class="v3-badge2">R</div>
+        <div>
+          <div class="name">FK Rumburaci</div>
+          <div class="sub">Buk · Prachatice</div>
+        </div>
+        <div class="right">
+          <div class="stat"><div class="num">3.</div><div class="lbl">Místo</div></div>
+          <div class="stat"><div class="num">24</div><div class="lbl">Body</div></div>
+          <div class="stat"><div class="num">18</div><div class="lbl">Hráčů</div></div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="card">
+          <div class="card-title">Stav kádru</div>
+          <div class="card-row"><span class="label">Celkem</span><span class="value">18</span></div>
+          <div class="card-row"><span class="label">Fit</span><span class="value" style="color:#2D5F2D">15</span></div>
+          <div class="card-row"><span class="label">Zranění</span><span class="value" style="color:#c44">3</span></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Další zápas</div>
+          <div class="card-row"><span class="label">Soupeř</span><span class="value">TJ Sokol Vacov</span></div>
+          <div class="card-row"><span class="label">Kolo</span><span class="value">12. kolo</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

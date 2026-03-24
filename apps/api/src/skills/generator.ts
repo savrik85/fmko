@@ -38,14 +38,23 @@ export function generateFieldSkills(
   position: "DEF" | "MID" | "FWD",
   villageSize: string,
   age: number,
+  isAi?: boolean,
 ): FieldSkills {
-  const range = SKILL_RANGES_BY_LEVEL[villageSize] ?? SKILL_RANGES_BY_LEVEL.village;
+  const base = SKILL_RANGES_BY_LEVEL[villageSize] ?? SKILL_RANGES_BY_LEVEL.village;
+  // AI teams are weaker: lower averages and caps
+  const penalty = isAi ? rng.int(6, 12) : 0;
+  const range: LeagueLevelRange = {
+    avgMin: Math.max(1, base.avgMin - penalty),
+    avgMax: Math.max(5, base.avgMax - penalty),
+    capMin: Math.max(5, base.capMin - Math.round(penalty * 0.7)),
+    capMax: Math.max(10, base.capMax - Math.round(penalty * 0.7)),
+  };
 
   // Position-specific bonuses
   const bonuses: Record<string, Record<string, number>> = {
-    DEF: { defense: 10, heading: 8, strength: 5, speed: 0, technique: -5, shooting: -8, passing: 0, vision: 3, stamina: 3 },
-    MID: { passing: 10, vision: 8, technique: 5, stamina: 5, defense: 0, heading: -3, shooting: 0, speed: 0, strength: -3 },
-    FWD: { shooting: 10, speed: 8, technique: 5, heading: 3, passing: 0, defense: -8, vision: 0, stamina: 0, strength: 0 },
+    DEF: { defense: 10, heading: 8, strength: 5, speed: 0, technique: -5, shooting: -8, passing: 0, vision: 3, stamina: 3, creativity: -5, setPieces: -5 },
+    MID: { passing: 10, vision: 8, technique: 5, stamina: 5, defense: 0, heading: -3, shooting: 0, speed: 0, strength: -3, creativity: 15, setPieces: 10 },
+    FWD: { shooting: 10, speed: 8, technique: 5, heading: 3, passing: 0, defense: -8, vision: 0, stamina: 0, strength: 0, creativity: 10, setPieces: 5 },
   };
   const b = bonuses[position];
 
@@ -59,6 +68,16 @@ export function generateFieldSkills(
     heading: applyAgeCurve(generateSkillValue(rng, range, b.heading), age),
     defense: applyAgeCurve(generateSkillValue(rng, range, b.defense), age),
     vision: applyAgeCurve(generateSkillValue(rng, range, b.vision ?? 0), age),
+    creativity: applyAgeCurve(generateSkillValue(rng, range, b.creativity ?? 0), age),
+    setPieces: (() => {
+      const base = applyAgeCurve(generateSkillValue(rng, range, b.setPieces ?? 0), age);
+      // 5% chance of set-piece specialist (+30 bonus)
+      if (rng.int(0, 100) < 5) {
+        base.current = Math.min(100, base.current + 30);
+        base.maxPotential = Math.min(100, base.maxPotential + 20);
+      }
+      return base;
+    })(),
     experience: {
       current: Math.min(100, Math.max(0, (age - 16) * rng.int(3, 6))),
       maxPotential: 100,
@@ -75,8 +94,16 @@ export function generateGKSkills(
   rng: Rng,
   villageSize: string,
   age: number,
+  isAi?: boolean,
 ): GoalkeeperSkills {
-  const range = SKILL_RANGES_BY_LEVEL[villageSize] ?? SKILL_RANGES_BY_LEVEL.village;
+  const base = SKILL_RANGES_BY_LEVEL[villageSize] ?? SKILL_RANGES_BY_LEVEL.village;
+  const penalty = isAi ? rng.int(6, 12) : 0;
+  const range: LeagueLevelRange = {
+    avgMin: Math.max(1, base.avgMin - penalty),
+    avgMax: Math.max(5, base.avgMax - penalty),
+    capMin: Math.max(5, base.capMin - Math.round(penalty * 0.7)),
+    capMax: Math.max(10, base.capMax - Math.round(penalty * 0.7)),
+  };
   const gkBonus = 5;
 
   return {

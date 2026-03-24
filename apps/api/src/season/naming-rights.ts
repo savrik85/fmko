@@ -55,29 +55,67 @@ const ARENA_TEMPLATES: Array<{
   { nameFormat: "Na {surname}ově", bonusRange: [3000, 6000] },
 ];
 
-const SURNAMES = [
-  "Novotný", "Kuchař", "Dvořák", "Procházka", "Novák",
-  "Horák", "Sedláček", "Veselý", "Kovář", "Pokorný",
-  "Marek", "Hájek", "Jelínek", "Fiala", "Šimek",
-];
-
-const SURNAME_GENITIVES: Record<string, string> = {
-  "Novotný": "Novotných", "Kuchař": "Kuchařů", "Dvořák": "Dvořáků",
-  "Procházka": "Procházků", "Novák": "Nováků", "Horák": "Horáků",
-  "Sedláček": "Sedláčků", "Veselý": "Veselých", "Kovář": "Kovářů",
-  "Pokorný": "Pokorných", "Marek": "Marků", "Hájek": "Hájků",
-  "Jelínek": "Jelínků", "Fiala": "Fialů", "Šimek": "Šimků",
-};
+// Genitive suffix fallback
+function makeGenitive(surname: string): string {
+  if (surname.endsWith("ý")) return surname.slice(0, -1) + "ých";
+  if (surname.endsWith("ek")) return surname.slice(0, -2) + "ků";
+  if (surname.endsWith("ář")) return surname + "ů";
+  return surname + "ů";
+}
 
 /**
- * Generate naming rights offers for a new team.
+ * Generate naming rights offers using district-specific sponsors from DB.
+ * Falls back to template-based generation if no district sponsors found.
  */
-export function generateNamingOffers(
+export async function generateNamingOffers(
   rng: Rng,
   villageName: string,
   villageCategory: string,
-): NamingRightsOffer[] {
+  db?: D1Database,
+  district?: string,
+): Promise<NamingRightsOffer[]> {
   const count = villageCategory === "vesnice" ? 2 : 3;
+
+  // Try loading real sponsors from DB
+  let realSponsors: Array<{ name: string; type: string; monthly_min: number; monthly_max: number }> = [];
+  let realSurnames: string[] = [];
+
+  if (db && district) {
+    const sponsorRows = await db.prepare(
+      "SELECT name, type, monthly_min, monthly_max FROM district_sponsors WHERE district = ? ORDER BY RANDOM() LIMIT ?"
+    ).bind(district, count + 2).all().catch(() => ({ results: [] }));
+    realSponsors = sponsorRows.results as any[];
+
+    const surnameRows = await db.prepare(
+      "SELECT surname FROM district_surnames WHERE district = ? ORDER BY frequency DESC LIMIT 20"
+    ).bind(district).all().catch(() => ({ results: [] }));
+    realSurnames = surnameRows.results.map((r) => r.surname as string);
+  }
+
+  const catMod = villageCategory === "mesto" ? 1.5
+    : villageCategory === "mestys" ? 1.2
+    : villageCategory === "obec" ? 1.0
+    : 0.7;
+
+  // Use real sponsors if available
+  if (realSponsors.length >= count) {
+    return realSponsors.slice(0, count).map((s) => {
+      const seasonBonus = Math.round(rng.int(s.monthly_min * 6, s.monthly_max * 8) * catMod);
+      return {
+        sponsorName: s.name,
+        sponsorType: s.type,
+        teamNameTemplate: `FK ${s.name} ${villageName}`,
+        seasonBonus,
+      };
+    });
+  }
+
+  // Fallback to template-based generation
+  const surnames = realSurnames.length > 0 ? realSurnames : [
+    "Novotný", "Kuchař", "Dvořák", "Procházka", "Novák",
+    "Horák", "Sedláček", "Veselý", "Kovář", "Pokorný",
+  ];
+
   const templates = [...SPONSOR_TEMPLATES];
   rng.shuffle(templates);
 
@@ -88,18 +126,12 @@ export function generateNamingOffers(
     const t = templates[i];
     let surname: string;
     do {
-      surname = rng.pick(SURNAMES);
-    } while (usedSurnames.has(surname));
+      surname = rng.pick(surnames);
+    } while (usedSurnames.has(surname) && usedSurnames.size < surnames.length);
     usedSurnames.add(surname);
 
-    const gen = SURNAME_GENITIVES[surname] ?? surname + "ů";
+    const gen = makeGenitive(surname);
     const bonus = rng.int(t.bonusRange[0], t.bonusRange[1]);
-
-    // Category modifier — bigger village = bigger sponsors
-    const catMod = villageCategory === "mesto" ? 1.5
-      : villageCategory === "mestys" ? 1.2
-      : villageCategory === "obec" ? 1.0
-      : 0.7;
 
     offers.push({
       sponsorName: t.nameTemplate.replace("{surname}", surname).replace("{surname_gen}", gen),
@@ -124,13 +156,19 @@ export function generateArenaOffers(
   rng: Rng,
   villageName: string,
   villageCategory: string,
+  surnames?: string[],
 ): ArenaRightsOffer[] {
   const count = rng.int(1, 2);
   const templates = [...ARENA_TEMPLATES];
   rng.shuffle(templates);
 
+  const pool = surnames && surnames.length > 0 ? surnames : [
+    "Novotný", "Kuchař", "Dvořák", "Procházka", "Novák",
+    "Horák", "Sedláček", "Veselý", "Kovář", "Pokorný",
+  ];
+
   return templates.slice(0, count).map((t) => {
-    const surname = rng.pick(SURNAMES);
+    const surname = rng.pick(pool);
     const catMod = villageCategory === "mesto" ? 1.5 : villageCategory === "obec" ? 1.0 : 0.7;
     const bonus = rng.int(t.bonusRange[0], t.bonusRange[1]);
 

@@ -17,9 +17,13 @@ import { generateDescription } from "../generators/description-generator";
 import { generateFieldSkills, generateGKSkills, generateHiddenTalent, calculateOverallRating } from "../skills/generator";
 import { generateSeasonCalendar } from "../season/calendar";
 import { pickOccupation } from "../generators/occupations";
-import { totalRounds } from "../league/schedule";
+import { totalRounds, generateSchedule } from "../league/schedule";
 import { generateLeague } from "../league/league-generator";
 import { applyManagerModifiers } from "../generators/manager-effects";
+import { generateManagerAttributes } from "../generators/manager-generator";
+import { initTeamConversations } from "./messaging";
+import { generateResidence } from "../generators/residence";
+import { getDistrictDataFromDB } from "../data/districts";
 import type { ManagerBackstory } from "@okresni-masina/shared";
 
 const teamsRouter = new Hono<{ Bindings: Bindings }>();
@@ -107,6 +111,14 @@ teamsRouter.post("/", async (c) => {
     jerseyPattern?: string;
     badgePattern?: string;
     stadiumName?: string;
+    sponsor?: {
+      name: string;
+      type: string;
+      seasonBonus: number;
+      seasons: number;
+      terminationFee: number;
+      isNamingRights: boolean;
+    };
   }>();
 
   if (!body.villageId || !body.name) {
@@ -146,6 +158,20 @@ teamsRouter.post("/", async (c) => {
     body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFFFFF", budget,
     body.jerseyPattern ?? "solid", body.badgePattern ?? "shield", body.stadiumName ?? null).run();
 
+  // Create sponsor contract if selected during onboarding (naming rights = main sponsor)
+  if (body.sponsor) {
+    const monthlyAmount = Math.round(body.sponsor.seasonBonus / 10); // ~10 months per season
+    const winBonus = Math.round(monthlyAmount * 0.1);
+    await c.env.DB.prepare(
+      `INSERT INTO sponsor_contracts (id, team_id, sponsor_name, sponsor_type, monthly_amount, win_bonus,
+        seasons_total, seasons_remaining, early_termination_fee, is_naming_rights, category)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(uuid(), teamId, body.sponsor.name, body.sponsor.type, monthlyAmount, winBonus,
+      body.sponsor.seasons, body.sponsor.seasons, body.sponsor.terminationFee,
+      body.sponsor.isNamingRights ? 1 : 0, "main",
+    ).run().catch(() => {});
+  }
+
   // Generate squad
   const rng = createRng(Date.now());
   const villageInfo = {
@@ -157,14 +183,10 @@ teamsRouter.post("/", async (c) => {
     population: village.population as number,
   };
 
+  // District-specific surnames from DB (weighted by local frequency)
+  const districtData = await getDistrictDataFromDB(c.env.DB, village.district as string);
   const surnameData = {
-    surnames: {
-      "Novák": 0.045, "Svoboda": 0.038, "Novotný": 0.036, "Dvořák": 0.035,
-      "Černý": 0.032, "Procházka": 0.030, "Kučera": 0.028, "Veselý": 0.026,
-      "Horák": 0.024, "Němec": 0.023, "Pokorný": 0.022, "Marek": 0.021,
-      "Hájek": 0.019, "Jelínek": 0.018, "Král": 0.017, "Fiala": 0.015,
-      "Sedláček": 0.015, "Kolář": 0.013, "Bartoš": 0.012, "Kovář": 0.011,
-    },
+    surnames: districtData.surnames,
     female_forms: {} as Record<string, string>,
   };
 
@@ -183,6 +205,8 @@ teamsRouter.post("/", async (c) => {
   const squad = generateSquad(rng, villageInfo, surnameData, firstnameData);
   const usedNicknames = new Set<string>();
   const playerIds: string[] = [];
+  const playerConvData: Array<{ id: string; firstName: string; lastName: string; nickname?: string; avatar: string }> = [];
+  const playerResidences: string[] = []; // residence name per player index
   const villageSize = village.size as string;
 
   // Apply manager backstory effects to squad
@@ -201,10 +225,10 @@ teamsRouter.post("/", async (c) => {
     const gkSkills = isGK ? generateGKSkills(rng, villageSize, player.age) : null;
     const hiddenTalent = generateHiddenTalent(rng, villageSize);
 
-    // Skills JSON — current values for display (backward compatible)
+    // Skills JSON — current values for display (backward compatible + new skills)
     const skillsCurrent = isGK
-      ? { speed: 0, technique: 0, shooting: 0, passing: gkSkills!.distribution.current, heading: 0, defense: 0, goalkeeping: gkSkills!.reflexes.current }
-      : { speed: fieldSkills!.speed.current, technique: fieldSkills!.technique.current, shooting: fieldSkills!.shooting.current, passing: fieldSkills!.passing.current, heading: fieldSkills!.heading.current, defense: fieldSkills!.defense.current, goalkeeping: 0 };
+      ? { speed: 0, technique: 0, shooting: 0, passing: gkSkills!.distribution.current, heading: 0, defense: 0, goalkeeping: gkSkills!.reflexes.current, creativity: 0, setPieces: 0 }
+      : { speed: fieldSkills!.speed.current, technique: fieldSkills!.technique.current, shooting: fieldSkills!.shooting.current, passing: fieldSkills!.passing.current, heading: fieldSkills!.heading.current, defense: fieldSkills!.defense.current, goalkeeping: 0, creativity: fieldSkills!.creativity.current, setPieces: fieldSkills!.setPieces.current };
 
     // Height & weight based on position + bodyType
     const baseHeight = player.position === "GK" ? 185 : player.position === "DEF" ? 180 : player.position === "FWD" ? 178 : 176;
@@ -218,6 +242,8 @@ teamsRouter.post("/", async (c) => {
       injuryProneness: rng.int(10, 80),
       height,
       weight,
+      preferredFoot: player.preferredFoot,
+      preferredSide: player.preferredSide,
     };
     const playerIndex = squad.indexOf(player);
     const pMod = managerMods?.personalityMods[playerIndex];
@@ -226,6 +252,11 @@ teamsRouter.post("/", async (c) => {
       patriotism: Math.min(100, rng.int(20, 90) + (pMod?.patriotism ?? 0)),
       alcohol: rng.int(5, 85),
       temper: rng.int(10, 80),
+      leadership: player.leadership,
+      workRate: player.workRate,
+      aggression: player.aggression,
+      consistency: player.consistency,
+      clutch: player.clutch,
     };
     // Pick occupation based on village size
     const occ = pickOccupation(rng, villageSize, player.age);
@@ -244,13 +275,25 @@ teamsRouter.post("/", async (c) => {
       patriotism: personality.patriotism,
     });
 
+    const res = generateResidence(rng, village.name as string, village.size as string, village.district as string);
+    playerResidences.push(res.residence);
+
     await c.env.DB.prepare(
-      "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, residence, commute_km) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(pid, teamId, player.firstName, player.lastName, nickname, player.age, player.position, rating,
       JSON.stringify(skillsCurrent), JSON.stringify(physical), JSON.stringify(personality),
       JSON.stringify(lifeContext), JSON.stringify(generatePlayerFace(player)), description,
       JSON.stringify(skillsMax), hiddenTalent, isGK ? (gkSkills!.experience.current) : (fieldSkills!.experience.current),
+      res.residence, res.commuteKm,
     ).run();
+
+    playerConvData.push({
+      id: pid,
+      firstName: player.firstName,
+      lastName: player.lastName,
+      nickname: nickname || undefined,
+      avatar: JSON.stringify(generatePlayerFace(player)),
+    });
   }
 
   // Relationships
@@ -258,6 +301,20 @@ teamsRouter.post("/", async (c) => {
   // Add manager backstory extra relationships
   if (managerMods?.extraRelationships) {
     rels.push(...managerMods.extraRelationships);
+  }
+  // Add neighbors — players who live in the same non-home village
+  const residenceGroups = new Map<string, number[]>();
+  playerResidences.forEach((res, i) => {
+    if (res !== (village.name as string)) {
+      const group = residenceGroups.get(res) ?? [];
+      group.push(i);
+      residenceGroups.set(res, group);
+    }
+  });
+  for (const [, group] of residenceGroups) {
+    if (group.length >= 2) {
+      rels.push({ playerAIndex: group[0], playerBIndex: group[1], type: "neighbors", strength: rng.int(35, 60) });
+    }
   }
   for (const rel of rels) {
     await c.env.DB.prepare(
@@ -267,28 +324,50 @@ teamsRouter.post("/", async (c) => {
 
   // Create manager profile (graceful — table may not exist before migration 0006)
   if (body.managerName && body.managerBackstory) {
+    const mgrAttrs = generateManagerAttributes(body.managerBackstory, rng);
     await c.env.DB.prepare(
-      "INSERT INTO managers (id, user_id, team_id, name, backstory, avatar) VALUES (?, ?, ?, ?, ?, ?)"
+      "INSERT INTO managers (id, user_id, team_id, name, backstory, avatar, age, coaching, motivation, tactics, youth_development, discipline, reputation, bio, birthplace) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(uuid(), userId, teamId, body.managerName, body.managerBackstory,
-      JSON.stringify(body.managerAvatar ?? {})).run().catch(() => {});
+      JSON.stringify(body.managerAvatar ?? {}),
+      mgrAttrs.age, mgrAttrs.coaching, mgrAttrs.motivation, mgrAttrs.tactics,
+      mgrAttrs.youthDevelopment, mgrAttrs.discipline, mgrAttrs.reputation, mgrAttrs.bio,
+      mgrAttrs.birthplace,
+    ).run().catch(() => {});
   }
 
   // ── League: join existing or create new ──
   const district = village.district as string;
 
-  // Check if a league already exists in this district
-  const existingLeague = await c.env.DB.prepare(
-    "SELECT t.league_id FROM teams t JOIN villages v ON t.village_id = v.id WHERE v.district = ? AND t.league_id IS NOT NULL LIMIT 1"
-  ).bind(district).first<{ league_id: string }>();
+  // Get current active season (or create season 1)
+  let season = await c.env.DB.prepare(
+    "SELECT id, number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+  ).first<{ id: string; number: number }>();
+  if (!season) {
+    const seasonId = "season-1";
+    await c.env.DB.prepare(
+      "INSERT OR IGNORE INTO seasons (id, number, status) VALUES (?, 1, 'active')"
+    ).bind(seasonId).run();
+    season = { id: seasonId, number: 1 };
+  }
 
-  if (existingLeague?.league_id) {
+  // Check if a league already exists in this district for current season
+  const existingLeague = await c.env.DB.prepare(
+    "SELECT id, name FROM leagues WHERE district = ? AND season_id = ? AND status = 'active' LIMIT 1"
+  ).bind(district, season.id).first<{ id: string; name: string }>();
+
+  if (existingLeague) {
     // ── JOIN existing league: replace a random AI team ──
     const aiTeam = await c.env.DB.prepare(
       "SELECT id FROM teams WHERE league_id = ? AND user_id = 'ai' ORDER BY RANDOM() LIMIT 1"
-    ).bind(existingLeague.league_id).first<{ id: string }>();
+    ).bind(existingLeague.id).first<{ id: string }>();
 
     if (aiTeam) {
-      // Delete AI team's players and relationships
+      // Replace AI team in existing matches with the new player team
+      await c.env.DB.prepare("UPDATE matches SET home_team_id = ? WHERE home_team_id = ? AND league_id = ?")
+        .bind(teamId, aiTeam.id, existingLeague.id).run();
+      await c.env.DB.prepare("UPDATE matches SET away_team_id = ? WHERE away_team_id = ? AND league_id = ?")
+        .bind(teamId, aiTeam.id, existingLeague.id).run();
+
       const aiPlayers = await c.env.DB.prepare("SELECT id FROM players WHERE team_id = ?").bind(aiTeam.id).all();
       for (const ap of aiPlayers.results) {
         await c.env.DB.prepare("DELETE FROM relationships WHERE player_a_id = ? OR player_b_id = ?").bind(ap.id, ap.id).run();
@@ -297,21 +376,67 @@ teamsRouter.post("/", async (c) => {
       await c.env.DB.prepare("DELETE FROM teams WHERE id = ?").bind(aiTeam.id).run();
     }
 
-    // Set league on player team
-    await c.env.DB.prepare("UPDATE teams SET league_id = ? WHERE id = ?").bind(existingLeague.league_id, teamId).run();
+    await c.env.DB.prepare("UPDATE teams SET league_id = ? WHERE id = ?").bind(existingLeague.id, teamId).run();
+
+    // ── Ensure schedule exists (may be missing if first team creation failed) ──
+    const matchCount = await c.env.DB.prepare(
+      "SELECT COUNT(*) as cnt FROM matches WHERE league_id = ?"
+    ).bind(existingLeague.id).first<{ cnt: number }>().catch(() => ({ cnt: 0 }));
+
+    if (!matchCount || matchCount.cnt === 0) {
+      const leagueTeamIds = await c.env.DB.prepare(
+        "SELECT id FROM teams WHERE league_id = ? ORDER BY name"
+      ).bind(existingLeague.id).all().catch(() => ({ results: [] }));
+
+      const allTeamIds = leagueTeamIds.results.map((r) => r.id as string);
+
+      if (allTeamIds.length >= 2) {
+        const schedule = generateSchedule(rng, allTeamIds.length);
+        const calendar = generateSeasonCalendar(existingLeague.id, season.number, new Date());
+
+        for (const entry of calendar.entries) {
+          await c.env.DB.prepare(
+            "INSERT OR IGNORE INTO season_calendar (id, league_id, season_number, game_week, match_day, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
+          ).bind(entry.id, existingLeague.id, season.number, entry.gameWeek, entry.matchDay, entry.scheduledAt).run().catch(() => {});
+        }
+
+        const calendarByWeek = new Map<number, string>();
+        for (const entry of calendar.entries) {
+          if (!calendarByWeek.has(entry.gameWeek)) {
+            calendarByWeek.set(entry.gameWeek, entry.id);
+          }
+        }
+
+        for (const match of schedule) {
+          if (match.homeTeamIndex >= allTeamIds.length || match.awayTeamIndex >= allTeamIds.length) continue;
+          const calId = calendarByWeek.get(match.round) ?? null;
+          await c.env.DB.prepare(
+            "INSERT INTO matches (id, league_id, calendar_id, round, home_team_id, away_team_id, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
+          ).bind(uuid(), existingLeague.id, calId, match.round, allTeamIds[match.homeTeamIndex], allTeamIds[match.awayTeamIndex]).run().catch(() => {});
+        }
+      }
+    }
+
+    // Init phone conversations
+    await initTeamConversations(c.env.DB, teamId, playerConvData).catch(() => {});
 
     return c.json({
       id: teamId,
       name: body.name,
       village: village.name,
       playersCount: squad.length,
-      leagueId: existingLeague.league_id,
-      leagueName: `Okresní přebor ${district}`,
+      leagueId: existingLeague.id,
+      leagueName: existingLeague.name,
     }, 201);
   }
 
-  // ── CREATE new league ──
+  // ── CREATE new league for this district + season ──
   const leagueId = uuid();
+  const leagueName = `Okresní přebor ${district}`;
+
+  await c.env.DB.prepare(
+    "INSERT INTO leagues (id, season_id, district, name, level, status) VALUES (?, ?, ?, ?, 'okresni_prebor', 'active')"
+  ).bind(leagueId, season.id, district, leagueName).run();
 
   // Get all villages in same district for AI teams
   const districtVillages = await c.env.DB.prepare(
@@ -371,13 +496,13 @@ teamsRouter.post("/", async (c) => {
         aiPlayerIds.push(apId);
         const apNickname = (ap as GeneratedPlayer & { nickname?: string | null }).nickname ?? "";
         const isGK = ap.position === "GK";
-        const apFieldSkills = !isGK ? generateFieldSkills(rng, ap.position as "DEF" | "MID" | "FWD", villageSize, ap.age) : null;
-        const apGkSkills = isGK ? generateGKSkills(rng, villageSize, ap.age) : null;
+        const apFieldSkills = !isGK ? generateFieldSkills(rng, ap.position as "DEF" | "MID" | "FWD", villageSize, ap.age, true) : null;
+        const apGkSkills = isGK ? generateGKSkills(rng, villageSize, ap.age, true) : null;
         const apHiddenTalent = generateHiddenTalent(rng, villageSize);
 
         const apSkills = isGK
-          ? { speed: 0, technique: 0, shooting: 0, passing: apGkSkills!.distribution.current, heading: 0, defense: 0, goalkeeping: apGkSkills!.reflexes.current }
-          : { speed: apFieldSkills!.speed.current, technique: apFieldSkills!.technique.current, shooting: apFieldSkills!.shooting.current, passing: apFieldSkills!.passing.current, heading: apFieldSkills!.heading.current, defense: apFieldSkills!.defense.current, goalkeeping: 0 };
+          ? { speed: 0, technique: 0, shooting: 0, passing: apGkSkills!.distribution.current, heading: 0, defense: 0, goalkeeping: apGkSkills!.reflexes.current, creativity: 0, setPieces: 0 }
+          : { speed: apFieldSkills!.speed.current, technique: apFieldSkills!.technique.current, shooting: apFieldSkills!.shooting.current, passing: apFieldSkills!.passing.current, heading: apFieldSkills!.heading.current, defense: apFieldSkills!.defense.current, goalkeeping: 0, creativity: apFieldSkills!.creativity.current, setPieces: apFieldSkills!.setPieces.current };
 
         const apHeight = (ap.position === "GK" ? 185 : ap.position === "DEF" ? 180 : ap.position === "FWD" ? 178 : 176) + rng.int(-8, 8);
         const apBaseWeight = ap.bodyType === "obese" ? 100 : ap.bodyType === "stocky" ? 88 : ap.bodyType === "thin" ? 68 : ap.bodyType === "athletic" ? 78 : 80;
@@ -387,8 +512,13 @@ teamsRouter.post("/", async (c) => {
           stamina: isGK ? apGkSkills!.strength.current : apFieldSkills!.stamina.current,
           strength: isGK ? apGkSkills!.strength.current : apFieldSkills!.strength.current,
           injuryProneness: rng.int(10, 80), height: apHeight, weight: apWeight,
+          preferredFoot: ap.preferredFoot, preferredSide: ap.preferredSide,
         };
-        const apPersonality = { discipline: rng.int(10, 90), patriotism: rng.int(20, 90), alcohol: rng.int(5, 85), temper: rng.int(10, 80) };
+        const apPersonality = {
+          discipline: rng.int(10, 90), patriotism: rng.int(20, 90), alcohol: rng.int(5, 85), temper: rng.int(10, 80),
+          leadership: ap.leadership, workRate: ap.workRate, aggression: ap.aggression,
+          consistency: ap.consistency, clutch: ap.clutch,
+        };
         const apOcc = pickOccupation(rng, villageSize, ap.age);
         const apLifeContext = { occupation: apOcc.name, condition: 100, morale: 50 + rng.int(-15, 15) };
         const apRating = calculateOverallRating(ap.position, isGK ? apGkSkills! : apFieldSkills!, apHiddenTalent);
@@ -422,6 +552,47 @@ teamsRouter.post("/", async (c) => {
       }
     }
   }
+
+  // ── Generate season schedule (all matches for the league) ──
+  // Generate schedule from all teams in the league
+
+  // Get AI team IDs from DB (they were just inserted)
+  const leagueTeamIds = await c.env.DB.prepare(
+    "SELECT id FROM teams WHERE league_id = ? ORDER BY name"
+  ).bind(leagueId).all().catch(() => ({ results: [] }));
+
+  const teamIds = leagueTeamIds.results.map((r) => r.id as string);
+
+  if (teamIds.length >= 2) {
+    const schedule = generateSchedule(rng, teamIds.length);
+    const calendar = generateSeasonCalendar(leagueId, season.number, new Date());
+
+    // Insert calendar entries
+    for (const entry of calendar.entries) {
+      await c.env.DB.prepare(
+        "INSERT OR IGNORE INTO season_calendar (id, league_id, season_number, game_week, match_day, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
+      ).bind(entry.id, leagueId, season.number, entry.gameWeek, entry.matchDay, entry.scheduledAt).run().catch(() => {});
+    }
+
+    // Insert matches — map schedule rounds to calendar entries
+    const calendarByWeek = new Map<number, string>();
+    for (const entry of calendar.entries) {
+      if (!calendarByWeek.has(entry.gameWeek)) {
+        calendarByWeek.set(entry.gameWeek, entry.id);
+      }
+    }
+
+    for (const match of schedule) {
+      if (match.homeTeamIndex >= teamIds.length || match.awayTeamIndex >= teamIds.length) continue;
+      const calId = calendarByWeek.get(match.round) ?? null;
+      await c.env.DB.prepare(
+        "INSERT INTO matches (id, league_id, calendar_id, round, home_team_id, away_team_id, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
+      ).bind(uuid(), leagueId, calId, match.round, teamIds[match.homeTeamIndex], teamIds[match.awayTeamIndex]).run().catch(() => {});
+    }
+  }
+
+  // Init phone conversations
+  await initTeamConversations(c.env.DB, teamId, playerConvData).catch(() => {});
 
   return c.json({
     id: teamId,
@@ -474,6 +645,73 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
   });
 });
 
+// GET /api/teams/:id/manager — get manager profile for team
+teamsRouter.get("/:id/manager", async (c) => {
+  const tId = c.req.param("id");
+
+  // Try DB first
+  const row = await c.env.DB.prepare(
+    "SELECT * FROM managers WHERE team_id = ? LIMIT 1"
+  ).bind(tId).first<Record<string, unknown>>().catch(() => null);
+
+  if (row) {
+    return c.json({
+      id: row.id,
+      name: row.name,
+      backstory: row.backstory,
+      avatar: JSON.parse(row.avatar as string),
+      age: row.age,
+      coaching: row.coaching ?? 40,
+      motivation: row.motivation ?? 40,
+      tactics: row.tactics ?? 40,
+      youthDevelopment: row.youth_development ?? 40,
+      discipline: row.discipline ?? 40,
+      reputation: row.reputation ?? 30,
+      bio: row.bio,
+      birthplace: row.birthplace,
+    });
+  }
+
+  // For AI teams, generate deterministic manager from team id
+  const team = await c.env.DB.prepare("SELECT user_id FROM teams WHERE id = ?")
+    .bind(tId).first<{ user_id: string }>();
+  if (!team || team.user_id !== "ai") return c.json(null);
+
+  // Generate deterministic AI manager
+  const { generateAiManager } = await import("../generators/manager-generator");
+  const { createRng } = await import("../generators/rng");
+  // Hash team ID to numeric seed
+  let seed = 0;
+  for (let i = 0; i < tId.length; i++) seed = ((seed << 5) - seed + tId.charCodeAt(i)) | 0;
+  const rng = createRng(Math.abs(seed));
+  const mgr = generateAiManager(rng);
+
+  // Persist for future requests
+  const mgrId = uuid();
+  await c.env.DB.prepare(
+    "INSERT INTO managers (id, user_id, team_id, name, backstory, avatar, age, coaching, motivation, tactics, youth_development, discipline, reputation, bio, birthplace) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(mgrId, "ai", tId, mgr.name, mgr.backstory, JSON.stringify(mgr.avatar),
+    mgr.age, mgr.coaching, mgr.motivation, mgr.tactics,
+    mgr.youthDevelopment, mgr.discipline, mgr.reputation, mgr.bio, mgr.birthplace,
+  ).run().catch(() => {});
+
+  return c.json({
+    id: mgrId,
+    name: mgr.name,
+    backstory: mgr.backstory,
+    avatar: mgr.avatar,
+    age: mgr.age,
+    coaching: mgr.coaching,
+    motivation: mgr.motivation,
+    tactics: mgr.tactics,
+    youthDevelopment: mgr.youthDevelopment,
+    discipline: mgr.discipline,
+    reputation: mgr.reputation,
+    bio: mgr.bio,
+    birthplace: mgr.birthplace,
+  });
+});
+
 // GET /api/teams/:id/league-teams — all teams in same league
 teamsRouter.get("/:id/league-teams", async (c) => {
   const team = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?")
@@ -481,7 +719,7 @@ teamsRouter.get("/:id/league-teams", async (c) => {
   if (!team?.league_id) return c.json([]);
 
   const result = await c.env.DB.prepare(
-    "SELECT t.id, t.name, t.primary_color, t.secondary_color, v.name as village_name, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.league_id = ? ORDER BY t.name"
+    "SELECT t.id, t.name, t.primary_color, t.secondary_color, v.name as village_name, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.league_id = ? AND t.user_id != 'ai' ORDER BY t.name"
   ).bind(team.league_id).all();
   return c.json(result.results);
 });
@@ -493,6 +731,84 @@ teamsRouter.get("/:id/relationships", async (c) => {
     FROM relationships r JOIN players pa ON r.player_a_id = pa.id JOIN players pb ON r.player_b_id = pb.id WHERE pa.team_id = ?`
   ).bind(c.req.param("id")).all();
   return c.json(result.results);
+});
+
+// GET /api/teams/:id/stats — statistiky kádru pro aktuální sezónu
+teamsRouter.get("/:id/stats", async (c) => {
+  const teamId = c.req.param("id");
+
+  const season = await c.env.DB.prepare(
+    "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+  ).first<{ id: string }>().catch(() => null);
+
+  if (!season) return c.json({ stats: [], topScorers: [], topAssists: [] });
+
+  const result = await c.env.DB.prepare(
+    `SELECT ps.*, p.first_name, p.last_name, p.nickname, p.position, p.avatar
+     FROM player_stats ps
+     JOIN players p ON ps.player_id = p.id
+     WHERE ps.team_id = ? AND ps.season_id = ?
+     ORDER BY ps.goals DESC, ps.assists DESC`
+  ).bind(teamId, season.id).all().catch(() => ({ results: [] }));
+
+  const stats = result.results.map((row) => ({
+    playerId: row.player_id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    nickname: row.nickname,
+    position: row.position,
+    avatar: row.avatar ? JSON.parse(row.avatar as string) : null,
+    appearances: row.appearances,
+    goals: row.goals,
+    assists: row.assists,
+    yellowCards: row.yellow_cards,
+    redCards: row.red_cards,
+    minutesPlayed: row.minutes_played,
+    avgRating: row.avg_rating,
+    cleanSheets: row.clean_sheets,
+    manOfMatch: row.man_of_match,
+  }));
+
+  return c.json({
+    stats,
+    topScorers: [...stats].sort((a, b) => (b.goals as number) - (a.goals as number)).slice(0, 5),
+    topAssists: [...stats].sort((a, b) => (b.assists as number) - (a.assists as number)).slice(0, 5),
+  });
+});
+
+// GET /api/teams/:id/players/:playerId/career-stats — kariérní statistiky hráče
+teamsRouter.get("/:id/players/:playerId/career-stats", async (c) => {
+  const playerId = c.req.param("playerId");
+
+  const result = await c.env.DB.prepare(
+    `SELECT ps.*, s.number as season_number
+     FROM player_stats ps
+     JOIN seasons s ON ps.season_id = s.id
+     WHERE ps.player_id = ?
+     ORDER BY s.number`
+  ).bind(playerId).all().catch(() => ({ results: [] }));
+
+  const seasons = result.results.map((row) => ({
+    season: row.season_number,
+    appearances: row.appearances,
+    goals: row.goals,
+    assists: row.assists,
+    yellowCards: row.yellow_cards,
+    redCards: row.red_cards,
+    avgRating: row.avg_rating,
+    cleanSheets: row.clean_sheets,
+  }));
+
+  // Career totals
+  const totals = {
+    appearances: seasons.reduce((s, r) => s + (r.appearances as number), 0),
+    goals: seasons.reduce((s, r) => s + (r.goals as number), 0),
+    assists: seasons.reduce((s, r) => s + (r.assists as number), 0),
+    yellowCards: seasons.reduce((s, r) => s + (r.yellowCards as number), 0),
+    redCards: seasons.reduce((s, r) => s + (r.redCards as number), 0),
+  };
+
+  return c.json({ seasons, totals });
 });
 
 export { teamsRouter };
