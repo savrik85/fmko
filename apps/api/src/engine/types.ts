@@ -56,6 +56,9 @@ export interface MatchConfig {
   away: TeamSetup;
   weather: Weather;
   isHomeAdvantage: boolean;
+  pitchCondition?: number; // 0-100, affects injury probability
+  stadiumName?: string;
+  attendance?: number;
 }
 
 export interface MatchMinuteState {

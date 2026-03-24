@@ -85,22 +85,49 @@ const TEMPLATES: CommentaryTemplate[] = [
   { event: 'substitution', template: '{player} běží na hřiště. Rozcvičoval se celý poločas u stánku.', tags: ['funny'] },
   { event: 'substitution', template: 'Na hřiště přichází {player}. Šatna voněla sprchou, ale on ne.', tags: ['funny'] },
 
-  // === SPECIÁLNÍ UDÁLOSTI (15) ===
+  // === SPECIÁLNÍ UDÁLOSTI ===
   { event: 'special', template: '{player} se drží za kolena a nemůže dál. Kondice na nule.', tags: ['exhausted'] },
   { event: 'special', template: "{player} se hádá s rozhodčím. 'Máte to doma trénovat, pane Malý!'", tags: ['argument'] },
   { event: 'special', template: '{player} vypadá, že včerejší hospoda se podepsala. Běhá jak po Novém roce.', tags: ['hangover'] },
   { event: 'special', template: "Divák u lajny: 'To bych dal i já, a to mám padesát!'", tags: ['crowd'] },
   { event: 'special', template: "Od plotu se ozývá: 'Rozhodčí, na oči!'", tags: ['crowd'] },
+  { event: 'special', template: "Sousedka z okna volá: 'Tak co, vedeme?'", tags: ['crowd'] },
+  { event: 'special', template: "Děda u plotu: 'Za mých časů se hrálo líp!'", tags: ['crowd'] },
+  { event: 'special', template: "U stánku s párky se tvoří fronta. Zápas nikoho nezajímá.", tags: ['crowd'] },
   { event: 'special', template: '{player} přiběhl pozdě. Prý mu nejel autobus. Bydlí přes ulici.', tags: ['late', 'funny'] },
   { event: 'special', template: '{player} předvedl zákrok sezóny! Odkud se to v něm vzalo?', tags: ['gk_hero'] },
   { event: 'special', template: 'Na hřiště vběhl pes. Má lepší kontrolu míče než polovina hráčů.', tags: ['dog', 'funny'] },
+  { event: 'special', template: '{player} volá na lavičku, jestli mu někdo podá vodu. Správce hřiště nese pivo.', tags: ['funny'] },
+  { event: 'special', template: '{player} si upravuje chrániče. Nebo to byl telefon?', tags: ['funny'] },
+  { event: 'special', template: 'Rozhodčí se dívá na hodinky. Asi pospíchá na autobus.', tags: ['funny'] },
   { event: 'special', template: 'Poločas! U stánku je guláš za padesátku a pivo za třicet.', tags: ['half_time'] },
   { event: 'special', template: 'Trenér si při kraji hřiště zapálil cigaretu. Asi ho to stresuje.', tags: ['half_time', 'funny'] },
   { event: 'special', template: 'Začíná druhá půle. Někteří hráči se vracejí od stánku.', tags: ['half_time'] },
-  { event: 'special', template: '{player} volá na lavičku, jestli mu někdo podá vodu. Správce hřiště nese pivo.', tags: ['funny'] },
   { event: 'special', template: 'Konec zápasu! Obě mužstva míří do hospody na rozbor.', tags: ['full_time'] },
   { event: 'special', template: 'Píská se konec! Rozhodčí utíká k autu — pro jistotu.', tags: ['full_time', 'funny'] },
   { event: 'special', template: 'Padla tma. Reflektory na tomhle hřišti nejsou, takže se dohrávalo poslepu.', tags: ['atmosphere'] },
+
+  // === POSSESSION — zobrazují se často, potřeba hodně variant ===
+  { event: 'special', template: '{team} kombinují přes střed hřiště.', tags: ['possession'] },
+  { event: 'special', template: '{team} kontrolují tempo hry.', tags: ['possession'] },
+  { event: 'special', template: 'Tvrdý pressing {team}. Soupeř se nemůže dostat z vlastní půlky.', tags: ['possession'] },
+  { event: 'special', template: '{player} rozehrává z hloubky pole.', tags: ['possession'] },
+  { event: 'special', template: '{team} si nahrávají na polovině soupeře.', tags: ['possession'] },
+  { event: 'special', template: 'Soupeř stahuje obranu, {team} hledají prostor.', tags: ['possession'] },
+  { event: 'special', template: 'Dlouhý míč od {player}, {team} zrychlují.', tags: ['possession'] },
+  { event: 'special', template: 'Hra se přesouvá na polovinu soupeře.', tags: ['possession'] },
+  { event: 'special', template: '{team} mají míč. Zatím nic nebezpečného.', tags: ['possession'] },
+  { event: 'special', template: '{player} vede míč po křídle. Hledá přihrávku.', tags: ['possession'] },
+  { event: 'special', template: '{team} pomalu budují útok. Trpělivá hra.', tags: ['possession'] },
+  { event: 'special', template: '{player} nahrává do středu — míč se vrací zpět do obrany.', tags: ['possession'] },
+  { event: 'special', template: 'Rozehrávka od brankáře. {team} začínají znovu.', tags: ['possession'] },
+  { event: 'special', template: '{team} tlačí dopředu. Obrana soupeře má plné ruce práce.', tags: ['possession'] },
+  { event: 'special', template: '{player} se snaží projít přes dva hráče. Neúspěšně.', tags: ['possession'] },
+  { event: 'special', template: 'Krátká nahrávka {player} na spoluhráče. Tempo se zrychluje.', tags: ['possession'] },
+  { event: 'special', template: '{team} drží míč. Soupeř čeká na chybu.', tags: ['possession'] },
+  { event: 'special', template: 'Centr od {player} — nikdo se k němu nedostal.', tags: ['possession'] },
+  { event: 'special', template: '{player} posílá míč na druhou stranu. Přepínání hry.', tags: ['possession'] },
+  { event: 'special', template: '{team} se snaží najít mezeru v obraně.', tags: ['possession'] },
 ];
 
 /**
@@ -114,13 +141,17 @@ export function generateCommentary(
   homeScore: number,
   awayScore: number,
 ): string {
-  // Find matching templates
-  const matching = TEMPLATES.filter((t) => t.event === event.type);
+  // Find matching templates — prefer tag-specific ones
+  let matching = TEMPLATES.filter((t) => t.event === event.type);
+  if (event.detail && matching.length > 0) {
+    const tagSpecific = matching.filter((t) => t.tags.includes(event.detail!));
+    if (tagSpecific.length > 0) matching = tagSpecific;
+  }
   if (matching.length === 0) return event.description;
 
   const template = rng.pick(matching);
   const crowdReaction = rng.pick(CROWD_REACTIONS);
-  const teamName = event.teamId ? homeTeamName : awayTeamName;
+  const teamName = event.teamId === 1 ? homeTeamName : awayTeamName;
 
   return template.template
     .replace('{player}', event.playerName)

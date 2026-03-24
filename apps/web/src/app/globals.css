@@ -332,6 +332,26 @@ body::before {
 
 .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
+/* Match replay animations */
+@keyframes goalFlashBg {
+  0% { background: rgba(74, 222, 128, 0.5); }
+  10% { background: rgba(74, 222, 128, 0.1); }
+  20% { background: rgba(74, 222, 128, 0.45); }
+  30% { background: rgba(74, 222, 128, 0.05); }
+  40% { background: rgba(74, 222, 128, 0.35); }
+  55% { background: rgba(74, 222, 128, 0.15); }
+  75% { background: rgba(74, 222, 128, 0.08); }
+  100% { background: transparent; }
+}
+@keyframes goalTextPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.7; }
+}
+@keyframes attackPulse {
+  0%, 100% { background: rgba(249, 115, 22, 0.05); }
+  50% { background: rgba(249, 115, 22, 0.15); }
+}
+
 .stagger-children > * { animation: slideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
 .stagger-children > *:nth-child(2) { animation-delay: 50ms; }

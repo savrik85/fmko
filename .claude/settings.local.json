@@ -60,7 +60,12 @@
       "Bash(do npx:*)",
       "Bash(echo \"FAILED: $t\")",
       "Bash(echo \"OK: $t\" done)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "WebFetch(domain:blog.statscore.com)",
+      "WebFetch(domain:store.sportradar.com)",
+      "WebFetch(domain:extra.nj.bet365.com)",
+      "Bash(echo \"FAIL: $t\" done npx wrangler d1 execute okresni-masina-db --local --command \"DELETE FROM users WHERE id != ''''ai'''';\")",
+      "Bash(tail -1 rm -f .wrangler/state/v3/kv/miniflare-KVNamespaceObject/*.sqlite echo \"Done\")"
     ]
   }
 }

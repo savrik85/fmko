@@ -32,7 +32,7 @@ function positionSum(lineup: MatchPlayer[], pos: string, stat: keyof MatchPlayer
 
 /** Get player display name */
 function playerName(p: MatchPlayer): string {
-  return p.nickname ?? `${p.firstName} ${p.lastName}`;
+  return p.lastName;
 }
 
 /** Tactic modifiers */
@@ -101,7 +101,7 @@ function calcChanceProb(
   const ratio = attackPower / (attackPower + defensePower);
   const longBallBonus = attacking.tactic === "long_ball" ? weatherMod.longBallBonus : 0;
 
-  return Math.min(0.12, Math.max(0.02, ratio * 0.08 + longBallBonus)) * tacticMod.chanceMod;
+  return Math.min(0.25, Math.max(0.08, ratio * 0.20 + longBallBonus)) * tacticMod.chanceMod;
 }
 
 /**
@@ -136,7 +136,7 @@ function calcGoalProb(
     ratio *= 0.9 + (attacker.clutch / 100) * 0.2;
   }
 
-  return Math.min(0.5, Math.max(0.1, ratio * 0.5));
+  return Math.min(0.60, Math.max(0.20, ratio * 0.65));
 }
 
 /**
@@ -262,8 +262,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       }
     }
 
-    // Check for foul (~5% per minute)
-    if (rng.random() < 0.05) {
+    // Check for foul (~8% per minute)
+    if (rng.random() < 0.08) {
       const defenders = defending.lineup.filter((p) => p.position !== "GK");
       if (defenders.length > 0) {
         // Weighted pick by aggression
@@ -330,7 +330,9 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     }
 
     // Check for injury (~1% per minute, modified by weather)
-    const injuryProb = 0.01 * WEATHER_MODS[weather].injuryMod;
+    // Pitch condition affects injuries: bad pitch (0-30) = 2-3× more injuries
+    const pitchMod = config.pitchCondition != null ? (1 + (100 - config.pitchCondition) / 50) : 1;
+    const injuryProb = 0.01 * WEATHER_MODS[weather].injuryMod * pitchMod;
     if (rng.random() < injuryProb) {
       const allPlayers = [...home.lineup, ...away.lineup];
       const unlucky = rng.pick(allPlayers);
@@ -354,8 +356,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       }
     }
 
-    // Special events for okresní fotbal (~2% per minute)
-    if (rng.random() < 0.02) {
+    // Special events for okresní fotbal (~4% per minute)
+    if (rng.random() < 0.04) {
       const allPlayers = [...home.lineup, ...away.lineup];
       const player = rng.pick(allPlayers);
       const teamId = home.lineup.includes(player) ? home.teamId : away.teamId;
@@ -397,6 +399,28 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
             `${playerName(gk)} předvedl zákrok sezóny!`,
             "gk_hero");
         }
+      }
+    }
+
+    // Possession/atmosphere events (~25% per minute — keeps match alive, ~45 events/match)
+    if (rng.random() < 0.25) {
+      const isHomeAtt = rng.random() < homePoss;
+      const att = isHomeAtt ? home : away;
+      const def = isHomeAtt ? away : home;
+      const attPlayer = rng.pick(att.lineup.filter((p) => p.position === "MID" || p.position === "FWD"));
+      if (attPlayer) {
+        const possTexts = [
+          `${att.teamName} kombinují přes střed hřiště.`,
+          `${att.teamName} kontrolují tempo hry.`,
+          `Tvrdý pressing ${att.teamName}, ${def.teamName} se nemůžou dostat z vlastní půlky.`,
+          `${playerName(attPlayer)} rozehrává z hloubky pole.`,
+          `${att.teamName} si nahrávají na polovině soupeře.`,
+          `${def.teamName} stahují obranu, ${att.teamName} hledají prostor.`,
+          `Dlouhý míč od ${playerName(attPlayer)}, ${att.teamName} zrychlují.`,
+          `Hra se přesouvá na polovinu ${def.teamName}.`,
+        ];
+        addEvent(minute, "special", attPlayer, att.teamId,
+          rng.pick(possTexts), "possession");
       }
     }
 

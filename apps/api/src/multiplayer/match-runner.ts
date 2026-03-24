@@ -84,6 +84,32 @@ export async function runScheduledMatches(
         tactic: "balanced",
       };
 
+      // Load stadium info for pitch condition + attendance
+      const stadium = await db.prepare("SELECT pitch_condition, stadium_name FROM stadiums WHERE team_id = ?")
+        .bind(homeTeamId).first<{ pitch_condition: number; stadium_name: string }>().catch(() => null);
+      const pitchCondition = stadium?.pitch_condition ?? 50;
+      const stadiumName = stadium?.stadium_name ?? null;
+
+      // Attendance: population + reputation + form
+      const homeInfo = await db.prepare(
+        "SELECT v.population, v.size, t.reputation FROM villages v JOIN teams t ON t.village_id = v.id WHERE t.id = ?"
+      ).bind(homeTeamId).first<{ population: number; size: string; reputation: number }>().catch(() => null);
+      const pop = homeInfo?.population ?? 500;
+      const rep = homeInfo?.reputation ?? 50;
+      // Base from population (2-5% of village comes)
+      const popBase = Math.round(pop * (0.02 + Math.random() * 0.03));
+      // Reputation bonus (higher rep = more fans)
+      const repBonus = Math.round(popBase * (rep / 100) * 0.5);
+      // Recent form — count wins in last 5 matches
+      const recentWins = await db.prepare(
+        `SELECT COUNT(*) as w FROM (
+          SELECT CASE WHEN (home_team_id = ? AND home_score > away_score) OR (away_team_id = ? AND away_score > home_score) THEN 1 ELSE 0 END as win
+          FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated' ORDER BY simulated_at DESC LIMIT 5
+        ) WHERE win = 1`
+      ).bind(homeTeamId, homeTeamId, homeTeamId, homeTeamId).first<{ w: number }>().catch(() => ({ w: 0 }));
+      const formBonus = Math.round((recentWins?.w ?? 0) * popBase * 0.08);
+      const attendance = Math.max(8, popBase + repBonus + formBonus + Math.round(Math.random() * 10 - 5));
+
       // Simulate
       const rng = createRng(Date.now() + matchId.charCodeAt(0));
       const result = simulateMatch(rng, {
@@ -91,6 +117,9 @@ export async function runScheduledMatches(
         away: awaySetup,
         weather,
         isHomeAdvantage: true,
+        pitchCondition,
+        stadiumName: stadiumName ?? undefined,
+        attendance,
       });
 
       // Generate commentary
@@ -101,13 +130,15 @@ export async function runScheduledMatches(
         awaySetup.teamName,
       );
 
-      // Save results with events + commentary
+      // Save results with events + commentary + match context
       await db.prepare(
         `UPDATE matches SET status = 'simulated', home_score = ?, away_score = ?,
-         events = ?, commentary = ?, simulated_at = datetime('now') WHERE id = ?`
+         events = ?, commentary = ?, attendance = ?, stadium_name = ?, pitch_condition = ?, weather = ?,
+         simulated_at = datetime('now') WHERE id = ?`
       ).bind(
         result.homeScore, result.awayScore,
         JSON.stringify(result.events), JSON.stringify(commentary),
+        attendance, stadiumName, pitchCondition, weather,
         matchId,
       ).run();
 

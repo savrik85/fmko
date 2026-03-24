@@ -521,7 +521,7 @@ matchesRouter.get("/teams/:teamId/unseen-match", async (c) => {
      FROM matches m
      JOIN teams t1 ON m.home_team_id = t1.id
      JOIN teams t2 ON m.away_team_id = t2.id
-     WHERE m.status = 'simulated'
+     WHERE m.status = 'simulated' AND m.events IS NOT NULL AND LENGTH(m.events) > 10
      AND ((m.home_team_id = ? AND m.home_seen_at IS NULL)
        OR (m.away_team_id = ? AND m.away_seen_at IS NULL))
      ORDER BY m.simulated_at ASC LIMIT 1`
