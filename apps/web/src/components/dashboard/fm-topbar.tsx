@@ -24,7 +24,7 @@ const PAGE_TITLES: Record<string, string> = {
 export function FMTopBar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { teamName, season, seasonDay, seasonTotal } = useTeam();
+  const { teamName, budget, season, seasonDay, seasonTotal, nextMatch } = useTeam();
 
   let title = PAGE_TITLES[pathname] ?? "";
   if (!title) {
@@ -57,7 +57,6 @@ export function FMTopBar() {
         </button>
       </div>
 
-      {/* Separator */}
       <div className="w-px h-5 bg-white/10" />
 
       {/* Page title */}
@@ -68,15 +67,24 @@ export function FMTopBar() {
         )}
       </div>
 
-      {/* Season + day */}
-      {season != null && (
-        <div className="text-right shrink-0 bg-white/5 rounded-lg px-4 py-1.5">
-          <div className="text-white font-heading font-bold text-sm">Sezóna {season}</div>
-          {seasonDay != null && seasonTotal != null && (
-            <div className="text-white/50 text-sm font-heading">Den {seasonDay}/{seasonTotal}</div>
-          )}
-        </div>
-      )}
+      {/* Right side info */}
+      <div className="flex items-center gap-6 shrink-0 text-sm font-heading">
+        {budget != null && (
+          <span className="text-white/60 tabular-nums">💰 {budget.toLocaleString("cs")} Kč</span>
+        )}
+        {nextMatch && (
+          <span className="text-white/60">
+            ⚽ <span className="text-white font-bold">{nextMatch.opponent}</span>
+            {" · "}
+            <span>{nextMatch.daysUntil === 0 ? "dnes" : nextMatch.daysUntil === 1 ? "zítra" : `za ${nextMatch.daysUntil} dní`}</span>
+          </span>
+        )}
+        {season != null && (
+          <span className="text-white/40">
+            📅 Sezóna {season}{seasonDay != null && seasonTotal != null && seasonTotal > 0 ? ` · den ${seasonDay}/${seasonTotal}` : ""}
+          </span>
+        )}
+      </div>
 
     </header>
   );

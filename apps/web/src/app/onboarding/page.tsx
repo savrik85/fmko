@@ -85,8 +85,13 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(restored.step);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
-  const { token, setTeam } = useTeam();
+  const { token, isLoading, setTeam } = useTeam();
   const router = useRouter();
+
+  // Redirect to register if not authenticated
+  useEffect(() => {
+    if (!isLoading && !token) router.replace("/register");
+  }, [isLoading, token, router]);
 
   const [state, setState] = useState<OnboardingState>(restored.state);
 

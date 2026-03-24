@@ -414,6 +414,14 @@ teamsRouter.post("/", async (c) => {
             "INSERT INTO matches (id, league_id, calendar_id, round, home_team_id, away_team_id, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
           ).bind(uuid(), existingLeague.id, calId, match.round, allTeamIds[match.homeTeamIndex], allTeamIds[match.awayTeamIndex]).run().catch(() => {});
         }
+
+        // Set game_date for all teams in the league
+        if (calendar.entries.length > 0) {
+          const firstMatch = new Date(calendar.entries[0].scheduledAt);
+          firstMatch.setDate(firstMatch.getDate() - 1);
+          await c.env.DB.prepare("UPDATE teams SET game_date = ? WHERE league_id = ?")
+            .bind(firstMatch.toISOString(), existingLeague.id).run();
+        }
       }
     }
 
@@ -589,10 +597,49 @@ teamsRouter.post("/", async (c) => {
         "INSERT INTO matches (id, league_id, calendar_id, round, home_team_id, away_team_id, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
       ).bind(uuid(), leagueId, calId, match.round, teamIds[match.homeTeamIndex], teamIds[match.awayTeamIndex]).run().catch(() => {});
     }
+
+    // Set game_date for all teams in the league (day before first match)
+    if (calendar.entries.length > 0) {
+      const firstMatch = new Date(calendar.entries[0].scheduledAt);
+      firstMatch.setDate(firstMatch.getDate() - 1);
+      await c.env.DB.prepare("UPDATE teams SET game_date = ? WHERE league_id = ?")
+        .bind(firstMatch.toISOString(), leagueId).run();
+    }
   }
 
   // Init phone conversations
   await initTeamConversations(c.env.DB, teamId, playerConvData).catch(() => {});
+
+  // Zpravodaj: článek o novém trenérovi
+  try {
+    const topRows = await c.env.DB.prepare(
+      "SELECT first_name, last_name, position, overall_rating FROM players WHERE team_id = ? ORDER BY overall_rating DESC LIMIT 3"
+    ).bind(teamId).all();
+    const topList = topRows.results.map((p) => `${p.first_name} ${p.last_name} (${p.position}, ${p.overall_rating})`).join(", ");
+    const managerLabel = body.managerName || "Nový trenér";
+    const backstoryMap: Record<string, string> = {
+      byvaly_hrac: "bývalý hráč, který se rozhodl zkusit trenérskou kariéru",
+      mistni_nadsenec: "místní nadšenec do fotbalu",
+      ucitel_tv: "učitel tělesné výchovy",
+      hospodsky: "hospodský, který si fotbal zamiloval u výčepu",
+    };
+    const backstoryText = backstoryMap[body.managerBackstory ?? ""] ?? "nová tvář na trenérské lavičce";
+
+    const headlines = [
+      `${managerLabel} přebírá ${body.name}!`,
+      `Nová éra v ${village.name as string}: ${managerLabel} u kormidla`,
+      `${body.name} má nového trenéra!`,
+    ];
+    const bodies = [
+      `${managerLabel}, ${backstoryText}, se ujímá vedení ${body.name} z ${village.name as string}. Kádr čítá ${squad.length} hráčů. Mezi oporami vyčnívají ${topList}. Fanoušci jsou zvědaví, co nová sezóna přinese.`,
+      `V ${village.name as string} to žije — ${managerLabel} převzal tým ${body.name}. „Chceme hrát dobrý fotbal," řekl po svém jmenování. Na soupisku se dostal ${squad.length} hráčů, tahouny by měli být ${topList}.`,
+      `Okresní fotbal má novou kapitolu. ${managerLabel} (${backstoryText}) dorazil do ${village.name as string} a ujal se vedení ${body.name}. V kádru o ${squad.length} hráčích budou klíčoví ${topList}.`,
+    ];
+    const idx = Math.floor(Math.random() * headlines.length);
+    await c.env.DB.prepare(
+      "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'manager_arrival', ?, ?, datetime('now'))"
+    ).bind(uuid(), leagueId, teamId, headlines[idx], bodies[idx]).run();
+  } catch {}
 
   return c.json({
     id: teamId,

@@ -8,7 +8,7 @@ import { createRng } from "../generators/rng";
 import { simulateTraining } from "./training";
 
 export interface DailyTickEvent {
-  type: "training" | "recovery" | "injury_healed" | "pitch" | "morale";
+  type: "training" | "recovery" | "injury_healed" | "pitch" | "morale" | "match" | "day";
   description: string;
   data?: unknown;
 }
@@ -191,6 +191,87 @@ export async function executeDailyTick(
       END)`
   ).run();
   events.push({ type: "morale", description: "Morálka se stabilizuje" });
+
+  // ── Advance game date for ALL teams (including AI) ──
+  const allTeams = await env.DB.prepare("SELECT id, league_id, game_date FROM teams").all();
+  for (const team of allTeams.results) {
+    const teamId = team.id as string;
+    const gameDate = team.game_date as string | null;
+    if (gameDate) {
+      const gd = new Date(gameDate);
+      gd.setDate(gd.getDate() + 1);
+      await env.DB.prepare("UPDATE teams SET game_date = ? WHERE id = ?")
+        .bind(gd.toISOString(), teamId).run();
+
+      events.push({ type: "day", description: `Herní den: ${gd.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" })}` });
+
+      // Check if there's a match scheduled for this date
+      const leagueId = team.league_id as string | null;
+
+      if (leagueId) {
+        const dayStart = new Date(gd); dayStart.setUTCHours(0, 0, 0, 0);
+        const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
+
+        const matchCal = await env.DB.prepare(
+          "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled'"
+        ).bind(leagueId, dayStart.toISOString(), dayEnd.toISOString()).first<{ id: string }>();
+
+        if (matchCal) {
+          try {
+            // Switch matches from 'scheduled' to 'lineups_open' so runner can find them
+            await env.DB.prepare(
+              "UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'"
+            ).bind(matchCal.id).run();
+
+            const { runScheduledMatches } = await import("../multiplayer/match-runner");
+            const results = await runScheduledMatches(env.DB, matchCal.id);
+            await env.DB.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
+              .bind(matchCal.id).run();
+            events.push({ type: "match", description: `Zápasový den! ${results.length} zápasů odsimulováno.` });
+
+            // Zpravodaj: článek o výsledcích kola
+            if (results.length > 0) {
+              try {
+                const calRow = await env.DB.prepare("SELECT game_week FROM season_calendar WHERE id = ?")
+                  .bind(matchCal.id).first<{ game_week: number }>();
+                const gameWeek = calRow?.game_week ?? 0;
+
+                const matchRows = await env.DB.prepare(
+                  `SELECT m.home_score, m.away_score, t1.name as home_name, t2.name as away_name
+                   FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id
+                   WHERE m.calendar_id = ? AND m.status = 'simulated'`
+                ).bind(matchCal.id).all();
+
+                const lines: string[] = [];
+                let topScore = 0;
+                let topMatch = "";
+                for (const r of matchRows.results) {
+                  const hs = r.home_score as number; const as_ = r.away_score as number;
+                  const hn = r.home_name as string; const an = r.away_name as string;
+                  if (hs > as_) lines.push(`${hn} porazil ${an} ${hs}:${as_}`);
+                  else if (hs < as_) lines.push(`${an} zvítězil nad ${hn} ${as_}:${hs}`);
+                  else lines.push(`${hn} remizoval s ${an} ${hs}:${as_}`);
+                  if (hs + as_ > topScore) { topScore = hs + as_; topMatch = `${hn} vs ${an} ${hs}:${as_}`; }
+                }
+
+                const headline = `${gameWeek}. kolo: přehled výsledků`;
+                const body = lines.join(". ") + "." + (topScore >= 4 ? ` Nejvíce gólů padlo v utkání ${topMatch}.` : "");
+
+                const newsId = crypto.randomUUID();
+                await env.DB.prepare(
+                  "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, datetime('now'))"
+                ).bind(newsId, leagueId, headline, body, gameWeek).run();
+              } catch (e) {
+                console.error("[DailyTick] News generation failed:", e);
+              }
+            }
+          } catch (e) {
+            console.error(`[DailyTick] Match sim failed:`, e);
+          }
+        }
+      }
+    }
+  }
 
   return { date: now.toISOString(), dayOfWeek, isTrainingDay, events };
 }

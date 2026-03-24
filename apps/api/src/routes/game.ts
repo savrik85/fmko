@@ -345,6 +345,30 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
     }
   }
 
+  // 3. Persistent news articles (zpravodaj, round results, manager arrival)
+  if (team.league_id) {
+    const newsRows = await c.env.DB.prepare(
+      "SELECT id, type, headline, body, created_at FROM news WHERE league_id = ? OR team_id = ? ORDER BY created_at DESC LIMIT 20"
+    ).bind(team.league_id, teamId).all().catch(() => ({ results: [] }));
+
+    for (const n of newsRows.results) {
+      const iconMap: Record<string, string> = {
+        manager_arrival: "\u{1F4CB}",
+        round_results: "\u26BD",
+        seasonal: "\u{1F389}",
+        transfer: "\u{1F91D}",
+      };
+      articles.push({
+        id: n.id as string,
+        type: n.type as string,
+        headline: n.headline as string,
+        body: n.body as string,
+        icon: iconMap[n.type as string] ?? "\u{1F4F0}",
+        date: n.created_at as string,
+      });
+    }
+  }
+
   // Sort by date
   articles.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
