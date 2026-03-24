@@ -22,7 +22,8 @@ export interface MatchPlayer {
   goalkeeping: number;
   stamina: number;
   strength: number;
-  // New skills
+  // Extended skills
+  vision: number;
   creativity: number;
   setPieces: number;
   // Personality

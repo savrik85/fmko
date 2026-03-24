@@ -140,9 +140,16 @@ interface UnlockReq {
 }
 
 const UNLOCK_REQUIREMENTS: Record<number, UnlockReq> = {
-  1: {},                                          // Always available
-  2: { reputation: 40, matchesPlayed: 5 },        // Need some progress
-  3: { reputation: 60, matchesPlayed: 15 },       // Need serious progress
+  1: {},                                                   // Always available
+  2: { reputation: 40, matchesPlayed: 5 },                 // Need some progress
+  3: { reputation: 60, matchesPlayed: 15, season: 2 },     // Need serious progress + season 2
+};
+
+/** Cooldown in days per upgrade target level */
+export const EQUIPMENT_COOLDOWN_DAYS: Record<number, number> = {
+  1: 7,    // L0→L1: 1 week
+  2: 21,   // L1→L2: 3 weeks
+  3: 42,   // L2→L3: 6 weeks
 };
 
 const UPGRADE_EFFECT_LABELS: Record<string, string[]> = {
@@ -212,6 +219,7 @@ export function getUpgradeOptions(
   levels: Record<string, number>,
   teamReputation: number,
   matchesPlayed: number,
+  currentSeason: number = 1,
 ): UpgradeOption[] {
   const options: UpgradeOption[] = [];
 
@@ -232,6 +240,10 @@ export function getUpgradeOptions(
     if (req.matchesPlayed && matchesPlayed < req.matchesPlayed) {
       locked = true;
       lockReason = `Potřeba ${req.matchesPlayed}+ odehraných zápasů (máš ${matchesPlayed})`;
+    }
+    if (req.season && currentSeason < req.season) {
+      locked = true;
+      lockReason = `Dostupné od sezóny ${req.season} (aktuální: ${currentSeason})`;
     }
 
     options.push({

@@ -217,3 +217,76 @@ export function calculateMonthlyBudget(
 
   return { income, expenses, net: totalIncome - totalExpenses };
 }
+
+/**
+ * Match result rewards — sponzorský bonus + bonus od soutěže + fan bonus.
+ */
+export interface MatchResultReward {
+  sponsorBonus: number;
+  leagueBonus: number;
+  fanBonus: number;
+  total: number;
+}
+
+export function calculateMatchReward(
+  result: "win" | "draw" | "loss",
+  sponsors: Sponsor[],
+  villageCategory: string,
+): MatchResultReward {
+  const sponsorBonus = result === "win"
+    ? sponsors.reduce((s, sp) => s + sp.winBonus, 0)
+    : result === "draw"
+      ? Math.round(sponsors.reduce((s, sp) => s + sp.winBonus, 0) * 0.3)
+      : 0;
+
+  const leagueBonus = result === "win" ? 500 : result === "draw" ? 150 : 0;
+
+  const fanBase = villageCategory === "vesnice" ? 50 : villageCategory === "obec" ? 100 : 200;
+  const fanBonus = result === "win" ? fanBase : result === "draw" ? Math.round(fanBase * 0.5) : 0;
+
+  const total = sponsorBonus + leagueBonus + fanBonus;
+  return { sponsorBonus, leagueBonus, fanBonus, total };
+}
+
+/**
+ * Season-end rewards by league position. Same for all teams regardless of village size.
+ */
+export interface SeasonReward {
+  prize: number;
+  reputationBonus: number;
+  description: string;
+}
+
+export function calculateSeasonReward(
+  position: number,
+  totalTeams: number,
+): SeasonReward {
+  if (position === 1) return { prize: 15000, reputationBonus: 10, description: "Vítěz ligy!" };
+  if (position === 2) return { prize: 10000, reputationBonus: 5, description: "Stříbrná příčka" };
+  if (position === 3) return { prize: 5000, reputationBonus: 3, description: "Bronzová medaile" };
+  if (position <= Math.ceil(totalTeams / 2)) return { prize: 2000, reputationBonus: 1, description: "Horní polovina tabulky" };
+  return { prize: 0, reputationBonus: 0, description: "Dolní polovina tabulky" };
+}
+
+/**
+ * Training cost per month based on sessions/week and village category.
+ */
+export function calculateTrainingCost(sessionsPerWeek: number, villageCategory: string): number {
+  const costPerSession: Record<string, number> = {
+    vesnice: 200,
+    obec: 400,
+    mestys: 600,
+    mesto: 1000,
+  };
+  const perSession = costPerSession[villageCategory] ?? 400;
+  return Math.round(perSession * sessionsPerWeek * 4.3);
+}
+
+/**
+ * Equipment repair cost — scales with level and missing condition.
+ */
+export function calculateRepairCost(level: number, condition: number): number {
+  const missing = 100 - condition;
+  const costPerPercent = level * 30 + 20;
+  return Math.round(missing * costPerPercent);
+}

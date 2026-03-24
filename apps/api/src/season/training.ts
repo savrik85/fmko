@@ -65,7 +65,7 @@ function simulateAttendance(
 ): TrainingAttendance[] {
   return squad.map((player, i) => {
     // Base attendance from discipline
-    let attendProb = player.discipline / 20 * 0.6 + 0.3;
+    let attendProb = player.discipline / 100 * 0.6 + 0.3;
 
     // Approach modifiers
     if (approach === "strict") attendProb += 0.1;
@@ -75,7 +75,7 @@ function simulateAttendance(
     if (player.age > 35) attendProb -= 0.1;
 
     // Alcohol: party animals skip more
-    if (player.alcohol > 14) attendProb -= 0.1;
+    if (player.alcohol > 70) attendProb -= 0.1;
 
     // Morale: low morale = less motivated
     if (player.morale < 30) attendProb -= 0.15;
@@ -143,24 +143,52 @@ export function simulateTraining(
 
     const player = squad[playerIndex];
     const attr = rng.pick(affectedAttrs);
+    const current = player[attr as keyof GeneratedPlayer] as number;
 
-    // Small chance of improvement per week
-    const improveChance = 0.08 * sessions * equipmentMultiplier;
+    // Diminishing returns: each point above 50 reduces chance
+    const diminishing = current >= 50 ? Math.max(0.15, 1.0 - (current - 50) * 0.017) : 1.0;
+
+    // Age modifier
+    const ageMod = player.age < 20 ? 1.3
+      : player.age < 25 ? 1.15
+      : player.age < 30 ? 1.0
+      : player.age < 34 ? 0.7
+      : player.age < 38 ? 0.4
+      : 0.15;
+
+    // TODO: Talent modifier — requires hidden_talent from DB (not in GeneratedPlayer yet)
+    // Will be added when daily-tick passes hidden_talent to squad data
+
+    const improveChance = 0.015 * sessions * equipmentMultiplier * diminishing * ageMod;
     if (rng.random() < improveChance) {
-      const current = player[attr as keyof GeneratedPlayer] as number;
-      if (current < 20) {
+      if (current < 100) {
         (player as unknown as Record<string, number>)[attr] = current + 1;
         improvements.push({ playerIndex, attribute: attr, change: 1 });
       }
     }
   }
 
-  // Non-attendees may lose condition
+  // Veteran decay: 34+ lose physical attributes
+  for (const [playerIndex] of attendanceCounts) {
+    const player = squad[playerIndex];
+    if (player.age >= 34) {
+      const decayChance = (player.age - 33) * 0.01;
+      for (const attr of ["speed", "stamina", "strength"]) {
+        const val = player[attr as keyof GeneratedPlayer] as number;
+        if (rng.random() < decayChance && val > 15) {
+          (player as unknown as Record<string, number>)[attr] = val - 1;
+          improvements.push({ playerIndex, attribute: attr, change: -1 });
+        }
+      }
+    }
+  }
+
+  // Non-attendees may lose stamina
   for (let i = 0; i < squad.length; i++) {
     const attended = attendanceCounts.get(i) ?? 0;
     if (attended === 0 && rng.random() < 0.3) {
       const player = squad[i];
-      if (player.stamina > 1) {
+      if (player.stamina > 5) {
         player.stamina -= 1;
         improvements.push({ playerIndex: i, attribute: "stamina", change: -1 });
       }
@@ -177,7 +205,7 @@ export function simulateTraining(
   // Approach morale effects
   if (plan.approach === "strict") {
     for (const player of squad) {
-      if (player.discipline < 10 && rng.random() < 0.1) {
+      if (player.discipline < 50 && rng.random() < 0.1) {
         player.morale = Math.max(0, player.morale - 2);
       }
     }

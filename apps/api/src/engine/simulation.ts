@@ -78,18 +78,26 @@ function calcChanceProb(
   const tacticMod = TACTIC_MODS[attacking.tactic];
   const weatherMod = WEATHER_MODS[weather];
 
+  const mids = attacking.lineup.filter((p) => p.position === "MID");
+  const midAndFwd = attacking.lineup.filter((p) => p.position === "MID" || p.position === "FWD");
+  const defs = defending.lineup.filter((p) => p.position === "DEF");
+
   const attackPower = (
-    teamAvg(attacking.lineup, "technique") * weatherMod.techniqueMod +
-    teamAvg(attacking.lineup, "passing") +
-    teamAvg(attacking.lineup, "speed")
-  ) / 3 * tacticMod.attackMod;
+    teamAvg(attacking.lineup, "technique") * weatherMod.techniqueMod * 0.8 +
+    teamAvg(attacking.lineup, "passing") * 1.0 +
+    teamAvg(attacking.lineup, "speed") * 0.7 +
+    (mids.length > 0 ? teamAvg(mids, "vision") * 0.6 : 0) +
+    (midAndFwd.length > 0 ? teamAvg(midAndFwd, "creativity") * 0.5 : 0) +
+    teamAvg(attacking.lineup, "workRate") * 0.3
+  ) / 5 * tacticMod.attackMod;
 
   const defensePower = (
-    teamAvg(defending.lineup, "defense") +
-    teamAvg(defending.lineup, "strength")
-  ) / 2 * TACTIC_MODS[defending.tactic].defenseMod;
+    teamAvg(defending.lineup, "defense") * 1.0 +
+    teamAvg(defending.lineup, "strength") * 0.7 +
+    (defs.length > 0 ? teamAvg(defs, "aggression") * 0.2 : 0) +
+    teamAvg(defending.lineup, "workRate") * 0.2
+  ) / 3 * TACTIC_MODS[defending.tactic].defenseMod;
 
-  // Base chance probability per minute: ~3-8%
   const ratio = attackPower / (attackPower + defensePower);
   const longBallBonus = attacking.tactic === "long_ball" ? weatherMod.longBallBonus : 0;
 
@@ -100,15 +108,34 @@ function calcChanceProb(
  * Calculate goal probability from a chance.
  */
 function calcGoalProb(
+  rng: Rng,
   attacker: MatchPlayer,
   gk: MatchPlayer,
   defenseAvg: number,
+  minute: number,
+  scoreDiff: number,
+  isSetPiece: boolean,
 ): number {
-  const attackVal = (attacker.shooting * 2 + attacker.technique) / 3;
+  // 30% šancí = hlavičky
+  const isHeader = rng.random() < 0.3;
+  const attackVal = isHeader
+    ? (attacker.heading * 2 + attacker.strength) / 3
+    : isSetPiece
+      ? (attacker.setPieces * 2 + attacker.technique) / 3
+      : (attacker.shooting * 2 + attacker.technique) / 3;
+
   const defenseVal = (gk.goalkeeping * 2 + defenseAvg) / 3;
 
-  // Base conversion rate: ~20-40% for okresní fotbal
-  const ratio = attackVal / (attackVal + defenseVal);
+  let ratio = attackVal / (attackVal + defenseVal);
+
+  // Consistency modifier: 0.85-1.15
+  ratio *= 0.85 + (attacker.consistency / 100) * 0.30;
+
+  // Clutch: po 75' při těsném skóre (≤1 gól)
+  if (minute >= 75 && Math.abs(scoreDiff) <= 1) {
+    ratio *= 0.9 + (attacker.clutch / 100) * 0.2;
+  }
+
   return Math.min(0.5, Math.max(0.1, ratio * 0.5));
 }
 
@@ -137,12 +164,12 @@ function getGK(lineup: MatchPlayer[]): MatchPlayer {
  */
 function updateCondition(lineup: MatchPlayer[], minute: number): void {
   for (const p of lineup) {
-    // Base decay: 0.5-1.5 per minute depending on stamina
-    const staminaFactor = (20 - p.stamina) / 20; // Low stamina = faster decay
-    const alcoholPenalty = p.alcohol > 14 ? 0.3 : p.alcohol > 10 ? 0.15 : 0;
-    const lateFatigue = minute > 70 ? 0.2 : 0;
+    // Base decay: depends on stamina (0-100 škála)
+    const staminaFactor = (100 - p.stamina) / 100; // Low stamina = faster decay
+    const alcoholPenalty = p.alcohol > 75 ? 0.15 : p.alcohol > 50 ? 0.08 : 0;
+    const lateFatigue = minute > 70 ? 0.15 : 0;
 
-    const decay = 0.5 + staminaFactor * 0.8 + alcoholPenalty + lateFatigue;
+    const decay = 0.3 + staminaFactor * 0.5 + alcoholPenalty + lateFatigue;
     p.condition = round2(Math.max(0, p.condition - decay));
   }
 }
@@ -181,7 +208,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
 
   // Check for late arrivals (low discipline)
   for (const p of [...home.lineup, ...away.lineup]) {
-    if (p.discipline <= 4 && rng.random() < 0.15) {
+    if (p.discipline <= 20 && rng.random() < 0.15) {
       const lateMinute = rng.int(5, 20);
       const teamId = home.lineup.includes(p) ? home.teamId : away.teamId;
       addEvent(lateMinute, "special", p, teamId,
@@ -201,14 +228,15 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     // Check for chance
     const chanceProb = calcChanceProb(attacking, defending, weather);
     // Reduce chance probability when condition is low
-    const conditionMod = Math.max(0.5, teamAvg(attacking.lineup, "condition") / 100);
+    const conditionMod = Math.max(0.3, teamAvg(attacking.lineup, "condition") / 100);
     const adjustedChanceProb = chanceProb * conditionMod;
 
     if (rng.random() < adjustedChanceProb) {
       const attacker = pickAttacker(rng, attacking.lineup);
       const gk = getGK(defending.lineup);
       const defAvg = teamAvg(defending.lineup.filter((p) => p.position === "DEF"), "defense");
-      const goalProb = calcGoalProb(attacker, gk, defAvg);
+      const scoreDiff = isHomePossession ? homeScore - awayScore : awayScore - homeScore;
+      const goalProb = calcGoalProb(rng, attacker, gk, defAvg, minute, scoreDiff, false);
 
       if (rng.random() < goalProb) {
         // GOAL!
@@ -217,9 +245,13 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           `Gól! ${playerName(attacker)} skóruje`,
           `${homeScore}:${awayScore}`);
 
-        // Morale boost for scoring team
-        for (const p of attacking.lineup) p.morale = Math.min(100, p.morale + 5);
-        for (const p of defending.lineup) p.morale = Math.max(0, p.morale - 3);
+        // Morale boost modulated by leadership
+        const attLeadership = teamAvg(attacking.lineup, "leadership") / 100;
+        const defLeadership = teamAvg(defending.lineup, "leadership") / 100;
+        const moraleBoost = Math.round(3 + attLeadership * 4); // 3-7
+        const moraleHit = Math.round(2 + (1 - defLeadership) * 3); // 2-5
+        for (const p of attacking.lineup) p.morale = Math.min(100, p.morale + moraleBoost);
+        for (const p of defending.lineup) p.morale = Math.max(0, p.morale - moraleHit);
       } else {
         // Missed chance
         const outcomes = ["vedle", "břevno", "tyč", "chytil brankář", "zblokováno"];
@@ -234,9 +266,18 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     if (rng.random() < 0.05) {
       const defenders = defending.lineup.filter((p) => p.position !== "GK");
       if (defenders.length > 0) {
-        const fouler = rng.pick(defenders);
-        const temperFactor = fouler.temper / 20;
-        const disciplineFactor = (20 - fouler.discipline) / 20;
+        // Weighted pick by aggression
+        const weights = defenders.map((p) => 1 + (p.aggression / 100) * 2);
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
+        let roll = rng.random() * totalWeight;
+        let foulerIdx = 0;
+        for (let fi = 0; fi < weights.length; fi++) {
+          roll -= weights[fi];
+          if (roll <= 0) { foulerIdx = fi; break; }
+        }
+        const fouler = defenders[foulerIdx];
+        const temperFactor = fouler.temper / 100;
+        const disciplineFactor = (100 - fouler.discipline) / 100;
 
         addEvent(minute, "foul", fouler, defending.teamId,
           `Faul ${playerName(fouler)}`,
@@ -260,6 +301,29 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
             addEvent(minute, "card", fouler, defending.teamId,
               `Žlutá karta pro ${playerName(fouler)}`,
               "yellow");
+          }
+        }
+      }
+
+      // Set piece chance from foul (25%)
+      if (rng.random() < 0.25) {
+        const kicker = attacking.lineup
+          .filter((p) => p.position !== "GK")
+          .sort((a, b) => b.setPieces - a.setPieces)[0];
+        if (kicker) {
+          const spGk = getGK(defending.lineup);
+          const spDefAvg = teamAvg(defending.lineup.filter((p) => p.position === "DEF"), "defense");
+          const spScoreDiff = isHomePossession ? homeScore - awayScore : awayScore - homeScore;
+          const spGoalProb = calcGoalProb(rng, kicker, spGk, spDefAvg, minute, spScoreDiff, true) * 0.7;
+          if (rng.random() < spGoalProb) {
+            if (isHomePossession) homeScore++; else awayScore++;
+            addEvent(minute, "goal", kicker, attacking.teamId,
+              `Gól ze standardní situace! ${playerName(kicker)}`,
+              `${homeScore}:${awayScore}`);
+            const attLead = teamAvg(attacking.lineup, "leadership") / 100;
+            const defLead = teamAvg(defending.lineup, "leadership") / 100;
+            for (const p of attacking.lineup) p.morale = Math.min(100, p.morale + Math.round(3 + attLead * 4));
+            for (const p of defending.lineup) p.morale = Math.max(0, p.morale - Math.round(2 + (1 - defLead) * 3));
           }
         }
       }
@@ -303,7 +367,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         addEvent(minute, "special", player, teamId,
           `${playerName(player)} se drží za kolena a nemůže dál`,
           "exhausted");
-      } else if (specialRoll < 0.45 && player.temper >= 14) {
+      } else if (specialRoll < 0.45 && player.temper >= 70) {
         // Argument with referee
         addEvent(minute, "special", player, teamId,
           `${playerName(player)} se hádá s rozhodčím`,
@@ -314,7 +378,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
             `Žlutá karta za protesty pro ${playerName(player)}`,
             "yellow");
         }
-      } else if (specialRoll < 0.55 && player.alcohol >= 15) {
+      } else if (specialRoll < 0.55 && player.alcohol >= 75) {
         // Hangover effect
         addEvent(minute, "special", player, teamId,
           `${playerName(player)} vypadá, že včerejší hospoda se podepsala`,
@@ -328,7 +392,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       } else if (specialRoll < 0.75 && minute > 75) {
         // GK hero moment for weak GKs
         const gk = getGK(home.lineup.includes(player) ? home.lineup : away.lineup);
-        if (gk.goalkeeping <= 8) {
+        if (gk.goalkeeping <= 40) {
           addEvent(minute, "special", gk, teamId,
             `${playerName(gk)} předvedl zákrok sezóny!`,
             "gk_hero");
@@ -336,12 +400,16 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       }
     }
 
-    // Half-time event
+    // Half-time event + recovery
     if (minute === 45) {
       const p = rng.pick(home.lineup);
       addEvent(45, "special", p, home.teamId,
         `Poločas ${homeScore}:${awayScore}`,
         "half_time");
+      // Half-time recovery: +5 condition
+      for (const pl of [...home.lineup, ...away.lineup]) {
+        pl.condition = Math.min(100, pl.condition + 5);
+      }
     }
 
     // Update condition

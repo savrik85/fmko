@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
 import { generateSponsors } from "../season/economy";
+import { executeDailyTick } from "../season/daily-tick";
 import { generateBetweenRoundEvents } from "../events/between-rounds";
 import { getSeasonalEventsForWeek, type SeasonalEventDef } from "../season/seasonal-events";
 import type { GeneratedPlayer } from "../generators/player";
@@ -93,14 +94,17 @@ gameRouter.get("/teams/:teamId/events", async (c) => {
     const skills = JSON.parse(r.skills as string);
     const personality = JSON.parse(r.personality as string);
     const lifeContext = JSON.parse(r.life_context as string);
+    const phys = r.physical ? JSON.parse(r.physical as string) : {};
     return {
       firstName: r.first_name as string, lastName: r.last_name as string,
       age: r.age as number, position: r.position as "GK" | "DEF" | "MID" | "FWD",
-      speed: skills.speed ?? 10, technique: skills.technique ?? 10,
-      shooting: skills.shooting ?? 10, passing: skills.passing ?? 10,
-      heading: skills.heading ?? 10, defense: skills.defense ?? 10,
-      goalkeeping: skills.goalkeeping ?? 10, stamina: 10, strength: 10,
-      injuryProneness: 10, discipline: personality.discipline ?? 50,
+      speed: skills.speed ?? 50, technique: skills.technique ?? 50,
+      shooting: skills.shooting ?? 50, passing: skills.passing ?? 50,
+      heading: skills.heading ?? 50, defense: skills.defense ?? 50,
+      goalkeeping: skills.goalkeeping ?? 50,
+      stamina: phys.stamina ?? skills.stamina ?? 50,
+      strength: phys.strength ?? skills.strength ?? 50,
+      injuryProneness: personality.injuryProneness ?? 50, discipline: personality.discipline ?? 50,
       patriotism: personality.patriotism ?? 50, alcohol: personality.alcohol ?? 30,
       temper: personality.temper ?? 40, occupation: lifeContext.occupation ?? "",
       bodyType: "normal" as const, avatarConfig: {} as any,
@@ -364,13 +368,16 @@ gameRouter.get("/teams/:teamId/transfers", async (c) => {
     const skills = JSON.parse(row.skills as string);
     const personality = JSON.parse(row.personality as string);
     const lifeContext = JSON.parse(row.life_context as string);
+    const physical = row.physical ? JSON.parse(row.physical as string) : {};
     return {
       firstName: row.first_name as string, lastName: row.last_name as string,
       age: row.age as number, position: row.position as "GK" | "DEF" | "MID" | "FWD",
       speed: skills.speed, technique: skills.technique, shooting: skills.shooting,
       passing: skills.passing, heading: skills.heading, defense: skills.defense,
-      goalkeeping: skills.goalkeeping, stamina: 10, strength: 10,
-      injuryProneness: 10, discipline: personality.discipline,
+      goalkeeping: skills.goalkeeping,
+      stamina: physical.stamina ?? skills.stamina ?? 50,
+      strength: physical.strength ?? skills.strength ?? 50,
+      injuryProneness: personality.injuryProneness ?? 50, discipline: personality.discipline,
       patriotism: personality.patriotism, alcohol: personality.alcohol,
       temper: personality.temper, occupation: lifeContext.occupation,
       bodyType: "normal" as const, avatarConfig: {} as any,
@@ -1249,6 +1256,27 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
     currentDay,
     totalDays,
     upcoming: futureEvents.slice(0, 15),
+  });
+});
+
+// POST /api/game/advance-day — simulace přechodu na další den (dev/test)
+gameRouter.post("/game/advance-day", async (c) => {
+  const body = await c.req.json<{ days?: number }>().catch(() => ({ days: 1 }));
+  const days = Math.min(7, Math.max(1, body.days ?? 1));
+
+  const results = [];
+  const baseDate = new Date();
+
+  for (let i = 0; i < days; i++) {
+    const gameDate = new Date(baseDate.getTime() + i * 86400000);
+    const result = await executeDailyTick(c.env, gameDate);
+    results.push(result);
+  }
+
+  return c.json({
+    ok: true,
+    daysAdvanced: days,
+    results,
   });
 });
 

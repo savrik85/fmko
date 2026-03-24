@@ -105,18 +105,27 @@ const UPGRADE_EFFECTS: Record<string, string[]> = {
 interface UnlockReq {
   reputation?: number;
   matchesPlayed?: number;
+  season?: number;
 }
 
 const STADIUM_UNLOCK: Record<number, UnlockReq> = {
   1: {},
   2: { reputation: 45, matchesPlayed: 8 },
-  3: { reputation: 65, matchesPlayed: 20 },
+  3: { reputation: 65, matchesPlayed: 20, season: 2 },
+};
+
+/** Cooldown in days per upgrade target level */
+export const STADIUM_COOLDOWN_DAYS: Record<number, number> = {
+  1: 14,   // L0→L1: 2 weeks
+  2: 42,   // L1→L2: 6 weeks
+  3: 84,   // L2→L3: 12 weeks
 };
 
 export function getUpgradeOptions(
   stadium: Record<string, number>,
   teamReputation: number = 0,
   matchesPlayed: number = 0,
+  currentSeason: number = 1,
 ): UpgradeOption[] {
   const options: UpgradeOption[] = [];
   for (const [key, label] of Object.entries(FACILITY_LABELS)) {
@@ -137,6 +146,10 @@ export function getUpgradeOptions(
     if (req.matchesPlayed && matchesPlayed < req.matchesPlayed) {
       locked = true;
       lockReason = `Potřeba ${req.matchesPlayed}+ odehraných zápasů (máš ${matchesPlayed})`;
+    }
+    if (req.season && currentSeason < req.season) {
+      locked = true;
+      lockReason = `Dostupné od sezóny ${req.season} (aktuální: ${currentSeason})`;
     }
 
     options.push({

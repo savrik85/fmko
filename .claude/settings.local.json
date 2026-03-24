@@ -53,7 +53,13 @@
       "Bash(done)",
       "Bash(sqlite3 /Users/savrik/Projects/fmko/apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite \"PRAGMA table_info\\(seasons\\);\")",
       "Bash(sqlite3:*)",
-      "Bash(ls /Users/savrik/Projects/fmko/apps/web/src/app/dashboard/match/[id]/page.tsx)"
+      "Bash(ls /Users/savrik/Projects/fmko/apps/web/src/app/dashboard/match/[id]/page.tsx)",
+      "mcp__plugin_serena_serena__read_file",
+      "Bash(ls /tmp/*.log)",
+      "Bash(for t:*)",
+      "Bash(do npx:*)",
+      "Bash(echo \"FAILED: $t\")",
+      "Bash(echo \"OK: $t\" done)"
     ]
   }
 }

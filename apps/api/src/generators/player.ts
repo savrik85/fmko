@@ -57,12 +57,12 @@ export interface GeneratedPlayer {
   clutch: number;
 }
 
-// Průměrná kvalita hráčů dle kategorie obce
+// Průměrná kvalita hráčů dle kategorie obce (0-100 škála)
 const QUALITY_BY_CATEGORY: Record<string, number> = {
-  vesnice: 6,
-  obec: 8,
-  mestys: 10,
-  mesto: 12,
+  vesnice: 30,
+  obec: 40,
+  mestys: 50,
+  mesto: 60,
 };
 
 const POSITIONS: PlayerPosition[] = ["GK", "DEF", "MID", "FWD"];
@@ -119,7 +119,7 @@ function ageToDecade(age: number): string {
 }
 
 /**
- * Generate football attributes with position bias and age curve.
+ * Generate football attributes with position bias and age curve (0-100 škála).
  */
 function generateAttributes(
   rng: Rng,
@@ -129,37 +129,37 @@ function generateAttributes(
 ): Record<string, number> {
   // Age curve: peak at 27, decline after 32
   let ageMod = 0;
-  if (age < 20) ageMod = -2;
-  else if (age < 24) ageMod = -1;
+  if (age < 20) ageMod = -10;
+  else if (age < 24) ageMod = -5;
   else if (age <= 30) ageMod = 0;
-  else if (age <= 34) ageMod = -1;
-  else if (age <= 38) ageMod = -2;
-  else ageMod = -4;
+  else if (age <= 34) ageMod = -5;
+  else if (age <= 38) ageMod = -10;
+  else ageMod = -20;
 
   const base = qualityBase + ageMod;
 
   function attr(posBonus: number): number {
-    const val = base + posBonus + rng.int(-3, 3);
-    return Math.max(1, Math.min(20, val));
+    const val = base + posBonus + rng.int(-15, 15);
+    return Math.max(1, Math.min(100, val));
   }
 
-  // Position-specific biases
+  // Position-specific biases (0-100 škála)
   const biases: Record<PlayerPosition, Record<string, number>> = {
     GK: {
-      speed: -2, technique: -2, shooting: -4, passing: -2,
-      heading: -2, defense: 1, goalkeeping: 6,
+      speed: -10, technique: -10, shooting: -20, passing: -10,
+      heading: -10, defense: 5, goalkeeping: 30,
     },
     DEF: {
-      speed: 0, technique: -1, shooting: -2, passing: 0,
-      heading: 2, defense: 3, goalkeeping: -6,
+      speed: 0, technique: -5, shooting: -10, passing: 0,
+      heading: 10, defense: 15, goalkeeping: -30,
     },
     MID: {
-      speed: 0, technique: 2, shooting: 0, passing: 3,
-      heading: 0, defense: 0, goalkeeping: -6,
+      speed: 0, technique: 10, shooting: 0, passing: 15,
+      heading: 0, defense: 0, goalkeeping: -30,
     },
     FWD: {
-      speed: 2, technique: 1, shooting: 3, passing: 0,
-      heading: 1, defense: -2, goalkeeping: -6,
+      speed: 10, technique: 5, shooting: 15, passing: 0,
+      heading: 5, defense: -10, goalkeeping: -30,
     },
   };
 
@@ -210,19 +210,19 @@ export function generatePlayer(
   };
   const bodyType = rng.weighted(bodyWeights) as BodyType;
 
-  // Physical attributes
-  const stamina = Math.max(1, Math.min(20,
-    qualityBase + (age < 30 ? 2 : age < 35 ? 0 : -3) + rng.int(-3, 3)));
-  const strength = Math.max(1, Math.min(20,
-    qualityBase + (bodyType === "athletic" ? 2 : bodyType === "stocky" ? 1 : 0) + rng.int(-2, 2)));
-  const injuryProneness = rng.int(1, 20);
+  // Physical attributes (0-100 škála)
+  const stamina = Math.max(1, Math.min(100,
+    qualityBase + (age < 30 ? 10 : age < 35 ? 0 : -15) + rng.int(-15, 15)));
+  const strength = Math.max(1, Math.min(100,
+    qualityBase + (bodyType === "athletic" ? 10 : bodyType === "stocky" ? 5 : 0) + rng.int(-10, 10)));
+  const injuryProneness = rng.int(5, 100);
 
-  // Personality
-  const discipline = rng.int(1, 20);
-  const patriotism = Math.max(1, Math.min(20,
-    10 + (village.category === "vesnice" ? 4 : village.category === "obec" ? 2 : 0) + rng.int(-5, 5)));
-  const alcohol = rng.int(1, 20);
-  const temper = rng.int(1, 20);
+  // Personality (0-100 škála)
+  const discipline = rng.int(5, 100);
+  const patriotism = Math.max(1, Math.min(100,
+    50 + (village.category === "vesnice" ? 20 : village.category === "obec" ? 10 : 0) + rng.int(-25, 25)));
+  const alcohol = rng.int(5, 100);
+  const temper = rng.int(5, 100);
 
   // Hair: older players more likely bald/gray
   let hairStyle = rng.pick(HAIR_STYLES);
@@ -276,7 +276,7 @@ export function generatePlayer(
   const leadershipBase = rng.int(10, 50)
     + Math.max(0, (age - 25) * 2)
     + (LEADERSHIP_OCCUPATIONS[occupation] ?? 0)
-    + Math.round(discipline * 1.5); // discipline is 1-20, so *1.5 gives 0-30
+    + Math.round(discipline * 0.3); // discipline is 0-100, *0.3 gives 0-30
   const leadership = Math.min(100, Math.max(1, leadershipBase));
 
   // Work rate: position + physical jobs + alcohol penalty
@@ -285,7 +285,7 @@ export function generatePlayer(
     + (position === "DEF" ? 10 : position === "MID" ? 5 : position === "FWD" ? -5 : 0)
     + (PHYSICAL_OCCUPATIONS.includes(occupation) ? 10 : 0)
     - (age > 35 ? (age - 35) * 3 : 0)
-    - (alcohol > 14 ? (alcohol - 14) * 2 : 0); // alcohol 1-20
+    - (alcohol > 70 ? Math.round((alcohol - 70) * 0.4) : 0); // alcohol 0-100
   const workRate = Math.min(100, Math.max(1, workRateBase));
 
   // Aggression: bodyType + occupation + temper
@@ -295,15 +295,15 @@ export function generatePlayer(
   const aggressionBase = rng.int(15, 65)
     + (bodyType === "stocky" ? 15 : bodyType === "athletic" ? 10 : bodyType === "thin" ? -10 : 0)
     + (AGGRESSIVE_OCCUPATIONS[occupation] ?? 0)
-    + Math.round(temper); // temper 1-20
+    + Math.round(temper * 0.2); // temper 0-100, *0.2 gives 0-20
     + (position === "DEF" ? 10 : position === "FWD" ? 5 : position === "GK" ? -10 : 0);
   const aggression = Math.min(100, Math.max(1, aggressionBase));
 
   // Consistency (hidden): experience-like, discipline helps
   const consistencyBase = rng.int(20, 80)
     + Math.round((age > 25 ? Math.min(30, (age - 20) * 2) : 0)) // experience proxy
-    - Math.round(alcohol * 1) // alcohol 1-20
-    + Math.round(discipline * 1); // discipline 1-20
+    - Math.round(alcohol * 0.2) // alcohol 0-100
+    + Math.round(discipline * 0.2); // discipline 0-100
   const consistency = Math.min(100, Math.max(1, consistencyBase));
 
   // Clutch (hidden): intentionally unpredictable
