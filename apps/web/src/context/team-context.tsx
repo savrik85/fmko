@@ -10,11 +10,21 @@ interface AuthState {
   email: string | null;
   teamId: string | null;
   teamName: string | null;
+  primaryColor: string | null;
+  secondaryColor: string | null;
+  badgePattern: string | null;
+  villageName: string | null;
+  district: string | null;
+  budget: number | null;
+  leaguePosition: number | null;
+  season: number | null;
+  seasonDay: number | null;
+  seasonTotal: number | null;
   isLoading: boolean;
 }
 
 interface TeamContextValue extends AuthState {
-  login: (token: string, user: { id: string; email: string; teamId: string | null; teamName: string | null }) => void;
+  login: (token: string, user: { id: string; email: string; teamId: string | null; teamName: string | null; primaryColor?: string | null; secondaryColor?: string | null; badgePattern?: string | null; villageName?: string | null; district?: string | null; budget?: number | null; leaguePosition?: number | null; season?: number | null; seasonDay?: number | null; seasonTotal?: number | null }) => void;
   setTeam: (id: string, name: string) => void;
   logout: () => void;
 }
@@ -22,11 +32,12 @@ interface TeamContextValue extends AuthState {
 const TeamContext = createContext<TeamContextValue | null>(null);
 
 const STORAGE_TOKEN = "om_token";
+const STORAGE_TEAM = "om_team";
 const PUBLIC_PATHS = ["/", "/login", "/register"];
 
 export function TeamProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
-    token: null, userId: null, email: null, teamId: null, teamName: null, isLoading: true,
+    token: null, userId: null, email: null, teamId: null, teamName: null, primaryColor: null, secondaryColor: null, badgePattern: null, villageName: null, district: null, budget: null, leaguePosition: null, season: null, seasonDay: null, seasonTotal: null, isLoading: true,
   });
   const router = useRouter();
   const pathname = usePathname();
@@ -39,18 +50,28 @@ export function TeamProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    apiFetch<{ id: string; email: string; teamId: string | null; teamName: string | null }>("/auth/me", {
+    apiFetch<{ id: string; email: string; teamId: string | null; teamName: string | null; primaryColor?: string | null; secondaryColor?: string | null; badgePattern?: string | null; villageName?: string | null; district?: string | null; budget?: number | null; leaguePosition?: number | null; season?: number | null; seasonDay?: number | null; seasonTotal?: number | null }>("/auth/me", {
       headers: { Authorization: `Bearer ${stored}` },
     })
       .then((user) => {
+        const teamData = { teamId: user.teamId, teamName: user.teamName, primaryColor: user.primaryColor ?? null, secondaryColor: user.secondaryColor ?? null, badgePattern: user.badgePattern ?? null, villageName: user.villageName ?? null, district: user.district ?? null, budget: user.budget ?? null, leaguePosition: user.leaguePosition ?? null, season: user.season ?? null, seasonDay: user.seasonDay ?? null, seasonTotal: user.seasonTotal ?? null };
+        localStorage.setItem(STORAGE_TEAM, JSON.stringify(teamData));
         setState({
           token: stored, userId: user.id, email: user.email,
-          teamId: user.teamId, teamName: user.teamName, isLoading: false,
+          ...teamData, isLoading: false,
         });
       })
-      .catch(() => {
-        localStorage.removeItem(STORAGE_TOKEN);
-        setState({ token: null, userId: null, email: null, teamId: null, teamName: null, isLoading: false });
+      .catch((err: Error & { status?: number }) => {
+        if (err?.status === 401) {
+          localStorage.removeItem(STORAGE_TOKEN);
+          localStorage.removeItem(STORAGE_TEAM);
+          setState({ token: null, userId: null, email: null, teamId: null, teamName: null, primaryColor: null, secondaryColor: null, badgePattern: null, villageName: null, district: null, budget: null, leaguePosition: null, season: null, seasonDay: null, seasonTotal: null, isLoading: false });
+        } else {
+          // API unreachable — restore from localStorage so redirect doesn't fire
+          const cached = localStorage.getItem(STORAGE_TEAM);
+          const teamData = cached ? JSON.parse(cached) : {};
+          setState((s) => ({ ...s, token: stored, ...teamData, isLoading: false }));
+        }
       });
   }, []);
 
@@ -67,9 +88,11 @@ export function TeamProvider({ children }: { children: ReactNode }) {
     }
   }, [state.token, state.teamId, state.isLoading, pathname, router]);
 
-  function login(token: string, user: { id: string; email: string; teamId: string | null; teamName: string | null }) {
+  function login(token: string, user: { id: string; email: string; teamId: string | null; teamName: string | null; primaryColor?: string | null; secondaryColor?: string | null; badgePattern?: string | null; villageName?: string | null; district?: string | null; budget?: number | null; leaguePosition?: number | null; season?: number | null; seasonDay?: number | null; seasonTotal?: number | null }) {
     localStorage.setItem(STORAGE_TOKEN, token);
-    setState({ token, userId: user.id, email: user.email, teamId: user.teamId, teamName: user.teamName, isLoading: false });
+    const teamData = { teamId: user.teamId, teamName: user.teamName, primaryColor: user.primaryColor ?? null, secondaryColor: user.secondaryColor ?? null, badgePattern: user.badgePattern ?? null, villageName: user.villageName ?? null, district: user.district ?? null, budget: user.budget ?? null, leaguePosition: user.leaguePosition ?? null, season: user.season ?? null, seasonDay: user.seasonDay ?? null, seasonTotal: user.seasonTotal ?? null };
+    localStorage.setItem(STORAGE_TEAM, JSON.stringify(teamData));
+    setState({ token, userId: user.id, email: user.email, ...teamData, isLoading: false });
   }
 
   function setTeam(id: string, name: string) {
@@ -80,7 +103,8 @@ export function TeamProvider({ children }: { children: ReactNode }) {
     const t = state.token;
     if (t) apiFetch("/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${t}` } }).catch(() => {});
     localStorage.removeItem(STORAGE_TOKEN);
-    setState({ token: null, userId: null, email: null, teamId: null, teamName: null, isLoading: false });
+    localStorage.removeItem(STORAGE_TEAM);
+    setState({ token: null, userId: null, email: null, teamId: null, teamName: null, primaryColor: null, secondaryColor: null, badgePattern: null, villageName: null, district: null, budget: null, leaguePosition: null, season: null, seasonDay: null, seasonTotal: null, isLoading: false });
     router.replace("/login");
   }
 

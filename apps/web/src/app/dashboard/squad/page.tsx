@@ -33,10 +33,9 @@ export default function SquadPage() {
   const sorted = [...filtered].sort((a, b) => POS_ORDER[a.position] - POS_ORDER[b.position] || b.overall_rating - a.overall_rating);
 
   return (
-    <div className="page-container">
-      <h1 className="text-h1 text-pitch-500 mb-4">Kádr ({players.length})</h1>
+    <div className="page-container space-y-5">
 
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2">
         {(["all", "GK", "DEF", "MID", "FWD"] as PosFilter[]).map((pos) => (
           <button key={pos} onClick={() => setFilter(pos)}
             className={`px-3 py-1.5 rounded-full text-sm font-heading font-bold transition-colors ${filter === pos ? "text-white" : "bg-white text-muted shadow-card"}`}

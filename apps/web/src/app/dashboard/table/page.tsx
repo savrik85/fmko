@@ -55,9 +55,9 @@ export default function TablePage() {
   const maxPlayed = Math.max(...standings.map((s) => s.played), 0);
 
   return (
-    <div className="page-container">
-      <h1 className="text-h1 text-pitch-500 mb-1">{leagueName || "Tabulka"}</h1>
-      <p className="text-base text-muted mb-5">
+    <div className="page-container space-y-5">
+
+      <p className="text-base text-muted">
         {maxPlayed > 0 ? `${maxPlayed} odehraných kol` : "Zatím žádné zápasy"}
       </p>
 

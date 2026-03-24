@@ -1,16 +1,40 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { Card, CardBody, Spinner, SectionLabel, PositionBadge, EntityLink, BadgePreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
+interface Standing {
+  pos: number;
+  team: string;
+  teamId: string | null;
+  points: number;
+  played: number;
+  isPlayer?: boolean;
+}
+
+interface ScheduleMatch {
+  id: string;
+  round: number | null;
+  status: string;
+  homeName: string;
+  awayName: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  scheduledAt: string | null;
+  isHome: boolean;
+}
+
 export default function DashboardPage() {
   const { teamId } = useTeam();
   const [team, setTeam] = useState<Team | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [standings, setStandings] = useState<Standing[]>([]);
+  const [matches, setMatches] = useState<ScheduleMatch[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,8 +42,14 @@ export default function DashboardPage() {
     Promise.all([
       apiFetch<Team>(`/api/teams/${teamId}`),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
-    ]).then(([t, p]) => {
-      setTeam(t); setPlayers(p); setLoading(false);
+      apiFetch<{ standings: Standing[] }>(`/api/teams/${teamId}/standings`).catch(() => ({ standings: [] })),
+      apiFetch<{ matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`).catch(() => ({ matches: [] })),
+    ]).then(([t, p, s, m]) => {
+      setTeam(t);
+      setPlayers(p);
+      setStandings(s.standings);
+      setMatches(m.matches);
+      setLoading(false);
     }).catch(() => setLoading(false));
   }, [teamId]);
 
@@ -27,36 +57,96 @@ export default function DashboardPage() {
   if (!team) return <div className="page-container">Tým nenalezen.</div>;
 
   const fitCount = players.filter((p) => (p.physical?.stamina ?? 0) > 3).length;
+  const nextMatch = matches.find((m) => m.status !== "simulated");
+  const recentMatches = matches.filter((m) => m.status === "simulated").slice(-5).reverse();
+  const myStanding = standings.find((s) => s.isPlayer);
 
   return (
     <div className="page-container space-y-4">
-      {/* Team header */}
-      <div className="hero-gradient rounded-card p-6 text-white flex items-center gap-5" style={{ backgroundColor: team.primary_color || "#2D5F2D" }}>
-        <BadgePreview
-          primary={team.primary_color || "#2D5F2D"}
-          secondary={team.secondary_color || "#FFFFFF"}
-          pattern={(team.badge_pattern as BadgePattern) || "shield"}
-          initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
-          size={64}
-        />
-        <div>
-          <h1 className="text-h1 text-white">{team.name}</h1>
-          <p className="text-white/90 text-sm mt-1">{team.village_name} &middot; {team.district}</p>
-          <p className="text-white/70 text-sm">Rozpočet: {(team.budget ?? 0).toLocaleString("cs")} Kč &middot; {players.length} hráčů</p>
-        </div>
+
+      {/* 3-column overview */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Squad status */}
+        <Card>
+          <CardBody>
+            <SectionLabel>Kádr</SectionLabel>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="font-heading font-bold text-2xl tabular-nums text-pitch-500">{players.length}</div>
+                <div className="text-xs text-muted">Celkem</div>
+              </div>
+              <div>
+                <div className="font-heading font-bold text-2xl tabular-nums text-pitch-500">{fitCount}</div>
+                <div className="text-xs text-muted">Fit</div>
+              </div>
+              <div>
+                <div className="font-heading font-bold text-2xl tabular-nums text-card-red">{players.length - fitCount}</div>
+                <div className="text-xs text-muted">Mimo</div>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+
+        {/* Next match */}
+        <Card>
+          <CardBody>
+            <SectionLabel>Další zápas</SectionLabel>
+            {nextMatch ? (
+              <div className="text-center">
+                <div className="font-heading font-bold text-base">{nextMatch.isHome ? team.name : nextMatch.homeName}</div>
+                <div className="text-muted text-sm my-1">vs</div>
+                <div className="font-heading font-bold text-base">{nextMatch.isHome ? nextMatch.awayName : team.name}</div>
+                {nextMatch.round && <div className="text-xs text-muted mt-2">{nextMatch.round}. kolo</div>}
+              </div>
+            ) : (
+              <div className="text-center text-muted py-2">Žádný naplánovaný zápas</div>
+            )}
+          </CardBody>
+        </Card>
+
+        {/* League position */}
+        <Card>
+          <CardBody>
+            <SectionLabel>Liga</SectionLabel>
+            {myStanding ? (
+              <div className="text-center">
+                <div className="font-heading font-[800] text-4xl tabular-nums text-pitch-500">{myStanding.pos}.</div>
+                <div className="text-sm text-muted">{myStanding.points} bodů · {myStanding.played} zápasů</div>
+                <Link href="/dashboard/liga" className="text-sm text-pitch-500 font-heading font-bold hover:underline mt-2 inline-block">Zobrazit tabulku →</Link>
+              </div>
+            ) : (
+              <div className="text-center">
+                <div className="text-muted py-2">Zatím žádné výsledky</div>
+                <Link href="/dashboard/match" className="text-sm text-pitch-500 font-heading font-bold hover:underline">Hrát zápas →</Link>
+              </div>
+            )}
+          </CardBody>
+        </Card>
       </div>
 
-      {/* Squad status */}
-      <Card>
-        <CardBody>
-          <SectionLabel>Stav kádru</SectionLabel>
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <StatusItem value={players.length} label="Celkem" color="text-pitch-500" />
-            <StatusItem value={fitCount} label="Fit" color="text-pitch-500" />
-            <StatusItem value={players.length - fitCount} label="Mimo" color="text-card-red" />
-          </div>
-        </CardBody>
-      </Card>
+      {/* Recent matches */}
+      {recentMatches.length > 0 && (
+        <Card>
+          <CardBody>
+            <SectionLabel>Poslední zápasy</SectionLabel>
+            <div className="space-y-2">
+              {recentMatches.map((m) => {
+                const won = m.isHome ? (m.homeScore ?? 0) > (m.awayScore ?? 0) : (m.awayScore ?? 0) > (m.homeScore ?? 0);
+                const draw = m.homeScore === m.awayScore;
+                return (
+                  <Link key={m.id} href={`/dashboard/match/${m.id}`} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-surface transition-colors">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold ${won ? "bg-pitch-400" : draw ? "bg-gold-500" : "bg-card-red"}`}>
+                      {won ? "V" : draw ? "R" : "P"}
+                    </div>
+                    <div className="flex-1 font-heading text-sm">{m.homeName} vs {m.awayName}</div>
+                    <div className="font-heading font-[800] text-base tabular-nums">{m.homeScore} : {m.awayScore}</div>
+                  </Link>
+                );
+              })}
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Top players */}
       <Card>
@@ -90,30 +180,21 @@ export default function DashboardPage() {
       </Card>
 
       {/* Quick links */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         {[
           { href: "/dashboard/squad", icon: "\u{1F465}", label: "Kádr" },
           { href: "/dashboard/match", icon: "\u26BD", label: "Zápas" },
-          { href: "/dashboard/table", icon: "\u{1F4CA}", label: "Tabulka" },
-          { href: "/dashboard/squad", icon: "\u{1F3CB}", label: "Tréninky" },
+          { href: "/dashboard/liga", icon: "\u{1F3C6}", label: "Liga" },
+          { href: "/dashboard/training", icon: "\u{1F3CB}", label: "Tréninky" },
         ].map((link) => (
-          <a key={link.href + link.label} href={link.href}>
+          <a key={link.href} href={link.href}>
             <Card hover className="p-4 text-center">
               <div className="text-2xl mb-1">{link.icon}</div>
-              <div className="text-h3">{link.label}</div>
+              <div className="font-heading font-bold text-sm">{link.label}</div>
             </Card>
           </a>
         ))}
       </div>
-    </div>
-  );
-}
-
-function StatusItem({ value, label, color }: { value: number; label: string; color: string }) {
-  return (
-    <div>
-      <div className={`font-heading font-bold text-2xl tabular-nums ${color}`}>{value}</div>
-      <div className="text-xs text-muted">{label}</div>
     </div>
   );
 }
