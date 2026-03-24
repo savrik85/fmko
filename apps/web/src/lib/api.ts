@@ -63,12 +63,32 @@ export interface Player {
   overall_rating: number;
   skills: { speed: number; technique: number; shooting: number; passing: number; heading: number; defense: number; goalkeeping: number; creativity?: number; setPieces?: number };
   physical: { stamina: number; strength: number; injuryProneness: number; height?: number; weight?: number; preferredFoot?: "left" | "right" | "both"; preferredSide?: "left" | "center" | "right" | "any" };
-  personality: { discipline: number; patriotism: number; alcohol: number; temper: number; leadership?: number; workRate?: number; aggression?: number };
+  personality: { discipline: number; patriotism: number; alcohol: number; temper: number; leadership?: number; workRate?: number; aggression?: number; consistency?: number; clutch?: number };
   lifeContext: { occupation: string; condition: number; morale: number };
   avatar: Record<string, unknown>;
   description: string;
   residence?: string;
   commute_km?: number;
+}
+
+export interface CareerStats {
+  seasons: {
+    season: number;
+    appearances: number;
+    goals: number;
+    assists: number;
+    yellowCards: number;
+    redCards: number;
+    avgRating: number;
+    cleanSheets: number;
+  }[];
+  totals: {
+    appearances: number;
+    goals: number;
+    assists: number;
+    yellowCards: number;
+    redCards: number;
+  };
 }
 
 export interface ManagerProfile {

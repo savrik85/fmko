@@ -18,6 +18,8 @@ export default function TeamPage() {
   const [team, setTeam] = useState<Team | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [leagueTeams, setLeagueTeams] = useState<Array<{ id: string; name: string }>>([]);
+  const [leagueName, setLeagueName] = useState("");
+  const [leaguePos, setLeaguePos] = useState<number | null>(null);
   const [filter, setFilter] = useState<PosFilter>("all");
   const [loading, setLoading] = useState(true);
 
@@ -26,10 +28,16 @@ export default function TeamPage() {
       apiFetch<Team>(`/api/teams/${teamId}`),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
       apiFetch<Array<{ id: string; name: string }>>(`/api/teams/${teamId}/league-teams`).catch(() => []),
-    ]).then(([t, p, lt]) => {
+      apiFetch<{ leagueName: string; standings: Array<{ teamId: string | null; pos: number }> }>(`/api/teams/${teamId}/standings`).catch(() => null),
+    ]).then(([t, p, lt, standings]) => {
       setTeam(t);
       setPlayers(p);
       setLeagueTeams(lt);
+      if (standings) {
+        setLeagueName(standings.leagueName);
+        const myPos = standings.standings.find((s) => s.teamId === teamId);
+        if (myPos) setLeaguePos(myPos.pos);
+      }
       setLoading(false);
     });
   }, [teamId]);
@@ -47,54 +55,65 @@ export default function TeamPage() {
   const avgRating = players.length > 0 ? Math.round(players.reduce((s, p) => s + p.overall_rating, 0) / players.length) : 0;
 
   return (
-    <div className="page-container space-y-5">
-
-      {/* ═══ Navigation bar ═══ */}
-      <div className="flex items-center justify-between">
-        <button onClick={() => router.back()} className="text-muted hover:text-ink text-sm flex items-center gap-1 transition-colors">
-          &#8592; Zpět
-        </button>
-
-        {leagueTeams.length > 1 && (
-          <div className="flex items-center gap-1">
+    <>
+      {/* ═══ Team header — full width, team color ═══ */}
+      <div className="hero-gradient px-5 sm:px-8 py-5" style={{ backgroundColor: color }}>
+        <div className="flex items-center gap-4 max-w-5xl mx-auto">
+          {leagueTeams.length > 1 && (
             <button
               onClick={() => prevTeam && router.push(`/dashboard/team/${prevTeam.id}`)}
-              className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-ink transition-colors"
+              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors"
             >
               &#9664;
             </button>
-            <span className="text-muted text-xs font-heading tabular-nums px-1">
-              {teamIndex + 1}/{leagueTeams.length}
-            </span>
+          )}
+
+          <BadgePreview
+            primary={color}
+            secondary={team.secondary_color || "#FFFFFF"}
+            pattern={(team.badge_pattern as BadgePattern) || "shield"}
+            initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
+            size={56}
+          />
+
+          <div className="flex-1 min-w-0">
+            <h1 className="font-heading font-extrabold text-white text-xl sm:text-2xl leading-tight truncate">
+              {team.name}
+            </h1>
+            <div className="text-white/60 text-sm mt-0.5">
+              <EntityLink type="village" id={team.village_name} className="!text-white/80 !decoration-white/30">{team.village_name}</EntityLink>
+              {" "}&middot; {team.district}
+            </div>
+            {leaguePos && leagueName && (
+              <a href="/dashboard/liga" className="inline-block mt-1 text-white/90 text-sm font-heading font-bold hover:text-white transition-colors underline decoration-white/30">
+                {leaguePos}. v {leagueName}
+              </a>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
+              <div className="font-heading font-extrabold text-xl tabular-nums leading-none text-white">{players.length}</div>
+              <div className="text-white/50 text-[10px] font-heading font-bold uppercase mt-1">Hráčů</div>
+            </div>
+            <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
+              <div className="font-heading font-extrabold text-xl tabular-nums leading-none text-white">{avgRating}</div>
+              <div className="text-white/50 text-[10px] font-heading font-bold uppercase mt-1">Rating</div>
+            </div>
+          </div>
+
+          {leagueTeams.length > 1 && (
             <button
               onClick={() => nextTeam && router.push(`/dashboard/team/${nextTeam.id}`)}
-              className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-ink transition-colors"
+              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors"
             >
               &#9654;
             </button>
-          </div>
-        )}
-      </div>
-
-      {/* ═══ Team identity ═══ */}
-      <div className="flex items-start gap-5">
-        <BadgePreview
-          primary={team.primary_color || "#2D5F2D"}
-          secondary={team.secondary_color || "#FFFFFF"}
-          pattern={(team.badge_pattern as BadgePattern) || "shield"}
-          initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
-          size={64}
-        />
-        <div className="flex-1 min-w-0 pt-0.5">
-          <h1 className="font-heading font-[800] text-ink text-2xl sm:text-3xl leading-tight">
-            {team.name}
-          </h1>
-          <div className="text-muted text-sm mt-1">
-            <EntityLink type="village" id={team.village_name}>{team.village_name}</EntityLink>
-            {" "}&middot; {team.district}
-          </div>
+          )}
         </div>
       </div>
+
+    <div className="page-container space-y-5">
 
       {/* ── Info grid ── */}
       <div className="card p-4 sm:p-5">
@@ -144,6 +163,7 @@ export default function TeamPage() {
       </div>
 
     </div>
+    </>
   );
 }
 

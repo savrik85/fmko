@@ -46,7 +46,7 @@ export function PageHeader({ name, detail, color, badge, children }: PageHeaderP
 
   return (
     <div
-      className="hero-gradient px-5 sm:px-6 py-3"
+      className="hero-gradient py-3 px-5 sm:px-8"
       style={{ backgroundColor: bg }}
     >
       <div className="flex items-center justify-between gap-4">

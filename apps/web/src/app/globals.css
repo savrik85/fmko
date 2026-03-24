@@ -251,7 +251,8 @@ body::before {
   padding: 3px 10px; border-radius: 6px;
   font-family: var(--font-heading); font-weight: 700;
   font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase;
-  background: var(--pos-bg); color: var(--pos-color);
+  background: white; color: var(--pos-color);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.06);
 }
 
 .pos-dot {

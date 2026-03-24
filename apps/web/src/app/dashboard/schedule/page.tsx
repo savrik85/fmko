@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview } from "@/components/ui";
+import { Spinner, SectionLabel, BadgePreview, PageHeader } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface ScheduleMatch {
@@ -114,11 +114,9 @@ export default function SchedulePage() {
   const upcoming = matches.filter((m) => m.status !== "simulated");
 
   return (
+    <>
+      <PageHeader name={leagueName || "Rozpis zápasů"} detail={`${played.length} odehráno · ${upcoming.length} zbývá`}>{null}</PageHeader>
     <div className="page-container space-y-5">
-
-      <p className="text-base text-muted">
-        {played.length} odehráno &middot; {upcoming.length} zbývá
-      </p>
 
       {/* Tabs */}
       <div className="flex gap-1 bg-surface rounded-xl p-1">
@@ -198,6 +196,7 @@ export default function SchedulePage() {
         </>
       )}
     </div>
+    </>
   );
 }
 

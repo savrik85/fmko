@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, Button, BadgePreview, PositionBadge } from "@/components/ui";
+import { Spinner, SectionLabel, Button, BadgePreview, PositionBadge, PageHeader } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 // ═══ Types ═══
@@ -151,6 +151,8 @@ export default function LigaPage() {
   if (loadingStandings) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
   return (
+    <>
+      <PageHeader name={leagueName || "Liga"} badge={null}>{null}</PageHeader>
     <div className="page-container space-y-5">
 
       {/* FM-style tabs */}
@@ -174,12 +176,53 @@ export default function LigaPage() {
       {tab === "vysledky" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("vysledky")} teamId={teamId!} showAll={false} />}
       {tab === "statistiky" && <StatsTab scorers={topScorers} assists={topAssists} loaded={loadedTabs.has("statistiky")} teamId={teamId!} />}
     </div>
+    </>
   );
 }
 
 // ═══ Tabulka ═══
 
+type SortKey = "pos" | "team" | "played" | "wins" | "draws" | "losses" | "gd" | "points";
+type SortDir = "asc" | "desc";
+
+const SORT_COLUMNS: { key: SortKey; label: string; center?: boolean }[] = [
+  { key: "pos", label: "#", center: true },
+  { key: "team", label: "Tým" },
+  { key: "played", label: "Z", center: true },
+  { key: "wins", label: "V", center: true },
+  { key: "draws", label: "R", center: true },
+  { key: "losses", label: "P", center: true },
+  { key: "gd", label: "Skóre", center: true },
+  { key: "points", label: "B", center: true },
+];
+
+function sortStandings(rows: Standing[], key: SortKey, dir: SortDir): Standing[] {
+  const sorted = [...rows].sort((a, b) => {
+    let cmp = 0;
+    switch (key) {
+      case "pos": cmp = a.pos - b.pos; break;
+      case "team": cmp = a.team.localeCompare(b.team, "cs"); break;
+      case "played": cmp = a.played - b.played; break;
+      case "wins": cmp = a.wins - b.wins; break;
+      case "draws": cmp = a.draws - b.draws; break;
+      case "losses": cmp = a.losses - b.losses; break;
+      case "gd": cmp = (a.gf - a.ga) - (b.gf - b.ga); break;
+      case "points": cmp = a.points - b.points; break;
+    }
+    return dir === "asc" ? cmp : -cmp;
+  });
+  return sorted;
+}
+
+function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return null;
+  return <span className="ml-0.5 text-[10px] text-pitch-500">{dir === "asc" ? "\u25B2" : "\u25BC"}</span>;
+}
+
 function StandingsTab({ standings, teamId }: { standings: Standing[]; teamId: string }) {
+  const [sortKey, setSortKey] = useState<SortKey>("pos");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
   if (standings.length === 0) {
     return (
       <div className="card p-8 text-center text-muted">
@@ -190,21 +233,39 @@ function StandingsTab({ standings, teamId }: { standings: Standing[]; teamId: st
     );
   }
 
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      // Default desc for numeric columns, asc for text
+      setSortDir(key === "team" ? "asc" : "desc");
+    }
+  };
+
+  const sorted = sortStandings(standings, sortKey, sortDir);
+  const totalTeams = standings.length;
+
   return (
     <div className="card overflow-hidden">
+      {/* Sortable header */}
       <div className="grid grid-cols-[2.5rem_1fr_3rem_3rem_3rem_3rem_4.5rem_3.5rem_7.5rem] gap-0 px-4 py-2.5 border-b border-gray-200">
-        <div className="text-label text-center">#</div>
-        <div className="text-label">Tým</div>
-        <div className="text-label text-center">Z</div>
-        <div className="text-label text-center">V</div>
-        <div className="text-label text-center">R</div>
-        <div className="text-label text-center">P</div>
-        <div className="text-label text-center">Skóre</div>
-        <div className="text-label text-center">B</div>
+        {SORT_COLUMNS.map((col) => (
+          <button
+            key={col.key}
+            onClick={() => handleSort(col.key)}
+            className={`text-label cursor-pointer hover:text-pitch-600 transition-colors select-none flex items-center gap-0.5 ${
+              col.center ? "justify-center" : ""
+            } ${sortKey === col.key ? "text-pitch-600" : ""}`}
+          >
+            {col.label}
+            <SortArrow active={sortKey === col.key} dir={sortDir} />
+          </button>
+        ))}
         <div className="text-label text-center">Forma</div>
       </div>
 
-      {standings.map((row) => {
+      {sorted.map((row, idx) => {
         const teamCell = row.isAi ? (
           <span className="text-muted">{row.team}</span>
         ) : row.teamId ? (
@@ -215,13 +276,13 @@ function StandingsTab({ standings, teamId }: { standings: Standing[]; teamId: st
 
         return (
           <div
-            key={row.pos}
+            key={row.teamId ?? row.pos}
             className={`grid grid-cols-[2.5rem_1fr_3rem_3rem_3rem_3rem_4.5rem_3.5rem_7.5rem] gap-0 px-4 py-4 border-b border-gray-200 items-center transition-colors ${
-              row.isPlayer ? "bg-pitch-50/50" : "hover:bg-gray-50/50"
+              row.isPlayer ? "bg-pitch-50/50" : idx % 2 === 1 ? "bg-gray-50/30" : "hover:bg-gray-50/50"
             }`}
           >
             <div className={`text-center font-heading font-bold tabular-nums ${
-              row.pos === 1 ? "text-gold-500" : row.pos <= 2 ? "text-pitch-500" : row.pos >= standings.length ? "text-card-red" : "text-muted"
+              row.pos === 1 ? "text-gold-500" : row.pos <= 2 ? "text-pitch-500" : row.pos >= totalTeams - 1 ? "text-card-red" : "text-muted"
             }`}>
               {row.pos}
             </div>
