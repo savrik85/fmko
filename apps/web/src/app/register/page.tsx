@@ -29,6 +29,8 @@ export default function RegisterPage() {
         body: JSON.stringify({ email, password }),
       });
       login(result.token, { id: result.user.id, email: result.user.email, teamId: null, teamName: null });
+      sessionStorage.removeItem("onboarding_step");
+      sessionStorage.removeItem("onboarding_state");
       router.push("/onboarding");
     } catch (err) {
       setError((err as Error).message);

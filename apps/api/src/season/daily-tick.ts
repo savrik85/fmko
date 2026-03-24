@@ -118,6 +118,18 @@ export async function executeDailyTick(
           "UPDATE teams SET last_training_at = ?, last_training_result = ? WHERE id = ?"
         ).bind(now.toISOString(), JSON.stringify(summary), teamId).run();
 
+        // Persist skill changes to DB
+        for (const imp of result.improvements) {
+          const player = squad[imp.playerIndex];
+          const playerId = playersResult.results[imp.playerIndex].id as string;
+          const currentSkills = JSON.parse(playersResult.results[imp.playerIndex].skills as string);
+          if (imp.attribute in currentSkills) {
+            currentSkills[imp.attribute] = player[imp.attribute as keyof typeof player];
+            await env.DB.prepare("UPDATE players SET skills = ? WHERE id = ?")
+              .bind(JSON.stringify(currentSkills), playerId).run();
+          }
+        }
+
         events.push({
           type: "training",
           description: `Trénink: ${summary.attendedCount}/${summary.totalCount} hráčů, ${improvementsWithNames.length} zlepšení`,

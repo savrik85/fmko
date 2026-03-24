@@ -1259,25 +1259,10 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
   });
 });
 
-// POST /api/game/advance-day — simulace přechodu na další den (dev/test)
+// POST /api/game/advance-day — spustí přesně stejný daily tick jako cron
 gameRouter.post("/game/advance-day", async (c) => {
-  const body = await c.req.json<{ days?: number }>().catch(() => ({ days: 1 }));
-  const days = Math.min(7, Math.max(1, body.days ?? 1));
-
-  const results = [];
-  const baseDate = new Date();
-
-  for (let i = 0; i < days; i++) {
-    const gameDate = new Date(baseDate.getTime() + i * 86400000);
-    const result = await executeDailyTick(c.env, gameDate);
-    results.push(result);
-  }
-
-  return c.json({
-    ok: true,
-    daysAdvanced: days,
-    results,
-  });
+  const result = await executeDailyTick(c.env);
+  return c.json({ ok: true, result });
 });
 
 export { gameRouter };

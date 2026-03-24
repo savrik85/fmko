@@ -21,16 +21,19 @@ function getRatingColor(rating: number): string {
   return "#D94032";
 }
 
+const SKILL_LABELS: Record<string, string> = {
+  speed: "RYC", technique: "TEC", shooting: "STŘ", passing: "PŘI",
+  heading: "HLA", defense: "OBR", goalkeeping: "BRA",
+  creativity: "KRE", setPieces: "STD", vision: "VID",
+  stamina: "VYD", strength: "SÍL",
+};
+
 function getTopStats(player: Player): Array<{ label: string; value: number }> {
   const skills = player.skills;
   if (!skills) return [];
-  const labels: Record<string, string> = {
-    speed: "RYC", technique: "TEC", shooting: "STŘ", passing: "PŘI",
-    heading: "HLA", defense: "OBR", goalkeeping: "BRA",
-  };
   return Object.entries(skills)
-    .filter(([, v]) => typeof v === "number")
-    .map(([k, v]) => ({ label: labels[k] ?? k, value: v as number }))
+    .filter(([k, v]) => typeof v === "number" && k in SKILL_LABELS)
+    .map(([k, v]) => ({ label: SKILL_LABELS[k], value: v as number }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 3);
 }
