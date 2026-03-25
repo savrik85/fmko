@@ -98,15 +98,26 @@ export async function runScheduledMatches(
         tactic: "balanced",
       };
 
-      // Load stadium info for pitch condition + attendance
-      const stadium = await db.prepare("SELECT pitch_condition FROM stadiums WHERE team_id = ?")
-        .bind(homeTeamId).first<{ pitch_condition: number }>().catch(() => null);
-      const pitchCondition = stadium?.pitch_condition ?? 50;
+      // Load stadium info for pitch condition + facilities
+      const stadiumRow = await db.prepare("SELECT * FROM stadiums WHERE team_id = ?")
+        .bind(homeTeamId).first<Record<string, unknown>>().catch(() => null);
+      const pitchCondition = (stadiumRow?.pitch_condition as number) ?? 50;
       const stadiumNameRow = await db.prepare("SELECT stadium_name FROM teams WHERE id = ?")
         .bind(homeTeamId).first<{ stadium_name: string }>().catch(() => null);
       const stadiumName = stadiumNameRow?.stadium_name ?? null;
 
-      // Attendance: population + reputation + form
+      // Calculate facility effects
+      const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
+      const facilities: Record<string, number> = {};
+      if (stadiumRow) {
+        for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "parking", "fence"]) {
+          facilities[key] = (stadiumRow[key] as number) ?? 0;
+        }
+      }
+      const facilityEffects = calculateFacilityEffects(facilities);
+      const stadiumCapacity = ((stadiumRow?.capacity as number) ?? 200) + facilityEffects.capacityBonus;
+
+      // Attendance: population + reputation + form + facility bonuses
       const homeInfo = await db.prepare(
         "SELECT v.population, v.size, t.reputation FROM villages v JOIN teams t ON t.village_id = v.id WHERE t.id = ?"
       ).bind(homeTeamId).first<{ population: number; size: string; reputation: number }>().catch(() => null);
@@ -124,7 +135,22 @@ export async function runScheduledMatches(
         ) WHERE win = 1`
       ).bind(homeTeamId, homeTeamId, homeTeamId, homeTeamId).first<{ w: number }>().catch(() => ({ w: 0 }));
       const formBonus = Math.round((recentWins?.w ?? 0) * popBase * 0.08);
-      const attendance = Math.max(8, popBase + repBonus + formBonus + Math.round(Math.random() * 10 - 5));
+      const rawAttendance = Math.max(8, popBase + repBonus + formBonus + Math.round(Math.random() * 10 - 5));
+      // Apply facility attendance bonus (lighting + parking) and cap at stadium capacity
+      const attendance = Math.min(
+        Math.round(rawAttendance * (1 + facilityEffects.attendanceBonus)),
+        stadiumCapacity,
+      );
+
+      // Apply changing room morale bonus to home lineup
+      if (facilityEffects.homeMoraleBonus > 0) {
+        for (const p of homeLineup) {
+          p.morale = Math.min(100, p.morale + facilityEffects.homeMoraleBonus);
+        }
+        for (const p of homeSubs) {
+          p.morale = Math.min(100, p.morale + facilityEffects.homeMoraleBonus);
+        }
+      }
 
       // Load equipment effects for both teams
       const { calculateEffects } = await import("../equipment/equipment-generator");
@@ -150,6 +176,11 @@ export async function runScheduledMatches(
       const [homeEquipment, awayEquipment] = await Promise.all([
         loadEquipMods(homeTeamId), loadEquipMods(awayTeamId),
       ]);
+
+      // Add changing room injury reduction to home equipment
+      if (facilityEffects.homeInjuryReduction > 0 && homeEquipment) {
+        homeEquipment.injurySeverityMod += facilityEffects.homeInjuryReduction;
+      }
 
       // Simulate
       const rng = createRng(Date.now() + matchId.charCodeAt(0));

@@ -231,6 +231,9 @@ export default function PlayerDetailPage() {
         </div>
       </div>
 
+      {/* ═══ Tréninkový vývoj (jen pro vlastníka) ═══ */}
+      {player.team_id === teamId && <TrainingDevelopment teamId={teamId} playerId={playerId} />}
+
       {/* ═══ Row 2: Kariéra — FM style ═══ */}
       <div className={`grid grid-cols-1 ${careerStats && careerStats.totals.appearances > 0 ? "lg:grid-cols-[1fr_320px]" : ""} gap-5`}>
 
@@ -486,4 +489,105 @@ function attrBg(value: number): string {
   if (value >= 30) return "bg-gray-100 text-ink";
   if (value >= 15) return "bg-amber-100 text-amber-800";
   return "bg-red-100 text-card-red";
+}
+
+/* ── Training Development Section ── */
+
+const TRAIN_ATTR_LABELS: Record<string, string> = {
+  speed: "Rychlost", technique: "Technika", shooting: "Střelba",
+  passing: "Přihrávky", heading: "Hlavičky", defense: "Obrana",
+  stamina: "Výdrž", strength: "Síla", goalkeeping: "Brankář",
+  vision: "Přehled", creativity: "Kreativita", setPieces: "Standardky",
+};
+
+const TRAIN_TYPE_LABELS: Record<string, string> = {
+  conditioning: "Kondice", technique: "Technika", tactics: "Taktika", match_practice: "Zápasová praxe",
+};
+
+interface TrainingLogEntry {
+  attribute: string;
+  old_value: number;
+  new_value: number;
+  change: number;
+  training_type: string;
+  game_date: string | null;
+  created_at: string;
+}
+
+function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: string }) {
+  const [log, setLog] = useState<TrainingLogEntry[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    apiFetch<{ log: TrainingLogEntry[] }>(`/api/teams/${teamId}/players/${playerId}/training-log`)
+      .then((data) => { setLog(data.log); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, [teamId, playerId]);
+
+  if (!loaded) return null;
+
+  const gains = log.filter((l) => l.change > 0).length;
+  const losses = log.filter((l) => l.change < 0).length;
+
+  return (
+    <div className="card p-4 sm:p-5">
+      <SectionLabel>Tréninkový vývoj</SectionLabel>
+
+      {log.length === 0 ? (
+        <p className="text-sm text-muted">Zatím žádné tréninkové záznamy.</p>
+      ) : (
+        <>
+          {/* Summary strip */}
+          <div className="flex gap-3 flex-wrap mb-4">
+            <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
+              <div className="font-heading font-[800] text-2xl tabular-nums text-ink">{log.length}</div>
+              <div className="text-xs text-muted uppercase">Změn</div>
+            </div>
+            <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
+              <div className="font-heading font-[800] text-2xl tabular-nums text-pitch-500">{gains}</div>
+              <div className="text-xs text-muted uppercase">Zlepšení</div>
+            </div>
+            {losses > 0 && (
+              <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
+                <div className="font-heading font-[800] text-2xl tabular-nums text-card-red">{losses}</div>
+                <div className="text-xs text-muted uppercase">Pokles</div>
+              </div>
+            )}
+          </div>
+
+          {/* Changes table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-xs text-muted uppercase">
+                  <th className="text-left py-2 font-heading">Datum</th>
+                  <th className="text-left py-2 font-heading">Atribut</th>
+                  <th className="text-center py-2 font-heading">Změna</th>
+                  <th className="text-left py-2 font-heading">Trénink</th>
+                </tr>
+              </thead>
+              <tbody>
+                {log.slice(0, 20).map((entry, i) => {
+                  const date = entry.game_date ? new Date(entry.game_date).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "—";
+                  return (
+                    <tr key={i} className="border-b border-gray-50 last:border-b-0">
+                      <td className="py-1.5 tabular-nums text-muted">{date}</td>
+                      <td className="py-1.5 font-medium">{TRAIN_ATTR_LABELS[entry.attribute] ?? entry.attribute}</td>
+                      <td className="py-1.5 text-center">
+                        <span className={`font-heading font-bold ${entry.change > 0 ? "text-pitch-500" : "text-card-red"}`}>
+                          {entry.change > 0 ? `+${entry.change}` : entry.change}
+                        </span>
+                        <span className="text-muted text-xs ml-1">({entry.old_value}→{entry.new_value})</span>
+                      </td>
+                      <td className="py-1.5 text-muted">{TRAIN_TYPE_LABELS[entry.training_type] ?? entry.training_type}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }

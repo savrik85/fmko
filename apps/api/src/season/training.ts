@@ -48,9 +48,9 @@ const COMMUTE_ABSENCE_REASONS = [
 
 const TRAINING_EFFECTS: Record<TrainingType, string[]> = {
   conditioning: ["stamina", "speed", "strength"],
-  technique: ["technique", "shooting", "passing"],
-  tactics: ["passing", "defense"],
-  match_practice: ["shooting", "technique", "heading"],
+  technique: ["technique", "shooting", "creativity", "setPieces"],
+  tactics: ["passing", "defense", "vision"],
+  match_practice: ["shooting", "heading", "goalkeeping"],
 };
 
 /**
@@ -142,7 +142,16 @@ export function simulateTraining(
     if (sessions < Math.ceil(plan.sessionsPerWeek / 2)) continue;
 
     const player = squad[playerIndex];
-    const attr = rng.pick(affectedAttrs);
+    // GK filter: non-GK never gets goalkeeping, GK prefers goalkeeping in match_practice
+    let attr = rng.pick(affectedAttrs);
+    if (attr === "goalkeeping" && player.position !== "GK") {
+      // Re-pick without goalkeeping
+      const filtered = affectedAttrs.filter((a) => a !== "goalkeeping");
+      attr = rng.pick(filtered);
+    } else if (player.position === "GK" && plan.type === "match_practice" && attr !== "goalkeeping") {
+      // GK has 60% chance to train goalkeeping instead during match practice
+      if (rng.random() < 0.6) attr = "goalkeeping";
+    }
     const current = player[attr as keyof GeneratedPlayer] as number;
 
     // Diminishing returns: each point above 50 reduces chance

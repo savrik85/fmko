@@ -51,6 +51,18 @@ gameRouter.post("/teams/:teamId/training", async (c) => {
 
 // Training simulation removed from manual endpoint — runs only via daily tick (cron)
 
+// GET /api/teams/:teamId/players/:playerId/training-log — tréninkový vývoj hráče
+gameRouter.get("/teams/:teamId/players/:playerId/training-log", async (c) => {
+  const teamId = c.req.param("teamId");
+  const playerId = c.req.param("playerId");
+
+  const rows = await c.env.DB.prepare(
+    "SELECT attribute, old_value, new_value, change, training_type, game_date, created_at FROM training_log WHERE player_id = ? AND team_id = ? ORDER BY created_at DESC LIMIT 50"
+  ).bind(playerId, teamId).all().catch(() => ({ results: [] }));
+
+  return c.json({ log: rows.results });
+});
+
 // GET /api/teams/:id/budget — rozpočet s kompletním přehledem
 gameRouter.get("/teams/:teamId/budget", async (c) => {
   const teamId = c.req.param("teamId");
@@ -769,11 +781,14 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     fence: stadium.fence as number ?? 0,
   };
 
-  const teamInfo = await c.env.DB.prepare("SELECT reputation FROM teams WHERE id = ?")
-    .bind(teamId).first<{ reputation: number }>().catch(() => null);
+  const teamInfo = await c.env.DB.prepare("SELECT reputation, stadium_name FROM teams WHERE id = ?")
+    .bind(teamId).first<{ reputation: number; stadium_name: string | null }>().catch(() => null);
   const matchCount = await c.env.DB.prepare(
     "SELECT COUNT(*) as cnt FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated'"
   ).bind(teamId, teamId).first<{ cnt: number }>().catch(() => null);
+  const currentSeason = await c.env.DB.prepare(
+    "SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+  ).first<{ number: number }>().catch(() => null);
 
   // Pitch maintenance options
   const pitchActions = [
@@ -792,11 +807,12 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   }
 
   return c.json({
+    stadiumName: teamInfo?.stadium_name ?? null,
     capacity: stadium.capacity,
     pitchCondition: stadium.pitch_condition,
     pitchType: stadium.pitch_type,
     facilities,
-    upgrades: getUpgradeOptions(facilities, teamInfo?.reputation ?? 0, matchCount?.cnt ?? 0),
+    upgrades: getUpgradeOptions(facilities, teamInfo?.reputation ?? 0, matchCount?.cnt ?? 0, currentSeason?.number ?? 1),
     pitchActions,
     pitchUpgrades,
   });

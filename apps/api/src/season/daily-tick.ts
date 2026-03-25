@@ -57,6 +57,9 @@ export async function executeDailyTick(
             speed: skills.speed, technique: skills.technique, shooting: skills.shooting,
             passing: skills.passing, heading: skills.heading ?? 0, defense: skills.defense,
             goalkeeping: skills.goalkeeping ?? 0,
+            vision: skills.vision ?? 30,
+            creativity: skills.creativity ?? 30,
+            setPieces: skills.setPieces ?? 30,
             stamina: physical.stamina ?? skills.stamina ?? skills.speed,
             strength: physical.strength ?? skills.strength ?? skills.defense,
             injuryProneness: personality.injuryProneness ?? 50,
@@ -95,11 +98,13 @@ export async function executeDailyTick(
         }, undefined, equipMul);
 
         const attendanceWithNames = result.attendance.map((a) => ({
+          playerId: playersResult.results[a.playerIndex].id as string,
           playerName: `${squad[a.playerIndex].firstName} ${squad[a.playerIndex].lastName}`,
           attended: a.attended,
           reason: a.reason,
         }));
         const improvementsWithNames = result.improvements.map((imp) => ({
+          playerId: playersResult.results[imp.playerIndex].id as string,
           playerName: `${squad[imp.playerIndex].firstName} ${squad[imp.playerIndex].lastName}`,
           attribute: imp.attribute,
           change: imp.change,
@@ -118,21 +123,37 @@ export async function executeDailyTick(
           "UPDATE teams SET last_training_at = ?, last_training_result = ? WHERE id = ?"
         ).bind(now.toISOString(), JSON.stringify(summary), teamId).run();
 
-        // Persist skill changes to DB + recalculate wages
+        // Persist skill changes to DB + recalculate wages + log training
         for (const imp of result.improvements) {
           const player = squad[imp.playerIndex];
           const playerId = playersResult.results[imp.playerIndex].id as string;
           const currentSkills = JSON.parse(playersResult.results[imp.playerIndex].skills as string);
-          if (imp.attribute in currentSkills) {
-            currentSkills[imp.attribute] = player[imp.attribute as keyof typeof player];
-            // Update skills + recalculate overall_rating + update weekly_wage
-            await env.DB.prepare("UPDATE players SET skills = ? WHERE id = ?")
-              .bind(JSON.stringify(currentSkills), playerId).run();
-            // Recalculate wage based on current overall_rating
-            await env.DB.prepare(
-              "UPDATE players SET weekly_wage = ROUND(10 + (overall_rating / 100.0) * 400) WHERE id = ?"
-            ).bind(playerId).run();
+          const newValue = player[imp.attribute as keyof typeof player] as number;
+
+          // Always write to skills JSON (ensure attribute exists)
+          const oldValue = currentSkills[imp.attribute] ?? 0;
+          currentSkills[imp.attribute] = newValue;
+          await env.DB.prepare("UPDATE players SET skills = ? WHERE id = ?")
+            .bind(JSON.stringify(currentSkills), playerId).run();
+
+          // For stamina/strength: also update physical JSON (read path prefers physical)
+          if (imp.attribute === "stamina" || imp.attribute === "strength") {
+            const currentPhysical = playersResult.results[imp.playerIndex].physical
+              ? JSON.parse(playersResult.results[imp.playerIndex].physical as string) : {};
+            currentPhysical[imp.attribute] = newValue;
+            await env.DB.prepare("UPDATE players SET physical = ? WHERE id = ?")
+              .bind(JSON.stringify(currentPhysical), playerId).run();
           }
+
+          // Recalculate wage based on current overall_rating
+          await env.DB.prepare(
+            "UPDATE players SET weekly_wage = ROUND(10 + (overall_rating / 100.0) * 400) WHERE id = ?"
+          ).bind(playerId).run();
+
+          // Log to training_log
+          await env.DB.prepare(
+            "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+          ).bind(playerId, teamId, imp.attribute, oldValue, newValue, imp.change, (team.training_type as string) ?? "conditioning", now.toISOString()).run().catch(() => {});
         }
 
         events.push({
@@ -194,6 +215,30 @@ export async function executeDailyTick(
       ))`
   ).run();
   events.push({ type: "recovery", description: "Regenerace kondice (dle staminy)" });
+
+  // Shower facility bonus: extra condition recovery per team
+  try {
+    const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
+    const stadiums = await env.DB.prepare(
+      "SELECT team_id, changing_rooms, showers, refreshments, lighting, stands, parking, fence FROM stadiums"
+    ).all();
+    for (const row of stadiums.results) {
+      const facilities: Record<string, number> = {};
+      for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "parking", "fence"]) {
+        facilities[key] = (row[key] as number) ?? 0;
+      }
+      const fx = calculateFacilityEffects(facilities);
+      if (fx.conditionRegenBonus > 0) {
+        await env.DB.prepare(
+          `UPDATE players SET life_context = json_set(life_context, '$.condition',
+            MIN(100, json_extract(life_context, '$.condition') + ?))
+          WHERE team_id = ?`
+        ).bind(fx.conditionRegenBonus, row.team_id).run();
+      }
+    }
+  } catch (e) {
+    console.error("[DailyTick] Shower bonus failed:", e);
+  }
 
   // Morale drift toward 50
   await env.DB.prepare(

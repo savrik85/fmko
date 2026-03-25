@@ -94,13 +94,13 @@ const UPGRADE_COSTS: Record<string, number[]> = {
 };
 
 const UPGRADE_EFFECTS: Record<string, string[]> = {
-  changing_rooms: ["", "+5 morálka domácí", "+3 morálka + méně zranění", "+5 morálka + lepší regenerace"],
-  showers: ["", "Základní hygiena", "+2 regenerace kondice", "+4 regenerace kondice"],
-  refreshments: ["", "+500 Kč vstupné/zápas", "+1500 Kč vstupné", "+3000 Kč + sponzor zájem"],
-  lighting: ["", "Večerní zápasy možné", "Lepší viditelnost", "Profesionální osvětlení"],
-  stands: ["", "+50 kapacita", "+150 kapacita", "+300 kapacita + VIP"],
-  parking: ["", "20 míst", "50 míst", "100 míst + autobusy"],
-  fence: ["", "Plot kolem hřiště", "Vstupní brána", "Kompletní oplocení + pokladna"],
+  changing_rooms: ["", "+3 morálka domácích", "+5 morálka, -5% zranění doma", "+8 morálka, -10% zranění"],
+  showers: ["", "+2 regenerace kondice/den", "+4 regenerace kondice/den", "+6 regenerace kondice/den"],
+  refreshments: ["", "+8 Kč/divák z prodeje", "+18 Kč/divák z prodeje", "+30 Kč/divák + bez nákladů na občerstvení"],
+  lighting: ["", "Večerní zápasy možné", "+5% návštěvnost", "+10% návštěvnost"],
+  stands: ["", "+50 kapacita", "+150 kapacita", "+300 kapacita"],
+  parking: ["", "+5% návštěvnost", "+10% návštěvnost", "+15% návštěvnost"],
+  fence: ["", "Umožní vybírat vstupné", "+10% cena vstupného", "+20% cena vstupného"],
 };
 
 // Unlock requirements per level
@@ -166,6 +166,39 @@ export function getUpgradeOptions(
     });
   }
   return options;
+}
+
+/** Calculated stadium facility effects for game logic */
+export interface StadiumFacilityEffects {
+  homeMoraleBonus: number;        // šatny: +morálka domácích hráčů
+  homeInjuryReduction: number;    // šatny: snížení závažnosti zranění doma (0.0-0.10)
+  conditionRegenBonus: number;    // sprchy: +body regenerace kondice/den
+  refreshmentPerAttendee: number; // občerstvení: Kč příjem za diváka
+  noRefreshmentExpense: boolean;  // občerstvení L3: zruší výdaj za občerstvení
+  attendanceBonus: number;        // osvětlení + parkoviště: % bonus návštěvnosti
+  capacityBonus: number;          // tribuny: +kapacita
+  ticketPriceBonus: number;       // oplocení: % bonus na cenu vstupného
+}
+
+export function calculateFacilityEffects(facilities: Record<string, number>): StadiumFacilityEffects {
+  const cr = facilities.changing_rooms ?? 0;
+  const sh = facilities.showers ?? 0;
+  const re = facilities.refreshments ?? 0;
+  const li = facilities.lighting ?? 0;
+  const st = facilities.stands ?? 0;
+  const pa = facilities.parking ?? 0;
+  const fe = facilities.fence ?? 0;
+
+  return {
+    homeMoraleBonus: [0, 3, 5, 8][cr] ?? 0,
+    homeInjuryReduction: [0, 0, 0.05, 0.10][cr] ?? 0,
+    conditionRegenBonus: [0, 2, 4, 6][sh] ?? 0,
+    refreshmentPerAttendee: [0, 8, 18, 30][re] ?? 0,
+    noRefreshmentExpense: re >= 3,
+    attendanceBonus: ([0, 0, 0.05, 0.10][li] ?? 0) + ([0, 0.05, 0.10, 0.15][pa] ?? 0),
+    capacityBonus: [0, 50, 150, 300][st] ?? 0,
+    ticketPriceBonus: [0, 0, 0.10, 0.20][fe] ?? 0,
+  };
 }
 
 export { FACILITY_LABELS };

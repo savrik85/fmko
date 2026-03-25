@@ -165,12 +165,32 @@ export async function processMatchDayFinances(
   ).bind(teamId).first<{ size: string }>();
   const category = mapVillageSize(team?.size ?? "village");
 
+  // Load stadium facility effects
+  const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
+  const stadiumRow = await db.prepare("SELECT * FROM stadiums WHERE team_id = ?")
+    .bind(teamId).first<Record<string, unknown>>().catch(() => null);
+  const facilities: Record<string, number> = {};
+  if (stadiumRow) {
+    for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "parking", "fence"]) {
+      facilities[key] = (stadiumRow[key] as number) ?? 0;
+    }
+  }
+  const facilityFx = calculateFacilityEffects(facilities);
+
   if (isHome && attendance > 0) {
-    // Home team: ticket income
-    const ticketPrice = category === "vesnice" ? 10 : category === "obec" ? 20 : category === "mestys" ? 30 : 50;
+    // Home team: ticket income (fence bonus increases ticket price)
+    const baseTicketPrice = category === "vesnice" ? 10 : category === "obec" ? 20 : category === "mestys" ? 30 : 50;
+    const ticketPrice = Math.round(baseTicketPrice * (1 + facilityFx.ticketPriceBonus));
     const ticketIncome = attendance * ticketPrice;
     await recordTransaction(db, teamId, "match_income", ticketIncome,
       `Vstupné: ${attendance} diváků × ${ticketPrice} Kč`, gameDate, matchId);
+
+    // Refreshment sales income (scales with attendance)
+    if (facilityFx.refreshmentPerAttendee > 0) {
+      const refreshmentIncome = attendance * facilityFx.refreshmentPerAttendee;
+      await recordTransaction(db, teamId, "match_income", refreshmentIncome,
+        `Tržby z občerstvení: ${attendance} diváků × ${facilityFx.refreshmentPerAttendee} Kč`, gameDate, matchId);
+    }
 
     // Home team: referee costs
     const refereeCost = 800 + Math.round(Math.random() * 700);
@@ -185,10 +205,12 @@ export async function processMatchDayFinances(
       `Cestovné (venkovní zápas)`, gameDate, matchId);
   }
 
-  // Both teams: refreshments (pivo po zápase)
-  const refreshments = 200 + Math.round(Math.random() * 400);
-  await recordTransaction(db, teamId, "match_expense", -refreshments,
-    `Občerstvení po zápase`, gameDate, matchId);
+  // Both teams: refreshments expense (pivo po zápase) — L3 občerstvení eliminuje
+  if (!facilityFx.noRefreshmentExpense) {
+    const refreshments = 200 + Math.round(Math.random() * 400);
+    await recordTransaction(db, teamId, "match_expense", -refreshments,
+      `Občerstvení po zápase`, gameDate, matchId);
+  }
 
   // Match result reward
   const sponsors = await db.prepare(

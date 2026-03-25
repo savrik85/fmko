@@ -33,6 +33,7 @@ interface PitchUpgrade {
 }
 
 interface StadiumData {
+  stadiumName: string | null;
   capacity: number;
   pitchCondition: number;
   pitchType: string;
@@ -139,6 +140,11 @@ export default function StadiumPage() {
 
       {/* ═══ Stadium visualization + stats ═══ */}
       <div className="card p-4 sm:p-5">
+        {stadium.stadiumName && (
+          <div className="text-center mb-3">
+            <h2 className="font-heading font-bold text-xl">{stadium.stadiumName}</h2>
+          </div>
+        )}
         <StadiumView
           pitchCondition={stadium.pitchCondition}
           pitchType={stadium.pitchType}

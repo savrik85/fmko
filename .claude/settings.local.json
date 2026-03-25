@@ -69,7 +69,8 @@
       "Bash(TEAM_ID=\"acc0bd5a-3c7c-4b57-9604-cb2ee11bc739\")",
       "Bash(head:*)",
       "Bash(cat /Users/savrik/Projects/fmko/apps/web/src/app/dashboard/team/[id]/page.tsx)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(lsof -i :3000 -i :8787 -sTCP:LISTEN)"
     ]
   }
 }
