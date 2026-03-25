@@ -51,6 +51,14 @@ export interface TeamSetup {
   tactic: Tactic;
 }
 
+export interface EquipmentMods {
+  techniqueMod: number;    // bonus to technique (e.g. +3 from good balls)
+  gkBonus: number;         // bonus to GK skill
+  injurySeverityMod: number; // 0-0.3, reduces injury chance
+  conditionDrainMod: number; // 0-0.24, reduces condition drain
+  moraleMod: number;        // bonus morale at start
+}
+
 export interface MatchConfig {
   home: TeamSetup;
   away: TeamSetup;
@@ -59,6 +67,8 @@ export interface MatchConfig {
   pitchCondition?: number; // 0-100, affects injury probability
   stadiumName?: string;
   attendance?: number;
+  homeEquipment?: EquipmentMods;
+  awayEquipment?: EquipmentMods;
 }
 
 export interface MatchMinuteState {

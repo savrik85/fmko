@@ -80,15 +80,17 @@ const FACILITY_LABELS: Record<string, string> = {
   fence: "Oplocení",
 };
 
-// Significantly higher costs — stadium is long-term investment
+// Stadium = dlouhodobá investice přes více sezón
+// Při čistém zisku ~1-2k Kč/týd (16-32k/sezóna):
+// L1 = 1-2 sezóny šetření, L2 = 2-4 sezóny, L3 = 4-8 sezón
 const UPGRADE_COSTS: Record<string, number[]> = {
-  changing_rooms: [0, 15000, 45000, 100000],
-  showers: [0, 10000, 30000, 70000],
-  refreshments: [0, 20000, 55000, 120000],
-  lighting: [0, 60000, 150000, 300000],
-  stands: [0, 35000, 90000, 200000],
-  parking: [0, 12000, 30000, 65000],
-  fence: [0, 8000, 25000, 55000],
+  changing_rooms: [0, 25000, 85000, 220000],
+  showers: [0, 18000, 60000, 160000],
+  refreshments: [0, 35000, 110000, 280000],
+  lighting: [0, 95000, 280000, 600000],
+  stands: [0, 55000, 170000, 450000],
+  parking: [0, 20000, 60000, 150000],
+  fence: [0, 15000, 50000, 130000],
 };
 
 const UPGRADE_EFFECTS: Record<string, string[]> = {
@@ -110,15 +112,15 @@ interface UnlockReq {
 
 const STADIUM_UNLOCK: Record<number, UnlockReq> = {
   1: {},
-  2: { reputation: 45, matchesPlayed: 8 },
-  3: { reputation: 65, matchesPlayed: 20, season: 2 },
+  2: { reputation: 50, matchesPlayed: 15 },
+  3: { reputation: 70, matchesPlayed: 35, season: 3 },
 };
 
 /** Cooldown in days per upgrade target level */
 export const STADIUM_COOLDOWN_DAYS: Record<number, number> = {
-  1: 14,   // L0→L1: 2 weeks
-  2: 42,   // L1→L2: 6 weeks
-  3: 84,   // L2→L3: 12 weeks
+  1: 21,    // L0→L1: 3 týdny
+  2: 56,    // L1→L2: 8 týdnů (půl sezóny)
+  3: 112,   // L2→L3: 16 týdnů (celá sezóna)
 };
 
 export function getUpgradeOptions(

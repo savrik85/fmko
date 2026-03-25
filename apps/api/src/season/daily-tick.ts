@@ -156,6 +156,15 @@ export async function executeDailyTick(
     "UPDATE stadiums SET pitch_condition = MAX(10, pitch_condition - 1) WHERE pitch_type = 'hybrid' AND (ABS(RANDOM()) % 2 = 0)"
   ).run();
 
+  // Equipment condition degradation (slow — 1-2 points per day for used items)
+  const equipCategories = ["balls", "jerseys", "training_cones", "first_aid", "boots_stock", "bibs", "goalkeeper_gear", "water_bottles", "tactics_board"];
+  for (const cat of equipCategories) {
+    // Only degrade items with level > 0, by 1 point/day (50% chance)
+    await env.DB.prepare(
+      `UPDATE equipment SET ${cat}_condition = MAX(5, ${cat}_condition - 1) WHERE ${cat} > 0 AND (ABS(RANDOM()) % 2 = 0)`
+    ).run().catch(() => {});
+  }
+
   // Injury recovery
   await env.DB.prepare(
     "UPDATE injuries SET days_remaining = days_remaining - 1 WHERE days_remaining > 0"

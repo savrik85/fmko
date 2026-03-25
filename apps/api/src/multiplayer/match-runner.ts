@@ -126,6 +126,31 @@ export async function runScheduledMatches(
       const formBonus = Math.round((recentWins?.w ?? 0) * popBase * 0.08);
       const attendance = Math.max(8, popBase + repBonus + formBonus + Math.round(Math.random() * 10 - 5));
 
+      // Load equipment effects for both teams
+      const { calculateEffects } = await import("../equipment/equipment-generator");
+      const loadEquipMods = async (tid: string) => {
+        const eq = await db.prepare("SELECT * FROM equipment WHERE team_id = ?").bind(tid).first<Record<string, unknown>>().catch(() => null);
+        if (!eq) return undefined;
+        const levels: Record<string, number> = {};
+        const conditions: Record<string, number> = {};
+        for (const [k, v] of Object.entries(eq)) {
+          if (k === "id" || k === "team_id") continue;
+          if (k.endsWith("_condition")) conditions[k] = v as number;
+          else if (typeof v === "number") levels[k] = v;
+        }
+        const eff = calculateEffects(levels, conditions);
+        return {
+          techniqueMod: eff.matchTechniqueMod,
+          gkBonus: eff.gkBonus,
+          injurySeverityMod: eff.injurySeverityMod,
+          conditionDrainMod: eff.conditionDrainMod,
+          moraleMod: eff.moraleMod,
+        };
+      };
+      const [homeEquipment, awayEquipment] = await Promise.all([
+        loadEquipMods(homeTeamId), loadEquipMods(awayTeamId),
+      ]);
+
       // Simulate
       const rng = createRng(Date.now() + matchId.charCodeAt(0));
       const result = simulateMatch(rng, {
@@ -136,6 +161,8 @@ export async function runScheduledMatches(
         pitchCondition,
         stadiumName: stadiumName ?? undefined,
         attendance,
+        homeEquipment,
+        awayEquipment,
       });
 
       // Generate commentary

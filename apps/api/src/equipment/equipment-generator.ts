@@ -119,16 +119,18 @@ export function calculateEffects(levels: Record<string, number>, conditions: Rec
 
 // ── Upgrade costs (significantly higher for progression) ──
 
+// Ceny: Lv.1 = 1-2 týdny šetření, Lv.2 = půl sezóny, Lv.3 = celá sezóna+
+// Při bilanci ~+2000 Kč/týd (= ~32 000 Kč/sezóna čistý zisk)
 const UPGRADE_COSTS: Record<string, number[]> = {
-  balls:           [0, 3000, 12000, 35000],
-  jerseys:         [0, 5000, 18000, 45000],
-  training_cones:  [0, 2000, 8000, 25000],
-  first_aid:       [0, 1500, 6000, 20000],
-  boots_stock:     [0, 4000, 15000, 40000],
-  bibs:            [0, 1000, 5000, 15000],
-  goalkeeper_gear: [0, 3000, 10000, 30000],
-  water_bottles:   [0, 800, 3000, 10000],
-  tactics_board:   [0, 2000, 8000, 25000],
+  balls:           [0, 3000, 15000, 40000],
+  jerseys:         [0, 4000, 18000, 50000],
+  training_cones:  [0, 2000, 10000, 30000],
+  first_aid:       [0, 1500, 8000, 25000],
+  boots_stock:     [0, 3500, 15000, 45000],
+  bibs:            [0, 1000, 6000, 18000],
+  goalkeeper_gear: [0, 3000, 12000, 35000],
+  water_bottles:   [0, 800, 4000, 12000],
+  tactics_board:   [0, 2000, 10000, 30000],
 };
 
 // ── Unlock requirements per level ──

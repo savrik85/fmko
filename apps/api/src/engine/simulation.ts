@@ -162,14 +162,14 @@ function getGK(lineup: MatchPlayer[]): MatchPlayer {
 /**
  * Update condition for all players after a minute.
  */
-function updateCondition(lineup: MatchPlayer[], minute: number): void {
+function updateCondition(lineup: MatchPlayer[], minute: number, drainMod: number = 1): void {
   for (const p of lineup) {
     // Base decay: depends on stamina (0-100 škála)
     const staminaFactor = (100 - p.stamina) / 100; // Low stamina = faster decay
     const alcoholPenalty = p.alcohol > 75 ? 0.15 : p.alcohol > 50 ? 0.08 : 0;
     const lateFatigue = minute > 70 ? 0.15 : 0;
 
-    const decay = 0.3 + staminaFactor * 0.5 + alcoholPenalty + lateFatigue;
+    const decay = (0.3 + staminaFactor * 0.5 + alcoholPenalty + lateFatigue) * drainMod;
     p.condition = round2(Math.max(0, p.condition - decay));
   }
 }
@@ -182,6 +182,40 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   const events: MatchEvent[] = [];
   let homeScore = 0;
   let awayScore = 0;
+
+  // Apply equipment bonuses to players
+  const homeEq = config.homeEquipment;
+  const awayEq = config.awayEquipment;
+  if (homeEq) {
+    for (const p of home.lineup) {
+      p.technique = Math.min(100, p.technique + homeEq.techniqueMod);
+      if (p.position === "GK") p.goalkeeping = Math.min(100, p.goalkeeping + homeEq.gkBonus);
+      p.morale = Math.min(100, p.morale + homeEq.moraleMod);
+    }
+    for (const p of home.subs) {
+      p.technique = Math.min(100, p.technique + homeEq.techniqueMod);
+      if (p.position === "GK") p.goalkeeping = Math.min(100, p.goalkeeping + homeEq.gkBonus);
+    }
+  }
+  if (awayEq) {
+    for (const p of away.lineup) {
+      p.technique = Math.min(100, p.technique + awayEq.techniqueMod);
+      if (p.position === "GK") p.goalkeeping = Math.min(100, p.goalkeeping + awayEq.gkBonus);
+      p.morale = Math.min(100, p.morale + awayEq.moraleMod);
+    }
+    for (const p of away.subs) {
+      p.technique = Math.min(100, p.technique + awayEq.techniqueMod);
+      if (p.position === "GK") p.goalkeeping = Math.min(100, p.goalkeeping + awayEq.gkBonus);
+    }
+  }
+
+  // Equipment condition drain modifiers
+  const homeCondDrainMod = 1 - (homeEq?.conditionDrainMod ?? 0);
+  const awayCondDrainMod = 1 - (awayEq?.conditionDrainMod ?? 0);
+
+  // Equipment injury modifiers
+  const homeInjuryMod = 1 - (homeEq?.injurySeverityMod ?? 0);
+  const awayInjuryMod = 1 - (awayEq?.injurySeverityMod ?? 0);
 
   // Track cards per player to avoid double yellow → red
   const yellowCards = new Set<number>();
@@ -329,29 +363,34 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       }
     }
 
-    // Check for injury (~1% per minute, modified by weather)
-    // Pitch condition affects injuries: bad pitch (0-30) = 2-3× more injuries
+    // Check for injury (~1% per minute, modified by weather, pitch, equipment)
     const pitchMod = config.pitchCondition != null ? (1 + (100 - config.pitchCondition) / 50) : 1;
     const injuryProb = 0.01 * WEATHER_MODS[weather].injuryMod * pitchMod;
     if (rng.random() < injuryProb) {
       const allPlayers = [...home.lineup, ...away.lineup];
       const unlucky = rng.pick(allPlayers);
-      const teamId = home.lineup.includes(unlucky) ? home.teamId : away.teamId;
-      const injuries = ["natažený sval", "podvrtnutý kotník", "křeče", "koleno", "naraženina"];
-      const injury = rng.pick(injuries);
-      addEvent(minute, "injury", unlucky, teamId,
-        `${playerName(unlucky)} — ${injury}`,
-        injury);
+      // Equipment first-aid kit reduces injury chance for the affected team
+      const teamInjMod = home.lineup.includes(unlucky) ? homeInjuryMod : awayInjuryMod;
+      if (teamInjMod < 1 && rng.random() > teamInjMod) {
+        // Equipment prevented this injury — skip
+      } else {
+        const teamId = home.lineup.includes(unlucky) ? home.teamId : away.teamId;
+        const injuries = ["natažený sval", "podvrtnutý kotník", "křeče", "koleno", "naraženina"];
+        const injury = rng.pick(injuries);
+        addEvent(minute, "injury", unlucky, teamId,
+          `${playerName(unlucky)} — ${injury}`,
+          injury);
 
-      // Try substitution
-      const team = teamId === home.teamId ? home : away;
-      if (team.subs.length > 0) {
-        const sub = team.subs.shift()!;
-        const idx = team.lineup.indexOf(unlucky);
-        if (idx >= 0) {
-          team.lineup[idx] = sub;
-          addEvent(minute, "substitution", sub, teamId,
-            `Střídání: ${playerName(sub)} za ${playerName(unlucky)}`);
+        // Try substitution
+        const team = teamId === home.teamId ? home : away;
+        if (team.subs.length > 0) {
+          const sub = team.subs.shift()!;
+          const idx = team.lineup.indexOf(unlucky);
+          if (idx >= 0) {
+            team.lineup[idx] = sub;
+            addEvent(minute, "substitution", sub, teamId,
+              `Střídání: ${playerName(sub)} za ${playerName(unlucky)}`);
+          }
         }
       }
     }
@@ -436,9 +475,9 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       }
     }
 
-    // Update condition
-    updateCondition(home.lineup, minute);
-    updateCondition(away.lineup, minute);
+    // Update condition (with equipment drain reduction)
+    updateCondition(home.lineup, minute, homeCondDrainMod);
+    updateCondition(away.lineup, minute, awayCondDrainMod);
   }
 
   // Full-time event

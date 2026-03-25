@@ -618,11 +618,14 @@ gameRouter.get("/teams/:teamId/equipment", async (c) => {
     if (!equip) return c.json({ error: "Failed to create equipment" }, 500);
   }
 
-  // Get team reputation + matches played for unlock logic
+  // Get team reputation + matches played + season for unlock logic
   const team = await c.env.DB.prepare("SELECT reputation FROM teams WHERE id = ?").bind(teamId).first<{ reputation: number }>().catch(() => null);
   const matchCount = await c.env.DB.prepare(
     "SELECT COUNT(*) as cnt FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated'"
   ).bind(teamId, teamId).first<{ cnt: number }>().catch(() => null);
+  const seasonRow = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' LIMIT 1")
+    .first<{ number: number }>().catch(() => null);
+  const seasonNum = seasonRow?.number ?? 1;
 
   const levels: Record<string, number> = {};
   const conditions: Record<string, number> = {};
@@ -647,7 +650,7 @@ gameRouter.get("/teams/:teamId/equipment", async (c) => {
 
   return c.json({
     categories,
-    upgrades: getUpgradeOptions(levels, team?.reputation ?? 0, matchCount?.cnt ?? 0),
+    upgrades: getUpgradeOptions(levels, team?.reputation ?? 0, matchCount?.cnt ?? 0, seasonNum),
     repairs: getRepairOptions(levels, conditions),
     effects,
   });
@@ -782,10 +785,10 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   // Pitch type upgrades
   const pitchUpgrades = [];
   if (stadium.pitch_type === "natural") {
-    pitchUpgrades.push({ pitchType: "hybrid", label: "Hybridní trávník", desc: "Mix přírodní + umělé vlákno, odolnější", cost: 50000 });
+    pitchUpgrades.push({ pitchType: "hybrid", label: "Hybridní trávník", desc: "Mix přírodní + umělé vlákno, odolnější", cost: 85000 });
   }
   if (stadium.pitch_type === "hybrid") {
-    pitchUpgrades.push({ pitchType: "artificial", label: "Umělý trávník", desc: "Žádná údržba, hratelný za každého počasí", cost: 120000 });
+    pitchUpgrades.push({ pitchType: "artificial", label: "Umělý trávník", desc: "Žádná údržba, hratelný za každého počasí", cost: 220000 });
   }
 
   return c.json({
@@ -887,8 +890,8 @@ gameRouter.post("/teams/:teamId/stadium/upgrade-pitch", async (c) => {
   const body = await c.req.json<{ pitchType: string }>();
 
   const upgrades: Record<string, { from: string; cost: number }> = {
-    hybrid:     { from: "natural", cost: 50000 },
-    artificial: { from: "hybrid", cost: 120000 },
+    hybrid:     { from: "natural", cost: 85000 },
+    artificial: { from: "hybrid", cost: 220000 },
   };
 
   const upgrade = upgrades[body.pitchType];
