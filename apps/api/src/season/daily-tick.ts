@@ -43,7 +43,7 @@ export async function executeDailyTick(
     if (isTrainingDay && team.training_type) {
       try {
         const playersResult = await env.DB.prepare(
-          "SELECT * FROM players WHERE team_id = ? ORDER BY overall_rating DESC"
+          "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
         ).bind(teamId).all();
 
         const squad = playersResult.results.map((row) => {
@@ -154,6 +154,17 @@ export async function executeDailyTick(
           await env.DB.prepare(
             "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
           ).bind(playerId, teamId, imp.attribute, oldValue, newValue, imp.change, (team.training_type as string) ?? "conditioning", now.toISOString()).run().catch(() => {});
+        }
+
+        // Training drains condition for attending players (-5 to -15 based on training type)
+        const condDrain = (team.training_type as string) === "conditioning" ? 15 : 8;
+        for (const a of result.attendance) {
+          if (a.attended) {
+            const playerId = playersResult.results[a.playerIndex].id as string;
+            await env.DB.prepare(
+              `UPDATE players SET life_context = json_set(life_context, '$.condition', MAX(5, json_extract(life_context, '$.condition') - ?)) WHERE id = ?`
+            ).bind(condDrain, playerId).run().catch(() => {});
+          }
         }
 
         events.push({
@@ -363,6 +374,62 @@ export async function executeDailyTick(
         }
       }
     }
+  }
+
+  // ── Free agent pool maintenance ──
+  try {
+    const { maintainFreeAgentPool } = await import("../transfers/free-agent-pool");
+    const faRng = createRng(now.getTime() + 7777);
+    const newFa = await maintainFreeAgentPool(env.DB, faRng, now);
+    if (newFa > 0) {
+      events.push({ type: "day", description: `${newFa} nových volných hráčů v okresu` });
+    }
+  } catch (e) {
+    console.error("[DailyTick] Free agent pool failed:", e);
+  }
+
+  // ── Player quitting check ──
+  try {
+    const quitRng = createRng(now.getTime() + 9999);
+    const activePlayers = await env.DB.prepare(
+      "SELECT p.id, p.first_name, p.last_name, p.age, p.personality, p.life_context, t.name as team_name, t.league_id FROM players p JOIN teams t ON p.team_id = t.id WHERE p.status = 'active' AND t.user_id != 'ai'"
+    ).all().catch(() => ({ results: [] }));
+
+    for (const row of activePlayers.results) {
+      const personality = (() => { try { return JSON.parse(row.personality as string); } catch { return {}; } })();
+      const lifeContext = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
+      const patriotism = personality.patriotism ?? 50;
+      const morale = lifeContext.morale ?? 50;
+
+      if (patriotism < 25 && morale < 20 && quitRng.random() < 0.05) {
+        await env.DB.prepare("UPDATE players SET status = 'quit' WHERE id = ?").bind(row.id).run();
+        events.push({ type: "day", description: `${row.first_name} ${row.last_name} přestal chodit na tréninky` });
+
+        // News
+        const { createTransferNews } = await import("../transfers/transfer-news");
+        await createTransferNews(env.DB, row.league_id as string, null, "player_quit", {
+          playerName: `${row.first_name} ${row.last_name}`,
+          playerAge: row.age as number,
+          playerPosition: "",
+          teamName: row.team_name as string,
+          reason: quitRng.random() < 0.5 ? "Prý ho to nebaví." : "Spoluhráči říkají, že má jiné priority.",
+        }).catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.error("[DailyTick] Player quit check failed:", e);
+  }
+
+  // ── Transfer expiry cleanup ──
+  try {
+    await env.DB.prepare("UPDATE transfer_offers SET status = 'expired' WHERE status = 'pending' AND expires_at < ?")
+      .bind(now.toISOString()).run();
+    await env.DB.prepare("UPDATE transfer_listings SET status = 'expired' WHERE status = 'active' AND expires_at < ?")
+      .bind(now.toISOString()).run();
+    await env.DB.prepare("UPDATE transfer_bids SET status = 'withdrawn' WHERE status = 'pending' AND listing_id IN (SELECT id FROM transfer_listings WHERE status != 'active')")
+      .run().catch(() => {});
+  } catch (e) {
+    console.error("[DailyTick] Transfer expiry failed:", e);
   }
 
   return { date: now.toISOString(), dayOfWeek, isTrainingDay, events };

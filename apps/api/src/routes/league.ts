@@ -133,49 +133,50 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
     .bind(teamId).first<{ league_id: string | null }>();
   if (!team?.league_id) return c.json({ topScorers: [], topAssists: [] });
 
-  // Get season
-  const league = await c.env.DB.prepare(
-    "SELECT season_id FROM leagues WHERE id = ?"
-  ).bind(team.league_id).first<{ season_id: string }>().catch(() => null);
-  if (!league) return c.json({ topScorers: [], topAssists: [] });
-
-  // Get all teams in league
-  const leagueTeams = await c.env.DB.prepare(
-    "SELECT id FROM teams WHERE league_id = ?"
-  ).bind(team.league_id).all().catch(() => ({ results: [] }));
-  const teamIds = leagueTeams.results.map((t) => t.id as string);
-  if (teamIds.length === 0) return c.json({ topScorers: [], topAssists: [] });
-
-  const placeholders = teamIds.map(() => "?").join(",");
+  // Get active season
+  const season = await c.env.DB.prepare(
+    "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+  ).first<{ id: string }>().catch(() => null);
+  const seasonId = season?.id ?? "season-1";
 
   const stats = await c.env.DB.prepare(
-    `SELECT ps.goals, ps.assists, ps.appearances, ps.motm,
-       p.first_name, p.last_name, p.position, p.team_id,
+    `SELECT ps.goals, ps.assists, ps.appearances, ps.man_of_match as motm,
+       ps.yellow_cards, ps.red_cards, ps.avg_rating, ps.clean_sheets,
+       p.id as player_id, p.first_name, p.last_name, p.position, ps.team_id,
        t.name as team_name, t.primary_color, t.secondary_color, t.badge_pattern
      FROM player_stats ps
      JOIN players p ON ps.player_id = p.id
-     JOIN teams t ON p.team_id = t.id
-     WHERE ps.season_id = ? AND p.team_id IN (${placeholders})
+     JOIN teams t ON ps.team_id = t.id
+     WHERE ps.season_id = ? AND t.league_id = ?
      ORDER BY ps.goals DESC, ps.assists DESC`
-  ).bind(league.season_id, ...teamIds).all().catch(() => ({ results: [] }));
+  ).bind(seasonId, team.league_id).all().catch((e) => { console.error("[league-stats]", e); return { results: [] }; });
 
   const rows = stats.results.map((r) => ({
+    playerId: r.player_id as string,
     name: `${r.first_name} ${r.last_name}`,
     position: r.position as string,
+    teamId: r.team_id as string,
     teamName: r.team_name as string,
-    teamColor: r.primary_color as string || "#2D5F2D",
-    teamSecondary: r.secondary_color as string || "#FFFFFF",
-    teamBadge: r.badge_pattern as string || "shield",
-    goals: r.goals as number,
-    assists: r.assists as number,
-    appearances: r.appearances as number,
-    motm: r.motm as number,
+    teamColor: (r.primary_color as string) || "#2D5F2D",
+    teamSecondary: (r.secondary_color as string) || "#FFFFFF",
+    teamBadge: (r.badge_pattern as string) || "shield",
+    goals: (r.goals as number) ?? 0,
+    assists: (r.assists as number) ?? 0,
+    appearances: (r.appearances as number) ?? 0,
+    motm: (r.motm as number) ?? 0,
+    yellowCards: (r.yellow_cards as number) ?? 0,
+    redCards: (r.red_cards as number) ?? 0,
+    avgRating: (r.avg_rating as number) ?? 0,
+    cleanSheets: (r.clean_sheets as number) ?? 0,
     isMyTeam: r.team_id === teamId,
   }));
 
   return c.json({
-    topScorers: [...rows].sort((a, b) => b.goals - a.goals || b.assists - a.assists).filter((r) => r.goals > 0).slice(0, 20),
-    topAssists: [...rows].sort((a, b) => b.assists - a.assists || b.goals - a.goals).filter((r) => r.assists > 0).slice(0, 20),
+    topScorers: [...rows].sort((a, b) => b.goals - a.goals || b.assists - a.assists).filter((r) => r.goals > 0).slice(0, 15),
+    topAssists: [...rows].sort((a, b) => b.assists - a.assists || b.goals - a.goals).filter((r) => r.assists > 0).slice(0, 15),
+    topRated: [...rows].filter((r) => r.appearances >= 3 && r.avgRating > 0).sort((a, b) => b.avgRating - a.avgRating).slice(0, 10),
+    mostCards: [...rows].filter((r) => r.yellowCards + r.redCards > 0).sort((a, b) => (b.yellowCards + b.redCards * 3) - (a.yellowCards + a.redCards * 3)).slice(0, 10),
+    mostAppearances: [...rows].sort((a, b) => b.appearances - a.appearances).filter((r) => r.appearances > 0).slice(0, 10),
   });
 });
 

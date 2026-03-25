@@ -70,7 +70,14 @@
       "Bash(head:*)",
       "Bash(cat /Users/savrik/Projects/fmko/apps/web/src/app/dashboard/team/[id]/page.tsx)",
       "Bash(wc:*)",
-      "Bash(lsof -i :3000 -i :8787 -sTCP:LISTEN)"
+      "Bash(lsof -i :3000 -i :8787 -sTCP:LISTEN)",
+      "Bash(lsof -i :8787 -sTCP:LISTEN)",
+      "Bash(TEAM=\"acc0bd5a-3c7c-4b57-9604-cb2ee11bc739\")",
+      "Bash(PLAYER=\"5aff0d4c-b803-475d-a954-4fe116ff4ad5\")",
+      "Bash(find /Users/savrik/Projects/fmko/apps/api -type f \\\\\\(-name *.sql -o -name *schema* \\\\\\))",
+      "WebFetch(domain:community.sports-interactive.com)",
+      "WebFetch(domain:dribbble.com)",
+      "Bash(TEAM=acc0bd5a-3c7c-4b57-9604-cb2ee11bc739)"
     ]
   }
 }

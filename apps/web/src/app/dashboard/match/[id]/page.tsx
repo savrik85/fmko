@@ -7,45 +7,41 @@ import { Spinner, SectionLabel, BadgePreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface MatchEvent {
-  minute: number;
-  type: string;
-  playerId: number;
-  playerName: string;
-  teamId: number;
-  description: string;
-  detail?: string;
+  minute: number; type: string; playerId: number; playerName: string;
+  teamId: number; description: string; detail?: string;
 }
 
 interface MatchDetail {
-  id: string;
-  home_team_id: string;
-  away_team_id: string;
-  home_name: string;
-  away_name: string;
-  home_color: string;
-  away_color: string;
-  home_secondary: string;
-  away_secondary: string;
-  home_badge: string;
-  away_badge: string;
-  home_score: number;
-  away_score: number;
-  status: string;
-  round: number | null;
-  events: MatchEvent[];
-  commentary: string[];
-  simulated_at: string | null;
+  id: string; home_team_id: string; away_team_id: string;
+  home_name: string; away_name: string; home_color: string; away_color: string;
+  home_secondary: string; away_secondary: string; home_badge: string; away_badge: string;
+  home_score: number; away_score: number; status: string; round: number | null;
+  events: MatchEvent[]; commentary: string[]; simulated_at: string | null;
+  attendance: number | null; stadium_name: string | null;
+  pitch_condition: number | null; weather: string | null;
 }
 
-const EVENT_ICONS: Record<string, string> = {
-  goal: "\u26BD",
-  chance: "\u{1F3AF}",
-  card: "\u{1F7E8}",
-  foul: "\u{1F6D1}",
-  injury: "\u{1F915}",
-  substitution: "\u{1F504}",
-  special: "\u2B50",
+function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
+
+const WEATHER_LABEL: Record<string, string> = {
+  sunny: "☀️ Slunečno", cloudy: "☁️ Zataženo", rain: "🌧️ Déšť", wind: "💨 Vítr", snow: "❄️ Sníh",
 };
+
+function StatBar({ label, home, away, hc, ac }: { label: string; home: number; away: number; hc: string; ac: string }) {
+  const total = home + away || 1;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-6 text-right font-heading font-bold text-sm tabular-nums text-white/80">{home}</span>
+      <div className="flex-1 flex h-2 rounded-full overflow-hidden bg-white/10">
+        <div className="h-full rounded-l-full" style={{ width: `${(home / total) * 100}%`, backgroundColor: `color-mix(in srgb, ${hc} 60%, white)` }} />
+        <div className="flex-1" />
+        <div className="h-full rounded-r-full" style={{ width: `${(away / total) * 100}%`, backgroundColor: `color-mix(in srgb, ${ac} 60%, white)` }} />
+      </div>
+      <span className="w-6 text-left font-heading font-bold text-sm tabular-nums text-white/80">{away}</span>
+      <span className="w-14 text-white/40 text-xs font-heading uppercase">{label}</span>
+    </div>
+  );
+}
 
 export default function MatchDetailPage() {
   const params = useParams();
@@ -64,123 +60,202 @@ export default function MatchDetailPage() {
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;
   if (!match) return <div className="page-container">Zápas nenalezen.</div>;
 
+  const hc = match.home_color || "#2D5F2D";
+  const ac = match.away_color || "#D94032";
   const goals = match.events.filter((e) => e.type === "goal");
-  const cards = match.events.filter((e) => e.type === "card");
   const homeGoals = goals.filter((e) => e.teamId === 1);
   const awayGoals = goals.filter((e) => e.teamId === 2);
+  const keyEvents = match.events.filter((e) => ["goal", "card", "injury", "substitution"].includes(e.type));
+  const firstHalf = keyEvents.filter((e) => e.minute <= 45);
+  const secondHalf = keyEvents.filter((e) => e.minute > 45);
+
+  // Stats
+  const st = {
+    shots: [
+      match.events.filter((e) => e.teamId === 1 && (e.type === "goal" || e.type === "chance")).length,
+      match.events.filter((e) => e.teamId === 2 && (e.type === "goal" || e.type === "chance")).length,
+    ],
+    fouls: [
+      match.events.filter((e) => e.teamId === 1 && e.type === "foul").length,
+      match.events.filter((e) => e.teamId === 2 && e.type === "foul").length,
+    ],
+    cards: [
+      match.events.filter((e) => e.teamId === 1 && e.type === "card").length,
+      match.events.filter((e) => e.teamId === 2 && e.type === "card").length,
+    ],
+  };
 
   return (
-    <div className="page-container space-y-5">
+    <div className="max-w-4xl mx-auto px-3 py-2 space-y-3">
 
-      {/* ═══ Back button ═══ */}
-      <div className="flex items-center">
-        <button onClick={() => router.back()} className="text-muted hover:text-ink text-sm flex items-center gap-1 transition-colors">
-          &#8592; Zpět
-        </button>
+      {/* ═══ SCOREBOARD — same dark style as replay ═══ */}
+      <div className="rounded-xl overflow-hidden" style={{ background: "#0a0a0a" }}>
+        {/* Back button */}
+        <div className="flex items-center px-4 pt-3">
+          <button onClick={() => router.back()} className="text-white/40 hover:text-white/70 text-sm flex items-center gap-1 transition-colors">
+            &#8592; Zpět
+          </button>
+          {match.status === "simulated" && (
+            <button onClick={() => router.push(`/dashboard/match/${matchId}/replay`)}
+              className="ml-auto text-sm font-heading font-bold text-pitch-400 hover:text-pitch-300 transition-colors">
+              ▶ Přehrát zápas
+            </button>
+          )}
+        </div>
+
+        {/* Score */}
+        <div className="flex items-center px-4 py-4">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <BadgePreview primary={hc} secondary={match.home_secondary || "#FFF"} pattern={(match.home_badge as BadgePattern) || "shield"} initials={ini(match.home_name)} size={44} />
+            <span className="font-heading font-bold text-white text-lg truncate">{match.home_name}</span>
+          </div>
+          <div className="text-center shrink-0 px-6">
+            <div className="font-heading font-[800] text-6xl tabular-nums leading-none" style={{ textShadow: "0 0 10px rgba(255,255,255,0.2)" }}>
+              <span style={{ color: `color-mix(in srgb, ${hc} 60%, white)` }}>{match.home_score}</span>
+              <span className="text-white/20 mx-3">:</span>
+              <span style={{ color: `color-mix(in srgb, ${ac} 60%, white)` }}>{match.away_score}</span>
+            </div>
+            <div className="flex items-center justify-center gap-1.5 mt-1.5">
+              <span className="text-white/40 text-sm font-heading">Konec</span>
+              {match.round && <span className="text-white/25 text-sm font-heading">· {match.round}. kolo</span>}
+            </div>
+          </div>
+          <div className="flex items-center gap-3 flex-1 min-w-0 justify-end">
+            <span className="font-heading font-bold text-white text-lg truncate">{match.away_name}</span>
+            <BadgePreview primary={ac} secondary={match.away_secondary || "#FFF"} pattern={(match.away_badge as BadgePattern) || "shield"} initials={ini(match.away_name)} size={44} />
+          </div>
+        </div>
+
+        {/* Match info bar */}
+        <div className="flex items-center justify-center gap-5 px-4 py-2 text-white/50 text-sm font-heading" style={{ background: "#060d06" }}>
+          {match.stadium_name && <span>{match.stadium_name}</span>}
+          {match.attendance != null && <span>{match.attendance} diváků</span>}
+          {match.pitch_condition != null && (
+            <span>Hřiště: {match.pitch_condition >= 70 ? "výborné" : match.pitch_condition >= 40 ? "průměrné" : "špatné"}</span>
+          )}
+          {match.weather && <span>{WEATHER_LABEL[match.weather] ?? match.weather}</span>}
+          {match.simulated_at && (
+            <span>{new Date(match.simulated_at).toLocaleDateString("cs", { day: "numeric", month: "long", year: "numeric" })}</span>
+          )}
+        </div>
+
+        {/* Stats bars */}
+        <div className="px-6 py-4 space-y-2" style={{ background: "#111" }}>
+          <StatBar label="Střely" home={st.shots[0]} away={st.shots[1]} hc={hc} ac={ac} />
+          <StatBar label="Fauly" home={st.fouls[0]} away={st.fouls[1]} hc={hc} ac={ac} />
+          <StatBar label="Karty" home={st.cards[0]} away={st.cards[1]} hc={hc} ac={ac} />
+        </div>
       </div>
 
-      {/* ═══ Score display ═══ */}
-      <div>
-        <div className="flex items-center justify-center gap-6">
-          <div className="flex-1 text-right">
-            <BadgePreview
-              primary={match.home_color || "#2D5F2D"}
-              secondary={match.home_secondary || "#FFF"}
-              pattern={(match.home_badge as BadgePattern) || "shield"}
-              initials={match.home_name?.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() ?? "H"}
-              size={40}
-            />
-            <div className="font-heading font-bold text-sm mt-2">{match.home_name ?? "Domácí"}</div>
-          </div>
-          <div className="shrink-0 text-center">
-            <div className="font-heading font-[800] text-5xl tabular-nums leading-none text-ink">
-              {match.home_score} : {match.away_score}
+      {/* ═══ GOALS ═══ */}
+      {goals.length > 0 && (
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Góly</SectionLabel>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              {homeGoals.map((g, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-xs text-muted tabular-nums w-6 text-right">{g.minute}&apos;</span>
+                  <span className="text-sm">⚽</span>
+                  <span className="text-sm font-heading font-bold">{g.playerName}</span>
+                </div>
+              ))}
             </div>
-            {match.simulated_at && (
-              <div className="text-muted text-xs mt-2">
-                {new Date(match.simulated_at).toLocaleDateString("cs", { day: "numeric", month: "long", year: "numeric" })}
+            <div className="space-y-1.5">
+              {awayGoals.map((g, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-xs text-muted tabular-nums w-6 text-right">{g.minute}&apos;</span>
+                  <span className="text-sm">⚽</span>
+                  <span className="text-sm font-heading font-bold">{g.playerName}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ TIMELINE ═══ */}
+      <div className="card p-4 sm:p-5">
+        <SectionLabel>Průběh zápasu</SectionLabel>
+
+        {keyEvents.length === 0 ? (
+          <p className="text-sm text-muted">Žádné klíčové události.</p>
+        ) : (
+          <div>
+            {/* 1st half */}
+            {firstHalf.length > 0 && (
+              <div>
+                <div className="text-xs font-heading uppercase text-muted mb-2 mt-1">1. poločas</div>
+                {firstHalf.map((e, i) => <EventRow key={i} event={e} hc={hc} ac={ac} />)}
+              </div>
+            )}
+
+            {/* Divider */}
+            {firstHalf.length > 0 && secondHalf.length > 0 && (
+              <div className="flex items-center gap-3 my-3">
+                <div className="flex-1 h-px bg-gray-200" />
+                <span className="text-xs font-heading text-muted uppercase">Poločas</span>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
+            )}
+
+            {/* 2nd half */}
+            {secondHalf.length > 0 && (
+              <div>
+                {firstHalf.length === 0 && <div className="text-xs font-heading uppercase text-muted mb-2 mt-1">2. poločas</div>}
+                {secondHalf.map((e, i) => <EventRow key={i} event={e} hc={hc} ac={ac} />)}
               </div>
             )}
           </div>
-          <div className="flex-1">
-            <BadgePreview
-              primary={match.away_color || "#2D5F2D"}
-              secondary={match.away_secondary || "#FFF"}
-              pattern={(match.away_badge as BadgePattern) || "shield"}
-              initials={match.away_name?.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() ?? "H"}
-              size={40}
-            />
-            <div className="font-heading font-bold text-sm mt-2">{match.away_name ?? "Hosté"}</div>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Goals */}
-      {goals.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Goly</SectionLabel>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              {homeGoals.map((g, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm">
-                  <span className="text-muted tabular-nums text-xs">{g.minute}&apos;</span>
-                  <span className="font-medium">{g.playerName}</span>
-                </div>
-              ))}
-            </div>
-            <div className="space-y-1">
-              {awayGoals.map((g, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm">
-                  <span className="text-muted tabular-nums text-xs">{g.minute}&apos;</span>
-                  <span className="font-medium">{g.playerName}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Key events timeline */}
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>Prubeh zapasu</SectionLabel>
-        <div className="space-y-2">
-          {match.events
-            .filter((e) => e.type === "goal" || e.type === "card" || e.type === "injury" || e.type === "substitution")
-            .map((e, i) => (
-            <div key={i} className="flex items-start gap-3 py-1.5 border-b border-gray-50 last:border-b-0">
-              <span className="shrink-0 text-muted tabular-nums text-sm w-8 text-right">{e.minute}&apos;</span>
-              <span className="shrink-0 text-base">{EVENT_ICONS[e.type] ?? ""}</span>
-              <div className="min-w-0">
-                <span className="text-sm font-medium">{e.playerName}</span>
-                <span className="text-sm text-muted ml-1.5">{e.description}</span>
-              </div>
-            </div>
-          ))}
-          {match.events.filter((e) => ["goal", "card", "injury", "substitution"].includes(e.type)).length === 0 && (
-            <p className="text-sm text-muted">Zadne klicove udalosti.</p>
-          )}
-        </div>
-      </div>
-
-      {/* Commentary toggle */}
+      {/* ═══ COMMENTARY ═══ */}
       {match.commentary.length > 0 && (
-        <div className="card p-4 sm:p-5">
+        <div className="card overflow-hidden">
           <button
             onClick={() => setShowCommentary(!showCommentary)}
-            className="flex items-center justify-between w-full"
+            className="flex items-center justify-between w-full px-4 sm:px-5 py-4 hover:bg-gray-50 transition-colors"
           >
-            <SectionLabel>Komentar ({match.commentary.length})</SectionLabel>
-            <span className="text-sm text-muted">{showCommentary ? "Skryt" : "Zobrazit"}</span>
+            <span className="text-xs font-heading font-bold uppercase text-muted">Komentář ({match.commentary.length})</span>
+            <span className="text-sm font-heading font-bold text-pitch-500">{showCommentary ? "Skrýt" : "Zobrazit"}</span>
           </button>
           {showCommentary && (
-            <div className="mt-3 space-y-1.5 max-h-96 overflow-y-auto">
+            <div className="px-4 sm:px-5 pb-4 space-y-1.5 max-h-[500px] overflow-y-auto border-t border-gray-100 pt-3">
               {match.commentary.map((line, i) => (
-                <p key={i} className="text-sm text-ink-light leading-relaxed">{line}</p>
+                <p key={i} className="text-sm text-ink leading-relaxed">{line}</p>
               ))}
             </div>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function EventRow({ event: e, hc, ac }: { event: MatchEvent; hc: string; ac: string }) {
+  const isHome = e.teamId === 1;
+  const teamColor = isHome ? hc : ac;
+
+  let icon: string;
+  let bgColor: string;
+  switch (e.type) {
+    case "goal": icon = "⚽"; bgColor = "bg-pitch-50"; break;
+    case "card": icon = e.detail === "red" ? "🟥" : "🟨"; bgColor = e.detail === "red" ? "bg-red-50" : "bg-yellow-50"; break;
+    case "injury": icon = "🩹"; bgColor = "bg-orange-50"; break;
+    case "substitution": icon = "🔄"; bgColor = "bg-blue-50"; break;
+    default: icon = ""; bgColor = "";
+  }
+
+  return (
+    <div className={`flex items-center gap-3 py-2 px-3 rounded-lg mb-1 ${bgColor}`}>
+      <span className="text-xs text-muted tabular-nums w-7 text-right font-heading font-bold">{e.minute}&apos;</span>
+      <div className="w-1 h-6 rounded-full shrink-0" style={{ backgroundColor: teamColor }} />
+      <span className="text-base shrink-0">{icon}</span>
+      <div className="flex-1 min-w-0">
+        <span className="text-sm font-heading font-bold">{e.playerName}</span>
+        <span className="text-xs text-muted ml-2">{e.description}</span>
+      </div>
     </div>
   );
 }

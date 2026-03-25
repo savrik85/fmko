@@ -4,7 +4,7 @@
  */
 
 import { simulateMatch } from "../engine/simulation";
-import { generateMatchCommentary } from "../engine/commentary";
+import { generateMatchCommentary, loadCommentaryFromDB } from "../engine/commentary";
 import { createRng } from "../generators/rng";
 import type { MatchPlayer, TeamSetup, Weather } from "../engine/types";
 import { calculatePlayerRatings, extractStatsFromEvents, updatePlayerStats, saveMatchPlayerStats, type MatchPlayerStatsEntry } from "../stats/update-stats";
@@ -63,9 +63,9 @@ export async function runScheduledMatches(
       const matchType: MatchRunResult["matchType"] = homeIsHuman && awayIsHuman ? "pvp"
         : homeIsHuman ? "pve_home" : awayIsHuman ? "pve_away" : "ai_vs_ai";
 
-      // Build match players from DB
-      const homeBuild = await buildMatchPlayers(db, homeTeamId);
-      const awayBuild = await buildMatchPlayers(db, awayTeamId);
+      // Build match players from DB (with absence filtering)
+      const homeBuild = await buildMatchPlayers(db, homeTeamId, rng);
+      const awayBuild = await buildMatchPlayers(db, awayTeamId, rng);
 
       const homeLineup = homeBuild.players;
       const awayLineup = awayBuild.players;
@@ -83,19 +83,48 @@ export async function runScheduledMatches(
       for (const [k, v] of homeBuild.positionMap) fullPosMap.set(k, v);
       for (const [k, v] of awayBuild.positionMap) fullPosMap.set(k, v);
 
+      // Read tactics from lineups (if user set them)
+      const homeLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(homeTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch(() => null);
+      const awayLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(awayTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch(() => null);
+
+      // Apply matchPosition from user lineup
+      if (homeLineupRow && homeLineupRow.is_auto === 0) {
+        try {
+          const lineupData = JSON.parse(homeLineupRow.players_data) as Array<{ playerId: string; matchPosition: string }>;
+          for (const entry of lineupData) {
+            const player = homeLineup.find((p) => homeBuild.idMap.get(p.id) === entry.playerId);
+            if (player && entry.matchPosition) player.matchPosition = entry.matchPosition as any;
+          }
+        } catch { /* ignore parse errors */ }
+      }
+      if (awayLineupRow && awayLineupRow.is_auto === 0) {
+        try {
+          const lineupData = JSON.parse(awayLineupRow.players_data) as Array<{ playerId: string; matchPosition: string }>;
+          for (const entry of lineupData) {
+            const player = awayLineup.find((p) => awayBuild.idMap.get(p.id) === entry.playerId);
+            if (player && entry.matchPosition) player.matchPosition = entry.matchPosition as any;
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
+      const homeTactic = (homeLineupRow?.tactic as any) ?? "balanced";
+      const awayTactic = (awayLineupRow?.tactic as any) ?? "balanced";
+
       const homeSetup: TeamSetup = {
         teamId: 1,
         teamName: (homeTeam?.name as string) ?? "Domácí",
         lineup: homeLineup,
         subs: homeSubs,
-        tactic: "balanced",
+        tactic: homeTactic,
       };
       const awaySetup: TeamSetup = {
         teamId: 2,
         teamName: (awayTeam?.name as string) ?? "Hosté",
         lineup: awayLineup,
         subs: awaySubs,
-        tactic: "balanced",
+        tactic: awayTactic,
       };
 
       // Load stadium info for pitch condition + facilities
@@ -196,7 +225,8 @@ export async function runScheduledMatches(
         awayEquipment,
       });
 
-      // Generate commentary
+      // Load commentary templates from DB + generate
+      await loadCommentaryFromDB(db);
       const commentary = generateMatchCommentary(
         rng,
         result.events,
@@ -227,12 +257,12 @@ export async function runScheduledMatches(
 
         // Home team stats
         const homeStarterIds = [...homeBuild.idMap.values()].slice(0, 11);
-        const homeUpdates = extractStatsFromEvents(result.events, homeBuild.idMap, homeStarterIds, ratings);
+        const homeUpdates = extractStatsFromEvents(result.events, homeBuild.idMap, homeStarterIds, ratings, result.playerMinutes);
         await updatePlayerStats(db, season.id, homeTeamId, homeUpdates, result.awayScore === 0).catch(() => {});
 
         // Away team stats
         const awayStarterIds = [...awayBuild.idMap.values()].slice(0, 11);
-        const awayUpdates = extractStatsFromEvents(result.events, awayBuild.idMap, awayStarterIds, ratings);
+        const awayUpdates = extractStatsFromEvents(result.events, awayBuild.idMap, awayStarterIds, ratings, result.playerMinutes);
         await updatePlayerStats(db, season.id, awayTeamId, awayUpdates, result.homeScore === 0).catch(() => {});
 
         // Save per-match player stats for both teams
@@ -281,6 +311,64 @@ export async function runScheduledMatches(
         console.error(`[MatchRunner] Match finances failed for ${matchId}:`, e);
       }
 
+      // Persist condition + morale changes back to DB
+      try {
+        for (const player of [...result.homeLineup, ...result.awayLineup]) {
+          const dbId = fullIdMap.get(player.id);
+          if (!dbId) continue;
+          await db.prepare(
+            `UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?`
+          ).bind(Math.round(player.condition), Math.round(player.morale), dbId).run();
+        }
+      } catch (e) {
+        console.error(`[MatchRunner] Condition persist failed:`, e);
+      }
+
+      // Match experience: small chance to improve skills from playing
+      // More minutes = more chance. Young players benefit more.
+      try {
+        const matchRng = createRng(Date.now() + matchId.charCodeAt(2));
+        for (const [engineId, pm] of Object.entries(result.playerMinutes)) {
+          const dbId = fullIdMap.get(Number(engineId));
+          if (!dbId) continue;
+          const minutes = ((pm as any).left ?? 90) - (pm as any).entered;
+          if (minutes < 15) continue; // too few minutes to learn anything
+
+          const playerRow = await db.prepare("SELECT age, skills, position FROM players WHERE id = ?")
+            .bind(dbId).first<{ age: number; skills: string; position: string }>().catch(() => null);
+          if (!playerRow) continue;
+
+          const age = playerRow.age;
+          const ageMod = age < 22 ? 0.08 : age < 26 ? 0.05 : age < 30 ? 0.03 : 0.01;
+          const minutesMod = minutes / 90; // full match = 1.0
+          const improveChance = ageMod * minutesMod;
+
+          if (matchRng.random() < improveChance) {
+            const skills = JSON.parse(playerRow.skills);
+            // Pick a position-relevant skill to improve
+            const posSkills: Record<string, string[]> = {
+              GK: ["goalkeeping"], DEF: ["defense", "heading", "strength"],
+              MID: ["passing", "vision", "technique"], FWD: ["shooting", "speed", "technique"],
+            };
+            const candidates = posSkills[playerRow.position] ?? ["technique"];
+            const attr = matchRng.pick(candidates);
+            const current = skills[attr] ?? 50;
+            if (current < 85) { // cap at 85 from match experience alone
+              skills[attr] = current + 1;
+              await db.prepare("UPDATE players SET skills = ? WHERE id = ?")
+                .bind(JSON.stringify(skills), dbId).run();
+              // Log it
+              await db.prepare(
+                "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'match', ?)"
+              ).bind(dbId, fullPosMap.get(dbId) ? (homeBuild.idMap.has(Number(engineId)) ? homeTeamId : awayTeamId) : homeTeamId,
+                attr, current, current + 1, new Date().toISOString()).run().catch(() => {});
+            }
+          }
+        }
+      } catch (e) {
+        console.error(`[MatchRunner] Match experience failed:`, e);
+      }
+
       results.push({
         matchId,
         homeScore: result.homeScore,
@@ -302,16 +390,42 @@ interface BuildResult {
   positionMap: Map<string, string>;   // DB player ID → position
 }
 
-async function buildMatchPlayers(db: D1Database, teamId: string): Promise<BuildResult> {
+async function buildMatchPlayers(db: D1Database, teamId: string, rng?: { random: () => number; pick: <T>(a: T[]) => T; int: (min: number, max: number) => number }): Promise<BuildResult> {
   const rows = await db.prepare(
-    "SELECT * FROM players WHERE team_id = ? ORDER BY overall_rating DESC LIMIT 16"
+    "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC LIMIT 20"
   ).bind(teamId).all();
+
+  // Generate absences if rng provided (for automatic matches)
+  let absentIds = new Set<string>();
+  if (rng) {
+    try {
+      const { generateAbsences } = await import("../events/absence");
+      const squadForAbsence = rows.results.map((row) => {
+        const personality = JSON.parse(row.personality as string);
+        const lifeContext = JSON.parse(row.life_context as string);
+        const physical = row.physical ? JSON.parse(row.physical as string) : {};
+        return {
+          firstName: row.first_name as string, lastName: row.last_name as string,
+          age: row.age as number, occupation: lifeContext.occupation ?? "",
+          discipline: personality.discipline ?? 50, patriotism: personality.patriotism ?? 50,
+          alcohol: personality.alcohol ?? 30, temper: personality.temper ?? 40,
+          morale: lifeContext.morale ?? 50, stamina: physical.stamina ?? 50,
+          injuryProneness: personality.injuryProneness ?? 50,
+        };
+      });
+      const absences = generateAbsences(rng as any, squadForAbsence);
+      absentIds = new Set(absences.map((a) => rows.results[a.playerIndex]?.id as string).filter(Boolean));
+    } catch { /* ignore absence errors */ }
+  }
+
+  // Filter out absent players, take top 16
+  const available = rows.results.filter((r) => !absentIds.has(r.id as string)).slice(0, 16);
 
   let idCounter = 1;
   const idMap = new Map<number, string>();
   const positionMap = new Map<string, string>();
 
-  const players = rows.results.map((row) => {
+  const players = available.map((row) => {
     const skills = JSON.parse(row.skills as string);
     const personality = JSON.parse(row.personality as string);
     const lifeContext = JSON.parse(row.life_context as string);

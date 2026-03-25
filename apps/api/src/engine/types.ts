@@ -12,6 +12,7 @@ export interface MatchPlayer {
   lastName: string;
   nickname: string | null;
   position: "GK" | "DEF" | "MID" | "FWD";
+  matchPosition?: "GK" | "DEF" | "MID" | "FWD"; // pozice v sestavě (může se lišit od přirozené)
   // Core skills
   speed: number;
   technique: number;
@@ -78,12 +79,18 @@ export interface MatchMinuteState {
   possession: "home" | "away";
 }
 
+export interface PlayerMinuteTrack {
+  entered: number;   // minuta vstupu (0 = starter)
+  left: number | null; // minuta odchodu (null = dohrál do konce)
+}
+
 export interface MatchResult {
   homeScore: number;
   awayScore: number;
   events: MatchEvent[];
-  homeLineup: MatchPlayer[]; // Final state (kondice atd.)
+  homeLineup: MatchPlayer[];
   awayLineup: MatchPlayer[];
+  playerMinutes: Record<number, PlayerMinuteTrack>; // engineId → minuty
 }
 
 export { MatchEvent, EventType };

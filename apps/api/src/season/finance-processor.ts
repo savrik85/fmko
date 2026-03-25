@@ -20,6 +20,9 @@ export type TransactionType =
   | "sponsor_termination"
   | "season_reward"
   | "event"
+  | "transfer_fee"
+  | "transfer_income"
+  | "signing_fee"
   | "other";
 
 /** Maps DB village size to economy.ts Czech category */

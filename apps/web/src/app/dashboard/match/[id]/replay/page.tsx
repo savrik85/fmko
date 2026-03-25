@@ -87,6 +87,7 @@ export default function MatchReplayPage() {
   const [finished, setFinished] = useState(false);
   const [htPause, setHtPause] = useState(false);
   const [htDone, setHtDone] = useState(false);
+  const [kickoff, setKickoff] = useState<"1st" | "2nd" | null>(null);
   const [flash, setFlash] = useState<"goal" | "card" | "chance" | "attacking" | "injury" | null>(null);
   const [flashEvent, setFlashEvent] = useState<MatchEvent | null>(null);
   const animating = useRef(false);
@@ -151,6 +152,23 @@ export default function MatchReplayPage() {
     if (cur) { const t = setTimeout(() => { prevBallX.current = ballX; }, 500); return () => clearTimeout(t); }
   }, [idx, cur, ballX]);
 
+  // Show kickoff when match loads — block replay via animating ref
+  useEffect(() => {
+    if (!match) return;
+    setKickoff("1st");
+    animating.current = true;
+    const t = setTimeout(() => { setKickoff(null); animating.current = false; setTick((t) => t + 1); }, 3000);
+    return () => clearTimeout(t);
+  }, [!!match]);
+
+  // Kickoff 2nd half — auto-dismiss
+  useEffect(() => {
+    if (kickoff !== "2nd") return;
+    animating.current = true;
+    const t = setTimeout(() => { setKickoff(null); animating.current = false; setTick((t) => t + 1); }, 2500);
+    return () => clearTimeout(t);
+  }, [kickoff]);
+
   // Auto-advance
   useEffect(() => {
     if (!match || finished || htPause || animating.current) return;
@@ -158,7 +176,7 @@ export default function MatchReplayPage() {
     if (speed === "instant") {
       let h = 0, a = 0;
       for (const e of match.events) { if (e.type === "goal") { if (e.teamId === 1) h++; else a++; } }
-      setHg(h); setAg(a); setIdx(match.events.length); setFinished(true); markSeen(); return;
+      setHg(h); setAg(a); setIdx(match.events.length); setFinished(true); setKickoff(null); markSeen(); return;
     }
     const next = match.events[idx];
     if (next.type === "special" && next.description.includes("Poločas")) { setIdx((i) => i + 1); return; }
@@ -192,7 +210,7 @@ export default function MatchReplayPage() {
         setFlashEvent(next);
         setFlash(next.type === "card" ? "card" : "injury");
         setIdx((i) => i + 1);
-        const dur = speed === "fast" ? 1500 : 2500;
+        const dur = speed === "fast" ? 2500 : 4000;
         setTimeout(() => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
       }
       return; // No cleanup — timeouts are fire-and-forget
@@ -453,6 +471,20 @@ export default function MatchReplayPage() {
             </div>
           )}
 
+          {/* KICKOFF overlay */}
+          {kickoff && !htPause && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-md" style={{ background: "rgba(0,0,0,0.5)" }}>
+              <div className="text-center" style={{ animation: "kickoffAnim 2.5s ease-out forwards" }}>
+                <div className="font-heading font-[900] text-5xl sm:text-7xl text-white tracking-[0.2em] drop-shadow-[0_0_30px_rgba(255,255,255,0.4)]">
+                  VÝKOP
+                </div>
+                {kickoff === "2nd" && (
+                  <div className="font-heading font-bold text-white/60 text-xl mt-2">2. poločas</div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* HALFTIME overlay */}
           {htPause && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-md" style={{ background: "rgba(0,0,0,0.4)" }}>
@@ -520,7 +552,7 @@ export default function MatchReplayPage() {
             }`} style={speed === s ? { backgroundColor: hc } : undefined}
           >{s === "live" ? "\u25B6 Živě" : s === "fast" ? "\u25B6\u25B6 Rychle" : "\u25B6\u25B6\u25B6 Konec"}</button>
         ))}
-        {htPause && <button onClick={() => { setHtPause(false); setHtDone(true); }} className="px-8 py-3 rounded-xl text-base font-heading font-bold uppercase text-white shadow-lg" style={{ backgroundColor: hc }}>2. poločas {"\u25B6"}</button>}
+        {htPause && <button onClick={() => { setHtPause(false); setHtDone(true); setKickoff("2nd"); }} className="px-8 py-3 rounded-xl text-base font-heading font-bold uppercase text-white shadow-lg" style={{ backgroundColor: hc }}>2. poločas {"\u25B6"}</button>}
         {finished && <button onClick={() => router.push("/dashboard")} className="px-10 py-3 rounded-xl text-lg font-heading font-bold uppercase text-white shadow-lg" style={{ backgroundColor: hc }}>Pokračovat</button>}
       </div>
 

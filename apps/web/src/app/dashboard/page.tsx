@@ -89,58 +89,15 @@ export default function DashboardPage() {
     }).catch(() => setLoading(false));
   }, [teamId]);
 
+  // Unseen match → redirect to match-day page
+  useEffect(() => {
+    if (unseen) {
+      router.push(`/dashboard/match-day/${unseen.matchId}`);
+    }
+  }, [unseen, router]);
+
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
   if (!team) return <div className="page-container">Tým nenalezen.</div>;
-
-  // Unseen match overlay
-  if (unseen) {
-    const teamColor = team.primary_color || "#2D5F2D";
-    return (
-      <div className="flex items-center justify-center min-h-[70vh] px-4">
-        <div className="w-full max-w-lg animate-slide-up">
-          <div className="rounded-2xl overflow-hidden shadow-2xl">
-            <div className="relative py-8 px-6 text-center" style={{ background: `linear-gradient(135deg, ${teamColor} 0%, #0f170f 100%)` }}>
-              <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")" }} />
-              <div className="relative">
-                <div className="text-white/50 text-sm font-heading font-bold uppercase tracking-widest mb-3">
-                  {unseen.round}. kolo · {unseen.isHome ? "Domácí" : "Venku"}
-                </div>
-                <div className="flex items-center justify-center gap-6">
-                  <div className="text-center">
-                    <BadgePreview primary={teamColor} secondary={team.secondary_color || "#FFFFFF"}
-                      pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                      initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={52} />
-                    <div className="font-heading font-bold text-white text-sm mt-2 max-w-[100px] truncate">{team.name}</div>
-                  </div>
-                  <div className="font-heading font-[800] text-4xl text-white/30">vs</div>
-                  <div className="text-center">
-                    <div className="w-[52px] h-[52px] rounded-xl bg-white/10 flex items-center justify-center text-white/70 font-heading font-bold text-xl mx-auto">
-                      {unseen.opponent.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()}
-                    </div>
-                    <div className="font-heading font-bold text-white text-sm mt-2 max-w-[100px] truncate">{unseen.opponent}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white p-6 space-y-3">
-              <Link href={`/dashboard/match/${unseen.matchId}/replay`} className="btn btn-primary btn-lg w-full text-center">
-                Sledovat zápas
-              </Link>
-              <button onClick={async () => {
-                await apiFetch(`/api/matches/${unseen.matchId}/mark-seen`, {
-                  method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ teamId }),
-                });
-                setUnseen(null);
-              }} className="w-full text-center py-2.5 text-sm text-muted hover:text-ink transition-colors">
-                Zobrazit výsledek
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const color = team.primary_color || "#2D5F2D";
   const nextMatch = matches.find((m) => m.status !== "simulated");

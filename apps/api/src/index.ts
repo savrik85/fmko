@@ -7,6 +7,7 @@ import { matchesRouter } from "./routes/matches";
 import { leagueRouter } from "./routes/league";
 import { gameRouter } from "./routes/game";
 import { messagingRouter } from "./routes/messaging";
+// transfers endpoints are in gameRouter
 import { runScheduledMatches } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
 

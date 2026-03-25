@@ -351,6 +351,13 @@ body::before {
   0%, 100% { background: rgba(249, 115, 22, 0.05); }
   50% { background: rgba(249, 115, 22, 0.15); }
 }
+@keyframes kickoffAnim {
+  0% { opacity: 0; transform: scale(0.5); }
+  20% { opacity: 1; transform: scale(1.1); }
+  35% { transform: scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.05); }
+}
 
 .stagger-children > * { animation: slideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .stagger-children > *:nth-child(1) { animation-delay: 0ms; }

@@ -665,7 +665,7 @@ teamsRouter.get("/:id", async (c) => {
 // GET /api/teams/:id/players
 teamsRouter.get("/:id/players", async (c) => {
   const result = await c.env.DB.prepare(
-    "SELECT * FROM players WHERE team_id = ? ORDER BY CASE position WHEN 'GK' THEN 0 WHEN 'DEF' THEN 1 WHEN 'MID' THEN 2 WHEN 'FWD' THEN 3 END, overall_rating DESC"
+    "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status != 'released') ORDER BY CASE position WHEN 'GK' THEN 0 WHEN 'DEF' THEN 1 WHEN 'MID' THEN 2 WHEN 'FWD' THEN 3 END, overall_rating DESC"
   ).bind(c.req.param("id")).all();
 
   const players = result.results.map((row) => ({

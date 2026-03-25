@@ -32,7 +32,7 @@ function positionSum(lineup: MatchPlayer[], pos: string, stat: keyof MatchPlayer
 
 /** Get player display name */
 function playerName(p: MatchPlayer): string {
-  return p.lastName;
+  return `${p.firstName} ${p.lastName}`;
 }
 
 /** Tactic modifiers */
@@ -174,6 +174,26 @@ function updateCondition(lineup: MatchPlayer[], minute: number, drainMod: number
   }
 }
 
+/** Out-of-position penalties */
+type Pos = "GK" | "DEF" | "MID" | "FWD";
+interface PosPenalty { speed: number; technique: number; shooting: number; passing: number; heading: number; defense: number; goalkeeping: number; vision: number; creativity: number }
+const ZERO_PEN: PosPenalty = { speed: 0, technique: 0, shooting: 0, passing: 0, heading: 0, defense: 0, goalkeeping: 0, vision: 0, creativity: 0 };
+
+function getPositionPenalty(natural: Pos, playing: Pos): PosPenalty {
+  if (natural === playing) return ZERO_PEN;
+  if (natural === "GK" || playing === "GK") return { speed: 0.4, technique: 0.4, shooting: 0.4, passing: 0.4, heading: 0.4, defense: 0.4, goalkeeping: 0.4, vision: 0.4, creativity: 0.4 };
+  const key = `${natural}→${playing}`;
+  switch (key) {
+    case "DEF→MID": return { ...ZERO_PEN, passing: 0.15, vision: 0.15, technique: 0.10 };
+    case "DEF→FWD": return { ...ZERO_PEN, shooting: 0.25, creativity: 0.25, technique: 0.15 };
+    case "MID→DEF": return { ...ZERO_PEN, defense: 0.10 };
+    case "MID→FWD": return { ...ZERO_PEN, shooting: 0.10 };
+    case "FWD→MID": return { ...ZERO_PEN, passing: 0.15, vision: 0.15 };
+    case "FWD→DEF": return { ...ZERO_PEN, defense: 0.30, heading: 0.15 };
+    default: return { ...ZERO_PEN, technique: 0.10 };
+  }
+}
+
 /**
  * Simulate a full 90-minute match.
  */
@@ -217,9 +237,34 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   const homeInjuryMod = 1 - (homeEq?.injurySeverityMod ?? 0);
   const awayInjuryMod = 1 - (awayEq?.injurySeverityMod ?? 0);
 
+  // Apply out-of-position penalties
+  for (const p of [...home.lineup, ...home.subs, ...away.lineup, ...away.subs]) {
+    const mp = p.matchPosition ?? p.position;
+    if (mp !== p.position) {
+      const pen = getPositionPenalty(p.position, mp);
+      p.speed = Math.max(5, Math.round(p.speed * (1 - pen.speed)));
+      p.technique = Math.max(5, Math.round(p.technique * (1 - pen.technique)));
+      p.shooting = Math.max(5, Math.round(p.shooting * (1 - pen.shooting)));
+      p.passing = Math.max(5, Math.round(p.passing * (1 - pen.passing)));
+      p.heading = Math.max(5, Math.round(p.heading * (1 - pen.heading)));
+      p.defense = Math.max(5, Math.round(p.defense * (1 - pen.defense)));
+      p.goalkeeping = Math.max(5, Math.round(p.goalkeeping * (1 - pen.goalkeeping)));
+      p.vision = Math.max(5, Math.round(p.vision * (1 - pen.vision)));
+      p.creativity = Math.max(5, Math.round(p.creativity * (1 - pen.creativity)));
+    }
+  }
+
   // Track cards per player to avoid double yellow → red
   const yellowCards = new Set<number>();
   const redCards = new Set<number>();
+
+  // Track minutes per player + substitutions used
+  const playerMinutes: Record<number, { entered: number; left: number | null }> = {};
+  for (const p of home.lineup) playerMinutes[p.id] = { entered: 0, left: null };
+  for (const p of away.lineup) playerMinutes[p.id] = { entered: 0, left: null };
+  let homeSubsUsed = 0;
+  let awaySubsUsed = 0;
+  const MAX_SUBS = 3;
 
   function addEvent(
     minute: number,
@@ -327,9 +372,12 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
             addEvent(minute, "card", fouler, defending.teamId,
               `Druhá žlutá a červená pro ${playerName(fouler)}!`,
               "red");
-            // Remove from lineup
+            // Remove from lineup + track minutes
             const idx = defending.lineup.indexOf(fouler);
-            if (idx >= 0) defending.lineup.splice(idx, 1);
+            if (idx >= 0) {
+              defending.lineup.splice(idx, 1);
+              if (playerMinutes[fouler.id]) playerMinutes[fouler.id].left = minute;
+            }
           } else {
             yellowCards.add(fouler.id);
             addEvent(minute, "card", fouler, defending.teamId,
@@ -381,15 +429,68 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           `${playerName(unlucky)} — ${injury}`,
           injury);
 
-        // Try substitution
+        // Try substitution (injury — doesn't count toward tactical sub limit)
         const team = teamId === home.teamId ? home : away;
-        if (team.subs.length > 0) {
+        const subsUsed = teamId === home.teamId ? homeSubsUsed : awaySubsUsed;
+        if (team.subs.length > 0 && subsUsed < MAX_SUBS) {
           const sub = team.subs.shift()!;
           const idx = team.lineup.indexOf(unlucky);
           if (idx >= 0) {
             team.lineup[idx] = sub;
+            playerMinutes[unlucky.id] = { ...playerMinutes[unlucky.id], left: minute };
+            playerMinutes[sub.id] = { entered: minute, left: null };
+            if (teamId === home.teamId) homeSubsUsed++; else awaySubsUsed++;
             addEvent(minute, "substitution", sub, teamId,
               `Střídání: ${playerName(sub)} za ${playerName(unlucky)}`);
+          }
+        }
+      }
+    }
+
+    // Tactical substitutions (after 60')
+    if (minute >= 60) {
+      for (const teamData of [{ team: home, teamId: home.teamId, subsUsed: homeSubsUsed, isHome: true },
+                               { team: away, teamId: away.teamId, subsUsed: awaySubsUsed, isHome: false }]) {
+        if (teamData.subsUsed >= MAX_SUBS || teamData.team.subs.length === 0) continue;
+
+        // Condition-based: stáhnout vyčerpaného hráče
+        const exhausted = teamData.team.lineup
+          .filter((p) => (p.matchPosition ?? p.position) !== "GK" && p.condition < 25)
+          .sort((a, b) => a.condition - b.condition)[0];
+
+        if (exhausted && rng.random() < 0.3) {
+          const sub = teamData.team.subs.shift()!;
+          const idx = teamData.team.lineup.indexOf(exhausted);
+          if (idx >= 0) {
+            teamData.team.lineup[idx] = sub;
+            playerMinutes[exhausted.id] = { ...playerMinutes[exhausted.id], left: minute };
+            playerMinutes[sub.id] = { entered: minute, left: null };
+            if (teamData.isHome) homeSubsUsed++; else awaySubsUsed++;
+            addEvent(minute, "substitution", sub, teamData.teamId,
+              `Střídání: ${playerName(sub)} za ${playerName(exhausted)}`);
+            continue;
+          }
+        }
+
+        // Tactical: prohrávající tým po 75' → útočník za obránce
+        if (minute >= 75) {
+          const scoreDiff = teamData.isHome ? homeScore - awayScore : awayScore - homeScore;
+          if (scoreDiff < 0 && rng.random() < 0.4) {
+            const fwdSub = teamData.team.subs.find((p) => p.position === "FWD");
+            const defOut = teamData.team.lineup
+              .filter((p) => (p.matchPosition ?? p.position) === "DEF")
+              .sort((a, b) => a.condition - b.condition)[0];
+            if (fwdSub && defOut) {
+              const subIdx = teamData.team.subs.indexOf(fwdSub);
+              teamData.team.subs.splice(subIdx, 1);
+              const lineupIdx = teamData.team.lineup.indexOf(defOut);
+              teamData.team.lineup[lineupIdx] = fwdSub;
+              playerMinutes[defOut.id] = { ...playerMinutes[defOut.id], left: minute };
+              playerMinutes[fwdSub.id] = { entered: minute, left: null };
+              if (teamData.isHome) homeSubsUsed++; else awaySubsUsed++;
+              addEvent(minute, "substitution", fwdSub, teamData.teamId,
+                `Taktické střídání: ${playerName(fwdSub)} za ${playerName(defOut)}`);
+            }
           }
         }
       }
@@ -495,5 +596,6 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     events,
     homeLineup: home.lineup,
     awayLineup: away.lineup,
+    playerMinutes,
   };
 }

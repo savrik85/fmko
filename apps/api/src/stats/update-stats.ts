@@ -141,21 +141,41 @@ export function extractStatsFromEvents(
   playerIdMap: Map<number, string>,
   allPlayerIds: string[],
   playerRatings: Record<string, number>,
+  playerMinutes?: Record<number, { entered: number; left: number | null }>,
 ): StatsUpdate[] {
   const stats = new Map<string, StatsUpdate>();
 
-  // Init all players who appeared
+  // Build reverse map: dbId → engineId
+  const reverseMap = new Map<string, number>();
+  for (const [engineId, dbId] of playerIdMap) reverseMap.set(dbId, engineId);
+
+  // Init all players who appeared (starters + substitutes)
   for (const pid of allPlayerIds) {
+    const engineId = reverseMap.get(pid);
+    let minutes = 90;
+    if (playerMinutes && engineId != null && playerMinutes[engineId]) {
+      const pm = playerMinutes[engineId];
+      minutes = (pm.left ?? 90) - pm.entered;
+    }
     stats.set(pid, {
-      playerId: pid,
-      goals: 0,
-      assists: 0,
-      yellowCards: 0,
-      redCards: 0,
-      appeared: true,
-      minutesPlayed: 90,
+      playerId: pid, goals: 0, assists: 0, yellowCards: 0, redCards: 0,
+      appeared: true, minutesPlayed: Math.max(0, minutes),
       rating: playerRatings[pid] ?? 6.0,
     });
+  }
+
+  // Also add substitutes who entered (they might not be in allPlayerIds/starterIds)
+  if (playerMinutes) {
+    for (const [engineId, pm] of Object.entries(playerMinutes)) {
+      const dbId = playerIdMap.get(Number(engineId));
+      if (dbId && !stats.has(dbId) && pm.entered > 0) {
+        stats.set(dbId, {
+          playerId: dbId, goals: 0, assists: 0, yellowCards: 0, redCards: 0,
+          appeared: true, minutesPlayed: Math.max(0, ((pm as any).left ?? 90) - (pm as any).entered),
+          rating: playerRatings[dbId] ?? 6.0,
+        });
+      }
+    }
   }
 
   for (const event of events) {
@@ -165,19 +185,10 @@ export function extractStatsFromEvents(
     if (!s) continue;
 
     switch (event.type) {
-      case "goal":
-        s.goals++;
-        break;
+      case "goal": s.goals++; break;
       case "card":
-        if (event.detail === "red") {
-          s.redCards++;
-        } else {
-          s.yellowCards++;
-        }
-        break;
-      case "substitution":
-        // Player subbed off — reduce minutes
-        s.minutesPlayed = event.minute;
+        if (event.detail === "red") s.redCards++;
+        else s.yellowCards++;
         break;
     }
   }
