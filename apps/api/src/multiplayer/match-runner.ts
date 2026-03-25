@@ -211,6 +211,18 @@ export async function runScheduledMatches(
           .bind(JSON.stringify(ratings), matchId).run().catch(() => {});
       }
 
+      // Match-day finances for both teams
+      try {
+        const { processMatchDayFinances } = await import("../season/finance-processor");
+        const homeResult = result.homeScore > result.awayScore ? "win" : result.homeScore < result.awayScore ? "loss" : "draw";
+        const awayResult = result.awayScore > result.homeScore ? "win" : result.awayScore < result.homeScore ? "loss" : "draw";
+        const gameDate = new Date().toISOString();
+        await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate);
+        await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate);
+      } catch (e) {
+        console.error(`[MatchRunner] Match finances failed for ${matchId}:`, e);
+      }
+
       results.push({
         matchId,
         homeScore: result.homeScore,

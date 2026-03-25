@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
-import { apiFetch, type Team, type Player } from "@/lib/api";
+import { apiFetch, type Team, type Player, type ManagerProfile, type TeamMatchResults } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { Card, CardBody, Spinner, SectionLabel, PositionBadge, EntityLink, BadgePreview } from "@/components/ui";
+import { Spinner, SectionLabel, PositionBadge, BadgePreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface Standing {
@@ -15,6 +15,11 @@ interface Standing {
   teamId: string | null;
   points: number;
   played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
   isPlayer?: boolean;
 }
 
@@ -23,7 +28,13 @@ interface ScheduleMatch {
   round: number | null;
   status: string;
   homeName: string;
+  homeColor?: string;
+  homeSecondary?: string;
+  homeBadge?: string;
   awayName: string;
+  awayColor?: string;
+  awaySecondary?: string;
+  awayBadge?: string;
   homeScore: number | null;
   awayScore: number | null;
   scheduledAt: string | null;
@@ -37,6 +48,13 @@ interface UnseenMatch {
   isHome: boolean;
 }
 
+function conditionLabel(condition: number): { text: string; color: string } {
+  if (condition >= 80) return { text: "Fit", color: "text-pitch-500" };
+  if (condition >= 50) return { text: "OK", color: "text-gold-500" };
+  if (condition >= 20) return { text: "Unavený", color: "text-orange-500" };
+  return { text: "Vyčerpaný", color: "text-card-red" };
+}
+
 export default function DashboardPage() {
   const { teamId } = useTeam();
   const router = useRouter();
@@ -45,6 +63,8 @@ export default function DashboardPage() {
   const [standings, setStandings] = useState<Standing[]>([]);
   const [matches, setMatches] = useState<ScheduleMatch[]>([]);
   const [unseen, setUnseen] = useState<UnseenMatch | null>(null);
+  const [manager, setManager] = useState<ManagerProfile | null>(null);
+  const [matchResults, setMatchResults] = useState<TeamMatchResults | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -55,12 +75,16 @@ export default function DashboardPage() {
       apiFetch<{ standings: Standing[] }>(`/api/teams/${teamId}/standings`).catch(() => ({ standings: [] })),
       apiFetch<{ matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`).catch(() => ({ matches: [] })),
       apiFetch<UnseenMatch | null>(`/api/teams/${teamId}/unseen-match`).catch(() => null),
-    ]).then(([t, p, s, m, u]) => {
+      apiFetch<ManagerProfile>(`/api/teams/${teamId}/manager`).catch(() => null),
+      apiFetch<TeamMatchResults>(`/api/teams/${teamId}/match-results`).catch(() => null),
+    ]).then(([t, p, s, m, u, mgr, mr]) => {
       setTeam(t);
       setPlayers(p);
       setStandings(s.standings);
       setMatches(m.matches);
       setUnseen(u);
+      setManager(mgr);
+      setMatchResults(mr);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [teamId]);
@@ -74,9 +98,7 @@ export default function DashboardPage() {
     return (
       <div className="flex items-center justify-center min-h-[70vh] px-4">
         <div className="w-full max-w-lg animate-slide-up">
-          {/* Dark match card */}
           <div className="rounded-2xl overflow-hidden shadow-2xl">
-            {/* Header with team color accent */}
             <div className="relative py-8 px-6 text-center" style={{ background: `linear-gradient(135deg, ${teamColor} 0%, #0f170f 100%)` }}>
               <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")" }} />
               <div className="relative">
@@ -85,13 +107,9 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center justify-center gap-6">
                   <div className="text-center">
-                    <BadgePreview
-                      primary={teamColor}
-                      secondary={team.secondary_color || "#FFFFFF"}
+                    <BadgePreview primary={teamColor} secondary={team.secondary_color || "#FFFFFF"}
                       pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                      initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
-                      size={52}
-                    />
+                      initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={52} />
                     <div className="font-heading font-bold text-white text-sm mt-2 max-w-[100px] truncate">{team.name}</div>
                   </div>
                   <div className="font-heading font-[800] text-4xl text-white/30">vs</div>
@@ -104,26 +122,17 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
-
-            {/* Actions */}
             <div className="bg-white p-6 space-y-3">
-              <Link
-                href={`/dashboard/match/${unseen.matchId}/replay`}
-                className="btn btn-primary btn-lg w-full text-center"
-              >
+              <Link href={`/dashboard/match/${unseen.matchId}/replay`} className="btn btn-primary btn-lg w-full text-center">
                 Sledovat zápas
               </Link>
-              <button
-                onClick={async () => {
-                  await apiFetch(`/api/matches/${unseen.matchId}/mark-seen`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ teamId }),
-                  });
-                  setUnseen(null);
-                }}
-                className="w-full text-center py-2.5 text-sm text-muted hover:text-ink transition-colors"
-              >
+              <button onClick={async () => {
+                await apiFetch(`/api/matches/${unseen.matchId}/mark-seen`, {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ teamId }),
+                });
+                setUnseen(null);
+              }} className="w-full text-center py-2.5 text-sm text-muted hover:text-ink transition-colors">
                 Zobrazit výsledek
               </button>
             </div>
@@ -133,145 +142,357 @@ export default function DashboardPage() {
     );
   }
 
-  const fitCount = players.filter((p) => (p.physical?.stamina ?? 0) > 3).length;
+  const color = team.primary_color || "#2D5F2D";
   const nextMatch = matches.find((m) => m.status !== "simulated");
-  const recentMatches = matches.filter((m) => m.status === "simulated").slice(-5).reverse();
   const myStanding = standings.find((s) => s.isPlayer);
+  const avgCondition = players.length > 0 ? Math.round(players.reduce((s, p) => s + (p.lifeContext?.condition ?? 50), 0) / players.length) : 0;
+  const avgMorale = players.length > 0 ? Math.round(players.reduce((s, p) => s + (p.lifeContext?.morale ?? 50), 0) / players.length) : 0;
+  const injuredCount = players.filter((p) => (p.lifeContext?.condition ?? 100) < 30).length;
+  const lowMoraleCount = players.filter((p) => (p.lifeContext?.morale ?? 50) < 30).length;
 
   return (
-    <div className="page-container space-y-4">
+    <div className="page-container space-y-5">
 
-      {/* 3-column overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Squad status */}
-        <Card>
-          <CardBody>
-            <SectionLabel>Kádr</SectionLabel>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div>
-                <div className="font-heading font-bold text-2xl tabular-nums text-pitch-500">{players.length}</div>
-                <div className="text-xs text-muted">Celkem</div>
-              </div>
-              <div>
-                <div className="font-heading font-bold text-2xl tabular-nums text-pitch-500">{fitCount}</div>
-                <div className="text-xs text-muted">Fit</div>
-              </div>
-              <div>
-                <div className="font-heading font-bold text-2xl tabular-nums text-card-red">{players.length - fitCount}</div>
-                <div className="text-xs text-muted">Mimo</div>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
+      {/* ═══ Row 1: Next match + Form + League position ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
         {/* Next match */}
-        <Card>
-          <CardBody>
-            <SectionLabel>Další zápas</SectionLabel>
-            {nextMatch ? (
-              <div className="text-center">
-                <div className="font-heading font-bold text-base">{nextMatch.isHome ? team.name : nextMatch.homeName}</div>
-                <div className="text-muted text-sm my-1">vs</div>
-                <div className="font-heading font-bold text-base">{nextMatch.isHome ? nextMatch.awayName : team.name}</div>
-                {nextMatch.round && <div className="text-xs text-muted mt-2">{nextMatch.round}. kolo</div>}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Další zápas</SectionLabel>
+          {nextMatch ? (
+            <Link href={`/dashboard/match/${nextMatch.id}/replay`} className="block group">
+              <div className="flex items-center justify-between">
+                <div className="text-center flex-1">
+                  <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"}
+                    pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                    initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={40} />
+                  <div className="font-heading font-bold text-sm mt-1.5 truncate">{team.name}</div>
+                </div>
+                <div className="px-4 text-center">
+                  <div className="font-heading font-[800] text-2xl text-muted">vs</div>
+                  <div className="text-[10px] text-muted uppercase mt-1">{nextMatch.round}. kolo</div>
+                </div>
+                <div className="text-center flex-1">
+                  <BadgePreview
+                    primary={nextMatch.isHome ? (nextMatch.awayColor || "#666") : (nextMatch.homeColor || "#666")}
+                    secondary={nextMatch.isHome ? (nextMatch.awaySecondary || "#FFF") : (nextMatch.homeSecondary || "#FFF")}
+                    pattern={((nextMatch.isHome ? nextMatch.awayBadge : nextMatch.homeBadge) as BadgePattern) || "shield"}
+                    initials={(nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName).split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={40} />
+                  <div className="font-heading font-bold text-sm mt-1.5 truncate">{nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName}</div>
+                </div>
               </div>
-            ) : (
-              <div className="text-center text-muted py-2">Žádný naplánovaný zápas</div>
-            )}
-          </CardBody>
-        </Card>
+              <div className="text-center mt-3">
+                <span className="text-xs text-pitch-500 font-heading font-bold group-hover:underline">Přehled zápasu →</span>
+              </div>
+            </Link>
+          ) : (
+            <div className="text-center text-muted py-4">Žádný naplánovaný zápas</div>
+          )}
+        </div>
+
+        {/* Form + Results */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Forma</SectionLabel>
+          {matchResults && matchResults.matches.length > 0 ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-center gap-1.5">
+                {matchResults.form.map((f, i) => (
+                  <span key={i} className={`w-8 h-8 rounded-md flex items-center justify-center text-sm font-heading font-bold text-white ${
+                    f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
+                  }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
+                ))}
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-gray-50 rounded-lg py-1.5">
+                  <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">{matchResults.summary.wins}</div>
+                  <div className="text-[9px] text-muted uppercase">Výhry</div>
+                </div>
+                <div className="bg-gray-50 rounded-lg py-1.5">
+                  <div className="font-heading font-bold text-lg tabular-nums">{matchResults.summary.draws}</div>
+                  <div className="text-[9px] text-muted uppercase">Remízy</div>
+                </div>
+                <div className="bg-gray-50 rounded-lg py-1.5">
+                  <div className="font-heading font-bold text-lg tabular-nums text-card-red">{matchResults.summary.losses}</div>
+                  <div className="text-[9px] text-muted uppercase">Prohry</div>
+                </div>
+              </div>
+              <div className="text-center text-sm text-muted">
+                Skóre <span className="font-heading font-bold text-ink">{matchResults.summary.goalsFor}:{matchResults.summary.goalsAgainst}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center text-muted py-4">Zatím bez zápasů</div>
+          )}
+        </div>
 
         {/* League position */}
-        <Card>
-          <CardBody>
-            <SectionLabel>Liga</SectionLabel>
-            {myStanding ? (
-              <div className="text-center">
-                <div className="font-heading font-[800] text-4xl tabular-nums text-pitch-500">{myStanding.pos}.</div>
-                <div className="text-sm text-muted">{myStanding.points} bodů · {myStanding.played} zápasů</div>
-                <Link href="/dashboard/liga" className="text-sm text-pitch-500 font-heading font-bold hover:underline mt-2 inline-block">Zobrazit tabulku →</Link>
-              </div>
-            ) : (
-              <div className="text-center">
-                <div className="text-muted py-2">Zatím žádné výsledky</div>
-                <Link href="/dashboard/match" className="text-sm text-pitch-500 font-heading font-bold hover:underline">Hrát zápas →</Link>
-              </div>
-            )}
-          </CardBody>
-        </Card>
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Liga</SectionLabel>
+          {myStanding ? (
+            <div className="text-center">
+              <div className="font-heading font-[800] text-5xl tabular-nums" style={{ color }}>{myStanding.pos}.</div>
+              <div className="text-sm text-muted mt-1">{myStanding.points} bodů · {myStanding.played} zápasů</div>
+              {myStanding.goalsFor != null && myStanding.goalsAgainst != null && (
+                <div className="text-xs text-muted mt-0.5">
+                  {myStanding.goalsFor}:{myStanding.goalsAgainst} ({myStanding.goalsFor - myStanding.goalsAgainst >= 0 ? "+" : ""}{myStanding.goalsFor - myStanding.goalsAgainst})
+                </div>
+              )}
+              <Link href="/dashboard/liga" className="text-sm text-pitch-500 font-heading font-bold hover:underline mt-2 inline-block">
+                Zobrazit tabulku →
+              </Link>
+            </div>
+          ) : (
+            <div className="text-center text-muted py-4">
+              <div>Zatím žádné výsledky</div>
+              <Link href="/dashboard/match" className="text-sm text-pitch-500 font-heading font-bold hover:underline mt-2 inline-block">Hrát zápas →</Link>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Recent matches */}
-      {recentMatches.length > 0 && (
-        <Card>
-          <CardBody>
-            <SectionLabel>Poslední zápasy</SectionLabel>
-            <div className="space-y-2">
-              {recentMatches.map((m) => {
-                const won = m.isHome ? (m.homeScore ?? 0) > (m.awayScore ?? 0) : (m.awayScore ?? 0) > (m.homeScore ?? 0);
-                const draw = m.homeScore === m.awayScore;
-                return (
-                  <Link key={m.id} href={`/dashboard/match/${m.id}`} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-surface transition-colors">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold ${won ? "bg-pitch-400" : draw ? "bg-gold-500" : "bg-card-red"}`}>
-                      {won ? "V" : draw ? "R" : "P"}
-                    </div>
-                    <div className="flex-1 font-heading text-sm">{m.homeName} vs {m.awayName}</div>
-                    <div className="font-heading font-[800] text-base tabular-nums">{m.homeScore} : {m.awayScore}</div>
-                  </Link>
-                );
-              })}
-            </div>
-          </CardBody>
-        </Card>
-      )}
+      {/* ═══ Row 2: Squad health + Mini league table + Manager ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-      {/* Top players */}
-      <Card>
-        <CardBody>
-          <SectionLabel>Nejlepší hráči</SectionLabel>
+        {/* Squad health */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Stav kádru</SectionLabel>
           <div className="space-y-3">
-            {[...players].sort((a, b) => b.overall_rating - a.overall_rating).slice(0, 5).map((p) => (
-              <div key={p.id} className="flex items-center gap-3">
-                {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
-                  <FaceAvatar faceConfig={p.avatar} size={36} />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-pitch-500 flex items-center justify-center text-white text-xs font-bold shrink-0">{p.first_name[0]}</div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">
-                    <EntityLink type="player" id={p.id}>{p.first_name} {p.last_name}</EntityLink>
-                    {p.nickname && <span className="text-gold-500 ml-1">&bdquo;{p.nickname}&ldquo;</span>}
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <PositionBadge position={p.position} />
-                    <span className="text-xs text-muted">{p.age} let</span>
-                  </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="font-heading font-bold text-2xl tabular-nums" style={{ color }}>{players.length}</div>
+                <div className="text-[10px] text-muted uppercase">Hráčů</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className={`font-heading font-bold text-2xl tabular-nums ${conditionLabel(avgCondition).color}`}>{avgCondition}%</div>
+                <div className="text-[10px] text-muted uppercase">Prům. kondice</div>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              {injuredCount > 0 && (
+                <div className="flex items-center justify-between text-sm py-1">
+                  <span className="text-muted">Zranění / vyčerpaní</span>
+                  <span className="font-heading font-bold text-card-red">{injuredCount}</span>
                 </div>
-                <div className={`font-heading font-bold text-lg tabular-nums ${p.overall_rating >= 70 ? "rating-gold" : p.overall_rating >= 50 ? "rating-good" : "rating-avg"}`}>
-                  {p.overall_rating}
+              )}
+              {lowMoraleCount > 0 && (
+                <div className="flex items-center justify-between text-sm py-1">
+                  <span className="text-muted">Nízká morálka</span>
+                  <span className="font-heading font-bold text-gold-600">{lowMoraleCount}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-sm py-1">
+                <span className="text-muted">Prům. morálka</span>
+                <span className="font-heading font-bold">{avgMorale}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm py-1">
+                <span className="text-muted">Prům. rating</span>
+                <span className="font-heading font-bold">{players.length > 0 ? Math.round(players.reduce((s, p) => s + p.overall_rating, 0) / players.length) : 0}</span>
+              </div>
+            </div>
+            <Link href="/dashboard/squad" className="text-xs text-pitch-500 font-heading font-bold hover:underline block text-center pt-1">
+              Zobrazit kádr →
+            </Link>
+          </div>
+        </div>
+
+        {/* Mini league table */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Tabulka</SectionLabel>
+          {standings.length > 0 ? (
+            <div className="overflow-x-auto -mx-4 sm:-mx-5">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-label border-b border-gray-200 text-[10px] uppercase tracking-wide">
+                    <th className="pb-1.5 pl-4 sm:pl-5 pr-1 w-6">#</th>
+                    <th className="pb-1.5 pr-2">Tým</th>
+                    <th className="pb-1.5 pr-1 text-center w-8">Z</th>
+                    <th className="pb-1.5 pr-1 text-center w-8">V</th>
+                    <th className="pb-1.5 pr-1 text-center w-8">R</th>
+                    <th className="pb-1.5 pr-1 text-center w-8">P</th>
+                    <th className="pb-1.5 pr-4 sm:pr-5 text-center w-8">B</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {standings.slice(0, 8).map((s) => (
+                    <tr key={s.teamId ?? s.pos} className={`border-b border-gray-50 ${s.isPlayer ? "bg-pitch-50/50 font-bold" : ""}`}>
+                      <td className="py-1.5 pl-4 sm:pl-5 pr-1 tabular-nums text-muted text-xs">{s.pos}</td>
+                      <td className="py-1.5 pr-2">
+                        <span className={`text-xs truncate block max-w-[140px] ${s.isPlayer ? "font-heading font-bold" : ""}`}>
+                          {s.team}
+                        </span>
+                      </td>
+                      <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.played}</td>
+                      <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.wins}</td>
+                      <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.draws}</td>
+                      <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.losses}</td>
+                      <td className="py-1.5 pr-4 sm:pr-5 text-center tabular-nums text-xs font-heading font-bold">{s.points}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="text-center pt-2 px-4">
+                <Link href="/dashboard/liga" className="text-xs text-pitch-500 font-heading font-bold hover:underline">Celá tabulka →</Link>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center text-muted py-4">Žádná data</div>
+          )}
+        </div>
+
+        {/* Manager */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Trenér</SectionLabel>
+          {manager ? (
+            <a href={`/dashboard/manager/${teamId}`} className="block group">
+              <div className="flex items-center gap-3">
+                {manager.avatar && Object.keys(manager.avatar).length > 2 ? (
+                  <FaceAvatar faceConfig={manager.avatar} size={48} className="shrink-0 rounded-xl" />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-heading font-bold text-lg shrink-0" style={{ backgroundColor: color }}>
+                    {manager.name[0]}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="font-heading font-bold group-hover:underline truncate">{manager.name}</div>
+                  {manager.birthplace && <div className="text-xs text-muted">{manager.birthplace}</div>}
                 </div>
               </div>
-            ))}
-          </div>
-        </CardBody>
-      </Card>
+              <div className="flex gap-2 mt-3">
+                <AttrPill label="Kou" value={manager.coaching ?? 40} />
+                <AttrPill label="Mot" value={manager.motivation ?? 40} />
+                <AttrPill label="Tak" value={manager.tactics ?? 40} />
+                <AttrPill label="Dis" value={manager.discipline ?? 40} />
+              </div>
+            </a>
+          ) : (
+            <div className="text-muted text-sm">Bez trenéra</div>
+          )}
 
-      {/* Quick links */}
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { href: "/dashboard/squad", icon: "\u{1F465}", label: "Kádr" },
-          { href: "/dashboard/match", icon: "\u26BD", label: "Zápas" },
-          { href: "/dashboard/liga", icon: "\u{1F3C6}", label: "Liga" },
-          { href: "/dashboard/training", icon: "\u{1F3CB}", label: "Tréninky" },
-        ].map((link) => (
-          <a key={link.href} href={link.href}>
-            <Card hover className="p-4 text-center">
-              <div className="text-2xl mb-1">{link.icon}</div>
-              <div className="font-heading font-bold text-sm">{link.label}</div>
-            </Card>
-          </a>
-        ))}
+          {/* Finance quick view */}
+          <div className="mt-4 pt-3 border-t border-gray-100">
+            <SectionLabel>Finance</SectionLabel>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted">Rozpočet</span>
+              <span className="font-heading font-bold">{team.budget.toLocaleString("cs")} Kč</span>
+            </div>
+            <Link href="/dashboard/finances" className="text-xs text-pitch-500 font-heading font-bold hover:underline block mt-2">
+              Detail financí →
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ Row 3: Recent matches + Top performers ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5">
+
+        {/* Recent matches */}
+        {matchResults && matchResults.matches.length > 0 && (
+          <div className="card p-4 sm:p-5">
+            <SectionLabel>Poslední zápasy</SectionLabel>
+            <div className="overflow-x-auto -mx-4 sm:-mx-5">
+              <table className="w-full text-sm min-w-[420px]">
+                <thead>
+                  <tr className="text-left text-label border-b border-gray-200 text-[11px] uppercase tracking-wide">
+                    <th className="pb-2 pl-4 sm:pl-5 pr-2 w-10">Kolo</th>
+                    <th className="pb-2 pr-2">Soupeř</th>
+                    <th className="pb-2 pr-4 sm:pr-5 text-center w-20">Výsledek</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {matchResults.matches.slice(0, 5).map((m) => {
+                    const resultBg = m.result === "W" ? "bg-pitch-50" : m.result === "L" ? "bg-red-50" : "bg-gray-50";
+                    const resultText = m.result === "W" ? "text-pitch-600" : m.result === "L" ? "text-card-red" : "text-muted";
+                    return (
+                      <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                        <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "—"}</td>
+                        <td className="py-2 pr-2">
+                          <a href={`/dashboard/match/${m.id}/replay`} className="flex items-center gap-2 hover:underline">
+                            <BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
+                              pattern={(m.opponentBadge as BadgePattern) || "shield"}
+                              initials={(m.opponent ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={20} />
+                            <span className="font-heading font-bold text-ink truncate max-w-[200px]">{m.opponent}</span>
+                            <span className="text-[10px] text-muted uppercase">{m.isHome ? "D" : "V"}</span>
+                          </a>
+                        </td>
+                        <td className="py-2 pr-4 sm:pr-5 text-center">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-heading font-bold ${resultBg} ${resultText}`}>
+                            {m.homeScore}:{m.awayScore}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-center pt-2">
+              <Link href="/dashboard/schedule" className="text-xs text-pitch-500 font-heading font-bold hover:underline">Všechny zápasy →</Link>
+            </div>
+          </div>
+        )}
+
+        {/* Top performers */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Nejlepší hráči sezóny</SectionLabel>
+          {matchResults && matchResults.topPlayers.length > 0 ? (
+            <div className="space-y-0">
+              {matchResults.topPlayers.slice(0, 7).map((p, i) => (
+                <a key={p.playerId} href={`/dashboard/player/${p.playerId}`}
+                  className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 transition-colors -mx-2 px-2 rounded">
+                  <span className="text-xs text-muted w-4 tabular-nums">{i + 1}.</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-heading font-bold text-sm truncate">{p.name}</div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
+                      <span className="text-[10px] text-muted">{p.appearances} zápasů</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm tabular-nums shrink-0">
+                    {(p.goals as number) > 0 && <span className="font-heading font-bold">{p.goals}g</span>}
+                    {(p.assists as number) > 0 && <span className="text-muted">{p.assists}a</span>}
+                    {(p.yellowCards as number) > 0 && <span className="inline-block w-2.5 h-3.5 rounded-[1px] bg-gold-400" />}
+                    <span className={`font-heading font-bold text-xs px-1.5 py-0.5 rounded ${
+                      (p.avgRating as number) >= 7 ? "bg-pitch-50 text-pitch-600" : "bg-gray-50 text-ink"
+                    }`}>{(p.avgRating as number)?.toFixed(1)}</span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {[...players].sort((a, b) => b.overall_rating - a.overall_rating).slice(0, 5).map((p) => (
+                <a key={p.id} href={`/dashboard/player/${p.id}`} className="flex items-center gap-3 hover:bg-gray-50/50 -mx-2 px-2 py-1 rounded transition-colors">
+                  {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
+                    <FaceAvatar faceConfig={p.avatar} size={32} className="shrink-0" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: color }}>{p.first_name[0]}</div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-heading font-bold truncate">{p.first_name} {p.last_name}</div>
+                    <div className="flex items-center gap-1.5">
+                      <PositionBadge position={p.position} />
+                      <span className="text-xs text-muted">{p.age} let</span>
+                    </div>
+                  </div>
+                  <span className="font-heading font-bold text-lg tabular-nums" style={{ color }}>{p.overall_rating}</span>
+                </a>
+              ))}
+            </div>
+          )}
+          <Link href="/dashboard/squad" className="text-xs text-pitch-500 font-heading font-bold hover:underline block text-center pt-2">
+            Celý kádr →
+          </Link>
+        </div>
       </div>
     </div>
+  );
+}
+
+function AttrPill({ label, value }: { label: string; value: number }) {
+  const bg = value >= 60 ? "bg-pitch-50 text-pitch-700" : value >= 40 ? "bg-gray-100 text-ink" : "bg-red-50 text-card-red";
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-heading font-bold ${bg}`}>
+      <span className="text-muted font-normal">{label}</span>{value}
+    </span>
   );
 }

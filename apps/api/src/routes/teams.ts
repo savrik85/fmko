@@ -160,8 +160,10 @@ teamsRouter.post("/", async (c) => {
 
   // Create sponsor contract if selected during onboarding (naming rights = main sponsor)
   if (body.sponsor) {
-    const monthlyAmount = Math.round(body.sponsor.seasonBonus / 10); // ~10 months per season
-    const winBonus = Math.round(monthlyAmount * 0.1);
+    // Naming rights sponzor (jméno v názvu klubu/stadionu) by měl dávat více
+    const baseMonthly = Math.round(body.sponsor.seasonBonus / 10);
+    const monthlyAmount = body.sponsor.isNamingRights ? Math.max(3000, baseMonthly * 5) : Math.max(1000, baseMonthly * 3);
+    const winBonus = Math.round(monthlyAmount * 0.15);
     await c.env.DB.prepare(
       `INSERT INTO sponsor_contracts (id, team_id, sponsor_name, sponsor_type, monthly_amount, win_bonus,
         seasons_total, seasons_remaining, early_termination_fee, is_naming_rights, category)
@@ -828,15 +830,26 @@ teamsRouter.get("/:id/players/:playerId/career-stats", async (c) => {
   const playerId = c.req.param("playerId");
 
   const result = await c.env.DB.prepare(
-    `SELECT ps.*, s.number as season_number
+    `SELECT ps.*, s.number as season_number,
+       t.name as team_name, t.primary_color as team_color, t.secondary_color as team_secondary,
+       t.badge_pattern as team_badge, t.id as stats_team_id,
+       l.name as league_name
      FROM player_stats ps
      JOIN seasons s ON ps.season_id = s.id
+     JOIN teams t ON ps.team_id = t.id
+     LEFT JOIN leagues l ON l.season_id = ps.season_id AND t.league_id = l.id
      WHERE ps.player_id = ?
      ORDER BY s.number`
   ).bind(playerId).all().catch(() => ({ results: [] }));
 
   const seasons = result.results.map((row) => ({
     season: row.season_number,
+    teamId: row.stats_team_id,
+    teamName: row.team_name,
+    teamColor: row.team_color || "#2D5F2D",
+    teamSecondary: row.team_secondary || "#FFFFFF",
+    teamBadge: row.team_badge || "shield",
+    leagueName: row.league_name ?? null,
     appearances: row.appearances,
     goals: row.goals,
     assists: row.assists,
@@ -844,6 +857,7 @@ teamsRouter.get("/:id/players/:playerId/career-stats", async (c) => {
     redCards: row.red_cards,
     avgRating: row.avg_rating,
     cleanSheets: row.clean_sheets,
+    minutesPlayed: row.minutes_played,
   }));
 
   // Career totals
@@ -856,6 +870,76 @@ teamsRouter.get("/:id/players/:playerId/career-stats", async (c) => {
   };
 
   return c.json({ seasons, totals });
+});
+
+// GET /api/teams/:id/players/:playerId/career-history — historie klubů hráče
+teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
+  const playerId = c.req.param("playerId");
+
+  const contracts = await c.env.DB.prepare(
+    `SELECT pc.*, t.name as team_name, t.primary_color as team_color,
+       t.secondary_color as team_secondary, t.badge_pattern as team_badge,
+       s.number as season_number
+     FROM player_contracts pc
+     JOIN teams t ON pc.team_id = t.id
+     JOIN seasons s ON pc.season_id = s.id
+     WHERE pc.player_id = ?
+     ORDER BY s.number DESC`
+  ).bind(playerId).all().catch(() => ({ results: [] }));
+
+  // If no contracts exist, create one from current player data
+  if (contracts.results.length === 0) {
+    const player = await c.env.DB.prepare("SELECT team_id FROM players WHERE id = ?")
+      .bind(playerId).first<{ team_id: string }>().catch(() => null);
+    const season = await c.env.DB.prepare("SELECT id, number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
+      .first<{ id: string; number: number }>().catch(() => null);
+
+    if (player && season) {
+      const contractId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        "INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, is_active) VALUES (?, ?, ?, ?, 'generated', 1)"
+      ).bind(contractId, playerId, player.team_id, season.id).run().catch(() => {});
+
+      // Re-query
+      const fresh = await c.env.DB.prepare(
+        `SELECT pc.*, t.name as team_name, t.primary_color as team_color,
+           t.secondary_color as team_secondary, t.badge_pattern as team_badge,
+           s.number as season_number
+         FROM player_contracts pc
+         JOIN teams t ON pc.team_id = t.id
+         JOIN seasons s ON pc.season_id = s.id
+         WHERE pc.player_id = ?
+         ORDER BY s.number DESC`
+      ).bind(playerId).all().catch(() => ({ results: [] }));
+      contracts.results = fresh.results;
+    }
+  }
+
+  const JOIN_LABELS: Record<string, string> = {
+    generated: "Zakládající člen",
+    transfer: "Přestup",
+    free_agent: "Volný hráč",
+    youth: "Z mládeže",
+  };
+
+  return c.json({
+    contracts: contracts.results.map((row) => ({
+      id: row.id,
+      teamId: row.team_id,
+      teamName: row.team_name,
+      teamColor: row.team_color || "#2D5F2D",
+      teamSecondary: row.team_secondary || "#FFFFFF",
+      teamBadge: row.team_badge || "shield",
+      seasonNumber: row.season_number,
+      joinedAt: row.joined_at,
+      leftAt: row.left_at,
+      joinType: row.join_type,
+      joinLabel: JOIN_LABELS[row.join_type as string] ?? row.join_type,
+      leaveType: row.leave_type,
+      fee: row.fee,
+      isActive: row.is_active === 1,
+    })),
+  });
 });
 
 export { teamsRouter };

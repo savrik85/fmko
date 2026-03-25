@@ -105,25 +105,12 @@ authRouter.post("/login", async (c) => {
 
   const teamId = team?.id as string | null ?? null;
 
-  // Calculate league position (include all teams, even with 0 matches)
+  // Calculate league position — uses shared standings utility
   let leaguePosition: number | null = null;
   if (teamId && team?.league_id) {
-    const leagueTeams = await c.env.DB.prepare(
-      `SELECT id FROM teams WHERE league_id = ?`
-    ).bind(team.league_id).all();
-    const pts: Record<string, number> = {};
-    for (const t of leagueTeams.results ?? []) pts[t.id as string] = 0;
-    const matches = await c.env.DB.prepare(
-      `SELECT home_team_id, away_team_id, home_score, away_score FROM matches WHERE league_id = ? AND status = 'simulated'`
-    ).bind(team.league_id).all();
-    for (const m of matches.results ?? []) {
-      const h = m.home_team_id as string, a = m.away_team_id as string;
-      const hs = m.home_score as number, as_ = m.away_score as number;
-      pts[h] = (pts[h] ?? 0) + (hs > as_ ? 3 : hs === as_ ? 1 : 0);
-      pts[a] = (pts[a] ?? 0) + (as_ > hs ? 3 : as_ === hs ? 1 : 0);
-    }
-    const sorted = Object.entries(pts).sort((a, b) => b[1] - a[1]);
-    leaguePosition = sorted.findIndex(([id]) => id === teamId) + 1;
+    const { getTeamPosition } = await import("../stats/standings");
+    leaguePosition = await getTeamPosition(c.env.DB, team.league_id as string, teamId);
+    if (leaguePosition === 0) leaguePosition = null;
   }
 
   const token = await createSession(c.env.SESSION_KV, user.id as string, body.email.toLowerCase(), teamId);
@@ -185,22 +172,9 @@ authRouter.get("/me", async (c) => {
 
   let leaguePosition: number | null = null;
   if (team?.id && team?.league_id) {
-    const leagueTeams = await c.env.DB.prepare(
-      `SELECT id FROM teams WHERE league_id = ?`
-    ).bind(team.league_id).all();
-    const pts: Record<string, number> = {};
-    for (const t of leagueTeams.results ?? []) pts[t.id as string] = 0;
-    const matches = await c.env.DB.prepare(
-      `SELECT home_team_id, away_team_id, home_score, away_score FROM matches WHERE league_id = ? AND status = 'simulated'`
-    ).bind(team.league_id).all();
-    for (const m of matches.results ?? []) {
-      const h = m.home_team_id as string, a = m.away_team_id as string;
-      const hs = m.home_score as number, as_ = m.away_score as number;
-      pts[h] = (pts[h] ?? 0) + (hs > as_ ? 3 : hs === as_ ? 1 : 0);
-      pts[a] = (pts[a] ?? 0) + (as_ > hs ? 3 : as_ === hs ? 1 : 0);
-    }
-    const sorted = Object.entries(pts).sort((a, b) => b[1] - a[1]);
-    leaguePosition = sorted.findIndex(([id]) => id === (team.id as string)) + 1;
+    const { getTeamPosition } = await import("../stats/standings");
+    leaguePosition = await getTeamPosition(c.env.DB, team.league_id as string, team.id as string);
+    if (leaguePosition === 0) leaguePosition = null;
   }
 
   return c.json({

@@ -7,6 +7,7 @@ import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
 import { generateSponsors } from "../season/economy";
 import { executeDailyTick } from "../season/daily-tick";
+import { recordTransaction } from "../season/finance-processor";
 import { generateBetweenRoundEvents } from "../events/between-rounds";
 import { getSeasonalEventsForWeek, type SeasonalEventDef } from "../season/seasonal-events";
 import type { GeneratedPlayer } from "../generators/player";
@@ -50,32 +51,169 @@ gameRouter.post("/teams/:teamId/training", async (c) => {
 
 // Training simulation removed from manual endpoint — runs only via daily tick (cron)
 
-// GET /api/teams/:id/budget — rozpočet
+// GET /api/teams/:id/budget — rozpočet s kompletním přehledem
 gameRouter.get("/teams/:teamId/budget", async (c) => {
   const teamId = c.req.param("teamId");
+  const { mapVillageSize } = await import("../season/finance-processor");
 
   const team = await c.env.DB.prepare(
     "SELECT t.*, v.name as village_name, v.size, v.population, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
   ).bind(teamId).first<Record<string, unknown>>();
   if (!team) return c.json({ error: "Team not found" }, 404);
 
-  const rng = createRng(teamId.charCodeAt(0));
-  const sponsors = await generateSponsors(rng, team.size as string, team.reputation as number, team.district as string, c.env.DB);
+  const category = mapVillageSize(team.size as string);
 
-  const playerCount = (await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM players WHERE team_id = ?").bind(teamId).first<{ cnt: number }>())?.cnt ?? 0;
+  // Players + wages
+  const wageResult = await c.env.DB.prepare(
+    "SELECT COUNT(*) as cnt, COALESCE(SUM(weekly_wage), 0) as weekly_total FROM players WHERE team_id = ?"
+  ).bind(teamId).first<{ cnt: number; weekly_total: number }>();
+  const playerCount = wageResult?.cnt ?? 0;
+  const weeklyWages = wageResult?.weekly_total ?? 0;
 
-  const monthlyIncome = sponsors.reduce((sum, s) => sum + s.monthlyAmount, 0);
-  const monthlyExpenses = (team.size as string) === "hamlet" ? 1500 : (team.size as string) === "village" ? 2500 : 4000;
+  // Sponsors (from contracts)
+  const sponsorContracts = await c.env.DB.prepare(
+    "SELECT sponsor_name, sponsor_type, monthly_amount, win_bonus FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
+  ).bind(teamId).all().catch(() => ({ results: [] }));
+  const sponsors = sponsorContracts.results.map((s) => ({
+    name: s.sponsor_name as string,
+    type: s.sponsor_type as string,
+    monthlyAmount: s.monthly_amount as number,
+    winBonus: s.win_bonus as number,
+  }));
+
+  // Also get generated sponsors if no contracts
+  if (sponsors.length === 0) {
+    const rng = createRng(teamId.charCodeAt(0));
+    const generated = await generateSponsors(rng, team.size as string, team.reputation as number, team.district as string, c.env.DB);
+    sponsors.push(...generated);
+  }
+
+  const reputation = (team.reputation as number) ?? 50;
+  const WEEKS_PER_SEASON = 16;
+
+  // All amounts calculated as WEEKLY (= per 7 game days)
+  // Income sources (weekly)
+  const weeklySponsorIncome = Math.round(sponsors.reduce((sum, s) => sum + s.monthlyAmount, 0) / 4.3) * 2;
+  const weeklyBaseSponsor = Math.round((reputation * 100) / 4.3);
+  const weeklySubsidies: Record<string, number> = { vesnice: 1400, obec: 2300, mestys: 3500, mesto: 5800 };
+  const weeklySubsidy = weeklySubsidies[category] ?? 2300;
+  const weeklyContributions = Math.round((playerCount * 100) / 4.3); // členské příspěvky (100 Kč/hráč/měs)
+
+  const weeklyIncome = weeklySponsorIncome + weeklyBaseSponsor + weeklySubsidy + weeklyContributions;
+
+  // Expense sources (weekly)
+  const maintenanceCosts: Record<string, number> = { vesnice: 115, obec: 230, mestys: 465, mesto: 700 };
+  const weeklyMaintenance = maintenanceCosts[category] ?? 230;
+  const weeklyEquipment = 115; // ~500/4.3
+  const trainingPerSession: Record<string, number> = { vesnice: 200, obec: 400, mestys: 600, mesto: 1000 };
+  const sessionsPerWeek = (team.training_sessions as number) ?? 2;
+  const weeklyTraining = (trainingPerSession[category] ?? 400) * sessionsPerWeek;
+
+  const weeklyExpenses = weeklyWages + weeklyMaintenance + weeklyEquipment + weeklyTraining;
+  const weeklyNet = weeklyIncome - weeklyExpenses;
+
+  // Forecast
+  const weeksUntilBankrupt = weeklyNet < 0 ? Math.floor((team.budget as number) / Math.abs(weeklyNet)) : null;
+
+  // Top 5 highest paid
+  const topWages = await c.env.DB.prepare(
+    "SELECT id, first_name, last_name, position, overall_rating, weekly_wage FROM players WHERE team_id = ? ORDER BY weekly_wage DESC LIMIT 5"
+  ).bind(teamId).all().catch(() => ({ results: [] }));
 
   return c.json({
     budget: team.budget,
-    sponsors,
-    monthly: {
-      income: monthlyIncome,
-      expenses: monthlyExpenses,
-      net: monthlyIncome - monthlyExpenses,
-    },
+    sponsors: sponsors.map((s) => ({ ...s, weeklyAmount: Math.round(s.monthlyAmount / 4.3) })),
     playerCount,
+    wageBill: {
+      weekly: weeklyWages,
+      topPlayers: topWages.results.map((p) => ({
+        id: p.id, name: `${p.first_name} ${p.last_name}`,
+        position: p.position, rating: p.overall_rating, weeklyWage: p.weekly_wage,
+      })),
+    },
+    weekly: {
+      income: {
+        sponsors: weeklySponsorIncome, baseSponsor: weeklyBaseSponsor,
+        subsidy: weeklySubsidy, playerContributions: weeklyContributions,
+        total: weeklyIncome,
+      },
+      expenses: {
+        wages: weeklyWages, maintenance: weeklyMaintenance,
+        equipment: weeklyEquipment, training: weeklyTraining, total: weeklyExpenses,
+      },
+      net: weeklyNet,
+    },
+    forecast: {
+      weeklyNet,
+      weeksUntilBankrupt,
+      in4Weeks: (team.budget as number) + weeklyNet * 4,
+      inSeason: (team.budget as number) + weeklyNet * WEEKS_PER_SEASON,
+    },
+  });
+});
+
+// GET /api/teams/:teamId/transactions — finanční historie
+gameRouter.get("/teams/:teamId/transactions", async (c) => {
+  const teamId = c.req.param("teamId");
+  const limit = parseInt(c.req.query("limit") ?? "50");
+  const offset = parseInt(c.req.query("offset") ?? "0");
+  const type = c.req.query("type") ?? null;
+  const direction = c.req.query("direction") ?? null; // "income" or "expense"
+
+  let query = "SELECT * FROM transactions WHERE team_id = ?";
+  const bindings: unknown[] = [teamId];
+
+  if (type) {
+    query += " AND type = ?";
+    bindings.push(type);
+  }
+  if (direction === "income") {
+    query += " AND amount > 0";
+  } else if (direction === "expense") {
+    query += " AND amount < 0";
+  }
+
+  query += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
+  bindings.push(limit, offset);
+
+  const result = await c.env.DB.prepare(query).bind(...bindings).all().catch(() => ({ results: [] }));
+
+  const countQuery = type
+    ? "SELECT COUNT(*) as cnt FROM transactions WHERE team_id = ? AND type = ?"
+    : "SELECT COUNT(*) as cnt FROM transactions WHERE team_id = ?";
+  const countBindings = type ? [teamId, type] : [teamId];
+  const total = await c.env.DB.prepare(countQuery).bind(...countBindings).first<{ cnt: number }>().catch(() => ({ cnt: 0 }));
+
+  return c.json({
+    transactions: result.results.map((t) => ({
+      id: t.id, type: t.type, amount: t.amount,
+      balanceAfter: t.balance_after, description: t.description,
+      referenceId: t.reference_id, gameDate: t.game_date, createdAt: t.created_at,
+    })),
+    total: total?.cnt ?? 0,
+    limit, offset,
+  });
+});
+
+// GET /api/teams/:teamId/wages — přehled mezd hráčů
+gameRouter.get("/teams/:teamId/wages", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  const result = await c.env.DB.prepare(
+    "SELECT id, first_name, last_name, position, overall_rating, weekly_wage, age FROM players WHERE team_id = ? ORDER BY weekly_wage DESC"
+  ).bind(teamId).all().catch(() => ({ results: [] }));
+
+  const totalWeekly = result.results.reduce((s, p) => s + (p.weekly_wage as number), 0);
+
+  return c.json({
+    players: result.results.map((p) => ({
+      id: p.id, name: `${p.first_name} ${p.last_name}`,
+      position: p.position, rating: p.overall_rating,
+      age: p.age, weeklyWage: p.weekly_wage,
+    })),
+    totalWeekly,
+    totalMonthly: Math.round(totalWeekly * 4.3),
+    playerCount: result.results.length,
   });
 });
 
@@ -197,8 +335,8 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
   // Apply effects
   for (const effect of choice.effects) {
     if (effect.type === "budget") {
-      await c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?")
-        .bind(effect.value, teamId).run().catch(() => {});
+      await recordTransaction(c.env.DB, teamId, "event", effect.value as number,
+        `Událost: ${(choice as Record<string, unknown>).text ?? "efekt"}`, new Date().toISOString()).catch(() => {});
     }
     if (effect.type === "reputation") {
       await c.env.DB.prepare("UPDATE teams SET reputation = MIN(100, MAX(0, reputation + ?)) WHERE id = ?")
@@ -316,28 +454,16 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
     });
   }
 
-  // 2. League standings position
+  // 2. League standings position — uses shared standings utility
   if (team.league_id) {
-    const standing = await c.env.DB.prepare(
-      `SELECT COUNT(*) + 1 as pos FROM (
-        SELECT home_team_id as tid, SUM(CASE WHEN home_score > away_score THEN 3 WHEN home_score = away_score THEN 1 ELSE 0 END) as pts
-        FROM matches WHERE league_id = ? AND status = 'simulated' GROUP BY home_team_id
-        UNION ALL
-        SELECT away_team_id, SUM(CASE WHEN away_score > home_score THEN 3 WHEN away_score = home_score THEN 1 ELSE 0 END)
-        FROM matches WHERE league_id = ? AND status = 'simulated' GROUP BY away_team_id
-      ) WHERE pts > (
-        SELECT COALESCE(SUM(CASE WHEN home_team_id = ? AND home_score > away_score THEN 3 WHEN home_team_id = ? AND home_score = away_score THEN 1
-          WHEN away_team_id = ? AND away_score > home_score THEN 3 WHEN away_team_id = ? AND away_score = home_score THEN 1 ELSE 0 END), 0)
-        FROM matches WHERE league_id = ? AND status = 'simulated' AND (home_team_id = ? OR away_team_id = ?)
-      )`
-    ).bind(team.league_id, team.league_id, teamId, teamId, teamId, teamId, team.league_id, teamId, teamId)
-      .first<{ pos: number }>().catch(() => null);
+    const { getTeamPosition } = await import("../stats/standings");
+    const pos = await getTeamPosition(c.env.DB, team.league_id, teamId);
 
-    if (standing) {
+    if (pos > 0) {
       articles.push({
         id: "standing",
         type: "standing",
-        headline: `${team.name} je na ${standing.pos}. místě v tabulce`,
+        headline: `${team.name} je na ${pos}. místě v tabulce`,
         body: `Aktuální pozice v okresním přeboru.`,
         icon: "\u{1F4CA}",
         date: new Date().toISOString(),
@@ -555,7 +681,8 @@ gameRouter.post("/teams/:teamId/equipment/upgrade", async (c) => {
   // Validate category name to prevent SQL injection
   if (!CATEGORIES.includes(body.category as any)) return c.json({ error: "Invalid category" }, 400);
 
-  await c.env.DB.prepare("UPDATE teams SET budget = budget - ? WHERE id = ?").bind(upgrade.cost, teamId).run();
+  await recordTransaction(c.env.DB, teamId, "equipment_upgrade", -upgrade.cost,
+    `Vylepšení vybavení: ${body.category} → úroveň ${upgrade.nextLevel}`, new Date().toISOString());
   await c.env.DB.prepare(
     `UPDATE equipment SET ${body.category} = ?, ${body.category}_condition = 100 WHERE team_id = ?`
   ).bind(upgrade.nextLevel, teamId).run();
@@ -581,7 +708,8 @@ gameRouter.post("/teams/:teamId/equipment/repair", async (c) => {
   const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
   if (!team || team.budget < cost) return c.json({ error: "Nedostatek peněz" }, 400);
 
-  await c.env.DB.prepare("UPDATE teams SET budget = budget - ? WHERE id = ?").bind(cost, teamId).run();
+  await recordTransaction(c.env.DB, teamId, "equipment_expense", -cost,
+    `Oprava vybavení: ${body.category}`, new Date().toISOString());
   await c.env.DB.prepare(
     `UPDATE equipment SET ${body.category}_condition = 100 WHERE team_id = ?`
   ).bind(teamId).run();
@@ -708,8 +836,8 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
   if (team.budget < upgrade.cost) return c.json({ error: "Nedostatek peněz" }, 400);
 
   // Deduct cost + apply upgrade
-  await c.env.DB.prepare("UPDATE teams SET budget = budget - ? WHERE id = ?")
-    .bind(upgrade.cost, teamId).run();
+  await recordTransaction(c.env.DB, teamId, "stadium_upgrade", -upgrade.cost,
+    `Vylepšení stadionu: ${body.facility}`, new Date().toISOString());
 
   await c.env.DB.prepare(
     `UPDATE stadiums SET ${body.facility} = ? WHERE team_id = ?`
@@ -744,7 +872,8 @@ gameRouter.post("/teams/:teamId/stadium/maintain-pitch", async (c) => {
     .bind(teamId).first<{ budget: number }>();
   if (!team || team.budget < action.cost) return c.json({ error: "Nedostatek peněz" }, 400);
 
-  await c.env.DB.prepare("UPDATE teams SET budget = budget - ? WHERE id = ?").bind(action.cost, teamId).run();
+  await recordTransaction(c.env.DB, teamId, "pitch_repair", -action.cost,
+    `Údržba hřiště: +${action.improvement}% kondice`, new Date().toISOString());
   await c.env.DB.prepare(
     "UPDATE stadiums SET pitch_condition = MIN(100, pitch_condition + ?) WHERE team_id = ?"
   ).bind(action.improvement, teamId).run();
@@ -774,7 +903,8 @@ gameRouter.post("/teams/:teamId/stadium/upgrade-pitch", async (c) => {
     .bind(teamId).first<{ budget: number }>();
   if (!team || team.budget < upgrade.cost) return c.json({ error: "Nedostatek peněz" }, 400);
 
-  await c.env.DB.prepare("UPDATE teams SET budget = budget - ? WHERE id = ?").bind(upgrade.cost, teamId).run();
+  await recordTransaction(c.env.DB, teamId, "pitch_upgrade", -upgrade.cost,
+    `Změna povrchu: ${body.pitchType}`, new Date().toISOString());
   await c.env.DB.prepare(
     "UPDATE stadiums SET pitch_type = ?, pitch_condition = 100 WHERE team_id = ?"
   ).bind(body.pitchType, teamId).run();
@@ -902,8 +1032,8 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     const pool = sponsorRows.results.slice(0, offerCount * 2);
     for (let i = 0; i < Math.min(offerCount, pool.length); i++) {
       const s = pool[i];
-      const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod);
-      const winB = Math.round(rng.int(s.win_bonus_min as number, s.win_bonus_max as number) * repMod);
+      const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod * 3);
+      const winB = Math.round(rng.int(s.win_bonus_min as number, s.win_bonus_max as number) * repMod * 2);
       const seasons = rng.int(1, 3);
       const terminationFee = Math.round(monthly * seasons * 2);
       let requirement: string | undefined;
@@ -922,7 +1052,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     const pool = sponsorRows.results.slice(sponsorRows.results.length > 4 ? 2 : 0);
     for (let i = 0; i < Math.min(3, pool.length); i++) {
       const s = pool[i];
-      const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * 0.3 * repMod * sizeMod);
+      const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod * 1.5);
       const seasons = rng.int(1, 3);
       const terminationFee = Math.round(monthly * seasons * 2);
       const cleanName = (s.name as string).replace(/\s*s\.r\.o\.?\s*/gi, "").trim();
@@ -1060,7 +1190,8 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
   if (!team || team.budget < fee) return c.json({ error: `Nedostatek peněz (sankce ${fee} Kč)` }, 400);
 
   // Deduct fee + terminate
-  await c.env.DB.prepare("UPDATE teams SET budget = budget - ? WHERE id = ?").bind(fee, teamId).run();
+  await recordTransaction(c.env.DB, teamId, "sponsor_termination", -fee,
+    `Ukončení sponzorské smlouvy (sankce)`, new Date().toISOString());
   await c.env.DB.prepare("UPDATE sponsor_contracts SET status = 'terminated' WHERE id = ?").bind(contract.id).run();
 
   const village = await c.env.DB.prepare("SELECT name FROM villages WHERE id = ?")
@@ -1287,6 +1418,106 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
 gameRouter.post("/game/advance-day", async (c) => {
   const result = await executeDailyTick(c.env);
   return c.json({ ok: true, result });
+});
+
+// ═══ Classifieds (Placená inzerce) ═══
+
+const CLASSIFIED_CATEGORIES: Record<string, { label: string; icon: string }> = {
+  player_wanted: { label: "Hledáme hráče", icon: "\u{1F50D}" },
+  player_offering: { label: "Hráč k dispozici", icon: "\u{1F91A}" },
+  equipment: { label: "Vybavení", icon: "\u{1F3BD}" },
+  match: { label: "Přátelský zápas", icon: "\u26BD" },
+  general: { label: "Různé", icon: "\u{1F4CB}" },
+};
+
+const CLASSIFIED_COST = 500; // Kč per ad
+const CLASSIFIED_DURATION_DAYS = 14;
+
+// GET /api/teams/:teamId/classifieds — all active classifieds visible to this team's league
+gameRouter.get("/teams/:teamId/classifieds", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  const team = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?")
+    .bind(teamId).first<{ league_id: string | null }>();
+
+  const now = new Date().toISOString();
+
+  const result = await c.env.DB.prepare(
+    `SELECT * FROM classifieds
+     WHERE (league_id = ? OR league_id IS NULL)
+       AND (expires_at IS NULL OR expires_at > ?)
+     ORDER BY created_at DESC`
+  ).bind(team?.league_id ?? "", now).all().catch(() => ({ results: [] }));
+
+  return c.json({
+    classifieds: result.results.map((row) => ({
+      id: row.id,
+      teamId: row.team_id,
+      teamName: row.team_name,
+      category: row.category,
+      categoryLabel: CLASSIFIED_CATEGORIES[row.category as string]?.label ?? "Různé",
+      categoryIcon: CLASSIFIED_CATEGORIES[row.category as string]?.icon ?? "\u{1F4CB}",
+      message: row.message,
+      cost: row.cost,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      isOwn: row.team_id === teamId,
+    })),
+    categories: Object.entries(CLASSIFIED_CATEGORIES).map(([key, val]) => ({
+      key, label: val.label, icon: val.icon,
+    })),
+    cost: CLASSIFIED_COST,
+  });
+});
+
+// POST /api/teams/:teamId/classifieds — create a new classified ad (deducts from budget)
+gameRouter.post("/teams/:teamId/classifieds", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ category?: string; message?: string }>().catch(() => ({ category: undefined, message: undefined }));
+
+  if (!body.message || body.message.trim().length < 5) {
+    return c.json({ error: "Zpráva musí mít alespoň 5 znaků" }, 400);
+  }
+  if (body.message.length > 200) {
+    return c.json({ error: "Zpráva může mít max 200 znaků" }, 400);
+  }
+
+  const category = body.category && CLASSIFIED_CATEGORIES[body.category] ? body.category : "general";
+
+  // Get team info + budget
+  const team = await c.env.DB.prepare("SELECT name, budget, league_id FROM teams WHERE id = ?")
+    .bind(teamId).first<{ name: string; budget: number; league_id: string | null }>();
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+  if (team.budget < CLASSIFIED_COST) {
+    return c.json({ error: `Nedostatečný rozpočet. Potřebujete ${CLASSIFIED_COST} Kč, máte ${team.budget} Kč.` }, 400);
+  }
+
+  // Deduct cost
+  await recordTransaction(c.env.DB, teamId, "classified_ad", -CLASSIFIED_COST,
+    `Inzerát ve zpravodaji`, new Date().toISOString());
+
+  // Create classified
+  const id = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + CLASSIFIED_DURATION_DAYS * 86400000).toISOString();
+
+  await c.env.DB.prepare(
+    "INSERT INTO classifieds (id, team_id, team_name, league_id, category, message, cost, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(id, teamId, team.name, team.league_id, category, body.message.trim(), CLASSIFIED_COST, expiresAt).run();
+
+  return c.json({ ok: true, id, newBudget: team.budget - CLASSIFIED_COST });
+});
+
+// DELETE /api/teams/:teamId/classifieds/:id — remove own classified
+gameRouter.delete("/teams/:teamId/classifieds/:id", async (c) => {
+  const teamId = c.req.param("teamId");
+  const id = c.req.param("id");
+
+  const ad = await c.env.DB.prepare("SELECT team_id FROM classifieds WHERE id = ?")
+    .bind(id).first<{ team_id: string }>();
+  if (!ad || ad.team_id !== teamId) return c.json({ error: "Inzerát nenalezen" }, 404);
+
+  await c.env.DB.prepare("DELETE FROM classifieds WHERE id = ?").bind(id).run();
+  return c.json({ ok: true });
 });
 
 export { gameRouter };

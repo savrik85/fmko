@@ -91,11 +91,11 @@ export async function generateSponsors(
     : { surnames: {}, sponsors: [] };
 
   const pool = districtData.sponsors.length > 0 ? districtData.sponsors : [
-    { name: "Řeznictví {surname}", type: "řeznictví", monthlyRange: [500, 1500] as [number, number], winBonus: [100, 300] as [number, number] },
-    { name: "Autoservis {surname}", type: "autoservis", monthlyRange: [600, 1800] as [number, number], winBonus: [100, 350] as [number, number] },
-    { name: "Hospoda U {surname}", type: "hospoda", monthlyRange: [400, 1200] as [number, number], winBonus: [50, 200] as [number, number] },
-    { name: "Potraviny {surname}", type: "potraviny", monthlyRange: [800, 2000] as [number, number], winBonus: [150, 400] as [number, number] },
-    { name: "Obecní úřad", type: "obec", monthlyRange: [800, 2500] as [number, number], winBonus: [200, 500] as [number, number] },
+    { name: "Řeznictví {surname}", type: "řeznictví", monthlyRange: [1500, 4000] as [number, number], winBonus: [200, 500] as [number, number] },
+    { name: "Autoservis {surname}", type: "autoservis", monthlyRange: [2000, 5000] as [number, number], winBonus: [300, 600] as [number, number] },
+    { name: "Hospoda U {surname}", type: "hospoda", monthlyRange: [1000, 3000] as [number, number], winBonus: [150, 400] as [number, number] },
+    { name: "Potraviny {surname}", type: "potraviny", monthlyRange: [2500, 6000] as [number, number], winBonus: [300, 700] as [number, number] },
+    { name: "Obecní úřad", type: "obec", monthlyRange: [3000, 8000] as [number, number], winBonus: [400, 800] as [number, number] },
   ];
 
   const hasReal = districtData.sponsors.length > 0;
@@ -280,6 +280,14 @@ export function calculateTrainingCost(sessionsPerWeek: number, villageCategory: 
   };
   const perSession = costPerSession[villageCategory] ?? 400;
   return Math.round(perSession * sessionsPerWeek * 4.3);
+}
+
+/**
+ * Player weekly wage based on overall rating.
+ * Okresní fotbal — spíš cestovné a odměna za zápas než plat.
+ */
+export function calculatePlayerWage(overallRating: number): number {
+  return Math.round(10 + (overallRating / 100) * 400);
 }
 
 /**

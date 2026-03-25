@@ -118,15 +118,20 @@ export async function executeDailyTick(
           "UPDATE teams SET last_training_at = ?, last_training_result = ? WHERE id = ?"
         ).bind(now.toISOString(), JSON.stringify(summary), teamId).run();
 
-        // Persist skill changes to DB
+        // Persist skill changes to DB + recalculate wages
         for (const imp of result.improvements) {
           const player = squad[imp.playerIndex];
           const playerId = playersResult.results[imp.playerIndex].id as string;
           const currentSkills = JSON.parse(playersResult.results[imp.playerIndex].skills as string);
           if (imp.attribute in currentSkills) {
             currentSkills[imp.attribute] = player[imp.attribute as keyof typeof player];
+            // Update skills + recalculate overall_rating + update weekly_wage
             await env.DB.prepare("UPDATE players SET skills = ? WHERE id = ?")
               .bind(JSON.stringify(currentSkills), playerId).run();
+            // Recalculate wage based on current overall_rating
+            await env.DB.prepare(
+              "UPDATE players SET weekly_wage = ROUND(10 + (overall_rating / 100.0) * 400) WHERE id = ?"
+            ).bind(playerId).run();
           }
         }
 
@@ -193,17 +198,50 @@ export async function executeDailyTick(
   events.push({ type: "morale", description: "Morálka se stabilizuje" });
 
   // ── Advance game date for ALL teams (including AI) ──
-  const allTeams = await env.DB.prepare("SELECT id, league_id, game_date FROM teams").all();
+  const allTeams = await env.DB.prepare(
+    "SELECT t.id, t.league_id, t.game_date, t.training_type, t.training_sessions, v.size as village_size FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
+  ).all();
   for (const team of allTeams.results) {
     const teamId = team.id as string;
     const gameDate = team.game_date as string | null;
     if (gameDate) {
       const gd = new Date(gameDate);
       gd.setDate(gd.getDate() + 1);
+      const newDayOfWeek = gd.getUTCDay();
+      const newGameDate = gd.toISOString();
+
       await env.DB.prepare("UPDATE teams SET game_date = ? WHERE id = ?")
-        .bind(gd.toISOString(), teamId).run();
+        .bind(newGameDate, teamId).run();
 
       events.push({ type: "day", description: `Herní den: ${gd.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" })}` });
+
+      // ── Weekly finances (Monday) ──
+      if (newDayOfWeek === 1) {
+        try {
+          const { processWeeklyFinances } = await import("./finance-processor");
+          await processWeeklyFinances(env.DB, teamId, newGameDate, (team.village_size as string) ?? "village");
+        } catch (e) {
+          console.error(`[DailyTick] Weekly finances failed for team ${teamId}:`, e);
+        }
+      }
+
+      // ── Training cost (only on actual training days, not every weekday) ──
+      if (team.training_type && newDayOfWeek >= 1 && newDayOfWeek <= 5) {
+        const sessions = (team.training_sessions as number) ?? 2;
+        // Map sessions/week to specific days: 1→Tue, 2→Tue+Thu, 3→Mon+Wed+Fri, 4→Mon+Tue+Thu+Fri, 5→all
+        const trainingDayMap: Record<number, number[]> = {
+          1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5],
+        };
+        const trainingDays = trainingDayMap[sessions] ?? trainingDayMap[2];
+        if (trainingDays.includes(newDayOfWeek)) {
+          try {
+            const { processTrainingCost } = await import("./finance-processor");
+            await processTrainingCost(env.DB, teamId, newGameDate, (team.village_size as string) ?? "village");
+          } catch (e) {
+            console.error(`[DailyTick] Training cost failed for team ${teamId}:`, e);
+          }
+        }
+      }
 
       // Check if there's a match scheduled for this date
       const leagueId = team.league_id as string | null;

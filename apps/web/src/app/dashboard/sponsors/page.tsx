@@ -69,7 +69,7 @@ export default function SponsorsPage() {
     if (!teamId || acting) return;
     const isMain = category === "main";
     const details = [
-      { label: "Měsíční příjem", value: `+${formatCZK(offer.monthlyAmount)}`, color: "text-pitch-500" },
+      { label: "Týdenní příjem", value: `+${formatCZK(Math.round(offer.monthlyAmount / 4.3))}`, color: "text-pitch-500" },
       ...(offer.winBonus > 0 ? [{ label: "Bonus za výhru", value: `+${formatCZK(offer.winBonus)}`, color: "text-pitch-400" }] : []),
       { label: "Sankce za zrušení", value: `-${formatCZK(offer.earlyTerminationFee)}`, color: "text-card-red" },
     ];
@@ -257,8 +257,8 @@ function ContractCard({ contract, category, onTerminate, acting }: {
             <div className="text-sm text-muted">{contract.sponsorType}</div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
               <div>
-                <div className="text-pitch-500 font-heading font-bold tabular-nums">+{formatCZK(contract.monthlyAmount)}</div>
-                <div className="text-xs text-muted">měsíčně</div>
+                <div className="text-pitch-500 font-heading font-bold tabular-nums">+{formatCZK(Math.round(contract.monthlyAmount / 4.3))}</div>
+                <div className="text-xs text-muted">týdně</div>
               </div>
               {contract.winBonus > 0 && (
                 <div>
@@ -309,7 +309,7 @@ function OffersList({ offers, category, onSign, acting }: {
                   <span className="text-xs text-muted bg-surface px-2 py-0.5 rounded-full">{offer.sponsorType}</span>
                 </div>
                 <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-sm">
-                  <span className="text-pitch-500 font-heading font-bold">+{formatCZK(offer.monthlyAmount)}/měs</span>
+                  <span className="text-pitch-500 font-heading font-bold">+{formatCZK(Math.round(offer.monthlyAmount / 4.3))}/týd</span>
                   {offer.winBonus > 0 && <span className="text-pitch-400 font-heading">+{formatCZK(offer.winBonus)} za výhru</span>}
                   <span className="text-muted">{offer.seasons} {offer.seasons === 1 ? "sezóna" : offer.seasons <= 4 ? "sezóny" : "sezón"}</span>
                 </div>
