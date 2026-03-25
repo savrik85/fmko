@@ -74,6 +74,12 @@ export interface Player {
 export interface CareerStats {
   seasons: {
     season: number;
+    teamId: string;
+    teamName: string;
+    teamColor: string;
+    teamSecondary: string;
+    teamBadge: string;
+    leagueName: string | null;
     appearances: number;
     goals: number;
     assists: number;
@@ -81,6 +87,7 @@ export interface CareerStats {
     redCards: number;
     avgRating: number;
     cleanSheets: number;
+    minutesPlayed: number;
   }[];
   totals: {
     appearances: number;
@@ -89,6 +96,83 @@ export interface CareerStats {
     yellowCards: number;
     redCards: number;
   };
+}
+
+export interface PlayerContract {
+  id: string;
+  teamId: string;
+  teamName: string;
+  teamColor: string;
+  teamSecondary: string;
+  teamBadge: string;
+  seasonNumber: number;
+  joinedAt: string;
+  leftAt: string | null;
+  joinType: string;
+  joinLabel: string;
+  leaveType: string | null;
+  fee: number;
+  isActive: boolean;
+}
+
+export interface PlayerMatchEntry {
+  matchId: string;
+  date: string;
+  round: number;
+  isHome: boolean;
+  opponent: string;
+  opponentId: string;
+  opponentColor: string;
+  opponentSecondary: string;
+  opponentBadge: string;
+  homeScore: number;
+  awayScore: number;
+  result: "W" | "D" | "L";
+  position: string;
+  started: boolean;
+  minutesPlayed: number;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCards: number;
+  rating: number;
+  weather: string | null;
+}
+
+export interface TeamMatchResult {
+  id: string;
+  round: number;
+  date: string;
+  isHome: boolean;
+  opponent: string;
+  opponentId: string;
+  opponentColor: string;
+  opponentSecondary: string;
+  opponentBadge: string;
+  homeScore: number;
+  awayScore: number;
+  result: "W" | "D" | "L";
+  weather: string | null;
+  attendance: number | null;
+  stadium: string | null;
+}
+
+export interface TeamMatchResults {
+  matches: TeamMatchResult[];
+  form: string[];
+  summary: { played: number; wins: number; draws: number; losses: number; goalsFor: number; goalsAgainst: number };
+  topPlayers: {
+    playerId: string;
+    name: string;
+    nickname: string | null;
+    position: string;
+    goals: number;
+    assists: number;
+    yellowCards: number;
+    redCards: number;
+    appearances: number;
+    avgRating: number;
+  }[];
 }
 
 export interface ManagerProfile {

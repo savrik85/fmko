@@ -16,6 +16,122 @@ interface StatsUpdate {
   rating: number;
 }
 
+export interface MatchPlayerStatsEntry {
+  playerId: string;
+  teamId: string;
+  started: boolean;
+  position: string;
+  minutesPlayed: number;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCards: number;
+  rating: number;
+}
+
+/**
+ * Vypočítá individuální hodnocení hráčů (1.0–10.0) na základě match eventů.
+ * Základ 6.0, góly/asistence přidávají, karty/fauly odečítají.
+ */
+export function calculatePlayerRatings(
+  events: MatchEvent[],
+  playerIdMap: Map<number, string>,
+  homeTeamEngineId: number,
+  homeScore: number,
+  awayScore: number,
+): Record<string, number> {
+  const ratings: Record<string, number> = {};
+  const goals: Record<string, number> = {};
+  const cards: Record<string, number> = {};
+  const fouls: Record<string, number> = {};
+  const chances: Record<string, number> = {};
+  const teamMap: Record<string, number> = {};
+
+  // Init all known players
+  for (const [engineId, dbId] of playerIdMap) {
+    ratings[dbId] = 6.0;
+    goals[dbId] = 0;
+    cards[dbId] = 0;
+    fouls[dbId] = 0;
+    chances[dbId] = 0;
+  }
+
+  for (const event of events) {
+    const dbId = playerIdMap.get(event.playerId);
+    if (!dbId) continue;
+
+    teamMap[dbId] = event.teamId;
+
+    switch (event.type) {
+      case "goal":
+        goals[dbId] = (goals[dbId] ?? 0) + 1;
+        ratings[dbId] += 1.0; // +1.0 per gól
+        break;
+      case "chance":
+        chances[dbId] = (chances[dbId] ?? 0) + 1;
+        ratings[dbId] += 0.1; // malý bonus za šanci
+        break;
+      case "card":
+        if (event.detail === "red") {
+          ratings[dbId] -= 1.5;
+          cards[dbId] = (cards[dbId] ?? 0) + 2;
+        } else {
+          ratings[dbId] -= 0.5;
+          cards[dbId] = (cards[dbId] ?? 0) + 1;
+        }
+        break;
+      case "foul":
+        fouls[dbId] = (fouls[dbId] ?? 0) + 1;
+        ratings[dbId] -= 0.15;
+        break;
+      case "injury":
+        ratings[dbId] -= 0.3;
+        break;
+    }
+  }
+
+  // Bonus/malus za výsledek týmu
+  for (const [dbId, teamEngineId] of Object.entries(teamMap)) {
+    const isHome = teamEngineId === homeTeamEngineId;
+    const myScore = isHome ? homeScore : awayScore;
+    const oppScore = isHome ? awayScore : homeScore;
+
+    if (myScore > oppScore) {
+      ratings[dbId] += 0.5; // výhra
+    } else if (myScore < oppScore) {
+      ratings[dbId] -= 0.3; // prohra
+    }
+  }
+
+  // Clamp 1.0–10.0 a zaokrouhli na 1 desetinné místo
+  for (const dbId of Object.keys(ratings)) {
+    ratings[dbId] = Math.round(Math.max(1.0, Math.min(10.0, ratings[dbId])) * 10) / 10;
+  }
+
+  return ratings;
+}
+
+/**
+ * Uloží per-match statistiky hráčů do match_player_stats.
+ */
+export async function saveMatchPlayerStats(
+  db: D1Database,
+  matchId: string,
+  entries: MatchPlayerStatsEntry[],
+): Promise<void> {
+  for (const e of entries) {
+    await db.prepare(
+      `INSERT INTO match_player_stats (id, match_id, player_id, team_id, started, position, minutes_played, goals, assists, yellow_cards, red_cards, rating)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(match_id, player_id) DO NOTHING`
+    ).bind(
+      crypto.randomUUID(), matchId, e.playerId, e.teamId,
+      e.started ? 1 : 0, e.position, e.minutesPlayed,
+      e.goals, e.assists, e.yellowCards, e.redCards, e.rating,
+    ).run().catch(() => {});
+  }
+}
+
 /**
  * Zpracuje match eventy a vrátí stats updaty per hráč.
  * playerIdMap mapuje match engine ID (number) → DB player ID (string).

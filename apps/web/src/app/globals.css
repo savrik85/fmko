@@ -390,8 +390,8 @@ body::before {
 }
 
 /* Page container */
-.page-container { padding: 16px; max-width: 768px; margin: 0 auto; }
-@media (min-width: 640px) { .page-container { padding: 24px; } }
+.page-container { padding: 16px; max-width: 1280px; margin: 0 auto; }
+@media (min-width: 640px) { .page-container { padding: 24px 32px; } }
 
 /* Section label */
 .section-label {

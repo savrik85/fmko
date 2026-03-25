@@ -7,6 +7,7 @@ import { simulateMatch } from "../engine/simulation";
 import { generateMatchCommentary } from "../engine/commentary";
 import { createRng } from "../generators/rng";
 import type { MatchPlayer, TeamSetup, Weather } from "../engine/types";
+import { calculatePlayerRatings, extractStatsFromEvents, updatePlayerStats, saveMatchPlayerStats, type MatchPlayerStatsEntry } from "../stats/update-stats";
 
 export interface MatchRunResult {
   matchId: string;
@@ -63,11 +64,24 @@ export async function runScheduledMatches(
         : homeIsHuman ? "pve_home" : awayIsHuman ? "pve_away" : "ai_vs_ai";
 
       // Build match players from DB
-      const homeLineup = await buildMatchPlayers(db, homeTeamId);
-      const awayLineup = await buildMatchPlayers(db, awayTeamId);
+      const homeBuild = await buildMatchPlayers(db, homeTeamId);
+      const awayBuild = await buildMatchPlayers(db, awayTeamId);
+
+      const homeLineup = homeBuild.players;
+      const awayLineup = awayBuild.players;
 
       const homeSubs = homeLineup.splice(11);
       const awaySubs = awayLineup.splice(11);
+
+      // Merge ID maps (engine ID → DB player ID)
+      const fullIdMap = new Map<number, string>();
+      for (const [k, v] of homeBuild.idMap) fullIdMap.set(k, v);
+      for (const [k, v] of awayBuild.idMap) fullIdMap.set(k, v);
+
+      // Merge position maps
+      const fullPosMap = new Map<string, string>();
+      for (const [k, v] of homeBuild.positionMap) fullPosMap.set(k, v);
+      for (const [k, v] of awayBuild.positionMap) fullPosMap.set(k, v);
 
       const homeSetup: TeamSetup = {
         teamId: 1,
@@ -144,7 +158,58 @@ export async function runScheduledMatches(
         matchId,
       ).run();
 
-      // Player stats update — TODO: integrate with updatePlayerStats when season tracking is ready
+      // Player stats update
+      const season = await db.prepare(
+        "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+      ).first<{ id: string }>().catch(() => null);
+
+      if (season) {
+        // Calculate per-player ratings
+        const ratings = calculatePlayerRatings(result.events, fullIdMap, 1, result.homeScore, result.awayScore);
+
+        // Home team stats
+        const homeStarterIds = [...homeBuild.idMap.values()].slice(0, 11);
+        const homeUpdates = extractStatsFromEvents(result.events, homeBuild.idMap, homeStarterIds, ratings);
+        await updatePlayerStats(db, season.id, homeTeamId, homeUpdates, result.awayScore === 0).catch(() => {});
+
+        // Away team stats
+        const awayStarterIds = [...awayBuild.idMap.values()].slice(0, 11);
+        const awayUpdates = extractStatsFromEvents(result.events, awayBuild.idMap, awayStarterIds, ratings);
+        await updatePlayerStats(db, season.id, awayTeamId, awayUpdates, result.homeScore === 0).catch(() => {});
+
+        // Save per-match player stats for both teams
+        const allEntries: MatchPlayerStatsEntry[] = [
+          ...homeUpdates.map((u) => ({
+            playerId: u.playerId,
+            teamId: homeTeamId,
+            started: homeStarterIds.includes(u.playerId),
+            position: fullPosMap.get(u.playerId) ?? "MID",
+            minutesPlayed: u.minutesPlayed,
+            goals: u.goals,
+            assists: u.assists,
+            yellowCards: u.yellowCards,
+            redCards: u.redCards,
+            rating: u.rating,
+          })),
+          ...awayUpdates.map((u) => ({
+            playerId: u.playerId,
+            teamId: awayTeamId,
+            started: awayStarterIds.includes(u.playerId),
+            position: fullPosMap.get(u.playerId) ?? "MID",
+            minutesPlayed: u.minutesPlayed,
+            goals: u.goals,
+            assists: u.assists,
+            yellowCards: u.yellowCards,
+            redCards: u.redCards,
+            rating: u.rating,
+          })),
+        ];
+        await saveMatchPlayerStats(db, matchId, allEntries).catch(() => {});
+
+        // Save player_ratings JSON to match record
+        await db.prepare("UPDATE matches SET player_ratings = ? WHERE id = ?")
+          .bind(JSON.stringify(ratings), matchId).run().catch(() => {});
+      }
 
       results.push({
         matchId,
@@ -161,20 +226,34 @@ export async function runScheduledMatches(
   return results;
 }
 
-async function buildMatchPlayers(db: D1Database, teamId: string): Promise<MatchPlayer[]> {
+interface BuildResult {
+  players: MatchPlayer[];
+  idMap: Map<number, string>;        // engine ID → DB player ID
+  positionMap: Map<string, string>;   // DB player ID → position
+}
+
+async function buildMatchPlayers(db: D1Database, teamId: string): Promise<BuildResult> {
   const rows = await db.prepare(
     "SELECT * FROM players WHERE team_id = ? ORDER BY overall_rating DESC LIMIT 16"
   ).bind(teamId).all();
 
   let idCounter = 1;
-  return rows.results.map((row) => {
+  const idMap = new Map<number, string>();
+  const positionMap = new Map<string, string>();
+
+  const players = rows.results.map((row) => {
     const skills = JSON.parse(row.skills as string);
     const personality = JSON.parse(row.personality as string);
     const lifeContext = JSON.parse(row.life_context as string);
     const physical = row.physical ? JSON.parse(row.physical as string) : {};
 
+    const engineId = idCounter++;
+    const dbId = row.id as string;
+    idMap.set(engineId, dbId);
+    positionMap.set(dbId, row.position as string);
+
     return {
-      id: idCounter++,
+      id: engineId,
       firstName: row.first_name as string,
       lastName: row.last_name as string,
       nickname: (row.nickname as string) || null,
@@ -205,6 +284,8 @@ async function buildMatchPlayers(db: D1Database, teamId: string): Promise<MatchP
       morale: lifeContext.morale ?? 50,
     };
   });
+
+  return { players, idMap, positionMap };
 }
 
 async function createAutoLineup(

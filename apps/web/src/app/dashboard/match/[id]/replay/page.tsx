@@ -314,7 +314,7 @@ export default function MatchReplayPage() {
             {/* ATTACKING: pulsing danger zone near goal */}
             {flash === "attacking" && flashEvent && (
               <rect
-                x={cur.teamId === 1 ? 82 : 2} y="8" width="16" height="29" rx="0.5"
+                x={flashEvent.teamId === 1 ? 82 : 2} y="8" width="16" height="29" rx="0.5"
                 fill={activeTeamColor} opacity="0.15"
               >
                 <animate attributeName="opacity" values="0.05;0.25;0.05" dur="0.5s" repeatCount="indefinite" />
@@ -344,7 +344,7 @@ export default function MatchReplayPage() {
                 </rect>
                 {/* Goal area burst */}
                 {cur && (
-                  <circle cx={cur.teamId === 1 ? 95 : 5} cy="22.5" r="5" fill="#4ade80" opacity="0.5">
+                  <circle cx={flashEvent?.teamId === 1 ? 95 : 5} cy="22.5" r="5" fill="#4ade80" opacity="0.5">
                     <animate attributeName="r" values="3;15;3" dur="0.6s" repeatCount="3" />
                     <animate attributeName="opacity" values="0.7;0.1;0.7" dur="0.6s" repeatCount="3" />
                   </circle>
@@ -362,10 +362,10 @@ export default function MatchReplayPage() {
             {flash === "card" && cur && (
               <g>
                 <rect x={ballX - 1.5} y="16" width="3" height="4.5" rx="0.3"
-                  fill={cur.detail === "red" ? "#D94032" : "#F5C542"} opacity="0.9">
+                  fill={flashEvent?.detail === "red" ? "#D94032" : "#F5C542"} opacity="0.9">
                   <animate attributeName="opacity" values="1;0.4;1" dur="0.5s" repeatCount="3" />
                 </rect>
-                <circle cx={ballX} cy="22.5" r="5" fill={cur.detail === "red" ? "#D94032" : "#F5C542"} opacity="0.15">
+                <circle cx={ballX} cy="22.5" r="5" fill={flashEvent?.detail === "red" ? "#D94032" : "#F5C542"} opacity="0.15">
                   <animate attributeName="r" values="3;8;3" dur="0.8s" repeatCount="2" />
                 </circle>
               </g>
@@ -453,6 +453,34 @@ export default function MatchReplayPage() {
             </div>
           )}
 
+          {/* HALFTIME overlay */}
+          {htPause && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-md" style={{ background: "rgba(0,0,0,0.4)" }}>
+              <div className="text-center">
+                <div className="font-heading font-[900] text-5xl sm:text-7xl text-white tracking-widest drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+                  POLOČAS
+                </div>
+                <div className="font-heading font-[800] text-3xl sm:text-4xl text-white/80 mt-2 tabular-nums">
+                  {hg} : {ag}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* FULLTIME overlay */}
+          {finished && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-md" style={{ background: "rgba(0,0,0,0.5)" }}>
+              <div className="text-center">
+                <div className="font-heading font-[900] text-4xl sm:text-6xl text-white tracking-widest drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+                  KONEC
+                </div>
+                <div className="font-heading font-[800] text-4xl sm:text-5xl text-white mt-2 tabular-nums">
+                  {match.home_score} : {match.away_score}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ATTACKING overlay */}
           {flash === "attacking" && flashEvent && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-md" style={{ animation: "attackPulse 0.5s ease-in-out infinite" }}>
@@ -484,21 +512,16 @@ export default function MatchReplayPage() {
       </div>
 
       {/* ═══ CONTROLS ═══ */}
-      <div className="flex justify-center gap-1.5 py-0.5">
+      <div className="flex justify-center gap-3 py-2">
         {!finished && !htPause && (["live", "fast", "instant"] as Speed[]).map((s) => (
           <button key={s} onClick={() => setSpeed(s)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold uppercase tracking-wide transition-all ${
-              speed === s ? "text-white shadow-md" : "bg-white/80 text-muted hover:text-ink"
+            className={`px-6 py-3 rounded-xl text-base font-heading font-bold uppercase tracking-wide transition-all ${
+              speed === s ? "text-white shadow-lg" : "bg-white text-muted hover:text-ink shadow-md"
             }`} style={speed === s ? { backgroundColor: hc } : undefined}
           >{s === "live" ? "\u25B6 Živě" : s === "fast" ? "\u25B6\u25B6 Rychle" : "\u25B6\u25B6\u25B6 Konec"}</button>
         ))}
-        {htPause && <button onClick={() => { setHtPause(false); setHtDone(true); }} className="px-5 py-1.5 rounded-lg text-sm font-heading font-bold uppercase text-white" style={{ backgroundColor: hc }}>2. poločas {"\u25B6"}</button>}
-        {finished && (
-          <>
-            <button onClick={() => router.push(`/dashboard/match/${matchId}`)} className="px-4 py-1.5 rounded-lg text-sm font-heading font-bold uppercase text-white" style={{ backgroundColor: hc }}>Detail zápasu</button>
-            <button onClick={() => router.push("/dashboard")} className="px-4 py-1.5 rounded-lg text-sm font-heading font-bold uppercase bg-white/80 text-muted hover:text-ink">Dashboard</button>
-          </>
-        )}
+        {htPause && <button onClick={() => { setHtPause(false); setHtDone(true); }} className="px-8 py-3 rounded-xl text-base font-heading font-bold uppercase text-white shadow-lg" style={{ backgroundColor: hc }}>2. poločas {"\u25B6"}</button>}
+        {finished && <button onClick={() => router.push("/dashboard")} className="px-10 py-3 rounded-xl text-lg font-heading font-bold uppercase text-white shadow-lg" style={{ backgroundColor: hc }}>Pokračovat</button>}
       </div>
 
       {/* ═══ TICKER ═══ */}
@@ -523,7 +546,7 @@ export default function MatchReplayPage() {
             {flash === "attacking" && cur ? (
               <div className="flex-1 min-w-0 animate-slide-up">
                 <span className="font-heading font-[800] text-orange-500 text-xl tracking-wide">ŠANCE! </span>
-                <span className="text-lg font-medium text-orange-700/70">{cur.teamId === 1 ? match.home_name : match.away_name} útočí...</span>
+                <span className="text-lg font-medium text-orange-700/70">{flashEvent?.teamId === 1 ? match.home_name : match.away_name} útočí...</span>
               </div>
             ) : cur ? (
               <>
@@ -562,11 +585,7 @@ export default function MatchReplayPage() {
       )}
 
       {/* Post-match actions */}
-      {finished && (
-        <div className="flex justify-center py-6">
-          <button onClick={() => router.push("/dashboard")} className="btn btn-primary btn-lg text-lg px-10">Pokračovat</button>
-        </div>
-      )}
+      {/* Post-match button is in CONTROLS section above */}
     </div>
   );
 }

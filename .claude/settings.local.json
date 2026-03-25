@@ -65,7 +65,11 @@
       "WebFetch(domain:store.sportradar.com)",
       "WebFetch(domain:extra.nj.bet365.com)",
       "Bash(echo \"FAIL: $t\" done npx wrangler d1 execute okresni-masina-db --local --command \"DELETE FROM users WHERE id != ''''ai'''';\")",
-      "Bash(tail -1 rm -f .wrangler/state/v3/kv/miniflare-KVNamespaceObject/*.sqlite echo \"Done\")"
+      "Bash(tail -1 rm -f .wrangler/state/v3/kv/miniflare-KVNamespaceObject/*.sqlite echo \"Done\")",
+      "Bash(TEAM_ID=\"acc0bd5a-3c7c-4b57-9604-cb2ee11bc739\")",
+      "Bash(head:*)",
+      "Bash(cat /Users/savrik/Projects/fmko/apps/web/src/app/dashboard/team/[id]/page.tsx)",
+      "Bash(wc:*)"
     ]
   }
 }

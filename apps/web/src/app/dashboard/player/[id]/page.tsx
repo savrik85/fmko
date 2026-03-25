@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { apiFetch, type Player, type Team, type CareerStats } from "@/lib/api";
+import { apiFetch, type Player, type Team, type CareerStats, type PlayerMatchEntry, type PlayerContract } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { PositionBadge, SectionLabel, EntityLink, Spinner, BadgePreview, PageHeader } from "@/components/ui";
+import { PositionBadge, SectionLabel, Spinner, BadgePreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 /* ── Helpers ── */
@@ -25,16 +25,14 @@ function conditionLabel(condition: number): { text: string; color: string } {
   return { text: "Vyčerpaný", color: "text-card-red" };
 }
 
-/** Attribute color for 0-100 skills scale */
 function attrColor(value: number): string {
   if (value >= 70) return "text-pitch-400 font-bold";
-  if (value >= 50) return "text-pitch-500";
+  if (value >= 50) return "text-pitch-600";
   if (value >= 30) return "text-ink";
   if (value >= 15) return "text-gold-600";
   return "text-card-red";
 }
 
-/** Trait level label for personality 0-100 */
 function traitLevel(value: number): { label: string; color: string } {
   if (value >= 80) return { label: "Velmi vysoký", color: "text-pitch-400" };
   if (value >= 60) return { label: "Vysoký", color: "text-pitch-500" };
@@ -70,6 +68,8 @@ export default function PlayerDetailPage() {
   const [team, setTeam] = useState<Team | null>(null);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [careerStats, setCareerStats] = useState<CareerStats | null>(null);
+  const [matchHistory, setMatchHistory] = useState<PlayerMatchEntry[]>([]);
+  const [contracts, setContracts] = useState<PlayerContract[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -79,11 +79,15 @@ export default function PlayerDetailPage() {
       apiFetch<Team>(`/api/teams/${teamId}`),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
       apiFetch<CareerStats>(`/api/teams/${teamId}/players/${playerId}/career-stats`).catch(() => null),
-    ]).then(([p, t, all, stats]) => {
+      apiFetch<{ matches: PlayerMatchEntry[] }>(`/api/teams/${teamId}/players/${playerId}/match-history`).catch(() => ({ matches: [] })),
+      apiFetch<{ contracts: PlayerContract[] }>(`/api/teams/${teamId}/players/${playerId}/career-history`).catch(() => ({ contracts: [] })),
+    ]).then(([p, t, all, stats, history, careerHistory]) => {
       setPlayer(p);
       setTeam(t);
       setAllPlayers(all);
       setCareerStats(stats);
+      setMatchHistory(history.matches);
+      setContracts(careerHistory.contracts);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [teamId, playerId]);
@@ -100,22 +104,18 @@ export default function PlayerDetailPage() {
 
   return (
     <>
-      {/* ═══ Player header — full width, team color ═══ */}
+      {/* ═══ Player header ═══ */}
       <div className="hero-gradient px-5 sm:px-8 py-5" style={{ backgroundColor: color }}>
-        <div className="flex items-center gap-4 max-w-5xl mx-auto">
+        <div className="flex items-center gap-4 max-w-[1280px] mx-auto">
           {allPlayers.length > 1 && (
-            <button
-              onClick={() => prevPlayer && router.push(`/dashboard/player/${prevPlayer.id}`)}
-              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors"
-            >
-              &#9664;
-            </button>
+            <button onClick={() => prevPlayer && router.push(`/dashboard/player/${prevPlayer.id}`)}
+              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors">&#9664;</button>
           )}
 
           {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
-            <FaceAvatar faceConfig={player.avatar} size={64} className="shrink-0 bg-white/10 rounded-xl" />
+            <FaceAvatar faceConfig={player.avatar} size={72} className="shrink-0 bg-white/10 rounded-xl" />
           ) : (
-            <div className="shrink-0 w-16 h-16 rounded-xl bg-white/10 flex items-center justify-center text-white font-heading font-bold text-2xl">
+            <div className="shrink-0 w-[72px] h-[72px] rounded-xl bg-white/10 flex items-center justify-center text-white font-heading font-bold text-2xl">
               {player.first_name[0]}
             </div>
           )}
@@ -133,67 +133,66 @@ export default function PlayerDetailPage() {
               <span className="text-white/40">&middot;</span>
               <span className="text-white/80 text-sm">{player.lifeContext?.occupation ?? ""}</span>
               <span className="text-white/40">&middot;</span>
-              <a href={`/dashboard/team/${team.id}`} className="text-white/90 text-sm hover:text-white underline decoration-white/30 transition-colors">
+              <a href={`/dashboard/team/${team.id}`} className="text-white/90 text-sm hover:text-white underline decoration-white/30 transition-colors flex items-center gap-1.5">
+                <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                  initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
                 {team.name}
               </a>
             </div>
           </div>
 
-          <div className="shrink-0 text-center">
-            <div className="font-heading font-extrabold text-5xl tabular-nums leading-none text-white">
-              {player.overall_rating}
+          {/* Condition + Morale + Rating */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="bg-white/10 rounded-xl px-3 py-2 text-center">
+              <div className={`font-heading font-extrabold text-lg tabular-nums leading-none ${cond.color === "text-pitch-500" ? "text-green-300" : cond.color === "text-gold-500" ? "text-yellow-300" : "text-red-300"}`}>
+                {player.lifeContext?.condition ?? 50}%
+              </div>
+              <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Kondice</div>
             </div>
-            <div className="text-white/50 text-[10px] font-heading font-bold uppercase mt-1">Hodnocení</div>
+            <div className="bg-white/10 rounded-xl px-3 py-2 text-center">
+              <div className="text-xl leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
+              <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Morálka</div>
+            </div>
+            <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
+              <div className="font-heading font-extrabold text-3xl tabular-nums leading-none text-white">
+                {player.overall_rating}
+              </div>
+              <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Rating</div>
+            </div>
           </div>
 
           {allPlayers.length > 1 && (
-            <button
-              onClick={() => nextPlayer && router.push(`/dashboard/player/${nextPlayer.id}`)}
-              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors"
-            >
-              &#9654;
-            </button>
+            <button onClick={() => nextPlayer && router.push(`/dashboard/player/${nextPlayer.id}`)}
+              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors">&#9654;</button>
           )}
         </div>
       </div>
 
     <div className="page-container space-y-5">
 
-      {/* ── Info grid ── */}
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>Informace</SectionLabel>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-3 gap-x-6">
-          <InfoRow label="Věk" value={`${player.age} let`} />
-          <InfoRow label="Pozice" value={<PositionBadge position={player.position} />} />
-          <InfoRow label="Povolání" value={player.lifeContext?.occupation ?? "—"} />
-          <InfoRow label="Tým" value={
-            <div className="flex items-center gap-2">
-              <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"} initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={32} />
-              <EntityLink type="team" id={team.id}>{team.name}</EntityLink>
-            </div>
-          } />
-          <InfoRow label="Bydliště" value={player.residence ?? "—"} />
-          <InfoRow label="Dojíždění" value={player.commute_km != null ? `${player.commute_km} km` : "—"} />
-          <InfoRow label="Noha" value={footLabel(player.physical?.preferredFoot)} />
-          <InfoRow label="Strana" value={sideLabel(player.physical?.preferredSide)} />
-          <InfoRow label="Výška" value={player.physical?.height ? `${player.physical.height} cm` : "—"} />
-          <InfoRow label="Váha" value={player.physical?.weight ? `${player.physical.weight} kg` : "—"} />
-          <InfoRow label="Kondice" value={
-            <span className={cond.color}>{player.lifeContext?.condition ?? 50}% — {cond.text}</span>
-          } />
-          <InfoRow label="Morálka" value={
-            <span>{getMoraleEmoji(player.lifeContext?.morale ?? 50)} {player.lifeContext?.morale ?? 50}</span>
-          } />
-        </div>
-      </div>
+      {/* ═══ Row 1: Info + Attributes grid + Physical/Character ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-      {/* ── Two columns: Left (attributes) + Right (personality, stats, team) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5">
-
-        {/* Left column — All attributes in one card */}
+        {/* Column 1: Personal info */}
         <div className="card p-4 sm:p-5">
-          <SectionLabel>Fotbalové atributy</SectionLabel>
-          <div>
+          <SectionLabel>Profil</SectionLabel>
+          <div className="space-y-0">
+            <DetailRow label="Pozice" value={<PositionBadge position={player.position} />} />
+            <DetailRow label="Věk" value={`${player.age} let`} />
+            <DetailRow label="Povolání" value={player.lifeContext?.occupation ?? "—"} />
+            <DetailRow label="Bydliště" value={player.residence ?? "—"} />
+            <DetailRow label="Dojíždění" value={player.commute_km != null ? `${player.commute_km} km` : "—"} />
+            <DetailRow label="Výška" value={player.physical?.height ? `${player.physical.height} cm` : "—"} />
+            <DetailRow label="Váha" value={player.physical?.weight ? `${player.physical.weight} kg` : "—"} />
+            <DetailRow label="Noha" value={footLabel(player.physical?.preferredFoot)} />
+            <DetailRow label="Strana" value={sideLabel(player.physical?.preferredSide)} />
+          </div>
+        </div>
+
+        {/* Column 2: Skills — FM-style compact grid */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Dovednosti</SectionLabel>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-0">
             <AttrRow label="Rychlost" value={player.skills?.speed ?? 0} />
             <AttrRow label="Technika" value={player.skills?.technique ?? 0} />
             <AttrRow label="Střelba" value={player.skills?.shooting ?? 0} />
@@ -205,84 +204,231 @@ export default function PlayerDetailPage() {
             {player.position === "GK" && <AttrRow label="Brankář" value={player.skills?.goalkeeping ?? 0} />}
           </div>
 
-          <div className="mt-5">
-            <SectionLabel>Fyzické atributy</SectionLabel>
-            <div>
-              <AttrRow label="Kondice" value={player.physical?.stamina ?? 0} />
+          <div className="mt-4 pt-3 border-t border-gray-100">
+            <div className="text-label text-[11px] uppercase tracking-wide mb-2">Fyzické</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0">
+              <AttrRow label="Výdrž" value={player.physical?.stamina ?? 0} />
               <AttrRow label="Síla" value={player.physical?.strength ?? 0} />
               <AttrRow label="Náchylnost" value={player.physical?.injuryProneness ?? 0} inverted />
             </div>
           </div>
         </div>
 
-        {/* Right column — Personality + Career stats + Team */}
-        <div className="space-y-5">
-          <div className="card p-4 sm:p-5">
-            <SectionLabel>Charakter</SectionLabel>
-            <div className="space-y-0">
-              <TraitRow label="Vůdcovství" value={player.personality?.leadership ?? 30} />
-              <TraitRow label="Disciplína" value={player.personality?.discipline ?? 50} />
-              <TraitRow label="Pracovitost" value={player.personality?.workRate ?? 50} />
-              <TraitRow label="Konzistence" value={player.personality?.consistency ?? 50} />
-              <TraitRow label="Pod tlakem" value={player.personality?.clutch ?? 50} />
-              <TraitRow label="Patriotismus" value={player.personality?.patriotism ?? 50} />
-              <TraitRow label="Agresivita" value={player.personality?.aggression ?? 40} />
-              <TraitRow label="Alkohol" value={player.personality?.alcohol ?? 30} inverted />
-              <TraitRow label="Temperament" value={player.personality?.temper ?? 40} inverted />
-            </div>
+        {/* Column 3: Character traits */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Charakter</SectionLabel>
+          <div className="space-y-0">
+            <TraitRow label="Vůdcovství" value={player.personality?.leadership ?? 30} />
+            <TraitRow label="Disciplína" value={player.personality?.discipline ?? 50} />
+            <TraitRow label="Pracovitost" value={player.personality?.workRate ?? 50} />
+            <TraitRow label="Konzistence" value={player.personality?.consistency ?? 50} />
+            <TraitRow label="Pod tlakem" value={player.personality?.clutch ?? 50} />
+            <TraitRow label="Patriotismus" value={player.personality?.patriotism ?? 50} />
+            <TraitRow label="Agresivita" value={player.personality?.aggression ?? 40} />
+            <TraitRow label="Alkohol" value={player.personality?.alcohol ?? 30} inverted />
+            <TraitRow label="Temperament" value={player.personality?.temper ?? 40} inverted />
           </div>
-
-          {/* Career stats */}
-          {careerStats && careerStats.totals.appearances > 0 && (
-            <div className="card p-4 sm:p-5">
-              <SectionLabel>Kariérní statistiky</SectionLabel>
-
-              {/* Totals */}
-              <div className="grid grid-cols-3 gap-3 mb-4">
-                <StatBox label="Zápasy" value={careerStats.totals.appearances} />
-                <StatBox label="Góly" value={careerStats.totals.goals} />
-                <StatBox label="Asistence" value={careerStats.totals.assists} />
-              </div>
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <StatBox label="Žluté karty" value={careerStats.totals.yellowCards} color="text-gold-500" />
-                <StatBox label="Červené karty" value={careerStats.totals.redCards} color="text-card-red" />
-              </div>
-
-              {/* Per-season breakdown */}
-              {careerStats.seasons.length > 0 && (
-                <div className="mt-3">
-                  <div className="text-label mb-2">Po sezónách</div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-label border-b border-gray-100">
-                          <th className="pb-1 pr-2">Sez.</th>
-                          <th className="pb-1 pr-2 text-center">Z</th>
-                          <th className="pb-1 pr-2 text-center">G</th>
-                          <th className="pb-1 pr-2 text-center">A</th>
-                          <th className="pb-1 text-center">Hod.</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {careerStats.seasons.map((s) => (
-                          <tr key={s.season} className="border-b border-gray-50">
-                            <td className="py-1 pr-2 font-heading tabular-nums">{s.season}</td>
-                            <td className="py-1 pr-2 text-center tabular-nums">{s.appearances}</td>
-                            <td className="py-1 pr-2 text-center tabular-nums">{s.goals}</td>
-                            <td className="py-1 pr-2 text-center tabular-nums">{s.assists}</td>
-                            <td className="py-1 text-center tabular-nums">{typeof s.avgRating === "number" ? s.avgRating.toFixed(1) : "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
         </div>
       </div>
+
+      {/* ═══ Row 2: Kariéra — FM style ═══ */}
+      <div className={`grid grid-cols-1 ${careerStats && careerStats.totals.appearances > 0 ? "lg:grid-cols-[1fr_320px]" : ""} gap-5`}>
+
+        {/* Career stats per season with team info */}
+        {careerStats && careerStats.totals.appearances > 0 ? (
+          <div className="card p-4 sm:p-5">
+            <SectionLabel>Kariérní statistiky</SectionLabel>
+
+            {/* Totals strip */}
+            <div className="flex gap-3 flex-wrap mb-4">
+              <StatBox label="Zápasy" value={careerStats.totals.appearances} />
+              <StatBox label="Góly" value={careerStats.totals.goals} />
+              <StatBox label="Asistence" value={careerStats.totals.assists} />
+              <StatBox label="Žluté" value={careerStats.totals.yellowCards} color="text-gold-500" />
+              <StatBox label="Červené" value={careerStats.totals.redCards} color="text-card-red" />
+              {matchHistory.length > 0 && (
+                <StatBox label="Prům. hod." value={Number((matchHistory.reduce((s, m) => s + m.rating, 0) / matchHistory.length).toFixed(1))} />
+              )}
+            </div>
+
+            {/* Per-season table with team */}
+            {careerStats.seasons.length > 0 && (
+              <div className="overflow-x-auto -mx-4 sm:-mx-5">
+                <table className="w-full text-sm min-w-[600px]">
+                  <thead>
+                    <tr className="text-left text-label border-b border-gray-200 text-[11px] uppercase tracking-wide">
+                      <th className="pb-2 pl-4 sm:pl-5 pr-2">Sezóna</th>
+                      <th className="pb-2 pr-2">Klub</th>
+                      <th className="pb-2 pr-2">Liga</th>
+                      <th className="pb-2 pr-2 text-center">Z</th>
+                      <th className="pb-2 pr-2 text-center">G</th>
+                      <th className="pb-2 pr-2 text-center">A</th>
+                      <th className="pb-2 pr-2 text-center">ŽK</th>
+                      <th className="pb-2 pr-2 text-center">ČK</th>
+                      <th className="pb-2 pr-4 sm:pr-5 text-center">Hod.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {careerStats.seasons.map((s) => (
+                      <tr key={`${s.season}-${s.teamId}`} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                        <td className="py-2 pl-4 sm:pl-5 pr-2 font-heading font-bold tabular-nums">{s.season}</td>
+                        <td className="py-2 pr-2">
+                          <a href={`/dashboard/team/${s.teamId}`} className="flex items-center gap-1.5 hover:underline">
+                            <BadgePreview primary={s.teamColor} secondary={s.teamSecondary}
+                              pattern={(s.teamBadge as BadgePattern) || "shield"}
+                              initials={(s.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
+                            <span className="font-heading font-bold text-ink truncate max-w-[140px]">{s.teamName}</span>
+                          </a>
+                        </td>
+                        <td className="py-2 pr-2 text-xs text-muted truncate max-w-[120px]">{s.leagueName ?? "—"}</td>
+                        <td className="py-2 pr-2 text-center tabular-nums">{s.appearances}</td>
+                        <td className="py-2 pr-2 text-center tabular-nums font-heading font-bold">{(s.goals as number) > 0 ? s.goals : "—"}</td>
+                        <td className="py-2 pr-2 text-center tabular-nums">{(s.assists as number) > 0 ? s.assists : "—"}</td>
+                        <td className="py-2 pr-2 text-center tabular-nums text-gold-500">{(s.yellowCards as number) > 0 ? s.yellowCards : ""}</td>
+                        <td className="py-2 pr-2 text-center tabular-nums text-card-red">{(s.redCards as number) > 0 ? s.redCards : ""}</td>
+                        <td className="py-2 pr-4 sm:pr-5 text-center tabular-nums font-heading font-bold">{typeof s.avgRating === "number" ? s.avgRating.toFixed(1) : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* No career stats yet — show placeholder */
+          <div className="card p-4 sm:p-5">
+            <SectionLabel>Kariérní statistiky</SectionLabel>
+            <div className="text-sm text-muted">Zatím žádné odehrané zápasy v sezóně.</div>
+          </div>
+        )}
+
+        {/* Club history sidebar */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Historie klubů</SectionLabel>
+          {contracts.length > 0 ? (
+            <div className="space-y-0">
+              {contracts.map((c) => (
+                <div key={c.id} className="py-3 border-b border-gray-50 last:border-b-0">
+                  <a href={`/dashboard/team/${c.teamId}`} className="flex items-center gap-2.5 group">
+                    <BadgePreview primary={c.teamColor} secondary={c.teamSecondary}
+                      pattern={(c.teamBadge as BadgePattern) || "shield"}
+                      initials={(c.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={32} />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-heading font-bold text-sm group-hover:underline truncate">{c.teamName}</div>
+                      <div className="text-[11px] text-muted">
+                        {c.isActive ? (
+                          <span>Od sezóny {c.seasonNumber} &middot; <span className="text-pitch-500 font-bold">Aktivní</span></span>
+                        ) : (
+                          <span>Sezóna {c.seasonNumber}{c.leftAt ? ` — ${c.leftAt}` : ""}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="shrink-0">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-heading font-bold ${
+                        c.joinType === "generated" ? "bg-gray-100 text-muted"
+                        : c.joinType === "transfer" ? "bg-blue-50 text-blue-600"
+                        : c.joinType === "free_agent" ? "bg-green-50 text-green-600"
+                        : c.joinType === "youth" ? "bg-purple-50 text-purple-600"
+                        : "bg-gray-100 text-muted"
+                      }`}>{c.joinLabel}</span>
+                    </div>
+                  </a>
+                  {c.fee > 0 && (
+                    <div className="text-[10px] text-muted mt-1 ml-[42px]">Přestupní částka: {c.fee.toLocaleString("cs")} Kč</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-muted">Žádná historie</div>
+          )}
+        </div>
+      </div>
+
+      {/* ═══ Row 3: Match history ═══ */}
+      {matchHistory.length > 0 && (
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Historie zápasů ({matchHistory.length})</SectionLabel>
+          <div className="overflow-x-auto -mx-4 sm:-mx-5">
+            <table className="w-full text-sm min-w-[700px]">
+              <thead>
+                <tr className="text-left text-label border-b border-gray-200 text-[11px] uppercase tracking-wide">
+                  <th className="pb-2 pl-4 sm:pl-5 pr-2 w-12">Kolo</th>
+                  <th className="pb-2 pr-2">Soupeř</th>
+                  <th className="pb-2 pr-2 text-center w-20">Výsledek</th>
+                  <th className="pb-2 pr-2 text-center w-14" title="Hodnocení">Hod.</th>
+                  <th className="pb-2 pr-2 text-center w-12" title="Minuty">Min</th>
+                  <th className="pb-2 pr-2 text-center w-8" title="Góly">G</th>
+                  <th className="pb-2 pr-2 text-center w-8" title="Asistence">A</th>
+                  <th className="pb-2 pr-4 sm:pr-5 text-center w-16" title="Karty">Karty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matchHistory.map((m) => {
+                  const resultBg = m.result === "W" ? "bg-pitch-50" : m.result === "L" ? "bg-red-50" : "bg-gray-50";
+                  const resultText = m.result === "W" ? "text-pitch-600" : m.result === "L" ? "text-card-red" : "text-muted";
+                  const ratingColor = m.rating >= 7.5 ? "text-pitch-500 font-bold"
+                    : m.rating >= 6.5 ? "text-pitch-600"
+                    : m.rating >= 5.5 ? "text-ink"
+                    : m.rating >= 4.5 ? "text-gold-600"
+                    : "text-card-red font-bold";
+
+                  return (
+                    <tr key={m.matchId} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                      <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "—"}</td>
+                      <td className="py-2 pr-2">
+                        <a href={`/dashboard/match/${m.matchId}/replay`} className="flex items-center gap-2 hover:underline">
+                          <BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
+                            pattern={(m.opponentBadge as BadgePattern) || "shield"}
+                            initials={(m.opponent ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={20} />
+                          <span className="font-heading font-bold text-ink truncate max-w-[180px]">{m.opponent ?? "Soupeř"}</span>
+                          <span className="text-[10px] text-muted uppercase">{m.isHome ? "D" : "V"}</span>
+                        </a>
+                      </td>
+                      <td className="py-2 pr-2 text-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-heading font-bold ${resultBg} ${resultText}`}>
+                          {m.homeScore}:{m.awayScore}
+                        </span>
+                      </td>
+                      <td className={`py-2 pr-2 text-center tabular-nums font-heading font-bold ${ratingColor}`}>
+                        {m.rating.toFixed(1)}
+                      </td>
+                      <td className="py-2 pr-2 text-center tabular-nums text-muted">{m.minutesPlayed}&apos;</td>
+                      <td className="py-2 pr-2 text-center tabular-nums font-heading font-bold">{m.goals > 0 ? m.goals : ""}</td>
+                      <td className="py-2 pr-2 text-center tabular-nums font-heading font-bold text-muted">{m.assists > 0 ? m.assists : ""}</td>
+                      <td className="py-2 pr-4 sm:pr-5 text-center">
+                        {m.yellowCards > 0 && <span className="inline-block w-3 h-4 rounded-[1px] bg-gold-400 mr-0.5" title="Žlutá karta" />}
+                        {m.redCards > 0 && <span className="inline-block w-3 h-4 rounded-[1px] bg-card-red" title="Červená karta" />}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Summary */}
+          <div className="flex gap-4 mt-4 pt-3 border-t border-gray-100 flex-wrap">
+            <div className="text-sm text-muted">
+              <span className="font-heading font-bold text-ink">{matchHistory.length}</span> zápasů
+            </div>
+            <div className="text-sm text-muted">
+              <span className="font-heading font-bold text-pitch-500">{matchHistory.filter((m) => m.result === "W").length}V</span>
+              {" "}
+              <span className="font-heading font-bold text-ink">{matchHistory.filter((m) => m.result === "D").length}R</span>
+              {" "}
+              <span className="font-heading font-bold text-card-red">{matchHistory.filter((m) => m.result === "L").length}P</span>
+            </div>
+            <div className="text-sm text-muted">
+              <span className="font-heading font-bold text-ink">{matchHistory.reduce((s, m) => s + m.goals, 0)}</span> gólů
+            </div>
+            <div className="text-sm text-muted">
+              Prům. <span className="font-heading font-bold text-ink">{(matchHistory.reduce((s, m) => s + m.rating, 0) / matchHistory.length).toFixed(1)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
     </>
   );
@@ -290,25 +436,23 @@ export default function PlayerDetailPage() {
 
 /* ── Sub-components ── */
 
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div>
-      <div className="text-label">{label}</div>
-      <div className="font-heading font-bold text-base">{value}</div>
+    <div className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-b-0">
+      <span className="text-sm text-muted">{label}</span>
+      <span className="font-heading font-bold text-sm">{value}</span>
     </div>
   );
 }
 
 function AttrRow({ label, value, inverted }: { label: string; value: number; inverted?: boolean }) {
   const colorValue = inverted ? 100 - value : value;
-  const barColor = colorValue >= 70 ? "#22c55e" : colorValue >= 50 ? "#6b7280" : colorValue >= 30 ? "#d97706" : "#ef4444";
   return (
-    <div className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-b-0">
-      <span className="text-sm text-ink-light w-28 shrink-0">{label}</span>
-      <div className="flex-1 h-2.5 rounded-full bg-gray-100 overflow-hidden">
-        <div className="h-full rounded-full" style={{ width: `${value}%`, backgroundColor: barColor }} />
-      </div>
-      <span className={`text-sm font-heading font-bold tabular-nums w-8 text-right ${attrColor(colorValue)}`}>{value}</span>
+    <div className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-b-0">
+      <span className="text-sm text-ink-light">{label}</span>
+      <span className={`inline-flex items-center justify-center w-8 h-6 rounded text-xs font-heading font-bold tabular-nums ${attrBg(colorValue)}`}>
+        {value}
+      </span>
     </div>
   );
 }
@@ -318,10 +462,10 @@ function TraitRow({ label, value, inverted }: { label: string; value: number; in
   const trait = traitLevel(effective);
   return (
     <div className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-b-0">
-      <span className="text-base text-ink-light">{label}</span>
+      <span className="text-sm text-ink-light">{label}</span>
       <div className="flex items-center gap-2">
-        <span className={`text-sm font-heading font-bold ${trait.color}`}>{trait.label}</span>
-        <span className="text-xs text-muted tabular-nums w-6 text-right">{value}</span>
+        <span className={`text-xs font-heading font-bold ${trait.color}`}>{trait.label}</span>
+        <span className="text-[10px] text-muted tabular-nums w-5 text-right">{value}</span>
       </div>
     </div>
   );
@@ -329,9 +473,17 @@ function TraitRow({ label, value, inverted }: { label: string; value: number; in
 
 function StatBox({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
-    <div className="text-center p-2 rounded-lg bg-gray-50">
+    <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
       <div className={`font-heading font-[800] text-2xl tabular-nums ${color ?? "text-ink"}`}>{value}</div>
       <div className="text-label text-[10px] uppercase">{label}</div>
     </div>
   );
+}
+
+function attrBg(value: number): string {
+  if (value >= 70) return "bg-pitch-500 text-white";
+  if (value >= 50) return "bg-pitch-100 text-pitch-800";
+  if (value >= 30) return "bg-gray-100 text-ink";
+  if (value >= 15) return "bg-amber-100 text-amber-800";
+  return "bg-red-100 text-card-red";
 }

@@ -10,7 +10,7 @@ import { simulateMatch } from "../engine/simulation";
 import { generateMatchCommentary } from "../engine/commentary";
 import type { GeneratedPlayer } from "../generators/player";
 import type { TeamSetup, Tactic, Weather } from "../engine/types";
-import { extractStatsFromEvents, updatePlayerStats } from "../stats/update-stats";
+import { extractStatsFromEvents, updatePlayerStats, calculatePlayerRatings, saveMatchPlayerStats, type MatchPlayerStatsEntry } from "../stats/update-stats";
 import { generateMatchWeather } from "../season/weather";
 
 const matchesRouter = new Hono<{ Bindings: Bindings }>();
@@ -157,17 +157,42 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
   ).first<{ id: string }>().catch(() => null);
 
   if (season) {
-    // Build engine ID → DB player ID map (engine uses index-based IDs from homeLineup)
+    // Build engine ID → DB player ID map
     const playerIdMap = new Map<number, string>();
     const starterDbIds: string[] = [];
-    availablePlayers.slice(0, 11).forEach((p, _i) => {
+    availablePlayers.slice(0, 11).forEach((p) => {
       playerIdMap.set(p.id as number, String(p.id));
       starterDbIds.push(String(p.id));
     });
 
-    const statsUpdates = extractStatsFromEvents(result.events, playerIdMap, starterDbIds, {});
+    // Calculate per-player ratings
+    const ratings = calculatePlayerRatings(result.events, playerIdMap, 1, result.homeScore, result.awayScore);
+
+    const statsUpdates = extractStatsFromEvents(result.events, playerIdMap, starterDbIds, ratings);
     const isCleanSheet = result.awayScore === 0;
     await updatePlayerStats(c.env.DB, season.id, teamId, statsUpdates, isCleanSheet).catch(() => {});
+
+    // Save per-match player stats
+    const matchPlayerEntries: MatchPlayerStatsEntry[] = statsUpdates.map((u) => {
+      const origPlayer = availablePlayers.find((p) => String(p.id) === u.playerId);
+      return {
+        playerId: u.playerId,
+        teamId,
+        started: true,
+        position: origPlayer?.position ?? "MID",
+        minutesPlayed: u.minutesPlayed,
+        goals: u.goals,
+        assists: u.assists,
+        yellowCards: u.yellowCards,
+        redCards: u.redCards,
+        rating: u.rating,
+      };
+    });
+    await saveMatchPlayerStats(c.env.DB, matchId, matchPlayerEntries).catch(() => {});
+
+    // Save player_ratings JSON to match record
+    await c.env.DB.prepare("UPDATE matches SET player_ratings = ? WHERE id = ?")
+      .bind(JSON.stringify(ratings), matchId).run().catch(() => {});
   }
 
   return c.json({
@@ -551,6 +576,154 @@ matchesRouter.post("/matches/:id/mark-seen", async (c) => {
   await c.env.DB.prepare(`UPDATE matches SET ${col} = datetime('now') WHERE id = ?`).bind(matchId).run();
 
   return c.json({ ok: true });
+});
+
+// GET /api/teams/:teamId/players/:playerId/match-history — FM-style match history per player
+matchesRouter.get("/teams/:teamId/players/:playerId/match-history", async (c) => {
+  const teamId = c.req.param("teamId");
+  const playerId = c.req.param("playerId");
+
+  const result = await c.env.DB.prepare(
+    `SELECT mps.*, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
+       m.simulated_at, m.round, m.weather,
+       ht.name as home_name, ht.primary_color as home_color, ht.secondary_color as home_secondary, ht.badge_pattern as home_badge,
+       at.name as away_name, at.primary_color as away_color, at.secondary_color as away_secondary, at.badge_pattern as away_badge
+     FROM match_player_stats mps
+     JOIN matches m ON mps.match_id = m.id
+     LEFT JOIN teams ht ON m.home_team_id = ht.id
+     LEFT JOIN teams at ON m.away_team_id = at.id
+     WHERE mps.player_id = ?
+     ORDER BY m.simulated_at DESC`
+  ).bind(playerId).all().catch(() => ({ results: [] }));
+
+  const matches = result.results.map((row) => {
+    const isHome = row.home_team_id === teamId;
+    const opponentName = isHome ? row.away_name : row.home_name;
+    const opponentColor = isHome ? row.away_color : row.home_color;
+    const opponentSecondary = isHome ? row.away_secondary : row.home_secondary;
+    const opponentBadge = isHome ? row.away_badge : row.home_badge;
+    const opponentId = isHome ? row.away_team_id : row.home_team_id;
+    const myScore = isHome ? row.home_score : row.away_score;
+    const oppScore = isHome ? row.away_score : row.home_score;
+    const resultLabel = (myScore as number) > (oppScore as number) ? "W"
+      : (myScore as number) < (oppScore as number) ? "L" : "D";
+
+    return {
+      matchId: row.match_id,
+      date: row.simulated_at,
+      round: row.round,
+      isHome,
+      opponent: opponentName,
+      opponentId,
+      opponentColor: opponentColor || "#2D5F2D",
+      opponentSecondary: opponentSecondary || "#FFFFFF",
+      opponentBadge: opponentBadge || "shield",
+      homeScore: row.home_score,
+      awayScore: row.away_score,
+      result: resultLabel,
+      position: row.position,
+      started: row.started === 1,
+      minutesPlayed: row.minutes_played,
+      goals: row.goals,
+      assists: row.assists,
+      yellowCards: row.yellow_cards,
+      redCards: row.red_cards,
+      rating: row.rating,
+      weather: row.weather,
+    };
+  });
+
+  return c.json({ matches });
+});
+
+// GET /api/teams/:teamId/match-results — team match results with aggregated stats
+matchesRouter.get("/teams/:teamId/match-results", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  const result = await c.env.DB.prepare(
+    `SELECT m.id, m.round, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
+       m.simulated_at, m.weather, m.attendance, m.stadium_name,
+       ht.name as home_name, ht.primary_color as home_color, ht.secondary_color as home_secondary, ht.badge_pattern as home_badge,
+       at.name as away_name, at.primary_color as away_color, at.secondary_color as away_secondary, at.badge_pattern as away_badge
+     FROM matches m
+     LEFT JOIN teams ht ON m.home_team_id = ht.id
+     LEFT JOIN teams at ON m.away_team_id = at.id
+     WHERE m.status = 'simulated'
+       AND (m.home_team_id = ? OR m.away_team_id = ?)
+     ORDER BY m.simulated_at DESC`
+  ).bind(teamId, teamId).all().catch(() => ({ results: [] }));
+
+  // Get top scorers for this team from match_player_stats
+  const scorers = await c.env.DB.prepare(
+    `SELECT mps.player_id, p.first_name, p.last_name, p.nickname, p.position,
+       SUM(mps.goals) as total_goals, SUM(mps.assists) as total_assists,
+       SUM(mps.yellow_cards) as total_yellows, SUM(mps.red_cards) as total_reds,
+       COUNT(*) as appearances, ROUND(AVG(mps.rating), 1) as avg_rating
+     FROM match_player_stats mps
+     JOIN players p ON mps.player_id = p.id
+     WHERE mps.team_id = ?
+     GROUP BY mps.player_id
+     ORDER BY total_goals DESC, total_assists DESC
+     LIMIT 10`
+  ).bind(teamId).all().catch(() => ({ results: [] }));
+
+  const matches = result.results.map((row) => {
+    const isHome = row.home_team_id === teamId;
+    const myScore = isHome ? row.home_score as number : row.away_score as number;
+    const oppScore = isHome ? row.away_score as number : row.home_score as number;
+    const resultLabel = myScore > oppScore ? "W" : myScore < oppScore ? "L" : "D";
+
+    return {
+      id: row.id,
+      round: row.round,
+      date: row.simulated_at,
+      isHome,
+      opponent: isHome ? row.away_name : row.home_name,
+      opponentId: isHome ? row.away_team_id : row.home_team_id,
+      opponentColor: (isHome ? row.away_color : row.home_color) || "#2D5F2D",
+      opponentSecondary: (isHome ? row.away_secondary : row.home_secondary) || "#FFFFFF",
+      opponentBadge: (isHome ? row.away_badge : row.home_badge) || "shield",
+      homeScore: row.home_score,
+      awayScore: row.away_score,
+      result: resultLabel,
+      weather: row.weather,
+      attendance: row.attendance,
+      stadium: row.stadium_name,
+    };
+  });
+
+  // Aggregate form
+  const form = matches.slice(0, 5).map((m) => m.result);
+  const totalW = matches.filter((m) => m.result === "W").length;
+  const totalD = matches.filter((m) => m.result === "D").length;
+  const totalL = matches.filter((m) => m.result === "L").length;
+  const goalsFor = matches.reduce((s, m) => s + (m.isHome ? (m.homeScore as number) : (m.awayScore as number)), 0);
+  const goalsAgainst = matches.reduce((s, m) => s + (m.isHome ? (m.awayScore as number) : (m.homeScore as number)), 0);
+
+  return c.json({
+    matches,
+    form,
+    summary: { played: matches.length, wins: totalW, draws: totalD, losses: totalL, goalsFor, goalsAgainst },
+    topPlayers: scorers.results.map((r) => ({
+      playerId: r.player_id,
+      name: `${r.first_name} ${r.last_name}`,
+      nickname: r.nickname,
+      position: r.position,
+      goals: r.total_goals,
+      assists: r.total_assists,
+      yellowCards: r.total_yellows,
+      redCards: r.total_reds,
+      appearances: r.appearances,
+      avgRating: r.avg_rating,
+    })),
+  });
+});
+
+// POST /api/admin/backfill-match-stats — jednorázový backfill match_player_stats z existujících zápasů
+matchesRouter.post("/admin/backfill-match-stats", async (c) => {
+  const { backfillMatchStats } = await import("../../scripts/backfill-match-stats");
+  const result = await backfillMatchStats(c.env.DB);
+  return c.json(result);
 });
 
 export { matchesRouter };
