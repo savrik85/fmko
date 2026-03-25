@@ -85,10 +85,12 @@ export async function runScheduledMatches(
       };
 
       // Load stadium info for pitch condition + attendance
-      const stadium = await db.prepare("SELECT pitch_condition, stadium_name FROM stadiums WHERE team_id = ?")
-        .bind(homeTeamId).first<{ pitch_condition: number; stadium_name: string }>().catch(() => null);
+      const stadium = await db.prepare("SELECT pitch_condition FROM stadiums WHERE team_id = ?")
+        .bind(homeTeamId).first<{ pitch_condition: number }>().catch(() => null);
       const pitchCondition = stadium?.pitch_condition ?? 50;
-      const stadiumName = stadium?.stadium_name ?? null;
+      const stadiumNameRow = await db.prepare("SELECT stadium_name FROM teams WHERE id = ?")
+        .bind(homeTeamId).first<{ stadium_name: string }>().catch(() => null);
+      const stadiumName = stadiumNameRow?.stadium_name ?? null;
 
       // Attendance: population + reputation + form
       const homeInfo = await db.prepare(
