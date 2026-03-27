@@ -25,6 +25,7 @@ import { initTeamConversations } from "./messaging";
 import { generateResidence } from "../generators/residence";
 import { getDistrictDataFromDB } from "../data/districts";
 import type { ManagerBackstory } from "@okresni-masina/shared";
+import { logger } from "../lib/logger";
 
 const teamsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -100,6 +101,7 @@ function generatePlayerFace(player: { age: number; bodyType: string }): Record<s
 
 // POST /api/teams
 teamsRouter.post("/", async (c) => {
+  try {
   const body = await c.req.json<{
     villageId: string;
     name: string;
@@ -171,7 +173,7 @@ teamsRouter.post("/", async (c) => {
     ).bind(uuid(), teamId, body.sponsor.name, body.sponsor.type, monthlyAmount, winBonus,
       body.sponsor.seasons, body.sponsor.seasons, body.sponsor.terminationFee,
       body.sponsor.isNamingRights ? 1 : 0, "main",
-    ).run().catch(() => {});
+    ).run().catch((e) => logger.warn({ module: "teams" }, "insert sponsor contract", e));
   }
 
   // Generate squad
@@ -334,7 +336,7 @@ teamsRouter.post("/", async (c) => {
       mgrAttrs.age, mgrAttrs.coaching, mgrAttrs.motivation, mgrAttrs.tactics,
       mgrAttrs.youthDevelopment, mgrAttrs.discipline, mgrAttrs.reputation, mgrAttrs.bio,
       mgrAttrs.birthplace,
-    ).run().catch(() => {});
+    ).run().catch((e) => logger.warn({ module: "teams" }, "insert manager profile", e));
   }
 
   // ── League: join existing or create new ──
@@ -383,12 +385,12 @@ teamsRouter.post("/", async (c) => {
     // ── Ensure schedule exists (may be missing if first team creation failed) ──
     const matchCount = await c.env.DB.prepare(
       "SELECT COUNT(*) as cnt FROM matches WHERE league_id = ?"
-    ).bind(existingLeague.id).first<{ cnt: number }>().catch(() => ({ cnt: 0 }));
+    ).bind(existingLeague.id).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "teams" }, "count league matches", e); return { cnt: 0 }; });
 
     if (!matchCount || matchCount.cnt === 0) {
       const leagueTeamIds = await c.env.DB.prepare(
         "SELECT id FROM teams WHERE league_id = ? ORDER BY name"
-      ).bind(existingLeague.id).all().catch(() => ({ results: [] }));
+      ).bind(existingLeague.id).all().catch((e) => { logger.warn({ module: "teams" }, "fetch league teams for schedule", e); return { results: [] }; });
 
       const allTeamIds = leagueTeamIds.results.map((r) => r.id as string);
 
@@ -399,7 +401,7 @@ teamsRouter.post("/", async (c) => {
         for (const entry of calendar.entries) {
           await c.env.DB.prepare(
             "INSERT OR IGNORE INTO season_calendar (id, league_id, season_number, game_week, match_day, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
-          ).bind(entry.id, existingLeague.id, season.number, entry.gameWeek, entry.matchDay, entry.scheduledAt).run().catch(() => {});
+          ).bind(entry.id, existingLeague.id, season.number, entry.gameWeek, entry.matchDay, entry.scheduledAt).run().catch((e) => logger.warn({ module: "teams" }, "insert calendar entry (join)", e));
         }
 
         const calendarByWeek = new Map<number, string>();
@@ -414,7 +416,7 @@ teamsRouter.post("/", async (c) => {
           const calId = calendarByWeek.get(match.round) ?? null;
           await c.env.DB.prepare(
             "INSERT INTO matches (id, league_id, calendar_id, round, home_team_id, away_team_id, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
-          ).bind(uuid(), existingLeague.id, calId, match.round, allTeamIds[match.homeTeamIndex], allTeamIds[match.awayTeamIndex]).run().catch(() => {});
+          ).bind(uuid(), existingLeague.id, calId, match.round, allTeamIds[match.homeTeamIndex], allTeamIds[match.awayTeamIndex]).run().catch((e) => logger.warn({ module: "teams" }, "insert match (join)", e));
         }
 
         // Set game_date for all teams in the league
@@ -428,7 +430,7 @@ teamsRouter.post("/", async (c) => {
     }
 
     // Init phone conversations
-    await initTeamConversations(c.env.DB, teamId, playerConvData).catch(() => {});
+    await initTeamConversations(c.env.DB, teamId, playerConvData).catch((e) => logger.warn({ module: "teams" }, "init conversations (join)", e));
 
     return c.json({
       id: teamId,
@@ -569,7 +571,7 @@ teamsRouter.post("/", async (c) => {
   // Get AI team IDs from DB (they were just inserted)
   const leagueTeamIds = await c.env.DB.prepare(
     "SELECT id FROM teams WHERE league_id = ? ORDER BY name"
-  ).bind(leagueId).all().catch(() => ({ results: [] }));
+  ).bind(leagueId).all().catch((e) => { logger.warn({ module: "teams" }, "fetch league teams for new schedule", e); return { results: [] }; });
 
   const teamIds = leagueTeamIds.results.map((r) => r.id as string);
 
@@ -581,7 +583,7 @@ teamsRouter.post("/", async (c) => {
     for (const entry of calendar.entries) {
       await c.env.DB.prepare(
         "INSERT OR IGNORE INTO season_calendar (id, league_id, season_number, game_week, match_day, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
-      ).bind(entry.id, leagueId, season.number, entry.gameWeek, entry.matchDay, entry.scheduledAt).run().catch(() => {});
+      ).bind(entry.id, leagueId, season.number, entry.gameWeek, entry.matchDay, entry.scheduledAt).run().catch((e) => logger.warn({ module: "teams" }, "insert calendar entry (create)", e));
     }
 
     // Insert matches — map schedule rounds to calendar entries
@@ -597,7 +599,7 @@ teamsRouter.post("/", async (c) => {
       const calId = calendarByWeek.get(match.round) ?? null;
       await c.env.DB.prepare(
         "INSERT INTO matches (id, league_id, calendar_id, round, home_team_id, away_team_id, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
-      ).bind(uuid(), leagueId, calId, match.round, teamIds[match.homeTeamIndex], teamIds[match.awayTeamIndex]).run().catch(() => {});
+      ).bind(uuid(), leagueId, calId, match.round, teamIds[match.homeTeamIndex], teamIds[match.awayTeamIndex]).run().catch((e) => logger.warn({ module: "teams" }, "insert match (create)", e));
     }
 
     // Set game_date for all teams in the league (day before first match)
@@ -610,7 +612,7 @@ teamsRouter.post("/", async (c) => {
   }
 
   // Init phone conversations
-  await initTeamConversations(c.env.DB, teamId, playerConvData).catch(() => {});
+  await initTeamConversations(c.env.DB, teamId, playerConvData).catch((e) => logger.warn({ module: "teams" }, "init conversations (create)", e));
 
   // Zpravodaj: článek o novém trenérovi
   try {
@@ -641,7 +643,7 @@ teamsRouter.post("/", async (c) => {
     await c.env.DB.prepare(
       "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'manager_arrival', ?, ?, datetime('now'))"
     ).bind(uuid(), leagueId, teamId, headlines[idx], bodies[idx]).run();
-  } catch {}
+  } catch (e) { logger.warn({ module: "teams" }, "news generation for manager arrival", e); }
 
   return c.json({
     id: teamId,
@@ -651,6 +653,9 @@ teamsRouter.post("/", async (c) => {
     leagueId,
     leagueName: leagueSetup.name,
   }, 201);
+  } catch (e: any) {
+    return c.json({ error: e.message, step: (c as any)._lastStep ?? "unknown" }, 500);
+  }
 });
 
 // GET /api/teams/:id
@@ -701,7 +706,7 @@ teamsRouter.get("/:id/manager", async (c) => {
   // Try DB first
   const row = await c.env.DB.prepare(
     "SELECT * FROM managers WHERE team_id = ? LIMIT 1"
-  ).bind(tId).first<Record<string, unknown>>().catch(() => null);
+  ).bind(tId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "teams" }, "fetch manager from DB", e); return null; });
 
   if (row) {
     return c.json({
@@ -742,7 +747,7 @@ teamsRouter.get("/:id/manager", async (c) => {
   ).bind(mgrId, "ai", tId, mgr.name, mgr.backstory, JSON.stringify(mgr.avatar),
     mgr.age, mgr.coaching, mgr.motivation, mgr.tactics,
     mgr.youthDevelopment, mgr.discipline, mgr.reputation, mgr.bio, mgr.birthplace,
-  ).run().catch(() => {});
+  ).run().catch((e) => logger.warn({ module: "teams" }, "persist AI manager", e));
 
   return c.json({
     id: mgrId,
@@ -788,7 +793,7 @@ teamsRouter.get("/:id/stats", async (c) => {
 
   const season = await c.env.DB.prepare(
     "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
-  ).first<{ id: string }>().catch(() => null);
+  ).first<{ id: string }>().catch((e) => { logger.warn({ module: "teams" }, "fetch active season for stats", e); return null; });
 
   if (!season) return c.json({ stats: [], topScorers: [], topAssists: [] });
 
@@ -798,7 +803,7 @@ teamsRouter.get("/:id/stats", async (c) => {
      JOIN players p ON ps.player_id = p.id
      WHERE ps.team_id = ? AND ps.season_id = ?
      ORDER BY ps.goals DESC, ps.assists DESC`
-  ).bind(teamId, season.id).all().catch(() => ({ results: [] }));
+  ).bind(teamId, season.id).all().catch((e) => { logger.warn({ module: "teams" }, "fetch player stats", e); return { results: [] }; });
 
   const stats = result.results.map((row) => ({
     playerId: row.player_id,
@@ -840,7 +845,7 @@ teamsRouter.get("/:id/players/:playerId/career-stats", async (c) => {
      LEFT JOIN leagues l ON l.season_id = ps.season_id AND t.league_id = l.id
      WHERE ps.player_id = ?
      ORDER BY s.number`
-  ).bind(playerId).all().catch(() => ({ results: [] }));
+  ).bind(playerId).all().catch((e) => { logger.warn({ module: "teams" }, "query player data", e); return { results: [] }; });
 
   const seasons = result.results.map((row) => ({
     season: row.season_number,
@@ -885,20 +890,20 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
      JOIN seasons s ON pc.season_id = s.id
      WHERE pc.player_id = ?
      ORDER BY s.number DESC`
-  ).bind(playerId).all().catch(() => ({ results: [] }));
+  ).bind(playerId).all().catch((e) => { logger.warn({ module: "teams" }, "query player data", e); return { results: [] }; });
 
   // If no contracts exist, create one from current player data
   if (contracts.results.length === 0) {
     const player = await c.env.DB.prepare("SELECT team_id FROM players WHERE id = ?")
-      .bind(playerId).first<{ team_id: string }>().catch(() => null);
+      .bind(playerId).first<{ team_id: string }>().catch((e) => { logger.warn({ module: "teams" }, "fetch player for contract", e); return null; });
     const season = await c.env.DB.prepare("SELECT id, number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
-      .first<{ id: string; number: number }>().catch(() => null);
+      .first<{ id: string; number: number }>().catch((e) => { logger.warn({ module: "teams" }, "fetch season for contract", e); return null; });
 
     if (player && season) {
       const contractId = crypto.randomUUID();
       await c.env.DB.prepare(
         "INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, is_active) VALUES (?, ?, ?, ?, 'generated', 1)"
-      ).bind(contractId, playerId, player.team_id, season.id).run().catch(() => {});
+      ).bind(contractId, playerId, player.team_id, season.id).run().catch((e) => logger.warn({ module: "teams" }, "insert player contract", e));
 
       // Re-query
       const fresh = await c.env.DB.prepare(
@@ -910,7 +915,7 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
          JOIN seasons s ON pc.season_id = s.id
          WHERE pc.player_id = ?
          ORDER BY s.number DESC`
-      ).bind(playerId).all().catch(() => ({ results: [] }));
+      ).bind(playerId).all().catch((e) => { logger.warn({ module: "teams" }, "query player data", e); return { results: [] }; });
       contracts.results = fresh.results;
     }
   }

@@ -8,12 +8,16 @@ import { Spinner, BadgePreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface MatchEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; }
+interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number }
+interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[] }
+
 interface MatchData {
   id: string; home_team_id: string; away_team_id: string; home_score: number; away_score: number; round: number | null;
   events: MatchEvent[]; commentary: string[];
   home_name: string; away_name: string; home_color: string; away_color: string;
   home_secondary: string; away_secondary: string; home_badge: string; away_badge: string;
   attendance: number | null; stadium_name: string | null; pitch_condition: number | null; weather: string | null;
+  home_lineup_data: LineupData | null; away_lineup_data: LineupData | null;
 }
 
 type Speed = "live" | "fast" | "instant";
@@ -110,6 +114,7 @@ export default function MatchReplayPage() {
         home_badge: (r.home_badge as string) ?? "shield", away_badge: (r.away_badge as string) ?? "shield",
         attendance: (r.attendance as number) ?? null, stadium_name: (r.stadium_name as string) ?? null,
         pitch_condition: (r.pitch_condition as number) ?? null, weather: (r.weather as string) ?? null,
+        home_lineup_data: r.home_lineup_data ?? null, away_lineup_data: r.away_lineup_data ?? null,
       });
       setLoading(false);
       // Fetch stadium info from home team
@@ -616,8 +621,44 @@ export default function MatchReplayPage() {
         </div>
       )}
 
-      {/* Post-match actions */}
-      {/* Post-match button is in CONTROLS section above */}
+      {/* ═══ LINEUPS — collapsible ═══ */}
+      {match.home_lineup_data && match.away_lineup_data && (
+        <details className="card overflow-hidden">
+          <summary className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between">
+            <span className="font-heading font-bold text-sm uppercase text-muted">Sestavy</span>
+            <span className="text-sm text-pitch-500 font-heading font-bold">Zobrazit</span>
+          </summary>
+          <div className="grid grid-cols-2 gap-0 border-t border-gray-100">
+            {[
+              { name: match.home_name, data: match.home_lineup_data, color: hc },
+              { name: match.away_name, data: match.away_lineup_data, color: ac },
+            ].map(({ name, data, color }, ti) => (
+              <div key={name} className={ti === 0 ? "border-r border-gray-100" : ""}>
+                <div className="px-3 py-2 font-heading font-bold text-sm" style={{ backgroundColor: `color-mix(in srgb, ${color} 8%, white)` }}>{name}</div>
+                {data.starters.map((p, i) => (
+                  <div key={i} className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-50 last:border-b-0">
+                    <span className="text-sm text-muted tabular-nums w-5 text-right">{i + 1}</span>
+                    <span className="text-sm font-heading font-bold text-muted">{p.position}</span>
+                    <span className="text-sm font-heading font-bold flex-1">{p.name}</span>
+                  </div>
+                ))}
+                {data.subs.length > 0 && (
+                  <>
+                    <div className="px-3 py-1 bg-gray-50 text-sm text-muted font-heading uppercase">Lavička</div>
+                    {data.subs.map((p, i) => (
+                      <div key={`s${i}`} className="flex items-center gap-2 px-3 py-1 border-b border-gray-50 last:border-b-0 text-muted">
+                        <span className="text-sm tabular-nums w-5 text-right">{12 + i}</span>
+                        <span className="text-sm font-heading font-bold">{p.position}</span>
+                        <span className="text-sm font-heading flex-1">{p.name}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }

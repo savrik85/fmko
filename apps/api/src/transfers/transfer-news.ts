@@ -2,6 +2,7 @@
  * Zpravodajské články o přestupech — generuje české texty s okresním humorem.
  */
 
+import { logger } from "../lib/logger";
 import type { Rng } from "../generators/rng";
 
 const HUMOR = [
@@ -75,5 +76,5 @@ export async function createTransferNews(
   const id = crypto.randomUUID();
   await db.prepare(
     "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'transfer', ?, ?, datetime('now'))"
-  ).bind(id, leagueId, teamId, headline, body).run().catch(() => {});
+  ).bind(id, leagueId, teamId, headline, body).run().catch((e) => logger.warn({ module: "transfer-news" }, "insert news", e));
 }

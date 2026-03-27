@@ -6,6 +6,7 @@
 import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
 import { simulateTraining } from "./training";
+import { logger } from "../lib/logger";
 
 export interface DailyTickEvent {
   type: "training" | "recovery" | "injury_healed" | "pitch" | "morale" | "match" | "day";
@@ -77,7 +78,7 @@ export async function executeDailyTick(
 
         const { calculateEffects } = await import("../equipment/equipment-generator");
         const equip = await env.DB.prepare("SELECT * FROM equipment WHERE team_id = ?")
-          .bind(teamId).first<Record<string, unknown>>().catch(() => null);
+          .bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "daily-tick" }, "fetch equipment", e); return null; });
 
         let equipMul = 1.0;
         if (equip) {
@@ -153,17 +154,17 @@ export async function executeDailyTick(
           // Log to training_log
           await env.DB.prepare(
             "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-          ).bind(playerId, teamId, imp.attribute, oldValue, newValue, imp.change, (team.training_type as string) ?? "conditioning", now.toISOString()).run().catch(() => {});
+          ).bind(playerId, teamId, imp.attribute, oldValue, newValue, imp.change, (team.training_type as string) ?? "conditioning", now.toISOString()).run().catch((e) => logger.warn({ module: "daily-tick" }, "insert training log", e));
         }
 
-        // Training drains condition for attending players (-5 to -15 based on training type)
-        const condDrain = (team.training_type as string) === "conditioning" ? 15 : 8;
+        // Training drains condition for attending players (-3 to -8 based on training type)
+        const condDrain = (team.training_type as string) === "conditioning" ? 8 : 3;
         for (const a of result.attendance) {
           if (a.attended) {
             const playerId = playersResult.results[a.playerIndex].id as string;
             await env.DB.prepare(
               `UPDATE players SET life_context = json_set(life_context, '$.condition', MAX(5, json_extract(life_context, '$.condition') - ?)) WHERE id = ?`
-            ).bind(condDrain, playerId).run().catch(() => {});
+            ).bind(condDrain, playerId).run().catch((e) => logger.warn({ module: "daily-tick" }, "drain condition after training", e));
           }
         }
 
@@ -173,7 +174,7 @@ export async function executeDailyTick(
           data: summary,
         });
       } catch (e) {
-        console.error(`[DailyTick] Training failed for team ${teamId}:`, e);
+        logger.error({ module: "daily-tick" }, `training failed for team ${teamId}`, e);
       }
     }
   }
@@ -194,7 +195,7 @@ export async function executeDailyTick(
     // Only degrade items with level > 0, by 1 point/day (50% chance)
     await env.DB.prepare(
       `UPDATE equipment SET ${cat}_condition = MAX(5, ${cat}_condition - 1) WHERE ${cat} > 0 AND (ABS(RANDOM()) % 2 = 0)`
-    ).run().catch(() => {});
+    ).run().catch((e) => logger.warn({ module: "daily-tick" }, "equipment condition degradation", e));
   }
 
   // Injury recovery
@@ -203,7 +204,7 @@ export async function executeDailyTick(
   ).run();
   const healed = await env.DB.prepare(
     "SELECT p.first_name, p.last_name FROM injuries i JOIN players p ON i.player_id = p.id WHERE i.days_remaining <= 0"
-  ).all().catch(() => ({ results: [] }));
+  ).all().catch((e) => { logger.warn({ module: "daily-tick" }, "fetch healed injuries", e); return { results: [] }; });
   await env.DB.prepare("DELETE FROM injuries WHERE days_remaining <= 0").run();
 
   if (healed.results.length > 0) {
@@ -248,7 +249,7 @@ export async function executeDailyTick(
       }
     }
   } catch (e) {
-    console.error("[DailyTick] Shower bonus failed:", e);
+    logger.error({ module: "daily-tick" }, "shower bonus failed", e);
   }
 
   // Morale drift toward 50
@@ -262,6 +263,7 @@ export async function executeDailyTick(
   ).run();
   events.push({ type: "morale", description: "Morálka se stabilizuje" });
 
+  logger.info({ module: "daily-tick" }, "reached game date advancement section");
   // ── Advance game date for ALL teams (including AI) ──
   const allTeams = await env.DB.prepare(
     "SELECT t.id, t.league_id, t.game_date, t.training_type, t.training_sessions, v.size as village_size FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
@@ -286,7 +288,7 @@ export async function executeDailyTick(
           const { processWeeklyFinances } = await import("./finance-processor");
           await processWeeklyFinances(env.DB, teamId, newGameDate, (team.village_size as string) ?? "village");
         } catch (e) {
-          console.error(`[DailyTick] Weekly finances failed for team ${teamId}:`, e);
+          logger.error({ module: "daily-tick" }, `weekly finances failed for team ${teamId}`, e);
         }
       }
 
@@ -303,7 +305,7 @@ export async function executeDailyTick(
             const { processTrainingCost } = await import("./finance-processor");
             await processTrainingCost(env.DB, teamId, newGameDate, (team.village_size as string) ?? "village");
           } catch (e) {
-            console.error(`[DailyTick] Training cost failed for team ${teamId}:`, e);
+            logger.error({ module: "daily-tick" }, `training cost failed for team ${teamId}`, e);
           }
         }
       }
@@ -312,12 +314,12 @@ export async function executeDailyTick(
       const leagueId = team.league_id as string | null;
 
       if (leagueId) {
-        const dayStart = new Date(gd); dayStart.setUTCHours(0, 0, 0, 0);
         const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
 
+        // Find ANY scheduled match up to current game date (catches overdue ones too)
         const matchCal = await env.DB.prepare(
-          "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled'"
-        ).bind(leagueId, dayStart.toISOString(), dayEnd.toISOString()).first<{ id: string }>();
+          "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
+        ).bind(leagueId, dayEnd.toISOString()).first<{ id: string }>();
 
         if (matchCal) {
           try {
@@ -327,7 +329,9 @@ export async function executeDailyTick(
             ).bind(matchCal.id).run();
 
             const { runScheduledMatches } = await import("../multiplayer/match-runner");
+            logger.info({ module: "daily-tick" }, `running matches for calendar ${matchCal.id}`);
             const results = await runScheduledMatches(env.DB, matchCal.id);
+            logger.info({ module: "daily-tick" }, `match results: ${results.length} matches`);
             await env.DB.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
               .bind(matchCal.id).run();
             events.push({ type: "match", description: `Zápasový den! ${results.length} zápasů odsimulováno.` });
@@ -365,11 +369,11 @@ export async function executeDailyTick(
                   "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, datetime('now'))"
                 ).bind(newsId, leagueId, headline, body, gameWeek).run();
               } catch (e) {
-                console.error("[DailyTick] News generation failed:", e);
+                logger.error({ module: "daily-tick" }, "news generation failed", e);
               }
             }
           } catch (e) {
-            console.error(`[DailyTick] Match sim failed:`, e);
+            logger.error({ module: "daily-tick" }, "match sim failed", e);
           }
         }
       }
@@ -385,7 +389,7 @@ export async function executeDailyTick(
       events.push({ type: "day", description: `${newFa} nových volných hráčů v okresu` });
     }
   } catch (e) {
-    console.error("[DailyTick] Free agent pool failed:", e);
+    logger.error({ module: "daily-tick" }, "free agent pool failed", e);
   }
 
   // ── Player quitting check ──
@@ -393,7 +397,7 @@ export async function executeDailyTick(
     const quitRng = createRng(now.getTime() + 9999);
     const activePlayers = await env.DB.prepare(
       "SELECT p.id, p.first_name, p.last_name, p.age, p.personality, p.life_context, t.name as team_name, t.league_id FROM players p JOIN teams t ON p.team_id = t.id WHERE p.status = 'active' AND t.user_id != 'ai'"
-    ).all().catch(() => ({ results: [] }));
+    ).all().catch((e) => { logger.warn({ module: "daily-tick" }, "fetch active players for quit check", e); return { results: [] }; });
 
     for (const row of activePlayers.results) {
       const personality = (() => { try { return JSON.parse(row.personality as string); } catch { return {}; } })();
@@ -413,11 +417,11 @@ export async function executeDailyTick(
           playerPosition: "",
           teamName: row.team_name as string,
           reason: quitRng.random() < 0.5 ? "Prý ho to nebaví." : "Spoluhráči říkají, že má jiné priority.",
-        }).catch(() => {});
+        }).catch((e) => logger.warn({ module: "daily-tick" }, "player quit news", e));
       }
     }
   } catch (e) {
-    console.error("[DailyTick] Player quit check failed:", e);
+    logger.error({ module: "daily-tick" }, "player quit check failed", e);
   }
 
   // ── Transfer expiry cleanup ──
@@ -427,9 +431,9 @@ export async function executeDailyTick(
     await env.DB.prepare("UPDATE transfer_listings SET status = 'expired' WHERE status = 'active' AND expires_at < ?")
       .bind(now.toISOString()).run();
     await env.DB.prepare("UPDATE transfer_bids SET status = 'withdrawn' WHERE status = 'pending' AND listing_id IN (SELECT id FROM transfer_listings WHERE status != 'active')")
-      .run().catch(() => {});
+      .run().catch((e) => logger.warn({ module: "daily-tick" }, "withdraw bids for expired listings", e));
   } catch (e) {
-    console.error("[DailyTick] Transfer expiry failed:", e);
+    logger.error({ module: "daily-tick" }, "transfer expiry failed", e);
   }
 
   return { date: now.toISOString(), dayOfWeek, isTrainingDay, events };

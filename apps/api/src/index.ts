@@ -22,6 +22,22 @@ const app = new Hono<{ Bindings: Bindings }>();
 
 app.use("*", cors({ origin: "*" }));
 
+// Global error handler — structured JSON logging
+app.onError((err, c) => {
+  const reqId = crypto.randomUUID().slice(0, 8);
+  const entry = {
+    ts: new Date().toISOString(),
+    level: "error",
+    mod: "api",
+    msg: `${c.req.method} ${c.req.url}`,
+    err: err.message,
+    stack: err.stack?.split("\n").slice(0, 4).join(" | "),
+    reqId,
+  };
+  console.error(JSON.stringify(entry));
+  return c.json({ error: err.message, reqId }, 500);
+});
+
 app.get("/", (c) => c.json({ name: "Prales API", version: "0.2.0" }));
 app.get("/health", (c) => c.json({ status: "ok" }));
 
@@ -63,11 +79,15 @@ export default {
       }
     }
 
-    // Daily tick: 4:00 CET (3:00 UTC)
-    if (cron === "0 3 * * *") {
+    // Daily tick: 4:00 CET (3:00 UTC) — or manual trigger (empty cron)
+    if (cron === "0 3 * * *" || !cron) {
       console.log("[Cron] Running daily tick...");
-      const result = await executeDailyTick(env);
-      console.log(`[Cron] Daily tick done: ${result.events.length} events, training=${result.isTrainingDay}`);
+      try {
+        const result = await executeDailyTick(env);
+        console.log(`[Cron] Daily tick done: ${result.events.length} events, training=${result.isTrainingDay}`);
+      } catch (e) {
+        console.error("[Cron] Daily tick failed:", e);
+      }
     }
   },
 };

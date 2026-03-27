@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Player } from "@/lib/api";
 import { Spinner, SectionLabel, PositionBadge, useConfirm } from "@/components/ui";
+import { PlayerRevealCard } from "@/components/players/reveal-card";
 
 type Tab = "free_agents" | "market" | "offers" | "squad";
 
@@ -37,7 +38,7 @@ interface TransferOffer {
 }
 
 export default function TransfersPage() {
-  const { teamId } = useTeam();
+  const { teamId, primaryColor } = useTeam();
   const [tab, setTab] = useState<Tab>("free_agents");
   const [loading, setLoading] = useState(true);
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -54,6 +55,8 @@ export default function TransfersPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   // Price dialog
   const [priceDialog, setPriceDialog] = useState<{ title: string; description: string; defaultPrice: number; onConfirm: (price: number) => void } | null>(null);
+  // Player reveal
+  const [revealPlayer, setRevealPlayer] = useState<Player | null>(null);
 
   const refresh = async () => {
     if (!teamId) return;
@@ -89,6 +92,28 @@ export default function TransfersPage() {
     <div className="page-container space-y-5">
       {confirmDialog}
       {priceDialog && <PriceDialog {...priceDialog} onClose={() => setPriceDialog(null)} />}
+
+      {/* Player reveal overlay */}
+      {revealPlayer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setRevealPlayer(null)}>
+          <div className="w-[320px]" onClick={(e) => e.stopPropagation()}>
+            <PlayerRevealCard
+              player={revealPlayer}
+              teamColor={primaryColor || "#2D5F2D"}
+              delay={300}
+              onRevealed={() => {
+                setTimeout(() => {
+                  // Auto-close after 3s
+                }, 3000);
+              }}
+            />
+            <button onClick={() => setRevealPlayer(null)}
+              className="w-full mt-4 py-3 rounded-xl font-heading font-bold text-white bg-white/10 hover:bg-white/20 transition-colors text-base">
+              Pokračovat
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="flex gap-1 bg-surface rounded-xl p-1">
@@ -143,16 +168,20 @@ export default function TransfersPage() {
                           confirmLabel: "Podepsat",
                         });
                         if (!ok || !teamId) return;
-                        const res = await apiFetch<{ success: boolean; decision: { accepted: boolean; probability: number; explanation: string } }>(
+                        const res = await apiFetch<{ success: boolean; decision: { accepted: boolean; probability: number; explanation: string }; player?: Player }>(
                           `/api/teams/${teamId}/free-agents/${fa.id}/sign`,
                           { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offeredWage: fa.weeklyWage }) },
                         ).catch(() => null);
                         if (res) {
-                          await confirm({
-                            title: res.success ? "Podepsáno!" : "Odmítl",
-                            description: res.decision.explanation,
-                            confirmLabel: "OK",
-                          });
+                          if (res.success && res.player) {
+                            setRevealPlayer(res.player);
+                          } else {
+                            await confirm({
+                              title: "Odmítl",
+                              description: res.decision.explanation,
+                              confirmLabel: "OK",
+                            });
+                          }
                           await refresh();
                         }
                       }}

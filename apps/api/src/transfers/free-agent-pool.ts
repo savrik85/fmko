@@ -3,6 +3,7 @@
  * Voláno z daily-tick.
  */
 
+import { logger } from "../lib/logger";
 import type { Rng } from "../generators/rng";
 import { generatePlayer, type VillageInfo } from "../generators/player";
 import { getDistrictDataFromDB } from "../data/districts";
@@ -30,12 +31,12 @@ export async function maintainFreeAgentPool(
 ): Promise<number> {
   // 1. Expire old free agents
   await db.prepare("DELETE FROM free_agents WHERE expires_at < ?")
-    .bind(gameDate.toISOString()).run().catch(() => {});
+    .bind(gameDate.toISOString()).run().catch((e) => logger.warn({ module: "free-agent-pool" }, "expire/insert", e));
 
   // 2. Find districts with active human teams
   const districts = await db.prepare(
     "SELECT DISTINCT v.district, v.id as village_id, v.population, v.category, v.latitude, v.longitude FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id != 'ai'"
-  ).all().catch(() => ({ results: [] }));
+  ).all().catch((e) => { logger.warn({ module: "free-agent-pool" }, "query", e); return { results: [] }; });
 
   let generated = 0;
 
@@ -45,7 +46,7 @@ export async function maintainFreeAgentPool(
     // Check current pool size for this district
     const poolCount = await db.prepare(
       "SELECT COUNT(*) as cnt FROM free_agents WHERE district = ?"
-    ).bind(district).first<{ cnt: number }>().catch(() => ({ cnt: 0 }));
+    ).bind(district).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "free-agent-pool" }, "count pool", e); return { cnt: 0 }; });
 
     // Max 8 free agents per district, generate 0-2 per day
     if ((poolCount?.cnt ?? 0) >= 8) continue;
@@ -65,7 +66,7 @@ export async function maintainFreeAgentPool(
     // Pick random villages from the district for residence
     const nearbyVillages = await db.prepare(
       "SELECT id, latitude, longitude FROM villages WHERE district = ? ORDER BY RANDOM() LIMIT 10"
-    ).bind(district).all().catch(() => ({ results: [] }));
+    ).bind(district).all().catch((e) => { logger.warn({ module: "free-agent-pool" }, "query", e); return { results: [] }; });
 
     for (let i = 0; i < count; i++) {
       const pos = rng.pick([...POSITIONS]);

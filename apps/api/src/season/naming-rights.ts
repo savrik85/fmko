@@ -1,3 +1,4 @@
+import { logger } from "../lib/logger";
 /**
  * FMK-43: Naming rights — sponzorský název klubu a hřiště.
  *
@@ -83,12 +84,12 @@ export async function generateNamingOffers(
   if (db && district) {
     const sponsorRows = await db.prepare(
       "SELECT name, type, monthly_min, monthly_max FROM district_sponsors WHERE district = ? ORDER BY RANDOM() LIMIT ?"
-    ).bind(district, count + 2).all().catch(() => ({ results: [] }));
+    ).bind(district, count + 2).all().catch((e) => { logger.warn({ module: "naming-rights" }, "query", e); return { results: [] }; });
     realSponsors = sponsorRows.results as any[];
 
     const surnameRows = await db.prepare(
       "SELECT surname FROM district_surnames WHERE district = ? ORDER BY frequency DESC LIMIT 20"
-    ).bind(district).all().catch(() => ({ results: [] }));
+    ).bind(district).all().catch((e) => { logger.warn({ module: "naming-rights" }, "query", e); return { results: [] }; });
     realSurnames = surnameRows.results.map((r) => r.surname as string);
   }
 

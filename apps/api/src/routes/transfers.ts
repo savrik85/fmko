@@ -8,6 +8,7 @@ import { recordTransaction } from "../season/finance-processor";
 import { createTransferNews } from "../transfers/transfer-news";
 import { evaluateSigningChance, haversineKm } from "../transfers/player-agency";
 import { createRng } from "../generators/rng";
+import { logger } from "../lib/logger";
 
 const transfersRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -41,11 +42,11 @@ transfersRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   // Update contract
   await c.env.DB.prepare(
     "UPDATE player_contracts SET leave_type = 'released', is_active = 0, left_at = datetime('now') WHERE player_id = ? AND team_id = ? AND is_active = 1"
-  ).bind(playerId, teamId).run().catch(() => {});
+  ).bind(playerId, teamId).run().catch((e) => logger.warn({ module: "transfers" }, "update contract on release", e));
 
   // Remove from listings/offers
-  await c.env.DB.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE player_id = ? AND status = 'active'").bind(playerId).run().catch(() => {});
-  await c.env.DB.prepare("UPDATE transfer_offers SET status = 'withdrawn' WHERE player_id = ? AND status = 'pending'").bind(playerId).run().catch(() => {});
+  await c.env.DB.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE player_id = ? AND status = 'active'").bind(playerId).run().catch((e) => logger.warn({ module: "transfers" }, "withdraw listings on release", e));
+  await c.env.DB.prepare("UPDATE transfer_offers SET status = 'withdrawn' WHERE player_id = ? AND status = 'pending'").bind(playerId).run().catch((e) => logger.warn({ module: "transfers" }, "withdraw offers on release", e));
 
   // Delete player
   await c.env.DB.prepare("DELETE FROM players WHERE id = ?").bind(playerId).run();
@@ -118,7 +119,7 @@ transfersRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   let agentVillage: { latitude: number; longitude: number } | null = null;
   if (fa.village_id) {
     agentVillage = await c.env.DB.prepare("SELECT latitude, longitude FROM villages WHERE id = ?")
-      .bind(fa.village_id).first<{ latitude: number; longitude: number }>().catch(() => null);
+      .bind(fa.village_id).first<{ latitude: number; longitude: number }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch agent village coords", e); return null; });
   }
 
   // Count squad
@@ -143,7 +144,7 @@ transfersRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
       playerAge: fa.age as number,
       playerPosition: fa.position as string,
       teamName: team.name as string,
-    }).catch(() => {});
+    }).catch((e) => logger.warn({ module: "transfers" }, "news for failed signing", e));
     return c.json({ success: false, decision });
   }
 
@@ -161,11 +162,11 @@ transfersRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
 
   // Create contract
   const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
-    .first<{ id: string }>().catch(() => null);
+    .first<{ id: string }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch active season for signing", e); return null; });
   const contractId = crypto.randomUUID();
   await c.env.DB.prepare(
     "INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'free_agent', 0, 1)"
-  ).bind(contractId, playerId, teamId, season?.id ?? "unknown").run().catch(() => {});
+  ).bind(contractId, playerId, teamId, season?.id ?? "unknown").run().catch((e) => logger.warn({ module: "transfers" }, "insert contract for signing", e));
 
   // Signing fee (registration)
   const signingFee = 500;
@@ -225,7 +226,7 @@ transfersRouter.delete("/teams/:teamId/listings/:listingId", async (c) => {
     .bind(listingId, teamId).run();
   // Also reject all pending bids
   await c.env.DB.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE listing_id = ? AND status = 'pending'")
-    .bind(listingId).run().catch(() => {});
+    .bind(listingId).run().catch((e) => logger.warn({ module: "transfers" }, "reject bids on listing withdrawal", e));
   return c.json({ ok: true });
 });
 
@@ -261,7 +262,7 @@ transfersRouter.get("/teams/:teamId/market", async (c) => {
     const bidsResult = await c.env.DB.prepare(
       `SELECT tb.*, t.name as bidder_name FROM transfer_bids tb JOIN teams t ON tb.team_id = t.id
        WHERE tb.listing_id IN (${myListingIds.map(() => "?").join(",")}) AND tb.status = 'pending'`
-    ).bind(...myListingIds).all().catch(() => ({ results: [] }));
+    ).bind(...myListingIds).all().catch((e) => { logger.warn({ module: "transfers" }, "fetch bids on my listings", e); return { results: [] }; });
     bids = bidsResult.results;
   }
 
@@ -338,16 +339,16 @@ transfersRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
 
   // Contracts
   await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = datetime('now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
-    .bind(playerId, teamId).run().catch(() => {});
-  const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch(() => null);
+    .bind(playerId, teamId).run().catch((e) => logger.warn({ module: "transfers" }, "deactivate seller contract on bid accept", e));
+  const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch active season for bid accept", e); return null; });
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
-    .bind(crypto.randomUUID(), playerId, buyerTeamId, season?.id ?? "unknown", amount).run().catch(() => {});
+    .bind(crypto.randomUUID(), playerId, buyerTeamId, season?.id ?? "unknown", amount).run().catch((e) => logger.warn({ module: "transfers" }, "insert buyer contract on bid accept", e));
 
   // Update listing + bids
   await c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE id = ?").bind(bid.listing_id).run();
   await c.env.DB.prepare("UPDATE transfer_bids SET status = 'accepted' WHERE id = ?").bind(bidId).run();
   await c.env.DB.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE listing_id = ? AND id != ? AND status = 'pending'")
-    .bind(bid.listing_id, bidId).run().catch(() => {});
+    .bind(bid.listing_id, bidId).run().catch((e) => logger.warn({ module: "transfers" }, "reject other bids on accept", e));
 
   // News
   await createTransferNews(c.env.DB, seller?.league_id ?? "", null, "transfer_completed", {
@@ -446,14 +447,14 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
 
   // Contracts
   await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = datetime('now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
-    .bind(playerId, teamId).run().catch(() => {});
-  const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch(() => null);
+    .bind(playerId, teamId).run().catch((e) => logger.warn({ module: "transfers" }, "deactivate seller contract on offer accept", e));
+  const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch active season for offer accept", e); return null; });
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
-    .bind(crypto.randomUUID(), playerId, buyerTeamId, season?.id ?? "unknown", amount).run().catch(() => {});
+    .bind(crypto.randomUUID(), playerId, buyerTeamId, season?.id ?? "unknown", amount).run().catch((e) => logger.warn({ module: "transfers" }, "insert buyer contract on offer accept", e));
 
   // Update offer + any listings
   await c.env.DB.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = datetime('now') WHERE id = ?").bind(offerId).run();
-  await c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE player_id = ? AND status = 'active'").bind(playerId).run().catch(() => {});
+  await c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE player_id = ? AND status = 'active'").bind(playerId).run().catch((e) => logger.warn({ module: "transfers" }, "mark listings sold on offer accept", e));
 
   // News
   await createTransferNews(c.env.DB, seller?.league_id ?? "", null, "transfer_completed", {
@@ -472,7 +473,7 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
 transfersRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
-  const body = await c.req.json<{ message?: string }>().catch(() => ({}));
+  const body = await c.req.json<{ message?: string }>().catch((e) => { logger.warn({ module: "transfers" }, "parse reject body", e); return {}; });
   await c.env.DB.prepare(
     "UPDATE transfer_offers SET status = 'rejected', reject_message = ?, resolved_at = datetime('now') WHERE id = ? AND to_team_id = ?"
   ).bind((body as { message?: string }).message ?? null, offerId, teamId).run();

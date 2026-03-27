@@ -1,3 +1,4 @@
+import { logger } from "../lib/logger";
 /**
  * FMK-34: Komentářový systém — šablony z DB ve stylu obecního rozhlasu.
  */
@@ -12,8 +13,8 @@ let cachedReactions: string[] | null = null;
 async function loadTemplates(db: D1Database) {
   if (cachedTemplates) return;
   const [tRes, rRes] = await Promise.all([
-    db.prepare("SELECT event_type, template, tags FROM commentary_templates").all().catch(() => ({ results: [] })),
-    db.prepare("SELECT text FROM crowd_reactions").all().catch(() => ({ results: [] })),
+    db.prepare("SELECT event_type, template, tags FROM commentary_templates").all().catch((e) => { logger.warn({ module: "commentary" }, "load templates", e); return { results: [] }; }),
+    db.prepare("SELECT text FROM crowd_reactions").all().catch((e) => { logger.warn({ module: "commentary" }, "load templates", e); return { results: [] }; }),
   ]);
   cachedTemplates = tRes.results.map((r) => ({
     event_type: r.event_type as string,

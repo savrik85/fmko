@@ -4,6 +4,7 @@
 
 import { Hono } from "hono";
 import type { Bindings } from "../index";
+import { logger } from "../lib/logger";
 
 const leagueRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -22,7 +23,7 @@ leagueRouter.get("/teams/:teamId/standings", async (c) => {
   // Get league + season info
   const leagueInfo = await c.env.DB.prepare(
     "SELECT l.name, l.level, s.number as season_number FROM leagues l JOIN seasons s ON l.season_id = s.id WHERE l.id = ?"
-  ).bind(leagueId).first<{ name: string; level: string; season_number: number }>().catch(() => null);
+  ).bind(leagueId).first<{ name: string; level: string; season_number: number }>().catch((e) => { logger.warn({ module: "league" }, "fetch league info", e); return null; });
 
   // Get all teams in league
   const leagueTeams = await c.env.DB.prepare(
@@ -42,7 +43,7 @@ leagueRouter.get("/teams/:teamId/standings", async (c) => {
   const placeholders = teamIds.map(() => "?").join(",");
   const matches = await c.env.DB.prepare(
     `SELECT * FROM matches WHERE status = 'simulated' AND (home_team_id IN (${placeholders}) OR away_team_id IN (${placeholders}))`
-  ).bind(...teamIds, ...teamIds).all().catch(() => ({ results: [] }));
+  ).bind(...teamIds, ...teamIds).all().catch((e) => { logger.warn({ module: "league" }, "fetch simulated matches", e); return { results: [] }; });
 
   // Calculate standings
   const stats: Record<string, { wins: number; draws: number; losses: number; gf: number; ga: number; form: string[] }> = {};
@@ -136,7 +137,7 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
   // Get active season
   const season = await c.env.DB.prepare(
     "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
-  ).first<{ id: string }>().catch(() => null);
+  ).first<{ id: string }>().catch((e) => { logger.warn({ module: "league" }, "fetch active season for stats", e); return null; });
   const seasonId = season?.id ?? "season-1";
 
   const stats = await c.env.DB.prepare(
@@ -149,7 +150,7 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
      JOIN teams t ON ps.team_id = t.id
      WHERE ps.season_id = ? AND t.league_id = ?
      ORDER BY ps.goals DESC, ps.assists DESC`
-  ).bind(seasonId, team.league_id).all().catch((e) => { console.error("[league-stats]", e); return { results: [] }; });
+  ).bind(seasonId, team.league_id).all().catch((e) => { logger.error({ module: "league" }, "fetch league stats", e); return { results: [] }; });
 
   const rows = stats.results.map((r) => ({
     playerId: r.player_id as string,

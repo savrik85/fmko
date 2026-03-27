@@ -78,6 +78,11 @@ export default function DashboardPage() {
       apiFetch<ManagerProfile>(`/api/teams/${teamId}/manager`).catch(() => null),
       apiFetch<TeamMatchResults>(`/api/teams/${teamId}/match-results`).catch(() => null),
     ]).then(([t, p, s, m, u, mgr, mr]) => {
+      // Redirect to match-day page BEFORE setting state
+      if (u && u.matchId) {
+        window.location.href = `/match-day/${u.matchId}`;
+        return; // don't set state, page is redirecting
+      }
       setTeam(t);
       setPlayers(p);
       setStandings(s.standings);
@@ -89,12 +94,6 @@ export default function DashboardPage() {
     }).catch(() => setLoading(false));
   }, [teamId]);
 
-  // Unseen match → redirect to match-day page
-  useEffect(() => {
-    if (unseen) {
-      router.push(`/dashboard/match-day/${unseen.matchId}`);
-    }
-  }, [unseen, router]);
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
   if (!team) return <div className="page-container">Tým nenalezen.</div>;

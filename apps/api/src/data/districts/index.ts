@@ -1,3 +1,4 @@
+import { logger } from "../../lib/logger";
 /**
  * District data — loads surnames + sponsors from DB.
  * Fallback na generická data pokud okres nemá záznamy v DB.
@@ -45,12 +46,12 @@ export async function getDistrictDataFromDB(db: D1Database, district: string): P
   // Load surnames
   const surnameRows = await db.prepare(
     "SELECT surname, frequency FROM district_surnames WHERE district = ? ORDER BY frequency DESC"
-  ).bind(district).all().catch(() => ({ results: [] }));
+  ).bind(district).all().catch((e) => { logger.warn({ module: "districts" }, "query", e); return { results: [] }; });
 
   // Load sponsors
   const sponsorRows = await db.prepare(
     "SELECT name, type, monthly_min, monthly_max, win_bonus_min, win_bonus_max FROM district_sponsors WHERE district = ?"
-  ).bind(district).all().catch(() => ({ results: [] }));
+  ).bind(district).all().catch((e) => { logger.warn({ module: "districts" }, "query", e); return { results: [] }; });
 
   const surnames: Record<string, number> = {};
   if (surnameRows.results.length > 0) {

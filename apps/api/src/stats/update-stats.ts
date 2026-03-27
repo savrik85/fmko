@@ -1,3 +1,4 @@
+import { logger } from "../lib/logger";
 /**
  * Aktualizace hráčských statistik po odehraném zápase.
  * Projde match events a inkrementuje goals/assists/cards v player_stats.
@@ -128,7 +129,7 @@ export async function saveMatchPlayerStats(
       crypto.randomUUID(), matchId, e.playerId, e.teamId,
       e.started ? 1 : 0, e.position, e.minutesPlayed,
       e.goals, e.assists, e.yellowCards, e.redCards, e.rating,
-    ).run().catch(() => {});
+    ).run().catch((e) => logger.warn({ module: "stats" }, "upsert stats", e));
   }
 }
 
@@ -225,6 +226,6 @@ export async function updatePlayerStats(
       u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0,
       // ON CONFLICT values:
       u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0,
-    ).run().catch(() => {});
+    ).run().catch((e) => logger.warn({ module: "stats" }, "upsert stats", e));
   }
 }

@@ -2,14 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview } from "@/components/ui";
+import { Spinner, SectionLabel, BadgePreview, PositionBadge } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface MatchEvent {
   minute: number; type: string; playerId: number; playerName: string;
   teamId: number; description: string; detail?: string;
 }
+
+interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number }
+interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[] }
 
 interface MatchDetail {
   id: string; home_team_id: string; away_team_id: string;
@@ -19,6 +23,7 @@ interface MatchDetail {
   events: MatchEvent[]; commentary: string[]; simulated_at: string | null;
   attendance: number | null; stadium_name: string | null;
   pitch_condition: number | null; weather: string | null;
+  home_lineup_data: LineupData | null; away_lineup_data: LineupData | null;
 }
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
@@ -146,6 +151,60 @@ export default function MatchDetailPage() {
           <StatBar label="Karty" home={st.cards[0]} away={st.cards[1]} hc={hc} ac={ac} />
         </div>
       </div>
+
+      {/* ═══ LINEUPS ═══ */}
+      {(match.home_lineup_data || match.away_lineup_data) && (
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: match.home_name, data: match.home_lineup_data, color: hc },
+            { label: match.away_name, data: match.away_lineup_data, color: ac },
+          ].map(({ label, data, color }) => data && (
+            <div key={label} className="card overflow-hidden">
+              <div className="px-3 py-2 border-b border-gray-100" style={{ backgroundColor: `color-mix(in srgb, ${color} 10%, white)` }}>
+                <span className="font-heading font-bold text-sm">{label}</span>
+              </div>
+              <table className="w-full text-sm">
+                <tbody>
+                  {data.starters.map((p, i) => (
+                    <tr key={i} className="border-b border-gray-50 last:border-b-0">
+                      <td className="py-1.5 pl-3 w-6 text-center text-sm text-muted tabular-nums">{i + 1}</td>
+                      <td className="py-1.5 px-1.5">
+                        <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
+                      </td>
+                      <td className="py-1.5 px-1.5">
+                        {p.id ? (
+                          <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
+                        ) : (
+                          <span className="font-heading font-bold">{p.name}</span>
+                        )}
+                        {p.position !== p.naturalPosition && <span className="text-gold-500 text-sm ml-1">⚠️</span>}
+                      </td>
+                    </tr>
+                  ))}
+                  {data.subs.length > 0 && (
+                    <tr className="bg-gray-50/50">
+                      <td colSpan={3} className="py-1 pl-3 text-sm text-muted font-heading uppercase">Lavička</td>
+                    </tr>
+                  )}
+                  {data.subs.map((p, i) => (
+                    <tr key={`s${i}`} className="border-b border-gray-50 last:border-b-0 text-muted">
+                      <td className="py-1 pl-3 w-6 text-center text-sm tabular-nums">{12 + i}</td>
+                      <td className="py-1 px-1.5"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></td>
+                      <td className="py-1 px-1.5">
+                        {p.id ? (
+                          <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
+                        ) : (
+                          <span className="font-heading font-bold">{p.name}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ═══ GOALS ═══ */}
       {goals.length > 0 && (

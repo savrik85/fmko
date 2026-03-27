@@ -77,7 +77,20 @@
       "Bash(find /Users/savrik/Projects/fmko/apps/api -type f \\\\\\(-name *.sql -o -name *schema* \\\\\\))",
       "WebFetch(domain:community.sports-interactive.com)",
       "WebFetch(domain:dribbble.com)",
-      "Bash(TEAM=acc0bd5a-3c7c-4b57-9604-cb2ee11bc739)"
+      "Bash(TEAM=acc0bd5a-3c7c-4b57-9604-cb2ee11bc739)",
+      "Bash(mkdir -p /Users/savrik/Projects/fmko/apps/web/src/app/match-day/[id])",
+      "Bash(mv /Users/savrik/Projects/fmko/apps/web/src/app/dashboard/match-day/[id]/page.tsx /Users/savrik/Projects/fmko/apps/web/src/app/match-day/[id]/page.tsx)",
+      "Bash(1 echo:*)",
+      "Bash(npx wrangler d1 execute okresni-masina-db --local --json --command \":*)",
+      "Bash(TABLES=\"users teams players managers equipment stadiums seasons leagues season_calendar matches lineups player_stats match_player_stats player_contracts injuries relationships conversations messages chat_messages news notifications sponsor_contracts classifieds transactions training_log transfer_offers transfer_listings transfer_bids free_agents challenges cups cup_entries seasonal_events league_history\")",
+      "Bash(__NEW_LINE_e7b3b27eb1020d13__ for:*)",
+      "Bash(do)",
+      "Bash(DB=\"/Users/savrik/Projects/fmko/apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/2b35d4d42e3c9f6b5ad5b5579a7b1470c66e69f6b33a31e3f5a0095cc6d18656.sqlite\" sqlite3 \"$DB\" \"SELECT sql FROM sqlite_master WHERE name=''''teams'''';\")",
+      "Bash(DB=\"/Users/savrik/Projects/fmko/apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/2b35d4d42e3c9f6b5ad5b5579a7b1470c66e69f6b33a31e3f5a0095cc6d18656.sqlite\" sqlite3 \"$DB\" \"SELECT sql FROM sqlite_master WHERE name=''''players'''';\")",
+      "Bash(DB=\"/Users/savrik/Projects/fmko/apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/2b35d4d42e3c9f6b5ad5b5579a7b1470c66e69f6b33a31e3f5a0095cc6d18656.sqlite\" sqlite3 \"$DB\" \"SELECT sql FROM sqlite_master WHERE name=''''matches'''';\")",
+      "Bash(echo \"=== .catch\\(\\(\\) => {}\\) counts by file ===\")",
+      "Bash(sort -t: -k2 -rn)",
+      "Bash(echo \"=== .catch\\(\\(\\) => null\\) counts by file ===\")"
     ]
   }
 }

@@ -1,3 +1,4 @@
+import { logger } from "../lib/logger";
 /**
  * Centrální finanční procesor — jediný způsob jak měnit rozpočet týmu.
  * Každá změna se zaznamená do transaction ledgeru.
@@ -171,7 +172,7 @@ export async function processMatchDayFinances(
   // Load stadium facility effects
   const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
   const stadiumRow = await db.prepare("SELECT * FROM stadiums WHERE team_id = ?")
-    .bind(teamId).first<Record<string, unknown>>().catch(() => null);
+    .bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "finance" }, "query", e); return null; });
   const facilities: Record<string, number> = {};
   if (stadiumRow) {
     for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "parking", "fence"]) {
@@ -218,7 +219,7 @@ export async function processMatchDayFinances(
   // Match result reward
   const sponsors = await db.prepare(
     "SELECT monthly_amount, win_bonus FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
-  ).bind(teamId).all().catch(() => ({ results: [] }));
+  ).bind(teamId).all().catch((e) => { logger.warn({ module: "finance" }, "query sponsors", e); return { results: [] }; });
 
   const sponsorBonus = result === "win"
     ? sponsors.results.reduce((s, sp) => s + ((sp.win_bonus as number) ?? 0), 0)

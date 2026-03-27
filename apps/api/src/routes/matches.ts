@@ -12,6 +12,7 @@ import type { GeneratedPlayer } from "../generators/player";
 import type { TeamSetup, Tactic, Weather } from "../engine/types";
 import { extractStatsFromEvents, updatePlayerStats, calculatePlayerRatings, saveMatchPlayerStats, type MatchPlayerStatsEntry } from "../stats/update-stats";
 import { generateMatchWeather } from "../season/weather";
+import { logger } from "../lib/logger";
 
 const matchesRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -20,7 +21,7 @@ function uuid(): string { return crypto.randomUUID(); }
 // POST /api/teams/:teamId/simulate-match — simuluje zápas (Sprint 1: okamžitá simulace)
 matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ tactic?: string }>().catch(() => ({ tactic: "balanced" }));
+  const body = await c.req.json<{ tactic?: string }>().catch((e) => { logger.warn({ module: "matches" }, "parse simulate-match body", e); return { tactic: "balanced" }; });
 
   const rng = createRng(Date.now());
 
@@ -154,7 +155,7 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
   // Update player stats
   const season = await c.env.DB.prepare(
     "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
-  ).first<{ id: string }>().catch(() => null);
+  ).first<{ id: string }>().catch((e) => { logger.warn({ module: "matches" }, "fetch active season for stats", e); return null; });
 
   if (season) {
     // Build engine ID → DB player ID map
@@ -170,7 +171,7 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
 
     const statsUpdates = extractStatsFromEvents(result.events, playerIdMap, starterDbIds, ratings);
     const isCleanSheet = result.awayScore === 0;
-    await updatePlayerStats(c.env.DB, season.id, teamId, statsUpdates, isCleanSheet).catch(() => {});
+    await updatePlayerStats(c.env.DB, season.id, teamId, statsUpdates, isCleanSheet).catch((e) => logger.warn({ module: "matches" }, "update player stats", e));
 
     // Save per-match player stats
     const matchPlayerEntries: MatchPlayerStatsEntry[] = statsUpdates.map((u) => {
@@ -188,11 +189,11 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
         rating: u.rating,
       };
     });
-    await saveMatchPlayerStats(c.env.DB, matchId, matchPlayerEntries).catch(() => {});
+    await saveMatchPlayerStats(c.env.DB, matchId, matchPlayerEntries).catch((e) => logger.warn({ module: "matches" }, "save match player stats", e));
 
     // Save player_ratings JSON to match record
     await c.env.DB.prepare("UPDATE matches SET player_ratings = ? WHERE id = ?")
-      .bind(JSON.stringify(ratings), matchId).run().catch(() => {});
+      .bind(JSON.stringify(ratings), matchId).run().catch((e) => logger.warn({ module: "matches" }, "save player ratings to match", e));
   }
 
   return c.json({
@@ -288,7 +289,7 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
   const ph = tIds.map(() => "?").join(",");
   const leagueMatches = await c.env.DB.prepare(
     `SELECT home_team_id, away_team_id, home_score, away_score FROM matches WHERE status = 'simulated' AND league_id = ?`
-  ).bind(leagueId).all().catch(() => ({ results: [] }));
+  ).bind(leagueId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch league matches for preview", e); return { results: [] }; });
 
   // Calculate standings
   const stats: Record<string, { w: number; d: number; l: number; gf: number; ga: number; form: string[] }> = {};
@@ -316,9 +317,9 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
     c.env.DB.prepare("SELECT id, first_name, last_name, age, position, overall_rating, physical FROM players WHERE team_id = ? ORDER BY CASE position WHEN 'GK' THEN 0 WHEN 'DEF' THEN 1 WHEN 'MID' THEN 2 WHEN 'FWD' THEN 3 END, overall_rating DESC")
       .bind(awayId).all(),
     c.env.DB.prepare("SELECT name, avatar FROM managers WHERE team_id = ? LIMIT 1")
-      .bind(homeId).first<{ name: string; avatar: string }>().catch(() => null),
+      .bind(homeId).first<{ name: string; avatar: string }>().catch((e) => { logger.warn({ module: "matches" }, "fetch home manager", e); return null; }),
     c.env.DB.prepare("SELECT name, avatar FROM managers WHERE team_id = ? LIMIT 1")
-      .bind(awayId).first<{ name: string; avatar: string }>().catch(() => null),
+      .bind(awayId).first<{ name: string; avatar: string }>().catch((e) => { logger.warn({ module: "matches" }, "fetch away manager", e); return null; }),
   ]);
 
   const mapTeam = (team: Record<string, unknown>, players: typeof homePlayers, manager: { name: string; avatar: string } | null) => {
@@ -363,7 +364,7 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
   // Stadium of home team (where the match is played)
   const stadium = await c.env.DB.prepare(
     "SELECT capacity, pitch_condition, pitch_type FROM stadiums WHERE team_id = ?"
-  ).bind(homeId).first<{ capacity: number; pitch_condition: number; pitch_type: string }>().catch(() => null);
+  ).bind(homeId).first<{ capacity: number; pitch_condition: number; pitch_type: string }>().catch((e) => { logger.warn({ module: "matches" }, "fetch stadium for preview", e); return null; });
 
   // Weather forecast
   const { generateForecast } = await import("../season/weather");
@@ -406,7 +407,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
   // Get league info
   const league = await c.env.DB.prepare(
     "SELECT l.name, s.number as season_number FROM leagues l JOIN seasons s ON l.season_id = s.id WHERE l.id = ?"
-  ).bind(team.league_id).first<{ name: string; season_number: number }>().catch(() => null);
+  ).bind(team.league_id).first<{ name: string; season_number: number }>().catch((e) => { logger.warn({ module: "matches" }, "fetch league for schedule", e); return null; });
 
   // Get all matches involving this team
   const result = await c.env.DB.prepare(
@@ -420,7 +421,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
      LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
      WHERE (m.home_team_id = ? OR m.away_team_id = ?)
      ORDER BY COALESCE(m.round, sc.game_week, 999), sc.scheduled_at ASC`
-  ).bind(teamId, teamId).all().catch(() => ({ results: [] }));
+  ).bind(teamId, teamId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team schedule", e); return { results: [] }; });
 
   const matches = result.results.map((row) => ({
     id: row.id,
@@ -462,7 +463,7 @@ matchesRouter.get("/teams/:teamId/league-schedule", async (c) => {
 
   const league = await c.env.DB.prepare(
     "SELECT l.name, s.number as season_number FROM leagues l JOIN seasons s ON l.season_id = s.id WHERE l.id = ?"
-  ).bind(team.league_id).first<{ name: string; season_number: number }>().catch(() => null);
+  ).bind(team.league_id).first<{ name: string; season_number: number }>().catch((e) => { logger.warn({ module: "matches" }, "fetch league for league-schedule", e); return null; });
 
   const result = await c.env.DB.prepare(
     `SELECT m.id, m.round, m.status, m.home_score, m.away_score,
@@ -476,7 +477,7 @@ matchesRouter.get("/teams/:teamId/league-schedule", async (c) => {
      LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
      WHERE m.league_id = ?
      ORDER BY COALESCE(m.round, sc.game_week, 999), ht.name`
-  ).bind(team.league_id).all().catch(() => ({ results: [] }));
+  ).bind(team.league_id).all().catch((e) => { logger.warn({ module: "matches" }, "fetch league schedule matches", e); return { results: [] }; });
 
   // Group by round
   const roundsMap = new Map<number, Array<Record<string, unknown>>>();
@@ -533,6 +534,8 @@ matchesRouter.get("/matches/:id", async (c) => {
     events: JSON.parse((row.events as string) ?? "[]"),
     commentary: JSON.parse((row.commentary as string) ?? "[]"),
     player_ratings: JSON.parse((row.player_ratings as string) ?? "{}"),
+    home_lineup_data: JSON.parse((row.home_lineup_data as string) ?? "null"),
+    away_lineup_data: JSON.parse((row.away_lineup_data as string) ?? "null"),
   });
 });
 
@@ -566,7 +569,7 @@ matchesRouter.get("/teams/:teamId/unseen-match", async (c) => {
 // POST /api/matches/:id/mark-seen — označí zápas jako přečtený
 matchesRouter.post("/matches/:id/mark-seen", async (c) => {
   const matchId = c.req.param("id");
-  const body = await c.req.json<{ teamId: string }>().catch(() => ({ teamId: "" }));
+  const body = await c.req.json<{ teamId: string }>().catch((e) => { logger.warn({ module: "matches" }, "parse mark-seen body", e); return { teamId: "" }; });
 
   const match = await c.env.DB.prepare("SELECT home_team_id, away_team_id FROM matches WHERE id = ?")
     .bind(matchId).first<Record<string, unknown>>();
@@ -594,7 +597,7 @@ matchesRouter.get("/teams/:teamId/players/:playerId/match-history", async (c) =>
      LEFT JOIN teams at ON m.away_team_id = at.id
      WHERE mps.player_id = ?
      ORDER BY m.simulated_at DESC`
-  ).bind(playerId).all().catch(() => ({ results: [] }));
+  ).bind(playerId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch player match history", e); return { results: [] }; });
 
   const matches = result.results.map((row) => {
     const isHome = row.home_team_id === teamId;
@@ -651,7 +654,7 @@ matchesRouter.get("/teams/:teamId/match-results", async (c) => {
      WHERE m.status = 'simulated'
        AND (m.home_team_id = ? OR m.away_team_id = ?)
      ORDER BY m.simulated_at DESC`
-  ).bind(teamId, teamId).all().catch(() => ({ results: [] }));
+  ).bind(teamId, teamId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team match results", e); return { results: [] }; });
 
   // Get top scorers for this team from match_player_stats
   const scorers = await c.env.DB.prepare(
@@ -665,7 +668,7 @@ matchesRouter.get("/teams/:teamId/match-results", async (c) => {
      GROUP BY mps.player_id
      ORDER BY total_goals DESC, total_assists DESC
      LIMIT 10`
-  ).bind(teamId).all().catch(() => ({ results: [] }));
+  ).bind(teamId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team scorers", e); return { results: [] }; });
 
   const matches = result.results.map((row) => {
     const isHome = row.home_team_id === teamId;

@@ -260,7 +260,7 @@ export default function MatchPage() {
                           {p.squadNumber ?? "?"}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-heading font-bold text-base">{p.firstName} {p.lastName}</div>
+                          <span className="font-heading font-bold text-base">{p.firstName} {p.lastName}</span>
                           <div className="text-sm text-muted">{p.position} · Rat {p.overallRating} · {p.age} let</div>
                         </div>
                         {isOOP && <span className="text-gold-500 text-lg shrink-0">⚠️</span>}
@@ -306,7 +306,7 @@ export default function MatchPage() {
                             </div>
                           </td>
                           <td className="py-1.5 px-1.5">
-                            <div className="font-heading font-bold text-sm leading-tight">{player.lastName}</div>
+                            <Link href={`/dashboard/player/${player.id}`} className="font-heading font-bold text-sm leading-tight hover:text-pitch-500 transition-colors">{player.lastName}</Link>
                             <div className="text-xs text-muted">{player.firstName} · {player.age} let</div>
                           </td>
                           <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${player.overallRating}`}>{player.overallRating}</td>
@@ -355,7 +355,7 @@ export default function MatchPage() {
                             </div>
                           </td>
                           <td className="py-1.5 px-1.5">
-                            <div className="font-heading font-bold text-sm leading-tight">{p.lastName}</div>
+                            <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-sm leading-tight hover:text-pitch-500 transition-colors">{p.lastName}</Link>
                             <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
                           </td>
                           <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${p.overallRating}`}>{p.overallRating}</td>

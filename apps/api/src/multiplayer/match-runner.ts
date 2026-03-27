@@ -8,6 +8,7 @@ import { generateMatchCommentary, loadCommentaryFromDB } from "../engine/comment
 import { createRng } from "../generators/rng";
 import type { MatchPlayer, TeamSetup, Weather } from "../engine/types";
 import { calculatePlayerRatings, extractStatsFromEvents, updatePlayerStats, saveMatchPlayerStats, type MatchPlayerStatsEntry } from "../stats/update-stats";
+import { logger } from "../lib/logger";
 
 export interface MatchRunResult {
   matchId: string;
@@ -55,6 +56,9 @@ export async function runScheduledMatches(
       ).bind(awayTeamId, calendarId).first();
       if (!hasAwayLineup) await createAutoLineup(db, awayTeamId, calendarId);
 
+      // Create RNG for this match
+      const rng = createRng(Date.now() + matchId.charCodeAt(0));
+
       // Determine match type
       const homeTeam = await db.prepare("SELECT name, user_id FROM teams WHERE id = ?").bind(homeTeamId).first<Record<string, unknown>>();
       const awayTeam = await db.prepare("SELECT name, user_id FROM teams WHERE id = ?").bind(awayTeamId).first<Record<string, unknown>>();
@@ -63,9 +67,17 @@ export async function runScheduledMatches(
       const matchType: MatchRunResult["matchType"] = homeIsHuman && awayIsHuman ? "pvp"
         : homeIsHuman ? "pve_home" : awayIsHuman ? "pve_away" : "ai_vs_ai";
 
-      // Build match players from DB (with absence filtering)
-      const homeBuild = await buildMatchPlayers(db, homeTeamId, rng);
-      const awayBuild = await buildMatchPlayers(db, awayTeamId, rng);
+      // Read user lineups from DB
+      const homeLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(homeTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home lineup", e); return null; });
+      const awayLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(awayTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load away lineup", e); return null; });
+
+      // Build match players — respect user lineup order if set
+      const homeBuild = await buildMatchPlayers(db, homeTeamId, rng,
+        homeLineupRow && homeLineupRow.is_auto === 0 ? homeLineupRow.players_data : null);
+      const awayBuild = await buildMatchPlayers(db, awayTeamId, rng,
+        awayLineupRow && awayLineupRow.is_auto === 0 ? awayLineupRow.players_data : null);
 
       const homeLineup = homeBuild.players;
       const awayLineup = awayBuild.players;
@@ -82,32 +94,6 @@ export async function runScheduledMatches(
       const fullPosMap = new Map<string, string>();
       for (const [k, v] of homeBuild.positionMap) fullPosMap.set(k, v);
       for (const [k, v] of awayBuild.positionMap) fullPosMap.set(k, v);
-
-      // Read tactics from lineups (if user set them)
-      const homeLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?")
-        .bind(homeTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch(() => null);
-      const awayLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?")
-        .bind(awayTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch(() => null);
-
-      // Apply matchPosition from user lineup
-      if (homeLineupRow && homeLineupRow.is_auto === 0) {
-        try {
-          const lineupData = JSON.parse(homeLineupRow.players_data) as Array<{ playerId: string; matchPosition: string }>;
-          for (const entry of lineupData) {
-            const player = homeLineup.find((p) => homeBuild.idMap.get(p.id) === entry.playerId);
-            if (player && entry.matchPosition) player.matchPosition = entry.matchPosition as any;
-          }
-        } catch { /* ignore parse errors */ }
-      }
-      if (awayLineupRow && awayLineupRow.is_auto === 0) {
-        try {
-          const lineupData = JSON.parse(awayLineupRow.players_data) as Array<{ playerId: string; matchPosition: string }>;
-          for (const entry of lineupData) {
-            const player = awayLineup.find((p) => awayBuild.idMap.get(p.id) === entry.playerId);
-            if (player && entry.matchPosition) player.matchPosition = entry.matchPosition as any;
-          }
-        } catch { /* ignore parse errors */ }
-      }
 
       const homeTactic = (homeLineupRow?.tactic as any) ?? "balanced";
       const awayTactic = (awayLineupRow?.tactic as any) ?? "balanced";
@@ -129,10 +115,10 @@ export async function runScheduledMatches(
 
       // Load stadium info for pitch condition + facilities
       const stadiumRow = await db.prepare("SELECT * FROM stadiums WHERE team_id = ?")
-        .bind(homeTeamId).first<Record<string, unknown>>().catch(() => null);
+        .bind(homeTeamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load stadium", e); return null; });
       const pitchCondition = (stadiumRow?.pitch_condition as number) ?? 50;
       const stadiumNameRow = await db.prepare("SELECT stadium_name FROM teams WHERE id = ?")
-        .bind(homeTeamId).first<{ stadium_name: string }>().catch(() => null);
+        .bind(homeTeamId).first<{ stadium_name: string }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load stadium name", e); return null; });
       const stadiumName = stadiumNameRow?.stadium_name ?? null;
 
       // Calculate facility effects
@@ -149,7 +135,7 @@ export async function runScheduledMatches(
       // Attendance: population + reputation + form + facility bonuses
       const homeInfo = await db.prepare(
         "SELECT v.population, v.size, t.reputation FROM villages v JOIN teams t ON t.village_id = v.id WHERE t.id = ?"
-      ).bind(homeTeamId).first<{ population: number; size: string; reputation: number }>().catch(() => null);
+      ).bind(homeTeamId).first<{ population: number; size: string; reputation: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home village info", e); return null; });
       const pop = homeInfo?.population ?? 500;
       const rep = homeInfo?.reputation ?? 50;
       // Base from population (2-5% of village comes)
@@ -162,7 +148,7 @@ export async function runScheduledMatches(
           SELECT CASE WHEN (home_team_id = ? AND home_score > away_score) OR (away_team_id = ? AND away_score > home_score) THEN 1 ELSE 0 END as win
           FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated' ORDER BY simulated_at DESC LIMIT 5
         ) WHERE win = 1`
-      ).bind(homeTeamId, homeTeamId, homeTeamId, homeTeamId).first<{ w: number }>().catch(() => ({ w: 0 }));
+      ).bind(homeTeamId, homeTeamId, homeTeamId, homeTeamId).first<{ w: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load recent wins", e); return { w: 0 }; });
       const formBonus = Math.round((recentWins?.w ?? 0) * popBase * 0.08);
       const rawAttendance = Math.max(8, popBase + repBonus + formBonus + Math.round(Math.random() * 10 - 5));
       // Apply facility attendance bonus (lighting + parking) and cap at stadium capacity
@@ -184,7 +170,7 @@ export async function runScheduledMatches(
       // Load equipment effects for both teams
       const { calculateEffects } = await import("../equipment/equipment-generator");
       const loadEquipMods = async (tid: string) => {
-        const eq = await db.prepare("SELECT * FROM equipment WHERE team_id = ?").bind(tid).first<Record<string, unknown>>().catch(() => null);
+        const eq = await db.prepare("SELECT * FROM equipment WHERE team_id = ?").bind(tid).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load equipment", e); return null; });
         if (!eq) return undefined;
         const levels: Record<string, number> = {};
         const conditions: Record<string, number> = {};
@@ -212,7 +198,6 @@ export async function runScheduledMatches(
       }
 
       // Simulate
-      const rng = createRng(Date.now() + matchId.charCodeAt(0));
       const result = simulateMatch(rng, {
         home: homeSetup,
         away: awaySetup,
@@ -234,22 +219,35 @@ export async function runScheduledMatches(
         awaySetup.teamName,
       );
 
-      // Save results with events + commentary + match context
+      // Build lineup data for storage (name, position, number, rating)
+      const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>) => {
+        const mapPlayer = (p: typeof homeLineup[0]) => ({
+          id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`,
+          position: p.matchPosition ?? p.position, naturalPosition: p.position,
+          rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5),
+        });
+        return { starters: lineup.map(mapPlayer), subs: subs.map(mapPlayer) };
+      };
+
+      // Save results with events + commentary + match context + lineups
       await db.prepare(
         `UPDATE matches SET status = 'simulated', home_score = ?, away_score = ?,
          events = ?, commentary = ?, attendance = ?, stadium_name = ?, pitch_condition = ?, weather = ?,
+         home_lineup_data = ?, away_lineup_data = ?,
          simulated_at = datetime('now') WHERE id = ?`
       ).bind(
         result.homeScore, result.awayScore,
         JSON.stringify(result.events), JSON.stringify(commentary),
         attendance, stadiumName, pitchCondition, weather,
+        JSON.stringify(buildLineupData(homeLineup, homeSubs, homeBuild.idMap)),
+        JSON.stringify(buildLineupData(awayLineup, awaySubs, awayBuild.idMap)),
         matchId,
       ).run();
 
       // Player stats update
       const season = await db.prepare(
         "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
-      ).first<{ id: string }>().catch(() => null);
+      ).first<{ id: string }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load active season", e); return null; });
 
       if (season) {
         // Calculate per-player ratings
@@ -258,12 +256,12 @@ export async function runScheduledMatches(
         // Home team stats
         const homeStarterIds = [...homeBuild.idMap.values()].slice(0, 11);
         const homeUpdates = extractStatsFromEvents(result.events, homeBuild.idMap, homeStarterIds, ratings, result.playerMinutes);
-        await updatePlayerStats(db, season.id, homeTeamId, homeUpdates, result.awayScore === 0).catch(() => {});
+        await updatePlayerStats(db, season.id, homeTeamId, homeUpdates, result.awayScore === 0).catch((e) => logger.warn({ module: "match-runner" }, "Failed to update home player stats", e));
 
         // Away team stats
         const awayStarterIds = [...awayBuild.idMap.values()].slice(0, 11);
         const awayUpdates = extractStatsFromEvents(result.events, awayBuild.idMap, awayStarterIds, ratings, result.playerMinutes);
-        await updatePlayerStats(db, season.id, awayTeamId, awayUpdates, result.homeScore === 0).catch(() => {});
+        await updatePlayerStats(db, season.id, awayTeamId, awayUpdates, result.homeScore === 0).catch((e) => logger.warn({ module: "match-runner" }, "Failed to update away player stats", e));
 
         // Save per-match player stats for both teams
         const allEntries: MatchPlayerStatsEntry[] = [
@@ -292,11 +290,11 @@ export async function runScheduledMatches(
             rating: u.rating,
           })),
         ];
-        await saveMatchPlayerStats(db, matchId, allEntries).catch(() => {});
+        await saveMatchPlayerStats(db, matchId, allEntries).catch((e) => logger.warn({ module: "match-runner" }, "Failed to save match player stats", e));
 
         // Save player_ratings JSON to match record
         await db.prepare("UPDATE matches SET player_ratings = ? WHERE id = ?")
-          .bind(JSON.stringify(ratings), matchId).run().catch(() => {});
+          .bind(JSON.stringify(ratings), matchId).run().catch((e) => logger.warn({ module: "match-runner" }, "Failed to save player ratings", e));
       }
 
       // Match-day finances for both teams
@@ -308,7 +306,7 @@ export async function runScheduledMatches(
         await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate);
         await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate);
       } catch (e) {
-        console.error(`[MatchRunner] Match finances failed for ${matchId}:`, e);
+        logger.error({ module: "match-runner" }, `Match finances failed for ${matchId}`, e);
       }
 
       // Persist condition + morale changes back to DB
@@ -321,7 +319,7 @@ export async function runScheduledMatches(
           ).bind(Math.round(player.condition), Math.round(player.morale), dbId).run();
         }
       } catch (e) {
-        console.error(`[MatchRunner] Condition persist failed:`, e);
+        logger.error({ module: "match-runner" }, "Condition persist failed", e);
       }
 
       // Match experience: small chance to improve skills from playing
@@ -335,7 +333,7 @@ export async function runScheduledMatches(
           if (minutes < 15) continue; // too few minutes to learn anything
 
           const playerRow = await db.prepare("SELECT age, skills, position FROM players WHERE id = ?")
-            .bind(dbId).first<{ age: number; skills: string; position: string }>().catch(() => null);
+            .bind(dbId).first<{ age: number; skills: string; position: string }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load player for match experience", e); return null; });
           if (!playerRow) continue;
 
           const age = playerRow.age;
@@ -361,12 +359,12 @@ export async function runScheduledMatches(
               await db.prepare(
                 "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'match', ?)"
               ).bind(dbId, fullPosMap.get(dbId) ? (homeBuild.idMap.has(Number(engineId)) ? homeTeamId : awayTeamId) : homeTeamId,
-                attr, current, current + 1, new Date().toISOString()).run().catch(() => {});
+                attr, current, current + 1, new Date().toISOString()).run().catch((e) => logger.warn({ module: "match-runner" }, "Failed to save training log", e));
             }
           }
         }
       } catch (e) {
-        console.error(`[MatchRunner] Match experience failed:`, e);
+        logger.error({ module: "match-runner" }, "Match experience failed", e);
       }
 
       results.push({
@@ -377,7 +375,7 @@ export async function runScheduledMatches(
         matchType,
       });
     } catch (e) {
-      console.error(`[MatchRunner] Failed to simulate match ${matchId}:`, e);
+      logger.error({ module: "match-runner" }, `Failed to simulate match ${matchId}`, e);
     }
   }
 
@@ -390,9 +388,13 @@ interface BuildResult {
   positionMap: Map<string, string>;   // DB player ID → position
 }
 
-async function buildMatchPlayers(db: D1Database, teamId: string, rng?: { random: () => number; pick: <T>(a: T[]) => T; int: (min: number, max: number) => number }): Promise<BuildResult> {
+async function buildMatchPlayers(
+  db: D1Database, teamId: string,
+  rng?: { random: () => number; pick: <T>(a: T[]) => T; int: (min: number, max: number) => number },
+  userLineupJson?: string | null,
+): Promise<BuildResult> {
   const rows = await db.prepare(
-    "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC LIMIT 20"
+    "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC LIMIT 22"
   ).bind(teamId).all();
 
   // Generate absences if rng provided (for automatic matches)
@@ -418,14 +420,38 @@ async function buildMatchPlayers(db: D1Database, teamId: string, rng?: { random:
     } catch { /* ignore absence errors */ }
   }
 
-  // Filter out absent players, take top 16
-  const available = rows.results.filter((r) => !absentIds.has(r.id as string)).slice(0, 16);
+  const allAvailable = rows.results.filter((r) => !absentIds.has(r.id as string));
+
+  // If user set a lineup, order players: selected 11 first, then rest as subs
+  let ordered = allAvailable;
+  if (userLineupJson) {
+    try {
+      const userPicks = JSON.parse(userLineupJson) as Array<{ playerId: string; matchPosition?: string }>;
+      const pickedIds = userPicks.map((p) => p.playerId);
+      const starters = pickedIds
+        .map((id) => allAvailable.find((r) => r.id === id))
+        .filter(Boolean) as typeof allAvailable;
+      const rest = allAvailable.filter((r) => !pickedIds.includes(r.id as string));
+      ordered = [...starters, ...rest].slice(0, 16);
+    } catch { ordered = allAvailable.slice(0, 16); }
+  } else {
+    ordered = allAvailable.slice(0, 16);
+  }
+
+  // Parse user lineup for matchPosition mapping
+  const matchPositionMap = new Map<string, string>();
+  if (userLineupJson) {
+    try {
+      const picks = JSON.parse(userLineupJson) as Array<{ playerId: string; matchPosition?: string }>;
+      for (const p of picks) { if (p.matchPosition) matchPositionMap.set(p.playerId, p.matchPosition); }
+    } catch { /* ignore */ }
+  }
 
   let idCounter = 1;
   const idMap = new Map<number, string>();
   const positionMap = new Map<string, string>();
 
-  const players = available.map((row) => {
+  const players = ordered.map((row) => {
     const skills = JSON.parse(row.skills as string);
     const personality = JSON.parse(row.personality as string);
     const lifeContext = JSON.parse(row.life_context as string);
@@ -436,12 +462,14 @@ async function buildMatchPlayers(db: D1Database, teamId: string, rng?: { random:
     idMap.set(engineId, dbId);
     positionMap.set(dbId, row.position as string);
 
+    const mp = matchPositionMap.get(dbId);
     return {
       id: engineId,
       firstName: row.first_name as string,
       lastName: row.last_name as string,
       nickname: (row.nickname as string) || null,
       position: row.position as "GK" | "DEF" | "MID" | "FWD",
+      matchPosition: mp ? mp as "GK" | "DEF" | "MID" | "FWD" : undefined,
       speed: skills.speed ?? 50,
       technique: skills.technique ?? 50,
       shooting: skills.shooting ?? 50,

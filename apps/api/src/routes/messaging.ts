@@ -5,6 +5,7 @@
 
 import { Hono } from "hono";
 import type { Bindings } from "../index";
+import { logger } from "../lib/logger";
 
 const messagingRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -18,13 +19,13 @@ messagingRouter.get("/teams/:teamId/conversations", async (c) => {
 
   let result = await c.env.DB.prepare(
     `SELECT * FROM conversations WHERE team_id = ? ORDER BY pinned DESC, last_message_at DESC`
-  ).bind(teamId).all().catch(() => ({ results: [] }));
+  ).bind(teamId).all().catch((e) => { logger.warn({ module: "messaging" }, "fetch conversations", e); return { results: [] }; });
 
   // Auto-init conversations if none exist
   if (result.results.length === 0) {
     const players = await c.env.DB.prepare(
       "SELECT id, first_name, last_name, nickname, avatar FROM players WHERE team_id = ?"
-    ).bind(teamId).all().catch(() => ({ results: [] }));
+    ).bind(teamId).all().catch((e) => { logger.warn({ module: "messaging" }, "fetch players for init", e); return { results: [] }; });
 
     if (players.results.length > 0) {
       const playerData = players.results.map((p) => ({
@@ -34,11 +35,11 @@ messagingRouter.get("/teams/:teamId/conversations", async (c) => {
         nickname: (p.nickname as string) || undefined,
         avatar: p.avatar as string,
       }));
-      await initTeamConversations(c.env.DB, teamId, playerData).catch(() => {});
+      await initTeamConversations(c.env.DB, teamId, playerData).catch((e) => logger.warn({ module: "messaging" }, "auto-init conversations", e));
 
       result = await c.env.DB.prepare(
         `SELECT * FROM conversations WHERE team_id = ? ORDER BY pinned DESC, last_message_at DESC`
-      ).bind(teamId).all().catch(() => ({ results: [] }));
+      ).bind(teamId).all().catch((e) => { logger.warn({ module: "messaging" }, "re-fetch conversations after init", e); return { results: [] }; });
     }
   }
 
@@ -74,7 +75,7 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
   query += " ORDER BY sent_at DESC LIMIT ?";
   binds.push(limit);
 
-  const result = await c.env.DB.prepare(query).bind(...binds).all().catch(() => ({ results: [] }));
+  const result = await c.env.DB.prepare(query).bind(...binds).all().catch((e) => { logger.warn({ module: "messaging" }, "fetch messages", e); return { results: [] }; });
 
   const messages = result.results.map((row) => ({
     id: row.id,
@@ -90,10 +91,10 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
   // Mark as read
   await c.env.DB.prepare(
     "UPDATE messages SET read = 1 WHERE conversation_id = ? AND read = 0"
-  ).bind(convId).run().catch(() => {});
+  ).bind(convId).run().catch((e) => logger.warn({ module: "messaging" }, "mark messages read", e));
   await c.env.DB.prepare(
     "UPDATE conversations SET unread_count = 0 WHERE id = ?"
-  ).bind(convId).run().catch(() => {});
+  ).bind(convId).run().catch((e) => logger.warn({ module: "messaging" }, "reset unread count", e));
 
   return c.json(messages);
 });
@@ -127,7 +128,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   // If manager conversation, deliver to the other side
   const conv = await c.env.DB.prepare(
     "SELECT type, participant_id FROM conversations WHERE id = ?"
-  ).bind(convId).first<{ type: string; participant_id: string | null }>().catch(() => null);
+  ).bind(convId).first<{ type: string; participant_id: string | null }>().catch((e) => { logger.warn({ module: "messaging" }, "fetch conversation type", e); return null; });
 
   if (conv?.type === "manager" && conv.participant_id) {
     const otherTeamId = conv.participant_id;
@@ -135,13 +136,13 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     // Get or create conversation on the other side
     let otherConv = await c.env.DB.prepare(
       "SELECT id FROM conversations WHERE team_id = ? AND type = 'manager' AND participant_id = ?"
-    ).bind(otherTeamId, teamId).first<{ id: string }>().catch(() => null);
+    ).bind(otherTeamId, teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "messaging" }, "fetch other side conversation", e); return null; });
 
     if (!otherConv) {
       // Create conversation on recipient's side
       const myManager = await c.env.DB.prepare(
         "SELECT name, avatar FROM managers WHERE team_id = ?"
-      ).bind(teamId).first<{ name: string; avatar: string }>().catch(() => null);
+      ).bind(teamId).first<{ name: string; avatar: string }>().catch((e) => { logger.warn({ module: "messaging" }, "fetch manager for cross-delivery", e); return null; });
 
       const otherConvId = uuid();
       const title = myManager?.name ?? senderName;
@@ -174,7 +175,7 @@ messagingRouter.get("/teams/:teamId/unread-count", async (c) => {
 
   const row = await c.env.DB.prepare(
     "SELECT COALESCE(SUM(unread_count), 0) as total FROM conversations WHERE team_id = ?"
-  ).bind(teamId).first<{ total: number }>().catch(() => null);
+  ).bind(teamId).first<{ total: number }>().catch((e) => { logger.warn({ module: "messaging" }, "fetch unread count", e); return null; });
 
   return c.json({ unread: row?.total ?? 0 });
 });
@@ -185,10 +186,10 @@ messagingRouter.post("/teams/:teamId/mark-read/:convId", async (c) => {
 
   await c.env.DB.prepare(
     "UPDATE messages SET read = 1 WHERE conversation_id = ? AND read = 0"
-  ).bind(convId).run().catch(() => {});
+  ).bind(convId).run().catch((e) => logger.warn({ module: "messaging" }, "mark-read messages", e));
   await c.env.DB.prepare(
     "UPDATE conversations SET unread_count = 0 WHERE id = ?"
-  ).bind(convId).run().catch(() => {});
+  ).bind(convId).run().catch((e) => logger.warn({ module: "messaging" }, "mark-read reset unread", e));
 
   return c.json({ ok: true });
 });
@@ -201,20 +202,20 @@ messagingRouter.post("/teams/:teamId/conversation-with/:otherTeamId", async (c) 
   // Check if conversation already exists
   const existing = await c.env.DB.prepare(
     "SELECT id FROM conversations WHERE team_id = ? AND type = 'manager' AND participant_id = ?"
-  ).bind(teamId, otherTeamId).first<{ id: string }>().catch(() => null);
+  ).bind(teamId, otherTeamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "messaging" }, "check existing conversation", e); return null; });
 
   if (existing) return c.json({ conversationId: existing.id });
 
   // Get other team info + manager
   const otherTeam = await c.env.DB.prepare(
     "SELECT t.name, t.user_id FROM teams t WHERE t.id = ?"
-  ).bind(otherTeamId).first<{ name: string; user_id: string }>().catch(() => null);
+  ).bind(otherTeamId).first<{ name: string; user_id: string }>().catch((e) => { logger.warn({ module: "messaging" }, "fetch other team info", e); return null; });
 
   if (!otherTeam || otherTeam.user_id === "ai") return c.json({ error: "Not a player team" }, 400);
 
   const otherManager = await c.env.DB.prepare(
     "SELECT name, avatar FROM managers WHERE team_id = ?"
-  ).bind(otherTeamId).first<{ name: string; avatar: string }>().catch(() => null);
+  ).bind(otherTeamId).first<{ name: string; avatar: string }>().catch((e) => { logger.warn({ module: "messaging" }, "fetch other manager", e); return null; });
 
   const title = otherManager?.name ?? otherTeam.name;
   const avatar = otherManager?.avatar ?? "{}";
@@ -235,14 +236,14 @@ messagingRouter.post("/teams/:teamId/init-conversations", async (c) => {
   // Check if already has conversations
   const existing = await c.env.DB.prepare(
     "SELECT COUNT(*) as cnt FROM conversations WHERE team_id = ?"
-  ).bind(teamId).first<{ cnt: number }>().catch(() => null);
+  ).bind(teamId).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "messaging" }, "check conversation count", e); return null; });
 
   if (existing && existing.cnt > 0) return c.json({ ok: true, message: "Already initialized" });
 
   // Get players
   const players = await c.env.DB.prepare(
     "SELECT id, first_name, last_name, nickname, avatar FROM players WHERE team_id = ?"
-  ).bind(teamId).all().catch(() => ({ results: [] }));
+  ).bind(teamId).all().catch((e) => { logger.warn({ module: "messaging" }, "fetch players for manual init", e); return { results: [] }; });
 
   const playerData = players.results.map((p) => ({
     id: p.id as string,

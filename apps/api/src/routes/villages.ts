@@ -2,6 +2,7 @@
  * Sprint 1: Villages API — raw SQL on D1.
  */
 
+import { logger } from "../lib/logger";
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 
@@ -86,7 +87,7 @@ villagesRouter.get("/:id/sponsors", async (c) => {
 
   const sponsorRows = await c.env.DB.prepare(
     "SELECT name, type, monthly_min, monthly_max, win_bonus_min, win_bonus_max FROM district_sponsors WHERE district = ? ORDER BY RANDOM() LIMIT 5"
-  ).bind(village.district).all().catch(() => ({ results: [] }));
+  ).bind(village.district).all().catch((e) => { logger.warn({ module: "villages" }, "query", e); return { results: [] }; });
 
   const catMod = village.size === "mesto" ? 1.5 : village.size === "mestys" ? 1.2 : village.size === "obec" ? 1.0 : 0.7;
 
@@ -120,7 +121,7 @@ villagesRouter.get("/:id/sponsors", async (c) => {
   if (offers.length === 0) {
     const surnameRows = await c.env.DB.prepare(
       "SELECT surname FROM district_surnames WHERE district = ? ORDER BY frequency DESC LIMIT 10"
-    ).bind(village.district).all().catch(() => ({ results: [] }));
+    ).bind(village.district).all().catch((e) => { logger.warn({ module: "villages" }, "query", e); return { results: [] }; });
     const surnames = surnameRows.results.length > 0
       ? surnameRows.results.map((r) => r.surname as string)
       : ["Novák", "Dvořák", "Svoboda", "Černý", "Kovář"];
