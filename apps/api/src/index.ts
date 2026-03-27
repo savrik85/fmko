@@ -81,12 +81,13 @@ export default {
 
     // Daily tick: 4:00 CET (3:00 UTC) — or manual trigger (empty cron)
     if (cron === "0 3 * * *" || !cron) {
-      console.log("[Cron] Running daily tick...");
+      const tickEntry = { ts: new Date().toISOString(), level: "info", mod: "cron", msg: "daily tick starting" };
+      console.log(JSON.stringify(tickEntry));
       try {
         const result = await executeDailyTick(env);
-        console.log(`[Cron] Daily tick done: ${result.events.length} events, training=${result.isTrainingDay}`);
-      } catch (e) {
-        console.error("[Cron] Daily tick failed:", e);
+        console.log(JSON.stringify({ ts: new Date().toISOString(), level: "info", mod: "cron", msg: `daily tick done: ${result.events.length} events, training=${result.isTrainingDay}` }));
+      } catch (e: any) {
+        console.error(JSON.stringify({ ts: new Date().toISOString(), level: "error", mod: "cron", msg: "daily tick failed", err: e.message, stack: e.stack?.split("\n").slice(0, 3).join(" | ") }));
       }
     }
   },

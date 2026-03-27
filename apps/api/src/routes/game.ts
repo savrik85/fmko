@@ -1567,14 +1567,37 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     "SELECT formation, tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?"
   ).bind(teamId, nextCal.id).first<{ formation: string; tactic: string; players_data: string; is_auto: number }>();
 
-  // Get available players (active, not injured)
+  // Get all players (active, not injured) + generate absences
   const players = await c.env.DB.prepare(
-    "SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.weekly_wage, p.skills, p.life_context, p.squad_number, ps.avg_rating FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.season_id = (SELECT id FROM seasons WHERE status = 'active' LIMIT 1) WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') AND i.id IS NULL ORDER BY p.overall_rating DESC"
+    "SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.weekly_wage, p.skills, p.life_context, p.personality, p.physical, p.squad_number, p.commute_km, ps.avg_rating FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.season_id = (SELECT id FROM seasons WHERE status = 'active' LIMIT 1) WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') AND i.id IS NULL ORDER BY p.overall_rating DESC"
   ).bind(teamId).all();
+
+  // Generate absences with deterministic seed from calendarId
+  const { seedFromString } = await import("../lib/seed");
+  const { generateAbsences } = await import("../events/absence");
+  const absenceRng = createRng(seedFromString(nextCal.id));
+  const absenceSquad = players.results.map((row) => {
+    const pers = (() => { try { return JSON.parse(row.personality as string); } catch { return {}; } })();
+    const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
+    const phys = (() => { try { return JSON.parse(row.physical as string); } catch { return {}; } })();
+    return {
+      firstName: row.first_name as string, lastName: row.last_name as string,
+      age: row.age as number, occupation: lc.occupation ?? "",
+      discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50,
+      alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
+      morale: lc.morale ?? 50, stamina: phys.stamina ?? 50,
+      injuryProneness: pers.injuryProneness ?? 50,
+      commuteKm: (row.commute_km as number) ?? 0,
+    };
+  });
+  const absences = generateAbsences(absenceRng as any, absenceSquad);
+  const absentPlayerIds = new Set(absences.map((a) => players.results[a.playerIndex]?.id as string).filter(Boolean));
 
   const available = players.results.map((p) => {
     const skills = (() => { try { return JSON.parse(p.skills as string); } catch (e) { logger.warn({ module: "game" }, "parse player skills for lineup", e); return {}; } })();
     const lc = (() => { try { return JSON.parse(p.life_context as string); } catch (e) { logger.warn({ module: "game" }, "parse player life_context for lineup", e); return {}; } })();
+    const absent = absentPlayerIds.has(p.id as string);
+    const absenceInfo = absent ? absences.find((a) => players.results[a.playerIndex]?.id === p.id) : null;
     return {
       id: p.id, firstName: p.first_name, lastName: p.last_name, position: p.position,
       overallRating: p.overall_rating, age: p.age, condition: lc.condition ?? 100, morale: lc.morale ?? 50, squadNumber: p.squad_number ?? null,
@@ -1582,6 +1605,10 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       passing: skills.passing ?? 50, heading: skills.heading ?? 50, defense: skills.defense ?? 50,
       goalkeeping: skills.goalkeeping ?? 50, stamina: skills.stamina ?? 50,
       avgRating: p.avg_rating ?? null,
+      absent,
+      absenceReason: absenceInfo?.reason ?? null,
+      absenceSms: absenceInfo?.smsText ?? null,
+      absenceEmoji: absenceInfo?.emoji ?? null,
     };
   });
 

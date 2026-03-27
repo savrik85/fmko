@@ -13,3 +13,4 @@ ALTER TABLE matches ADD COLUMN pitch_condition INTEGER;
 ALTER TABLE matches ADD COLUMN weather TEXT;
 ALTER TABLE matches ADD COLUMN home_lineup_data TEXT;
 ALTER TABLE matches ADD COLUMN away_lineup_data TEXT;
+ALTER TABLE matches ADD COLUMN absences TEXT;

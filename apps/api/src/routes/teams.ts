@@ -101,6 +101,7 @@ function generatePlayerFace(player: { age: number; bodyType: string }): Record<s
 
 // POST /api/teams
 teamsRouter.post("/", async (c) => {
+  let step = "init";
   try {
   const body = await c.req.json<{
     villageId: string;
@@ -154,6 +155,7 @@ teamsRouter.post("/", async (c) => {
   const budget = (village.population as number) > 5000 ? 80000
     : (village.population as number) > 1000 ? 40000 : 20000;
 
+  step = "insert-team";
   await c.env.DB.prepare(
     "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget, jersey_pattern, badge_pattern, stadium_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   ).bind(teamId, userId, body.villageId, body.name,
@@ -176,7 +178,7 @@ teamsRouter.post("/", async (c) => {
     ).run().catch((e) => logger.warn({ module: "teams" }, "insert sponsor contract", e));
   }
 
-  // Generate squad
+  step = "generate-squad";
   const rng = createRng(Date.now());
   const villageInfo = {
     region_code: "CZ020",
@@ -339,7 +341,7 @@ teamsRouter.post("/", async (c) => {
     ).run().catch((e) => logger.warn({ module: "teams" }, "insert manager profile", e));
   }
 
-  // ── League: join existing or create new ──
+  step = "league-setup";
   const district = village.district as string;
 
   // Get current active season (or create season 1)
@@ -442,7 +444,7 @@ teamsRouter.post("/", async (c) => {
     }, 201);
   }
 
-  // ── CREATE new league for this district + season ──
+  step = "create-league";
   const leagueId = uuid();
   const leagueName = `Okresní přebor ${district}`;
 
@@ -496,11 +498,12 @@ teamsRouter.post("/", async (c) => {
     const aiBudget = (aiVillage?.population as number ?? 500) > 5000 ? 80000
       : (aiVillage?.population as number ?? 500) > 1000 ? 40000 : 20000;
 
+    step = `insert-ai-team-${lt.teamName}`;
     await c.env.DB.prepare(
       "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget, league_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(aiTeamId, "ai", aiVillageId, lt.teamName, lt.primaryColor, lt.secondaryColor, aiBudget, leagueId).run();
 
-    // Insert AI players
+    step = `insert-ai-players-${lt.teamName}`;
     if (lt.aiTeam?.squad) {
       const aiPlayerIds: string[] = [];
       for (const ap of lt.aiTeam.squad) {
@@ -575,6 +578,7 @@ teamsRouter.post("/", async (c) => {
 
   const teamIds = leagueTeamIds.results.map((r) => r.id as string);
 
+  step = "create-schedule";
   if (teamIds.length >= 2) {
     const schedule = generateSchedule(rng, teamIds.length);
     const calendar = generateSeasonCalendar(leagueId, season.number, new Date());
@@ -654,7 +658,8 @@ teamsRouter.post("/", async (c) => {
     leagueName: leagueSetup.name,
   }, 201);
   } catch (e: any) {
-    return c.json({ error: e.message, step: (c as any)._lastStep ?? "unknown" }, 500);
+    logger.error({ module: "teams", step }, "team creation failed", e);
+    return c.json({ error: e.message, step }, 500);
   }
 });
 

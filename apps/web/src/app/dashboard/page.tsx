@@ -62,36 +62,39 @@ export default function DashboardPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [matches, setMatches] = useState<ScheduleMatch[]>([]);
-  const [unseen, setUnseen] = useState<UnseenMatch | null>(null);
+  // unseen state removed — redirect handled inline in useEffect
   const [manager, setManager] = useState<ManagerProfile | null>(null);
   const [matchResults, setMatchResults] = useState<TeamMatchResults | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!teamId) return;
-    Promise.all([
-      apiFetch<Team>(`/api/teams/${teamId}`),
-      apiFetch<Player[]>(`/api/teams/${teamId}/players`),
-      apiFetch<{ standings: Standing[] }>(`/api/teams/${teamId}/standings`).catch(() => ({ standings: [] })),
-      apiFetch<{ matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`).catch(() => ({ matches: [] })),
-      apiFetch<UnseenMatch | null>(`/api/teams/${teamId}/unseen-match`).catch(() => null),
-      apiFetch<ManagerProfile>(`/api/teams/${teamId}/manager`).catch(() => null),
-      apiFetch<TeamMatchResults>(`/api/teams/${teamId}/match-results`).catch(() => null),
-    ]).then(([t, p, s, m, u, mgr, mr]) => {
-      // Redirect to match-day page BEFORE setting state
-      if (u && u.matchId) {
-        window.location.href = `/match-day/${u.matchId}`;
-        return; // don't set state, page is redirecting
-      }
-      setTeam(t);
-      setPlayers(p);
-      setStandings(s.standings);
-      setMatches(m.matches);
-      setUnseen(u);
-      setManager(mgr);
-      setMatchResults(mr);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    // Check unseen match FIRST — redirect before loading anything else
+    apiFetch<UnseenMatch | null>(`/api/teams/${teamId}/unseen-match`)
+      .catch(() => null)
+      .then((unseen) => {
+        if (unseen && unseen.matchId) {
+          window.location.replace(`/match-day/${unseen.matchId}`);
+          return;
+        }
+        // No unseen match — load dashboard data
+        Promise.all([
+          apiFetch<Team>(`/api/teams/${teamId}`),
+          apiFetch<Player[]>(`/api/teams/${teamId}/players`),
+          apiFetch<{ standings: Standing[] }>(`/api/teams/${teamId}/standings`).catch(() => ({ standings: [] })),
+          apiFetch<{ matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`).catch(() => ({ matches: [] })),
+          apiFetch<ManagerProfile>(`/api/teams/${teamId}/manager`).catch(() => null),
+          apiFetch<TeamMatchResults>(`/api/teams/${teamId}/match-results`).catch(() => null),
+        ]).then(([t, p, s, m, mgr, mr]) => {
+          setTeam(t);
+          setPlayers(p);
+          setStandings(s.standings);
+          setMatches(m.matches);
+          setManager(mgr);
+          setMatchResults(mr);
+          setLoading(false);
+        }).catch(() => setLoading(false));
+      });
   }, [teamId]);
 
 

@@ -49,7 +49,15 @@ export default function MatchDayPage() {
         });
         setLoading(false);
       })
-      .catch(() => { setLoading(false); router.push("/dashboard"); });
+      .catch(() => {
+        // Mark as seen to prevent redirect loop, then go to dashboard
+        apiFetch(`/api/matches/${matchId}/mark-seen`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teamId }),
+        }).catch(() => {});
+        setLoading(false);
+        router.push("/dashboard");
+      });
   }, [matchId, teamId]);
 
   const skipMatch = async () => {

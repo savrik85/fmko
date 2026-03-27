@@ -32,6 +32,8 @@ export async function executeDailyTick(
   const dayOfWeek = now.getUTCDay();
   const isTrainingDay = dayOfWeek >= 1 && dayOfWeek <= 5;
   const events: DailyTickEvent[] = [];
+  const tickStart = Date.now();
+  logger.info({ module: "daily-tick" }, `START dayOfWeek=${dayOfWeek} training=${isTrainingDay} date=${now.toISOString()}`);
 
   // ── Training (Mon-Fri, if plan is set) ──
   const teams = await env.DB.prepare(
@@ -380,6 +382,94 @@ export async function executeDailyTick(
     }
   }
 
+  // ── Match-day attendance messages (Kabina) — den před zápasem ──
+  try {
+    for (const team of allTeams.results) {
+      if ((team as any).user_id === "ai") continue;
+      const tid = team.id as string;
+      const lid = team.league_id as string | null;
+      if (!lid) continue;
+
+      const gd = new Date(team.game_date as string);
+      const tomorrow = new Date(gd); tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowEnd = new Date(tomorrow); tomorrowEnd.setUTCHours(23, 59, 59, 999);
+
+      // Check if there's a match TOMORROW
+      const tomorrowMatch = await env.DB.prepare(
+        "SELECT sc.id as cal_id FROM season_calendar sc WHERE sc.league_id = ? AND sc.scheduled_at BETWEEN ? AND ? AND sc.status = 'scheduled'"
+      ).bind(lid, tomorrow.toISOString(), tomorrowEnd.toISOString()).first<{ cal_id: string }>().catch(() => null);
+
+      if (tomorrowMatch) {
+        // Check if messages already sent for this calendar
+        const alreadySent = await env.DB.prepare(
+          "SELECT id FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group') AND metadata LIKE ?"
+        ).bind(tid, `%${tomorrowMatch.cal_id}%`).first().catch(() => null);
+
+        if (!alreadySent) {
+          const { seedFromString } = await import("../lib/seed");
+          const { generateAbsences } = await import("../events/absence");
+          const { generateAttendanceMessage } = await import("../messaging/message-generator");
+
+          const squadRows = await env.DB.prepare(
+            "SELECT id, first_name, last_name, personality, life_context, physical, commute_km FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
+          ).bind(tid).all();
+
+          const absenceRng = createRng(seedFromString(tomorrowMatch.cal_id));
+          const absenceSquad = squadRows.results.map((r) => {
+            const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
+            const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();
+            const phys = (() => { try { return JSON.parse(r.physical as string); } catch { return {}; } })();
+            return {
+              firstName: r.first_name as string, lastName: r.last_name as string,
+              age: 25, occupation: lc.occupation ?? "", discipline: pers.discipline ?? 50,
+              patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
+              morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50,
+              commuteKm: (r.commute_km as number) ?? 0,
+            };
+          });
+          const absences = generateAbsences(absenceRng as any, absenceSquad);
+          const absentIds = new Set(absences.map((a) => squadRows.results[a.playerIndex]?.id as string));
+
+          // Find or create Kabina conversation
+          let kabinaId = await env.DB.prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group'")
+            .bind(tid).first<{ id: string }>().then((r) => r?.id).catch(() => null);
+
+          if (!kabinaId) {
+            kabinaId = crypto.randomUUID();
+            await env.DB.prepare("INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, created_at) VALUES (?, ?, 'squad_group', 'Kabina', 1, 0, datetime('now'))")
+              .bind(kabinaId, tid).run().catch(() => {});
+          }
+
+          // Insert messages
+          let msgCount = 0;
+          for (const row of squadRows.results) {
+            const pid = row.id as string;
+            const name = `${row.first_name} ${row.last_name}`;
+            const available = !absentIds.has(pid);
+            const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
+            const msg = generateAttendanceMessage(name, available, lc.condition ?? 100, absenceRng as any);
+
+            await env.DB.prepare(
+              "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'))"
+            ).bind(crypto.randomUUID(), kabinaId, pid, msg.senderName, msg.body,
+              JSON.stringify({ ...msg.metadata, calendarId: tomorrowMatch.cal_id }),
+              msgCount * 30 // stagger messages by 30s
+            ).run().catch((e) => logger.warn({ module: "daily-tick" }, "insert attendance message", e));
+            msgCount++;
+          }
+
+          // Update conversation
+          await env.DB.prepare("UPDATE conversations SET unread_count = ?, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+            .bind(msgCount, `${msgCount} odpovědí na docházku`, kabinaId).run().catch(() => {});
+
+          logger.info({ module: "daily-tick", teamId: tid }, `attendance messages: ${msgCount} sent to Kabina`);
+        }
+      }
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "attendance messages failed", e);
+  }
+
   // ── Free agent pool maintenance ──
   try {
     const { maintainFreeAgentPool } = await import("../transfers/free-agent-pool");
@@ -436,5 +526,7 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "transfer expiry failed", e);
   }
 
+  const duration = ((Date.now() - tickStart) / 1000).toFixed(1);
+  logger.info({ module: "daily-tick" }, `DONE events=${events.length} duration=${duration}s`);
   return { date: now.toISOString(), dayOfWeek, isTrainingDay, events };
 }

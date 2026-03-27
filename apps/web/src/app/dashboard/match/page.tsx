@@ -76,6 +76,7 @@ interface AvailablePlayer {
   id: string; firstName: string; lastName: string; position: string;
   overallRating: number; age: number; condition: number; morale: number;
   squadNumber?: number;
+  absent?: boolean; absenceReason?: string | null; absenceSms?: string | null; absenceEmoji?: string | null;
 }
 
 interface NextMatchInfo {
@@ -116,11 +117,12 @@ export default function MatchPage() {
   const autoFill = (pool: AvailablePlayer[], form: string) => {
     const slots = POSITIONS[form] ?? POSITIONS["4-4-2"];
     const used = new Set<string>();
+    const avail = pool.filter((p) => !p.absent); // skip absent players
     const sel: (string | null)[] = [];
     for (const slot of slots) {
-      const best = pool.filter((p) => !used.has(p.id) && p.position === slot.pos).sort((a, b) => b.overallRating - a.overallRating)[0];
+      const best = avail.filter((p) => !used.has(p.id) && p.position === slot.pos).sort((a, b) => b.overallRating - a.overallRating)[0];
       if (best) { sel.push(best.id); used.add(best.id); }
-      else { const any = pool.filter((p) => !used.has(p.id)).sort((a, b) => b.overallRating - a.overallRating)[0]; if (any) { sel.push(any.id); used.add(any.id); } else sel.push(null); }
+      else { const any = avail.filter((p) => !used.has(p.id)).sort((a, b) => b.overallRating - a.overallRating)[0]; if (any) { sel.push(any.id); used.add(any.id); } else sel.push(null); }
     }
     setSelected(sel); setSaved(false);
   };
@@ -187,6 +189,24 @@ export default function MatchPage() {
           ))}
         </div>
       </div>
+
+      {/* Absent players */}
+      {players.filter((p) => p.absent).length > 0 && (
+        <div className="card p-4">
+          <div className="font-heading font-bold text-sm uppercase text-card-red mb-2">Nedostupní hráči</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {players.filter((p) => p.absent).map((p) => (
+              <div key={p.id} className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-lg">
+                <span className="text-lg">{p.absenceEmoji ?? "❌"}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-heading font-bold text-sm">{p.firstName} {p.lastName}</div>
+                  <div className="text-sm text-muted italic truncate">{p.absenceSms ?? p.absenceReason}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Main layout: pitch left, player list right */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-4">

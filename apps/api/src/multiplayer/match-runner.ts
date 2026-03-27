@@ -56,8 +56,9 @@ export async function runScheduledMatches(
       ).bind(awayTeamId, calendarId).first();
       if (!hasAwayLineup) await createAutoLineup(db, awayTeamId, calendarId);
 
-      // Create RNG for this match
-      const rng = createRng(Date.now() + matchId.charCodeAt(0));
+      // Create RNG with deterministic seed from calendarId (same as lineup page)
+      const { seedFromString } = await import("../lib/seed");
+      const rng = createRng(seedFromString(calendarId) + matchId.charCodeAt(0));
 
       // Determine match type
       const homeTeam = await db.prepare("SELECT name, user_id FROM teams WHERE id = ?").bind(homeTeamId).first<Record<string, unknown>>();
@@ -229,11 +230,17 @@ export async function runScheduledMatches(
         return { starters: lineup.map(mapPlayer), subs: subs.map(mapPlayer) };
       };
 
-      // Save results with events + commentary + match context + lineups
+      // Collect absence data for both teams
+      const matchAbsences = [
+        ...Array.from(homeBuild.absentNames ?? []),
+        ...Array.from(awayBuild.absentNames ?? []),
+      ];
+
+      // Save results with events + commentary + match context + lineups + absences
       await db.prepare(
         `UPDATE matches SET status = 'simulated', home_score = ?, away_score = ?,
          events = ?, commentary = ?, attendance = ?, stadium_name = ?, pitch_condition = ?, weather = ?,
-         home_lineup_data = ?, away_lineup_data = ?,
+         home_lineup_data = ?, away_lineup_data = ?, absences = ?,
          simulated_at = datetime('now') WHERE id = ?`
       ).bind(
         result.homeScore, result.awayScore,
@@ -241,6 +248,7 @@ export async function runScheduledMatches(
         attendance, stadiumName, pitchCondition, weather,
         JSON.stringify(buildLineupData(homeLineup, homeSubs, homeBuild.idMap)),
         JSON.stringify(buildLineupData(awayLineup, awaySubs, awayBuild.idMap)),
+        matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null,
         matchId,
       ).run();
 
@@ -384,8 +392,9 @@ export async function runScheduledMatches(
 
 interface BuildResult {
   players: MatchPlayer[];
-  idMap: Map<number, string>;        // engine ID → DB player ID
-  positionMap: Map<string, string>;   // DB player ID → position
+  idMap: Map<number, string>;
+  positionMap: Map<string, string>;
+  absentNames: Array<{ name: string; reason: string; smsText: string }>;
 }
 
 async function buildMatchPlayers(
@@ -399,6 +408,7 @@ async function buildMatchPlayers(
 
   // Generate absences if rng provided (for automatic matches)
   let absentIds = new Set<string>();
+  const absentInfo: Array<{ name: string; reason: string; smsText: string }> = [];
   if (rng) {
     try {
       const { generateAbsences } = await import("../events/absence");
@@ -417,7 +427,11 @@ async function buildMatchPlayers(
       });
       const absences = generateAbsences(rng as any, squadForAbsence);
       absentIds = new Set(absences.map((a) => rows.results[a.playerIndex]?.id as string).filter(Boolean));
-    } catch { /* ignore absence errors */ }
+      for (const a of absences) {
+        const r = rows.results[a.playerIndex];
+        if (r) absentInfo.push({ name: `${r.first_name} ${r.last_name}`, reason: a.reason, smsText: a.smsText });
+      }
+    } catch (e) { logger.warn({ module: "match-runner" }, "absence generation", e); }
   }
 
   const allAvailable = rows.results.filter((r) => !absentIds.has(r.id as string));
@@ -497,7 +511,7 @@ async function buildMatchPlayers(
     };
   });
 
-  return { players, idMap, positionMap };
+  return { players, idMap, positionMap, absentNames: absentInfo };
 }
 
 async function createAutoLineup(
