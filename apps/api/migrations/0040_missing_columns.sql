@@ -14,3 +14,6 @@ ALTER TABLE matches ADD COLUMN weather TEXT;
 ALTER TABLE matches ADD COLUMN home_lineup_data TEXT;
 ALTER TABLE matches ADD COLUMN away_lineup_data TEXT;
 ALTER TABLE matches ADD COLUMN absences TEXT;
+
+-- Admin role
+ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;

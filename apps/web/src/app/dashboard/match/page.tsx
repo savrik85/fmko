@@ -190,21 +190,41 @@ export default function MatchPage() {
         </div>
       </div>
 
-      {/* Absent players */}
+      {/* Absent players — summary table */}
       {players.filter((p) => p.absent).length > 0 && (
-        <div className="card p-4">
-          <div className="font-heading font-bold text-sm uppercase text-card-red mb-2">Nedostupní hráči</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {players.filter((p) => p.absent).map((p) => (
-              <div key={p.id} className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-lg">
-                <span className="text-lg">{p.absenceEmoji ?? "❌"}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-heading font-bold text-sm">{p.firstName} {p.lastName}</div>
-                  <div className="text-sm text-muted italic truncate">{p.absenceSms ?? p.absenceReason}</div>
-                </div>
-              </div>
-            ))}
+        <div className="card overflow-hidden">
+          <div className="px-4 py-2 bg-red-50 border-b border-red-100 flex items-center gap-2">
+            <span className="font-heading font-bold text-sm uppercase text-card-red">Nedostupní ({players.filter((p) => p.absent).length})</span>
           </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 text-muted">
+                <th className="py-1.5 pl-4 text-left text-xs font-heading">Hráč</th>
+                <th className="py-1.5 text-left text-xs font-heading">Pozice</th>
+                <th className="py-1.5 text-left text-xs font-heading">Důvod</th>
+                <th className="py-1.5 pr-4 text-left text-xs font-heading">Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {players.filter((p) => p.absent).map((p) => (
+                <tr key={p.id} className="border-b border-gray-50 last:border-b-0">
+                  <td className="py-2 pl-4">
+                    <div className="flex items-center gap-2">
+                      <span>{p.absenceEmoji ?? "❌"}</span>
+                      <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.firstName} {p.lastName}</Link>
+                    </div>
+                  </td>
+                  <td className="py-2"><PositionBadge position={p.position as Pos} /></td>
+                  <td className="py-2">
+                    <span className={`font-heading font-bold text-sm ${(p as any).injured ? "text-card-red" : "text-gold-600"}`}>
+                      {(p as any).injured ? `🩹 Zranění (${(p as any).injuryDays}d)` : p.absenceReason}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-4 text-muted italic">{p.absenceSms}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -266,24 +286,33 @@ export default function MatchPage() {
               <div className="space-y-1 max-h-[400px] overflow-y-auto">
                 {players
                   .filter((p) => !selected.includes(p.id) || p.id === selected[editSlot])
-                  .sort((a, b) => (a.position === slots[editSlot].pos ? -1 : 1) - (b.position === slots[editSlot].pos ? -1 : 1) || b.overallRating - a.overallRating)
+                  .sort((a, b) => {
+                    // Absent players last
+                    if (a.absent && !b.absent) return 1;
+                    if (!a.absent && b.absent) return -1;
+                    return (a.position === slots[editSlot].pos ? -1 : 1) - (b.position === slots[editSlot].pos ? -1 : 1) || b.overallRating - a.overallRating;
+                  })
                   .map((p) => {
                     const isCurrent = p.id === selected[editSlot];
                     const isOOP = p.position !== slots[editSlot].pos;
+                    const isAbsent = p.absent;
                     return (
-                      <button key={p.id} onClick={() => {
+                      <button key={p.id} disabled={isAbsent} onClick={() => {
+                        if (isAbsent) return;
                         const s = [...selected]; s[editSlot] = p.id; setSelected(s); setEditSlot(null); setSaved(false);
                       }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
-                        isCurrent ? "bg-pitch-100 ring-1 ring-pitch-400" : "hover:bg-gray-50"
+                        isAbsent ? "opacity-40 cursor-not-allowed" : isCurrent ? "bg-pitch-100 ring-1 ring-pitch-400" : "hover:bg-gray-50"
                       }`}>
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-heading font-bold text-sm ${POS_BG[p.position]}`}>
                           {p.squadNumber ?? "?"}
                         </div>
                         <div className="flex-1 min-w-0">
                           <span className="font-heading font-bold text-base">{p.firstName} {p.lastName}</span>
-                          <div className="text-sm text-muted">{p.position} · Rat {p.overallRating} · {p.age} let</div>
+                          <div className="text-sm text-muted">
+                            {isAbsent ? <span className="text-card-red">❌ Nedostupný</span> : `${p.position} · Rat ${p.overallRating} · ${p.age} let`}
+                          </div>
                         </div>
-                        {isOOP && <span className="text-gold-500 text-lg shrink-0">⚠️</span>}
+                        {isOOP && !isAbsent && <span className="text-gold-500 text-lg shrink-0">⚠️</span>}
                       </button>
                     );
                   })}
@@ -365,18 +394,32 @@ export default function MatchPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {bench.sort((a, b) => b.overallRating - a.overallRating).map((p) => {
+                    {bench.sort((a, b) => {
+                      if (a.absent && !b.absent) return 1;
+                      if (!a.absent && b.absent) return -1;
+                      return b.overallRating - a.overallRating;
+                    }).map((p) => {
                       const s = p as any;
+                      const isAbsent = p.absent;
                       return (
-                        <tr key={p.id} className="border-b border-gray-50 last:border-b-0">
+                        <tr key={p.id} className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : ""}`}>
                           <td className="py-1.5 pl-3 w-8 text-center">
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[p.position]}`}>
                               {p.squadNumber ?? "?"}
                             </div>
                           </td>
                           <td className="py-1.5 px-1.5">
-                            <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-sm leading-tight hover:text-pitch-500 transition-colors">{p.lastName}</Link>
-                            <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
+                            {isAbsent ? (
+                              <div>
+                                <span className="font-heading font-bold text-sm leading-tight line-through text-muted">{p.lastName}</span>
+                                <div className="text-xs text-card-red">❌ Nedostupný</div>
+                              </div>
+                            ) : (
+                              <>
+                                <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-sm leading-tight hover:text-pitch-500 transition-colors">{p.lastName}</Link>
+                                <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
+                              </>
+                            )}
                           </td>
                           <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${p.overallRating}`}>{p.overallRating}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.speed)}`} title={`Rychlost: ${s.speed}`}>{s.speed}</td>

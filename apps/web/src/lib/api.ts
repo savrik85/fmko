@@ -46,6 +46,7 @@ export interface Team {
   league_id?: string;
   jersey_pattern?: string;
   badge_pattern?: string;
+  game_date?: string;
   stadium_name?: string;
   captain_id?: string;
   penalty_taker_id?: string;
@@ -69,6 +70,8 @@ export interface Player {
   description: string;
   residence?: string;
   commute_km?: number;
+  loan_from_team_id?: string | null;
+  loan_until?: string | null;
 }
 
 export interface CareerStats {

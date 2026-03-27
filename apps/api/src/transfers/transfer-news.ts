@@ -59,6 +59,16 @@ export async function createTransferNews(
       body = `${data.playerName} (${data.playerAge}, ${data.playerPosition}) přestupuje z ${data.fromTeamName} do ${data.toTeamName}${data.fee ? ` za ${data.fee.toLocaleString("cs")} Kč` : ""}. ${humor}`;
       break;
 
+    case "loan_completed":
+      headline = `Hostování: ${data.playerName} zamířil do ${data.toTeamName}`;
+      body = `${data.playerName} (${data.playerAge}, ${data.playerPosition}) odchází z ${data.fromTeamName} na hostování do ${data.toTeamName}${data.fee ? ` za poplatek ${data.fee.toLocaleString("cs")} Kč` : ""}. Uvidíme, jestli se vrátí jako lepší hráč.`;
+      break;
+
+    case "loan_return":
+      headline = `${data.playerName} se vrátil z hostování do ${data.teamName}`;
+      body = `${data.playerName} (${data.playerAge}, ${data.playerPosition}) se vrací zpět do ${data.teamName} po skončení hostování${data.fromTeamName ? ` v ${data.fromTeamName}` : ""}.`;
+      break;
+
     case "player_listed":
       headline = `${data.teamName} nabízí ${data.playerName} na přestup`;
       body = `Na přestupovém trhu se objevil ${data.playerName} (${data.playerAge}, ${data.playerPosition}) z ${data.teamName}. Požadovaná cena: ${(data.fee ?? 0).toLocaleString("cs")} Kč.`;

@@ -66,11 +66,19 @@ export default function PlayerDetailPage() {
 
   const [player, setPlayer] = useState<Player | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
+  const [playerTeam, setPlayerTeam] = useState<Team | null>(null);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [careerStats, setCareerStats] = useState<CareerStats | null>(null);
   const [matchHistory, setMatchHistory] = useState<PlayerMatchEntry[]>([]);
   const [contracts, setContracts] = useState<PlayerContract[]>([]);
   const [loading, setLoading] = useState(true);
+  const [offerOpen, setOfferOpen] = useState(false);
+  const [offerAmount, setOfferAmount] = useState("");
+  const [offerMessage, setOfferMessage] = useState("");
+  const [offerSending, setOfferSending] = useState(false);
+  const [offerSent, setOfferSent] = useState(false);
+  const [offerType, setOfferType] = useState<"transfer" | "loan">("transfer");
+  const [loanDuration, setLoanDuration] = useState("30");
 
   useEffect(() => {
     if (!teamId) return;
@@ -81,13 +89,18 @@ export default function PlayerDetailPage() {
       apiFetch<CareerStats>(`/api/teams/${teamId}/players/${playerId}/career-stats`).catch(() => null),
       apiFetch<{ matches: PlayerMatchEntry[] }>(`/api/teams/${teamId}/players/${playerId}/match-history`).catch(() => ({ matches: [] })),
       apiFetch<{ contracts: PlayerContract[] }>(`/api/teams/${teamId}/players/${playerId}/career-history`).catch(() => ({ contracts: [] })),
-    ]).then(([p, t, all, stats, history, careerHistory]) => {
+    ]).then(async ([p, t, all, stats, history, careerHistory]) => {
       setPlayer(p);
       setTeam(t);
       setAllPlayers(all);
       setCareerStats(stats);
       setMatchHistory(history.matches);
       setContracts(careerHistory.contracts);
+      // If viewing foreign player, fetch their team info
+      if (p.team_id && p.team_id !== teamId) {
+        const pt = await apiFetch<Team>(`/api/teams/${p.team_id}`).catch(() => null);
+        setPlayerTeam(pt);
+      }
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [teamId, playerId]);
@@ -95,6 +108,35 @@ export default function PlayerDetailPage() {
   const currentIndex = allPlayers.findIndex((p) => p.id === playerId);
   const prevPlayer = allPlayers.length > 1 ? allPlayers[(currentIndex - 1 + allPlayers.length) % allPlayers.length] : null;
   const nextPlayer = allPlayers.length > 1 ? allPlayers[(currentIndex + 1) % allPlayers.length] : null;
+
+  const isOwnPlayer = player?.team_id === teamId;
+  const isForeignHumanPlayer = !isOwnPlayer && playerTeam && playerTeam.user_id !== "ai";
+
+  async function sendOffer() {
+    if (!teamId || !player || offerSending) return;
+    const amount = parseInt(offerAmount.replace(/\s/g, "") || "0", 10);
+    if (offerType === "transfer" && (!amount || amount <= 0)) return;
+    setOfferSending(true);
+    try {
+      await apiFetch(`/api/teams/${teamId}/offers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerId: player.id,
+          amount,
+          message: offerMessage.trim() || undefined,
+          offerType,
+          ...(offerType === "loan" ? { loanDuration: parseInt(loanDuration, 10) } : {}),
+        }),
+      });
+      setOfferSent(true);
+      setOfferOpen(false);
+    } catch {
+      // silently handled
+    } finally {
+      setOfferSending(false);
+    }
+  }
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>;
   if (!player || !team) return <div className="page-container">Hráč nenalezen.</div>;
@@ -132,6 +174,12 @@ export default function PlayerDetailPage() {
               <span className="text-white/80 text-sm">{player.age} let</span>
               <span className="text-white/40">&middot;</span>
               <span className="text-white/80 text-sm">{player.lifeContext?.occupation ?? ""}</span>
+              {player.loan_from_team_id && (
+                <>
+                  <span className="text-white/40">&middot;</span>
+                  <span className="bg-yellow-400/20 text-yellow-200 text-xs font-heading font-bold px-2 py-0.5 rounded-full">Na hostování</span>
+                </>
+              )}
               <span className="text-white/40">&middot;</span>
               <a href={`/dashboard/team/${team.id}`} className="text-white/90 text-sm hover:text-white underline decoration-white/30 transition-colors flex items-center gap-1.5">
                 <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
@@ -142,23 +190,30 @@ export default function PlayerDetailPage() {
           </div>
 
           {/* Condition + Morale + Rating */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="bg-white/10 rounded-xl px-3 py-2 text-center">
+          <div className="flex items-center gap-2.5 shrink-0">
+            <div className="bg-white/10 rounded-xl py-2.5 text-center min-w-[64px]">
               <div className={`font-heading font-extrabold text-lg tabular-nums leading-none ${cond.color === "text-pitch-500" ? "text-green-300" : cond.color === "text-gold-500" ? "text-yellow-300" : "text-red-300"}`}>
                 {player.lifeContext?.condition ?? 50}%
               </div>
               <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Kondice</div>
             </div>
-            <div className="bg-white/10 rounded-xl px-3 py-2 text-center">
+            <div className="bg-white/10 rounded-xl py-2.5 text-center min-w-[64px]">
               <div className="text-xl leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
               <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Morálka</div>
             </div>
-            <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
-              <div className="font-heading font-extrabold text-3xl tabular-nums leading-none text-white">
+            <div className="bg-white/10 rounded-xl py-2.5 text-center min-w-[64px]">
+              <div className="font-heading font-extrabold text-xl tabular-nums leading-none text-white">
                 {player.overall_rating}
               </div>
               <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Rating</div>
             </div>
+            {isForeignHumanPlayer && !offerSent && (
+              <button onClick={() => setOfferOpen(!offerOpen)}
+                className={`rounded-xl px-3 py-2 text-center transition-colors cursor-pointer min-w-[64px] ${offerOpen ? "bg-white/20" : "bg-white/10 hover:bg-white/20"}`}>
+                <div className="text-xl leading-none">{offerOpen ? "✕" : "🤝"}</div>
+                <div className="text-white/70 text-[9px] font-heading font-bold uppercase mt-0.5">Nabídka</div>
+              </button>
+            )}
           </div>
 
           {allPlayers.length > 1 && (
@@ -166,6 +221,84 @@ export default function PlayerDetailPage() {
               className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors">&#9654;</button>
           )}
         </div>
+
+        {/* Transfer offer inline below hero — same banner bg */}
+        {offerSent && (
+          <div className="max-w-[1280px] mx-auto mt-3 px-5 sm:px-8">
+            <div className="text-white/80 text-sm font-heading font-bold">Nabídka odeslána</div>
+          </div>
+        )}
+        {offerOpen && (
+          <div className="max-w-[1280px] mx-auto mt-2 px-5 sm:px-8 pb-2">
+            <div className="bg-white/10 backdrop-blur rounded-xl p-4 space-y-3">
+              {/* Type toggle */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setOfferType("transfer")}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "transfer" ? "bg-white/20 text-white" : "bg-white/5 text-white/50 hover:text-white/80"}`}
+                >
+                  Trvalý přestup
+                </button>
+                <button
+                  onClick={() => setOfferType("loan")}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "loan" ? "bg-white/20 text-white" : "bg-white/5 text-white/50 hover:text-white/80"}`}
+                >
+                  Hostování
+                </button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+                <div className="flex-1 min-w-0">
+                  <label className="text-white/60 text-xs font-heading uppercase mb-1 block">
+                    {offerType === "loan" ? "Poplatek za hostování (Kč)" : "Nabízená částka (Kč)"}
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={offerAmount}
+                    onChange={(e) => setOfferAmount(e.target.value.replace(/[^\d]/g, ""))}
+                    placeholder={offerType === "loan" ? "0 = zdarma" : "např. 50000"}
+                    className="w-full bg-white/10 text-white placeholder:text-white/30 border border-white/20 rounded-lg px-3 py-2 text-sm font-heading font-bold focus:outline-none focus:border-white/50"
+                  />
+                </div>
+                {offerType === "loan" && (
+                  <div className="w-32 shrink-0">
+                    <label className="text-white/60 text-xs font-heading uppercase mb-1 block">Délka (dní)</label>
+                    <select
+                      value={loanDuration}
+                      onChange={(e) => setLoanDuration(e.target.value)}
+                      className="w-full bg-white/10 text-white border border-white/20 rounded-lg px-3 py-2 text-sm font-heading font-bold focus:outline-none focus:border-white/50"
+                    >
+                      <option value="14" className="bg-gray-800">14 dní</option>
+                      <option value="30" className="bg-gray-800">30 dní</option>
+                      <option value="60" className="bg-gray-800">60 dní</option>
+                      <option value="90" className="bg-gray-800">90 dní</option>
+                      <option value="120" className="bg-gray-800">Půl sezóny</option>
+                      <option value="180" className="bg-gray-800">Celá sezóna</option>
+                    </select>
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <label className="text-white/60 text-xs font-heading uppercase mb-1 block">Zpráva (volitelné)</label>
+                  <input
+                    type="text"
+                    value={offerMessage}
+                    onChange={(e) => setOfferMessage(e.target.value)}
+                    placeholder="Nabízím vám spolupráci..."
+                    className="w-full bg-white/10 text-white placeholder:text-white/30 border border-white/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-white/50"
+                  />
+                </div>
+                <button
+                  onClick={sendOffer}
+                  disabled={offerSending || (!offerAmount && offerType !== "loan")}
+                  className="bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 text-white font-heading font-bold text-sm px-5 py-2 rounded-lg transition-colors shrink-0"
+                >
+                  {offerSending ? "Odesílám..." : offerType === "loan" ? "Nabídnout hostování" : "Odeslat nabídku"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
     <div className="page-container space-y-5">

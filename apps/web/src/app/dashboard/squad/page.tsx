@@ -192,6 +192,9 @@ export default function SquadPage() {
                       className="font-heading font-bold text-sm hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors whitespace-nowrap">
                       {p.first_name} {p.last_name}
                     </Link>
+                    {p.loan_from_team_id && (
+                      <span className="ml-1.5 text-[10px] bg-yellow-100 text-yellow-700 font-heading font-bold px-1.5 py-0.5 rounded-full">Host.</span>
+                    )}
                   </td>
                   {/* Position */}
                   <td className="py-2 px-1.5 text-center"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></td>

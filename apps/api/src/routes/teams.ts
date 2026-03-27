@@ -342,6 +342,8 @@ teamsRouter.post("/", async (c) => {
   }
 
   step = "league-setup";
+  // Ensure AI user exists
+  await c.env.DB.prepare("INSERT OR IGNORE INTO users (id, email, password_hash) VALUES ('ai', 'ai@system', 'none')").run().catch(() => {});
   const district = village.district as string;
 
   // Get current active season (or create season 1)
@@ -383,6 +385,13 @@ teamsRouter.post("/", async (c) => {
     }
 
     await c.env.DB.prepare("UPDATE teams SET league_id = ? WHERE id = ?").bind(existingLeague.id, teamId).run();
+
+    // Sync game_date from existing league teams
+    const peerDate = await c.env.DB.prepare("SELECT game_date FROM teams WHERE league_id = ? AND game_date IS NOT NULL AND id != ? LIMIT 1")
+      .bind(existingLeague.id, teamId).first<{ game_date: string }>().catch(() => null);
+    if (peerDate?.game_date) {
+      await c.env.DB.prepare("UPDATE teams SET game_date = ? WHERE id = ?").bind(peerDate.game_date, teamId).run();
+    }
 
     // ── Ensure schedule exists (may be missing if first team creation failed) ──
     const matchCount = await c.env.DB.prepare(
@@ -445,6 +454,8 @@ teamsRouter.post("/", async (c) => {
   }
 
   step = "create-league";
+  // Ensure AI user exists (required for FK on AI team inserts)
+  await c.env.DB.prepare("INSERT OR IGNORE INTO users (id, email, password_hash) VALUES ('ai', 'ai@system', 'none')").run().catch(() => {});
   const leagueId = uuid();
   const leagueName = `Okresní přebor ${district}`;
 
@@ -894,7 +905,7 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
      JOIN teams t ON pc.team_id = t.id
      JOIN seasons s ON pc.season_id = s.id
      WHERE pc.player_id = ?
-     ORDER BY s.number DESC`
+     ORDER BY pc.joined_at DESC`
   ).bind(playerId).all().catch((e) => { logger.warn({ module: "teams" }, "query player data", e); return { results: [] }; });
 
   // If no contracts exist, create one from current player data
@@ -919,7 +930,7 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
          JOIN teams t ON pc.team_id = t.id
          JOIN seasons s ON pc.season_id = s.id
          WHERE pc.player_id = ?
-         ORDER BY s.number DESC`
+         ORDER BY pc.joined_at DESC`
       ).bind(playerId).all().catch((e) => { logger.warn({ module: "teams" }, "query player data", e); return { results: [] }; });
       contracts.results = fresh.results;
     }
@@ -930,6 +941,7 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
     transfer: "Přestup",
     free_agent: "Volný hráč",
     youth: "Z mládeže",
+    loan: "Hostování",
   };
 
   return c.json({

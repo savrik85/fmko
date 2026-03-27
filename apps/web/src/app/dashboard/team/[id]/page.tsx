@@ -168,6 +168,19 @@ export default function TeamPage() {
             )}
           </div>
           <div className="flex items-center gap-3 shrink-0">
+            {!isOwnTeam && (team as any).user_id !== "ai" && (
+              <button onClick={async () => {
+                if (!myTeamId) return;
+                const res = await apiFetch<{ conversationId: string }>(`/api/teams/${myTeamId}/conversation-with/${teamId}`, {
+                  method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+                }).catch(() => null);
+                if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
+              }}
+                className="bg-white/10 hover:bg-white/20 rounded-xl px-4 py-2 text-center transition-colors cursor-pointer">
+                <div className="text-xl leading-none">💬</div>
+                <div className="text-white/70 text-[10px] font-heading font-bold uppercase mt-1">Napsat</div>
+              </button>
+            )}
             <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
               <div className="font-heading font-extrabold text-xl tabular-nums leading-none text-white">{players.length}</div>
               <div className="text-white/50 text-[10px] font-heading font-bold uppercase mt-1">Hráčů</div>

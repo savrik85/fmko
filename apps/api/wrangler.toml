@@ -23,11 +23,9 @@ id = "local"
 binding = "SEED_DATA"
 bucket_name = "okresni-masina-seed"
 
-# Cron Triggers — tick systém (časy v UTC, CET = UTC+1)
+# Cron Triggers — dva hlavní crony
 [triggers]
 crons = [
-  "0 19 * * 3",   # St 20:00 CET — ligový/pohárový zápas
-  "0 14 * * 6",   # So 15:00 CET — ligový zápas
-  "0 14 * * 0",   # Ne 15:00 CET — ligový zápas (nabitý týden)
-  "0 3 * * *",    # Denně 4:00 CET — denní tick (trénink, eventy, regenerace)
+  "0 3 * * *",    # Denní tick 4:00 CET — posun dne, tréninky, finance, absence zprávy
+  "0 17 * * *",   # Zápasový tick 18:00 CET — simulace zápasů naplánovaných na dnešek
 ]

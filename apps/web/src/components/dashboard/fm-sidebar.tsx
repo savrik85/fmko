@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTeam } from "@/context/team-context";
+import { apiFetch } from "@/lib/api";
 
 interface NavItem {
   href: string;
@@ -37,8 +38,26 @@ const GROUP_LABELS: Record<string, string> = {
 
 export function FMSidebar() {
   const [expanded, setExpanded] = useState(true);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [incomingOffers, setIncomingOffers] = useState(0);
   const pathname = usePathname();
-  const { teamId, logout } = useTeam();
+  const { teamId, isAdmin, logout } = useTeam();
+
+  // Poll unread messages count — refresh on page change too
+  useEffect(() => {
+    if (!teamId) return;
+    const load = () => {
+      apiFetch<Array<{ unreadCount: number }>>(`/api/teams/${teamId}/conversations`)
+        .then((convs) => setUnreadMessages(convs.reduce((s, c) => s + (c.unreadCount ?? 0), 0)))
+        .catch(() => {});
+      apiFetch<{ incoming: unknown[] }>(`/api/teams/${teamId}/offers`)
+        .then((o) => setIncomingOffers(o.incoming?.length ?? 0))
+        .catch(() => {});
+    };
+    load();
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
+  }, [teamId, pathname]);
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -48,7 +67,9 @@ export function FMSidebar() {
     return pathname.startsWith(href);
   };
 
-  const items = NAV_ITEMS;
+  const items = isAdmin
+    ? [...NAV_ITEMS, { href: "/dashboard/admin", label: "Admin", icon: "⚙️", group: "main" as const }]
+    : NAV_ITEMS;
 
   const groups = ["main", "club", "league"] as const;
 
@@ -110,7 +131,15 @@ export function FMSidebar() {
                       )}
                       <span className="text-sm shrink-0 w-5 text-center leading-none">{item.icon}</span>
                       {expanded && (
-                        <span className="text-[13px] font-medium whitespace-nowrap leading-none">{item.label}</span>
+                        <span className="text-[13px] font-medium whitespace-nowrap leading-none">
+                          {item.label}
+                          {item.href === "/dashboard/phone" && unreadMessages > 0 && (
+                            <span className="ml-1.5 bg-card-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unreadMessages}</span>
+                          )}
+                          {item.href === "/dashboard/transfers" && incomingOffers > 0 && (
+                            <span className="ml-1.5 bg-card-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{incomingOffers}</span>
+                          )}
+                        </span>
                       )}
                     </Link>
                   );

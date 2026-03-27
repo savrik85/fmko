@@ -1,22 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { FMSidebar } from "@/components/dashboard/fm-sidebar";
 import { FMTopBar } from "@/components/dashboard/fm-topbar";
 import { BottomNav } from "@/components/dashboard/bottom-nav";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { useTeam } from "@/context/team-context";
 
 const DETAIL_PREFIXES = ["/dashboard/player/", "/dashboard/team/", "/dashboard/match/"];
 const CUSTOM_HEADER_PAGES = ["/dashboard/liga", "/dashboard/schedule"];
 
-const isDev = process.env.NODE_ENV === "development";
-
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { teamId, isAdmin } = useTeam();
   const isDetailPage = DETAIL_PREFIXES.some((p) => pathname.startsWith(p) && pathname !== p.slice(0, -1));
   const hasCustomHeader = CUSTOM_HEADER_PAGES.includes(pathname);
   const [advancing, setAdvancing] = useState(false);
+  // Check for unseen match — redirect to match-day screen (skip on replay pages)
+  useEffect(() => {
+    if (!teamId) return;
+    if (pathname.includes("/replay")) return; // don't redirect away from replay
+    const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+    fetch(`${API}/api/teams/${teamId}/unseen-match`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && data.matchId) {
+          window.location.replace(`/match-day/${data.matchId}`);
+        }
+      })
+      .catch(() => {});
+  }, [teamId, pathname]);
 
   async function advanceDay() {
     if (advancing) return;
@@ -42,7 +56,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <BottomNav />
 
-      {isDev && (
+      {isAdmin && (
         <button
           onClick={advanceDay}
           disabled={advancing}

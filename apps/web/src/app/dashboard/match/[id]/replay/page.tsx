@@ -114,7 +114,8 @@ export default function MatchReplayPage() {
         home_badge: (r.home_badge as string) ?? "shield", away_badge: (r.away_badge as string) ?? "shield",
         attendance: (r.attendance as number) ?? null, stadium_name: (r.stadium_name as string) ?? null,
         pitch_condition: (r.pitch_condition as number) ?? null, weather: (r.weather as string) ?? null,
-        home_lineup_data: r.home_lineup_data ?? null, away_lineup_data: r.away_lineup_data ?? null,
+        home_lineup_data: (r.home_lineup_data && (r.home_lineup_data as LineupData).starters) ? r.home_lineup_data as LineupData : null,
+        away_lineup_data: (r.away_lineup_data && (r.away_lineup_data as LineupData).starters) ? r.away_lineup_data as LineupData : null,
       });
       setLoading(false);
       // Fetch stadium info from home team

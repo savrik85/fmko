@@ -7,7 +7,7 @@ import { logger } from "../lib/logger";
 import type { Rng } from "../generators/rng";
 import { generatePlayer, type VillageInfo } from "../generators/player";
 import { getDistrictDataFromDB } from "../data/districts";
-import { calculateOverallRating } from "../skills/generator";
+// calculateOverallRating expects {current,potential} SkillValues — we use simple numbers here
 
 const FIRSTNAMES: Record<string, Record<string, number>> = {
   "1960s": { "Jiří": 0.08, "Jan": 0.07, "Petr": 0.06, "Josef": 0.06, "Jaroslav": 0.05, "Milan": 0.05, "Zdeněk": 0.04 },
@@ -35,7 +35,7 @@ export async function maintainFreeAgentPool(
 
   // 2. Find districts with active human teams
   const districts = await db.prepare(
-    "SELECT DISTINCT v.district, v.id as village_id, v.population, v.category, v.latitude, v.longitude FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id != 'ai'"
+    "SELECT DISTINCT v.district, v.id as village_id, v.population, v.size, v.lat, v.lng FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id != 'ai'"
   ).all().catch((e) => { logger.warn({ module: "free-agent-pool" }, "query", e); return { results: [] }; });
 
   let generated = 0;
@@ -59,27 +59,40 @@ export async function maintainFreeAgentPool(
 
     const villageInfo: VillageInfo = {
       region_code: district,
-      category: (row.category as VillageInfo["category"]) ?? "obec",
+      category: ((row.size as string) ?? "obec") as VillageInfo["category"],
       population: (row.population as number) ?? 500,
     };
 
     // Pick random villages from the district for residence
     const nearbyVillages = await db.prepare(
-      "SELECT id, latitude, longitude FROM villages WHERE district = ? ORDER BY RANDOM() LIMIT 10"
+      "SELECT id, lat, lng FROM villages WHERE district = ? ORDER BY RANDOM() LIMIT 10"
     ).bind(district).all().catch((e) => { logger.warn({ module: "free-agent-pool" }, "query", e); return { results: [] }; });
 
     for (let i = 0; i < count; i++) {
       const pos = rng.pick([...POSITIONS]);
       const player = generatePlayer(rng, villageInfo, pos, surnameData, firstnameData);
 
-      // Calculate overall rating
+      // Calculate overall rating from raw numbers
       const skills = {
         speed: player.speed, technique: player.technique, shooting: player.shooting,
         passing: player.passing, heading: player.heading, defense: player.defense,
         goalkeeping: player.goalkeeping ?? 0, stamina: player.stamina, strength: player.strength,
         vision: 30, creativity: 30, setPieces: 30, experience: 20,
       };
-      const overallRating = calculateOverallRating(pos, skills, 0);
+      const posWeights: Record<string, Record<string, number>> = {
+        GK: { goalkeeping: 4, strength: 2, stamina: 1 },
+        DEF: { defense: 3, heading: 2, strength: 2, speed: 1, stamina: 2, passing: 1 },
+        MID: { passing: 3, technique: 2, stamina: 3, speed: 1, shooting: 1, vision: 2 },
+        FWD: { shooting: 3, speed: 3, technique: 2, heading: 1, stamina: 1 },
+      };
+      const w = posWeights[pos] ?? posWeights.MID;
+      let wSum = 0, wTotal = 0;
+      for (const [k, wt] of Object.entries(w)) {
+        wSum += ((skills as Record<string, number>)[k] ?? 30) * wt;
+        wTotal += wt;
+      }
+      const rawRating = wTotal > 0 ? wSum / wTotal : 30;
+      const overallRating = Number.isFinite(rawRating) ? Math.round(rawRating) : 30;
       const weeklyWage = Math.round(10 + (overallRating / 100) * 400);
 
       // Pick a random village for residence
@@ -102,9 +115,10 @@ export async function maintainFreeAgentPool(
         JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
         JSON.stringify(player.avatarConfig ?? {}),
         weeklyWage, resVillage?.id ?? null, expiresAt.toISOString(),
-      ).run().catch((e) => console.error("[FreeAgentPool] Insert failed:", e));
+      ).run();
 
       generated++;
+      logger.info({ module: "free-agent-pool" }, `inserted ${player.firstName} ${player.lastName} (${pos}, ${overallRating}) in ${district}`);
     }
   }
 

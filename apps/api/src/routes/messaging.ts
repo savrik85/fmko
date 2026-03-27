@@ -18,7 +18,7 @@ messagingRouter.get("/teams/:teamId/conversations", async (c) => {
   const teamId = c.req.param("teamId");
 
   let result = await c.env.DB.prepare(
-    `SELECT * FROM conversations WHERE team_id = ? ORDER BY pinned DESC, last_message_at DESC`
+    `SELECT * FROM conversations WHERE team_id = ? ORDER BY pinned DESC, REPLACE(last_message_at, 'T', ' ') DESC`
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "messaging" }, "fetch conversations", e); return { results: [] }; });
 
   // Auto-init conversations if none exist
@@ -38,7 +38,7 @@ messagingRouter.get("/teams/:teamId/conversations", async (c) => {
       await initTeamConversations(c.env.DB, teamId, playerData).catch((e) => logger.warn({ module: "messaging" }, "auto-init conversations", e));
 
       result = await c.env.DB.prepare(
-        `SELECT * FROM conversations WHERE team_id = ? ORDER BY pinned DESC, last_message_at DESC`
+        `SELECT * FROM conversations WHERE team_id = ? ORDER BY pinned DESC, REPLACE(last_message_at, 'T', ' ') DESC`
       ).bind(teamId).all().catch((e) => { logger.warn({ module: "messaging" }, "re-fetch conversations after init", e); return { results: [] }; });
     }
   }
@@ -274,26 +274,11 @@ export async function initTeamConversations(
   ).bind(groupId, teamId, "Vítejte v kabině! ⚽", now, now).run();
 
   await db.prepare(
-    "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at, read) VALUES (?, ?, 'system', 'Systém', ?, ?, 0)"
-  ).bind(uuid(), groupId, "Vítejte v kabině! Tady se řeší docházka na zápasy a všechno důležité. ⚽", now, now).run();
+    "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Systém', ?, ?)"
+  ).bind(uuid(), groupId, "Vítejte v kabině! Tady se řeší docházka na zápasy a všechno důležité. ⚽", now).run()
+    .catch((e) => logger.warn({ module: "messaging" }, "insert Kabina welcome message", e));
 
-  // 2. Konverzace s každým hráčem
-  for (const p of players) {
-    const name = p.nickname
-      ? `${p.firstName} ${p.lastName} „${p.nickname}"`
-      : `${p.firstName} ${p.lastName}`;
-
-    const convId = uuid();
-    const greeting = pickGreeting(p.firstName);
-
-    await db.prepare(
-      "INSERT INTO conversations (id, team_id, type, title, participant_id, participant_avatar, last_message_text, last_message_at, unread_count, created_at) VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 1, ?)"
-    ).bind(convId, teamId, name, p.id, p.avatar, greeting.slice(0, 100), now, now).run();
-
-    await db.prepare(
-      "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at, read) VALUES (?, ?, 'player', ?, ?, ?, ?, 0)"
-    ).bind(uuid(), convId, p.id, p.firstName, greeting, now).run();
-  }
+  // 1:1 konverzace s hráči se nevytvářejí při onboardingu — vzniknou až na vyžádání
 }
 
 const GREETINGS = [

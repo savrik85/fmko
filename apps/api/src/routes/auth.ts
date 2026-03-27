@@ -177,9 +177,13 @@ authRouter.get("/me", async (c) => {
     if (leaguePosition === 0) leaguePosition = null;
   }
 
+  const user = await c.env.DB.prepare("SELECT is_admin FROM users WHERE id = ?")
+    .bind(session.userId).first<{ is_admin: number }>().catch(() => null);
+
   return c.json({
     id: session.userId,
     email: session.email,
+    isAdmin: (user?.is_admin ?? 0) === 1,
     teamId: team?.id ?? null,
     teamName: team?.name ?? null,
     primaryColor: (team?.primary_color as string) ?? null,

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, BadgePreview } from "@/components/ui";
@@ -17,6 +16,7 @@ interface MatchInfo {
   home_secondary: string; away_secondary: string;
   home_badge: string; away_badge: string;
   home_score: number; away_score: number;
+  home_team_id: string; away_team_id: string;
   isHome: boolean;
 }
 
@@ -45,6 +45,8 @@ export default function MatchDayPage() {
           away_badge: (r.away_badge as string) ?? "shield",
           home_score: r.home_score as number,
           away_score: r.away_score as number,
+          home_team_id: r.home_team_id as string,
+          away_team_id: r.away_team_id as string,
           isHome: r.home_team_id === teamId,
         });
         setLoading(false);
@@ -62,11 +64,13 @@ export default function MatchDayPage() {
 
   const skipMatch = async () => {
     setSkipping(true);
-    await apiFetch(`/api/matches/${matchId}/mark-seen`, {
+    const tid = teamId ?? (match?.isHome ? match.home_team_id : match?.away_team_id);
+    const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+    await fetch(`${API}/api/matches/${matchId}/mark-seen`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ teamId }),
+      body: JSON.stringify({ teamId: tid }),
     }).catch(() => {});
-    router.push(`/dashboard/match/${matchId}`);
+    window.location.href = `/dashboard/match/${matchId}`;
   };
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><Spinner size="lg" /></div>;
@@ -105,10 +109,19 @@ export default function MatchDayPage() {
 
           {/* Actions */}
           <div className="bg-white p-6 space-y-3">
-            <Link href={`/dashboard/match/${matchId}/replay`}
-              className="btn btn-primary btn-lg w-full text-center block font-heading font-bold text-lg py-4">
+            <button
+              onClick={async () => {
+                const tid = teamId ?? (match?.isHome ? match.home_team_id : match?.away_team_id);
+                const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+                await fetch(`${API}/api/matches/${matchId}/mark-seen`, {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ teamId: tid }),
+                }).catch(() => {});
+                window.location.href = `/dashboard/match/${matchId}/replay`;
+              }}
+              className="btn btn-primary btn-lg w-full font-heading font-bold text-lg py-4">
               ▶ Sledovat zápas
-            </Link>
+            </button>
             <button onClick={skipMatch} disabled={skipping}
               className="btn btn-ghost btn-lg w-full font-heading font-bold">
               {skipping ? "..." : "Přeskočit → zobrazit výsledek"}

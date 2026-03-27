@@ -69,32 +69,22 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!teamId) return;
-    // Check unseen match FIRST — redirect before loading anything else
-    apiFetch<UnseenMatch | null>(`/api/teams/${teamId}/unseen-match`)
-      .catch(() => null)
-      .then((unseen) => {
-        if (unseen && unseen.matchId) {
-          window.location.replace(`/match-day/${unseen.matchId}`);
-          return;
-        }
-        // No unseen match — load dashboard data
-        Promise.all([
-          apiFetch<Team>(`/api/teams/${teamId}`),
-          apiFetch<Player[]>(`/api/teams/${teamId}/players`),
-          apiFetch<{ standings: Standing[] }>(`/api/teams/${teamId}/standings`).catch(() => ({ standings: [] })),
-          apiFetch<{ matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`).catch(() => ({ matches: [] })),
-          apiFetch<ManagerProfile>(`/api/teams/${teamId}/manager`).catch(() => null),
-          apiFetch<TeamMatchResults>(`/api/teams/${teamId}/match-results`).catch(() => null),
-        ]).then(([t, p, s, m, mgr, mr]) => {
-          setTeam(t);
-          setPlayers(p);
-          setStandings(s.standings);
-          setMatches(m.matches);
-          setManager(mgr);
-          setMatchResults(mr);
-          setLoading(false);
-        }).catch(() => setLoading(false));
-      });
+    Promise.all([
+      apiFetch<Team>(`/api/teams/${teamId}`),
+      apiFetch<Player[]>(`/api/teams/${teamId}/players`),
+      apiFetch<{ standings: Standing[] }>(`/api/teams/${teamId}/standings`).catch(() => ({ standings: [] })),
+      apiFetch<{ matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`).catch(() => ({ matches: [] })),
+      apiFetch<ManagerProfile>(`/api/teams/${teamId}/manager`).catch(() => null),
+      apiFetch<TeamMatchResults>(`/api/teams/${teamId}/match-results`).catch(() => null),
+    ]).then(([t, p, s, m, mgr, mr]) => {
+      setTeam(t);
+      setPlayers(p);
+      setStandings(s.standings);
+      setMatches(m.matches);
+      setManager(mgr);
+      setMatchResults(mr);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, [teamId]);
 
 
@@ -109,8 +99,52 @@ export default function DashboardPage() {
   const injuredCount = players.filter((p) => (p.lifeContext?.condition ?? 100) < 30).length;
   const lowMoraleCount = players.filter((p) => (p.lifeContext?.morale ?? 50) < 30).length;
 
+  // Determine today's program
+  const gameDate = team.game_date ? new Date(team.game_date) : null;
+  const dayOfWeek = gameDate?.getUTCDay() ?? 0;
+  const isTrainingDay = dayOfWeek >= 1 && dayOfWeek <= 5;
+  // Match day: next match scheduled_at is on the same day as game_date
+  const isMatchDay = (() => {
+    if (!nextMatch?.scheduledAt || !gameDate) return false;
+    const matchDate = new Date(nextMatch.scheduledAt);
+    return Math.abs(matchDate.getTime() - gameDate.getTime()) < 86400000; // within 1 day
+  })();
+  const matchOpponent = nextMatch ? (nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName) : null;
+  const dayName = gameDate ? gameDate.toLocaleDateString("cs", { weekday: "long" }) : "";
+
   return (
     <div className="page-container space-y-5">
+
+      {/* ═══ Today's program ═══ */}
+      <div className={`card p-4 sm:p-5 ${isMatchDay ? "ring-2 ring-pitch-400 bg-pitch-50/30" : ""}`}>
+        <div className="flex items-center gap-4">
+          <div className="text-3xl">
+            {isMatchDay ? "⚽" : isTrainingDay ? "🏋️" : "🌴"}
+          </div>
+          <div className="flex-1">
+            <div className="font-heading font-bold text-lg">
+              {isMatchDay ? "Zápasový den!" : isTrainingDay ? "Tréninkový den" : "Volný den"}
+            </div>
+            <div className="text-sm text-muted">
+              {dayName && <span className="capitalize">{dayName}</span>}
+              {isMatchDay && matchOpponent && (
+                <span> · <span className="font-heading font-bold text-pitch-600">{matchOpponent}</span> · výkop v 18:00</span>
+              )}
+              {isTrainingDay && !isMatchDay && (
+                <span> · Trénink dle plánu</span>
+              )}
+              {!isTrainingDay && !isMatchDay && (
+                <span> · Regenerace, žádný program</span>
+              )}
+            </div>
+          </div>
+          {isMatchDay && (
+            <Link href="/dashboard/match" className="py-2 px-4 rounded-lg bg-pitch-500 text-white font-heading font-bold text-sm hover:bg-pitch-600 transition-colors">
+              Sestava →
+            </Link>
+          )}
+        </div>
+      </div>
 
       {/* ═══ Row 1: Next match + Form + League position ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

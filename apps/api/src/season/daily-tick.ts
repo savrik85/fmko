@@ -272,8 +272,99 @@ export async function executeDailyTick(
   ).all();
   for (const team of allTeams.results) {
     const teamId = team.id as string;
-    const gameDate = team.game_date as string | null;
+    let gameDate = team.game_date as string | null;
+    // If game_date is NULL, sync from another team in the same league
+    if (!gameDate && team.league_id) {
+      const peer = await env.DB.prepare("SELECT game_date FROM teams WHERE league_id = ? AND game_date IS NOT NULL LIMIT 1")
+        .bind(team.league_id).first<{ game_date: string }>().catch(() => null);
+      if (peer?.game_date) {
+        gameDate = peer.game_date;
+        await env.DB.prepare("UPDATE teams SET game_date = ? WHERE id = ?").bind(gameDate, teamId).run().catch(() => {});
+        logger.info({ module: "daily-tick" }, `synced game_date for team ${teamId} from league peer`);
+      }
+    }
     if (gameDate) {
+      // ── Day-before attendance messages (BEFORE advancing date) ──
+      // gameDate = current day. Check if TOMORROW (gameDate+1) has a match.
+      if ((team as any).user_id !== "ai") {
+        try {
+          const tomorrow = new Date(gameDate);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const checkDayStart = new Date(tomorrow); checkDayStart.setUTCHours(0, 0, 0, 0);
+          const checkDayEnd = new Date(tomorrow); checkDayEnd.setUTCHours(23, 59, 59, 999);
+          const lid = team.league_id as string | null;
+          if (lid) {
+            const tomorrowMatch = await env.DB.prepare(
+              "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled'"
+            ).bind(lid, checkDayStart.toISOString(), checkDayEnd.toISOString()).first<{ id: string }>().catch(() => null);
+            if (tomorrowMatch) {
+              const alreadySent = await env.DB.prepare(
+                "SELECT id FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group') AND metadata LIKE ?"
+              ).bind(teamId, `%${tomorrowMatch.id}%`).first().catch(() => null);
+
+              if (!alreadySent) {
+                const { seedFromString } = await import("../lib/seed");
+                const { generateAbsences } = await import("../events/absence");
+                const { generateAttendanceMessage } = await import("../messaging/message-generator");
+
+                // Find opponent name for conversation title
+                const matchRow = await env.DB.prepare(
+                  "SELECT m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1"
+                ).bind(tomorrowMatch.id, teamId, teamId).first<Record<string, unknown>>().catch(() => null);
+                const opponentName = matchRow ? (matchRow.home_team_id === teamId ? matchRow.away_name : matchRow.home_name) as string : "Soupeř";
+
+                const squadRows = await env.DB.prepare(
+                  "SELECT id, first_name, last_name, personality, life_context, physical, commute_km FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
+                ).bind(teamId).all();
+
+                const absRng = createRng(seedFromString(tomorrowMatch.id));
+                const absSquad = squadRows.results.map((r) => {
+                  const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
+                  const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();
+                  const phys = (() => { try { return JSON.parse(r.physical as string); } catch { return {}; } })();
+                  return { firstName: r.first_name as string, lastName: r.last_name as string, age: 25, occupation: lc.occupation ?? "",
+                    discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
+                    morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0 };
+                });
+                const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, "day_before");
+                const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
+
+                // Create NEW match-day conversation group (named after opponent)
+                const matchConvId = crypto.randomUUID();
+                await env.DB.prepare(
+                  "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_at, created_at) VALUES (?, ?, 'squad_group', ?, 0, 0, datetime('now'), datetime('now'))"
+                ).bind(matchConvId, teamId, `⚽ vs ${opponentName}`).run().catch(() => {});
+
+                // System message
+                await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', 'Systém', ?, ?, datetime('now'))")
+                  .bind(crypto.randomUUID(), matchConvId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`, JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }))
+                  .run().catch(() => {});
+
+                let msgCount = 1;
+                for (const row of squadRows.results) {
+                  const pid = row.id as string;
+                  const absence = dayBeforeAbsences.find((a) => squadRows.results[a.playerIndex]?.id === pid);
+                  const available = !absentIds.has(pid);
+                  const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
+                  const msg = generateAttendanceMessage(`${row.first_name} ${row.last_name}`, available, lc.condition ?? 100, absRng as any);
+
+                  await env.DB.prepare(
+                    "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'))"
+                  ).bind(crypto.randomUUID(), matchConvId, pid, msg.senderName, absence ? absence.smsText : msg.body,
+                    JSON.stringify({ type: "attendance", response: available ? "yes" : "no", timing: "day_before", calendarId: tomorrowMatch.id }), msgCount * 10,
+                  ).run().catch((e) => logger.warn({ module: "daily-tick" }, "day_before attendance msg", e));
+                  msgCount++;
+                }
+                await env.DB.prepare("UPDATE conversations SET unread_count = ?, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+                  .bind(msgCount, `📋 ${dayBeforeAbsences.length} omluvených z ${squadRows.results.length}`, matchConvId).run().catch(() => {});
+                logger.info({ module: "daily-tick", teamId }, `day_before attendance: ${msgCount} msgs → ⚽ vs ${opponentName}`);
+              }
+            }
+          }
+        } catch (e) { logger.warn({ module: "daily-tick" }, "day_before attendance failed", e); }
+      }
+
+      // NOW advance the date
       const gd = new Date(gameDate);
       gd.setDate(gd.getDate() + 1);
       const newDayOfWeek = gd.getUTCDay();
@@ -312,162 +403,77 @@ export async function executeDailyTick(
         }
       }
 
-      // Check if there's a match scheduled for this date
-      const leagueId = team.league_id as string | null;
+      // Match simulation is handled by MATCH TICK (separate cron at 18:00)
+      // But send match_day absence messages NOW (morning) so user can react before 18:00
+      if ((team as any).user_id !== "ai" && team.league_id) {
+        try {
+          const todayEnd = new Date(gd); todayEnd.setUTCHours(23, 59, 59, 999);
+          const todayMatch = await env.DB.prepare(
+            "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
+          ).bind(team.league_id, todayEnd.toISOString()).first<{ id: string }>().catch(() => null);
 
-      if (leagueId) {
-        const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
+          if (todayMatch) {
+            const alreadySentMatchDay = await env.DB.prepare(
+              "SELECT id FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group') AND metadata LIKE ? AND metadata LIKE '%match_day%'"
+            ).bind(teamId, `%${todayMatch.id}%`).first().catch(() => null);
 
-        // Find ANY scheduled match up to current game date (catches overdue ones too)
-        const matchCal = await env.DB.prepare(
-          "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
-        ).bind(leagueId, dayEnd.toISOString()).first<{ id: string }>();
+            if (!alreadySentMatchDay) {
+              const { seedFromString } = await import("../lib/seed");
+              const { generateAbsences } = await import("../events/absence");
+              const squadRows = await env.DB.prepare(
+                "SELECT id, first_name, last_name, personality, life_context, physical, commute_km FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')"
+              ).bind(teamId).all();
 
-        if (matchCal) {
-          try {
-            // Switch matches from 'scheduled' to 'lineups_open' so runner can find them
-            await env.DB.prepare(
-              "UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'"
-            ).bind(matchCal.id).run();
+              const mdRng = createRng(seedFromString(todayMatch.id) + 9999);
+              const absSquad = squadRows.results.map((r) => {
+                const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
+                const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();
+                const phys = (() => { try { return JSON.parse(r.physical as string); } catch { return {}; } })();
+                return { firstName: r.first_name as string, lastName: r.last_name as string, age: 25, occupation: lc.occupation ?? "",
+                  discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
+                  morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0 };
+              });
+              // Find the match conversation created day before
+              const matchConvId = await env.DB.prepare(
+                "SELECT c.id FROM conversations c JOIN messages m ON m.conversation_id = c.id WHERE c.team_id = ? AND c.type = 'squad_group' AND m.metadata LIKE ? LIMIT 1"
+              ).bind(teamId, `%${todayMatch.id}%`).first<{ id: string }>().then((r) => r?.id).catch(() => null);
 
-            const { runScheduledMatches } = await import("../multiplayer/match-runner");
-            logger.info({ module: "daily-tick" }, `running matches for calendar ${matchCal.id}`);
-            const results = await runScheduledMatches(env.DB, matchCal.id);
-            logger.info({ module: "daily-tick" }, `match results: ${results.length} matches`);
-            await env.DB.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
-              .bind(matchCal.id).run();
-            events.push({ type: "match", description: `Zápasový den! ${results.length} zápasů odsimulováno.` });
+              if (matchConvId) {
+                // Exclude players who already sent day_before messages
+                const alreadyMessaged = await env.DB.prepare(
+                  "SELECT sender_id FROM messages WHERE conversation_id = ? AND sender_type = 'player'"
+                ).bind(matchConvId).all().catch(() => ({ results: [] }));
+                const alreadyIds = new Set(alreadyMessaged.results.map((r) => r.sender_id as string));
 
-            // Zpravodaj: článek o výsledcích kola
-            if (results.length > 0) {
-              try {
-                const calRow = await env.DB.prepare("SELECT game_week FROM season_calendar WHERE id = ?")
-                  .bind(matchCal.id).first<{ game_week: number }>();
-                const gameWeek = calRow?.game_week ?? 0;
+                const matchDayAbsences = generateAbsences(mdRng as any, absSquad, "match_day")
+                  .filter((a) => {
+                    const pid = squadRows.results[a.playerIndex]?.id as string;
+                    return pid && !alreadyIds.has(pid);
+                  });
 
-                const matchRows = await env.DB.prepare(
-                  `SELECT m.home_score, m.away_score, t1.name as home_name, t2.name as away_name
-                   FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id
-                   WHERE m.calendar_id = ? AND m.status = 'simulated'`
-                ).bind(matchCal.id).all();
-
-                const lines: string[] = [];
-                let topScore = 0;
-                let topMatch = "";
-                for (const r of matchRows.results) {
-                  const hs = r.home_score as number; const as_ = r.away_score as number;
-                  const hn = r.home_name as string; const an = r.away_name as string;
-                  if (hs > as_) lines.push(`${hn} porazil ${an} ${hs}:${as_}`);
-                  else if (hs < as_) lines.push(`${an} zvítězil nad ${hn} ${as_}:${hs}`);
-                  else lines.push(`${hn} remizoval s ${an} ${hs}:${as_}`);
-                  if (hs + as_ > topScore) { topScore = hs + as_; topMatch = `${hn} vs ${an} ${hs}:${as_}`; }
+                if (matchDayAbsences.length > 0) {
+                  await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', 'Systém', ?, ?, datetime('now'))")
+                    .bind(crypto.randomUUID(), matchConvId, "⚠️ Nové omluvenky v den zápasu:", JSON.stringify({ type: "match_day_announce", calendarId: todayMatch.id }))
+                    .run().catch(() => {});
+                  let cnt = 1;
+                  for (const a of matchDayAbsences) {
+                    const row = squadRows.results[a.playerIndex]; if (!row) continue;
+                    await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'))")
+                      .bind(crypto.randomUUID(), matchConvId, row.id, `${row.first_name} ${row.last_name}`, a.smsText,
+                        JSON.stringify({ type: "attendance", response: "no", timing: "match_day", calendarId: todayMatch.id }), cnt * 10,
+                      ).run().catch((e) => logger.warn({ module: "daily-tick" }, "match_day absence msg", e));
+                    cnt++;
+                  }
+                  await env.DB.prepare("UPDATE conversations SET unread_count = unread_count + ?, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+                    .bind(cnt, `⚠️ ${matchDayAbsences.length} nových omluvenek!`, matchConvId).run().catch(() => {});
+                  logger.info({ module: "daily-tick", teamId }, `match_day absences: ${matchDayAbsences.length}`);
                 }
-
-                const headline = `${gameWeek}. kolo: přehled výsledků`;
-                const body = lines.join(". ") + "." + (topScore >= 4 ? ` Nejvíce gólů padlo v utkání ${topMatch}.` : "");
-
-                const newsId = crypto.randomUUID();
-                await env.DB.prepare(
-                  "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, datetime('now'))"
-                ).bind(newsId, leagueId, headline, body, gameWeek).run();
-              } catch (e) {
-                logger.error({ module: "daily-tick" }, "news generation failed", e);
               }
             }
-          } catch (e) {
-            logger.error({ module: "daily-tick" }, "match sim failed", e);
           }
-        }
+        } catch (e) { logger.warn({ module: "daily-tick" }, "match_day absences failed", e); }
       }
     }
-  }
-
-  // ── Match-day attendance messages (Kabina) — den před zápasem ──
-  try {
-    for (const team of allTeams.results) {
-      if ((team as any).user_id === "ai") continue;
-      const tid = team.id as string;
-      const lid = team.league_id as string | null;
-      if (!lid) continue;
-
-      const gd = new Date(team.game_date as string);
-      const tomorrow = new Date(gd); tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowEnd = new Date(tomorrow); tomorrowEnd.setUTCHours(23, 59, 59, 999);
-
-      // Check if there's a match TOMORROW
-      const tomorrowMatch = await env.DB.prepare(
-        "SELECT sc.id as cal_id FROM season_calendar sc WHERE sc.league_id = ? AND sc.scheduled_at BETWEEN ? AND ? AND sc.status = 'scheduled'"
-      ).bind(lid, tomorrow.toISOString(), tomorrowEnd.toISOString()).first<{ cal_id: string }>().catch(() => null);
-
-      if (tomorrowMatch) {
-        // Check if messages already sent for this calendar
-        const alreadySent = await env.DB.prepare(
-          "SELECT id FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group') AND metadata LIKE ?"
-        ).bind(tid, `%${tomorrowMatch.cal_id}%`).first().catch(() => null);
-
-        if (!alreadySent) {
-          const { seedFromString } = await import("../lib/seed");
-          const { generateAbsences } = await import("../events/absence");
-          const { generateAttendanceMessage } = await import("../messaging/message-generator");
-
-          const squadRows = await env.DB.prepare(
-            "SELECT id, first_name, last_name, personality, life_context, physical, commute_km FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
-          ).bind(tid).all();
-
-          const absenceRng = createRng(seedFromString(tomorrowMatch.cal_id));
-          const absenceSquad = squadRows.results.map((r) => {
-            const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
-            const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();
-            const phys = (() => { try { return JSON.parse(r.physical as string); } catch { return {}; } })();
-            return {
-              firstName: r.first_name as string, lastName: r.last_name as string,
-              age: 25, occupation: lc.occupation ?? "", discipline: pers.discipline ?? 50,
-              patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
-              morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50,
-              commuteKm: (r.commute_km as number) ?? 0,
-            };
-          });
-          const absences = generateAbsences(absenceRng as any, absenceSquad);
-          const absentIds = new Set(absences.map((a) => squadRows.results[a.playerIndex]?.id as string));
-
-          // Find or create Kabina conversation
-          let kabinaId = await env.DB.prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group'")
-            .bind(tid).first<{ id: string }>().then((r) => r?.id).catch(() => null);
-
-          if (!kabinaId) {
-            kabinaId = crypto.randomUUID();
-            await env.DB.prepare("INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, created_at) VALUES (?, ?, 'squad_group', 'Kabina', 1, 0, datetime('now'))")
-              .bind(kabinaId, tid).run().catch(() => {});
-          }
-
-          // Insert messages
-          let msgCount = 0;
-          for (const row of squadRows.results) {
-            const pid = row.id as string;
-            const name = `${row.first_name} ${row.last_name}`;
-            const available = !absentIds.has(pid);
-            const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
-            const msg = generateAttendanceMessage(name, available, lc.condition ?? 100, absenceRng as any);
-
-            await env.DB.prepare(
-              "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'))"
-            ).bind(crypto.randomUUID(), kabinaId, pid, msg.senderName, msg.body,
-              JSON.stringify({ ...msg.metadata, calendarId: tomorrowMatch.cal_id }),
-              msgCount * 30 // stagger messages by 30s
-            ).run().catch((e) => logger.warn({ module: "daily-tick" }, "insert attendance message", e));
-            msgCount++;
-          }
-
-          // Update conversation
-          await env.DB.prepare("UPDATE conversations SET unread_count = ?, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
-            .bind(msgCount, `${msgCount} odpovědí na docházku`, kabinaId).run().catch(() => {});
-
-          logger.info({ module: "daily-tick", teamId: tid }, `attendance messages: ${msgCount} sent to Kabina`);
-        }
-      }
-    }
-  } catch (e) {
-    logger.error({ module: "daily-tick" }, "attendance messages failed", e);
   }
 
   // ── Free agent pool maintenance ──
@@ -512,6 +518,41 @@ export async function executeDailyTick(
     }
   } catch (e) {
     logger.error({ module: "daily-tick" }, "player quit check failed", e);
+  }
+
+  // ── Loan returns — hráči vracející se z hostování ──
+  try {
+    const expiredLoans = await env.DB.prepare(
+      "SELECT id, first_name, last_name, team_id, loan_from_team_id FROM players WHERE loan_from_team_id IS NOT NULL AND loan_until <= ?"
+    ).bind(now.toISOString()).all();
+    for (const p of expiredLoans.results) {
+      const originalTeamId = p.loan_from_team_id as string;
+      const playerId = p.id as string;
+      const loanTeamId = p.team_id as string;
+      await env.DB.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL WHERE id = ?")
+        .bind(originalTeamId, playerId).run();
+      // Close loan contract
+      await env.DB.prepare("UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'loan_end' WHERE player_id = ? AND team_id = ? AND join_type = 'loan' AND is_active = 1")
+        .bind(now.toISOString(), playerId, loanTeamId).run().catch(() => {});
+      logger.info({ module: "daily-tick" }, `loan return: ${p.first_name} ${p.last_name} → team ${originalTeamId}`);
+      // News about loan return
+      try {
+        const { createTransferNews } = await import("../transfers/transfer-news");
+        const origTeam = await env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(originalTeamId).first<{ name: string; league_id: string }>();
+        const loanTeam = await env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(loanTeamId).first<{ name: string }>();
+        if (origTeam) {
+          await createTransferNews(env.DB, origTeam.league_id ?? "", null, "loan_return", {
+            playerName: `${p.first_name} ${p.last_name}`, playerAge: 0,
+            playerPosition: "", teamName: origTeam.name, fromTeamName: loanTeam?.name,
+          });
+        }
+      } catch { /* optional */ }
+    }
+    if (expiredLoans.results.length > 0) {
+      events.push({ type: "loan_return", description: `${expiredLoans.results.length} hráčů se vrátilo z hostování` });
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "loan return check failed", e);
   }
 
   // ── Transfer expiry cleanup ──

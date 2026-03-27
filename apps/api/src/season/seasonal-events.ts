@@ -4,7 +4,7 @@
 
 import type { Rng } from "../generators/rng";
 
-export type SeasonalEventType = "zabijacka" | "ples" | "vanocni_turnaj" | "silvestr" | "letni_soustredeni" | "obecni_zpravodaj";
+export type SeasonalEventType = "zabijacka" | "ples" | "vanocni_turnaj" | "silvestr" | "letni_soustredeni" | "obecni_zpravodaj" | "den_obce" | "pout" | "brigada_hriste" | "sponzorsky_den" | "konec_skoly";
 
 export interface SeasonalEventDef {
   type: SeasonalEventType;
@@ -136,6 +136,127 @@ const EVENT_TEMPLATES: SeasonalEventDef[] = [
     gameWeek: 8,
     effects: [
       { type: "reputation", value: 2, description: "+2 reputace" },
+    ],
+  },
+  {
+    type: "den_obce",
+    title: "Den obce",
+    description: "Obec slaví své výročí. Fotbalový tým je pozván k organizaci programu.",
+    gameWeek: 6,
+    effects: [],
+    choices: [
+      {
+        id: "organize",
+        label: "Zorganizovat ukázkový zápas",
+        effects: [
+          { type: "reputation", value: 5, description: "+5 reputace" },
+          { type: "morale", value: 5, description: "+5 morálka" },
+          { type: "budget", value: -2000, description: "-2 000 Kč (občerstvení)" },
+        ],
+      },
+      {
+        id: "attend",
+        label: "Jen se zúčastnit",
+        effects: [
+          { type: "reputation", value: 2, description: "+2 reputace" },
+        ],
+      },
+      {
+        id: "skip",
+        label: "Nejít",
+        effects: [
+          { type: "reputation", value: -3, description: "-3 reputace (lidi si všimnou)" },
+        ],
+      },
+    ],
+  },
+  {
+    type: "pout",
+    title: "Pouť",
+    description: "Je pouť! Hráči se ptají jestli bude trénink nebo volno.",
+    gameWeek: 10,
+    effects: [],
+    choices: [
+      {
+        id: "volno",
+        label: "Dát volno — ať si užijou",
+        effects: [
+          { type: "morale", value: 8, description: "+8 morálka" },
+          { type: "alcohol_event", value: 1, description: "Kocovina příští den" },
+        ],
+      },
+      {
+        id: "trenink",
+        label: "Trénink jako vždycky",
+        effects: [
+          { type: "morale", value: -3, description: "-3 morálka (nemají radost)" },
+        ],
+      },
+    ],
+  },
+  {
+    type: "brigada_hriste",
+    title: "Brigáda na hřišti",
+    description: "Hřiště potřebuje údržbu. Obec nabízí materiál, ale práce je na vás.",
+    gameWeek: 4,
+    effects: [],
+    choices: [
+      {
+        id: "full",
+        label: "Celý tým pomůže (celý víkend)",
+        effects: [
+          { type: "morale", value: 5, description: "+5 morálka (teambuilding)" },
+          { type: "reputation", value: 3, description: "+3 reputace" },
+        ],
+      },
+      {
+        id: "hire",
+        label: "Zaplatit firmu (-5 000 Kč)",
+        effects: [
+          { type: "budget", value: -5000, description: "-5 000 Kč" },
+        ],
+      },
+      {
+        id: "skip",
+        label: "Nechat to být",
+        effects: [
+          { type: "reputation", value: -2, description: "-2 reputace" },
+        ],
+      },
+    ],
+  },
+  {
+    type: "sponzorsky_den",
+    title: "Sponzorský den",
+    description: "Hlavní sponzor zve tým na firemní akci. Dobrá příležitost pro vztahy.",
+    gameWeek: 14,
+    effects: [],
+    choices: [
+      {
+        id: "attend",
+        label: "Celý tým se zúčastní",
+        effects: [
+          { type: "budget", value: 3000, description: "+3 000 Kč (bonus od sponzora)" },
+          { type: "reputation", value: 2, description: "+2 reputace" },
+        ],
+      },
+      {
+        id: "captain",
+        label: "Pošleme jen kapitána",
+        effects: [
+          { type: "budget", value: 1000, description: "+1 000 Kč" },
+        ],
+      },
+    ],
+  },
+  {
+    type: "konec_skoly",
+    title: "Konec školy",
+    description: "Končí školní rok. Mladí kluci z vesnice se ptají jestli můžou na trénink.",
+    gameWeek: 22,
+    effects: [
+      { type: "morale", value: 3, description: "+3 morálka (svěží krev)" },
+      { type: "reputation", value: 1, description: "+1 reputace" },
     ],
   },
 ];

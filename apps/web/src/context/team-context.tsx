@@ -22,6 +22,7 @@ interface AuthState {
   seasonTotal: number | null;
   gameDate: string | null;
   nextMatch: { opponent: string; daysUntil: number } | null;
+  isAdmin: boolean;
   isLoading: boolean;
 }
 
@@ -39,7 +40,7 @@ const PUBLIC_PATHS = ["/", "/login", "/register"];
 
 export function TeamProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
-    token: null, userId: null, email: null, teamId: null, teamName: null, primaryColor: null, secondaryColor: null, badgePattern: null, villageName: null, district: null, budget: null, leaguePosition: null, season: null, seasonDay: null, seasonTotal: null, gameDate: null, nextMatch: null, isLoading: true,
+    token: null, userId: null, email: null, teamId: null, teamName: null, primaryColor: null, secondaryColor: null, badgePattern: null, villageName: null, district: null, budget: null, leaguePosition: null, season: null, seasonDay: null, seasonTotal: null, gameDate: null, nextMatch: null, isAdmin: false, isLoading: true,
   });
   const router = useRouter();
   const pathname = usePathname();
@@ -52,7 +53,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    apiFetch<{ id: string; email: string; teamId: string | null; teamName: string | null; primaryColor?: string | null; secondaryColor?: string | null; badgePattern?: string | null; villageName?: string | null; district?: string | null; budget?: number | null; leaguePosition?: number | null; season?: number | null; seasonDay?: number | null; seasonTotal?: number | null; gameDate?: string | null; nextMatch?: { opponent: string; daysUntil: number } | null }>("/auth/me", {
+    apiFetch<{ id: string; email: string; isAdmin?: boolean; teamId: string | null; teamName: string | null; primaryColor?: string | null; secondaryColor?: string | null; badgePattern?: string | null; villageName?: string | null; district?: string | null; budget?: number | null; leaguePosition?: number | null; season?: number | null; seasonDay?: number | null; seasonTotal?: number | null; gameDate?: string | null; nextMatch?: { opponent: string; daysUntil: number } | null }>("/auth/me", {
       headers: { Authorization: `Bearer ${stored}` },
     })
       .then((user) => {
@@ -60,14 +61,14 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(STORAGE_TEAM, JSON.stringify(teamData));
         setState({
           token: stored, userId: user.id, email: user.email,
-          ...teamData, isLoading: false,
+          ...teamData, isAdmin: user.isAdmin ?? false, isLoading: false,
         });
       })
       .catch((err: Error & { status?: number }) => {
         if (err?.status === 401) {
           localStorage.removeItem(STORAGE_TOKEN);
           localStorage.removeItem(STORAGE_TEAM);
-          setState({ token: null, userId: null, email: null, teamId: null, teamName: null, primaryColor: null, secondaryColor: null, badgePattern: null, villageName: null, district: null, budget: null, leaguePosition: null, season: null, seasonDay: null, seasonTotal: null, gameDate: null, nextMatch: null, isLoading: false });
+          setState({ token: null, userId: null, email: null, teamId: null, teamName: null, primaryColor: null, secondaryColor: null, badgePattern: null, villageName: null, district: null, budget: null, leaguePosition: null, season: null, seasonDay: null, seasonTotal: null, gameDate: null, nextMatch: null, isAdmin: false, isLoading: false });
         } else {
           // API unreachable — restore from localStorage so redirect doesn't fire
           const cached = localStorage.getItem(STORAGE_TEAM);
@@ -106,7 +107,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
     if (t) apiFetch("/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${t}` } }).catch(() => {});
     localStorage.removeItem(STORAGE_TOKEN);
     localStorage.removeItem(STORAGE_TEAM);
-    setState({ token: null, userId: null, email: null, teamId: null, teamName: null, primaryColor: null, secondaryColor: null, badgePattern: null, villageName: null, district: null, budget: null, leaguePosition: null, season: null, seasonDay: null, seasonTotal: null, gameDate: null, nextMatch: null, isLoading: false });
+    setState({ token: null, userId: null, email: null, teamId: null, teamName: null, primaryColor: null, secondaryColor: null, badgePattern: null, villageName: null, district: null, budget: null, leaguePosition: null, season: null, seasonDay: null, seasonTotal: null, gameDate: null, nextMatch: null, isAdmin: false, isLoading: false });
     router.replace("/login");
   }
 

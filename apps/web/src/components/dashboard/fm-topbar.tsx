@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 
@@ -76,7 +77,13 @@ export function FMTopBar() {
           <span className="text-white/60">
             ⚽ <span className="text-white font-bold">{nextMatch.opponent}</span>
             {" · "}
-            <span>{nextMatch.daysUntil === 0 ? "dnes" : nextMatch.daysUntil === 1 ? "zítra" : `za ${nextMatch.daysUntil} dní`}</span>
+            {nextMatch.daysUntil === 0 ? (
+              <MatchCountdown />
+            ) : nextMatch.daysUntil === 1 ? (
+              <span className="text-pitch-400">zítra</span>
+            ) : (
+              <span>za {nextMatch.daysUntil} dní</span>
+            )}
           </span>
         )}
         {season != null && (
@@ -89,3 +96,31 @@ export function FMTopBar() {
     </header>
   );
 }
+
+function MatchCountdown() {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Match cron at 18:00 CET (17:00 UTC)
+  const today = new Date(now);
+  const matchTime = new Date(today);
+  matchTime.setHours(18, 0, 0, 0);
+  const diff = matchTime.getTime() - now;
+
+  if (diff <= 0) {
+    return <span className="text-pitch-400 font-bold">výkop brzy!</span>;
+  }
+
+  const hours = Math.floor(diff / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+
+  return (
+    <span className="text-pitch-400 font-bold tabular-nums">
+      výkop za {hours > 0 ? `${hours}h ` : ""}{mins}min
+    </span>
+  );
+}
+

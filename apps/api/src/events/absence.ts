@@ -13,9 +13,12 @@
 import type { Rng } from "../generators/rng";
 import { getOccupationByName, type Occupation } from "../generators/occupations";
 
+export type AbsenceTiming = "day_before" | "match_day" | "any";
+
 export interface AbsenceResult {
   playerIndex: number;
   category: "professional" | "personal" | "absurd" | "health" | "hangover" | "commute";
+  timing: AbsenceTiming;
   reason: string;
   emoji: string;
   smsText: string;
@@ -41,31 +44,29 @@ interface PlayerForAbsence {
 // ═══════════════════════════════════════════════
 
 const PERSONAL_EXCUSES = [
-  // Rodina (vyšší šance pro starší, ženatý věk)
-  { text: "Manželka mě nepustila, sorry", emoji: "\u{1F46B}", minAge: 25 },
-  { text: "Tchýně má narozeniny, musel jsem slíbit že přijdu", emoji: "\u{1F382}", minAge: 28 },
-  { text: "Malej je nemocnej, musím ho hlídat", emoji: "\u{1F476}", minAge: 24 },
-  { text: "Musím na rodičák do školky", emoji: "\u{1F3EB}", minAge: 25 },
-  { text: "Ženská mi dala ultimátum — buď fotbal nebo ona. Ještě přemýšlím", emoji: "\u{1F494}", minAge: 20 },
-  { text: "Dcera má vystoupení ve škole, slíbil jsem že přijdu", emoji: "\u{1F3AD}", minAge: 28 },
-  { text: "Rodinnej oběd u rodičů, nemůžu to zrušit", emoji: "\u{1F356}", minAge: 0 },
+  // Rodina — víte den předem
+  { text: "Manželka mě nepustila, sorry", emoji: "\u{1F46B}", minAge: 25, timing: "day_before" as AbsenceTiming },
+  { text: "Tchýně má narozeniny, musel jsem slíbit že přijdu", emoji: "\u{1F382}", minAge: 28, timing: "day_before" as AbsenceTiming },
+  { text: "Malej je nemocnej, musím ho hlídat", emoji: "\u{1F476}", minAge: 24, timing: "day_before" as AbsenceTiming },
+  { text: "Musím na rodičák do školky", emoji: "\u{1F3EB}", minAge: 25, timing: "day_before" as AbsenceTiming },
+  { text: "Ženská mi dala ultimátum — buď fotbal nebo ona. Ještě přemýšlím", emoji: "\u{1F494}", minAge: 20, timing: "day_before" as AbsenceTiming },
+  { text: "Dcera má vystoupení ve škole, slíbil jsem že přijdu", emoji: "\u{1F3AD}", minAge: 28, timing: "day_before" as AbsenceTiming },
+  { text: "Rodinnej oběd u rodičů, nemůžu to zrušit", emoji: "\u{1F356}", minAge: 0, timing: "day_before" as AbsenceTiming },
+  { text: "Slíbil jsem ženský že jedeme do IKEA, nemůžu to zrušit", emoji: "\u{1F6D2}", minAge: 22, timing: "day_before" as AbsenceTiming },
+  { text: "Musím pomoct stěhovat kamarádovi, slíbil jsem to už třikrát", emoji: "\u{1F4E6}", minAge: 0, timing: "day_before" as AbsenceTiming },
 
-  // Zdraví
-  { text: "Bolí mě záda od včerejška, nemůžu se ohnout", emoji: "\u{1F915}", minAge: 30 },
-  { text: "Mám doktora, nemohl jsem to přeobjednat", emoji: "\u{1F3E5}", minAge: 0 },
-  { text: "Chytil jsem chřipku, nechci nakazit celej tým", emoji: "\u{1F912}", minAge: 0 },
+  // Zdraví — víte den předem
+  { text: "Bolí mě záda od včerejška, nemůžu se ohnout", emoji: "\u{1F915}", minAge: 30, timing: "day_before" as AbsenceTiming },
+  { text: "Mám doktora, nemohl jsem to přeobjednat", emoji: "\u{1F3E5}", minAge: 0, timing: "day_before" as AbsenceTiming },
+  { text: "Chytil jsem chřipku, nechci nakazit celej tým", emoji: "\u{1F912}", minAge: 0, timing: "day_before" as AbsenceTiming },
 
-  // Logistika
-  { text: "Nemám odvoz, auto je v servisu od pátku", emoji: "\u{1F697}", minAge: 0 },
-  { text: "Ujel mi bus a další jede až za dvě hodiny", emoji: "\u{1F68C}", minAge: 0 },
+  // Logistika — v den zápasu
+  { text: "Nemám odvoz, auto je v servisu od pátku", emoji: "\u{1F697}", minAge: 0, timing: "match_day" as AbsenceTiming },
+  { text: "Ujel mi bus a další jede až za dvě hodiny", emoji: "\u{1F68C}", minAge: 0, timing: "match_day" as AbsenceTiming },
 
-  // Zapomnětlivost
-  { text: "Zapomněl jsem, myslel jsem že hrajeme příští týden", emoji: "\u{1F937}", minAge: 0 },
-  { text: "Hele já se omlouvám ale fakt jsem si to nespojil", emoji: "\u{1F644}", minAge: 0 },
-
-  // Vztahy
-  { text: "Slíbil jsem ženský že jedeme do IKEA, nemůžu to zrušit", emoji: "\u{1F6D2}", minAge: 22 },
-  { text: "Musím pomoct stěhovat kamarádovi, slíbil jsem to už třikrát", emoji: "\u{1F4E6}", minAge: 0 },
+  // Zapomnětlivost — v den zápasu
+  { text: "Zapomněl jsem, myslel jsem že hrajeme příští týden", emoji: "\u{1F937}", minAge: 0, timing: "match_day" as AbsenceTiming },
+  { text: "Hele já se omlouvám ale fakt jsem si to nespojil", emoji: "\u{1F644}", minAge: 0, timing: "match_day" as AbsenceTiming },
 ];
 
 // ═══════════════════════════════════════════════
@@ -73,26 +74,27 @@ const PERSONAL_EXCUSES = [
 // ═══════════════════════════════════════════════
 
 const ABSURD_EXCUSES = [
-  { text: "Zamkl jsem se v garáži a nikdo není doma", emoji: "\u{1F512}" },
-  { text: "Musím hlídat kozu, utekla sousedům a žere mi zahradu", emoji: "\u{1F410}" },
-  { text: "Přijeli příbuzní z Kanady, neviděl jsem je 15 let, nemůžu odejít", emoji: "\u{2708}" },
-  { text: "Slíbil jsem dědovi že mu pomůžu vyčistit studnu", emoji: "\u{1F4A7}" },
-  { text: "Našel jsem houby a musím je hned zpracovat, jinak se zkazí", emoji: "\u{1F344}" },
-  { text: "Spadl mi strom na plot a utečou slepice", emoji: "\u{1F333}" },
-  { text: "Dostal jsem lístky na hokej, sorry ale tohle se neodmítá", emoji: "\u{1F3D2}" },
-  { text: "Musím odvézt tchána na houby, hrozil že jinak nepůjčí přívěs", emoji: "\u{1F698}" },
-  { text: "Pes sežral klíče od auta, čekám až je... vrátí", emoji: "\u{1F436}" },
-  { text: "Montér na parabolu přijede jen dneska mezi 8 a 17", emoji: "\u{1F4E1}" },
-  { text: "Svědek na svatbě bratrance, nemůžu odmítnout", emoji: "\u{1F492}" },
-  { text: "Musím natřít plot, barva schne jen do patnácti stupňů", emoji: "\u{1F3A8}" },
-  { text: "Soused mi vrací vrtačku a slíbil jsem mu za to pomoct se střechou", emoji: "\u{1F527}" },
-  { text: "Žena mi vyhodila kopačky z okna. Doslova. Hledám je v křoví", emoji: "\u{1F462}" },
-  { text: "Zateklo mi do sklepa, musím to vylejvat kbelíkem", emoji: "\u{1FAA3}" },
-  { text: "Musím opravit záchod, ženská řekla že dokud nebude fungovat, nikam nejdu", emoji: "\u{1F6BD}" },
-  { text: "Chytil jsem sumce a nemůžu ho nechat v autě", emoji: "\u{1F41F}" },
-  { text: "Klíště. Musím k doktorovi. Asi. Pro jistotu", emoji: "\u{1FAB2}" },
-  { text: "Babička volala že jí nefunguje televize a neumí přepnout vstup", emoji: "\u{1F4FA}" },
-  { text: "Musím vyzvednout traktůrek ze servisu, jinak mi ho prodaj", emoji: "\u{1F69C}" },
+  // Většina absurdních přijde v den zápasu — nečekané situace
+  { text: "Zamkl jsem se v garáži a nikdo není doma", emoji: "\u{1F512}", timing: "match_day" as AbsenceTiming },
+  { text: "Musím hlídat kozu, utekla sousedům a žere mi zahradu", emoji: "\u{1F410}", timing: "match_day" as AbsenceTiming },
+  { text: "Přijeli příbuzní z Kanady, neviděl jsem je 15 let, nemůžu odejít", emoji: "\u{2708}", timing: "day_before" as AbsenceTiming },
+  { text: "Slíbil jsem dědovi že mu pomůžu vyčistit studnu", emoji: "\u{1F4A7}", timing: "day_before" as AbsenceTiming },
+  { text: "Našel jsem houby a musím je hned zpracovat, jinak se zkazí", emoji: "\u{1F344}", timing: "match_day" as AbsenceTiming },
+  { text: "Spadl mi strom na plot a utečou slepice", emoji: "\u{1F333}", timing: "match_day" as AbsenceTiming },
+  { text: "Dostal jsem lístky na hokej, sorry ale tohle se neodmítá", emoji: "\u{1F3D2}", timing: "match_day" as AbsenceTiming },
+  { text: "Musím odvézt tchána na houby, hrozil že jinak nepůjčí přívěs", emoji: "\u{1F698}", timing: "day_before" as AbsenceTiming },
+  { text: "Pes sežral klíče od auta, čekám až je... vrátí", emoji: "\u{1F436}", timing: "match_day" as AbsenceTiming },
+  { text: "Montér na parabolu přijede jen dneska mezi 8 a 17", emoji: "\u{1F4E1}", timing: "match_day" as AbsenceTiming },
+  { text: "Svědek na svatbě bratrance, nemůžu odmítnout", emoji: "\u{1F492}", timing: "day_before" as AbsenceTiming },
+  { text: "Musím natřít plot, barva schne jen do patnácti stupňů", emoji: "\u{1F3A8}", timing: "match_day" as AbsenceTiming },
+  { text: "Soused mi vrací vrtačku a slíbil jsem mu za to pomoct se střechou", emoji: "\u{1F527}", timing: "match_day" as AbsenceTiming },
+  { text: "Žena mi vyhodila kopačky z okna. Doslova. Hledám je v křoví", emoji: "\u{1F462}", timing: "match_day" as AbsenceTiming },
+  { text: "Zateklo mi do sklepa, musím to vylejvat kbelíkem", emoji: "\u{1FAA3}", timing: "match_day" as AbsenceTiming },
+  { text: "Musím opravit záchod, ženská řekla že dokud nebude fungovat, nikam nejdu", emoji: "\u{1F6BD}", timing: "match_day" as AbsenceTiming },
+  { text: "Chytil jsem sumce a nemůžu ho nechat v autě", emoji: "\u{1F41F}", timing: "match_day" as AbsenceTiming },
+  { text: "Klíště. Musím k doktorovi. Asi. Pro jistotu", emoji: "\u{1FAB2}", timing: "match_day" as AbsenceTiming },
+  { text: "Babička volala že jí nefunguje televize a neumí přepnout vstup", emoji: "\u{1F4FA}", timing: "match_day" as AbsenceTiming },
+  { text: "Musím vyzvednout traktůrek ze servisu, jinak mi ho prodaj", emoji: "\u{1F69C}", timing: "match_day" as AbsenceTiming },
 ];
 
 // ═══════════════════════════════════════════════
@@ -144,6 +146,7 @@ const COMMUTE_EXCUSES = [
 export function generateAbsences(
   rng: Rng,
   squad: PlayerForAbsence[],
+  timing: AbsenceTiming = "any",
 ): AbsenceResult[] {
   const absences: AbsenceResult[] = [];
 
@@ -190,25 +193,31 @@ export function generateAbsences(
 
     let smsText: string;
     let emoji: string;
+    let excuseTiming: AbsenceTiming = timing === "any" ? "day_before" : timing;
 
     switch (category) {
       case "professional": {
         const excuses = occupation?.excuses ?? ["Musím do práce, nemůžu přijít"];
         smsText = rng.pick(excuses);
-        emoji = "\u{1F3D7}"; // construction
+        emoji = "\u{1F3D7}";
+        excuseTiming = "day_before";
         break;
       }
       case "personal": {
-        const applicable = PERSONAL_EXCUSES.filter((e) => p.age >= e.minAge);
-        const pick = rng.pick(applicable.length > 0 ? applicable : PERSONAL_EXCUSES);
+        const applicable = PERSONAL_EXCUSES.filter((e) => p.age >= e.minAge && (timing === "any" || e.timing === timing));
+        const fallback = PERSONAL_EXCUSES.filter((e) => p.age >= e.minAge);
+        const pick = rng.pick(applicable.length > 0 ? applicable : fallback.length > 0 ? fallback : PERSONAL_EXCUSES);
         smsText = pick.text;
         emoji = pick.emoji;
+        excuseTiming = pick.timing ?? "any";
         break;
       }
       case "absurd": {
-        const pick = rng.pick(ABSURD_EXCUSES);
+        const applicable = ABSURD_EXCUSES.filter((e) => timing === "any" || e.timing === timing);
+        const pick = rng.pick(applicable.length > 0 ? applicable : ABSURD_EXCUSES);
         smsText = pick.text;
         emoji = pick.emoji;
+        excuseTiming = pick.timing ?? "match_day";
         break;
       }
       case "health": {
@@ -236,9 +245,19 @@ export function generateAbsences(
       health: "Zdraví", hangover: "Kocovina", commute: "Doprava",
     };
 
+    // Skip if timing doesn't match (professional = day_before only, commute/hangover = match_day only)
+    if (timing !== "any") {
+      const categoryTiming: Record<string, AbsenceTiming> = {
+        professional: "day_before", health: "day_before", commute: "match_day", hangover: "match_day",
+      };
+      const catTiming = categoryTiming[category];
+      if (catTiming && catTiming !== timing) continue;
+    }
+
     absences.push({
       playerIndex: i,
       category,
+      timing: excuseTiming,
       reason: CATEGORY_LABELS[category] ?? category,
       emoji,
       smsText,

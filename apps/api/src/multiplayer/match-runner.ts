@@ -303,6 +303,31 @@ export async function runScheduledMatches(
         // Save player_ratings JSON to match record
         await db.prepare("UPDATE matches SET player_ratings = ? WHERE id = ?")
           .bind(JSON.stringify(ratings), matchId).run().catch((e) => logger.warn({ module: "match-runner" }, "Failed to save player ratings", e));
+
+        // ── Suspensions: red card = 1 match ban, 4 yellows in season = 1 match ban ──
+        const allUpdates = [...homeUpdates, ...awayUpdates];
+        for (const u of allUpdates) {
+          // Red card → immediate 1-match suspension
+          if (u.redCards > 0) {
+            await db.prepare("UPDATE players SET suspended_matches = suspended_matches + 1 WHERE id = ?")
+              .bind(u.playerId).run().catch((e) => logger.warn({ module: "match-runner" }, "red card suspension", e));
+            logger.info({ module: "match-runner" }, `red card suspension: player ${u.playerId}`);
+          }
+          // 4 yellows accumulated → 1-match suspension (check after update)
+          if (u.yellowCards > 0) {
+            const stats = await db.prepare("SELECT yellow_cards FROM player_stats WHERE player_id = ? AND season_id = ?")
+              .bind(u.playerId, season.id).first<{ yellow_cards: number }>().catch(() => null);
+            if (stats && stats.yellow_cards > 0 && stats.yellow_cards % 4 === 0) {
+              await db.prepare("UPDATE players SET suspended_matches = suspended_matches + 1 WHERE id = ?")
+                .bind(u.playerId).run().catch((e) => logger.warn({ module: "match-runner" }, "yellow card suspension", e));
+              logger.info({ module: "match-runner" }, `yellow card suspension (${stats.yellow_cards} yellows): player ${u.playerId}`);
+            }
+          }
+        }
+
+        // Decrement suspensions for players who SAT OUT this match (served their ban)
+        await db.prepare("UPDATE players SET suspended_matches = MAX(0, suspended_matches - 1) WHERE team_id IN (?, ?) AND suspended_matches > 0 AND id NOT IN (SELECT player_id FROM match_player_stats WHERE match_id = ?)")
+          .bind(homeTeamId, awayTeamId, matchId).run().catch((e) => logger.warn({ module: "match-runner" }, "decrement suspensions", e));
       }
 
       // Match-day finances for both teams
@@ -434,7 +459,21 @@ async function buildMatchPlayers(
     } catch (e) { logger.warn({ module: "match-runner" }, "absence generation", e); }
   }
 
-  const allAvailable = rows.results.filter((r) => !absentIds.has(r.id as string));
+  // Also exclude suspended and injured players
+  const injuredIds = new Set<string>();
+  const suspendedIds = new Set<string>();
+  for (const r of rows.results) {
+    if ((r.suspended_matches as number) > 0) {
+      suspendedIds.add(r.id as string);
+      absentInfo.push({ name: `${r.first_name} ${r.last_name}`, reason: "Stopka za karty", smsText: `Mám stopku, nesmím hrát.` });
+    }
+  }
+  // Check injuries
+  const injuryRows = await db.prepare("SELECT player_id FROM injuries WHERE days_remaining > 0 AND player_id IN (SELECT id FROM players WHERE team_id = ?)")
+    .bind(teamId).all().catch(() => ({ results: [] }));
+  for (const ir of injuryRows.results) injuredIds.add(ir.player_id as string);
+
+  const allAvailable = rows.results.filter((r) => !absentIds.has(r.id as string) && !suspendedIds.has(r.id as string) && !injuredIds.has(r.id as string));
 
   // If user set a lineup, order players: selected 11 first, then rest as subs
   let ordered = allAvailable;

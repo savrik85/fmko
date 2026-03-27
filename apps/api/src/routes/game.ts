@@ -15,6 +15,45 @@ import { logger } from "../lib/logger";
 
 const gameRouter = new Hono<{ Bindings: Bindings }>();
 
+/** Send a system SMS to a team's phone (find-or-create conversation by role title). */
+async function sendPhoneSMS(db: D1Database, teamId: string, senderName: string, roleTitle: string, body: string) {
+  let convId = await db.prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?")
+    .bind(teamId, roleTitle).first<{ id: string }>().then((r) => r?.id).catch(() => null);
+  if (!convId) {
+    convId = crypto.randomUUID();
+    await db.prepare("INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', datetime('now'), datetime('now'))")
+      .bind(convId, teamId, roleTitle).run().catch(() => {});
+  }
+  await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', ?, ?, datetime('now'))")
+    .bind(crypto.randomUUID(), convId, senderName, body).run().catch(() => {});
+  await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+    .bind(body.slice(0, 100), convId).run().catch(() => {});
+}
+
+/** After transfer: recalculate commute distance and reset squad number. */
+async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: string) {
+  // Get new team's village info
+  const team = await db.prepare("SELECT v.name, v.district, v.lat, v.lng FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
+    .bind(newTeamId).first<{ name: string; district: string; lat: number; lng: number }>().catch(() => null);
+  // Get player's residence
+  const player = await db.prepare("SELECT residence, commute_km FROM players WHERE id = ?")
+    .bind(playerId).first<{ residence: string; commute_km: number }>().catch(() => null);
+
+  if (team && player) {
+    // If player lives in the new team's village → commute = 0
+    // Otherwise estimate based on old commute (we don't have player lat/lng)
+    // Simple: if residence matches new village → 0, else random 5-20km
+    const sameVillage = player.residence === team.name;
+    const newCommute = sameVillage ? 0 : Math.floor(5 + Math.random() * 15);
+    await db.prepare("UPDATE players SET commute_km = ?, squad_number = NULL WHERE id = ?")
+      .bind(newCommute, playerId).run().catch(() => {});
+  } else {
+    // At minimum reset squad number
+    await db.prepare("UPDATE players SET squad_number = NULL WHERE id = ?")
+      .bind(playerId).run().catch(() => {});
+  }
+}
+
 // GET /api/teams/:id/training — get training plan + simulate a session preview
 gameRouter.get("/teams/:teamId/training", async (c) => {
   const teamId = c.req.param("teamId");
@@ -361,6 +400,23 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
           MIN(100, MAX(0, json_extract(life_context, '$.morale') + ?)))
         WHERE team_id = ?`
       ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "update morale from event", e));
+    }
+    if (effect.type === "stamina_boost") {
+      await c.env.DB.prepare(
+        `UPDATE players SET skills = json_set(skills, '$.stamina', MIN(100, json_extract(skills, '$.stamina') + ?)) WHERE team_id = ?`
+      ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "apply stamina boost", e));
+    }
+    if (effect.type === "experience") {
+      await c.env.DB.prepare(
+        `UPDATE players SET skills = json_set(skills, '$.experience', MIN(100, COALESCE(json_extract(skills, '$.experience'), 0) + ?)) WHERE team_id = ?`
+      ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "apply experience event", e));
+    }
+    if (effect.type === "alcohol_event") {
+      // Increase alcohol-prone players' next absence chance by reducing condition
+      await c.env.DB.prepare(
+        `UPDATE players SET life_context = json_set(life_context, '$.condition', MAX(10, json_extract(life_context, '$.condition') - 20))
+        WHERE team_id = ? AND json_extract(personality, '$.alcohol') > 50`
+      ).bind(teamId).run().catch((e) => logger.warn({ module: "game" }, "apply alcohol event", e));
     }
   }
 
@@ -1434,10 +1490,114 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
   });
 });
 
-// POST /api/game/advance-day — spustí přesně stejný daily tick jako cron
+// POST /api/game/set-admin — nastavit admin roli (jen pro existující adminy nebo první uživatel)
+gameRouter.post("/game/set-admin", async (c) => {
+  const body = await c.req.json<{ email: string; isAdmin: boolean }>().catch(() => null);
+  if (!body?.email) return c.json({ error: "Missing email" }, 400);
+
+  // Check if ANY admin exists
+  const anyAdmin = await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM users WHERE is_admin = 1").first<{ cnt: number }>();
+  if ((anyAdmin?.cnt ?? 0) > 0) {
+    // Verify caller is admin
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+    const token = authHeader.replace("Bearer ", "");
+    const { getSession } = await import("../auth/session");
+    const session = await getSession(c.env.SESSION_KV, token);
+    if (!session) return c.json({ error: "Invalid session" }, 401);
+    const caller = await c.env.DB.prepare("SELECT is_admin FROM users WHERE id = ?").bind(session.userId).first<{ is_admin: number }>();
+    if (!caller || caller.is_admin !== 1) return c.json({ error: "Not admin" }, 403);
+  }
+
+  await c.env.DB.prepare("UPDATE users SET is_admin = ? WHERE email = ?").bind(body.isAdmin ? 1 : 0, body.email).run();
+  return c.json({ ok: true, email: body.email, isAdmin: body.isAdmin });
+});
+
+// POST /api/game/advance-day — denní tick + automaticky odsimuluje nahromaděné zápasy
 gameRouter.post("/game/advance-day", async (c) => {
   const result = await executeDailyTick(c.env);
-  return c.json({ ok: true, result });
+
+  // Auto-run match tick for any past-due matches
+  let matchesSimulated = 0;
+  try {
+    const { runScheduledMatches } = await import("../multiplayer/match-runner");
+    const leagues = await c.env.DB.prepare(
+      "SELECT league_id, MAX(game_date) as max_game_date FROM teams WHERE league_id IS NOT NULL AND game_date IS NOT NULL GROUP BY league_id"
+    ).all();
+    for (const league of leagues.results) {
+      const gd = league.max_game_date as string | null;
+      const lid = league.league_id as string | null;
+      if (!gd || !lid) continue;
+      const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
+      const pendingCals = await c.env.DB.prepare(
+        "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC"
+      ).bind(lid, dayEnd.toISOString()).all();
+      for (const cal of pendingCals.results) {
+        await c.env.DB.prepare("UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'")
+          .bind(cal.id).run();
+        const results = await runScheduledMatches(c.env.DB, cal.id as string);
+        await c.env.DB.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
+          .bind(cal.id).run();
+        matchesSimulated += results.length;
+      }
+    }
+  } catch (e) {
+    logger.error({ module: "game" }, "auto match-tick in advance-day failed", e);
+  }
+
+  return c.json({ ok: true, type: "daily", result, matchesSimulated });
+});
+
+// POST /api/game/run-matches — spustí JEN zápasový tick (simulace zápasů naplánovaných na dnešek)
+gameRouter.post("/game/run-matches", async (c) => {
+  const { runScheduledMatches } = await import("../multiplayer/match-runner");
+  const teams = await c.env.DB.prepare("SELECT t.id, t.league_id, t.game_date FROM teams t WHERE t.league_id IS NOT NULL").all();
+
+  let totalMatches = 0;
+  for (const team of teams.results) {
+    const gameDate = team.game_date as string | null;
+    const leagueId = team.league_id as string | null;
+    if (!gameDate || !leagueId) continue;
+
+    const gd = new Date(gameDate);
+    const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
+
+    const matchCal = await c.env.DB.prepare(
+      "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
+    ).bind(leagueId, dayEnd.toISOString()).first<{ id: string }>();
+
+    if (matchCal) {
+      await c.env.DB.prepare("UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'")
+        .bind(matchCal.id).run();
+      const results = await runScheduledMatches(c.env.DB, matchCal.id);
+      await c.env.DB.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
+        .bind(matchCal.id).run();
+      totalMatches += results.length;
+
+      // Zpravodaj
+      if (results.length > 0) {
+        try {
+          const calRow = await c.env.DB.prepare("SELECT game_week FROM season_calendar WHERE id = ?")
+            .bind(matchCal.id).first<{ game_week: number }>();
+          const gameWeek = calRow?.game_week ?? 0;
+          const matchRows = await c.env.DB.prepare(
+            "SELECT m.home_score, m.away_score, t1.name as home_name, t2.name as away_name FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND m.status = 'simulated'"
+          ).bind(matchCal.id).all();
+          const lines: string[] = [];
+          for (const r of matchRows.results) {
+            const hs = r.home_score as number; const as_ = r.away_score as number;
+            const hn = r.home_name as string; const an = r.away_name as string;
+            if (hs > as_) lines.push(`${hn} porazil ${an} ${hs}:${as_}`);
+            else if (hs < as_) lines.push(`${an} zvítězil nad ${hn} ${as_}:${hs}`);
+            else lines.push(`${hn} remizoval s ${an} ${hs}:${as_}`);
+          }
+          await c.env.DB.prepare("INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, datetime('now'))")
+            .bind(crypto.randomUUID(), leagueId, `${gameWeek}. kolo: přehled výsledků`, lines.join(". ") + ".", gameWeek).run();
+        } catch { /* news generation optional */ }
+      }
+    }
+  }
+  return c.json({ ok: true, type: "matches", totalMatches });
 });
 
 // ═══ Classifieds (Placená inzerce) ═══
@@ -1567,12 +1727,15 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     "SELECT formation, tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?"
   ).bind(teamId, nextCal.id).first<{ formation: string; tactic: string; players_data: string; is_auto: number }>();
 
-  // Get all players (active, not injured) + generate absences
+  // Get ALL players (including injured) + generate absences
   const players = await c.env.DB.prepare(
-    "SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.weekly_wage, p.skills, p.life_context, p.personality, p.physical, p.squad_number, p.commute_km, ps.avg_rating FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.season_id = (SELECT id FROM seasons WHERE status = 'active' LIMIT 1) WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') AND i.id IS NULL ORDER BY p.overall_rating DESC"
+    "SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.weekly_wage, p.skills, p.life_context, p.personality, p.physical, p.squad_number, p.commute_km, p.suspended_matches, ps.avg_rating, i.days_remaining as injury_days, i.type as injury_type FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.season_id = (SELECT id FROM seasons WHERE status = 'active' LIMIT 1) WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') ORDER BY p.overall_rating DESC"
   ).bind(teamId).all();
 
-  // Generate absences with deterministic seed from calendarId
+  // Generate absences only day_before or match_day (not 2+ days before)
+  const matchDate = new Date(nextCal.scheduled_at);
+  const daysUntilMatch = Math.max(0, Math.round((matchDate.getTime() - gameDate.getTime()) / 86400000));
+
   const { seedFromString } = await import("../lib/seed");
   const { generateAbsences } = await import("../events/absence");
   const absenceRng = createRng(seedFromString(nextCal.id));
@@ -1590,14 +1753,18 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       commuteKm: (row.commute_km as number) ?? 0,
     };
   });
-  const absences = generateAbsences(absenceRng as any, absenceSquad);
+  // day_before = 1 day until match, match_day = 0 days, 2+ = no absences yet
+  const timing = daysUntilMatch === 0 ? "any" : daysUntilMatch === 1 ? "day_before" : null;
+  const absences = timing ? generateAbsences(absenceRng as any, absenceSquad, timing) : [];
   const absentPlayerIds = new Set(absences.map((a) => players.results[a.playerIndex]?.id as string).filter(Boolean));
 
   const available = players.results.map((p) => {
     const skills = (() => { try { return JSON.parse(p.skills as string); } catch (e) { logger.warn({ module: "game" }, "parse player skills for lineup", e); return {}; } })();
     const lc = (() => { try { return JSON.parse(p.life_context as string); } catch (e) { logger.warn({ module: "game" }, "parse player life_context for lineup", e); return {}; } })();
-    const absent = absentPlayerIds.has(p.id as string);
-    const absenceInfo = absent ? absences.find((a) => players.results[a.playerIndex]?.id === p.id) : null;
+    const injured = (p.injury_days as number) > 0;
+    const suspended = ((p.suspended_matches as number) ?? 0) > 0;
+    const absent = absentPlayerIds.has(p.id as string) || injured || suspended;
+    const absenceInfo = !injured && !suspended ? absences.find((a) => players.results[a.playerIndex]?.id === p.id) : null;
     return {
       id: p.id, firstName: p.first_name, lastName: p.last_name, position: p.position,
       overallRating: p.overall_rating, age: p.age, condition: lc.condition ?? 100, morale: lc.morale ?? 50, squadNumber: p.squad_number ?? null,
@@ -1606,9 +1773,14 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       goalkeeping: skills.goalkeeping ?? 50, stamina: skills.stamina ?? 50,
       avgRating: p.avg_rating ?? null,
       absent,
-      absenceReason: absenceInfo?.reason ?? null,
-      absenceSms: absenceInfo?.smsText ?? null,
-      absenceEmoji: absenceInfo?.emoji ?? null,
+      injured,
+      suspended,
+      suspendedMatches: suspended ? (p.suspended_matches as number) : null,
+      injuryDays: injured ? (p.injury_days as number) : null,
+      injuryType: injured ? (p.injury_type as string) : null,
+      absenceReason: suspended ? "Stopka" : injured ? "Zranění" : (absenceInfo?.reason ?? null),
+      absenceSms: suspended ? `Mám stopku, ${p.suspended_matches} zápas(ů) nesmím hrát.` : injured ? `Jsem zraněný (${p.injury_type ?? "zranění"}), ještě ${p.injury_days} dní.` : (absenceInfo?.smsText ?? null),
+      absenceEmoji: suspended ? "🟥" : injured ? "🩹" : (absenceInfo?.emoji ?? null),
     };
   });
 
@@ -1789,8 +1961,19 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   await c.env.DB.prepare(
     `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
-  ).bind(playerId, teamId, fa.first_name, fa.last_name, fa.nickname ?? null, fa.age, fa.position, fa.overall_rating,
+  ).bind(playerId, teamId, fa.first_name, fa.last_name, (fa.nickname as string) ?? "", fa.age, fa.position, fa.overall_rating,
     fa.skills, fa.physical, fa.personality, fa.life_context, fa.avatar, fa.hidden_talent ?? 0, body.offeredWage).run();
+
+  // Set residence & commute for new signing
+  const { generateResidence } = await import("../generators/residence");
+  const teamVillage = await c.env.DB.prepare("SELECT v.name, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
+    .bind(teamId).first<{ name: string; size: string; district: string }>().catch(() => null);
+  if (teamVillage) {
+    const resRng = createRng(playerId.charCodeAt(0) + Date.now());
+    const res = generateResidence(resRng, teamVillage.name, teamVillage.size, teamVillage.district);
+    await c.env.DB.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
+      .bind(res.residence, res.commuteKm, playerId).run().catch(() => {});
+  }
 
   const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for signing contract", e); return null; });
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'free_agent', 0, 1)")
@@ -1890,11 +2073,24 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
     bids = bidsResult.results;
   }
 
+  // Check if user has pending bids on any listing
+  const listingIds = listings.results.map((l) => l.id as string);
+  let myBids: Record<string, number> = {};
+  if (listingIds.length > 0) {
+    const myBidsResult = await c.env.DB.prepare(
+      `SELECT listing_id, amount FROM transfer_bids WHERE team_id = ? AND status = 'pending' AND listing_id IN (${listingIds.map(() => "?").join(",")})`
+    ).bind(teamId, ...listingIds).all().catch(() => ({ results: [] }));
+    for (const b of myBidsResult.results) {
+      myBids[b.listing_id as string] = b.amount as number;
+    }
+  }
+
   return c.json({
     listings: listings.results.map((l) => ({
       id: l.id, playerId: l.player_id, askingPrice: l.asking_price,
       playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,
       overallRating: l.overall_rating, teamName: l.team_name, expiresAt: l.expires_at,
+      myBidAmount: myBids[l.id as string] ?? null,
     })),
     myListings: myListings.results.map((l) => ({
       id: l.id, playerId: l.player_id, askingPrice: l.asking_price,
@@ -1942,6 +2138,7 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
   await recordTransaction(c.env.DB, buyerTeamId, "transfer_fee", -amount, `Přestup: ${player?.first_name} ${player?.last_name}`, gameDate);
   await recordTransaction(c.env.DB, teamId, "transfer_income", amount, `Prodej: ${player?.first_name} ${player?.last_name}`, gameDate);
   await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ?").bind(buyerTeamId, playerId).run();
+  await onPlayerTransferred(c.env.DB, playerId, buyerTeamId);
 
   await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = datetime('now') WHERE player_id = ? AND team_id = ? AND is_active = 1").bind(playerId, teamId).run().catch((e) => logger.warn({ module: "game" }, "deactivate contract on transfer", e));
   const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for transfer contract", e); return null; });
@@ -1969,20 +2166,42 @@ gameRouter.post("/teams/:teamId/bids/:bidId/reject", async (c) => {
   return c.json({ ok: true });
 });
 
-// Transfer offers between teams
+// Transfer offers between teams (transfer or loan)
 gameRouter.post("/teams/:teamId/offers", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ playerId: string; amount: number; message?: string }>();
+  const body = await c.req.json<{ playerId: string; amount: number; message?: string; offerType?: "transfer" | "loan"; loanDuration?: number }>();
   const player = await c.env.DB.prepare("SELECT p.*, t.user_id FROM players p JOIN teams t ON p.team_id = t.id WHERE p.id = ?").bind(body.playerId).first<Record<string, unknown>>();
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
   if (player.team_id === teamId) return c.json({ error: "Nemůžeš nabídnout na vlastního hráče" }, 400);
   if (player.user_id === "ai") return c.json({ error: "Nabídky lze posílat jen lidským týmům" }, 400);
+  if (player.loan_from_team_id) return c.json({ error: "Hráč je již na hostování" }, 400);
+
+  const offerType = body.offerType ?? "transfer";
+  const loanDuration = offerType === "loan" ? (body.loanDuration ?? 30) : null;
+
+  if (offerType === "loan" && (!loanDuration || loanDuration < 7 || loanDuration > 180)) {
+    return c.json({ error: "Délka hostování musí být 7–180 dní" }, 400);
+  }
 
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
   const id = crypto.randomUUID();
-  await c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, body.playerId, teamId, player.team_id, body.amount, body.message ?? null, expiresAt.toISOString()).run();
+  await c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, body.playerId, teamId, player.team_id, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration).run();
+
+  // SMS to the player's team about the incoming offer
+  const buyerTeam = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>().catch(() => null);
+  const pName = `${player.first_name} ${player.last_name}`;
+  if (offerType === "loan") {
+    await sendPhoneSMS(c.env.DB, player.team_id as string, "Sportovní ředitel", "Sportovní ředitel",
+      `📩 ${buyerTeam?.name ?? "Neznámý klub"} má zájem o hostování ${pName}.${body.amount > 0 ? ` Nabízí poplatek ${body.amount.toLocaleString("cs")} Kč.` : ""} Podívejte se na to v přestupech.`
+    ).catch(() => {});
+  } else {
+    await sendPhoneSMS(c.env.DB, player.team_id as string, "Sportovní ředitel", "Sportovní ředitel",
+      `📩 Přišla nabídka na ${pName} od ${buyerTeam?.name ?? "neznámého klubu"} za ${body.amount.toLocaleString("cs")} Kč. Podívejte se na to v přestupech.`
+    ).catch(() => {});
+  }
+
   return c.json({ ok: true, offerId: id });
 });
 
@@ -1998,7 +2217,17 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.to_team_id = t.id
      WHERE to2.from_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
   ).bind(teamId).all();
-  return c.json({ incoming: incoming.results, outgoing: outgoing.results });
+  // Include loaned-out players
+  const loanedOut = await c.env.DB.prepare(
+    `SELECT p.id, p.first_name, p.last_name, p.position, p.age, p.overall_rating, p.loan_until, t.name as loan_team_name
+     FROM players p JOIN teams t ON p.team_id = t.id WHERE p.loan_from_team_id = ?`
+  ).bind(teamId).all().catch(() => ({ results: [] }));
+  // Include loaned-in players
+  const loanedIn = await c.env.DB.prepare(
+    `SELECT p.id, p.first_name, p.last_name, p.position, p.age, p.overall_rating, p.loan_until, t.name as owner_team_name
+     FROM players p JOIN teams t ON p.loan_from_team_id = t.id WHERE p.team_id = ? AND p.loan_from_team_id IS NOT NULL`
+  ).bind(teamId).all().catch(() => ({ results: [] }));
+  return c.json({ incoming: incoming.results, outgoing: outgoing.results, loanedOut: loanedOut.results, loanedIn: loanedIn.results });
 });
 
 gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
@@ -2010,6 +2239,8 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const amount = (offer.counter_amount as number) ?? (offer.offer_amount as number);
   const buyerTeamId = offer.from_team_id as string;
   const playerId = offer.player_id as string;
+  const offerType = (offer.offer_type as string) ?? "transfer";
+  const loanDuration = offer.loan_duration as number | null;
 
   const buyer = await c.env.DB.prepare("SELECT budget, name, game_date FROM teams WHERE id = ?").bind(buyerTeamId).first<{ budget: number; name: string; game_date: string }>();
   if (!buyer || buyer.budget < amount) return c.json({ error: "Kupující nemá dostatek prostředků" }, 400);
@@ -2017,17 +2248,69 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const player = await c.env.DB.prepare("SELECT first_name, last_name, age, position FROM players WHERE id = ?").bind(playerId).first<Record<string, unknown>>();
   const gameDate = buyer.game_date ?? new Date().toISOString();
 
-  await recordTransaction(c.env.DB, buyerTeamId, "transfer_fee", -amount, `Přestup: ${player?.first_name} ${player?.last_name}`, gameDate);
-  await recordTransaction(c.env.DB, teamId, "transfer_income", amount, `Prodej: ${player?.first_name} ${player?.last_name}`, gameDate);
-  await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ?").bind(buyerTeamId, playerId).run();
+  // Get current season for contract records
+  const currentSeason = await c.env.DB.prepare("SELECT id FROM seasons ORDER BY number DESC LIMIT 1")
+    .first<{ id: string }>().catch(() => null);
+  const seasonId = currentSeason?.id ?? "season-1";
+
+  if (offerType === "loan" && loanDuration) {
+    // Hostování — hráč se dočasně přesune, ale pamatuje si původní tým
+    const loanUntil = new Date(gameDate);
+    loanUntil.setDate(loanUntil.getDate() + loanDuration);
+    await c.env.DB.prepare("UPDATE players SET team_id = ?, loan_from_team_id = ?, loan_until = ? WHERE id = ?")
+      .bind(buyerTeamId, teamId, loanUntil.toISOString(), playerId).run();
+
+    // Contract: create loan contract at new team (don't close old one — player returns)
+    await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, joined_at, join_type, fee, is_active) VALUES (?, ?, ?, ?, ?, 'loan', ?, 1)")
+      .bind(crypto.randomUUID(), playerId, buyerTeamId, seasonId, gameDate, amount).run().catch(() => {});
+
+    if (amount > 0) {
+      await recordTransaction(c.env.DB, buyerTeamId, "loan_fee", -amount, `Hostování: ${player?.first_name} ${player?.last_name}`, gameDate);
+      await recordTransaction(c.env.DB, teamId, "loan_income", amount, `Hostování (příjem): ${player?.first_name} ${player?.last_name}`, gameDate);
+    }
+
+    const { createTransferNews } = await import("../transfers/transfer-news");
+    await createTransferNews(c.env.DB, seller?.league_id ?? "", null, "loan_completed", {
+      playerName: `${player?.first_name} ${player?.last_name}`, playerAge: player?.age as number,
+      playerPosition: player?.position as string, teamName: seller?.name ?? "",
+      fromTeamName: seller?.name, toTeamName: buyer.name, fee: amount,
+    }).catch((e) => logger.warn({ module: "game" }, "create loan news", e));
+  } else {
+    // Trvalý přestup
+    // Close old contract
+    await c.env.DB.prepare("UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'transfer' WHERE player_id = ? AND team_id = ? AND is_active = 1")
+      .bind(gameDate, playerId, teamId).run().catch(() => {});
+    // Create new contract
+    await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, joined_at, join_type, fee, is_active) VALUES (?, ?, ?, ?, ?, 'transfer', ?, 1)")
+      .bind(crypto.randomUUID(), playerId, buyerTeamId, seasonId, gameDate, amount).run().catch(() => {});
+
+    await recordTransaction(c.env.DB, buyerTeamId, "transfer_fee", -amount, `Přestup: ${player?.first_name} ${player?.last_name}`, gameDate);
+    await recordTransaction(c.env.DB, teamId, "transfer_income", amount, `Prodej: ${player?.first_name} ${player?.last_name}`, gameDate);
+    await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ?").bind(buyerTeamId, playerId).run();
+
+    const { createTransferNews } = await import("../transfers/transfer-news");
+    await createTransferNews(c.env.DB, seller?.league_id ?? "", null, "transfer_completed", {
+      playerName: `${player?.first_name} ${player?.last_name}`, playerAge: player?.age as number,
+      playerPosition: player?.position as string, teamName: seller?.name ?? "",
+      fromTeamName: seller?.name, toTeamName: buyer.name, fee: amount,
+    }).catch((e) => logger.warn({ module: "game" }, "create offer accepted news", e));
+  }
+
   await c.env.DB.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = datetime('now') WHERE id = ?").bind(offerId).run();
 
-  const { createTransferNews } = await import("../transfers/transfer-news");
-  await createTransferNews(c.env.DB, seller?.league_id ?? "", null, "transfer_completed", {
-    playerName: `${player?.first_name} ${player?.last_name}`, playerAge: player?.age as number,
-    playerPosition: player?.position as string, teamName: seller?.name ?? "",
-    fromTeamName: seller?.name, toTeamName: buyer.name, fee: amount,
-  }).catch((e) => logger.warn({ module: "game" }, "create offer accepted news", e));
+  // Update commute + reset squad number
+  await onPlayerTransferred(c.env.DB, playerId, buyerTeamId);
+
+  // SMS notifications
+  const playerName = `${player?.first_name} ${player?.last_name}`;
+  const role = "Sportovní ředitel";
+  if (offerType === "loan") {
+    await sendPhoneSMS(c.env.DB, buyerTeamId, role, role, `🤝 Hostování schváleno! ${playerName} přichází z ${seller?.name ?? "neznámého klubu"} na ${loanDuration} dní.`).catch(() => {});
+    await sendPhoneSMS(c.env.DB, teamId, role, role, `📤 Hostování potvrzeno. ${playerName} odchází do ${buyer.name} na ${loanDuration} dní.${amount > 0 ? ` Poplatek: ${amount.toLocaleString("cs")} Kč.` : ""}`).catch(() => {});
+  } else {
+    await sendPhoneSMS(c.env.DB, buyerTeamId, role, role, `🤝 Přestup potvrzen! ${playerName} přichází z ${seller?.name ?? "neznámého klubu"} za ${amount.toLocaleString("cs")} Kč.`).catch(() => {});
+    await sendPhoneSMS(c.env.DB, teamId, role, role, `📤 Přestup potvrzen. ${playerName} odchází do ${buyer.name} za ${amount.toLocaleString("cs")} Kč.`).catch(() => {});
+  }
 
   return c.json({ ok: true });
 });
@@ -2036,8 +2319,28 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
   const body = await c.req.json<{ message?: string }>().catch((e) => { logger.warn({ module: "game" }, "parse reject offer body", e); return {}; });
+
+  // Get offer info before rejecting
+  const offer = await c.env.DB.prepare("SELECT player_id, from_team_id, offer_type FROM transfer_offers WHERE id = ? AND to_team_id = ?")
+    .bind(offerId, teamId).first<{ player_id: string; from_team_id: string; offer_type: string }>().catch(() => null);
+
   await c.env.DB.prepare("UPDATE transfer_offers SET status = 'rejected', reject_message = ?, resolved_at = datetime('now') WHERE id = ? AND to_team_id = ?")
     .bind((body as { message?: string }).message ?? null, offerId, teamId).run();
+
+  // SMS to the offering team
+  if (offer) {
+    const player = await c.env.DB.prepare("SELECT first_name, last_name FROM players WHERE id = ?")
+      .bind(offer.player_id).first<{ first_name: string; last_name: string }>().catch(() => null);
+    const sellerTeam = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
+      .bind(teamId).first<{ name: string }>().catch(() => null);
+    const playerName = player ? `${player.first_name} ${player.last_name}` : "hráče";
+    const isLoan = offer.offer_type === "loan";
+    const rejectMsg = (body as { message?: string }).message;
+    await sendPhoneSMS(c.env.DB, offer.from_team_id, "Sportovní ředitel", "Sportovní ředitel",
+      `❌ ${sellerTeam?.name ?? "Klub"} odmítl vaši nabídku na ${isLoan ? "hostování" : "přestup"} ${playerName}.${rejectMsg ? ` Vzkaz: "${rejectMsg}"` : ""}`
+    ).catch(() => {});
+  }
+
   return c.json({ ok: true });
 });
 

@@ -93,7 +93,10 @@
       "Bash(echo \"=== .catch\\(\\(\\) => null\\) counts by file ===\")",
       "Bash(DB=\"/Users/savrik/Projects/fmko/apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/2b35d4d42e3c9f6b5ad5b5579a7b1470c66e69f6b33a31e3f5a0095cc6d18656.sqlite\" sqlite3 \"$DB\" \"PRAGMA table_info\\(matches\\);\")",
       "Bash(DB=\"/Users/savrik/Projects/fmko/apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/2b35d4d42e3c9f6b5ad5b5579a7b1470c66e69f6b33a31e3f5a0095cc6d18656.sqlite\")",
-      "Bash(lsof -i :3000 -sTCP:LISTEN)"
+      "Bash(lsof -i :3000 -sTCP:LISTEN)",
+      "Bash(chmod +x /Users/savrik/Projects/fmko/apps/api/scripts/wipe-game-data.sh)",
+      "Bash(bash apps/api/scripts/wipe-game-data.sh)",
+      "Bash(lsof -iTCP:3000 -sTCP:LISTEN -P)"
     ]
   }
 }
