@@ -2606,7 +2606,7 @@ gameRouter.get("/admin/seed-data/:table", async (c) => {
   const limit = Number(c.req.query("limit") || "100");
   const offset = Number(c.req.query("offset") || "0");
 
-  let query = `SELECT * FROM ${table}`;
+  let query = `SELECT ${table === "district_surnames" ? "rowid as id, " : ""}* FROM ${table}`;
   const binds: unknown[] = [];
   if (district && (table === "district_surnames" || table === "district_sponsors")) {
     query += " WHERE district = ?";
@@ -2664,6 +2664,38 @@ gameRouter.delete("/admin/seed-data/:table/:id", async (c) => {
 
   const idCol = table === "district_surnames" ? "rowid" : "id";
   await c.env.DB.prepare(`DELETE FROM ${table} WHERE ${idCol} = ?`).bind(id).run();
+  return c.json({ ok: true });
+});
+
+gameRouter.put("/admin/seed-data/:table/:id", async (c) => {
+  const table = c.req.param("table");
+  const id = c.req.param("id");
+  const allowed = ["district_surnames", "district_sponsors", "commentary_templates", "crowd_reactions"];
+  if (!allowed.includes(table)) return c.json({ error: "Cannot edit this table" }, 400);
+
+  const body = await c.req.json<Record<string, unknown>>();
+  const idCol = table === "district_surnames" ? "rowid" : "id";
+
+  // Build SET clause from body keys (only allowed columns)
+  const allowedCols: Record<string, string[]> = {
+    district_surnames: ["district", "surname", "frequency"],
+    district_sponsors: ["district", "name", "type", "monthly_min", "monthly_max", "win_bonus_min", "win_bonus_max"],
+    commentary_templates: ["event_type", "template", "tags"],
+    crowd_reactions: ["text"],
+  };
+  const validCols = allowedCols[table] ?? [];
+  const updates: string[] = [];
+  const values: unknown[] = [];
+  for (const [k, v] of Object.entries(body)) {
+    if (validCols.includes(k)) {
+      updates.push(`${k} = ?`);
+      values.push(v);
+    }
+  }
+  if (updates.length === 0) return c.json({ error: "No valid fields" }, 400);
+
+  values.push(id);
+  await c.env.DB.prepare(`UPDATE ${table} SET ${updates.join(", ")} WHERE ${idCol} = ?`).bind(...values).run();
   return c.json({ ok: true });
 });
 

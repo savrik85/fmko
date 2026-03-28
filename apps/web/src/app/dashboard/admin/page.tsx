@@ -152,6 +152,8 @@ function SeedDataSection() {
   const [district, setDistrict] = useState("");
   const [adding, setAdding] = useState(false);
   const [newRow, setNewRow] = useState<Record<string, string>>({});
+  const [editCell, setEditCell] = useState<{ rowIdx: number; col: string } | null>(null);
+  const [editValue, setEditValue] = useState("");
 
   const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
@@ -171,6 +173,23 @@ function SeedDataSection() {
   const deleteRow = async (table: string, id: unknown) => {
     await fetch(`${API}/api/admin/seed-data/${table}/${id}`, { method: "DELETE" }).catch(() => {});
     loadTable(table, district || undefined);
+  };
+
+  const saveCell = async (rowIdx: number, col: string, value: string) => {
+    if (!activeTable) return;
+    const row = rows[rowIdx];
+    const id = row.id ?? row.rowid;
+    if (id == null) return;
+    // Only save if value changed
+    if (String(row[col] ?? "") === value) { setEditCell(null); return; }
+    const numCols = ["frequency", "monthly_min", "monthly_max", "win_bonus_min", "win_bonus_max", "min_skill"];
+    const body = { [col]: numCols.includes(col) ? Number(value) : value };
+    await fetch(`${API}/api/admin/seed-data/${activeTable}/${id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).catch(() => {});
+    setEditCell(null);
+    loadTable(activeTable, district || undefined);
   };
 
   const addRow = async () => {
@@ -258,15 +277,29 @@ function SeedDataSection() {
               <tbody>
                 {rows.map((row, i) => (
                   <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
-                    {colKeys.map((k) => (
-                      <td key={k} className="py-1.5 px-3 text-sm truncate max-w-[200px]">
-                        {typeof row[k] === "string" && (row[k] as string).length > 60
-                          ? (row[k] as string).slice(0, 60) + "..."
-                          : String(row[k] ?? "")}
-                      </td>
-                    ))}
+                    {colKeys.map((k) => {
+                      const isEditing = editCell?.rowIdx === i && editCell?.col === k;
+                      const val = String(row[k] ?? "");
+                      return (
+                        <td key={k} className="py-1 px-2 text-sm max-w-[250px]">
+                          {isEditing ? (
+                            <input autoFocus type="text" value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onBlur={() => saveCell(i, k, editValue)}
+                              onKeyDown={(e) => { if (e.key === "Enter") saveCell(i, k, editValue); if (e.key === "Escape") setEditCell(null); }}
+                              className="w-full border border-pitch-400 rounded px-1.5 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-pitch-400" />
+                          ) : (
+                            <span onClick={() => { if (activeInfo?.editable) { setEditCell({ rowIdx: i, col: k }); setEditValue(val); } }}
+                              className={`block truncate ${activeInfo?.editable ? "cursor-pointer hover:bg-pitch-50 rounded px-1 -mx-1" : ""}`}
+                              title={val.length > 40 ? val : undefined}>
+                              {val.length > 60 ? val.slice(0, 60) + "..." : val}
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
                     {activeInfo?.editable && (
-                      <td className="py-1.5 px-3">
+                      <td className="py-1.5 px-2">
                         <button onClick={() => deleteRow(activeTable, row.id ?? row.rowid ?? i)}
                           className="text-card-red text-xs hover:underline">✕</button>
                       </td>
