@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Player } from "@/lib/api";
-import { Spinner, Button, PositionBadge, BadgePreview } from "@/components/ui";
+import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 type Pos = "GK" | "DEF" | "MID" | "FWD";
@@ -158,12 +158,14 @@ export default function MatchPage() {
           <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
             <span className={`font-heading font-bold text-lg ${nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.homeName}</span>
             <BadgePreview primary={nextMatch.homeColor || "#2D5F2D"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.homeName)} size={28} />
+            <JerseyPreview primary={nextMatch.homeColor || "#2D5F2D"} secondary="#FFF" size={32} />
           </div>
           <div className="text-center shrink-0">
             <div className="font-heading font-[800] text-xl text-muted">vs</div>
             <div className="text-sm text-muted">{nextMatch.gameWeek}. kolo</div>
           </div>
           <div className="flex items-center gap-2 flex-1 min-w-0">
+            <JerseyPreview primary={nextMatch.awayColor || "#D94032"} secondary="#FFF" size={32} />
             <BadgePreview primary={nextMatch.awayColor || "#D94032"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.awayName)} size={28} />
             <span className={`font-heading font-bold text-lg ${!nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.awayName}</span>
           </div>

@@ -11,5 +11,6 @@ export { PositionBadge, PositionDot } from "./position-badge";
 export { EntityLink } from "./entity-link";
 export { BadgePreview } from "./badge-preview";
 export type { BadgePattern } from "./badge-preview";
+export { JerseyPreview } from "./jersey-preview";
 export { ConfirmDialog, useConfirm } from "./confirm-dialog";
 export { PageHeader, HeaderStat } from "../dashboard/page-header";

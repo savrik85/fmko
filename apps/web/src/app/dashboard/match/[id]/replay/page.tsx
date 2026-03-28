@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, BadgePreview } from "@/components/ui";
+import { Spinner, BadgePreview, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface MatchEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; }
@@ -245,7 +245,8 @@ export default function MatchReplayPage() {
       <div className="rounded-t-xl overflow-hidden" style={{ background: "#0a0a0a" }}>
         <div className="flex items-center px-4 py-2.5">
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <BadgePreview primary={hc} secondary={match.home_secondary} pattern={match.home_badge as BadgePattern} initials={ini(match.home_name)} size={36} />
+            <BadgePreview primary={hc} secondary={match.home_secondary} pattern={match.home_badge as BadgePattern} initials={ini(match.home_name)} size={32} />
+            <JerseyPreview primary={hc} secondary={match.home_secondary} size={28} />
             <span className="font-heading font-bold text-white text-base sm:text-lg truncate">{match.home_name}</span>
           </div>
           <div className="text-center shrink-0 px-5">
@@ -260,7 +261,8 @@ export default function MatchReplayPage() {
           </div>
           <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
             <span className="font-heading font-bold text-white text-base sm:text-lg truncate">{match.away_name}</span>
-            <BadgePreview primary={ac} secondary={match.away_secondary} pattern={match.away_badge as BadgePattern} initials={ini(match.away_name)} size={36} />
+            <JerseyPreview primary={ac} secondary={match.away_secondary} size={28} />
+            <BadgePreview primary={ac} secondary={match.away_secondary} pattern={match.away_badge as BadgePattern} initials={ini(match.away_name)} size={32} />
           </div>
         </div>
         {/* Match info bar */}

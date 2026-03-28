@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch, type Team, type Player, type TeamMatchResults, type ManagerProfile } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { Spinner, SectionLabel, EntityLink, BadgePreview, PositionBadge } from "@/components/ui";
+import { Spinner, SectionLabel, EntityLink, BadgePreview, PositionBadge, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
@@ -155,6 +155,7 @@ export default function TeamPage() {
           )}
           <BadgePreview primary={color} secondary={team.secondary_color || "#FFFFFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
             initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={56} />
+          <JerseyPreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={team.jersey_pattern as string} size={44} />
           <div className="flex-1 min-w-0">
             <h1 className="font-heading font-extrabold text-white text-xl sm:text-2xl leading-tight truncate">{team.name}</h1>
             <div className="text-white/60 text-sm mt-0.5">
