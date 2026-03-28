@@ -32,7 +32,8 @@ export function JerseyPreview({ primary, secondary, pattern = "solid", size = 48
         {p === "chest_band" && <rect x="0" y="80" width="200" height="30" fill={secondary} />}
       </g>
       <path d={neckCut} fill={secondary} />
-      <path d={outline} fill="none" stroke="rgba(0,0,0,0.25)" strokeWidth="3" strokeLinejoin="round" />
+      <path d={outline} fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="4" strokeLinejoin="round" />
+      <path d={outline} fill="none" stroke="rgba(0,0,0,0.2)" strokeWidth="2" strokeLinejoin="round" />
       {number != null && (
         <text x="100" y="155" textAnchor="middle" fontSize={numSize} fontWeight="bold"
           fill="white" stroke="rgba(0,0,0,0.4)" strokeWidth="1.5" paintOrder="stroke"
