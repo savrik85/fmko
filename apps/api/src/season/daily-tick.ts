@@ -280,7 +280,7 @@ export async function executeDailyTick(
   logger.info({ module: "daily-tick" }, "reached game date advancement section");
   // ── Advance game date for ALL teams (including AI) ──
   const allTeams = await env.DB.prepare(
-    "SELECT t.id, t.league_id, t.game_date, t.training_type, t.training_sessions, v.size as village_size FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
+    "SELECT t.id, t.user_id, t.league_id, t.game_date, t.training_type, t.training_sessions, v.size as village_size FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
   ).all();
   for (const team of allTeams.results) {
     const teamId = team.id as string;
@@ -298,7 +298,7 @@ export async function executeDailyTick(
     if (gameDate) {
       // ── Day-before attendance messages (BEFORE advancing date) ──
       // gameDate = current day. Check if TOMORROW (gameDate+1) has a match.
-      if ((team as any).user_id !== "ai") {
+      if (team.user_id !== "ai") {
         try {
           const tomorrow = new Date(gameDate);
           tomorrow.setDate(tomorrow.getDate() + 1);
@@ -309,6 +309,7 @@ export async function executeDailyTick(
             const tomorrowMatch = await env.DB.prepare(
               "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled'"
             ).bind(lid, checkDayStart.toISOString(), checkDayEnd.toISOString()).first<{ id: string }>().catch(() => null);
+            logger.info({ module: "daily-tick", teamId }, `day-before: gameDate=${gameDate} check=${checkDayStart.toISOString()}-${checkDayEnd.toISOString()} found=${tomorrowMatch?.id ?? 'NONE'}`);
             if (tomorrowMatch) {
               const alreadySent = await env.DB.prepare(
                 "SELECT id FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group') AND metadata LIKE ?"
@@ -417,7 +418,7 @@ export async function executeDailyTick(
 
       // Match simulation is handled by MATCH TICK (separate cron at 18:00)
       // But send match_day absence messages NOW (morning) so user can react before 18:00
-      if ((team as any).user_id !== "ai" && team.league_id) {
+      if (team.user_id !== "ai" && team.league_id) {
         try {
           const todayEnd = new Date(gd); todayEnd.setUTCHours(23, 59, 59, 999);
           const todayMatch = await env.DB.prepare(
