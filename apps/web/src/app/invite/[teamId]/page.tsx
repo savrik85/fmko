@@ -27,7 +27,7 @@ interface ManagerData {
 
 async function fetchTeam(teamId: string): Promise<TeamData | null> {
   try {
-    const r = await fetch(`${API}/api/teams/${teamId}`, { next: { revalidate: 60 } });
+    const r = await fetch(`${API}/api/teams/${teamId}`, { cache: "no-store" });
     if (!r.ok) return null;
     return r.json();
   } catch { return null; }
@@ -35,7 +35,7 @@ async function fetchTeam(teamId: string): Promise<TeamData | null> {
 
 async function fetchManager(teamId: string): Promise<ManagerData | null> {
   try {
-    const r = await fetch(`${API}/api/teams/${teamId}/manager`, { next: { revalidate: 60 } });
+    const r = await fetch(`${API}/api/teams/${teamId}/manager`, { cache: "no-store" });
     if (!r.ok) return null;
     return r.json();
   } catch { return null; }
@@ -43,7 +43,7 @@ async function fetchManager(teamId: string): Promise<ManagerData | null> {
 
 async function fetchPosition(teamId: string): Promise<number | null> {
   try {
-    const r = await fetch(`${API}/api/teams/${teamId}/standings`, { next: { revalidate: 60 } });
+    const r = await fetch(`${API}/api/teams/${teamId}/standings`, { cache: "no-store" });
     if (!r.ok) return null;
     const standings = await r.json();
     const idx = standings.findIndex?.((t: { team_id: string }) => t.team_id === teamId);
