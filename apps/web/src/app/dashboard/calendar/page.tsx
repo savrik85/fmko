@@ -126,29 +126,40 @@ export default function CalendarPage() {
         {data.upcoming.length === 0 ? (
           <Card><CardBody><p className="text-center text-muted py-4">Žádné nadcházející události</p></CardBody></Card>
         ) : (
-          <div className="space-y-4">
-            {Array.from(grouped.entries()).map(([dateLabel, events]) => (
-              <div key={dateLabel}>
-                <div className="font-heading font-bold text-sm text-muted mb-2">{dateLabel}</div>
-                <div className="space-y-1.5">
-                  {events.map((ev, i) => (
-                    <div key={i} className={`card flex items-center gap-3 px-4 py-3 border-l-4 ${TYPE_COLORS[ev.type] ?? "border-l-gray-300"}`}>
-                      <span className="text-lg shrink-0">{TYPE_ICONS[ev.type] ?? "\u{1F4C5}"}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-heading font-bold text-sm">{ev.title}</div>
-                        {ev.subtitle && <div className="text-xs text-muted">{ev.subtitle}</div>}
-                      </div>
-                      <div className="text-right shrink-0">
-                        <div className="text-xs font-heading">{formatTime(ev.date)}</div>
-                        {ev.status && ev.status !== "Naplánováno" && (
-                          <div className="text-xs font-heading font-bold text-pitch-500">{ev.status}</div>
-                        )}
-                      </div>
+          <div className="card divide-y divide-gray-50">
+            {Array.from(grouped.entries()).map(([dateLabel, events]) => {
+              const hasMatch = events.some((e) => e.type === "match");
+              return (
+                <div key={dateLabel} className={`flex items-center gap-3 px-4 ${hasMatch ? "py-3" : "py-1.5"}`}>
+                  {/* Date column */}
+                  <div className="w-20 shrink-0">
+                    <div className={`font-heading ${hasMatch ? "font-bold text-sm text-ink" : "text-xs text-muted"}`}>
+                      {dateLabel.split(" ").slice(0, 2).join(" ")}
                     </div>
-                  ))}
+                  </div>
+                  {/* Events */}
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    {events.map((ev, i) => (
+                      ev.type === "match" ? (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="text-sm">⚽</span>
+                          <span className="font-heading font-bold text-sm">{ev.title}</span>
+                          <span className="text-xs text-muted">{ev.subtitle}</span>
+                          {ev.status && ev.status !== "Naplánováno" && (
+                            <span className="text-xs font-heading font-bold text-pitch-500 ml-auto">{ev.status}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div key={i} className="flex items-center gap-2 text-xs text-muted">
+                          <span>🏋️</span>
+                          <span>{ev.title}</span>
+                        </div>
+                      )
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

@@ -1427,7 +1427,9 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
   const seasonEnd = new Date(lastEntry.scheduled_at as string);
   seasonEnd.setDate(seasonEnd.getDate() + 7); // a week after last match
 
-  const now = new Date();
+  // Use GAME DATE, not real date
+  const gameDateRow = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>().catch(() => null);
+  const now = gameDateRow?.game_date ? new Date(gameDateRow.game_date) : new Date();
   const totalDays = Math.max(1, Math.ceil((seasonEnd.getTime() - seasonStart.getTime()) / (24 * 60 * 60 * 1000)));
   const currentDay = Math.max(1, Math.min(totalDays, Math.ceil((now.getTime() - seasonStart.getTime()) / (24 * 60 * 60 * 1000))));
 
@@ -1460,9 +1462,9 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
     });
   }
 
-  // Training days (Mon-Fri if training plan set)
+  // Training days (Mon-Fri if training plan set) — from game_date
   if (team.training_type) {
-    const today = new Date();
+    const today = new Date(now);
     for (let d = 0; d < 14; d++) {
       const day = new Date(today);
       day.setDate(today.getDate() + d);
@@ -1480,7 +1482,8 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
 
   // Sort by date and take next events
   upcoming.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  const futureEvents = upcoming.filter((e) => new Date(e.date) >= new Date() || e.status === "Naplánováno");
+  const gameNow = new Date(now); gameNow.setUTCHours(0, 0, 0, 0);
+  const futureEvents = upcoming.filter((e) => new Date(e.date) >= gameNow || e.status === "Naplánováno");
 
   return c.json({
     season: league?.season_number ?? 1,
