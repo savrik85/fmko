@@ -139,10 +139,10 @@ export async function runScheduledMatches(
       ).bind(homeTeamId).first<{ population: number; size: string; reputation: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home village info", e); return null; });
       const pop = homeInfo?.population ?? 500;
       const rep = homeInfo?.reputation ?? 50;
-      // Base from population (2-5% of village comes)
-      const popBase = Math.round(pop * (0.02 + Math.random() * 0.03));
+      // Base from population — okresní fotbal: realisticky 0.5-1.5% obyvatel
+      const popBase = Math.round(pop * (0.005 + Math.random() * 0.01));
       // Reputation bonus (higher rep = more fans)
-      const repBonus = Math.round(popBase * (rep / 100) * 0.5);
+      const repBonus = Math.round(popBase * (rep / 100) * 0.3);
       // Recent form — count wins in last 5 matches
       const recentWins = await db.prepare(
         `SELECT COUNT(*) as w FROM (
@@ -328,6 +328,23 @@ export async function runScheduledMatches(
         // Decrement suspensions for players who SAT OUT this match (served their ban)
         await db.prepare("UPDATE players SET suspended_matches = MAX(0, suspended_matches - 1) WHERE team_id IN (?, ?) AND suspended_matches > 0 AND id NOT IN (SELECT player_id FROM match_player_stats WHERE match_id = ?)")
           .bind(homeTeamId, awayTeamId, matchId).run().catch((e) => logger.warn({ module: "match-runner" }, "decrement suspensions", e));
+
+        // ── Persist injuries from match events ──
+        for (const event of result.events) {
+          if (event.type === "injury") {
+            // Map event teamId (1=home,2=away) + playerId to real DB player
+            const teamId = event.teamId === 1 ? homeTeamId : awayTeamId;
+            const idMap = event.teamId === 1 ? homeBuild.idMap : awayBuild.idMap;
+            const realPlayerId = idMap.get(event.playerId);
+            if (realPlayerId) {
+              const days = 3 + Math.floor(Math.random() * 18); // 3-20 days
+              await db.prepare("INSERT OR IGNORE INTO injuries (id, player_id, type, days_remaining) VALUES (?, ?, ?, ?)")
+                .bind(crypto.randomUUID(), realPlayerId, event.detail ?? "zranění", days).run()
+                .catch((e) => logger.warn({ module: "match-runner" }, "persist injury", e));
+              logger.info({ module: "match-runner" }, `injury: ${event.playerName} (${event.detail}), ${days} days`);
+            }
+          }
+        }
       }
 
       // Match-day finances for both teams

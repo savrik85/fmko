@@ -58,11 +58,12 @@ export interface GeneratedPlayer {
 }
 
 // Průměrná kvalita hráčů dle kategorie obce (0-100 škála)
+// Zmenšený rozdíl — okresní fotbal, všichni jsou víceméně na stejné úrovni
 const QUALITY_BY_CATEGORY: Record<string, number> = {
-  vesnice: 30,
-  obec: 40,
-  mestys: 50,
-  mesto: 60,
+  vesnice: 35,
+  obec: 38,
+  mestys: 42,
+  mesto: 45,
 };
 
 const POSITIONS: PlayerPosition[] = ["GK", "DEF", "MID", "FWD"];
@@ -197,7 +198,13 @@ export function generatePlayer(
   const firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1980s"]);
   const lastName = rng.weighted(surnameData.surnames);
 
-  const qualityBase = QUALITY_BY_CATEGORY[village.category] + rng.int(-2, 2);
+  let qualityBase = QUALITY_BY_CATEGORY[village.category] + rng.int(-2, 2);
+  // Wonderkid: 2% šance na výjimečný talent (+15-25 quality boost)
+  const isWonderkid = age <= 21 && rng.random() < 0.02;
+  if (isWonderkid) qualityBase += rng.int(15, 25);
+  // Exceptional player: 1% šance na nadprůměrného hráče (+8-15)
+  const isExceptional = !isWonderkid && rng.random() < 0.01;
+  if (isExceptional) qualityBase += rng.int(8, 15);
   const attrs = generateAttributes(rng, position, age, qualityBase);
 
   // Body type correlates with age and position
