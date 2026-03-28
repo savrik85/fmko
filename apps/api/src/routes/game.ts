@@ -1659,22 +1659,24 @@ gameRouter.post("/game/advance-day", async (c) => {
             }
           } catch (e) { logger.warn({ module: "game" }, "player offer generation failed", e); }
 
-          // Cleanup match-day attendance conversations
-          try {
-            const matchConvs = await c.env.DB.prepare(
-              "SELECT c.id FROM conversations c JOIN messages m ON m.conversation_id = c.id WHERE c.type = 'squad_group' AND c.title LIKE '⚽ vs %' AND m.metadata LIKE ? LIMIT 50"
-            ).bind(`%${calId}%`).all().catch(() => ({ results: [] }));
-            for (const conv of matchConvs.results) {
-              await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
-              await c.env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch(() => {});
-            }
-          } catch { /* cleanup optional */ }
+          // Cleanup done outside the match loop below
         }
       }
     }
   } catch (e) {
     logger.error({ module: "game" }, "auto match-tick in advance-day failed", e);
   }
+
+  // Cleanup old match-day attendance conversations — keep only today's (freshly created)
+  try {
+    const oldMatchConvs = await c.env.DB.prepare(
+      "SELECT id FROM conversations WHERE type = 'squad_group' AND title LIKE '⚽ vs %' AND created_at < datetime('now', '-1 hour')"
+    ).all().catch(() => ({ results: [] }));
+    for (const conv of oldMatchConvs.results) {
+      await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
+      await c.env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch(() => {});
+    }
+  } catch { /* cleanup optional */ }
 
   return c.json({ ok: true, type: "daily", result, matchesSimulated });
 });
