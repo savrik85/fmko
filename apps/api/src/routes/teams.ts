@@ -491,6 +491,20 @@ teamsRouter.post("/", async (c) => {
     // Init phone conversations
     await initTeamConversations(c.env.DB, teamId, playerConvData).catch((e) => logger.warn({ module: "teams" }, "init conversations (join)", e));
 
+    // Zpravodaj: nový trenér převzal tým
+    try {
+      const topRows = await c.env.DB.prepare(
+        "SELECT first_name, last_name, position, overall_rating FROM players WHERE team_id = ? ORDER BY overall_rating DESC LIMIT 3"
+      ).bind(teamId).all();
+      const topList = topRows.results.map((p) => `${p.first_name} ${p.last_name} (${p.position}, ${p.overall_rating})`).join(", ");
+      const managerLabel = body.managerName ?? "Nový trenér";
+      const headline = `${body.name} má nového trenéra: ${managerLabel}!`;
+      const newsBody = `${managerLabel} přebírá vedení ${body.name} z ${village.name as string}. V kádru je ${squad.length} hráčů, oporami by měli být ${topList}. Fanoušci jsou zvědaví, co přinese nová éra.`;
+      await c.env.DB.prepare(
+        "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'manager_arrival', ?, ?, datetime('now'))"
+      ).bind(uuid(), existingLeague.id, teamId, headline, newsBody).run();
+    } catch { /* news optional */ }
+
     return c.json({
       id: teamId,
       name: body.name,
