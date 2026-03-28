@@ -37,7 +37,7 @@ function uuid(): string {
  * Generate a facesjs-compatible config on the server.
  * No DOM needed — just a JSON object that facesjs display() can render on the client.
  */
-function generatePlayerFace(player: { age: number; bodyType: string }): Record<string, unknown> {
+export function generatePlayerFace(player: { age: number; bodyType: string }): Record<string, unknown> {
   const r = () => Math.random();
   const pick = <T,>(arr: T[]): T => arr[Math.floor(r() * arr.length)];
 

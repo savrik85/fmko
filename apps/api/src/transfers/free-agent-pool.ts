@@ -7,7 +7,7 @@ import { logger } from "../lib/logger";
 import type { Rng } from "../generators/rng";
 import { generatePlayer, type VillageInfo } from "../generators/player";
 import { getDistrictDataFromDB } from "../data/districts";
-// calculateOverallRating expects {current,potential} SkillValues — we use simple numbers here
+import { generatePlayerFace } from "../routes/teams";
 
 const FIRSTNAMES: Record<string, Record<string, number>> = {
   "1960s": { "Jiří": 0.08, "Jan": 0.07, "Petr": 0.06, "Josef": 0.06, "Jaroslav": 0.05, "Milan": 0.05, "Zdeněk": 0.04 },
@@ -115,7 +115,7 @@ export async function maintainFreeAgentPool(
         JSON.stringify({ stamina: player.stamina, strength: player.strength, injuryProneness: player.injuryProneness ?? 50, preferredFoot: player.preferredFoot, preferredSide: player.preferredSide }),
         JSON.stringify({ discipline: player.discipline, patriotism: player.patriotism, alcohol: player.alcohol, temper: player.temper, leadership: player.leadership ?? 30, workRate: player.workRate ?? 50, aggression: player.aggression ?? 40, consistency: player.consistency ?? 50, clutch: player.clutch ?? 50 }),
         JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
-        JSON.stringify(player.avatarConfig ?? {}),
+        JSON.stringify(generatePlayerFace({ age: player.age, bodyType: player.bodyType ?? "normal" })),
         weeklyWage, resVillage?.id ?? null, expiresAt.toISOString(),
       ).run();
 

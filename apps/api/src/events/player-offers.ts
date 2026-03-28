@@ -6,6 +6,7 @@
 import type { Rng } from "../generators/rng";
 import { generatePlayer, type VillageInfo } from "../generators/player";
 import { getDistrictDataFromDB } from "../data/districts";
+import { generatePlayerFace } from "../routes/teams";
 import { logger } from "../lib/logger";
 
 const SOURCES = [
@@ -135,7 +136,7 @@ export async function generatePlayerOffer(
     JSON.stringify({ stamina: player.stamina, strength: player.strength, injuryProneness: player.injuryProneness ?? 50, preferredFoot: player.preferredFoot, preferredSide: player.preferredSide }),
     JSON.stringify({ discipline: player.discipline, patriotism: player.patriotism, alcohol: player.alcohol, temper: player.temper }),
     JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
-    JSON.stringify(player.avatarConfig ?? {}),
+    JSON.stringify(generatePlayerFace({ age: player.age ?? age, bodyType: player.bodyType ?? "normal" })),
     weeklyWage, expiresAt.toISOString(),
   ).run();
 
