@@ -115,6 +115,7 @@ export function simulateTraining(
   plan: TrainingPlan,
   commuteKms?: number[],
   equipmentMultiplier: number = 1.0,
+  managerBonus: { coaching: number; discipline: number; youthDev: number } = { coaching: 40, discipline: 40, youthDev: 40 },
 ): TrainingResult {
   const allAttendance: TrainingAttendance[] = [];
   const attendanceCounts = new Map<number, number>();
@@ -168,8 +169,12 @@ export function simulateTraining(
     // TODO: Talent modifier — requires hidden_talent from DB (not in GeneratedPlayer yet)
     // Will be added when daily-tick passes hidden_talent to squad data
 
-    // Base 4% chance (was 1.5%) — okresní hráči se zlepšují rychleji
-    const improveChance = 0.04 * sessions * equipmentMultiplier * diminishing * ageMod;
+    // Manager coaching bonus: 40=1.0x, 60=1.2x, 80=1.4x, 100=1.6x
+    const coachMod = 0.8 + (managerBonus.coaching / 100) * 0.8;
+    // Youth development bonus for players under 22
+    const youthMod = player.age < 22 ? (0.9 + (managerBonus.youthDev / 100) * 0.6) : 1.0;
+    // Base 4% chance
+    const improveChance = 0.04 * sessions * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod;
     if (rng.random() < improveChance) {
       if (current < 100) {
         (player as unknown as Record<string, number>)[attr] = current + 1;

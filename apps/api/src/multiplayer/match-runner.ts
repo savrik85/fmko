@@ -198,6 +198,30 @@ export async function runScheduledMatches(
         homeEquipment.injurySeverityMod += facilityEffects.homeInjuryReduction;
       }
 
+      // Apply manager tactics bonus to team skills
+      const applyManagerBonus = async (teamId: string, lineup: typeof homeLineup, subs: typeof homeSubs) => {
+        const mgr = await db.prepare("SELECT tactics, motivation FROM managers WHERE team_id = ?")
+          .bind(teamId).first<{ tactics: number; motivation: number }>().catch(() => null);
+        if (!mgr) return;
+        // Tactics: 40=0, 60=+1, 80=+2, 100=+3 to passing/defense for all players
+        const tacticsBonus = Math.floor((mgr.tactics - 40) / 20);
+        if (tacticsBonus > 0) {
+          for (const p of [...lineup, ...subs]) {
+            p.passing = Math.min(100, p.passing + tacticsBonus);
+            p.defense = Math.min(100, p.defense + tacticsBonus);
+          }
+        }
+        // Motivation: 40=0, 60=+2, 80=+4, 100=+6 morale
+        const moraleBonus = Math.floor((mgr.motivation - 30) / 10);
+        if (moraleBonus > 0) {
+          for (const p of [...lineup, ...subs]) {
+            p.morale = Math.min(100, p.morale + moraleBonus);
+          }
+        }
+      };
+      await applyManagerBonus(homeTeamId, homeLineup, homeSubs);
+      await applyManagerBonus(awayTeamId, awayLineup, awaySubs);
+
       // Simulate
       const result = simulateMatch(rng, {
         home: homeSetup,
@@ -363,6 +387,31 @@ export async function runScheduledMatches(
         await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate);
       } catch (e) {
         logger.error({ module: "match-runner" }, `Match finances failed for ${matchId}`, e);
+      }
+
+      // Manager experience — small chance to improve attributes after each match
+      for (const tid of [homeTeamId, awayTeamId]) {
+        try {
+          // 10% chance per attribute per match
+          const attrs = ["coaching", "motivation", "tactics", "discipline"];
+          const attr = attrs[Math.floor(Math.random() * attrs.length)];
+          if (Math.random() < 0.10) {
+            await db.prepare(`UPDATE managers SET ${attr} = MIN(100, ${attr} + 1) WHERE team_id = ?`)
+              .bind(tid).run();
+          }
+          // Youth development improves if young players played
+          if (Math.random() < 0.05) {
+            await db.prepare("UPDATE managers SET youth_development = MIN(100, youth_development + 1) WHERE team_id = ?")
+              .bind(tid).run();
+          }
+          // Reputation grows with wins
+          const isHome = tid === homeTeamId;
+          const won = isHome ? result.homeScore > result.awayScore : result.awayScore > result.homeScore;
+          if (won && Math.random() < 0.15) {
+            await db.prepare("UPDATE managers SET reputation = MIN(100, reputation + 1) WHERE team_id = ?")
+              .bind(tid).run();
+          }
+        } catch { /* manager xp optional */ }
       }
 
       // Persist condition + morale changes back to DB

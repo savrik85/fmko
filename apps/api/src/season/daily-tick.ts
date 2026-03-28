@@ -98,12 +98,17 @@ export async function executeDailyTick(
           equipMul = calculateEffects(levels, conditions).trainingMultiplier;
         }
 
+        // Load manager attributes for training bonuses
+        const mgr = await env.DB.prepare("SELECT coaching, discipline, youth_development FROM managers WHERE team_id = ?")
+          .bind(teamId).first<{ coaching: number; discipline: number; youth_development: number }>().catch(() => null);
+        const mgrBonus = { coaching: mgr?.coaching ?? 40, discipline: mgr?.discipline ?? 40, youthDev: mgr?.youth_development ?? 40 };
+
         const rng = createRng(now.getTime() + teamId.charCodeAt(0));
         const result = simulateTraining(rng, squad, {
           type: (team.training_type as any) ?? "conditioning",
           approach: (team.training_approach as any) ?? "balanced",
           sessionsPerWeek: (team.training_sessions as number) ?? 2,
-        }, undefined, equipMul);
+        }, undefined, equipMul, mgrBonus);
 
         const attendanceWithNames = result.attendance.map((a) => ({
           playerId: playersResult.results[a.playerIndex].id as string,
