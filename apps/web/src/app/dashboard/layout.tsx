@@ -16,7 +16,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { teamId, isAdmin } = useTeam();
   const isDetailPage = DETAIL_PREFIXES.some((p) => pathname.startsWith(p) && pathname !== p.slice(0, -1));
   const hasCustomHeader = CUSTOM_HEADER_PAGES.includes(pathname);
-  const [advancing, setAdvancing] = useState(false);
   // Check for unseen match — redirect to match-day screen (skip on replay pages)
   useEffect(() => {
     if (!teamId) return;
@@ -32,18 +31,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .catch(() => {});
   }, [teamId, pathname]);
 
-  async function advanceDay() {
-    if (advancing) return;
-    setAdvancing(true);
-    const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
-    await fetch(`${API}/api/game/advance-day`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-    window.location.reload();
-  }
-
   return (
     <div className="min-h-screen flex bg-paper">
       <FMSidebar />
@@ -55,16 +42,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       <BottomNav />
-
-      {isAdmin && (
-        <button
-          onClick={advanceDay}
-          disabled={advancing}
-          className="fixed bottom-24 sm:bottom-4 right-4 z-50 bg-pitch-600 hover:bg-pitch-700 text-white font-heading font-bold text-sm px-4 py-2 rounded-xl shadow-lg transition-colors disabled:opacity-50"
-        >
-          {advancing ? "..." : "+1 den"}
-        </button>
-      )}
     </div>
   );
 }
