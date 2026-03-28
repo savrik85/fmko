@@ -523,6 +523,13 @@ teamsRouter.post("/", async (c) => {
       ).bind(uuid(), existingLeague.id, teamId, headline, newsBody).run();
     } catch { /* news optional */ }
 
+    // Generate free agents if pool is empty
+    try {
+      const { maintainFreeAgentPool } = await import("../transfers/free-agent-pool");
+      const { createRng } = await import("../generators/rng");
+      await maintainFreeAgentPool(c.env.DB, createRng(Date.now() + 7777), new Date());
+    } catch { /* optional */ }
+
     return c.json({
       id: teamId,
       name: body.name,
@@ -739,6 +746,14 @@ teamsRouter.post("/", async (c) => {
       "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'manager_arrival', ?, ?, datetime('now'))"
     ).bind(uuid(), leagueId, teamId, headlines[idx], bodies[idx]).run();
   } catch (e) { logger.warn({ module: "teams" }, "news generation for manager arrival", e); }
+
+  // Generate initial free agent pool for this district
+  try {
+    const { maintainFreeAgentPool } = await import("../transfers/free-agent-pool");
+    const { createRng } = await import("../generators/rng");
+    const faRng = createRng(Date.now() + 7777);
+    await maintainFreeAgentPool(c.env.DB, faRng, new Date());
+  } catch (e) { logger.warn({ module: "teams" }, "initial free agent pool generation", e); }
 
   return c.json({
     id: teamId,

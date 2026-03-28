@@ -100,6 +100,17 @@ export function TeamProvider({ children }: { children: ReactNode }) {
 
   function setTeam(id: string, name: string) {
     setState((s) => ({ ...s, teamId: id, teamName: name }));
+    // Refresh full data from API so topbar/sidebar have budget, season, etc.
+    const stored = localStorage.getItem(STORAGE_TOKEN);
+    if (stored) {
+      apiFetch<{ id: string; email: string; isAdmin?: boolean; teamId: string | null; teamName: string | null; primaryColor?: string | null; secondaryColor?: string | null; badgePattern?: string | null; villageName?: string | null; district?: string | null; budget?: number | null; leaguePosition?: number | null; season?: number | null; seasonDay?: number | null; seasonTotal?: number | null; gameDate?: string | null; nextMatch?: { opponent: string; daysUntil: number } | null }>("/auth/me", {
+        headers: { Authorization: `Bearer ${stored}` },
+      }).then((user) => {
+        const teamData = { teamId: user.teamId, teamName: user.teamName, primaryColor: user.primaryColor ?? null, secondaryColor: user.secondaryColor ?? null, badgePattern: user.badgePattern ?? null, villageName: user.villageName ?? null, district: user.district ?? null, budget: user.budget ?? null, leaguePosition: user.leaguePosition ?? null, season: user.season ?? null, seasonDay: user.seasonDay ?? null, seasonTotal: user.seasonTotal ?? null, gameDate: user.gameDate ?? null, nextMatch: user.nextMatch ?? null };
+        localStorage.setItem(STORAGE_TEAM, JSON.stringify(teamData));
+        setState((s) => ({ ...s, ...teamData, isAdmin: user.isAdmin ?? false }));
+      }).catch(() => {});
+    }
   }
 
   function logout() {
