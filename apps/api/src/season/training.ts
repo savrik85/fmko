@@ -168,7 +168,8 @@ export function simulateTraining(
     // TODO: Talent modifier — requires hidden_talent from DB (not in GeneratedPlayer yet)
     // Will be added when daily-tick passes hidden_talent to squad data
 
-    const improveChance = 0.015 * sessions * equipmentMultiplier * diminishing * ageMod;
+    // Base 4% chance (was 1.5%) — okresní hráči se zlepšují rychleji
+    const improveChance = 0.04 * sessions * equipmentMultiplier * diminishing * ageMod;
     if (rng.random() < improveChance) {
       if (current < 100) {
         (player as unknown as Record<string, number>)[attr] = current + 1;
@@ -177,11 +178,11 @@ export function simulateTraining(
     }
   }
 
-  // Veteran decay: 34+ lose physical attributes
+  // Veteran decay: 37+ lose physical attributes (was 34+)
   for (const [playerIndex] of attendanceCounts) {
     const player = squad[playerIndex];
-    if (player.age >= 34) {
-      const decayChance = (player.age - 33) * 0.01;
+    if (player.age >= 37) {
+      const decayChance = (player.age - 36) * 0.01;
       for (const attr of ["speed", "stamina", "strength"]) {
         const val = player[attr as keyof GeneratedPlayer] as number;
         if (rng.random() < decayChance && val > 15) {
@@ -192,10 +193,10 @@ export function simulateTraining(
     }
   }
 
-  // Non-attendees may lose stamina
+  // Non-attendees may lose stamina (10% chance, was 30%)
   for (let i = 0; i < squad.length; i++) {
     const attended = attendanceCounts.get(i) ?? 0;
-    if (attended === 0 && rng.random() < 0.3) {
+    if (attended === 0 && rng.random() < 0.10) {
       const player = squad[i];
       if (player.stamina > 5) {
         player.stamina -= 1;

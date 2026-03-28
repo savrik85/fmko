@@ -1533,12 +1533,115 @@ gameRouter.post("/game/advance-day", async (c) => {
         "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC"
       ).bind(lid, dayEnd.toISOString()).all();
       for (const cal of pendingCals.results) {
+        const calId = cal.id as string;
         await c.env.DB.prepare("UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'")
-          .bind(cal.id).run();
-        const results = await runScheduledMatches(c.env.DB, cal.id as string);
+          .bind(calId).run();
+        const results = await runScheduledMatches(c.env.DB, calId);
         await c.env.DB.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
-          .bind(cal.id).run();
+          .bind(calId).run();
         matchesSimulated += results.length;
+
+        // Generate round results news (zpravodaj)
+        if (results.length > 0) {
+          try {
+            const calRow = await c.env.DB.prepare("SELECT game_week FROM season_calendar WHERE id = ?")
+              .bind(calId).first<{ game_week: number }>();
+            const gameWeek = calRow?.game_week ?? 0;
+            const matchRows = await c.env.DB.prepare(
+              `SELECT m.home_score, m.away_score, t1.name as home_name, t2.name as away_name
+               FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id
+               WHERE m.calendar_id = ? AND m.status = 'simulated'`
+            ).bind(calId).all();
+            const lines: string[] = [];
+            let topScore = 0; let topMatch = "";
+            for (const r of matchRows.results) {
+              const hs = r.home_score as number; const as_ = r.away_score as number;
+              const hn = r.home_name as string; const an = r.away_name as string;
+              if (hs > as_) lines.push(`${hn} porazil ${an} ${hs}:${as_}`);
+              else if (hs < as_) lines.push(`${an} zvítězil nad ${hn} ${as_}:${hs}`);
+              else lines.push(`${hn} remizoval s ${an} ${hs}:${as_}`);
+              if (hs + as_ > topScore) { topScore = hs + as_; topMatch = `${hn} vs ${an} ${hs}:${as_}`; }
+            }
+            const headline = `${gameWeek}. kolo: přehled výsledků`;
+            const body = lines.join(". ") + "." + (topScore >= 4 ? ` Nejvíce gólů padlo v utkání ${topMatch}.` : "");
+            await c.env.DB.prepare(
+              "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, datetime('now'))"
+            ).bind(crypto.randomUUID(), lid, headline, body, gameWeek).run();
+          } catch { /* news optional */ }
+
+          // Between-round events for human teams
+          try {
+            const { generateBetweenRoundEvents } = await import("../events/between-rounds");
+            const { createRng } = await import("../generators/rng");
+            const { recordTransaction } = await import("../season/finance-processor");
+            const brRng = createRng(Date.now());
+            const calRow = await c.env.DB.prepare("SELECT game_week FROM season_calendar WHERE id = ?").bind(calId).first<{ game_week: number }>();
+            const gameWeek = calRow?.game_week ?? 0;
+
+            for (const mr of results) {
+              if (mr.matchType === "ai_vs_ai") continue;
+              const humanTeamId = mr.matchType === "pve_home" || mr.matchType === "pvp"
+                ? (await c.env.DB.prepare("SELECT home_team_id FROM matches WHERE id = ?").bind(mr.matchId).first<{home_team_id:string}>())?.home_team_id
+                : (await c.env.DB.prepare("SELECT away_team_id FROM matches WHERE id = ?").bind(mr.matchId).first<{away_team_id:string}>())?.away_team_id;
+              if (!humanTeamId) continue;
+
+              const td = await c.env.DB.prepare("SELECT budget, reputation, game_date FROM teams WHERE id = ?").bind(humanTeamId).first<{budget:number; reputation:number; game_date:string}>();
+              const sqRows = await c.env.DB.prepare("SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')").bind(humanTeamId).all();
+              const squad = sqRows.results.map((r: any) => {
+                const s = JSON.parse(r.skills); const p = JSON.parse(r.personality); const lc = JSON.parse(r.life_context);
+                return { firstName: r.first_name, lastName: r.last_name, age: r.age, position: r.position,
+                  speed: s.speed??50, technique: s.technique??50, shooting: s.shooting??50, passing: s.passing??50,
+                  heading: s.heading??50, defense: s.defense??50, goalkeeping: s.goalkeeping??0,
+                  stamina: s.stamina??50, strength: s.strength??50, discipline: p.discipline??50,
+                  patriotism: p.patriotism??50, alcohol: p.alcohol??30, temper: p.temper??40,
+                  injuryProneness: p.injuryProneness??50, occupation: lc.occupation??"",
+                  bodyType: "normal" as const, avatarConfig: {} as any, condition: lc.condition??100, morale: lc.morale??50,
+                  preferredFoot: "right" as const, preferredSide: "center" as const,
+                  leadership: p.leadership??30, workRate: p.workRate??50, aggression: p.aggression??40,
+                  consistency: p.consistency??50, clutch: p.clutch??50 };
+              });
+
+              const lastWon = mr.matchType === "pve_home" ? mr.homeScore > mr.awayScore : mr.awayScore > mr.homeScore;
+              const brEvents = generateBetweenRoundEvents(brRng, squad, td?.budget??0, td?.reputation??50, lastWon, gameWeek);
+
+              for (const ev of brEvents) {
+                if (ev.effect) {
+                  const eff = ev.effect;
+                  if (eff.type === "morale" && eff.value) {
+                    await c.env.DB.prepare("UPDATE players SET life_context = json_set(life_context, '$.morale', MIN(100, MAX(0, json_extract(life_context, '$.morale') + ?))) WHERE team_id = ?")
+                      .bind(eff.value, humanTeamId).run().catch(() => {});
+                  }
+                  if (eff.type === "budget" && eff.value) {
+                    await recordTransaction(c.env.DB, humanTeamId, "event", eff.value, ev.title, td?.game_date ?? new Date().toISOString()).catch(() => {});
+                  }
+                  if (eff.type === "reputation" && eff.value) {
+                    await c.env.DB.prepare("UPDATE teams SET reputation = MIN(100, MAX(0, reputation + ?)) WHERE id = ?")
+                      .bind(eff.value, humanTeamId).run().catch(() => {});
+                  }
+                }
+                // Send SMS from role-based sender
+                const roleSenders: Record<string, { name: string; title: string }> = {
+                  budget: { name: "Účetní", title: "Účetní klubu" }, reputation: { name: "Starosta", title: "Starosta obce" },
+                  morale: { name: "Asistent trenéra", title: "Asistent" }, player_leave: { name: "Kapitán", title: "Kapitán týmu" },
+                  injury: { name: "Zdravotník", title: "Správce hřiště" }, condition: { name: "Masér", title: "Masér" },
+                };
+                const sender = roleSenders[ev.effect?.type ?? ""] ?? { name: "Vedení klubu", title: "Vedení" };
+                await sendPhoneSMS(c.env.DB, humanTeamId, sender.name, sender.title, `${ev.emoji} ${ev.description}`).catch(() => {});
+              }
+            }
+          } catch { /* events optional */ }
+
+          // Cleanup match-day attendance conversations
+          try {
+            const matchConvs = await c.env.DB.prepare(
+              "SELECT c.id FROM conversations c JOIN messages m ON m.conversation_id = c.id WHERE c.type = 'squad_group' AND c.title LIKE '⚽ vs %' AND m.metadata LIKE ? LIMIT 50"
+            ).bind(`%${calId}%`).all().catch(() => ({ results: [] }));
+            for (const conv of matchConvs.results) {
+              await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
+              await c.env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch(() => {});
+            }
+          } catch { /* cleanup optional */ }
+        }
       }
     }
   } catch (e) {

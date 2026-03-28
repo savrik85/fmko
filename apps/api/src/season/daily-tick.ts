@@ -29,7 +29,12 @@ export async function executeDailyTick(
   gameDate?: Date,
 ): Promise<DailyTickResult> {
   const now = gameDate ?? new Date();
-  const dayOfWeek = now.getUTCDay();
+  // Use GAME DATE for day-of-week, not real date
+  // Find any human team's game_date to determine the in-game day
+  const gameDateRow = await env.DB.prepare("SELECT game_date FROM teams WHERE user_id != 'ai' AND game_date IS NOT NULL LIMIT 1")
+    .first<{ game_date: string }>().catch(() => null);
+  const effectiveDate = gameDateRow?.game_date ? new Date(gameDateRow.game_date) : now;
+  const dayOfWeek = effectiveDate.getUTCDay();
   const isTrainingDay = dayOfWeek >= 1 && dayOfWeek <= 5;
   const events: DailyTickEvent[] = [];
   const tickStart = Date.now();

@@ -101,7 +101,8 @@ function calcChanceProb(
   const ratio = attackPower / (attackPower + defensePower);
   const longBallBonus = attacking.tactic === "long_ball" ? weatherMod.longBallBonus : 0;
 
-  return Math.min(0.25, Math.max(0.08, ratio * 0.20 + longBallBonus)) * tacticMod.chanceMod;
+  // Okresní přebor: víc šancí díky slabší obraně a častějším chybám
+  return Math.min(0.32, Math.max(0.11, ratio * 0.28 + longBallBonus)) * tacticMod.chanceMod;
 }
 
 /**
@@ -136,7 +137,8 @@ function calcGoalProb(
     ratio *= 0.9 + (attacker.clutch / 100) * 0.2;
   }
 
-  return Math.min(0.60, Math.max(0.20, ratio * 0.65));
+  // Okresní level: víc gólů (slabší brankáři, horší obrana)
+  return Math.min(0.65, Math.max(0.25, ratio * 0.75));
 }
 
 /**
