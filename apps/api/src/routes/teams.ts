@@ -328,6 +328,18 @@ teamsRouter.post("/", async (c) => {
     ).bind(uuid(), playerIds[rel.playerAIndex], playerIds[rel.playerBIndex], rel.type).run();
   }
 
+  // Assign squad numbers (1 = GK, 2-5 DEF, 6-8 MID, 9-11 FWD, rest 12+)
+  {
+    const posOrder = ["GK", "DEF", "MID", "FWD"];
+    const sorted = playerIds.map((pid, i) => ({ pid, pos: squad[i].position, i }))
+      .sort((a, b) => posOrder.indexOf(a.pos) - posOrder.indexOf(b.pos));
+    let num = 1;
+    for (const { pid } of sorted) {
+      await c.env.DB.prepare("UPDATE players SET squad_number = ? WHERE id = ?").bind(num, pid).run().catch(() => {});
+      num++;
+    }
+  }
+
   // Create manager profile (graceful — table may not exist before migration 0006)
   if (body.managerName && body.managerBackstory) {
     const mgrAttrs = generateManagerAttributes(body.managerBackstory, rng);
