@@ -398,7 +398,11 @@ teamsRouter.post("/", async (c) => {
       await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch(() => {});
       await c.env.DB.prepare("UPDATE managers SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch(() => {});
 
-      // Clean old AI equipment/stadium/conversations (human gets fresh)
+      // Clean old AI equipment/stadium/conversations/messages (human gets fresh start)
+      const oldConvIds = await c.env.DB.prepare("SELECT id FROM conversations WHERE team_id = ?").bind(teamId).all().catch(() => ({ results: [] }));
+      for (const conv of oldConvIds.results) {
+        await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
+      }
       for (const t of ["equipment", "stadiums", "conversations", "sponsor_contracts"]) {
         await c.env.DB.prepare(`DELETE FROM ${t} WHERE team_id = ?`).bind(teamId).run().catch(() => {});
       }
