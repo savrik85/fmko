@@ -98,11 +98,14 @@ function calcChanceProb(
     teamAvg(defending.lineup, "workRate") * 0.2
   ) / 3 * TACTIC_MODS[defending.tactic].defenseMod;
 
-  const ratio = attackPower / (attackPower + defensePower);
+  // Use DIFFERENCE not ratio — so stronger teams create more chances
+  // attackPower ~20 (weak) to ~35 (strong), defensePower ~18 to ~25
+  const advantage = (attackPower - defensePower) / 80; // -0.2 to +0.2 (toned down)
+  const baseChance = 0.12; // neutral chance per minute
   const longBallBonus = attacking.tactic === "long_ball" ? weatherMod.longBallBonus : 0;
 
-  // Okresní přebor: víc šancí díky slabší obraně a častějším chybám
-  return Math.min(0.32, Math.max(0.11, ratio * 0.28 + longBallBonus)) * tacticMod.chanceMod;
+  // Okresní přebor: skill advantage matters but not overwhelmingly
+  return Math.min(0.28, Math.max(0.06, baseChance + advantage + longBallBonus)) * tacticMod.chanceMod;
 }
 
 /**
@@ -309,7 +312,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     // Check for chance
     const chanceProb = calcChanceProb(attacking, defending, weather);
     // Reduce chance probability when condition is low
-    const conditionMod = Math.max(0.3, teamAvg(attacking.lineup, "condition") / 100);
+    // Condition reduces chance creation but not drastically — floor at 0.6
+    const conditionMod = Math.max(0.6, teamAvg(attacking.lineup, "condition") / 100);
     const adjustedChanceProb = chanceProb * conditionMod;
 
     if (rng.random() < adjustedChanceProb) {
