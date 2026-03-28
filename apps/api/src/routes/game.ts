@@ -2572,4 +2572,99 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/reject", async (c) => {
   return c.json({ ok: true });
 });
 
+// ── Admin: Seed data management ──
+
+gameRouter.get("/admin/seed-data", async (c) => {
+  const tables = [
+    { key: "villages", label: "Vesnice", editable: false },
+    { key: "district_surnames", label: "Příjmení", editable: true },
+    { key: "district_sponsors", label: "Sponzoři", editable: true },
+    { key: "commentary_templates", label: "Komentáře", editable: true },
+    { key: "crowd_reactions", label: "Reakce publika", editable: true },
+  ];
+
+  const result: Array<{ key: string; label: string; count: number; editable: boolean; districts?: string[] }> = [];
+  for (const t of tables) {
+    const row = await c.env.DB.prepare(`SELECT COUNT(*) as cnt FROM ${t.key}`).first<{ cnt: number }>().catch(() => ({ cnt: 0 }));
+    const entry: typeof result[0] = { key: t.key, label: t.label, count: row?.cnt ?? 0, editable: t.editable };
+    if (t.key === "district_surnames" || t.key === "district_sponsors") {
+      const dists = await c.env.DB.prepare(`SELECT DISTINCT district FROM ${t.key} ORDER BY district`).all().catch(() => ({ results: [] }));
+      entry.districts = dists.results.map((r) => r.district as string);
+    }
+    result.push(entry);
+  }
+
+  return c.json(result);
+});
+
+gameRouter.get("/admin/seed-data/:table", async (c) => {
+  const table = c.req.param("table");
+  const allowed = ["villages", "district_surnames", "district_sponsors", "commentary_templates", "crowd_reactions"];
+  if (!allowed.includes(table)) return c.json({ error: "Invalid table" }, 400);
+
+  const district = c.req.query("district");
+  const limit = Number(c.req.query("limit") || "100");
+  const offset = Number(c.req.query("offset") || "0");
+
+  let query = `SELECT * FROM ${table}`;
+  const binds: unknown[] = [];
+  if (district && (table === "district_surnames" || table === "district_sponsors")) {
+    query += " WHERE district = ?";
+    binds.push(district);
+  }
+  query += ` LIMIT ? OFFSET ?`;
+  binds.push(limit, offset);
+
+  const rows = await c.env.DB.prepare(query).bind(...binds).all().catch(() => ({ results: [] }));
+  const total = await c.env.DB.prepare(`SELECT COUNT(*) as cnt FROM ${table}${district ? " WHERE district = ?" : ""}`)
+    .bind(...(district ? [district] : [])).first<{ cnt: number }>().catch(() => ({ cnt: 0 }));
+
+  return c.json({ rows: rows.results, total: total?.cnt ?? 0 });
+});
+
+gameRouter.post("/admin/seed-data/:table", async (c) => {
+  const table = c.req.param("table");
+  const body = await c.req.json<Record<string, unknown>>();
+
+  if (table === "district_surnames") {
+    const { district, surname, frequency } = body;
+    if (!district || !surname) return c.json({ error: "Missing district or surname" }, 400);
+    await c.env.DB.prepare("INSERT INTO district_surnames (district, surname, frequency) VALUES (?, ?, ?)")
+      .bind(district, surname, frequency ?? 10).run();
+    return c.json({ ok: true });
+  }
+  if (table === "district_sponsors") {
+    const { district, name, type, monthly_min, monthly_max, win_bonus_min, win_bonus_max } = body;
+    if (!district || !name) return c.json({ error: "Missing fields" }, 400);
+    await c.env.DB.prepare("INSERT INTO district_sponsors (district, name, type, monthly_min, monthly_max, win_bonus_min, win_bonus_max) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(district, name, type ?? "obecné", monthly_min ?? 500, monthly_max ?? 1500, win_bonus_min ?? 100, win_bonus_max ?? 300).run();
+    return c.json({ ok: true });
+  }
+  if (table === "commentary_templates") {
+    const { event_type, template, tags } = body;
+    if (!event_type || !template) return c.json({ error: "Missing fields" }, 400);
+    await c.env.DB.prepare("INSERT INTO commentary_templates (event_type, template, tags) VALUES (?, ?, ?)")
+      .bind(event_type, template, JSON.stringify(tags ?? [])).run();
+    return c.json({ ok: true });
+  }
+  if (table === "crowd_reactions") {
+    const { text } = body;
+    if (!text) return c.json({ error: "Missing text" }, 400);
+    await c.env.DB.prepare("INSERT INTO crowd_reactions (text) VALUES (?)").bind(text).run();
+    return c.json({ ok: true });
+  }
+  return c.json({ error: "Table not writable" }, 400);
+});
+
+gameRouter.delete("/admin/seed-data/:table/:id", async (c) => {
+  const table = c.req.param("table");
+  const id = c.req.param("id");
+  const allowed = ["district_surnames", "district_sponsors", "commentary_templates", "crowd_reactions"];
+  if (!allowed.includes(table)) return c.json({ error: "Cannot delete from this table" }, 400);
+
+  const idCol = table === "district_surnames" ? "rowid" : "id";
+  await c.env.DB.prepare(`DELETE FROM ${table} WHERE ${idCol} = ?`).bind(id).run();
+  return c.json({ ok: true });
+});
+
 export { gameRouter };
