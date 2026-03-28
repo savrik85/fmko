@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { apiFetch, type Player, type Team, type CareerStats, type PlayerMatchEntry, type PlayerContract } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { PositionBadge, SectionLabel, Spinner, BadgePreview } from "@/components/ui";
+import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 /* ── Helpers ── */
@@ -161,6 +161,9 @@ export default function PlayerDetailPage() {
               {player.first_name[0]}
             </div>
           )}
+          <JerseyPreview primary={color} secondary={team.secondary_color || "#FFF"}
+            pattern={team.jersey_pattern as string} size={52}
+            number={player.squad_number ?? undefined} />
 
           <div className="flex-1 min-w-0">
             <h1 className="font-heading font-extrabold text-white text-xl sm:text-2xl leading-tight truncate">
