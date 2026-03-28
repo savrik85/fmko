@@ -180,6 +180,88 @@ const EVENT_RULES: EventRule[] = [
     },
   },
 
+  {
+    category: "negative",
+    title: "Vykradení kabiny",
+    emoji: "\u{1F977}",
+    baseProb: 0.03,
+    evaluate: (ctx) => {
+      const amount = ctx.rng.int(800, 3000);
+      const stolen = [
+        `Z kabiny zmizely míče a dresy. Škoda ${amount} Kč.`,
+        `Někdo vykradl kabinu přes noc. Ukradli výstroj za ${amount} Kč.`,
+        `Rozbité okno u kabiny, chybí sada tréninkových leiblů. Oprava a náhrada: ${amount} Kč.`,
+      ];
+      return {
+        prob: 1.0,
+        description: ctx.rng.pick(stolen),
+        effect: { type: "budget", value: -amount },
+      };
+    },
+  },
+  {
+    category: "negative",
+    title: "Havárie na hřišti",
+    emoji: "\u{1F527}",
+    baseProb: 0.05,
+    evaluate: (ctx) => {
+      const amount = ctx.rng.int(500, 4000);
+      const issues = [
+        { text: `Rozbitý bojler v kabinách. Oprava: ${amount} Kč.`, sender: "boiler" },
+        { text: `Praskla vodovodní trubka pod hřištěm. Instalatér si řekl ${amount} Kč.`, sender: "pipe" },
+        { text: `Spadl kus střechy z tribunky. Tesař počítá ${amount} Kč.`, sender: "roof" },
+        { text: `Sekačka na trávu odešla. Nová stojí ${amount} Kč.`, sender: "mower" },
+        { text: `Zateklo do skladu s výstrojí. Škoda na dresech: ${amount} Kč.`, sender: "flood" },
+        { text: `Branky zrezivěly, potřebujeme nové sítě a svařování. Náklad: ${amount} Kč.`, sender: "goals" },
+      ];
+      const issue = ctx.rng.pick(issues);
+      return {
+        prob: 1.0,
+        description: issue.text,
+        effect: { type: "budget", value: -amount },
+      };
+    },
+  },
+  {
+    category: "negative",
+    title: "Pokuta od svazu",
+    emoji: "\u{1F4C4}",
+    baseProb: 0.02,
+    evaluate: (ctx) => {
+      const amount = ctx.rng.int(300, 1500);
+      const reasons = [
+        `Pokuta od svazu za pozdní přihlášku soupisky: ${amount} Kč.`,
+        `Svaz udělil pokutu za neuklizené kabiny po zápase: ${amount} Kč.`,
+        `Rozhodčí nahlásil nesportovní chování fanoušků. Pokuta: ${amount} Kč.`,
+        `Nedodaný zápis ze zápasu — pokuta ${amount} Kč.`,
+      ];
+      return {
+        prob: 1.0,
+        description: ctx.rng.pick(reasons),
+        effect: { type: "budget", value: -amount },
+      };
+    },
+  },
+  {
+    category: "negative",
+    title: "Vandalizmus",
+    emoji: "\u{1F4A5}",
+    baseProb: 0.02,
+    evaluate: (ctx) => {
+      const amount = ctx.rng.int(500, 2500);
+      const acts = [
+        `Někdo pomaloval kabiny sprejem. Přemalování: ${amount} Kč.`,
+        `Na hřišti někdo udělal burnout autem. Oprava trávníku: ${amount} Kč.`,
+        `Rozbité lavičky na tribuně. Oprava: ${amount} Kč.`,
+      ];
+      return {
+        prob: 1.0,
+        description: ctx.rng.pick(acts),
+        effect: { type: "budget", value: -amount },
+      };
+    },
+  },
+
   // === NEUTRÁLNÍ ===
   {
     category: "neutral",
