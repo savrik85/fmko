@@ -43,11 +43,11 @@ export default function Home() {
 
         {/* Features */}
         <div className="w-full max-w-md mx-auto space-y-2 stagger-children">
-          <Feature text="Postav fotbalov\u00FD t\u00FDm v re\u00E1ln\u00E9 \u010Desk\u00E9 obci" />
-          <Feature text="Ka\u017Ed\u00FD hr\u00E1\u010D m\u00E1 p\u0159\u00EDb\u011Bh, zam\u011Bstn\u00E1n\u00ED a vlastn\u00ED avatar" />
-          <Feature text="Ka\u017Ed\u00FD hr\u00E1\u010D m\u00E1 sv\u016Fj \u017Eivot \u2014 pr\u00E1ci, rodinu i v\u00FDmluvy" />
-          <Feature text="Koment\u00E1\u0159e ve stylu okresn\u00EDho z\u00E1pasu" />
-          <Feature text="Sez\u00F3na, tabulka, postup \u2014 jako opravdick\u00FD" />
+          <Feature text={"Postav fotbalový tým v reálné české obci"} />
+          <Feature text={"Každý hráč má příběh, zaměstnání a vlastní avatar"} />
+          <Feature text={"Každý hráč má svůj život — práci, rodinu i výmluvy"} />
+          <Feature text={"Komentáře ve stylu okresního zápasu"} />
+          <Feature text={"Sezóna, tabulka, postup — jako opravdický"} />
         </div>
       </div>
 

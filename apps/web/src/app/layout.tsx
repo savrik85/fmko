@@ -22,8 +22,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Prales \u2014 Fotbalov\u00FD Mana\u017Eer",
-  description: "Online fotbalov\u00FD mana\u017Eer z \u010Desk\u00E9ho okresu. Postav si t\u00FDm, \u0159e\u0161 kocoviny a p\u0159\u00EDbuzensk\u00E9 vazby, vyhraj okresn\u00ED p\u0159ebor.",
+  title: "Prales — Fotbalový Manažer",
+  description: "Online fotbalový manažer z českého okresu. Postav si tým, vyhraj okresní přebor.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   openGraph: {
     siteName: "Prales FM",
