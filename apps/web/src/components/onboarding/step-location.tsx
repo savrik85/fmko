@@ -129,6 +129,11 @@ export function StepLocation({ onSelect }: Props) {
         <div className="flex-1 flex items-center justify-center py-20"><Spinner /></div>
       ) : step === "region" ? (
         /* ═══ Region selection ═══ */
+        <>
+        <div className="bg-pitch-50 border border-pitch-200 rounded-xl px-4 py-3 mb-4 text-sm text-pitch-800 leading-relaxed">
+          <span className="font-bold">{"🌱 První testovací sezóna."}</span>{" "}
+          {"Pro nejlepší zážitek zvol"} <span className="font-bold">{"Jihočeský kraj → Prachatice"}</span> {"— tento okres má nejvíc personalizovaných dat."}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {regions.map((r) => (
             <button
@@ -147,8 +152,14 @@ export function StepLocation({ onSelect }: Props) {
             </button>
           ))}
         </div>
+        </>
       ) : step === "district" ? (
         /* ═══ District selection ═══ */
+        <>
+        <div className="bg-pitch-50 border border-pitch-200 rounded-xl px-4 py-3 mb-4 text-sm text-pitch-800 leading-relaxed">
+          <span className="font-bold">{"🌱 První testovací sezóna!"}</span>{" "}
+          {"Pro nejlepší zážitek doporučuju okres"} <span className="font-bold">{"Prachatice"}</span> {"— má personalizovaná data (reálná příjmení, místní názvy). Ostatní okresy fungují také, ale s obecnějšími daty. Pokud chceš personalizaci pro svůj okres, dej vědět!"}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {districts.map((d) => (
             <button
@@ -167,6 +178,7 @@ export function StepLocation({ onSelect }: Props) {
             </button>
           ))}
         </div>
+        </>
       ) : (
         /* ═══ Village selection ═══ */
         <>

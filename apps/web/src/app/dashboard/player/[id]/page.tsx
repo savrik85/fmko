@@ -156,22 +156,25 @@ export default function PlayerDetailPage() {
   return (
     <>
       {/* ═══ Player header ═══ */}
-      <div className="hero-gradient px-5 sm:px-8 py-5" style={{ backgroundColor: color }}>
-        <div className="flex items-center gap-4 max-w-[1280px] mx-auto">
+      <div className="hero-gradient px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
+        <div className="flex items-center gap-3 sm:gap-4 max-w-[1280px] mx-auto">
           {allPlayers.length > 1 && (
             <button onClick={() => prevPlayer && router.push(`/dashboard/player/${prevPlayer.id}`)}
-              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors">&#9664;</button>
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors text-sm sm:text-base">&#9664;</button>
           )}
 
           {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
-            <FaceAvatar faceConfig={player.avatar} size={72} className="shrink-0 bg-white/10 rounded-xl" />
+            <FaceAvatar faceConfig={player.avatar} size={72} className="shrink-0 bg-white/10 rounded-xl hidden sm:block" />
+          ) : null}
+          {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
+            <FaceAvatar faceConfig={player.avatar} size={52} className="shrink-0 bg-white/10 rounded-xl sm:hidden" />
           ) : (
-            <div className="shrink-0 w-[72px] h-[72px] rounded-xl bg-white/10 flex items-center justify-center text-white font-heading font-bold text-2xl">
+            <div className="shrink-0 w-[52px] h-[52px] sm:w-[72px] sm:h-[72px] rounded-xl bg-white/10 flex items-center justify-center text-white font-heading font-bold text-xl sm:text-2xl">
               {player.first_name[0]}
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <h1 className="font-heading font-extrabold text-white text-xl sm:text-2xl leading-tight truncate">
+            <h1 className="font-heading font-extrabold text-white text-lg sm:text-2xl leading-tight">
               {player.first_name} {player.last_name}
             </h1>
             {player.nickname && (
@@ -198,22 +201,22 @@ export default function PlayerDetailPage() {
           </div>
 
           {/* Condition + Morale + Rating */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            <div className="bg-white/10 rounded-xl py-2.5 text-center min-w-[64px]">
-              <div className={`font-heading font-extrabold text-lg tabular-nums leading-none ${cond.color === "text-pitch-500" ? "text-green-300" : cond.color === "text-gold-500" ? "text-yellow-300" : "text-red-300"}`}>
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            <div className="bg-white/10 rounded-lg sm:rounded-xl py-2 sm:py-2.5 text-center min-w-[48px] sm:min-w-[64px]">
+              <div className={`font-heading font-extrabold text-base sm:text-lg tabular-nums leading-none ${cond.color === "text-pitch-500" ? "text-green-300" : cond.color === "text-gold-500" ? "text-yellow-300" : "text-red-300"}`}>
                 {player.lifeContext?.condition ?? 50}%
               </div>
-              <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Kondice</div>
+              <div className="text-white/50 text-[8px] sm:text-[9px] font-heading font-bold uppercase mt-0.5">Kondice</div>
             </div>
-            <div className="bg-white/10 rounded-xl py-2.5 text-center min-w-[64px]">
-              <div className="text-xl leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
-              <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Morálka</div>
+            <div className="bg-white/10 rounded-lg sm:rounded-xl py-2 sm:py-2.5 text-center min-w-[48px] sm:min-w-[64px]">
+              <div className="text-lg sm:text-xl leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
+              <div className="text-white/50 text-[8px] sm:text-[9px] font-heading font-bold uppercase mt-0.5">Mor\u00E1lka</div>
             </div>
-            <div className="bg-white/10 rounded-xl py-2.5 text-center min-w-[64px]">
-              <div className="font-heading font-extrabold text-xl tabular-nums leading-none text-white">
+            <div className="bg-white/10 rounded-lg sm:rounded-xl py-2 sm:py-2.5 text-center min-w-[48px] sm:min-w-[64px]">
+              <div className="font-heading font-extrabold text-lg sm:text-xl tabular-nums leading-none text-white">
                 {player.overall_rating}
               </div>
-              <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Rating</div>
+              <div className="text-white/50 text-[8px] sm:text-[9px] font-heading font-bold uppercase mt-0.5">Rating</div>
             </div>
             {isForeignHumanPlayer && !offerSent && (
               <button onClick={() => setOfferOpen(!offerOpen)}
@@ -226,7 +229,7 @@ export default function PlayerDetailPage() {
 
           {allPlayers.length > 1 && (
             <button onClick={() => nextPlayer && router.push(`/dashboard/player/${nextPlayer.id}`)}
-              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors">&#9654;</button>
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors text-sm sm:text-base">&#9654;</button>
           )}
         </div>
 

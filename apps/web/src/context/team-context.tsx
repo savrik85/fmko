@@ -36,7 +36,7 @@ const TeamContext = createContext<TeamContextValue | null>(null);
 
 const STORAGE_TOKEN = "om_token";
 const STORAGE_TEAM = "om_team";
-const PUBLIC_PATHS = ["/", "/login", "/register"];
+const PUBLIC_PATHS = ["/", "/login", "/register", "/invite"];
 
 export function TeamProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -81,7 +81,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
   // Redirect logic
   useEffect(() => {
     if (state.isLoading) return;
-    const isPublic = PUBLIC_PATHS.includes(pathname);
+    const isPublic = PUBLIC_PATHS.includes(pathname) || pathname.startsWith("/invite/");
     const isOnboarding = pathname.startsWith("/onboarding");
 
     if (!state.token && !isPublic) {

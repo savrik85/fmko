@@ -41,11 +41,13 @@ export default function Home() {
           </Link>
         </div>
 
-        {/* Feature cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full stagger-children">
-          <FeatureCard icon="&#9917;" title="Generované postavy" desc="Každý hráč má příběh, přezdívku a vlastní avatar" />
-          <FeatureCard icon="&#128251;" title="Obecní rozhlas" desc="Komentáře ve stylu okresního zápasu" />
-          <FeatureCard icon="&#127942;" title="Ligový systém" desc="Sezóna, tabulka, postup, sestup" />
+        {/* Features */}
+        <div className="w-full max-w-md mx-auto space-y-2 stagger-children">
+          <Feature text="Postav fotbalov\u00FD t\u00FDm v re\u00E1ln\u00E9 \u010Desk\u00E9 obci" />
+          <Feature text="Ka\u017Ed\u00FD hr\u00E1\u010D m\u00E1 p\u0159\u00EDb\u011Bh, zam\u011Bstn\u00E1n\u00ED a vlastn\u00ED avatar" />
+          <Feature text="Ka\u017Ed\u00FD hr\u00E1\u010D m\u00E1 sv\u016Fj \u017Eivot \u2014 pr\u00E1ci, rodinu i v\u00FDmluvy" />
+          <Feature text="Koment\u00E1\u0159e ve stylu okresn\u00EDho z\u00E1pasu" />
+          <Feature text="Sez\u00F3na, tabulka, postup \u2014 jako opravdick\u00FD" />
         </div>
       </div>
 
@@ -55,12 +57,11 @@ export default function Home() {
   );
 }
 
-function FeatureCard({ icon, title, desc }: { icon: string; title: string; desc: string }) {
+function Feature({ text }: { text: string }) {
   return (
-    <div className="card-dark p-5 text-left">
-      <div className="text-2xl mb-2">{icon}</div>
-      <h3 className="font-heading font-bold text-white text-lg mb-1">{title}</h3>
-      <p className="text-sm text-white/40 leading-relaxed">{desc}</p>
+    <div className="flex items-center gap-3 px-5 py-3 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+      <span className="text-pitch-400 text-sm shrink-0">{"\u2714"}</span>
+      <span className="text-white/60 text-sm">{text}</span>
     </div>
   );
 }

@@ -164,6 +164,15 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Zmena hesla. Minimalne 8 znaku, velke pismeno, male pismeno, cislo." },
     ],
   },
+  "/dashboard/invite": {
+    title: "Pozvi kamarada",
+    icon: "\u2709\uFE0F",
+    sections: [
+      { text: "Vygeneruj odkaz a posli ho kamaradovi. Uvidi tvuj tym, obec a pozici v lize. Po registraci se prida do stejneho okresu." },
+      { heading: "Jak to funguje", text: "Kamarad klikne na odkaz, uvidi tvoji vyzvu a muze si rovnou zalozit ucet. Automaticky se prida do tve ligy." },
+      { text: "Na mobilu pouzij tlacitko Sdilet pro odeslani pres WhatsApp, Messenger nebo jinou aplikaci.", tip: true },
+    ],
+  },
 };
 
 function findHelp(pathname: string): HelpEntry | null {
@@ -215,7 +224,7 @@ function HelpPanel({ help, onClose }: { help: HelpEntry; onClose: () => void }) 
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed bottom-40 sm:bottom-20 right-4 z-50 w-[360px] max-h-[70vh] overflow-y-auto rounded-xl bg-white shadow-2xl border border-gray-100 animate-slide-up">
+      <div className="fixed bottom-[5.5rem] sm:bottom-20 left-3 right-3 sm:left-auto sm:right-4 z-50 sm:w-[360px] max-h-[55vh] sm:max-h-[70vh] overflow-y-auto rounded-xl bg-white shadow-2xl border border-gray-100 animate-slide-up">
         <div className="sticky top-0 bg-pitch-700 text-white px-5 py-3 rounded-t-xl flex items-center gap-3">
           <span className="text-xl">{help.icon}</span>
           <span className="font-heading font-bold text-base">{help.title}</span>
@@ -331,7 +340,7 @@ export function NapovedaOnboarding({ step }: { step: string }) {
 
   return (
     <>
-      <HelpButton open={open} onClick={() => setOpen(!open)} className="bottom-6 right-4" />
+      <HelpButton open={open} onClick={() => setOpen(!open)} className="bottom-20 right-4" />
       {open && <HelpPanel help={help} onClose={() => setOpen(false)} />}
     </>
   );

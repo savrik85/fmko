@@ -51,7 +51,7 @@ export default function LoginPage() {
         <div className="text-center mb-12 animate-slide-up">
           <div className="flex items-center justify-center gap-3 mb-6">
             <div className="h-[2px] w-8 bg-gradient-to-r from-transparent to-gold-500/40" />
-            <span className="text-label text-gold-500/60">Est. 2024</span>
+            <span className="text-label text-gold-500/60">Est. 2026</span>
             <div className="h-[2px] w-8 bg-gradient-to-l from-transparent to-gold-500/40" />
           </div>
           <h1 className="text-display text-white">
