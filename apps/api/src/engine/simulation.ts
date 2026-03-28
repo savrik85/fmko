@@ -100,8 +100,8 @@ function calcChanceProb(
 
   // Use DIFFERENCE not ratio — so stronger teams create more chances
   // attackPower ~20 (weak) to ~35 (strong), defensePower ~18 to ~25
-  const advantage = (attackPower - defensePower) / 80; // -0.2 to +0.2 (toned down)
-  const baseChance = 0.12; // neutral chance per minute
+  const advantage = (attackPower - defensePower) / 100; // skill difference matters but not overwhelming
+  const baseChance = 0.10; // neutral chance per minute — target ~3.5 goals/match
   const longBallBonus = attacking.tactic === "long_ball" ? weatherMod.longBallBonus : 0;
 
   // Okresní přebor: skill advantage matters but not overwhelmingly
