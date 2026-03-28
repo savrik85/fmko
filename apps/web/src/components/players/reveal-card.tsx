@@ -106,9 +106,9 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
         phase === "flipping" ? "animate-[cardFlip_0.6s_ease-out]" : ""
       } ${phase === "rating" ? "animate-[cardGlow_0.8s_ease-out]" : ""}`}
       style={{
-        background: `linear-gradient(165deg, ${teamColor}15 0%, #FFFFFF 50%, ${teamColor}08 100%)`,
-        border: `1px solid ${teamColor}18`,
-        boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+        background: "#FFFFFF",
+        border: "1px solid #e5e7eb",
+        boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
       }}
     >
       {/* Top bar: position badge + rating area */}
@@ -120,7 +120,7 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
         {/* Rating — hidden until phase=rating */}
         <div className="text-right min-w-[3rem]">
           {(phase === "rating") ? (
-            <span className="font-heading font-[800] text-4xl leading-none tabular-nums transition-all"
+            <span className="font-heading font-[800] text-5xl leading-none tabular-nums transition-all"
               style={{ color: ratingColor }}>
               {displayRating}
             </span>
@@ -145,7 +145,7 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
 
       {/* Name + nickname */}
       <div className="text-center px-4 pb-2">
-        <div className="font-heading font-bold text-base text-ink leading-tight truncate">
+        <div className="font-heading font-bold text-lg text-ink leading-tight truncate">
           {player.first_name} {player.last_name}
         </div>
         {player.nickname && (
@@ -161,9 +161,9 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
       {/* Top 3 stats — revealed with delay */}
       <div className="px-4 py-3">
         {topStats.map((stat, i) => (
-          <div key={stat.label} className="flex items-center gap-2.5 py-1">
-            <span className="text-sm text-muted w-9 text-right font-heading font-semibold">{stat.label}</span>
-            <div className="flex-1 h-2 bg-black/[0.04] rounded-full overflow-hidden">
+          <div key={stat.label} className="flex items-center gap-2.5 py-1.5">
+            <span className="text-sm text-ink w-9 text-right font-heading font-bold">{stat.label}</span>
+            <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
               <div className="h-full rounded-full transition-all duration-700"
                 style={{
                   width: phase === "rating" ? `${stat.value}%` : "0%",
@@ -172,7 +172,7 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
                   transitionDelay: `${i * 100}ms`,
                 }} />
             </div>
-            <span className={`text-sm tabular-nums font-heading font-bold w-7 text-right transition-opacity duration-500 ${phase === "rating" ? "opacity-100" : "opacity-0"}`}
+            <span className={`text-base tabular-nums font-heading font-[800] w-8 text-right transition-opacity duration-500 ${phase === "rating" ? "opacity-100" : "opacity-0"}`}
               style={{ color: teamColor, transitionDelay: `${i * 100 + 200}ms` }}>
               {stat.value}
             </span>
@@ -180,14 +180,14 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
         ))}
       </div>
 
-      {/* Info — 2 rows: physical + occupation */}
-      <div className="px-4 pb-4 text-center text-sm text-muted space-y-0.5">
-        <div>
+      {/* Info — age + occupation */}
+      <div className="px-4 pb-4 text-center space-y-0.5">
+        <div className="text-sm text-ink">
           {player.age} let
-          {player.physical?.height ? ` \u00B7 ${player.physical.height} cm` : ""}
-          {player.physical?.weight ? ` \u00B7 ${player.physical.weight} kg` : ""}
+          {player.physical?.height ? ` · ${player.physical.height} cm` : ""}
+          {player.physical?.weight ? ` · ${player.physical.weight} kg` : ""}
         </div>
-        <div className="font-medium truncate">{player.lifeContext?.occupation ?? ""}</div>
+        <div className="text-sm font-heading font-bold text-muted truncate">{player.lifeContext?.occupation ?? ""}</div>
       </div>
     </div>
   );
