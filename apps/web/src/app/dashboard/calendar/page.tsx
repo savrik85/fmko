@@ -98,7 +98,7 @@ export default function CalendarPage() {
         {/* Day headers */}
         <div className="grid grid-cols-7 border-b border-gray-100">
           {DAY_NAMES.map((d) => (
-            <div key={d} className="text-center py-1.5 text-[10px] font-heading font-bold text-muted uppercase">
+            <div key={d} className="text-center py-2 text-xs font-heading font-bold text-muted uppercase">
               {d}
             </div>
           ))}
@@ -109,7 +109,7 @@ export default function CalendarPage() {
           {Array.from({ length: rows * 7 }, (_, i) => {
             const dayNum = i - startOffset + 1;
             const isValid = dayNum >= 1 && dayNum <= lastDay.getDate();
-            if (!isValid) return <div key={i} className="min-h-[72px] bg-gray-50/30 border-b border-r border-gray-50" />;
+            if (!isValid) return <div key={i} className="min-h-[80px] bg-gray-50/30 border-b border-r border-gray-50" />;
 
             const dateKey = `${year}-${month}-${dayNum}`;
             const isToday = dateKey === todayKey;
@@ -120,14 +120,14 @@ export default function CalendarPage() {
             const isWeekend = dow >= 5;
 
             return (
-              <div key={i} className={`min-h-[72px] border-b border-r border-gray-50 px-1 py-1 ${isToday ? "bg-pitch-50 ring-1 ring-inset ring-pitch-400" : isWeekend ? "bg-gray-50/40" : ""}`}>
+              <div key={i} className={`min-h-[80px] border-b border-r border-gray-50 px-1.5 py-1 ${isToday ? "bg-pitch-50 ring-2 ring-inset ring-pitch-400" : isWeekend ? "bg-gray-50/40" : ""}`}>
                 {/* Day number */}
-                <div className={`text-right text-xs tabular-nums mb-0.5 ${isToday ? "font-bold text-pitch-600" : "text-muted"}`}>
+                <div className={`text-right text-sm tabular-nums mb-1 ${isToday ? "font-bold text-pitch-600" : "text-muted"}`}>
                   {dayNum}
                 </div>
                 {/* Events */}
                 {match && (
-                  <div className={`text-[9px] font-heading font-bold leading-tight px-1 py-0.5 rounded truncate ${
+                  <div className={`text-[11px] font-heading font-bold leading-tight px-1.5 py-1 rounded truncate ${
                     match.status && match.status !== "Naplánováno"
                       ? "bg-pitch-100 text-pitch-700"
                       : "bg-pitch-500 text-white"
@@ -139,7 +139,7 @@ export default function CalendarPage() {
                   </div>
                 )}
                 {hasTraining && !match && (
-                  <div className="text-[9px] text-muted px-1">🏋️</div>
+                  <div className="text-sm text-center mt-1">🏋️</div>
                 )}
               </div>
             );
