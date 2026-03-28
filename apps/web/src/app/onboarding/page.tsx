@@ -231,9 +231,9 @@ export default function OnboardingPage() {
             />
             {creating && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-card p-8 text-center">
+                <div className="bg-white rounded-card p-8 flex flex-col items-center gap-3">
                   <Spinner />
-                  <p className="font-heading font-bold text-pitch-500">Generuji tým...</p>
+                  <p className="font-heading font-bold text-pitch-500">{"Generuji tým..."}</p>
                 </div>
               </div>
             )}
