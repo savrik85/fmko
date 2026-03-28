@@ -6,6 +6,7 @@ import { FMSidebar } from "@/components/dashboard/fm-sidebar";
 import { FMTopBar } from "@/components/dashboard/fm-topbar";
 import { BottomNav } from "@/components/dashboard/bottom-nav";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { Napoveda } from "@/components/ui/napoveda";
 import { useTeam } from "@/context/team-context";
 
 const DETAIL_PREFIXES = ["/dashboard/player/", "/dashboard/team/", "/dashboard/match/"];
@@ -42,6 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       <BottomNav />
+      <Napoveda />
     </div>
   );
 }

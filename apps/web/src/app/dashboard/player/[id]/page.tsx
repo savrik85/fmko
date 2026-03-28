@@ -82,27 +82,35 @@ export default function PlayerDetailPage() {
 
   useEffect(() => {
     if (!teamId) return;
-    Promise.all([
-      apiFetch<Player>(`/api/teams/${teamId}/players/${playerId}`),
-      apiFetch<Team>(`/api/teams/${teamId}`),
-      apiFetch<Player[]>(`/api/teams/${teamId}/players`),
-      apiFetch<CareerStats>(`/api/teams/${teamId}/players/${playerId}/career-stats`).catch(() => null),
-      apiFetch<{ matches: PlayerMatchEntry[] }>(`/api/teams/${teamId}/players/${playerId}/match-history`).catch(() => ({ matches: [] })),
-      apiFetch<{ contracts: PlayerContract[] }>(`/api/teams/${teamId}/players/${playerId}/career-history`).catch(() => ({ contracts: [] })),
-    ]).then(async ([p, t, all, stats, history, careerHistory]) => {
-      setPlayer(p);
-      setTeam(t);
-      setAllPlayers(all);
-      setCareerStats(stats);
-      setMatchHistory(history.matches);
-      setContracts(careerHistory.contracts);
-      // If viewing foreign player, fetch their team info
-      if (p.team_id && p.team_id !== teamId) {
-        const pt = await apiFetch<Team>(`/api/teams/${p.team_id}`).catch(() => null);
-        setPlayerTeam(pt);
-      }
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    // First fetch the player to find which team they belong to
+    apiFetch<Player>(`/api/teams/${teamId}/players/${playerId}`)
+      .then(async (p) => {
+        setPlayer(p);
+        const playerOwnerTeamId = p.team_id || teamId;
+        const isForeign = playerOwnerTeamId !== teamId;
+
+        const [t, all, stats, history, careerHistory] = await Promise.all([
+          apiFetch<Team>(`/api/teams/${teamId}`),
+          // Fetch players from the PLAYER's team for navigation arrows
+          apiFetch<Player[]>(`/api/teams/${playerOwnerTeamId}/players`),
+          apiFetch<CareerStats>(`/api/teams/${teamId}/players/${playerId}/career-stats`).catch(() => null),
+          apiFetch<{ matches: PlayerMatchEntry[] }>(`/api/teams/${teamId}/players/${playerId}/match-history`).catch(() => ({ matches: [] })),
+          apiFetch<{ contracts: PlayerContract[] }>(`/api/teams/${teamId}/players/${playerId}/career-history`).catch(() => ({ contracts: [] })),
+        ]);
+
+        setTeam(t);
+        setAllPlayers(all);
+        setCareerStats(stats);
+        setMatchHistory(history.matches);
+        setContracts(careerHistory.contracts);
+
+        if (isForeign) {
+          const pt = await apiFetch<Team>(`/api/teams/${playerOwnerTeamId}`).catch(() => null);
+          setPlayerTeam(pt);
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, [teamId, playerId]);
 
   const currentIndex = allPlayers.findIndex((p) => p.id === playerId);
@@ -142,7 +150,8 @@ export default function PlayerDetailPage() {
   if (!player || !team) return <div className="page-container">Hráč nenalezen.</div>;
 
   const cond = conditionLabel(player.lifeContext?.condition ?? 50);
-  const color = team.primary_color || "#2D5F2D";
+  const displayTeam = isOwnPlayer ? team : (playerTeam ?? team);
+  const color = displayTeam.primary_color || "#2D5F2D";
 
   return (
     <>
@@ -180,10 +189,10 @@ export default function PlayerDetailPage() {
                 </>
               )}
               <span className="text-white/40">&middot;</span>
-              <a href={`/dashboard/team/${team.id}`} className="text-white/90 text-sm hover:text-white underline decoration-white/30 transition-colors flex items-center gap-1.5">
-                <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                  initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
-                {team.name}
+              <a href={`/dashboard/team/${displayTeam.id}`} className="text-white/90 text-sm hover:text-white underline decoration-white/30 transition-colors flex items-center gap-1.5">
+                <BadgePreview primary={color} secondary={displayTeam.secondary_color || "#FFF"} pattern={(displayTeam.badge_pattern as BadgePattern) || "shield"}
+                  initials={displayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
+                {displayTeam.name}
               </a>
             </div>
           </div>
@@ -309,8 +318,8 @@ export default function PlayerDetailPage() {
         <div className="card p-4 sm:p-5">
           <div className="flex items-start justify-between mb-2">
             <SectionLabel>Profil</SectionLabel>
-            <JerseyPreview primary={color} secondary={team.secondary_color || "#FFF"}
-              pattern={team.jersey_pattern as string} size={56}
+            <JerseyPreview primary={color} secondary={displayTeam.secondary_color || "#FFF"}
+              pattern={displayTeam.jersey_pattern as string} size={56}
               number={player.squad_number ?? undefined} />
           </div>
           <div className="space-y-0">

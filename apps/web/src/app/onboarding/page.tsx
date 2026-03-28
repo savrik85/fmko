@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Player } from "@/lib/api";
 import { Spinner } from "@/components/ui";
+import { NapovedaOnboarding } from "@/components/ui/napoveda";
 import { StepLocation } from "@/components/onboarding/step-location";
 import { StepManager } from "@/components/onboarding/step-manager";
 import { StepClubName } from "@/components/onboarding/step-club-name";
@@ -256,6 +257,8 @@ export default function OnboardingPage() {
           />
         )}
       </div>
+
+      <NapovedaOnboarding step={step === 1 ? "location" : step === 2 ? "manager" : step === 3 ? "club" : step === 4 ? "team" : "reveal"} />
     </main>
   );
 }
