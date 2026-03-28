@@ -149,8 +149,15 @@ export function FMSidebar() {
           })}
         </nav>
 
-        {/* Logout */}
+        {/* Settings + Logout */}
         <div className="border-t border-white/5 p-1.5">
+          <Link href="/dashboard/settings" title={!expanded ? "Nastavení" : undefined}
+            className={`flex items-center gap-2.5 w-full rounded text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors ${
+              expanded ? "px-2.5 py-1.5" : "px-0 py-1.5 justify-center"
+            }`}>
+            <span className="text-sm shrink-0 w-5 text-center">{"\u2699\uFE0F"}</span>
+            {expanded && <span className="text-sm font-medium">Nastavení</span>}
+          </Link>
           <button
             onClick={logout}
             className={`flex items-center gap-2.5 w-full rounded text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors ${

@@ -18,6 +18,8 @@ const PAGE_TITLES: Record<string, string> = {
   "/dashboard/news": "Zpravodaj",
   "/dashboard/phone": "Zprávy",
   "/dashboard/liga": "Liga",
+  "/dashboard/settings": "Nastavení",
+  "/dashboard/admin": "Administrace",
   "/dashboard/schedule": "Rozpis zápasů",
   "/dashboard/calendar": "Kalendář",
 };

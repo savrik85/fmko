@@ -37,6 +37,14 @@ const authRouter = new Hono<{ Bindings: Bindings }>();
 
 function uuid(): string { return crypto.randomUUID(); }
 
+function validatePassword(pw: string): string | null {
+  if (pw.length < 8) return "Heslo musí mít alespoň 8 znaků";
+  if (!/[a-z]/.test(pw)) return "Heslo musí obsahovat malé písmeno";
+  if (!/[A-Z]/.test(pw)) return "Heslo musí obsahovat velké písmeno";
+  if (!/[0-9]/.test(pw)) return "Heslo musí obsahovat číslo";
+  return null;
+}
+
 // POST /auth/register
 authRouter.post("/register", async (c) => {
   const body = await c.req.json<{ email: string; password: string }>();
@@ -44,9 +52,8 @@ authRouter.post("/register", async (c) => {
   if (!body.email || !body.password) {
     return c.json({ error: "Vyplň email a heslo" }, 400);
   }
-  if (body.password.length < 6) {
-    return c.json({ error: "Heslo musí mít alespoň 6 znaků" }, 400);
-  }
+  const pwErr = validatePassword(body.password);
+  if (pwErr) return c.json({ error: pwErr }, 400);
 
   // Check if email exists
   const existing = await c.env.DB.prepare(
@@ -205,6 +212,76 @@ authRouter.get("/me", async (c) => {
       ? await getNextMatch(c.env.DB, team.id as string, team.league_id as string, team.game_date as string | null)
       : null,
   });
+});
+
+// POST /auth/change-password — change own password
+authRouter.post("/change-password", async (c) => {
+  const token = getTokenFromRequest(c);
+  if (!token) return c.json({ error: "Nepřihlášen" }, 401);
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return c.json({ error: "Neplatná session" }, 401);
+
+  const body = await c.req.json<{ currentPassword: string; newPassword: string }>();
+  if (!body.currentPassword || !body.newPassword) return c.json({ error: "Vyplň obě pole" }, 400);
+
+  const pwErr = validatePassword(body.newPassword);
+  if (pwErr) return c.json({ error: pwErr }, 400);
+
+  const user = await c.env.DB.prepare("SELECT password_hash FROM users WHERE id = ?")
+    .bind(session.userId).first<{ password_hash: string }>();
+  if (!user) return c.json({ error: "Uživatel nenalezen" }, 404);
+
+  const valid = await verifyPassword(body.currentPassword, user.password_hash);
+  if (!valid) return c.json({ error: "Špatné současné heslo" }, 403);
+
+  const newHash = await hashPassword(body.newPassword);
+  await c.env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
+    .bind(newHash, session.userId).run();
+
+  return c.json({ ok: true });
+});
+
+// POST /auth/admin/change-password — admin changes any user's password
+authRouter.post("/admin/change-password", async (c) => {
+  const token = getTokenFromRequest(c);
+  if (!token) return c.json({ error: "Nepřihlášen" }, 401);
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return c.json({ error: "Neplatná session" }, 401);
+
+  // Check admin
+  const admin = await c.env.DB.prepare("SELECT is_admin FROM users WHERE id = ?")
+    .bind(session.userId).first<{ is_admin: number }>();
+  if (!admin?.is_admin) return c.json({ error: "Přístup odepřen" }, 403);
+
+  const body = await c.req.json<{ userId: string; newPassword: string }>();
+  if (!body.userId || !body.newPassword) return c.json({ error: "Chybí údaje" }, 400);
+
+  const pwErr = validatePassword(body.newPassword);
+  if (pwErr) return c.json({ error: pwErr }, 400);
+
+  const newHash = await hashPassword(body.newPassword);
+  await c.env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
+    .bind(newHash, body.userId).run();
+
+  return c.json({ ok: true });
+});
+
+// GET /auth/admin/users — list users (admin only)
+authRouter.get("/admin/users", async (c) => {
+  const token = getTokenFromRequest(c);
+  if (!token) return c.json({ error: "Nepřihlášen" }, 401);
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return c.json({ error: "Neplatná session" }, 401);
+
+  const admin = await c.env.DB.prepare("SELECT is_admin FROM users WHERE id = ?")
+    .bind(session.userId).first<{ is_admin: number }>();
+  if (!admin?.is_admin) return c.json({ error: "Přístup odepřen" }, 403);
+
+  const users = await c.env.DB.prepare(
+    "SELECT u.id, u.email, u.is_admin, t.name as team_name FROM users u LEFT JOIN teams t ON t.user_id = u.id WHERE u.id != 'ai' ORDER BY u.email"
+  ).all();
+
+  return c.json(users.results);
 });
 
 export { authRouter };

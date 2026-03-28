@@ -112,6 +112,9 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* User Management */}
+      <UserManagement />
+
       {/* Seed Data Management */}
       <SeedDataSection />
 
@@ -124,6 +127,80 @@ export default function AdminPage() {
           <div><span className="text-muted">Env:</span> <span className="font-mono">{process.env.NODE_ENV}</span></div>
           <div><span className="text-muted">Admin:</span> <span className="font-mono text-pitch-500">true</span></div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── User Management ── */
+
+function UserManagement() {
+  const [users, setUsers] = useState<Array<{ id: string; email: string; is_admin: number; team_name: string | null }>>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [resetId, setResetId] = useState<string | null>(null);
+  const [newPw, setNewPw] = useState("");
+  const [status, setStatus] = useState("");
+
+  const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+
+  const loadUsers = async () => {
+    const data = await fetch(`${API}/auth/admin/users`, { credentials: "include" }).then((r) => r.json()).catch(() => []);
+    setUsers(data);
+    setLoaded(true);
+  };
+
+  useEffect(() => { loadUsers(); }, []);
+
+  const resetPassword = async (userId: string) => {
+    if (!newPw) return;
+    const res = await fetch(`${API}/auth/admin/change-password`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+      body: JSON.stringify({ userId, newPassword: newPw }),
+    }).then((r) => r.json()).catch(() => ({ error: "Chyba" }));
+    setStatus(res.ok ? "Heslo změněno" : res.error);
+    setNewPw("");
+    setResetId(null);
+    setTimeout(() => setStatus(""), 3000);
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="card p-4">
+      <SectionLabel>Uživatelé ({users.length})</SectionLabel>
+      {status && <div className="text-sm font-heading font-bold text-pitch-500 mb-2">{status}</div>}
+      <div className="overflow-x-auto -mx-4">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 text-left">
+              <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Email</th>
+              <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Tým</th>
+              <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Admin</th>
+              <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Heslo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                <td className="py-1.5 px-3 font-mono text-xs">{u.email}</td>
+                <td className="py-1.5 px-3">{u.team_name ?? "—"}</td>
+                <td className="py-1.5 px-3">{u.is_admin ? "✓" : ""}</td>
+                <td className="py-1.5 px-3">
+                  {resetId === u.id ? (
+                    <div className="flex gap-1 items-center">
+                      <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)}
+                        placeholder="Nové heslo" className="border border-gray-200 rounded px-2 py-0.5 text-xs w-32" />
+                      <button onClick={() => resetPassword(u.id)} className="text-xs px-2 py-0.5 bg-pitch-500 text-white rounded font-bold">OK</button>
+                      <button onClick={() => { setResetId(null); setNewPw(""); }} className="text-xs text-muted">✕</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setResetId(u.id)} className="text-xs text-pitch-600 hover:underline">Změnit</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
