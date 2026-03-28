@@ -702,15 +702,38 @@ teamsRouter.get("/:id/players", async (c) => {
 
 // GET /api/teams/:id/players/:playerId
 teamsRouter.get("/:id/players/:playerId", async (c) => {
+  const teamId = c.req.param("id");
   const row = await c.env.DB.prepare("SELECT * FROM players WHERE id = ?")
     .bind(c.req.param("playerId")).first<Record<string, unknown>>();
   if (!row) return c.json({ error: "Player not found" }, 404);
+
+  const isOwn = row.team_id === teamId;
+  const skills = JSON.parse(row.skills as string);
+  const physical = JSON.parse(row.physical as string);
+  const personality = JSON.parse(row.personality as string);
+  const lifeContext = JSON.parse(row.life_context as string);
+
+  // Foreign players: round attributes to nearest 5, hide personality details
+  if (!isOwn) {
+    const blur = (v: number) => Math.round(v / 5) * 5;
+    for (const k of Object.keys(skills)) { if (typeof skills[k] === "number") skills[k] = blur(skills[k]); }
+    for (const k of Object.keys(physical)) { if (typeof physical[k] === "number") physical[k] = blur(physical[k]); }
+    // Hide precise personality — show only rough level
+    for (const k of Object.keys(personality)) {
+      if (typeof personality[k] === "number") personality[k] = blur(personality[k]);
+    }
+    // Hide condition and morale
+    lifeContext.condition = Math.round((lifeContext.condition ?? 50) / 10) * 10;
+    lifeContext.morale = Math.round((lifeContext.morale ?? 50) / 10) * 10;
+  }
+
   return c.json({
     ...row,
-    skills: JSON.parse(row.skills as string),
-    physical: JSON.parse(row.physical as string),
-    personality: JSON.parse(row.personality as string),
-    lifeContext: JSON.parse(row.life_context as string),
+    isOwn,
+    skills,
+    physical,
+    personality,
+    lifeContext: lifeContext,
     avatar: JSON.parse(row.avatar as string),
   });
 });
