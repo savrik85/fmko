@@ -162,7 +162,7 @@ export const OCCUPATIONS: Occupation[] = [
   // ŘEMESLNÁ POVOLÁNÍ (village+)
   // ═══════════════════════════════════════
   {
-    id: "zednik", name: "Zedník", w: W(1, 2.5, 2.5, 2, 1.5),
+    id: "zednik", name: "Zedník", w: W(2, 2.5, 2.5, 2, 1.5),
     injuryRisk: 0.4, overtimeRisk: 0.5, strengthBonus: 2,
     excuses: [
       "Lijeme beton, nemůže to čekat",
@@ -171,7 +171,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "tesar", name: "Tesař", w: W(0.5, 1.5, 1.5, 1.5, 1),
+    id: "tesar", name: "Tesař", w: W(1.5, 1.5, 1.5, 1.5, 1),
     injuryRisk: 0.4, overtimeRisk: 0.4, strengthBonus: 2,
     excuses: [
       "Stavíme krov, nemůžu nechat kluky samotný",
@@ -237,7 +237,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "automechanik", name: "Automechanik", w: W(0.8, 2, 2, 1.5, 1),
+    id: "automechanik", name: "Automechanik", w: W(1.5, 2, 2, 1.5, 1),
     injuryRisk: 0.3, overtimeRisk: 0.4, strengthBonus: 1,
     excuses: [
       "Zákazník potřebuje auto na pondělí, musím to dodělat",
@@ -274,6 +274,71 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Musím posekat trávník před zítřejším zápasem... mládeže",
       "Zalévám, potrubí prasklo",
+    ],
+  },
+
+  {
+    id: "obchodnik", name: "Obchodník", w: W(0.5, 1, 1.5, 1.5, 1),
+    injuryRisk: 0.05, overtimeRisk: 0.3, strengthBonus: 0,
+    excuses: [
+      "Mám jednání s dodavatelem, nemůžu zrušit",
+      "Jedu na veletrh, vracím se až večer",
+    ],
+  },
+  {
+    id: "opravarOS", name: "Opravář", w: W(1, 1.5, 1, 0.5, 0.3),
+    injuryRisk: 0.2, overtimeRisk: 0.3, strengthBonus: 1,
+    excuses: [
+      "Opravuju čerpadlo, nemůžu to nechat rozloženýho",
+      "Volali mě k havárii, musím jet hned",
+    ],
+  },
+  {
+    id: "zahradnik", name: "Zahradník", w: W(1.5, 1.5, 1, 0.5, 0.3),
+    injuryRisk: 0.15, overtimeRisk: 0.2, strengthBonus: 1,
+    excuses: [
+      "Musím zasadit stromy, přišly ze školky",
+      "Stříhám živý plot, zákazník tlačí na termín",
+    ],
+  },
+  {
+    id: "ridic_autobusu", name: "Řidič autobusu", w: W(0.5, 1, 1.5, 1.5, 1),
+    injuryRisk: 0.05, overtimeRisk: 0.5, strengthBonus: 0,
+    excuses: [
+      "Mám směnu, jezdím do Prachatic a zpět",
+      "Kolega nepřišel, musím ho zastoupit",
+    ],
+  },
+  {
+    id: "stolar", name: "Stolař", w: W(1, 1.5, 1, 0.5, 0.3),
+    injuryRisk: 0.25, overtimeRisk: 0.3, strengthBonus: 1,
+    excuses: [
+      "Dodělávám schody, zákazník stěhuje za týden",
+      "Musím nařezat materiál, fréza je volná jen dneska",
+    ],
+  },
+  {
+    id: "mistr_v_tovarne", name: "Mistr v továrně", w: W(0.3, 1, 2, 2, 1.5),
+    injuryRisk: 0.15, overtimeRisk: 0.5, strengthBonus: 0,
+    excuses: [
+      "Máme přesčas v továrně, šéf nás nepustí",
+      "Porouchala se linka, musím to řešit",
+    ],
+  },
+  {
+    id: "delnik_v_pile", name: "Dělník v pile", w: W(2, 1.5, 0.5, 0.2, 0),
+    injuryRisk: 0.4, overtimeRisk: 0.4, strengthBonus: 2,
+    excuses: [
+      "Pořezali jsme velkou zakázku, musíme to dodělat",
+      "Přivezli kmeny, musím je zpracovat dokud je čerstvý",
+    ],
+  },
+  {
+    id: "delnik_v_kamenolomu", name: "Dělník v kamenolomu", w: W(1, 0.5, 0.3, 0.1, 0),
+    injuryRisk: 0.5, overtimeRisk: 0.4, strengthBonus: 3,
+    excuses: [
+      "Odstřel se posunul na dnešek, musím být na místě",
+      "Nakládáme štěrk, kamion čeká",
     ],
   },
 

@@ -142,6 +142,7 @@ const COLUMN_LABELS: Record<string, Record<string, string>> = {
   commentary_templates: { event_type: "Typ eventu", template: "Šablona", tags: "Tagy" },
   crowd_reactions: { text: "Text" },
   villages: { name: "Název", district: "Okres", region: "Kraj", population: "Obyvatel", size: "Velikost" },
+  occupations: { name: "Povolání", hamlet: "Hamlet", village: "Village", town: "Town", small_city: "S.City", city: "City", injuryRisk: "Zranění", strengthBonus: "Síla", excuses: "Výmluvy" },
 };
 
 function SeedDataSection() {

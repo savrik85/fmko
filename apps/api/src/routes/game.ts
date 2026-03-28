@@ -2575,18 +2575,20 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/reject", async (c) => {
 // ── Admin: Seed data management ──
 
 gameRouter.get("/admin/seed-data", async (c) => {
+  const { OCCUPATIONS } = await import("../generators/occupations");
   const tables = [
     { key: "villages", label: "Vesnice", editable: false },
     { key: "district_surnames", label: "Příjmení", editable: true },
     { key: "district_sponsors", label: "Sponzoři", editable: true },
     { key: "commentary_templates", label: "Komentáře", editable: true },
     { key: "crowd_reactions", label: "Reakce publika", editable: true },
+    { key: "occupations", label: "Povolání", editable: false, count: OCCUPATIONS.length },
   ];
 
   const result: Array<{ key: string; label: string; count: number; editable: boolean; districts?: string[] }> = [];
   for (const t of tables) {
-    const row = await c.env.DB.prepare(`SELECT COUNT(*) as cnt FROM ${t.key}`).first<{ cnt: number }>().catch(() => ({ cnt: 0 }));
-    const entry: typeof result[0] = { key: t.key, label: t.label, count: row?.cnt ?? 0, editable: t.editable };
+    const cnt = (t as any).count ?? (await c.env.DB.prepare(`SELECT COUNT(*) as cnt FROM ${t.key}`).first<{ cnt: number }>().catch(() => ({ cnt: 0 })))?.cnt ?? 0;
+    const entry: typeof result[0] = { key: t.key, label: t.label, count: cnt, editable: t.editable };
     if (t.key === "district_surnames" || t.key === "district_sponsors") {
       const dists = await c.env.DB.prepare(`SELECT DISTINCT district FROM ${t.key} ORDER BY district`).all().catch(() => ({ results: [] }));
       entry.districts = dists.results.map((r) => r.district as string);
@@ -2599,6 +2601,18 @@ gameRouter.get("/admin/seed-data", async (c) => {
 
 gameRouter.get("/admin/seed-data/:table", async (c) => {
   const table = c.req.param("table");
+  // Special case: occupations from code
+  if (table === "occupations") {
+    const { OCCUPATIONS } = await import("../generators/occupations");
+    const rows = OCCUPATIONS.map((o) => ({
+      id: o.id, name: o.name,
+      hamlet: o.w.hamlet, village: o.w.village, town: o.w.town, small_city: o.w.small_city, city: o.w.city,
+      injuryRisk: o.injuryRisk, overtimeRisk: o.overtimeRisk, strengthBonus: o.strengthBonus,
+      excuses: o.excuses.join(" | "),
+    }));
+    return c.json({ rows, total: rows.length });
+  }
+
   const allowed = ["villages", "district_surnames", "district_sponsors", "commentary_templates", "crowd_reactions"];
   if (!allowed.includes(table)) return c.json({ error: "Invalid table" }, 400);
 
