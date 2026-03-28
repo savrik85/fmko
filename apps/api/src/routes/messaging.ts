@@ -43,17 +43,19 @@ messagingRouter.get("/teams/:teamId/conversations", async (c) => {
     }
   }
 
-  const convs = result.results.map((row) => ({
-    id: row.id,
-    type: row.type,
-    title: row.title,
-    participantId: row.participant_id,
-    participantAvatar: row.participant_avatar ? JSON.parse(row.participant_avatar as string) : null,
-    lastMessageText: row.last_message_text,
-    lastMessageAt: row.last_message_at,
-    unreadCount: row.unread_count,
-    pinned: row.pinned === 1,
-  }));
+  const convs = result.results
+    .filter((row) => row.last_message_text && (row.last_message_text as string).length > 0)
+    .map((row) => ({
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      participantId: row.participant_id,
+      participantAvatar: row.participant_avatar ? JSON.parse(row.participant_avatar as string) : null,
+      lastMessageText: row.last_message_text,
+      lastMessageAt: row.last_message_at,
+      unreadCount: row.unread_count,
+      pinned: row.pinned === 1,
+    }));
 
   return c.json(convs);
 });

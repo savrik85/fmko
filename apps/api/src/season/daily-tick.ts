@@ -347,9 +347,9 @@ export async function executeDailyTick(
                   "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_at, created_at) VALUES (?, ?, 'squad_group', ?, 0, 0, datetime('now'), datetime('now'))"
                 ).bind(matchConvId, teamId, `⚽ vs ${opponentName}`).run().catch(() => {});
 
-                // System message
-                await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', 'Systém', ?, ?, datetime('now'))")
-                  .bind(crypto.randomUUID(), matchConvId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`, JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }))
+                // Coach message (appears as sent by user/trenér)
+                await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'user', ?, 'Trenér', ?, ?, datetime('now'))")
+                  .bind(crypto.randomUUID(), matchConvId, teamId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`, JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }))
                   .run().catch(() => {});
 
                 let msgCount = 1;
