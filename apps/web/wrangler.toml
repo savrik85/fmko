@@ -1,0 +1,7 @@
+name = "prales-web"
+compatibility_date = "2025-03-14"
+pages_build_output_dir = ".open-next/assets"
+
+[vars]
+NEXT_PUBLIC_API_URL = "https://api.prales.fun"
+NEXT_PUBLIC_SITE_URL = "https://prales.fun"

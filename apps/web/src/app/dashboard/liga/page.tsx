@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
@@ -59,7 +59,11 @@ type Tab = "tabulka" | "rozpis" | "vysledky" | "statistiky";
 
 // ═══ Main Page ═══
 
-export default function LigaPage() {
+export default function LigaPageWrapper() {
+  return <Suspense><LigaPage /></Suspense>;
+}
+
+function LigaPage() {
   const ctx = useTeam();
   const teamId = ctx.teamId;
   const router = useRouter();

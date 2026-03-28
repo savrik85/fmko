@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@cloudflare/next-on-pages": "^1.13.16",
     "@okresni-masina/shared": "*",
     "@okresni-masina/ui": "*",
     "@opennextjs/cloudflare": "^1.18.0",

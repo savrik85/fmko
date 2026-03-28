@@ -49,12 +49,13 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: cd apps/web && npx opennextjs-cloudflare build
+      - run: npx @cloudflare/next-on-pages
+        working-directory: apps/web
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: apps/web
-          command: pages deploy .open-next/assets --project-name=prales-web --branch=main
+          command: pages deploy .vercel/output/static --project-name=prales-web --branch=main
 
   deploy-api-test:
     needs: typecheck
@@ -87,9 +88,10 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: cd apps/web && npx opennextjs-cloudflare build
+      - run: npx @cloudflare/next-on-pages
+        working-directory: apps/web
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: apps/web
-          command: pages deploy .open-next/assets --project-name=prales-web --branch=testing
+          command: pages deploy .vercel/output/static --project-name=prales-web --branch=testing

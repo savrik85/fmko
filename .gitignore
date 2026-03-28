@@ -8,3 +8,8 @@ dist/
 .DS_Store
 .idea/
 .next/
+.turbo/
+apps/web/.open-next/
+apps/web/.vercel/
+.vercel/
+.next/
