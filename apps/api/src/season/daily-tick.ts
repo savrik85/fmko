@@ -9,7 +9,7 @@ import { simulateTraining } from "./training";
 import { logger } from "../lib/logger";
 
 export interface DailyTickEvent {
-  type: "training" | "recovery" | "injury_healed" | "pitch" | "morale" | "match" | "day";
+  type: "training" | "recovery" | "injury_healed" | "pitch" | "morale" | "match" | "day" | "loan_return";
   description: string;
   data?: unknown;
 }

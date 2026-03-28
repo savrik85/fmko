@@ -116,10 +116,10 @@ transfersRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   if (!fa) return c.json({ error: "Volný hráč nenalezen" }, 404);
 
   // Get agent's village coords
-  let agentVillage: { latitude: number; longitude: number } | null = null;
+  let agentVillage: { lat: number; lng: number } | null = null;
   if (fa.village_id) {
-    agentVillage = await c.env.DB.prepare("SELECT latitude, longitude FROM villages WHERE id = ?")
-      .bind(fa.village_id).first<{ latitude: number; longitude: number }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch agent village coords", e); return null; });
+    agentVillage = await c.env.DB.prepare("SELECT latitude as lat, longitude as lng FROM villages WHERE id = ?")
+      .bind(fa.village_id).first<{ lat: number; lng: number }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch agent village coords", e); return null; });
   }
 
   // Count squad

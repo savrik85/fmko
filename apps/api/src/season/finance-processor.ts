@@ -24,6 +24,8 @@ export type TransactionType =
   | "transfer_fee"
   | "transfer_income"
   | "signing_fee"
+  | "loan_fee"
+  | "loan_income"
   | "other";
 
 /** Maps DB village size to economy.ts Czech category */

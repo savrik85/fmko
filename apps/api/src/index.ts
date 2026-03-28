@@ -102,17 +102,17 @@ export default {
               "UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'"
             ).bind(matchCal.id).run();
 
-            const results = await runScheduledMatches(env.DB, matchCal.id);
+            const results = await runScheduledMatches(env.DB, matchCal.id as string);
             await env.DB.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
               .bind(matchCal.id).run();
             totalMatches += results.length;
 
             // Between-round events + news (zpravodaj)
             if (results.length > 0) {
+              const calRow = await env.DB.prepare("SELECT game_week FROM season_calendar WHERE id = ?")
+                .bind(matchCal.id).first<{ game_week: number }>();
+              const gameWeek = calRow?.game_week ?? 0;
               try {
-                const calRow = await env.DB.prepare("SELECT game_week FROM season_calendar WHERE id = ?")
-                  .bind(matchCal.id).first<{ game_week: number }>();
-                const gameWeek = calRow?.game_week ?? 0;
                 const matchRows = await env.DB.prepare(
                   `SELECT m.home_score, m.away_score, t1.name as home_name, t2.name as away_name
                    FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id

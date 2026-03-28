@@ -2,6 +2,7 @@ export type MatchStatus = "scheduled" | "in_progress" | "finished";
 
 export type EventType =
   | "goal"
+  | "assist"
   | "chance"
   | "foul"
   | "card"
