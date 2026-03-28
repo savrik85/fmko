@@ -71,9 +71,11 @@ export function generateAITeams(
 
   for (let i = 0; i < count && i < availableVillages.length; i++) {
     const village = availableVillages[i];
+    // AI teams are slightly weaker — downgrade category by one level
+    const aiCategoryMap: Record<string, string> = { mesto: "mestys", mestys: "obec", obec: "vesnice", vesnice: "vesnice" };
     const villageInfo: VillageInfo = {
       region_code: village.region_code,
-      category: village.category as VillageInfo["category"],
+      category: (aiCategoryMap[village.category] ?? village.category) as VillageInfo["category"],
       population: village.population,
     };
 

@@ -58,12 +58,12 @@ export interface GeneratedPlayer {
 }
 
 // Průměrná kvalita hráčů dle kategorie obce (0-100 škála)
-// Zmenšený rozdíl — okresní fotbal, všichni jsou víceméně na stejné úrovni
+// Malý rozdíl — okresní fotbal, i malá vesnice má šanci
 const QUALITY_BY_CATEGORY: Record<string, number> = {
-  vesnice: 35,
-  obec: 38,
-  mestys: 42,
-  mesto: 45,
+  vesnice: 37,  // hamlet → sem, blízko obci
+  obec: 39,     // village
+  mestys: 41,
+  mesto: 44,    // město má výhodu ale ne drtivou
 };
 
 const POSITIONS: PlayerPosition[] = ["GK", "DEF", "MID", "FWD"];
@@ -364,7 +364,7 @@ export function generateSquad(
   firstnameData: FirstnameData,
   squadSize?: number,
 ): GeneratedPlayer[] {
-  const size = squadSize ?? village.category === "vesnice" ? 18 : village.category === "obec" ? 20 : 22;
+  const size = squadSize ?? (village.category === "vesnice" ? 18 : village.category === "obec" ? 20 : 22);
 
   // Build position list
   const positions: PlayerPosition[] = [];
