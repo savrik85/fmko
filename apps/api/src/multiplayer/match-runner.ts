@@ -330,18 +330,24 @@ export async function runScheduledMatches(
           .bind(homeTeamId, awayTeamId, matchId).run().catch((e) => logger.warn({ module: "match-runner" }, "decrement suspensions", e));
 
         // ── Persist injuries from match events ──
+        const injuryTypeMap: Record<string, string> = {
+          "natažený sval": "sval", "naražené žebro": "zebra", "podvrtnutý kotník": "kotnik",
+          "bolest kolene": "koleno", "bolavá záda": "zada", "naražená hlava": "hlava",
+          "pohmožděný palec": "obecne", "přetržený achilov": "achilovka",
+        };
         for (const event of result.events) {
           if (event.type === "injury") {
-            // Map event teamId (1=home,2=away) + playerId to real DB player
-            const teamId = event.teamId === 1 ? homeTeamId : awayTeamId;
+            const evTeamId = event.teamId === 1 ? homeTeamId : awayTeamId;
             const idMap = event.teamId === 1 ? homeBuild.idMap : awayBuild.idMap;
             const realPlayerId = idMap.get(event.playerId);
             if (realPlayerId) {
-              const days = 3 + Math.floor(Math.random() * 18); // 3-20 days
-              await db.prepare("INSERT OR IGNORE INTO injuries (id, player_id, type, days_remaining) VALUES (?, ?, ?, ?)")
-                .bind(crypto.randomUUID(), realPlayerId, event.detail ?? "zranění", days).run()
+              const days = 3 + Math.floor(Math.random() * 18);
+              const injType = injuryTypeMap[event.detail ?? ""] ?? "obecne";
+              const severity = days <= 7 ? "lehke" : days <= 14 ? "stredni" : "tezke";
+              await db.prepare(
+                "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, match_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+              ).bind(crypto.randomUUID(), realPlayerId, evTeamId, injType, event.detail ?? "zranění", severity, days, days, matchId).run()
                 .catch((e) => logger.warn({ module: "match-runner" }, "persist injury", e));
-              logger.info({ module: "match-runner" }, `injury: ${event.playerName} (${event.detail}), ${days} days`);
             }
           }
         }
