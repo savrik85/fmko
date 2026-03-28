@@ -96,7 +96,11 @@
       "Bash(lsof -i :3000 -sTCP:LISTEN)",
       "Bash(chmod +x /Users/savrik/Projects/fmko/apps/api/scripts/wipe-game-data.sh)",
       "Bash(bash apps/api/scripts/wipe-game-data.sh)",
-      "Bash(lsof -iTCP:3000 -sTCP:LISTEN -P)"
+      "Bash(lsof -iTCP:3000 -sTCP:LISTEN -P)",
+      "Bash(TEAM=\"e9e5968c-6072-431b-ad0d-abd3ae7dc628\")",
+      "Bash(TOKEN=\"1db80d972c9332b71e7e16ec7c5c783170e055008f385ef8d29071f864de4746\")",
+      "Bash(for i:*)",
+      "Bash(do curl:*)"
     ]
   }
 }

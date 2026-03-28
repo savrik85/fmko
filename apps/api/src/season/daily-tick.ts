@@ -296,11 +296,23 @@ export async function executeDailyTick(
       }
     }
     if (gameDate) {
-      // ── Day-before attendance messages (BEFORE advancing date) ──
-      // gameDate = current day. Check if TOMORROW (gameDate+1) has a match.
+      // Advance the date FIRST
+      const gd = new Date(gameDate);
+      gd.setDate(gd.getDate() + 1);
+      const newDayOfWeek = gd.getUTCDay();
+      const newGameDate = gd.toISOString();
+
+      await env.DB.prepare("UPDATE teams SET game_date = ? WHERE id = ?")
+        .bind(newGameDate, teamId).run();
+
+      events.push({ type: "day", description: `Herní den: ${gd.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" })}` });
+
+      // ── Day-before attendance messages (AFTER advancing date) ──
+      // newGameDate = today. Check if TOMORROW (newGameDate+1) has a match.
+      // This way the conversation is visible when user sees "zítra" in the header.
       if (team.user_id !== "ai") {
         try {
-          const tomorrow = new Date(gameDate);
+          const tomorrow = new Date(newGameDate);
           tomorrow.setDate(tomorrow.getDate() + 1);
           const checkDayStart = new Date(tomorrow); checkDayStart.setUTCHours(0, 0, 0, 0);
           const checkDayEnd = new Date(tomorrow); checkDayEnd.setUTCHours(23, 59, 59, 999);
@@ -309,27 +321,21 @@ export async function executeDailyTick(
             const tomorrowMatch = await env.DB.prepare(
               "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled'"
             ).bind(lid, checkDayStart.toISOString(), checkDayEnd.toISOString()).first<{ id: string }>().catch(() => null);
-            logger.info({ module: "daily-tick", teamId }, `day-before: gameDate=${gameDate} check=${checkDayStart.toISOString()}-${checkDayEnd.toISOString()} found=${tomorrowMatch?.id ?? 'NONE'}`);
             if (tomorrowMatch) {
               const alreadySent = await env.DB.prepare(
                 "SELECT id FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group') AND metadata LIKE ?"
               ).bind(teamId, `%${tomorrowMatch.id}%`).first().catch(() => null);
-
               if (!alreadySent) {
                 const { seedFromString } = await import("../lib/seed");
                 const { generateAbsences } = await import("../events/absence");
                 const { generateAttendanceMessage } = await import("../messaging/message-generator");
-
-                // Find opponent name for conversation title
                 const matchRow = await env.DB.prepare(
                   "SELECT m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1"
                 ).bind(tomorrowMatch.id, teamId, teamId).first<Record<string, unknown>>().catch(() => null);
                 const opponentName = matchRow ? (matchRow.home_team_id === teamId ? matchRow.away_name : matchRow.home_name) as string : "Soupeř";
-
                 const squadRows = await env.DB.prepare(
                   "SELECT id, first_name, last_name, personality, life_context, physical, commute_km FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
                 ).bind(teamId).all();
-
                 const absRng = createRng(seedFromString(tomorrowMatch.id));
                 const absSquad = squadRows.results.map((r) => {
                   const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
@@ -341,18 +347,13 @@ export async function executeDailyTick(
                 });
                 const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, "day_before");
                 const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
-
-                // Create NEW match-day conversation group (named after opponent)
                 const matchConvId = crypto.randomUUID();
                 await env.DB.prepare(
                   "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_at, created_at) VALUES (?, ?, 'squad_group', ?, 0, 0, datetime('now'), datetime('now'))"
                 ).bind(matchConvId, teamId, `⚽ vs ${opponentName}`).run().catch(() => {});
-
-                // Coach message (appears as sent by user/trenér)
                 await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'user', ?, 'Trenér', ?, ?, datetime('now'))")
                   .bind(crypto.randomUUID(), matchConvId, teamId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`, JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }))
                   .run().catch(() => {});
-
                 let msgCount = 1;
                 for (const row of squadRows.results) {
                   const pid = row.id as string;
@@ -360,7 +361,6 @@ export async function executeDailyTick(
                   const available = !absentIds.has(pid);
                   const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
                   const msg = generateAttendanceMessage(`${row.first_name} ${row.last_name}`, available, lc.condition ?? 100, absRng as any);
-
                   await env.DB.prepare(
                     "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'))"
                   ).bind(crypto.randomUUID(), matchConvId, pid, msg.senderName, absence ? absence.smsText : msg.body,
@@ -376,17 +376,6 @@ export async function executeDailyTick(
           }
         } catch (e) { logger.warn({ module: "daily-tick" }, "day_before attendance failed", e); }
       }
-
-      // NOW advance the date
-      const gd = new Date(gameDate);
-      gd.setDate(gd.getDate() + 1);
-      const newDayOfWeek = gd.getUTCDay();
-      const newGameDate = gd.toISOString();
-
-      await env.DB.prepare("UPDATE teams SET game_date = ? WHERE id = ?")
-        .bind(newGameDate, teamId).run();
-
-      events.push({ type: "day", description: `Herní den: ${gd.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" })}` });
 
       // ── Weekly finances (Monday) ──
       if (newDayOfWeek === 1) {

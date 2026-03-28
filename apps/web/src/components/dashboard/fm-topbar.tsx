@@ -80,7 +80,7 @@ export function FMTopBar() {
             ⚽ <span className="text-white font-bold">{nextMatch.opponent}</span>
             {" · "}
             {nextMatch.daysUntil === 0 ? (
-              <MatchCountdown />
+              <span className="text-pitch-400 font-bold">dnes!</span>
             ) : nextMatch.daysUntil === 1 ? (
               <span className="text-pitch-400">zítra</span>
             ) : (

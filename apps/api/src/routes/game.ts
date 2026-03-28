@@ -1532,10 +1532,11 @@ gameRouter.post("/game/advance-day", async (c) => {
       const gd = league.max_game_date as string | null;
       const lid = league.league_id as string | null;
       if (!gd || !lid) continue;
-      const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
+      // Only simulate PAST matches — today's match is handled by run-matches cron
+      const dayStart = new Date(gd); dayStart.setUTCHours(0, 0, 0, 0);
       const pendingCals = await c.env.DB.prepare(
-        "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC"
-      ).bind(lid, dayEnd.toISOString()).all();
+        "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at < ? AND status = 'scheduled' ORDER BY scheduled_at ASC"
+      ).bind(lid, dayStart.toISOString()).all();
       for (const cal of pendingCals.results) {
         const calId = cal.id as string;
         await c.env.DB.prepare("UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'")
@@ -1667,14 +1668,35 @@ gameRouter.post("/game/advance-day", async (c) => {
     logger.error({ module: "game" }, "auto match-tick in advance-day failed", e);
   }
 
-  // Cleanup old match-day attendance conversations — keep only today's (freshly created)
+  // Cleanup match-day attendance conversations for already-simulated matches
   try {
-    const oldMatchConvs = await c.env.DB.prepare(
-      "SELECT id FROM conversations WHERE type = 'squad_group' AND title LIKE '⚽ vs %' AND created_at < datetime('now', '-1 hour')"
+    // Find all "⚽ vs" conversations and check if their referenced calendar entry is simulated
+    const matchConvs = await c.env.DB.prepare(
+      "SELECT c.id FROM conversations c WHERE c.type = 'squad_group' AND c.title LIKE '⚽ vs %'"
     ).all().catch(() => ({ results: [] }));
-    for (const conv of oldMatchConvs.results) {
-      await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
-      await c.env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch(() => {});
+    for (const conv of matchConvs.results) {
+      // Get the calendarId from the first attendance message metadata
+      const meta = await c.env.DB.prepare(
+        "SELECT metadata FROM messages WHERE conversation_id = ? AND metadata LIKE '%calendarId%' LIMIT 1"
+      ).bind(conv.id).first<{ metadata: string }>().catch(() => null);
+      if (!meta?.metadata) {
+        // No calendar reference → old orphan, delete
+        await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
+        await c.env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch(() => {});
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(meta.metadata);
+        const calId = parsed.calendarId;
+        if (calId) {
+          const cal = await c.env.DB.prepare("SELECT status FROM season_calendar WHERE id = ?").bind(calId).first<{ status: string }>().catch(() => null);
+          if (cal?.status === "simulated") {
+            // Match played → delete conversation
+            await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
+            await c.env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch(() => {});
+          }
+        }
+      } catch { /* parse error, skip */ }
     }
   } catch { /* cleanup optional */ }
 
@@ -1730,6 +1752,34 @@ gameRouter.post("/game/run-matches", async (c) => {
       }
     }
   }
+  // Cleanup match-day attendance conversations for simulated matches
+  try {
+    const matchConvs = await c.env.DB.prepare(
+      "SELECT c.id FROM conversations c WHERE c.type = 'squad_group' AND c.title LIKE '⚽ vs %'"
+    ).all().catch(() => ({ results: [] }));
+    for (const conv of matchConvs.results) {
+      const meta = await c.env.DB.prepare(
+        "SELECT metadata FROM messages WHERE conversation_id = ? AND metadata LIKE '%calendarId%' LIMIT 1"
+      ).bind(conv.id).first<{ metadata: string }>().catch(() => null);
+      if (!meta?.metadata) {
+        await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
+        await c.env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch(() => {});
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(meta.metadata);
+        const calId = parsed.calendarId;
+        if (calId) {
+          const cal = await c.env.DB.prepare("SELECT status FROM season_calendar WHERE id = ?").bind(calId).first<{ status: string }>().catch(() => null);
+          if (cal?.status === "simulated") {
+            await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
+            await c.env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch(() => {});
+          }
+        }
+      } catch { /* parse error, skip */ }
+    }
+  } catch { /* cleanup optional */ }
+
   return c.json({ ok: true, type: "matches", totalMatches });
 });
 
