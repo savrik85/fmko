@@ -155,7 +155,6 @@ export default function TeamPage() {
           )}
           <BadgePreview primary={color} secondary={team.secondary_color || "#FFFFFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
             initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={56} />
-          <JerseyPreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={team.jersey_pattern as string} size={44} />
           <div className="flex-1 min-w-0">
             <h1 className="font-heading font-extrabold text-white text-xl sm:text-2xl leading-tight truncate">{team.name}</h1>
             <div className="text-white/60 text-sm mt-0.5">
@@ -206,7 +205,10 @@ export default function TeamPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Info */}
         <div className="card p-4 sm:p-5">
-          <SectionLabel>Informace o týmu</SectionLabel>
+          <div className="flex items-start justify-between mb-2">
+            <SectionLabel>Informace o týmu</SectionLabel>
+            <JerseyPreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={team.jersey_pattern as string} size={60} />
+          </div>
           <div className="grid grid-cols-2 gap-y-3 gap-x-6">
             <InfoRow label="Vesnice" value={team.village_name} />
             <InfoRow label="Okres" value={team.district} />

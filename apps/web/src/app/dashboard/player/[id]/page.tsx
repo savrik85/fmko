@@ -161,10 +161,6 @@ export default function PlayerDetailPage() {
               {player.first_name[0]}
             </div>
           )}
-          <JerseyPreview primary={color} secondary={team.secondary_color || "#FFF"}
-            pattern={team.jersey_pattern as string} size={52}
-            number={player.squad_number ?? undefined} />
-
           <div className="flex-1 min-w-0">
             <h1 className="font-heading font-extrabold text-white text-xl sm:text-2xl leading-tight truncate">
               {player.first_name} {player.last_name}
@@ -311,7 +307,12 @@ export default function PlayerDetailPage() {
 
         {/* Column 1: Personal info */}
         <div className="card p-4 sm:p-5">
-          <SectionLabel>Profil</SectionLabel>
+          <div className="flex items-start justify-between mb-2">
+            <SectionLabel>Profil</SectionLabel>
+            <JerseyPreview primary={color} secondary={team.secondary_color || "#FFF"}
+              pattern={team.jersey_pattern as string} size={56}
+              number={player.squad_number ?? undefined} />
+          </div>
           <div className="space-y-0">
             <DetailRow label="Pozice" value={<PositionBadge position={player.position} />} />
             <DetailRow label="Věk" value={`${player.age} let`} />
