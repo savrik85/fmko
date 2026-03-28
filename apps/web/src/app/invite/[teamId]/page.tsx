@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { InvitePageClient } from "./client";
 
-// export const runtime = "edge"; // enabled at build time by next-on-pages
+export const runtime = "edge";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
