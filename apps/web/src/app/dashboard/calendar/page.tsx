@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, Card, CardBody } from "@/components/ui";
+import { Spinner } from "@/components/ui";
 
 interface UpcomingEvent {
   type: "match" | "training" | "seasonal";
@@ -20,148 +19,140 @@ interface SeasonInfo {
   currentDay: number;
   totalDays: number;
   upcoming: UpcomingEvent[];
+  gameDate: string;
 }
 
-const TYPE_ICONS: Record<string, string> = {
-  match: "\u26BD",
-  training: "\u{1F3CB}",
-  seasonal: "\u{1F389}",
-};
-
-const TYPE_COLORS: Record<string, string> = {
-  match: "border-l-pitch-500",
-  training: "border-l-gold-500",
-  seasonal: "border-l-card-red",
-};
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" });
-}
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" });
-}
-
-function daysUntil(iso: string): string {
-  const diff = Math.ceil((new Date(iso).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
-  if (diff <= 0) return "Dnes";
-  if (diff === 1) return "Zítra";
-  return `Za ${diff} dní`;
-}
+const DAY_NAMES = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"];
+const MONTH_NAMES = ["leden", "únor", "březen", "duben", "květen", "červen", "červenec", "srpen", "září", "říjen", "listopad", "prosinec"];
 
 export default function CalendarPage() {
   const { teamId } = useTeam();
   const [data, setData] = useState<SeasonInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewMonth, setViewMonth] = useState<Date | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
     apiFetch<SeasonInfo>(`/api/teams/${teamId}/season-info`)
-      .then((d) => { setData(d); setLoading(false); })
+      .then((d) => {
+        setData(d);
+        setViewMonth(new Date(d.gameDate || d.upcoming[0]?.date || new Date()));
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [teamId]);
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
-  if (!data) return <div className="page-container">Data nenalezena.</div>;
+  if (!data || !viewMonth) return <div className="page-container">Data nenalezena.</div>;
 
   const progress = Math.round((data.currentDay / data.totalDays) * 100);
+  const gameDate = new Date(data.gameDate || new Date());
+  const todayKey = `${gameDate.getUTCFullYear()}-${gameDate.getUTCMonth()}-${gameDate.getUTCDate()}`;
 
-  // Group events by date
-  const grouped = new Map<string, UpcomingEvent[]>();
+  // Index events by date key
+  const eventsByDay = new Map<string, UpcomingEvent[]>();
   for (const ev of data.upcoming) {
-    const key = new Date(ev.date).toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "long" });
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key)!.push(ev);
+    const d = new Date(ev.date);
+    const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+    if (!eventsByDay.has(key)) eventsByDay.set(key, []);
+    eventsByDay.get(key)!.push(ev);
   }
 
+  // Build calendar grid for viewMonth
+  const year = viewMonth.getFullYear();
+  const month = viewMonth.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  // Monday = 0, Sunday = 6
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const totalCells = startOffset + lastDay.getDate();
+  const rows = Math.ceil(totalCells / 7);
+
+  const prevMonth = () => setViewMonth(new Date(year, month - 1, 1));
+  const nextMonth = () => setViewMonth(new Date(year, month + 1, 1));
+
   return (
-    <div className="page-container space-y-5">
+    <div className="page-container space-y-4">
 
-      {/* Season progress */}
-      <Card>
-        <CardBody>
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-heading font-bold text-lg">Sezóna {data.season}</span>
-            <span className="font-heading font-bold text-lg tabular-nums text-pitch-600">Den {data.currentDay}/{data.totalDays}</span>
-          </div>
-          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-pitch-400 rounded-full transition-all" style={{ width: `${progress}%` }} />
-          </div>
-          <div className="flex justify-between mt-1.5 text-xs text-muted">
-            <span>Podzim</span>
-            <span>Zima</span>
-            <span>Jaro</span>
-            <span>Konec</span>
-          </div>
-        </CardBody>
-      </Card>
+      {/* Season progress — compact */}
+      <div className="card px-4 py-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="font-heading font-bold">Sezóna {data.season}</span>
+          <span className="font-heading font-bold tabular-nums text-pitch-600">Den {data.currentDay}/{data.totalDays}</span>
+        </div>
+        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-full bg-pitch-400 rounded-full transition-all" style={{ width: `${progress}%` }} />
+        </div>
+      </div>
 
-      {/* Next match highlight */}
-      {(() => {
-        const nextMatch = data.upcoming.find((e) => e.type === "match" && e.status === "Naplánováno");
-        if (!nextMatch) return null;
-        return (
-          <div className="card overflow-hidden">
-            <div className="bg-pitch-800 px-5 py-3 flex items-center justify-between">
-              <span className="text-sm font-heading font-bold text-white/80">Příští zápas</span>
-              <span className="text-sm font-heading text-white/50">{daysUntil(nextMatch.date)}</span>
+      {/* Month navigation */}
+      <div className="card overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 bg-pitch-800">
+          <button onClick={prevMonth} className="text-white/60 hover:text-white text-lg font-bold px-2">‹</button>
+          <span className="font-heading font-bold text-white text-base capitalize">
+            {MONTH_NAMES[month]} {year}
+          </span>
+          <button onClick={nextMonth} className="text-white/60 hover:text-white text-lg font-bold px-2">›</button>
+        </div>
+
+        {/* Day headers */}
+        <div className="grid grid-cols-7 border-b border-gray-100">
+          {DAY_NAMES.map((d) => (
+            <div key={d} className="text-center py-1.5 text-[10px] font-heading font-bold text-muted uppercase">
+              {d}
             </div>
-            <div className="px-5 py-4 flex items-center justify-between">
-              <div>
-                <div className="font-heading font-bold text-base">{nextMatch.title}</div>
-                <div className="text-sm text-muted">{nextMatch.subtitle}</div>
-              </div>
-              <div className="text-right">
-                <div className="font-heading font-bold text-sm">{formatDate(nextMatch.date)}</div>
-                <div className="text-sm text-muted">{formatTime(nextMatch.date)}</div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+          ))}
+        </div>
 
-      {/* Timeline */}
-      <div>
-        {data.upcoming.length === 0 ? (
-          <Card><CardBody><p className="text-center text-muted py-4">Žádné nadcházející události</p></CardBody></Card>
-        ) : (
-          <div className="card divide-y divide-gray-50">
-            {Array.from(grouped.entries()).map(([dateLabel, events]) => {
-              const hasMatch = events.some((e) => e.type === "match");
-              return (
-                <div key={dateLabel} className={`flex items-center gap-3 px-4 ${hasMatch ? "py-3" : "py-1.5"}`}>
-                  {/* Date column */}
-                  <div className="w-20 shrink-0">
-                    <div className={`font-heading ${hasMatch ? "font-bold text-sm text-ink" : "text-xs text-muted"}`}>
-                      {dateLabel.split(" ").slice(0, 2).join(" ")}
-                    </div>
-                  </div>
-                  {/* Events */}
-                  <div className="flex-1 min-w-0 space-y-0.5">
-                    {events.map((ev, i) => (
-                      ev.type === "match" ? (
-                        <div key={i} className="flex items-center gap-2">
-                          <span className="text-sm">⚽</span>
-                          <span className="font-heading font-bold text-sm">{ev.title}</span>
-                          <span className="text-xs text-muted">{ev.subtitle}</span>
-                          {ev.status && ev.status !== "Naplánováno" && (
-                            <span className="text-xs font-heading font-bold text-pitch-500 ml-auto">{ev.status}</span>
-                          )}
-                        </div>
-                      ) : (
-                        <div key={i} className="flex items-center gap-2 text-xs text-muted">
-                          <span>🏋️</span>
-                          <span>{ev.title}</span>
-                        </div>
-                      )
-                    ))}
-                  </div>
+        {/* Calendar grid */}
+        <div className="grid grid-cols-7">
+          {Array.from({ length: rows * 7 }, (_, i) => {
+            const dayNum = i - startOffset + 1;
+            const isValid = dayNum >= 1 && dayNum <= lastDay.getDate();
+            if (!isValid) return <div key={i} className="min-h-[72px] bg-gray-50/30 border-b border-r border-gray-50" />;
+
+            const dateKey = `${year}-${month}-${dayNum}`;
+            const isToday = dateKey === todayKey;
+            const events = eventsByDay.get(dateKey) ?? [];
+            const match = events.find((e) => e.type === "match");
+            const hasTraining = events.some((e) => e.type === "training");
+            const dow = (i % 7);
+            const isWeekend = dow >= 5;
+
+            return (
+              <div key={i} className={`min-h-[72px] border-b border-r border-gray-50 px-1 py-1 ${isToday ? "bg-pitch-50 ring-1 ring-inset ring-pitch-400" : isWeekend ? "bg-gray-50/40" : ""}`}>
+                {/* Day number */}
+                <div className={`text-right text-xs tabular-nums mb-0.5 ${isToday ? "font-bold text-pitch-600" : "text-muted"}`}>
+                  {dayNum}
                 </div>
-              );
-            })}
-          </div>
-        )}
+                {/* Events */}
+                {match && (
+                  <div className={`text-[9px] font-heading font-bold leading-tight px-1 py-0.5 rounded truncate ${
+                    match.status && match.status !== "Naplánováno"
+                      ? "bg-pitch-100 text-pitch-700"
+                      : "bg-pitch-500 text-white"
+                  }`}>
+                    ⚽ {match.title.replace(/^\d+\. kolo — /, "")}
+                    {match.status && match.status !== "Naplánováno" && (
+                      <span className="ml-1 font-[800]">{match.status}</span>
+                    )}
+                  </div>
+                )}
+                {hasTraining && !match && (
+                  <div className="text-[9px] text-muted px-1">🏋️</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex gap-4 text-xs text-muted px-1">
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-pitch-500" /> Zápas</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-pitch-100" /> Odehráno</span>
+        <span className="flex items-center gap-1">🏋️ Trénink</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded ring-1 ring-pitch-400 bg-pitch-50" /> Dnes</span>
       </div>
     </div>
   );

@@ -1489,7 +1489,8 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
     season: league?.season_number ?? 1,
     currentDay,
     totalDays,
-    upcoming: futureEvents.slice(0, 15),
+    gameDate: now.toISOString(),
+    upcoming,
   });
 });
 
