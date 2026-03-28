@@ -370,18 +370,52 @@ teamsRouter.post("/", async (c) => {
     ).bind(existingLeague.id).first<{ id: string }>();
 
     if (aiTeam) {
-      // Replace AI team in existing matches with the new player team
-      await c.env.DB.prepare("UPDATE matches SET home_team_id = ? WHERE home_team_id = ? AND league_id = ?")
-        .bind(teamId, aiTeam.id, existingLeague.id).run();
-      await c.env.DB.prepare("UPDATE matches SET away_team_id = ? WHERE away_team_id = ? AND league_id = ?")
-        .bind(teamId, aiTeam.id, existingLeague.id).run();
+      // Instead of deleting AI team (FK nightmare), UPDATE all references to point to new team
+      // This replaces AI team identity with the human player's team
+      const oldId = aiTeam.id;
 
-      const aiPlayers = await c.env.DB.prepare("SELECT id FROM players WHERE team_id = ?").bind(aiTeam.id).all();
-      for (const ap of aiPlayers.results) {
-        await c.env.DB.prepare("DELETE FROM relationships WHERE player_a_id = ? OR player_b_id = ?").bind(ap.id, ap.id).run();
+      // Update all match references
+      await c.env.DB.prepare("UPDATE matches SET home_team_id = ? WHERE home_team_id = ?").bind(teamId, oldId).run().catch(() => {});
+      await c.env.DB.prepare("UPDATE matches SET away_team_id = ? WHERE away_team_id = ?").bind(teamId, oldId).run().catch(() => {});
+
+      // Update all other table references from old AI team to new team
+      const updateTables = [
+        "UPDATE match_player_stats SET team_id = ? WHERE team_id = ?",
+        "UPDATE player_stats SET team_id = ? WHERE team_id = ?",
+        "UPDATE lineups SET team_id = ? WHERE team_id = ?",
+        "UPDATE injuries SET team_id = ? WHERE team_id = ?",
+        "UPDATE training_log SET team_id = ? WHERE team_id = ?",
+        "UPDATE transactions SET team_id = ? WHERE team_id = ?",
+      ];
+      for (const sql of updateTables) {
+        await c.env.DB.prepare(sql).bind(teamId, oldId).run().catch(() => {});
       }
-      await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(aiTeam.id).run();
-      await c.env.DB.prepare("DELETE FROM teams WHERE id = ?").bind(aiTeam.id).run();
+
+      // Delete AI team's players (human team has its own generated squad)
+      const aiPlayers = await c.env.DB.prepare("SELECT id FROM players WHERE team_id = ?").bind(oldId).all();
+      for (const ap of aiPlayers.results) {
+        await c.env.DB.prepare("DELETE FROM relationships WHERE player_a_id = ? OR player_b_id = ?").bind(ap.id, ap.id).run().catch(() => {});
+        await c.env.DB.prepare("DELETE FROM match_player_stats WHERE player_id = ?").bind(ap.id).run().catch(() => {});
+        await c.env.DB.prepare("DELETE FROM player_stats WHERE player_id = ?").bind(ap.id).run().catch(() => {});
+        await c.env.DB.prepare("DELETE FROM player_contracts WHERE player_id = ?").bind(ap.id).run().catch(() => {});
+      }
+      await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(oldId).run().catch(() => {});
+
+      // Delete orphan AI team data
+      for (const sql of [
+        "DELETE FROM managers WHERE team_id = ?",
+        "DELETE FROM equipment WHERE team_id = ?",
+        "DELETE FROM stadiums WHERE team_id = ?",
+        "DELETE FROM conversations WHERE team_id = ?",
+        "DELETE FROM sponsor_contracts WHERE team_id = ?",
+      ]) { await c.env.DB.prepare(sql).bind(oldId).run().catch(() => {}); }
+
+      // Now safe to delete empty AI team
+      await c.env.DB.prepare("DELETE FROM teams WHERE id = ?").bind(oldId).run().catch((e) => {
+        // If still fails, just mark as inactive
+        logger.warn({ module: "teams" }, "Could not delete AI team, marking inactive", e);
+        c.env.DB.prepare("UPDATE teams SET user_id = 'ai_replaced', league_id = NULL WHERE id = ?").bind(oldId).run().catch(() => {});
+      });
     }
 
     await c.env.DB.prepare("UPDATE teams SET league_id = ? WHERE id = ?").bind(existingLeague.id, teamId).run();
