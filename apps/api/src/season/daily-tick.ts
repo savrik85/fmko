@@ -153,25 +153,12 @@ export async function executeDailyTick(
               .bind(JSON.stringify(currentPhysical), playerId).run();
           }
 
-          // Recalculate overall_rating from current skills
-          const pos = playersResult.results[imp.playerIndex].position as string;
-          const physData = playersResult.results[imp.playerIndex].physical ? JSON.parse(playersResult.results[imp.playerIndex].physical as string) : {};
-          const ratingWeights: Record<string, Record<string, number>> = {
-            GK: { goalkeeping: 4, strength: 2, stamina: 1 },
-            DEF: { defense: 3, heading: 2, strength: 2, speed: 1, stamina: 2, passing: 1 },
-            MID: { passing: 3, technique: 2, stamina: 3, speed: 1, shooting: 1 },
-            FWD: { shooting: 3, speed: 3, technique: 2, heading: 1, stamina: 1 },
-          };
-          const rw = ratingWeights[pos] ?? ratingWeights.MID;
-          let rwSum = 0, rwTotal = 0;
-          for (const [k, wt] of Object.entries(rw)) {
-            const v = currentSkills[k] ?? physData[k] ?? 30;
-            rwSum += v * wt; rwTotal += wt;
-          }
-          const newRating = Math.round(rwTotal > 0 ? rwSum / rwTotal : 30);
+          // Adjust overall_rating relative to the change (don't recalculate from scratch
+          // because initial rating includes hidden_talent bonus that plain skills don't reflect)
+          const ratingDelta = imp.change > 0 ? 1 : -1; // +1 or -1 per skill point change
           await env.DB.prepare(
-            "UPDATE players SET overall_rating = ?, weekly_wage = ROUND(10 + (? / 100.0) * 400) WHERE id = ?"
-          ).bind(newRating, newRating, playerId).run();
+            "UPDATE players SET overall_rating = MAX(1, overall_rating + ?), weekly_wage = ROUND(10 + (MAX(1, overall_rating + ?) / 100.0) * 400) WHERE id = ?"
+          ).bind(ratingDelta, ratingDelta, playerId).run();
 
           // Log to training_log
           await env.DB.prepare(
