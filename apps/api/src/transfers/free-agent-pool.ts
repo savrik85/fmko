@@ -57,9 +57,10 @@ export async function maintainFreeAgentPool(
     const surnameData = { surnames: districtData.surnames, female_forms: {} as Record<string, string> };
     const firstnameData = { male: FIRSTNAMES, female: {} as Record<string, Record<string, number>> };
 
+    const sizeMap: Record<string, string> = { hamlet: "vesnice", village: "obec", town: "mestys", small_city: "mesto", city: "mesto" };
     const villageInfo: VillageInfo = {
       region_code: district,
-      category: ((row.size as string) ?? "obec") as VillageInfo["category"],
+      category: (sizeMap[(row.size as string)] ?? "obec") as VillageInfo["category"],
       population: (row.population as number) ?? 500,
     };
 
@@ -72,17 +73,13 @@ export async function maintainFreeAgentPool(
       const pos = rng.pick([...POSITIONS]);
       const player = generatePlayer(rng, villageInfo, pos, surnameData, firstnameData);
 
-      // Calculate overall rating from raw numbers
-      // Fallback to rng-generated values if player properties are undefined
-      const fallback = () => rng.int(15, 45);
+      // Build skills from generated player
       const skills = {
-        speed: player.speed ?? fallback(), technique: player.technique ?? fallback(),
-        shooting: player.shooting ?? fallback(), passing: player.passing ?? fallback(),
-        heading: player.heading ?? fallback(), defense: player.defense ?? fallback(),
-        goalkeeping: player.goalkeeping ?? (pos === "GK" ? rng.int(30, 60) : 0),
-        stamina: player.stamina ?? fallback(), strength: player.strength ?? fallback(),
-        vision: player.technique ?? fallback(), creativity: player.passing ?? fallback(),
-        setPieces: rng.int(10, 50), experience: Math.min(80, (player.age ?? 25) * 2),
+        speed: player.speed, technique: player.technique, shooting: player.shooting,
+        passing: player.passing, heading: player.heading, defense: player.defense,
+        goalkeeping: player.goalkeeping ?? 0, stamina: player.stamina, strength: player.strength,
+        vision: player.technique, creativity: player.passing, setPieces: rng.int(10, 50),
+        experience: Math.min(80, player.age * 2),
       };
       const posWeights: Record<string, Record<string, number>> = {
         GK: { goalkeeping: 4, strength: 2, stamina: 1 },
