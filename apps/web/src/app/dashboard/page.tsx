@@ -103,11 +103,13 @@ export default function DashboardPage() {
   const gameDate = team.game_date ? new Date(team.game_date) : null;
   const dayOfWeek = gameDate?.getUTCDay() ?? 0;
   const isTrainingDay = dayOfWeek >= 1 && dayOfWeek <= 5;
-  // Match day: next match scheduled_at is on the same day as game_date
+  // Match day: next match is on the SAME calendar date as game_date
   const isMatchDay = (() => {
     if (!nextMatch?.scheduledAt || !gameDate) return false;
     const matchDate = new Date(nextMatch.scheduledAt);
-    return Math.abs(matchDate.getTime() - gameDate.getTime()) < 86400000; // within 1 day
+    return matchDate.getUTCFullYear() === gameDate.getUTCFullYear()
+      && matchDate.getUTCMonth() === gameDate.getUTCMonth()
+      && matchDate.getUTCDate() === gameDate.getUTCDate();
   })();
   const matchOpponent = nextMatch ? (nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName) : null;
   const dayName = gameDate ? gameDate.toLocaleDateString("cs", { weekday: "long" }) : "";
