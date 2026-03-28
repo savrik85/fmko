@@ -420,7 +420,13 @@ teamsRouter.post("/", async (c) => {
       }
 
       // Delete the duplicate team row created at line 159
-      await c.env.DB.prepare("DELETE FROM teams WHERE id = ?").bind(origTeamId).run().catch(() => {});
+      // First clean any FK references to origTeamId
+      await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
+      await c.env.DB.prepare("DELETE FROM managers WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
+      await c.env.DB.prepare("DELETE FROM conversations WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
+      await c.env.DB.prepare("DELETE FROM teams WHERE id = ?").bind(origTeamId).run().catch((e) => {
+        logger.error({ module: "teams" }, `FAILED to delete duplicate team ${origTeamId}`, e);
+      });
 
       // Mark all existing matches as seen
       await c.env.DB.prepare("UPDATE matches SET home_seen_at = datetime('now') WHERE home_team_id = ? AND status = 'simulated'").bind(teamId).run().catch(() => {});
