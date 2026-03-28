@@ -187,6 +187,7 @@ export function extractStatsFromEvents(
 
     switch (event.type) {
       case "goal": s.goals++; break;
+      case "assist": s.assists++; break;
       case "card":
         if (event.detail === "red") s.redCards++;
         else s.yellowCards++;

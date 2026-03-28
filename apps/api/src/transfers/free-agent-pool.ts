@@ -77,7 +77,7 @@ export async function maintainFreeAgentPool(
         speed: player.speed, technique: player.technique, shooting: player.shooting,
         passing: player.passing, heading: player.heading, defense: player.defense,
         goalkeeping: player.goalkeeping ?? 0, stamina: player.stamina, strength: player.strength,
-        vision: 30, creativity: 30, setPieces: 30, experience: 20,
+        vision: player.technique ?? 30, creativity: player.passing ?? 30, setPieces: rng.int(10, 50), experience: Math.min(80, player.age * 2),
       };
       const posWeights: Record<string, Record<string, number>> = {
         GK: { goalkeeping: 4, strength: 2, stamina: 1 },

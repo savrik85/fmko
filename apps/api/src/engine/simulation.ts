@@ -326,6 +326,16 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           `Gól! ${playerName(attacker)} skóruje`,
           `${homeScore}:${awayScore}`);
 
+        // Assist — 65% chance, pick random teammate (not scorer)
+        if (rng.random() < 0.65) {
+          const assistCandidates = attacking.lineup.filter((p) => p !== attacker && (p.position === "MID" || p.position === "FWD" || p.position === "DEF"));
+          if (assistCandidates.length > 0) {
+            const assister = rng.pick(assistCandidates);
+            addEvent(minute, "assist", assister, attacking.teamId,
+              `Asistence: ${playerName(assister)}`, "");
+          }
+        }
+
         // Morale boost modulated by leadership
         const attLeadership = teamAvg(attacking.lineup, "leadership") / 100;
         const defLeadership = teamAvg(defending.lineup, "leadership") / 100;
@@ -404,6 +414,15 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
             addEvent(minute, "goal", kicker, attacking.teamId,
               `Gól ze standardní situace! ${playerName(kicker)}`,
               `${homeScore}:${awayScore}`);
+            // Set piece assist (40% chance — someone played the ball)
+            if (rng.random() < 0.40) {
+              const spAssistCandidates = attacking.lineup.filter((p) => p !== kicker);
+              if (spAssistCandidates.length > 0) {
+                const spAssister = rng.pick(spAssistCandidates);
+                addEvent(minute, "assist", spAssister, attacking.teamId,
+                  `Asistence: ${playerName(spAssister)}`, "");
+              }
+            }
             const attLead = teamAvg(attacking.lineup, "leadership") / 100;
             const defLead = teamAvg(defending.lineup, "leadership") / 100;
             for (const p of attacking.lineup) p.morale = Math.min(100, p.morale + Math.round(3 + attLead * 4));

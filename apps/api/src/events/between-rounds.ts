@@ -66,7 +66,7 @@ const EVENT_RULES: EventRule[] = [
     baseProb: 0.04,
     evaluate: (ctx) => {
       const bonus = ctx.reputation > 60 ? 1.5 : 0.8;
-      const amount = ctx.rng.int(500, 3000);
+      const amount = ctx.rng.int(200, 1000);
       const sponsors = [
         "Řeznictví u Nováků", "Autoservis Dvořák", "Hospoda Na Růžku",
         "Potraviny u Mařky", "Stavby Procházka", "Pila Hájek",
@@ -85,10 +85,10 @@ const EVENT_RULES: EventRule[] = [
     emoji: "\u{1F3DB}",
     baseProb: 0.02,
     evaluate: (ctx) => {
-      const amount = ctx.rng.int(5000, 20000);
+      const amount = ctx.rng.int(1000, 5000);
       return {
         prob: ctx.reputation > 50 ? 1.3 : 0.7,
-        description: `Obecní zastupitelstvo schválilo dotaci ${amount} Kč na údržbu hřiště a dresy.`,
+        description: `Obecní zastupitelstvo schválilo dotaci ${amount} Kč na údržbu hřiště.`,
         effect: { type: "budget", value: amount },
       };
     },

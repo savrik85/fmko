@@ -1631,6 +1631,30 @@ gameRouter.post("/game/advance-day", async (c) => {
             }
           } catch { /* events optional */ }
 
+          // Generate organic player offers (10% chance per human team per round)
+          try {
+            const { generatePlayerOffer } = await import("../events/player-offers");
+            const { createRng } = await import("../generators/rng");
+            const humanTeams = await c.env.DB.prepare(
+              "SELECT t.id, t.game_date, v.district, v.population, v.size FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.league_id = ? AND t.user_id != 'ai'"
+            ).bind(lid).all();
+            for (const ht of humanTeams.results) {
+              const seedStr = `${ht.id}-${calId}-offer`;
+              let seed = 0; for (let si = 0; si < seedStr.length; si++) seed = ((seed << 5) - seed + seedStr.charCodeAt(si)) | 0;
+              const offerRng = createRng(Math.abs(seed));
+              if (offerRng.random() < 0.20) { // 20% šance per round
+                const sizeMap: Record<string, string> = { hamlet: "vesnice", village: "obec", town: "mestys", city: "mesto" };
+                const villageInfo = { region_code: ht.district as string, category: (sizeMap[ht.size as string] ?? "obec") as "vesnice" | "obec" | "mestys" | "mesto", population: (ht.population as number) ?? 500 };
+                const offer = await generatePlayerOffer(c.env.DB, offerRng, ht.id as string, ht.district as string, villageInfo, (ht.game_date as string) ?? new Date().toISOString());
+                if (offer) {
+                  await sendPhoneSMS(c.env.DB, ht.id as string, offer.senderName, offer.senderTitle,
+                    `👋 ${offer.message} Jmenuje se ${offer.playerName}. Podívej se na něj v přestupech.`
+                  ).catch(() => {});
+                }
+              }
+            }
+          } catch (e) { logger.warn({ module: "game" }, "player offer generation failed", e); }
+
           // Cleanup match-day attendance conversations
           try {
             const matchConvs = await c.env.DB.prepare(
@@ -2460,6 +2484,87 @@ gameRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
   await c.env.DB.prepare("UPDATE transfer_offers SET status = 'withdrawn' WHERE id = ? AND from_team_id = ? AND status = 'pending'").bind(offerId, teamId).run();
+  return c.json({ ok: true });
+});
+
+// ── Player offers (organic scouting) ──
+
+// GET /api/teams/:teamId/player-offers — pending offers
+gameRouter.get("/teams/:teamId/player-offers", async (c) => {
+  const teamId = c.req.param("teamId");
+  const offers = await c.env.DB.prepare(
+    "SELECT * FROM player_offers WHERE team_id = ? AND status = 'pending' AND expires_at > datetime('now') ORDER BY created_at DESC"
+  ).bind(teamId).all().catch(() => ({ results: [] }));
+  return c.json(offers.results.map((o) => ({
+    id: o.id, source: o.source, sourceName: o.source_name, message: o.message,
+    firstName: o.first_name, lastName: o.last_name, age: o.age, position: o.position,
+    overallRating: o.overall_rating, weeklyWage: o.weekly_wage, expiresAt: o.expires_at,
+    skills: JSON.parse((o.skills as string) ?? "{}"),
+    physical: JSON.parse((o.physical as string) ?? "{}"),
+    personality: JSON.parse((o.personality as string) ?? "{}"),
+    lifeContext: JSON.parse((o.life_context as string) ?? "{}"),
+    avatar: JSON.parse((o.avatar as string) ?? "{}"),
+  })));
+});
+
+// POST /api/teams/:teamId/player-offers/:offerId/accept — sign the offered player
+gameRouter.post("/teams/:teamId/player-offers/:offerId/accept", async (c) => {
+  const teamId = c.req.param("teamId");
+  const offerId = c.req.param("offerId");
+
+  const offer = await c.env.DB.prepare("SELECT * FROM player_offers WHERE id = ? AND team_id = ? AND status = 'pending'")
+    .bind(offerId, teamId).first<Record<string, unknown>>();
+  if (!offer) return c.json({ error: "Nabídka nenalezena" }, 404);
+
+  const playerId = crypto.randomUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status)
+     VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
+  ).bind(playerId, teamId, offer.first_name, offer.last_name, offer.age, offer.position, offer.overall_rating,
+    offer.skills, offer.physical, offer.personality, offer.life_context, offer.avatar, offer.weekly_wage).run();
+
+  // Set residence
+  const { generateResidence } = await import("../generators/residence");
+  const teamVillage = await c.env.DB.prepare("SELECT v.name, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
+    .bind(teamId).first<{ name: string; size: string; district: string }>().catch(() => null);
+  if (teamVillage) {
+    const resRng = createRng(playerId.charCodeAt(0) + Date.now());
+    const res = generateResidence(resRng, teamVillage.name, teamVillage.size, teamVillage.district);
+    await c.env.DB.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
+      .bind(res.residence, res.commuteKm, playerId).run().catch(() => {});
+  }
+
+  // Contract
+  const season = await c.env.DB.prepare("SELECT id FROM seasons ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch(() => null);
+  await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, ?, 0, 1)")
+    .bind(crypto.randomUUID(), playerId, teamId, season?.id ?? "season-1", offer.source).run().catch(() => {});
+
+  // Registration fee
+  const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>().catch(() => null);
+  await recordTransaction(c.env.DB, teamId, "signing_fee", -500, `Registrace: ${offer.first_name} ${offer.last_name}`, team?.game_date ?? new Date().toISOString());
+
+  // Mark offer as accepted
+  await c.env.DB.prepare("UPDATE player_offers SET status = 'accepted' WHERE id = ?").bind(offerId).run();
+
+  // Return full player data for reveal card
+  const newPlayer = await c.env.DB.prepare("SELECT * FROM players WHERE id = ?").bind(playerId).first<Record<string, unknown>>();
+  const playerData = newPlayer ? {
+    ...newPlayer,
+    skills: JSON.parse((newPlayer.skills as string) ?? "{}"),
+    physical: JSON.parse((newPlayer.physical as string) ?? "{}"),
+    personality: JSON.parse((newPlayer.personality as string) ?? "{}"),
+    lifeContext: JSON.parse((newPlayer.life_context as string) ?? "{}"),
+    avatar: JSON.parse((newPlayer.avatar as string) ?? "{}"),
+  } : null;
+
+  return c.json({ ok: true, player: playerData });
+});
+
+// POST /api/teams/:teamId/player-offers/:offerId/reject
+gameRouter.post("/teams/:teamId/player-offers/:offerId/reject", async (c) => {
+  const offerId = c.req.param("offerId");
+  const teamId = c.req.param("teamId");
+  await c.env.DB.prepare("UPDATE player_offers SET status = 'rejected' WHERE id = ? AND team_id = ?").bind(offerId, teamId).run();
   return c.json({ ok: true });
 });
 

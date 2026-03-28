@@ -193,10 +193,10 @@ export function simulateTraining(
     }
   }
 
-  // Non-attendees may lose stamina (10% chance, was 30%)
+  // Non-attendees may lose stamina (5% chance per training day)
   for (let i = 0; i < squad.length; i++) {
     const attended = attendanceCounts.get(i) ?? 0;
-    if (attended === 0 && rng.random() < 0.10) {
+    if (attended === 0 && rng.random() < 0.05) {
       const player = squad[i];
       if (player.stamina > 5) {
         player.stamina -= 1;

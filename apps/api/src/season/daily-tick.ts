@@ -566,6 +566,8 @@ export async function executeDailyTick(
       .bind(now.toISOString()).run();
     await env.DB.prepare("UPDATE transfer_listings SET status = 'expired' WHERE status = 'active' AND expires_at < ?")
       .bind(now.toISOString()).run();
+    await env.DB.prepare("UPDATE player_offers SET status = 'expired' WHERE status = 'pending' AND expires_at < ?")
+      .bind(now.toISOString()).run();
     await env.DB.prepare("UPDATE transfer_bids SET status = 'withdrawn' WHERE status = 'pending' AND listing_id IN (SELECT id FROM transfer_listings WHERE status != 'active')")
       .run().catch((e) => logger.warn({ module: "daily-tick" }, "withdraw bids for expired listings", e));
   } catch (e) {
