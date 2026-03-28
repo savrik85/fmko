@@ -267,16 +267,11 @@ export async function initTeamConversations(
 ) {
   const now = new Date().toISOString();
 
-  // 1. Skupinový chat "Kabina" (pinned)
+  // 1. Skupinový chat "Kabina" (pinned, bez uvítací zprávy)
   const groupId = uuid();
   await db.prepare(
-    "INSERT INTO conversations (id, team_id, type, title, pinned, last_message_text, last_message_at, unread_count, created_at) VALUES (?, ?, 'squad_group', 'Kabina', 1, ?, ?, 1, ?)"
-  ).bind(groupId, teamId, "Vítejte v kabině! ⚽", now, now).run();
-
-  await db.prepare(
-    "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Systém', ?, ?)"
-  ).bind(uuid(), groupId, "Vítejte v kabině! Tady se řeší docházka na zápasy a všechno důležité. ⚽", now).run()
-    .catch((e) => logger.warn({ module: "messaging" }, "insert Kabina welcome message", e));
+    "INSERT INTO conversations (id, team_id, type, title, pinned, last_message_text, last_message_at, unread_count, created_at) VALUES (?, ?, 'squad_group', 'Kabina', 1, '', ?, 0, ?)"
+  ).bind(groupId, teamId, now, now).run();
 
   // 1:1 konverzace s hráči se nevytvářejí při onboardingu — vzniknou až na vyžádání
 }
