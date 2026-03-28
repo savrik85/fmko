@@ -63,10 +63,10 @@ const EVENT_RULES: EventRule[] = [
     category: "positive",
     title: "Sponzor nabízí smlouvu",
     emoji: "\u{1F4B0}",
-    baseProb: 0.04,
+    baseProb: 0.12,
     evaluate: (ctx) => {
       const bonus = ctx.reputation > 60 ? 1.5 : 0.8;
-      const amount = ctx.rng.int(200, 1000);
+      const amount = ctx.rng.int(500, 2000);
       const sponsors = [
         "Řeznictví u Nováků", "Autoservis Dvořák", "Hospoda Na Růžku",
         "Potraviny u Mařky", "Stavby Procházka", "Pila Hájek",
@@ -83,7 +83,7 @@ const EVENT_RULES: EventRule[] = [
     category: "positive",
     title: "Dotace od obce",
     emoji: "\u{1F3DB}",
-    baseProb: 0.02,
+    baseProb: 0.06,
     evaluate: (ctx) => {
       const amount = ctx.rng.int(1000, 5000);
       return {
