@@ -132,7 +132,7 @@ teamsRouter.post("/", async (c) => {
     .bind(body.villageId).first<Record<string, unknown>>();
   if (!village) return c.json({ error: "Village not found" }, 404);
 
-  const teamId = uuid();
+  let teamId = uuid();
 
   // Get userId from auth token (or allow anonymous for now)
   let userId: string | null = null;
@@ -384,7 +384,6 @@ teamsRouter.post("/", async (c) => {
         await c.env.DB.prepare("UPDATE teams SET name = ?, user_id = ?, village_id = ?, primary_color = ?, secondary_color = ?, badge_pattern = ? WHERE id = ?")
           .bind(body.name, userId, body.villageId, body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFF", body.badgePattern ?? "shield", oldId).run();
         // Use old ID as teamId for rest of the flow
-        // @ts-ignore
         teamId = oldId;
       });
 
