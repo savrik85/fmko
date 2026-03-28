@@ -370,55 +370,59 @@ teamsRouter.post("/", async (c) => {
     ).bind(existingLeague.id).first<{ id: string }>();
 
     if (aiTeam) {
-      // Instead of deleting AI team (FK nightmare), UPDATE all references to point to new team
-      // This replaces AI team identity with the human player's team
+      // TAKEOVER: Reuse AI team ID — just update its identity to the human player
+      // This preserves all match history, stats, and FK references
       const oldId = aiTeam.id;
 
-      // Update all match references
-      await c.env.DB.prepare("UPDATE matches SET home_team_id = ? WHERE home_team_id = ?").bind(teamId, oldId).run().catch(() => {});
-      await c.env.DB.prepare("UPDATE matches SET away_team_id = ? WHERE away_team_id = ?").bind(teamId, oldId).run().catch(() => {});
-
-      // Update all other table references from old AI team to new team
-      const updateTables = [
-        "UPDATE match_player_stats SET team_id = ? WHERE team_id = ?",
-        "UPDATE player_stats SET team_id = ? WHERE team_id = ?",
-        "UPDATE lineups SET team_id = ? WHERE team_id = ?",
-        "UPDATE injuries SET team_id = ? WHERE team_id = ?",
-        "UPDATE training_log SET team_id = ? WHERE team_id = ?",
-        "UPDATE transactions SET team_id = ? WHERE team_id = ?",
-      ];
-      for (const sql of updateTables) {
-        await c.env.DB.prepare(sql).bind(teamId, oldId).run().catch(() => {});
-      }
-
-      // Delete AI team's players (human team has its own generated squad)
-      const aiPlayers = await c.env.DB.prepare("SELECT id FROM players WHERE team_id = ?").bind(oldId).all();
-      for (const ap of aiPlayers.results) {
-        await c.env.DB.prepare("DELETE FROM relationships WHERE player_a_id = ? OR player_b_id = ?").bind(ap.id, ap.id).run().catch(() => {});
-        await c.env.DB.prepare("DELETE FROM match_player_stats WHERE player_id = ?").bind(ap.id).run().catch(() => {});
-        await c.env.DB.prepare("DELETE FROM player_stats WHERE player_id = ?").bind(ap.id).run().catch(() => {});
-        await c.env.DB.prepare("DELETE FROM player_contracts WHERE player_id = ?").bind(ap.id).run().catch(() => {});
-      }
-      await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(oldId).run().catch(() => {});
-
-      // Delete orphan AI team data
-      for (const sql of [
-        "DELETE FROM managers WHERE team_id = ?",
-        "DELETE FROM equipment WHERE team_id = ?",
-        "DELETE FROM stadiums WHERE team_id = ?",
-        "DELETE FROM conversations WHERE team_id = ?",
-        "DELETE FROM sponsor_contracts WHERE team_id = ?",
-      ]) { await c.env.DB.prepare(sql).bind(oldId).run().catch(() => {}); }
-
-      // Now safe to delete empty AI team
-      await c.env.DB.prepare("DELETE FROM teams WHERE id = ?").bind(oldId).run().catch((e) => {
-        // If still fails, just mark as inactive
-        logger.warn({ module: "teams" }, "Could not delete AI team, marking inactive", e);
-        c.env.DB.prepare("UPDATE teams SET user_id = 'ai_replaced', league_id = NULL WHERE id = ?").bind(oldId).run().catch(() => {});
+      // Update the AI team row to become the human player's team
+      await c.env.DB.prepare(
+        "UPDATE teams SET id = ?, name = ?, user_id = ?, village_id = ?, primary_color = ?, secondary_color = ?, badge_pattern = ?, jersey_pattern = ?, budget = ?, reputation = 50 WHERE id = ?"
+      ).bind(teamId, body.name, userId, body.villageId, body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFF", body.badgePattern ?? "shield", body.jerseyPattern ?? null,
+        village.size === "small_city" || village.size === "city" ? 80000 : village.size === "town" || village.size === "village" ? 40000 : 20000,
+        oldId).run().catch(async () => {
+        // If ID change fails (FK constraints), keep old ID and just rename
+        await c.env.DB.prepare("UPDATE teams SET name = ?, user_id = ?, village_id = ?, primary_color = ?, secondary_color = ?, badge_pattern = ? WHERE id = ?")
+          .bind(body.name, userId, body.villageId, body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFF", body.badgePattern ?? "shield", oldId).run();
+        // Use old ID as teamId for rest of the flow
+        // @ts-ignore
+        teamId = oldId;
       });
-    }
 
-    await c.env.DB.prepare("UPDATE teams SET league_id = ? WHERE id = ?").bind(existingLeague.id, teamId).run();
+      // Delete AI players (human gets fresh generated squad)
+      const aiPlayers = await c.env.DB.prepare("SELECT id FROM players WHERE team_id = ? OR team_id = ?").bind(oldId, teamId).all();
+      for (const ap of aiPlayers.results) {
+        for (const t of ["relationships", "match_player_stats", "player_stats", "player_contracts", "injuries", "training_log"]) {
+          const col = t === "relationships" ? "player_a_id" : "player_id";
+          await c.env.DB.prepare(`DELETE FROM ${t} WHERE ${col} = ?`).bind(ap.id).run().catch(() => {});
+          if (t === "relationships") await c.env.DB.prepare("DELETE FROM relationships WHERE player_b_id = ?").bind(ap.id).run().catch(() => {});
+        }
+      }
+      await c.env.DB.prepare("DELETE FROM players WHERE team_id = ? OR team_id = ?").bind(oldId, teamId).run().catch(() => {});
+
+      // Clean AI manager/equipment/stadium (human gets fresh ones)
+      for (const t of ["managers", "equipment", "stadiums", "conversations", "sponsor_contracts"]) {
+        await c.env.DB.prepare(`DELETE FROM ${t} WHERE team_id = ? OR team_id = ?`).bind(oldId, teamId).run().catch(() => {});
+      }
+
+      // Update all references from oldId to teamId (if ID changed)
+      if (oldId !== teamId) {
+        for (const sql of [
+          "UPDATE matches SET home_team_id = ? WHERE home_team_id = ?",
+          "UPDATE matches SET away_team_id = ? WHERE away_team_id = ?",
+          "UPDATE match_player_stats SET team_id = ? WHERE team_id = ?",
+          "UPDATE player_stats SET team_id = ? WHERE team_id = ?",
+          "UPDATE lineups SET team_id = ? WHERE team_id = ?",
+          "UPDATE transactions SET team_id = ? WHERE team_id = ?",
+          "UPDATE injuries SET team_id = ? WHERE team_id = ?",
+          "UPDATE training_log SET team_id = ? WHERE team_id = ?",
+        ]) { await c.env.DB.prepare(sql).bind(teamId, oldId).run().catch(() => {}); }
+        // Delete old team row if it still exists
+        await c.env.DB.prepare("DELETE FROM teams WHERE id = ? AND id != ?").bind(oldId, teamId).run().catch(() => {});
+      }
+    } else {
+      // No AI team to replace — just join the league
+      await c.env.DB.prepare("UPDATE teams SET league_id = ? WHERE id = ?").bind(existingLeague.id, teamId).run();
+    }
 
     // Sync game_date from existing league teams
     const peerDate = await c.env.DB.prepare("SELECT game_date FROM teams WHERE league_id = ? AND game_date IS NOT NULL AND id != ? LIMIT 1")
