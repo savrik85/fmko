@@ -403,7 +403,7 @@ teamsRouter.post("/", async (c) => {
       for (const conv of oldConvIds.results) {
         await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
       }
-      for (const t of ["equipment", "stadiums", "conversations", "sponsor_contracts"]) {
+      for (const t of ["equipment", "stadiums", "conversations", "sponsor_contracts", "transactions"]) {
         await c.env.DB.prepare(`DELETE FROM ${t} WHERE team_id = ?`).bind(teamId).run().catch(() => {});
       }
 
