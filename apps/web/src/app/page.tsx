@@ -25,7 +25,7 @@ export default function Home() {
 
       <div className="relative z-10 text-center max-w-xl mx-auto animate-slide-up">
         {/* Logo */}
-        <h1 className="text-display text-white mb-4">PRALES</h1>
+        <h1 className="text-display text-white mb-4">PRA<span className="text-pitch-400">L</span>ES</h1>
         <p className="text-lg text-white/40 max-w-md mx-auto mb-12 leading-relaxed">
           Fotbalový manažer z českého okresu. Postav si tým, řeš kocoviny
           a příbuzenské vazby, vyhraj okresní přebor.
