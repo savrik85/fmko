@@ -72,6 +72,8 @@ export interface Player {
   commute_km?: number;
   loan_from_team_id?: string | null;
   loan_until?: string | null;
+  squad_number?: number | null;
+  weekly_wage?: number | null;
 }
 
 export interface CareerStats {

@@ -95,7 +95,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_TOKEN, token);
     const teamData = { teamId: user.teamId, teamName: user.teamName, primaryColor: user.primaryColor ?? null, secondaryColor: user.secondaryColor ?? null, badgePattern: user.badgePattern ?? null, villageName: user.villageName ?? null, district: user.district ?? null, budget: user.budget ?? null, leaguePosition: user.leaguePosition ?? null, season: user.season ?? null, seasonDay: user.seasonDay ?? null, seasonTotal: user.seasonTotal ?? null, gameDate: user.gameDate ?? null, nextMatch: user.nextMatch ?? null };
     localStorage.setItem(STORAGE_TEAM, JSON.stringify(teamData));
-    setState({ token, userId: user.id, email: user.email, ...teamData, isLoading: false });
+    setState({ token, userId: user.id, email: user.email, ...teamData, isAdmin: false, isLoading: false });
   }
 
   function setTeam(id: string, name: string) {

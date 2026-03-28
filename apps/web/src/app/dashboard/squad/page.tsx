@@ -33,7 +33,7 @@ const COLUMNS: Array<{ key: SortKey; label: string; tip: string }> = [
 
 function getVal(p: Player, key: SortKey): string | number {
   const s = p.skills as Record<string, number> | undefined;
-  const lc = p.lifeContext as Record<string, number> | undefined;
+  const lc = p.lifeContext as unknown as Record<string, number> | undefined;
   switch (key) {
     case "name": return `${p.last_name} ${p.first_name}`;
     case "pos": return POS_ORDER[p.position] ?? 9;
@@ -179,7 +179,7 @@ export default function SquadPage() {
           <tbody>
             {sorted.map((p) => {
               const s = p.skills as Record<string, number> | undefined;
-              const lc = p.lifeContext as Record<string, number> | undefined;
+              const lc = p.lifeContext as unknown as Record<string, number> | undefined;
               const cond = lc?.condition ?? 100;
               const morale = lc?.morale ?? 50;
               const isQuit = (p as any).status === "quit";

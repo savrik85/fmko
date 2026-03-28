@@ -272,7 +272,7 @@ function SeedDataSection() {
 
   const addRow = async () => {
     if (!activeTable) return;
-    const body = { ...newRow, district: district || newRow.district };
+    const body: Record<string, string> = { ...newRow, district: district || newRow.district };
     if (newRow.frequency) body.frequency = String(Number(newRow.frequency));
     await fetch(`${API}/api/admin/seed-data/${activeTable}`, {
       method: "POST", headers: { "Content-Type": "application/json" },
