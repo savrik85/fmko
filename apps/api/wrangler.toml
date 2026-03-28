@@ -1,31 +1,65 @@
-name = "okresni-masina-api"
+name = "prales-api"
 main = "src/index.ts"
 compatibility_date = "2025-03-14"
 
-# D1 Database
+# ═══ PRODUCTION (default — main branch) ═══
+
 [[d1_databases]]
 binding = "DB"
-database_name = "okresni-masina-db"
-database_id = "local"
+database_name = "prales-db-prod"
+database_id = "87dfc1ba-d4f5-4158-8163-9f933b5d3571"
 migrations_dir = "migrations"
 
-# KV Namespaces — session, cache, leaderboardy
 [[kv_namespaces]]
 binding = "SESSION_KV"
-id = "local"
+id = "8937f279d9a742339e53408470289ff1"
 
 [[kv_namespaces]]
 binding = "CACHE_KV"
-id = "local"
+id = "6f565d070b8b4b7aa2d17009f484ec16"
 
-# R2 Bucket — seed data (obce, jména), avatary
 [[r2_buckets]]
 binding = "SEED_DATA"
-bucket_name = "okresni-masina-seed"
+bucket_name = "prales-seed"
 
-# Cron Triggers — dva hlavní crony
 [triggers]
 crons = [
-  "0 3 * * *",    # Denní tick 4:00 CET — posun dne, tréninky, finance, absence zprávy
-  "0 17 * * *",   # Zápasový tick 18:00 CET — simulace zápasů naplánovaných na dnešek
+  "0 3 * * *",
+  "0 17 * * *",
+]
+
+[[routes]]
+pattern = "api.prales.fun"
+custom_domain = true
+
+# ═══ TESTING (testing branch) ═══
+
+[env.testing]
+name = "prales-api-test"
+routes = [
+  { pattern = "api-test.prales.fun", custom_domain = true }
+]
+
+[[env.testing.d1_databases]]
+binding = "DB"
+database_name = "prales-db-test"
+database_id = "50b683da-6948-4ae5-8fe8-ee41a40d2e17"
+migrations_dir = "migrations"
+
+[[env.testing.kv_namespaces]]
+binding = "SESSION_KV"
+id = "5b7afe5ba1a646bca2c1c4f55eb5591a"
+
+[[env.testing.kv_namespaces]]
+binding = "CACHE_KV"
+id = "f2900579992a4a8da17986f9b7d83f01"
+
+[[env.testing.r2_buckets]]
+binding = "SEED_DATA"
+bucket_name = "prales-seed"
+
+[env.testing.triggers]
+crons = [
+  "0 3 * * *",
+  "0 17 * * *",
 ]

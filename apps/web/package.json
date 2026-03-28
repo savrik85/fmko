@@ -11,6 +11,7 @@
   "dependencies": {
     "@okresni-masina/shared": "*",
     "@okresni-masina/ui": "*",
+    "@opennextjs/cloudflare": "^1.18.0",
     "facesjs": "^5.0.2",
     "next": "^15.2.0",
     "react": "^19.0.0",

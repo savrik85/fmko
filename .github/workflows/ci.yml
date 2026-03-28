@@ -1,8 +1,8 @@
-name: CI
+name: CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [main, testing]
   pull_request:
     branches: [main]
 
@@ -18,7 +18,7 @@ jobs:
       - run: npm ci
       - run: npx turbo typecheck
 
-  deploy-api:
+  deploy-api-prod:
     needs: typecheck
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -33,3 +33,63 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: apps/api
+          command: deploy
+
+  deploy-web-prod:
+    needs: typecheck
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_API_URL: https://api.prales.fun
+      NEXT_PUBLIC_SITE_URL: https://prales.fun
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: cd apps/web && npx opennextjs-cloudflare build
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: apps/web
+          command: pages deploy .open-next/assets --project-name=prales-web --branch=main
+
+  deploy-api-test:
+    needs: typecheck
+    if: github.ref == 'refs/heads/testing' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: apps/api
+          command: deploy --env testing
+
+  deploy-web-test:
+    needs: typecheck
+    if: github.ref == 'refs/heads/testing' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_API_URL: https://api-test.prales.fun
+      NEXT_PUBLIC_SITE_URL: https://test.prales.fun
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: cd apps/web && npx opennextjs-cloudflare build
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: apps/web
+          command: pages deploy .open-next/assets --project-name=prales-web --branch=testing

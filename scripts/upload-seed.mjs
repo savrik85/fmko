@@ -13,6 +13,7 @@ import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const seedDir = resolve(__dirname, "../data/seed");
 const isLocal = process.argv.includes("--local");
+const isRemote = process.argv.includes("--remote");
 
 const files = readdirSync(seedDir).filter((f) => f.endsWith(".json"));
 
@@ -20,11 +21,12 @@ for (const file of files) {
   const filePath = resolve(seedDir, file);
   const args = [
     "wrangler", "r2", "object", "put",
-    `okresni-masina-seed/${file}`,
+    `prales-seed/${file}`,
     `--file=${filePath}`,
     "--content-type=application/json",
   ];
   if (isLocal) args.push("--local");
+  if (isRemote) args.push("--remote");
 
   console.log(`Uploading ${file}...`);
   try {
