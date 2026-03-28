@@ -1,6 +1,7 @@
 {
-  "name": "okresni-masina",
+  "name": "prales",
   "private": true,
+  "packageManager": "npm@11.2.0",
   "workspaces": [
     "apps/*",
     "packages/*"
