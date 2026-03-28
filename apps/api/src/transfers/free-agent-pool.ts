@@ -73,11 +73,16 @@ export async function maintainFreeAgentPool(
       const player = generatePlayer(rng, villageInfo, pos, surnameData, firstnameData);
 
       // Calculate overall rating from raw numbers
+      // Fallback to rng-generated values if player properties are undefined
+      const fallback = () => rng.int(15, 45);
       const skills = {
-        speed: player.speed, technique: player.technique, shooting: player.shooting,
-        passing: player.passing, heading: player.heading, defense: player.defense,
-        goalkeeping: player.goalkeeping ?? 0, stamina: player.stamina, strength: player.strength,
-        vision: player.technique ?? 30, creativity: player.passing ?? 30, setPieces: rng.int(10, 50), experience: Math.min(80, player.age * 2),
+        speed: player.speed ?? fallback(), technique: player.technique ?? fallback(),
+        shooting: player.shooting ?? fallback(), passing: player.passing ?? fallback(),
+        heading: player.heading ?? fallback(), defense: player.defense ?? fallback(),
+        goalkeeping: player.goalkeeping ?? (pos === "GK" ? rng.int(30, 60) : 0),
+        stamina: player.stamina ?? fallback(), strength: player.strength ?? fallback(),
+        vision: player.technique ?? fallback(), creativity: player.passing ?? fallback(),
+        setPieces: rng.int(10, 50), experience: Math.min(80, (player.age ?? 25) * 2),
       };
       const posWeights: Record<string, Record<string, number>> = {
         GK: { goalkeeping: 4, strength: 2, stamina: 1 },

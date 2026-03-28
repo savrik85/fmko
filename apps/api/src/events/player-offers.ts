@@ -97,11 +97,14 @@ export async function generatePlayerOffer(
   // Override age for source-specific ranges
   const age = rng.int(ageRange[0], ageRange[1]);
 
-  // Calculate rating
+  // Calculate rating — fallback if generatePlayer returns undefined props
+  const fb = () => rng.int(15, 45);
   const skills = {
-    speed: player.speed, technique: player.technique, shooting: player.shooting,
-    passing: player.passing, heading: player.heading, defense: player.defense,
-    goalkeeping: player.goalkeeping ?? 0, stamina: player.stamina, strength: player.strength,
+    speed: player.speed ?? fb(), technique: player.technique ?? fb(),
+    shooting: player.shooting ?? fb(), passing: player.passing ?? fb(),
+    heading: player.heading ?? fb(), defense: player.defense ?? fb(),
+    goalkeeping: player.goalkeeping ?? (pos === "GK" ? rng.int(30, 60) : 0),
+    stamina: player.stamina ?? fb(), strength: player.strength ?? fb(),
   };
   const posWeights: Record<string, Record<string, number>> = {
     GK: { goalkeeping: 4, strength: 2, stamina: 1 },
