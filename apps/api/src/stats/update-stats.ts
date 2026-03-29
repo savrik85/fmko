@@ -40,6 +40,7 @@ export function calculatePlayerRatings(
   homeTeamEngineId: number,
   homeScore: number,
   awayScore: number,
+  playerPositions?: Map<number, string>,
 ): Record<string, number> {
   const ratings: Record<string, number> = {};
   const goals: Record<string, number> = {};
@@ -48,9 +49,11 @@ export function calculatePlayerRatings(
   const chances: Record<string, number> = {};
   const teamMap: Record<string, number> = {};
 
-  // Init all known players
+  // Init all known players with position-based baseline
   for (const [engineId, dbId] of playerIdMap) {
-    ratings[dbId] = 6.0;
+    const pos = playerPositions?.get(engineId);
+    // DEF/GK get +0.2 baseline since they rarely get positive events
+    ratings[dbId] = 6.0 + ((pos === "DEF" || pos === "GK") ? 0.2 : 0);
     goals[dbId] = 0;
     cards[dbId] = 0;
     fouls[dbId] = 0;
@@ -66,11 +69,14 @@ export function calculatePlayerRatings(
     switch (event.type) {
       case "goal":
         goals[dbId] = (goals[dbId] ?? 0) + 1;
-        ratings[dbId] += 1.0; // +1.0 per gól
+        ratings[dbId] += 1.0;
+        break;
+      case "assist":
+        ratings[dbId] += 0.5;
         break;
       case "chance":
         chances[dbId] = (chances[dbId] ?? 0) + 1;
-        ratings[dbId] += 0.1; // malý bonus za šanci
+        ratings[dbId] += 0.1;
         break;
       case "card":
         if (event.detail === "red") {
@@ -88,19 +94,34 @@ export function calculatePlayerRatings(
       case "injury":
         ratings[dbId] -= 0.3;
         break;
+      case "special":
+        if (event.detail === "save") ratings[dbId] += 0.4;
+        else if (event.detail === "block") ratings[dbId] += 0.25;
+        break;
     }
   }
 
-  // Bonus/malus za výsledek týmu
+  // Bonus/malus za výsledek týmu + clean sheet
   for (const [dbId, teamEngineId] of Object.entries(teamMap)) {
     const isHome = teamEngineId === homeTeamEngineId;
     const myScore = isHome ? homeScore : awayScore;
     const oppScore = isHome ? awayScore : homeScore;
 
     if (myScore > oppScore) {
-      ratings[dbId] += 0.5; // výhra
+      ratings[dbId] += 0.5;
     } else if (myScore < oppScore) {
-      ratings[dbId] -= 0.3; // prohra
+      ratings[dbId] -= 0.3;
+    }
+
+    // Clean sheet bonus for DEF and GK
+    if (oppScore === 0 && playerPositions) {
+      for (const [engineId, pid] of playerIdMap) {
+        if (pid !== dbId) continue;
+        const pos = playerPositions.get(engineId);
+        if ((pos === "DEF" || pos === "GK") && teamMap[pid] === teamEngineId) {
+          ratings[dbId] += 0.8;
+        }
+      }
     }
   }
 

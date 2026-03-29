@@ -282,8 +282,14 @@ export async function runScheduledMatches(
       ).first<{ id: string }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load active season", e); return null; });
 
       if (season) {
+        // Build position map for rating calculation
+        const playerPositions = new Map<number, string>();
+        for (const p of [...homeLineup, ...homeSubs, ...awayLineup, ...awaySubs]) {
+          playerPositions.set(p.id, p.matchPosition ?? p.position);
+        }
+
         // Calculate per-player ratings
-        const ratings = calculatePlayerRatings(result.events, fullIdMap, 1, result.homeScore, result.awayScore);
+        const ratings = calculatePlayerRatings(result.events, fullIdMap, 1, result.homeScore, result.awayScore, playerPositions);
 
         // Home team stats
         const homeStarterIds = [...homeBuild.idMap.values()].slice(0, 11);

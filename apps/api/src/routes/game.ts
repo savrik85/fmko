@@ -1404,8 +1404,8 @@ gameRouter.post("/leagues/:leagueId/generate-schedule", async (c) => {
 gameRouter.get("/teams/:teamId/season-info", async (c) => {
   const teamId = c.req.param("teamId");
 
-  const team = await c.env.DB.prepare("SELECT league_id, training_type FROM teams WHERE id = ?")
-    .bind(teamId).first<{ league_id: string | null; training_type: string | null }>();
+  const team = await c.env.DB.prepare("SELECT league_id, training_type, training_sessions, training_approach FROM teams WHERE id = ?")
+    .bind(teamId).first<{ league_id: string | null; training_type: string | null; training_sessions: number | null; training_approach: string | null }>();
   if (!team?.league_id) return c.json({ season: 1, currentDay: 1, totalDays: 1, upcoming: [] });
 
   const league = await c.env.DB.prepare(
@@ -1462,19 +1462,27 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
     });
   }
 
-  // Training days (Mon-Fri if training plan set) — from game_date
+  // Training days — based on sessions per week setting
   if (team.training_type) {
+    const sessions = team.training_sessions ?? 2;
+    // Pick training days based on session count: 1→Wed, 2→Tue+Thu, 3→Mon+Wed+Fri
+    const trainingDays: number[] = sessions >= 3 ? [1, 3, 5] : sessions >= 2 ? [2, 4] : [3];
+    const typeLabels: Record<string, string> = { conditioning: "Kondice", technique: "Technika", tactics: "Taktika", match_practice: "Zápasový" };
+    const approachLabels: Record<string, string> = { strict: "přísný", balanced: "vyrovnaný", relaxed: "volný" };
+    const label = typeLabels[team.training_type] ?? team.training_type;
+    const approach = team.training_approach ? approachLabels[team.training_approach] ?? "" : "";
+
     const today = new Date(now);
     for (let d = 0; d < 14; d++) {
       const day = new Date(today);
       day.setDate(today.getDate() + d);
       const dow = day.getDay();
-      if (dow >= 1 && dow <= 5) { // Mon-Fri
+      if (trainingDays.includes(dow)) {
         upcoming.push({
           type: "training",
           date: day.toISOString(),
-          title: "Trénink",
-          subtitle: team.training_type,
+          title: `Trénink — ${label}`,
+          subtitle: approach ? `${sessions}×/týden · ${approach}` : `${sessions}×/týden`,
         });
       }
     }

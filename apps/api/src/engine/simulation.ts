@@ -36,11 +36,11 @@ function playerName(p: MatchPlayer): string {
 }
 
 /** Tactic modifiers */
-const TACTIC_MODS: Record<Tactic, { attackMod: number; defenseMod: number; chanceMod: number }> = {
-  offensive:  { attackMod: 1.3, defenseMod: 0.8, chanceMod: 1.2 },
-  balanced:   { attackMod: 1.0, defenseMod: 1.0, chanceMod: 1.0 },
-  defensive:  { attackMod: 0.7, defenseMod: 1.3, chanceMod: 0.8 },
-  long_ball:  { attackMod: 1.1, defenseMod: 0.9, chanceMod: 0.9 },
+const TACTIC_MODS: Record<Tactic, { attackMod: number; defenseMod: number; chanceMod: number; counterMod: number }> = {
+  offensive:  { attackMod: 1.15, defenseMod: 0.85, chanceMod: 1.05, counterMod: 0.0 },
+  balanced:   { attackMod: 1.0,  defenseMod: 1.0,  chanceMod: 1.0,  counterMod: 0.0 },
+  defensive:  { attackMod: 0.75, defenseMod: 1.15, chanceMod: 0.75, counterMod: 0.03 },
+  long_ball:  { attackMod: 1.05, defenseMod: 0.95, chanceMod: 0.95, counterMod: 0.0 },
 };
 
 /** Weather effects */
@@ -74,6 +74,7 @@ function calcChanceProb(
   attacking: TeamSetup,
   defending: TeamSetup,
   weather: Weather,
+  formFactor: number = 1.0,
 ): number {
   const tacticMod = TACTIC_MODS[attacking.tactic];
   const weatherMod = WEATHER_MODS[weather];
@@ -89,7 +90,7 @@ function calcChanceProb(
     (mids.length > 0 ? teamAvg(mids, "vision") * 0.6 : 0) +
     (midAndFwd.length > 0 ? teamAvg(midAndFwd, "creativity") * 0.5 : 0) +
     teamAvg(attacking.lineup, "workRate") * 0.3
-  ) / 5 * tacticMod.attackMod;
+  ) / 5 * tacticMod.attackMod * formFactor;
 
   const defensePower = (
     teamAvg(defending.lineup, "defense") * 1.0 +
@@ -104,8 +105,10 @@ function calcChanceProb(
   const baseChance = 0.10; // neutral chance per minute — target ~3.5 goals/match
   const longBallBonus = attacking.tactic === "long_ball" ? weatherMod.longBallBonus : 0;
 
+  // Underdog boost: weaker team gets small floor boost
+  const underdogBoost = advantage < -0.05 ? 0.02 : 0;
   // Okresní přebor: skill advantage matters but not overwhelmingly
-  return Math.min(0.28, Math.max(0.06, baseChance + advantage + longBallBonus)) * tacticMod.chanceMod;
+  return Math.min(0.25, Math.max(0.07, baseChance + advantage + longBallBonus + underdogBoost)) * tacticMod.chanceMod;
 }
 
 /**
@@ -141,20 +144,53 @@ function calcGoalProb(
   }
 
   // Okresní level: víc gólů (slabší brankáři, horší obrana)
-  return Math.min(0.65, Math.max(0.25, ratio * 0.75));
+  return Math.min(0.70, Math.max(0.15, ratio * 0.90));
 }
 
 /**
- * Pick a random attacker (FWD/MID weighted).
+ * Pick attacker weighted by position + skill quality.
  */
 function pickAttacker(rng: Rng, lineup: MatchPlayer[]): MatchPlayer {
-  const fwds = lineup.filter((p) => p.position === "FWD");
-  const mids = lineup.filter((p) => p.position === "MID");
-  const pool = [
-    ...fwds, ...fwds, ...fwds, // FWD 3x weighted
-    ...mids, ...mids,          // MID 2x weighted
-  ];
-  return pool.length > 0 ? rng.pick(pool) : rng.pick(lineup);
+  const candidates = lineup.filter((p) => p.position !== "GK");
+  if (candidates.length === 0) return rng.pick(lineup);
+
+  const weights = candidates.map((p) => {
+    const posW = p.position === "FWD" ? 4.0 : p.position === "MID" ? 1.0 : 0.3;
+    const skillFactor = 0.5 + ((p.shooting * 0.5 + p.speed * 0.3 + p.heading * 0.2)) / 100;
+    const workFactor = 0.9 + (p.workRate / 100) * 0.2;
+    return posW * skillFactor * workFactor;
+  });
+
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  let roll = rng.random() * totalWeight;
+  for (let i = 0; i < candidates.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return candidates[i];
+  }
+  return candidates[candidates.length - 1];
+}
+
+/**
+ * Pick assist provider weighted by passing/vision/creativity.
+ */
+function pickAssister(rng: Rng, lineup: MatchPlayer[], scorer: MatchPlayer): MatchPlayer | null {
+  const candidates = lineup.filter((p) => p !== scorer && p.position !== "GK");
+  if (candidates.length === 0) return null;
+
+  const weights = candidates.map((p) => {
+    const posW = p.position === "MID" ? 2.0 : p.position === "FWD" ? 1.5 : 0.8;
+    const rawSkill = (p.passing * 0.4 + p.vision * 0.35 + p.creativity * 0.25);
+    const skillFactor = (rawSkill / 50) ** 1.5; // exponential — star playmakers dominate
+    return posW * skillFactor;
+  });
+
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  let roll = rng.random() * totalWeight;
+  for (let i = 0; i < candidates.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return candidates[i];
+  }
+  return candidates[candidates.length - 1];
 }
 
 /**
@@ -271,6 +307,10 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   let awaySubsUsed = 0;
   const MAX_SUBS = 3;
 
+  // Match-day form: random factor 0.75-1.25 applied to attack power
+  const homeForm = 0.75 + rng.random() * 0.50;
+  const awayForm = 0.75 + rng.random() * 0.50;
+
   function addEvent(
     minute: number,
     type: EventType,
@@ -310,7 +350,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     const defending = isHomePossession ? away : home;
 
     // Check for chance
-    const chanceProb = calcChanceProb(attacking, defending, weather);
+    const attackForm = isHomePossession ? homeForm : awayForm;
+    const chanceProb = calcChanceProb(attacking, defending, weather, attackForm);
     // Reduce chance probability when condition is low
     // Condition reduces chance creation but not drastically — floor at 0.6
     const conditionMod = Math.max(0.6, teamAvg(attacking.lineup, "condition") / 100);
@@ -330,30 +371,69 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           `Gól! ${playerName(attacker)} skóruje`,
           `${homeScore}:${awayScore}`);
 
-        // Assist — 65% chance, pick random teammate (not scorer)
+        // Assist — 65% chance, weighted by passing/vision/creativity
         if (rng.random() < 0.65) {
-          const assistCandidates = attacking.lineup.filter((p) => p !== attacker && (p.position === "MID" || p.position === "FWD" || p.position === "DEF"));
-          if (assistCandidates.length > 0) {
-            const assister = rng.pick(assistCandidates);
+          const assister = pickAssister(rng, attacking.lineup, attacker);
+          if (assister) {
             addEvent(minute, "assist", assister, attacking.teamId,
               `Asistence: ${playerName(assister)}`, "");
           }
         }
 
-        // Morale boost modulated by leadership
+        // Morale boost modulated by leadership (reduced snowball)
         const attLeadership = teamAvg(attacking.lineup, "leadership") / 100;
         const defLeadership = teamAvg(defending.lineup, "leadership") / 100;
-        const moraleBoost = Math.round(3 + attLeadership * 4); // 3-7
-        const moraleHit = Math.round(2 + (1 - defLeadership) * 3); // 2-5
+        const moraleBoost = Math.round(2 + attLeadership * 2); // 2-4 (was 3-7)
+        const moraleHit = Math.round(1 + (1 - defLeadership) * 2); // 1-3 (was 2-5)
         for (const p of attacking.lineup) p.morale = Math.min(100, p.morale + moraleBoost);
         for (const p of defending.lineup) p.morale = Math.max(0, p.morale - moraleHit);
       } else {
-        // Missed chance
+        // Missed chance — credit GK save or defensive block
         const outcomes = ["vedle", "břevno", "tyč", "chytil brankář", "zblokováno"];
         const outcome = rng.pick(outcomes);
         addEvent(minute, "chance", attacker, attacking.teamId,
           `Šance! ${playerName(attacker)} — ${outcome}`,
           outcome);
+
+        // Save/block events for rating
+        if (outcome === "chytil brankář") {
+          addEvent(minute, "special", gk, defending.teamId,
+            `${playerName(gk)} chytá střelu`, "save");
+        } else if (outcome === "zblokováno") {
+          const blocker = rng.pick(defending.lineup.filter((p) => p.position === "DEF"));
+          if (blocker) {
+            addEvent(minute, "special", blocker, defending.teamId,
+              `${playerName(blocker)} zblokoval šanci`, "block");
+          }
+        }
+      }
+    }
+
+    // Counter-attack: defensive tactic team can break on opponent's possession
+    const defTacticMods = TACTIC_MODS[defending.tactic];
+    if (defTacticMods.counterMod > 0 && rng.random() < defTacticMods.counterMod * conditionMod) {
+      const counterAttacker = pickAttacker(rng, defending.lineup);
+      const counterGk = getGK(attacking.lineup);
+      const counterDefAvg = teamAvg(attacking.lineup.filter((p) => p.position === "DEF"), "defense");
+      const counterScoreDiff = isHomePossession ? awayScore - homeScore : homeScore - awayScore;
+      const counterGoalProb = calcGoalProb(rng, counterAttacker, counterGk, counterDefAvg, minute, counterScoreDiff, false) * 0.85;
+
+      if (rng.random() < counterGoalProb) {
+        if (isHomePossession) awayScore++; else homeScore++;
+        addEvent(minute, "goal", counterAttacker, defending.teamId,
+          `Protiútok! ${playerName(counterAttacker)} skóruje po brejku`,
+          `${homeScore}:${awayScore}`);
+        if (rng.random() < 0.50) {
+          const counterAssister = pickAssister(rng, defending.lineup, counterAttacker);
+          if (counterAssister) {
+            addEvent(minute, "assist", counterAssister, defending.teamId,
+              `Asistence: ${playerName(counterAssister)}`, "");
+          }
+        }
+        const cAttLead = teamAvg(defending.lineup, "leadership") / 100;
+        const cDefLead = teamAvg(attacking.lineup, "leadership") / 100;
+        for (const p of defending.lineup) p.morale = Math.min(100, p.morale + Math.round(2 + cAttLead * 2));
+        for (const p of attacking.lineup) p.morale = Math.max(0, p.morale - Math.round(1 + (1 - cDefLead) * 2));
       }
     }
 
@@ -418,19 +498,18 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
             addEvent(minute, "goal", kicker, attacking.teamId,
               `Gól ze standardní situace! ${playerName(kicker)}`,
               `${homeScore}:${awayScore}`);
-            // Set piece assist (40% chance — someone played the ball)
+            // Set piece assist (40% chance — weighted by passing/vision/creativity)
             if (rng.random() < 0.40) {
-              const spAssistCandidates = attacking.lineup.filter((p) => p !== kicker);
-              if (spAssistCandidates.length > 0) {
-                const spAssister = rng.pick(spAssistCandidates);
+              const spAssister = pickAssister(rng, attacking.lineup, kicker);
+              if (spAssister) {
                 addEvent(minute, "assist", spAssister, attacking.teamId,
                   `Asistence: ${playerName(spAssister)}`, "");
               }
             }
             const attLead = teamAvg(attacking.lineup, "leadership") / 100;
             const defLead = teamAvg(defending.lineup, "leadership") / 100;
-            for (const p of attacking.lineup) p.morale = Math.min(100, p.morale + Math.round(3 + attLead * 4));
-            for (const p of defending.lineup) p.morale = Math.max(0, p.morale - Math.round(2 + (1 - defLead) * 3));
+            for (const p of attacking.lineup) p.morale = Math.min(100, p.morale + Math.round(2 + attLead * 2));
+            for (const p of defending.lineup) p.morale = Math.max(0, p.morale - Math.round(1 + (1 - defLead) * 2));
           }
         }
       }

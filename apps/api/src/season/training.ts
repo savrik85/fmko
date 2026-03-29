@@ -143,20 +143,6 @@ export function simulateTraining(
     if (sessions < Math.ceil(plan.sessionsPerWeek / 2)) continue;
 
     const player = squad[playerIndex];
-    // GK filter: non-GK never gets goalkeeping, GK prefers goalkeeping in match_practice
-    let attr = rng.pick(affectedAttrs);
-    if (attr === "goalkeeping" && player.position !== "GK") {
-      // Re-pick without goalkeeping
-      const filtered = affectedAttrs.filter((a) => a !== "goalkeeping");
-      attr = rng.pick(filtered);
-    } else if (player.position === "GK" && plan.type === "match_practice" && attr !== "goalkeeping") {
-      // GK has 60% chance to train goalkeeping instead during match practice
-      if (rng.random() < 0.6) attr = "goalkeeping";
-    }
-    const current = player[attr as keyof GeneratedPlayer] as number;
-
-    // Diminishing returns: each point above 50 reduces chance
-    const diminishing = current >= 50 ? Math.max(0.15, 1.0 - (current - 50) * 0.017) : 1.0;
 
     // Age modifier
     const ageMod = player.age < 20 ? 1.3
@@ -166,19 +152,32 @@ export function simulateTraining(
       : player.age < 38 ? 0.4
       : 0.15;
 
-    // TODO: Talent modifier — requires hidden_talent from DB (not in GeneratedPlayer yet)
-    // Will be added when daily-tick passes hidden_talent to squad data
-
     // Manager coaching bonus: 40=1.0x, 60=1.2x, 80=1.4x, 100=1.6x
     const coachMod = 0.8 + (managerBonus.coaching / 100) * 0.8;
     // Youth development bonus for players under 22
     const youthMod = player.age < 22 ? (0.9 + (managerBonus.youthDev / 100) * 0.6) : 1.0;
-    // Base 4% chance
-    const improveChance = 0.04 * sessions * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod;
-    if (rng.random() < improveChance) {
-      if (current < 100) {
-        (player as unknown as Record<string, number>)[attr] = current + 1;
-        improvements.push({ playerIndex, attribute: attr, change: 1 });
+
+    // Independent roll per session attended (base 10% per session)
+    for (let s = 0; s < sessions; s++) {
+      // GK filter: non-GK never gets goalkeeping, GK prefers goalkeeping in match_practice
+      let attr = rng.pick(affectedAttrs);
+      if (attr === "goalkeeping" && player.position !== "GK") {
+        const filtered = affectedAttrs.filter((a) => a !== "goalkeeping");
+        attr = rng.pick(filtered);
+      } else if (player.position === "GK" && plan.type === "match_practice" && attr !== "goalkeeping") {
+        if (rng.random() < 0.6) attr = "goalkeeping";
+      }
+      const current = player[attr as keyof GeneratedPlayer] as number;
+
+      // Diminishing returns: each point above 50 reduces chance
+      const diminishing = current >= 50 ? Math.max(0.15, 1.0 - (current - 50) * 0.017) : 1.0;
+
+      const improveChance = 0.10 * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod;
+      if (rng.random() < improveChance) {
+        if (current < 100) {
+          (player as unknown as Record<string, number>)[attr] = current + 1;
+          improvements.push({ playerIndex, attribute: attr, change: 1 });
+        }
       }
     }
   }
