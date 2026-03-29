@@ -141,10 +141,8 @@ function UserManagement() {
   const [newPw, setNewPw] = useState("");
   const [status, setStatus] = useState("");
 
-  const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
-
   const loadUsers = async () => {
-    const data = await fetch(`${API}/auth/admin/users`, { credentials: "include" }).then((r) => r.json()).catch(() => []);
+    const data = await apiFetch<Array<{ id: string; email: string; is_admin: number; team_name: string | null }>>("/auth/admin/users").catch(() => []);
     setUsers(data);
     setLoaded(true);
   };
@@ -153,11 +151,11 @@ function UserManagement() {
 
   const resetPassword = async (userId: string) => {
     if (!newPw) return;
-    const res = await fetch(`${API}/auth/admin/change-password`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+    const res = await apiFetch<{ ok?: boolean; error?: string }>("/auth/admin/change-password", {
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, newPassword: newPw }),
-    }).then((r) => r.json()).catch(() => ({ error: "Chyba" }));
-    setStatus(res.ok ? "Heslo změněno" : res.error);
+    }).catch(() => ({ error: "Chyba" } as { ok?: boolean; error?: string }));
+    setStatus(res.ok ? "Heslo změněno" : (res.error ?? "Chyba"));
     setNewPw("");
     setResetId(null);
     setTimeout(() => setStatus(""), 3000);
