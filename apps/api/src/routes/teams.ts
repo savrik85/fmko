@@ -152,8 +152,10 @@ teamsRouter.post("/", async (c) => {
   const existingTeam = await c.env.DB.prepare(
     "SELECT id FROM teams WHERE user_id = ? AND user_id <> 'ai' LIMIT 1"
   ).bind(userId).first<{ id: string }>();
+  logger.info({ module: "teams" }, `duplicate check: userId=${userId}, existingTeam=${existingTeam?.id ?? "NONE"}`);
   if (existingTeam) {
     const existingName = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(existingTeam.id).first<{ name: string }>();
+    logger.info({ module: "teams" }, `returning existing team: ${existingTeam.id} (${existingName?.name})`);
     return c.json({ id: existingTeam.id, name: existingName?.name ?? "", existing: true }, 200);
   }
 
