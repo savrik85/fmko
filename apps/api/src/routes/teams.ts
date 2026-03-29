@@ -153,7 +153,6 @@ teamsRouter.post("/", async (c) => {
     "SELECT id FROM teams WHERE user_id = ? AND user_id <> 'ai' LIMIT 1"
   ).bind(userId).first<{ id: string }>();
   if (existingTeam) {
-    // Return same format as normal creation so frontend works
     const existingName = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(existingTeam.id).first<{ name: string }>();
     return c.json({ id: existingTeam.id, name: existingName?.name ?? "", existing: true }, 200);
   }
@@ -162,11 +161,20 @@ teamsRouter.post("/", async (c) => {
     : (village.population as number) > 1000 ? 40000 : 20000;
 
   step = "insert-team";
-  await c.env.DB.prepare(
-    "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget, jersey_pattern, badge_pattern, stadium_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).bind(teamId, userId, body.villageId, body.name,
-    body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFFFFF", budget,
-    body.jerseyPattern ?? "solid", body.badgePattern ?? "shield", body.stadiumName ?? null).run();
+  try {
+    await c.env.DB.prepare(
+      "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget, jersey_pattern, badge_pattern, stadium_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(teamId, userId, body.villageId, body.name,
+      body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFFFFF", budget,
+      body.jerseyPattern ?? "solid", body.badgePattern ?? "shield", body.stadiumName ?? null).run();
+  } catch (insertErr: any) {
+    // UNIQUE constraint on user_id — race condition, team already created by parallel request
+    if (insertErr?.message?.includes("UNIQUE")) {
+      const existing = await c.env.DB.prepare("SELECT id, name FROM teams WHERE user_id = ? AND user_id <> 'ai' LIMIT 1").bind(userId).first<{ id: string; name: string }>();
+      if (existing) return c.json({ id: existing.id, name: existing.name, existing: true }, 200);
+    }
+    throw insertErr;
+  }
 
   // Create sponsor contract if selected during onboarding (naming rights = main sponsor)
   if (body.sponsor) {

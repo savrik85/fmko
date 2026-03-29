@@ -108,7 +108,7 @@ export default function OnboardingPage() {
   }, [step, state]);
 
   async function handleCreateTeam(teamName: string, primary: string, secondary: string, jerseyPattern?: string, badgePattern?: string) {
-    if (!state.village) return;
+    if (!state.village || creating) return;
     setCreating(true);
     setError("");
 
@@ -231,6 +231,7 @@ export default function OnboardingPage() {
               secondaryColor={state.secondaryColor}
               onBack={() => setStep(3)}
               onSubmit={handleCreateTeam}
+              creating={creating}
             />
             {creating && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

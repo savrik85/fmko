@@ -213,9 +213,10 @@ interface Props {
   secondaryColor: string;
   onBack: () => void;
   onSubmit: (teamName: string, primary: string, secondary: string, jerseyPattern?: string, badgePattern?: string) => void;
+  creating?: boolean;
 }
 
-export function StepTeam({ village, teamName, primaryColor: initialPrimary, secondaryColor: initialSecondary, onBack, onSubmit }: Props) {
+export function StepTeam({ village, teamName, primaryColor: initialPrimary, secondaryColor: initialSecondary, onBack, onSubmit, creating }: Props) {
   const [primaryColor, setPrimaryColor] = useState(initialPrimary);
   const [secondaryColor, setSecondaryColor] = useState(initialSecondary);
   const [jerseyPattern, setJerseyPattern] = useState<JerseyPattern>("solid");
@@ -292,8 +293,9 @@ export function StepTeam({ village, teamName, primaryColor: initialPrimary, seco
           </div>
 
           <button
+            disabled={creating}
             onClick={() => onSubmit(displayName, primaryColor, secondaryColor, jerseyPattern, badgePattern)}
-            className="btn btn-primary btn-lg w-full"
+            className="btn btn-primary btn-lg w-full disabled:opacity-50"
           >
             Vytvořit tým!
           </button>
