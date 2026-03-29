@@ -42,8 +42,8 @@ export function generateSeasonCalendar(
 ): SeasonCalendar {
   const entries: CalendarEntry[] = [];
   let currentDate = new Date(startDate);
-  // Skip 4 days so the player has time to train before first match
-  currentDate.setDate(currentDate.getDate() + 4);
+  // Skip 2 days so first match is ~3-4 days after registration (2 + nearest Wednesday)
+  currentDate.setDate(currentDate.getDate() + 2);
   let round = 1;
 
   // Find first Wednesday from adjusted start date
