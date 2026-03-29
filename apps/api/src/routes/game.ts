@@ -1465,8 +1465,8 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
   // Training days — based on sessions per week setting
   if (team.training_type) {
     const sessions = team.training_sessions ?? 2;
-    // Pick training days based on session count: 1→Wed, 2→Tue+Thu, 3→Mon+Wed+Fri
-    const trainingDays: number[] = sessions >= 3 ? [1, 3, 5] : sessions >= 2 ? [2, 4] : [3];
+    // Zápasy jsou St(3) + So(6) — tréninky nesmí kolidovat
+    const trainingDays: number[] = sessions >= 3 ? [1, 2, 4] : sessions >= 2 ? [2, 4] : [1];
     const typeLabels: Record<string, string> = { conditioning: "Kondice", technique: "Technika", tactics: "Taktika", match_practice: "Zápasový" };
     const approachLabels: Record<string, string> = { strict: "přísný", balanced: "vyrovnaný", relaxed: "volný" };
     const label = typeLabels[team.training_type] ?? team.training_type;

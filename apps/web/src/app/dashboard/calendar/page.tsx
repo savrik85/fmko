@@ -138,7 +138,7 @@ export default function CalendarPage() {
                     )}
                   </div>
                 )}
-                {hasTraining && !match && (() => {
+                {hasTraining && (() => {
                   const tr = events.find((e) => e.type === "training");
                   return (
                     <div className="text-[11px] font-heading leading-tight px-1.5 py-1 rounded bg-amber-50 text-amber-700 truncate">
