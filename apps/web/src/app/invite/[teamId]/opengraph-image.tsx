@@ -92,7 +92,7 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
           }}
         >
           <div style={{ fontSize: 24, color: "rgba(255,255,255,0.8)" }}>
-            {managerName ? `${managerName} te vyzyvat!` : "Prijmi vyzvu!"}
+            {managerName ? `${managerName} tě vyzývá!` : "Přijmi výzvu!"}
           </div>
         </div>
 
@@ -109,7 +109,7 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
             color: "white",
           }}
         >
-          Zaloz si svuj tym zdarma
+          {"Založ si svůj tým zdarma"}
         </div>
       </div>
     ),

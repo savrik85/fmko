@@ -59,9 +59,9 @@ export async function generateMetadata({ params }: { params: Promise<{ teamId: s
     return { title: "Prales FM" };
   }
 
-  const managerName = manager?.name ?? "Trener";
-  const title = `${team.name} te vyzyvat! | Prales FM`;
-  const description = `${managerName} z ${team.village_name} te zve do okresniho preboru ${team.district}. Prijmi vyzvu a zaloz si svuj tym!`;
+  const managerName = manager?.name ?? "Trenér";
+  const title = `${team.name} tě vyzývá! | Prales FM`;
+  const description = `${managerName} z ${team.village_name} tě zve do okresního přeboru ${team.district}. Přijmi výzvu a založ si svůj tým!`;
 
   return {
     title,
