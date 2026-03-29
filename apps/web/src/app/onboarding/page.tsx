@@ -92,12 +92,12 @@ export default function OnboardingPage() {
     if (!isLoading && !token) router.replace("/register");
   }, [isLoading, token, router]);
 
+  const [state, setState] = useState<OnboardingState>(restored.state);
+
   // If user already has a team AND we're not in reveal step, redirect to dashboard
   useEffect(() => {
     if (!isLoading && teamId && step < 5 && !state.createdTeamId) router.replace("/dashboard");
   }, [isLoading, teamId, step, state.createdTeamId, router]);
-
-  const [state, setState] = useState<OnboardingState>(restored.state);
 
   // Persist step + state to sessionStorage (but not step 5 / completed state)
   useEffect(() => {
