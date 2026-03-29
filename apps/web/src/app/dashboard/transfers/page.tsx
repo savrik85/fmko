@@ -549,18 +549,21 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">
-              {SORT_COLS.map((col) => (
-                <th key={col.key}
-                  onClick={() => toggleSort(col.key)}
-                  className={`py-2 px-2 text-xs font-heading uppercase cursor-pointer select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
-                    sortKey === col.key ? "text-pitch-600" : "text-muted"
-                  } ${col.key === "name" ? "text-left pl-4" : "text-center"}`}
-                  title={col.label}
-                >
-                  {col.short}{sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                </th>
-              ))}
-              <th className="py-2 px-2 text-xs font-heading uppercase text-muted text-center">Status</th>
+              {SORT_COLS.map((col) => {
+                const hideMobile = ["speed", "technique", "shooting", "passing", "defense", "stamina", "wage"].includes(col.key);
+                return (
+                  <th key={col.key}
+                    onClick={() => toggleSort(col.key)}
+                    className={`py-2 px-2 text-xs font-heading uppercase cursor-pointer select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
+                      sortKey === col.key ? "text-pitch-600" : "text-muted"
+                    } ${col.key === "name" ? "text-left pl-4" : "text-center"} ${hideMobile ? "hidden sm:table-cell" : ""}`}
+                    title={col.label}
+                  >
+                    {col.short}{sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </th>
+                );
+              })}
+              <th className="py-2 px-2 text-xs font-heading uppercase text-muted text-center hidden sm:table-cell">Status</th>
               <th className="py-2 px-2 text-xs font-heading uppercase text-muted text-right pr-4">Akce</th>
             </tr>
           </thead>
@@ -579,14 +582,14 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
                   <td className="py-2 px-2 text-center"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></td>
                   <td className="py-2 px-2 text-center tabular-nums text-muted">{p.age}</td>
                   <td className="py-2 px-2 text-center tabular-nums font-heading font-bold">{p.overall_rating}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums ${attrCellColor(s?.speed ?? 0)}`}>{s?.speed ?? "—"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums ${attrCellColor(s?.technique ?? 0)}`}>{s?.technique ?? "—"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums ${attrCellColor(s?.shooting ?? 0)}`}>{s?.shooting ?? "—"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums ${attrCellColor(s?.passing ?? 0)}`}>{s?.passing ?? "—"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums ${attrCellColor(s?.defense ?? 0)}`}>{s?.defense ?? "—"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums ${attrCellColor(s?.stamina ?? 0)}`}>{s?.stamina ?? "—"}</td>
-                  <td className="py-2 px-2 text-center tabular-nums text-muted text-xs">{formatCZK(p.weekly_wage ?? 0)}</td>
-                  <td className="py-2 px-2 text-center">
+                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.speed ?? 0)}`}>{s?.speed ?? "—"}</td>
+                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.technique ?? 0)}`}>{s?.technique ?? "—"}</td>
+                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.shooting ?? 0)}`}>{s?.shooting ?? "—"}</td>
+                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.passing ?? 0)}`}>{s?.passing ?? "—"}</td>
+                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.defense ?? 0)}`}>{s?.defense ?? "—"}</td>
+                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.stamina ?? 0)}`}>{s?.stamina ?? "—"}</td>
+                  <td className="py-2 px-2 text-center tabular-nums text-muted text-xs hidden sm:table-cell">{formatCZK(p.weekly_wage ?? 0)}</td>
+                  <td className="py-2 px-2 text-center hidden sm:table-cell">
                     {isQuit && <span className="text-xs font-heading font-bold text-card-red bg-red-50 px-1.5 py-0.5 rounded">Odmítá</span>}
                     {isListed && <span className="text-xs font-heading font-bold text-gold-600 bg-gold-50 px-1.5 py-0.5 rounded">Na trhu</span>}
                   </td>
