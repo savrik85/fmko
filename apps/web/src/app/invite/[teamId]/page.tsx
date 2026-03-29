@@ -3,7 +3,7 @@ import { InvitePageClient } from "./client";
 
 export const runtime = "edge";
 
-const API = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+const API = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "https://api.prales.fun";
 
 interface TeamData {
   id: string;
