@@ -135,13 +135,14 @@ export default function AdminPage() {
 /* ── User Management ── */
 
 function UserManagement() {
+  const { token } = useTeam();
   const [users, setUsers] = useState<Array<{ id: string; email: string; is_admin: number; team_name: string | null }>>([]);
   const [loaded, setLoaded] = useState(false);
   const [resetId, setResetId] = useState<string | null>(null);
   const [newPw, setNewPw] = useState("");
   const [status, setStatus] = useState("");
 
-  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+  const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
   const loadUsers = async () => {
     const data = await apiFetch<Array<{ id: string; email: string; is_admin: number; team_name: string | null }>>("/auth/admin/users", { headers: authHeaders }).catch(() => []);
