@@ -124,7 +124,7 @@ export default function AdminPage() {
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div><span className="text-muted">Team ID:</span> <span className="font-mono">{teamId ?? "—"}</span></div>
           <div><span className="text-muted">API:</span> <span className="font-mono">{process.env.NEXT_PUBLIC_API_URL ?? "localhost:8787"}</span></div>
-          <div><span className="text-muted">Env:</span> <span className="font-mono">{process.env.NODE_ENV}</span></div>
+          <div><span className="text-muted">Env:</span> <span className="font-mono">{(process.env.NEXT_PUBLIC_API_URL ?? "").includes("test") ? "testing" : process.env.NODE_ENV}</span></div>
           <div><span className="text-muted">Admin:</span> <span className="font-mono text-pitch-500">true</span></div>
         </div>
       </div>
