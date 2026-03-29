@@ -42,7 +42,7 @@ export function JerseyPreview({ primary, secondary, pattern = "solid", size = 48
         const isLight = (r * 299 + g * 587 + b * 114) / 1000 > 160;
         return (
           <text x="100" y="155" textAnchor="middle" fontSize={numSize} fontWeight="bold"
-            fill={isLight ? "#1a1a1a" : "white"} stroke={isLight ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.4)"} strokeWidth="1.5" paintOrder="stroke"
+            fill="white" stroke={isLight ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.3)"} strokeWidth={isLight ? "3" : "1.5"} paintOrder="stroke"
             fontFamily="var(--font-heading)">{number}</text>
         );
       })()}
