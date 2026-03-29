@@ -393,10 +393,10 @@ teamsRouter.post("/", async (c) => {
       // Keep AI team ID — just update its identity to human player
       // Delete the new team we created earlier (line 159) — we'll use AI team instead
       const origTeamId = teamId;
-      await c.env.DB.prepare("UPDATE teams SET name = ?, user_id = ?, village_id = ?, primary_color = ?, secondary_color = ?, badge_pattern = ?, jersey_pattern = ?, budget = ?, reputation = 50 WHERE id = ?")
+      await c.env.DB.prepare("UPDATE teams SET name = ?, user_id = ?, village_id = ?, primary_color = ?, secondary_color = ?, badge_pattern = ?, jersey_pattern = ?, budget = ?, reputation = 50, stadium_name = ? WHERE id = ?")
         .bind(body.name, userId, body.villageId, body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFF", body.badgePattern ?? "shield", body.jerseyPattern ?? "solid",
           village.size === "small_city" || village.size === "city" ? 80000 : village.size === "town" || village.size === "village" ? 40000 : 20000,
-          oldId).run();
+          body.stadiumName ?? null, oldId).run();
       teamId = oldId;
 
       // 1. Delete OLD AI players first (they are under teamId = oldId)
