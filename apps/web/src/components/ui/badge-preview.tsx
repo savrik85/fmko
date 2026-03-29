@@ -5,8 +5,19 @@ export type BadgePattern = "shield" | "circle" | "diamond" | "hexagon" | "crest"
 export function BadgePreview({ primary, secondary, pattern, initials, size = 64 }: { primary: string; secondary: string; pattern: BadgePattern; initials: string; size?: number }) {
   const s = size;
   const half = s / 2;
-  const stroke = secondary;
   const fontSize = s * 0.28;
+
+  // Detect if both colors are too light — add visible border
+  const lum = (hex: string) => {
+    const c = hex.replace("#", "");
+    const r = parseInt(c.substring(0, 2), 16);
+    const g = parseInt(c.substring(2, 4), 16);
+    const b = parseInt(c.substring(4, 6), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000;
+  };
+  const primaryLight = lum(primary) > 200;
+  const stroke = primaryLight && lum(secondary) > 200 ? "#bbb" : secondary;
+  const textFill = primaryLight ? "#333" : "white";
 
   const shapes: Record<BadgePattern, string> = {
     shield: `M${half},${s * 0.05} L${s * 0.9},${s * 0.25} L${s * 0.9},${s * 0.6} Q${s * 0.9},${s * 0.85} ${half},${s * 0.95} Q${s * 0.1},${s * 0.85} ${s * 0.1},${s * 0.6} L${s * 0.1},${s * 0.25}Z`,
@@ -29,7 +40,7 @@ export function BadgePreview({ primary, secondary, pattern, initials, size = 64 
         <path d={shapes[pattern]} fill={primary} stroke={stroke} strokeWidth={s * 0.04} strokeLinejoin="round" />
       )}
       <text x={half} y={half + fontSize * 0.35} textAnchor="middle" fontSize={fontSize * 0.85} fontWeight="800"
-        fill="white" stroke="rgba(0,0,0,0.4)" strokeWidth={s * 0.02} paintOrder="stroke"
+        fill={textFill} stroke={primaryLight ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.4)"} strokeWidth={s * 0.02} paintOrder="stroke"
         fontFamily="var(--font-heading)" letterSpacing="0.05em">{initials}</text>
     </svg>
   );
