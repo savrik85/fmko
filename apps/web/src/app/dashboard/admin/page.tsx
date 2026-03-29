@@ -9,7 +9,7 @@ interface SeedTable { key: string; label: string; count: number; editable: boole
 interface SeedRow { [key: string]: unknown }
 
 export default function AdminPage() {
-  const { isAdmin, teamId } = useTeam();
+  const { isAdmin, teamId, token } = useTeam();
   const [output, setOutput] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
 
@@ -141,8 +141,10 @@ function UserManagement() {
   const [newPw, setNewPw] = useState("");
   const [status, setStatus] = useState("");
 
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+
   const loadUsers = async () => {
-    const data = await apiFetch<Array<{ id: string; email: string; is_admin: number; team_name: string | null }>>("/auth/admin/users").catch(() => []);
+    const data = await apiFetch<Array<{ id: string; email: string; is_admin: number; team_name: string | null }>>("/auth/admin/users", { headers: authHeaders }).catch(() => []);
     setUsers(data);
     setLoaded(true);
   };
@@ -152,7 +154,7 @@ function UserManagement() {
   const resetPassword = async (userId: string) => {
     if (!newPw) return;
     const res = await apiFetch<{ ok?: boolean; error?: string }>("/auth/admin/change-password", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify({ userId, newPassword: newPw }),
     }).catch(() => ({ error: "Chyba" } as { ok?: boolean; error?: string }));
     setStatus(res.ok ? "Heslo změněno" : (res.error ?? "Chyba"));
