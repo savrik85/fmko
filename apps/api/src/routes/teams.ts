@@ -444,10 +444,14 @@ teamsRouter.post("/", async (c) => {
       }
 
       // Delete the duplicate team row created at line 159
-      // First clean any FK references to origTeamId
+      // First clean any FK references to origTeamId — move sponsor to takeover team, delete rest
+      await c.env.DB.prepare("UPDATE sponsor_contracts SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch(() => {});
       await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
       await c.env.DB.prepare("DELETE FROM managers WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
       await c.env.DB.prepare("DELETE FROM conversations WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
+      await c.env.DB.prepare("DELETE FROM stadiums WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
+      await c.env.DB.prepare("DELETE FROM equipment WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
+      await c.env.DB.prepare("DELETE FROM transactions WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
       await c.env.DB.prepare("DELETE FROM teams WHERE id = ?").bind(origTeamId).run().catch((e) => {
         logger.error({ module: "teams" }, `FAILED to delete duplicate team ${origTeamId}`, e);
       });
