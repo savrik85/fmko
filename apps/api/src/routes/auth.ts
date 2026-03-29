@@ -138,7 +138,7 @@ authRouter.post("/login", async (c) => {
       leaguePosition,
       season: (team?.season as number) ?? null,
       seasonDay: team?.game_date && team?.season_start
-        ? Math.max(0, Math.round((new Date(team.game_date as string).getTime() - new Date(team.season_start as string).getTime()) / 86400000))
+        ? Math.max(1, Math.round((new Date(team.game_date as string).getTime() - new Date(team.season_start as string).getTime()) / 86400000) + 1)
         : null,
       seasonTotal: team?.season_start && team?.season_end
         ? Math.round((new Date(team.season_end as string).getTime() - new Date(team.season_start as string).getTime()) / 86400000)
@@ -202,7 +202,7 @@ authRouter.get("/me", async (c) => {
     leaguePosition,
     season: (team?.season as number) ?? null,
     seasonDay: team?.game_date && team?.season_start
-      ? Math.max(0, Math.round((new Date(team.game_date as string).getTime() - new Date(team.season_start as string).getTime()) / 86400000))
+      ? Math.max(1, Math.round((new Date(team.game_date as string).getTime() - new Date(team.season_start as string).getTime()) / 86400000) + 1)
       : null,
     seasonTotal: team?.season_start && team?.season_end
       ? Math.round((new Date(team.season_end as string).getTime() - new Date(team.season_start as string).getTime()) / 86400000)
