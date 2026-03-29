@@ -1422,10 +1422,10 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
   // Calculate season day
   const firstEntry = calEntries.results[0];
   const lastEntry = calEntries.results[calEntries.results.length - 1];
-  const seasonStart = new Date(firstEntry.scheduled_at as string);
-  seasonStart.setDate(seasonStart.getDate() - 3); // a few days before first match
-  const seasonEnd = new Date(lastEntry.scheduled_at as string);
-  seasonEnd.setDate(seasonEnd.getDate() + 7); // a week after last match
+  // Use team's season_start/season_end for consistency with topbar
+  const teamRow = await c.env.DB.prepare("SELECT season_start, season_end FROM teams WHERE id = ?").bind(teamId).first<{ season_start: string; season_end: string }>().catch(() => null);
+  const seasonStart = teamRow?.season_start ? new Date(teamRow.season_start) : new Date(firstEntry.scheduled_at as string);
+  const seasonEnd = teamRow?.season_end ? new Date(teamRow.season_end) : new Date(lastEntry.scheduled_at as string);
 
   // Use GAME DATE, not real date
   const gameDateRow = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>().catch(() => null);
