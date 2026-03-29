@@ -92,6 +92,13 @@ export default function DashboardPage() {
   if (!team) return <div className="page-container">Tým nenalezen.</div>;
 
   const color = team.primary_color || "#2D5F2D";
+  const safeColor = (() => {
+    const c = color.replace("#", "");
+    const r = parseInt(c.substring(0, 2), 16);
+    const g = parseInt(c.substring(2, 4), 16);
+    const b = parseInt(c.substring(4, 6), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 > 200 ? "#2D5F2D" : color;
+  })();
   const nextMatch = matches.find((m) => m.status !== "simulated");
   const myStanding = standings.find((s) => s.isPlayer);
   const avgCondition = players.length > 0 ? Math.round(players.reduce((s, p) => s + (p.lifeContext?.condition ?? 50), 0) / players.length) : 0;
@@ -225,7 +232,7 @@ export default function DashboardPage() {
           <SectionLabel>Liga</SectionLabel>
           {myStanding ? (
             <div className="text-center">
-              <div className="font-heading font-[800] text-5xl tabular-nums" style={{ color }}>{myStanding.pos}.</div>
+              <div className="font-heading font-[800] text-5xl tabular-nums" style={{ color: safeColor }}>{myStanding.pos}.</div>
               <div className="text-sm text-muted mt-1">{myStanding.points} bodů · {myStanding.played} zápasů</div>
               {myStanding.goalsFor != null && myStanding.goalsAgainst != null && (
                 <div className="text-xs text-muted mt-0.5">
@@ -254,7 +261,7 @@ export default function DashboardPage() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-gray-50 rounded-lg p-3 text-center">
-                <div className="font-heading font-bold text-2xl tabular-nums" style={{ color }}>{players.length}</div>
+                <div className="font-heading font-bold text-2xl tabular-nums" style={{ color: safeColor }}>{players.length}</div>
                 <div className="text-[10px] text-muted uppercase">Hráčů</div>
               </div>
               <div className="bg-gray-50 rounded-lg p-3 text-center">
@@ -469,7 +476,7 @@ export default function DashboardPage() {
                       <span className="text-xs text-muted">{p.age} let</span>
                     </div>
                   </div>
-                  <span className="font-heading font-bold text-lg tabular-nums" style={{ color }}>{p.overall_rating}</span>
+                  <span className="font-heading font-bold text-lg tabular-nums" style={{ color: safeColor }}>{p.overall_rating}</span>
                 </a>
               ))}
             </div>
