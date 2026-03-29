@@ -780,7 +780,15 @@ teamsRouter.get("/:id", async (c) => {
     "SELECT t.*, v.name as village_name, v.population, v.size, v.district, v.region FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
   ).bind(c.req.param("id")).first();
   if (!team) return c.json({ error: "Team not found" }, 404);
-  return c.json(team);
+
+  const stadium = await c.env.DB.prepare(
+    "SELECT capacity, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1"
+  ).bind(c.req.param("id")).first().catch(() => null);
+
+  return c.json({
+    ...team,
+    stadium: stadium ? { name: team.stadium_name, capacity: stadium.capacity, pitchCondition: stadium.pitch_condition, pitchType: stadium.pitch_type } : null,
+  });
 });
 
 // GET /api/teams/:id/players
