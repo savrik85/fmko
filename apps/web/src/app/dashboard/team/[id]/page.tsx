@@ -8,6 +8,14 @@ import { Spinner, SectionLabel, EntityLink, BadgePreview, PositionBadge, JerseyP
 import type { BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
+function isLightColor(hex: string): boolean {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 160;
+}
+
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
 type PosFilter = "all" | "GK" | "DEF" | "MID" | "FWD";
@@ -142,6 +150,13 @@ export default function TeamPage() {
   if (!team) return <div className="page-container">Tým nenalezen.</div>;
 
   const color = team.primary_color || "#2D5F2D";
+  const light = isLightColor(color);
+  const txt = light ? "text-gray-900" : "text-white";
+  const txtMuted = light ? "text-gray-500" : "text-white/60";
+  const txtSoft = light ? "text-gray-400" : "text-white/40";
+  const boxBg = light ? "bg-black/5" : "bg-white/10";
+  const boxBgHover = light ? "hover:bg-black/10" : "hover:bg-white/20";
+  const boxLabel = light ? "text-gray-400" : "text-white/50";
   const avgRating = players.length > 0 ? Math.round(players.reduce((s, p) => s + p.overall_rating, 0) / players.length) : 0;
 
   return (
@@ -153,18 +168,18 @@ export default function TeamPage() {
           <div className="hidden sm:flex items-center gap-4">
             {leagueTeams.length > 1 && (
               <button onClick={() => prevTeam && router.push(`/dashboard/team/${prevTeam.id}`)}
-                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors">&#9664;</button>
+                className={`w-10 h-10 rounded-xl ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} shrink-0 transition-colors`}>&#9664;</button>
             )}
             <BadgePreview primary={color} secondary={team.secondary_color || "#FFFFFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
               initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={56} />
             <div className="flex-1 min-w-0">
-              <h1 className="font-heading font-extrabold text-white text-2xl leading-tight truncate">{team.name}</h1>
-              <div className="text-white/60 text-sm mt-0.5">
-                <EntityLink type="village" id={team.village_name} className="!text-white/80 !decoration-white/30">{team.village_name}</EntityLink>
+              <h1 className={`font-heading font-extrabold ${txt} text-2xl leading-tight truncate`}>{team.name}</h1>
+              <div className={`${txtMuted} text-sm mt-0.5`}>
+                <EntityLink type="village" id={team.village_name} className={light ? "!text-gray-700 !decoration-gray-300" : "!text-white/80 !decoration-white/30"}>{team.village_name}</EntityLink>
                 {" "}&middot; {team.district}
               </div>
               {leaguePos && leagueName && (
-                <a href="/dashboard/liga" className="inline-block mt-1 text-white/90 text-sm font-heading font-bold hover:text-white transition-colors underline decoration-white/30">
+                <a href="/dashboard/liga" className={`inline-block mt-1 ${txtMuted} text-sm font-heading font-bold hover:opacity-80 transition-colors underline`}>
                   {leaguePos}. v {leagueName}
                 </a>
               )}
@@ -178,25 +193,25 @@ export default function TeamPage() {
                   }).catch(() => null);
                   if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
                 }}
-                  className="bg-white/10 hover:bg-white/20 rounded-xl px-4 py-2 text-center transition-colors cursor-pointer">
+                  className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer`}>
                   <div className="text-xl leading-none">💬</div>
-                  <div className="text-white/70 text-[10px] font-heading font-bold uppercase mt-1">Napsat</div>
+                  <div className={`${boxLabel} text-[10px] font-heading font-bold uppercase mt-1`}>Napsat</div>
                 </button>
               )}
-              <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
-                <div className="font-heading font-extrabold text-xl tabular-nums leading-none text-white">{players.length}</div>
-                <div className="text-white/50 text-[10px] font-heading font-bold uppercase mt-1">Hráčů</div>
+              <div className={`${boxBg} rounded-xl px-4 py-2 text-center`}>
+                <div className={`font-heading font-extrabold text-xl tabular-nums leading-none ${txt}`}>{players.length}</div>
+                <div className={`${boxLabel} text-[10px] font-heading font-bold uppercase mt-1`}>Hráčů</div>
               </div>
               {isOwnTeam && (
-                <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
-                  <div className="font-heading font-extrabold text-xl tabular-nums leading-none text-white">{avgRating}</div>
-                  <div className="text-white/50 text-[10px] font-heading font-bold uppercase mt-1">Rating</div>
+                <div className={`${boxBg} rounded-xl px-4 py-2 text-center`}>
+                  <div className={`font-heading font-extrabold text-xl tabular-nums leading-none ${txt}`}>{avgRating}</div>
+                  <div className={`${boxLabel} text-[10px] font-heading font-bold uppercase mt-1`}>Rating</div>
                 </div>
               )}
             </div>
             {leagueTeams.length > 1 && (
               <button onClick={() => nextTeam && router.push(`/dashboard/team/${nextTeam.id}`)}
-                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors">&#9654;</button>
+                className={`w-10 h-10 rounded-xl ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} shrink-0 transition-colors`}>&#9654;</button>
             )}
           </div>
 
@@ -207,25 +222,25 @@ export default function TeamPage() {
               <BadgePreview primary={color} secondary={team.secondary_color || "#FFFFFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
                 initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={44} />
               <div className="flex-1 min-w-0">
-                <h1 className="font-heading font-extrabold text-white text-xl leading-tight truncate">{team.name}</h1>
-                <div className="text-white/60 text-sm">
-                  <EntityLink type="village" id={team.village_name} className="!text-white/80 !decoration-white/30">{team.village_name}</EntityLink>
+                <h1 className={`font-heading font-extrabold ${txt} text-xl leading-tight truncate`}>{team.name}</h1>
+                <div className={`${txtMuted} text-sm`}>
+                  <EntityLink type="village" id={team.village_name} className={light ? "!text-gray-700 !decoration-gray-300" : "!text-white/80 !decoration-white/30"}>{team.village_name}</EntityLink>
                   {" "}&middot; {team.district}
                 </div>
               </div>
               {leagueTeams.length > 1 && (
                 <div className="flex gap-1.5 shrink-0">
                   <button onClick={() => prevTeam && router.push(`/dashboard/team/${prevTeam.id}`)}
-                    className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors text-sm">&#9664;</button>
+                    className={`w-8 h-8 rounded-lg ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9664;</button>
                   <button onClick={() => nextTeam && router.push(`/dashboard/team/${nextTeam.id}`)}
-                    className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors text-sm">&#9654;</button>
+                    className={`w-8 h-8 rounded-lg ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9654;</button>
                 </div>
               )}
             </div>
             {/* Řádek 2: liga + staty + napsat */}
             <div className="flex items-center justify-between mt-3">
               {leaguePos && leagueName ? (
-                <a href="/dashboard/liga" className="text-white/90 text-sm font-heading font-bold hover:text-white transition-colors">
+                <a href="/dashboard/liga" className={`${txtMuted} text-sm font-heading font-bold hover:opacity-80 transition-colors`}>
                   {leaguePos}. v {leagueName}
                 </a>
               ) : <span />}
@@ -238,19 +253,19 @@ export default function TeamPage() {
                     }).catch(() => null);
                     if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
                   }}
-                    className="bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5 text-center transition-colors cursor-pointer">
+                    className={`${boxBg} ${boxBgHover} rounded-lg px-3 py-1.5 text-center transition-colors cursor-pointer`}>
                     <div className="text-base leading-none">💬</div>
-                    <div className="text-white/60 text-[8px] font-heading font-bold uppercase mt-0.5">Napsat</div>
+                    <div className={`${boxLabel} text-[8px] font-heading font-bold uppercase mt-0.5`}>Napsat</div>
                   </button>
                 )}
-                <div className="bg-white/10 rounded-lg px-3 py-1.5 text-center">
-                  <div className="font-heading font-extrabold text-base tabular-nums leading-none text-white">{players.length}</div>
-                  <div className="text-white/50 text-[8px] font-heading font-bold uppercase mt-0.5">Hráčů</div>
+                <div className={`${boxBg} rounded-lg px-3 py-1.5 text-center`}>
+                  <div className={`font-heading font-extrabold text-base tabular-nums leading-none ${txt}`}>{players.length}</div>
+                  <div className={`${boxLabel} text-[8px] font-heading font-bold uppercase mt-0.5`}>Hráčů</div>
                 </div>
                 {isOwnTeam && (
-                  <div className="bg-white/10 rounded-lg px-3 py-1.5 text-center">
-                    <div className="font-heading font-extrabold text-base tabular-nums leading-none text-white">{avgRating}</div>
-                    <div className="text-white/50 text-[8px] font-heading font-bold uppercase mt-0.5">Rating</div>
+                  <div className={`${boxBg} rounded-lg px-3 py-1.5 text-center`}>
+                    <div className={`font-heading font-extrabold text-base tabular-nums leading-none ${txt}`}>{avgRating}</div>
+                    <div className={`${boxLabel} text-[8px] font-heading font-bold uppercase mt-0.5`}>Rating</div>
                   </div>
                 )}
               </div>

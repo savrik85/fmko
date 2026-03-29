@@ -21,6 +21,15 @@ function getRatingColor(rating: number): string {
   return "#D94032";
 }
 
+function ensureContrast(hex: string): string {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  const lum = (r * 299 + g * 587 + b * 114) / 1000;
+  return lum > 200 ? "#2D5F2D" : hex;
+}
+
 const SKILL_LABELS: Record<string, string> = {
   speed: "RYC", technique: "TEC", shooting: "STŘ", passing: "PŘI",
   heading: "HLA", defense: "OBR", goalkeeping: "BRA",
@@ -86,6 +95,7 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
 
   const ratingColor = getRatingColor(player.overall_rating);
   const topStats = getTopStats(player);
+  const barColor = ensureContrast(teamColor);
 
   // Phase: hidden
   if (phase === "hidden") {
@@ -167,13 +177,13 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
               <div className="h-full rounded-full transition-all duration-700"
                 style={{
                   width: phase === "rating" ? `${stat.value}%` : "0%",
-                  backgroundColor: teamColor,
+                  backgroundColor: barColor,
                   opacity: 0.7 - i * 0.12,
                   transitionDelay: `${i * 100}ms`,
                 }} />
             </div>
             <span className={`text-base tabular-nums font-heading font-[800] w-8 text-right transition-opacity duration-500 ${phase === "rating" ? "opacity-100" : "opacity-0"}`}
-              style={{ color: teamColor, transitionDelay: `${i * 100 + 200}ms` }}>
+              style={{ color: barColor, transitionDelay: `${i * 100 + 200}ms` }}>
               {stat.value}
             </span>
           </div>
