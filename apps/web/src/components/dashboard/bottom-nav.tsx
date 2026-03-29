@@ -10,7 +10,7 @@ export function BottomNav() {
 
   const items = [
     { href: "/dashboard", label: "Domů", icon: "\u{1F3DF}" },
-    { href: teamId ? `/dashboard/team/${teamId}` : "/dashboard/squad", label: "Kádr", icon: "\u{1F465}" },
+    { href: "/dashboard/phone", label: "Zprávy", icon: "\u{1F4F1}" },
     { href: "/dashboard/match", label: "Zápas", icon: "\u26BD" },
     { href: "/dashboard/liga", label: "Liga", icon: "\u{1F3C6}" },
     { href: "/dashboard/more", label: "Více", icon: "\u2699" },
