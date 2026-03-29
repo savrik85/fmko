@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { InvitePageClient } from "./client";
 
-// runtime = "edge" added at build time by add-edge-runtime.sh
+export const runtime = "edge";
 
 const API = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
