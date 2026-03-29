@@ -147,55 +147,115 @@ export default function TeamPage() {
   return (
     <>
       {/* ═══ Team header ═══ */}
-      <div className="hero-gradient px-5 sm:px-8 py-5" style={{ backgroundColor: color }}>
-        <div className="flex items-center gap-4 max-w-[1280px] mx-auto">
-          {leagueTeams.length > 1 && (
-            <button onClick={() => prevTeam && router.push(`/dashboard/team/${prevTeam.id}`)}
-              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors">&#9664;</button>
-          )}
-          <BadgePreview primary={color} secondary={team.secondary_color || "#FFFFFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
-            initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={56} />
-          <div className="flex-1 min-w-0">
-            <h1 className="font-heading font-extrabold text-white text-xl sm:text-2xl leading-tight truncate">{team.name}</h1>
-            <div className="text-white/60 text-sm mt-0.5">
-              <EntityLink type="village" id={team.village_name} className="!text-white/80 !decoration-white/30">{team.village_name}</EntityLink>
-              {" "}&middot; {team.district}
-            </div>
-            {leaguePos && leagueName && (
-              <a href="/dashboard/liga" className="inline-block mt-1 text-white/90 text-sm font-heading font-bold hover:text-white transition-colors underline decoration-white/30">
-                {leaguePos}. v {leagueName}
-              </a>
+      <div className="hero-gradient px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
+        <div className="max-w-[1280px] mx-auto">
+          {/* ─── Desktop ─── */}
+          <div className="hidden sm:flex items-center gap-4">
+            {leagueTeams.length > 1 && (
+              <button onClick={() => prevTeam && router.push(`/dashboard/team/${prevTeam.id}`)}
+                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors">&#9664;</button>
             )}
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
-            {!isOwnTeam && (team as any).user_id !== "ai" && (
-              <button onClick={async () => {
-                if (!myTeamId) return;
-                const res = await apiFetch<{ conversationId: string }>(`/api/teams/${myTeamId}/conversation-with/${teamId}`, {
-                  method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-                }).catch(() => null);
-                if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
-              }}
-                className="bg-white/10 hover:bg-white/20 rounded-xl px-4 py-2 text-center transition-colors cursor-pointer">
-                <div className="text-xl leading-none">💬</div>
-                <div className="text-white/70 text-[10px] font-heading font-bold uppercase mt-1">Napsat</div>
-              </button>
-            )}
-            <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
-              <div className="font-heading font-extrabold text-xl tabular-nums leading-none text-white">{players.length}</div>
-              <div className="text-white/50 text-[10px] font-heading font-bold uppercase mt-1">Hráčů</div>
-            </div>
-            {isOwnTeam && (
-              <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
-                <div className="font-heading font-extrabold text-xl tabular-nums leading-none text-white">{avgRating}</div>
-                <div className="text-white/50 text-[10px] font-heading font-bold uppercase mt-1">Rating</div>
+            <BadgePreview primary={color} secondary={team.secondary_color || "#FFFFFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
+              initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={56} />
+            <div className="flex-1 min-w-0">
+              <h1 className="font-heading font-extrabold text-white text-2xl leading-tight truncate">{team.name}</h1>
+              <div className="text-white/60 text-sm mt-0.5">
+                <EntityLink type="village" id={team.village_name} className="!text-white/80 !decoration-white/30">{team.village_name}</EntityLink>
+                {" "}&middot; {team.district}
               </div>
+              {leaguePos && leagueName && (
+                <a href="/dashboard/liga" className="inline-block mt-1 text-white/90 text-sm font-heading font-bold hover:text-white transition-colors underline decoration-white/30">
+                  {leaguePos}. v {leagueName}
+                </a>
+              )}
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              {!isOwnTeam && (team as any).user_id !== "ai" && (
+                <button onClick={async () => {
+                  if (!myTeamId) return;
+                  const res = await apiFetch<{ conversationId: string }>(`/api/teams/${myTeamId}/conversation-with/${teamId}`, {
+                    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+                  }).catch(() => null);
+                  if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
+                }}
+                  className="bg-white/10 hover:bg-white/20 rounded-xl px-4 py-2 text-center transition-colors cursor-pointer">
+                  <div className="text-xl leading-none">💬</div>
+                  <div className="text-white/70 text-[10px] font-heading font-bold uppercase mt-1">Napsat</div>
+                </button>
+              )}
+              <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
+                <div className="font-heading font-extrabold text-xl tabular-nums leading-none text-white">{players.length}</div>
+                <div className="text-white/50 text-[10px] font-heading font-bold uppercase mt-1">Hráčů</div>
+              </div>
+              {isOwnTeam && (
+                <div className="bg-white/10 rounded-xl px-4 py-2 text-center">
+                  <div className="font-heading font-extrabold text-xl tabular-nums leading-none text-white">{avgRating}</div>
+                  <div className="text-white/50 text-[10px] font-heading font-bold uppercase mt-1">Rating</div>
+                </div>
+              )}
+            </div>
+            {leagueTeams.length > 1 && (
+              <button onClick={() => nextTeam && router.push(`/dashboard/team/${nextTeam.id}`)}
+                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors">&#9654;</button>
             )}
           </div>
-          {leagueTeams.length > 1 && (
-            <button onClick={() => nextTeam && router.push(`/dashboard/team/${nextTeam.id}`)}
-              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors">&#9654;</button>
-          )}
+
+          {/* ─── Mobil ─── */}
+          <div className="sm:hidden">
+            {/* Řádek 1: badge + název + šipky */}
+            <div className="flex items-center gap-3">
+              <BadgePreview primary={color} secondary={team.secondary_color || "#FFFFFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={44} />
+              <div className="flex-1 min-w-0">
+                <h1 className="font-heading font-extrabold text-white text-xl leading-tight truncate">{team.name}</h1>
+                <div className="text-white/60 text-sm">
+                  <EntityLink type="village" id={team.village_name} className="!text-white/80 !decoration-white/30">{team.village_name}</EntityLink>
+                  {" "}&middot; {team.district}
+                </div>
+              </div>
+              {leagueTeams.length > 1 && (
+                <div className="flex gap-1.5 shrink-0">
+                  <button onClick={() => prevTeam && router.push(`/dashboard/team/${prevTeam.id}`)}
+                    className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors text-sm">&#9664;</button>
+                  <button onClick={() => nextTeam && router.push(`/dashboard/team/${nextTeam.id}`)}
+                    className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors text-sm">&#9654;</button>
+                </div>
+              )}
+            </div>
+            {/* Řádek 2: liga + staty + napsat */}
+            <div className="flex items-center justify-between mt-3">
+              {leaguePos && leagueName ? (
+                <a href="/dashboard/liga" className="text-white/90 text-sm font-heading font-bold hover:text-white transition-colors">
+                  {leaguePos}. v {leagueName}
+                </a>
+              ) : <span />}
+              <div className="flex items-center gap-2">
+                {!isOwnTeam && (team as any).user_id !== "ai" && (
+                  <button onClick={async () => {
+                    if (!myTeamId) return;
+                    const res = await apiFetch<{ conversationId: string }>(`/api/teams/${myTeamId}/conversation-with/${teamId}`, {
+                      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+                    }).catch(() => null);
+                    if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
+                  }}
+                    className="bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5 text-center transition-colors cursor-pointer">
+                    <div className="text-base leading-none">💬</div>
+                    <div className="text-white/60 text-[8px] font-heading font-bold uppercase mt-0.5">Napsat</div>
+                  </button>
+                )}
+                <div className="bg-white/10 rounded-lg px-3 py-1.5 text-center">
+                  <div className="font-heading font-extrabold text-base tabular-nums leading-none text-white">{players.length}</div>
+                  <div className="text-white/50 text-[8px] font-heading font-bold uppercase mt-0.5">Hráčů</div>
+                </div>
+                {isOwnTeam && (
+                  <div className="bg-white/10 rounded-lg px-3 py-1.5 text-center">
+                    <div className="font-heading font-extrabold text-base tabular-nums leading-none text-white">{avgRating}</div>
+                    <div className="text-white/50 text-[8px] font-heading font-bold uppercase mt-0.5">Rating</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
