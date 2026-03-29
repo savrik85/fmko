@@ -152,6 +152,14 @@ teamsRouter.post("/", async (c) => {
     ).bind(userId, `anon-${teamId}@temp.local`, "anonymous").run();
   }
 
+  // Prevent duplicate team creation
+  const existingTeam = await c.env.DB.prepare(
+    "SELECT id FROM teams WHERE user_id = ? LIMIT 1"
+  ).bind(userId).first<{ id: string }>();
+  if (existingTeam) {
+    return c.json({ teamId: existingTeam.id, existing: true }, 200);
+  }
+
   const budget = (village.population as number) > 5000 ? 80000
     : (village.population as number) > 1000 ? 40000 : 20000;
 
