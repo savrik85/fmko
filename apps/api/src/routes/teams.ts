@@ -423,6 +423,23 @@ teamsRouter.post("/", async (c) => {
         await c.env.DB.prepare(`DELETE FROM ${t} WHERE team_id = ?`).bind(teamId).run().catch(() => {});
       }
 
+      // Create fresh stadium for the new human player
+      {
+        const { generateStadium } = await import("../stadium/stadium-generator");
+        const { createRng } = await import("../generators/rng");
+        let seed = 0;
+        for (let i = 0; i < teamId.length; i++) seed = ((seed << 5) - seed + teamId.charCodeAt(i)) | 0;
+        const rng = createRng(Math.abs(seed));
+        const villageSize = (village as any).size as string || "small";
+        const config = generateStadium(rng, villageSize);
+        await c.env.DB.prepare(
+          `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, lighting, stands, parking, fence)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).bind(uuid(), teamId, config.capacity, config.pitchCondition, config.pitchType,
+          config.changingRooms, config.showers, config.refreshments, config.lighting,
+          config.stands, config.parking, config.fence).run().catch(() => {});
+      }
+
       // Delete the duplicate team row created at line 159
       // First clean any FK references to origTeamId
       await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
