@@ -285,12 +285,12 @@ teamsRouter.post("/", async (c) => {
     playerResidences.push(res.residence);
 
     await c.env.DB.prepare(
-      "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, residence, commute_km) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, residence, commute_km, weekly_wage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(pid, teamId, player.firstName, player.lastName, nickname, player.age, player.position, rating,
       JSON.stringify(skillsCurrent), JSON.stringify(physical), JSON.stringify(personality),
       JSON.stringify(lifeContext), JSON.stringify(generatePlayerFace(player)), description,
       JSON.stringify(skillsMax), hiddenTalent, isGK ? (gkSkills!.experience.current) : (fieldSkills!.experience.current),
-      res.residence, res.commuteKm,
+      res.residence, res.commuteKm, Math.round(10 + rating * 4),
     ).run();
 
     playerConvData.push({
@@ -644,12 +644,13 @@ teamsRouter.post("/", async (c) => {
         });
 
         await c.env.DB.prepare(
-          "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         ).bind(apId, aiTeamId, ap.firstName, ap.lastName, apNickname, ap.age, ap.position, apRating,
           JSON.stringify(apSkills), JSON.stringify(apPhysical), JSON.stringify(apPersonality),
           JSON.stringify(apLifeContext), JSON.stringify(generatePlayerFace(ap)), apDescription,
           JSON.stringify(isGK ? apGkSkills : apFieldSkills), apHiddenTalent,
           isGK ? apGkSkills!.experience.current : apFieldSkills!.experience.current,
+          Math.round(10 + apRating * 4),
         ).run();
       }
 
