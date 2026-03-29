@@ -153,7 +153,9 @@ teamsRouter.post("/", async (c) => {
     "SELECT id FROM teams WHERE user_id = ? AND user_id <> 'ai' LIMIT 1"
   ).bind(userId).first<{ id: string }>();
   if (existingTeam) {
-    return c.json({ teamId: existingTeam.id, existing: true }, 200);
+    // Return same format as normal creation so frontend works
+    const existingName = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(existingTeam.id).first<{ name: string }>();
+    return c.json({ id: existingTeam.id, name: existingName?.name ?? "", existing: true }, 200);
   }
 
   const budget = (village.population as number) > 5000 ? 80000
