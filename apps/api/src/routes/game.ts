@@ -1473,7 +1473,8 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
     const approach = team.training_approach ? approachLabels[team.training_approach] ?? "" : "";
 
     const today = new Date(now);
-    for (let d = 0; d < 14; d++) {
+    const daysToGenerate = Math.max(14, totalDays - currentDay + 1);
+    for (let d = 0; d < daysToGenerate; d++) {
       const day = new Date(today);
       day.setDate(today.getDate() + d);
       const dow = day.getDay();
