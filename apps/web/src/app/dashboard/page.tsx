@@ -384,10 +384,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══ Row 3: Recent matches + Top performers ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5">
-
-        {/* Recent matches */}
+      {/* ═══ Row 3: Recent matches ═══ */}
+      <div className="grid grid-cols-1 gap-5">
         {matchResults && matchResults.matches.length > 0 && (
           <div className="card p-4 sm:p-5">
             <SectionLabel>Poslední zápasy</SectionLabel>
@@ -433,59 +431,59 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Top performers */}
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Nejlepší hráči sezóny</SectionLabel>
-          {matchResults && matchResults.topPlayers.length > 0 ? (
-            <div className="space-y-0">
-              {matchResults.topPlayers.slice(0, 7).map((p, i) => (
-                <a key={p.playerId} href={`/dashboard/player/${p.playerId}`}
-                  className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 transition-colors -mx-2 px-2 rounded">
-                  <span className="text-xs text-muted w-4 tabular-nums">{i + 1}.</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-heading font-bold text-sm truncate">{p.name}</div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                      <span className="text-[10px] text-muted">{p.appearances} zápasů</span>
+      </div>
+
+      {/* ═══ Row 4: Top performers — 3 columns ═══ */}
+      {matchResults && matchResults.topPlayers.length > 0 && (() => {
+          const topScorers = [...matchResults.topPlayers].filter(p => (p.goals as number) > 0).sort((a, b) => (b.goals as number) - (a.goals as number)).slice(0, 5);
+          const topAssisters = [...matchResults.topPlayers].filter(p => (p.assists as number) > 0).sort((a, b) => (b.assists as number) - (a.assists as number)).slice(0, 5);
+          const topRated = [...matchResults.topPlayers].filter(p => (p.appearances as number) >= 1).sort((a, b) => (b.avgRating as number) - (a.avgRating as number)).slice(0, 5);
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+              <div className="card p-4 sm:p-5">
+                <SectionLabel>Střelci</SectionLabel>
+                {topScorers.length > 0 ? topScorers.map((p, i) => (
+                  <a key={p.playerId} href={`/dashboard/player/${p.playerId}`}
+                    className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 -mx-1 px-1 rounded transition-colors">
+                    <span className="text-xs text-muted w-4 tabular-nums">{i + 1}.</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-heading font-bold text-sm truncate">{p.name}</div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm tabular-nums shrink-0">
-                    {(p.goals as number) > 0 && <span className="font-heading font-bold">{p.goals}g</span>}
-                    {(p.assists as number) > 0 && <span className="text-muted">{p.assists}a</span>}
-                    {(p.yellowCards as number) > 0 && <span className="inline-block w-2.5 h-3.5 rounded-[1px] bg-gold-400" />}
-                    <span className={`font-heading font-bold text-xs px-1.5 py-0.5 rounded ${
+                    <span className="font-heading font-bold tabular-nums">{p.goals}</span>
+                  </a>
+                )) : <div className="text-sm text-muted py-2">Žádné góly</div>}
+              </div>
+              <div className="card p-4 sm:p-5">
+                <SectionLabel>Nahrávači</SectionLabel>
+                {topAssisters.length > 0 ? topAssisters.map((p, i) => (
+                  <a key={p.playerId} href={`/dashboard/player/${p.playerId}`}
+                    className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 -mx-1 px-1 rounded transition-colors">
+                    <span className="text-xs text-muted w-4 tabular-nums">{i + 1}.</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-heading font-bold text-sm truncate">{p.name}</div>
+                    </div>
+                    <span className="font-heading font-bold tabular-nums">{p.assists}</span>
+                  </a>
+                )) : <div className="text-sm text-muted py-2">Žádné asistence</div>}
+              </div>
+              <div className="card p-4 sm:p-5">
+                <SectionLabel>Hodnocení</SectionLabel>
+                {topRated.length > 0 ? topRated.map((p, i) => (
+                  <a key={p.playerId} href={`/dashboard/player/${p.playerId}`}
+                    className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 -mx-1 px-1 rounded transition-colors">
+                    <span className="text-xs text-muted w-4 tabular-nums">{i + 1}.</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-heading font-bold text-sm truncate">{p.name}</div>
+                    </div>
+                    <span className={`font-heading font-bold text-xs px-1.5 py-0.5 rounded tabular-nums ${
                       (p.avgRating as number) >= 7 ? "bg-pitch-50 text-pitch-600" : "bg-gray-50 text-ink"
                     }`}>{(p.avgRating as number)?.toFixed(1)}</span>
-                  </div>
-                </a>
-              ))}
+                  </a>
+                )) : <div className="text-sm text-muted py-2">Žádná data</div>}
+              </div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {[...players].sort((a, b) => b.overall_rating - a.overall_rating).slice(0, 5).map((p) => (
-                <a key={p.id} href={`/dashboard/player/${p.id}`} className="flex items-center gap-3 hover:bg-gray-50/50 -mx-2 px-2 py-1 rounded transition-colors">
-                  {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
-                    <FaceAvatar faceConfig={p.avatar} size={32} className="shrink-0" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: color }}>{p.first_name[0]}</div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-heading font-bold truncate">{p.first_name} {p.last_name}</div>
-                    <div className="flex items-center gap-1.5">
-                      <PositionBadge position={p.position} />
-                      <span className="text-xs text-muted">{p.age} let</span>
-                    </div>
-                  </div>
-                  <span className="font-heading font-bold text-lg tabular-nums" style={{ color: safeColor }}>{p.overall_rating}</span>
-                </a>
-              ))}
-            </div>
-          )}
-          <Link href="/dashboard/squad" className="text-xs text-pitch-500 font-heading font-bold hover:underline block text-center pt-2">
-            Celý kádr →
-          </Link>
-        </div>
-      </div>
+          );
+      })()}
     </div>
   );
 }
