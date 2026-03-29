@@ -20,6 +20,19 @@ export function PageHeader({ name, detail, color, badge, children }: PageHeaderP
   const displayName = name || ctx.teamName || "";
   const displayDetail = detail ?? (ctx.villageName && ctx.district ? `${ctx.villageName} · ${ctx.district}` : null);
 
+  const isLight = (() => {
+    const c = bg.replace("#", "");
+    const r = parseInt(c.substring(0, 2), 16);
+    const g = parseInt(c.substring(2, 4), 16);
+    const b = parseInt(c.substring(4, 6), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 > 160;
+  })();
+  const txt = isLight ? "text-gray-900" : "text-white";
+  const txtMuted = isLight ? "text-gray-500" : "text-white/60";
+  const boxBg = isLight ? "bg-black/5" : "bg-white/10";
+  const boxBgHover = isLight ? "hover:bg-black/10" : "hover:bg-white/20";
+  const boxLabel = isLight ? "text-gray-400" : "text-white/50";
+
   const initials = (name || ctx.teamName || "").split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
   const defaultBadge = (color || ctx.primaryColor) ? (
     <BadgePreview
@@ -34,11 +47,11 @@ export function PageHeader({ name, detail, color, badge, children }: PageHeaderP
   const renderedBadge = badge === null ? null : (badge ?? defaultBadge);
 
   const defaultChildren = (
-    <Link href="/dashboard/liga" className="bg-white/10 hover:bg-white/20 rounded-xl px-4 py-2.5 text-center transition-colors">
-      <div className="font-heading font-[800] text-2xl tabular-nums leading-none text-white">
+    <Link href="/dashboard/liga" className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2.5 text-center transition-colors`}>
+      <div className={`font-heading font-[800] text-2xl tabular-nums leading-none ${txt}`}>
         {ctx.leaguePosition != null ? `${ctx.leaguePosition}.` : "—"}
       </div>
-      <div className="text-white/50 text-[10px] font-heading font-bold uppercase mt-1">Místo v lize</div>
+      <div className={`${boxLabel} text-[10px] font-heading font-bold uppercase mt-1`}>Místo v lize</div>
     </Link>
   );
 
@@ -53,11 +66,11 @@ export function PageHeader({ name, detail, color, badge, children }: PageHeaderP
         <div className="flex items-center gap-4 min-w-0">
           {renderedBadge && <div className="shrink-0">{renderedBadge}</div>}
           <div className="min-w-0">
-            <div className="font-heading font-[800] text-white text-xl sm:text-2xl leading-tight truncate">
+            <div className={`font-heading font-[800] ${txt} text-xl sm:text-2xl leading-tight truncate`}>
               {displayName}
             </div>
             {displayDetail && (
-              <div className="text-white/60 text-sm mt-0.5 truncate">{displayDetail}</div>
+              <div className={`${txtMuted} text-sm mt-0.5 truncate`}>{displayDetail}</div>
             )}
           </div>
         </div>
@@ -67,11 +80,11 @@ export function PageHeader({ name, detail, color, badge, children }: PageHeaderP
   );
 }
 
-export function HeaderStat({ value, label }: { value: string | number; label: string }) {
+export function HeaderStat({ value, label, light }: { value: string | number; label: string; light?: boolean }) {
   return (
-    <div className="bg-white/10 rounded-xl px-4 py-2 text-center min-w-[60px]">
-      <div className="font-heading font-[800] text-xl tabular-nums leading-none text-white">{value}</div>
-      <div className="text-white/50 text-[10px] font-heading font-bold uppercase mt-1">{label}</div>
+    <div className={`${light ? "bg-black/5" : "bg-white/10"} rounded-xl px-4 py-2 text-center min-w-[60px]`}>
+      <div className={`font-heading font-[800] text-xl tabular-nums leading-none ${light ? "text-gray-900" : "text-white"}`}>{value}</div>
+      <div className={`${light ? "text-gray-400" : "text-white/50"} text-[10px] font-heading font-bold uppercase mt-1`}>{label}</div>
     </div>
   );
 }

@@ -101,11 +101,9 @@
       "Bash(TOKEN=\"1db80d972c9332b71e7e16ec7c5c783170e055008f385ef8d29071f864de4746\")",
       "Bash(for i:*)",
       "Bash(do curl:*)",
-      "Bash(gh run:*)",
-      "Bash(git push:*)",
+      "Bash(git stash:*)",
       "Bash(git checkout:*)",
-      "Bash(git reset:*)",
-      "Bash(git stash:*)"
+      "Bash(git push:*)"
     ]
   }
 }
