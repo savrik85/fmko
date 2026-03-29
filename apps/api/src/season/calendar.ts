@@ -42,9 +42,11 @@ export function generateSeasonCalendar(
 ): SeasonCalendar {
   const entries: CalendarEntry[] = [];
   let currentDate = new Date(startDate);
+  // Skip 4 days so the player has time to train before first match
+  currentDate.setDate(currentDate.getDate() + 4);
   let round = 1;
 
-  // Find first Wednesday from start date
+  // Find first Wednesday from adjusted start date
   while (currentDate.getDay() !== 3) { // 3 = Wednesday
     currentDate.setDate(currentDate.getDate() + 1);
   }
