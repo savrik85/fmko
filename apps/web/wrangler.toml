@@ -4,11 +4,6 @@ compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".open-next/assets"
 
 [vars]
-NEXT_PUBLIC_API_URL = "https://api.prales.fun"
-NEXT_PUBLIC_SITE_URL = "https://prales.fun"
-API_URL = "https://api.prales.fun"
-
-[env.preview.vars]
 NEXT_PUBLIC_API_URL = "https://api-test.prales.fun"
 NEXT_PUBLIC_SITE_URL = "https://test.prales.fun"
 API_URL = "https://api-test.prales.fun"
