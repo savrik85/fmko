@@ -145,26 +145,15 @@ teamsRouter.post("/", async (c) => {
   }
 
   if (!userId) {
-    // Fallback: create anonymous user
-    userId = uuid();
-    await c.env.DB.prepare(
-      "INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)"
-    ).bind(userId, `anon-${teamId}@temp.local`, "anonymous").run();
+    return c.json({ error: "Musíš být přihlášen" }, 401);
   }
 
-  // Prevent duplicate team creation — check by user_id AND by village_id+name combo
+  // Prevent duplicate team creation — jeden uživatel = jeden tým
   const existingTeam = await c.env.DB.prepare(
     "SELECT id FROM teams WHERE user_id = ? AND user_id <> 'ai' LIMIT 1"
   ).bind(userId).first<{ id: string }>();
   if (existingTeam) {
     return c.json({ teamId: existingTeam.id, existing: true }, 200);
-  }
-  // Also check village+name to prevent anon user duplicates
-  const existingByName = await c.env.DB.prepare(
-    "SELECT id FROM teams WHERE village_id = ? AND name = ? LIMIT 1"
-  ).bind(body.villageId, body.name).first<{ id: string }>();
-  if (existingByName) {
-    return c.json({ teamId: existingByName.id, existing: true }, 200);
   }
 
   const budget = (village.population as number) > 5000 ? 80000
