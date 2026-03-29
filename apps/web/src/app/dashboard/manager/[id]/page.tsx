@@ -2,7 +2,7 @@
 export const runtime = "edge";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { apiFetch, type ManagerProfile, type Team } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -27,6 +27,7 @@ function attrColor(value: number): string {
 
 export default function ManagerDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const { teamId } = useTeam();
   const managerId = params.id as string;
 
@@ -87,6 +88,21 @@ export default function ManagerDetailPage() {
               </a>
             </div>
           </div>
+
+          {/* Message button for rival managers */}
+          {managerId !== teamId && teamId && (team as any).user_id !== "ai" && (
+            <button onClick={async () => {
+              if (!teamId) return;
+              const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/conversation-with/${managerId}`, {
+                method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+              }).catch(() => null);
+              if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
+            }}
+              className="bg-white/10 hover:bg-white/20 rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0">
+              <div className="text-xl leading-none">{"\u{1F4AC}"}</div>
+              <div className="text-white/70 text-[10px] font-heading font-bold uppercase mt-1">Napsat</div>
+            </button>
+          )}
         </div>
       </div>
 
