@@ -191,15 +191,19 @@ function StandingsTab({ standings, teamId }: { standings: Standing[]; teamId: st
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b-2 border-gray-200">
-            {cols.map((col) => (
-              <th key={col.key} onClick={() => handleSort(col.key)}
-                className={`py-2.5 px-1.5 text-xs font-heading uppercase cursor-pointer select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
-                  col.key === "team" ? "text-left pl-3" : "text-center"
-                } ${sortKey === col.key ? "text-pitch-600" : "text-muted"}`}>
-                {col.label}{sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-              </th>
-            ))}
-            <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-muted text-center w-28">Forma</th>
+            {cols.map((col) => {
+              const hideMobile = ["played", "wins", "draws", "losses"].includes(col.key);
+              return (
+                <th key={col.key} onClick={() => handleSort(col.key)}
+                  colSpan={col.key === "team" ? 2 : undefined}
+                  className={`py-2.5 px-1.5 text-xs font-heading uppercase cursor-pointer select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
+                    col.key === "team" ? "text-left pl-3" : "text-center"
+                  } ${sortKey === col.key ? "text-pitch-600" : "text-muted"} ${hideMobile ? "hidden sm:table-cell" : ""}`}>
+                  {col.label}{sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                </th>
+              );
+            })}
+            <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-muted text-center w-28 hidden sm:table-cell">Forma</th>
           </tr>
         </thead>
         <tbody>
@@ -219,32 +223,33 @@ function StandingsTab({ standings, teamId }: { standings: Standing[]; teamId: st
                     {row.pos}
                   </span>
                 </td>
-                {/* Team */}
-                <td className="py-3 px-1.5 pl-3">
-                  <div className="flex items-center gap-2">
-                    <BadgePreview primary={row.primaryColor || "#2D5F2D"} secondary={row.secondaryColor || "#FFF"}
-                      pattern={(row.badgePattern as BadgePattern) || "shield"} initials={ini(row.team)} size={24} />
-                    {row.teamId && !row.isAi ? (
-                      <Link href={`/dashboard/team/${row.teamId}`} className={`font-heading font-bold hover:text-pitch-500 transition-colors ${row.isPlayer ? "text-pitch-600" : ""}`}>
-                        {row.team}
-                      </Link>
-                    ) : (
-                      <span className={`font-heading font-bold ${row.isAi ? "text-muted" : ""}`}>{row.team}</span>
-                    )}
-                  </div>
+                {/* Badge */}
+                <td className="py-3 pl-2 pr-0 w-8" style={{ verticalAlign: "middle" }}>
+                  <BadgePreview primary={row.primaryColor || "#2D5F2D"} secondary={row.secondaryColor || "#FFF"}
+                    pattern={(row.badgePattern as BadgePattern) || "shield"} initials={ini(row.team)} size={24} />
                 </td>
-                {/* Stats */}
-                <td className="py-3 px-1.5 text-center tabular-nums text-muted">{row.played}</td>
-                <td className="py-3 px-1.5 text-center tabular-nums font-medium">{row.wins}</td>
-                <td className="py-3 px-1.5 text-center tabular-nums font-medium">{row.draws}</td>
-                <td className="py-3 px-1.5 text-center tabular-nums font-medium">{row.losses}</td>
+                {/* Team */}
+                <td className="py-3 px-1.5" style={{ verticalAlign: "middle" }}>
+                  {row.teamId && !row.isAi ? (
+                    <Link href={`/dashboard/team/${row.teamId}`} className={`font-heading font-bold hover:text-pitch-500 transition-colors ${row.isPlayer ? "text-pitch-600" : ""}`}>
+                      {row.team}
+                    </Link>
+                  ) : (
+                    <span className={`font-heading font-bold ${row.isAi ? "text-muted" : ""}`}>{row.team}</span>
+                  )}
+                </td>
+                {/* Stats — hidden on mobile */}
+                <td className="py-3 px-1.5 text-center tabular-nums text-muted hidden sm:table-cell">{row.played}</td>
+                <td className="py-3 px-1.5 text-center tabular-nums font-medium hidden sm:table-cell">{row.wins}</td>
+                <td className="py-3 px-1.5 text-center tabular-nums font-medium hidden sm:table-cell">{row.draws}</td>
+                <td className="py-3 px-1.5 text-center tabular-nums font-medium hidden sm:table-cell">{row.losses}</td>
                 <td className="py-3 px-1.5 text-center tabular-nums">{row.gf}:{row.ga}</td>
                 {/* Points */}
                 <td className="py-3 px-1.5 text-center">
                   <span className="font-heading font-[800] text-xl tabular-nums">{row.points}</span>
                 </td>
-                {/* Form */}
-                <td className="py-3 px-1.5">
+                {/* Form — hidden on mobile */}
+                <td className="py-3 px-1.5 hidden sm:table-cell">
                   <div className="flex gap-1 justify-center">
                     {(row.form ?? []).slice(0, 5).map((f, i) => (
                       <div key={i} className={`w-5 h-5 rounded ${FORM_COLORS[f] ?? "bg-gray-200"} flex items-center justify-center text-white text-[10px] font-bold`}>

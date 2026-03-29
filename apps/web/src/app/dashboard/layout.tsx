@@ -33,7 +33,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [teamId, pathname]);
 
   return (
-    <div className="min-h-screen flex bg-paper">
+    <div className="min-h-screen flex bg-paper overflow-x-hidden">
       <FMSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 pb-20 sm:pb-0">

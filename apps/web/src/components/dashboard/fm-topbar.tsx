@@ -71,26 +71,26 @@ export function FMTopBar() {
       </div>
 
       {/* Right side info */}
-      <div className="flex items-center gap-6 shrink-0 text-sm font-heading">
+      <div className="flex items-center gap-3 sm:gap-6 shrink-0 text-xs sm:text-sm font-heading overflow-hidden">
         {budget != null && (
-          <span className="text-white/60 tabular-nums">💰 {budget.toLocaleString("cs")} Kč</span>
+          <span className="text-white/60 tabular-nums whitespace-nowrap">{"💰"} {budget.toLocaleString("cs")} {"Kč"}</span>
         )}
         {nextMatch && (
-          <span className="text-white/60">
-            ⚽ <span className="text-white font-bold">{nextMatch.opponent}</span>
+          <span className="text-white/60 whitespace-nowrap truncate">
+            {"⚽"} <span className="text-white font-bold">{nextMatch.opponent}</span>
             {" · "}
             {nextMatch.daysUntil === 0 ? (
-              <span className="text-pitch-400 font-bold">dnes!</span>
+              <span className="text-pitch-400 font-bold">{"dnes!"}</span>
             ) : nextMatch.daysUntil === 1 ? (
-              <span className="text-pitch-400">zítra</span>
+              <span className="text-pitch-400">{"zítra"}</span>
             ) : (
-              <span>za {nextMatch.daysUntil} dní</span>
+              <span>{"za"} {nextMatch.daysUntil} {"dní"}</span>
             )}
           </span>
         )}
         {season != null && (
-          <span className="text-white/40">
-            📅 Sezóna {season}{seasonDay != null && seasonTotal != null && seasonTotal > 0 ? ` · den ${seasonDay}/${seasonTotal}` : ""}
+          <span className="text-white/40 whitespace-nowrap hidden sm:inline">
+            {"📅"} {"Sezóna"} {season}{seasonDay != null && seasonTotal != null && seasonTotal > 0 ? ` · den ${seasonDay}/${seasonTotal}` : ""}
           </span>
         )}
       </div>

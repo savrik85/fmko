@@ -14,7 +14,7 @@ const TACTICS = [
   { key: "offensive", label: "Útočná", icon: "⚔️" },
   { key: "balanced", label: "Vyrovnaná", icon: "⚖️" },
   { key: "defensive", label: "Defenzivní", icon: "🛡️" },
-  { key: "long_ball", label: "Dlouhé míče", icon: "🏈" },
+  { key: "long_ball", label: "Nakopávané", icon: "🏈" },
 ] as const;
 
 // Vertikální hřiště — GK dole, FWD nahoře. Souřadnice v % (x=0-100, y=0-100)
@@ -152,11 +152,20 @@ export default function MatchPage() {
   return (
     <div className="page-container space-y-4">
 
-      {/* Match header */}
+      {/* Match header — mobil: jen soupeř, desktop: oba týmy */}
       <div className="card p-4">
-        <div className="flex items-center justify-center gap-6">
+        {/* Mobil: kompaktní — soupeř + kolo */}
+        <div className="flex items-center justify-center gap-3 sm:hidden">
+          <span className="font-heading font-bold text-sm text-muted">vs</span>
+          <JerseyPreview primary={nextMatch.isHome ? (nextMatch.awayColor || "#D94032") : (nextMatch.homeColor || "#2D5F2D")} secondary="#FFF" size={36} />
+          <BadgePreview primary={nextMatch.isHome ? (nextMatch.awayColor || "#D94032") : (nextMatch.homeColor || "#2D5F2D")} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName)} size={32} />
+          <span className="font-heading font-bold text-lg">{nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName}</span>
+          <span className="text-sm text-muted">· {nextMatch.gameWeek}. kolo</span>
+        </div>
+        {/* Desktop: plný header */}
+        <div className="hidden sm:flex items-center justify-center gap-6">
           <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
-            <span className={`font-heading font-bold text-lg ${nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.homeName}</span>
+            <span className={`font-heading font-bold text-lg text-right ${nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.homeName}</span>
             <BadgePreview primary={nextMatch.homeColor || "#2D5F2D"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.homeName)} size={28} />
             <JerseyPreview primary={nextMatch.homeColor || "#2D5F2D"} secondary="#FFF" size={32} />
           </div>
@@ -173,19 +182,19 @@ export default function MatchPage() {
       </div>
 
       {/* Formation + Tactic */}
-      <div className="flex items-center gap-2 flex-wrap justify-center">
-        <div className="flex gap-1 bg-surface rounded-xl p-1">
+      <div className="space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-2 sm:justify-center">
+        <div className="flex gap-1 bg-surface rounded-xl p-1 justify-between sm:justify-start">
           {FORMATIONS.map((f) => (
             <button key={f} onClick={() => { setFormation(f); autoFill(players, f); }}
-              className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${formation === f ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"}`}>
+              className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${formation === f ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"}`}>
               {f}
             </button>
           ))}
         </div>
-        <div className="flex gap-1 bg-surface rounded-xl p-1">
+        <div className="flex gap-1 bg-surface rounded-xl p-1 justify-between sm:justify-start">
           {TACTICS.map((t) => (
             <button key={t.key} onClick={() => { setTactic(t.key); setSaved(false); }}
-              className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${tactic === t.key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"}`}>
+              className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${tactic === t.key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"}`}>
               {t.icon} {t.label}
             </button>
           ))}
@@ -198,33 +207,24 @@ export default function MatchPage() {
           <div className="px-4 py-2 bg-red-50 border-b border-red-100 flex items-center gap-2">
             <span className="font-heading font-bold text-sm uppercase text-card-red">Nedostupní ({players.filter((p) => p.absent).length})</span>
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 text-muted">
-                <th className="py-1.5 pl-4 text-left text-xs font-heading">Hráč</th>
-                <th className="py-1.5 text-left text-xs font-heading">Pozice</th>
-                <th className="py-1.5 text-left text-xs font-heading">Důvod</th>
-                <th className="py-1.5 pr-4 text-left text-xs font-heading">Detail</th>
-              </tr>
-            </thead>
-            <tbody>
-              {players.filter((p) => p.absent).map((p) => (
-                <tr key={p.id} className="border-b border-gray-50 last:border-b-0">
-                  <td className="py-2 pl-4">
-                    <div className="flex items-center gap-2">
-                      <span>{p.absenceEmoji ?? "❌"}</span>
-                      <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.firstName} {p.lastName}</Link>
-                    </div>
-                  </td>
-                  <td className="py-2"><PositionBadge position={p.position as Pos} /></td>
-                  <td className="py-2">
-                    <span className={`font-heading font-bold text-sm ${(p as any).injured ? "text-card-red" : "text-gold-600"}`}>
-                      {(p as any).injured ? `🩹 Zranění (${(p as any).injuryDays}d)` : p.absenceReason}
-                    </span>
-                  </td>
-                  <td className="py-2 pr-4 text-muted italic">{p.absenceSms}</td>
-                </tr>
-              ))}
+          <table className="w-full">
+            <tbody className="divide-y divide-gray-50">
+              {players.filter((p) => p.absent).map((p) => {
+                const reason = (p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : (p.absenceSms ?? p.absenceReason);
+                return (
+                  <tr key={p.id}>
+                    <td className="py-2 pl-4 pr-1 w-8 align-middle"><span>{p.absenceEmoji ?? "❌"}</span></td>
+                    <td className="py-2 px-1 align-middle">
+                      <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-sm hover:text-pitch-500 transition-colors">{p.firstName} {p.lastName}</Link>
+                      <p className="text-sm text-muted sm:hidden">{reason}</p>
+                    </td>
+                    <td className="py-2 px-1 align-middle hidden sm:table-cell">
+                      <span className="text-sm text-muted">{reason}</span>
+                    </td>
+                    <td className="py-2 pl-1 pr-4 align-middle text-right"><PositionBadge position={p.position as Pos} /></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

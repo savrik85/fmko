@@ -157,79 +157,139 @@ export default function PlayerDetailPage() {
     <>
       {/* ═══ Player header ═══ */}
       <div className="hero-gradient px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
-        <div className="flex items-center gap-3 sm:gap-4 max-w-[1280px] mx-auto">
-          {allPlayers.length > 1 && (
-            <button onClick={() => prevPlayer && router.push(`/dashboard/player/${prevPlayer.id}`)}
-              className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors text-sm sm:text-base">&#9664;</button>
-          )}
-
-          {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
-            <FaceAvatar faceConfig={player.avatar} size={72} className="shrink-0 bg-white/10 rounded-xl hidden sm:block" />
-          ) : null}
-          {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
-            <FaceAvatar faceConfig={player.avatar} size={52} className="shrink-0 bg-white/10 rounded-xl sm:hidden" />
-          ) : (
-            <div className="shrink-0 w-[52px] h-[52px] sm:w-[72px] sm:h-[72px] rounded-xl bg-white/10 flex items-center justify-center text-white font-heading font-bold text-xl sm:text-2xl">
-              {player.first_name[0]}
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <h1 className="font-heading font-extrabold text-white text-lg sm:text-2xl leading-tight">
-              {player.first_name} {player.last_name}
-            </h1>
-            {player.nickname && (
-              <div className="text-white/70 text-sm">&bdquo;{player.nickname}&ldquo;</div>
+        <div className="max-w-[1280px] mx-auto">
+          {/* ─── Desktop: jednořádkový layout ─── */}
+          <div className="hidden sm:flex items-center gap-4">
+            {allPlayers.length > 1 && (
+              <button onClick={() => prevPlayer && router.push(`/dashboard/player/${prevPlayer.id}`)}
+                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors">&#9664;</button>
             )}
-            <div className="flex items-center gap-3 mt-1 flex-wrap">
+            {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
+              <FaceAvatar faceConfig={player.avatar} size={72} className="shrink-0 bg-white/10 rounded-xl" />
+            ) : (
+              <div className="shrink-0 w-[72px] h-[72px] rounded-xl bg-white/10 flex items-center justify-center text-white font-heading font-bold text-2xl">
+                {player.first_name[0]}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <h1 className="font-heading font-extrabold text-white text-2xl leading-tight">
+                {player.first_name} {player.last_name}
+              </h1>
+              {player.nickname && (
+                <div className="text-white/70 text-sm">&bdquo;{player.nickname}&ldquo;</div>
+              )}
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                <PositionBadge position={player.position} />
+                <span className="text-white/80 text-sm">{player.age} let</span>
+                <span className="text-white/40">&middot;</span>
+                <span className="text-white/80 text-sm">{player.lifeContext?.occupation ?? ""}</span>
+                {player.loan_from_team_id && (
+                  <>
+                    <span className="text-white/40">&middot;</span>
+                    <span className="bg-yellow-400/20 text-yellow-200 text-xs font-heading font-bold px-2 py-0.5 rounded-full">Na hostování</span>
+                  </>
+                )}
+                <span className="text-white/40">&middot;</span>
+                <a href={`/dashboard/team/${displayTeam.id}`} className="text-white/90 text-sm hover:text-white underline decoration-white/30 transition-colors flex items-center gap-1.5">
+                  <BadgePreview primary={color} secondary={displayTeam.secondary_color || "#FFF"} pattern={(displayTeam.badge_pattern as BadgePattern) || "shield"}
+                    initials={displayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
+                  {displayTeam.name}
+                </a>
+              </div>
+            </div>
+            {/* Condition + Morale + Rating */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              <div className="bg-white/10 rounded-xl py-2.5 text-center min-w-[64px]">
+                <div className={`font-heading font-extrabold text-lg tabular-nums leading-none ${cond.color === "text-pitch-500" ? "text-green-300" : cond.color === "text-gold-500" ? "text-yellow-300" : "text-red-300"}`}>
+                  {player.lifeContext?.condition ?? 50}%
+                </div>
+                <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Kondice</div>
+              </div>
+              <div className="bg-white/10 rounded-xl py-2.5 text-center min-w-[64px]">
+                <div className="text-xl leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
+                <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Mor\u00E1lka</div>
+              </div>
+              <div className="bg-white/10 rounded-xl py-2.5 text-center min-w-[64px]">
+                <div className="font-heading font-extrabold text-xl tabular-nums leading-none text-white">
+                  {player.overall_rating}
+                </div>
+                <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Rating</div>
+              </div>
+            </div>
+            {allPlayers.length > 1 && (
+              <button onClick={() => nextPlayer && router.push(`/dashboard/player/${nextPlayer.id}`)}
+                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors">&#9654;</button>
+            )}
+          </div>
+
+          {/* ─── Mobil: kompaktní layout ─── */}
+          <div className="sm:hidden">
+            {/* Řádek 1: avatar + jméno/info + šipky */}
+            <div className="flex items-center gap-3">
+              {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
+                <FaceAvatar faceConfig={player.avatar} size={56} className="shrink-0 bg-white/10 rounded-xl" />
+              ) : (
+                <div className="shrink-0 w-14 h-14 rounded-xl bg-white/10 flex items-center justify-center text-white font-heading font-bold text-xl">
+                  {player.first_name[0]}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h1 className="font-heading font-extrabold text-white text-xl leading-tight">
+                  {player.first_name} {player.last_name}
+                </h1>
+                {player.nickname && (
+                  <div className="text-white/60 text-sm">&bdquo;{player.nickname}&ldquo;</div>
+                )}
+              </div>
+              {allPlayers.length > 1 && (
+                <div className="flex gap-1.5 shrink-0">
+                  <button onClick={() => prevPlayer && router.push(`/dashboard/player/${prevPlayer.id}`)}
+                    className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors text-sm">&#9664;</button>
+                  <button onClick={() => nextPlayer && router.push(`/dashboard/player/${nextPlayer.id}`)}
+                    className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors text-sm">&#9654;</button>
+                </div>
+              )}
+            </div>
+            {/* Řádek 2: pozice, věk, povolání, tým */}
+            <div className="flex items-center gap-2.5 mt-2 flex-wrap">
               <PositionBadge position={player.position} />
               <span className="text-white/80 text-sm">{player.age} let</span>
               <span className="text-white/40">&middot;</span>
-              <span className="text-white/80 text-sm">{player.lifeContext?.occupation ?? ""}</span>
-              {player.loan_from_team_id && (
-                <>
-                  <span className="text-white/40">&middot;</span>
-                  <span className="bg-yellow-400/20 text-yellow-200 text-xs font-heading font-bold px-2 py-0.5 rounded-full">Na hostování</span>
-                </>
-              )}
+              <span className="text-white/70 text-sm">{player.lifeContext?.occupation ?? ""}</span>
               <span className="text-white/40">&middot;</span>
-              <a href={`/dashboard/team/${displayTeam.id}`} className="text-white/90 text-sm hover:text-white underline decoration-white/30 transition-colors flex items-center gap-1.5">
+              <a href={`/dashboard/team/${displayTeam.id}`} className="text-white/80 text-sm hover:text-white flex items-center gap-1.5">
                 <BadgePreview primary={color} secondary={displayTeam.secondary_color || "#FFF"} pattern={(displayTeam.badge_pattern as BadgePattern) || "shield"}
-                  initials={displayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
+                  initials={displayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={16} />
                 {displayTeam.name}
               </a>
             </div>
+            {/* Řádek 3: staty přes celou šířku */}
+            <div className="flex gap-2 mt-3">
+              <div className="flex-1 bg-white/10 rounded-lg py-2 text-center">
+                <div className={`font-heading font-extrabold text-base tabular-nums leading-none ${cond.color === "text-pitch-500" ? "text-green-300" : cond.color === "text-gold-500" ? "text-yellow-300" : "text-red-300"}`}>
+                  {player.lifeContext?.condition ?? 50}%
+                </div>
+                <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Kondice</div>
+              </div>
+              <div className="flex-1 bg-white/10 rounded-lg py-2 text-center">
+                <div className="text-lg leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
+                <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Morálka</div>
+              </div>
+              <div className="flex-1 bg-white/10 rounded-lg py-2 text-center">
+                <div className="font-heading font-extrabold text-base tabular-nums leading-none text-white">{player.overall_rating}</div>
+                <div className="text-white/50 text-[9px] font-heading font-bold uppercase mt-0.5">Rating</div>
+              </div>
+            </div>
           </div>
 
-          {/* Condition + Morale + Rating */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-            <div className="bg-white/10 rounded-lg sm:rounded-xl py-2 sm:py-2.5 text-center min-w-[48px] sm:min-w-[64px]">
-              <div className={`font-heading font-extrabold text-base sm:text-lg tabular-nums leading-none ${cond.color === "text-pitch-500" ? "text-green-300" : cond.color === "text-gold-500" ? "text-yellow-300" : "text-red-300"}`}>
-                {player.lifeContext?.condition ?? 50}%
-              </div>
-              <div className="text-white/50 text-[8px] sm:text-[9px] font-heading font-bold uppercase mt-0.5">Kondice</div>
-            </div>
-            <div className="bg-white/10 rounded-lg sm:rounded-xl py-2 sm:py-2.5 text-center min-w-[48px] sm:min-w-[64px]">
-              <div className="text-lg sm:text-xl leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
-              <div className="text-white/50 text-[8px] sm:text-[9px] font-heading font-bold uppercase mt-0.5">Mor\u00E1lka</div>
-            </div>
-            <div className="bg-white/10 rounded-lg sm:rounded-xl py-2 sm:py-2.5 text-center min-w-[48px] sm:min-w-[64px]">
-              <div className="font-heading font-extrabold text-lg sm:text-xl tabular-nums leading-none text-white">
-                {player.overall_rating}
-              </div>
-              <div className="text-white/50 text-[8px] sm:text-[9px] font-heading font-bold uppercase mt-0.5">Rating</div>
-            </div>
-            {isForeignHumanPlayer && !offerSent && (
+          {/* Nabídka tlačítko — pod headerem */}
+          {isForeignHumanPlayer && !offerSent && (
+            <div className="max-w-[1280px] mx-auto mt-3">
               <button onClick={() => setOfferOpen(!offerOpen)}
-                className={`rounded-xl px-3 py-2 text-center transition-colors cursor-pointer min-w-[64px] ${offerOpen ? "bg-white/20" : "bg-white/10 hover:bg-white/20"}`}>
-                <div className="text-xl leading-none">{offerOpen ? "✕" : "🤝"}</div>
-                <div className="text-white/70 text-[9px] font-heading font-bold uppercase mt-0.5">Nabídka</div>
+                className={`rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors ${offerOpen ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white/80"}`}>
+                {offerOpen ? "✕ Zavřít" : "🤝 Nabídka"}
               </button>
-            )}
-          </div>
-
-          {allPlayers.length > 1 && (
-            <button onClick={() => nextPlayer && router.push(`/dashboard/player/${nextPlayer.id}`)}
-              className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 transition-colors text-sm sm:text-base">&#9654;</button>
+            </div>
           )}
         </div>
 

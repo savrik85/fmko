@@ -20,7 +20,7 @@ export function BadgePreview({ primary, secondary, pattern, initials, size = 64 
   };
 
   return (
-    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} style={{ verticalAlign: "middle", flexShrink: 0 }}>
       {pattern === "circle" ? (
         <circle cx={half} cy={half} r={half * 0.85} fill={primary} stroke={stroke} strokeWidth={s * 0.04} />
       ) : pattern === "square" ? (
