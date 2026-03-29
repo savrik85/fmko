@@ -64,11 +64,9 @@ function restoreOnboarding(): { step: number; state: OnboardingState } {
   let parsed: OnboardingState;
   try { parsed = JSON.parse(savedState); } catch { return { step: 1, state: EMPTY_STATE }; }
 
-  // If team was already created, start fresh
+  // If team was already created, go to reveal step (step 5)
   if (parsed.createdTeamId) {
-    sessionStorage.removeItem("onboarding_step");
-    sessionStorage.removeItem("onboarding_state");
-    return { step: 1, state: EMPTY_STATE };
+    return { step: 5, state: parsed };
   }
 
   // Validate step has required data — if not, fall back to the highest valid step
@@ -86,13 +84,18 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(restored.step);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
-  const { token, isLoading, setTeam } = useTeam();
+  const { token, isLoading, teamId, setTeam } = useTeam();
   const router = useRouter();
 
   // Redirect to register if not authenticated
   useEffect(() => {
     if (!isLoading && !token) router.replace("/register");
   }, [isLoading, token, router]);
+
+  // If user already has a team, redirect to dashboard
+  useEffect(() => {
+    if (!isLoading && teamId) router.replace("/dashboard");
+  }, [isLoading, teamId, router]);
 
   const [state, setState] = useState<OnboardingState>(restored.state);
 
