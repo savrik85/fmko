@@ -336,21 +336,22 @@ export async function runScheduledMatches(
 
         // ── Suspensions: red card = 1 match ban, 4 yellows in season = 1 match ban ──
         const allUpdates = [...homeUpdates, ...awayUpdates];
+        const suspensionStmts: D1PreparedStatement[] = [];
         for (const u of allUpdates) {
-          // Red card → immediate 1-match suspension
           if (u.redCards > 0) {
-            await db.prepare("UPDATE players SET suspended_matches = suspended_matches + 1 WHERE id = ?")
-              .bind(u.playerId).run().catch((e) => logger.warn({ module: "match-runner" }, "red card suspension", e));
-            logger.info({ module: "match-runner" }, `red card suspension: player ${u.playerId}`);
+            suspensionStmts.push(db.prepare("UPDATE players SET suspended_matches = suspended_matches + 1 WHERE id = ?").bind(u.playerId));
           }
-          // 4 yellows accumulated → 1-match suspension (check after update)
+        }
+        if (suspensionStmts.length > 0) await db.batch(suspensionStmts).catch((e) => logger.warn({ module: "match-runner" }, "batch suspensions", e));
+
+        // Yellow card accumulation check (needs reads, do sequentially but only for players with yellows)
+        for (const u of allUpdates) {
           if (u.yellowCards > 0) {
             const stats = await db.prepare("SELECT yellow_cards FROM player_stats WHERE player_id = ? AND season_id = ?")
               .bind(u.playerId, season.id).first<{ yellow_cards: number }>().catch(() => null);
             if (stats && stats.yellow_cards > 0 && stats.yellow_cards % 4 === 0) {
               await db.prepare("UPDATE players SET suspended_matches = suspended_matches + 1 WHERE id = ?")
-                .bind(u.playerId).run().catch((e) => logger.warn({ module: "match-runner" }, "yellow card suspension", e));
-              logger.info({ module: "match-runner" }, `yellow card suspension (${stats.yellow_cards} yellows): player ${u.playerId}`);
+                .bind(u.playerId).run().catch(() => {});
             }
           }
         }
@@ -365,6 +366,7 @@ export async function runScheduledMatches(
           "bolest kolene": "koleno", "bolavá záda": "zada", "naražená hlava": "hlava",
           "pohmožděný palec": "obecne", "přetržený achilov": "achilovka",
         };
+        const injuryStmts: D1PreparedStatement[] = [];
         for (const event of result.events) {
           if (event.type === "injury") {
             const evTeamId = event.teamId === 1 ? homeTeamId : awayTeamId;
@@ -374,13 +376,13 @@ export async function runScheduledMatches(
               const days = 3 + Math.floor(Math.random() * 18);
               const injType = injuryTypeMap[event.detail ?? ""] ?? "obecne";
               const severity = days <= 7 ? "lehke" : days <= 14 ? "stredni" : "tezke";
-              await db.prepare(
+              injuryStmts.push(db.prepare(
                 "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, match_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-              ).bind(crypto.randomUUID(), realPlayerId, evTeamId, injType, event.detail ?? "zranění", severity, days, days, matchId).run()
-                .catch((e) => logger.warn({ module: "match-runner" }, "persist injury", e));
+              ).bind(crypto.randomUUID(), realPlayerId, evTeamId, injType, event.detail ?? "zranění", severity, days, days, matchId));
             }
           }
         }
+        if (injuryStmts.length > 0) await db.batch(injuryStmts).catch((e) => logger.warn({ module: "match-runner" }, "batch persist injuries", e));
       }
 
       // Match-day finances for both teams
@@ -420,15 +422,14 @@ export async function runScheduledMatches(
         } catch { /* manager xp optional */ }
       }
 
-      // Persist condition + morale changes back to DB
+      // Persist condition + morale changes back to DB (batched)
       try {
-        for (const player of [...result.homeLineup, ...result.awayLineup]) {
-          const dbId = fullIdMap.get(player.id);
-          if (!dbId) continue;
-          await db.prepare(
+        const condStmts = [...result.homeLineup, ...result.awayLineup]
+          .filter(p => fullIdMap.has(p.id))
+          .map(p => db.prepare(
             `UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?`
-          ).bind(Math.round(player.condition), Math.round(player.morale), dbId).run();
-        }
+          ).bind(Math.round(p.condition), Math.round(p.morale), fullIdMap.get(p.id)!));
+        if (condStmts.length > 0) await db.batch(condStmts);
       } catch (e) {
         logger.error({ module: "match-runner" }, "Condition persist failed", e);
       }

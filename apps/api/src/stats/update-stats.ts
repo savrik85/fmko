@@ -141,8 +141,9 @@ export async function saveMatchPlayerStats(
   matchId: string,
   entries: MatchPlayerStatsEntry[],
 ): Promise<void> {
-  for (const e of entries) {
-    await db.prepare(
+  if (entries.length === 0) return;
+  const stmts = entries.map((e) =>
+    db.prepare(
       `INSERT INTO match_player_stats (id, match_id, player_id, team_id, started, position, minutes_played, goals, assists, yellow_cards, red_cards, rating)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(match_id, player_id) DO NOTHING`
@@ -150,8 +151,9 @@ export async function saveMatchPlayerStats(
       crypto.randomUUID(), matchId, e.playerId, e.teamId,
       e.started ? 1 : 0, e.position, e.minutesPlayed,
       e.goals, e.assists, e.yellowCards, e.redCards, e.rating,
-    ).run().catch((e) => logger.warn({ module: "stats" }, "upsert stats", e));
-  }
+    )
+  );
+  await db.batch(stmts).catch((e) => logger.warn({ module: "stats" }, "batch save match player stats", e));
 }
 
 /**
@@ -229,9 +231,9 @@ export async function updatePlayerStats(
   updates: StatsUpdate[],
   isCleanSheet: boolean,
 ): Promise<void> {
-  for (const u of updates) {
-    // Try insert, on conflict update
-    await db.prepare(
+  if (updates.length === 0) return;
+  const stmts = updates.map((u) =>
+    db.prepare(
       `INSERT INTO player_stats (id, player_id, team_id, season_id, appearances, goals, assists, yellow_cards, red_cards, minutes_played, avg_rating, clean_sheets)
        VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(player_id, season_id) DO UPDATE SET
@@ -246,8 +248,8 @@ export async function updatePlayerStats(
     ).bind(
       crypto.randomUUID(), u.playerId, teamId, seasonId,
       u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0,
-      // ON CONFLICT values:
       u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0,
-    ).run().catch((e) => logger.warn({ module: "stats" }, "upsert stats", e));
-  }
+    )
+  );
+  await db.batch(stmts).catch((e) => logger.warn({ module: "stats" }, "batch upsert stats", e));
 }
