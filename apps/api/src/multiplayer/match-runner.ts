@@ -531,7 +531,7 @@ async function buildMatchPlayers(
           injuryProneness: personality.injuryProneness ?? 50,
         };
       });
-      const absences = generateAbsences(absenceRng as any, squadForAbsence);
+      const absences = generateAbsences(rng as any, squadForAbsence);
       absentIds = new Set(absences.map((a) => rows.results[a.playerIndex]?.id as string).filter(Boolean));
       for (const a of absences) {
         const r = rows.results[a.playerIndex];
