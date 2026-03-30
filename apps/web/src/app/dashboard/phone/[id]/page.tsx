@@ -210,7 +210,7 @@ export default function ConversationPage() {
           onChange={(e) => setNewMsg(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
           placeholder="Napiš zprávu..."
-          className="flex-1 bg-gray-100 rounded-full px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-pitch-500/30"
+          className="flex-1 bg-gray-100 rounded-full px-3 py-2 text-base outline-none focus:ring-2 focus:ring-pitch-500/30"
         />
         <button
           onClick={handleSend}
