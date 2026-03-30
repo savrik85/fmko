@@ -298,4 +298,76 @@ function pickGreeting(firstName: string): string {
   return GREETINGS[Math.abs(hash) % GREETINGS.length];
 }
 
+// ── Admin: Broadcast message to all human teams ──
+
+messagingRouter.post("/admin/broadcast", async (c) => {
+  const body = await c.req.json<{ message: string }>();
+  if (!body.message?.trim()) return c.json({ error: "Empty message" }, 400);
+
+  const msg = body.message.trim();
+  const roleTitle = "Předseda Přeboru";
+
+  // Get all human teams
+  const teams = await c.env.DB.prepare(
+    "SELECT id FROM teams WHERE user_id != 'ai'"
+  ).all().catch((e) => { logger.warn({ module: "messaging" }, "fetch human teams for broadcast", e); return { results: [] }; });
+
+  let sent = 0;
+  const now = new Date().toISOString();
+
+  for (const team of teams.results) {
+    const teamId = team.id as string;
+
+    // Find or create conversation
+    let convId = await c.env.DB.prepare(
+      "SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?"
+    ).bind(teamId, roleTitle).first<{ id: string }>().then((r) => r?.id).catch(() => null);
+
+    if (!convId) {
+      convId = uuid();
+      await c.env.DB.prepare(
+        "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', ?, ?)"
+      ).bind(convId, teamId, roleTitle, now, now).run().catch(() => {});
+    }
+
+    await c.env.DB.prepare(
+      "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', ?, ?, ?)"
+    ).bind(uuid(), convId, roleTitle, msg, now).run().catch(() => {});
+
+    await c.env.DB.prepare(
+      "UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = ? WHERE id = ?"
+    ).bind(msg.slice(0, 100), now, convId).run().catch(() => {});
+
+    sent++;
+  }
+
+  return c.json({ ok: true, sent });
+});
+
+// ── Admin: Get replies to broadcast messages ──
+
+messagingRouter.get("/admin/broadcast-replies", async (c) => {
+  const roleTitle = "Předseda Přeboru";
+
+  // Find all conversations with title "Předseda Přeboru" and get user replies
+  const replies = await c.env.DB.prepare(
+    `SELECT m.body, m.sent_at, t.name as team_name, t.id as team_id
+     FROM messages m
+     JOIN conversations c ON m.conversation_id = c.id
+     JOIN teams t ON c.team_id = t.id
+     WHERE c.type = 'system' AND c.title = ? AND m.sender_type = 'user'
+     ORDER BY m.sent_at DESC
+     LIMIT 100`
+  ).bind(roleTitle).all().catch((e) => { logger.warn({ module: "messaging" }, "fetch broadcast replies", e); return { results: [] }; });
+
+  const result = replies.results.map((r) => ({
+    teamName: r.team_name as string,
+    teamId: r.team_id as string,
+    message: r.body as string,
+    sentAt: r.sent_at as string,
+  }));
+
+  return c.json(result);
+});
+
 export { messagingRouter };

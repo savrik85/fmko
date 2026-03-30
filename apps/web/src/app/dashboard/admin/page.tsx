@@ -112,6 +112,9 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* Broadcast */}
+      <BroadcastSection />
+
       {/* User Management */}
       <UserManagement />
 
@@ -128,6 +131,91 @@ export default function AdminPage() {
           <div><span className="text-muted">Admin:</span> <span className="font-mono text-pitch-500">true</span></div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Broadcast Section ── */
+
+function BroadcastSection() {
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState("");
+  const [replies, setReplies] = useState<Array<{ teamName: string; teamId: string; message: string; sentAt: string }>>([]);
+
+  const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+
+  const loadReplies = async () => {
+    const data = await fetch(`${API}/api/admin/broadcast-replies`).then((r) => r.json()).catch(() => []);
+    setReplies(data);
+  };
+
+  useEffect(() => { loadReplies(); }, []);
+
+  const send = async () => {
+    if (!message.trim()) return;
+    setSending(true);
+    try {
+      const res = await fetch(`${API}/api/admin/broadcast`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: message.trim() }),
+      });
+      const data = await res.json();
+      setStatus(`Odesláno ${data.sent ?? 0} týmům`);
+      setMessage("");
+      setTimeout(() => setStatus(""), 4000);
+    } catch {
+      setStatus("Chyba při odesílání");
+    }
+    setSending(false);
+  };
+
+  const formatDate = (val: string | null | undefined) => {
+    if (!val) return "—";
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleString("cs", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+
+  return (
+    <div className="card p-4">
+      <SectionLabel>📢 Předseda Přeboru — zpráva všem</SectionLabel>
+
+      <div className="flex gap-3 items-end mb-4">
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Napište zprávu všem týmům..."
+          rows={2}
+          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-pitch-400"
+        />
+        <button
+          onClick={send}
+          disabled={sending || !message.trim()}
+          className="px-4 py-2 bg-pitch-500 text-white rounded-lg font-heading font-bold text-sm disabled:opacity-50 shrink-0"
+        >
+          Rozeslat
+        </button>
+      </div>
+
+      {status && <div className="text-sm font-heading font-bold text-pitch-500 mb-3">{status}</div>}
+
+      <SectionLabel>Odpovědi ({replies.length})</SectionLabel>
+      {replies.length > 0 ? (
+        <div className="space-y-2">
+          {replies.map((r, i) => (
+            <div key={i} className="flex items-baseline gap-3 text-sm">
+              <span className="font-heading font-bold text-pitch-600 shrink-0">{r.teamName}</span>
+              <span className="flex-1">{r.message}</span>
+              <span className="text-muted text-xs shrink-0">{formatDate(r.sentAt)}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm text-muted">Zatím žádné odpovědi</div>
+      )}
+      <button onClick={loadReplies} className="text-xs text-pitch-600 hover:underline mt-2">Obnovit odpovědi</button>
     </div>
   );
 }
