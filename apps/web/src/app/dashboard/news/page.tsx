@@ -35,6 +35,17 @@ interface Article {
   date: string;
 }
 
+/** Parse **bold** markdown in text */
+function renderMarkdown(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i} className="font-heading font-bold text-ink">{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
+
 function formatDate(iso: string): string {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("cs", { day: "numeric", month: "long", year: "numeric" });
@@ -133,8 +144,9 @@ export default function NewsPage() {
   const standingArticles = articles.filter((a) => a.type === "standing");
   const otherArticles = articles.filter((a) => !["match", "round_results", "standing", "ai_report"].includes(a.type));
 
-  // Lead story = AI report (richest content) > match > standing > any
+  // Lead story = latest AI report only
   const leadStory = aiReportArticles[0] || matchArticles[0] || standingArticles[0] || articles[0];
+  const olderAiReports = aiReportArticles.slice(1);
   const secondaryStories = matchArticles.slice(leadStory?.type === "match" ? 1 : 0, 3);
   const restArticles = [...otherArticles, ...matchArticles.slice(3)];
 
@@ -171,27 +183,50 @@ export default function NewsPage() {
           {leadStory && (
             <div className="border-b border-gray-200 pb-5">
               <ArticleWrapper article={leadStory}>
-                <div className="text-center max-w-3xl mx-auto">
-                  <div className="text-xs uppercase tracking-widest text-muted mb-2">
-                    {leadStory.type === "ai_report" ? "Komentář kola" : leadStory.type === "match" ? "Zápasová zpráva" : leadStory.type === "standing" ? "Tabulka" : "Aktualita"}
-                  </div>
-                  <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-3 hover:underline decoration-2 underline-offset-4">
-                    {leadStory.headline}
-                  </h2>
-                  {leadStory.type === "ai_report" ? (
-                    <div className="text-base text-ink-light leading-relaxed max-w-xl mx-auto text-left space-y-3">
+                {leadStory.type === "ai_report" ? (
+                  <div>
+                    <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">Komentář kola</div>
+                    <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
+                      {leadStory.headline}
+                    </h2>
+                    <div className="text-base text-ink-light leading-relaxed space-y-3 columns-1 sm:columns-2 gap-8">
                       {leadStory.body.split("\n").filter(Boolean).map((p, i) => (
-                        <p key={i}>{p}</p>
+                        <p key={i} className="break-inside-avoid">{renderMarkdown(p)}</p>
                       ))}
                     </div>
-                  ) : (
+                    <div className="text-xs text-muted mt-3 italic text-center">{timeAgo(leadStory.date)}</div>
+                  </div>
+                ) : (
+                  <div className="text-center max-w-3xl mx-auto">
+                    <div className="text-xs uppercase tracking-widest text-muted mb-2">
+                      {leadStory.type === "match" ? "Zápasová zpráva" : leadStory.type === "standing" ? "Tabulka" : "Aktualita"}
+                    </div>
+                    <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-3 hover:underline decoration-2 underline-offset-4">
+                      {leadStory.headline}
+                    </h2>
                     <p className="text-base text-ink-light leading-relaxed max-w-xl mx-auto">
                       {leadStory.body}
                     </p>
-                  )}
-                  <div className="text-xs text-muted mt-3 italic">{timeAgo(leadStory.date)}</div>
-                </div>
+                    <div className="text-xs text-muted mt-3 italic">{timeAgo(leadStory.date)}</div>
+                  </div>
+                )}
               </ArticleWrapper>
+            </div>
+          )}
+
+          {/* ═══ Older AI reports ═══ */}
+          {olderAiReports.length > 0 && (
+            <div className="border-b border-gray-200 pb-4">
+              <div className="text-[10px] uppercase tracking-widest text-muted mb-2">Starší komentáře</div>
+              <div className="space-y-1.5">
+                {olderAiReports.map((a) => (
+                  <div key={a.id} className="flex items-baseline gap-3 text-sm">
+                    <span className="text-muted shrink-0">{a.icon}</span>
+                    <span className="font-heading font-bold truncate">{a.headline}</span>
+                    <span className="text-xs text-muted shrink-0 ml-auto">{timeAgo(a.date)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

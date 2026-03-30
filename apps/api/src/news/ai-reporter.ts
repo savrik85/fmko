@@ -182,36 +182,39 @@ Pravidla:
 
   // Volání Gemini
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 1024, temperature: 0.85 },
+        generationConfig: { maxOutputTokens: 2048, temperature: 0.85, thinkingConfig: { thinkingBudget: 0 } },
       }),
     },
   );
 
   if (!res.ok) {
-    logger.warn({ module: "ai-reporter" }, `Gemini API error: ${res.status} ${res.statusText}`);
+    const errBody = await res.text().catch(() => "");
+    logger.warn({ module: "ai-reporter" }, `Gemini API error: ${res.status} ${res.statusText} — ${errBody.slice(0, 200)}`);
     return;
   }
 
   const json = await res.json() as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
   };
 
-  const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+  // Filter out "thinking" parts (Gemini 2.5 feature) and concatenate text
+  const parts = json.candidates?.[0]?.content?.parts ?? [];
+  const text = parts.filter((p) => !p.thought).map((p) => p.text ?? "").join("");
   if (!text) {
     logger.warn({ module: "ai-reporter" }, "Gemini returned empty response");
     return;
   }
 
-  // Parsování: první řádek = headline, zbytek = body
-  const lines = text.trim().split("\n");
+  // Parsování: první neprázdný řádek = headline, zbytek = body
+  const lines = text.trim().split("\n").filter((l) => l.trim().length > 0);
   const headline = lines[0].replace(/^#+\s*/, "").replace(/^\*+/, "").replace(/\*+$/, "").trim();
-  const body = lines.slice(1).join("\n").trim();
+  const body = lines.slice(1).map((l) => l.replace(/^\*+/, "").replace(/\*+$/, "").trim()).filter(Boolean).join("\n");
 
   if (!headline || !body) {
     logger.warn({ module: "ai-reporter" }, "Could not parse headline/body from Gemini response");

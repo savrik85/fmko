@@ -1553,6 +1553,10 @@ gameRouter.post("/game/run-matches", async (c) => {
     ).bind(leagueId, dayEnd.toISOString()).first<{ id: string }>();
 
     if (matchCal) {
+      // Snapshot tabulky PŘED kolem (pro AI reportera)
+      const { calculateStandings } = await import("../stats/standings");
+      const standingsBefore = await calculateStandings(c.env.DB, leagueId);
+
       await c.env.DB.prepare("UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'")
         .bind(matchCal.id).run();
       const results = await runScheduledMatches(c.env.DB, matchCal.id);
@@ -1579,6 +1583,18 @@ gameRouter.post("/game/run-matches", async (c) => {
           }
           await c.env.DB.prepare("INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, datetime('now'))")
             .bind(crypto.randomUUID(), leagueId, `${gameWeek}. kolo: přehled výsledků`, lines.join(". ") + ".", gameWeek).run();
+
+          // AI zpravodajský článek
+          if (c.env.GEMINI_API_KEY) {
+            try {
+              const { generateAiRoundReport } = await import("../news/ai-reporter");
+              console.log(`[AI-REPORTER] Starting for league=${leagueId} cal=${matchCal.id} gw=${gameWeek}`);
+              await generateAiRoundReport(c.env.DB, c.env.GEMINI_API_KEY, leagueId, matchCal.id, gameWeek, standingsBefore);
+              console.log(`[AI-REPORTER] Done for gw=${gameWeek}`);
+            } catch (e: any) {
+              console.error(`[AI-REPORTER] Error: ${e.message}`);
+            }
+          }
         } catch { /* news generation optional */ }
       }
     }
