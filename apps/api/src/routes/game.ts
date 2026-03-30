@@ -1527,47 +1527,9 @@ gameRouter.post("/game/set-admin", async (c) => {
 });
 
 // POST /api/game/advance-day — denní tick (posun dne, tréninky, finance, zprávy)
-// Zápasy simuluje VÝHRADNĚ run-matches cron (18:00 CET)
+// Zápasy a zpravodaj řeší VÝHRADNĚ run-matches cron (18:00 CET)
 gameRouter.post("/game/advance-day", async (c) => {
   const result = await executeDailyTick(c.env);
-
-  // Generate zpravodaj for recently played rounds (from previous run-matches)
-  try {
-    const leagues = await c.env.DB.prepare(
-      "SELECT DISTINCT league_id FROM teams WHERE league_id IS NOT NULL"
-    ).all();
-    for (const league of leagues.results) {
-      const lid = league.league_id as string;
-      const recentCal = await c.env.DB.prepare(
-        "SELECT sc.id, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.status = 'simulated' AND NOT EXISTS (SELECT 1 FROM news n WHERE n.league_id = ? AND n.game_week = sc.game_week AND n.type = 'round_results') ORDER BY sc.scheduled_at DESC LIMIT 1"
-      ).bind(lid, lid).first<{ id: string; game_week: number }>();
-      if (!recentCal) continue;
-
-      const matchRows = await c.env.DB.prepare(
-        `SELECT m.home_score, m.away_score, t1.name as home_name, t2.name as away_name
-         FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id
-         WHERE m.calendar_id = ? AND m.status = 'simulated'`
-      ).bind(recentCal.id).all();
-      if (matchRows.results.length === 0) continue;
-
-      const lines: string[] = [];
-      let topScore = 0; let topMatch = "";
-      for (const r of matchRows.results) {
-        const hs = r.home_score as number; const as_ = r.away_score as number;
-        const hn = r.home_name as string; const an = r.away_name as string;
-        if (hs > as_) lines.push(`${hn} porazil ${an} ${hs}:${as_}`);
-        else if (hs < as_) lines.push(`${an} zvítězil nad ${hn} ${as_}:${hs}`);
-        else lines.push(`${hn} remizoval s ${an} ${hs}:${as_}`);
-        if (hs + as_ > topScore) { topScore = hs + as_; topMatch = `${hn} vs ${an} ${hs}:${as_}`; }
-      }
-      const headline = `${recentCal.game_week}. kolo: přehled výsledků`;
-      const body = lines.join(". ") + "." + (topScore >= 4 ? ` Nejvíce gólů padlo v utkání ${topMatch}.` : "");
-      await c.env.DB.prepare(
-        "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, datetime('now'))"
-      ).bind(crypto.randomUUID(), lid, headline, body, recentCal.game_week).run();
-    }
-  } catch { /* news optional */ }
-
   return c.json({ ok: true, type: "daily", result });
 });
 
