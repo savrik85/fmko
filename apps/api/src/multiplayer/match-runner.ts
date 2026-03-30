@@ -503,7 +503,7 @@ interface BuildResult {
   absentNames: Array<{ name: string; reason: string; smsText: string }>;
 }
 
-async function buildMatchPlayers(
+export async function buildMatchPlayers(
   db: D1Database, teamId: string,
   rng?: { random: () => number; pick: <T>(a: T[]) => T; int: (min: number, max: number) => number },
   userLineupJson?: string | null,

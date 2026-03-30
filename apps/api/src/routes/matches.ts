@@ -729,4 +729,205 @@ matchesRouter.post("/admin/backfill-match-stats", async (c) => {
   return c.json(result);
 });
 
+// ── Friendly match challenges (PvP only) ──
+
+async function sendSMS(db: D1Database, teamId: string, senderName: string, roleTitle: string, body: string) {
+  let convId = await db.prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?")
+    .bind(teamId, roleTitle).first<{ id: string }>().then((r) => r?.id).catch(() => null);
+  if (!convId) {
+    convId = uuid();
+    await db.prepare("INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', datetime('now'), datetime('now'))")
+      .bind(convId, teamId, roleTitle).run().catch(() => {});
+  }
+  await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', ?, ?, datetime('now'))")
+    .bind(uuid(), convId, senderName, body).run().catch(() => {});
+  await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+    .bind(body.slice(0, 100), convId).run().catch(() => {});
+}
+
+// POST /api/teams/:teamId/challenge/:opponentTeamId — poslat výzvu na přátelák
+matchesRouter.post("/teams/:teamId/challenge/:opponentTeamId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const opponentTeamId = c.req.param("opponentTeamId");
+  const body = await c.req.json<{ message?: string }>().catch(() => ({}));
+
+  if (teamId === opponentTeamId) return c.json({ error: "Nemůžeš vyzvat sám sebe" }, 400);
+
+  // Verify opponent is human
+  const opponent = await c.env.DB.prepare("SELECT id, name, user_id FROM teams WHERE id = ?")
+    .bind(opponentTeamId).first<{ id: string; name: string; user_id: string }>();
+  if (!opponent || opponent.user_id === "ai") return c.json({ error: "Přáteláky lze hrát pouze proti hráčským týmům" }, 400);
+
+  // Check budget
+  const team = await c.env.DB.prepare("SELECT name, budget, game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ name: string; budget: number; game_date: string }>();
+  if (!team) return c.json({ error: "Team not found" }, 404);
+  if (team.budget < 1000) return c.json({ error: "Nedostatek peněz (min 1 000 Kč)" }, 400);
+
+  // Cooldown: 3 game days since last challenge
+  const lastChallenge = await c.env.DB.prepare(
+    "SELECT created_at FROM challenges WHERE (challenger_team_id = ? OR challenged_team_id = ?) AND status IN ('accepted','played') ORDER BY created_at DESC LIMIT 1"
+  ).bind(teamId, teamId).first<{ created_at: string }>().catch(() => null);
+
+  if (lastChallenge) {
+    const daysDiff = (new Date(team.game_date).getTime() - new Date(lastChallenge.created_at).getTime()) / (1000 * 60 * 60 * 24);
+    if (daysDiff < 3) return c.json({ error: "Přátelák je možný jednou za 3 dny", cooldown: true }, 400);
+  }
+
+  // Check no pending challenge already exists between these teams
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM challenges WHERE challenger_team_id = ? AND challenged_team_id = ? AND status = 'pending'"
+  ).bind(teamId, opponentTeamId).first<{ id: string }>().catch(() => null);
+  if (existing) return c.json({ error: "Výzva už byla odeslána" }, 400);
+
+  const challengeId = uuid();
+  const expiresAt = new Date(team.game_date);
+  expiresAt.setDate(expiresAt.getDate() + 7);
+
+  await c.env.DB.prepare(
+    "INSERT INTO challenges (id, challenger_team_id, challenged_team_id, status, message, created_at, expires_at) VALUES (?, ?, ?, 'pending', ?, ?, ?)"
+  ).bind(challengeId, teamId, opponentTeamId, (body as { message?: string }).message ?? null, team.game_date, expiresAt.toISOString()).run();
+
+  // SMS to opponent
+  await sendSMS(c.env.DB, opponentTeamId, "Sportovní ředitel", "Sportovní ředitel",
+    `⚽ Výzva na přátelský zápas od ${team.name}!${(body as { message?: string }).message ? ` Vzkaz: "${(body as { message?: string }).message}"` : ""} Podívej se do Přáteláků.`
+  );
+
+  return c.json({ ok: true, challengeId });
+});
+
+// POST /api/teams/:teamId/challenge/:challengeId/accept — přijmout výzvu
+matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => {
+  const teamId = c.req.param("teamId");
+  const challengeId = c.req.param("challengeId");
+
+  const challenge = await c.env.DB.prepare(
+    "SELECT * FROM challenges WHERE id = ? AND challenged_team_id = ? AND status = 'pending'"
+  ).bind(challengeId, teamId).first<Record<string, unknown>>();
+  if (!challenge) return c.json({ error: "Výzva nenalezena nebo už zpracována" }, 404);
+
+  // Check budget
+  const team = await c.env.DB.prepare("SELECT name, budget, game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ name: string; budget: number; game_date: string }>();
+  if (!team || team.budget < 1000) return c.json({ error: "Nedostatek peněz (min 1 000 Kč)" }, 400);
+
+  const challengerTeamId = challenge.challenger_team_id as string;
+  const challenger = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
+    .bind(challengerTeamId).first<{ name: string }>();
+
+  // Charge both teams 1000 Kč
+  const { recordTransaction } = await import("../season/finance-processor");
+  await recordTransaction(c.env.DB, teamId, "event", -1000, `Přátelák: cestovné a rozhodčí`, team.game_date);
+  await recordTransaction(c.env.DB, challengerTeamId, "event", -1000, `Přátelák: cestovné a rozhodčí`, team.game_date);
+
+  // Create match
+  const matchId = uuid();
+  await c.env.DB.prepare(
+    "INSERT INTO matches (id, home_team_id, away_team_id, status, created_at) VALUES (?, ?, ?, 'lineups_open', datetime('now'))"
+  ).bind(matchId, challengerTeamId, teamId).run();
+
+  // Update challenge
+  await c.env.DB.prepare("UPDATE challenges SET status = 'accepted', match_id = ? WHERE id = ?")
+    .bind(matchId, challengeId).run();
+
+  // SMS both teams
+  await sendSMS(c.env.DB, challengerTeamId, "Sportovní ředitel", "Sportovní ředitel",
+    `✅ ${team.name} přijal výzvu na přátelák! Nastav sestavu, zápas se odehraje v 18:00.`
+  );
+  await sendSMS(c.env.DB, teamId, "Sportovní ředitel", "Sportovní ředitel",
+    `✅ Přátelák s ${challenger?.name ?? "soupeřem"} domluven! Nastav sestavu, zápas se odehraje v 18:00.`
+  );
+
+  return c.json({ ok: true, matchId });
+});
+
+// POST /api/teams/:teamId/challenge/:challengeId/decline — odmítnout výzvu
+matchesRouter.post("/teams/:teamId/challenge/:challengeId/decline", async (c) => {
+  const teamId = c.req.param("teamId");
+  const challengeId = c.req.param("challengeId");
+
+  const challenge = await c.env.DB.prepare(
+    "SELECT challenger_team_id FROM challenges WHERE id = ? AND challenged_team_id = ? AND status = 'pending'"
+  ).bind(challengeId, teamId).first<{ challenger_team_id: string }>();
+  if (!challenge) return c.json({ error: "Výzva nenalezena" }, 404);
+
+  await c.env.DB.prepare("UPDATE challenges SET status = 'declined' WHERE id = ?").bind(challengeId).run();
+
+  const team = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>();
+  await sendSMS(c.env.DB, challenge.challenger_team_id, "Sportovní ředitel", "Sportovní ředitel",
+    `❌ ${team?.name ?? "Soupeř"} odmítl výzvu na přátelák.`
+  );
+
+  return c.json({ ok: true });
+});
+
+// GET /api/teams/:teamId/challenges — seznam výzev + cooldown
+matchesRouter.get("/teams/:teamId/challenges", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ game_date: string }>();
+
+  // Incoming pending
+  const incoming = await c.env.DB.prepare(
+    `SELECT c.*, t.name as challenger_name FROM challenges c
+     JOIN teams t ON c.challenger_team_id = t.id
+     WHERE c.challenged_team_id = ? AND c.status = 'pending'
+     ORDER BY c.created_at DESC`
+  ).bind(teamId).all();
+
+  // Outgoing pending
+  const outgoing = await c.env.DB.prepare(
+    `SELECT c.*, t.name as challenged_name FROM challenges c
+     JOIN teams t ON c.challenged_team_id = t.id
+     WHERE c.challenger_team_id = ? AND c.status = 'pending'
+     ORDER BY c.created_at DESC`
+  ).bind(teamId).all();
+
+  // Recent played (last 5)
+  const played = await c.env.DB.prepare(
+    `SELECT c.*, t1.name as challenger_name, t2.name as challenged_name,
+            m.home_score, m.away_score
+     FROM challenges c
+     JOIN teams t1 ON c.challenger_team_id = t1.id
+     JOIN teams t2 ON c.challenged_team_id = t2.id
+     LEFT JOIN matches m ON c.match_id = m.id
+     WHERE (c.challenger_team_id = ? OR c.challenged_team_id = ?) AND c.status = 'played'
+     ORDER BY c.created_at DESC LIMIT 5`
+  ).bind(teamId, teamId).all();
+
+  // Cooldown check
+  const lastChallenge = await c.env.DB.prepare(
+    "SELECT created_at FROM challenges WHERE (challenger_team_id = ? OR challenged_team_id = ?) AND status IN ('accepted','played') ORDER BY created_at DESC LIMIT 1"
+  ).bind(teamId, teamId).first<{ created_at: string }>().catch(() => null);
+
+  let cooldownDaysLeft = 0;
+  if (lastChallenge && team) {
+    const daysDiff = (new Date(team.game_date).getTime() - new Date(lastChallenge.created_at).getTime()) / (1000 * 60 * 60 * 24);
+    cooldownDaysLeft = Math.max(0, Math.ceil(3 - daysDiff));
+  }
+
+  // List of human teams to challenge (exclude self)
+  const humanTeams = await c.env.DB.prepare(
+    "SELECT t.id, t.name, v.name as village FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id <> 'ai' AND t.id <> ? ORDER BY t.name"
+  ).bind(teamId).all();
+
+  return c.json({
+    incoming: incoming.results.map((r) => ({
+      id: r.id, challengerName: r.challenger_name, message: r.message, createdAt: r.created_at,
+    })),
+    outgoing: outgoing.results.map((r) => ({
+      id: r.id, challengedName: r.challenged_name, message: r.message, createdAt: r.created_at,
+    })),
+    played: played.results.map((r) => ({
+      id: r.id, matchId: r.match_id,
+      challengerName: r.challenger_name, challengedName: r.challenged_name,
+      homeScore: r.home_score, awayScore: r.away_score,
+    })),
+    cooldownDaysLeft,
+    canChallenge: cooldownDaysLeft === 0,
+    teams: humanTeams.results.map((r) => ({ id: r.id, name: r.name, village: r.village })),
+  });
+});
+
 export { matchesRouter };

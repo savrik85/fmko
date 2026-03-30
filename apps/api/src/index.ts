@@ -286,6 +286,14 @@ export default {
             }
           }
         }
+        // ── Přáteláky: simulovat accepted challenges ──
+        try {
+          const { simulateFriendlyMatches } = await import("./multiplayer/friendly-runner");
+          const friendlyCount = await simulateFriendlyMatches(env.DB);
+          totalMatches += friendlyCount;
+          if (friendlyCount > 0) log("info", `${friendlyCount} friendly matches simulated`);
+        } catch (e) { log("error", "friendly matches failed", e); }
+
         log("info", `match tick done: ${totalMatches} matches simulated`);
       } catch (e: any) {
         log("error", "match tick failed", e);

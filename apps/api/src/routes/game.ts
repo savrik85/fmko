@@ -1752,6 +1752,13 @@ gameRouter.post("/game/run-matches", async (c) => {
     }
   } catch { /* cleanup optional */ }
 
+  // Přáteláky
+  try {
+    const { simulateFriendlyMatches } = await import("../multiplayer/friendly-runner");
+    const friendlyCount = await simulateFriendlyMatches(c.env.DB);
+    totalMatches += friendlyCount;
+  } catch { /* friendlies optional */ }
+
   return c.json({ ok: true, type: "matches", totalMatches });
 });
 
