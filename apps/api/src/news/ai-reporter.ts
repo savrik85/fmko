@@ -178,7 +178,8 @@ Pravidla:
 - Vypíchni překvapení, zajímavé výkony, vývoj tabulky
 - Piš barvitě s humorem, jako reportér co zná každého v okrese
 - Používej místní kolorit — zmiňuj obce, jejich charakter, šumavskou atmosféru
-- Nemusíš popsat každý zápas, vyber ty nejzajímavější`;
+- Nemusíš popsat každý zápas, vyber ty nejzajímavější
+- DŮLEŽITÉ: Nikdy nevymýšlej čísla — body, góly, skóre, počty diváků beri VÝHRADNĚ z dat výše. Pokud si nejsi jistý, číslo nezmiňuj.`;
 
   // Volání Gemini
   const res = await fetch(
