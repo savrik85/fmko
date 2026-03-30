@@ -42,7 +42,9 @@ function formatDate(iso: string): string {
 
 function timeAgo(iso: string): string {
   if (!iso) return "";
-  const diff = Date.now() - new Date(iso).getTime();
+  // SQLite datetime('now') ukládá UTC bez Z suffixu — přidáme ho
+  const utcIso = iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z";
+  const diff = Date.now() - new Date(utcIso).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "Právě teď";
   if (mins < 60) return `Před ${mins} min`;

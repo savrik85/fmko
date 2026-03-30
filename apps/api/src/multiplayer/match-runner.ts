@@ -80,7 +80,7 @@ export async function runScheduledMatches(
       const homeBuild = await buildMatchPlayers(db, homeTeamId, rng,
         homeLineupRow && homeLineupRow.is_auto === 0 ? homeLineupRow.players_data : null);
       const awayBuild = await buildMatchPlayers(db, awayTeamId, rng,
-        awayLineupRow && awayLineupRow.is_auto === 0 ? awayLineupRow.players_data : null);
+        awayLineupRow && awayLineupRow.is_auto === 0 ? awayLineupRow.players_data : null, 100);
 
       const homeLineup = homeBuild.players;
       const awayLineup = awayBuild.players;
@@ -507,6 +507,7 @@ async function buildMatchPlayers(
   db: D1Database, teamId: string,
   rng?: { random: () => number; pick: <T>(a: T[]) => T; int: (min: number, max: number) => number },
   userLineupJson?: string | null,
+  idOffset: number = 0,
 ): Promise<BuildResult> {
   const rows = await db.prepare(
     "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC LIMIT 22"
@@ -581,7 +582,7 @@ async function buildMatchPlayers(
     } catch { /* ignore */ }
   }
 
-  let idCounter = 1;
+  let idCounter = 1 + idOffset;
   const idMap = new Map<number, string>();
   const positionMap = new Map<string, string>();
 
