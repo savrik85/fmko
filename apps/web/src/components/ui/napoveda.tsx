@@ -207,14 +207,8 @@ function findHelp(pathname: string): HelpEntry | null {
       { text: "Goly v poslednich 15 minutach jsou ovlivneny clutch atributem hrace (0.9\u20131.1x modifikator).", tip: true },
     ],
   };
-  if (pathname.match(/\/dashboard\/phone\/.+/)) return {
-    title: "Konverzace",
-    icon: "\u{1F4AC}",
-    sections: [
-      { text: "Zpravy od hracu a vedeni. Systemove zpravy jsou informacni." },
-      { heading: "Dochazka", text: "V predzapasove konverzaci hraci odpovidaji, jestli dorazit. Odpoved zavisi na discipline, moralce, alkoholu, dojezdu a zamestnani. Nekteri se omluvi, nekteri dorazit pozde." },
-    ],
-  };
+  // Skrýt nápovědu v detailu konverzace — překrývá input na mobilu
+  if (pathname.match(/\/dashboard\/phone\/.+/)) return null;
   return null;
 }
 
