@@ -35,6 +35,21 @@ const EVENT_ICONS: Record<string, string> = {
   silvestr: "\u{1F386}",
   letni_soustredeni: "\u26FA",
   obecni_zpravodaj: "\u{1F4F0}",
+  den_obce: "\u{1F3AA}",
+  pout: "\u{1F3A0}",
+  brigada_hriste: "\u{1F528}",
+  sponzorsky_den: "\u{1F454}",
+  konec_skoly: "\u{1F393}",
+  hospoda: "\u{1F37A}",
+  pratele: "\u26BD",
+  adhoc_brigada: "\u{1F528}",
+  stolni_fotbalek: "\u{1F3AF}",
+  sponzor_vecere: "\u{1F37D}\uFE0F",
+  obecni_slavnost: "\u{1F3AA}",
+  exligovec: "\u2B50",
+  narozeniny: "\u{1F382}",
+  vylet_zapas: "\u{1F3DF}\uFE0F",
+  kontrola_svaz: "\u{1F4CB}",
 };
 
 const EVENT_COLORS: Record<string, string> = {
@@ -44,6 +59,16 @@ const EVENT_COLORS: Record<string, string> = {
   silvestr: "bg-yellow-50 border-yellow-200",
   letni_soustredeni: "bg-green-50 border-green-200",
   obecni_zpravodaj: "bg-blue-50 border-blue-200",
+  hospoda: "bg-amber-50 border-amber-200",
+  pratele: "bg-green-50 border-green-200",
+  adhoc_brigada: "bg-orange-50 border-orange-200",
+  stolni_fotbalek: "bg-blue-50 border-blue-200",
+  sponzor_vecere: "bg-indigo-50 border-indigo-200",
+  obecni_slavnost: "bg-pink-50 border-pink-200",
+  exligovec: "bg-yellow-50 border-yellow-200",
+  narozeniny: "bg-rose-50 border-rose-200",
+  vylet_zapas: "bg-emerald-50 border-emerald-200",
+  kontrola_svaz: "bg-gray-100 border-gray-300",
 };
 
 function effectColor(type: string, value: number): string {

@@ -425,6 +425,18 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
         WHERE team_id = ? AND json_extract(personality, '$.alcohol') > 50`
       ).bind(teamId).run().catch((e) => logger.warn({ module: "game" }, "apply alcohol event", e));
     }
+    if (effect.type === "condition") {
+      await c.env.DB.prepare(
+        `UPDATE players SET life_context = json_set(life_context, '$.condition',
+          MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?)))
+        WHERE team_id = ?`
+      ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "update condition from event", e));
+    }
+    if (effect.type === "pitch_condition") {
+      await c.env.DB.prepare(
+        "UPDATE stadiums SET pitch_condition = MIN(100, MAX(0, pitch_condition + ?)) WHERE team_id = ?"
+      ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "update pitch condition from event", e));
+    }
   }
 
   // Mark as resolved
@@ -1602,6 +1614,26 @@ gameRouter.post("/game/run-matches", async (c) => {
               console.error(`[AI-REPORTER] Error: ${e.message}`);
             }
           }
+          // Ad-hoc události pro human týmy
+          try {
+            const { pickRandomAdhocEvent } = await import("../season/seasonal-events");
+            const { createRng } = await import("../generators/rng");
+            const humanTeams = await c.env.DB.prepare(
+              "SELECT t.id, t.league_id FROM teams t WHERE t.league_id = ? AND t.user_id <> 'ai'"
+            ).bind(leagueId).all();
+
+            for (const ht of humanTeams.results) {
+              const adhocRng = createRng(Date.now() + (ht.id as string).charCodeAt(0));
+              const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek);
+              if (adhocEvent) {
+                await c.env.DB.prepare(
+                  "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?, 'pending')"
+                ).bind(crypto.randomUUID(), ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
+                  JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), adhocEvent.gameWeek
+                ).run().catch(() => {});
+              }
+            }
+          } catch { /* ad-hoc events optional */ }
         } catch { /* news generation optional */ }
       }
     }

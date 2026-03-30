@@ -252,6 +252,27 @@ export default {
                 }
               } catch (e) { log("error", "between-round events failed", e); }
 
+              // Ad-hoc události pro human týmy
+              try {
+                const { pickRandomAdhocEvent } = await import("./season/seasonal-events");
+                const { createRng: createAdhocRng } = await import("./generators/rng");
+                const humanTeams = await env.DB.prepare(
+                  "SELECT id, league_id FROM teams WHERE league_id = ? AND user_id <> 'ai'"
+                ).bind(leagueId).all();
+
+                for (const ht of humanTeams.results) {
+                  const adhocRng = createAdhocRng(Date.now() + (ht.id as string).charCodeAt(0));
+                  const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek);
+                  if (adhocEvent) {
+                    await env.DB.prepare(
+                      "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?, 'pending')"
+                    ).bind(crypto.randomUUID(), ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
+                      JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), adhocEvent.gameWeek
+                    ).run().catch(() => {});
+                  }
+                }
+              } catch (e) { log("error", "adhoc events failed", e); }
+
               // Delete match-day attendance conversations (they served their purpose)
               try {
                 const matchConvs = await env.DB.prepare(
