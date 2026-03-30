@@ -190,17 +190,19 @@ export default function EventsPage() {
               <Card key={ev.id}>
                 <CardBody>
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">{EVENT_ICONS[ev.type] ?? "\u{1F3C6}"}</span>
+                    <span className="text-2xl shrink-0">{EVENT_ICONS[ev.type] ?? "\u{1F3C6}"}</span>
                     <div className="flex-1 min-w-0">
                       <div className="font-heading font-bold text-sm">{ev.title}</div>
                       <div className="text-xs text-muted">Týden {ev.gameWeek}</div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {(appliedEffects[ev.id] ?? ev.effects).map((eff, i) => (
-                        <span key={i} className={`text-xs font-medium ${effectColor(eff.type, eff.value)}`}>
-                          {eff.description}
-                        </span>
-                      ))}
+                      {(appliedEffects[ev.id] ?? ev.effects).length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {(appliedEffects[ev.id] ?? ev.effects).map((eff, i) => (
+                            <span key={i} className={`text-xs font-medium ${effectColor(eff.type, eff.value)}`}>
+                              {eff.description}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardBody>
