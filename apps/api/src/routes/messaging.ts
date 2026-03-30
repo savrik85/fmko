@@ -370,4 +370,38 @@ messagingRouter.get("/admin/broadcast-replies", async (c) => {
   return c.json(result);
 });
 
+// ── Admin: Reply to a specific team's conversation ──
+
+messagingRouter.post("/admin/broadcast-reply/:teamId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ message: string }>();
+  if (!body.message?.trim()) return c.json({ error: "Empty message" }, 400);
+
+  const msg = body.message.trim();
+  const roleTitle = "Předseda Přeboru";
+  const now = new Date().toISOString();
+
+  // Find existing conversation
+  let convId = await c.env.DB.prepare(
+    "SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?"
+  ).bind(teamId, roleTitle).first<{ id: string }>().then((r) => r?.id).catch(() => null);
+
+  if (!convId) {
+    convId = uuid();
+    await c.env.DB.prepare(
+      "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', ?, ?)"
+    ).bind(convId, teamId, roleTitle, now, now).run().catch(() => {});
+  }
+
+  await c.env.DB.prepare(
+    "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', ?, ?, ?)"
+  ).bind(uuid(), convId, roleTitle, msg, now).run().catch(() => {});
+
+  await c.env.DB.prepare(
+    "UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = ? WHERE id = ?"
+  ).bind(msg.slice(0, 100), now, convId).run().catch(() => {});
+
+  return c.json({ ok: true });
+});
+
 export { messagingRouter };

@@ -142,6 +142,8 @@ function BroadcastSection() {
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState("");
   const [replies, setReplies] = useState<Array<{ teamName: string; teamId: string; message: string; sentAt: string }>>([]);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [replyMsg, setReplyMsg] = useState("");
 
   const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
@@ -169,6 +171,23 @@ function BroadcastSection() {
       setStatus("Chyba při odesílání");
     }
     setSending(false);
+  };
+
+  const sendReply = async (teamId: string) => {
+    if (!replyMsg.trim()) return;
+    try {
+      await fetch(`${API}/api/admin/broadcast-reply/${teamId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: replyMsg.trim() }),
+      });
+      setReplyTo(null);
+      setReplyMsg("");
+      setStatus("Odpověď odeslána");
+      setTimeout(() => setStatus(""), 3000);
+    } catch {
+      setStatus("Chyba při odesílání odpovědi");
+    }
   };
 
   const formatDate = (val: string | null | undefined) => {
@@ -205,10 +224,24 @@ function BroadcastSection() {
       {replies.length > 0 ? (
         <div className="space-y-2">
           {replies.map((r, i) => (
-            <div key={i} className="flex items-baseline gap-3 text-sm">
-              <span className="font-heading font-bold text-pitch-600 shrink-0">{r.teamName}</span>
-              <span className="flex-1">{r.message}</span>
-              <span className="text-muted text-xs shrink-0">{formatDate(r.sentAt)}</span>
+            <div key={i}>
+              <div className="flex items-baseline gap-3 text-sm">
+                <span className="font-heading font-bold text-pitch-600 shrink-0">{r.teamName}</span>
+                <span className="flex-1">{r.message}</span>
+                <span className="text-muted text-xs shrink-0">{formatDate(r.sentAt)}</span>
+                <button onClick={() => { setReplyTo(replyTo === r.teamId ? null : r.teamId); setReplyMsg(""); }}
+                  className="text-xs text-pitch-600 hover:underline shrink-0">Odpovědět</button>
+              </div>
+              {replyTo === r.teamId && (
+                <div className="flex gap-2 mt-1 ml-4">
+                  <input type="text" value={replyMsg} onChange={(e) => setReplyMsg(e.target.value)}
+                    placeholder={`Odpověď pro ${r.teamName}...`}
+                    onKeyDown={(e) => { if (e.key === "Enter" && replyMsg.trim()) sendReply(r.teamId); }}
+                    className="flex-1 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-pitch-400" />
+                  <button onClick={() => sendReply(r.teamId)} disabled={!replyMsg.trim()}
+                    className="px-3 py-1 bg-pitch-500 text-white rounded text-sm font-bold disabled:opacity-50">Odeslat</button>
+                </div>
+              )}
             </div>
           ))}
         </div>
