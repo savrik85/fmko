@@ -16,6 +16,7 @@ export type Bindings = {
   SESSION_KV: KVNamespace;
   CACHE_KV: KVNamespace;
   SEED_DATA: R2Bucket;
+  GEMINI_API_KEY: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -98,6 +99,10 @@ export default {
           ).bind(leagueId, dayEnd.toISOString()).all();
 
           for (const matchCal of pendingCals.results) {
+            // Snapshot tabulky PŘED kolem (pro AI reportera)
+            const { calculateStandings } = await import("./stats/standings");
+            const standingsBefore = await calculateStandings(env.DB, leagueId);
+
             await env.DB.prepare(
               "UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'"
             ).bind(matchCal.id).run();
@@ -134,6 +139,17 @@ export default {
                   "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, datetime('now'))"
                 ).bind(crypto.randomUUID(), leagueId, headline, body, gameWeek).run();
               } catch (e) { log("error", "news generation failed", e); }
+
+              // AI zpravodajský článek (async, neblokuje)
+              if (env.GEMINI_API_KEY) {
+                try {
+                  const { generateAiRoundReport } = await import("./news/ai-reporter");
+                  ctx.waitUntil(
+                    generateAiRoundReport(env.DB, env.GEMINI_API_KEY, leagueId, matchCal.id as string, gameWeek, standingsBefore)
+                      .catch((e) => log("error", "AI report failed", e))
+                  );
+                } catch (e) { log("error", "AI reporter import failed", e); }
+              }
 
               // Between-round events for human teams
               try {

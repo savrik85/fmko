@@ -552,6 +552,7 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
         round_results: "\u26BD",
         seasonal: "\u{1F389}",
         transfer: "\u{1F91D}",
+        ai_report: "\u270D\uFE0F",
       };
       articles.push({
         id: n.id as string,

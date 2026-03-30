@@ -128,12 +128,13 @@ export default function NewsPage() {
 
   // Separate articles by type
   const matchArticles = articles.filter((a) => a.type === "match");
+  const aiReportArticles = articles.filter((a) => a.type === "ai_report");
   const roundArticles = articles.filter((a) => a.type === "round_results").slice(0, 1);
   const standingArticles = articles.filter((a) => a.type === "standing");
-  const otherArticles = articles.filter((a) => !["match", "round_results", "standing"].includes(a.type));
+  const otherArticles = articles.filter((a) => !["match", "round_results", "standing", "ai_report"].includes(a.type));
 
-  // Lead story = most recent match or standing
-  const leadStory = matchArticles[0] || standingArticles[0] || articles[0];
+  // Lead story = AI report (richest content) > match > standing > any
+  const leadStory = aiReportArticles[0] || matchArticles[0] || standingArticles[0] || articles[0];
   const secondaryStories = matchArticles.slice(leadStory?.type === "match" ? 1 : 0, 3);
   const restArticles = [...otherArticles, ...matchArticles.slice(3)];
 
@@ -172,14 +173,22 @@ export default function NewsPage() {
               <ArticleWrapper article={leadStory}>
                 <div className="text-center max-w-3xl mx-auto">
                   <div className="text-xs uppercase tracking-widest text-muted mb-2">
-                    {leadStory.type === "match" ? "Zápasová zpráva" : leadStory.type === "standing" ? "Tabulka" : "Aktualita"}
+                    {leadStory.type === "ai_report" ? "Komentář kola" : leadStory.type === "match" ? "Zápasová zpráva" : leadStory.type === "standing" ? "Tabulka" : "Aktualita"}
                   </div>
                   <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-3 hover:underline decoration-2 underline-offset-4">
                     {leadStory.headline}
                   </h2>
-                  <p className="text-base text-ink-light leading-relaxed max-w-xl mx-auto">
-                    {leadStory.body}
-                  </p>
+                  {leadStory.type === "ai_report" ? (
+                    <div className="text-base text-ink-light leading-relaxed max-w-xl mx-auto text-left space-y-3">
+                      {leadStory.body.split("\n").filter(Boolean).map((p, i) => (
+                        <p key={i}>{p}</p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-base text-ink-light leading-relaxed max-w-xl mx-auto">
+                      {leadStory.body}
+                    </p>
+                  )}
                   <div className="text-xs text-muted mt-3 italic">{timeAgo(leadStory.date)}</div>
                 </div>
               </ArticleWrapper>
