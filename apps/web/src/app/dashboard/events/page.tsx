@@ -58,14 +58,15 @@ function effectColor(type: string, value: number): string {
 export default function EventsPage() {
   const { teamId } = useTeam();
   const [events, setEvents] = useState<SeasonalEvent[]>([]);
+  const [currentGameWeek, setCurrentGameWeek] = useState(0);
   const [loading, setLoading] = useState(true);
   const [choosing, setChoosing] = useState<string | null>(null);
   const [appliedEffects, setAppliedEffects] = useState<Record<string, EventEffect[]>>({});
 
   useEffect(() => {
     if (!teamId) return;
-    apiFetch<{ events: SeasonalEvent[] }>(`/api/teams/${teamId}/seasonal-events`)
-      .then((d) => { setEvents(d.events); setLoading(false); })
+    apiFetch<{ events: SeasonalEvent[]; currentGameWeek: number }>(`/api/teams/${teamId}/seasonal-events`)
+      .then((d) => { setEvents(d.events); setCurrentGameWeek(d.currentGameWeek ?? 0); setLoading(false); })
       .catch(() => setLoading(false));
   }, [teamId]);
 
@@ -98,8 +99,9 @@ export default function EventsPage() {
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
-  const pending = events.filter((e) => e.status === "pending");
-  const past = events.filter((e) => e.status !== "pending");
+  const pending = events.filter((e) => e.status === "pending" && e.gameWeek <= currentGameWeek);
+  const upcoming = events.filter((e) => e.status !== "resolved" && e.gameWeek > currentGameWeek);
+  const past = events.filter((e) => e.status === "resolved" || (e.status === "active" && e.gameWeek <= currentGameWeek));
 
   return (
     <div className="page-container space-y-5">
@@ -151,6 +153,29 @@ export default function EventsPage() {
                   </div>
                 )}
               </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Upcoming events */}
+      {upcoming.length > 0 && (
+        <div>
+          <SectionLabel>Nadcházející</SectionLabel>
+          <div className="space-y-2">
+            {upcoming.map((ev) => (
+              <Card key={ev.id}>
+                <CardBody>
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{EVENT_ICONS[ev.type] ?? "\u{1F3C6}"}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-heading font-bold text-sm">{ev.title}</div>
+                      <div className="text-xs text-muted">Týden {ev.gameWeek}</div>
+                    </div>
+                    <div className="text-xs text-muted italic">za {ev.gameWeek - currentGameWeek} {ev.gameWeek - currentGameWeek === 1 ? "kolo" : "kol"}</div>
+                  </div>
+                </CardBody>
+              </Card>
             ))}
           </div>
         </div>

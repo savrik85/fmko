@@ -327,6 +327,12 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
     "SELECT * FROM seasonal_events WHERE league_id = ? ORDER BY game_week"
   ).bind(team.league_id).all().catch((e) => { logger.warn({ module: "game" }, "fetch seasonal events", e); return { results: [] }; });
 
+  // Current game week from last simulated calendar
+  const lastCal = await c.env.DB.prepare(
+    "SELECT MAX(game_week) as gw FROM season_calendar WHERE league_id = ? AND status = 'simulated'"
+  ).bind(team.league_id).first<{ gw: number | null }>();
+  const currentGameWeek = lastCal?.gw ?? 0;
+
   if (dbEvents.results.length > 0) {
     const events = dbEvents.results.map((row) => ({
       id: row.id,
@@ -338,7 +344,7 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
       gameWeek: row.game_week,
       status: row.status,
     }));
-    return c.json({ events });
+    return c.json({ events, currentGameWeek });
   }
 
   // No events in DB yet — generate from templates for all weeks and insert
@@ -366,6 +372,7 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
       effects: ev.effects, choices: ev.choices ?? null,
       gameWeek: ev.gameWeek, status: ev.status,
     })),
+    currentGameWeek,
   });
 });
 
