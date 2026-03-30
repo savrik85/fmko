@@ -1526,190 +1526,49 @@ gameRouter.post("/game/set-admin", async (c) => {
   return c.json({ ok: true, email: body.email, isAdmin: body.isAdmin });
 });
 
-// POST /api/game/advance-day — denní tick + automaticky odsimuluje nahromaděné zápasy
+// POST /api/game/advance-day — denní tick (posun dne, tréninky, finance, zprávy)
+// Zápasy simuluje VÝHRADNĚ run-matches cron (18:00 CET)
 gameRouter.post("/game/advance-day", async (c) => {
   const result = await executeDailyTick(c.env);
 
-  // Auto-run match tick for any past-due matches
-  let matchesSimulated = 0;
+  // Generate zpravodaj for recently played rounds (from previous run-matches)
   try {
-    const { runScheduledMatches } = await import("../multiplayer/match-runner");
     const leagues = await c.env.DB.prepare(
-      "SELECT league_id, MAX(game_date) as max_game_date FROM teams WHERE league_id IS NOT NULL AND game_date IS NOT NULL GROUP BY league_id"
+      "SELECT DISTINCT league_id FROM teams WHERE league_id IS NOT NULL"
     ).all();
     for (const league of leagues.results) {
-      const gd = league.max_game_date as string | null;
-      const lid = league.league_id as string | null;
-      if (!gd || !lid) continue;
-      // Only simulate PAST matches — today's match is handled by run-matches cron
-      const dayStart = new Date(gd); dayStart.setUTCHours(0, 0, 0, 0);
-      const pendingCals = await c.env.DB.prepare(
-        "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at < ? AND status = 'scheduled' ORDER BY scheduled_at ASC"
-      ).bind(lid, dayStart.toISOString()).all();
-      for (const cal of pendingCals.results) {
-        const calId = cal.id as string;
-        await c.env.DB.prepare("UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'")
-          .bind(calId).run();
-        const results = await runScheduledMatches(c.env.DB, calId);
-        await c.env.DB.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
-          .bind(calId).run();
-        matchesSimulated += results.length;
+      const lid = league.league_id as string;
+      const recentCal = await c.env.DB.prepare(
+        "SELECT sc.id, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.status = 'simulated' AND NOT EXISTS (SELECT 1 FROM news n WHERE n.league_id = ? AND n.game_week = sc.game_week AND n.type = 'round_results') ORDER BY sc.scheduled_at DESC LIMIT 1"
+      ).bind(lid, lid).first<{ id: string; game_week: number }>();
+      if (!recentCal) continue;
 
-        // Generate round results news (zpravodaj)
-        if (results.length > 0) {
-          try {
-            const calRow = await c.env.DB.prepare("SELECT game_week FROM season_calendar WHERE id = ?")
-              .bind(calId).first<{ game_week: number }>();
-            const gameWeek = calRow?.game_week ?? 0;
-            const matchRows = await c.env.DB.prepare(
-              `SELECT m.home_score, m.away_score, t1.name as home_name, t2.name as away_name
-               FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id
-               WHERE m.calendar_id = ? AND m.status = 'simulated'`
-            ).bind(calId).all();
-            const lines: string[] = [];
-            let topScore = 0; let topMatch = "";
-            for (const r of matchRows.results) {
-              const hs = r.home_score as number; const as_ = r.away_score as number;
-              const hn = r.home_name as string; const an = r.away_name as string;
-              if (hs > as_) lines.push(`${hn} porazil ${an} ${hs}:${as_}`);
-              else if (hs < as_) lines.push(`${an} zvítězil nad ${hn} ${as_}:${hs}`);
-              else lines.push(`${hn} remizoval s ${an} ${hs}:${as_}`);
-              if (hs + as_ > topScore) { topScore = hs + as_; topMatch = `${hn} vs ${an} ${hs}:${as_}`; }
-            }
-            const headline = `${gameWeek}. kolo: přehled výsledků`;
-            const body = lines.join(". ") + "." + (topScore >= 4 ? ` Nejvíce gólů padlo v utkání ${topMatch}.` : "");
-            await c.env.DB.prepare(
-              "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, datetime('now'))"
-            ).bind(crypto.randomUUID(), lid, headline, body, gameWeek).run();
-          } catch { /* news optional */ }
+      const matchRows = await c.env.DB.prepare(
+        `SELECT m.home_score, m.away_score, t1.name as home_name, t2.name as away_name
+         FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id
+         WHERE m.calendar_id = ? AND m.status = 'simulated'`
+      ).bind(recentCal.id).all();
+      if (matchRows.results.length === 0) continue;
 
-          // Between-round events for human teams
-          try {
-            const { generateBetweenRoundEvents } = await import("../events/between-rounds");
-            const { createRng } = await import("../generators/rng");
-            const { recordTransaction } = await import("../season/finance-processor");
-            const brRng = createRng(Date.now());
-            const calRow = await c.env.DB.prepare("SELECT game_week FROM season_calendar WHERE id = ?").bind(calId).first<{ game_week: number }>();
-            const gameWeek = calRow?.game_week ?? 0;
-
-            for (const mr of results) {
-              if (mr.matchType === "ai_vs_ai") continue;
-              const humanTeamId = mr.matchType === "pve_home" || mr.matchType === "pvp"
-                ? (await c.env.DB.prepare("SELECT home_team_id FROM matches WHERE id = ?").bind(mr.matchId).first<{home_team_id:string}>())?.home_team_id
-                : (await c.env.DB.prepare("SELECT away_team_id FROM matches WHERE id = ?").bind(mr.matchId).first<{away_team_id:string}>())?.away_team_id;
-              if (!humanTeamId) continue;
-
-              const td = await c.env.DB.prepare("SELECT budget, reputation, game_date FROM teams WHERE id = ?").bind(humanTeamId).first<{budget:number; reputation:number; game_date:string}>();
-              const sqRows = await c.env.DB.prepare("SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')").bind(humanTeamId).all();
-              const squad = sqRows.results.map((r: any) => {
-                const s = JSON.parse(r.skills); const p = JSON.parse(r.personality); const lc = JSON.parse(r.life_context);
-                return { firstName: r.first_name, lastName: r.last_name, age: r.age, position: r.position,
-                  speed: s.speed??50, technique: s.technique??50, shooting: s.shooting??50, passing: s.passing??50,
-                  heading: s.heading??50, defense: s.defense??50, goalkeeping: s.goalkeeping??0,
-                  stamina: s.stamina??50, strength: s.strength??50, discipline: p.discipline??50,
-                  patriotism: p.patriotism??50, alcohol: p.alcohol??30, temper: p.temper??40,
-                  injuryProneness: p.injuryProneness??50, occupation: lc.occupation??"",
-                  bodyType: "normal" as const, avatarConfig: {} as any, condition: lc.condition??100, morale: lc.morale??50,
-                  preferredFoot: "right" as const, preferredSide: "center" as const,
-                  leadership: p.leadership??30, workRate: p.workRate??50, aggression: p.aggression??40,
-                  consistency: p.consistency??50, clutch: p.clutch??50 };
-              });
-
-              const lastWon = mr.matchType === "pve_home" ? mr.homeScore > mr.awayScore : mr.awayScore > mr.homeScore;
-              const brEvents = generateBetweenRoundEvents(brRng, squad, td?.budget??0, td?.reputation??50, lastWon, gameWeek);
-
-              for (const ev of brEvents) {
-                if (ev.effect) {
-                  const eff = ev.effect;
-                  if (eff.type === "morale" && eff.value) {
-                    await c.env.DB.prepare("UPDATE players SET life_context = json_set(life_context, '$.morale', MIN(100, MAX(0, json_extract(life_context, '$.morale') + ?))) WHERE team_id = ?")
-                      .bind(eff.value, humanTeamId).run().catch(() => {});
-                  }
-                  if (eff.type === "budget" && eff.value) {
-                    await recordTransaction(c.env.DB, humanTeamId, "event", eff.value, ev.title, td?.game_date ?? new Date().toISOString()).catch(() => {});
-                  }
-                  if (eff.type === "reputation" && eff.value) {
-                    await c.env.DB.prepare("UPDATE teams SET reputation = MIN(100, MAX(0, reputation + ?)) WHERE id = ?")
-                      .bind(eff.value, humanTeamId).run().catch(() => {});
-                  }
-                }
-                // Send SMS from role-based sender
-                const roleSenders: Record<string, { name: string; title: string }> = {
-                  budget: { name: "Účetní", title: "Účetní klubu" }, reputation: { name: "Starosta", title: "Starosta obce" },
-                  morale: { name: "Asistent trenéra", title: "Asistent" }, player_leave: { name: "Kapitán", title: "Kapitán týmu" },
-                  injury: { name: "Zdravotník", title: "Správce hřiště" }, condition: { name: "Masér", title: "Masér" },
-                };
-                const sender = roleSenders[ev.effect?.type ?? ""] ?? { name: "Vedení klubu", title: "Vedení" };
-                await sendPhoneSMS(c.env.DB, humanTeamId, sender.name, sender.title, `${ev.emoji} ${ev.description}`).catch(() => {});
-              }
-            }
-          } catch { /* events optional */ }
-
-          // Generate organic player offers (10% chance per human team per round)
-          try {
-            const { generatePlayerOffer } = await import("../events/player-offers");
-            const { createRng } = await import("../generators/rng");
-            const humanTeams = await c.env.DB.prepare(
-              "SELECT t.id, t.game_date, v.district, v.population, v.size FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.league_id = ? AND t.user_id != 'ai'"
-            ).bind(lid).all();
-            for (const ht of humanTeams.results) {
-              const seedStr = `${ht.id}-${calId}-offer`;
-              let seed = 0; for (let si = 0; si < seedStr.length; si++) seed = ((seed << 5) - seed + seedStr.charCodeAt(si)) | 0;
-              const offerRng = createRng(Math.abs(seed));
-              if (offerRng.random() < 0.20) { // 20% šance per round
-                const sizeMap: Record<string, string> = { hamlet: "vesnice", village: "obec", town: "mestys", city: "mesto" };
-                const villageInfo = { region_code: ht.district as string, category: (sizeMap[ht.size as string] ?? "obec") as "vesnice" | "obec" | "mestys" | "mesto", population: (ht.population as number) ?? 500 };
-                const offer = await generatePlayerOffer(c.env.DB, offerRng, ht.id as string, ht.district as string, villageInfo, (ht.game_date as string) ?? new Date().toISOString());
-                if (offer) {
-                  await sendPhoneSMS(c.env.DB, ht.id as string, offer.senderName, offer.senderTitle,
-                    `👋 ${offer.message} Jmenuje se ${offer.playerName}. Podívej se na něj v přestupech.`
-                  ).catch(() => {});
-                }
-              }
-            }
-          } catch (e) { logger.warn({ module: "game" }, "player offer generation failed", e); }
-
-          // Cleanup done outside the match loop below
-        }
+      const lines: string[] = [];
+      let topScore = 0; let topMatch = "";
+      for (const r of matchRows.results) {
+        const hs = r.home_score as number; const as_ = r.away_score as number;
+        const hn = r.home_name as string; const an = r.away_name as string;
+        if (hs > as_) lines.push(`${hn} porazil ${an} ${hs}:${as_}`);
+        else if (hs < as_) lines.push(`${an} zvítězil nad ${hn} ${as_}:${hs}`);
+        else lines.push(`${hn} remizoval s ${an} ${hs}:${as_}`);
+        if (hs + as_ > topScore) { topScore = hs + as_; topMatch = `${hn} vs ${an} ${hs}:${as_}`; }
       }
+      const headline = `${recentCal.game_week}. kolo: přehled výsledků`;
+      const body = lines.join(". ") + "." + (topScore >= 4 ? ` Nejvíce gólů padlo v utkání ${topMatch}.` : "");
+      await c.env.DB.prepare(
+        "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, datetime('now'))"
+      ).bind(crypto.randomUUID(), lid, headline, body, recentCal.game_week).run();
     }
-  } catch (e) {
-    logger.error({ module: "game" }, "auto match-tick in advance-day failed", e);
-  }
+  } catch { /* news optional */ }
 
-  // Cleanup match-day attendance conversations for already-simulated matches
-  try {
-    // Find all "⚽ vs" conversations and check if their referenced calendar entry is simulated
-    const matchConvs = await c.env.DB.prepare(
-      "SELECT c.id FROM conversations c WHERE c.type = 'squad_group' AND c.title LIKE '⚽ vs %'"
-    ).all().catch(() => ({ results: [] }));
-    for (const conv of matchConvs.results) {
-      // Get the calendarId from the first attendance message metadata
-      const meta = await c.env.DB.prepare(
-        "SELECT metadata FROM messages WHERE conversation_id = ? AND metadata LIKE '%calendarId%' LIMIT 1"
-      ).bind(conv.id).first<{ metadata: string }>().catch(() => null);
-      if (!meta?.metadata) {
-        // No calendar reference → old orphan, delete
-        await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
-        await c.env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch(() => {});
-        continue;
-      }
-      try {
-        const parsed = JSON.parse(meta.metadata);
-        const calId = parsed.calendarId;
-        if (calId) {
-          const cal = await c.env.DB.prepare("SELECT status FROM season_calendar WHERE id = ?").bind(calId).first<{ status: string }>().catch(() => null);
-          if (cal?.status === "simulated") {
-            // Match played → delete conversation
-            await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
-            await c.env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch(() => {});
-          }
-        }
-      } catch { /* parse error, skip */ }
-    }
-  } catch { /* cleanup optional */ }
-
-  return c.json({ ok: true, type: "daily", result, matchesSimulated });
+  return c.json({ ok: true, type: "daily", result });
 });
 
 // POST /api/game/run-matches — spustí JEN zápasový tick (simulace zápasů naplánovaných na dnešek)
