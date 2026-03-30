@@ -131,6 +131,10 @@ export default function EventsPage() {
   return (
     <div className="page-container space-y-5">
       {confirmDialog}
+
+      {/* Permanent actions */}
+      <PubAction teamId={teamId} />
+
       {/* Pending — needs decision */}
       {pending.length > 0 && (
         <div>
@@ -244,6 +248,103 @@ export default function EventsPage() {
           </CardBody>
         </Card>
       )}
+    </div>
+  );
+}
+
+/* ── Pub Action ── */
+
+function PubAction({ teamId }: { teamId: string | null }) {
+  const [available, setAvailable] = useState(false);
+  const [daysLeft, setDaysLeft] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [result, setResult] = useState<Array<{ type: string; value: number; description: string }> | null>(null);
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    if (!teamId) return;
+    apiFetch<{ available: boolean; daysLeft?: number }>(`/api/teams/${teamId}/pub-status`)
+      .then((d) => { setAvailable(d.available); setDaysLeft(d.daysLeft ?? 0); })
+      .catch(() => {});
+  }, [teamId]);
+
+  const visit = async (choice: "all" | "one" | "no") => {
+    if (!teamId) return;
+    setSending(true);
+    try {
+      const res = await apiFetch<{ ok: boolean; effects: Array<{ type: string; value: number; description: string }> }>(
+        `/api/teams/${teamId}/pub-visit`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choice }) },
+      );
+      setResult(res.effects);
+      setAvailable(false);
+      setOpen(false);
+    } catch { /* ignore */ }
+    setSending(false);
+  };
+
+  return (
+    <div>
+      <SectionLabel>Akce</SectionLabel>
+      <Card>
+        <CardBody>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl shrink-0">🍺</span>
+            <div className="flex-1 min-w-0">
+              <div className="font-heading font-bold text-sm">Posezení v hospodě</div>
+              <div className="text-xs text-muted">Vezmi kluky na pivo. Morálka nahoru, kondice dolů.</div>
+              {result && (
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {result.map((eff, i) => (
+                    <span key={i} className={`text-xs font-medium ${eff.value >= 0 ? "text-pitch-500" : "text-card-red"}`}>
+                      {eff.description}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            {available && !result ? (
+              <button onClick={() => setOpen(!open)}
+                className="px-3 py-1.5 bg-amber-500 text-white rounded-lg font-heading font-bold text-xs shrink-0">
+                Do hospody
+              </button>
+            ) : (
+              <span className="text-xs text-muted italic shrink-0">
+                {result ? "Hotovo" : `za ${daysLeft} ${daysLeft === 1 ? "den" : "dny"}`}
+              </span>
+            )}
+          </div>
+          {open && (
+            <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
+              <button onClick={() => visit("all")} disabled={sending}
+                className="w-full text-left p-3 rounded-xl bg-amber-50 hover:bg-amber-100 transition-colors border border-amber-200">
+                <div className="font-heading font-bold text-sm">Celý tým jde</div>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  <span className="text-xs font-medium text-pitch-500">+8 morálka</span>
+                  <span className="text-xs font-medium text-card-red">-15 kondice</span>
+                  <span className="text-xs font-medium text-card-red">-1 500 Kč</span>
+                </div>
+              </button>
+              <button onClick={() => visit("one")} disabled={sending}
+                className="w-full text-left p-3 rounded-xl bg-amber-50/50 hover:bg-amber-50 transition-colors border border-amber-100">
+                <div className="font-heading font-bold text-sm">Jen jedno pivo</div>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  <span className="text-xs font-medium text-pitch-500">+3 morálka</span>
+                  <span className="text-xs font-medium text-card-red">-5 kondice</span>
+                  <span className="text-xs font-medium text-card-red">-500 Kč</span>
+                </div>
+              </button>
+              <button onClick={() => visit("no")} disabled={sending}
+                className="w-full text-left p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors border border-gray-200">
+                <div className="font-heading font-bold text-sm">Zakázat</div>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  <span className="text-xs font-medium text-card-red">-3 morálka</span>
+                </div>
+              </button>
+            </div>
+          )}
+        </CardBody>
+      </Card>
     </div>
   );
 }

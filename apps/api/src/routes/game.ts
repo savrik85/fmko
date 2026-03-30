@@ -446,6 +446,92 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
   return c.json({ ok: true, appliedEffects: choice.effects });
 });
 
+// POST /api/teams/:id/pub-visit — vzít kluky do hospody (cooldown 2 herní dny)
+gameRouter.post("/teams/:teamId/pub-visit", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ choice: "all" | "one" | "no" }>();
+
+  // Check cooldown — last pub visit
+  const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ game_date: string }>();
+  if (!team) return c.json({ error: "Team not found" }, 404);
+
+  const lastVisit = await c.env.DB.prepare(
+    "SELECT created_at FROM seasonal_events WHERE league_id = (SELECT league_id FROM teams WHERE id = ?) AND type = 'hospoda_action' ORDER BY created_at DESC LIMIT 1"
+  ).bind(teamId).first<{ created_at: string }>().catch(() => null);
+
+  if (lastVisit) {
+    const lastDate = new Date(lastVisit.created_at).getTime();
+    const gameDate = new Date(team.game_date).getTime();
+    const daysDiff = (gameDate - lastDate) / (1000 * 60 * 60 * 24);
+    if (daysDiff < 2) {
+      return c.json({ error: "Hospoda je dostupná jednou za 2 dny", cooldown: true }, 400);
+    }
+  }
+
+  const effects: Array<{ type: string; value: number; description: string }> = [];
+
+  if (body.choice === "all") {
+    effects.push(
+      { type: "morale", value: 8, description: "+8 morálka" },
+      { type: "condition", value: -15, description: "-15 kondice všem" },
+      { type: "budget", value: -1500, description: "-1 500 Kč" },
+    );
+  } else if (body.choice === "one") {
+    effects.push(
+      { type: "morale", value: 3, description: "+3 morálka" },
+      { type: "condition", value: -5, description: "-5 kondice" },
+      { type: "budget", value: -500, description: "-500 Kč" },
+    );
+  } else {
+    effects.push({ type: "morale", value: -3, description: "-3 morálka" });
+  }
+
+  // Apply effects
+  for (const effect of effects) {
+    if (effect.type === "budget") {
+      await recordTransaction(c.env.DB, teamId, "event", effect.value, "Hospoda", team.game_date).catch(() => {});
+    }
+    if (effect.type === "morale") {
+      await c.env.DB.prepare(
+        "UPDATE players SET life_context = json_set(life_context, '$.morale', MIN(100, MAX(0, json_extract(life_context, '$.morale') + ?))) WHERE team_id = ?"
+      ).bind(effect.value, teamId).run().catch(() => {});
+    }
+    if (effect.type === "condition") {
+      await c.env.DB.prepare(
+        "UPDATE players SET life_context = json_set(life_context, '$.condition', MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?))) WHERE team_id = ?"
+      ).bind(effect.value, teamId).run().catch(() => {});
+    }
+  }
+
+  // Record as event for cooldown tracking
+  await c.env.DB.prepare(
+    "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, season, game_week, status, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'hospoda_action', 'Posezení v hospodě', ?, ?, '1', 0, 'resolved', ?)"
+  ).bind(crypto.randomUUID(), teamId,
+    body.choice === "all" ? "Celý tým šel do hospody" : body.choice === "one" ? "Jen jedno pivo" : "Trenér zakázal hospodu",
+    JSON.stringify(effects), team.game_date
+  ).run().catch(() => {});
+
+  return c.json({ ok: true, effects });
+});
+
+// GET /api/teams/:id/pub-status — cooldown check
+gameRouter.get("/teams/:teamId/pub-status", async (c) => {
+  const teamId = c.req.param("teamId");
+  const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ game_date: string }>();
+  if (!team) return c.json({ available: false });
+
+  const lastVisit = await c.env.DB.prepare(
+    "SELECT created_at FROM seasonal_events WHERE league_id = (SELECT league_id FROM teams WHERE id = ?) AND type = 'hospoda_action' ORDER BY created_at DESC LIMIT 1"
+  ).bind(teamId).first<{ created_at: string }>().catch(() => null);
+
+  if (!lastVisit) return c.json({ available: true });
+
+  const daysDiff = (new Date(team.game_date).getTime() - new Date(lastVisit.created_at).getTime()) / (1000 * 60 * 60 * 24);
+  return c.json({ available: daysDiff >= 2, daysLeft: Math.max(0, Math.ceil(2 - daysDiff)) });
+});
+
 // POST /api/teams/:id/youth — nastavit investici do mládeže
 gameRouter.post("/teams/:teamId/youth", async (c) => {
   const body = await c.req.json<{ investment: string }>();
