@@ -56,9 +56,11 @@ export async function runScheduledMatches(
       ).bind(awayTeamId, calendarId).first();
       if (!hasAwayLineup) await createAutoLineup(db, awayTeamId, calendarId);
 
-      // Create RNG with deterministic seed from calendarId (same as lineup page)
+      // Create RNG — deterministic seed for absences (same every time)
       const { seedFromString } = await import("../lib/seed");
-      const rng = createRng(seedFromString(calendarId) + matchId.charCodeAt(0));
+      const absenceRng = createRng(seedFromString(calendarId) + matchId.charCodeAt(0));
+      // Separate RNG for match simulation — includes Date.now() so results vary
+      const rng = createRng(seedFromString(calendarId) + Date.now());
 
       // Determine match type
       const homeTeam = await db.prepare("SELECT name, user_id FROM teams WHERE id = ?").bind(homeTeamId).first<Record<string, unknown>>();
@@ -529,7 +531,7 @@ async function buildMatchPlayers(
           injuryProneness: personality.injuryProneness ?? 50,
         };
       });
-      const absences = generateAbsences(rng as any, squadForAbsence);
+      const absences = generateAbsences(absenceRng as any, squadForAbsence);
       absentIds = new Set(absences.map((a) => rows.results[a.playerIndex]?.id as string).filter(Boolean));
       for (const a of absences) {
         const r = rows.results[a.playerIndex];

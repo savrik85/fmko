@@ -79,24 +79,26 @@ function calcChanceProb(
   const tacticMod = TACTIC_MODS[attacking.tactic];
   const weatherMod = WEATHER_MODS[weather];
 
+  const outfield = attacking.lineup.filter((p) => p.position !== "GK");
   const mids = attacking.lineup.filter((p) => p.position === "MID");
   const midAndFwd = attacking.lineup.filter((p) => p.position === "MID" || p.position === "FWD");
+  const defOutfield = defending.lineup.filter((p) => p.position !== "GK");
   const defs = defending.lineup.filter((p) => p.position === "DEF");
 
   const attackPower = (
-    teamAvg(attacking.lineup, "technique") * weatherMod.techniqueMod * 0.8 +
-    teamAvg(attacking.lineup, "passing") * 1.0 +
-    teamAvg(attacking.lineup, "speed") * 0.7 +
+    teamAvg(outfield, "technique") * weatherMod.techniqueMod * 0.8 +
+    teamAvg(outfield, "passing") * 1.0 +
+    teamAvg(outfield, "speed") * 0.7 +
     (mids.length > 0 ? teamAvg(mids, "vision") * 0.6 : 0) +
     (midAndFwd.length > 0 ? teamAvg(midAndFwd, "creativity") * 0.5 : 0) +
-    teamAvg(attacking.lineup, "workRate") * 0.3
+    teamAvg(outfield, "workRate") * 0.3
   ) / 5 * tacticMod.attackMod * formFactor;
 
   const defensePower = (
-    teamAvg(defending.lineup, "defense") * 1.0 +
-    teamAvg(defending.lineup, "strength") * 0.7 +
+    teamAvg(defOutfield, "defense") * 1.0 +
+    teamAvg(defOutfield, "strength") * 0.7 +
     (defs.length > 0 ? teamAvg(defs, "aggression") * 0.2 : 0) +
-    teamAvg(defending.lineup, "workRate") * 0.2
+    teamAvg(defOutfield, "workRate") * 0.2
   ) / 3 * TACTIC_MODS[defending.tactic].defenseMod;
 
   // Use DIFFERENCE not ratio — so stronger teams create more chances
