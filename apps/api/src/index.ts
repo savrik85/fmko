@@ -73,9 +73,9 @@ export default {
       }
     }
 
-    // ── MATCH TICK: 18:00 CET (17:00 UTC) — simuluje zápasy naplánované na dnešek ──
+    // ── MATCH TICK: 18:00 CEST (16:00 UTC) — simuluje zápasy naplánované na dnešek ──
     // Manuální trigger spustí taky
-    if (cron === "0 17 * * *" || !cron) {
+    if (cron === "0 16 * * *" || !cron) {
       try {
         log("info", "match tick starting");
         // Find max game_date per league to know which rounds to simulate

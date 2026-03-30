@@ -25,7 +25,7 @@ bucket_name = "prales-seed"
 [triggers]
 crons = [
   "0 3 * * *",
-  "0 17 * * *",
+  "0 16 * * *",
 ]
 
 [[routes]]
@@ -61,5 +61,5 @@ bucket_name = "prales-seed"
 [env.testing.triggers]
 crons = [
   "0 3 * * *",
-  "0 17 * * *",
+  "0 16 * * *",
 ]
