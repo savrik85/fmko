@@ -269,17 +269,19 @@ function PubAction({ teamId }: { teamId: string | null }) {
   }, [teamId]);
 
   const visit = async (choice: "all" | "one" | "no") => {
-    if (!teamId) return;
+    if (!teamId || sending) return;
     setSending(true);
+    setAvailable(false);
     try {
       const res = await apiFetch<{ ok: boolean; effects: Array<{ type: string; value: number; description: string }> }>(
         `/api/teams/${teamId}/pub-visit`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choice }) },
       );
       setResult(res.effects);
-      setAvailable(false);
       setOpen(false);
-    } catch { /* ignore */ }
+    } catch {
+      setAvailable(true);
+    }
     setSending(false);
   };
 
