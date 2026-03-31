@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
@@ -158,51 +158,75 @@ export default function MatchDetailPage() {
           {[
             { label: match.home_name, data: match.home_lineup_data, color: hc },
             { label: match.away_name, data: match.away_lineup_data, color: ac },
-          ].map(({ label, data, color }) => data && (
+          ].map(({ label, data, color }) => {
+            if (!data) return null;
+            const posOrder = { GK: 0, DEF: 1, MID: 2, FWD: 3 } as Record<string, number>;
+            const sorted = [...data.starters].sort((a, b) => (posOrder[a.position] ?? 9) - (posOrder[b.position] ?? 9));
+            const posConfig: Record<string, { label: string; bg: string; border: string; text: string }> = {
+              GK:  { label: "Brankář", bg: "bg-amber-50",  border: "border-l-amber-400", text: "text-amber-700" },
+              DEF: { label: "Obrana",  bg: "bg-blue-50",   border: "border-l-blue-400",   text: "text-blue-700" },
+              MID: { label: "Záloha", bg: "bg-emerald-50", border: "border-l-emerald-400", text: "text-emerald-700" },
+              FWD: { label: "Útok",   bg: "bg-red-50",     border: "border-l-red-400",    text: "text-red-700" },
+            };
+            const groups: Array<{ pos: string; players: LineupPlayer[] }> = [];
+            for (const p of sorted) {
+              const last = groups[groups.length - 1];
+              if (last && last.pos === p.position) { last.players.push(p); }
+              else { groups.push({ pos: p.position, players: [p] }); }
+            }
+            return (
             <div key={label} className="card overflow-hidden">
               <div className="px-3 py-2 border-b border-gray-100" style={{ backgroundColor: `color-mix(in srgb, ${color} 10%, white)` }}>
                 <span className="font-heading font-bold text-sm">{label}</span>
               </div>
-              <table className="w-full text-sm">
-                <tbody>
-                  {data.starters.map((p, i) => (
-                    <tr key={i} className="border-b border-gray-50 last:border-b-0">
-                      <td className="py-1.5 pl-3 w-6 text-center text-sm text-muted tabular-nums">{i + 1}</td>
-                      <td className="py-1.5 px-1.5">
-                        <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                      </td>
-                      <td className="py-1.5 px-1.5">
-                        {p.id ? (
-                          <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
-                        ) : (
-                          <span className="font-heading font-bold">{p.name}</span>
-                        )}
-                        {p.position !== p.naturalPosition && <span className="text-gold-500 text-sm ml-1">⚠️</span>}
-                      </td>
-                    </tr>
-                  ))}
-                  {data.subs.length > 0 && (
-                    <tr className="bg-gray-50/50">
-                      <td colSpan={3} className="py-1 pl-3 text-sm text-muted font-heading uppercase">Lavička</td>
-                    </tr>
-                  )}
-                  {data.subs.map((p, i) => (
-                    <tr key={`s${i}`} className="border-b border-gray-50 last:border-b-0 text-muted">
-                      <td className="py-1 pl-3 w-6 text-center text-sm tabular-nums">{12 + i}</td>
-                      <td className="py-1 px-1.5"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></td>
-                      <td className="py-1 px-1.5">
-                        {p.id ? (
-                          <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
-                        ) : (
-                          <span className="font-heading font-bold">{p.name}</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="divide-y divide-gray-100">
+                {groups.map((g) => {
+                  const cfg = posConfig[g.pos] ?? posConfig.MID;
+                  return (
+                    <div key={g.pos}>
+                      <div className={`px-3 py-1 ${cfg.bg} ${cfg.text} text-[11px] font-heading font-bold uppercase tracking-wider`}>
+                        {cfg.label}
+                      </div>
+                      {g.players.map((p) => (
+                        <div key={p.id} className={`flex items-center gap-2 px-3 py-1.5 border-l-3 ${cfg.border}`}>
+                          <span className="shrink-0"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></span>
+                          <span className="flex-1 min-w-0 truncate">
+                            {p.id ? (
+                              <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 transition-colors">{p.name}</Link>
+                            ) : (
+                              <span className="font-heading font-bold text-base">{p.name}</span>
+                            )}
+                            {p.position !== p.naturalPosition && (
+                              <span className="text-amber-500 text-xs ml-1.5" title={`Přirozená pozice: ${p.naturalPosition}`}>({p.naturalPosition})</span>
+                            )}
+                          </span>
+                          <span className="text-sm text-muted tabular-nums shrink-0">{p.rating}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+                {data.subs.length > 0 && (
+                  <div>
+                    <div className="px-3 py-1 bg-gray-100 text-[11px] text-muted font-heading font-bold uppercase tracking-wider">Lavička</div>
+                    {data.subs.map((p) => (
+                      <div key={p.id} className="flex items-center gap-2 px-3 py-1 border-l-3 border-l-gray-300 text-muted">
+                        <span className="shrink-0"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></span>
+                        <span className="flex-1 min-w-0 truncate">
+                          {p.id ? (
+                            <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
+                          ) : (
+                            <span className="font-heading font-bold">{p.name}</span>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

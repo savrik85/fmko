@@ -645,7 +645,7 @@ matchesRouter.get("/teams/:teamId/match-results", async (c) => {
 
   const result = await c.env.DB.prepare(
     `SELECT m.id, m.round, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
-       m.simulated_at, m.weather, m.attendance, m.stadium_name,
+       m.simulated_at, m.weather, m.attendance, m.stadium_name, m.calendar_id,
        ht.name as home_name, ht.primary_color as home_color, ht.secondary_color as home_secondary, ht.badge_pattern as home_badge,
        at.name as away_name, at.primary_color as away_color, at.secondary_color as away_secondary, at.badge_pattern as away_badge
      FROM matches m
@@ -681,6 +681,7 @@ matchesRouter.get("/teams/:teamId/match-results", async (c) => {
       round: row.round,
       date: row.simulated_at,
       isHome,
+      isFriendly: row.calendar_id == null,
       opponent: isHome ? row.away_name : row.home_name,
       opponentId: isHome ? row.away_team_id : row.home_team_id,
       opponentColor: (isHome ? row.away_color : row.home_color) || "#2D5F2D",
@@ -695,18 +696,19 @@ matchesRouter.get("/teams/:teamId/match-results", async (c) => {
     };
   });
 
-  // Aggregate form
-  const form = matches.slice(0, 5).map((m) => m.result);
-  const totalW = matches.filter((m) => m.result === "W").length;
-  const totalD = matches.filter((m) => m.result === "D").length;
-  const totalL = matches.filter((m) => m.result === "L").length;
-  const goalsFor = matches.reduce((s, m) => s + (m.isHome ? (m.homeScore as number) : (m.awayScore as number)), 0);
-  const goalsAgainst = matches.reduce((s, m) => s + (m.isHome ? (m.awayScore as number) : (m.homeScore as number)), 0);
+  // Aggregate form — league matches only
+  const leagueMatches = matches.filter((m) => !m.isFriendly);
+  const form = leagueMatches.slice(0, 5).map((m) => m.result);
+  const totalW = leagueMatches.filter((m) => m.result === "W").length;
+  const totalD = leagueMatches.filter((m) => m.result === "D").length;
+  const totalL = leagueMatches.filter((m) => m.result === "L").length;
+  const goalsFor = leagueMatches.reduce((s, m) => s + (m.isHome ? (m.homeScore as number) : (m.awayScore as number)), 0);
+  const goalsAgainst = leagueMatches.reduce((s, m) => s + (m.isHome ? (m.awayScore as number) : (m.homeScore as number)), 0);
 
   return c.json({
     matches,
     form,
-    summary: { played: matches.length, wins: totalW, draws: totalD, losses: totalL, goalsFor, goalsAgainst },
+    summary: { played: leagueMatches.length, wins: totalW, draws: totalD, losses: totalL, goalsFor, goalsAgainst },
     topPlayers: scorers.results.map((r) => ({
       playerId: r.player_id,
       name: `${r.first_name} ${r.last_name}`,
@@ -780,6 +782,26 @@ matchesRouter.post("/teams/:teamId/challenge/:opponentTeamId", async (c) => {
   ).bind(teamId, opponentTeamId).first<{ id: string }>().catch(() => null);
   if (existing) return c.json({ error: "Výzva už byla odeslána" }, 400);
 
+  // Check neither team has a league match or friendly today (same game_date)
+  const gameDateStr = team.game_date;
+  const gameDateDay = gameDateStr ? gameDateStr.split("T")[0] : null;
+  if (gameDateDay) {
+    const [leagueRes, friendlyRes] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `SELECT m.id FROM matches m JOIN season_calendar sc ON m.calendar_id = sc.id
+         WHERE (m.home_team_id = ? OR m.away_team_id = ? OR m.home_team_id = ? OR m.away_team_id = ?)
+         AND sc.scheduled_at LIKE ? AND m.status IN ('scheduled','lineups_open','simulated') LIMIT 1`
+      ).bind(teamId, teamId, opponentTeamId, opponentTeamId, `${gameDateDay}%`),
+      c.env.DB.prepare(
+        `SELECT id FROM matches WHERE calendar_id IS NULL AND status IN ('lineups_open','simulated')
+         AND (home_team_id = ? OR away_team_id = ? OR home_team_id = ? OR away_team_id = ?)
+         AND created_at LIKE ? LIMIT 1`
+      ).bind(teamId, teamId, opponentTeamId, opponentTeamId, `${gameDateDay}%`),
+    ]);
+    if (leagueRes.results.length > 0) return c.json({ error: "Dnes máš nebo soupeř má ligový zápas — přátelák lze hrát jen v dny bez ligového zápasu" }, 400);
+    if (friendlyRes.results.length > 0) return c.json({ error: "Jeden z týmů už dnes hrál nebo má naplánovaný přátelák" }, 400);
+  }
+
   const challengeId = uuid();
   const expiresAt = new Date(team.game_date);
   expiresAt.setDate(expiresAt.getDate() + 7);
@@ -812,8 +834,27 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
   if (!team || team.budget < 1000) return c.json({ error: "Nedostatek peněz (min 1 000 Kč)" }, 400);
 
   const challengerTeamId = challenge.challenger_team_id as string;
-  const challenger = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
-    .bind(challengerTeamId).first<{ name: string }>();
+  const challenger = await c.env.DB.prepare("SELECT name, game_date FROM teams WHERE id = ?")
+    .bind(challengerTeamId).first<{ name: string; game_date: string }>();
+
+  // Check neither team has a league match or friendly today
+  const gameDateDay = team.game_date ? team.game_date.split("T")[0] : null;
+  if (gameDateDay) {
+    const [leagueRes, friendlyRes] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `SELECT m.id FROM matches m JOIN season_calendar sc ON m.calendar_id = sc.id
+         WHERE (m.home_team_id = ? OR m.away_team_id = ? OR m.home_team_id = ? OR m.away_team_id = ?)
+         AND sc.scheduled_at LIKE ? AND m.status IN ('scheduled','lineups_open','simulated') LIMIT 1`
+      ).bind(teamId, teamId, challengerTeamId, challengerTeamId, `${gameDateDay}%`),
+      c.env.DB.prepare(
+        `SELECT id FROM matches WHERE calendar_id IS NULL AND status IN ('lineups_open','simulated')
+         AND (home_team_id = ? OR away_team_id = ? OR home_team_id = ? OR away_team_id = ?)
+         AND created_at LIKE ? LIMIT 1`
+      ).bind(teamId, teamId, challengerTeamId, challengerTeamId, `${gameDateDay}%`),
+    ]);
+    if (leagueRes.results.length > 0) return c.json({ error: "Dnes máš nebo soupeř má ligový zápas — přátelák nelze přijmout" }, 400);
+    if (friendlyRes.results.length > 0) return c.json({ error: "Jeden z týmů už dnes hrál nebo má naplánovaný přátelák" }, 400);
+  }
 
   // Charge both teams 1000 Kč
   const { recordTransaction } = await import("../season/finance-processor");
@@ -823,8 +864,8 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
   // Create match
   const matchId = uuid();
   await c.env.DB.prepare(
-    "INSERT INTO matches (id, home_team_id, away_team_id, status, created_at) VALUES (?, ?, ?, 'lineups_open', datetime('now'))"
-  ).bind(matchId, challengerTeamId, teamId).run();
+    "INSERT INTO matches (id, home_team_id, away_team_id, status, created_at) VALUES (?, ?, ?, 'lineups_open', ?)"
+  ).bind(matchId, challengerTeamId, teamId, team.game_date).run();
 
   // Update challenge
   await c.env.DB.prepare("UPDATE challenges SET status = 'accepted', match_id = ? WHERE id = ?")
@@ -876,11 +917,12 @@ matchesRouter.get("/teams/:teamId/challenges", async (c) => {
      ORDER BY c.created_at DESC`
   ).bind(teamId).all();
 
-  // Outgoing pending
+  // Outgoing pending + accepted (waiting for lineup/simulation)
   const outgoing = await c.env.DB.prepare(
-    `SELECT c.*, t.name as challenged_name FROM challenges c
+    `SELECT c.*, t.name as challenged_name, m.status as match_status FROM challenges c
      JOIN teams t ON c.challenged_team_id = t.id
-     WHERE c.challenger_team_id = ? AND c.status = 'pending'
+     LEFT JOIN matches m ON c.match_id = m.id
+     WHERE c.challenger_team_id = ? AND c.status IN ('pending', 'accepted')
      ORDER BY c.created_at DESC`
   ).bind(teamId).all();
 
@@ -918,6 +960,9 @@ matchesRouter.get("/teams/:teamId/challenges", async (c) => {
     })),
     outgoing: outgoing.results.map((r) => ({
       id: r.id, challengedName: r.challenged_name, message: r.message, createdAt: r.created_at,
+      status: r.status as string,
+      matchId: r.match_id as string | null,
+      matchStatus: r.match_status as string | null,
     })),
     played: played.results.map((r) => ({
       id: r.id, matchId: r.match_id,

@@ -21,7 +21,7 @@ interface AuthState {
   seasonDay: number | null;
   seasonTotal: number | null;
   gameDate: string | null;
-  nextMatch: { opponent: string; daysUntil: number } | null;
+  nextMatch: { opponent: string; daysUntil: number; isFriendly?: boolean } | null;
   isAdmin: boolean;
   isLoading: boolean;
 }

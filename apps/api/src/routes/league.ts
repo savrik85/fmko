@@ -42,7 +42,7 @@ leagueRouter.get("/teams/:teamId/standings", async (c) => {
   // Get all simulated matches in this league
   const placeholders = teamIds.map(() => "?").join(",");
   const matches = await c.env.DB.prepare(
-    `SELECT * FROM matches WHERE status = 'simulated' AND (home_team_id IN (${placeholders}) OR away_team_id IN (${placeholders}))`
+    `SELECT * FROM matches WHERE status = 'simulated' AND calendar_id IS NOT NULL AND (home_team_id IN (${placeholders}) OR away_team_id IN (${placeholders}))`
   ).bind(...teamIds, ...teamIds).all().catch((e) => { logger.warn({ module: "league" }, "fetch simulated matches", e); return { results: [] }; });
 
   // Calculate standings

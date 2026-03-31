@@ -78,9 +78,12 @@ export function FMTopBar() {
         )}
         {nextMatch && (
           <span className="text-white/60 whitespace-nowrap truncate">
-            {"⚽"} <span className="text-white font-bold">{nextMatch.opponent}</span>
+            {"⚽"} {nextMatch.isFriendly && <span className="text-amber-400 text-xs mr-1">přátelák</span>}
+            <span className="text-white font-bold">{nextMatch.opponent}</span>
             {" · "}
-            {nextMatch.daysUntil === 0 ? (
+            {nextMatch.isFriendly ? (
+              <span className="text-amber-400 font-bold">nastav sestavu!</span>
+            ) : nextMatch.daysUntil === 0 ? (
               <span className="text-pitch-400 font-bold">{"dnes!"}</span>
             ) : nextMatch.daysUntil === 1 ? (
               <span className="text-pitch-400">{"zítra"}</span>

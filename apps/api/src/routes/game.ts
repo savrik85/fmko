@@ -108,25 +108,32 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
   const teamId = c.req.param("teamId");
   const { mapVillageSize } = await import("../season/finance-processor");
 
-  const team = await c.env.DB.prepare(
-    "SELECT t.*, v.name as village_name, v.size, v.population, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
-  ).bind(teamId).first<Record<string, unknown>>();
+  // Batch: team info + wages + sponsors + top wages in single round-trip
+  const [teamResult, wageResult, sponsorContracts, topWages] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      "SELECT t.*, v.name as village_name, v.size, v.population, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
+    ).bind(teamId),
+    c.env.DB.prepare(
+      "SELECT COUNT(*) as cnt, COALESCE(SUM(weekly_wage), 0) as weekly_total FROM players WHERE team_id = ?"
+    ).bind(teamId),
+    c.env.DB.prepare(
+      "SELECT sponsor_name, sponsor_type, monthly_amount, win_bonus FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
+    ).bind(teamId),
+    c.env.DB.prepare(
+      "SELECT id, first_name, last_name, position, overall_rating, weekly_wage FROM players WHERE team_id = ? ORDER BY weekly_wage DESC LIMIT 5"
+    ).bind(teamId),
+  ]);
+
+  const team = teamResult.results[0] as Record<string, unknown> | undefined;
   if (!team) return c.json({ error: "Team not found" }, 404);
 
   const category = mapVillageSize(team.size as string);
 
-  // Players + wages
-  const wageResult = await c.env.DB.prepare(
-    "SELECT COUNT(*) as cnt, COALESCE(SUM(weekly_wage), 0) as weekly_total FROM players WHERE team_id = ?"
-  ).bind(teamId).first<{ cnt: number; weekly_total: number }>();
-  const playerCount = wageResult?.cnt ?? 0;
-  const weeklyWages = wageResult?.weekly_total ?? 0;
+  const wageRow = wageResult.results[0] as { cnt: number; weekly_total: number } | undefined;
+  const playerCount = wageRow?.cnt ?? 0;
+  const weeklyWages = wageRow?.weekly_total ?? 0;
 
-  // Sponsors (from contracts)
-  const sponsorContracts = await c.env.DB.prepare(
-    "SELECT sponsor_name, sponsor_type, monthly_amount, win_bonus FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
-  ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch sponsor contracts", e); return { results: [] }; });
-  const sponsors = sponsorContracts.results.map((s) => ({
+  const sponsors = (sponsorContracts.results as Record<string, unknown>[]).map((s) => ({
     name: s.sponsor_name as string,
     type: s.sponsor_type as string,
     monthlyAmount: s.monthly_amount as number,
@@ -167,18 +174,13 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
   // Forecast
   const weeksUntilBankrupt = weeklyNet < 0 ? Math.floor((team.budget as number) / Math.abs(weeklyNet)) : null;
 
-  // Top 5 highest paid
-  const topWages = await c.env.DB.prepare(
-    "SELECT id, first_name, last_name, position, overall_rating, weekly_wage FROM players WHERE team_id = ? ORDER BY weekly_wage DESC LIMIT 5"
-  ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch top wages", e); return { results: [] }; });
-
   return c.json({
     budget: team.budget,
     sponsors: sponsors.map((s) => ({ ...s, weeklyAmount: Math.round(s.monthlyAmount / 4.3) })),
     playerCount,
     wageBill: {
       weekly: weeklyWages,
-      topPlayers: topWages.results.map((p) => ({
+      topPlayers: (topWages.results as Record<string, unknown>[]).map((p) => ({
         id: p.id, name: `${p.first_name} ${p.last_name}`,
         position: p.position, rating: p.overall_rating, weeklyWage: p.weekly_wage,
       })),
@@ -323,18 +325,16 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
   const team = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string }>();
   if (!team?.league_id) return c.json({ events: [] });
 
-  const dbEvents = await c.env.DB.prepare(
-    "SELECT * FROM seasonal_events WHERE league_id = ? ORDER BY game_week"
-  ).bind(team.league_id).all().catch((e) => { logger.warn({ module: "game" }, "fetch seasonal events", e); return { results: [] }; });
-
-  // Current game week from last simulated calendar
-  const lastCal = await c.env.DB.prepare(
-    "SELECT MAX(game_week) as gw FROM season_calendar WHERE league_id = ? AND status = 'simulated'"
-  ).bind(team.league_id).first<{ gw: number | null }>();
-  const currentGameWeek = lastCal?.gw ?? 0;
+  // Batch: seasonal events + current game week
+  const [dbEventsRes, lastCalRes] = await c.env.DB.batch([
+    c.env.DB.prepare("SELECT * FROM seasonal_events WHERE league_id = ? ORDER BY game_week").bind(team.league_id),
+    c.env.DB.prepare("SELECT MAX(game_week) as gw FROM season_calendar WHERE league_id = ? AND status = 'simulated'").bind(team.league_id),
+  ]);
+  const dbEvents = { results: dbEventsRes.results };
+  const currentGameWeek = (lastCalRes.results[0] as { gw: number | null } | undefined)?.gw ?? 0;
 
   if (dbEvents.results.length > 0) {
-    const events = dbEvents.results.map((row) => ({
+    const events = (dbEvents.results as Record<string, unknown>[]).map((row) => ({
       id: row.id,
       type: row.type,
       title: row.title,
@@ -578,26 +578,25 @@ gameRouter.post("/teams/:teamId/recruit", async (c) => {
 gameRouter.get("/teams/:teamId/news", async (c) => {
   const teamId = c.req.param("teamId");
 
-  const team = await c.env.DB.prepare(
-    "SELECT t.name, t.league_id, t.reputation FROM teams t WHERE t.id = ?"
-  ).bind(teamId).first<{ name: string; league_id: string | null; reputation: number }>();
-  if (!team) return c.json({ error: "Team not found" }, 404);
-
-  const articles: Array<{ id: string; type: string; headline: string; body: string; icon: string; date: string }> = [];
-
-  // 1. Recent match results as articles
-  const matches = await c.env.DB.prepare(
-    `SELECT m.id, m.home_score, m.away_score, m.simulated_at, m.round,
+  // Batch: team info + recent matches
+  const [teamRes, matchesRes] = await c.env.DB.batch([
+    c.env.DB.prepare("SELECT t.name, t.league_id, t.reputation FROM teams t WHERE t.id = ?").bind(teamId),
+    c.env.DB.prepare(`SELECT m.id, m.home_score, m.away_score, m.simulated_at, m.round,
        ht.name as home_name, at.name as away_name,
        m.home_team_id, m.away_team_id
      FROM matches m
      JOIN teams ht ON m.home_team_id = ht.id
      JOIN teams at ON m.away_team_id = at.id
      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
-     ORDER BY m.simulated_at DESC LIMIT 5`
-  ).bind(teamId, teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch match results for news", e); return { results: [] }; });
+     ORDER BY m.simulated_at DESC LIMIT 5`).bind(teamId, teamId),
+  ]);
+  const team = teamRes.results[0] as { name: string; league_id: string | null; reputation: number } | undefined;
+  if (!team) return c.json({ error: "Team not found" }, 404);
+  const matchRows = matchesRes.results as Record<string, unknown>[];
 
-  for (const m of matches.results) {
+  const articles: Array<{ id: string; type: string; headline: string; body: string; icon: string; date: string }> = [];
+
+  for (const m of matchRows) {
     const isHome = m.home_team_id === teamId;
     const myScore = isHome ? m.home_score as number : m.away_score as number;
     const theirScore = isHome ? m.away_score as number : m.home_score as number;
@@ -793,14 +792,15 @@ gameRouter.get("/teams/:teamId/equipment", async (c) => {
     if (!equip) return c.json({ error: "Failed to create equipment" }, 500);
   }
 
-  // Get team reputation + matches played + season for unlock logic
-  const team = await c.env.DB.prepare("SELECT reputation FROM teams WHERE id = ?").bind(teamId).first<{ reputation: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch team reputation for equipment", e); return null; });
-  const matchCount = await c.env.DB.prepare(
-    "SELECT COUNT(*) as cnt FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated'"
-  ).bind(teamId, teamId).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "game" }, "count matches for equipment", e); return null; });
-  const seasonRow = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' LIMIT 1")
-    .first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch active season for equipment", e); return null; });
-  const seasonNum = seasonRow?.number ?? 1;
+  // Batch: team reputation + matches played + active season
+  const [teamRes, matchCountRes, seasonRes] = await c.env.DB.batch([
+    c.env.DB.prepare("SELECT reputation FROM teams WHERE id = ?").bind(teamId),
+    c.env.DB.prepare("SELECT COUNT(*) as cnt FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated'").bind(teamId, teamId),
+    c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' LIMIT 1"),
+  ]);
+  const team = teamRes.results[0] as { reputation: number } | undefined;
+  const matchCount = matchCountRes.results[0] as { cnt: number } | undefined;
+  const seasonNum = (seasonRes.results[0] as { number: number } | undefined)?.number ?? 1;
 
   const levels: Record<string, number> = {};
   const conditions: Record<string, number> = {};
@@ -944,14 +944,15 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     fence: stadium.fence as number ?? 0,
   };
 
-  const teamInfo = await c.env.DB.prepare("SELECT reputation, stadium_name FROM teams WHERE id = ?")
-    .bind(teamId).first<{ reputation: number; stadium_name: string | null }>().catch((e) => { logger.warn({ module: "game" }, "fetch team info for stadium", e); return null; });
-  const matchCount = await c.env.DB.prepare(
-    "SELECT COUNT(*) as cnt FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated'"
-  ).bind(teamId, teamId).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "game" }, "count matches for stadium", e); return null; });
-  const currentSeason = await c.env.DB.prepare(
-    "SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
-  ).first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch active season for stadium", e); return null; });
+  // Batch: team info + match count + active season
+  const [teamInfoRes, matchCountRes, currentSeasonRes] = await c.env.DB.batch([
+    c.env.DB.prepare("SELECT reputation, stadium_name FROM teams WHERE id = ?").bind(teamId),
+    c.env.DB.prepare("SELECT COUNT(*) as cnt FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated'").bind(teamId, teamId),
+    c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"),
+  ]);
+  const teamInfo = (teamInfoRes.results[0] as { reputation: number; stadium_name: string | null } | undefined) ?? null;
+  const matchCount = (matchCountRes.results[0] as { cnt: number } | undefined) ?? null;
+  const currentSeason = (currentSeasonRes.results[0] as { number: number } | undefined) ?? null;
 
   // Pitch maintenance options
   const pitchActions = [
@@ -1246,15 +1247,13 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     stadiumOffers.sort((a, b) => b.monthlyAmount - a.monthlyAmount);
   }
 
-  // Check season limit for main sponsor changes
-  const currentSeason = await c.env.DB.prepare(
-    "SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
-  ).first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch current season for sponsors", e); return null; });
-  const seasonNum = currentSeason?.number ?? 1;
-
-  const teamFull = await c.env.DB.prepare(
-    "SELECT name, last_main_sponsor_change_season FROM teams WHERE id = ?"
-  ).bind(teamId).first<{ name: string; last_main_sponsor_change_season: number | null }>().catch((e) => { logger.warn({ module: "game" }, "fetch team sponsor change season", e); return null; });
+  // Batch: current season + team sponsor change info
+  const [currentSeasonRes, teamFullRes] = await c.env.DB.batch([
+    c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"),
+    c.env.DB.prepare("SELECT name, last_main_sponsor_change_season FROM teams WHERE id = ?").bind(teamId),
+  ]);
+  const seasonNum = (currentSeasonRes.results[0] as { number: number } | undefined)?.number ?? 1;
+  const teamFull = (teamFullRes.results[0] as { name: string; last_main_sponsor_change_season: number | null } | undefined) ?? null;
 
   const changedThisSeason = (teamFull?.last_main_sponsor_change_season ?? 0) >= seasonNum;
 
@@ -1510,32 +1509,26 @@ gameRouter.post("/leagues/:leagueId/generate-schedule", async (c) => {
 gameRouter.get("/teams/:teamId/season-info", async (c) => {
   const teamId = c.req.param("teamId");
 
-  const team = await c.env.DB.prepare("SELECT league_id, training_type, training_sessions, training_approach FROM teams WHERE id = ?")
-    .bind(teamId).first<{ league_id: string | null; training_type: string | null; training_sessions: number | null; training_approach: string | null }>();
+  const team = await c.env.DB.prepare("SELECT league_id, training_type, training_sessions, training_approach, season_start, season_end, game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ league_id: string | null; training_type: string | null; training_sessions: number | null; training_approach: string | null; season_start: string | null; season_end: string | null; game_date: string | null }>();
   if (!team?.league_id) return c.json({ season: 1, currentDay: 1, totalDays: 1, upcoming: [] });
 
-  const league = await c.env.DB.prepare(
-    "SELECT l.id, s.number as season_number FROM leagues l JOIN seasons s ON l.season_id = s.id WHERE l.id = ?"
-  ).bind(team.league_id).first<{ id: string; season_number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch league for season info", e); return null; });
+  // Batch: league info + calendar entries
+  const [leagueRes, calRes] = await c.env.DB.batch([
+    c.env.DB.prepare("SELECT l.id, s.number as season_number FROM leagues l JOIN seasons s ON l.season_id = s.id WHERE l.id = ?").bind(team.league_id),
+    c.env.DB.prepare("SELECT sc.*, m.home_team_id, m.away_team_id, m.status as match_status, m.home_score, m.away_score, ht.name as home_name, at.name as away_name FROM season_calendar sc LEFT JOIN matches m ON m.calendar_id = sc.id AND (m.home_team_id = ? OR m.away_team_id = ?) LEFT JOIN teams ht ON m.home_team_id = ht.id LEFT JOIN teams at ON m.away_team_id = at.id WHERE sc.league_id = ? ORDER BY sc.scheduled_at ASC").bind(teamId, teamId, team.league_id),
+  ]);
+  const league = (leagueRes.results[0] as { id: string; season_number: number } | undefined) ?? null;
+  const calEntries = calRes.results as Record<string, unknown>[];
 
-  // Get all calendar entries for this league
-  const calEntries = await c.env.DB.prepare(
-    "SELECT sc.*, m.home_team_id, m.away_team_id, m.status as match_status, m.home_score, m.away_score, ht.name as home_name, at.name as away_name FROM season_calendar sc LEFT JOIN matches m ON m.calendar_id = sc.id AND (m.home_team_id = ? OR m.away_team_id = ?) LEFT JOIN teams ht ON m.home_team_id = ht.id LEFT JOIN teams at ON m.away_team_id = at.id WHERE sc.league_id = ? ORDER BY sc.scheduled_at ASC"
-  ).bind(teamId, teamId, team.league_id).all().catch((e) => { logger.warn({ module: "game" }, "fetch calendar entries for season info", e); return { results: [] }; });
-
-  if (calEntries.results.length === 0) return c.json({ season: league?.season_number ?? 1, currentDay: 1, totalDays: 1, upcoming: [] });
+  if (calEntries.length === 0) return c.json({ season: league?.season_number ?? 1, currentDay: 1, totalDays: 1, upcoming: [] });
 
   // Calculate season day
-  const firstEntry = calEntries.results[0];
-  const lastEntry = calEntries.results[calEntries.results.length - 1];
-  // Use team's season_start/season_end for consistency with topbar
-  const teamRow = await c.env.DB.prepare("SELECT season_start, season_end FROM teams WHERE id = ?").bind(teamId).first<{ season_start: string; season_end: string }>().catch(() => null);
-  const seasonStart = teamRow?.season_start ? new Date(teamRow.season_start) : new Date(firstEntry.scheduled_at as string);
-  const seasonEnd = teamRow?.season_end ? new Date(teamRow.season_end) : new Date(lastEntry.scheduled_at as string);
-
-  // Use GAME DATE, not real date
-  const gameDateRow = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>().catch(() => null);
-  const now = gameDateRow?.game_date ? new Date(gameDateRow.game_date) : new Date();
+  const firstEntry = calEntries[0];
+  const lastEntry = calEntries[calEntries.length - 1];
+  const seasonStart = team.season_start ? new Date(team.season_start) : new Date(firstEntry.scheduled_at as string);
+  const seasonEnd = team.season_end ? new Date(team.season_end) : new Date(lastEntry.scheduled_at as string);
+  const now = team.game_date ? new Date(team.game_date) : new Date();
   const totalDays = Math.max(1, Math.ceil((seasonEnd.getTime() - seasonStart.getTime()) / (24 * 60 * 60 * 1000)));
   const currentDay = Math.max(1, Math.min(totalDays, Math.ceil((now.getTime() - seasonStart.getTime()) / (24 * 60 * 60 * 1000))));
 
@@ -1550,7 +1543,7 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
   }> = [];
 
   // My matches
-  for (const entry of calEntries.results) {
+  for (const entry of calEntries) {
     if (!entry.home_team_id) continue; // no match for this team in this slot
     const isHome = entry.home_team_id === teamId;
     const opponent = isHome ? entry.away_name : entry.home_name;
@@ -1564,6 +1557,33 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
       status: matchStatus === "simulated"
         ? `${entry.home_score}:${entry.away_score}`
         : "Naplánováno",
+      isHome,
+    });
+  }
+
+  // Friendly matches (challenges)
+  const friendlyMatches = await c.env.DB.prepare(
+    `SELECT m.id, m.status, m.home_team_id, m.away_team_id, m.home_score, m.away_score, m.created_at, m.simulated_at,
+       t1.name as home_name, t2.name as away_name
+     FROM matches m
+     JOIN teams t1 ON m.home_team_id = t1.id
+     JOIN teams t2 ON m.away_team_id = t2.id
+     WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.calendar_id IS NULL
+     ORDER BY m.created_at DESC LIMIT 10`
+  ).bind(teamId, teamId).all().catch(() => ({ results: [] }));
+
+  for (const fm of friendlyMatches.results as Record<string, unknown>[]) {
+    const isHome = fm.home_team_id === teamId;
+    const opponent = isHome ? fm.away_name as string : fm.home_name as string;
+    const fmStatus = fm.status as string;
+    upcoming.push({
+      type: "match",
+      date: (fm.simulated_at ?? fm.created_at) as string,
+      title: `Přátelák — ${opponent}`,
+      subtitle: isHome ? "Doma" : "Venku",
+      status: fmStatus === "simulated"
+        ? `${fm.home_score}:${fm.away_score}`
+        : fmStatus === "lineups_open" ? "Nastav sestavu!" : "Naplánováno",
       isHome,
     });
   }
@@ -1870,37 +1890,70 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 
   const team = await c.env.DB.prepare("SELECT league_id, game_date FROM teams WHERE id = ?")
     .bind(teamId).first<{ league_id: string | null; game_date: string | null }>();
-  if (!team?.league_id) return c.json({ nextMatch: null });
+  if (!team) return c.json({ nextMatch: null });
 
-  // Find next scheduled match
   const gameDate = team.game_date ? new Date(team.game_date) : new Date();
-  const nextCal = await c.env.DB.prepare(
-    "SELECT sc.id, sc.scheduled_at, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.scheduled_at >= ? AND sc.status = 'scheduled' ORDER BY sc.scheduled_at ASC LIMIT 1"
-  ).bind(team.league_id, gameDate.toISOString()).first<{ id: string; scheduled_at: string; game_week: number }>();
-  if (!nextCal) return c.json({ nextMatch: null });
 
-  const match = await c.env.DB.prepare(
-    "SELECT m.id, m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name, t1.primary_color as home_color, t2.primary_color as away_color FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?)"
-  ).bind(nextCal.id, teamId, teamId).first<Record<string, unknown>>();
+  // Priority: friendly match with lineups_open (needs immediate lineup)
+  const friendlyMatch = await c.env.DB.prepare(
+    `SELECT m.id, m.home_team_id, m.away_team_id, m.created_at,
+       t1.name as home_name, t2.name as away_name,
+       t1.primary_color as home_color, t2.primary_color as away_color
+     FROM matches m
+     JOIN teams t1 ON m.home_team_id = t1.id
+     JOIN teams t2 ON m.away_team_id = t2.id
+     WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'lineups_open' AND m.calendar_id IS NULL
+     ORDER BY m.created_at ASC LIMIT 1`
+  ).bind(teamId, teamId).first<Record<string, unknown>>();
+
+  let match: Record<string, unknown> | null = friendlyMatch ?? null;
+  let calendarId: string | null = null;
+  let gameWeek: number | null = null;
+  let scheduledAt: string | null = null;
+  let isFriendly = false;
+
+  if (friendlyMatch) {
+    isFriendly = true;
+    scheduledAt = friendlyMatch.created_at as string;
+  } else if (team.league_id) {
+    // Fallback: next league match from calendar
+    const nextCal = await c.env.DB.prepare(
+      "SELECT sc.id, sc.scheduled_at, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.scheduled_at >= ? AND sc.status = 'scheduled' ORDER BY sc.scheduled_at ASC LIMIT 1"
+    ).bind(team.league_id, gameDate.toISOString()).first<{ id: string; scheduled_at: string; game_week: number }>();
+    if (!nextCal) return c.json({ nextMatch: null });
+
+    calendarId = nextCal.id;
+    gameWeek = nextCal.game_week;
+    scheduledAt = nextCal.scheduled_at;
+
+    match = await c.env.DB.prepare(
+      "SELECT m.id, m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name, t1.primary_color as home_color, t2.primary_color as away_color FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?)"
+    ).bind(nextCal.id, teamId, teamId).first<Record<string, unknown>>();
+  }
+
   if (!match) return c.json({ nextMatch: null });
 
-  // Get existing lineup
-  const lineup = await c.env.DB.prepare(
-    "SELECT formation, tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?"
-  ).bind(teamId, nextCal.id).first<{ formation: string; tactic: string; players_data: string; is_auto: number }>();
+  // For friendlies, lookup lineup by match_id; for league by calendar_id
+  const lineupQuery = isFriendly
+    ? c.env.DB.prepare("SELECT formation, tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(teamId, match.id as string)
+    : c.env.DB.prepare("SELECT formation, tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(teamId, calendarId!);
 
-  // Get ALL players (including injured) + generate absences
-  const players = await c.env.DB.prepare(
-    "SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.weekly_wage, p.skills, p.life_context, p.personality, p.physical, p.squad_number, p.commute_km, p.suspended_matches, ps.avg_rating, i.days_remaining as injury_days, i.type as injury_type FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.season_id = (SELECT id FROM seasons WHERE status = 'active' LIMIT 1) WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') ORDER BY p.overall_rating DESC"
-  ).bind(teamId).all();
+  // Batch: existing lineup + all players (including injured)
+  const [lineupRes, playersRes] = await c.env.DB.batch([
+    lineupQuery,
+    c.env.DB.prepare("SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.weekly_wage, p.skills, p.life_context, p.personality, p.physical, p.squad_number, p.commute_km, p.suspended_matches, ps.avg_rating, i.days_remaining as injury_days, i.type as injury_type FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.season_id = (SELECT id FROM seasons WHERE status = 'active' LIMIT 1) WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') ORDER BY p.overall_rating DESC").bind(teamId),
+  ]);
+  const lineup = (lineupRes.results[0] as { formation: string; tactic: string; players_data: string; is_auto: number } | undefined) ?? null;
+  const players = { results: playersRes.results as Record<string, unknown>[] };
 
-  // Generate absences only day_before or match_day (not 2+ days before)
-  const matchDate = new Date(nextCal.scheduled_at);
-  const daysUntilMatch = Math.max(0, Math.round((matchDate.getTime() - gameDate.getTime()) / 86400000));
+  // Generate absences only day_before or match_day (not 2+ days before) — friendlies always match_day
+  const matchDate = new Date(scheduledAt!);
+  const daysUntilMatch = isFriendly ? 0 : Math.max(0, Math.round((matchDate.getTime() - gameDate.getTime()) / 86400000));
 
   const { seedFromString } = await import("../lib/seed");
   const { generateAbsences } = await import("../events/absence");
-  const absenceRng = createRng(seedFromString(nextCal.id));
+  const seedId = isFriendly ? (match.id as string) : calendarId!;
+  const absenceRng = createRng(seedFromString(seedId));
   const absenceSquad = players.results.map((row) => {
     const pers = (() => { try { return JSON.parse(row.personality as string); } catch { return {}; } })();
     const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
@@ -1948,10 +2001,14 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 
   return c.json({
     nextMatch: {
-      matchId: match.id, calendarId: nextCal.id, gameWeek: nextCal.game_week,
-      scheduledAt: nextCal.scheduled_at, isHome: match.home_team_id === teamId,
+      matchId: match.id,
+      calendarId: isFriendly ? (match.id as string) : calendarId,
+      gameWeek: gameWeek,
+      scheduledAt: scheduledAt,
+      isHome: match.home_team_id === teamId,
       homeName: match.home_name, awayName: match.away_name,
       homeColor: match.home_color, awayColor: match.away_color,
+      isFriendly,
     },
     lineup: lineup ? {
       formation: lineup.formation, tactic: lineup.tactic, isAuto: lineup.is_auto === 1,

@@ -38,7 +38,7 @@ export async function calculateStandings(
 
   // Get all simulated matches
   const matches = await db.prepare(
-    "SELECT home_team_id, away_team_id, home_score, away_score FROM matches WHERE league_id = ? AND status = 'simulated'"
+    "SELECT home_team_id, away_team_id, home_score, away_score FROM matches WHERE league_id = ? AND status = 'simulated' AND calendar_id IS NOT NULL"
   ).bind(leagueId).all();
 
   for (const m of matches.results) {

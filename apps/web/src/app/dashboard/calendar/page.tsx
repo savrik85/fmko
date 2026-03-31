@@ -126,18 +126,25 @@ export default function CalendarPage() {
                   {dayNum}
                 </div>
                 {/* Events */}
-                {match && (
-                  <div className={`text-[11px] font-heading font-bold leading-tight px-1.5 py-1 rounded truncate ${
-                    match.status && match.status !== "Naplánováno"
-                      ? "bg-pitch-100 text-pitch-700"
-                      : "bg-pitch-500 text-white"
-                  }`}>
-                    ⚽ {match.title.replace(/^\d+\. kolo — /, "")}
-                    {match.status && match.status !== "Naplánováno" && (
-                      <span className="ml-1 font-[800]">{match.status}</span>
-                    )}
-                  </div>
-                )}
+                {match && (() => {
+                  const isFriendly = match.title.startsWith("Přátelák");
+                  const label = isFriendly ? match.title.replace("Přátelák — ", "") : match.title.replace(/^\d+\. kolo — /, "");
+                  const isLineupNeeded = match.status === "Nastav sestavu!";
+                  return (
+                    <div className={`text-[11px] font-heading font-bold leading-tight px-1.5 py-1 rounded truncate ${
+                      isLineupNeeded
+                        ? "bg-amber-100 text-amber-700 ring-1 ring-amber-300"
+                        : match.status && match.status !== "Naplánováno"
+                          ? "bg-pitch-100 text-pitch-700"
+                          : isFriendly ? "bg-amber-500 text-white" : "bg-pitch-500 text-white"
+                    }`}>
+                      {isFriendly ? "🤝" : "⚽"} {label}
+                      {match.status && match.status !== "Naplánováno" && (
+                        <span className="ml-1 font-[800]">{match.status}</span>
+                      )}
+                    </div>
+                  );
+                })()}
                 {hasTraining && (() => {
                   const tr = events.find((e) => e.type === "training");
                   return (

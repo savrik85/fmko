@@ -3,11 +3,28 @@
  * PBKDF2 hashování, KV sessions.
  */
 
-async function getNextMatch(db: D1Database, teamId: string, leagueId: string, gameDate: string | null): Promise<{ opponent: string; daysUntil: number } | null> {
+async function getNextMatch(db: D1Database, teamId: string, leagueId: string, gameDate: string | null): Promise<{ opponent: string; daysUntil: number; isFriendly?: boolean } | null> {
   if (!gameDate) return null;
   const gd = new Date(gameDate);
   const dayStart = new Date(gd); dayStart.setUTCHours(0, 0, 0, 0);
 
+  // Priority: friendly match waiting for lineup
+  const friendly = await db.prepare(
+    `SELECT m.home_team_id, m.away_team_id, m.created_at,
+     t1.name as home_name, t2.name as away_name
+     FROM matches m
+     JOIN teams t1 ON m.home_team_id = t1.id
+     JOIN teams t2 ON m.away_team_id = t2.id
+     WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'lineups_open' AND m.calendar_id IS NULL
+     ORDER BY m.created_at ASC LIMIT 1`
+  ).bind(teamId, teamId).first<Record<string, unknown>>();
+
+  if (friendly) {
+    const opponent = (friendly.home_team_id === teamId ? friendly.away_name : friendly.home_name) as string;
+    return { opponent, daysUntil: 0, isFriendly: true };
+  }
+
+  // Fallback: next league match
   const row = await db.prepare(
     `SELECT m.home_team_id, m.away_team_id, sc.scheduled_at,
      t1.name as home_name, t2.name as away_name

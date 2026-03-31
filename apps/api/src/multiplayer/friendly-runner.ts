@@ -35,11 +35,19 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
     const awayTeamId = match.away_team_id as string;
 
     try {
+      // Use same seed as /next-match endpoint so absences are consistent
+      const { seedFromString } = await import("../lib/seed");
+      const absenceRng = createRng(seedFromString(matchId));
       const rng = createRng(Date.now() + matchId.charCodeAt(0));
 
-      // Build players (auto-lineup, no calendar needed)
-      const homeBuild = await buildMatchPlayers(db, homeTeamId, rng, null);
-      const awayBuild = await buildMatchPlayers(db, awayTeamId, rng, null, 100);
+      // Load saved lineups (friendly uses matchId as calendarId in lineups table)
+      const homeLineupRow = await db.prepare("SELECT players_data FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(homeTeamId, matchId).first<{ players_data: string }>().catch(() => null);
+      const awayLineupRow = await db.prepare("SELECT players_data FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(awayTeamId, matchId).first<{ players_data: string }>().catch(() => null);
+
+      const homeBuild = await buildMatchPlayers(db, homeTeamId, absenceRng, homeLineupRow?.players_data ?? null);
+      const awayBuild = await buildMatchPlayers(db, awayTeamId, absenceRng, awayLineupRow?.players_data ?? null, 100);
 
       const homeLineup = homeBuild.players;
       const awayLineup = awayBuild.players;
@@ -112,10 +120,67 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       // Update challenge status
       await db.prepare("UPDATE challenges SET status = 'played' WHERE match_id = ?").bind(matchId).run().catch(() => {});
 
-      // Apply experience only (not full stats)
-      await db.prepare(
-        "UPDATE players SET skills = json_set(skills, '$.experience', MIN(100, COALESCE(json_extract(skills, '$.experience'), 0) + 2)) WHERE team_id IN (?, ?)"
-      ).bind(homeTeamId, awayTeamId).run().catch(() => {});
+      // Persist condition + morale changes for players who actually played
+      try {
+        const allPlayers = [...result.homeLineup, ...result.awayLineup];
+        const fullIdMap = new Map<number, string>();
+        for (const [engineId, dbId] of homeBuild.idMap) fullIdMap.set(engineId, dbId);
+        for (const [engineId, dbId] of awayBuild.idMap) fullIdMap.set(engineId, dbId);
+
+        const condStmts = allPlayers
+          .filter(p => fullIdMap.has(p.id))
+          .map(p => db.prepare(
+            "UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?"
+          ).bind(Math.round(p.condition), Math.round(p.morale), fullIdMap.get(p.id)!));
+        if (condStmts.length > 0) await db.batch(condStmts);
+      } catch (e) {
+        logger.error({ module: "friendly-runner" }, "Condition persist failed", e);
+      }
+
+      // Match experience: small chance to improve skills (same as league, but halved chance)
+      try {
+        const fullIdMap = new Map<number, string>();
+        for (const [engineId, dbId] of homeBuild.idMap) fullIdMap.set(engineId, dbId);
+        for (const [engineId, dbId] of awayBuild.idMap) fullIdMap.set(engineId, dbId);
+
+        const matchRng = createRng(Date.now() + matchId.charCodeAt(2));
+        for (const [engineId, pm] of Object.entries(result.playerMinutes)) {
+          const dbId = fullIdMap.get(Number(engineId));
+          if (!dbId) continue;
+          const minutes = ((pm as any).left ?? 90) - (pm as any).entered;
+          if (minutes < 15) continue;
+
+          const playerRow = await db.prepare("SELECT age, skills, position, team_id FROM players WHERE id = ?")
+            .bind(dbId).first<{ age: number; skills: string; position: string; team_id: string }>().catch(() => null);
+          if (!playerRow) continue;
+
+          const age = playerRow.age;
+          const ageMod = age < 22 ? 0.04 : age < 26 ? 0.025 : age < 30 ? 0.015 : 0.005; // halved vs league
+          const minutesMod = minutes / 90;
+          const improveChance = ageMod * minutesMod;
+
+          if (matchRng.random() < improveChance) {
+            const skills = JSON.parse(playerRow.skills);
+            const posSkills: Record<string, string[]> = {
+              GK: ["goalkeeping"], DEF: ["defense", "heading", "strength"],
+              MID: ["passing", "technique"], FWD: ["shooting", "speed", "technique"],
+            };
+            const candidates = posSkills[playerRow.position] ?? ["technique"];
+            const attr = matchRng.pick(candidates);
+            const current = skills[attr] ?? 50;
+            if (current < 80) { // lower cap than league (80 vs 85)
+              skills[attr] = current + 1;
+              await db.prepare("UPDATE players SET skills = ? WHERE id = ?")
+                .bind(JSON.stringify(skills), dbId).run();
+              await db.prepare(
+                "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'friendly', ?)"
+              ).bind(dbId, playerRow.team_id, attr, current, current + 1, new Date().toISOString()).run().catch(() => {});
+            }
+          }
+        }
+      } catch (e) {
+        logger.error({ module: "friendly-runner" }, "Match experience failed", e);
+      }
 
       // SMS both teams
       const smsBody = `⚽ Přátelák odehrán! ${homeSetup.teamName} ${result.homeScore}:${result.awayScore} ${awaySetup.teamName}`;

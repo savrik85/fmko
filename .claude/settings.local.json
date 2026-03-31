@@ -104,7 +104,19 @@
       "Bash(gh run:*)",
       "Bash(git reset:*)",
       "Bash(git stash:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(npx tsx:*)",
+      "Bash(git push:*)",
+      "Bash(git merge:*)",
+      "Bash(bash scripts/clean-advance-day-matches.sh test 2>&1)",
+      "Bash(npx vercel:*)",
+      "Bash(cat /Users/savrik/Projects/fmko/.github/workflows/*.yml)",
+      "Bash(npx turbo:*)",
+      "Bash(TEAM=\"44e88dfe-6000-4d3e-a6c5-980eec6be216\")",
+      "Bash(TEAM=\"01f283b9-6e9b-42f0-a214-410175a65a96\")",
+      "Bash(MATCH=\"cc78cb7e-37ab-45a9-8e26-33700c0b0345\")",
+      "Bash(MATCH=cc78cb7e-37ab-45a9-8e26-33700c0b0345)",
+      "Bash(npx opennextjs-cloudflare:*)"
     ]
   }
 }

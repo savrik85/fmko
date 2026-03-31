@@ -12,7 +12,9 @@ interface Challenge {
   challengedName?: string;
   message: string | null;
   createdAt: string;
-  matchId?: string;
+  matchId?: string | null;
+  matchStatus?: string | null;
+  status?: string;
   homeScore?: number;
   awayScore?: number;
 }
@@ -141,19 +143,30 @@ export default function FriendlyPage() {
         <div>
           <SectionLabel>Odeslané výzvy</SectionLabel>
           <div className="space-y-2">
-            {data.outgoing.map((ch) => (
-              <Card key={ch.id}>
-                <CardBody>
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">📨</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-heading font-bold text-sm">{ch.challengedName}</div>
-                      <div className="text-xs text-muted">Čeká na odpověď</div>
+            {data.outgoing.map((ch) => {
+              const isAccepted = ch.status === "accepted";
+              return (
+                <Card key={ch.id}>
+                  <CardBody>
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{isAccepted ? "✅" : "📨"}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-heading font-bold text-base">{ch.challengedName}</div>
+                        <div className={`text-xs ${isAccepted ? "text-pitch-600 font-bold" : "text-muted"}`}>
+                          {isAccepted ? "Přijato! Nastav sestavu." : "Čeká na odpověď"}
+                        </div>
+                      </div>
+                      {isAccepted && ch.matchId && (
+                        <Link href="/dashboard/match"
+                          className="px-3 py-1.5 bg-pitch-500 text-white rounded-lg font-heading font-bold text-xs shrink-0">
+                          Sestava ▶
+                        </Link>
+                      )}
                     </div>
-                  </div>
-                </CardBody>
-              </Card>
-            ))}
+                  </CardBody>
+                </Card>
+              );
+            })}
           </div>
         </div>
       )}
