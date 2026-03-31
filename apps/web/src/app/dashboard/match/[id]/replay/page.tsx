@@ -635,30 +635,54 @@ export default function MatchReplayPage() {
             {[
               { name: match.home_name, data: match.home_lineup_data, color: hc },
               { name: match.away_name, data: match.away_lineup_data, color: ac },
-            ].map(({ name, data, color }, ti) => (
+            ].map(({ name, data, color }, ti) => {
+              const posOrder = { GK: 0, DEF: 1, MID: 2, FWD: 3 } as Record<string, number>;
+              const sorted = [...data.starters].sort((a, b) => (posOrder[a.position] ?? 9) - (posOrder[b.position] ?? 9));
+              const posStyle: Record<string, { bg: string; border: string; text: string; label: string }> = {
+                GK:  { bg: "bg-amber-50",   border: "border-l-amber-400",   text: "text-amber-700",   label: "Brankář" },
+                DEF: { bg: "bg-blue-50",    border: "border-l-blue-400",    text: "text-blue-700",    label: "Obrana" },
+                MID: { bg: "bg-emerald-50", border: "border-l-emerald-400", text: "text-emerald-700", label: "Záloha" },
+                FWD: { bg: "bg-red-50",     border: "border-l-red-400",     text: "text-red-700",     label: "Útok" },
+              };
+              const groups: Array<{ pos: string; players: LineupPlayer[] }> = [];
+              for (const p of sorted) {
+                const last = groups[groups.length - 1];
+                if (last && last.pos === p.position) last.players.push(p);
+                else groups.push({ pos: p.position, players: [p] });
+              }
+              return (
               <div key={name} className={ti === 0 ? "border-r border-gray-100" : ""}>
                 <div className="px-3 py-2 font-heading font-bold text-sm" style={{ backgroundColor: `color-mix(in srgb, ${color} 8%, white)` }}>{name}</div>
-                {data.starters.map((p, i) => (
-                  <div key={i} className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-50 last:border-b-0">
-                    <span className="text-sm text-muted tabular-nums w-5 text-right">{i + 1}</span>
-                    <span className="text-sm font-heading font-bold text-muted">{p.position}</span>
-                    <span className="text-sm font-heading font-bold flex-1">{p.name}</span>
-                  </div>
-                ))}
+                {groups.map((g) => {
+                  const cfg = posStyle[g.pos] ?? posStyle.MID;
+                  return (
+                    <div key={g.pos}>
+                      <div className={`px-3 py-0.5 ${cfg.bg} ${cfg.text} text-[10px] font-heading font-bold uppercase tracking-wider`}>{cfg.label}</div>
+                      {g.players.map((p) => (
+                        <div key={p.id || p.name} className={`flex items-center gap-2 px-3 py-1.5 border-l-3 ${cfg.border}`}>
+                          <span className={`text-xs font-heading font-bold ${cfg.text}`}>{p.position}</span>
+                          <span className="text-sm font-heading font-bold flex-1">{p.name}</span>
+                          {p.position !== p.naturalPosition && (
+                            <span className="text-amber-500 text-[10px]">({p.naturalPosition})</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
                 {data.subs.length > 0 && (
                   <>
-                    <div className="px-3 py-1 bg-gray-50 text-sm text-muted font-heading uppercase">Lavička</div>
+                    <div className="px-3 py-0.5 bg-gray-50 text-[10px] text-muted font-heading font-bold uppercase tracking-wider">Lavička</div>
                     {data.subs.map((p, i) => (
-                      <div key={`s${i}`} className="flex items-center gap-2 px-3 py-1 border-b border-gray-50 last:border-b-0 text-muted">
-                        <span className="text-sm tabular-nums w-5 text-right">{12 + i}</span>
-                        <span className="text-sm font-heading font-bold">{p.position}</span>
+                      <div key={`s${i}`} className="flex items-center gap-2 px-3 py-1 border-l-3 border-l-gray-300 text-muted">
+                        <span className="text-xs font-heading font-bold">{p.position}</span>
                         <span className="text-sm font-heading flex-1">{p.name}</span>
                       </div>
                     ))}
                   </>
                 )}
               </div>
-            ))}
+            );})}
           </div>
         </details>
       )}
