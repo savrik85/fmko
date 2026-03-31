@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { InvitePageClient } from "./client";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 
 const API = "https://api.prales.fun";
 
