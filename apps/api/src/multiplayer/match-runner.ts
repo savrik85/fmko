@@ -641,15 +641,42 @@ async function createAutoLineup(
   calendarId: string,
 ): Promise<void> {
   const players = await db.prepare(
-    "SELECT id, position FROM players WHERE team_id = ? ORDER BY overall_rating DESC LIMIT 11"
+    "SELECT id, position, overall_rating FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
   ).bind(teamId).all();
 
-  const lineupData = players.results.map((p) => ({
-    playerId: p.id, position: p.position,
-  }));
+  // Respect team's saved formation if exists
+  const savedLineup = await db.prepare("SELECT formation FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC LIMIT 1")
+    .bind(teamId).first<{ formation: string }>().catch(() => null);
+  const formation = savedLineup?.formation ?? "4-4-2";
+  const parts = formation.split("-").map(Number);
+  const slots: Record<string, number> = { GK: 1, DEF: parts[0] || 4, MID: (parts[1] || 4) + (parts[2] && parts.length > 3 ? parts[2] : 0), FWD: parts[parts.length - 1] || 2 };
+  const picked: Array<{ playerId: string; matchPosition: string }> = [];
+  const usedIds = new Set<string>();
+
+  // First pass: fill each position with natural players
+  for (const pos of ["GK", "DEF", "MID", "FWD"]) {
+    const candidates = players.results.filter((p) => p.position === pos && !usedIds.has(p.id as string));
+    const count = slots[pos];
+    for (let i = 0; i < count && i < candidates.length; i++) {
+      picked.push({ playerId: candidates[i].id as string, matchPosition: pos });
+      usedIds.add(candidates[i].id as string);
+    }
+  }
+
+  // Second pass: fill remaining slots with best available (out of position)
+  while (picked.length < 11) {
+    const remaining = players.results.find((p) => !usedIds.has(p.id as string));
+    if (!remaining) break;
+    // Find which position still needs players
+    const filled: Record<string, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+    for (const p of picked) filled[p.matchPosition]++;
+    const needPos = Object.entries(slots).find(([pos, need]) => filled[pos] < need)?.[0] ?? "MID";
+    picked.push({ playerId: remaining.id as string, matchPosition: needPos });
+    usedIds.add(remaining.id as string);
+  }
 
   const lineupId = crypto.randomUUID();
   await db.prepare(
     "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto) VALUES (?, ?, ?, '4-4-2', 'balanced', ?, 1)"
-  ).bind(lineupId, teamId, calendarId, JSON.stringify(lineupData)).run();
+  ).bind(lineupId, teamId, calendarId, JSON.stringify(picked)).run();
 }
