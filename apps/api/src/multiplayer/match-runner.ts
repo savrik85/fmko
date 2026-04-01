@@ -70,10 +70,10 @@ export async function runScheduledMatches(
       const matchType: MatchRunResult["matchType"] = homeIsHuman && awayIsHuman ? "pvp"
         : homeIsHuman ? "pve_home" : awayIsHuman ? "pve_away" : "ai_vs_ai";
 
-      // Read user lineups from DB
-      const homeLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?")
+      // Read user lineups from DB — prefer user-saved (is_auto=0) over auto-generated
+      const homeLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
         .bind(homeTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home lineup", e); return null; });
-      const awayLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?")
+      const awayLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
         .bind(awayTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load away lineup", e); return null; });
 
       // Build match players — always pass lineup data for matchPosition mapping
