@@ -248,19 +248,12 @@ export async function runScheduledMatches(
 
       // Build lineup data for storage (name, position, number, rating)
       const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>) => {
-        let gkCount = 0;
-        const mapStarter = (p: typeof homeLineup[0]) => {
-          let pos = p.matchPosition ?? p.position;
-          if (pos === "GK") { gkCount++; if (gkCount > 1) pos = "DEF"; }
-          return { id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`, position: pos, naturalPosition: p.position,
-            rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5) };
-        };
-        const mapSub = (p: typeof homeLineup[0]) => ({
+        const mapPlayer = (p: typeof homeLineup[0]) => ({
           id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`,
           position: p.matchPosition ?? p.position, naturalPosition: p.position,
           rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5),
         });
-        return { starters: lineup.map(mapStarter), subs: subs.map(mapSub) };
+        return { starters: lineup.map(mapPlayer), subs: subs.map(mapPlayer) };
       };
 
       // Collect absence data for both teams
@@ -682,6 +675,13 @@ export async function buildMatchPlayers(
       best.matchPosition = "GK";
     }
   }
+
+  // DEBUG: log matchPosition assignments
+  const debugInfo = starters.map(p => ({
+    id: idMap.get(p.id), name: `${p.firstName} ${p.lastName}`,
+    nat: p.position, mp: p.matchPosition, fromMap: !!matchPositionMap.get(idMap.get(p.id) ?? ""),
+  }));
+  logger.info({ module: "match-runner", debugInfo, mapSize: matchPositionMap.size }, "matchPosition assignments");
 
   return { players, idMap, positionMap, absentNames: absentInfo };
 }
