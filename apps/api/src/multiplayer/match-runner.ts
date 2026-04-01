@@ -677,6 +677,21 @@ export async function buildMatchPlayers(
     if (p.matchPosition) posCounts[p.matchPosition]++;
   }
 
+  // 1b) If a non-GK player is assigned as GK but a natural GK exists, swap them
+  const currentGK = starters.find(p => p.matchPosition === "GK");
+  if (currentGK && currentGK.position !== "GK") {
+    // Find a natural GK who isn't playing GK
+    const betterGK = starters.find(p => p.position === "GK" && p.matchPosition !== "GK");
+    if (betterGK) {
+      // Swap their matchPositions
+      const oldPos = betterGK.matchPosition;
+      betterGK.matchPosition = "GK";
+      currentGK.matchPosition = oldPos ?? currentGK.position;
+      if (oldPos) { posCounts[oldPos]--; }
+      posCounts[currentGK.matchPosition] = (posCounts[currentGK.matchPosition] ?? 0) + 1;
+    }
+  }
+
   // 2) If no GK assigned, force-assign the best goalkeeper
   if (posCounts.GK === 0 && starters.length > 0) {
     // a) Prefer a natural GK without matchPosition
