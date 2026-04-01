@@ -248,18 +248,9 @@ export async function runScheduledMatches(
 
       // Build lineup data for storage (name, position, number, rating)
       const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>) => {
-        // Ensure exactly 1 GK in starters
-        const hasGK = lineup.some(p => (p.matchPosition ?? p.position) === "GK");
-        let gkAssignedIdx = -1;
-        if (!hasGK && lineup.length > 0) {
-          let bestGK = -1;
-          for (let i = 0; i < lineup.length; i++) {
-            if (lineup[i].goalkeeping > bestGK) { bestGK = lineup[i].goalkeeping; gkAssignedIdx = i; }
-          }
-        }
         let gkCount = 0;
-        const mapStarter = (p: typeof homeLineup[0], idx: number) => {
-          let pos = (idx === gkAssignedIdx) ? "GK" : (p.matchPosition ?? p.position);
+        const mapStarter = (p: typeof homeLineup[0]) => {
+          let pos = p.matchPosition ?? p.position;
           if (pos === "GK") { gkCount++; if (gkCount > 1) pos = "DEF"; }
           return { id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`, position: pos, naturalPosition: p.position,
             rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5) };
@@ -647,19 +638,6 @@ export async function buildMatchPlayers(
       morale: lifeContext.morale ?? 50,
     };
   });
-
-  // Ensure first 11 starters include exactly one GK
-  const starters = players.slice(0, 11);
-  const hasGK = starters.some(p => (p.matchPosition ?? p.position) === "GK");
-  if (!hasGK && starters.length > 0) {
-    // Find the starter with the highest goalkeeping skill and assign them as GK
-    let bestIdx = 0;
-    let bestGK = starters[0].goalkeeping;
-    for (let i = 1; i < starters.length; i++) {
-      if (starters[i].goalkeeping > bestGK) { bestGK = starters[i].goalkeeping; bestIdx = i; }
-    }
-    starters[bestIdx].matchPosition = "GK";
-  }
 
   return { players, idMap, positionMap, absentNames: absentInfo };
 }
