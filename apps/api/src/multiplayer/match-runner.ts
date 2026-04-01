@@ -650,13 +650,21 @@ export async function buildMatchPlayers(
       if (!found) missingPositions.push(pos);
     }
 
-    // Assign missing positions to starters without matchPosition (replacements)
-    for (const p of starters) {
+    // Assign missing positions to replacements — prefer matching natural position
+    const replacements = starters.filter(p => !p.matchPosition);
+    // First pass: assign natural position if it's in missingPositions
+    for (const p of replacements) {
+      const idx = missingPositions.indexOf(p.position);
+      if (idx >= 0) {
+        p.matchPosition = missingPositions.splice(idx, 1)[0] as "GK" | "DEF" | "MID" | "FWD";
+      }
+    }
+    // Second pass: assign remaining missing positions to unassigned replacements
+    for (const p of replacements) {
       if (p.matchPosition) continue;
       if (missingPositions.length > 0) {
         p.matchPosition = missingPositions.shift()! as "GK" | "DEF" | "MID" | "FWD";
       } else {
-        // More replacements than missing slots (shouldn't happen, but fallback)
         p.matchPosition = p.position;
       }
     }
