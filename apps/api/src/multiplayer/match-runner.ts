@@ -76,11 +76,11 @@ export async function runScheduledMatches(
       const awayLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?")
         .bind(awayTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load away lineup", e); return null; });
 
-      // Build match players — respect user lineup order if set
+      // Build match players — always pass lineup data for matchPosition mapping
       const homeBuild = await buildMatchPlayers(db, homeTeamId, rng,
-        homeLineupRow && homeLineupRow.is_auto === 0 ? homeLineupRow.players_data : null);
+        homeLineupRow?.players_data ?? null);
       const awayBuild = await buildMatchPlayers(db, awayTeamId, rng,
-        awayLineupRow && awayLineupRow.is_auto === 0 ? awayLineupRow.players_data : null, 100);
+        awayLineupRow?.players_data ?? null, 100);
 
       const homeLineup = homeBuild.players;
       const awayLineup = awayBuild.players;
@@ -580,6 +580,23 @@ export async function buildMatchPlayers(
     ordered = allAvailable.slice(0, 16);
   }
 
+  // Ensure a GK is in the starting 11 — if the lineup's GK was absent,
+  // find a natural GK in positions 11+ and swap them into the starting 11
+  if (ordered.length > 11) {
+    const first11 = ordered.slice(0, 11);
+    const hasGKInLineup = first11.some(r => (r.position as string) === "GK");
+    if (!hasGKInLineup) {
+      // Check if there's a GK on the bench (positions 11+)
+      const benchGKIdx = ordered.findIndex((r, i) => i >= 11 && (r.position as string) === "GK");
+      if (benchGKIdx >= 0) {
+        // Swap bench GK with the last outfield starter (position 10)
+        const tmp = ordered[10];
+        ordered[10] = ordered[benchGKIdx];
+        ordered[benchGKIdx] = tmp;
+      }
+    }
+  }
+
   // Parse user lineup for matchPosition mapping
   const matchPositionMap = new Map<string, string>();
   if (userLineupJson) {
@@ -638,6 +655,79 @@ export async function buildMatchPlayers(
       morale: lifeContext.morale ?? 50,
     };
   });
+
+  // ── Ensure first 11 starters always have proper matchPositions ──
+  // Use the ORIGINAL lineup's formation as target (from matchPositionMap),
+  // so replacements fill the same positions as absent players.
+  const starters = players.slice(0, Math.min(11, players.length));
+
+  // Target formation = counts from the original lineup data (includes absent players)
+  const targetCounts: Record<string, number> = { GK: 1, DEF: 4, MID: 4, FWD: 2 };
+  if (matchPositionMap.size > 0) {
+    targetCounts.GK = 0; targetCounts.DEF = 0; targetCounts.MID = 0; targetCounts.FWD = 0;
+    for (const pos of matchPositionMap.values()) {
+      targetCounts[pos] = (targetCounts[pos] ?? 0) + 1;
+    }
+    if (targetCounts.GK === 0) targetCounts.GK = 1; // safety
+  }
+
+  // 1) Count already-assigned matchPositions among starters
+  const posCounts: Record<string, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+  for (const p of starters) {
+    if (p.matchPosition) posCounts[p.matchPosition]++;
+  }
+
+  // 2) If no GK assigned, force-assign the best goalkeeper
+  if (posCounts.GK === 0 && starters.length > 0) {
+    // a) Prefer a natural GK without matchPosition
+    const unassignedGK = starters.find(p => !p.matchPosition && p.position === "GK");
+    if (unassignedGK) {
+      unassignedGK.matchPosition = "GK";
+    } else {
+      // b) Check if there's a natural GK who was assigned to a different position —
+      //    reassign them back to GK (their original matchPosition slot will be filled later)
+      const misplacedGK = starters.find(p => p.position === "GK" && p.matchPosition !== "GK");
+      if (misplacedGK) {
+        posCounts[misplacedGK.matchPosition!]--;
+        misplacedGK.matchPosition = "GK";
+      } else {
+        // c) No natural GK at all — pick the player with highest goalkeeping skill
+        const unassigned = starters.filter(p => !p.matchPosition);
+        if (unassigned.length > 0) {
+          let best = unassigned[0];
+          for (const p of unassigned) { if (p.goalkeeping > best.goalkeeping) best = p; }
+          best.matchPosition = "GK";
+        } else {
+          // All assigned, override the one with highest goalkeeping
+          let best = starters[0];
+          for (const p of starters) { if (p.goalkeeping > best.goalkeeping) best = p; }
+          posCounts[best.matchPosition!]--;
+          best.matchPosition = "GK";
+        }
+      }
+    }
+    posCounts.GK = 1;
+  }
+
+  // 3) Assign matchPosition to remaining starters — fill gaps in the target formation
+  for (const p of starters) {
+    if (p.matchPosition) continue;
+    // Find which position has the biggest gap (target - current)
+    const gaps = (["DEF", "MID", "FWD"] as const)
+      .map(pos => ({ pos, gap: (targetCounts[pos] ?? 0) - (posCounts[pos] ?? 0) }))
+      .sort((a, b) => b.gap - a.gap);
+    // Prefer natural position if it has a gap
+    const nat = p.position;
+    if (nat !== "GK" && (posCounts[nat] ?? 0) < (targetCounts[nat] ?? 0)) {
+      p.matchPosition = nat;
+      posCounts[nat]++;
+    } else {
+      // Fill the position with the biggest gap
+      const best = gaps[0];
+      p.matchPosition = best.pos;
+      posCounts[best.pos]++;
+    }
+  }
 
   return { players, idMap, positionMap, absentNames: absentInfo };
 }

@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, BadgePreview, JerseyPreview } from "@/components/ui";
+import { PositionBadge } from "@/components/ui/position-badge";
 import type { BadgePattern } from "@/components/ui";
 
 interface MatchEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; }
@@ -660,11 +661,12 @@ export default function MatchReplayPage() {
                       <div className={`px-3 py-0.5 ${cfg.bg} ${cfg.text} text-[10px] font-heading font-bold uppercase tracking-wider`}>{cfg.label}</div>
                       {g.players.map((p) => (
                         <div key={p.id || p.name} className={`flex items-center gap-2 px-3 py-1.5 border-l-3 ${cfg.border}`}>
-                          <span className={`text-xs font-heading font-bold ${cfg.text}`}>{p.position}</span>
+                          <PositionBadge position={p.position} />
                           <span className="text-sm font-heading font-bold flex-1">{p.name}</span>
                           {p.position !== p.naturalPosition && (
                             <span className="text-amber-500 text-[10px]">({p.naturalPosition})</span>
                           )}
+                          {p.rating > 0 && <span className="text-sm font-heading tabular-nums text-muted">{p.rating}</span>}
                         </div>
                       ))}
                     </div>
@@ -675,7 +677,7 @@ export default function MatchReplayPage() {
                     <div className="px-3 py-0.5 bg-gray-50 text-[10px] text-muted font-heading font-bold uppercase tracking-wider">Lavička</div>
                     {data.subs.map((p, i) => (
                       <div key={`s${i}`} className="flex items-center gap-2 px-3 py-1 border-l-3 border-l-gray-300 text-muted">
-                        <span className="text-xs font-heading font-bold">{p.position}</span>
+                        <PositionBadge position={p.position} />
                         <span className="text-sm font-heading flex-1">{p.name}</span>
                       </div>
                     ))}
