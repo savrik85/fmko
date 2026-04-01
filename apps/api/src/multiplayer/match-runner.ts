@@ -261,7 +261,7 @@ export async function runScheduledMatches(
         ...Array.from(homeBuild.absentNames ?? []),
         ...Array.from(awayBuild.absentNames ?? []),
         { name: "DEBUG_HOME", reason: `mapSize=${homeBuild.debugMapSize ?? '?'} missing=[${(homeBuild.debugMissing ?? []).join(',')}]`, smsText: `starters=${homeLineup.map(p => `${p.firstName[0]}.${p.lastName}:${p.matchPosition ?? '?'}`).join(',')}` },
-        { name: "DEBUG_AWAY", reason: `mapSize=${awayBuild.debugMapSize ?? '?'} missing=[${(awayBuild.debugMissing ?? []).join(',')}]`, smsText: `starters=${awayLineup.map(p => `${p.firstName[0]}.${p.lastName}:${p.matchPosition ?? '?'}`).join(',')}` },
+        { name: "DEBUG_AWAY", reason: `mapSize=${awayBuild.debugMapSize ?? '?'} missing=[${(awayBuild.debugMissing ?? []).join(',')}]`, smsText: `${awayBuild.debugExtra ?? ''} | starters=${awayLineup.map(p => `${p.firstName[0]}.${p.lastName}:${p.matchPosition ?? '?'}`).join(',')}` },
       ];
 
       // Save results with events + commentary + match context + lineups + absences
@@ -505,6 +505,7 @@ interface BuildResult {
   absentNames: Array<{ name: string; reason: string; smsText: string }>;
   debugMapSize?: number;
   debugMissing?: string[];
+  debugExtra?: string;
 }
 
 export async function buildMatchPlayers(
@@ -702,13 +703,23 @@ export async function buildMatchPlayers(
   }));
   logger.info({ module: "match-runner", debugInfo, mapSize: matchPositionMap.size, missing: _missingDbg }, "matchPosition DEBUG");
 
-  const _capturedMissing = (matchPositionMap.size > 0) ? (() => {
-    const m: string[] = [];
-    const pIds = new Set(starters.map(p => idMap.get(p.id)).filter(Boolean));
-    for (const [pid, pos] of matchPositionMap) { if (!pIds.has(pid)) m.push(pos); }
-    return m;
-  })() : [];
-  return { players, idMap, positionMap, absentNames: absentInfo, debugMapSize: matchPositionMap.size, debugMissing: _capturedMissing };
+  // Debug: capture BEFORE assignment (from inside the if block)
+  const _dbgPresent = new Set(starters.map(p => idMap.get(p.id)).filter(Boolean));
+  const _dbgMissing: string[] = [];
+  const _dbgDetails: string[] = [];
+  for (const [pid, pos] of matchPositionMap) {
+    const present = _dbgPresent.has(pid);
+    if (!present) _dbgMissing.push(pos);
+    _dbgDetails.push(`${pid.slice(0,6)}:${pos}:${present ? 'HIT' : 'MISS'}`);
+  }
+  const _dbgUnassigned = starters.filter(p => !p.matchPosition).map(p => `${(idMap.get(p.id) ?? '?').slice(0,6)}:${p.position}`);
+
+  return {
+    players, idMap, positionMap, absentNames: absentInfo,
+    debugMapSize: matchPositionMap.size,
+    debugMissing: _dbgMissing,
+    debugExtra: `present=${_dbgPresent.size} unassigned=[${_dbgUnassigned.join(',')}] details=[${_dbgDetails.join(',')}]`
+  };
 }
 
 /**
