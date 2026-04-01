@@ -698,9 +698,17 @@ export async function buildMatchPlayers(
  * Validates that copied players still exist and are active.
  */
 export async function copyOrCreateLineup(db: D1Database, teamId: string, calendarId: string): Promise<void> {
-  const lastLineup = await db.prepare(
-    "SELECT formation, tactic, players_data FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
+  // Find the user's ORIGINAL saved lineup (not auto-copies from copyOrCreateLineup).
+  // We use is_auto = 0 AND source = 'user' to distinguish user-saved from copies.
+  // Fallback: if no 'user' source lineup, use any is_auto = 0.
+  let lastLineup = await db.prepare(
+    "SELECT formation, tactic, players_data FROM lineups WHERE team_id = ? AND is_auto = 0 AND source = 'user' ORDER BY submitted_at DESC LIMIT 1"
   ).bind(teamId).first<{ formation: string; tactic: string; players_data: string }>().catch(() => null);
+  if (!lastLineup) {
+    lastLineup = await db.prepare(
+      "SELECT formation, tactic, players_data FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
+    ).bind(teamId).first<{ formation: string; tactic: string; players_data: string }>().catch(() => null);
+  }
 
   if (lastLineup) {
     // Validate players still exist and are active
@@ -712,9 +720,9 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
     const validPicks = picks.filter((p) => activeSet.has(p.playerId));
 
     if (validPicks.length >= 11) {
-      // Copy lineup
+      // Copy lineup — mark as 'copy' so it doesn't override the original
       await db.prepare(
-        "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto) VALUES (?, ?, ?, ?, ?, ?, 0)"
+        "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto, source) VALUES (?, ?, ?, ?, ?, ?, 0, 'copy')"
       ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, JSON.stringify(validPicks.slice(0, 11))).run();
       return;
     }
