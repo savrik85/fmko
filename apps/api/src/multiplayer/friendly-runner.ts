@@ -103,11 +103,19 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       await loadCommentaryFromDB(db);
       const commentary = generateMatchCommentary(rng, result.events, homeSetup.teamName, awaySetup.teamName);
 
-      // Build lineup data (max 1 GK in starters)
+      // Build lineup data (ensure exactly 1 GK in starters)
       const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>) => {
+        const hasGK = lineup.some(p => (p.matchPosition ?? p.position) === "GK");
+        let gkAssignedIdx = -1;
+        if (!hasGK && lineup.length > 0) {
+          let bestGK = -1;
+          for (let i = 0; i < lineup.length; i++) {
+            if (lineup[i].goalkeeping > bestGK) { bestGK = lineup[i].goalkeeping; gkAssignedIdx = i; }
+          }
+        }
         let gkCount = 0;
-        const mapStarter = (p: typeof homeLineup[0]) => {
-          let pos = p.matchPosition ?? p.position;
+        const mapStarter = (p: typeof homeLineup[0], idx: number) => {
+          let pos = (idx === gkAssignedIdx) ? "GK" : (p.matchPosition ?? p.position);
           if (pos === "GK") { gkCount++; if (gkCount > 1) pos = "DEF"; }
           return { id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`, position: pos, naturalPosition: p.position,
             rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5) };
