@@ -228,19 +228,28 @@ export async function executeDailyTick(
     });
   }
 
-  // Condition recovery: stamina-based
+  // Condition recovery: stamina-based + age modifier
+  // Young players recover faster, older players slower
   await env.DB.prepare(
     `UPDATE players SET life_context = json_set(life_context, '$.condition',
       MIN(100, json_extract(life_context, '$.condition') +
-        CASE
+        (CASE
           WHEN json_extract(skills, '$.stamina') >= 75 THEN 18
           WHEN json_extract(skills, '$.stamina') >= 50 THEN 14
-          WHEN json_extract(skills, '$.stamina') >= 25 THEN 10
-          ELSE 7
-        END
+          WHEN json_extract(skills, '$.stamina') >= 25 THEN 12
+          ELSE 9
+        END)
+        +
+        (CASE
+          WHEN age <= 21 THEN 4
+          WHEN age <= 25 THEN 2
+          WHEN age <= 30 THEN 0
+          WHEN age <= 35 THEN -2
+          ELSE -4
+        END)
       ))`
   ).run();
-  events.push({ type: "recovery", description: "Regenerace kondice (dle staminy)" });
+  events.push({ type: "recovery", description: "Regenerace kondice (dle staminy a věku)" });
 
   // Shower facility bonus: extra condition recovery per team
   try {
