@@ -45,16 +45,16 @@ export async function runScheduledMatches(
     const awayTeamId = match.away_team_id as string;
 
     try {
-      // Ensure lineups exist
+      // Ensure lineups exist — copy last saved lineup or auto-generate
       const hasHomeLineup = await db.prepare(
         "SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?"
       ).bind(homeTeamId, calendarId).first();
-      if (!hasHomeLineup) await createAutoLineup(db, homeTeamId, calendarId);
+      if (!hasHomeLineup) await copyOrCreateLineup(db, homeTeamId, calendarId);
 
       const hasAwayLineup = await db.prepare(
         "SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?"
       ).bind(awayTeamId, calendarId).first();
-      if (!hasAwayLineup) await createAutoLineup(db, awayTeamId, calendarId);
+      if (!hasAwayLineup) await copyOrCreateLineup(db, awayTeamId, calendarId);
 
       // Create RNG — deterministic seed for absences (same every time)
       const { seedFromString } = await import("../lib/seed");
@@ -640,6 +640,37 @@ export async function buildMatchPlayers(
   });
 
   return { players, idMap, positionMap, absentNames: absentInfo };
+}
+
+/**
+ * Copy last saved lineup to new calendar_id, or auto-generate if none exists.
+ * Validates that copied players still exist and are active.
+ */
+async function copyOrCreateLineup(db: D1Database, teamId: string, calendarId: string): Promise<void> {
+  const lastLineup = await db.prepare(
+    "SELECT formation, tactic, players_data FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
+  ).bind(teamId).first<{ formation: string; tactic: string; players_data: string }>().catch(() => null);
+
+  if (lastLineup) {
+    // Validate players still exist and are active
+    const picks = JSON.parse(lastLineup.players_data) as Array<{ playerId: string; matchPosition?: string }>;
+    const activeIds = await db.prepare(
+      "SELECT id FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')"
+    ).bind(teamId).all();
+    const activeSet = new Set(activeIds.results.map((r) => r.id as string));
+    const validPicks = picks.filter((p) => activeSet.has(p.playerId));
+
+    if (validPicks.length >= 11) {
+      // Copy lineup
+      await db.prepare(
+        "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto) VALUES (?, ?, ?, ?, ?, ?, 0)"
+      ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, JSON.stringify(validPicks.slice(0, 11))).run();
+      return;
+    }
+  }
+
+  // Fallback: auto-generate
+  await createAutoLineup(db, teamId, calendarId);
 }
 
 export async function createAutoLineup(
