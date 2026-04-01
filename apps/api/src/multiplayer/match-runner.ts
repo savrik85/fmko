@@ -642,18 +642,23 @@ export async function buildMatchPlayers(
   const starters = players.slice(0, Math.min(11, players.length));
 
   if (matchPositionMap.size > 0) {
-    // Figure out which positions are missing (absent players' positions)
-    const missingPositions: string[] = [];
-    for (const [playerId, pos] of matchPositionMap) {
-      // If this player isn't among starters with a matchPosition, their slot is vacant
-      const found = starters.find(p => {
-        const dbId = idMap.get(p.id);
-        return dbId === playerId && p.matchPosition === pos;
-      });
-      if (!found) missingPositions.push(pos);
+    // Simple approach:
+    // 1. Build set of present player dbIds
+    const presentDbIds = new Set<string>();
+    for (const p of starters) {
+      const dbId = idMap.get(p.id);
+      if (dbId) presentDbIds.add(dbId);
     }
 
-    // Assign missing positions to replacements (in order)
+    // 2. Find which lineup positions are vacant (player absent)
+    const missingPositions: string[] = [];
+    for (const [playerId, pos] of matchPositionMap) {
+      if (!presentDbIds.has(playerId)) {
+        missingPositions.push(pos);
+      }
+    }
+
+    // 3. Assign missing positions to starters without matchPosition
     for (const p of starters) {
       if (p.matchPosition) continue;
       if (missingPositions.length > 0) {
