@@ -506,13 +506,30 @@ export function generateNewspaperArticle(
     `${teamName} slaví výhru! "${lastResult.opponent} neměl šanci," říká trenér.`,
     `Parádní víkend pro ${teamName}. Fanoušci (oba dva) jsou nadšení.`,
     `${teamName} stoupá tabulkou. Na ${position}. místě a s chutí do dalšího kola.`,
+    `${teamName} válí! Výhra nad ${lastResult.opponent} zvedla náladu v celé obci.`,
+    `Jasná záležitost pro ${teamName}. V kabině teklo šampaňské (nebo aspoň pivo).`,
+    `Trenér ${teamName}: "Kluci to odmakali na sto procent."`,
+    `${teamName} pokračuje v sérii. ${lastResult.opponent} na ně nestačil.`,
+    `U hřiště ${teamName} zavládlo nadšení. Stánek s pivem nestíhal.`,
+    `${teamName} si pohlídal tři body. Soupeř odjel s prázdnou.`,
+    `Výhra ${teamName} ${lastResult.homeScore}:${lastResult.awayScore}! Hospodský gratuloval jako první.`,
   ] : drew ? [
     `Remíza ${teamName} s ${lastResult.opponent}. "Bod je bod," komentuje trenér.`,
     `${teamName} si přivezl bod. U stánku se prodalo rekordních 12 piv.`,
+    `Dělba bodů mezi ${teamName} a ${lastResult.opponent}. Oba trenéři spokojení. Asi.`,
+    `${teamName} remizoval. "Mohli jsme vyhrát, ale i prohrát," filozofuje kapitán.`,
+    `Spravedlivá remíza na hřišti ${lastResult.opponent}. ${teamName} drží sérii bez prohry.`,
+    `Bod z venku pro ${teamName}. Trenér to bere, hospodský taky.`,
   ] : [
     `Těžký víkend pro ${teamName}. Prohra ${lastResult.homeScore}:${lastResult.awayScore}.`,
     `${teamName} padl. "Příště to bude lepší," slibuje kapitán v hospodě.`,
     `${lastResult.opponent} porazil ${teamName}. Trenér zvažuje taktické změny (a výměnu brankáře).`,
+    `Další prohra ${teamName}. Fanoušci (oba dva) odešli před koncem.`,
+    `${teamName} nestačil na ${lastResult.opponent}. V kabině bylo ticho.`,
+    `Prohra ${teamName} ${lastResult.homeScore}:${lastResult.awayScore}. "Musíme se zvednout," říká trenér a objednává další pivo.`,
+    `${lastResult.opponent} přejel ${teamName}. Trenér hledá útěchu na dně sklenice.`,
+    `Těžká porážka. ${teamName} klesá tabulkou. Starosta obce nervózně mačká telefon.`,
+    `${teamName} dostal lekci od ${lastResult.opponent}. Ale jak říká kapitán: "Ještě není konec sezóny."`,
   ];
 
   return rng.pick(headlines);

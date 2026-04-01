@@ -36,6 +36,22 @@ const ABSENCE_REASONS = [
   "Říkal, že zapomněl",
   "Auto nejelo",
   "Dovolená",
+  "Říkal, že ho bolí koleno",
+  "Natáhl si sval v práci",
+  "Prý má rýmu a nechce nakazit ostatní",
+  "Opravuje si auto, nemá jak dojet",
+  "Stěhuje se, nemá čas",
+  "Slíbil ženě, že dneska zůstane doma",
+  "Byl na nočce, spal celý den",
+  "Řekl, že přijde, ale nepřišel. Nezdá telefon",
+  "Schůzka u doktora, nemohl přeobjednat",
+  "Hlídá ségřiny děti",
+  "Jede na rybářské závody",
+  "Musí na pohřeb, prý vzdálená příbuzná",
+  "Montér mu přijde dělat kotel",
+  "Zaspěl, prý měl budík na pět",
+  "Oslavuje narozeniny — své, ne cizí",
+  "Říkal, že myslel že je zítra",
 ];
 
 const COMMUTE_ABSENCE_REASONS = [
@@ -44,6 +60,11 @@ const COMMUTE_ABSENCE_REASONS = [
   "Nechtělo se mu jet tak daleko v dešti",
   "Zmeškal autobus",
   "Říkal že cesta za to nestojí",
+  "Silnice je zasněžená, nejede",
+  "Tankoval a zjistil, že nemá peníze na benzín",
+  "Spolujezdec zrušil, sám nechce jet",
+  "Říkal, že v tom blátě tam jeho auto nedojede",
+  "Potkalo ho stádo krav na silnici, prý čekal půl hodiny",
 ];
 
 const TRAINING_EFFECTS: Record<TrainingType, string[]> = {

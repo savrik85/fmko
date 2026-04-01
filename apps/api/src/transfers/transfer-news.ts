@@ -14,6 +14,30 @@ const HUMOR = [
   "V hospodě se o ničem jiném nemluví.",
   "Trenér si mne ruce.",
   "Fanoušci jsou nadšení — oba dva.",
+  "Starosta obce pogratuloval osobně.",
+  "Říká se, že rozhodla nabídka domácího guláše po zápase.",
+  "Přestup století! No, alespoň tohoto měsíce.",
+  "Údajně o něj stálo i sousední vesnice, ale prohráli v hospodě v kartách.",
+  "Prý se rozhodoval mezi fotbalem a hasičama. Zvítězil míč.",
+  "Dres mu šijou na míru. Tedy — svlékají ze starého hráče.",
+  "Slavnostní podpis proběhl v místní hospodě za přítomnosti výčepní.",
+  "Přestupní papíry podepsal na kapotě traktoru.",
+];
+
+const HUMOR_YOUNG = [
+  "Mladá krev! Snad vydrží aspoň do konce sezóny.",
+  "Prý ho doporučil učitel tělocviku.",
+  "Ještě nemá ani řidičák, ale na hřišti je jako blesk.",
+  "Spoluhráči se těší — konečně někdo, kdo poběží místo nich.",
+  "Mládí vpřed! A hlavně na tréninky.",
+];
+
+const HUMOR_OLD = [
+  "Zkušenosti k nezaplacení. Tedy — zaplatili jsme trochu.",
+  "Říká se mu okresní Maldini.",
+  "Kolena sice vrzou, ale hlava to pořád má.",
+  "Veterán, který viděl víc sobot v kabině než většina hráčů.",
+  "Přišel s vlastní masážní emulzí a ibuprofenem.",
 ];
 
 export async function createTransferNews(
@@ -36,7 +60,8 @@ export async function createTransferNews(
   let headline = "";
   let body = "";
   const pick = rng?.pick.bind(rng) ?? ((arr: string[]) => arr[Math.floor(Math.random() * arr.length)]);
-  const humor = pick(HUMOR);
+  const agePool = data.playerAge <= 22 ? [...HUMOR, ...HUMOR_YOUNG] : data.playerAge >= 33 ? [...HUMOR, ...HUMOR_OLD] : HUMOR;
+  const humor = pick(agePool);
 
   switch (type) {
     case "player_released":

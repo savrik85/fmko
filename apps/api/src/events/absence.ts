@@ -67,6 +67,19 @@ const PERSONAL_EXCUSES = [
   // Zapomnětlivost — v den zápasu
   { text: "Zapomněl jsem, myslel jsem že hrajeme příští týden", emoji: "\u{1F937}", minAge: 0, timing: "match_day" as AbsenceTiming },
   { text: "Hele já se omlouvám ale fakt jsem si to nespojil", emoji: "\u{1F644}", minAge: 0, timing: "match_day" as AbsenceTiming },
+
+  // Další rodina
+  { text: "Malá má angínu, musím s ní k doktorovi", emoji: "\u{1F321}", minAge: 26, timing: "match_day" as AbsenceTiming },
+  { text: "Tchán padl ze žebříku, jedeme do nemocnice", emoji: "\u{1F691}", minAge: 25, timing: "match_day" as AbsenceTiming },
+  { text: "Manželka rodí! Ne teď, ale prý co kdyby", emoji: "\u{1F930}", minAge: 24, timing: "day_before" as AbsenceTiming },
+  { text: "Syn má turnaj v šachách, slíbil jsem že přijdu", emoji: "\u265F", minAge: 30, timing: "day_before" as AbsenceTiming },
+  { text: "Ženská jede s kamarádkama pryč, musím hlídat", emoji: "\u{1F476}", minAge: 25, timing: "day_before" as AbsenceTiming },
+  { text: "Stěhujeme se k rodičům na víkend, nemůžu odjet", emoji: "\u{1F3E0}", minAge: 0, timing: "day_before" as AbsenceTiming },
+
+  // Další logistika
+  { text: "Kopačky mi zůstaly v práci a nemůžu se tam dostat", emoji: "\u{1F45F}", minAge: 0, timing: "match_day" as AbsenceTiming },
+  { text: "Klíče od auta jsou zamčený v autě. Čekám na zámečníka", emoji: "\u{1F511}", minAge: 0, timing: "match_day" as AbsenceTiming },
+  { text: "Spadl mi telefon do záchodu a nevím kde hrajeme", emoji: "\u{1F4F1}", minAge: 0, timing: "match_day" as AbsenceTiming },
 ];
 
 // ═══════════════════════════════════════════════
@@ -95,6 +108,20 @@ const ABSURD_EXCUSES = [
   { text: "Klíště. Musím k doktorovi. Asi. Pro jistotu", emoji: "\u{1FAB2}", timing: "match_day" as AbsenceTiming },
   { text: "Babička volala že jí nefunguje televize a neumí přepnout vstup", emoji: "\u{1F4FA}", timing: "match_day" as AbsenceTiming },
   { text: "Musím vyzvednout traktůrek ze servisu, jinak mi ho prodaj", emoji: "\u{1F69C}", timing: "match_day" as AbsenceTiming },
+  { text: "Kočka mi porodila v tašce s vybavením", emoji: "\u{1F431}", timing: "match_day" as AbsenceTiming },
+  { text: "Sousedovic pes mi ukradl kopačku, honíme ho po vsi", emoji: "\u{1F415}", timing: "match_day" as AbsenceTiming },
+  { text: "Přišla kontrola z hygieny, nemůžu odejít z hospody", emoji: "\u{1F52C}", timing: "match_day" as AbsenceTiming },
+  { text: "Vyhrál jsem v tombole prase a musím ho odvézt domů", emoji: "\u{1F416}", timing: "match_day" as AbsenceTiming },
+  { text: "Našel jsem v garáži ježka a čekám na záchranku pro zvířata", emoji: "\u{1F994}", timing: "match_day" as AbsenceTiming },
+  { text: "Soused topí listím a mně smrdí prádlo na šňůře, musím hlídat", emoji: "\u{1F342}", timing: "match_day" as AbsenceTiming },
+  { text: "Dostal jsem pokutu za parkování a musím to jít řešit", emoji: "\u{1F694}", timing: "match_day" as AbsenceTiming },
+  { text: "Tchyně mi vaří svíčkovou, to se neodmítá", emoji: "\u{1F35B}", timing: "day_before" as AbsenceTiming },
+  { text: "Musím posekat sousedovic zahradu, prý jinak nepohlídá psa", emoji: "\u{1F33F}", timing: "match_day" as AbsenceTiming },
+  { text: "Spadla mi včelí budka a musím řešit roj", emoji: "\u{1F41D}", timing: "match_day" as AbsenceTiming },
+  { text: "Udělal jsem si zkoušku na rybářský lístek a musím to oslavit", emoji: "\u{1F41F}", timing: "match_day" as AbsenceTiming },
+  { text: "Zablokoval mi někdo výjezd z dvorku, čekám na odtahovou", emoji: "\u{1F698}", timing: "match_day" as AbsenceTiming },
+  { text: "Právě jsem zjistil, že mi teče střecha. Přesně teď. Přesně dneska", emoji: "\u{1F327}", timing: "match_day" as AbsenceTiming },
+  { text: "Jdu na sraz ročníku, víme se dvacet let neviděli", emoji: "\u{1F37B}", timing: "day_before" as AbsenceTiming },
 ];
 
 // ═══════════════════════════════════════════════
@@ -108,6 +135,12 @@ const HANGOVER_EXCUSES = [
   { text: "Včera jsme to s klukama trochu přetáhli... omlouvám se", emoji: "\u{1F943}" },
   { text: "Trenere omlouvám se, mám žaludeční chřipku (pivo)", emoji: "\u{1F912}" },
   { text: "Dneska to fakt nepůjde. Včera byla zabijačka", emoji: "\u{1F37B}" },
+  { text: "Ještě se mi točí hlava. Snad do soboty budu v pohodě", emoji: "\u{1F4AB}" },
+  { text: "Trenere já vím že jsem slíbil... ale opravdu nemůžu", emoji: "\u{1F62C}" },
+  { text: "Přísahám že už nikdy. Ale dneska fakt ne", emoji: "\u{1F64F}" },
+  { text: "Vím že to vypadá blbě, ale prej jsem včera zpíval hymnu na náměstí", emoji: "\u{1F3A4}" },
+  { text: "Nevím jak jsem se dostal domů, natož na hřiště", emoji: "\u{1F635}\u200D\u{1F4AB}" },
+  { text: "Kluci mě včera přemluvili na jednu. Jedna se změnila v devět", emoji: "\u{1F37A}" },
 ];
 
 // ═══════════════════════════════════════════════
@@ -120,6 +153,12 @@ const HEALTH_EXCUSES = [
   { text: "Záda úplně ztuhlý, nemůžu se ani otočit", emoji: "\u{1F615}" },
   { text: "Kotník mi otekl, asi jsem si ho podvrtl v práci", emoji: "\u{1F97E}" },
   { text: "Mám ten zánět šlach zas, doktor říkal klid", emoji: "\u{1FA7A}" },
+  { text: "Píchlo mě v třísle, nechci riskovat", emoji: "\u{1F915}" },
+  { text: "Lýtko ztuhlý od pondělka, asi jsem to přetáhl", emoji: "\u{1F9B6}" },
+  { text: "Rameno mi vyskočilo, musím k ortopedovi", emoji: "\u{1F4AA}" },
+  { text: "Mám migrénu, nevidím na jedno oko", emoji: "\u{1F635}" },
+  { text: "Alergická reakce, jsem celej oteklej", emoji: "\u{1F922}" },
+  { text: "Doktor mi zakázal sport na týden, něco s tlakem", emoji: "\u{1FA7A}" },
 ];
 
 const COMMUTE_EXCUSES = [
