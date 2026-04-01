@@ -261,6 +261,7 @@ export async function runScheduledMatches(
         ...Array.from(homeBuild.absentNames ?? []),
         ...Array.from(awayBuild.absentNames ?? []),
         { name: "DEBUG_HOME", reason: `mapSize=${homeBuild.debugMapSize ?? '?'} missing=[${(homeBuild.debugMissing ?? []).join(',')}]`, smsText: `starters=${homeLineup.map(p => `${p.firstName[0]}.${p.lastName}:${p.matchPosition ?? '?'}`).join(',')}` },
+        { name: "DEBUG_AWAY", reason: `mapSize=${awayBuild.debugMapSize ?? '?'} missing=[${(awayBuild.debugMissing ?? []).join(',')}]`, smsText: `starters=${awayLineup.map(p => `${p.firstName[0]}.${p.lastName}:${p.matchPosition ?? '?'}`).join(',')}` },
       ];
 
       // Save results with events + commentary + match context + lineups + absences
@@ -658,6 +659,9 @@ export async function buildMatchPlayers(
       }
     }
 
+    // Capture for debug
+    const _debugMissing = [...missingPositions];
+
     // 3. Assign missing positions to starters without matchPosition
     for (const p of starters) {
       if (p.matchPosition) continue;
@@ -698,14 +702,13 @@ export async function buildMatchPlayers(
   }));
   logger.info({ module: "match-runner", debugInfo, mapSize: matchPositionMap.size, missing: _missingDbg }, "matchPosition DEBUG");
 
-  // Capture debug data for missing positions
-  const debugMissing: string[] = [];
-  for (const [pid, pos] of matchPositionMap) {
-    const f = starters.find(p => idMap.get(p.id) === pid && p.matchPosition === pos);
-    if (!f) debugMissing.push(pos);
-  }
-
-  return { players, idMap, positionMap, absentNames: absentInfo, debugMapSize: matchPositionMap.size, debugMissing };
+  const _capturedMissing = (matchPositionMap.size > 0) ? (() => {
+    const m: string[] = [];
+    const pIds = new Set(starters.map(p => idMap.get(p.id)).filter(Boolean));
+    for (const [pid, pos] of matchPositionMap) { if (!pIds.has(pid)) m.push(pos); }
+    return m;
+  })() : [];
+  return { players, idMap, positionMap, absentNames: absentInfo, debugMapSize: matchPositionMap.size, debugMissing: _capturedMissing };
 }
 
 /**
