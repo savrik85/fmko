@@ -646,7 +646,7 @@ export async function buildMatchPlayers(
  * Copy last saved lineup to new calendar_id, or auto-generate if none exists.
  * Validates that copied players still exist and are active.
  */
-async function copyOrCreateLineup(db: D1Database, teamId: string, calendarId: string): Promise<void> {
+export async function copyOrCreateLineup(db: D1Database, teamId: string, calendarId: string): Promise<void> {
   const lastLineup = await db.prepare(
     "SELECT formation, tactic, players_data FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
   ).bind(teamId).first<{ formation: string; tactic: string; players_data: string }>().catch(() => null);

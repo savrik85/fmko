@@ -40,15 +40,15 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       const absenceRng = createRng(seedFromString(matchId));
       const rng = createRng(Date.now() + matchId.charCodeAt(0));
 
-      // Ensure lineups exist (auto-generate if not set by player)
-      const { createAutoLineup } = await import("./match-runner");
+      // Ensure lineups exist — copy last saved or auto-generate
+      const { copyOrCreateLineup } = await import("./match-runner");
       const hasHomeLineup = await db.prepare("SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?")
         .bind(homeTeamId, matchId).first().catch(() => null);
-      if (!hasHomeLineup) await createAutoLineup(db, homeTeamId, matchId);
+      if (!hasHomeLineup) await copyOrCreateLineup(db, homeTeamId, matchId);
 
       const hasAwayLineup = await db.prepare("SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?")
         .bind(awayTeamId, matchId).first().catch(() => null);
-      if (!hasAwayLineup) await createAutoLineup(db, awayTeamId, matchId);
+      if (!hasAwayLineup) await copyOrCreateLineup(db, awayTeamId, matchId);
 
       // Load lineups
       const homeLineupRow = await db.prepare("SELECT players_data FROM lineups WHERE team_id = ? AND calendar_id = ?")
