@@ -260,7 +260,7 @@ export async function runScheduledMatches(
       const matchAbsences = [
         ...Array.from(homeBuild.absentNames ?? []),
         ...Array.from(awayBuild.absentNames ?? []),
-        { name: "DEBUG_HOME", reason: `mapSize=${homeBuild.debugMapSize ?? '?'} missing=[${(homeBuild.debugMissing ?? []).join(',')}]`, smsText: `starters=${homeLineup.map(p => `${p.firstName[0]}.${p.lastName}:${p.matchPosition ?? '?'}`).join(',')}` },
+        { name: "DEBUG_HOME", reason: `mapSize=${homeBuild.debugMapSize ?? '?'} missing=[${(homeBuild.debugMissing ?? []).join(',')}]`, smsText: `${homeBuild.debugExtra ?? ''} | starters=${homeLineup.map(p => `${p.firstName[0]}.${p.lastName}:${p.matchPosition ?? '?'}`).join(',')}` },
         { name: "DEBUG_AWAY", reason: `mapSize=${awayBuild.debugMapSize ?? '?'} missing=[${(awayBuild.debugMissing ?? []).join(',')}]`, smsText: `${awayBuild.debugExtra ?? ''} | starters=${awayLineup.map(p => `${p.firstName[0]}.${p.lastName}:${p.matchPosition ?? '?'}`).join(',')}` },
       ];
 
