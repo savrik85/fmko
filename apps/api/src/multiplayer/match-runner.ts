@@ -256,10 +256,11 @@ export async function runScheduledMatches(
         return { starters: lineup.map(mapPlayer), subs: subs.map(mapPlayer) };
       };
 
-      // Collect absence data for both teams
+      // Collect absence data for both teams + DEBUG info
       const matchAbsences = [
         ...Array.from(homeBuild.absentNames ?? []),
         ...Array.from(awayBuild.absentNames ?? []),
+        { name: "DEBUG_HOME", reason: `mapSize=${homeBuild.debugMapSize ?? '?'} missing=[${(homeBuild.debugMissing ?? []).join(',')}]`, smsText: `starters=${homeLineup.map(p => `${p.firstName[0]}.${p.lastName}:${p.matchPosition ?? '?'}`).join(',')}` },
       ];
 
       // Save results with events + commentary + match context + lineups + absences
@@ -501,6 +502,8 @@ interface BuildResult {
   idMap: Map<number, string>;
   positionMap: Map<string, string>;
   absentNames: Array<{ name: string; reason: string; smsText: string }>;
+  debugMapSize?: number;
+  debugMissing?: string[];
 }
 
 export async function buildMatchPlayers(
@@ -690,7 +693,14 @@ export async function buildMatchPlayers(
   }));
   logger.info({ module: "match-runner", debugInfo, mapSize: matchPositionMap.size, missing: _missingDbg }, "matchPosition DEBUG");
 
-  return { players, idMap, positionMap, absentNames: absentInfo };
+  // Capture debug data for missing positions
+  const debugMissing: string[] = [];
+  for (const [pid, pos] of matchPositionMap) {
+    const f = starters.find(p => idMap.get(p.id) === pid && p.matchPosition === pos);
+    if (!f) debugMissing.push(pos);
+  }
+
+  return { players, idMap, positionMap, absentNames: absentInfo, debugMapSize: matchPositionMap.size, debugMissing };
 }
 
 /**
