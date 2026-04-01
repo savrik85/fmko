@@ -40,7 +40,17 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       const absenceRng = createRng(seedFromString(matchId));
       const rng = createRng(Date.now() + matchId.charCodeAt(0));
 
-      // Load saved lineups (friendly uses matchId as calendarId in lineups table)
+      // Ensure lineups exist (auto-generate if not set by player)
+      const { createAutoLineup } = await import("./match-runner");
+      const hasHomeLineup = await db.prepare("SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(homeTeamId, matchId).first().catch(() => null);
+      if (!hasHomeLineup) await createAutoLineup(db, homeTeamId, matchId);
+
+      const hasAwayLineup = await db.prepare("SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(awayTeamId, matchId).first().catch(() => null);
+      if (!hasAwayLineup) await createAutoLineup(db, awayTeamId, matchId);
+
+      // Load lineups
       const homeLineupRow = await db.prepare("SELECT players_data FROM lineups WHERE team_id = ? AND calendar_id = ?")
         .bind(homeTeamId, matchId).first<{ players_data: string }>().catch(() => null);
       const awayLineupRow = await db.prepare("SELECT players_data FROM lineups WHERE team_id = ? AND calendar_id = ?")
@@ -93,14 +103,24 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       await loadCommentaryFromDB(db);
       const commentary = generateMatchCommentary(rng, result.events, homeSetup.teamName, awaySetup.teamName);
 
-      // Build lineup data
-      const mapPlayer = (p: typeof homeLineup[0], idMap: Map<number, string>) => ({
-        id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`,
-        position: p.matchPosition ?? p.position, naturalPosition: p.position,
-        rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5),
-      });
-      const homeLineupData = { starters: homeLineup.map((p) => mapPlayer(p, homeBuild.idMap)), subs: homeSubs.map((p) => mapPlayer(p, homeBuild.idMap)) };
-      const awayLineupData = { starters: awayLineup.map((p) => mapPlayer(p, awayBuild.idMap)), subs: awaySubs.map((p) => mapPlayer(p, awayBuild.idMap)) };
+      // Build lineup data (max 1 GK in starters)
+      const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>) => {
+        let gkCount = 0;
+        const mapStarter = (p: typeof homeLineup[0]) => {
+          let pos = p.matchPosition ?? p.position;
+          if (pos === "GK") { gkCount++; if (gkCount > 1) pos = "DEF"; }
+          return { id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`, position: pos, naturalPosition: p.position,
+            rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5) };
+        };
+        const mapSub = (p: typeof homeLineup[0]) => ({
+          id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`,
+          position: p.matchPosition ?? p.position, naturalPosition: p.position,
+          rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5),
+        });
+        return { starters: lineup.map(mapStarter), subs: subs.map(mapSub) };
+      };
+      const homeLineupData = buildLineupData(homeLineup, homeSubs, homeBuild.idMap);
+      const awayLineupData = buildLineupData(awayLineup, awaySubs, awayBuild.idMap);
 
       // Save
       await db.prepare(

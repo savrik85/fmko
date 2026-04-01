@@ -248,12 +248,19 @@ export async function runScheduledMatches(
 
       // Build lineup data for storage (name, position, number, rating)
       const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>) => {
-        const mapPlayer = (p: typeof homeLineup[0]) => ({
+        let gkCount = 0;
+        const mapStarter = (p: typeof homeLineup[0]) => {
+          let pos = p.matchPosition ?? p.position;
+          if (pos === "GK") { gkCount++; if (gkCount > 1) pos = "DEF"; }
+          return { id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`, position: pos, naturalPosition: p.position,
+            rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5) };
+        };
+        const mapSub = (p: typeof homeLineup[0]) => ({
           id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`,
           position: p.matchPosition ?? p.position, naturalPosition: p.position,
           rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5),
         });
-        return { starters: lineup.map(mapPlayer), subs: subs.map(mapPlayer) };
+        return { starters: lineup.map(mapStarter), subs: subs.map(mapSub) };
       };
 
       // Collect absence data for both teams
@@ -635,7 +642,7 @@ export async function buildMatchPlayers(
   return { players, idMap, positionMap, absentNames: absentInfo };
 }
 
-async function createAutoLineup(
+export async function createAutoLineup(
   db: D1Database,
   teamId: string,
   calendarId: string,
