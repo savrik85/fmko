@@ -580,22 +580,6 @@ export async function buildMatchPlayers(
     ordered = allAvailable.slice(0, 16);
   }
 
-  // Ensure a GK is in the starting 11 — if the lineup's GK was absent,
-  // find a natural GK in positions 11+ and swap them into the starting 11
-  if (ordered.length > 11) {
-    const first11 = ordered.slice(0, 11);
-    const hasGKInLineup = first11.some(r => (r.position as string) === "GK");
-    if (!hasGKInLineup) {
-      // Check if there's a GK on the bench (positions 11+)
-      const benchGKIdx = ordered.findIndex((r, i) => i >= 11 && (r.position as string) === "GK");
-      if (benchGKIdx >= 0) {
-        // Swap bench GK with the last outfield starter (position 10)
-        const tmp = ordered[10];
-        ordered[10] = ordered[benchGKIdx];
-        ordered[benchGKIdx] = tmp;
-      }
-    }
-  }
 
   // Parse user lineup for matchPosition mapping
   const matchPositionMap = new Map<string, string>();
@@ -656,91 +640,46 @@ export async function buildMatchPlayers(
     };
   });
 
-  // ── Ensure first 11 starters always have proper matchPositions ──
-  // Use the ORIGINAL lineup's formation as target (from matchPositionMap),
-  // so replacements fill the same positions as absent players.
+  // ── Assign matchPositions to replacements ──
+  // User's lineup is SACRED — positions set by the user are preserved exactly.
+  // When players are absent/injured, replacements fill the SAME position slots.
   const starters = players.slice(0, Math.min(11, players.length));
 
-  // Target formation = counts from the original lineup data (includes absent players)
-  const targetCounts: Record<string, number> = { GK: 1, DEF: 4, MID: 4, FWD: 2 };
   if (matchPositionMap.size > 0) {
-    targetCounts.GK = 0; targetCounts.DEF = 0; targetCounts.MID = 0; targetCounts.FWD = 0;
-    for (const pos of matchPositionMap.values()) {
-      targetCounts[pos] = (targetCounts[pos] ?? 0) + 1;
+    // Figure out which positions are missing (absent players' positions)
+    const missingPositions: string[] = [];
+    for (const [playerId, pos] of matchPositionMap) {
+      // If this player isn't among starters with a matchPosition, their slot is vacant
+      const found = starters.find(p => {
+        const dbId = idMap.get(p.id);
+        return dbId === playerId && p.matchPosition === pos;
+      });
+      if (!found) missingPositions.push(pos);
     }
-    if (targetCounts.GK === 0) targetCounts.GK = 1; // safety
-  }
 
-  // 1) Count already-assigned matchPositions among starters
-  const posCounts: Record<string, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
-  for (const p of starters) {
-    if (p.matchPosition) posCounts[p.matchPosition]++;
-  }
-
-  // 1b) If a non-GK player is assigned as GK but a natural GK exists, swap them
-  const currentGK = starters.find(p => p.matchPosition === "GK");
-  if (currentGK && currentGK.position !== "GK") {
-    // Find a natural GK who isn't playing GK
-    const betterGK = starters.find(p => p.position === "GK" && p.matchPosition !== "GK");
-    if (betterGK) {
-      // Swap their matchPositions
-      const oldPos = betterGK.matchPosition;
-      betterGK.matchPosition = "GK";
-      currentGK.matchPosition = oldPos ?? currentGK.position;
-      if (oldPos) { posCounts[oldPos]--; }
-      posCounts[currentGK.matchPosition] = (posCounts[currentGK.matchPosition] ?? 0) + 1;
-    }
-  }
-
-  // 2) If no GK assigned, force-assign the best goalkeeper
-  if (posCounts.GK === 0 && starters.length > 0) {
-    // a) Prefer a natural GK without matchPosition
-    const unassignedGK = starters.find(p => !p.matchPosition && p.position === "GK");
-    if (unassignedGK) {
-      unassignedGK.matchPosition = "GK";
-    } else {
-      // b) Check if there's a natural GK who was assigned to a different position —
-      //    reassign them back to GK (their original matchPosition slot will be filled later)
-      const misplacedGK = starters.find(p => p.position === "GK" && p.matchPosition !== "GK");
-      if (misplacedGK) {
-        posCounts[misplacedGK.matchPosition!]--;
-        misplacedGK.matchPosition = "GK";
+    // Assign missing positions to starters without matchPosition (replacements)
+    for (const p of starters) {
+      if (p.matchPosition) continue;
+      if (missingPositions.length > 0) {
+        p.matchPosition = missingPositions.shift()! as "GK" | "DEF" | "MID" | "FWD";
       } else {
-        // c) No natural GK at all — pick the player with highest goalkeeping skill
-        const unassigned = starters.filter(p => !p.matchPosition);
-        if (unassigned.length > 0) {
-          let best = unassigned[0];
-          for (const p of unassigned) { if (p.goalkeeping > best.goalkeeping) best = p; }
-          best.matchPosition = "GK";
-        } else {
-          // All assigned, override the one with highest goalkeeping
-          let best = starters[0];
-          for (const p of starters) { if (p.goalkeeping > best.goalkeeping) best = p; }
-          posCounts[best.matchPosition!]--;
-          best.matchPosition = "GK";
-        }
+        // More replacements than missing slots (shouldn't happen, but fallback)
+        p.matchPosition = p.position;
       }
     }
-    posCounts.GK = 1;
-  }
-
-  // 3) Assign matchPosition to remaining starters — fill gaps in the target formation
-  for (const p of starters) {
-    if (p.matchPosition) continue;
-    // Find which position has the biggest gap (target - current)
-    const gaps = (["DEF", "MID", "FWD"] as const)
-      .map(pos => ({ pos, gap: (targetCounts[pos] ?? 0) - (posCounts[pos] ?? 0) }))
-      .sort((a, b) => b.gap - a.gap);
-    // Prefer natural position if it has a gap
-    const nat = p.position;
-    if (nat !== "GK" && (posCounts[nat] ?? 0) < (targetCounts[nat] ?? 0)) {
-      p.matchPosition = nat;
-      posCounts[nat]++;
-    } else {
-      // Fill the position with the biggest gap
-      const best = gaps[0];
-      p.matchPosition = best.pos;
-      posCounts[best.pos]++;
+  } else {
+    // No user lineup — auto-assign: 1 GK + rest by natural position
+    let hasGK = false;
+    for (const p of starters) {
+      if (p.matchPosition) { if (p.matchPosition === "GK") hasGK = true; continue; }
+      if (!hasGK && p.position === "GK") { p.matchPosition = "GK"; hasGK = true; }
+      else p.matchPosition = p.position === "GK" ? "DEF" : p.position;
+    }
+    // If still no GK, assign the one with best goalkeeping
+    if (!hasGK && starters.length > 0) {
+      let best = starters.find(p => !p.matchPosition) ?? starters[0];
+      for (const p of starters) { if (p.goalkeeping > best.goalkeeping) best = p; }
+      best.matchPosition = "GK";
     }
   }
 
