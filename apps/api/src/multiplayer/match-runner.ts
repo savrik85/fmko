@@ -675,12 +675,20 @@ export async function buildMatchPlayers(
     }
   }
 
-  // DEBUG: log matchPosition assignments
+  // DEBUG: log matchPosition assignments with full detail
+  const _missingDbg: string[] = [];
+  for (const [pid, pos] of matchPositionMap) {
+    const f = starters.find(p => idMap.get(p.id) === pid && p.matchPosition === pos);
+    if (!f) _missingDbg.push(`${pid.slice(0,8)}=${pos}`);
+  }
   const debugInfo = starters.map(p => ({
-    id: idMap.get(p.id), name: `${p.firstName} ${p.lastName}`,
-    nat: p.position, mp: p.matchPosition, fromMap: !!matchPositionMap.get(idMap.get(p.id) ?? ""),
+    id: (idMap.get(p.id) ?? "").slice(0, 8),
+    name: `${p.firstName} ${p.lastName}`,
+    nat: p.position, mp: p.matchPosition,
+    inMap: matchPositionMap.has(idMap.get(p.id) ?? ""),
+    mapVal: matchPositionMap.get(idMap.get(p.id) ?? "") ?? null,
   }));
-  logger.info({ module: "match-runner", debugInfo, mapSize: matchPositionMap.size }, "matchPosition assignments");
+  logger.info({ module: "match-runner", debugInfo, mapSize: matchPositionMap.size, missing: _missingDbg }, "matchPosition DEBUG");
 
   return { players, idMap, positionMap, absentNames: absentInfo };
 }
