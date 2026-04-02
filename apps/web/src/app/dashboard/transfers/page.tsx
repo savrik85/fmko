@@ -357,7 +357,7 @@ export default function TransfersPage() {
           {!searchLoaded && <div className="flex justify-center py-8"><Spinner /></div>}
           {searchLoaded && (
             <>
-              {/* Search + filters */}
+              {/* Search + filters — always visible */}
               <div className="card p-3 space-y-3">
                 <input
                   type="text" placeholder="Hledat jméno nebo tým..."
@@ -387,10 +387,13 @@ export default function TransfersPage() {
                   </select>
                 </div>
               </div>
+            </>
+          )}
 
+          {/* Results — only when user has set a filter */}
+          {searchLoaded && (searchQuery.trim() !== "" || searchPos !== "all" || searchMinRating > 0) && (
+            <>
               <div className="text-xs text-muted font-heading px-1">{filteredSearch.length} z {searchPlayers.length} hráčů</div>
-
-              {/* Results */}
               <div className="space-y-2">
                 {filteredSearch.map((p) => {
                   const isExpanded = searchExpandedSkills.has(p.id);
@@ -455,6 +458,10 @@ export default function TransfersPage() {
                 </div>
               )}
             </>
+          )}
+
+          {searchLoaded && searchQuery.trim() === "" && searchPos === "all" && searchMinRating === 0 && (
+            <div className="card p-6 text-center text-muted">Zadej jméno, vyber pozici nebo nastav minimální rating pro vyhledání hráčů.</div>
           )}
         </div>
       )}
