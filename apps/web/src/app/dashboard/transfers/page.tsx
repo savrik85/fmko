@@ -226,7 +226,7 @@ export default function TransfersPage() {
 
   useEffect(() => {
     if (!teamId) return;
-    refresh().then(() => setLoading(false)).catch(() => setLoading(false));
+    refresh().then(() => setLoading(false)).catch((e) => { console.error("Failed to load transfers data:", e); setLoading(false); });
   }, [teamId]);
 
   const handleSavePreset = () => {
