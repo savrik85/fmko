@@ -397,9 +397,9 @@ export default function TransfersPage() {
                   return (
                     <div key={p.id} className={`card p-3 ${p.isOwnTeam ? "ring-1 ring-pitch-500/20" : ""}`}>
                       <div className="flex items-center gap-3">
-                        <div className="shrink-0 w-9 h-9 rounded-full bg-gray-100 overflow-hidden">
+                        <div className="shrink-0 w-10 h-10 rounded-full bg-gray-100">
                           {p.avatar && Object.keys(p.avatar).length > 0
-                            ? <FaceAvatar faceConfig={p.avatar} size={36} />
+                            ? <FaceAvatar faceConfig={p.avatar} size={40} className="rounded-full" />
                             : <div className="w-full h-full flex items-center justify-center font-heading font-bold text-xs text-muted">{p.firstName[0]}{p.lastName[0]}</div>}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -679,9 +679,9 @@ export default function TransfersPage() {
                 return (
                   <div key={fa.id} className="card p-4">
                     <div className="flex items-start gap-3">
-                      <div className="shrink-0 w-10 h-10 rounded-full bg-gray-100 overflow-hidden">
+                      <div className="shrink-0 w-11 h-11 rounded-full bg-gray-100">
                         {fa.avatar && Object.keys(fa.avatar).length > 0
-                          ? <FaceAvatar faceConfig={fa.avatar} size={40} />
+                          ? <FaceAvatar faceConfig={fa.avatar} size={44} className="rounded-full" />
                           : <div className="w-full h-full flex items-center justify-center font-heading font-bold text-sm text-muted">{fa.firstName[0]}{fa.lastName[0]}</div>}
                       </div>
                       <div className="flex-1 min-w-0">
