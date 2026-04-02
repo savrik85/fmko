@@ -96,6 +96,9 @@ transfersRouter.get("/teams/:teamId/free-agents", async (c) => {
       distanceKm: distKm,
       expiresAt: fa.expires_at,
       avatar: (() => { try { return JSON.parse(fa.avatar as string); } catch { return {}; } })(),
+      skills: (() => { try { return JSON.parse(fa.skills as string); } catch { return {}; } })(),
+      physical: (() => { try { return JSON.parse(fa.physical as string); } catch { return {}; } })(),
+      personality: (() => { try { return JSON.parse(fa.personality as string); } catch { return {}; } })(),
     };
   });
 
