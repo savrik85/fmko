@@ -208,10 +208,10 @@ export default function TransfersPage() {
   const refresh = async () => {
     if (!teamId) return;
     const [fa, market, offers, squad] = await Promise.all([
-      apiFetch<{ freeAgents: FreeAgent[] }>(`/api/teams/${teamId}/free-agents`).catch(() => ({ freeAgents: [] })),
-      apiFetch<{ listings: MarketListing[]; myListings: MyListing[] }>(`/api/teams/${teamId}/market`).catch(() => ({ listings: [], myListings: [] })),
-      apiFetch<{ incoming: TransferOffer[]; outgoing: TransferOffer[]; loanedOut: typeof loanedOut; loanedIn: typeof loanedIn }>(`/api/teams/${teamId}/offers`).catch(() => ({ incoming: [], outgoing: [], loanedOut: [], loanedIn: [] })),
-      apiFetch<Player[]>(`/api/teams/${teamId}/players`).catch(() => []),
+      apiFetch<{ freeAgents: FreeAgent[] }>(`/api/teams/${teamId}/free-agents`).catch((e) => { console.error("Failed to load free agents:", e); return { freeAgents: [] }; }),
+      apiFetch<{ listings: MarketListing[]; myListings: MyListing[] }>(`/api/teams/${teamId}/market`).catch((e) => { console.error("Failed to load market:", e); return { listings: [], myListings: [] }; }),
+      apiFetch<{ incoming: TransferOffer[]; outgoing: TransferOffer[]; loanedOut: typeof loanedOut; loanedIn: typeof loanedIn }>(`/api/teams/${teamId}/offers`).catch((e) => { console.error("Failed to load offers:", e); return { incoming: [], outgoing: [], loanedOut: [], loanedIn: [] }; }),
+      apiFetch<Player[]>(`/api/teams/${teamId}/players`).catch((e) => { console.error("Failed to load players:", e); return []; }),
     ]);
     setFreeAgents(fa.freeAgents);
     setListings(market.listings);
@@ -601,7 +601,7 @@ export default function TransfersPage() {
                           const res = await apiFetch<{ success: boolean; decision: { accepted: boolean; probability: number; explanation: string }; player?: Player }>(
                             `/api/teams/${teamId}/free-agents/${fa.id}/sign`,
                             { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offeredWage: fa.weeklyWage }) },
-                          ).catch(() => null);
+                          ).catch((e) => { console.error("Transfer action failed:", e); return null; });
                           if (res) {
                             if (res.success && res.player) {
                               setRevealPlayer(res.player);
@@ -669,7 +669,7 @@ export default function TransfersPage() {
                                 await apiFetch(`/api/teams/${teamId}/market/${l.id}/bid`, {
                                   method: "POST", headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({ amount: price }),
-                                }).catch(() => {});
+                                }).catch((e) => console.error("Transfer action failed:", e));
                                 setPriceDialog(null);
                                 await refresh();
                               },
@@ -707,7 +707,7 @@ export default function TransfersPage() {
                       <button
                         onClick={async () => {
                           if (!teamId) return;
-                          await apiFetch(`/api/teams/${teamId}/listings/${l.id}`, { method: "DELETE" }).catch(() => {});
+                          await apiFetch(`/api/teams/${teamId}/listings/${l.id}`, { method: "DELETE" }).catch((e) => console.error("Transfer action failed:", e));
                           await refresh();
                         }}
                         className="shrink-0 py-1 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
@@ -728,14 +728,14 @@ export default function TransfersPage() {
                               <button onClick={async () => {
                                 const ok = await confirm({ title: `Přijmout nabídku ${formatCZK(b.amount)}?`, description: `Od: ${b.bidderName}`, confirmLabel: "Přijmout" });
                                 if (!ok || !teamId) return;
-                                await apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }).catch(() => {});
+                                await apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }).catch((e) => console.error("Transfer action failed:", e));
                                 await refresh();
                               }} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                                 Přijmout
                               </button>
                               <button onClick={async () => {
                                 if (!teamId) return;
-                                await apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }).catch(() => {});
+                                await apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }).catch((e) => console.error("Transfer action failed:", e));
                                 await refresh();
                               }} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                                 Odmítnout
@@ -786,14 +786,14 @@ export default function TransfersPage() {
                         <button onClick={async () => {
                           const ok = await confirm({ title: `Přijmout ${formatCZK(o.counter_amount ?? o.offer_amount)}?`, description: `Za ${o.first_name} ${o.last_name}`, confirmLabel: "Přijmout" });
                           if (!ok || !teamId) return;
-                          await apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }).catch(() => {});
+                          await apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }).catch((e) => console.error("Transfer action failed:", e));
                           await refresh();
                         }} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                           Přijmout
                         </button>
                         <button onClick={async () => {
                           if (!teamId) return;
-                          await apiFetch(`/api/teams/${teamId}/offers/${o.id}/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch(() => {});
+                          await apiFetch(`/api/teams/${teamId}/offers/${o.id}/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch((e) => console.error("Transfer action failed:", e));
                           await refresh();
                         }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                           Odmítnout
@@ -830,7 +830,7 @@ export default function TransfersPage() {
                       </div>
                       <button onClick={async () => {
                         if (!teamId) return;
-                        await apiFetch(`/api/teams/${teamId}/offers/${o.id}`, { method: "DELETE" }).catch(() => {});
+                        await apiFetch(`/api/teams/${teamId}/offers/${o.id}`, { method: "DELETE" }).catch((e) => console.error("Transfer action failed:", e));
                         await refresh();
                       }} className="shrink-0 py-1 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                         Stáhnout
@@ -1029,7 +1029,7 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
                               await apiFetch(`/api/teams/${teamId}/players/${p.id}/list`, {
                                 method: "POST", headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ askingPrice: price }),
-                              }).catch(() => {});
+                              }).catch((e) => console.error("Transfer action failed:", e));
                               await refresh();
                             },
                           });
@@ -1044,7 +1044,7 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
                           confirmLabel: "Uvolnit",
                         });
                         if (!ok) return;
-                        await apiFetch(`/api/teams/${teamId}/players/${p.id}/release`, { method: "POST" }).catch(() => {});
+                        await apiFetch(`/api/teams/${teamId}/players/${p.id}/release`, { method: "POST" }).catch((e) => console.error("Transfer action failed:", e));
                         await refresh();
                       }} className="py-1 px-2.5 rounded text-xs font-heading font-bold bg-card-red text-white hover:bg-red-600 transition-colors">
                         Uvolnit
