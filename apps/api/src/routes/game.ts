@@ -2032,11 +2032,11 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
     .bind(teamId, body.calendarId).first<{ id: string }>();
 
   if (existing) {
-    await c.env.DB.prepare("UPDATE lineups SET formation = ?, tactic = ?, players_data = ?, is_auto = 0, source = 'user', submitted_at = datetime('now') WHERE id = ?")
+    await c.env.DB.prepare("UPDATE lineups SET formation = ?, tactic = ?, players_data = ?, is_auto = 0, submitted_at = datetime('now') WHERE id = ?")
       .bind(body.formation, body.tactic, JSON.stringify(body.players), existing.id).run();
   } else {
     const id = crypto.randomUUID();
-    await c.env.DB.prepare("INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto, source, submitted_at) VALUES (?, ?, ?, ?, ?, ?, 0, 'user', datetime('now'))")
+    await c.env.DB.prepare("INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, 0, datetime('now'))")
       .bind(id, teamId, body.calendarId, body.formation, body.tactic, JSON.stringify(body.players)).run();
   }
 

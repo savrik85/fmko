@@ -539,17 +539,6 @@ matchesRouter.get("/matches/:id", async (c) => {
   });
 });
 
-// DEBUG: GET /api/teams/:teamId/debug-lineup — show lineup data
-matchesRouter.get("/teams/:teamId/debug-lineup", async (c) => {
-  const teamId = c.req.param("teamId");
-  const lineups = await c.env.DB.prepare(
-    "SELECT id, calendar_id, formation, tactic, is_auto, players_data, submitted_at FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC LIMIT 3"
-  ).bind(teamId).all();
-  const players = await c.env.DB.prepare(
-    "SELECT id, first_name, last_name, position, overall_rating FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
-  ).bind(teamId).all();
-  return c.json({ lineups: lineups.results, players: players.results });
-});
 
 // GET /api/teams/:teamId/unseen-match — najde nejstarší nepřečtený zápas
 matchesRouter.get("/teams/:teamId/unseen-match", async (c) => {
