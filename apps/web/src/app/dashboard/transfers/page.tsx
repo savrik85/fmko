@@ -355,7 +355,10 @@ export default function TransfersPage() {
       {tab === "search" && (
         <div className="space-y-3">
           {!searchLoaded && <div className="flex justify-center py-8"><Spinner /></div>}
-          {searchLoaded && (
+          {searchLoaded && searchQuery.trim() === "" && searchPos === "all" && searchMinRating === 0 && (
+            <div className="card p-6 text-center text-muted">Zadej jméno, vyber pozici nebo nastav minimální rating.</div>
+          )}
+          {searchLoaded && (searchQuery.trim() !== "" || searchPos !== "all" || searchMinRating > 0) && (
             <>
               {/* Search + filters */}
               <div className="card p-3 space-y-3">
