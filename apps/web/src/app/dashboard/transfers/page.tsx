@@ -342,7 +342,7 @@ export default function TransfersPage() {
       {/* Tab bar */}
       <div className="flex gap-1 bg-surface rounded-xl p-1">
         {tabs.map(([key, label, count]) => (
-          <button key={key} onClick={() => setTab(key)}
+          <button key={key} onClick={() => { setTab(key); if (key === "search") loadSearch(); }}
             className={`flex-1 py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
               tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
             }`}>
@@ -354,14 +354,7 @@ export default function TransfersPage() {
       {/* ═══ TAB: Hledání ═══ */}
       {tab === "search" && (
         <div className="space-y-3">
-          {!searchLoaded && (
-            <div className="card p-6 text-center">
-              <button onClick={loadSearch} className="py-2 px-6 rounded-lg font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
-                Načíst hráče z celé ligy
-              </button>
-              <p className="text-sm text-muted mt-2">Zobrazí všechny hráče ze všech týmů v soutěži</p>
-            </div>
-          )}
+          {!searchLoaded && <div className="flex justify-center py-8"><Spinner /></div>}
           {searchLoaded && (
             <>
               {/* Search + filters */}
