@@ -421,6 +421,10 @@ export default function TransfersPage() {
             </>
           )}
 
+          {searchLoaded && (
+            <p className="text-xs text-amber-600 italic px-1">⚠ Dovednosti cizích hráčů jsou pouze orientační — přesné hodnoty znáš jen u svého týmu.</p>
+          )}
+
           {/* Results — only when user has set a filter */}
           {searchLoaded && (searchQuery.trim() !== "" || searchPos !== "all" || searchMinRating > 0 || searchAgeMin > 0 || searchAgeMax < 99) && (
             <>
