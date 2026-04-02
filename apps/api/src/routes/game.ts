@@ -2133,10 +2133,10 @@ gameRouter.get("/teams/:teamId/free-agents", async (c) => {
         age: fa.age, position: fa.position, overallRating: fa.overall_rating, weeklyWage: fa.weekly_wage,
         occupation: (() => { try { return JSON.parse(fa.life_context as string)?.occupation ?? ""; } catch (e) { logger.warn({ module: "game" }, "parse free agent life_context", e); return ""; } })(),
         source: fa.source, villageName: fa.village_name ?? null, distanceKm: distKm, expiresAt: fa.expires_at,
-        avatar: (() => { try { return JSON.parse(fa.avatar as string); } catch { return {}; } })(),
-        skills: (() => { try { return JSON.parse(fa.skills as string); } catch { return {}; } })(),
-        physical: (() => { try { return JSON.parse(fa.physical as string); } catch { return {}; } })(),
-        personality: (() => { try { return JSON.parse(fa.personality as string); } catch { return {}; } })(),
+        avatar: (() => { try { return JSON.parse(fa.avatar as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent avatar", e); return {}; } })(),
+        skills: (() => { try { return JSON.parse(fa.skills as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent skills", e); return {}; } })(),
+        physical: (() => { try { return JSON.parse(fa.physical as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent physical", e); return {}; } })(),
+        personality: (() => { try { return JSON.parse(fa.personality as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent personality", e); return {}; } })(),
       };
     });
     return c.json({ freeAgents: result });
