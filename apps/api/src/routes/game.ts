@@ -2159,9 +2159,9 @@ gameRouter.get("/teams/:teamId/search-players", async (c) => {
        p.skills, p.physical, p.personality, p.life_context, p.avatar, p.squad_number,
        t.id as team_id, t.name as team_name
        FROM players p JOIN teams t ON p.team_id = t.id
-       WHERE t.league_id = ? AND (p.status IS NULL OR p.status = 'active')
+       WHERE t.league_id = ? AND t.id != ? AND t.user_id != 'ai' AND (p.status IS NULL OR p.status = 'active')
        ORDER BY p.overall_rating DESC LIMIT 200`
-    ).bind(team.league_id).all();
+    ).bind(team.league_id, teamId).all();
 
     const blur = (v: number) => Math.round(v / 5) * 5;
     const players = rows.results.map((r) => {

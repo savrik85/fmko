@@ -273,6 +273,8 @@ export default function TransfersPage() {
   const [searchPos, setSearchPos] = useState<string>("all");
   const [searchSort, setSearchSort] = useState<string>("rating");
   const [searchMinRating, setSearchMinRating] = useState(0);
+  const [searchAgeMin, setSearchAgeMin] = useState(0);
+  const [searchAgeMax, setSearchAgeMax] = useState(99);
   const [searchExpandedSkills, setSearchExpandedSkills] = useState<Set<string>>(new Set());
 
   const loadSearch = async () => {
@@ -290,6 +292,8 @@ export default function TransfersPage() {
     }
     if (searchPos !== "all") list = list.filter(p => p.position === searchPos);
     if (searchMinRating > 0) list = list.filter(p => p.overallRating >= searchMinRating);
+    if (searchAgeMin > 0) list = list.filter(p => p.age >= searchAgeMin);
+    if (searchAgeMax < 99) list = list.filter(p => p.age <= searchAgeMax);
     list = [...list].sort((a, b) => {
       switch (searchSort) {
         case "rating": return b.overallRating - a.overallRating;
@@ -300,7 +304,7 @@ export default function TransfersPage() {
       }
     });
     return list;
-  }, [searchPlayers, searchQuery, searchPos, searchSort, searchMinRating]);
+  }, [searchPlayers, searchQuery, searchPos, searchSort, searchMinRating, searchAgeMin, searchAgeMax]);
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
@@ -386,12 +390,28 @@ export default function TransfersPage() {
                     <option value="name">Jméno</option>
                   </select>
                 </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-muted text-xs">Věk:</span>
+                  <input type="number" value={searchAgeMin || ""} onChange={(e) => setSearchAgeMin(parseInt(e.target.value) || 0)}
+                    placeholder="od" min={0} max={60}
+                    className="w-14 px-2 py-1 rounded border border-gray-200 text-xs font-heading tabular-nums text-center focus:outline-none focus:ring-1 focus:ring-pitch-500/30" />
+                  <span className="text-muted text-xs">–</span>
+                  <input type="number" value={searchAgeMax < 99 ? searchAgeMax : ""} onChange={(e) => setSearchAgeMax(parseInt(e.target.value) || 99)}
+                    placeholder="do" min={0} max={60}
+                    className="w-14 px-2 py-1 rounded border border-gray-200 text-xs font-heading tabular-nums text-center focus:outline-none focus:ring-1 focus:ring-pitch-500/30" />
+                  {[{l:"18-23",a:18,b:23},{l:"24-30",a:24,b:30},{l:"30+",a:30,b:99}].map(({l,a,b}) => (
+                    <button key={l} onClick={() => { setSearchAgeMin(a); setSearchAgeMax(b); }}
+                      className={`px-2 py-1 rounded text-xs font-heading font-bold transition-colors ${searchAgeMin === a && searchAgeMax === b ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
               </div>
             </>
           )}
 
           {/* Results — only when user has set a filter */}
-          {searchLoaded && (searchQuery.trim() !== "" || searchPos !== "all" || searchMinRating > 0) && (
+          {searchLoaded && (searchQuery.trim() !== "" || searchPos !== "all" || searchMinRating > 0 || searchAgeMin > 0 || searchAgeMax < 99) && (
             <>
               <div className="text-xs text-muted font-heading px-1">{filteredSearch.length} z {searchPlayers.length} hráčů</div>
               <div className="space-y-2">
@@ -454,7 +474,7 @@ export default function TransfersPage() {
               {filteredSearch.length === 0 && (
                 <div className="card p-6 text-center text-muted">
                   Žádný hráč neodpovídá.
-                  <button onClick={() => { setSearchQuery(""); setSearchPos("all"); setSearchMinRating(0); }} className="ml-2 text-pitch-500 font-heading font-bold hover:underline">Resetovat</button>
+                  <button onClick={() => { setSearchQuery(""); setSearchPos("all"); setSearchMinRating(0); setSearchAgeMin(0); setSearchAgeMax(99); }} className="ml-2 text-pitch-500 font-heading font-bold hover:underline">Resetovat</button>
                 </div>
               )}
             </>
