@@ -362,51 +362,60 @@ export default function TransfersPage() {
           {searchLoaded && (
             <>
               {/* Search + filters — always visible */}
-              <div className="card p-4 space-y-3">
-                <div className="flex gap-2">
-                  <input
-                    type="text" placeholder="Jméno nebo tým..."
-                    value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                    className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 font-heading text-sm focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
-                  />
-                  <select value={searchSort} onChange={(e) => setSearchSort(e.target.value)}
-                    className="px-2 py-2 rounded-lg border border-gray-200 text-sm font-heading shrink-0">
-                    <option value="rating">Rating ↓</option>
-                    <option value="age">Věk ↑</option>
-                    <option value="wage">Plat ↑</option>
-                    <option value="name">Jméno</option>
-                  </select>
-                </div>
-                <div className="flex gap-1.5 items-center flex-wrap">
-                  {["all", "GK", "DEF", "MID", "FWD"].map((pos) => (
-                    <button key={pos} onClick={() => setSearchPos(pos)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${searchPos === pos ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
-                      {pos === "all" ? "Vše" : pos === "GK" ? "BRA" : pos === "DEF" ? "OBR" : pos === "MID" ? "ZÁL" : "ÚTO"}
-                    </button>
-                  ))}
-                  <span className="w-px h-5 bg-gray-200 mx-1" />
-                  {[0, 30, 50, 60].map((v) => (
-                    <button key={v} onClick={() => setSearchMinRating(v)}
-                      className={`px-2.5 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${searchMinRating === v ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
-                      {v === 0 ? "Rat" : `${v}+`}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex gap-1.5 items-center">
-                  <span className="text-sm text-muted font-heading shrink-0">Věk</span>
-                  <input type="number" value={searchAgeMin || ""} onChange={(e) => setSearchAgeMin(parseInt(e.target.value) || 0)}
-                    placeholder="od" min={0} max={60}
-                    className="w-14 px-2 py-1.5 rounded-lg border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-1 focus:ring-pitch-500/30" />
-                  <span className="text-muted">–</span>
-                  <input type="number" value={searchAgeMax < 99 ? searchAgeMax : ""} onChange={(e) => setSearchAgeMax(parseInt(e.target.value) || 99)}
-                    placeholder="do" min={0} max={60}
-                    className="w-14 px-2 py-1.5 rounded-lg border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-1 focus:ring-pitch-500/30" />
-                  {[{l:"16-23",a:16,b:23},{l:"24-30",a:24,b:30},{l:"30+",a:30,b:99}].map(({l,a,b}) => (
-                    <button key={l} onClick={() => { setSearchAgeMin(a); setSearchAgeMax(b); }}
-                      className={`px-2.5 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${searchAgeMin === a && searchAgeMax === b ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
-                      {l}
-                    </button>
-                  ))}
+              <div className="card p-4 space-y-4">
+                <input
+                  type="text" placeholder="Hledat jméno hráče nebo název týmu..."
+                  value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-heading text-sm focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
+                />
+                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-3 items-center">
+                  <span className="text-sm text-muted font-heading font-bold">Pozice</span>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {["all", "GK", "DEF", "MID", "FWD"].map((pos) => (
+                      <button key={pos} onClick={() => setSearchPos(pos)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${searchPos === pos ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
+                        {pos === "all" ? "Vše" : pos === "GK" ? "BRA" : pos === "DEF" ? "OBR" : pos === "MID" ? "ZÁL" : "ÚTO"}
+                      </button>
+                    ))}
+                  </div>
+
+                  <span className="text-sm text-muted font-heading font-bold">Rating</span>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {[0, 30, 50, 60].map((v) => (
+                      <button key={v} onClick={() => setSearchMinRating(v)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${searchMinRating === v ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
+                        {v === 0 ? "Vše" : `${v}+`}
+                      </button>
+                    ))}
+                  </div>
+
+                  <span className="text-sm text-muted font-heading font-bold">Věk</span>
+                  <div className="flex gap-1.5 items-center flex-wrap">
+                    <input type="number" value={searchAgeMin || ""} onChange={(e) => setSearchAgeMin(parseInt(e.target.value) || 0)}
+                      placeholder="od" min={0} max={60}
+                      className="w-14 px-2 py-1.5 rounded-lg border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-1 focus:ring-pitch-500/30" />
+                    <span className="text-muted">–</span>
+                    <input type="number" value={searchAgeMax < 99 ? searchAgeMax : ""} onChange={(e) => setSearchAgeMax(parseInt(e.target.value) || 99)}
+                      placeholder="do" min={0} max={60}
+                      className="w-14 px-2 py-1.5 rounded-lg border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-1 focus:ring-pitch-500/30" />
+                    {[{l:"16-23",a:16,b:23},{l:"24-30",a:24,b:30},{l:"30+",a:30,b:99}].map(({l,a,b}) => (
+                      <button key={l} onClick={() => { setSearchAgeMin(a); setSearchAgeMax(b); }}
+                        className={`px-2.5 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${searchAgeMin === a && searchAgeMax === b ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+
+                  <span className="text-sm text-muted font-heading font-bold">Řazení</span>
+                  <div>
+                    <select value={searchSort} onChange={(e) => setSearchSort(e.target.value)}
+                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-heading">
+                      <option value="rating">Rating (nejlepší)</option>
+                      <option value="age">Věk (nejmladší)</option>
+                      <option value="wage">Plat (nejnižší)</option>
+                      <option value="name">Jméno (A-Z)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </>
