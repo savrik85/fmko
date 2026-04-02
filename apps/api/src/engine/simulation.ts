@@ -542,6 +542,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           const sub = team.subs.shift()!;
           const idx = team.lineup.indexOf(unlucky);
           if (idx >= 0) {
+            sub.matchPosition = unlucky.matchPosition;
             team.lineup[idx] = sub;
             playerMinutes[unlucky.id] = { ...playerMinutes[unlucky.id], left: minute };
             playerMinutes[sub.id] = { entered: minute, left: null };
@@ -568,6 +569,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           const sub = teamData.team.subs.shift()!;
           const idx = teamData.team.lineup.indexOf(exhausted);
           if (idx >= 0) {
+            sub.matchPosition = exhausted.matchPosition;
             teamData.team.lineup[idx] = sub;
             playerMinutes[exhausted.id] = { ...playerMinutes[exhausted.id], left: minute };
             playerMinutes[sub.id] = { entered: minute, left: null };
@@ -590,6 +592,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
               const subIdx = teamData.team.subs.indexOf(fwdSub);
               teamData.team.subs.splice(subIdx, 1);
               const lineupIdx = teamData.team.lineup.indexOf(defOut);
+              fwdSub.matchPosition = defOut.matchPosition;
               teamData.team.lineup[lineupIdx] = fwdSub;
               playerMinutes[defOut.id] = { ...playerMinutes[defOut.id], left: minute };
               playerMinutes[fwdSub.id] = { entered: minute, left: null };
