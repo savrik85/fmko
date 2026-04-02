@@ -430,15 +430,20 @@ export default function TransfersPage() {
                         </button>
                       </div>
                       {isExpanded && p.skills && (
-                        <div className="grid grid-cols-3 gap-x-4 gap-y-1 mt-2 pt-2 border-t border-gray-100 text-sm">
-                          {[["Rych", "speed"], ["Tech", "technique"], ["Stř", "shooting"],
-                            ["Přih", "passing"], ["Obr", "defense"], ["Výd", "stamina"],
-                            ["Hlav", "heading"], ["Síla", "strength"], ["Bra", "goalkeeping"]].map(([label, key]) => (
-                            <div key={key} className="flex justify-between">
-                              <span className="text-muted text-xs">{label}</span>
-                              <span className={`font-heading font-bold tabular-nums text-xs ${skillColor(p.skills[key] ?? 0)}`}>{p.skills[key] ?? "—"}</span>
-                            </div>
-                          ))}
+                        <div className="mt-2 pt-2 border-t border-gray-100">
+                          {!p.isOwnTeam && (
+                            <p className="text-xs text-amber-600 mb-1.5 italic">⚠ Odhad — přesné hodnoty znáš jen u svých hráčů</p>
+                          )}
+                          <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-sm">
+                            {[["Rych", "speed"], ["Tech", "technique"], ["Stř", "shooting"],
+                              ["Přih", "passing"], ["Obr", "defense"], ["Výd", "stamina"],
+                              ["Hlav", "heading"], ["Síla", "strength"], ["Bra", "goalkeeping"]].map(([label, key]) => (
+                              <div key={key} className="flex justify-between">
+                                <span className="text-muted text-xs">{label}</span>
+                                <span className={`font-heading font-bold tabular-nums text-xs ${skillColor(p.skills[key] ?? 0)}`}>{!p.isOwnTeam ? "~" : ""}{p.skills[key] ?? "—"}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
