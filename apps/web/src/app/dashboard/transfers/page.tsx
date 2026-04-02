@@ -310,7 +310,7 @@ export default function TransfersPage() {
 
   const tabs: [Tab, string, number][] = [
     ["search", "Hledání", 0],
-    ["free_agents", "Volní hráči", freeAgents.length],
+    ["free_agents", "Volní hráči", 0],
     ["market", "Trh", listings.length],
     ["offers", "Nabídky", incoming.length],
     ["squad", "Můj tým", players.filter((p) => (p as any).status === "quit").length],
