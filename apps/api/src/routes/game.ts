@@ -1943,7 +1943,14 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     lineupQuery,
     c.env.DB.prepare("SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.weekly_wage, p.skills, p.life_context, p.personality, p.physical, p.squad_number, p.commute_km, p.suspended_matches, ps.avg_rating, i.days_remaining as injury_days, i.type as injury_type FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.season_id = (SELECT id FROM seasons WHERE status = 'active' LIMIT 1) WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') ORDER BY p.overall_rating DESC").bind(teamId),
   ]);
-  const lineup = (lineupRes.results[0] as { formation: string; tactic: string; players_data: string; is_auto: number } | undefined) ?? null;
+  let lineup = (lineupRes.results[0] as { formation: string; tactic: string; players_data: string; is_auto: number } | undefined) ?? null;
+
+  // If no lineup for this specific match, use the last saved lineup as default
+  if (!lineup) {
+    lineup = await c.env.DB.prepare(
+      "SELECT formation, tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
+    ).bind(teamId).first<{ formation: string; tactic: string; players_data: string; is_auto: number }>().catch(() => null);
+  }
   const players = { results: playersRes.results as Record<string, unknown>[] };
 
   // Generate absences only day_before or match_day (not 2+ days before) — friendlies always match_day
