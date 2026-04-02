@@ -70,17 +70,17 @@ export async function runScheduledMatches(
       const matchType: MatchRunResult["matchType"] = homeIsHuman && awayIsHuman ? "pvp"
         : homeIsHuman ? "pve_home" : awayIsHuman ? "pve_away" : "ai_vs_ai";
 
-      // Read user lineups from DB
-      const homeLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?")
+      // Read user lineups from DB — prefer user-saved (is_auto=0) over auto-generated
+      const homeLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
         .bind(homeTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home lineup", e); return null; });
-      const awayLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ?")
+      const awayLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
         .bind(awayTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load away lineup", e); return null; });
 
-      // Build match players — respect user lineup order if set
+      // Build match players — always pass lineup data for matchPosition mapping
       const homeBuild = await buildMatchPlayers(db, homeTeamId, rng,
-        homeLineupRow && homeLineupRow.is_auto === 0 ? homeLineupRow.players_data : null);
+        homeLineupRow?.players_data ?? null);
       const awayBuild = await buildMatchPlayers(db, awayTeamId, rng,
-        awayLineupRow && awayLineupRow.is_auto === 0 ? awayLineupRow.players_data : null, 100);
+        awayLineupRow?.players_data ?? null, 100);
 
       const homeLineup = homeBuild.players;
       const awayLineup = awayBuild.players;
@@ -248,19 +248,12 @@ export async function runScheduledMatches(
 
       // Build lineup data for storage (name, position, number, rating)
       const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>) => {
-        let gkCount = 0;
-        const mapStarter = (p: typeof homeLineup[0]) => {
-          let pos = p.matchPosition ?? p.position;
-          if (pos === "GK") { gkCount++; if (gkCount > 1) pos = "DEF"; }
-          return { id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`, position: pos, naturalPosition: p.position,
-            rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5) };
-        };
-        const mapSub = (p: typeof homeLineup[0]) => ({
+        const mapPlayer = (p: typeof homeLineup[0]) => ({
           id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`,
           position: p.matchPosition ?? p.position, naturalPosition: p.position,
           rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5),
         });
-        return { starters: lineup.map(mapStarter), subs: subs.map(mapSub) };
+        return { starters: lineup.map(mapPlayer), subs: subs.map(mapPlayer) };
       };
 
       // Collect absence data for both teams
@@ -580,6 +573,7 @@ export async function buildMatchPlayers(
     ordered = allAvailable.slice(0, 16);
   }
 
+
   // Parse user lineup for matchPosition mapping
   const matchPositionMap = new Map<string, string>();
   if (userLineupJson) {
@@ -639,6 +633,56 @@ export async function buildMatchPlayers(
     };
   });
 
+  // ── Assign matchPositions to replacements ──
+  // User's lineup is SACRED — positions set by the user are preserved exactly.
+  // When players are absent/injured, replacements fill the SAME position slots.
+  const starters = players.slice(0, Math.min(11, players.length));
+
+  if (matchPositionMap.size > 0) {
+    // Simple approach:
+    // 1. Build set of present player dbIds
+    const presentDbIds = new Set<string>();
+    for (const p of starters) {
+      const dbId = idMap.get(p.id);
+      if (dbId) presentDbIds.add(dbId);
+    }
+
+    // 2. Find which lineup positions are vacant (player absent)
+    const missingPositions: string[] = [];
+    for (const [playerId, pos] of matchPositionMap) {
+      if (!presentDbIds.has(playerId)) {
+        missingPositions.push(pos);
+      }
+    }
+
+    // Capture for debug
+    const _debugMissing = [...missingPositions];
+
+    // 3. Assign missing positions to starters without matchPosition
+    for (const p of starters) {
+      if (p.matchPosition) continue;
+      if (missingPositions.length > 0) {
+        p.matchPosition = missingPositions.shift()! as "GK" | "DEF" | "MID" | "FWD";
+      } else {
+        p.matchPosition = p.position;
+      }
+    }
+  } else {
+    // No user lineup — auto-assign: 1 GK + rest by natural position
+    let hasGK = false;
+    for (const p of starters) {
+      if (p.matchPosition) { if (p.matchPosition === "GK") hasGK = true; continue; }
+      if (!hasGK && p.position === "GK") { p.matchPosition = "GK"; hasGK = true; }
+      else p.matchPosition = p.position === "GK" ? "DEF" : p.position;
+    }
+    // If still no GK, assign the one with best goalkeeping
+    if (!hasGK && starters.length > 0) {
+      let best = starters.find(p => !p.matchPosition) ?? starters[0];
+      for (const p of starters) { if (p.goalkeeping > best.goalkeeping) best = p; }
+      best.matchPosition = "GK";
+    }
+  }
+
   return { players, idMap, positionMap, absentNames: absentInfo };
 }
 
@@ -649,10 +693,9 @@ export async function buildMatchPlayers(
 export async function copyOrCreateLineup(db: D1Database, teamId: string, calendarId: string): Promise<void> {
   const lastLineup = await db.prepare(
     "SELECT formation, tactic, players_data FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
-  ).bind(teamId).first<{ formation: string; tactic: string; players_data: string }>().catch(() => null);
+  ).bind(teamId).first<{ formation: string; tactic: string; players_data: string }>().catch((e) => { logger.error({ module: "match-runner" }, "copyOrCreateLineup: query failed", e); return null; });
 
   if (lastLineup) {
-    // Validate players still exist and are active
     const picks = JSON.parse(lastLineup.players_data) as Array<{ playerId: string; matchPosition?: string }>;
     const activeIds = await db.prepare(
       "SELECT id FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')"
@@ -661,12 +704,19 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
     const validPicks = picks.filter((p) => activeSet.has(p.playerId));
 
     if (validPicks.length >= 11) {
-      // Copy lineup
-      await db.prepare(
-        "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto) VALUES (?, ?, ?, ?, ?, ?, 0)"
-      ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, JSON.stringify(validPicks.slice(0, 11))).run();
-      return;
+      try {
+        await db.prepare(
+          "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, 0, datetime('now'))"
+        ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, JSON.stringify(validPicks.slice(0, 11))).run();
+        return;
+      } catch (e) {
+        logger.error({ module: "match-runner" }, `copyOrCreateLineup INSERT failed for ${teamId} cal=${calendarId}`, e);
+      }
+    } else {
+      logger.warn({ module: "match-runner" }, `copyOrCreateLineup: only ${validPicks.length}/11 valid for ${teamId}`);
     }
+  } else {
+    logger.warn({ module: "match-runner" }, `copyOrCreateLineup: no lineup found for ${teamId}`);
   }
 
   // Fallback: auto-generate

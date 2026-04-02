@@ -539,6 +539,7 @@ matchesRouter.get("/matches/:id", async (c) => {
   });
 });
 
+
 // GET /api/teams/:teamId/unseen-match — najde nejstarší nepřečtený zápas
 matchesRouter.get("/teams/:teamId/unseen-match", async (c) => {
   const teamId = c.req.param("teamId");
