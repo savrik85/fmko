@@ -228,4 +228,38 @@ Pravidla:
   ).bind(crypto.randomUUID(), leagueId, headline, body, gameWeek).run();
 
   logger.info({ module: "ai-reporter" }, `AI report generated for game week ${gameWeek}: "${headline}"`);
+
+  // Poslat zprávu všem human týmům o novém článku
+  try {
+    const humanTeams = await db.prepare(
+      "SELECT t.id FROM teams t WHERE t.league_id = ? AND t.user_id != 'ai'"
+    ).bind(leagueId).all();
+
+    const smsBody = `📰 Vyšel nový článek ve Zpravodaji: „${headline}"`;
+    for (const t of humanTeams.results) {
+      const tid = t.id as string;
+      const conv = await db.prepare(
+        "SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = 'Redakce Zpravodaje'"
+      ).bind(tid).first<{ id: string }>().catch(() => null);
+
+      let convId = conv?.id;
+      if (!convId) {
+        convId = crypto.randomUUID();
+        await db.prepare(
+          "INSERT INTO conversations (id, team_id, type, title, unread_count, last_message_text, last_message_at) VALUES (?, ?, 'system', 'Redakce Zpravodaje', 1, ?, datetime('now'))"
+        ).bind(convId, tid, smsBody.slice(0, 100)).run().catch((e) => logger.warn({ module: "ai-reporter" }, "create conversation failed", e));
+      }
+
+      if (convId) {
+        await db.prepare(
+          "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Redakce Zpravodaje', ?, datetime('now'))"
+        ).bind(crypto.randomUUID(), convId, smsBody).run().catch((e) => logger.warn({ module: "ai-reporter" }, "send message failed", e));
+        await db.prepare(
+          "UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?"
+        ).bind(smsBody.slice(0, 100), convId).run().catch((e) => logger.warn({ module: "ai-reporter" }, "update conversation failed", e));
+      }
+    }
+  } catch (e) {
+    logger.warn({ module: "ai-reporter" }, "Failed to send article notifications", e);
+  }
 }
