@@ -2385,6 +2385,10 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
   const teamId = c.req.param("teamId");
   const listingId = c.req.param("listingId");
   const body = await c.req.json<{ amount: number }>();
+
+  const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
+  if (!team || team.budget < body.amount) return c.json({ error: `Nedostatek peněz. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
+
   const id = crypto.randomUUID();
   await c.env.DB.prepare("INSERT INTO transfer_bids (id, listing_id, team_id, amount) VALUES (?, ?, ?, ?)")
     .bind(id, listingId, teamId, body.amount).run();
@@ -2452,6 +2456,12 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   if (player.team_id === teamId) return c.json({ error: "Nemůžeš nabídnout na vlastního hráče" }, 400);
   if (player.user_id === "ai") return c.json({ error: "Nabídky lze posílat jen lidským týmům" }, 400);
   if (player.loan_from_team_id) return c.json({ error: "Hráč je již na hostování" }, 400);
+
+  // Budget check — nelze nabídnout víc než máme
+  if (body.amount > 0) {
+    const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
+    if (!team || team.budget < body.amount) return c.json({ error: `Nedostatek peněz. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
+  }
 
   const offerType = body.offerType ?? "transfer";
   const loanDuration = offerType === "loan" ? (body.loanDuration ?? 30) : null;
