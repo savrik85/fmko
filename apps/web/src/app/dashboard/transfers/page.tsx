@@ -6,8 +6,9 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, type Player } from "@/lib/api";
 import { Spinner, SectionLabel, PositionBadge, useConfirm } from "@/components/ui";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
+import { FaceAvatar } from "@/components/players/face-avatar";
 
-type Tab = "free_agents" | "market" | "offers" | "squad";
+type Tab = "search" | "free_agents" | "market" | "offers" | "squad";
 
 function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
 
@@ -259,9 +260,52 @@ export default function TransfersPage() {
     });
   };
 
+  // Search all players
+  interface SearchPlayer {
+    id: string; firstName: string; lastName: string; nickname?: string;
+    age: number; position: string; overallRating: number; weeklyWage: number;
+    squadNumber?: number; teamId: string; teamName: string; isOwnTeam: boolean;
+    skills: Record<string, number>; physical: Record<string, unknown>; avatar: Record<string, unknown>;
+  }
+  const [searchPlayers, setSearchPlayers] = useState<SearchPlayer[]>([]);
+  const [searchLoaded, setSearchLoaded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchPos, setSearchPos] = useState<string>("all");
+  const [searchSort, setSearchSort] = useState<string>("rating");
+  const [searchMinRating, setSearchMinRating] = useState(0);
+  const [searchExpandedSkills, setSearchExpandedSkills] = useState<Set<string>>(new Set());
+
+  const loadSearch = async () => {
+    if (!teamId || searchLoaded) return;
+    const data = await apiFetch<{ players: SearchPlayer[] }>(`/api/teams/${teamId}/search-players`).catch((e) => { console.error("Failed to search players:", e); return { players: [] }; });
+    setSearchPlayers(data.players);
+    setSearchLoaded(true);
+  };
+
+  const filteredSearch = useMemo(() => {
+    let list = searchPlayers;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(p => `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) || p.teamName.toLowerCase().includes(q));
+    }
+    if (searchPos !== "all") list = list.filter(p => p.position === searchPos);
+    if (searchMinRating > 0) list = list.filter(p => p.overallRating >= searchMinRating);
+    list = [...list].sort((a, b) => {
+      switch (searchSort) {
+        case "rating": return b.overallRating - a.overallRating;
+        case "age": return a.age - b.age;
+        case "wage": return a.weeklyWage - b.weeklyWage;
+        case "name": return `${a.lastName}`.localeCompare(`${b.lastName}`, "cs");
+        default: return 0;
+      }
+    });
+    return list;
+  }, [searchPlayers, searchQuery, searchPos, searchSort, searchMinRating]);
+
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
   const tabs: [Tab, string, number][] = [
+    ["search", "Hledání", 0],
     ["free_agents", "Volní hráči", freeAgents.length],
     ["market", "Trh", listings.length],
     ["offers", "Nabídky", incoming.length],
@@ -306,6 +350,116 @@ export default function TransfersPage() {
           </button>
         ))}
       </div>
+
+      {/* ═══ TAB: Hledání ═══ */}
+      {tab === "search" && (
+        <div className="space-y-3">
+          {!searchLoaded && (
+            <div className="card p-6 text-center">
+              <button onClick={loadSearch} className="py-2 px-6 rounded-lg font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                Načíst hráče z celé ligy
+              </button>
+              <p className="text-sm text-muted mt-2">Zobrazí všechny hráče ze všech týmů v soutěži</p>
+            </div>
+          )}
+          {searchLoaded && (
+            <>
+              {/* Search + filters */}
+              <div className="card p-3 space-y-3">
+                <input
+                  type="text" placeholder="Hledat jméno nebo tým..."
+                  value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 font-heading text-sm focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
+                />
+                <div className="flex flex-wrap gap-2 items-center">
+                  {["all", "GK", "DEF", "MID", "FWD"].map((pos) => (
+                    <button key={pos} onClick={() => setSearchPos(pos)}
+                      className={`px-3 py-1 rounded-lg text-xs font-heading font-bold transition-colors ${searchPos === pos ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
+                      {pos === "all" ? "Vše" : pos === "GK" ? "BRA" : pos === "DEF" ? "OBR" : pos === "MID" ? "ZÁL" : "ÚTO"}
+                    </button>
+                  ))}
+                  <span className="text-muted text-xs ml-1">Rating:</span>
+                  {[0, 30, 50, 60].map((v) => (
+                    <button key={v} onClick={() => setSearchMinRating(v)}
+                      className={`px-2 py-1 rounded text-xs font-heading font-bold transition-colors ${searchMinRating === v ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
+                      {v === 0 ? "Vše" : `${v}+`}
+                    </button>
+                  ))}
+                  <select value={searchSort} onChange={(e) => setSearchSort(e.target.value)}
+                    className="ml-auto px-2 py-1 rounded-lg border border-gray-200 text-xs font-heading">
+                    <option value="rating">Rating</option>
+                    <option value="age">Věk</option>
+                    <option value="wage">Plat</option>
+                    <option value="name">Jméno</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="text-xs text-muted font-heading px-1">{filteredSearch.length} z {searchPlayers.length} hráčů</div>
+
+              {/* Results */}
+              <div className="space-y-2">
+                {filteredSearch.map((p) => {
+                  const isExpanded = searchExpandedSkills.has(p.id);
+                  return (
+                    <div key={p.id} className={`card p-3 ${p.isOwnTeam ? "ring-1 ring-pitch-500/20" : ""}`}>
+                      <div className="flex items-center gap-3">
+                        <div className="shrink-0 w-9 h-9 rounded-full bg-gray-100 overflow-hidden">
+                          {p.avatar && Object.keys(p.avatar).length > 0
+                            ? <FaceAvatar faceConfig={p.avatar} size={36} />
+                            : <div className="w-full h-full flex items-center justify-center font-heading font-bold text-xs text-muted">{p.firstName[0]}{p.lastName[0]}</div>}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors truncate">
+                              {p.firstName} {p.lastName}
+                            </Link>
+                            <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
+                            <span className="text-sm font-heading font-bold tabular-nums">{p.overallRating}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-x-3 text-xs text-muted">
+                            <span>{p.age} let</span>
+                            <Link href={`/dashboard/team/${p.teamId}`} className="hover:text-pitch-500 transition-colors">
+                              {p.teamName}{p.isOwnTeam ? " (tvůj)" : ""}
+                            </Link>
+                            <span>{formatCZK(p.weeklyWage)}/týd</span>
+                          </div>
+                        </div>
+                        <button onClick={() => {
+                          const next = new Set(searchExpandedSkills);
+                          if (next.has(p.id)) next.delete(p.id); else next.add(p.id);
+                          setSearchExpandedSkills(next);
+                        }} className="shrink-0 text-xs text-muted hover:text-pitch-500 transition-colors font-heading">
+                          {isExpanded ? "▾" : "▸"}
+                        </button>
+                      </div>
+                      {isExpanded && p.skills && (
+                        <div className="grid grid-cols-3 gap-x-4 gap-y-1 mt-2 pt-2 border-t border-gray-100 text-sm">
+                          {[["Rych", "speed"], ["Tech", "technique"], ["Stř", "shooting"],
+                            ["Přih", "passing"], ["Obr", "defense"], ["Výd", "stamina"],
+                            ["Hlav", "heading"], ["Síla", "strength"], ["Bra", "goalkeeping"]].map(([label, key]) => (
+                            <div key={key} className="flex justify-between">
+                              <span className="text-muted text-xs">{label}</span>
+                              <span className={`font-heading font-bold tabular-nums text-xs ${skillColor(p.skills[key] ?? 0)}`}>{p.skills[key] ?? "—"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {filteredSearch.length === 0 && (
+                <div className="card p-6 text-center text-muted">
+                  Žádný hráč neodpovídá.
+                  <button onClick={() => { setSearchQuery(""); setSearchPos("all"); setSearchMinRating(0); }} className="ml-2 text-pitch-500 font-heading font-bold hover:underline">Resetovat</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* ═══ TAB: Volní hráči ═══ */}
       {tab === "free_agents" && (
@@ -532,8 +686,10 @@ export default function TransfersPage() {
                 return (
                   <div key={fa.id} className="card p-4">
                     <div className="flex items-start gap-3">
-                      <div className="shrink-0 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-heading font-bold text-sm text-muted">
-                        {fa.firstName[0]}{fa.lastName[0]}
+                      <div className="shrink-0 w-10 h-10 rounded-full bg-gray-100 overflow-hidden">
+                        {fa.avatar && Object.keys(fa.avatar).length > 0
+                          ? <FaceAvatar faceConfig={fa.avatar} size={40} />
+                          : <div className="w-full h-full flex items-center justify-center font-heading font-bold text-sm text-muted">{fa.firstName[0]}{fa.lastName[0]}</div>}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">

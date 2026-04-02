@@ -2146,6 +2146,40 @@ gameRouter.get("/teams/:teamId/free-agents", async (c) => {
   }
 });
 
+// Search all players across all teams in the league
+gameRouter.get("/teams/:teamId/search-players", async (c) => {
+  try {
+    const teamId = c.req.param("teamId");
+    const team = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?")
+      .bind(teamId).first<{ league_id: string | null }>();
+    if (!team?.league_id) return c.json({ players: [] });
+
+    const rows = await c.env.DB.prepare(
+      `SELECT p.id, p.first_name, p.last_name, p.nickname, p.age, p.position, p.overall_rating, p.weekly_wage,
+       p.skills, p.physical, p.personality, p.life_context, p.avatar, p.squad_number,
+       t.id as team_id, t.name as team_name
+       FROM players p JOIN teams t ON p.team_id = t.id
+       WHERE t.league_id = ? AND (p.status IS NULL OR p.status = 'active')
+       ORDER BY p.overall_rating DESC LIMIT 200`
+    ).bind(team.league_id).all();
+
+    const players = rows.results.map((r) => ({
+      id: r.id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname,
+      age: r.age, position: r.position, overallRating: r.overall_rating, weeklyWage: r.weekly_wage,
+      squadNumber: r.squad_number,
+      teamId: r.team_id, teamName: r.team_name,
+      isOwnTeam: r.team_id === teamId,
+      skills: (() => { try { return JSON.parse(r.skills as string); } catch (e) { logger.warn({ module: "game" }, "parse player skills", e); return {}; } })(),
+      physical: (() => { try { return JSON.parse(r.physical as string); } catch (e) { logger.warn({ module: "game" }, "parse player physical", e); return {}; } })(),
+      avatar: (() => { try { return JSON.parse(r.avatar as string); } catch (e) { logger.warn({ module: "game" }, "parse player avatar", e); return {}; } })(),
+    }));
+    return c.json({ players });
+  } catch (e) {
+    logger.error({ module: "game" }, "search players failed", e);
+    return c.json({ error: String(e), players: [] }, 500);
+  }
+});
+
 // Sign free agent
 gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   const teamId = c.req.param("teamId");
