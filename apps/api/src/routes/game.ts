@@ -2163,16 +2163,29 @@ gameRouter.get("/teams/:teamId/search-players", async (c) => {
        ORDER BY p.overall_rating DESC LIMIT 200`
     ).bind(team.league_id).all();
 
-    const players = rows.results.map((r) => ({
-      id: r.id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname,
-      age: r.age, position: r.position, overallRating: r.overall_rating, weeklyWage: r.weekly_wage,
-      squadNumber: r.squad_number,
-      teamId: r.team_id, teamName: r.team_name,
-      isOwnTeam: r.team_id === teamId,
-      skills: (() => { try { return JSON.parse(r.skills as string); } catch (e) { logger.warn({ module: "game" }, "parse player skills", e); return {}; } })(),
-      physical: (() => { try { return JSON.parse(r.physical as string); } catch (e) { logger.warn({ module: "game" }, "parse player physical", e); return {}; } })(),
-      avatar: (() => { try { return JSON.parse(r.avatar as string); } catch (e) { logger.warn({ module: "game" }, "parse player avatar", e); return {}; } })(),
-    }));
+    const blur = (v: number) => Math.round(v / 5) * 5;
+    const players = rows.results.map((r) => {
+      const isOwn = r.team_id === teamId;
+      let skills: Record<string, unknown> = {};
+      let physical: Record<string, unknown> = {};
+      try { skills = JSON.parse(r.skills as string); } catch (e) { logger.warn({ module: "game" }, "parse player skills", e); }
+      try { physical = JSON.parse(r.physical as string); } catch (e) { logger.warn({ module: "game" }, "parse player physical", e); }
+
+      // Foreign players: blur attributes (round to nearest 5)
+      if (!isOwn) {
+        for (const k of Object.keys(skills)) { if (typeof skills[k] === "number") skills[k] = blur(skills[k] as number); }
+        for (const k of Object.keys(physical)) { if (typeof physical[k] === "number") physical[k] = blur(physical[k] as number); }
+      }
+
+      return {
+        id: r.id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname,
+        age: r.age, position: r.position, overallRating: r.overall_rating, weeklyWage: r.weekly_wage,
+        squadNumber: r.squad_number,
+        teamId: r.team_id, teamName: r.team_name, isOwnTeam: isOwn,
+        skills, physical,
+        avatar: (() => { try { return JSON.parse(r.avatar as string); } catch (e) { logger.warn({ module: "game" }, "parse player avatar", e); return {}; } })(),
+      };
+    });
     return c.json({ players });
   } catch (e) {
     logger.error({ module: "game" }, "search players failed", e);
