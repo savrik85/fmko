@@ -63,6 +63,8 @@ export default function LigaPageWrapper() {
   return <Suspense><LigaPage /></Suspense>;
 }
 
+interface LeagueOption { id: string; name: string; district: string; team_count: number }
+
 function LigaPage() {
   const ctx = useTeam();
   const teamId = ctx.teamId;
@@ -79,6 +81,19 @@ function LigaPage() {
   const [loadingStandings, setLoadingStandings] = useState(true);
   const [loadedTabs, setLoadedTabs] = useState<Set<Tab>>(new Set());
 
+  // League picker
+  const [allLeagues, setAllLeagues] = useState<LeagueOption[]>([]);
+  const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
+  const isOtherLeague = selectedLeagueId !== null;
+
+  // Load available leagues
+  useEffect(() => {
+    apiFetch<{ leagues: LeagueOption[] }>("/api/leagues")
+      .then((data) => setAllLeagues(data.leagues))
+      .catch(() => {});
+  }, []);
+
+  // Load own league standings on mount
   useEffect(() => {
     if (!teamId) return;
     apiFetch<{ leagueName: string; season?: number; standings: Standing[] }>(`/api/teams/${teamId}/standings`)
@@ -92,8 +107,27 @@ function LigaPage() {
       .catch(() => setLoadingStandings(false));
   }, [teamId]);
 
+  // Load other league data when selected
   useEffect(() => {
-    if (!teamId) return;
+    if (!selectedLeagueId) return;
+    setLoadingStandings(true);
+    setLoadedTabs(new Set());
+    setRounds([]);
+    setStatsData(null);
+    apiFetch<{ leagueName: string; season?: number; standings: Standing[] }>(`/api/leagues/${selectedLeagueId}/standings`)
+      .then((data) => {
+        setLeagueName(data.leagueName);
+        setSeasonNum(data.season ?? null);
+        setStandings(data.standings);
+        setLoadingStandings(false);
+        setLoadedTabs((s) => new Set(s).add("tabulka"));
+      })
+      .catch(() => setLoadingStandings(false));
+  }, [selectedLeagueId]);
+
+  // Load own league tabs (schedule, stats) — only when viewing own league
+  useEffect(() => {
+    if (!teamId || isOtherLeague) return;
     if ((tab === "rozpis" || tab === "vysledky") && !loadedTabs.has("rozpis")) {
       apiFetch<{ rounds: LeagueRound[] }>(`/api/teams/${teamId}/league-schedule`)
         .then((data) => {
@@ -108,22 +142,64 @@ function LigaPage() {
           setLoadedTabs((s) => new Set(s).add("statistiky"));
         }).catch(() => {});
     }
-  }, [tab, teamId, loadedTabs]);
+  }, [tab, teamId, loadedTabs, isOtherLeague]);
 
   const changeTab = (t: Tab) => { setTab(t); router.replace(`/dashboard/liga?tab=${t}`, { scroll: false }); };
+
+  const handleLeagueChange = (leagueId: string) => {
+    if (leagueId === "own") {
+      setSelectedLeagueId(null);
+      // Reload own data
+      if (teamId) {
+        setLoadingStandings(true);
+        setLoadedTabs(new Set());
+        apiFetch<{ leagueName: string; season?: number; standings: Standing[] }>(`/api/teams/${teamId}/standings`)
+          .then((data) => {
+            setLeagueName(data.leagueName);
+            setSeasonNum(data.season ?? null);
+            setStandings(data.standings);
+            setLoadingStandings(false);
+            setLoadedTabs((s) => new Set(s).add("tabulka"));
+          })
+          .catch(() => setLoadingStandings(false));
+      }
+    } else {
+      setSelectedLeagueId(leagueId);
+    }
+    setTab("tabulka");
+  };
 
   if (loadingStandings) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
   const displayName = seasonNum ? `${leagueName} — Sezóna ${seasonNum}` : (leagueName || "Liga");
+  // Other leagues = leagues that are NOT my own
+  const otherLeagues = allLeagues.filter((l) => l.name !== leagueName || isOtherLeague);
 
   return (
     <>
     <PageHeader name={displayName} detail={ctx.district ? `Okres ${ctx.district}` : undefined} badge={null}>{null}</PageHeader>
     <div className="page-container space-y-5">
 
-      {/* Tabs */}
+      {/* League picker — only show if there are other leagues */}
+      {allLeagues.length > 1 && (
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted font-medium">Zobrazit ligu:</span>
+          <select
+            value={selectedLeagueId ?? "own"}
+            onChange={(e) => handleLeagueChange(e.target.value)}
+            className="text-sm bg-white border border-border rounded-lg px-3 py-2 font-medium"
+          >
+            <option value="own">Moje liga</option>
+            {allLeagues.map((l) => (
+              <option key={l.id} value={l.id}>{l.name} ({l.team_count} týmů)</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Tabs — rozpis/výsledky/statistiky only for own league */}
       <div className="flex gap-1 bg-surface rounded-xl p-1">
-        {(["tabulka", "rozpis", "vysledky", "statistiky"] as Tab[]).map((key) => (
+        {(isOtherLeague ? ["tabulka"] as Tab[] : ["tabulka", "rozpis", "vysledky", "statistiky"] as Tab[]).map((key) => (
           <button key={key} onClick={() => changeTab(key)}
             className={`flex-1 py-2.5 text-sm font-heading font-bold rounded-lg transition-colors ${
               tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
@@ -135,9 +211,9 @@ function LigaPage() {
 
       {/* Tab content */}
       {tab === "tabulka" && <StandingsTab standings={standings} teamId={teamId!} />}
-      {tab === "rozpis" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("rozpis")} teamId={teamId!} showAll />}
-      {tab === "vysledky" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("vysledky")} teamId={teamId!} showAll={false} />}
-      {tab === "statistiky" && <StatsTab data={statsData} loaded={loadedTabs.has("statistiky")} />}
+      {!isOtherLeague && tab === "rozpis" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("rozpis")} teamId={teamId!} showAll />}
+      {!isOtherLeague && tab === "vysledky" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("vysledky")} teamId={teamId!} showAll={false} />}
+      {!isOtherLeague && tab === "statistiky" && <StatsTab data={statsData} loaded={loadedTabs.has("statistiky")} />}
     </div>
     </>
   );

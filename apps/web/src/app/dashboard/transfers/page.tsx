@@ -277,9 +277,21 @@ export default function TransfersPage() {
   const [searchAgeMax, setSearchAgeMax] = useState(99);
   const [searchExpandedSkills, setSearchExpandedSkills] = useState<Set<string>>(new Set());
 
-  const loadSearch = async () => {
-    if (!teamId || searchLoaded) return;
-    const data = await apiFetch<{ players: SearchPlayer[] }>(`/api/teams/${teamId}/search-players`).catch((e) => { console.error("Failed to search players:", e); return { players: [] }; });
+  // League picker for search
+  const [searchLeagues, setSearchLeagues] = useState<Array<{ id: string; name: string; team_count: number }>>([]);
+  const [searchLeagueId, setSearchLeagueId] = useState<string>("");
+
+  useEffect(() => {
+    apiFetch<{ leagues: Array<{ id: string; name: string; team_count: number }> }>("/api/leagues")
+      .then((data) => setSearchLeagues(data.leagues))
+      .catch(() => {});
+  }, []);
+
+  const loadSearch = async (leagueOverride?: string) => {
+    if (!teamId) return;
+    const lid = leagueOverride ?? searchLeagueId;
+    const url = lid ? `/api/teams/${teamId}/search-players?leagueId=${lid}` : `/api/teams/${teamId}/search-players`;
+    const data = await apiFetch<{ players: SearchPlayer[] }>(url).catch((e) => { console.error("Failed to search players:", e); return { players: [] }; });
     setSearchPlayers(data.players);
     setSearchLoaded(true);
   };
@@ -363,6 +375,22 @@ export default function TransfersPage() {
             <>
               {/* Search + filters — always visible */}
               <div className="card p-4 space-y-4">
+                {/* League picker for cross-league search */}
+                {searchLeagues.length > 1 && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-muted font-heading font-bold">Liga</span>
+                    <select
+                      value={searchLeagueId}
+                      onChange={(e) => { setSearchLeagueId(e.target.value); setSearchLoaded(false); setTimeout(() => loadSearch(e.target.value), 50); }}
+                      className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-2 font-heading font-medium flex-1"
+                    >
+                      <option value="">Moje liga</option>
+                      {searchLeagues.map((l) => (
+                        <option key={l.id} value={l.id}>{l.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <input
                   type="text" placeholder="Hledat jméno hráče nebo název týmu..."
                   value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}

@@ -2286,9 +2286,12 @@ gameRouter.get("/teams/:teamId/free-agents", async (c) => {
 gameRouter.get("/teams/:teamId/search-players", async (c) => {
   try {
     const teamId = c.req.param("teamId");
+    const searchLeagueId = c.req.query("leagueId");
     const team = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?")
       .bind(teamId).first<{ league_id: string | null }>();
     if (!team?.league_id) return c.json({ players: [] });
+
+    const targetLeague = searchLeagueId ?? team.league_id;
 
     const rows = await c.env.DB.prepare(
       `SELECT p.id, p.first_name, p.last_name, p.nickname, p.age, p.position, p.overall_rating, p.weekly_wage,
@@ -2297,7 +2300,7 @@ gameRouter.get("/teams/:teamId/search-players", async (c) => {
        FROM players p JOIN teams t ON p.team_id = t.id
        WHERE t.league_id = ? AND t.id != ? AND t.user_id != 'ai' AND (p.status IS NULL OR p.status = 'active')
        ORDER BY p.overall_rating DESC LIMIT 200`
-    ).bind(team.league_id, teamId).all();
+    ).bind(targetLeague, teamId).all();
 
     const blur = (v: number) => Math.round(v / 5) * 5;
     const players = rows.results.map((r) => {
