@@ -74,9 +74,10 @@ export default {
       }
     }
 
-    // ── MATCH TICK: 18:00/18:05 CEST — simuluje zápasy, 1 liga za invokaci ──
-    // Více cron triggerů (0 16, 5 16) zpracovává po jedné lize
-    if (cron === "0 16 * * *" || cron === "5 16 * * *" || !cron) {
+    // ── MATCH TICK: 18:00-18:15 CEST — simuluje zápasy, 1 liga za invokaci ──
+    // Každý cron trigger zpracuje 1 nezpracovanou ligu (KV tracking)
+    const isMatchTick = cron?.startsWith("0 16") || cron?.startsWith("5 16") || cron?.startsWith("10 16") || cron?.startsWith("15 16") || !cron;
+    if (isMatchTick) {
       try {
         log("info", "match tick starting");
         const leagues = await env.DB.prepare(

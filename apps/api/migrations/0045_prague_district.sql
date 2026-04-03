@@ -1,13 +1,14 @@
 -- Prague district: městské části, příjmení, sponzoři
 -- Přebor Prahy — nejnižší pražská amatérská soutěž
 
--- Cleanup: smazat starou Prahu (celé město) a její data
-DELETE FROM players WHERE team_id IN (SELECT id FROM teams WHERE village_id = 'c7495e0e-4062-52c3-8df0-28674d14e381');
-DELETE FROM matches WHERE league_id IN (SELECT id FROM leagues WHERE district = 'Praha');
-DELETE FROM season_calendar WHERE league_id IN (SELECT id FROM leagues WHERE district = 'Praha');
-DELETE FROM teams WHERE village_id = 'c7495e0e-4062-52c3-8df0-28674d14e381';
-DELETE FROM leagues WHERE district = 'Praha';
-DELETE FROM villages WHERE id = 'c7495e0e-4062-52c3-8df0-28674d14e381';
+-- POZOR: Stará Praha (c7495e0e-...) se NEMAŽE automaticky!
+-- Na produkci existuje tým Sk Dolíček s FK na starou village.
+-- Postup nasazení na prod:
+--   1. UPDATE teams SET village_id = 'praha-vrsovice' WHERE village_id = 'c7495e0e-4062-52c3-8df0-28674d14e381';
+--   2. DELETE FROM villages WHERE id = 'c7495e0e-4062-52c3-8df0-28674d14e381';
+--   3. UPDATE leagues SET name = 'Přebor Prahy' WHERE district = 'Praha';
+--   4. POST /api/game/bootstrap-league {"leagueId":"..."}
+--   5. Odsimulovat kola aby se synchronizovala s Prachaticemi
 
 -- ═══ 1. Pražské městské části (villages) ═══
 -- Difficulty labels: town = "Dobrý start", village = "Výzva"
