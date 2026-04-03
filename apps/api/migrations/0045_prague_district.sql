@@ -10,19 +10,22 @@ DELETE FROM leagues WHERE district = 'Praha';
 DELETE FROM villages WHERE id = 'c7495e0e-4062-52c3-8df0-28674d14e381';
 
 -- ═══ 1. Pražské městské části (villages) ═══
--- Všechny 'village' = "Výzva" v onboardingu (avg 20-40, cap 35-55)
--- Žádná hardcore — nejnižší amatérská soutěž Prahy, srovnatelné s Prachatickými obcemi
+-- Difficulty labels: town = "Dobrý start", village = "Výzva"
+-- Žádná hardcore/hamlet. Max je town (avg 25-45) = srovnatelné s Vimperkem/Volary v Prachaticích
+-- Větší části (30k+) = town, menší = village
 
 INSERT OR IGNORE INTO villages (id, name, district, region, population, size, lat, lng) VALUES
-  ('praha-zizkov',      'Žižkov',       'Praha', 'Hlavní město Praha', 75000,  'village', 50.0875, 14.4508),
-  ('praha-vinohrady',   'Vinohrady',    'Praha', 'Hlavní město Praha', 55000,  'village', 50.0753, 14.4439),
-  ('praha-liben',       'Libeň',        'Praha', 'Hlavní město Praha', 40000,  'village', 50.1083, 14.4750),
-  ('praha-smichov',     'Smíchov',      'Praha', 'Hlavní město Praha', 40000,  'village', 50.0700, 14.4000),
-  ('praha-vrsovice',    'Vršovice',     'Praha', 'Hlavní město Praha', 35000,  'village', 50.0664, 14.4483),
-  ('praha-hostivar',    'Hostivař',     'Praha', 'Hlavní město Praha', 30000,  'village', 50.0439, 14.5125),
-  ('praha-dejvice',     'Dejvice',      'Praha', 'Hlavní město Praha', 30000,  'village', 50.1003, 14.3936),
-  ('praha-nusle',       'Nusle',        'Praha', 'Hlavní město Praha', 30000,  'village', 50.0600, 14.4350),
-  ('praha-chodov',      'Chodov',       'Praha', 'Hlavní město Praha', 30000,  'village', 50.0314, 14.4897),
+  -- town (30k+) = "Dobrý start"
+  ('praha-zizkov',      'Žižkov',       'Praha', 'Hlavní město Praha', 75000,  'town', 50.0875, 14.4508),
+  ('praha-vinohrady',   'Vinohrady',    'Praha', 'Hlavní město Praha', 55000,  'town', 50.0753, 14.4439),
+  ('praha-liben',       'Libeň',        'Praha', 'Hlavní město Praha', 40000,  'town', 50.1083, 14.4750),
+  ('praha-smichov',     'Smíchov',      'Praha', 'Hlavní město Praha', 40000,  'town', 50.0700, 14.4000),
+  ('praha-vrsovice',    'Vršovice',     'Praha', 'Hlavní město Praha', 35000,  'town', 50.0664, 14.4483),
+  ('praha-hostivar',    'Hostivař',     'Praha', 'Hlavní město Praha', 30000,  'town', 50.0439, 14.5125),
+  ('praha-dejvice',     'Dejvice',      'Praha', 'Hlavní město Praha', 30000,  'town', 50.1003, 14.3936),
+  ('praha-nusle',       'Nusle',        'Praha', 'Hlavní město Praha', 30000,  'town', 50.0600, 14.4350),
+  ('praha-chodov',      'Chodov',       'Praha', 'Hlavní město Praha', 30000,  'town', 50.0314, 14.4897),
+  -- village (<30k) = "Výzva"
   ('praha-kobylisy',    'Kobylisy',     'Praha', 'Hlavní město Praha', 25000,  'village', 50.1250, 14.4500),
   ('praha-letna',       'Letná',        'Praha', 'Hlavní město Praha', 25000,  'village', 50.0986, 14.4264),
   ('praha-prosek',      'Prosek',       'Praha', 'Hlavní město Praha', 20000,  'village', 50.1167, 14.5000),
