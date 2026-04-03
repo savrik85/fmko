@@ -55,7 +55,9 @@ function formatDate(iso: string | null): string {
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
 
-type Tab = "tabulka" | "rozpis" | "vysledky" | "statistiky";
+type Tab = "tabulka" | "rozpis" | "vysledky" | "statistiky" | "zpravodaj";
+
+interface NewsArticle { id: string; type: string; headline: string; body: string; icon: string; date: string; gameWeek?: number | null }
 
 // ═══ Main Page ═══
 
@@ -78,6 +80,7 @@ function LigaPage() {
   const [standings, setStandings] = useState<Standing[]>([]);
   const [rounds, setRounds] = useState<LeagueRound[]>([]);
   const [statsData, setStatsData] = useState<StatsData | null>(null);
+  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([]);
   const [loadingStandings, setLoadingStandings] = useState(true);
   const [loadedTabs, setLoadedTabs] = useState<Set<Tab>>(new Set());
 
@@ -144,6 +147,18 @@ function LigaPage() {
     }
   }, [tab, teamId, loadedTabs, isOtherLeague]);
 
+  // Load zpravodaj for other league
+  useEffect(() => {
+    if (!isOtherLeague || !selectedLeagueId) return;
+    if (tab === "zpravodaj" && !loadedTabs.has("zpravodaj")) {
+      apiFetch<{ articles: NewsArticle[] }>(`/api/leagues/${selectedLeagueId}/news`)
+        .then((data) => {
+          setNewsArticles(data.articles);
+          setLoadedTabs((s) => new Set(s).add("zpravodaj"));
+        }).catch(() => {});
+    }
+  }, [tab, selectedLeagueId, loadedTabs, isOtherLeague]);
+
   const changeTab = (t: Tab) => { setTab(t); router.replace(`/dashboard/liga?tab=${t}`, { scroll: false }); };
 
   const handleLeagueChange = (leagueId: string) => {
@@ -197,14 +212,14 @@ function LigaPage() {
         </div>
       )}
 
-      {/* Tabs — rozpis/výsledky/statistiky only for own league */}
+      {/* Tabs — cizí liga: tabulka + zpravodaj, vlastní: plné menu */}
       <div className="flex gap-1 bg-surface rounded-xl p-1">
-        {(isOtherLeague ? ["tabulka"] as Tab[] : ["tabulka", "rozpis", "vysledky", "statistiky"] as Tab[]).map((key) => (
+        {(isOtherLeague ? ["tabulka", "zpravodaj"] as Tab[] : ["tabulka", "rozpis", "vysledky", "statistiky"] as Tab[]).map((key) => (
           <button key={key} onClick={() => changeTab(key)}
             className={`flex-1 py-2.5 text-sm font-heading font-bold rounded-lg transition-colors ${
               tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
             }`}>
-            {{ tabulka: "Tabulka", rozpis: "Rozpis", vysledky: "Výsledky", statistiky: "Statistiky" }[key]}
+            {{ tabulka: "Tabulka", rozpis: "Rozpis", vysledky: "Výsledky", statistiky: "Statistiky", zpravodaj: "Zpravodaj" }[key]}
           </button>
         ))}
       </div>
@@ -214,6 +229,25 @@ function LigaPage() {
       {!isOtherLeague && tab === "rozpis" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("rozpis")} teamId={teamId!} showAll />}
       {!isOtherLeague && tab === "vysledky" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("vysledky")} teamId={teamId!} showAll={false} />}
       {!isOtherLeague && tab === "statistiky" && <StatsTab data={statsData} loaded={loadedTabs.has("statistiky")} />}
+      {isOtherLeague && tab === "zpravodaj" && (
+        !loadedTabs.has("zpravodaj") ? <div className="flex justify-center py-8"><Spinner /></div> : (
+          <div className="space-y-3">
+            {newsArticles.length === 0 && <p className="text-muted text-sm text-center py-8">Zatím žádné zprávy</p>}
+            {newsArticles.map((a) => (
+              <div key={a.id} className="card p-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">{a.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-heading font-bold text-base text-ink">{a.headline}</h3>
+                    <p className="text-sm text-muted mt-1 whitespace-pre-wrap">{a.body}</p>
+                    <p className="text-xs text-muted/60 mt-2">{a.date ? formatDate(a.date) : ""}{a.gameWeek ? ` — ${a.gameWeek}. kolo` : ""}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
     </div>
     </>
   );

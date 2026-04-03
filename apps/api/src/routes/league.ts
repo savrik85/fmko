@@ -263,4 +263,27 @@ leagueRouter.get("/leagues/:leagueId/results", async (c) => {
   return c.json({ results: results.results });
 });
 
+// GET /api/leagues/:leagueId/news — zpravodaj cizí ligy
+leagueRouter.get("/leagues/:leagueId/news", async (c) => {
+  const leagueId = c.req.param("leagueId");
+
+  const newsRows = await c.env.DB.prepare(
+    "SELECT id, type, headline, body, game_week, created_at FROM news WHERE league_id = ? ORDER BY created_at DESC LIMIT 30"
+  ).bind(leagueId).all().catch((e) => { logger.error({ module: "league" }, "fetch league news", e); return { results: [] }; });
+
+  const iconMap: Record<string, string> = {
+    round_results: "\u26BD", ai_report: "\u270D\uFE0F", transfer: "\u{1F91D}",
+    seasonal: "\u{1F389}", manager_arrival: "\u{1F4CB}",
+  };
+
+  const articles = newsRows.results.map((n) => ({
+    id: n.id as string, type: n.type as string,
+    headline: (n.headline ?? n.type) as string, body: (n.body ?? "") as string,
+    icon: iconMap[n.type as string] ?? "\u{1F4F0}",
+    date: n.created_at as string, gameWeek: n.game_week as number | null,
+  }));
+
+  return c.json({ articles });
+});
+
 export { leagueRouter };
