@@ -334,7 +334,7 @@ transfersRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
 
   // Cross-league admin fee (15%)
   const isCrossLeague = seller?.league_id && buyer.league_id && seller.league_id !== buyer.league_id;
-  const adminFee = isCrossLeague ? Math.round(amount * 0.15) : 0;
+  const adminFee = isCrossLeague ? Math.round(amount * 0.20) : 0;
   const totalCost = amount + adminFee;
 
   if (buyer.budget < totalCost) {
@@ -460,7 +460,7 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
 
   // Cross-league admin fee (15%)
   const isCrossLeague = seller?.league_id && buyer.league_id && seller.league_id !== buyer.league_id;
-  const adminFee = isCrossLeague ? Math.round(amount * 0.15) : 0;
+  const adminFee = isCrossLeague ? Math.round(amount * 0.20) : 0;
   const totalCost = amount + adminFee;
 
   if (buyer.budget < totalCost) {
