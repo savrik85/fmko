@@ -1819,16 +1819,23 @@ gameRouter.post("/game/advance-day", async (c) => {
   return c.json({ ok: true, type: "daily", result });
 });
 
-// POST /api/game/run-matches — spustí JEN zápasový tick (simulace zápasů naplánovaných na dnešek)
+// POST /api/game/run-matches — simulace zápasů, max 1 liga za invokaci
 gameRouter.post("/game/run-matches", async (c) => {
   const { runScheduledMatches } = await import("../multiplayer/match-runner");
-  const teams = await c.env.DB.prepare("SELECT t.id, t.league_id, t.game_date FROM teams t WHERE t.league_id IS NOT NULL").all();
+  const targetLeagueId = c.req.query("leagueId");
+
+  const leagueRows = await c.env.DB.prepare(
+    "SELECT DISTINCT t.league_id, MIN(t.game_date) as game_date FROM teams t WHERE t.league_id IS NOT NULL AND t.game_date IS NOT NULL GROUP BY t.league_id"
+  ).all();
 
   let totalMatches = 0;
-  for (const team of teams.results) {
-    const gameDate = team.game_date as string | null;
-    const leagueId = team.league_id as string | null;
+  let processedLeague: string | null = null;
+
+  for (const row of leagueRows.results) {
+    const gameDate = row.game_date as string | null;
+    const leagueId = row.league_id as string | null;
     if (!gameDate || !leagueId) continue;
+    if (targetLeagueId && leagueId !== targetLeagueId) continue;
 
     const gd = new Date(gameDate);
     const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
@@ -1838,7 +1845,8 @@ gameRouter.post("/game/run-matches", async (c) => {
     ).bind(leagueId, dayEnd.toISOString()).first<{ id: string }>();
 
     if (matchCal) {
-      // Snapshot tabulky PŘED kolem (pro AI reportera)
+      if (processedLeague && !targetLeagueId) break;
+
       const { calculateStandings } = await import("../stats/standings");
       const standingsBefore = await calculateStandings(c.env.DB, leagueId);
 
@@ -1849,7 +1857,6 @@ gameRouter.post("/game/run-matches", async (c) => {
         .bind(matchCal.id).run();
       totalMatches += results.length;
 
-      // Zpravodaj
       if (results.length > 0) {
         try {
           const calRow = await c.env.DB.prepare("SELECT game_week FROM season_calendar WHERE id = ?")
@@ -1869,25 +1876,20 @@ gameRouter.post("/game/run-matches", async (c) => {
           await c.env.DB.prepare("INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, datetime('now'))")
             .bind(crypto.randomUUID(), leagueId, `${gameWeek}. kolo: přehled výsledků`, lines.join(". ") + ".", gameWeek).run();
 
-          // AI zpravodajský článek
           if (c.env.GEMINI_API_KEY) {
             try {
               const { generateAiRoundReport } = await import("../news/ai-reporter");
-              console.log(`[AI-REPORTER] Starting for league=${leagueId} cal=${matchCal.id} gw=${gameWeek}`);
               await generateAiRoundReport(c.env.DB, c.env.GEMINI_API_KEY, leagueId, matchCal.id, gameWeek, standingsBefore);
-              console.log(`[AI-REPORTER] Done for gw=${gameWeek}`);
             } catch (e: any) {
-              console.error(`[AI-REPORTER] Error: ${e.message}`);
+              logger.warn({ module: "game" }, `AI reporter error: ${e.message}`);
             }
           }
-          // Ad-hoc události pro human týmy
           try {
             const { pickRandomAdhocEvent } = await import("../season/seasonal-events");
             const { createRng } = await import("../generators/rng");
             const humanTeams = await c.env.DB.prepare(
               "SELECT t.id, t.league_id FROM teams t WHERE t.league_id = ? AND t.user_id <> 'ai'"
             ).bind(leagueId).all();
-
             for (const ht of humanTeams.results) {
               const adhocRng = createRng(Date.now() + (ht.id as string).charCodeAt(0));
               const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek);
@@ -1896,50 +1898,24 @@ gameRouter.post("/game/run-matches", async (c) => {
                   "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?, 'pending')"
                 ).bind(crypto.randomUUID(), ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
                   JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), adhocEvent.gameWeek
-                ).run().catch(() => {});
+                ).run().catch((e: any) => logger.warn({ module: "game" }, `ad-hoc event insert: ${e.message}`));
               }
             }
-          } catch { /* ad-hoc events optional */ }
-        } catch { /* news generation optional */ }
+          } catch (e: any) { logger.warn({ module: "game" }, `ad-hoc events: ${e.message}`); }
+        } catch (e: any) { logger.warn({ module: "game" }, `news generation: ${e.message}`); }
       }
+      processedLeague = leagueId;
     }
   }
-  // Cleanup match-day attendance conversations for simulated matches
-  try {
-    const matchConvs = await c.env.DB.prepare(
-      "SELECT c.id FROM conversations c WHERE c.type = 'squad_group' AND c.title LIKE '⚽ vs %'"
-    ).all().catch(() => ({ results: [] }));
-    for (const conv of matchConvs.results) {
-      const meta = await c.env.DB.prepare(
-        "SELECT metadata FROM messages WHERE conversation_id = ? AND metadata LIKE '%calendarId%' LIMIT 1"
-      ).bind(conv.id).first<{ metadata: string }>().catch(() => null);
-      if (!meta?.metadata) {
-        await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
-        await c.env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch(() => {});
-        continue;
-      }
-      try {
-        const parsed = JSON.parse(meta.metadata);
-        const calId = parsed.calendarId;
-        if (calId) {
-          const cal = await c.env.DB.prepare("SELECT status FROM season_calendar WHERE id = ?").bind(calId).first<{ status: string }>().catch(() => null);
-          if (cal?.status === "simulated") {
-            await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
-            await c.env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch(() => {});
-          }
-        }
-      } catch { /* parse error, skip */ }
-    }
-  } catch { /* cleanup optional */ }
 
   // Přáteláky
   try {
     const { simulateFriendlyMatches } = await import("../multiplayer/friendly-runner");
     const friendlyCount = await simulateFriendlyMatches(c.env.DB);
     totalMatches += friendlyCount;
-  } catch { /* friendlies optional */ }
+  } catch (e: any) { logger.warn({ module: "game" }, `friendlies: ${e.message}`); }
 
-  return c.json({ ok: true, type: "matches", totalMatches });
+  return c.json({ ok: true, type: "matches", totalMatches, processedLeague });
 });
 
 // ═══ Classifieds (Placená inzerce) ═══

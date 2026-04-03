@@ -116,7 +116,9 @@
       "Bash(TEAM=\"01f283b9-6e9b-42f0-a214-410175a65a96\")",
       "Bash(MATCH=\"cc78cb7e-37ab-45a9-8e26-33700c0b0345\")",
       "Bash(MATCH=cc78cb7e-37ab-45a9-8e26-33700c0b0345)",
-      "Bash(npx opennextjs-cloudflare:*)"
+      "Bash(npx opennextjs-cloudflare:*)",
+      "Bash(API=\"https://api-test.prales.fun\")",
+      "Bash(__NEW_LINE_825bb53f2d1015a0__ echo:*)"
     ]
   }
 }
