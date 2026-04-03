@@ -586,14 +586,113 @@ export function pickRandomAdhocEvent(rng: Rng, gameWeek: number, district?: stri
   return { ...event, gameWeek };
 }
 
+// Pražské fixní sezónní události — městské alternativy
+const EVENT_TEMPLATES_PRAHA: SeasonalEventDef[] = [
+  {
+    type: "zabijacka", title: "Grilovačka na náplavce", gameWeek: 12,
+    description: "Tradice je tradice. Grilovačka na náplavce přinese peníze do kasy, ale kluci budou mít kocovinu.",
+    effects: [{ type: "budget", value: 5000, description: "+5 000 Kč" }, { type: "morale", value: 10, description: "+10 morálka" }],
+    choices: [
+      { id: "big", label: "Velká grilovačka s kapelou", effects: [{ type: "budget", value: 8000, description: "+8 000 Kč" }, { type: "morale", value: 15, description: "+15 morálka" }, { type: "condition", value: -20, description: "-20 kondice (kocovina)" }] },
+      { id: "small", label: "Malá grilovačka", effects: [{ type: "budget", value: 3000, description: "+3 000 Kč" }, { type: "morale", value: 5, description: "+5 morálka" }] },
+      { id: "no", label: "Letos ne", effects: [] },
+    ],
+  },
+  {
+    type: "ples", title: "Fotbalová after-party v klubu", gameWeek: 20,
+    description: "Konec sezóny se blíží. Tým chce uspořádat after-party v místním klubu.",
+    effects: [],
+    choices: [
+      { id: "big", label: "Velká party s DJem", effects: [{ type: "budget", value: 5000, description: "+5 000 Kč (vstupné)" }, { type: "reputation", value: 10, description: "+10 reputace" }, { type: "morale", value: 10, description: "+10 morálka" }, { type: "condition", value: -15, description: "-15 kondice" }] },
+      { id: "small", label: "Pivko v hospodě", effects: [{ type: "morale", value: 5, description: "+5 morálka" }] },
+      { id: "no", label: "Nemáme čas", effects: [{ type: "morale", value: -5, description: "-5 morálka (zklamání)" }] },
+    ],
+  },
+  {
+    type: "vanocni_turnaj", title: "Vánoční halový turnaj", gameWeek: 16,
+    description: "Zimní halový turnaj v pražské sportovní hale. Šance získat zkušenosti.",
+    effects: [],
+    choices: [
+      { id: "yes", label: "Zúčastnit se", effects: [{ type: "experience", value: 5, description: "+5 zkušenost" }, { type: "morale", value: 3, description: "+3 morálka" }, { type: "budget", value: -1000, description: "-1 000 Kč (startovné)" }] },
+      { id: "no", label: "Přeskočit", effects: [] },
+    ],
+  },
+  {
+    type: "silvestr", title: "Silvestrovský turnaj na Letné", gameWeek: 17,
+    description: "Silvestrovská exhibice na Letné. Kdo přijde střízlivý, dostane medaili.",
+    effects: [{ type: "morale", value: 5, description: "+5 morálka" }],
+  },
+  {
+    type: "letni_soustredeni", title: "Letní soustředění", gameWeek: 0,
+    description: "Volitelné soustředění před novou sezónou. Boost pro přípravu, ale stojí peníze.",
+    effects: [],
+    choices: [
+      { id: "full", label: "Kompletní soustředění (3 dny, -8 000 Kč)", effects: [{ type: "budget", value: -8000, description: "-8 000 Kč" }, { type: "stamina", value: 5, description: "+5 vytrvalost pro všechny" }, { type: "morale", value: 10, description: "+10 morálka" }] },
+      { id: "weekend", label: "Víkendový kemp (-3 000 Kč)", effects: [{ type: "budget", value: -3000, description: "-3 000 Kč" }, { type: "stamina", value: 2, description: "+2 vytrvalost" }] },
+      { id: "no", label: "Letos bez soustředění", effects: [] },
+    ],
+  },
+  {
+    type: "obecni_zpravodaj", title: "Článek v Metro deníku", gameWeek: 8,
+    description: "Metro deník píše o vašem týmu. Jaký bude tón článku záleží na výsledcích.",
+    effects: [{ type: "reputation", value: 5, description: "+5 reputace" }],
+  },
+  {
+    type: "den_obce", title: "Den městské části", gameWeek: 6,
+    description: "Městská část slaví výročí. Tým může ukázat co umí.",
+    effects: [],
+    choices: [
+      { id: "show", label: "Ukázkový trénink", effects: [{ type: "reputation", value: 8, description: "+8 reputace" }, { type: "morale", value: 3, description: "+3 morálka" }] },
+      { id: "no", label: "Nezúčastnit se", effects: [{ type: "reputation", value: -3, description: "-3 reputace" }] },
+    ],
+  },
+  {
+    type: "pout", title: "Žižkovská noc", gameWeek: 10,
+    description: "Žižkovská noc — kulturní festival v ulicích. Tým může mít stánek nebo volno.",
+    effects: [],
+    choices: [
+      { id: "stanek", label: "Stánek s občerstvením", effects: [{ type: "budget", value: 3000, description: "+3 000 Kč" }, { type: "reputation", value: 5, description: "+5 reputace" }, { type: "condition", value: -10, description: "-10 kondice" }] },
+      { id: "volno", label: "Dát klukům volno", effects: [{ type: "morale", value: 8, description: "+8 morálka" }, { type: "condition", value: -15, description: "-15 kondice (pivo)" }] },
+      { id: "train", label: "Ignorovat a trénovat", effects: [{ type: "condition", value: 5, description: "+5 kondice" }, { type: "morale", value: -5, description: "-5 morálka" }] },
+    ],
+  },
+  {
+    type: "brigada_hriste", title: "Brigáda — odklízení graffiti", gameWeek: 4,
+    description: "Někdo posprejoval plot a kabiny. Městská část žádá o pomoc s úklidem.",
+    effects: [],
+    choices: [
+      { id: "yes", label: "Pomůžeme", effects: [{ type: "reputation", value: 5, description: "+5 reputace" }, { type: "condition", value: -5, description: "-5 kondice" }] },
+      { id: "hire", label: "Najmout firmu (-2 000 Kč)", effects: [{ type: "budget", value: -2000, description: "-2 000 Kč" }] },
+      { id: "no", label: "Nechat to", effects: [{ type: "reputation", value: -5, description: "-5 reputace" }] },
+    ],
+  },
+  {
+    type: "sponzorsky_den", title: "Networking s lokálními firmami", gameWeek: 14,
+    description: "Příležitost navázat kontakty s firmami z městské části. Možný nový sponzor.",
+    effects: [],
+    choices: [
+      { id: "yes", label: "Jít na networking", effects: [{ type: "budget", value: 3000, description: "+3 000 Kč (dar)" }, { type: "reputation", value: 5, description: "+5 reputace" }] },
+      { id: "no", label: "Nemáme čas", effects: [] },
+    ],
+  },
+  {
+    type: "konec_skoly", title: "Konec školy — noví hráči", gameWeek: 22,
+    description: "Skončil školní rok. Pár mladých z okolí hledá tým kde hrát.",
+    effects: [{ type: "reputation", value: 3, description: "+3 reputace" }],
+  },
+];
+
 /**
  * Get events that should trigger for a given game week.
+ * District-aware: Praha gets urban events, rest gets rural.
  */
 export function getSeasonalEventsForWeek(
   rng: Rng,
   gameWeek: number,
+  district?: string,
 ): SeasonalEventDef[] {
-  return EVENT_TEMPLATES.filter((e) => e.gameWeek === gameWeek);
+  const templates = district === "Praha" ? EVENT_TEMPLATES_PRAHA : EVENT_TEMPLATES;
+  return templates.filter((e) => e.gameWeek === gameWeek);
 }
 
 /**

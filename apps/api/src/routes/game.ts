@@ -322,7 +322,7 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
   const teamId = c.req.param("teamId");
 
   // Get events from DB
-  const team = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string }>();
+  const team = await c.env.DB.prepare("SELECT t.league_id, v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.id = ?").bind(teamId).first<{ league_id: string; district: string }>();
   if (!team?.league_id) return c.json({ events: [] });
 
   // Batch: seasonal events + current game week
@@ -352,7 +352,7 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
   const allEvents: Array<SeasonalEventDef & { id: string; status: string }> = [];
 
   for (let week = 0; week <= 30; week++) {
-    const weekEvents = getSeasonalEventsForWeek(rng, week);
+    const weekEvents = getSeasonalEventsForWeek(rng, week, team.district);
     for (const ev of weekEvents) {
       const id = crypto.randomUUID();
       await c.env.DB.prepare(
