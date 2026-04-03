@@ -190,8 +190,8 @@ export default function NewsPage() {
 
   const today = new Date().toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const selectedLeague = selectedLeagueId ? allLeagues.find(l => l.id === selectedLeagueId) : null;
-  const district = isOtherLeague ? (selectedLeague?.district || "Praha") : (team.district || "Prachatice");
-  const newspaperName = district === "Praha" ? "Pražský Zpravodaj" : "Okresní Zpravodaj";
+  const district = isOtherLeague ? (selectedLeague?.district || "Praha") : (team.district || "");
+  const newspaperName = district === "Praha" ? "Pražský Zpravodaj" : `Okresní Zpravodaj`;
 
   return (
     <div className="page-container">
