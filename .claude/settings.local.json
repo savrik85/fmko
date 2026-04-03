@@ -118,7 +118,9 @@
       "Bash(MATCH=cc78cb7e-37ab-45a9-8e26-33700c0b0345)",
       "Bash(npx opennextjs-cloudflare:*)",
       "Bash(API=\"https://api-test.prales.fun\")",
-      "Bash(__NEW_LINE_825bb53f2d1015a0__ echo:*)"
+      "Bash(__NEW_LINE_825bb53f2d1015a0__ echo:*)",
+      "Bash(TID=e5d794d0-8589-49ca-833b-09ba3f86e32a for t in players matches challenges chat_messages notifications cup_entries managers conversations player_stats injuries stadiums equipment sponsor_contracts lineups match_player_stats training_log transfer_offers transfer_listings transfer_bids news classifieds transactions)",
+      "Bash(/dev/null done:*)"
     ]
   }
 }
