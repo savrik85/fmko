@@ -35,7 +35,7 @@ export const OCCUPATIONS: Occupation[] = [
   //                       hamlet  village town  s_city city
   // ═══════════════════════════════════════
   {
-    id: "zemedelec", name: "Zemědělec", w: W(5, 3, 1, 0.3, 0.1),
+    id: "zemedelec", name: "Zemědělec", w: W(5, 3, 0, 0, 0),
     injuryRisk: 0.3, overtimeRisk: 0.5, strengthBonus: 2,
     excuses: [
       "Musim orat, vítr se otočil a jsou ideální podmínky",
@@ -46,7 +46,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "traktorista", name: "Traktorista", w: W(4, 2.5, 0.5, 0.2, 0.1),
+    id: "traktorista", name: "Traktorista", w: W(4, 2.5, 0, 0, 0),
     injuryRisk: 0.2, overtimeRisk: 0.6, strengthBonus: 1,
     excuses: [
       "Traktor se rozbil na poli, čekám na odtah",
@@ -56,7 +56,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "lesni_delnik", name: "Lesní dělník", w: W(4, 2.5, 0.5, 0.2, 0.1),
+    id: "lesni_delnik", name: "Lesní dělník", w: W(4, 2.5, 0, 0, 0),
     injuryRisk: 0.5, overtimeRisk: 0.3, strengthBonus: 3,
     excuses: [
       "Kácíme smrky, nemůžu odejít uprostřed",
@@ -65,7 +65,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "drevorubec", name: "Dřevorubec", w: W(3, 1.5, 0.3, 0.1, 0),
+    id: "drevorubec", name: "Dřevorubec", w: W(3, 1.5, 0, 0, 0),
     injuryRisk: 0.6, overtimeRisk: 0.3, strengthBonus: 3,
     excuses: [
       "Spadl strom špatným směrem, musím to uklidit",
@@ -73,7 +73,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "vcelar", name: "Včelař", w: W(3, 1.5, 0.3, 0.1, 0),
+    id: "vcelar", name: "Včelař", w: W(3, 1.5, 0, 0, 0),
     injuryRisk: 0.1, overtimeRisk: 0.2, strengthBonus: 0,
     excuses: [
       "Rojí se mi včely, musím je chytit než odletí",
@@ -82,7 +82,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "chovatel", name: "Chovatel", w: W(4, 2.5, 0.5, 0.2, 0.1),
+    id: "chovatel", name: "Chovatel", w: W(4, 2.5, 0, 0, 0),
     injuryRisk: 0.2, overtimeRisk: 0.4, strengthBonus: 1,
     excuses: [
       "Prasnice se prosila, musím být u toho",
@@ -92,7 +92,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "kombajner", name: "Kombajnér", w: W(3, 1.5, 0.3, 0.1, 0),
+    id: "kombajner", name: "Kombajnér", w: W(3, 1.5, 0, 0, 0),
     injuryRisk: 0.2, overtimeRisk: 0.7, strengthBonus: 1,
     excuses: [
       "Žně nečekají, musím jet dokud je sucho",
@@ -100,7 +100,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "myslivec", name: "Myslivec", w: W(3, 1.5, 0.3, 0.1, 0),
+    id: "myslivec", name: "Myslivec", w: W(3, 1.5, 0, 0, 0),
     injuryRisk: 0.15, overtimeRisk: 0.2, strengthBonus: 0,
     excuses: [
       "Mám naháňku na divočáky, je nás málo",
@@ -109,7 +109,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "kovar", name: "Kovář", w: W(2, 1, 0.2, 0.1, 0),
+    id: "kovar", name: "Kovář", w: W(2, 1, 0, 0, 0),
     injuryRisk: 0.4, overtimeRisk: 0.3, strengthBonus: 3,
     excuses: [
       "Musím dokovat mříž, slíbil jsem to na pondělí",
@@ -117,7 +117,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "hajny", name: "Hajný", w: W(3, 1.5, 0.3, 0.1, 0),
+    id: "hajny", name: "Hajný", w: W(3, 1.5, 0, 0, 0),
     injuryRisk: 0.1, overtimeRisk: 0.3, strengthBonus: 1,
     excuses: [
       "Mám obchůzku, pytláci zase řádí",
@@ -126,7 +126,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "spravce_rybniku", name: "Správce rybníka", w: W(2, 1, 0.2, 0.1, 0),
+    id: "spravce_rybniku", name: "Správce rybníka", w: W(2, 1, 0, 0, 0),
     injuryRisk: 0.1, overtimeRisk: 0.2, strengthBonus: 0,
     excuses: [
       "Výlov je tento víkend, nemůžu chybět",
@@ -134,7 +134,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "sadar", name: "Sadař", w: W(2, 1, 0.2, 0.1, 0),
+    id: "sadar", name: "Sadař", w: W(2, 1, 0, 0, 0),
     injuryRisk: 0.2, overtimeRisk: 0.3, strengthBonus: 0,
     excuses: [
       "Musím česat jablka, padaj ze stromů",
@@ -142,7 +142,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "sezonni_delnik", name: "Sezonní dělník", w: W(3.5, 2, 0.5, 0.2, 0.1),
+    id: "sezonni_delnik", name: "Sezonní dělník", w: W(3.5, 2, 0, 0, 0),
     injuryRisk: 0.3, overtimeRisk: 0.5, strengthBonus: 1,
     excuses: [
       "Mám brigádu, nemůžu si dovolit přijít o prachy",
@@ -150,7 +150,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "chalupar", name: "Chalupář", w: W(2, 1, 0.2, 0.1, 0),
+    id: "chalupar", name: "Chalupář", w: W(2, 1, 0, 0, 0),
     injuryRisk: 0.2, overtimeRisk: 0.1, strengthBonus: 0,
     excuses: [
       "Opravuju střechu na chalupě, musím to dodělat než zaprší",
@@ -326,7 +326,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "delnik_v_pile", name: "Dělník v pile", w: W(2, 1.5, 0.5, 0.2, 0),
+    id: "delnik_v_pile", name: "Dělník v pile", w: W(2, 1.5, 0, 0, 0),
     injuryRisk: 0.4, overtimeRisk: 0.4, strengthBonus: 2,
     excuses: [
       "Pořezali jsme velkou zakázku, musíme to dodělat",
@@ -334,7 +334,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "delnik_v_kamenolomu", name: "Dělník v kamenolomu", w: W(1, 0.5, 0.3, 0.1, 0),
+    id: "delnik_v_kamenolomu", name: "Dělník v kamenolomu", w: W(1, 0.5, 0, 0, 0),
     injuryRisk: 0.5, overtimeRisk: 0.4, strengthBonus: 3,
     excuses: [
       "Odstřel se posunul na dnešek, musím být na místě",
@@ -467,7 +467,7 @@ export const OCCUPATIONS: Occupation[] = [
   // PRAŽSKÉ / MĚSTSKÉ (town/city)
   // ═══════════════════════════════════════
   {
-    id: "revizor", name: "Revizor", w: W(0, 0, 1.5, 1, 1.5),
+    id: "revizor", name: "Revizor", w: W(0, 0, 3, 2, 3),
     injuryRisk: 0.05, overtimeRisk: 0.3, strengthBonus: 0,
     excuses: [
       "Mám kontrolní den na lince 22",
@@ -476,7 +476,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "tramvajak", name: "Řidič tramvaje", w: W(0, 0, 2, 1.5, 2),
+    id: "tramvajak", name: "Řidič tramvaje", w: W(0, 0, 4, 3, 4),
     injuryRisk: 0.1, overtimeRisk: 0.6, strengthBonus: 0,
     excuses: [
       "Mám směnu na trojce",
@@ -486,7 +486,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "bezdomovec", name: "Bezdomovec", w: W(0, 0, 0.5, 0.5, 1),
+    id: "bezdomovec", name: "Bezdomovec", w: W(0, 0, 1, 1, 2),
     injuryRisk: 0.2, overtimeRisk: 0.05, strengthBonus: -1,
     excuses: [
       "Někdo mi obsadil lavičku",
@@ -496,7 +496,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "ridic_boltu", name: "Řidič Boltu", w: W(0, 0, 1, 1, 2),
+    id: "ridic_boltu", name: "Řidič Boltu", w: W(0, 0, 3, 2, 4),
     injuryRisk: 0.05, overtimeRisk: 0.4, strengthBonus: 0,
     excuses: [
       "Mám bonusovej cíl, ještě 3 jízdy",
@@ -505,7 +505,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "barman", name: "Barman", w: W(0, 0.1, 1.5, 1, 1.5),
+    id: "barman", name: "Barman", w: W(0, 0.1, 3, 2, 3),
     injuryRisk: 0.05, overtimeRisk: 0.5, strengthBonus: 0,
     excuses: [
       "Máme live music večer, nemůžu odejít",
@@ -514,7 +514,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "kuryr", name: "Kurýr", w: W(0, 0, 1.5, 1, 2),
+    id: "kuryr", name: "Kurýr", w: W(0, 0, 3, 2, 4),
     injuryRisk: 0.15, overtimeRisk: 0.5, strengthBonus: 0,
     excuses: [
       "Mám ještě 15 balíků do konce směny",
@@ -523,7 +523,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "vratny", name: "Vrátný", w: W(0, 0, 1, 0.5, 1),
+    id: "vratny", name: "Vrátný", w: W(0, 0, 2.5, 1.5, 2.5),
     injuryRisk: 0.02, overtimeRisk: 0.3, strengthBonus: 0,
     excuses: [
       "Nemůžu opustit vrátnici, čekám na zásilku",
@@ -532,7 +532,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "taxikar", name: "Taxikář", w: W(0, 0, 1.5, 1, 1.5),
+    id: "taxikar", name: "Taxikář", w: W(0, 0, 3, 2, 3),
     injuryRisk: 0.05, overtimeRisk: 0.5, strengthBonus: 0,
     excuses: [
       "Mám objednanou jízdu na letiště",
@@ -541,7 +541,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "prodavac_trafika", name: "Prodavač v trafice", w: W(0, 0.3, 1, 0.5, 1),
+    id: "prodavac_trafika", name: "Prodavač v trafice", w: W(0, 0.3, 2.5, 1.5, 2.5),
     injuryRisk: 0.02, overtimeRisk: 0.3, strengthBonus: -1,
     excuses: [
       "Musím zavřít krám, kolega nepřijde",
@@ -549,7 +549,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "metar", name: "Metař", w: W(0, 0, 1, 0.5, 1),
+    id: "metar", name: "Metař", w: W(0, 0, 2.5, 1.5, 2.5),
     injuryRisk: 0.15, overtimeRisk: 0.4, strengthBonus: 1,
     excuses: [
       "Uklízíme po koncertu na Letné",
@@ -558,7 +558,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "strojvedouci_metro", name: "Strojvedoucí metra", w: W(0, 0, 1, 1, 1.5),
+    id: "strojvedouci_metro", name: "Strojvedoucí metra", w: W(0, 0, 3, 2, 3),
     injuryRisk: 0.05, overtimeRisk: 0.6, strengthBonus: 0,
     excuses: [
       "Mám noční na lince B",
@@ -567,7 +567,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "hlidac_parkoviste", name: "Hlídač parkoviště", w: W(0, 0, 1, 0.5, 0.5),
+    id: "hlidac_parkoviste", name: "Hlídač parkoviště", w: W(0, 0, 2, 1, 1.5),
     injuryRisk: 0.02, overtimeRisk: 0.3, strengthBonus: 0,
     excuses: [
       "Střídání nedorazilo",
@@ -576,7 +576,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "poulicni_muzikant", name: "Pouliční muzikant", w: W(0, 0, 0.5, 0.5, 1),
+    id: "poulicni_muzikant", name: "Pouliční muzikant", w: W(0, 0, 1.5, 1, 2),
     injuryRisk: 0.05, overtimeRisk: 0.1, strengthBonus: -1,
     excuses: [
       "Mám dobré místo na Karláku, nemůžu odejít",
@@ -585,7 +585,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "ridic_mhd", name: "Řidič autobusu MHD", w: W(0, 0, 1.5, 1, 1.5),
+    id: "ridic_mhd", name: "Řidič autobusu MHD", w: W(0, 0, 3, 2, 3),
     injuryRisk: 0.05, overtimeRisk: 0.6, strengthBonus: 0,
     excuses: [
       "Mám směnu na 119 na letiště",
@@ -594,7 +594,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "uklidova_firma", name: "Uklízeč kanceláří", w: W(0, 0, 1, 0.5, 1),
+    id: "uklidova_firma", name: "Uklízeč kanceláří", w: W(0, 0, 2.5, 1.5, 2.5),
     injuryRisk: 0.1, overtimeRisk: 0.4, strengthBonus: 0,
     excuses: [
       "Uklízíme kanceláře na Pankráci, noční směna",
