@@ -406,7 +406,7 @@ transfersRouter.get("/teams/:teamId/offers", async (c) => {
 
   // Incoming offers (for my players) — include buyer's league for cross-league fee display
   const incoming = await c.env.DB.prepare(
-    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating,
+    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar,
      t.name as from_team_name, t.league_id as from_league_id
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.from_team_id = t.id
      WHERE to2.to_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
@@ -415,7 +415,7 @@ transfersRouter.get("/teams/:teamId/offers", async (c) => {
   // Outgoing offers (from me) — include seller's league for cross-league fee display
   const myTeam = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string }>();
   const outgoing = await c.env.DB.prepare(
-    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position,
+    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.avatar,
      t.name as to_team_name, t.league_id as to_league_id
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.to_team_id = t.id
      WHERE to2.from_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`

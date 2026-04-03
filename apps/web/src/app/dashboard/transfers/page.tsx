@@ -49,6 +49,7 @@ interface TransferOffer {
   first_name: string; last_name: string; age: number; position: string; overall_rating: number;
   from_team_name?: string; to_team_name?: string; expires_at: string;
   offer_type?: "transfer" | "loan"; loan_duration?: number | null;
+  avatar?: Record<string, unknown>;
 }
 
 type FASortKey = "rating" | "wage" | "age" | "distance";
@@ -866,6 +867,9 @@ export default function TransfersPage() {
                 {listings.map((l) => (
                   <div key={l.id} className="card p-4">
                     <div className="flex items-center gap-3">
+                      {l.avatar && Object.keys(l.avatar).length > 0
+                        ? <FaceAvatar faceConfig={l.avatar} size={40} className="rounded-full shrink-0" />
+                        : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <Link href={`/dashboard/player/${l.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
@@ -986,9 +990,14 @@ export default function TransfersPage() {
             <div>
               <SectionLabel>Příchozí nabídky ({incoming.length})</SectionLabel>
               <div className="space-y-3">
-                {incoming.map((o) => (
+                {incoming.map((o) => {
+                  const oAvatar = (() => { try { return typeof o.avatar === "string" ? JSON.parse(o.avatar) : o.avatar; } catch { return null; } })();
+                  return (
                   <div key={o.id} className="card p-4">
                     <div className="flex items-start gap-3">
+                      {oAvatar && Object.keys(oAvatar).length > 0
+                        ? <FaceAvatar faceConfig={oAvatar} size={40} className="rounded-full shrink-0 mt-0.5" />
+                        : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0 mt-0.5" />}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <Link href={`/dashboard/player/${o.player_id}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
@@ -1033,7 +1042,7 @@ export default function TransfersPage() {
                       </div>
                     </div>
                   </div>
-                ))}
+                ); })}
               </div>
             </div>
           )}
@@ -1042,9 +1051,14 @@ export default function TransfersPage() {
             <div>
               <SectionLabel>Moje nabídky ({outgoing.length})</SectionLabel>
               <div className="space-y-3">
-                {outgoing.map((o) => (
+                {outgoing.map((o) => {
+                  const oAvatar = (() => { try { return typeof o.avatar === "string" ? JSON.parse(o.avatar) : o.avatar; } catch { return null; } })();
+                  return (
                   <div key={o.id} className="card p-4">
                     <div className="flex items-center gap-3">
+                      {oAvatar && Object.keys(oAvatar).length > 0
+                        ? <FaceAvatar faceConfig={oAvatar} size={40} className="rounded-full shrink-0" />
+                        : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="font-heading font-bold">{o.first_name} {o.last_name}</span>
@@ -1075,7 +1089,7 @@ export default function TransfersPage() {
                       </button>
                     </div>
                   </div>
-                ))}
+                ); })}
               </div>
             </div>
           )}
