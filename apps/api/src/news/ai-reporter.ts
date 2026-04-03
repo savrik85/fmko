@@ -28,6 +28,19 @@ const VILLAGE_FLAVOR: Record<string, string> = {
   "Stachy": "šumavská obec známá běžkařskými tratěmi",
   "Zdíkov": "obec pod Šumavou s tradicí dřevařství",
   "Horní Vltavice": "šumavská obec u pramenů Vltavy",
+  // Praha
+  "Žižkov": "nejslavnější pražská čtvrť s televizní věží a hospodami na každém rohu",
+  "Vršovice": "domov Bohemians, klokánků a Ďolíčku",
+  "Vinohrady": "elegantní čtvrť s kavárnami a secesními domy",
+  "Smíchov": "průmyslová čtvrť pod Petřínem, dnes plná obchoďáků",
+  "Libeň": "dělnická čtvrť s duchem starého Povltaví",
+  "Dejvice": "diplomatická čtvrť u Hradčan",
+  "Nusle": "čtvrť pod slavným mostem",
+  "Braník": "pivovarnická tradice na břehu Vltavy",
+  "Letná": "parková čtvrť s nejlepším výhledem na Prahu",
+  "Kobylisy": "klidná severní čtvrť s vojenskými kasárnami",
+  "Klamovka": "park a čtvrť na pomezí Smíchova a Košíř",
+  "Hostivař": "okrajová čtvrť s přehradou a lesoparkem",
 };
 
 const WEATHER_CZ: Record<string, string> = {
@@ -160,7 +173,18 @@ export async function generateAiRoundReport(
     highlights.push(`Červená karta: ${rc.first_name} ${rc.last_name} (${rc.team_name})`);
   }
 
-  const prompt = `Jsi sportovní redaktor okresního zpravodaje v Prachaticích. Napiš článek o ${gameWeek}. kole okresního přeboru.
+  // Get league info for context
+  const leagueInfo = await db.prepare("SELECT name, district FROM leagues WHERE id = ?")
+    .bind(leagueId).first<{ name: string; district: string }>().catch(() => null);
+  const district = leagueInfo?.district ?? "Prachatice";
+  const leagueName = leagueInfo?.name ?? "Okresní přebor";
+  const isPraha = district === "Praha";
+
+  const localFlavor = isPraha
+    ? "Používej pražský městský kolorit — zmiňuj městské části, tramvaje, hospody, pražskou atmosféru. Piš jako pražský sportovní reportér."
+    : "Používej místní kolorit — zmiňuj obce, jejich charakter, šumavskou atmosféru. Piš jako reportér co zná každého v okrese.";
+
+  const prompt = `Jsi sportovní redaktor ${isPraha ? "pražského" : "okresního"} zpravodaje${isPraha ? "" : ` v ${district}ích`}. Napiš článek o ${gameWeek}. kole ${leagueName.replace("Okresní přebor", "okresního přeboru").replace("Přebor Prahy", "Přeboru Prahy")}.
 
 VÝSLEDKY ${gameWeek}. KOLA:
 ${resultLines.join("\n")}
@@ -172,12 +196,12 @@ ZAJÍMAVOSTI:
 ${highlights.length > 0 ? highlights.join("\n") : "Žádné výrazné individuální výkony"}
 
 Pravidla:
-- Piš česky, styl místního okresního zpravodaje, 200-400 slov
+- Piš česky, styl místního ${isPraha ? "pražského" : "okresního"} zpravodaje, 200-400 slov
 - První řádek = titulek článku (bez uvozovek, bez "Titulek:")
 - Zbytek = tělo článku
 - Vypíchni překvapení, zajímavé výkony, vývoj tabulky
-- Piš barvitě s humorem, jako reportér co zná každého v okrese
-- Používej místní kolorit — zmiňuj obce, jejich charakter, šumavskou atmosféru
+- Piš barvitě s humorem
+- ${localFlavor}
 - Nemusíš popsat každý zápas, vyber ty nejzajímavější
 - DŮLEŽITÉ: Nikdy nevymýšlej čísla — body, góly, skóre, počty diváků beri VÝHRADNĚ z dat výše. Pokud si nejsi jistý, číslo nezmiňuj.`;
 
