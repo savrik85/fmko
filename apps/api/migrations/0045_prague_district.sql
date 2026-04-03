@@ -1,35 +1,43 @@
 -- Prague district: městské části, příjmení, sponzoři
 -- Přebor Prahy — nejnižší pražská amatérská soutěž
 
+-- Cleanup: smazat starou Prahu (celé město) a její data
+DELETE FROM players WHERE team_id IN (SELECT id FROM teams WHERE village_id = 'c7495e0e-4062-52c3-8df0-28674d14e381');
+DELETE FROM matches WHERE league_id IN (SELECT id FROM leagues WHERE district = 'Praha');
+DELETE FROM season_calendar WHERE league_id IN (SELECT id FROM leagues WHERE district = 'Praha');
+DELETE FROM teams WHERE village_id = 'c7495e0e-4062-52c3-8df0-28674d14e381';
+DELETE FROM leagues WHERE district = 'Praha';
+DELETE FROM villages WHERE id = 'c7495e0e-4062-52c3-8df0-28674d14e381';
+
 -- ═══ 1. Pražské městské části (villages) ═══
--- size = 'hamlet' → mírně slabší hráči než Prachatice (village)
--- hamlet: avgMin=15, avgMax=35, capMin=30, capMax=50
+-- size = 'village' → srovnatelné s průměrem Prachatických vesnic
+-- village: avgMin=20, avgMax=40, capMin=35, capMax=55
 
 INSERT OR IGNORE INTO villages (id, name, district, region, population, size, lat, lng) VALUES
-  ('praha-zizkov',      'Žižkov',       'Praha', 'Hlavní město Praha', 75000,  'hamlet', 50.0875, 14.4508),
-  ('praha-hostivar',    'Hostivař',     'Praha', 'Hlavní město Praha', 30000,  'hamlet', 50.0439, 14.5125),
-  ('praha-vrsovice',    'Vršovice',     'Praha', 'Hlavní město Praha', 35000,  'hamlet', 50.0664, 14.4483),
-  ('praha-vinohrady',   'Vinohrady',    'Praha', 'Hlavní město Praha', 55000,  'hamlet', 50.0753, 14.4439),
-  ('praha-dejvice',     'Dejvice',      'Praha', 'Hlavní město Praha', 30000,  'hamlet', 50.1003, 14.3936),
-  ('praha-liben',       'Libeň',        'Praha', 'Hlavní město Praha', 40000,  'hamlet', 50.1083, 14.4750),
-  ('praha-branik',      'Braník',       'Praha', 'Hlavní město Praha', 10000,  'hamlet', 50.0389, 14.4183),
-  ('praha-stresovice',  'Střešovice',   'Praha', 'Hlavní město Praha', 12000,  'hamlet', 50.0917, 14.3767),
-  ('praha-krc',         'Krč',          'Praha', 'Hlavní město Praha', 15000,  'hamlet', 50.0333, 14.4333),
-  ('praha-chodov',      'Chodov',       'Praha', 'Hlavní město Praha', 30000,  'hamlet', 50.0314, 14.4897),
-  ('praha-prosek',      'Prosek',       'Praha', 'Hlavní město Praha', 20000,  'hamlet', 50.1167, 14.5000),
-  ('praha-kobylisy',    'Kobylisy',     'Praha', 'Hlavní město Praha', 25000,  'hamlet', 50.1250, 14.4500),
-  ('praha-suchdol',     'Suchdol',      'Praha', 'Hlavní město Praha',  8000,  'hamlet', 50.1400, 14.3833),
-  ('praha-letna',       'Letná',        'Praha', 'Hlavní město Praha', 25000,  'hamlet', 50.0986, 14.4264),
-  ('praha-smichov',     'Smíchov',      'Praha', 'Hlavní město Praha', 40000,  'hamlet', 50.0700, 14.4000),
-  ('praha-nusle',       'Nusle',        'Praha', 'Hlavní město Praha', 30000,  'hamlet', 50.0600, 14.4350),
-  ('praha-malesice',    'Malešice',     'Praha', 'Hlavní město Praha', 12000,  'hamlet', 50.0833, 14.5000),
-  ('praha-stodulky',    'Stodůlky',     'Praha', 'Hlavní město Praha', 20000,  'hamlet', 50.0500, 14.3167),
-  ('praha-reporyje',    'Řeporyje',     'Praha', 'Hlavní město Praha',  8000,  'hamlet', 50.0250, 14.3333),
-  ('praha-uhrineves',   'Uhříněves',    'Praha', 'Hlavní město Praha',  6000,  'hamlet', 50.0167, 14.5667),
-  ('praha-radotin',     'Radotín',      'Praha', 'Hlavní město Praha',  9000,  'hamlet', 49.9833, 14.3583),
-  ('praha-haje',        'Háje',         'Praha', 'Hlavní město Praha', 20000,  'hamlet', 50.0250, 14.5083),
-  ('praha-kbely',       'Kbely',        'Praha', 'Hlavní město Praha', 10000,  'hamlet', 50.1333, 14.5333),
-  ('praha-bohdalec',    'Bohdalec',     'Praha', 'Hlavní město Praha',  5000,  'hamlet', 50.0550, 14.4650);
+  ('praha-zizkov',      'Žižkov',       'Praha', 'Hlavní město Praha', 75000,  'village', 50.0875, 14.4508),
+  ('praha-hostivar',    'Hostivař',     'Praha', 'Hlavní město Praha', 30000,  'village', 50.0439, 14.5125),
+  ('praha-vrsovice',    'Vršovice',     'Praha', 'Hlavní město Praha', 35000,  'village', 50.0664, 14.4483),
+  ('praha-vinohrady',   'Vinohrady',    'Praha', 'Hlavní město Praha', 55000,  'village', 50.0753, 14.4439),
+  ('praha-dejvice',     'Dejvice',      'Praha', 'Hlavní město Praha', 30000,  'village', 50.1003, 14.3936),
+  ('praha-liben',       'Libeň',        'Praha', 'Hlavní město Praha', 40000,  'village', 50.1083, 14.4750),
+  ('praha-branik',      'Braník',       'Praha', 'Hlavní město Praha', 10000,  'village', 50.0389, 14.4183),
+  ('praha-stresovice',  'Střešovice',   'Praha', 'Hlavní město Praha', 12000,  'village', 50.0917, 14.3767),
+  ('praha-krc',         'Krč',          'Praha', 'Hlavní město Praha', 15000,  'village', 50.0333, 14.4333),
+  ('praha-chodov',      'Chodov',       'Praha', 'Hlavní město Praha', 30000,  'village', 50.0314, 14.4897),
+  ('praha-prosek',      'Prosek',       'Praha', 'Hlavní město Praha', 20000,  'village', 50.1167, 14.5000),
+  ('praha-kobylisy',    'Kobylisy',     'Praha', 'Hlavní město Praha', 25000,  'village', 50.1250, 14.4500),
+  ('praha-suchdol',     'Suchdol',      'Praha', 'Hlavní město Praha',  8000,  'village', 50.1400, 14.3833),
+  ('praha-letna',       'Letná',        'Praha', 'Hlavní město Praha', 25000,  'village', 50.0986, 14.4264),
+  ('praha-smichov',     'Smíchov',      'Praha', 'Hlavní město Praha', 40000,  'village', 50.0700, 14.4000),
+  ('praha-nusle',       'Nusle',        'Praha', 'Hlavní město Praha', 30000,  'village', 50.0600, 14.4350),
+  ('praha-malesice',    'Malešice',     'Praha', 'Hlavní město Praha', 12000,  'village', 50.0833, 14.5000),
+  ('praha-stodulky',    'Stodůlky',     'Praha', 'Hlavní město Praha', 20000,  'village', 50.0500, 14.3167),
+  ('praha-reporyje',    'Řeporyje',     'Praha', 'Hlavní město Praha',  8000,  'village', 50.0250, 14.3333),
+  ('praha-uhrineves',   'Uhříněves',    'Praha', 'Hlavní město Praha',  6000,  'village', 50.0167, 14.5667),
+  ('praha-radotin',     'Radotín',      'Praha', 'Hlavní město Praha',  9000,  'village', 49.9833, 14.3583),
+  ('praha-haje',        'Háje',         'Praha', 'Hlavní město Praha', 20000,  'village', 50.0250, 14.5083),
+  ('praha-kbely',       'Kbely',        'Praha', 'Hlavní město Praha', 10000,  'village', 50.1333, 14.5333),
+  ('praha-bohdalec',    'Bohdalec',     'Praha', 'Hlavní město Praha',  5000,  'village', 50.0550, 14.4650);
 
 -- ═══ 2. Pražská příjmení ═══
 
