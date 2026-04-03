@@ -66,6 +66,8 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString("cs", { day: "numeric", month: "short" });
 }
 
+interface LeagueOption { id: string; name: string; district: string; team_count: number }
+
 export default function NewsPage() {
   const { teamId } = useTeam();
   const [articles, setArticles] = useState<Article[]>([]);
@@ -79,6 +81,17 @@ export default function NewsPage() {
   const [adSubmitting, setAdSubmitting] = useState(false);
   const [adError, setAdError] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // League picker for viewing other league's news
+  const [allLeagues, setAllLeagues] = useState<LeagueOption[]>([]);
+  const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
+  const isOtherLeague = selectedLeagueId !== null;
+
+  useEffect(() => {
+    apiFetch<{ leagues: LeagueOption[] }>("/api/leagues")
+      .then((data) => setAllLeagues(data.leagues))
+      .catch(() => {});
+  }, []);
 
   const loadClassifieds = () => {
     if (!teamId) return;
@@ -102,6 +115,31 @@ export default function NewsPage() {
     }).catch(() => setLoading(false));
     loadClassifieds();
   }, [teamId]);
+
+  // Load other league news when selected
+  useEffect(() => {
+    if (!selectedLeagueId) return;
+    setLoading(true);
+    apiFetch<{ articles: Article[] }>(`/api/leagues/${selectedLeagueId}/news`)
+      .then((data) => {
+        setArticles(data.articles);
+        setLoading(false);
+      }).catch(() => setLoading(false));
+  }, [selectedLeagueId]);
+
+  const handleLeagueChange = (leagueId: string) => {
+    if (leagueId === "own") {
+      setSelectedLeagueId(null);
+      if (teamId) {
+        setLoading(true);
+        apiFetch<{ articles: Article[] }>(`/api/teams/${teamId}/news`)
+          .then((data) => { setArticles(data.articles); setLoading(false); })
+          .catch(() => setLoading(false));
+      }
+    } else {
+      setSelectedLeagueId(leagueId);
+    }
+  };
 
   const submitAd = async () => {
     if (!teamId) return;
@@ -151,10 +189,29 @@ export default function NewsPage() {
   const restArticles = [...otherArticles, ...matchArticles.slice(3)];
 
   const today = new Date().toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const district = team.district || "Prachatice";
+  const selectedLeague = selectedLeagueId ? allLeagues.find(l => l.id === selectedLeagueId) : null;
+  const district = isOtherLeague ? (selectedLeague?.district || "Praha") : (team.district || "Prachatice");
+  const newspaperName = district === "Praha" ? "Pražský Zpravodaj" : "Okresní Zpravodaj";
 
   return (
     <div className="page-container">
+
+      {/* League picker */}
+      {allLeagues.length > 1 && (
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-sm text-muted font-medium">Zobrazit zpravodaj:</span>
+          <select
+            value={selectedLeagueId ?? "own"}
+            onChange={(e) => handleLeagueChange(e.target.value)}
+            className="text-sm bg-white border border-border rounded-lg px-3 py-2 font-medium"
+          >
+            <option value="own">Můj okres</option>
+            {allLeagues.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* ═══ Newspaper Masthead ═══ */}
       <div className="border-b-4 border-double border-ink pb-3 mb-1">
@@ -163,11 +220,11 @@ export default function NewsPage() {
           <div className="text-[10px] uppercase tracking-widest text-muted">Sezóna 1</div>
         </div>
         <h1 className="font-heading font-[900] text-3xl sm:text-4xl text-center tracking-tight leading-none my-2" style={{ fontVariant: "small-caps" }}>
-          Okresní Zpravodaj
+          {newspaperName}
         </h1>
         <div className="flex items-center justify-between">
           <div className="text-[11px] text-muted">{today}</div>
-          <div className="text-[11px] text-muted italic">Nezávislé noviny okresního fotbalu</div>
+          <div className="text-[11px] text-muted italic">Nezávislé noviny {district === "Praha" ? "pražského" : "okresního"} fotbalu</div>
         </div>
       </div>
       <div className="border-b border-ink mb-5" />
@@ -344,8 +401,8 @@ export default function NewsPage() {
             </div>
           )}
 
-          {/* ═══ Placená inzerce — newspaper classifieds section ═══ */}
-          <div className="border-t-2 border-ink pt-4">
+          {/* ═══ Placená inzerce — newspaper classifieds section (only own league) ═══ */}
+          {!isOtherLeague && <div className="border-t-2 border-ink pt-4">
             <div className="font-heading font-[900] text-sm uppercase tracking-[0.2em] text-center mb-1" style={{ fontVariant: "small-caps" }}>
               Placená inzerce
             </div>
@@ -431,7 +488,7 @@ export default function NewsPage() {
                 </div>
               </div>
             )}
-          </div>
+          </div>}
 
         </div>
       )}
