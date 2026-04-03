@@ -86,56 +86,59 @@ const PERSONAL_EXCUSES = [
 // ABSURDNÍ VÝMLUVY (český vesnický humor)
 // ═══════════════════════════════════════════════
 
-const ABSURD_EXCUSES = [
-  // Většina absurdních přijde v den zápasu — nečekané situace
-  { text: "Zamkl jsem se v garáži a nikdo není doma", emoji: "\u{1F512}", timing: "match_day" as AbsenceTiming },
-  { text: "Musím hlídat kozu, utekla sousedům a žere mi zahradu", emoji: "\u{1F410}", timing: "match_day" as AbsenceTiming },
-  { text: "Přijeli příbuzní z Kanady, neviděl jsem je 15 let, nemůžu odejít", emoji: "\u{2708}", timing: "day_before" as AbsenceTiming },
-  { text: "Slíbil jsem dědovi že mu pomůžu vyčistit studnu", emoji: "\u{1F4A7}", timing: "day_before" as AbsenceTiming },
-  { text: "Našel jsem houby a musím je hned zpracovat, jinak se zkazí", emoji: "\u{1F344}", timing: "match_day" as AbsenceTiming },
-  { text: "Spadl mi strom na plot a utečou slepice", emoji: "\u{1F333}", timing: "match_day" as AbsenceTiming },
-  { text: "Dostal jsem lístky na hokej, sorry ale tohle se neodmítá", emoji: "\u{1F3D2}", timing: "match_day" as AbsenceTiming },
-  { text: "Musím odvézt tchána na houby, hrozil že jinak nepůjčí přívěs", emoji: "\u{1F698}", timing: "day_before" as AbsenceTiming },
-  { text: "Pes sežral klíče od auta, čekám až je... vrátí", emoji: "\u{1F436}", timing: "match_day" as AbsenceTiming },
-  { text: "Montér na parabolu přijede jen dneska mezi 8 a 17", emoji: "\u{1F4E1}", timing: "match_day" as AbsenceTiming },
-  { text: "Svědek na svatbě bratrance, nemůžu odmítnout", emoji: "\u{1F492}", timing: "day_before" as AbsenceTiming },
-  { text: "Musím natřít plot, barva schne jen do patnácti stupňů", emoji: "\u{1F3A8}", timing: "match_day" as AbsenceTiming },
-  { text: "Soused mi vrací vrtačku a slíbil jsem mu za to pomoct se střechou", emoji: "\u{1F527}", timing: "match_day" as AbsenceTiming },
-  { text: "Žena mi vyhodila kopačky z okna. Doslova. Hledám je v křoví", emoji: "\u{1F462}", timing: "match_day" as AbsenceTiming },
-  { text: "Zateklo mi do sklepa, musím to vylejvat kbelíkem", emoji: "\u{1FAA3}", timing: "match_day" as AbsenceTiming },
-  { text: "Musím opravit záchod, ženská řekla že dokud nebude fungovat, nikam nejdu", emoji: "\u{1F6BD}", timing: "match_day" as AbsenceTiming },
-  { text: "Chytil jsem sumce a nemůžu ho nechat v autě", emoji: "\u{1F41F}", timing: "match_day" as AbsenceTiming },
-  { text: "Klíště. Musím k doktorovi. Asi. Pro jistotu", emoji: "\u{1FAB2}", timing: "match_day" as AbsenceTiming },
-  { text: "Babička volala že jí nefunguje televize a neumí přepnout vstup", emoji: "\u{1F4FA}", timing: "match_day" as AbsenceTiming },
-  { text: "Musím vyzvednout traktůrek ze servisu, jinak mi ho prodaj", emoji: "\u{1F69C}", timing: "match_day" as AbsenceTiming },
-  { text: "Kočka mi porodila v tašce s vybavením", emoji: "\u{1F431}", timing: "match_day" as AbsenceTiming },
-  { text: "Sousedovic pes mi ukradl kopačku, honíme ho po vsi", emoji: "\u{1F415}", timing: "match_day" as AbsenceTiming },
-  { text: "Přišla kontrola z hygieny, nemůžu odejít z hospody", emoji: "\u{1F52C}", timing: "match_day" as AbsenceTiming },
-  { text: "Vyhrál jsem v tombole prase a musím ho odvézt domů", emoji: "\u{1F416}", timing: "match_day" as AbsenceTiming },
-  { text: "Našel jsem v garáži ježka a čekám na záchranku pro zvířata", emoji: "\u{1F994}", timing: "match_day" as AbsenceTiming },
-  { text: "Soused topí listím a mně smrdí prádlo na šňůře, musím hlídat", emoji: "\u{1F342}", timing: "match_day" as AbsenceTiming },
-  { text: "Dostal jsem pokutu za parkování a musím to jít řešit", emoji: "\u{1F694}", timing: "match_day" as AbsenceTiming },
-  { text: "Tchyně mi vaří svíčkovou, to se neodmítá", emoji: "\u{1F35B}", timing: "day_before" as AbsenceTiming },
-  { text: "Musím posekat sousedovic zahradu, prý jinak nepohlídá psa", emoji: "\u{1F33F}", timing: "match_day" as AbsenceTiming },
-  { text: "Spadla mi včelí budka a musím řešit roj", emoji: "\u{1F41D}", timing: "match_day" as AbsenceTiming },
-  { text: "Udělal jsem si zkoušku na rybářský lístek a musím to oslavit", emoji: "\u{1F41F}", timing: "match_day" as AbsenceTiming },
-  { text: "Zablokoval mi někdo výjezd z dvorku, čekám na odtahovou", emoji: "\u{1F698}", timing: "match_day" as AbsenceTiming },
-  { text: "Právě jsem zjistil, že mi teče střecha. Přesně teď. Přesně dneska", emoji: "\u{1F327}", timing: "match_day" as AbsenceTiming },
-  { text: "Jdu na sraz ročníku, víme se dvacet let neviděli", emoji: "\u{1F37B}", timing: "day_before" as AbsenceTiming },
-  // Pražské absurdní
-  { text: "Turisti mi zablokovali vchod, nedostal jsem se z domu", emoji: "\u{1F4F7}", timing: "match_day" as AbsenceTiming },
-  { text: "Demonstrace na Václaváku, nedostal jsem se přes kordon", emoji: "\u{1F4E2}", timing: "match_day" as AbsenceTiming },
-  { text: "Soused pouští techno od rána, nemohl jsem spát", emoji: "\u{1F3B6}", timing: "match_day" as AbsenceTiming },
-  { text: "Ztratil jsem Lítačku a bez ní nikam nejedu", emoji: "\u{1F4B3}", timing: "match_day" as AbsenceTiming },
-  { text: "Spadl jsem do výkopu u metra D", emoji: "\u{1F6A7}", timing: "match_day" as AbsenceTiming },
-  { text: "Holubi mi posrali dres na balkóně", emoji: "\u{1F54A}", timing: "match_day" as AbsenceTiming },
-  { text: "Zabloudil jsem v Holešovickém OC, nenašel jsem východ", emoji: "\u{1F6D2}", timing: "match_day" as AbsenceTiming },
-  { text: "Food festival na náplavce, nedostal jsem se přes davy", emoji: "\u{1F354}", timing: "match_day" as AbsenceTiming },
-  { text: "Klíče spadly do šachty od metra", emoji: "\u{1F511}", timing: "match_day" as AbsenceTiming },
-  { text: "Pražský městský soud — svědčím proti sousedovi", emoji: "\u{2696}", timing: "day_before" as AbsenceTiming },
-  { text: "Stěhuju se z Žižkova na Vinohrady, nemám čas", emoji: "\u{1F4E6}", timing: "day_before" as AbsenceTiming },
-  { text: "Sousedka mi zalila byt, řeším pojistku", emoji: "\u{1F4A7}", timing: "match_day" as AbsenceTiming },
-  { text: "Bytová schůze, musím být jinak mi schválí kokotiny", emoji: "\u{1F3E2}", timing: "day_before" as AbsenceTiming },
+// env: "rural" = jen vesnice/hamlet, "urban" = jen town/city, undefined = všude
+type ExcuseEnv = "rural" | "urban" | undefined;
+
+const ABSURD_EXCUSES: Array<{ text: string; emoji: string; timing: AbsenceTiming; env?: ExcuseEnv }> = [
+  // Vesnické
+  { text: "Zamkl jsem se v garáži a nikdo není doma", emoji: "\u{1F512}", timing: "match_day" },
+  { text: "Musím hlídat kozu, utekla sousedům a žere mi zahradu", emoji: "\u{1F410}", timing: "match_day", env: "rural" },
+  { text: "Přijeli příbuzní z Kanady, neviděl jsem je 15 let, nemůžu odejít", emoji: "\u{2708}", timing: "day_before" },
+  { text: "Slíbil jsem dědovi že mu pomůžu vyčistit studnu", emoji: "\u{1F4A7}", timing: "day_before", env: "rural" },
+  { text: "Našel jsem houby a musím je hned zpracovat, jinak se zkazí", emoji: "\u{1F344}", timing: "match_day", env: "rural" },
+  { text: "Spadl mi strom na plot a utečou slepice", emoji: "\u{1F333}", timing: "match_day", env: "rural" },
+  { text: "Dostal jsem lístky na hokej, sorry ale tohle se neodmítá", emoji: "\u{1F3D2}", timing: "match_day" },
+  { text: "Musím odvézt tchána na houby, hrozil že jinak nepůjčí přívěs", emoji: "\u{1F698}", timing: "day_before", env: "rural" },
+  { text: "Pes sežral klíče od auta, čekám až je... vrátí", emoji: "\u{1F436}", timing: "match_day" },
+  { text: "Montér na parabolu přijede jen dneska mezi 8 a 17", emoji: "\u{1F4E1}", timing: "match_day" },
+  { text: "Svědek na svatbě bratrance, nemůžu odmítnout", emoji: "\u{1F492}", timing: "day_before" },
+  { text: "Musím natřít plot, barva schne jen do patnácti stupňů", emoji: "\u{1F3A8}", timing: "match_day", env: "rural" },
+  { text: "Soused mi vrací vrtačku a slíbil jsem mu za to pomoct se střechou", emoji: "\u{1F527}", timing: "match_day", env: "rural" },
+  { text: "Žena mi vyhodila kopačky z okna. Doslova. Hledám je v křoví", emoji: "\u{1F462}", timing: "match_day" },
+  { text: "Zateklo mi do sklepa, musím to vylejvat kbelíkem", emoji: "\u{1FAA3}", timing: "match_day" },
+  { text: "Musím opravit záchod, ženská řekla že dokud nebude fungovat, nikam nejdu", emoji: "\u{1F6BD}", timing: "match_day" },
+  { text: "Chytil jsem sumce a nemůžu ho nechat v autě", emoji: "\u{1F41F}", timing: "match_day", env: "rural" },
+  { text: "Klíště. Musím k doktorovi. Asi. Pro jistotu", emoji: "\u{1FAB2}", timing: "match_day", env: "rural" },
+  { text: "Babička volala že jí nefunguje televize a neumí přepnout vstup", emoji: "\u{1F4FA}", timing: "match_day" },
+  { text: "Musím vyzvednout traktůrek ze servisu, jinak mi ho prodaj", emoji: "\u{1F69C}", timing: "match_day", env: "rural" },
+  { text: "Kočka mi porodila v tašce s vybavením", emoji: "\u{1F431}", timing: "match_day" },
+  { text: "Sousedovic pes mi ukradl kopačku, honíme ho po vsi", emoji: "\u{1F415}", timing: "match_day", env: "rural" },
+  { text: "Přišla kontrola z hygieny, nemůžu odejít z hospody", emoji: "\u{1F52C}", timing: "match_day" },
+  { text: "Vyhrál jsem v tombole prase a musím ho odvézt domů", emoji: "\u{1F416}", timing: "match_day", env: "rural" },
+  { text: "Našel jsem v garáži ježka a čekám na záchranku pro zvířata", emoji: "\u{1F994}", timing: "match_day", env: "rural" },
+  { text: "Soused topí listím a mně smrdí prádlo na šňůře, musím hlídat", emoji: "\u{1F342}", timing: "match_day", env: "rural" },
+  { text: "Dostal jsem pokutu za parkování a musím to jít řešit", emoji: "\u{1F694}", timing: "match_day" },
+  { text: "Tchyně mi vaří svíčkovou, to se neodmítá", emoji: "\u{1F35B}", timing: "day_before" },
+  { text: "Musím posekat sousedovic zahradu, prý jinak nepohlídá psa", emoji: "\u{1F33F}", timing: "match_day", env: "rural" },
+  { text: "Spadla mi včelí budka a musím řešit roj", emoji: "\u{1F41D}", timing: "match_day", env: "rural" },
+  { text: "Udělal jsem si zkoušku na rybářský lístek a musím to oslavit", emoji: "\u{1F41F}", timing: "match_day", env: "rural" },
+  { text: "Zablokoval mi někdo výjezd z dvorku, čekám na odtahovou", emoji: "\u{1F698}", timing: "match_day" },
+  { text: "Právě jsem zjistil, že mi teče střecha. Přesně teď. Přesně dneska", emoji: "\u{1F327}", timing: "match_day" },
+  { text: "Jdu na sraz ročníku, víme se dvacet let neviděli", emoji: "\u{1F37B}", timing: "day_before" },
+  // Pražské / městské
+  { text: "Turisti mi zablokovali vchod, nedostal jsem se z domu", emoji: "\u{1F4F7}", timing: "match_day", env: "urban" },
+  { text: "Demonstrace na Václaváku, nedostal jsem se přes kordon", emoji: "\u{1F4E2}", timing: "match_day", env: "urban" },
+  { text: "Soused pouští techno od rána, nemohl jsem spát", emoji: "\u{1F3B6}", timing: "match_day", env: "urban" },
+  { text: "Ztratil jsem Lítačku a bez ní nikam nejedu", emoji: "\u{1F4B3}", timing: "match_day", env: "urban" },
+  { text: "Spadl jsem do výkopu u metra D", emoji: "\u{1F6A7}", timing: "match_day", env: "urban" },
+  { text: "Holubi mi posrali dres na balkóně", emoji: "\u{1F54A}", timing: "match_day", env: "urban" },
+  { text: "Zabloudil jsem v Holešovickém OC, nenašel jsem východ", emoji: "\u{1F6D2}", timing: "match_day", env: "urban" },
+  { text: "Food festival na náplavce, nedostal jsem se přes davy", emoji: "\u{1F354}", timing: "match_day", env: "urban" },
+  { text: "Klíče spadly do šachty od metra", emoji: "\u{1F511}", timing: "match_day", env: "urban" },
+  { text: "Pražský městský soud — svědčím proti sousedovi", emoji: "\u{2696}", timing: "day_before", env: "urban" },
+  { text: "Stěhuju se z Žižkova na Vinohrady, nemám čas", emoji: "\u{1F4E6}", timing: "day_before", env: "urban" },
+  { text: "Sousedka mi zalila byt, řeším pojistku", emoji: "\u{1F4A7}", timing: "match_day", env: "urban" },
+  { text: "Bytová schůze, musím být jinak mi schválí kokotiny", emoji: "\u{1F3E2}", timing: "day_before", env: "urban" },
 ];
 
 // ═══════════════════════════════════════════════
@@ -175,26 +178,28 @@ const HEALTH_EXCUSES = [
   { text: "Doktor mi zakázal sport na týden, něco s tlakem", emoji: "\u{1FA7A}" },
 ];
 
-const COMMUTE_EXCUSES = [
+const COMMUTE_EXCUSES: Array<{ text: string; emoji: string; env?: ExcuseEnv }> = [
+  // Univerzální
   { text: "Auto se porouchalo cestou na zápas", emoji: "\u{1F697}" },
   { text: "Nestihl jsem to, na silnici byla nehoda a stálo se", emoji: "\u{1F6A7}" },
   { text: "Zmeškal jsem autobus a další jede až za hodinu", emoji: "\u{1F68C}" },
   { text: "Nemám odvoz, nikdo nejede mým směrem", emoji: "\u{1F6B6}" },
-  { text: "Musím jet přes dvě vesnice a silnice je rozkopaná", emoji: "\u{1F6A7}" },
   { text: "Dneska to nestíhám, je to daleko a mám ještě směnu", emoji: "\u23F0" },
   { text: "Kolega co mě veze onemocněl, nemám jak se dostat", emoji: "\u{1F912}" },
-  // Pražské dopravní
-  { text: "Nejela tramvaj, výluka na Palackého náměstí", emoji: "\u{1F68B}" },
-  { text: "Magistrála byla totálně ucpaná", emoji: "\u{1F697}" },
-  { text: "Metro stálo 20 minut, porucha na lince C", emoji: "\u{1F687}" },
-  { text: "Zavřeli Nuselák, objížďka přes půl Prahy", emoji: "\u{1F6A7}" },
-  { text: "Autobus 135 nejel, čekal jsem na dalšího 40 minut", emoji: "\u{1F68C}" },
-  { text: "Parkování na Žižkově je peklo, objel jsem to třikrát", emoji: "\u{1F697}" },
-  { text: "Kolaps na Barrandovském mostě, stálo se hodinu", emoji: "\u{1F6A7}" },
-  { text: "Výluka na trati, tramvaj nejede, NAD autobus nepřijel", emoji: "\u{1F68B}" },
-  { text: "D1 ucpaná od Chodova po Spořilov, stojím v koloně", emoji: "\u{1F697}" },
-  { text: "Koloběžka se mi rozbila u Anděla, pěšky to nestíhám", emoji: "\u{1F6F4}" },
-  { text: "Lítačka mi nefunguje, turnikety mě nepustily", emoji: "\u{1F4B3}" },
+  // Vesnické
+  { text: "Musím jet přes dvě vesnice a silnice je rozkopaná", emoji: "\u{1F6A7}", env: "rural" },
+  // Pražské / městské
+  { text: "Nejela tramvaj, výluka na Palackého náměstí", emoji: "\u{1F68B}", env: "urban" },
+  { text: "Magistrála byla totálně ucpaná", emoji: "\u{1F697}", env: "urban" },
+  { text: "Metro stálo 20 minut, porucha na lince C", emoji: "\u{1F687}", env: "urban" },
+  { text: "Zavřeli Nuselák, objížďka přes půl Prahy", emoji: "\u{1F6A7}", env: "urban" },
+  { text: "Autobus 135 nejel, čekal jsem na dalšího 40 minut", emoji: "\u{1F68C}", env: "urban" },
+  { text: "Parkování na Žižkově je peklo, objel jsem to třikrát", emoji: "\u{1F697}", env: "urban" },
+  { text: "Kolaps na Barrandovském mostě, stálo se hodinu", emoji: "\u{1F6A7}", env: "urban" },
+  { text: "Výluka na trati, tramvaj nejede, NAD autobus nepřijel", emoji: "\u{1F68B}", env: "urban" },
+  { text: "D1 ucpaná od Chodova po Spořilov, stojím v koloně", emoji: "\u{1F697}", env: "urban" },
+  { text: "Koloběžka se mi rozbila u Anděla, pěšky to nestíhám", emoji: "\u{1F6F4}", env: "urban" },
+  { text: "Lítačka mi nefunguje, turnikety mě nepustily", emoji: "\u{1F4B3}", env: "urban" },
 ];
 
 /**
@@ -212,8 +217,12 @@ export function generateAbsences(
   rng: Rng,
   squad: PlayerForAbsence[],
   timing: AbsenceTiming = "any",
+  villageSize?: string,
 ): AbsenceResult[] {
   const absences: AbsenceResult[] = [];
+  // Filter excuses by environment: town/city = urban, hamlet/village = rural
+  const isUrban = villageSize === "town" || villageSize === "small_city" || villageSize === "city";
+  const envFilter = (e: { env?: ExcuseEnv }) => !e.env || (isUrban ? e.env === "urban" : e.env === "rural");
 
   for (let i = 0; i < squad.length; i++) {
     const p = squad[i];
@@ -278,8 +287,8 @@ export function generateAbsences(
         break;
       }
       case "absurd": {
-        const applicable = ABSURD_EXCUSES.filter((e) => timing === "any" || e.timing === timing);
-        const pick = rng.pick(applicable.length > 0 ? applicable : ABSURD_EXCUSES);
+        const applicable = ABSURD_EXCUSES.filter((e) => (timing === "any" || e.timing === timing) && envFilter(e));
+        const pick = rng.pick(applicable.length > 0 ? applicable : ABSURD_EXCUSES.filter(envFilter));
         smsText = pick.text;
         emoji = pick.emoji;
         excuseTiming = pick.timing ?? "match_day";
@@ -298,7 +307,8 @@ export function generateAbsences(
         break;
       }
       case "commute": {
-        const pick = rng.pick(COMMUTE_EXCUSES);
+        const commuteFiltered = COMMUTE_EXCUSES.filter(envFilter);
+        const pick = rng.pick(commuteFiltered.length > 0 ? commuteFiltered : COMMUTE_EXCUSES);
         smsText = pick.text;
         emoji = pick.emoji;
         break;
