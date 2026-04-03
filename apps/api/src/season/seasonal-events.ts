@@ -468,13 +468,121 @@ const ADHOC_EVENT_POOL: SeasonalEventDef[] = [
   },
 ];
 
+// Pražské ad-hoc události — městské alternativy
+const ADHOC_EVENT_POOL_PRAHA: SeasonalEventDef[] = [
+  {
+    type: "hospoda",
+    title: "Hospoda Na Roháčku po zápase",
+    description: "Kluci chtějí zajít na pivo do hospody Na Roháčku. Prý mají nový ležák.",
+    gameWeek: 0,
+    effects: [{ type: "morale", value: 5, description: "+5 morálka" }, { type: "condition", value: -10, description: "-10 kondice" }],
+  },
+  {
+    type: "pratelak",
+    title: "Přátelák s partou z Letné",
+    description: "Parta fotbalistů z Letné vyzývá k přáteláku na jejich hřišti.",
+    gameWeek: 0,
+    effects: [],
+    choices: [
+      { id: "yes", label: "Přijmout", effects: [{ type: "experience", value: 5, description: "+5 zkušenost" }, { type: "condition", value: -5, description: "-5 kondice" }] },
+      { id: "no", label: "Odmítnout", effects: [] },
+    ],
+  },
+  {
+    type: "brigada",
+    title: "Úklid hřiště po koncertu",
+    description: "Na hřišti byl včera koncert a je potřeba uklidit. Městská část nabízí odměnu.",
+    gameWeek: 0,
+    effects: [],
+    choices: [
+      { id: "yes", label: "Pomůžeme", effects: [{ type: "reputation", value: 5, description: "+5 reputace" }, { type: "budget", value: 1500, description: "+1 500 Kč" }, { type: "condition", value: -10, description: "-10 kondice" }] },
+      { id: "no", label: "Nemáme čas", effects: [] },
+    ],
+  },
+  {
+    type: "sipky",
+    title: "Turnaj v šipkách v hospodě",
+    description: "Místní hospoda pořádá turnaj v šipkách. Vítěz bere sud piva pro tým.",
+    gameWeek: 0,
+    effects: [{ type: "morale", value: 3, description: "+3 morálka" }],
+  },
+  {
+    type: "grilovani",
+    title: "Sponzor grilování na náplavce",
+    description: "Sponzor zve celý tým na grilování na Vltavské náplavce.",
+    gameWeek: 0,
+    effects: [{ type: "morale", value: 5, description: "+5 morálka" }, { type: "budget", value: 500, description: "+500 Kč (sponzorský dar)" }],
+  },
+  {
+    type: "streetfood",
+    title: "Street food festival v okolí",
+    description: "V městské části je food festival. Tým by mohl mít stánek s pivem a klobásami.",
+    gameWeek: 0,
+    effects: [],
+    choices: [
+      { id: "help", label: "Postavit stánek", effects: [{ type: "reputation", value: 8, description: "+8 reputace" }, { type: "budget", value: 2000, description: "+2 000 Kč" }, { type: "condition", value: -15, description: "-15 kondice" }] },
+      { id: "visit", label: "Jen se projít", effects: [{ type: "morale", value: 3, description: "+3 morálka" }] },
+      { id: "no", label: "Ignorovat", effects: [] },
+    ],
+  },
+  {
+    type: "exligovec",
+    title: "Borec ze Slavie na tréninku",
+    description: "Bývalý hráč Slavie bydlí v okolí a nabízí tréninkovou lekci.",
+    gameWeek: 0,
+    effects: [],
+    choices: [
+      { id: "pay", label: "Přijmout a zaplatit", effects: [{ type: "experience", value: 8, description: "+8 zkušenost" }, { type: "budget", value: -2000, description: "-2 000 Kč" }] },
+      { id: "free", label: "Přijmout zdarma", effects: [{ type: "experience", value: 3, description: "+3 zkušenost" }] },
+      { id: "no", label: "Nepotřebujeme", effects: [] },
+    ],
+  },
+  {
+    type: "narozeniny",
+    title: "Hráč slaví v baru na Žižkově",
+    description: "Jeden z hráčů má narozeniny a zve tým do svého oblíbeného baru na Žižkově.",
+    gameWeek: 0,
+    effects: [],
+    choices: [
+      { id: "big", label: "Velká oslava", effects: [{ type: "morale", value: 10, description: "+10 morálka" }, { type: "condition", value: -20, description: "-20 kondice" }, { type: "alcohol_event", value: 1, description: "Kocovina" }] },
+      { id: "small", label: "Skromná gratulace", effects: [{ type: "morale", value: 3, description: "+3 morálka" }] },
+      { id: "skip", label: "Ignorovat", effects: [{ type: "morale", value: -5, description: "-5 morálka" }] },
+    ],
+  },
+  {
+    type: "vylet_zapas",
+    title: "Výlet na derby Sparta–Slavia",
+    description: "Blíží se pražské derby! Koupíme lístky a půjdeme se podívat?",
+    gameWeek: 0,
+    effects: [],
+    choices: [
+      { id: "bus", label: "Celý tým na derby", effects: [{ type: "morale", value: 8, description: "+8 morálka" }, { type: "experience", value: 3, description: "+3 zkušenost" }, { type: "budget", value: -3000, description: "-3 000 Kč (lístky)" }] },
+      { id: "solo", label: "Kdo chce, ať jde sám", effects: [{ type: "morale", value: 2, description: "+2 morálka" }] },
+      { id: "train", label: "Zůstaneme trénovat", effects: [{ type: "condition", value: 5, description: "+5 kondice" }] },
+    ],
+  },
+  {
+    type: "kontrola_svaz",
+    title: "Kontrola z pražského svazu",
+    description: "Přijela kontrola z pražského fotbalového svazu. Hřiště musí splňovat podmínky.",
+    gameWeek: 0,
+    effects: [],
+    choices: [
+      { id: "fix", label: "Rychle uklidit", effects: [{ type: "budget", value: -1000, description: "-1 000 Kč" }] },
+      { id: "risk", label: "Nechat jak to je", effects: [{ type: "budget", value: -2000, description: "-2 000 Kč (pokuta)" }] },
+      { id: "lunch", label: "Pozvat na oběd", effects: [{ type: "budget", value: -500, description: "-500 Kč" }, { type: "reputation", value: 2, description: "+2 reputace" }] },
+    ],
+  },
+];
+
 /**
  * Pick a random ad-hoc event for after a match round.
- * ~30% chance of triggering.
+ * ~30% chance of triggering. District-aware (Praha = městské události).
  */
-export function pickRandomAdhocEvent(rng: Rng, gameWeek: number): SeasonalEventDef | null {
+export function pickRandomAdhocEvent(rng: Rng, gameWeek: number, district?: string): SeasonalEventDef | null {
   if (rng.random() > 0.3) return null;
-  const event = rng.pick(ADHOC_EVENT_POOL);
+  const pool = district === "Praha" ? ADHOC_EVENT_POOL_PRAHA : ADHOC_EVENT_POOL;
+  const event = rng.pick(pool);
   return { ...event, gameWeek };
 }
 

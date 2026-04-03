@@ -311,6 +311,7 @@ export function generateBetweenRoundEvents(
   reputation: number,
   lastMatchWon: boolean | null,
   round: number,
+  district?: string,
 ): GameEvent[] {
   const ctx: EventContext = { rng, squad, budget, reputation, lastMatchWon, round };
   const events: GameEvent[] = [];
@@ -330,10 +331,33 @@ export function generateBetweenRoundEvents(
 
     if (rng.random() > result.prob) continue;
 
+    let title = rule.title;
+    let description = result.description;
+
+    // Pražské varianty textů
+    if (district === "Praha") {
+      const pragueTexts: Record<string, { title?: string; replace?: [string, string][] }> = {
+        "Vykradení kabiny": { title: "Vloupání do kabiny", replace: [["zlodějíčci", "bezdomovci"], ["někdo vykradl", "někdo se vloupal do"]] },
+        "Havárie na hřišti": { title: "Havárie v areálu" },
+        "Vandalizmus": { replace: [["sprejoval kabiny", "tageři posprejovali plot"], ["po vsi", "po městské části"]] },
+        "Obecní zpravodaj": { title: "Článek v Metro deníku", replace: [["obecním zpravodaji", "Metro deníku"], ["V obci", "V městské části"]] },
+        "Nový hráč se nabídl": { replace: [["přišel na trénink", "viděl plakát v tramvaji a přišel"], ["z okolní vesnice", "z vedlejší městské části"]] },
+        "Dotace od obce": { title: "Grant z městské části", replace: [["obec", "městská část"], ["obce", "městské části"]] },
+        "Sponzor nabízí smlouvu": { replace: [["Místní firma", "Lokální pražská firma"]] },
+      };
+      const pt = pragueTexts[title];
+      if (pt) {
+        if (pt.title) title = pt.title;
+        if (pt.replace) {
+          for (const [from, to] of pt.replace) description = description.replace(from, to);
+        }
+      }
+    }
+
     events.push({
       category: rule.category,
-      title: rule.title,
-      description: result.description,
+      title,
+      description,
       emoji: rule.emoji,
       effect: result.effect,
     });

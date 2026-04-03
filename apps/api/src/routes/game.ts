@@ -311,7 +311,7 @@ gameRouter.get("/teams/:teamId/events", async (c) => {
   const events = generateBetweenRoundEvents(
     rng, generatedPlayers,
     team.budget as number, team.reputation as number,
-    null, 1,
+    null, 1, team.district as string | undefined,
   );
 
   return c.json(events);
@@ -1888,11 +1888,11 @@ gameRouter.post("/game/run-matches", async (c) => {
             const { pickRandomAdhocEvent } = await import("../season/seasonal-events");
             const { createRng } = await import("../generators/rng");
             const humanTeams = await c.env.DB.prepare(
-              "SELECT t.id, t.league_id FROM teams t WHERE t.league_id = ? AND t.user_id <> 'ai'"
+              "SELECT t.id, t.league_id, v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.league_id = ? AND t.user_id <> 'ai'"
             ).bind(leagueId).all();
             for (const ht of humanTeams.results) {
               const adhocRng = createRng(Date.now() + (ht.id as string).charCodeAt(0));
-              const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek);
+              const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek, ht.district as string);
               if (adhocEvent) {
                 await c.env.DB.prepare(
                   "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?, 'pending')"

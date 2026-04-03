@@ -205,7 +205,8 @@ export default {
                   });
 
                   const lastWon = mr.matchType === "pve_home" ? mr.homeScore > mr.awayScore : mr.awayScore > mr.homeScore;
-                  const brEvents = generateBetweenRoundEvents(brRng, squad, td?.budget??0, td?.reputation??50, lastWon, gameWeek);
+                  const teamDistrict = await env.DB.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.id=?").bind(humanTeamId).first<{district:string}>().catch(() => null);
+                  const brEvents = generateBetweenRoundEvents(brRng, squad, td?.budget??0, td?.reputation??50, lastWon, gameWeek, teamDistrict?.district);
 
                   for (const ev of brEvents) {
                     if (ev.effect) {
@@ -280,12 +281,12 @@ export default {
                 const { pickRandomAdhocEvent } = await import("./season/seasonal-events");
                 const { createRng: createAdhocRng } = await import("./generators/rng");
                 const humanTeams = await env.DB.prepare(
-                  "SELECT id, league_id FROM teams WHERE league_id = ? AND user_id <> 'ai'"
+                  "SELECT t.id, t.league_id, v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.league_id = ? AND t.user_id <> 'ai'"
                 ).bind(leagueId).all();
 
                 for (const ht of humanTeams.results) {
                   const adhocRng = createAdhocRng(Date.now() + (ht.id as string).charCodeAt(0));
-                  const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek);
+                  const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek, ht.district as string);
                   if (adhocEvent) {
                     await env.DB.prepare(
                       "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?, 'pending')"
