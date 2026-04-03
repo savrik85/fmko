@@ -321,9 +321,9 @@ transfersRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
   const amount = bid.amount as number;
 
   // Check buyer budget
-  const buyer = await c.env.DB.prepare("SELECT budget, name, game_date FROM teams WHERE id = ?")
-    .bind(buyerTeamId).first<{ budget: number; name: string; game_date: string }>();
-  if (!buyer || buyer.budget < amount) return c.json({ error: "Kupující nemá dostatek prostředků" }, 400);
+  const buyer = await c.env.DB.prepare("SELECT budget, name, game_date, league_id FROM teams WHERE id = ?")
+    .bind(buyerTeamId).first<{ budget: number; name: string; game_date: string; league_id: string }>();
+  if (!buyer) return c.json({ error: "Kupující nenalezen" }, 400);
 
   const seller = await c.env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?")
     .bind(teamId).first<{ name: string; league_id: string }>();
@@ -332,8 +332,20 @@ transfersRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
 
   const gameDate = buyer.game_date ?? new Date().toISOString();
 
+  // Cross-league admin fee (15%)
+  const isCrossLeague = seller?.league_id && buyer.league_id && seller.league_id !== buyer.league_id;
+  const adminFee = isCrossLeague ? Math.round(amount * 0.15) : 0;
+  const totalCost = amount + adminFee;
+
+  if (buyer.budget < totalCost) {
+    return c.json({ error: isCrossLeague ? `Nedostatek prostředků (cena ${amount} Kč + administrační poplatek ${adminFee} Kč)` : "Kupující nemá dostatek prostředků" }, 400);
+  }
+
   // Transfer money
   await recordTransaction(c.env.DB, buyerTeamId, "transfer_fee", -amount, `Přestup: ${player?.first_name} ${player?.last_name}`, gameDate);
+  if (adminFee > 0) {
+    await recordTransaction(c.env.DB, buyerTeamId, "transfer_admin_fee", -adminFee, `Administrační poplatek za meziligový přestup`, gameDate);
+  }
   await recordTransaction(c.env.DB, teamId, "transfer_income", amount, `Prodej: ${player?.first_name} ${player?.last_name}`, gameDate);
 
   // Transfer player
