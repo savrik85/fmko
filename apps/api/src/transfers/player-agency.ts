@@ -30,8 +30,8 @@ export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: numb
 }
 
 export function evaluateSigningChance(
-  agent: { weekly_wage: number; personality: Record<string, number>; village_id?: string | null },
-  team: { reputation: number; villageLat: number; villageLon: number; squadSize: number },
+  agent: { weekly_wage: number; personality: Record<string, number>; village_id?: string | null; district?: string | null },
+  team: { reputation: number; villageLat: number; villageLon: number; squadSize: number; district?: string | null },
   agentVillage: { lat: number; lng: number } | null,
   offeredWage: number,
   rng: Rng,
@@ -96,7 +96,21 @@ export function evaluateSigningChance(
     detail: patriotism >= 70 ? "Lokální patriot" : patriotism < 30 ? "Nezáleží mu na klubu" : "Normální přístup",
   });
 
-  // 6. Náhoda (-10 až +10)
+  // 6. Meziligový přestup (-15 až -25, patrioti -30)
+  const agentDistrict = agent.district ?? null;
+  const teamDistrict = team.district ?? null;
+  const isCrossDistrict = agentDistrict && teamDistrict && agentDistrict !== teamDistrict;
+  if (isCrossDistrict) {
+    const crossPenalty = patriotism >= 70 ? -30 : rng.int(-25, -15);
+    total += crossPenalty;
+    factors.push({
+      name: "Jiný okres",
+      value: crossPenalty,
+      detail: patriotism >= 70 ? "Lokální patriot — nechce pryč z regionu" : "Nechce se stěhovat do jiného okresu",
+    });
+  }
+
+  // 7. Náhoda (-10 až +10)
   const randomScore = rng.int(-10, 10);
   total += randomScore;
 
@@ -135,6 +149,12 @@ export function evaluateSigningChance(
         `O vašem klubu prý neslyšel. Zkusí to jinde.`,
         `Říkal, že chce do lepšího týmu.`,
         `Odmítl — prý nemáte dost dobrou pověst.`,
+      ]);
+    } else if (worst.name === "Jiný okres") {
+      explanation = rng.pick([
+        `Řekl, že do jiného okresu se mu nechce. Má to tu rád.`,
+        `Odmítl — prý nechce dojíždět tak daleko.`,
+        `Říkal, že všichni jeho kamarádi hrajou tady. Proč by měnil?`,
       ]);
     } else if (worst.name === "Kádr") {
       explanation = rng.pick([

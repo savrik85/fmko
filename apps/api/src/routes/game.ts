@@ -1652,6 +1652,166 @@ gameRouter.post("/game/set-admin", async (c) => {
   return c.json({ ok: true, email: body.email, isAdmin: body.isAdmin });
 });
 
+// POST /api/game/bootstrap-league — vyplní existující prázdnou ligu AI týmy + rozpis
+gameRouter.post("/game/bootstrap-league", async (c) => {
+  const body = await c.req.json<{ leagueId: string; simulateRounds?: number }>().catch(() => null);
+  if (!body?.leagueId) return c.json({ error: "Missing leagueId" }, 400);
+
+  const db = c.env.DB;
+  const league = await db.prepare("SELECT id, district, name, level, season_id, status FROM leagues WHERE id = ?")
+    .bind(body.leagueId).first<{ id: string; district: string; name: string; level: string; season_id: string; status: string }>();
+  if (!league) return c.json({ error: "League not found" }, 404);
+  if (league.status !== "active") return c.json({ error: "League not active" }, 400);
+
+  // Check existing teams
+  const existingTeams = await db.prepare("SELECT id, name, user_id, village_id FROM teams WHERE league_id = ?").bind(league.id).all();
+  const humanTeam = existingTeams.results.find(t => t.user_id !== "ai");
+  const aiTeamCount = existingTeams.results.filter(t => t.user_id === "ai").length;
+  const targetAI = 14 - (humanTeam ? 1 : 0) - aiTeamCount;
+
+  if (targetAI <= 0) return c.json({ error: "League already has enough teams", teams: existingTeams.results.length }, 400);
+
+  // Get district villages (exclude already used)
+  const usedVillageIds = new Set(existingTeams.results.map(t => t.village_id as string));
+  const districtVillages = await db.prepare(
+    "SELECT id as code, name, district, region as region_code, population, size as category FROM villages WHERE district = ?"
+  ).bind(league.district).all();
+
+  const availableVillages = districtVillages.results
+    .filter(v => !usedVillageIds.has(v.code as string))
+    .map(v => ({
+      name: v.name as string, code: v.code as string,
+      region_code: v.region_code as string || "CZ010",
+      category: (v.category as string) === "hamlet" ? "vesnice" : (v.category as string) === "village" ? "obec" : (v.category as string) === "town" ? "mestys" : "mesto",
+      population: v.population as number,
+    }));
+
+  if (availableVillages.length < targetAI) {
+    return c.json({ error: `Not enough villages: need ${targetAI}, have ${availableVillages.length}` }, 400);
+  }
+
+  // Load district data
+  const { getDistrictDataFromDB } = await import("../data/districts/index");
+  const districtData = await getDistrictDataFromDB(db, league.district);
+  const { createRng } = await import("../generators/rng");
+  const rng = createRng(Date.now());
+  const usedNames = new Set(existingTeams.results.map(t => t.name as string));
+
+  // Determine village size for skill generation (use first available village's category)
+  const villageSize = (districtVillages.results[0]?.category as string) ?? "village";
+
+  // Generate AI teams
+  const { generateAITeams } = await import("../league/ai-teams");
+  const firstnameData = {
+    male: {
+      "1960s": { "Jiří": 0.08, "Jan": 0.07, "Petr": 0.06, "Josef": 0.06, "Jaroslav": 0.05, "Milan": 0.05, "Zdeněk": 0.04 },
+      "1970s": { "Petr": 0.08, "Jan": 0.07, "Martin": 0.06, "Jiří": 0.06, "Pavel": 0.05, "Tomáš": 0.04, "Roman": 0.03 },
+      "1980s": { "Jan": 0.08, "Martin": 0.07, "Tomáš": 0.06, "Pavel": 0.05, "Michal": 0.05, "David": 0.05, "Lukáš": 0.04 },
+      "1990s": { "Jan": 0.09, "Tomáš": 0.07, "Jakub": 0.06, "David": 0.06, "Lukáš": 0.05, "Ondřej": 0.05, "Filip": 0.04 },
+      "2000s": { "Jakub": 0.08, "Jan": 0.07, "Adam": 0.06, "Matěj": 0.06, "Ondřej": 0.05, "Filip": 0.05, "Vojtěch": 0.04 },
+      "2010s": { "Jakub": 0.07, "Jan": 0.07, "Adam": 0.06, "Vojtěch": 0.05, "Filip": 0.05, "Tomáš": 0.05, "Šimon": 0.04 },
+    },
+  };
+
+  const aiTeams = generateAITeams(rng, availableVillages, targetAI, districtData.surnames, firstnameData, usedNames);
+
+  // Insert AI teams into DB
+  const { insertAITeamsIntoDB } = await import("../league/insert-ai-teams");
+  const leagueSetup = {
+    name: league.name, district: league.district, season: "2024/2025", level: 1, totalRounds: 26,
+    teams: aiTeams.map(ai => ({
+      teamName: ai.teamName, villageName: ai.villageName, villageCode: ai.villageCode,
+      primaryColor: ai.primaryColor, secondaryColor: ai.secondaryColor, isPlayer: false, aiTeam: ai,
+    })),
+    schedule: [],
+  };
+  await insertAITeamsIntoDB(db, league.id, leagueSetup, districtVillages.results as any, rng, villageSize);
+
+  // Generate schedule + calendar
+  const { generateSchedule, totalRounds } = await import("../league/schedule");
+  const { generateSeasonCalendar } = await import("../season/calendar");
+
+  const allTeams = await db.prepare("SELECT id FROM teams WHERE league_id = ? ORDER BY name").bind(league.id).all();
+  const teamIds = allTeams.results.map(r => r.id as string);
+
+  const seasonRow = await db.prepare("SELECT number FROM seasons WHERE id = ?").bind(league.season_id).first<{ number: number }>();
+  const seasonNumber = seasonRow?.number ?? 1;
+
+  const schedule = generateSchedule(rng, teamIds.length);
+  const calendar = generateSeasonCalendar(league.id, seasonNumber, new Date());
+  const rounds = totalRounds(teamIds.length);
+
+  // Insert calendar entries
+  for (const entry of calendar.entries) {
+    await db.prepare(
+      "INSERT OR IGNORE INTO season_calendar (id, league_id, season_number, game_week, match_day, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
+    ).bind(entry.id, league.id, seasonNumber, entry.gameWeek, entry.matchDay, entry.scheduledAt)
+      .run().catch((e: any) => logger.warn({ module: "bootstrap" }, "calendar insert", e));
+  }
+
+  // Map calendar entries by week
+  const calByWeek = new Map<number, string>();
+  for (const entry of calendar.entries) {
+    if (!calByWeek.has(entry.gameWeek)) calByWeek.set(entry.gameWeek, entry.id);
+  }
+
+  // Insert matches
+  for (const match of schedule) {
+    if (match.homeTeamIndex >= teamIds.length || match.awayTeamIndex >= teamIds.length) continue;
+    const calId = calByWeek.get(match.round) ?? null;
+    await db.prepare(
+      "INSERT INTO matches (id, league_id, calendar_id, round, home_team_id, away_team_id, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
+    ).bind(crypto.randomUUID(), league.id, calId, match.round, teamIds[match.homeTeamIndex], teamIds[match.awayTeamIndex])
+      .run().catch((e: any) => logger.warn({ module: "bootstrap" }, "match insert", e));
+  }
+
+  // Set game_date for all teams
+  if (calendar.entries.length > 0) {
+    const firstMatch = new Date(calendar.entries[0].scheduledAt);
+    firstMatch.setDate(firstMatch.getDate() - 1);
+    await db.prepare("UPDATE teams SET game_date = ? WHERE league_id = ?")
+      .bind(firstMatch.toISOString(), league.id).run();
+  }
+
+  // Simulate past rounds if requested
+  let simulatedRounds = 0;
+  if (body.simulateRounds && body.simulateRounds > 0) {
+    const { runScheduledMatches } = await import("../multiplayer/match-runner");
+    // Set game_date far ahead so all rounds are eligible
+    await db.prepare("UPDATE teams SET game_date = '2030-01-01T00:00:00.000Z' WHERE league_id = ?").bind(league.id).run();
+
+    for (let r = 0; r < body.simulateRounds; r++) {
+      const cal = await db.prepare(
+        "SELECT id FROM season_calendar WHERE league_id = ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
+      ).bind(league.id).first<{ id: string }>();
+      if (!cal) break;
+
+      await db.prepare("UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'")
+        .bind(cal.id).run();
+      await runScheduledMatches(db, cal.id);
+      await db.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?").bind(cal.id).run();
+      simulatedRounds++;
+    }
+
+    // Sync game_date with reference league (Prachatice or similar)
+    const refTeam = await db.prepare(
+      "SELECT t.game_date FROM teams t JOIN leagues l ON t.league_id = l.id WHERE l.district != ? AND t.game_date IS NOT NULL LIMIT 1"
+    ).bind(league.district).first<{ game_date: string }>();
+    if (refTeam?.game_date) {
+      await db.prepare("UPDATE teams SET game_date = ? WHERE league_id = ?").bind(refTeam.game_date, league.id).run();
+    }
+  }
+
+  return c.json({
+    ok: true,
+    league: league.name,
+    teams: teamIds.length,
+    matches: schedule.length,
+    calendarEntries: calendar.entries.length,
+    simulatedRounds,
+  });
+});
+
 // POST /api/game/advance-day — denní tick (posun dne, tréninky, finance, zprávy)
 // Zápasy a zpravodaj řeší VÝHRADNĚ run-matches cron (18:00 CET)
 gameRouter.post("/game/advance-day", async (c) => {
@@ -2220,8 +2380,8 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   const { evaluateSigningChance } = await import("../transfers/player-agency");
   const rng = createRng(Date.now() + faId.charCodeAt(0));
   const decision = evaluateSigningChance(
-    { weekly_wage: fa.weekly_wage as number, personality, village_id: fa.village_id as string | null },
-    { reputation: team.reputation as number, villageLat: team.lat as number, villageLon: team.lng as number, squadSize: squadCount?.cnt ?? 15 },
+    { weekly_wage: fa.weekly_wage as number, personality, village_id: fa.village_id as string | null, district: fa.district as string | null },
+    { reputation: team.reputation as number, villageLat: team.lat as number, villageLon: team.lng as number, squadSize: squadCount?.cnt ?? 15, district: team.district as string | null },
     agentVillage, body.offeredWage, rng,
   );
 

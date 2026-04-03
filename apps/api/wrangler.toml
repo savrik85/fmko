@@ -26,6 +26,7 @@ bucket_name = "prales-seed"
 crons = [
   "0 3 * * *",
   "0 16 * * *",
+  "5 16 * * *",
 ]
 
 [[routes]]
@@ -62,4 +63,5 @@ bucket_name = "prales-seed"
 crons = [
   "0 3 * * *",
   "0 16 * * *",
+  "5 16 * * *",
 ]

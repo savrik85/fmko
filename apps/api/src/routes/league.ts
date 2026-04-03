@@ -181,4 +181,86 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
   });
 });
 
+// GET /api/leagues — seznam všech aktivních lig (pro league picker v UI)
+leagueRouter.get("/leagues", async (c) => {
+  const leagues = await c.env.DB.prepare(
+    "SELECT l.id, l.name, l.level, l.district, l.season_id, s.number as season_number, (SELECT COUNT(*) FROM teams t WHERE t.league_id = l.id) as team_count FROM leagues l JOIN seasons s ON l.season_id = s.id WHERE l.status = 'active' ORDER BY l.name"
+  ).all().catch((e) => { logger.error({ module: "league" }, "fetch leagues", e); return { results: [] }; });
+
+  return c.json({ leagues: leagues.results });
+});
+
+// GET /api/leagues/:leagueId/standings — tabulka libovolné ligy
+leagueRouter.get("/leagues/:leagueId/standings", async (c) => {
+  const leagueId = c.req.param("leagueId");
+
+  const leagueInfo = await c.env.DB.prepare(
+    "SELECT l.name, l.level, l.district, s.number as season_number FROM leagues l JOIN seasons s ON l.season_id = s.id WHERE l.id = ?"
+  ).bind(leagueId).first<{ name: string; level: string; district: string; season_number: number }>();
+  if (!leagueInfo) return c.json({ error: "League not found" }, 404);
+
+  const leagueTeams = await c.env.DB.prepare(
+    "SELECT t.id, t.name, t.user_id, t.primary_color, t.secondary_color, t.badge_pattern, v.name as village_name FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.league_id = ? ORDER BY t.name"
+  ).bind(leagueId).all();
+
+  const teamIds = leagueTeams.results.map((t) => t.id as string);
+  if (teamIds.length === 0) return c.json({ leagueName: leagueInfo.name, standings: [], season: leagueInfo.season_number });
+
+  const matches = await c.env.DB.prepare(
+    "SELECT home_team_id, away_team_id, home_score, away_score FROM matches WHERE league_id = ? AND status = 'simulated' AND calendar_id IS NOT NULL"
+  ).bind(leagueId).all();
+
+  const stats: Record<string, { wins: number; draws: number; losses: number; gf: number; ga: number; form: string[] }> = {};
+  for (const tid of teamIds) stats[tid] = { wins: 0, draws: 0, losses: 0, gf: 0, ga: 0, form: [] };
+
+  for (const m of matches.results) {
+    const homeId = m.home_team_id as string;
+    const awayId = m.away_team_id as string;
+    const hs = m.home_score as number;
+    const as_ = m.away_score as number;
+    if (!stats[homeId] || !stats[awayId]) continue;
+    stats[homeId].gf += hs; stats[homeId].ga += as_;
+    stats[awayId].gf += as_; stats[awayId].ga += hs;
+    if (hs > as_) { stats[homeId].wins++; stats[homeId].form.push("W"); stats[awayId].losses++; stats[awayId].form.push("L"); }
+    else if (hs < as_) { stats[awayId].wins++; stats[awayId].form.push("W"); stats[homeId].losses++; stats[homeId].form.push("L"); }
+    else { stats[homeId].draws++; stats[homeId].form.push("D"); stats[awayId].draws++; stats[awayId].form.push("D"); }
+  }
+
+  const standings = teamIds.map((tid) => {
+    const s = stats[tid];
+    const t = leagueTeams.results.find(r => r.id === tid)!;
+    return {
+      teamId: tid, team: t.name as string,
+      played: s.wins + s.draws + s.losses, wins: s.wins, draws: s.draws, losses: s.losses,
+      gf: s.gf, ga: s.ga, points: s.wins * 3 + s.draws,
+      form: s.form.slice(-5).reverse(),
+      isAi: t.user_id === "ai",
+      primaryColor: (t.primary_color as string) || "#2D5F2D",
+      secondaryColor: (t.secondary_color as string) || "#FFFFFF",
+      badgePattern: (t.badge_pattern as string) || "shield",
+    };
+  });
+
+  standings.sort((a, b) => (b.points - a.points) || ((b.gf - b.ga) - (a.gf - a.ga)) || (b.gf - a.gf));
+  standings.forEach((s, i) => { (s as Record<string, unknown>).pos = i + 1; });
+
+  return c.json({ leagueName: leagueInfo.name, leagueLevel: leagueInfo.level, season: leagueInfo.season_number, standings });
+});
+
+// GET /api/leagues/:leagueId/results — výsledky zápasů
+leagueRouter.get("/leagues/:leagueId/results", async (c) => {
+  const leagueId = c.req.param("leagueId");
+  const gameWeek = c.req.query("gameWeek");
+
+  let query = "SELECT m.id, m.round, m.home_score, m.away_score, m.status, m.attendance, m.weather, sc.game_week, sc.scheduled_at, t1.name as home_name, t1.primary_color as home_color, t2.name as away_name, t2.primary_color as away_color FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id LEFT JOIN season_calendar sc ON m.calendar_id = sc.id WHERE m.league_id = ? AND m.status = 'simulated'";
+  const binds: unknown[] = [leagueId];
+  if (gameWeek) { query += " AND sc.game_week = ?"; binds.push(parseInt(gameWeek)); }
+  query += " ORDER BY sc.game_week DESC, m.round";
+
+  const results = await c.env.DB.prepare(query).bind(...binds).all()
+    .catch((e) => { logger.error({ module: "league" }, "fetch results", e); return { results: [] }; });
+
+  return c.json({ results: results.results });
+});
+
 export { leagueRouter };

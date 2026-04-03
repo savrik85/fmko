@@ -92,8 +92,9 @@ export function generateLeague(
   const schedule = generateSchedule(rng, actualSize);
   const rounds = totalRounds(actualSize);
 
-  // League name
-  const leagueName = `Okresní přebor ${district}`;
+  // League name — Praha has its own naming convention
+  const LEAGUE_NAMES: Record<string, string> = { 'Praha': 'Přebor Prahy' };
+  const leagueName = LEAGUE_NAMES[district] ?? `Okresní přebor ${district}`;
 
   return {
     name: leagueName,

@@ -572,7 +572,8 @@ teamsRouter.post("/", async (c) => {
   // Ensure AI user exists (required for FK on AI team inserts)
   await c.env.DB.prepare("INSERT OR IGNORE INTO users (id, email, password_hash) VALUES ('ai', 'ai@system', 'none')").run().catch(() => {});
   const leagueId = uuid();
-  const leagueName = `Okresní přebor ${district}`;
+  const LEAGUE_NAMES: Record<string, string> = { 'Praha': 'Přebor Prahy' };
+  const leagueName = LEAGUE_NAMES[district] ?? `Okresní přebor ${district}`;
 
   await c.env.DB.prepare(
     "INSERT INTO leagues (id, season_id, district, name, level, status) VALUES (?, ?, ?, ?, 'okresni_prebor', 'active')"
