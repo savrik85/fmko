@@ -217,11 +217,11 @@ export function generateAbsences(
   rng: Rng,
   squad: PlayerForAbsence[],
   timing: AbsenceTiming = "any",
-  villageSize?: string,
+  district?: string,
 ): AbsenceResult[] {
   const absences: AbsenceResult[] = [];
-  // Filter excuses by environment: town/city = urban, hamlet/village = rural
-  const isUrban = villageSize === "town" || villageSize === "small_city" || villageSize === "city";
+  // Filter excuses by district: Praha = urban, vše ostatní = rural
+  const isUrban = district === "Praha";
   const envFilter = (e: { env?: ExcuseEnv }) => !e.env || (isUrban ? e.env === "urban" : e.env === "rural");
 
   for (let i = 0; i < squad.length; i++) {

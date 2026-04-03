@@ -532,10 +532,10 @@ export async function buildMatchPlayers(
           injuryProneness: personality.injuryProneness ?? 50,
         };
       });
-      // Get village size for environment-specific excuses
-      const villageRow = await db.prepare("SELECT v.size FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
-        .bind(teamId).first<{ size: string }>().catch(() => null);
-      const absences = generateAbsences(rng as any, squadForAbsence, "any", villageRow?.size);
+      // Get district for environment-specific excuses (Praha = urban, rest = rural)
+      const districtRow = await db.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
+        .bind(teamId).first<{ district: string }>().catch(() => null);
+      const absences = generateAbsences(rng as any, squadForAbsence, "any", districtRow?.district);
       absentIds = new Set(absences.map((a) => rows.results[a.playerIndex]?.id as string).filter(Boolean));
       for (const a of absences) {
         const r = rows.results[a.playerIndex];
