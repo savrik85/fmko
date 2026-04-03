@@ -151,6 +151,7 @@ export default function TransfersPage() {
   // Offers
   const [incoming, setIncoming] = useState<TransferOffer[]>([]);
   const [outgoing, setOutgoing] = useState<TransferOffer[]>([]);
+  const [myLeagueId, setMyLeagueId] = useState<string | null>(null);
   // Loans
   const [loanedOut, setLoanedOut] = useState<Array<{ id: string; first_name: string; last_name: string; position: string; age: number; overall_rating: number; loan_until: string; loan_team_name: string }>>([]);
   const [loanedIn, setLoanedIn] = useState<Array<{ id: string; first_name: string; last_name: string; position: string; age: number; overall_rating: number; loan_until: string; owner_team_name: string }>>([]);
@@ -211,7 +212,7 @@ export default function TransfersPage() {
     const [fa, market, offers, squad] = await Promise.all([
       apiFetch<{ freeAgents: FreeAgent[] }>(`/api/teams/${teamId}/free-agents`).catch((e) => { console.error("Failed to load free agents:", e); return { freeAgents: [] }; }),
       apiFetch<{ listings: MarketListing[]; myListings: MyListing[] }>(`/api/teams/${teamId}/market`).catch((e) => { console.error("Failed to load market:", e); return { listings: [], myListings: [] }; }),
-      apiFetch<{ incoming: TransferOffer[]; outgoing: TransferOffer[]; loanedOut: typeof loanedOut; loanedIn: typeof loanedIn }>(`/api/teams/${teamId}/offers`).catch((e) => { console.error("Failed to load offers:", e); return { incoming: [], outgoing: [], loanedOut: [], loanedIn: [] }; }),
+      apiFetch<{ incoming: TransferOffer[]; outgoing: TransferOffer[]; loanedOut: typeof loanedOut; loanedIn: typeof loanedIn; myLeagueId?: string | null }>(`/api/teams/${teamId}/offers`).catch((e) => { console.error("Failed to load offers:", e); return { incoming: [], outgoing: [], loanedOut: [], loanedIn: [] }; }),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`).catch((e) => { console.error("Failed to load players:", e); return []; }),
     ]);
     setFreeAgents(fa.freeAgents);
@@ -219,6 +220,7 @@ export default function TransfersPage() {
     setMyListings(market.myListings);
     setIncoming(offers.incoming);
     setOutgoing(offers.outgoing);
+    if ((offers as any).myLeagueId) setMyLeagueId((offers as any).myLeagueId);
     setLoanedOut(offers.loanedOut ?? []);
     setLoanedIn(offers.loanedIn ?? []);
     setPlayers(squad);
@@ -1008,7 +1010,13 @@ export default function TransfersPage() {
                       </div>
                       <div className="flex gap-2 shrink-0">
                         <button onClick={async () => {
-                          const ok = await confirm({ title: `Přijmout ${formatCZK(o.counter_amount ?? o.offer_amount)}?`, description: `Za ${o.first_name} ${o.last_name}`, confirmLabel: "Přijmout" });
+                          const amount = o.counter_amount ?? o.offer_amount;
+                          const isCrossLeague = myLeagueId && (o as any).from_league_id && (o as any).from_league_id !== myLeagueId;
+                          const adminFee = isCrossLeague ? Math.round(amount * 0.15) : 0;
+                          const desc = isCrossLeague
+                            ? `Za ${o.first_name} ${o.last_name}\n\nMeziligový přestup — kupující zaplatí navíc administrační poplatek ${formatCZK(adminFee)} (15%)`
+                            : `Za ${o.first_name} ${o.last_name}`;
+                          const ok = await confirm({ title: `Přijmout ${formatCZK(amount)}?`, description: desc, confirmLabel: "Přijmout" });
                           if (!ok || !teamId) return;
                           await apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }).catch((e) => console.error("Transfer action failed:", e));
                           await refresh();
@@ -1050,6 +1058,12 @@ export default function TransfersPage() {
                             <>Nabídka: <span className="font-heading font-bold text-ink">{formatCZK(o.offer_amount)}</span></>
                           )}
                           {o.counter_amount && <span className="text-gold-600 ml-2">Protinabídka: {formatCZK(o.counter_amount)}</span>}
+                          {(() => {
+                            const crossLeague = myLeagueId && (o as any).to_league_id && (o as any).to_league_id !== myLeagueId;
+                            if (!crossLeague) return null;
+                            const fee = Math.round((o.counter_amount ?? o.offer_amount) * 0.15);
+                            return <span className="text-xs text-card-red ml-2">+ poplatek {formatCZK(fee)}</span>;
+                          })()}
                         </div>
                       </div>
                       <button onClick={async () => {

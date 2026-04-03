@@ -404,21 +404,24 @@ transfersRouter.post("/teams/:teamId/offers", async (c) => {
 transfersRouter.get("/teams/:teamId/offers", async (c) => {
   const teamId = c.req.param("teamId");
 
-  // Incoming offers (for my players)
+  // Incoming offers (for my players) — include buyer's league for cross-league fee display
   const incoming = await c.env.DB.prepare(
-    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, t.name as from_team_name
+    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating,
+     t.name as from_team_name, t.league_id as from_league_id
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.from_team_id = t.id
      WHERE to2.to_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
   ).bind(teamId).all();
 
-  // Outgoing offers (from me)
+  // Outgoing offers (from me) — include seller's league for cross-league fee display
+  const myTeam = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string }>();
   const outgoing = await c.env.DB.prepare(
-    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, t.name as to_team_name
+    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position,
+     t.name as to_team_name, t.league_id as to_league_id
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.to_team_id = t.id
      WHERE to2.from_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
   ).bind(teamId).all();
 
-  return c.json({ incoming: incoming.results, outgoing: outgoing.results });
+  return c.json({ incoming: incoming.results, outgoing: outgoing.results, myLeagueId: myTeam?.league_id ?? null });
 });
 
 transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
