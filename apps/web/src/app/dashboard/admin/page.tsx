@@ -257,7 +257,7 @@ function BroadcastSection() {
 
 function UserManagement() {
   const { token } = useTeam();
-  const [users, setUsers] = useState<Array<{ id: string; email: string; is_admin: number; team_name: string | null }>>([]);
+  const [users, setUsers] = useState<Array<{ id: string; email: string; is_admin: number; team_name: string | null; last_login_at: string | null; created_at: string | null }>>([]);
   const [loaded, setLoaded] = useState(false);
   const [resetId, setResetId] = useState<string | null>(null);
   const [newPw, setNewPw] = useState("");
@@ -266,7 +266,7 @@ function UserManagement() {
   const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
   const loadUsers = async () => {
-    const data = await apiFetch<Array<{ id: string; email: string; is_admin: number; team_name: string | null }>>("/auth/admin/users", { headers: authHeaders }).catch(() => []);
+    const data = await apiFetch<Array<{ id: string; email: string; is_admin: number; team_name: string | null; last_login_at: string | null; created_at: string | null }>>("/auth/admin/users", { headers: authHeaders }).catch(() => []);
     setUsers(data);
     setLoaded(true);
   };
@@ -298,6 +298,7 @@ function UserManagement() {
               <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Email</th>
               <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Tým</th>
               <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Admin</th>
+              <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Poslední login</th>
               <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Heslo</th>
             </tr>
           </thead>
@@ -307,6 +308,7 @@ function UserManagement() {
                 <td className="py-1.5 px-3 font-mono text-xs">{u.email}</td>
                 <td className="py-1.5 px-3">{u.team_name ?? "—"}</td>
                 <td className="py-1.5 px-3">{u.is_admin ? "✓" : ""}</td>
+                <td className="py-1.5 px-3 text-xs text-muted">{u.last_login_at ? new Date(u.last_login_at + "Z").toLocaleString("cs", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                 <td className="py-1.5 px-3">
                   {resetId === u.id ? (
                     <div className="flex gap-1 items-center">

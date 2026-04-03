@@ -137,6 +137,9 @@ authRouter.post("/login", async (c) => {
     if (leaguePosition === 0) leaguePosition = null;
   }
 
+  await c.env.DB.prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?")
+    .bind(user.id).run().catch((e) => console.error("Failed to update last_login_at:", e));
+
   const token = await createSession(c.env.SESSION_KV, user.id as string, body.email.toLowerCase(), teamId);
 
   return c.json({
@@ -295,7 +298,7 @@ authRouter.get("/admin/users", async (c) => {
   if (!admin?.is_admin) return c.json({ error: "Přístup odepřen" }, 403);
 
   const users = await c.env.DB.prepare(
-    "SELECT u.id, u.email, u.is_admin, t.name as team_name FROM users u LEFT JOIN teams t ON t.user_id = u.id WHERE u.id != 'ai' ORDER BY u.email"
+    "SELECT u.id, u.email, u.is_admin, u.last_login_at, u.created_at, t.name as team_name FROM users u LEFT JOIN teams t ON t.user_id = u.id WHERE u.id != 'ai' ORDER BY u.email"
   ).all();
 
   return c.json(users.results);
