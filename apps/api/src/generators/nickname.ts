@@ -58,8 +58,7 @@ const SURNAME_NICKNAMES: Record<string, string[]> = {
   "Pavlík": ["Pávek", "Pavlas"],
   "Janda": ["Jandík", "Jandák"],
   "Kukačka": ["Kuky", "Kukač"],
-  "Staš": ["Stášek", "Stáša"],
-  "Jungvirt": ["Jung", "Jungr"],
+  "Staš": ["Stašík"],
 };
 
 // 2. Přezdívky z povolání
