@@ -464,6 +464,145 @@ export const OCCUPATIONS: Occupation[] = [
   },
 
   // ═══════════════════════════════════════
+  // PRAŽSKÉ / MĚSTSKÉ (town/city)
+  // ═══════════════════════════════════════
+  {
+    id: "revizor", name: "Revizor", w: W(0, 0, 1.5, 1, 1.5),
+    injuryRisk: 0.05, overtimeRisk: 0.3, strengthBonus: 0,
+    excuses: [
+      "Mám kontrolní den na lince 22",
+      "Revizoři mají poradu na Florenci",
+      "Chytil jsem černého pasažéra, musím sepsat protokol",
+    ],
+  },
+  {
+    id: "tramvajak", name: "Řidič tramvaje", w: W(0, 0, 2, 1.5, 2),
+    injuryRisk: 0.1, overtimeRisk: 0.6, strengthBonus: 0,
+    excuses: [
+      "Mám směnu na trojce",
+      "Kolega nepřišel, musím jet za něj",
+      "Výluka na Vinohradské, musím objíždět",
+      "Ranní směna na Barrandov, nekončím do šesti",
+    ],
+  },
+  {
+    id: "bezdomovec", name: "Bezdomovec", w: W(0, 0, 0.5, 0.5, 1),
+    injuryRisk: 0.2, overtimeRisk: 0.05, strengthBonus: -1,
+    excuses: [
+      "Někdo mi obsadil lavičku",
+      "Sbírám lahve u Tesca",
+      "Spím pod mostem, nepřišla mi SMS",
+      "Ztratil jsem boty",
+    ],
+  },
+  {
+    id: "ridic_boltu", name: "Řidič Boltu", w: W(0, 0, 1, 1, 2),
+    injuryRisk: 0.05, overtimeRisk: 0.4, strengthBonus: 0,
+    excuses: [
+      "Mám bonusovej cíl, ještě 3 jízdy",
+      "Zákazník mě odvezl na Zličín",
+      "Surge pricing, teď se nevyplatí zastavit",
+    ],
+  },
+  {
+    id: "barman", name: "Barman", w: W(0, 0.1, 1.5, 1, 1.5),
+    injuryRisk: 0.05, overtimeRisk: 0.5, strengthBonus: 0,
+    excuses: [
+      "Máme live music večer, nemůžu odejít",
+      "Kolegyně onemocněla, musím zastoupit",
+      "Rozlil se sud, uklízím",
+    ],
+  },
+  {
+    id: "kuryr", name: "Kurýr", w: W(0, 0, 1.5, 1, 2),
+    injuryRisk: 0.15, overtimeRisk: 0.5, strengthBonus: 0,
+    excuses: [
+      "Mám ještě 15 balíků do konce směny",
+      "Navigace mě poslala na Jižák místo Žižkov",
+      "Zásilkovna plná, čekám na vyzvednutí",
+    ],
+  },
+  {
+    id: "vratny", name: "Vrátný", w: W(0, 0, 1, 0.5, 1),
+    injuryRisk: 0.02, overtimeRisk: 0.3, strengthBonus: 0,
+    excuses: [
+      "Nemůžu opustit vrátnici, čekám na zásilku",
+      "Střídání nepřišlo",
+      "Alarm se spustil, musím počkat na policii",
+    ],
+  },
+  {
+    id: "taxikar", name: "Taxikář", w: W(0, 0, 1.5, 1, 1.5),
+    injuryRisk: 0.05, overtimeRisk: 0.5, strengthBonus: 0,
+    excuses: [
+      "Mám objednanou jízdu na letiště",
+      "Stojím v koloně na magistrále",
+      "Zákazník zapomněl věci, musím se vracet",
+    ],
+  },
+  {
+    id: "prodavac_trafika", name: "Prodavač v trafice", w: W(0, 0.3, 1, 0.5, 1),
+    injuryRisk: 0.02, overtimeRisk: 0.3, strengthBonus: -1,
+    excuses: [
+      "Musím zavřít krám, kolega nepřijde",
+      "Přišla kontrola z finančáku",
+    ],
+  },
+  {
+    id: "metar", name: "Metař", w: W(0, 0, 1, 0.5, 1),
+    injuryRisk: 0.15, overtimeRisk: 0.4, strengthBonus: 1,
+    excuses: [
+      "Uklízíme po koncertu na Letné",
+      "Dneska mi přidali Smíchov, nestíhám",
+      "Zametám Karlák, nemůžu odejít",
+    ],
+  },
+  {
+    id: "strojvedouci_metro", name: "Strojvedoucí metra", w: W(0, 0, 1, 1, 1.5),
+    injuryRisk: 0.05, overtimeRisk: 0.6, strengthBonus: 0,
+    excuses: [
+      "Mám noční na lince B",
+      "Kolega volal nemocného, musím ho zastoupit",
+      "Výluka na Florenci, chaos",
+    ],
+  },
+  {
+    id: "hlidac_parkoviste", name: "Hlídač parkoviště", w: W(0, 0, 1, 0.5, 0.5),
+    injuryRisk: 0.02, overtimeRisk: 0.3, strengthBonus: 0,
+    excuses: [
+      "Střídání nedorazilo",
+      "Řeším nabouraný auto na P+R",
+      "Závora se zasekla, čekám na technika",
+    ],
+  },
+  {
+    id: "poulicni_muzikant", name: "Pouliční muzikant", w: W(0, 0, 0.5, 0.5, 1),
+    injuryRisk: 0.05, overtimeRisk: 0.1, strengthBonus: -1,
+    excuses: [
+      "Mám dobré místo na Karláku, nemůžu odejít",
+      "Kytaru mi zabavil strážník, řeším to",
+      "Vydělávám na nový struny",
+    ],
+  },
+  {
+    id: "ridic_mhd", name: "Řidič autobusu MHD", w: W(0, 0, 1.5, 1, 1.5),
+    injuryRisk: 0.05, overtimeRisk: 0.6, strengthBonus: 0,
+    excuses: [
+      "Mám směnu na 119 na letiště",
+      "Kolaps na Smíchově, stojíme v koloně",
+      "Ranní špička, jedeme nadoraz",
+    ],
+  },
+  {
+    id: "uklidova_firma", name: "Uklízeč kanceláří", w: W(0, 0, 1, 0.5, 1),
+    injuryRisk: 0.1, overtimeRisk: 0.4, strengthBonus: 0,
+    excuses: [
+      "Uklízíme kanceláře na Pankráci, noční směna",
+      "Šéf přidal extra zakázku",
+    ],
+  },
+
+  // ═══════════════════════════════════════
   // UNIVERZÁLNÍ (věkové)
   // ═══════════════════════════════════════
   {

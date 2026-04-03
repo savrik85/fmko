@@ -122,6 +122,20 @@ const ABSURD_EXCUSES = [
   { text: "Zablokoval mi někdo výjezd z dvorku, čekám na odtahovou", emoji: "\u{1F698}", timing: "match_day" as AbsenceTiming },
   { text: "Právě jsem zjistil, že mi teče střecha. Přesně teď. Přesně dneska", emoji: "\u{1F327}", timing: "match_day" as AbsenceTiming },
   { text: "Jdu na sraz ročníku, víme se dvacet let neviděli", emoji: "\u{1F37B}", timing: "day_before" as AbsenceTiming },
+  // Pražské absurdní
+  { text: "Turisti mi zablokovali vchod, nedostal jsem se z domu", emoji: "\u{1F4F7}", timing: "match_day" as AbsenceTiming },
+  { text: "Demonstrace na Václaváku, nedostal jsem se přes kordon", emoji: "\u{1F4E2}", timing: "match_day" as AbsenceTiming },
+  { text: "Soused pouští techno od rána, nemohl jsem spát", emoji: "\u{1F3B6}", timing: "match_day" as AbsenceTiming },
+  { text: "Ztratil jsem Lítačku a bez ní nikam nejedu", emoji: "\u{1F4B3}", timing: "match_day" as AbsenceTiming },
+  { text: "Spadl jsem do výkopu u metra D", emoji: "\u{1F6A7}", timing: "match_day" as AbsenceTiming },
+  { text: "Holubi mi posrali dres na balkóně", emoji: "\u{1F54A}", timing: "match_day" as AbsenceTiming },
+  { text: "Zabloudil jsem v Holešovickém OC, nenašel jsem východ", emoji: "\u{1F6D2}", timing: "match_day" as AbsenceTiming },
+  { text: "Food festival na náplavce, nedostal jsem se přes davy", emoji: "\u{1F354}", timing: "match_day" as AbsenceTiming },
+  { text: "Klíče spadly do šachty od metra", emoji: "\u{1F511}", timing: "match_day" as AbsenceTiming },
+  { text: "Pražský městský soud — svědčím proti sousedovi", emoji: "\u{2696}", timing: "day_before" as AbsenceTiming },
+  { text: "Stěhuju se z Žižkova na Vinohrady, nemám čas", emoji: "\u{1F4E6}", timing: "day_before" as AbsenceTiming },
+  { text: "Sousedka mi zalila byt, řeším pojistku", emoji: "\u{1F4A7}", timing: "match_day" as AbsenceTiming },
+  { text: "Bytová schůze, musím být jinak mi schválí kokotiny", emoji: "\u{1F3E2}", timing: "day_before" as AbsenceTiming },
 ];
 
 // ═══════════════════════════════════════════════
@@ -169,6 +183,18 @@ const COMMUTE_EXCUSES = [
   { text: "Musím jet přes dvě vesnice a silnice je rozkopaná", emoji: "\u{1F6A7}" },
   { text: "Dneska to nestíhám, je to daleko a mám ještě směnu", emoji: "\u23F0" },
   { text: "Kolega co mě veze onemocněl, nemám jak se dostat", emoji: "\u{1F912}" },
+  // Pražské dopravní
+  { text: "Nejela tramvaj, výluka na Palackého náměstí", emoji: "\u{1F68B}" },
+  { text: "Magistrála byla totálně ucpaná", emoji: "\u{1F697}" },
+  { text: "Metro stálo 20 minut, porucha na lince C", emoji: "\u{1F687}" },
+  { text: "Zavřeli Nuselák, objížďka přes půl Prahy", emoji: "\u{1F6A7}" },
+  { text: "Autobus 135 nejel, čekal jsem na dalšího 40 minut", emoji: "\u{1F68C}" },
+  { text: "Parkování na Žižkově je peklo, objel jsem to třikrát", emoji: "\u{1F697}" },
+  { text: "Kolaps na Barrandovském mostě, stálo se hodinu", emoji: "\u{1F6A7}" },
+  { text: "Výluka na trati, tramvaj nejede, NAD autobus nepřijel", emoji: "\u{1F68B}" },
+  { text: "D1 ucpaná od Chodova po Spořilov, stojím v koloně", emoji: "\u{1F697}" },
+  { text: "Koloběžka se mi rozbila u Anděla, pěšky to nestíhám", emoji: "\u{1F6F4}" },
+  { text: "Lítačka mi nefunguje, turnikety mě nepustily", emoji: "\u{1F4B3}" },
 ];
 
 /**
