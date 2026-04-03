@@ -227,15 +227,14 @@ export function generateAbsences(
   for (let i = 0; i < squad.length; i++) {
     const p = squad[i];
 
-    // Celková šance na absenci — discipline je klíčový faktor
-    // discipline 100 → 5% šance, discipline 0 → 25% šance
-    // patriotism snižuje šanci (loajální hráč chodí vždycky)
-    // morale snižuje šanci (spokojený hráč chce hrát)
+    // Celková šance na absenci — cíl: průměrně 1-2 absence na tým (18 hráčů)
+    // discipline 100 → ~3%, discipline 0 → ~15%
+    // Průměrný hráč (disc=50, pat=50, morale=50) → ~7% → 1.3 absence na tým
     const disciplineFactor = (100 - p.discipline) / 100;
-    const patriotismFactor = (100 - p.patriotism) / 200; // Menší vliv
-    const moraleFactor = (100 - p.morale) / 300; // Ještě menší vliv
-    const commuteFactor = Math.min(0.08, (p.commuteKm ?? 0) * 0.003); // 10km → +3%, 25km → +7.5%
-    const baseChance = 0.04 + disciplineFactor * 0.16 + patriotismFactor * 0.05 + moraleFactor * 0.03 + commuteFactor;
+    const patriotismFactor = (100 - p.patriotism) / 200;
+    const moraleFactor = (100 - p.morale) / 300;
+    const commuteFactor = Math.min(0.04, (p.commuteKm ?? 0) * 0.002);
+    const baseChance = 0.02 + disciplineFactor * 0.10 + patriotismFactor * 0.03 + moraleFactor * 0.02 + commuteFactor;
 
     if (rng.random() > baseChance) continue; // Přijde!
 
