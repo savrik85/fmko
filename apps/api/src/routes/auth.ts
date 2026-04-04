@@ -298,7 +298,7 @@ authRouter.get("/admin/users", async (c) => {
   if (!admin?.is_admin) return c.json({ error: "Přístup odepřen" }, 403);
 
   const users = await c.env.DB.prepare(
-    "SELECT u.id, u.email, u.is_admin, u.last_login_at, u.created_at, t.name as team_name FROM users u LEFT JOIN teams t ON t.user_id = u.id WHERE u.id != 'ai' ORDER BY u.email"
+    "SELECT u.id, u.email, u.is_admin, u.last_login_at, u.created_at, t.name as team_name, t.game_date, v.district FROM users u LEFT JOIN teams t ON t.user_id = u.id AND t.name NOT LIKE 'DELETED%' LEFT JOIN villages v ON t.village_id = v.id WHERE u.id != 'ai' ORDER BY u.email"
   ).all();
 
   return c.json(users.results);
