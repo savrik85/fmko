@@ -355,8 +355,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     const attackForm = isHomePossession ? homeForm : awayForm;
     const chanceProb = calcChanceProb(attacking, defending, weather, attackForm);
     // Reduce chance probability when condition is low
-    // Condition reduces chance creation but not drastically — floor at 0.6
-    const conditionMod = Math.max(0.6, teamAvg(attacking.lineup, "condition") / 100);
+    // Low condition has significant impact — floor at 0.45
+    const conditionMod = Math.max(0.45, teamAvg(attacking.lineup, "condition") / 100);
     const adjustedChanceProb = chanceProb * conditionMod;
 
     if (rng.random() < adjustedChanceProb) {

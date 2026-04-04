@@ -234,9 +234,9 @@ export async function executeDailyTick(
     `UPDATE players SET life_context = json_set(life_context, '$.condition',
       MIN(100, json_extract(life_context, '$.condition') +
         (CASE
-          WHEN json_extract(skills, '$.stamina') >= 75 THEN 20
-          WHEN json_extract(skills, '$.stamina') >= 50 THEN 16
-          WHEN json_extract(skills, '$.stamina') >= 25 THEN 13
+          WHEN COALESCE(json_extract(physical, '$.stamina'), json_extract(skills, '$.stamina'), 40) >= 75 THEN 20
+          WHEN COALESCE(json_extract(physical, '$.stamina'), json_extract(skills, '$.stamina'), 40) >= 50 THEN 16
+          WHEN COALESCE(json_extract(physical, '$.stamina'), json_extract(skills, '$.stamina'), 40) >= 25 THEN 13
           ELSE 10
         END)
         +
