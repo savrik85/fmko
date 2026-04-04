@@ -76,6 +76,8 @@ interface AvailablePlayer {
   id: string; firstName: string; lastName: string; position: string;
   overallRating: number; age: number; condition: number; morale: number;
   squadNumber?: number;
+  speed?: number; technique?: number; shooting?: number; passing?: number;
+  heading?: number; defense?: number; goalkeeping?: number; stamina?: number;
   absent?: boolean; absenceReason?: string | null; absenceSms?: string | null; absenceEmoji?: string | null;
 }
 
@@ -310,9 +312,37 @@ export default function MatchPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <span className="font-heading font-bold text-base">{p.firstName} {p.lastName}</span>
-                          <div className="text-sm text-muted">
-                            {isAbsent ? <span className="text-card-red">❌ Nedostupný</span> : `${p.position} · Rat ${p.overallRating} · ${p.age} let`}
-                          </div>
+                          {isAbsent ? (
+                            <div className="text-sm text-card-red">❌ Nedostupný</div>
+                          ) : (
+                            <>
+                              <div className="text-sm text-muted">{p.position} · Rat {p.overallRating} · {p.age} let</div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="flex items-center gap-1 text-xs text-muted">
+                                  <span>Kon</span>
+                                  <div className="w-14 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full ${p.condition >= 70 ? "bg-pitch-400" : p.condition >= 40 ? "bg-gold-500" : "bg-card-red"}`} style={{ width: `${p.condition}%` }} />
+                                  </div>
+                                  <span className="tabular-nums w-5 text-right">{p.condition}</span>
+                                </div>
+                                {(() => {
+                                  const pos = slots[editSlot].pos;
+                                  const attrs: [string, number][] = pos === "GK"
+                                    ? [["Bra", p.goalkeeping ?? 0]]
+                                    : pos === "DEF"
+                                    ? [["Obr", p.defense ?? 0], ["Hl", p.heading ?? 0]]
+                                    : pos === "MID"
+                                    ? [["Pas", p.passing ?? 0], ["Tch", p.technique ?? 0]]
+                                    : [["Stř", p.shooting ?? 0], ["Rch", p.speed ?? 0]];
+                                  return attrs.map(([label, val]) => (
+                                    <span key={label} className={`text-xs tabular-nums ${val >= 50 ? "text-pitch-600 font-bold" : val >= 30 ? "text-muted" : "text-card-red"}`}>
+                                      {label} {val}
+                                    </span>
+                                  ));
+                                })()}
+                              </div>
+                            </>
+                          )}
                         </div>
                         {isOOP && !isAbsent && <span className="text-gold-500 text-lg shrink-0">⚠️</span>}
                       </button>
