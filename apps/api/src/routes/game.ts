@@ -2653,12 +2653,15 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
 gameRouter.get("/teams/:teamId/offers", async (c) => {
   const teamId = c.req.param("teamId");
   const incoming = await c.env.DB.prepare(
-    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, t.name as from_team_name
+    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
+     t.name as from_team_name, t.league_id as from_league_id
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.from_team_id = t.id
      WHERE to2.to_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
   ).bind(teamId).all();
+  const myTeam = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string }>();
   const outgoing = await c.env.DB.prepare(
-    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, t.name as to_team_name
+    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.avatar as player_avatar,
+     t.name as to_team_name, t.league_id as to_league_id
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.to_team_id = t.id
      WHERE to2.from_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
   ).bind(teamId).all();
@@ -2672,7 +2675,7 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
     `SELECT p.id, p.first_name, p.last_name, p.position, p.age, p.overall_rating, p.loan_until, t.name as owner_team_name
      FROM players p JOIN teams t ON p.loan_from_team_id = t.id WHERE p.team_id = ? AND p.loan_from_team_id IS NOT NULL`
   ).bind(teamId).all().catch(() => ({ results: [] }));
-  return c.json({ incoming: incoming.results, outgoing: outgoing.results, loanedOut: loanedOut.results, loanedIn: loanedIn.results });
+  return c.json({ incoming: incoming.results, outgoing: outgoing.results, loanedOut: loanedOut.results, loanedIn: loanedIn.results, myLeagueId: myTeam?.league_id ?? null });
 });
 
 gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
