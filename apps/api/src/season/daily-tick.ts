@@ -171,8 +171,17 @@ export async function executeDailyTick(
           ).bind(playerId, teamId, imp.attribute, oldValue, newValue, imp.change, (team.training_type as string) ?? "conditioning", now.toISOString()).run().catch((e) => logger.warn({ module: "daily-tick" }, "insert training log", e));
         }
 
-        // Training drains condition for attending players (-3 to -8 based on training type)
-        const condDrain = (team.training_type as string) === "conditioning" ? 8 : 3;
+        // Training drains condition for attending players
+        // Conditioning = light (builds stamina, low drain), tactical = medium, intense drills = heavy
+        const drainMap: Record<string, number> = {
+          conditioning: 3,
+          passing: 4,
+          defense: 5,
+          shooting: 5,
+          technique: 4,
+          tactical: 3,
+        };
+        const condDrain = drainMap[(team.training_type as string)] ?? 4;
         for (const a of result.attendance) {
           if (a.attended) {
             const playerId = playersResult.results[a.playerIndex].id as string;
