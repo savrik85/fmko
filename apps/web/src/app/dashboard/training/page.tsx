@@ -44,6 +44,16 @@ const ATTR_EMOJI: Record<string, string> = {
   vision: "\uD83D\uDC41\uFE0F", creativity: "\uD83C\uDFA8", setPieces: "\uD83C\uDFAA",
 };
 
+interface TrainingStats {
+  totalImprovements: number;
+  totalDeclines: number;
+  trainingSessions: number;
+  topImprovers: Array<{ playerId: string; name: string; totalGains: number; topAttribute: string }>;
+  skillBreakdown: Array<{ attribute: string; gains: number; losses: number }>;
+  attendanceTop: Array<{ playerId: string; name: string; attended: number; total: number; pct: number }>;
+  attendanceBottom: Array<{ playerId: string; name: string; attended: number; total: number; pct: number }>;
+}
+
 export default function TrainingPage() {
   const { teamId } = useTeam();
   const [type, setType] = useState<TrainingType>("conditioning");
@@ -52,6 +62,7 @@ export default function TrainingPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<TrainingResult | null>(null);
+  const [stats, setStats] = useState<TrainingStats | null>(null);
   const [dirty, setDirty] = useState(false);
   const [playerMap, setPlayerMap] = useState<Map<string, string>>(new Map());
 
@@ -62,11 +73,13 @@ export default function TrainingPage() {
         `/api/teams/${teamId}/training`
       ),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
-    ]).then(([data, players]) => {
+      apiFetch<TrainingStats>(`/api/teams/${teamId}/training-stats`).catch(() => null),
+    ]).then(([data, players, statsData]) => {
       setType(data.type);
       setApproach(data.approach);
       setSessions(data.sessionsPerWeek);
       setResult(data.lastResult);
+      setStats(statsData);
       // Build name → id map for linking (covers old results without playerId)
       const map = new Map<string, string>();
       for (const p of players) {
@@ -318,6 +331,128 @@ export default function TrainingPage() {
           </div>
         );
       })()}
+
+      {/* ═══ Training Stats Dashboard ═══ */}
+      {stats && (stats.totalImprovements > 0 || stats.trainingSessions > 0) && (
+        <>
+          {/* Stat boxes */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="card p-3 text-center">
+              <div className="font-heading font-[800] text-2xl tabular-nums text-pitch-500">{stats.totalImprovements}</div>
+              <div className="text-[10px] text-muted uppercase tracking-wide">Zlepšení</div>
+            </div>
+            <div className="card p-3 text-center">
+              <div className="font-heading font-[800] text-2xl tabular-nums text-card-red">{stats.totalDeclines}</div>
+              <div className="text-[10px] text-muted uppercase tracking-wide">Poklesů</div>
+            </div>
+            <div className="card p-3 text-center">
+              <div className="font-heading font-[800] text-2xl tabular-nums">{stats.trainingSessions}</div>
+              <div className="text-[10px] text-muted uppercase tracking-wide">Tréninků</div>
+            </div>
+          </div>
+
+          {/* Top improvers + Skill breakdown side by side on desktop */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Top improvers */}
+            {stats.topImprovers.length > 0 && (
+              <div className="card p-4 sm:p-5">
+                <SectionLabel>Nejvíc se zlepšili</SectionLabel>
+                <div className="space-y-1.5">
+                  {stats.topImprovers.map((p, i) => {
+                    const maxGains = stats.topImprovers[0]?.totalGains ?? 1;
+                    return (
+                      <div key={p.playerId} className="flex items-center gap-2">
+                        <span className="text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
+                        <div className="flex-1 min-w-0">
+                          <Link href={`/dashboard/player/${p.playerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 transition-colors truncate block">
+                            {p.name}
+                          </Link>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                              <div className="h-full bg-pitch-400 rounded-full" style={{ width: `${(p.totalGains / maxGains) * 100}%` }} />
+                            </div>
+                            <span className="font-heading font-bold text-xs text-pitch-500 tabular-nums shrink-0">+{p.totalGains}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Skill breakdown */}
+            {stats.skillBreakdown.length > 0 && (
+              <div className="card p-4 sm:p-5">
+                <SectionLabel>Podle atributů</SectionLabel>
+                <div className="space-y-1.5">
+                  {stats.skillBreakdown.filter((s) => s.gains > 0).slice(0, 8).map((s) => {
+                    const maxGains = stats.skillBreakdown[0]?.gains ?? 1;
+                    return (
+                      <div key={s.attribute} className="flex items-center gap-2">
+                        <span className="text-sm w-5 shrink-0">{ATTR_EMOJI[s.attribute] ?? ""}</span>
+                        <span className="text-xs font-heading font-bold w-16 shrink-0 truncate">{ATTR_LABELS[s.attribute] ?? s.attribute}</span>
+                        <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                          <div className="h-full bg-pitch-300 rounded-full" style={{ width: `${(s.gains / maxGains) * 100}%` }} />
+                        </div>
+                        <span className="font-heading font-bold text-xs tabular-nums text-pitch-500 w-6 text-right shrink-0">+{s.gains}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Attendance top/bottom */}
+          {(stats.attendanceTop.length > 0 || stats.attendanceBottom.length > 0) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {stats.attendanceTop.length > 0 && (
+                <div className="card p-4 sm:p-5">
+                  <SectionLabel>Nejlepší docházka</SectionLabel>
+                  <div className="space-y-1">
+                    {stats.attendanceTop.map((p, i) => (
+                      <div key={p.playerId} className="flex items-center gap-2 py-1">
+                        <span className="text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
+                        <Link href={`/dashboard/player/${p.playerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 transition-colors truncate flex-1 min-w-0">
+                          {p.name}
+                        </Link>
+                        <span className="text-xs text-muted tabular-nums shrink-0">{p.attended}/{p.total}</span>
+                        <span className={`font-heading font-bold text-xs tabular-nums w-9 text-right shrink-0 ${
+                          p.pct >= 80 ? "text-pitch-500" : p.pct >= 50 ? "text-gold-600" : "text-card-red"
+                        }`}>{p.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {stats.attendanceBottom.length > 0 && (
+                <div className="card p-4 sm:p-5">
+                  <SectionLabel>Nejhorší docházka</SectionLabel>
+                  <div className="space-y-1">
+                    {stats.attendanceBottom.map((p, i) => (
+                      <div key={p.playerId} className="flex items-center gap-2 py-1">
+                        <span className="text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
+                        <Link href={`/dashboard/player/${p.playerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 transition-colors truncate flex-1 min-w-0">
+                          {p.name}
+                        </Link>
+                        <span className="text-xs text-muted tabular-nums shrink-0">{p.attended}/{p.total}</span>
+                        <span className={`font-heading font-bold text-xs tabular-nums w-9 text-right shrink-0 ${
+                          p.pct >= 80 ? "text-pitch-500" : p.pct >= 50 ? "text-gold-600" : "text-card-red"
+                        }`}>{p.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      <p className="text-xs text-muted text-center">
+        Tréninky probíhají automaticky Po–Pá
+      </p>
     </div>
   );
 }

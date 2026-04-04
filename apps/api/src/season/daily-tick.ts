@@ -191,6 +191,26 @@ export async function executeDailyTick(
           }
         }
 
+        // Update cumulative training attendance
+        try {
+          const attRow = await env.DB.prepare("SELECT training_attendance FROM teams WHERE id = ?")
+            .bind(teamId).first<{ training_attendance: string }>().catch(() => null);
+          const attData: Record<string, { attended: number; total: number }> = (() => {
+            try { return JSON.parse(attRow?.training_attendance ?? "{}"); } catch { return {}; }
+          })();
+          for (const a of result.attendance) {
+            const pid = playersResult.results[a.playerIndex]?.id as string;
+            if (!pid) continue;
+            if (!attData[pid]) attData[pid] = { attended: 0, total: 0 };
+            attData[pid].total++;
+            if (a.attended) attData[pid].attended++;
+          }
+          await env.DB.prepare("UPDATE teams SET training_attendance = ? WHERE id = ?")
+            .bind(JSON.stringify(attData), teamId).run();
+        } catch (e) {
+          logger.warn({ module: "daily-tick" }, "training attendance tracking failed", e);
+        }
+
         events.push({
           type: "training",
           description: `Trénink: ${summary.attendedCount}/${summary.totalCount} hráčů, ${improvementsWithNames.length} zlepšení`,

@@ -103,6 +103,95 @@ gameRouter.get("/teams/:teamId/players/:playerId/training-log", async (c) => {
   return c.json({ log: rows.results });
 });
 
+// GET /api/teams/:id/training-stats — aggregated training statistics
+gameRouter.get("/teams/:teamId/training-stats", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  const [totalsRes, topRes, breakdownRes, teamRow] = await c.env.DB.batch([
+    // Total gains/losses
+    c.env.DB.prepare(
+      `SELECT SUM(CASE WHEN change > 0 THEN 1 ELSE 0 END) as gains,
+              SUM(CASE WHEN change < 0 THEN 1 ELSE 0 END) as losses,
+              COUNT(DISTINCT game_date) as sessions
+       FROM training_log WHERE team_id = ?`
+    ).bind(teamId),
+    // Top improvers (join with players for name)
+    c.env.DB.prepare(
+      `SELECT tl.player_id, p.first_name, p.last_name, SUM(tl.change) as total_gains,
+              (SELECT tl2.attribute FROM training_log tl2 WHERE tl2.player_id = tl.player_id AND tl2.team_id = ? AND tl2.change > 0 GROUP BY tl2.attribute ORDER BY SUM(tl2.change) DESC LIMIT 1) as top_attr
+       FROM training_log tl JOIN players p ON tl.player_id = p.id
+       WHERE tl.team_id = ? AND tl.change > 0
+       GROUP BY tl.player_id ORDER BY total_gains DESC LIMIT 5`
+    ).bind(teamId, teamId),
+    // Skill breakdown
+    c.env.DB.prepare(
+      `SELECT attribute,
+              SUM(CASE WHEN change > 0 THEN change ELSE 0 END) as gains,
+              SUM(CASE WHEN change < 0 THEN ABS(change) ELSE 0 END) as losses
+       FROM training_log WHERE team_id = ?
+       GROUP BY attribute ORDER BY gains DESC`
+    ).bind(teamId),
+    // Attendance data
+    c.env.DB.prepare("SELECT training_attendance FROM teams WHERE id = ?").bind(teamId),
+  ]);
+
+  const totals = (totalsRes.results[0] as any) ?? { gains: 0, losses: 0, sessions: 0 };
+
+  const topImprovers = (topRes.results as any[]).map((r) => ({
+    playerId: r.player_id,
+    name: `${r.first_name} ${r.last_name}`,
+    totalGains: r.total_gains,
+    topAttribute: r.top_attr,
+  }));
+
+  const skillBreakdown = (breakdownRes.results as any[]).map((r) => ({
+    attribute: r.attribute,
+    gains: r.gains,
+    losses: r.losses,
+  }));
+
+  // Attendance top/bottom
+  const attRaw = (teamRow.results[0] as any)?.training_attendance;
+  const attData: Record<string, { attended: number; total: number }> = (() => {
+    try { return JSON.parse(attRaw ?? "{}"); } catch { return {}; }
+  })();
+
+  // Get player names for attendance
+  const attPlayerIds = Object.keys(attData);
+  let attNames: Record<string, string> = {};
+  if (attPlayerIds.length > 0) {
+    const nameRows = await c.env.DB.prepare(
+      `SELECT id, first_name, last_name FROM players WHERE id IN (${attPlayerIds.map(() => "?").join(",")}) AND team_id = ?`
+    ).bind(...attPlayerIds, teamId).all().catch(() => ({ results: [] }));
+    for (const r of nameRows.results as any[]) {
+      attNames[r.id] = `${r.first_name} ${r.last_name}`;
+    }
+  }
+
+  const attList = Object.entries(attData)
+    .filter(([pid]) => attNames[pid]) // only current players
+    .map(([pid, d]) => ({
+      playerId: pid,
+      name: attNames[pid],
+      attended: d.attended,
+      total: d.total,
+      pct: d.total > 0 ? Math.round((d.attended / d.total) * 100) : 0,
+    }));
+
+  const attendanceTop = [...attList].sort((a, b) => b.pct - a.pct).slice(0, 5);
+  const attendanceBottom = [...attList].sort((a, b) => a.pct - b.pct).slice(0, 5);
+
+  return c.json({
+    totalImprovements: totals.gains ?? 0,
+    totalDeclines: totals.losses ?? 0,
+    trainingSessions: totals.sessions ?? 0,
+    topImprovers,
+    skillBreakdown,
+    attendanceTop,
+    attendanceBottom,
+  });
+});
+
 // GET /api/teams/:id/budget — rozpočet s kompletním přehledem
 gameRouter.get("/teams/:teamId/budget", async (c) => {
   const teamId = c.req.param("teamId");
