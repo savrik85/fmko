@@ -113,13 +113,15 @@ export default function MatchPage() {
         setSelected(data.lineup.players.map((p) => p.playerId));
       } else { autoFill(data.availablePlayers ?? [], "4-4-2"); }
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((e) => { console.error("Failed to load next match:", e); setLoading(false); });
   }, [teamId]);
+
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const autoFill = (pool: AvailablePlayer[], form: string) => {
     const slots = POSITIONS[form] ?? POSITIONS["4-4-2"];
     const used = new Set<string>();
-    const avail = pool.filter((p) => !p.absent); // skip absent players
+    const avail = pool.filter((p) => !p.absent);
     const sel: (string | null)[] = [];
     for (const slot of slots) {
       const best = avail.filter((p) => !used.has(p.id) && p.position === slot.pos).sort((a, b) => b.overallRating - a.overallRating)[0];
@@ -132,12 +134,21 @@ export default function MatchPage() {
   const saveLineup = async () => {
     if (!teamId || !nextMatch || saving) return;
     setSaving(true);
-    const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
-    await apiFetch(`/api/teams/${teamId}/lineup`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
-    }).catch(() => {});
-    setSaving(false); setSaved(true);
+    setSaveError(null);
+    try {
+      const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
+      const res = await apiFetch<{ ok?: boolean; error?: string }>(`/api/teams/${teamId}/lineup`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
+      });
+      if (res.ok) { setSaved(true); }
+      else { setSaveError(res.error ?? "Nepodařilo se uložit sestavu"); }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Nepodařilo se uložit sestavu";
+      setSaveError(msg);
+      console.error("Failed to save lineup:", e);
+    }
+    setSaving(false);
   };
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
@@ -481,6 +492,7 @@ export default function MatchPage() {
           className={`btn btn-lg w-full ${saved ? "btn-ghost" : "btn-primary"}`}>
           {saving ? "Ukládám..." : saved ? "Sestava uložena ✓" : "Uložit sestavu"}
         </button>
+        {saveError && <p className="text-sm text-card-red mt-2 text-center">{saveError}</p>}
         <p className="text-sm text-muted mt-2 text-center">Sestava se použije v příštím automatickém zápase.</p>
       </div>
     </div>
