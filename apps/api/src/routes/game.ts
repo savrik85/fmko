@@ -2111,9 +2111,8 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       commuteKm: (row.commute_km as number) ?? 0,
     };
   });
-  // day_before = 1 day until match, match_day = 0 days, 2+ = no absences yet
-  const timing = daysUntilMatch === 0 ? "any" : daysUntilMatch === 1 ? "day_before" : null;
-  const absences = timing ? generateAbsences(absenceRng as any, absenceSquad, timing) : [];
+  // Always generate absences so user sees who will be missing (must match simulation RNG)
+  const absences = generateAbsences(absenceRng as any, absenceSquad, "any");
   const absentPlayerIds = new Set(absences.map((a) => players.results[a.playerIndex]?.id as string).filter(Boolean));
 
   const available = players.results.map((p) => {
@@ -2169,6 +2168,21 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
   if (!body.players || body.players.length !== 11) return c.json({ error: "Sestava musí mít přesně 11 hráčů" }, 400);
   const gkCount = body.players.filter((p) => p.matchPosition === "GK").length;
   if (gkCount !== 1) return c.json({ error: "Sestava musí mít přesně 1 brankáře" }, 400);
+
+  // Validate players belong to team and are available
+  const playerIds = body.players.map((p) => p.playerId);
+  const placeholders = playerIds.map(() => "?").join(",");
+  const validPlayers = await c.env.DB.prepare(
+    `SELECT p.id FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0
+     WHERE p.id IN (${placeholders}) AND p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
+     AND i.id IS NULL AND (p.suspended_matches IS NULL OR p.suspended_matches = 0)`
+  ).bind(...playerIds, teamId).all().catch((e) => { logger.warn({ module: "game" }, "validate lineup players", e); return { results: [] }; });
+
+  const validIds = new Set(validPlayers.results.map((r) => r.id as string));
+  const invalid = playerIds.filter((id) => !validIds.has(id));
+  if (invalid.length > 0) {
+    return c.json({ error: `${invalid.length} hráč(ů) není dostupných (zranění, suspendace nebo nepatří do týmu)` }, 400);
+  }
 
   // Upsert lineup
   const existing = await c.env.DB.prepare("SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?")

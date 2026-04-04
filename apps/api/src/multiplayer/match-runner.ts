@@ -56,9 +56,9 @@ export async function runScheduledMatches(
       ).bind(awayTeamId, calendarId).first();
       if (!hasAwayLineup) await copyOrCreateLineup(db, awayTeamId, calendarId);
 
-      // Create RNG — deterministic seed for absences (same every time)
+      // Deterministic RNG for absences — MUST match next-match endpoint seed
       const { seedFromString } = await import("../lib/seed");
-      const absenceRng = createRng(seedFromString(calendarId) + matchId.charCodeAt(0));
+      const absenceRng = createRng(seedFromString(calendarId));
       // Separate RNG for match simulation — includes Date.now() so results vary
       const rng = createRng(seedFromString(calendarId) + Date.now());
 
@@ -535,7 +535,7 @@ export async function buildMatchPlayers(
       // Get district for environment-specific excuses (Praha = urban, rest = rural)
       const districtRow = await db.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
         .bind(teamId).first<{ district: string }>().catch(() => null);
-      const absences = generateAbsences(rng as any, squadForAbsence, "any", districtRow?.district);
+      const absences = generateAbsences(absenceRng as any, squadForAbsence, "any", districtRow?.district);
       absentIds = new Set(absences.map((a) => rows.results[a.playerIndex]?.id as string).filter(Boolean));
       for (const a of absences) {
         const r = rows.results[a.playerIndex];
