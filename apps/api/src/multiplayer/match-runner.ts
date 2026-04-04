@@ -510,7 +510,7 @@ export async function buildMatchPlayers(
   idOffset: number = 0,
 ): Promise<BuildResult> {
   const rows = await db.prepare(
-    "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC LIMIT 22"
+    "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
   ).bind(teamId).all();
 
   // Generate absences if rng provided (for automatic matches)
