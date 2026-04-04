@@ -636,16 +636,26 @@ export const OCCUPATIONS: Occupation[] = [
 /**
  * Pick occupation based on village size and player age.
  */
-export function pickOccupation(rng: Rng, villageSize: string, age: number): Occupation {
+// Rural occupation IDs — never appear in Praha
+const RURAL_ONLY = new Set([
+  "zemedelec", "traktorista", "lesni_delnik", "drevorubec", "vcelar",
+  "chovatel", "kombajner", "myslivec", "kovar", "hajny",
+  "spravce_rybniku", "sadar", "sezonni_delnik", "chalupar",
+  "delnik_v_pile", "delnik_v_kamenolomu",
+]);
+
+export function pickOccupation(rng: Rng, villageSize: string, age: number, district?: string): Occupation {
   // Age overrides
   if (age < 20) return OCCUPATIONS.find((o) => o.id === "student")!;
   if (age > 55 && rng.random() < 0.4) return OCCUPATIONS.find((o) => o.id === "duchodce")!;
 
   const size = (villageSize as VillageSize) || "village";
+  const isPraha = district === "Praha";
 
-  // All occupations available everywhere — just with different weights
   const weights: Record<string, number> = {};
   for (const o of OCCUPATIONS) {
+    // Praha: skip rural occupations entirely
+    if (isPraha && RURAL_ONLY.has(o.id)) continue;
     const w = o.w[size] ?? 0;
     if (w > 0) weights[o.id] = w;
   }

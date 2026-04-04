@@ -1725,7 +1725,7 @@ gameRouter.post("/game/bootstrap-league", async (c) => {
     })),
     schedule: [],
   };
-  await insertAITeamsIntoDB(db, league.id, leagueSetup, districtVillages.results as any, rng, villageSize);
+  await insertAITeamsIntoDB(db, league.id, leagueSetup, districtVillages.results as any, rng, villageSize, league.district);
 
   // Generate schedule + calendar
   const { generateSchedule, totalRounds } = await import("../league/schedule");

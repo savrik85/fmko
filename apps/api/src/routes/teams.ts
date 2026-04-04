@@ -272,7 +272,7 @@ teamsRouter.post("/", async (c) => {
       clutch: player.clutch,
     };
     // Pick occupation based on village size
-    const occ = pickOccupation(rng, villageSize, player.age);
+    const occ = pickOccupation(rng, villageSize, player.age, village.district as string);
     const baseMorale = 50 + rng.int(-15, 15) + (managerMods?.moraleMods[playerIndex] ?? 0);
     const lifeContext = { occupation: occ.name, condition: 100, morale: Math.max(10, Math.min(90, baseMorale)) };
     const rating = calculateOverallRating(player.position, isGK ? gkSkills! : fieldSkills!, hiddenTalent);
@@ -661,7 +661,7 @@ teamsRouter.post("/", async (c) => {
           leadership: ap.leadership, workRate: ap.workRate, aggression: ap.aggression,
           consistency: ap.consistency, clutch: ap.clutch,
         };
-        const apOcc = pickOccupation(rng, villageSize, ap.age);
+        const apOcc = pickOccupation(rng, villageSize, ap.age, district);
         const apLifeContext = { occupation: apOcc.name, condition: 100, morale: 50 + rng.int(-15, 15) };
         const apRating = calculateOverallRating(ap.position, isGK ? apGkSkills! : apFieldSkills!, apHiddenTalent);
         const apDescription = generateDescription(rng, {

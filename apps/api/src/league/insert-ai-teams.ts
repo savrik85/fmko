@@ -19,6 +19,7 @@ export async function insertAITeamsIntoDB(
   districtVillages: Array<{ code: string; name: string; population: number; [key: string]: unknown }>,
   rng: Rng,
   villageSize: string,
+  district?: string,
 ): Promise<void> {
   // Collect all statements and batch them
   const teamStmts: D1PreparedStatement[] = [];
@@ -69,7 +70,7 @@ export async function insertAITeamsIntoDB(
           leadership: ap.leadership, workRate: ap.workRate, aggression: ap.aggression,
           consistency: ap.consistency, clutch: ap.clutch,
         };
-        const apOcc = pickOccupation(rng, villageSize, ap.age);
+        const apOcc = pickOccupation(rng, villageSize, ap.age, district);
         const apLifeContext = { occupation: apOcc.name, condition: 100, morale: 50 + rng.int(-15, 15) };
         const apRating = calculateOverallRating(ap.position, isGK ? apGkSkills! : apFieldSkills!, apHiddenTalent);
         const apDescription = generateDescription(rng, {
