@@ -4,7 +4,7 @@
 
 import type { Rng } from "../generators/rng";
 
-export type SeasonalEventType = "zabijacka" | "ples" | "vanocni_turnaj" | "silvestr" | "letni_soustredeni" | "obecni_zpravodaj" | "den_obce" | "pout" | "brigada_hriste" | "sponzorsky_den" | "konec_skoly" | "hospoda" | "pratele" | "adhoc_brigada" | "stolni_fotbalek" | "sponzor_vecere" | "obecni_slavnost" | "exligovec" | "narozeniny" | "vylet_zapas" | "kontrola_svaz";
+export type SeasonalEventType = "zabijacka" | "ples" | "vanocni_turnaj" | "silvestr" | "letni_soustredeni" | "obecni_zpravodaj" | "den_obce" | "pout" | "brigada_hriste" | "sponzorsky_den" | "konec_skoly" | "hospoda" | "pratele" | "pratelak" | "adhoc_brigada" | "brigada" | "stolni_fotbalek" | "sipky" | "sponzor_vecere" | "grilovani" | "streetfood" | "obecni_slavnost" | "exligovec" | "narozeniny" | "vylet_zapas" | "kontrola_svaz";
 
 export interface SeasonalEventDef {
   type: SeasonalEventType;
