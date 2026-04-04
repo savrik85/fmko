@@ -168,6 +168,17 @@ export default function TrainingPage() {
         </div>
       </div>
 
+      {/* Save — right after settings, always visible */}
+      <div>
+        <button
+          onClick={savePlan}
+          disabled={!dirty || saving}
+          className={`btn btn-lg w-full ${dirty ? "btn-primary" : "btn-ghost"}`}
+        >
+          {saving ? "Ukládám..." : dirty ? "Uložit změny" : "Vše uloženo"}
+        </button>
+      </div>
+
       {/* Results */}
       {result && (() => {
         const pct = result.totalCount > 0 ? (result.attendedCount / result.totalCount) * 100 : 0;
@@ -189,170 +200,124 @@ export default function TrainingPage() {
         const totalUpgrades = result.improvements.filter((i) => i.change > 0).length;
 
         return (
-          <div className="space-y-4">
+          <div className="card p-4 sm:p-5 space-y-3">
+            <SectionLabel>Poslední trénink</SectionLabel>
 
-            {/* ── Header strip ── */}
-            <div className="card p-4 sm:p-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-pitch-500 flex items-center justify-center text-white text-lg shrink-0">
-                    {trainingLabel?.icon ?? "🏃"}
-                  </div>
-                  <div>
-                    <div className="font-heading font-bold text-base leading-tight">{trainingLabel?.label ?? "Trénink"}</div>
-                    <div className="text-xs text-muted">
-                      {(result as any).day ? <span className="capitalize">{(result as any).day}</span> : "Poslední trénink"}
-                    </div>
-                  </div>
+            {/* ── Compact header row ── */}
+            <div className="flex items-center gap-3">
+              <span className="text-xl">{trainingLabel?.icon ?? "🏃"}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-heading font-bold text-sm">{trainingLabel?.label ?? "Trénink"}</span>
+                  {(result as any).day && <span className="text-xs text-muted capitalize">{(result as any).day}</span>}
                 </div>
-                <div className="text-right">
-                  <div className="font-heading font-[800] text-2xl tabular-nums leading-none">
-                    <span className="text-pitch-500">{result.attendedCount}</span>
-                    <span className="text-muted font-normal text-base">/{result.totalCount}</span>
-                  </div>
-                  <div className="text-[10px] text-muted uppercase tracking-wide mt-0.5">docházka</div>
+                <div className="bg-gray-100 rounded-full h-1.5 overflow-hidden mt-1">
+                  <div className="h-full bg-pitch-400 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
                 </div>
               </div>
-              {/* Thin progress bar */}
-              <div className="mt-3 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                <div className="h-full bg-pitch-400 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
-              </div>
-
-              {/* Quick stats row */}
-              <div className="flex gap-2 mt-3">
-                {totalUpgrades > 0 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-pitch-50 text-pitch-600 text-xs font-heading font-bold">
-                    +{totalUpgrades} zlepšení
-                  </span>
-                )}
-                {result.teamChemistry > 0 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-pitch-50 text-pitch-600 text-xs font-heading font-bold">
-                    🤝 +{result.teamChemistry} chemie
-                  </span>
-                )}
-                {pct === 100 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gold-300/20 text-gold-600 text-xs font-heading font-bold">
-                    Plná účast
-                  </span>
-                )}
-                {absentList.length > 0 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-50 text-card-red text-xs font-heading font-bold">
-                    {absentList.length} chyběl{absentList.length === 1 ? "" : absentList.length < 5 ? "i" : "o"}
-                  </span>
-                )}
-              </div>
+              <span className="font-heading font-[800] text-lg tabular-nums shrink-0">
+                <span className="text-pitch-500">{result.attendedCount}</span>
+                <span className="text-muted font-normal text-sm">/{result.totalCount}</span>
+              </span>
             </div>
 
-            {/* ── Improvements — grouped by player ── */}
-            {groupedPositive.length > 0 && (
-              <div className="card p-4 sm:p-5">
-                <SectionLabel>Zlepšení</SectionLabel>
-                <div className="space-y-2">
-                  {groupedPositive.map(([name, data]) => (
-                    <div key={name} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-b-0">
-                      {/* Total change badge */}
-                      <div className="w-9 h-9 rounded-lg bg-pitch-500 flex items-center justify-center shrink-0">
-                        <span className="font-heading font-[800] text-white text-sm tabular-nums">
-                          +{data.attrs.reduce((s, a) => s + Math.max(0, a.change), 0)}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm">
-                          <PlayerLink id={data.playerId} name={name} playerMap={playerMap} />
-                        </div>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {data.attrs.filter((a) => a.change > 0).map((a, i) => (
-                            <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-[11px] font-heading font-bold">
-                              {ATTR_EMOJI[a.attribute] ?? ""} {ATTR_LABELS[a.attribute] ?? a.attribute}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* ── Stat badges ── */}
+            <div className="flex flex-wrap gap-1.5">
+              {totalUpgrades > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-pitch-50 text-pitch-600 text-xs font-heading font-bold">
+                  +{totalUpgrades} zlepšení
+                </span>
+              )}
+              {result.teamChemistry > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-pitch-50 text-pitch-600 text-xs font-heading font-bold">
+                  🤝 +{result.teamChemistry}
+                </span>
+              )}
+              {pct === 100 && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gold-300/20 text-gold-600 text-xs font-heading font-bold">
+                  Plná účast
+                </span>
+              )}
+              {absentList.length > 0 && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-red-50 text-card-red text-xs font-heading font-bold">
+                  {absentList.length} chyběl{absentList.length === 1 ? "" : absentList.length < 5 ? "i" : "o"}
+                </span>
+              )}
+            </div>
 
-            {groupedNegative.length > 0 && (
-              <div className="card p-4 sm:p-5">
-                <SectionLabel>Pokles</SectionLabel>
-                <div className="space-y-2">
-                  {groupedNegative.map(([name, data]) => (
-                    <div key={name} className="flex items-center gap-3 py-2">
-                      <div className="w-9 h-9 rounded-lg bg-card-red/10 flex items-center justify-center shrink-0">
-                        <span className="font-heading font-[800] text-card-red text-sm tabular-nums">
-                          {data.attrs.reduce((s, a) => s + a.change, 0)}
-                        </span>
+            {/* ── Improvements — collapsible, grouped by player ── */}
+            {(groupedPositive.length > 0 || groupedNegative.length > 0) && (
+              <details className="group">
+                <summary className="cursor-pointer select-none flex items-center gap-2 text-sm font-heading font-bold text-pitch-600 hover:text-pitch-500 transition-colors py-1">
+                  <span className="text-[10px] text-muted group-open:rotate-90 transition-transform">&#9654;</span>
+                  Zlepšení ({totalUpgrades})
+                </summary>
+                <div className="mt-1 space-y-0.5">
+                  {groupedPositive.map(([name, data]) => (
+                    <div key={name} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+                      <span className="font-heading font-[800] text-pitch-500 text-sm tabular-nums w-7 text-center shrink-0">
+                        +{data.attrs.reduce((s, a) => s + Math.max(0, a.change), 0)}
+                      </span>
+                      <PlayerLink id={data.playerId} name={name} playerMap={playerMap} />
+                      <div className="flex flex-wrap gap-1 ml-auto shrink-0">
+                        {data.attrs.filter((a) => a.change > 0).map((a, i) => (
+                          <span key={i} className="text-[11px] text-pitch-600">
+                            {ATTR_EMOJI[a.attribute] ?? ""}{ATTR_LABELS[a.attribute] ?? a.attribute}
+                          </span>
+                        ))}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm">
-                          <PlayerLink id={data.playerId} name={name} playerMap={playerMap} />
-                        </div>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {data.attrs.map((a, i) => (
-                            <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-50 text-card-red text-[11px] font-heading font-bold">
-                              {ATTR_EMOJI[a.attribute] ?? ""} {ATTR_LABELS[a.attribute] ?? a.attribute}
-                            </span>
-                          ))}
-                        </div>
+                    </div>
+                  ))}
+                  {groupedNegative.map(([name, data]) => (
+                    <div key={name} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+                      <span className="font-heading font-[800] text-card-red text-sm tabular-nums w-7 text-center shrink-0">
+                        {data.attrs.reduce((s, a) => s + a.change, 0)}
+                      </span>
+                      <PlayerLink id={data.playerId} name={name} playerMap={playerMap} />
+                      <div className="flex flex-wrap gap-1 ml-auto shrink-0">
+                        {data.attrs.map((a, i) => (
+                          <span key={i} className="text-[11px] text-card-red">
+                            {ATTR_EMOJI[a.attribute] ?? ""}{ATTR_LABELS[a.attribute] ?? a.attribute}
+                          </span>
+                        ))}
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
+              </details>
             )}
 
             {result.improvements.length === 0 && (
-              <div className="card p-4 sm:p-5 text-center">
-                <div className="text-2xl mb-1">😴</div>
-                <div className="text-sm text-muted">Dnes bez zlepšení — zítra to přijde!</div>
-              </div>
+              <div className="text-sm text-muted italic py-1">Dnes bez zlepšení</div>
             )}
 
-            {/* ── Absences — SMS/chat style ── */}
+            {/* ── Absences — collapsible ── */}
             {absentList.length > 0 && (
-              <div className="card p-4 sm:p-5">
-                <SectionLabel>Omluvenky</SectionLabel>
-                <div className="space-y-2.5">
+              <details className="group">
+                <summary className="cursor-pointer select-none flex items-center gap-2 text-sm font-heading font-bold text-card-red hover:text-red-600 transition-colors py-1">
+                  <span className="text-[10px] text-muted group-open:rotate-90 transition-transform">&#9654;</span>
+                  Omluvenky ({absentList.length})
+                </summary>
+                <div className="mt-1 space-y-1.5">
                   {absentList.map((a, i) => (
-                    <div key={i} className="flex gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 text-xs font-heading font-bold text-muted">
-                        {a.playerName.split(" ").map((w) => w[0]).join("")}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-heading font-bold">
+                    <div key={i} className="flex items-start gap-2 py-1 border-b border-gray-50 last:border-b-0">
+                      <span className="text-card-red text-[10px] mt-1 shrink-0">&#10005;</span>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-sm">
                           <PlayerLink id={a.playerId} name={a.playerName} playerMap={playerMap} />
-                        </div>
+                        </span>
                         {a.reason && (
-                          <div className="mt-0.5 px-3 py-1.5 rounded-2xl rounded-tl-sm bg-gray-50 text-xs text-ink-light inline-block max-w-[85%]">
-                            {a.reason}
-                          </div>
+                          <span className="text-xs text-muted italic ml-1">&mdash; {a.reason}</span>
                         )}
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
+              </details>
             )}
-
           </div>
         );
       })()}
-
-      {/* Save footer — always at bottom of page */}
-      <div className="pt-2">
-        <button
-          onClick={savePlan}
-          disabled={!dirty || saving}
-          className={`btn btn-lg w-full ${dirty ? "btn-primary" : "btn-ghost"}`}
-        >
-          {saving ? "Ukládám..." : dirty ? "Uložit změny" : "Vše uloženo"}
-        </button>
-        <p className="text-xs text-muted mt-2 text-center">
-          Tréninky probíhají automaticky Po-Pá. Výsledky se zobrazí výše.
-        </p>
-      </div>
     </div>
   );
 }
