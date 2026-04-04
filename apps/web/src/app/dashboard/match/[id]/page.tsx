@@ -59,7 +59,7 @@ export default function MatchDetailPage() {
   useEffect(() => {
     apiFetch<MatchDetail>(`/api/matches/${matchId}`)
       .then((m) => { setMatch(m); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch((e) => { console.error("Failed to load match:", e); setLoading(false); });
   }, [matchId]);
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;

@@ -126,12 +126,12 @@ export default function MatchReplayPage() {
           name: (team.stadium_name as string) ?? (team.name as string) + " stadion",
           pitchCondition: (r.pitch_condition as number) ?? 50,
         });
-      }).catch(() => {});
-    }).catch(() => setLoading(false));
+      }).catch((e) => console.error("Failed to load stadium:", e));
+    }).catch((e) => { console.error("Failed to load replay:", e); setLoading(false); });
   }, [matchId]);
 
   const markSeen = useCallback(() => {
-    if (teamId) apiFetch(`/api/matches/${matchId}/mark-seen`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ teamId }) }).catch(() => {});
+    if (teamId) apiFetch(`/api/matches/${matchId}/mark-seen`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ teamId }) }).catch((e) => console.error("Failed to mark seen:", e));
   }, [matchId, teamId]);
 
   const vis = match ? match.events.slice(0, idx) : [];
