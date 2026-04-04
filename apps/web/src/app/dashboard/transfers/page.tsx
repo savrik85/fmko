@@ -864,11 +864,13 @@ export default function TransfersPage() {
               <div className="card p-6 text-center text-muted">Nikdo momentálně nenabízí hráče.</div>
             ) : (
               <div className="space-y-3">
-                {listings.map((l) => (
+                {listings.map((l) => {
+                  const lAvatar = (() => { try { return typeof l.avatar === "string" ? JSON.parse(l.avatar) : l.avatar; } catch { return null; } })();
+                  return (
                   <div key={l.id} className="card p-4">
                     <div className="flex items-center gap-3">
-                      {l.avatar && Object.keys(l.avatar).length > 0
-                        ? <FaceAvatar faceConfig={l.avatar} size={40} className="rounded-full shrink-0" />
+                      {lAvatar && Object.keys(lAvatar).length > 0
+                        ? <FaceAvatar faceConfig={lAvatar} size={40} className="rounded-full shrink-0" />
                         : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
@@ -912,7 +914,7 @@ export default function TransfersPage() {
                       )}
                     </div>
                   </div>
-                ))}
+                ); })}
               </div>
             )}
           </div>
