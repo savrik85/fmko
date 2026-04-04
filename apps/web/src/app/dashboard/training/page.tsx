@@ -171,107 +171,163 @@ export default function TrainingPage() {
       {/* Results */}
       {result && (() => {
         const pct = result.totalCount > 0 ? (result.attendedCount / result.totalCount) * 100 : 0;
-        const circumference = 2 * Math.PI * 42;
-        const strokeDash = (pct / 100) * circumference;
         const absentList = result.attendance.filter((a) => !a.attended);
-        const positiveImps = result.improvements.filter((i) => i.change > 0);
-        const negativeImps = result.improvements.filter((i) => i.change < 0);
         const trainingLabel = TRAINING_TYPES.find((t) => t.key === type);
 
-        return (
-          <div className="card p-4 sm:p-5 space-y-5">
-            <SectionLabel>Výsledek tréninku</SectionLabel>
+        // Group improvements by player
+        const grouped = new Map<string, { playerId?: string; attrs: Array<{ attribute: string; change: number }> }>();
+        for (const imp of result.improvements) {
+          const existing = grouped.get(imp.playerName);
+          if (existing) {
+            existing.attrs.push({ attribute: imp.attribute, change: imp.change });
+          } else {
+            grouped.set(imp.playerName, { playerId: imp.playerId, attrs: [{ attribute: imp.attribute, change: imp.change }] });
+          }
+        }
+        const groupedPositive = [...grouped.entries()].filter(([, v]) => v.attrs.some((a) => a.change > 0));
+        const groupedNegative = [...grouped.entries()].filter(([, v]) => v.attrs.every((a) => a.change < 0));
+        const totalUpgrades = result.improvements.filter((i) => i.change > 0).length;
 
-            {/* ── Attendance ring + info ── */}
-            <div className="flex items-center gap-5">
-              <div className="relative shrink-0" style={{ width: 100, height: 100 }}>
-                <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-                  <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="6" className="text-gray-100" />
-                  <circle cx="50" cy="50" r="42" fill="none" strokeWidth="6" strokeLinecap="round"
-                    className="text-pitch-400 transition-all duration-700"
-                    style={{ strokeDasharray: `${strokeDash} ${circumference}` }} />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="font-heading font-[800] text-xl tabular-nums leading-none">{result.attendedCount}</span>
-                  <span className="text-[10px] text-muted leading-tight">/{result.totalCount}</span>
+        return (
+          <div className="space-y-4">
+
+            {/* ── Header strip ── */}
+            <div className="card p-4 sm:p-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-pitch-500 flex items-center justify-center text-white text-lg shrink-0">
+                    {trainingLabel?.icon ?? "🏃"}
+                  </div>
+                  <div>
+                    <div className="font-heading font-bold text-base leading-tight">{trainingLabel?.label ?? "Trénink"}</div>
+                    <div className="text-xs text-muted">
+                      {(result as any).day ? <span className="capitalize">{(result as any).day}</span> : "Poslední trénink"}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-heading font-[800] text-2xl tabular-nums leading-none">
+                    <span className="text-pitch-500">{result.attendedCount}</span>
+                    <span className="text-muted font-normal text-base">/{result.totalCount}</span>
+                  </div>
+                  <div className="text-[10px] text-muted uppercase tracking-wide mt-0.5">docházka</div>
                 </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-heading font-bold text-base">
-                  {trainingLabel?.icon} {trainingLabel?.label ?? "Trénink"}
-                </div>
-                <div className="text-sm text-muted mt-0.5">
-                  {(result as any).day ? <span className="capitalize">{(result as any).day}</span> : "Poslední trénink"}
-                </div>
-                {pct === 100 && (
-                  <div className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full bg-pitch-50 text-pitch-600 text-xs font-heading font-bold">
-                    Plná docházka
-                  </div>
+              {/* Thin progress bar */}
+              <div className="mt-3 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                <div className="h-full bg-pitch-400 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
+              </div>
+
+              {/* Quick stats row */}
+              <div className="flex gap-2 mt-3">
+                {totalUpgrades > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-pitch-50 text-pitch-600 text-xs font-heading font-bold">
+                    +{totalUpgrades} zlepšení
+                  </span>
                 )}
-                {pct < 100 && absentList.length > 0 && (
-                  <div className="text-xs text-muted mt-1.5">
+                {result.teamChemistry > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-pitch-50 text-pitch-600 text-xs font-heading font-bold">
+                    🤝 +{result.teamChemistry} chemie
+                  </span>
+                )}
+                {pct === 100 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gold-300/20 text-gold-600 text-xs font-heading font-bold">
+                    Plná účast
+                  </span>
+                )}
+                {absentList.length > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-50 text-card-red text-xs font-heading font-bold">
                     {absentList.length} chyběl{absentList.length === 1 ? "" : absentList.length < 5 ? "i" : "o"}
-                  </div>
+                  </span>
                 )}
               </div>
             </div>
 
-            {/* ── Improvements — pull cards ── */}
-            {positiveImps.length > 0 || negativeImps.length > 0 ? (
-              <div>
-                <div className="text-xs text-muted font-heading uppercase mb-2 tracking-wide">Zlepšení</div>
-                <div className="space-y-1.5">
-                  {positiveImps.map((imp, idx) => (
-                    <div key={`p${idx}`} className="flex items-center gap-3 rounded-lg bg-pitch-50/60 border border-pitch-100 px-3 py-2">
-                      <span className="font-heading font-[800] text-lg text-pitch-500 tabular-nums w-8 text-center shrink-0">+{imp.change}</span>
-                      <div className="flex-1 min-w-0">
-                        <PlayerLink id={imp.playerId} name={imp.playerName} playerMap={playerMap} />
+            {/* ── Improvements — grouped by player ── */}
+            {groupedPositive.length > 0 && (
+              <div className="card p-4 sm:p-5">
+                <SectionLabel>Zlepšení</SectionLabel>
+                <div className="space-y-2">
+                  {groupedPositive.map(([name, data]) => (
+                    <div key={name} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-b-0">
+                      {/* Total change badge */}
+                      <div className="w-9 h-9 rounded-lg bg-pitch-500 flex items-center justify-center shrink-0">
+                        <span className="font-heading font-[800] text-white text-sm tabular-nums">
+                          +{data.attrs.reduce((s, a) => s + Math.max(0, a.change), 0)}
+                        </span>
                       </div>
-                      <span className="inline-flex items-center gap-1 text-sm text-pitch-600 shrink-0">
-                        <span>{ATTR_EMOJI[imp.attribute] ?? ""}</span>
-                        <span className="font-heading font-bold text-xs">{ATTR_LABELS[imp.attribute] ?? imp.attribute}</span>
-                      </span>
-                    </div>
-                  ))}
-                  {negativeImps.map((imp, idx) => (
-                    <div key={`n${idx}`} className="flex items-center gap-3 rounded-lg bg-red-50/60 border border-red-100 px-3 py-2">
-                      <span className="font-heading font-[800] text-lg text-card-red tabular-nums w-8 text-center shrink-0">{imp.change}</span>
                       <div className="flex-1 min-w-0">
-                        <PlayerLink id={imp.playerId} name={imp.playerName} playerMap={playerMap} />
+                        <div className="text-sm">
+                          <PlayerLink id={data.playerId} name={name} playerMap={playerMap} />
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {data.attrs.filter((a) => a.change > 0).map((a, i) => (
+                            <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-[11px] font-heading font-bold">
+                              {ATTR_EMOJI[a.attribute] ?? ""} {ATTR_LABELS[a.attribute] ?? a.attribute}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                      <span className="inline-flex items-center gap-1 text-sm text-card-red shrink-0">
-                        <span>{ATTR_EMOJI[imp.attribute] ?? ""}</span>
-                        <span className="font-heading font-bold text-xs">{ATTR_LABELS[imp.attribute] ?? imp.attribute}</span>
-                      </span>
                     </div>
                   ))}
                 </div>
               </div>
-            ) : (
-              <div className="text-center py-3 text-sm text-muted italic">
-                Dnes bez zlepšení — zítra to přijde!
+            )}
+
+            {groupedNegative.length > 0 && (
+              <div className="card p-4 sm:p-5">
+                <SectionLabel>Pokles</SectionLabel>
+                <div className="space-y-2">
+                  {groupedNegative.map(([name, data]) => (
+                    <div key={name} className="flex items-center gap-3 py-2">
+                      <div className="w-9 h-9 rounded-lg bg-card-red/10 flex items-center justify-center shrink-0">
+                        <span className="font-heading font-[800] text-card-red text-sm tabular-nums">
+                          {data.attrs.reduce((s, a) => s + a.change, 0)}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm">
+                          <PlayerLink id={data.playerId} name={name} playerMap={playerMap} />
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {data.attrs.map((a, i) => (
+                            <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-50 text-card-red text-[11px] font-heading font-bold">
+                              {ATTR_EMOJI[a.attribute] ?? ""} {ATTR_LABELS[a.attribute] ?? a.attribute}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* ── Team chemistry ── */}
-            {result.teamChemistry > 0 && (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-pitch-50 text-pitch-600 font-heading font-bold text-sm">
-                <span>🤝</span> Chemie +{result.teamChemistry}
+            {result.improvements.length === 0 && (
+              <div className="card p-4 sm:p-5 text-center">
+                <div className="text-2xl mb-1">😴</div>
+                <div className="text-sm text-muted">Dnes bez zlepšení — zítra to přijde!</div>
               </div>
             )}
 
-            {/* ── Absence list — always visible ── */}
+            {/* ── Absences — SMS/chat style ── */}
             {absentList.length > 0 && (
-              <div>
-                <div className="text-xs text-muted font-heading uppercase mb-2 tracking-wide">Chyběli</div>
-                <div className="space-y-1">
+              <div className="card p-4 sm:p-5">
+                <SectionLabel>Omluvenky</SectionLabel>
+                <div className="space-y-2.5">
                   {absentList.map((a, i) => (
-                    <div key={i} className="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-                      <span className="w-2 h-2 rounded-full bg-card-red mt-1.5 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <PlayerLink id={a.playerId} name={a.playerName} playerMap={playerMap} />
+                    <div key={i} className="flex gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 text-xs font-heading font-bold text-muted">
+                        {a.playerName.split(" ").map((w) => w[0]).join("")}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-heading font-bold">
+                          <PlayerLink id={a.playerId} name={a.playerName} playerMap={playerMap} />
+                        </div>
                         {a.reason && (
-                          <div className="text-xs text-muted italic mt-0.5">&bdquo;{a.reason}&ldquo;</div>
+                          <div className="mt-0.5 px-3 py-1.5 rounded-2xl rounded-tl-sm bg-gray-50 text-xs text-ink-light inline-block max-w-[85%]">
+                            {a.reason}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -279,11 +335,7 @@ export default function TrainingPage() {
                 </div>
               </div>
             )}
-            {absentList.length === 0 && pct === 100 && (
-              <div className="text-center text-sm text-pitch-500 font-heading font-bold py-1">
-                Nikdo nechyběl!
-              </div>
-            )}
+
           </div>
         );
       })()}
