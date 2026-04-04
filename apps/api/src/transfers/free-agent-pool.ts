@@ -62,6 +62,7 @@ export async function maintainFreeAgentPool(
       region_code: district,
       category: (sizeMap[(row.size as string)] ?? "obec") as VillageInfo["category"],
       population: (row.population as number) ?? 500,
+      district,
     };
 
     // Pick random villages from the district for residence

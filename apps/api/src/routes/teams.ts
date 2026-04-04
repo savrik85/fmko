@@ -194,6 +194,7 @@ teamsRouter.post("/", async (c) => {
       : (village.size as string) === "town" ? "mestys" as const
       : "mesto" as const,
     population: village.population as number,
+    district: village.district as string,
   };
 
   // District-specific surnames from DB (weighted by local frequency)

@@ -5,6 +5,7 @@ import type {
   AvatarConfig,
 } from "@okresni-masina/shared";
 import type { PreferredFoot, PreferredSide } from "../skills/types";
+import { pickOccupation } from "./occupations";
 
 // Seed data types
 interface SurnameData {
@@ -21,6 +22,7 @@ export interface VillageInfo {
   region_code: string;
   category: "vesnice" | "obec" | "mestys" | "mesto";
   population: number;
+  district?: string;
 }
 
 export interface GeneratedPlayer {
@@ -255,7 +257,10 @@ export function generatePlayer(
     accessories: [],
   };
 
-  const occupation = age < 18 ? "Student" : age > 60 ? "Důchodce" : rng.pick(FALLBACK_OCCUPATIONS);
+  // Map category back to villageSize for pickOccupation
+  const villageSizeMap: Record<string, string> = { vesnice: "hamlet", obec: "village", mestys: "town", mesto: "small_city" };
+  const occ = pickOccupation(rng, villageSizeMap[village.category] ?? "village", age, village.district);
+  const occupation = occ.name;
 
   // ── New attributes ──
 
