@@ -89,16 +89,16 @@ transfersRouter.get("/teams/:teamId/free-agents", async (c) => {
       position: fa.position,
       overallRating: fa.overall_rating,
       weeklyWage: fa.weekly_wage,
-      occupation: (() => { try { return JSON.parse(fa.life_context as string)?.occupation ?? ""; } catch { return ""; } })(),
+      occupation: (() => { try { return JSON.parse(fa.life_context as string)?.occupation ?? ""; } catch (e) { logger.warn({ module: "transfers" }, `parse fa life_context: ${e}`); return ""; } })(),
       source: fa.source,
       releasedFromTeamId: fa.released_from_team_id,
       villageName: fa.village_name ?? null,
       distanceKm: distKm,
       expiresAt: fa.expires_at,
-      avatar: (() => { try { return JSON.parse(fa.avatar as string); } catch { return {}; } })(),
-      skills: (() => { try { return JSON.parse(fa.skills as string); } catch { return {}; } })(),
-      physical: (() => { try { return JSON.parse(fa.physical as string); } catch { return {}; } })(),
-      personality: (() => { try { return JSON.parse(fa.personality as string); } catch { return {}; } })(),
+      avatar: (() => { try { return JSON.parse(fa.avatar as string); } catch (e) { logger.warn({ module: "transfers" }, `parse fa avatar: ${e}`); return {}; } })(),
+      skills: (() => { try { return JSON.parse(fa.skills as string); } catch (e) { logger.warn({ module: "transfers" }, `parse fa skills: ${e}`); return {}; } })(),
+      physical: (() => { try { return JSON.parse(fa.physical as string); } catch (e) { logger.warn({ module: "transfers" }, `parse fa physical: ${e}`); return {}; } })(),
+      personality: (() => { try { return JSON.parse(fa.personality as string); } catch (e) { logger.warn({ module: "transfers" }, `parse fa personality: ${e}`); return {}; } })(),
     };
   });
 
@@ -129,7 +129,7 @@ transfersRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   const squadCount = await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM players WHERE team_id = ?")
     .bind(teamId).first<{ cnt: number }>();
 
-  const personality = (() => { try { return JSON.parse(fa.personality as string); } catch { return {}; } })();
+  const personality = (() => { try { return JSON.parse(fa.personality as string); } catch (e) { logger.warn({ module: "transfers" }, `parse sign personality: ${e}`); return {}; } })();
   const rng = createRng(Date.now() + faId.charCodeAt(0));
 
   const decision = evaluateSigningChance(
@@ -243,7 +243,9 @@ transfersRouter.get("/teams/:teamId/market", async (c) => {
 
   // Listings from other teams in same league
   const listings = await c.env.DB.prepare(
-    `SELECT tl.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar, t.name as team_name
+    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at,
+     p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
+     t.name as team_name
      FROM transfer_listings tl
      JOIN players p ON tl.player_id = p.id
      JOIN teams t ON tl.team_id = t.id
@@ -253,7 +255,8 @@ transfersRouter.get("/teams/:teamId/market", async (c) => {
 
   // My listings with bids
   const myListings = await c.env.DB.prepare(
-    `SELECT tl.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar
+    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at,
+     p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar
      FROM transfer_listings tl JOIN players p ON tl.player_id = p.id
      WHERE tl.team_id = ? AND tl.status = 'active'`
   ).bind(teamId).all();
@@ -274,12 +277,13 @@ transfersRouter.get("/teams/:teamId/market", async (c) => {
       id: l.id, playerId: l.player_id, askingPrice: l.asking_price,
       playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,
       overallRating: l.overall_rating, teamName: l.team_name, expiresAt: l.expires_at,
-      avatar: (() => { try { return JSON.parse(l.avatar as string); } catch { return {}; } })(),
+      avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "transfers" }, `parse listing avatar: ${e}`); return {}; } })(),
     })),
     myListings: myListings.results.map((l) => ({
       id: l.id, playerId: l.player_id, askingPrice: l.asking_price,
       playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,
       overallRating: l.overall_rating, expiresAt: l.expires_at,
+      avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "transfers" }, `parse myListing avatar: ${e}`); return {}; } })(),
       bids: bids.filter((b) => b.listing_id === l.id).map((b) => ({
         id: b.id, amount: b.amount, bidderName: b.bidder_name, teamId: b.team_id,
       })),
@@ -418,7 +422,7 @@ transfersRouter.get("/teams/:teamId/offers", async (c) => {
 
   // Incoming offers (for my players) — include buyer's league for cross-league fee display
   const incoming = await c.env.DB.prepare(
-    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar,
+    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
      t.name as from_team_name, t.league_id as from_league_id
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.from_team_id = t.id
      WHERE to2.to_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
@@ -427,7 +431,7 @@ transfersRouter.get("/teams/:teamId/offers", async (c) => {
   // Outgoing offers (from me) — include seller's league for cross-league fee display
   const myTeam = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string }>();
   const outgoing = await c.env.DB.prepare(
-    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.avatar,
+    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.avatar as player_avatar,
      t.name as to_team_name, t.league_id as to_league_id
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.to_team_id = t.id
      WHERE to2.from_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`

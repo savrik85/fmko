@@ -2483,13 +2483,16 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
   if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
   const listings = await c.env.DB.prepare(
-    `SELECT tl.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, t.name as team_name
+    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at,
+     p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
+     t.name as team_name
      FROM transfer_listings tl JOIN players p ON tl.player_id = p.id JOIN teams t ON tl.team_id = t.id
      WHERE tl.league_id = ? AND tl.status = 'active' AND tl.team_id != ? ORDER BY tl.created_at DESC`
   ).bind(team.league_id, teamId).all();
 
   const myListings = await c.env.DB.prepare(
-    `SELECT tl.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating
+    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at,
+     p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar
      FROM transfer_listings tl JOIN players p ON tl.player_id = p.id WHERE tl.team_id = ? AND tl.status = 'active'`
   ).bind(teamId).all();
 
@@ -2520,12 +2523,14 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
       id: l.id, playerId: l.player_id, askingPrice: l.asking_price,
       playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,
       overallRating: l.overall_rating, teamName: l.team_name, expiresAt: l.expires_at,
+      avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "game" }, `parse market avatar: ${e}`); return {}; } })(),
       myBidAmount: myBids[l.id as string] ?? null,
     })),
     myListings: myListings.results.map((l) => ({
       id: l.id, playerId: l.player_id, askingPrice: l.asking_price,
       playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,
       overallRating: l.overall_rating, expiresAt: l.expires_at,
+      avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "game" }, `parse myListing avatar: ${e}`); return {}; } })(),
       bids: bids.filter((b) => b.listing_id === l.id).map((b) => ({
         id: b.id, amount: b.amount, bidderName: b.bidder_name, teamId: b.team_id,
       })),

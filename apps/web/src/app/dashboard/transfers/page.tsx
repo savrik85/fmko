@@ -998,7 +998,7 @@ export default function TransfersPage() {
               <SectionLabel>Příchozí nabídky ({incoming.length})</SectionLabel>
               <div className="space-y-3">
                 {incoming.map((o) => {
-                  const oAvatar = (() => { try { return typeof o.avatar === "string" ? JSON.parse(o.avatar) : o.avatar; } catch { return null; } })();
+                  const oAvatar = (() => { try { const raw = (o as any).player_avatar ?? o.avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
                   return (
                   <div key={o.id} className="card p-4">
                     <div className="flex items-start gap-3">
@@ -1059,7 +1059,7 @@ export default function TransfersPage() {
               <SectionLabel>Moje nabídky ({outgoing.length})</SectionLabel>
               <div className="space-y-3">
                 {outgoing.map((o) => {
-                  const oAvatar = (() => { try { return typeof o.avatar === "string" ? JSON.parse(o.avatar) : o.avatar; } catch { return null; } })();
+                  const oAvatar = (() => { try { const raw = (o as any).player_avatar ?? o.avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
                   return (
                   <div key={o.id} className="card p-4">
                     <div className="flex items-center gap-3">
