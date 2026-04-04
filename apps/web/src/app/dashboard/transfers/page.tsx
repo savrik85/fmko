@@ -884,6 +884,11 @@ export default function TransfersPage() {
                         <div className="text-xs text-muted">
                           <span className="font-heading font-bold text-ink">{formatCZK(l.askingPrice)}</span> — {l.teamName}
                         </div>
+                        {(l as any).skills && Object.keys((l as any).skills).length > 0 && (() => {
+                          const s = (l as any).skills as Record<string, number>;
+                          const labels: [string, string][] = l.position === "GK" ? [["Bra", "goalkeeping"]] : l.position === "DEF" ? [["Obr", "defense"],["Hl", "heading"],["Rch", "speed"]] : l.position === "MID" ? [["Pas", "passing"],["Tch", "technique"],["Kre", "creativity"]] : [["Stř", "shooting"],["Rch", "speed"],["Tch", "technique"]];
+                          return <div className="flex gap-2 mt-0.5">{labels.map(([lbl, key]) => <span key={key} className={`text-[10px] tabular-nums ${skillColor(s[key] ?? 0)}`}>~{lbl} {s[key] ?? 0}</span>)}</div>;
+                        })()}
                       </div>
                       {l.myBidAmount ? (
                         <span className="shrink-0 py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-50 text-pitch-600">
@@ -1012,6 +1017,14 @@ export default function TransfersPage() {
                           </Link>
                           <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
                         </div>
+                        {(() => {
+                          const ps = (() => { try { const raw = (o as any).player_skills; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
+                          if (!ps || Object.keys(ps).length === 0) return null;
+                          const blur = (v: number) => Math.round(v / 5) * 5;
+                          const pos = o.position;
+                          const labels: [string, string][] = pos === "GK" ? [["Bra", "goalkeeping"]] : pos === "DEF" ? [["Obr", "defense"],["Hl", "heading"],["Rch", "speed"]] : pos === "MID" ? [["Pas", "passing"],["Tch", "technique"],["Kre", "creativity"]] : [["Stř", "shooting"],["Rch", "speed"],["Tch", "technique"]];
+                          return <div className="flex gap-2 mt-0.5">{labels.map(([lbl, key]) => <span key={key} className={`text-[10px] tabular-nums ${skillColor(blur(ps[key] ?? 0))}`}>~{lbl} {blur(ps[key] ?? 0)}</span>)}</div>;
+                        })()}
                         <div className="text-sm">
                           <span className="font-heading font-bold">{o.from_team_name}</span>
                           <span className="text-muted"> nabízí </span>
@@ -1072,6 +1085,14 @@ export default function TransfersPage() {
                           <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
                           <span className="text-sm text-muted">→ {o.to_team_name}</span>
                         </div>
+                        {(() => {
+                          const ps = (() => { try { const raw = (o as any).player_skills; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
+                          if (!ps || Object.keys(ps).length === 0) return null;
+                          const blur = (v: number) => Math.round(v / 5) * 5;
+                          const pos = o.position;
+                          const labels: [string, string][] = pos === "GK" ? [["Bra", "goalkeeping"]] : pos === "DEF" ? [["Obr", "defense"],["Hl", "heading"],["Rch", "speed"]] : pos === "MID" ? [["Pas", "passing"],["Tch", "technique"],["Kre", "creativity"]] : [["Stř", "shooting"],["Rch", "speed"],["Tch", "technique"]];
+                          return <div className="flex gap-2 mt-0.5">{labels.map(([lbl, key]) => <span key={key} className={`text-[10px] tabular-nums ${skillColor(blur(ps[key] ?? 0))}`}>~{lbl} {blur(ps[key] ?? 0)}</span>)}</div>;
+                        })()}
                         <div className="text-sm text-muted">
                           {o.offer_type === "loan" ? (
                             <span className="text-yellow-600 font-heading font-bold">Hostování{o.loan_duration ? ` (${o.loan_duration} dní)` : ""}</span>

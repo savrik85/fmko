@@ -2484,7 +2484,7 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
 
   const listings = await c.env.DB.prepare(
     `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at,
-     p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
+     p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.skills,
      t.name as team_name
      FROM transfer_listings tl JOIN players p ON tl.player_id = p.id JOIN teams t ON tl.team_id = t.id
      WHERE tl.league_id = ? AND tl.status = 'active' AND tl.team_id != ? ORDER BY tl.created_at DESC`
@@ -2524,6 +2524,7 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
       playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,
       overallRating: l.overall_rating, teamName: l.team_name, expiresAt: l.expires_at,
       avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "game" }, `parse market avatar: ${e}`); return {}; } })(),
+      skills: (() => { try { const s = JSON.parse(l.skills as string); const blur = (v: number) => Math.round(v / 5) * 5; return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === "number" ? blur(v) : v])); } catch { return {}; } })(),
       myBidAmount: myBids[l.id as string] ?? null,
     })),
     myListings: myListings.results.map((l) => ({
@@ -2653,14 +2654,14 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
 gameRouter.get("/teams/:teamId/offers", async (c) => {
   const teamId = c.req.param("teamId");
   const incoming = await c.env.DB.prepare(
-    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
+    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.skills as player_skills,
      t.name as from_team_name, t.league_id as from_league_id
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.from_team_id = t.id
      WHERE to2.to_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
   ).bind(teamId).all();
   const myTeam = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string }>();
   const outgoing = await c.env.DB.prepare(
-    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.avatar as player_avatar,
+    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.avatar as player_avatar, p.skills as player_skills,
      t.name as to_team_name, t.league_id as to_league_id
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.to_team_id = t.id
      WHERE to2.from_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
