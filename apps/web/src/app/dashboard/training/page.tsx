@@ -94,63 +94,63 @@ export default function TrainingPage() {
   return (
     <div className="page-container space-y-5">
 
-      {/* Training settings — compact single card */}
+      {/* Training settings */}
       <div className="card p-4 sm:p-5 space-y-4">
-        {/* Type row */}
-        <div>
-          <SectionLabel>Zaměření</SectionLabel>
-          <div className="grid grid-cols-4 gap-1.5">
-            {TRAINING_TYPES.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => { setType(t.key); setDirty(true); }}
-                className={`py-2 px-1 rounded-lg text-center transition-all border-2 ${
-                  type === t.key
-                    ? "border-pitch-500 bg-pitch-500/5"
-                    : "border-transparent bg-surface hover:border-pitch-500/20"
-                }`}
-              >
-                <div className="text-lg leading-none">{t.icon}</div>
-                <div className="font-heading font-bold text-xs mt-1">{t.label}</div>
-              </button>
-            ))}
-          </div>
-          <div className="text-[11px] text-muted mt-1 text-center">
-            {TRAINING_TYPES.find((t) => t.key === type)?.skills}
-          </div>
+        <SectionLabel>Tréninkový plán</SectionLabel>
+
+        {/* Type — 2x2 mobile, 4 cols desktop */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {TRAINING_TYPES.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => { setType(t.key); setDirty(true); }}
+              className={`flex items-center gap-2 p-2.5 rounded-xl transition-all border-2 ${
+                type === t.key
+                  ? "border-pitch-500 bg-pitch-50/50"
+                  : "border-transparent bg-gray-50 hover:border-pitch-500/20"
+              }`}
+            >
+              <span className="text-xl shrink-0">{t.icon}</span>
+              <div className="text-left min-w-0">
+                <div className="font-heading font-bold text-sm leading-tight">{t.label}</div>
+                <div className="text-[10px] text-muted leading-tight truncate">{t.skills}</div>
+              </div>
+            </button>
+          ))}
         </div>
 
-        {/* Approach + sessions row */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1">
-            <SectionLabel>Přístup</SectionLabel>
-            <div className="flex gap-1.5">
+        {/* Approach + Sessions — side by side */}
+        <div className="flex gap-3 items-end">
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Přístup</div>
+            <div className="flex rounded-xl bg-gray-50 p-0.5">
               {APPROACHES.map((a) => (
                 <button
                   key={a.key}
                   onClick={() => { setApproach(a.key); setDirty(true); }}
-                  className={`flex-1 py-2 px-2 rounded-lg text-center transition-all border-2 ${
+                  className={`flex-1 py-2 rounded-lg text-center transition-all text-sm font-heading font-bold ${
                     approach === a.key
-                      ? "border-pitch-500 bg-pitch-500/5"
-                      : "border-transparent bg-surface hover:border-pitch-500/20"
+                      ? "bg-white shadow-sm text-pitch-600"
+                      : "text-muted hover:text-ink"
                   }`}
+                  title={a.desc}
                 >
-                  <div className="font-heading font-bold text-xs">{a.label}</div>
+                  {a.label}
                 </button>
               ))}
             </div>
           </div>
-          <div className="sm:w-36">
-            <SectionLabel>Za týden</SectionLabel>
-            <div className="flex gap-1.5">
+          <div className="shrink-0">
+            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Týdně</div>
+            <div className="flex rounded-xl bg-gray-50 p-0.5">
               {[1, 2, 3].map((n) => (
                 <button
                   key={n}
                   onClick={() => { setSessions(n); setDirty(true); }}
-                  className={`flex-1 py-2 rounded-lg text-center font-heading font-bold text-base transition-all border-2 ${
+                  className={`w-10 py-2 rounded-lg text-center font-heading font-bold text-sm transition-all ${
                     sessions === n
-                      ? "border-pitch-500 bg-pitch-500/5 text-pitch-500"
-                      : "border-transparent bg-surface text-muted hover:border-pitch-500/20"
+                      ? "bg-white shadow-sm text-pitch-600"
+                      : "text-muted hover:text-ink"
                   }`}
                 >
                   {n}x
