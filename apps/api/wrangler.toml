@@ -59,4 +59,5 @@ id = "f2900579992a4a8da17986f9b7d83f01"
 binding = "SEED_DATA"
 bucket_name = "prales-seed"
 
-# Testing crony nejsou potřeba — spouštíme ručně
+[env.testing.triggers]
+crons = []

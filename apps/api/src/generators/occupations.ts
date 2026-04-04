@@ -467,7 +467,7 @@ export const OCCUPATIONS: Occupation[] = [
   // PRAŽSKÉ / MĚSTSKÉ (town/city)
   // ═══════════════════════════════════════
   {
-    id: "revizor", name: "Revizor", w: W(0, 0, 3, 2, 3),
+    id: "revizor", name: "Revizor", w: W(0, 2, 3, 2, 3),
     injuryRisk: 0.05, overtimeRisk: 0.3, strengthBonus: 0,
     excuses: [
       "Mám kontrolní den na lince 22",
@@ -476,7 +476,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "tramvajak", name: "Řidič tramvaje", w: W(0, 0, 4, 3, 4),
+    id: "tramvajak", name: "Řidič tramvaje", w: W(0, 3, 4, 3, 4),
     injuryRisk: 0.1, overtimeRisk: 0.6, strengthBonus: 0,
     excuses: [
       "Mám směnu na trojce",
@@ -486,7 +486,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "bezdomovec", name: "Bezdomovec", w: W(0, 0, 1, 1, 2),
+    id: "bezdomovec", name: "Bezdomovec", w: W(0, 0.5, 1, 1, 2),
     injuryRisk: 0.2, overtimeRisk: 0.05, strengthBonus: -1,
     excuses: [
       "Někdo mi obsadil lavičku",
@@ -496,7 +496,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "ridic_boltu", name: "Řidič Boltu", w: W(0, 0, 3, 2, 4),
+    id: "ridic_boltu", name: "Řidič Boltu", w: W(0, 2, 3, 2, 4),
     injuryRisk: 0.05, overtimeRisk: 0.4, strengthBonus: 0,
     excuses: [
       "Mám bonusovej cíl, ještě 3 jízdy",
@@ -505,7 +505,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "barman", name: "Barman", w: W(0, 0.1, 3, 2, 3),
+    id: "barman", name: "Barman", w: W(0, 2, 3, 2, 3),
     injuryRisk: 0.05, overtimeRisk: 0.5, strengthBonus: 0,
     excuses: [
       "Máme live music večer, nemůžu odejít",
@@ -514,7 +514,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "kuryr", name: "Kurýr", w: W(0, 0, 3, 2, 4),
+    id: "kuryr", name: "Kurýr", w: W(0, 2, 3, 2, 4),
     injuryRisk: 0.15, overtimeRisk: 0.5, strengthBonus: 0,
     excuses: [
       "Mám ještě 15 balíků do konce směny",
@@ -523,7 +523,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "vratny", name: "Vrátný", w: W(0, 0, 2.5, 1.5, 2.5),
+    id: "vratny", name: "Vrátný", w: W(0, 1.5, 2.5, 1.5, 2.5),
     injuryRisk: 0.02, overtimeRisk: 0.3, strengthBonus: 0,
     excuses: [
       "Nemůžu opustit vrátnici, čekám na zásilku",
@@ -532,7 +532,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "taxikar", name: "Taxikář", w: W(0, 0, 3, 2, 3),
+    id: "taxikar", name: "Taxikář", w: W(0, 2, 3, 2, 3),
     injuryRisk: 0.05, overtimeRisk: 0.5, strengthBonus: 0,
     excuses: [
       "Mám objednanou jízdu na letiště",
@@ -541,7 +541,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "prodavac_trafika", name: "Prodavač v trafice", w: W(0, 0.3, 2.5, 1.5, 2.5),
+    id: "prodavac_trafika", name: "Prodavač v trafice", w: W(0, 1.5, 2.5, 1.5, 2.5),
     injuryRisk: 0.02, overtimeRisk: 0.3, strengthBonus: -1,
     excuses: [
       "Musím zavřít krám, kolega nepřijde",
@@ -549,7 +549,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "metar", name: "Metař", w: W(0, 0, 2.5, 1.5, 2.5),
+    id: "metar", name: "Metař", w: W(0, 1.5, 2.5, 1.5, 2.5),
     injuryRisk: 0.15, overtimeRisk: 0.4, strengthBonus: 1,
     excuses: [
       "Uklízíme po koncertu na Letné",
@@ -558,7 +558,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "strojvedouci_metro", name: "Strojvedoucí metra", w: W(0, 0, 3, 2, 3),
+    id: "strojvedouci_metro", name: "Strojvedoucí metra", w: W(0, 2, 3, 2, 3),
     injuryRisk: 0.05, overtimeRisk: 0.6, strengthBonus: 0,
     excuses: [
       "Mám noční na lince B",
@@ -567,7 +567,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "hlidac_parkoviste", name: "Hlídač parkoviště", w: W(0, 0, 2, 1, 1.5),
+    id: "hlidac_parkoviste", name: "Hlídač parkoviště", w: W(0, 1.5, 2, 1, 1.5),
     injuryRisk: 0.02, overtimeRisk: 0.3, strengthBonus: 0,
     excuses: [
       "Střídání nedorazilo",
@@ -576,7 +576,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "poulicni_muzikant", name: "Pouliční muzikant", w: W(0, 0, 1.5, 1, 2),
+    id: "poulicni_muzikant", name: "Pouliční muzikant", w: W(0, 1, 1.5, 1, 2),
     injuryRisk: 0.05, overtimeRisk: 0.1, strengthBonus: -1,
     excuses: [
       "Mám dobré místo na Karláku, nemůžu odejít",
@@ -585,7 +585,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "ridic_mhd", name: "Řidič autobusu MHD", w: W(0, 0, 3, 2, 3),
+    id: "ridic_mhd", name: "Řidič autobusu MHD", w: W(0, 2, 3, 2, 3),
     injuryRisk: 0.05, overtimeRisk: 0.6, strengthBonus: 0,
     excuses: [
       "Mám směnu na 119 na letiště",
@@ -594,7 +594,7 @@ export const OCCUPATIONS: Occupation[] = [
     ],
   },
   {
-    id: "uklidova_firma", name: "Uklízeč kanceláří", w: W(0, 0, 2.5, 1.5, 2.5),
+    id: "uklidova_firma", name: "Uklízeč kanceláří", w: W(0, 1.5, 2.5, 1.5, 2.5),
     injuryRisk: 0.1, overtimeRisk: 0.4, strengthBonus: 0,
     excuses: [
       "Uklízíme kanceláře na Pankráci, noční směna",
@@ -636,12 +636,19 @@ export const OCCUPATIONS: Occupation[] = [
 /**
  * Pick occupation based on village size and player age.
  */
-// Rural occupation IDs — never appear in Praha
+// Rural occupation IDs — only in non-Praha districts
 const RURAL_ONLY = new Set([
   "zemedelec", "traktorista", "lesni_delnik", "drevorubec", "vcelar",
   "chovatel", "kombajner", "myslivec", "kovar", "hajny",
   "spravce_rybniku", "sadar", "sezonni_delnik", "chalupar",
   "delnik_v_pile", "delnik_v_kamenolomu",
+]);
+
+// Urban occupation IDs — only in Praha
+const URBAN_ONLY = new Set([
+  "revizor", "tramvajak", "bezdomovec", "ridic_boltu", "kuryr",
+  "vratny", "taxikar", "prodavac_trafika", "metar", "strojvedouci_metro",
+  "hlidac_parkoviste", "poulicni_muzikant", "ridic_mhd", "uklidova_firma",
 ]);
 
 export function pickOccupation(rng: Rng, villageSize: string, age: number, district?: string): Occupation {
@@ -654,8 +661,9 @@ export function pickOccupation(rng: Rng, villageSize: string, age: number, distr
 
   const weights: Record<string, number> = {};
   for (const o of OCCUPATIONS) {
-    // Praha: skip rural occupations entirely
+    // Praha: skip rural, non-Praha: skip urban
     if (isPraha && RURAL_ONLY.has(o.id)) continue;
+    if (!isPraha && URBAN_ONLY.has(o.id)) continue;
     const w = o.w[size] ?? 0;
     if (w > 0) weights[o.id] = w;
   }
