@@ -253,7 +253,7 @@ transfersRouter.get("/teams/:teamId/market", async (c) => {
 
   // My listings with bids
   const myListings = await c.env.DB.prepare(
-    `SELECT tl.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating
+    `SELECT tl.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar
      FROM transfer_listings tl JOIN players p ON tl.player_id = p.id
      WHERE tl.team_id = ? AND tl.status = 'active'`
   ).bind(teamId).all();

@@ -923,9 +923,14 @@ export default function TransfersPage() {
             <div>
               <SectionLabel>Moje inzerce ({myListings.length})</SectionLabel>
               <div className="space-y-3">
-                {myListings.map((l) => (
+                {myListings.map((l) => {
+                  const mlAvatar = (() => { try { const a = (l as any).avatar; return typeof a === "string" ? JSON.parse(a) : a; } catch { return null; } })();
+                  return (
                   <div key={l.id} className="card p-4">
                     <div className="flex items-center gap-3 mb-2">
+                      {mlAvatar && Object.keys(mlAvatar).length > 0
+                        ? <FaceAvatar faceConfig={mlAvatar} size={40} className="rounded-full shrink-0" />
+                        : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <Link href={`/dashboard/player/${l.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
@@ -978,7 +983,7 @@ export default function TransfersPage() {
                       </div>
                     )}
                   </div>
-                ))}
+                ); })}
               </div>
             </div>
           )}
