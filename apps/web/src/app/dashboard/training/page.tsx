@@ -37,6 +37,13 @@ const ATTR_LABELS: Record<string, string> = {
   vision: "Přehled", creativity: "Kreativita", setPieces: "Standardky",
 };
 
+const ATTR_EMOJI: Record<string, string> = {
+  speed: "\u26A1", technique: "\u26BD", shooting: "\uD83C\uDFAF",
+  passing: "\uD83D\uDCD0", heading: "\uD83D\uDDE3\uFE0F", defense: "\uD83D\uDEE1\uFE0F",
+  stamina: "\uD83E\uDEC1", strength: "\uD83D\uDCAA", goalkeeping: "\uD83E\uDDE4",
+  vision: "\uD83D\uDC41\uFE0F", creativity: "\uD83C\uDFA8", setPieces: "\uD83C\uDFAA",
+};
+
 export default function TrainingPage() {
   const { teamId } = useTeam();
   const [type, setType] = useState<TrainingType>("conditioning");
@@ -155,72 +162,124 @@ export default function TrainingPage() {
       </div>
 
       {/* Results */}
-      {result && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Výsledek tréninku</SectionLabel>
+      {result && (() => {
+        const pct = result.totalCount > 0 ? (result.attendedCount / result.totalCount) * 100 : 0;
+        const circumference = 2 * Math.PI * 42;
+        const strokeDash = (pct / 100) * circumference;
+        const absentList = result.attendance.filter((a) => !a.attended);
+        const positiveImps = result.improvements.filter((i) => i.change > 0);
+        const negativeImps = result.improvements.filter((i) => i.change < 0);
+        const trainingLabel = TRAINING_TYPES.find((t) => t.key === type);
 
-          {/* Summary bar */}
-          <div className="flex items-center gap-4 mb-4">
-            <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-              <div
-                className="h-full bg-pitch-400 rounded-full transition-all"
-                style={{ width: `${(result.attendedCount / result.totalCount) * 100}%` }}
-              />
-            </div>
-            <span className="text-sm font-heading font-bold text-pitch-500 tabular-nums shrink-0">
-              {result.attendedCount}/{result.totalCount} na tréninku
-            </span>
-          </div>
+        return (
+          <div className="card p-4 sm:p-5 space-y-5">
+            <SectionLabel>Výsledek tréninku</SectionLabel>
 
-          {/* Improvements */}
-          {result.improvements.length > 0 && (
-            <div className="mb-4">
-              <div className="text-xs text-muted font-heading uppercase mb-2">Zlepšení</div>
-              <div className="space-y-1">
-                {result.improvements.filter((i) => i.change > 0).map((imp, idx) => (
-                  <div key={idx} className="flex items-center gap-2 text-sm">
-                    <span className="text-pitch-400 font-bold">+{imp.change}</span>
-                    <PlayerLink id={imp.playerId} name={imp.playerName} playerMap={playerMap} />
-                    <span className="text-muted">{ATTR_LABELS[imp.attribute] ?? imp.attribute}</span>
+            {/* ── Attendance ring + info ── */}
+            <div className="flex items-center gap-5">
+              <div className="relative shrink-0" style={{ width: 100, height: 100 }}>
+                <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="6" className="text-gray-100" />
+                  <circle cx="50" cy="50" r="42" fill="none" strokeWidth="6" strokeLinecap="round"
+                    className="text-pitch-400 transition-all duration-700"
+                    style={{ strokeDasharray: `${strokeDash} ${circumference}` }} />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="font-heading font-[800] text-xl tabular-nums leading-none">{result.attendedCount}</span>
+                  <span className="text-[10px] text-muted leading-tight">/{result.totalCount}</span>
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-heading font-bold text-base">
+                  {trainingLabel?.icon} {trainingLabel?.label ?? "Trénink"}
+                </div>
+                <div className="text-sm text-muted mt-0.5">
+                  {(result as any).day ? <span className="capitalize">{(result as any).day}</span> : "Poslední trénink"}
+                </div>
+                {pct === 100 && (
+                  <div className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full bg-pitch-50 text-pitch-600 text-xs font-heading font-bold">
+                    Plná docházka
                   </div>
-                ))}
-                {result.improvements.filter((i) => i.change < 0).map((imp, idx) => (
-                  <div key={idx} className="flex items-center gap-2 text-sm">
-                    <span className="text-card-red font-bold">{imp.change}</span>
-                    <PlayerLink id={imp.playerId} name={imp.playerName} playerMap={playerMap} />
-                    <span className="text-muted">{ATTR_LABELS[imp.attribute] ?? imp.attribute}</span>
+                )}
+                {pct < 100 && absentList.length > 0 && (
+                  <div className="text-xs text-muted mt-1.5">
+                    {absentList.length} chyběl{absentList.length === 1 ? "" : absentList.length < 5 ? "i" : "o"}
                   </div>
-                ))}
+                )}
               </div>
             </div>
-          )}
 
-          {result.teamChemistry > 0 && (
-            <div className="text-sm text-pitch-500 font-medium mb-3">
-              Chemie týmu +{result.teamChemistry}
-            </div>
-          )}
-
-          {/* Attendance detail */}
-          <details className="group">
-            <summary className="text-xs text-muted font-heading uppercase cursor-pointer hover:text-ink transition-colors">
-              Docházka &middot; {result.attendance.filter((a) => !a.attended).length} chybělo
-            </summary>
-            <div className="mt-2 space-y-1">
-              {result.attendance.filter((a) => !a.attended).map((a, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm py-1">
-                  <span className="text-card-red text-xs">&#10005;</span>
-                  <PlayerLink id={a.playerId} name={a.playerName} playerMap={playerMap} />
-                  <span className="text-muted italic text-xs">{a.reason}</span>
+            {/* ── Improvements — pull cards ── */}
+            {positiveImps.length > 0 || negativeImps.length > 0 ? (
+              <div>
+                <div className="text-xs text-muted font-heading uppercase mb-2 tracking-wide">Zlepšení</div>
+                <div className="space-y-1.5">
+                  {positiveImps.map((imp, idx) => (
+                    <div key={`p${idx}`} className="flex items-center gap-3 rounded-lg bg-pitch-50/60 border border-pitch-100 px-3 py-2">
+                      <span className="font-heading font-[800] text-lg text-pitch-500 tabular-nums w-8 text-center shrink-0">+{imp.change}</span>
+                      <div className="flex-1 min-w-0">
+                        <PlayerLink id={imp.playerId} name={imp.playerName} playerMap={playerMap} />
+                      </div>
+                      <span className="inline-flex items-center gap-1 text-sm text-pitch-600 shrink-0">
+                        <span>{ATTR_EMOJI[imp.attribute] ?? ""}</span>
+                        <span className="font-heading font-bold text-xs">{ATTR_LABELS[imp.attribute] ?? imp.attribute}</span>
+                      </span>
+                    </div>
+                  ))}
+                  {negativeImps.map((imp, idx) => (
+                    <div key={`n${idx}`} className="flex items-center gap-3 rounded-lg bg-red-50/60 border border-red-100 px-3 py-2">
+                      <span className="font-heading font-[800] text-lg text-card-red tabular-nums w-8 text-center shrink-0">{imp.change}</span>
+                      <div className="flex-1 min-w-0">
+                        <PlayerLink id={imp.playerId} name={imp.playerName} playerMap={playerMap} />
+                      </div>
+                      <span className="inline-flex items-center gap-1 text-sm text-card-red shrink-0">
+                        <span>{ATTR_EMOJI[imp.attribute] ?? ""}</span>
+                        <span className="font-heading font-bold text-xs">{ATTR_LABELS[imp.attribute] ?? imp.attribute}</span>
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-              {result.attendance.filter((a) => !a.attended).length === 0 && (
-                <p className="text-sm text-pitch-500">Plná docházka!</p>
-              )}
-            </div>
-          </details>
-        </div>
-      )}
+              </div>
+            ) : (
+              <div className="text-center py-3 text-sm text-muted italic">
+                Dnes bez zlepšení — zítra to přijde!
+              </div>
+            )}
+
+            {/* ── Team chemistry ── */}
+            {result.teamChemistry > 0 && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-pitch-50 text-pitch-600 font-heading font-bold text-sm">
+                <span>🤝</span> Chemie +{result.teamChemistry}
+              </div>
+            )}
+
+            {/* ── Absence list — always visible ── */}
+            {absentList.length > 0 && (
+              <div>
+                <div className="text-xs text-muted font-heading uppercase mb-2 tracking-wide">Chyběli</div>
+                <div className="space-y-1">
+                  {absentList.map((a, i) => (
+                    <div key={i} className="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+                      <span className="w-2 h-2 rounded-full bg-card-red mt-1.5 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <PlayerLink id={a.playerId} name={a.playerName} playerMap={playerMap} />
+                        {a.reason && (
+                          <div className="text-xs text-muted italic mt-0.5">&bdquo;{a.reason}&ldquo;</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {absentList.length === 0 && pct === 100 && (
+              <div className="text-center text-sm text-pitch-500 font-heading font-bold py-1">
+                Nikdo nechyběl!
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Save footer — always at bottom of page */}
       <div className="pt-2">
