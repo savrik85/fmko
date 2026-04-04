@@ -119,6 +119,13 @@ export default function TrainingPage() {
           ))}
         </div>
 
+        {/* Info about selected type + approach */}
+        <div className="text-xs text-muted bg-gray-50 rounded-lg px-3 py-2 space-y-1">
+          <div><span className="font-heading font-bold text-ink">{TRAINING_TYPES.find((t) => t.key === type)?.label}:</span> {TRAINING_TYPES.find((t) => t.key === type)?.desc}. Zlepšuje {TRAINING_TYPES.find((t) => t.key === type)?.skills}.</div>
+          <div><span className="font-heading font-bold text-ink">{APPROACHES.find((a) => a.key === approach)?.label}:</span> {APPROACHES.find((a) => a.key === approach)?.desc}.</div>
+          <div>Tréninky probíhají automaticky Po–Pá. Víc tréninků = rychlejší růst, ale horší docházka a únava.</div>
+        </div>
+
         {/* Approach + Sessions — side by side */}
         <div className="flex gap-3 items-end">
           <div className="flex-1 min-w-0">
