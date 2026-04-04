@@ -184,7 +184,7 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
 // GET /api/leagues — seznam všech aktivních lig (pro league picker v UI)
 leagueRouter.get("/leagues", async (c) => {
   const leagues = await c.env.DB.prepare(
-    "SELECT l.id, l.name, l.level, l.district, l.season_id, s.number as season_number, (SELECT COUNT(*) FROM teams t WHERE t.league_id = l.id) as team_count FROM leagues l JOIN seasons s ON l.season_id = s.id WHERE l.status = 'active' ORDER BY l.name"
+    "SELECT l.id, l.name, l.level, l.district, l.season_id, s.number as season_number, (SELECT COUNT(*) FROM teams t WHERE t.league_id = l.id) as team_count FROM leagues l JOIN seasons s ON l.season_id = s.id WHERE l.status = 'active' AND l.district IN ('Prachatice', 'Praha') ORDER BY l.name"
   ).all().catch((e) => { logger.error({ module: "league" }, "fetch leagues", e); return { results: [] }; });
 
   return c.json({ leagues: leagues.results });
