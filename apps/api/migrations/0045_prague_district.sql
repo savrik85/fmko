@@ -42,7 +42,18 @@ INSERT OR IGNORE INTO villages (id, name, district, region, population, size, la
   ('praha-suchdol',     'Suchdol',      'Praha', 'Hlavní město Praha',  8000,  'village', 50.1400, 14.3833),
   ('praha-reporyje',    'Řeporyje',     'Praha', 'Hlavní město Praha',  8000,  'village', 50.0250, 14.3333),
   ('praha-uhrineves',   'Uhříněves',    'Praha', 'Hlavní město Praha',  6000,  'village', 50.0167, 14.5667),
-  ('praha-bohdalec',    'Bohdalec',     'Praha', 'Hlavní město Praha',  5000,  'village', 50.0550, 14.4650);
+  ('praha-bohdalec',    'Bohdalec',     'Praha', 'Hlavní město Praha',  5000,  'village', 50.0550, 14.4650),
+  -- Další městské části
+  ('praha-karlin',      'Karlín',       'Praha', 'Hlavní město Praha', 20000,  'village', 50.0928, 14.4500),
+  ('praha-vysocany',    'Vysočany',     'Praha', 'Hlavní město Praha', 18000,  'village', 50.1050, 14.4917),
+  ('praha-modřany',     'Modřany',      'Praha', 'Hlavní město Praha', 22000,  'village', 50.0122, 14.4183),
+  ('praha-kunratice',   'Kunratice',    'Praha', 'Hlavní město Praha',  9000,  'village', 50.0100, 14.4867),
+  ('praha-troja',       'Troja',        'Praha', 'Hlavní město Praha',  5000,  'village', 50.1167, 14.4167),
+  ('praha-brevnov',     'Břevnov',      'Praha', 'Hlavní město Praha', 15000,  'village', 50.0833, 14.3667),
+  ('praha-michle',      'Michle',       'Praha', 'Hlavní město Praha', 16000,  'village', 50.0500, 14.4417),
+  ('praha-podoli',      'Podolí',       'Praha', 'Hlavní město Praha', 10000,  'village', 50.0500, 14.4233),
+  ('praha-hlubocepy',   'Hlubočepy',    'Praha', 'Hlavní město Praha',  8000,  'village', 50.0500, 14.3917),
+  ('praha-zbraslav',    'Zbraslav',     'Praha', 'Hlavní město Praha', 10000,  'village', 49.9750, 14.3917);
 
 -- ═══ 2. Pražská příjmení ═══
 
