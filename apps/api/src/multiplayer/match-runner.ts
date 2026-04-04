@@ -76,10 +76,10 @@ export async function runScheduledMatches(
       const awayLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
         .bind(awayTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load away lineup", e); return null; });
 
-      // Build match players — always pass lineup data for matchPosition mapping
-      const homeBuild = await buildMatchPlayers(db, homeTeamId, rng,
+      // Build match players — use absenceRng for deterministic absences (must match next-match endpoint)
+      const homeBuild = await buildMatchPlayers(db, homeTeamId, absenceRng,
         homeLineupRow?.players_data ?? null);
-      const awayBuild = await buildMatchPlayers(db, awayTeamId, rng,
+      const awayBuild = await buildMatchPlayers(db, awayTeamId, absenceRng,
         awayLineupRow?.players_data ?? null, 100);
 
       const homeLineup = homeBuild.players;
@@ -535,7 +535,7 @@ export async function buildMatchPlayers(
       // Get district for environment-specific excuses (Praha = urban, rest = rural)
       const districtRow = await db.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
         .bind(teamId).first<{ district: string }>().catch(() => null);
-      const absences = generateAbsences(absenceRng as any, squadForAbsence, "any", districtRow?.district);
+      const absences = generateAbsences(rng as any, squadForAbsence, "any", districtRow?.district);
       absentIds = new Set(absences.map((a) => rows.results[a.playerIndex]?.id as string).filter(Boolean));
       for (const a of absences) {
         const r = rows.results[a.playerIndex];
