@@ -304,47 +304,50 @@ export default function MatchPage() {
                       <button key={p.id} disabled={isAbsent} onClick={() => {
                         if (isAbsent) return;
                         const s = [...selected]; s[editSlot] = p.id; setSelected(s); setEditSlot(null); setSaved(false);
-                      }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
+                      }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                         isAbsent ? "opacity-40 cursor-not-allowed" : isCurrent ? "bg-pitch-100 ring-1 ring-pitch-400" : "hover:bg-gray-50"
                       }`}>
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-heading font-bold text-sm ${POS_BG[p.position]}`}>
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-heading font-bold text-sm shrink-0 ${POS_BG[p.position]}`}>
                           {p.squadNumber ?? "?"}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <span className="font-heading font-bold text-base">{p.firstName} {p.lastName}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-heading font-bold text-sm">{p.firstName} {p.lastName}</span>
+                            {isOOP && !isAbsent && <span className="text-gold-500 text-xs">⚠️</span>}
+                          </div>
                           {isAbsent ? (
-                            <div className="text-sm text-card-red">❌ Nedostupný</div>
+                            <div className="text-xs text-card-red">❌ Nedostupný</div>
                           ) : (
-                            <>
-                              <div className="text-sm text-muted">{p.position} · Rat {p.overallRating} · {p.age} let</div>
-                              <div className="flex items-center gap-2 mt-1">
-                                <div className="flex items-center gap-1 text-xs text-muted">
-                                  <span>Kon</span>
-                                  <div className="w-14 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                    <div className={`h-full rounded-full ${p.condition >= 70 ? "bg-pitch-400" : p.condition >= 40 ? "bg-gold-500" : "bg-card-red"}`} style={{ width: `${p.condition}%` }} />
-                                  </div>
-                                  <span className="tabular-nums w-5 text-right">{p.condition}</span>
+                            <div className="flex items-center gap-3 mt-0.5">
+                              <span className="text-xs text-muted">{p.position} · {p.overallRating}</span>
+                              <div className="flex items-center gap-1">
+                                <div className={`w-10 h-1.5 rounded-full overflow-hidden ${p.condition >= 70 ? "bg-pitch-200" : p.condition >= 40 ? "bg-gold-200" : "bg-red-200"}`}>
+                                  <div className={`h-full rounded-full ${p.condition >= 70 ? "bg-pitch-500" : p.condition >= 40 ? "bg-gold-500" : "bg-card-red"}`} style={{ width: `${p.condition}%` }} />
                                 </div>
-                                {(() => {
-                                  const pos = slots[editSlot].pos;
-                                  const attrs: [string, number][] = pos === "GK"
-                                    ? [["Bra", p.goalkeeping ?? 0]]
-                                    : pos === "DEF"
-                                    ? [["Obr", p.defense ?? 0], ["Hl", p.heading ?? 0]]
-                                    : pos === "MID"
-                                    ? [["Pas", p.passing ?? 0], ["Tch", p.technique ?? 0]]
-                                    : [["Stř", p.shooting ?? 0], ["Rch", p.speed ?? 0]];
-                                  return attrs.map(([label, val]) => (
-                                    <span key={label} className={`text-xs tabular-nums ${val >= 50 ? "text-pitch-600 font-bold" : val >= 30 ? "text-muted" : "text-card-red"}`}>
-                                      {label} {val}
-                                    </span>
-                                  ));
-                                })()}
+                                <span className="text-[10px] tabular-nums text-muted w-4">{p.condition}</span>
                               </div>
-                            </>
+                              {(() => {
+                                const pos = slots[editSlot].pos;
+                                const attrs: [string, number][] = pos === "GK"
+                                  ? [["Bra", p.goalkeeping ?? 0]]
+                                  : pos === "DEF"
+                                  ? [["Obr", p.defense ?? 0], ["Hl", p.heading ?? 0]]
+                                  : pos === "MID"
+                                  ? [["Pas", p.passing ?? 0], ["Tch", p.technique ?? 0]]
+                                  : [["Stř", p.shooting ?? 0], ["Rch", p.speed ?? 0]];
+                                return (
+                                  <div className="flex gap-1.5">
+                                    {attrs.map(([label, val]) => (
+                                      <span key={label} className={`text-[10px] tabular-nums ${val >= 50 ? "text-pitch-600 font-medium" : val >= 30 ? "text-muted" : "text-card-red"}`}>
+                                        {label}&nbsp;{val}
+                                      </span>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+                            </div>
                           )}
                         </div>
-                        {isOOP && !isAbsent && <span className="text-gold-500 text-lg shrink-0">⚠️</span>}
                       </button>
                     );
                   })}
