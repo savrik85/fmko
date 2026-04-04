@@ -2113,8 +2113,10 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       commuteKm: (row.commute_km as number) ?? 0,
     };
   });
-  // Always generate absences so user sees who will be missing (must match simulation RNG)
-  const absences = generateAbsences(absenceRng as any, absenceSquad, "any");
+  // Only show absences day-before or match-day (not 2+ days before)
+  const absences = daysUntilMatch <= 1
+    ? generateAbsences(absenceRng as any, absenceSquad, "any")
+    : [];
   const absentPlayerIds = new Set(absences.map((a) => players.results[a.playerIndex]?.id as string).filter(Boolean));
 
   const available = players.results.map((p) => {
