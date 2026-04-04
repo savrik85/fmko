@@ -64,6 +64,12 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       const homeSubs = homeLineup.splice(11);
       const awaySubs = awayLineup.splice(11);
 
+      // Save pre-simulation copies (simulation mutates arrays via substitutions)
+      const homeLineupPreSim = homeLineup.map(p => ({ ...p }));
+      const awayLineupPreSim = awayLineup.map(p => ({ ...p }));
+      const homeSubsPreSim = homeSubs.map(p => ({ ...p }));
+      const awaySubsPreSim = awaySubs.map(p => ({ ...p }));
+
       const homeTeam = await db.prepare("SELECT name FROM teams WHERE id = ?").bind(homeTeamId).first<{ name: string }>();
       const awayTeam = await db.prepare("SELECT name FROM teams WHERE id = ?").bind(awayTeamId).first<{ name: string }>();
 
@@ -119,8 +125,8 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         });
         return { starters: lineup.map(mapStarter), subs: subs.map(mapSub) };
       };
-      const homeLineupData = buildLineupData(homeLineup, homeSubs, homeBuild.idMap);
-      const awayLineupData = buildLineupData(awayLineup, awaySubs, awayBuild.idMap);
+      const homeLineupData = buildLineupData(homeLineupPreSim, homeSubsPreSim, homeBuild.idMap);
+      const awayLineupData = buildLineupData(awayLineupPreSim, awaySubsPreSim, awayBuild.idMap);
 
       // Save
       await db.prepare(

@@ -88,6 +88,12 @@ export async function runScheduledMatches(
       const homeSubs = homeLineup.splice(11);
       const awaySubs = awayLineup.splice(11);
 
+      // Save pre-simulation lineup for buildLineupData (simulation mutates arrays via substitutions)
+      const homeLineupPreSim = homeLineup.map(p => ({ ...p }));
+      const awayLineupPreSim = awayLineup.map(p => ({ ...p }));
+      const homeSubsPreSim = homeSubs.map(p => ({ ...p }));
+      const awaySubsPreSim = awaySubs.map(p => ({ ...p }));
+
       // Merge ID maps (engine ID → DB player ID)
       const fullIdMap = new Map<number, string>();
       for (const [k, v] of homeBuild.idMap) fullIdMap.set(k, v);
@@ -272,8 +278,8 @@ export async function runScheduledMatches(
         result.homeScore, result.awayScore,
         JSON.stringify(result.events), JSON.stringify(commentary),
         attendance, stadiumName, pitchCondition, weather,
-        JSON.stringify(buildLineupData(homeLineup, homeSubs, homeBuild.idMap)),
-        JSON.stringify(buildLineupData(awayLineup, awaySubs, awayBuild.idMap)),
+        JSON.stringify(buildLineupData(homeLineupPreSim, homeSubsPreSim, homeBuild.idMap)),
+        JSON.stringify(buildLineupData(awayLineupPreSim, awaySubsPreSim, awayBuild.idMap)),
         matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null,
         matchId,
       ).run();
@@ -513,12 +519,18 @@ export async function buildMatchPlayers(
     "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
   ).bind(teamId).all();
 
-  // Generate absences if rng provided (for automatic matches)
+  // Generate absences — only for AI teams (no user lineup saved)
+  // If user saved a lineup, respect it — they chose those players consciously
   let absentIds = new Set<string>();
   const absentInfo: Array<{ name: string; reason: string; smsText: string }> = [];
-  if (rng) {
+  const hasUserLineup = !!userLineupJson;
+  const allDbIds = rows.results.map(r => (r.id as string).slice(0,8));
+  logger.info({ module: "match-runner" }, `buildMatchPlayers team=${teamId.slice(0,8)} total=${rows.results.length} hasLineup=${hasUserLineup} dbIDs=[${allDbIds.join(",")}]`);
+  if (rng && !hasUserLineup) {
     try {
       const { generateAbsences } = await import("../events/absence");
+      const { seedFromString } = await import("../lib/seed");
+      const teamAbsenceRng = createRng(seedFromString(teamId));
       const squadForAbsence = rows.results.map((row) => {
         const personality = JSON.parse(row.personality as string);
         const lifeContext = JSON.parse(row.life_context as string);
@@ -535,7 +547,7 @@ export async function buildMatchPlayers(
       // Get district for environment-specific excuses (Praha = urban, rest = rural)
       const districtRow = await db.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
         .bind(teamId).first<{ district: string }>().catch(() => null);
-      const absences = generateAbsences(rng as any, squadForAbsence, "any", districtRow?.district);
+      const absences = generateAbsences(teamAbsenceRng as any, squadForAbsence, "any", districtRow?.district);
       absentIds = new Set(absences.map((a) => rows.results[a.playerIndex]?.id as string).filter(Boolean));
       for (const a of absences) {
         const r = rows.results[a.playerIndex];
@@ -558,7 +570,19 @@ export async function buildMatchPlayers(
     .bind(teamId).all().catch(() => ({ results: [] }));
   for (const ir of injuryRows.results) injuredIds.add(ir.player_id as string);
 
+  // DEBUG: check each player's exclusion reason
+  for (const r of rows.results) {
+    const id = r.id as string;
+    if (absentIds.has(id)) console.log(`[LINEUP-DEBUG] ${r.first_name} ${r.last_name} (${id.slice(0,8)}) EXCLUDED: absent`);
+    if (suspendedIds.has(id)) console.log(`[LINEUP-DEBUG] ${r.first_name} ${r.last_name} (${id.slice(0,8)}) EXCLUDED: suspended=${r.suspended_matches}`);
+    if (injuredIds.has(id)) console.log(`[LINEUP-DEBUG] ${r.first_name} ${r.last_name} (${id.slice(0,8)}) EXCLUDED: injured`);
+  }
+
   const allAvailable = rows.results.filter((r) => !absentIds.has(r.id as string) && !suspendedIds.has(r.id as string) && !injuredIds.has(r.id as string));
+
+  logger.info({ module: "match-runner" }, `team=${teamId} DB=${rows.results.length} absent=${absentIds.size} suspended=${suspendedIds.size} injured=${injuredIds.size} available=${allAvailable.length}`);
+  if (suspendedIds.size > 0) logger.info({ module: "match-runner" }, `suspended IDs: ${[...suspendedIds].join(",")}`);
+  if (injuredIds.size > 0) logger.info({ module: "match-runner" }, `injured IDs: ${[...injuredIds].join(",")}`);
 
   // If user set a lineup, order players: selected 11 first, then rest as subs
   let ordered = allAvailable;
@@ -566,12 +590,62 @@ export async function buildMatchPlayers(
     try {
       const userPicks = JSON.parse(userLineupJson) as Array<{ playerId: string; matchPosition?: string }>;
       const pickedIds = userPicks.map((p) => p.playerId);
-      const starters = pickedIds
-        .map((id) => allAvailable.find((r) => r.id === id))
-        .filter(Boolean) as typeof allAvailable;
+      const allAvailIds = new Set(allAvailable.map((r) => r.id as string));
+      const allDbIds = new Set(rows.results.map((r) => r.id as string));
+
+      console.log(`[LINEUP-DEBUG] pickedIds=${pickedIds.map(id=>id.slice(0,8)).join(",")}`);
+      console.log(`[LINEUP-DEBUG] allAvail=${allAvailIds.size} allDb=${allDbIds.size}`);
+      for (const id of pickedIds) {
+        const inDb = allDbIds.has(id);
+        const inAvail = allAvailIds.has(id);
+        if (!inDb) console.log(`[LINEUP-DEBUG] ${id.slice(0,8)} NOT IN DB`);
+        else if (!inAvail) console.log(`[LINEUP-DEBUG] ${id.slice(0,8)} IN DB but NOT IN AVAILABLE`);
+        if (!allDbIds.has(id)) {
+          logger.error({ module: "match-runner" }, `LINEUP PLAYER ${id} NOT IN DB AT ALL`);
+        } else if (!allAvailIds.has(id)) {
+          const isAbsent = absentIds.has(id);
+          const isSusp = suspendedIds.has(id);
+          const isInj = injuredIds.has(id);
+          const player = rows.results.find(r => r.id === id);
+          logger.warn({ module: "match-runner" }, `LINEUP PLAYER ${player?.first_name} ${player?.last_name} (${id}) EXCLUDED: absent=${isAbsent} suspended=${isSusp} injured=${isInj}`);
+        }
+      }
+
+      // For user-saved lineups: use ONLY rows.results (already fetched from DB)
+      // Just find each picked player by iterating through all rows
+      const starters: typeof allAvailable = [];
+      for (const id of pickedIds) {
+        let found = false;
+        for (let ri = 0; ri < rows.results.length; ri++) {
+          if ((rows.results[ri].id as string) === id) {
+            starters.push(rows.results[ri]);
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          const msg = `MISSING: ${id} not in ${rows.results.length} rows. All IDs: ${rows.results.map(r => (r.id as string)).join(",")}`;
+          console.log(`[LINEUP-BUG] ${msg}`);
+          if (!(globalThis as any).__lineupDebug) (globalThis as any).__lineupDebug = [];
+          (globalThis as any).__lineupDebug.push(msg);
+        }
+      }
+
+      logger.info({ module: "match-runner" }, `Lineup: ${pickedIds.length} picked, ${starters.length} found, ${pickedIds.length - starters.length} missing`);
+
       const rest = allAvailable.filter((r) => !pickedIds.includes(r.id as string));
       ordered = [...starters, ...rest].slice(0, 16);
-    } catch { ordered = allAvailable.slice(0, 16); }
+
+      // Log saved vs actual
+      const savedNames = pickedIds.map(id => { const p = rows.results.find(r => r.id === id); return p ? `${p.first_name} ${p.last_name}` : `?${id.slice(0,8)}`; });
+      const actualNames = ordered.slice(0, 11).map(r => `${r.first_name} ${r.last_name}`);
+      logger.info({ module: "match-runner" }, `SAVED:  ${savedNames.join(", ")}`);
+      logger.info({ module: "match-runner" }, `ACTUAL: ${actualNames.join(", ")}`);
+      if (!(globalThis as any).__lineupDebug) (globalThis as any).__lineupDebug = [];
+      const dbgSaved = starters.map(s => `${s.first_name} ${s.last_name}`).join(",");
+      const dbgActual = ordered.slice(0, 11).map(s => `${s.first_name} ${s.last_name}`).join(",");
+      (globalThis as any).__lineupDebug.push(`team=${teamId.slice(0,8)} starters=${starters.length} ordered11=[${dbgActual}] savedPicked=[${dbgSaved}]`);
+    } catch (e) { logger.error({ module: "match-runner" }, `Failed to parse lineup: ${e}`); ordered = allAvailable.slice(0, 16); }
   } else {
     ordered = allAvailable.slice(0, 16);
   }

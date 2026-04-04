@@ -1915,7 +1915,9 @@ gameRouter.post("/game/run-matches", async (c) => {
     totalMatches += friendlyCount;
   } catch (e: any) { logger.warn({ module: "game" }, `friendlies: ${e.message}`); }
 
-  return c.json({ ok: true, type: "matches", totalMatches, processedLeague });
+  // Collect debug from global
+  const debugLogs = (globalThis as any).__lineupDebug ?? [];
+  return c.json({ ok: true, type: "matches", totalMatches, processedLeague, debug: debugLogs });
 });
 
 // ═══ Classifieds (Placená inzerce) ═══
@@ -2095,8 +2097,8 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 
   const { seedFromString } = await import("../lib/seed");
   const { generateAbsences } = await import("../events/absence");
-  const seedId = isFriendly ? (match.id as string) : calendarId!;
-  const absenceRng = createRng(seedFromString(seedId));
+  // Seed absence RNG from teamId — must match buildMatchPlayers
+  const absenceRng = createRng(seedFromString(teamId));
   const absenceSquad = players.results.map((row) => {
     const pers = (() => { try { return JSON.parse(row.personality as string); } catch { return {}; } })();
     const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();

@@ -122,7 +122,9 @@
       "Bash(TID=e5d794d0-8589-49ca-833b-09ba3f86e32a for t in players matches challenges chat_messages notifications cup_entries managers conversations player_stats injuries stadiums equipment sponsor_contracts lineups match_player_stats training_log transfer_offers transfer_listings transfer_bids news classifieds transactions)",
       "Bash(/dev/null done:*)",
       "Bash(git log:*)",
-      "Bash(MID=99adc02d-f915-4718-b3c8-37d97e0194cf TID=44e88dfe-6000-4d3e-a6c5-980eec6be216 __NEW_LINE_b1c1cdf703627852__ echo '=== ULOŽENÁ SESTAVA ===' npx wrangler d1 execute prales-db-prod --remote --command \":*)"
+      "Bash(MID=99adc02d-f915-4718-b3c8-37d97e0194cf TID=44e88dfe-6000-4d3e-a6c5-980eec6be216 __NEW_LINE_b1c1cdf703627852__ echo '=== ULOŽENÁ SESTAVA ===' npx wrangler d1 execute prales-db-prod --remote --command \":*)",
+      "Bash(echo 'MATCH_ID=$MATCH_ID CAL_ID=$CAL_ID' npx wrangler d1 execute prales-db-test --remote --command \"SELECT id, status FROM matches WHERE id=''''$MATCH_ID''''\" --json)",
+      "Bash(bash /tmp/test-lineup.sh)"
     ]
   }
 }
