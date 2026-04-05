@@ -96,7 +96,6 @@ export default function SquadPage() {
   if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
   if (!team) return <div className="p-6">Tým nenalezen.</div>;
 
-  const color = team.primary_color || "#2D5F2D";
   const filtered = filter === "all" ? players : players.filter((p) => p.position === filter);
 
   const sorted = [...filtered].sort((a, b) => {
@@ -121,41 +120,51 @@ export default function SquadPage() {
   return (
     <div className="page-container space-y-4">
 
-      {/* Summary strip */}
-      <div className="flex gap-3 flex-wrap">
-        <div className="text-center px-4 py-2 rounded-lg bg-white shadow-card min-w-[70px]">
+      {/* Summary stats — 4 boxes grid (2x2 mobile, 4 cols desktop) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="card p-3 text-center">
           <div className="font-heading font-[800] text-2xl tabular-nums">{players.length}</div>
-          <div className="text-xs text-muted uppercase">Hráčů</div>
+          <div className="text-[10px] text-muted uppercase tracking-wide">Hráčů</div>
         </div>
-        <div className="text-center px-4 py-2 rounded-lg bg-white shadow-card min-w-[70px]">
+        <div className="card p-3 text-center">
           <div className="font-heading font-[800] text-2xl tabular-nums">{avgRating}</div>
-          <div className="text-xs text-muted uppercase">Ø Rating</div>
+          <div className="text-[10px] text-muted uppercase tracking-wide">Ø Rating</div>
         </div>
-        <div className="text-center px-4 py-2 rounded-lg bg-white shadow-card min-w-[70px]">
+        <div className="card p-3 text-center">
           <div className="font-heading font-[800] text-2xl tabular-nums">{avgAge}</div>
-          <div className="text-xs text-muted uppercase">Ø Věk</div>
+          <div className="text-[10px] text-muted uppercase tracking-wide">Ø Věk</div>
         </div>
-        <div className="text-center px-4 py-2 rounded-lg bg-white shadow-card min-w-[70px]">
-          <div className="font-heading font-[800] text-lg tabular-nums text-card-red">{totalWage.toLocaleString("cs")} Kč</div>
-          <div className="text-xs text-muted uppercase">Mzdy/týd</div>
-        </div>
-        <div className="text-center px-4 py-2 rounded-lg bg-white shadow-card min-w-[70px]">
-          <div className="font-heading font-bold text-sm tabular-nums">{posCounts.GK}B {posCounts.DEF}O {posCounts.MID}Z {posCounts.FWD}Ú</div>
-          <div className="text-xs text-muted uppercase">Složení</div>
+        <div className="card p-3 text-center">
+          <div className="font-heading font-[800] text-xl tabular-nums text-card-red">{totalWage.toLocaleString("cs")}</div>
+          <div className="text-[10px] text-muted uppercase tracking-wide">Mzdy Kč/týd</div>
         </div>
       </div>
 
-      {/* Position filter */}
-      <div className="flex gap-1.5">
-        {(["all", "GK", "DEF", "MID", "FWD"] as PosFilter[]).map((pos) => (
-          <button key={pos} onClick={() => setFilter(pos)}
-            className={`px-3 py-1.5 rounded-full text-xs font-heading font-bold transition-colors ${
-              filter === pos ? "text-white" : "bg-white text-muted shadow-card"
-            }`}
-            style={filter === pos ? { backgroundColor: color } : undefined}>
-            {pos === "all" ? `Všichni (${players.length})` : `${({ GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" })[pos]} (${posCounts[pos]})`}
-          </button>
-        ))}
+      {/* Position filter — segmented control */}
+      <div className="card p-3">
+        <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-2">Filtr pozice</div>
+        <div className="flex rounded-xl bg-gray-50 p-0.5 gap-0.5">
+          {([
+            ["all", "Vše", players.length],
+            ["GK", "Brankáři", posCounts.GK],
+            ["DEF", "Obrana", posCounts.DEF],
+            ["MID", "Záloha", posCounts.MID],
+            ["FWD", "Útok", posCounts.FWD],
+          ] as Array<[PosFilter, string, number]>).map(([pos, label, count]) => (
+            <button
+              key={pos}
+              onClick={() => setFilter(pos)}
+              className={`flex-1 py-1.5 px-1 rounded-lg text-center transition-all font-heading font-bold ${
+                filter === pos
+                  ? "bg-white shadow-sm text-pitch-600"
+                  : "text-muted hover:text-ink"
+              }`}
+            >
+              <div className="text-xs sm:text-sm truncate">{label}</div>
+              <div className={`text-[10px] tabular-nums ${filter === pos ? "text-pitch-500" : "text-muted-light"}`}>{count}</div>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* FM-style table */}
