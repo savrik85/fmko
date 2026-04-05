@@ -917,13 +917,15 @@ function AttrRow({ label, value, inverted }: { label: string; value: number; inv
 }
 
 function TraitRow({ label, value, inverted }: { label: string; value: number; inverted?: boolean }) {
-  const effective = inverted ? 100 - value : value;
-  const trait = traitLevel(effective);
+  // Label reflects actual value (Vysoký/Nízký), color reflects quality (inverted = high is bad)
+  const levelLabel = traitLevel(value);
+  const colorEffective = inverted ? 100 - value : value;
+  const levelColor = traitLevel(colorEffective);
   return (
     <div className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-b-0">
       <span className="text-sm text-ink-light">{label}</span>
       <div className="flex items-center gap-2">
-        <span className={`text-xs font-heading font-bold ${trait.color}`}>{trait.label}</span>
+        <span className={`text-xs font-heading font-bold ${levelColor.color}`}>{levelLabel.label}</span>
         <span className="text-[10px] text-muted tabular-nums w-5 text-right">{value}</span>
       </div>
     </div>
