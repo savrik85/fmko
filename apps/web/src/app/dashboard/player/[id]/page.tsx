@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { apiFetch, type Player, type Team, type CareerStats, type PlayerMatchEntry, type PlayerContract } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview } from "@/components/ui";
+import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 /* ── Helpers ── */
@@ -87,6 +87,10 @@ export default function PlayerDetailPage() {
   const [offerSent, setOfferSent] = useState(false);
   const [offerType, setOfferType] = useState<"transfer" | "loan">("transfer");
   const [loanDuration, setLoanDuration] = useState("30");
+  const [myListing, setMyListing] = useState<{ listingId: string; askingPrice: number } | null>(null);
+  const [priceDialogOpen, setPriceDialogOpen] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
     if (!teamId) return;
@@ -101,9 +105,9 @@ export default function PlayerDetailPage() {
           apiFetch<Team>(`/api/teams/${teamId}`),
           // Fetch players from the PLAYER's team for navigation arrows
           apiFetch<Player[]>(`/api/teams/${playerOwnerTeamId}/players`),
-          apiFetch<CareerStats>(`/api/teams/${teamId}/players/${playerId}/career-stats`).catch(() => null),
-          apiFetch<{ matches: PlayerMatchEntry[] }>(`/api/teams/${teamId}/players/${playerId}/match-history`).catch(() => ({ matches: [] })),
-          apiFetch<{ contracts: PlayerContract[] }>(`/api/teams/${teamId}/players/${playerId}/career-history`).catch(() => ({ contracts: [] })),
+          apiFetch<CareerStats>(`/api/teams/${teamId}/players/${playerId}/career-stats`).catch((e) => { console.error("career-stats fetch:", e); return null; }),
+          apiFetch<{ matches: PlayerMatchEntry[] }>(`/api/teams/${teamId}/players/${playerId}/match-history`).catch((e) => { console.error("match-history fetch:", e); return { matches: [] }; }),
+          apiFetch<{ contracts: PlayerContract[] }>(`/api/teams/${teamId}/players/${playerId}/career-history`).catch((e) => { console.error("career-history fetch:", e); return { contracts: [] }; }),
         ]);
 
         setTeam(t);
@@ -113,13 +117,79 @@ export default function PlayerDetailPage() {
         setContracts(careerHistory.contracts);
 
         if (isForeign) {
-          const pt = await apiFetch<Team>(`/api/teams/${playerOwnerTeamId}`).catch(() => null);
+          const pt = await apiFetch<Team>(`/api/teams/${playerOwnerTeamId}`).catch((e) => { console.error("player team fetch:", e); return null; });
           setPlayerTeam(pt);
+        } else {
+          // Own player — check if already listed on market
+          const market = await apiFetch<{ myListings: Array<{ id: string; playerId: string; askingPrice: number }> }>(`/api/teams/${teamId}/market`).catch((e) => { console.error("market fetch:", e); return null; });
+          const found = market?.myListings?.find((l) => l.playerId === playerId);
+          if (found) setMyListing({ listingId: found.id, askingPrice: found.askingPrice });
         }
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((e) => { console.error("player detail load:", e); setLoading(false); });
   }, [teamId, playerId]);
+
+  const refreshListing = async () => {
+    if (!teamId) return;
+    const market = await apiFetch<{ myListings: Array<{ id: string; playerId: string; askingPrice: number }> }>(`/api/teams/${teamId}/market`).catch((e) => { console.error("market refresh:", e); return null; });
+    const found = market?.myListings?.find((l) => l.playerId === playerId);
+    setMyListing(found ? { listingId: found.id, askingPrice: found.askingPrice } : null);
+  };
+
+  const listOnMarket = async (price: number) => {
+    if (!teamId || !player || actionLoading) return;
+    setActionLoading(true);
+    try {
+      await apiFetch(`/api/teams/${teamId}/players/${playerId}/list`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ askingPrice: price }),
+      });
+      setPriceDialogOpen(false);
+      await refreshListing();
+    } catch (e) {
+      console.error("list on market failed:", e);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const withdrawFromMarket = async () => {
+    if (!teamId || !myListing || actionLoading) return;
+    const ok = await confirm({
+      title: "Stáhnout z trhu?",
+      description: `${player?.first_name} ${player?.last_name} se vrátí zpět do tvého kádru.`,
+      confirmLabel: "Stáhnout",
+    });
+    if (!ok) return;
+    setActionLoading(true);
+    try {
+      await apiFetch(`/api/teams/${teamId}/listings/${myListing.listingId}`, { method: "DELETE" });
+      await refreshListing();
+    } catch (e) {
+      console.error("withdraw listing failed:", e);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const releasePlayer = async () => {
+    if (!teamId || !player || actionLoading) return;
+    const ok = await confirm({
+      title: `Propustit ${player.first_name} ${player.last_name}?`,
+      description: "Hráč bude uvolněn z kádru a stane se volným hráčem. Akci nelze vrátit.",
+      confirmLabel: "Propustit",
+    });
+    if (!ok) return;
+    setActionLoading(true);
+    try {
+      await apiFetch(`/api/teams/${teamId}/players/${playerId}/release`, { method: "POST" });
+      router.push("/dashboard/squad");
+    } catch (e) {
+      console.error("release player failed:", e);
+      setActionLoading(false);
+    }
+  };
 
   const currentIndex = allPlayers.findIndex((p) => p.id === playerId);
   const prevPlayer = allPlayers.length > 1 ? allPlayers[(currentIndex - 1 + allPlayers.length) % allPlayers.length] : null;
@@ -302,6 +372,42 @@ export default function PlayerDetailPage() {
               <button onClick={() => setOfferOpen(!offerOpen)}
                 className={`rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors ${offerOpen ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white/80"}`}>
                 {offerOpen ? "✕ Zavřít" : "🤝 Nabídka"}
+              </button>
+            </div>
+          )}
+
+          {/* Own player actions */}
+          {isOwnPlayer && (
+            <div className="max-w-[1280px] mx-auto mt-3 flex flex-wrap gap-2">
+              {myListing ? (
+                <>
+                  <div className="rounded-xl px-4 py-2 bg-gold-500/20 text-white text-sm font-heading font-bold flex items-center gap-2">
+                    <span>🏷️</span>
+                    <span>Na trhu za {myListing.askingPrice.toLocaleString("cs")} Kč</span>
+                  </div>
+                  <button
+                    onClick={withdrawFromMarket}
+                    disabled={actionLoading}
+                    className="rounded-xl px-4 py-2 text-sm font-heading font-bold bg-white/10 hover:bg-white/20 text-white/80 transition-colors disabled:opacity-50"
+                  >
+                    ✕ Stáhnout z trhu
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setPriceDialogOpen(true)}
+                  disabled={actionLoading}
+                  className="rounded-xl px-4 py-2 text-sm font-heading font-bold bg-white/10 hover:bg-white/20 text-white/80 transition-colors disabled:opacity-50"
+                >
+                  🏷️ Nabídnout na trh
+                </button>
+              )}
+              <button
+                onClick={releasePlayer}
+                disabled={actionLoading}
+                className="rounded-xl px-4 py-2 text-sm font-heading font-bold bg-red-500/20 hover:bg-red-500/30 text-white transition-colors disabled:opacity-50"
+              >
+                🗑️ Propustit
               </button>
             </div>
           )}
@@ -656,7 +762,76 @@ export default function PlayerDetailPage() {
       )}
 
     </div>
+
+    {confirmDialog}
+    {priceDialogOpen && player && (
+      <PlayerPriceDialog
+        player={player}
+        onClose={() => setPriceDialogOpen(false)}
+        onConfirm={listOnMarket}
+        loading={actionLoading}
+      />
+    )}
     </>
+  );
+}
+
+function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
+  player: Player; onClose: () => void; onConfirm: (price: number) => void; loading: boolean;
+}) {
+  const defaultPrice = Math.round((player.overall_rating ?? 50) * 50);
+  const [price, setPrice] = useState(defaultPrice);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="p-5">
+          <h3 className="font-heading font-bold text-lg">Nabídnout na trh</h3>
+          <p className="text-sm text-muted mt-1">
+            {player.first_name} {player.last_name} · {player.position}, {player.age} let, rating {player.overall_rating}
+          </p>
+
+          <div className="mt-4">
+            <label className="text-xs text-muted font-heading uppercase tracking-wide block mb-1.5">Požadovaná cena (Kč)</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={price.toLocaleString("cs")}
+              onChange={(e) => setPrice(parseInt(e.target.value.replace(/\D/g, "") || "0", 10))}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 font-heading font-bold text-lg tabular-nums focus:outline-none focus:border-pitch-500"
+            />
+            <div className="flex gap-2 mt-2">
+              {[0.5, 1, 1.5, 2].map((mul) => (
+                <button
+                  key={mul}
+                  type="button"
+                  onClick={() => setPrice(Math.round(defaultPrice * mul))}
+                  className="flex-1 py-1 px-2 rounded text-xs font-heading font-bold bg-gray-50 hover:bg-gray-100 text-muted"
+                >
+                  {mul}×
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-2 mt-5">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2 rounded-lg text-sm font-heading font-bold bg-gray-100 hover:bg-gray-200 text-ink"
+            >
+              Zrušit
+            </button>
+            <button
+              onClick={() => onConfirm(price)}
+              disabled={loading || price <= 0}
+              className="flex-1 py-2 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50"
+            >
+              {loading ? "Ukládám..." : "Nabídnout"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
