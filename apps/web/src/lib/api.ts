@@ -65,7 +65,7 @@ export interface Player {
   overall_rating: number;
   skills: { speed: number; technique: number; shooting: number; passing: number; heading: number; defense: number; goalkeeping: number; creativity?: number; setPieces?: number };
   physical: { stamina: number; strength: number; injuryProneness: number; height?: number; weight?: number; preferredFoot?: "left" | "right" | "both"; preferredSide?: "left" | "center" | "right" | "any" };
-  personality: { discipline: number; patriotism: number; alcohol: number; temper: number; leadership?: number; workRate?: number; aggression?: number; consistency?: number; clutch?: number };
+  personality: { discipline: number; patriotism: number; alcohol: number; temper: number; leadership?: number; workRate?: number; aggression?: number; consistency?: number; clutch?: number; injuryProneness?: number };
   lifeContext: { occupation: string; condition: number; morale: number };
   avatar: Record<string, unknown>;
   description: string;

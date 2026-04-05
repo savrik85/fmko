@@ -549,83 +549,7 @@ export default function PlayerDetailPage() {
         );
       })()}
 
-      {/* ═══ Personality + Relationships (own players only) ═══ */}
-      {isOwnPlayer && profileExtras && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Osobnost panel */}
-          <div className="card p-4 sm:p-5">
-            <SectionLabel>Osobnost</SectionLabel>
-            <div className="space-y-2 mt-1">
-              {[
-                { key: "discipline", label: "Disciplína", emoji: "🎯", desc: "Ovlivňuje docházku na tréninky a zápasy" },
-                { key: "patriotism", label: "Věrnost klubu", emoji: "💚", desc: "Motivace zůstat v klubu, odolnost proti odchodu" },
-                { key: "alcohol", label: "Alkoholismus", emoji: "🍺", desc: "Po výhře oslavy → riziko absence další den", invert: true },
-                { key: "temper", label: "Temperament", emoji: "😤", desc: "Vysoký → víc faulů a žlutých karet", invert: true },
-                { key: "leadership", label: "Leadership", emoji: "👑", desc: "Vliv na morálku kabiny po gólech a výsledcích" },
-                { key: "workRate", label: "Pracovitost", emoji: "🔋", desc: "Ovlivňuje tréninkové zlepšení a výdrž" },
-                { key: "aggression", label: "Agresivita", emoji: "💥", desc: "Souboje, fauly, červené karty" },
-                { key: "consistency", label: "Konzistence", emoji: "📏", desc: "Nízká = velké výkyvy výkonu mezi zápasy" },
-                { key: "clutch", label: "Clutch", emoji: "🔥", desc: "Schopnost rozhodovat v klíčových momentech" },
-                { key: "injuryProneness", label: "Náchylnost", emoji: "🩹", desc: "Pravděpodobnost zranění při soubojích", invert: true },
-              ].map((trait) => {
-                const val = profileExtras.personality[trait.key] ?? 50;
-                const barColor = trait.invert
-                  ? val > 65 ? "bg-card-red" : val > 40 ? "bg-gold-400" : "bg-pitch-400"
-                  : val > 65 ? "bg-pitch-400" : val > 40 ? "bg-gold-400" : "bg-card-red";
-                return (
-                  <div key={trait.key} className="flex items-center gap-2" title={trait.desc}>
-                    <span className="text-sm w-5 shrink-0">{trait.emoji}</span>
-                    <span className="text-xs font-heading font-bold w-20 shrink-0 truncate">{trait.label}</span>
-                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                      <div className={`h-full rounded-full ${barColor}`} style={{ width: `${val}%` }} />
-                    </div>
-                    <span className="text-xs tabular-nums font-heading font-bold w-7 text-right shrink-0">{val}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Vztahy panel */}
-          <div className="card p-4 sm:p-5">
-            <SectionLabel>Vztahy v kádru</SectionLabel>
-            {profileExtras.relationships.length === 0 ? (
-              <div className="text-sm text-muted py-4 text-center">Žádné známé vztahy</div>
-            ) : (
-              <div className="space-y-2 mt-1">
-                {(showAllRelationships ? profileExtras.relationships : profileExtras.relationships.slice(0, 3)).map((rel) => {
-                  const EMOJI_MAP: Record<string, string> = {
-                    brothers: "👨‍👦", father_son: "👴", in_laws: "🤝", classmates: "🎓",
-                    coworkers: "💼", neighbors: "🏠", drinking_buddies: "🍻", rivals: "⚔️", mentor_pupil: "📚",
-                  };
-                  return (
-                    <div key={rel.relatedPlayerId} className="border-b border-gray-50 last:border-b-0 pb-2 last:pb-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">{EMOJI_MAP[rel.type] ?? "👥"}</span>
-                        <span className="text-xs text-muted font-heading uppercase">{rel.typeLabel}</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 ml-7">
-                        <Link href={`/dashboard/player/${rel.relatedPlayerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20">
-                          {rel.relatedPlayerName}
-                        </Link>
-                        <PositionBadge position={rel.relatedPlayerPosition as "GK" | "DEF" | "MID" | "FWD"} />
-                      </div>
-                      {rel.effect && (
-                        <div className="text-[11px] text-muted italic ml-7 mt-0.5">{rel.effect}</div>
-                      )}
-                    </div>
-                  );
-                })}
-                {!showAllRelationships && profileExtras.relationships.length > 3 && (
-                  <button onClick={() => setShowAllRelationships(true)} className="text-xs text-pitch-500 font-heading font-bold hover:underline mt-1">
-                    Zobrazit všechny ({profileExtras.relationships.length}) →
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Osobnost + Vztahy přesunuty pod statistiky — viz dole */}
 
       {/* ═══ Row 1: Info + Attributes grid + Physical/Character ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -678,17 +602,18 @@ export default function PlayerDetailPage() {
 
         {/* Column 3: Character traits */}
         <div className="card p-4 sm:p-5">
-          <SectionLabel>Charakter</SectionLabel>
+          <SectionLabel>Osobnost</SectionLabel>
           <div className="space-y-0">
             <TraitRow label="Vůdcovství" value={player.personality?.leadership ?? 30} />
             <TraitRow label="Disciplína" value={player.personality?.discipline ?? 50} />
             <TraitRow label="Pracovitost" value={player.personality?.workRate ?? 50} />
             <TraitRow label="Konzistence" value={player.personality?.consistency ?? 50} />
             <TraitRow label="Pod tlakem" value={player.personality?.clutch ?? 50} />
-            <TraitRow label="Patriotismus" value={player.personality?.patriotism ?? 50} />
+            <TraitRow label="Věrnost" value={player.personality?.patriotism ?? 50} />
             <TraitRow label="Agresivita" value={player.personality?.aggression ?? 40} />
-            <TraitRow label="Alkohol" value={player.personality?.alcohol ?? 30} inverted />
+            <TraitRow label="Alkoholismus" value={player.personality?.alcohol ?? 30} inverted />
             <TraitRow label="Temperament" value={player.personality?.temper ?? 40} inverted />
+            <TraitRow label="Náchylnost" value={player.personality?.injuryProneness ?? 30} inverted />
           </div>
         </div>
       </div>

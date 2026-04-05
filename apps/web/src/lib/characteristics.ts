@@ -44,7 +44,7 @@ export function generateCharacteristics(
     } else if (percentile >= 82) {
       tags.push({ key: "key", label: "Klíčový hráč", emoji: "⭐", color: "green", description: "Patří mezi top hráče v týmu", priority: 2 });
     } else if (percentile >= 68) {
-      tags.push({ key: "starter", label: "Pravidelný starter", emoji: "✅", color: "green", description: "Stabilní člen základní sestavy", priority: 5 });
+      tags.push({ key: "starter", label: "Pravidelný hráč", emoji: "✅", color: "green", description: "Stabilní člen základní sestavy", priority: 5 });
     } else if (percentile < 18 && age > 30) {
       tags.push({ key: "ballast", label: "Doplněk kádru", emoji: "⚠️", color: "red", description: "Stárnoucí hráč pod úrovní týmu", priority: 20 });
     } else if (percentile < 30) {
@@ -99,13 +99,13 @@ export function generateCharacteristics(
     tags.push({ key: "wildcard", label: "Nevyzpytatelný", emoji: "🎲", color: "gold", description: "Jednou génius, podruhé neviditelný", priority: 12 });
   }
   if ((p.clutch ?? 50) > 75) {
-    tags.push({ key: "clutch", label: "Clutch hráč", emoji: "🔥", color: "gold", description: "Rozhoduje zápasy v klíčových momentech", priority: 7 });
+    tags.push({ key: "clutch", label: "Rozhodující hráč", emoji: "🔥", color: "gold", description: "Dává góly v klíčových momentech", priority: 7 });
   }
   if ((p.leadership ?? 30) > 70) {
     tags.push({ key: "leader", label: "Vůdce kabiny", emoji: "👑", color: "purple", description: "Vysoký leadership, materiál na kapitána", priority: 5 });
   }
   if ((p.alcohol ?? 30) > 68) {
-    tags.push({ key: "drinker", label: "Problém s lahví", emoji: "🍺", color: "red", description: "Vysoký alkohol → riziko absence po výhře", priority: 14 });
+    tags.push({ key: "drinker", label: "Alkáč", emoji: "🍺", color: "red", description: "Vysoký alkoholismus → riziko absence po výhře", priority: 14 });
   }
   if ((p.discipline ?? 50) < 28) {
     tags.push({ key: "undisciplined", label: "Nedisciplinovaný", emoji: "😠", color: "red", description: "Nízká disciplína → častější absence a karty", priority: 13 });
