@@ -235,7 +235,7 @@ export default function TrainingPage() {
                       <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-[11px] font-heading font-bold">+{totalUpgrades} zlepšení</span>
                     )}
                     {result.teamChemistry > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-[11px] font-heading font-bold">🤝 +{result.teamChemistry}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-[11px] font-heading font-bold">🤝 +{result.teamChemistry} chemie</span>
                     )}
                     {absentList.length > 0 && (
                       <span className="px-1.5 py-0.5 rounded bg-red-50 text-card-red text-[11px] font-heading font-bold">{absentList.length} chyběl{absentList.length === 1 ? "" : absentList.length < 5 ? "i" : "o"}</span>
