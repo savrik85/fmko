@@ -103,6 +103,80 @@ gameRouter.get("/teams/:teamId/players/:playerId/training-log", async (c) => {
   return c.json({ log: rows.results });
 });
 
+// GET /api/teams/:teamId/players/:playerId/profile-extras — personality + relationships
+gameRouter.get("/teams/:teamId/players/:playerId/profile-extras", async (c) => {
+  const teamId = c.req.param("teamId");
+  const playerId = c.req.param("playerId");
+
+  const [playerRow, relRows] = await c.env.DB.batch([
+    c.env.DB.prepare("SELECT personality FROM players WHERE id = ?").bind(playerId),
+    c.env.DB.prepare(
+      `SELECT r.type, r.strength,
+              CASE WHEN r.player_a_id = ? THEN r.player_b_id ELSE r.player_a_id END as related_id
+       FROM relationships r
+       WHERE r.player_a_id = ? OR r.player_b_id = ?`
+    ).bind(playerId, playerId, playerId),
+  ]);
+
+  const personalityRaw = (playerRow.results[0] as any)?.personality;
+  const personality = (() => {
+    try { return typeof personalityRaw === "string" ? JSON.parse(personalityRaw) : (personalityRaw ?? {}); }
+    catch (e) { logger.warn({ module: "game" }, "parse player personality", e); return {}; }
+  })();
+
+  // Get names + positions for related players
+  const relatedIds = (relRows.results as any[]).map((r) => r.related_id as string).filter(Boolean);
+  let relatedMap: Record<string, { name: string; position: string }> = {};
+  if (relatedIds.length > 0) {
+    const placeholders = relatedIds.map(() => "?").join(",");
+    const nameRows = await c.env.DB.prepare(
+      `SELECT id, first_name, last_name, position FROM players WHERE id IN (${placeholders})`
+    ).bind(...relatedIds).all().catch((e) => { logger.warn({ module: "game" }, "fetch related player names", e); return { results: [] }; });
+    for (const r of nameRows.results as any[]) {
+      relatedMap[r.id] = { name: `${r.first_name} ${r.last_name}`, position: r.position };
+    }
+  }
+
+  const EFFECT_MAP: Record<string, string> = {
+    brothers: "+5 morálka když hrají spolu",
+    father_son: "+3 morálka, mentoring efekt",
+    in_laws: "Neutrální, občas třecí plochy",
+    classmates: "+2 chemie na tréninku",
+    coworkers: "+1 morálka, znají se z práce",
+    neighbors: "+1 morálka, společná cesta",
+    drinking_buddies: "+3 morálka, riziko absence po výhře",
+    rivals: "-2 morálka v sestavě, motivace k překonání",
+    mentor_pupil: "+5 vývoj mladšího hráče",
+  };
+
+  const TYPE_LABELS: Record<string, string> = {
+    brothers: "Bratři",
+    father_son: "Otec a syn",
+    in_laws: "Příbuzní",
+    classmates: "Spolužáci",
+    coworkers: "Kolegové z práce",
+    neighbors: "Sousedi",
+    drinking_buddies: "Kamarádi z hospody",
+    rivals: "Rivalové",
+    mentor_pupil: "Mentor a žák",
+  };
+
+  const relationships = (relRows.results as any[])
+    .filter((r) => relatedMap[r.related_id])
+    .map((r) => ({
+      relatedPlayerId: r.related_id as string,
+      relatedPlayerName: relatedMap[r.related_id].name,
+      relatedPlayerPosition: relatedMap[r.related_id].position,
+      type: r.type as string,
+      typeLabel: TYPE_LABELS[r.type as string] ?? r.type,
+      strength: (r.strength as number) ?? 50,
+      effect: EFFECT_MAP[r.type as string] ?? "",
+    }))
+    .sort((a, b) => b.strength - a.strength);
+
+  return c.json({ personality, relationships });
+});
+
 // GET /api/teams/:id/training-stats — aggregated training statistics
 gameRouter.get("/teams/:teamId/training-stats", async (c) => {
   const teamId = c.req.param("teamId");

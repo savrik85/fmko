@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { apiFetch, type Player, type Team, type CareerStats, type PlayerMatchEntry, type PlayerContract } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
+import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
 import type { BadgePattern } from "@/components/ui";
 
 /* ── Helpers ── */
@@ -91,6 +93,11 @@ export default function PlayerDetailPage() {
   const [priceDialogOpen, setPriceDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
+  const [profileExtras, setProfileExtras] = useState<{
+    personality: Record<string, number>;
+    relationships: Array<{ relatedPlayerId: string; relatedPlayerName: string; relatedPlayerPosition: string; type: string; typeLabel: string; strength: number; effect: string }>;
+  } | null>(null);
+  const [showAllRelationships, setShowAllRelationships] = useState(false);
 
   useEffect(() => {
     if (!teamId) return;
@@ -124,6 +131,12 @@ export default function PlayerDetailPage() {
           const market = await apiFetch<{ myListings: Array<{ id: string; playerId: string; askingPrice: number }> }>(`/api/teams/${teamId}/market`).catch((e) => { console.error("market fetch:", e); return null; });
           const found = market?.myListings?.find((l) => l.playerId === playerId);
           if (found) setMyListing({ listingId: found.id, askingPrice: found.askingPrice });
+        }
+
+        // Profile extras (personality + relationships) — only for own players
+        if (!isForeign) {
+          const extras = await apiFetch<typeof profileExtras>(`/api/teams/${teamId}/players/${playerId}/profile-extras`).catch((e) => { console.error("profile-extras fetch:", e); return null; });
+          if (extras) setProfileExtras(extras);
         }
         setLoading(false);
       })
@@ -493,6 +506,126 @@ export default function PlayerDetailPage() {
       </div>
 
     <div className="page-container space-y-5">
+
+      {/* ═══ Characteristics (tags) ═══ */}
+      {player && allPlayers.length > 0 && (() => {
+        const playerInput = {
+          overall_rating: player.overall_rating ?? 0,
+          age: player.age,
+          position: player.position,
+          skills: player.skills as Record<string, number> | undefined,
+          personality: profileExtras?.personality ?? (player as any).personality,
+          lifeContext: player.lifeContext as unknown as Record<string, number> | undefined,
+        };
+        const teamInput = allPlayers.map((tp) => ({
+          overall_rating: tp.overall_rating ?? 0,
+          age: tp.age,
+          position: tp.position,
+          skills: tp.skills as Record<string, number> | undefined,
+        }));
+        const tags = generateCharacteristics(playerInput, teamInput);
+
+        if (tags.length === 0) return null;
+
+        const TAG_COLORS: Record<string, string> = {
+          green: "bg-pitch-50 text-pitch-600 border-pitch-200",
+          gold: "bg-amber-50 text-amber-700 border-amber-200",
+          red: "bg-red-50 text-card-red border-red-200",
+          blue: "bg-blue-50 text-blue-700 border-blue-200",
+          purple: "bg-purple-50 text-purple-700 border-purple-200",
+          muted: "bg-gray-50 text-muted border-gray-200",
+        };
+
+        return (
+          <div className="flex flex-wrap gap-2">
+            {tags.map((tag) => (
+              <div key={tag.key} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-sm font-heading font-bold ${TAG_COLORS[tag.color] ?? TAG_COLORS.muted}`}
+                title={tag.description}>
+                <span>{tag.emoji}</span>
+                <span>{tag.label}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* ═══ Personality + Relationships (own players only) ═══ */}
+      {isOwnPlayer && profileExtras && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Osobnost panel */}
+          <div className="card p-4 sm:p-5">
+            <SectionLabel>Osobnost</SectionLabel>
+            <div className="space-y-2 mt-1">
+              {[
+                { key: "discipline", label: "Disciplína", emoji: "🎯", desc: "Ovlivňuje docházku na tréninky a zápasy" },
+                { key: "patriotism", label: "Věrnost klubu", emoji: "💚", desc: "Motivace zůstat v klubu, odolnost proti odchodu" },
+                { key: "alcohol", label: "Alkohol", emoji: "🍺", desc: "Po výhře oslavy → riziko absence další den", invert: true },
+                { key: "temper", label: "Temperament", emoji: "😤", desc: "Vysoký → víc faulů a žlutých karet", invert: true },
+                { key: "leadership", label: "Leadership", emoji: "👑", desc: "Vliv na morálku kabiny po gólech a výsledcích" },
+                { key: "workRate", label: "Pracovitost", emoji: "🔋", desc: "Ovlivňuje tréninkové zlepšení a výdrž" },
+                { key: "aggression", label: "Agresivita", emoji: "💥", desc: "Souboje, fauly, červené karty" },
+                { key: "consistency", label: "Konzistence", emoji: "📏", desc: "Nízká = velké výkyvy výkonu mezi zápasy" },
+                { key: "clutch", label: "Clutch", emoji: "🔥", desc: "Schopnost rozhodovat v klíčových momentech" },
+                { key: "injuryProneness", label: "Náchylnost", emoji: "🩹", desc: "Pravděpodobnost zranění při soubojích", invert: true },
+              ].map((trait) => {
+                const val = profileExtras.personality[trait.key] ?? 50;
+                const barColor = trait.invert
+                  ? val > 65 ? "bg-card-red" : val > 40 ? "bg-gold-400" : "bg-pitch-400"
+                  : val > 65 ? "bg-pitch-400" : val > 40 ? "bg-gold-400" : "bg-card-red";
+                return (
+                  <div key={trait.key} className="flex items-center gap-2" title={trait.desc}>
+                    <span className="text-sm w-5 shrink-0">{trait.emoji}</span>
+                    <span className="text-xs font-heading font-bold w-20 shrink-0 truncate">{trait.label}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div className={`h-full rounded-full ${barColor}`} style={{ width: `${val}%` }} />
+                    </div>
+                    <span className="text-xs tabular-nums font-heading font-bold w-7 text-right shrink-0">{val}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Vztahy panel */}
+          <div className="card p-4 sm:p-5">
+            <SectionLabel>Vztahy v kádru</SectionLabel>
+            {profileExtras.relationships.length === 0 ? (
+              <div className="text-sm text-muted py-4 text-center">Žádné známé vztahy</div>
+            ) : (
+              <div className="space-y-2 mt-1">
+                {(showAllRelationships ? profileExtras.relationships : profileExtras.relationships.slice(0, 3)).map((rel) => {
+                  const EMOJI_MAP: Record<string, string> = {
+                    brothers: "👨‍👦", father_son: "👴", in_laws: "🤝", classmates: "🎓",
+                    coworkers: "💼", neighbors: "🏠", drinking_buddies: "🍻", rivals: "⚔️", mentor_pupil: "📚",
+                  };
+                  return (
+                    <div key={rel.relatedPlayerId} className="border-b border-gray-50 last:border-b-0 pb-2 last:pb-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">{EMOJI_MAP[rel.type] ?? "👥"}</span>
+                        <span className="text-xs text-muted font-heading uppercase">{rel.typeLabel}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 ml-7">
+                        <Link href={`/dashboard/player/${rel.relatedPlayerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20">
+                          {rel.relatedPlayerName}
+                        </Link>
+                        <PositionBadge position={rel.relatedPlayerPosition as "GK" | "DEF" | "MID" | "FWD"} />
+                      </div>
+                      {rel.effect && (
+                        <div className="text-[11px] text-muted italic ml-7 mt-0.5">{rel.effect}</div>
+                      )}
+                    </div>
+                  );
+                })}
+                {!showAllRelationships && profileExtras.relationships.length > 3 && (
+                  <button onClick={() => setShowAllRelationships(true)} className="text-xs text-pitch-500 font-heading font-bold hover:underline mt-1">
+                    Zobrazit všechny ({profileExtras.relationships.length}) →
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ═══ Row 1: Info + Attributes grid + Physical/Character ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
