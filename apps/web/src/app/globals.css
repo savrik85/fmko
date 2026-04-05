@@ -65,6 +65,14 @@
 html {
   overscroll-behavior: none;
   scroll-behavior: smooth;
+  /* Mobile: match bottom nav color so safe area / overscroll doesn't show beige gap */
+  background-color: #1e2d1e;
+}
+
+@media (min-width: 640px) {
+  html {
+    background-color: var(--color-paper);
+  }
 }
 
 body {
@@ -76,6 +84,9 @@ body {
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.55;
   letter-spacing: -0.005em;
+  /* Use dynamic viewport height on mobile so min-h-screen doesn't leave gaps
+     when mobile browser chrome (URL bar) shows/hides during scroll */
+  min-height: 100dvh;
 }
 
 /* Subtle paper noise texture */

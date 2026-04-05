@@ -29,11 +29,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           window.location.replace(`/match-day/${data.matchId}`);
         }
       })
-      .catch(() => {});
+      .catch((e) => console.error("fetch unseen-match:", e));
   }, [teamId, pathname]);
 
   return (
-    <div className="min-h-screen flex bg-paper overflow-x-hidden">
+    <div className="min-h-dvh flex bg-paper overflow-x-hidden">
       <FMSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 pb-20 sm:pb-0">
