@@ -286,4 +286,141 @@ leagueRouter.get("/leagues/:leagueId/news", async (c) => {
   return c.json({ articles });
 });
 
+// GET /api/leagues/:leagueId/transfers-overview — přehled přestupů v lize
+leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
+  const leagueId = c.req.param("leagueId");
+
+  // All completed transfers in this league (either buyer or seller is in league)
+  // Get new contracts (join_type='transfer') and resolve the "from team" from previous contract
+  const transfersRes = await c.env.DB.prepare(
+    `SELECT
+       pc.player_id, pc.team_id as to_team_id, pc.fee, pc.joined_at,
+       p.first_name, p.last_name,
+       t_to.name as to_team_name, t_to.league_id as to_league_id,
+       (SELECT pc2.team_id FROM player_contracts pc2
+        WHERE pc2.player_id = pc.player_id
+        AND pc2.is_active = 0
+        AND pc2.leave_type = 'transfer'
+        AND pc2.left_at <= pc.joined_at
+        ORDER BY pc2.left_at DESC LIMIT 1) as from_team_id
+     FROM player_contracts pc
+     JOIN players p ON pc.player_id = p.id
+     JOIN teams t_to ON pc.team_id = t_to.id
+     WHERE pc.join_type = 'transfer'
+     ORDER BY pc.joined_at DESC`
+  ).all().catch((e) => { logger.error({ module: "league" }, "fetch transfers", e); return { results: [] }; });
+
+  // Get team names + league_ids for from teams (batch)
+  const fromTeamIds = Array.from(new Set(
+    (transfersRes.results as any[]).map((r) => r.from_team_id).filter(Boolean)
+  ));
+  let fromTeamsMap: Record<string, { name: string; leagueId: string | null }> = {};
+  if (fromTeamIds.length > 0) {
+    const placeholders = fromTeamIds.map(() => "?").join(",");
+    const fromTeamsRows = await c.env.DB.prepare(
+      `SELECT id, name, league_id FROM teams WHERE id IN (${placeholders})`
+    ).bind(...fromTeamIds).all().catch(() => ({ results: [] }));
+    for (const r of fromTeamsRows.results as any[]) {
+      fromTeamsMap[r.id] = { name: r.name, leagueId: r.league_id };
+    }
+  }
+
+  // Filter: transfers where either buyer or seller is in this league
+  const leagueTransfers = (transfersRes.results as any[])
+    .filter((r) => {
+      const toInLeague = r.to_league_id === leagueId;
+      const fromInLeague = r.from_team_id && fromTeamsMap[r.from_team_id]?.leagueId === leagueId;
+      return toInLeague || fromInLeague;
+    })
+    .map((r) => {
+      const fromTeam = r.from_team_id ? fromTeamsMap[r.from_team_id] : null;
+      const isCrossLeague = fromTeam && fromTeam.leagueId !== r.to_league_id;
+      return {
+        playerId: r.player_id as string,
+        playerName: `${r.first_name} ${r.last_name}`,
+        fromTeamId: r.from_team_id as string | null,
+        fromTeam: fromTeam?.name ?? null,
+        toTeamId: r.to_team_id as string,
+        toTeam: r.to_team_name as string,
+        fee: (r.fee as number) ?? 0,
+        date: r.joined_at as string,
+        isCrossLeague: !!isCrossLeague,
+      };
+    });
+
+  const totalTransfers = leagueTransfers.length;
+  const totalValue = leagueTransfers.reduce((s, t) => s + t.fee, 0);
+  const avgFee = totalTransfers > 0 ? Math.round(totalValue / totalTransfers) : 0;
+  const crossLeagueCount = leagueTransfers.filter((t) => t.isCrossLeague).length;
+
+  // Free agent signings in this league
+  const faRes = await c.env.DB.prepare(
+    `SELECT COUNT(*) as cnt FROM player_contracts pc
+     JOIN teams t ON pc.team_id = t.id
+     WHERE pc.join_type = 'free_agent' AND t.league_id = ?`
+  ).bind(leagueId).first<{ cnt: number }>().catch(() => ({ cnt: 0 }));
+
+  // Cross-league admin fee total (from transactions)
+  const adminFeeRes = await c.env.DB.prepare(
+    `SELECT SUM(ABS(amount)) as total FROM transactions tx
+     JOIN teams t ON tx.team_id = t.id
+     WHERE tx.type = 'transfer_admin_fee' AND t.league_id = ?`
+  ).bind(leagueId).first<{ total: number }>().catch(() => ({ total: 0 }));
+
+  // Top 10 biggest transfers
+  const biggest = [...leagueTransfers].sort((a, b) => b.fee - a.fee).slice(0, 10);
+
+  // Top sellers (most earned) — aggregate by fromTeamId
+  const sellersMap = new Map<string, { teamId: string; teamName: string; earned: number; count: number }>();
+  for (const t of leagueTransfers) {
+    if (!t.fromTeamId || !t.fromTeam) continue;
+    const existing = sellersMap.get(t.fromTeamId);
+    if (existing) { existing.earned += t.fee; existing.count++; }
+    else sellersMap.set(t.fromTeamId, { teamId: t.fromTeamId, teamName: t.fromTeam, earned: t.fee, count: 1 });
+  }
+  const topSellers = [...sellersMap.values()].sort((a, b) => b.earned - a.earned).slice(0, 5);
+
+  // Top buyers (most spent) — aggregate by toTeamId
+  const buyersMap = new Map<string, { teamId: string; teamName: string; spent: number; count: number }>();
+  for (const t of leagueTransfers) {
+    const existing = buyersMap.get(t.toTeamId);
+    if (existing) { existing.spent += t.fee; existing.count++; }
+    else buyersMap.set(t.toTeamId, { teamId: t.toTeamId, teamName: t.toTeam, spent: t.fee, count: 1 });
+  }
+  const topBuyers = [...buyersMap.values()].sort((a, b) => b.spent - a.spent).slice(0, 5);
+
+  // Most active (in + out combined)
+  const activeMap = new Map<string, { teamId: string; teamName: string; in: number; out: number; total: number }>();
+  for (const t of leagueTransfers) {
+    const buyer = activeMap.get(t.toTeamId) ?? { teamId: t.toTeamId, teamName: t.toTeam, in: 0, out: 0, total: 0 };
+    buyer.in++; buyer.total++;
+    activeMap.set(t.toTeamId, buyer);
+    if (t.fromTeamId && t.fromTeam) {
+      const seller = activeMap.get(t.fromTeamId) ?? { teamId: t.fromTeamId, teamName: t.fromTeam, in: 0, out: 0, total: 0 };
+      seller.out++; seller.total++;
+      activeMap.set(t.fromTeamId, seller);
+    }
+  }
+  const mostActive = [...activeMap.values()].sort((a, b) => b.total - a.total).slice(0, 5);
+
+  // Recent 20
+  const recent = leagueTransfers.slice(0, 20);
+
+  return c.json({
+    stats: {
+      totalTransfers,
+      totalValue,
+      avgFee,
+      freeAgentSignings: faRes?.cnt ?? 0,
+      crossLeagueCount,
+      crossLeagueAdminTotal: adminFeeRes?.total ?? 0,
+    },
+    biggest,
+    topSellers,
+    topBuyers,
+    mostActive,
+    recent,
+  });
+});
+
 export { leagueRouter };

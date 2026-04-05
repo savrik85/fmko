@@ -8,7 +8,23 @@ import { Spinner, SectionLabel, PositionBadge, useConfirm } from "@/components/u
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
-type Tab = "search" | "free_agents" | "market" | "offers" | "squad";
+type Tab = "overview" | "search" | "free_agents" | "market" | "offers" | "squad";
+
+interface TransfersOverview {
+  stats: {
+    totalTransfers: number;
+    totalValue: number;
+    avgFee: number;
+    freeAgentSignings: number;
+    crossLeagueCount: number;
+    crossLeagueAdminTotal: number;
+  };
+  biggest: Array<{ playerId: string; playerName: string; fromTeamId: string | null; fromTeam: string | null; toTeamId: string; toTeam: string; fee: number; date: string; isCrossLeague: boolean }>;
+  topSellers: Array<{ teamId: string; teamName: string; earned: number; count: number }>;
+  topBuyers: Array<{ teamId: string; teamName: string; spent: number; count: number }>;
+  mostActive: Array<{ teamId: string; teamName: string; in: number; out: number; total: number }>;
+  recent: Array<{ playerId: string; playerName: string; fromTeamId: string | null; fromTeam: string | null; toTeamId: string; toTeam: string; fee: number; date: string; isCrossLeague: boolean }>;
+}
 
 function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
 
@@ -140,7 +156,9 @@ const SORT_OPTIONS: Array<{ value: FASortKey; label: string }> = [
 
 export default function TransfersPage() {
   const { teamId, primaryColor } = useTeam();
-  const [tab, setTab] = useState<Tab>("free_agents");
+  const [tab, setTab] = useState<Tab>("overview");
+  const [overview, setOverview] = useState<TransfersOverview | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -299,6 +317,21 @@ export default function TransfersPage() {
     setSearchLoaded(true);
   };
 
+  const loadOverview = async () => {
+    if (!myLeagueId || overviewLoading) return;
+    setOverviewLoading(true);
+    const data = await apiFetch<TransfersOverview>(`/api/leagues/${myLeagueId}/transfers-overview`).catch((e) => { console.error("Failed to load transfers overview:", e); return null; });
+    setOverview(data);
+    setOverviewLoading(false);
+  };
+
+  useEffect(() => {
+    if (tab === "overview" && myLeagueId && !overview && !overviewLoading) {
+      loadOverview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, myLeagueId]);
+
   const filteredSearch = useMemo(() => {
     let list = searchPlayers;
     if (searchQuery.trim()) {
@@ -324,6 +357,7 @@ export default function TransfersPage() {
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
   const tabs: [Tab, string, number][] = [
+    ["overview", "Přehled", 0],
     ["search", "Hledání", 0],
     ["free_agents", "Volní hráči", 0],
     ["market", "Trh", listings.length],
@@ -369,6 +403,184 @@ export default function TransfersPage() {
           </button>
         ))}
       </div>
+
+      {/* ═══ TAB: Přehled ═══ */}
+      {tab === "overview" && (
+        <div className="space-y-4">
+          {overviewLoading && <div className="flex justify-center py-8"><Spinner /></div>}
+          {!overviewLoading && !overview && (
+            <div className="card p-8 text-center text-muted">Nepodařilo se načíst přehled</div>
+          )}
+          {!overviewLoading && overview && overview.stats.totalTransfers === 0 && overview.stats.freeAgentSignings === 0 && (
+            <div className="card p-8 text-center">
+              <div className="text-3xl mb-2">📭</div>
+              <div className="font-heading font-bold text-base mb-1">Zatím žádné přestupy</div>
+              <div className="text-sm text-muted">Jakmile se v lize něco stane, uvidíš to tady.</div>
+            </div>
+          )}
+          {!overviewLoading && overview && (overview.stats.totalTransfers > 0 || overview.stats.freeAgentSignings > 0) && (
+            <>
+              {/* Stat boxes */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="card p-3 text-center">
+                  <div className="font-heading font-[800] text-2xl tabular-nums text-pitch-500">{overview.stats.totalTransfers}</div>
+                  <div className="text-[10px] text-muted uppercase tracking-wide">Přestupů</div>
+                </div>
+                <div className="card p-3 text-center">
+                  <div className="font-heading font-[800] text-2xl tabular-nums">{Math.round(overview.stats.totalValue / 1000)}k</div>
+                  <div className="text-[10px] text-muted uppercase tracking-wide">Celkem Kč</div>
+                </div>
+                <div className="card p-3 text-center">
+                  <div className="font-heading font-[800] text-2xl tabular-nums">{Math.round(overview.stats.avgFee / 1000)}k</div>
+                  <div className="text-[10px] text-muted uppercase tracking-wide">Průměr</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="card p-3 text-center">
+                  <div className="font-heading font-[800] text-xl tabular-nums text-pitch-500">{overview.stats.freeAgentSignings}</div>
+                  <div className="text-[10px] text-muted uppercase tracking-wide">Volní hráči</div>
+                </div>
+                <div className="card p-3 text-center">
+                  <div className="font-heading font-[800] text-xl tabular-nums">{overview.stats.crossLeagueCount}</div>
+                  <div className="text-[10px] text-muted uppercase tracking-wide">Cross-league 🔄</div>
+                </div>
+              </div>
+
+              {/* Biggest transfers */}
+              {overview.biggest.length > 0 && (
+                <div className="card p-4 sm:p-5">
+                  <SectionLabel>Nejdražší přestupy</SectionLabel>
+                  <div className="space-y-2">
+                    {overview.biggest.slice(0, 5).map((t, i) => (
+                      <div key={`${t.playerId}-${t.date}`} className="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+                        <span className="text-xs text-muted w-4 tabular-nums shrink-0 pt-0.5">{i + 1}.</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline gap-2">
+                            <Link href={`/dashboard/player/${t.playerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 truncate">
+                              {t.playerName}
+                            </Link>
+                            {t.isCrossLeague && <span className="text-[10px] shrink-0">🔄</span>}
+                          </div>
+                          <div className="text-xs text-muted mt-0.5 truncate">
+                            {t.fromTeam ? (
+                              <Link href={`/dashboard/team/${t.fromTeamId}`} className="hover:text-ink">{t.fromTeam}</Link>
+                            ) : <span>—</span>}
+                            <span> → </span>
+                            <Link href={`/dashboard/team/${t.toTeamId}`} className="hover:text-ink">{t.toTeam}</Link>
+                          </div>
+                        </div>
+                        <span className="font-heading font-bold text-sm text-pitch-500 tabular-nums shrink-0">
+                          {t.fee.toLocaleString("cs")} Kč
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Top sellers + buyers */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {overview.topSellers.length > 0 && (
+                  <div className="card p-4 sm:p-5">
+                    <SectionLabel>Nejvíc vydělali</SectionLabel>
+                    <div className="space-y-1.5">
+                      {overview.topSellers.map((s, i) => {
+                        const max = overview.topSellers[0]?.earned ?? 1;
+                        return (
+                          <div key={s.teamId} className="flex items-center gap-2">
+                            <span className="text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
+                            <div className="flex-1 min-w-0">
+                              <Link href={`/dashboard/team/${s.teamId}`} className="text-sm font-heading font-bold hover:text-pitch-500 truncate block">
+                                {s.teamName}
+                              </Link>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                                  <div className="h-full bg-pitch-400 rounded-full" style={{ width: `${(s.earned / max) * 100}%` }} />
+                                </div>
+                                <span className="font-heading font-bold text-xs text-pitch-500 tabular-nums shrink-0">{Math.round(s.earned / 1000)}k</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {overview.topBuyers.length > 0 && (
+                  <div className="card p-4 sm:p-5">
+                    <SectionLabel>Nejvíc utratili</SectionLabel>
+                    <div className="space-y-1.5">
+                      {overview.topBuyers.map((b, i) => {
+                        const max = overview.topBuyers[0]?.spent ?? 1;
+                        return (
+                          <div key={b.teamId} className="flex items-center gap-2">
+                            <span className="text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
+                            <div className="flex-1 min-w-0">
+                              <Link href={`/dashboard/team/${b.teamId}`} className="text-sm font-heading font-bold hover:text-pitch-500 truncate block">
+                                {b.teamName}
+                              </Link>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                                  <div className="h-full bg-card-red/70 rounded-full" style={{ width: `${(b.spent / max) * 100}%` }} />
+                                </div>
+                                <span className="font-heading font-bold text-xs text-card-red tabular-nums shrink-0">{Math.round(b.spent / 1000)}k</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Most active teams */}
+              {overview.mostActive.length > 0 && (
+                <div className="card p-4 sm:p-5">
+                  <SectionLabel>Nejaktivnější</SectionLabel>
+                  <div className="space-y-1.5">
+                    {overview.mostActive.map((a, i) => (
+                      <div key={a.teamId} className="flex items-center gap-2 py-1">
+                        <span className="text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
+                        <Link href={`/dashboard/team/${a.teamId}`} className="text-sm font-heading font-bold hover:text-pitch-500 truncate flex-1 min-w-0">
+                          {a.teamName}
+                        </Link>
+                        <div className="flex items-center gap-2 shrink-0 text-xs">
+                          <span className="text-pitch-500 font-heading font-bold tabular-nums">↓{a.in}</span>
+                          <span className="text-card-red font-heading font-bold tabular-nums">↑{a.out}</span>
+                          <span className="font-heading font-bold tabular-nums w-6 text-right">{a.total}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Recent transfers */}
+              {overview.recent.length > 0 && (
+                <div className="card p-4 sm:p-5">
+                  <SectionLabel>Poslední přestupy</SectionLabel>
+                  <div className="space-y-1">
+                    {overview.recent.map((t) => (
+                      <div key={`${t.playerId}-${t.date}`} className="flex items-baseline gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+                        <Link href={`/dashboard/player/${t.playerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 truncate max-w-[40%] shrink-0">
+                          {t.playerName}
+                        </Link>
+                        <span className="text-xs text-muted truncate flex-1 min-w-0">
+                          {t.fromTeam ?? "—"} → {t.toTeam} {t.isCrossLeague && "🔄"}
+                        </span>
+                        <span className="font-heading font-bold text-xs text-pitch-500 tabular-nums shrink-0">
+                          {t.fee > 0 ? `${Math.round(t.fee / 1000)}k` : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* ═══ TAB: Hledání ═══ */}
       {tab === "search" && (
