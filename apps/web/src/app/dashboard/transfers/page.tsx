@@ -427,12 +427,12 @@ export default function TransfersPage() {
                   <div className="text-[10px] text-muted uppercase tracking-wide">Přestupů</div>
                 </div>
                 <div className="card p-3 text-center">
-                  <div className="font-heading font-[800] text-2xl tabular-nums">{Math.round(overview.stats.totalValue / 1000)}k</div>
+                  <div className="font-heading font-[800] text-xl tabular-nums">{overview.stats.totalValue.toLocaleString("cs")}</div>
                   <div className="text-[10px] text-muted uppercase tracking-wide">Celkem Kč</div>
                 </div>
                 <div className="card p-3 text-center">
-                  <div className="font-heading font-[800] text-2xl tabular-nums">{Math.round(overview.stats.avgFee / 1000)}k</div>
-                  <div className="text-[10px] text-muted uppercase tracking-wide">Průměr</div>
+                  <div className="font-heading font-[800] text-xl tabular-nums">{overview.stats.avgFee.toLocaleString("cs")}</div>
+                  <div className="text-[10px] text-muted uppercase tracking-wide">Průměr Kč</div>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -497,7 +497,7 @@ export default function TransfersPage() {
                                 <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
                                   <div className="h-full bg-pitch-400 rounded-full" style={{ width: `${(s.earned / max) * 100}%` }} />
                                 </div>
-                                <span className="font-heading font-bold text-xs text-pitch-500 tabular-nums shrink-0">{Math.round(s.earned / 1000)}k</span>
+                                <span className="font-heading font-bold text-xs text-pitch-500 tabular-nums shrink-0">{s.earned.toLocaleString("cs")}</span>
                               </div>
                             </div>
                           </div>
@@ -523,7 +523,7 @@ export default function TransfersPage() {
                                 <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
                                   <div className="h-full bg-card-red/70 rounded-full" style={{ width: `${(b.spent / max) * 100}%` }} />
                                 </div>
-                                <span className="font-heading font-bold text-xs text-card-red tabular-nums shrink-0">{Math.round(b.spent / 1000)}k</span>
+                                <span className="font-heading font-bold text-xs text-card-red tabular-nums shrink-0">{b.spent.toLocaleString("cs")}</span>
                               </div>
                             </div>
                           </div>
@@ -570,7 +570,7 @@ export default function TransfersPage() {
                           {t.fromTeam ?? "—"} → {t.toTeam} {t.isCrossLeague && "🔄"}
                         </span>
                         <span className="font-heading font-bold text-xs text-pitch-500 tabular-nums shrink-0">
-                          {t.fee > 0 ? `${Math.round(t.fee / 1000)}k` : "—"}
+                          {t.fee > 0 ? `${t.fee.toLocaleString("cs")} Kč` : "—"}
                         </span>
                       </div>
                     ))}
