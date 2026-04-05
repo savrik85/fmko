@@ -549,7 +549,6 @@ export default function PlayerDetailPage() {
         );
       })()}
 
-      {/* Osobnost + Vztahy přesunuty pod statistiky — viz dole */}
 
       {/* ═══ Row 1: Info + Attributes grid + Physical/Character ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -620,6 +619,37 @@ export default function PlayerDetailPage() {
 
       {/* ═══ Tréninkový vývoj (jen pro vlastníka) ═══ */}
       {player.team_id === teamId && <TrainingDevelopment teamId={teamId} playerId={playerId} />}
+
+      {/* ═══ Vztahy v kádru (jen vlastní hráči) ═══ */}
+      {isOwnPlayer && profileExtras && profileExtras.relationships.length > 0 && (
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Vztahy v kádru</SectionLabel>
+          <div className="space-y-1">
+            {(showAllRelationships ? profileExtras.relationships : profileExtras.relationships.slice(0, 3)).map((rel) => {
+              const EMOJI: Record<string, string> = {
+                brothers: "👨‍👦", father_son: "👴", in_laws: "🤝", classmates: "🎓",
+                coworkers: "💼", neighbors: "🏠", drinking_buddies: "🍻", rivals: "⚔️", mentor_pupil: "📚",
+              };
+              return (
+                <div key={rel.relatedPlayerId} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+                  <span className="text-sm shrink-0">{EMOJI[rel.type] ?? "👥"}</span>
+                  <span className="text-xs text-muted font-heading uppercase w-16 shrink-0 truncate">{rel.typeLabel}</span>
+                  <Link href={`/dashboard/player/${rel.relatedPlayerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 truncate">
+                    {rel.relatedPlayerName}
+                  </Link>
+                  <PositionBadge position={rel.relatedPlayerPosition as "GK" | "DEF" | "MID" | "FWD"} />
+                  {rel.effect && <span className="text-[10px] text-muted italic ml-auto shrink-0 hidden sm:inline">{rel.effect}</span>}
+                </div>
+              );
+            })}
+            {!showAllRelationships && profileExtras.relationships.length > 3 && (
+              <button onClick={() => setShowAllRelationships(true)} className="text-xs text-pitch-500 font-heading font-bold hover:underline pt-1">
+                Zobrazit všechny ({profileExtras.relationships.length}) →
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ═══ Row 2: Kariéra — FM style ═══ */}
       <div className={`grid grid-cols-1 ${careerStats && careerStats.totals.appearances > 0 ? "lg:grid-cols-[1fr_320px]" : ""} gap-5`}>
