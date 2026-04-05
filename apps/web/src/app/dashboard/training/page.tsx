@@ -214,35 +214,40 @@ export default function TrainingPage() {
 
         return (
           <>
-            {/* ── Last training header — inline summary row ── */}
-            <div className="card p-3 sm:p-4 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-pitch-500 flex items-center justify-center text-white text-base shrink-0">
-                {trainingLabel?.icon ?? "🏃"}
+            {/* ── Last training header ── */}
+            <div className="card p-3 sm:p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-pitch-500 flex items-center justify-center text-white text-base shrink-0">
+                  {trainingLabel?.icon ?? "🏃"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="font-heading font-bold text-sm">{trainingLabel?.label ?? "Trénink"}</span>
+                    {(result as any).day && <span className="text-xs text-muted capitalize">{(result as any).day}</span>}
+                    <span className="text-xs text-muted">·</span>
+                    <span className="font-heading font-bold text-sm tabular-nums">
+                      <span className="text-pitch-500">{result.attendedCount}</span>
+                      <span className="text-muted font-normal">/{result.totalCount}</span>
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {totalUpgrades > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-[11px] font-heading font-bold">+{totalUpgrades} zlepšení</span>
+                    )}
+                    {result.teamChemistry > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-[11px] font-heading font-bold">🤝 +{result.teamChemistry}</span>
+                    )}
+                    {absentList.length > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-red-50 text-card-red text-[11px] font-heading font-bold">{absentList.length} chyběl{absentList.length === 1 ? "" : absentList.length < 5 ? "i" : "o"}</span>
+                    )}
+                    {pct === 100 && (
+                      <span className="px-1.5 py-0.5 rounded bg-gold-300/20 text-gold-600 text-[11px] font-heading font-bold">Plná účast</span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-heading font-bold text-sm">{trainingLabel?.label ?? "Trénink"}</span>
-                  {(result as any).day && <span className="text-xs text-muted capitalize">{(result as any).day}</span>}
-                  <span className="text-xs text-muted">·</span>
-                  <span className="font-heading font-bold text-sm tabular-nums">
-                    <span className="text-pitch-500">{result.attendedCount}</span>
-                    <span className="text-muted font-normal">/{result.totalCount}</span>
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {totalUpgrades > 0 && (
-                    <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-[11px] font-heading font-bold">+{totalUpgrades} zlepšení</span>
-                  )}
-                  {result.teamChemistry > 0 && (
-                    <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-[11px] font-heading font-bold">🤝 +{result.teamChemistry}</span>
-                  )}
-                  {absentList.length > 0 && (
-                    <span className="px-1.5 py-0.5 rounded bg-red-50 text-card-red text-[11px] font-heading font-bold">{absentList.length} chyběl{absentList.length === 1 ? "" : absentList.length < 5 ? "i" : "o"}</span>
-                  )}
-                  {pct === 100 && (
-                    <span className="px-1.5 py-0.5 rounded bg-gold-300/20 text-gold-600 text-[11px] font-heading font-bold">Plná účast</span>
-                  )}
-                </div>
+              <div className="mt-2.5 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                <div className="h-full bg-pitch-400 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
               </div>
             </div>
 
@@ -256,27 +261,27 @@ export default function TrainingPage() {
                 </summary>
                 <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-0.5">
                   {groupedPositive.map(([name, data]) => (
-                    <div key={name} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+                    <div key={name} className="flex items-baseline gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
                       <span className="font-heading font-[800] text-pitch-500 text-sm tabular-nums w-7 text-center shrink-0">
                         +{data.attrs.reduce((s, a) => s + Math.max(0, a.change), 0)}
                       </span>
-                      <PlayerLink id={data.playerId} name={name} playerMap={playerMap} />
-                      <div className="flex flex-wrap gap-1 ml-auto shrink-0">
+                      <span className="text-sm"><PlayerLink id={data.playerId} name={name} playerMap={playerMap} /></span>
+                      <div className="flex flex-wrap gap-1.5 ml-auto shrink-0">
                         {data.attrs.filter((a) => a.change > 0).map((a, i) => (
-                          <span key={i} className="text-[11px] text-pitch-600">{ATTR_EMOJI[a.attribute] ?? ""}{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
+                          <span key={i} className="text-xs text-pitch-600">{ATTR_EMOJI[a.attribute] ?? ""} {ATTR_LABELS[a.attribute] ?? a.attribute}</span>
                         ))}
                       </div>
                     </div>
                   ))}
                   {groupedNegative.map(([name, data]) => (
-                    <div key={name} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+                    <div key={name} className="flex items-baseline gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
                       <span className="font-heading font-[800] text-card-red text-sm tabular-nums w-7 text-center shrink-0">
                         {data.attrs.reduce((s, a) => s + a.change, 0)}
                       </span>
-                      <PlayerLink id={data.playerId} name={name} playerMap={playerMap} />
-                      <div className="flex flex-wrap gap-1 ml-auto shrink-0">
+                      <span className="text-sm"><PlayerLink id={data.playerId} name={name} playerMap={playerMap} /></span>
+                      <div className="flex flex-wrap gap-1.5 ml-auto shrink-0">
                         {data.attrs.map((a, i) => (
-                          <span key={i} className="text-[11px] text-card-red">{ATTR_EMOJI[a.attribute] ?? ""}{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
+                          <span key={i} className="text-xs text-card-red">{ATTR_EMOJI[a.attribute] ?? ""} {ATTR_LABELS[a.attribute] ?? a.attribute}</span>
                         ))}
                       </div>
                     </div>
@@ -298,12 +303,10 @@ export default function TrainingPage() {
                 </summary>
                 <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-0.5">
                   {absentList.map((a, i) => (
-                    <div key={i} className="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-                      <span className="text-card-red text-[10px] mt-1 shrink-0">&#10005;</span>
-                      <div className="min-w-0 flex-1">
-                        <span className="text-sm"><PlayerLink id={a.playerId} name={a.playerName} playerMap={playerMap} /></span>
-                        {a.reason && <span className="text-xs text-muted italic ml-1">&mdash; {a.reason}</span>}
-                      </div>
+                    <div key={i} className="flex items-baseline gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+                      <span className="text-card-red text-xs shrink-0">&#10005;</span>
+                      <span className="text-sm"><PlayerLink id={a.playerId} name={a.playerName} playerMap={playerMap} /></span>
+                      {a.reason && <span className="text-xs text-muted italic">&mdash; {a.reason}</span>}
                     </div>
                   ))}
                 </div>
