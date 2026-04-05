@@ -559,7 +559,7 @@ export default function PlayerDetailPage() {
               {[
                 { key: "discipline", label: "Disciplína", emoji: "🎯", desc: "Ovlivňuje docházku na tréninky a zápasy" },
                 { key: "patriotism", label: "Věrnost klubu", emoji: "💚", desc: "Motivace zůstat v klubu, odolnost proti odchodu" },
-                { key: "alcohol", label: "Alkohol", emoji: "🍺", desc: "Po výhře oslavy → riziko absence další den", invert: true },
+                { key: "alcohol", label: "Alkoholismus", emoji: "🍺", desc: "Po výhře oslavy → riziko absence další den", invert: true },
                 { key: "temper", label: "Temperament", emoji: "😤", desc: "Vysoký → víc faulů a žlutých karet", invert: true },
                 { key: "leadership", label: "Leadership", emoji: "👑", desc: "Vliv na morálku kabiny po gólech a výsledcích" },
                 { key: "workRate", label: "Pracovitost", emoji: "🔋", desc: "Ovlivňuje tréninkové zlepšení a výdrž" },
