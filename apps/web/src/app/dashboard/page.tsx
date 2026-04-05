@@ -74,8 +74,8 @@ export default function DashboardPage() {
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
       apiFetch<{ standings: Standing[] }>(`/api/teams/${teamId}/standings`).catch(() => ({ standings: [] })),
       apiFetch<{ matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`).catch(() => ({ matches: [] })),
-      apiFetch<ManagerProfile>(`/api/teams/${teamId}/manager`).catch(() => null),
-      apiFetch<TeamMatchResults>(`/api/teams/${teamId}/match-results`).catch(() => null),
+      apiFetch<ManagerProfile>(`/api/teams/${teamId}/manager`).catch((e) => { console.error("manager fetch:", e); return null; }),
+      apiFetch<TeamMatchResults>(`/api/teams/${teamId}/match-results`).catch((e) => { console.error("match-results fetch:", e); return null; }),
     ]).then(([t, p, s, m, mgr, mr]) => {
       setTeam(t);
       setPlayers(p);
@@ -163,24 +163,24 @@ export default function DashboardPage() {
           <SectionLabel>Další zápas</SectionLabel>
           {nextMatch ? (
             <Link href={`/dashboard/match/${nextMatch.id}/replay`} className="block group">
-              <div className="flex items-center justify-between">
-                <div className="text-center flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-col items-center flex-1 min-w-0">
                   <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"}
                     pattern={(team.badge_pattern as BadgePattern) || "shield"}
                     initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={40} />
-                  <div className="font-heading font-bold text-sm mt-1.5 truncate">{team.name}</div>
+                  <div className="font-heading font-bold text-sm mt-1.5 truncate max-w-full text-center">{team.name}</div>
                 </div>
-                <div className="px-4 text-center">
+                <div className="flex flex-col items-center shrink-0">
                   <div className="font-heading font-[800] text-2xl text-muted">vs</div>
-                  <div className="text-[10px] text-muted uppercase mt-1">{nextMatch.round}. kolo</div>
+                  <div className="text-[10px] text-muted uppercase mt-1 whitespace-nowrap">{nextMatch.round}. kolo</div>
                 </div>
-                <div className="text-center flex-1">
+                <div className="flex flex-col items-center flex-1 min-w-0">
                   <BadgePreview
                     primary={nextMatch.isHome ? (nextMatch.awayColor || "#666") : (nextMatch.homeColor || "#666")}
                     secondary={nextMatch.isHome ? (nextMatch.awaySecondary || "#FFF") : (nextMatch.homeSecondary || "#FFF")}
                     pattern={((nextMatch.isHome ? nextMatch.awayBadge : nextMatch.homeBadge) as BadgePattern) || "shield"}
                     initials={(nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName).split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={40} />
-                  <div className="font-heading font-bold text-sm mt-1.5 truncate">{nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName}</div>
+                  <div className="font-heading font-bold text-sm mt-1.5 truncate max-w-full text-center">{nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName}</div>
                 </div>
               </div>
               <div className="text-center mt-3">
