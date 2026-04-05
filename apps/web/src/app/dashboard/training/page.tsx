@@ -188,7 +188,7 @@ export default function TrainingPage() {
           disabled={!dirty || saving}
           className={`btn btn-lg w-full ${dirty ? "btn-primary" : "btn-ghost"}`}
         >
-          {saving ? "Ukládám..." : dirty ? "Uložit změny" : "Vše uloženo"}
+          {saving ? "Ukládám..." : dirty ? "Uložit změny taktiky" : "Vše uloženo"}
         </button>
       </div>
 
@@ -213,59 +213,48 @@ export default function TrainingPage() {
         const totalUpgrades = result.improvements.filter((i) => i.change > 0).length;
 
         return (
-          <div className="card p-4 sm:p-5 space-y-3">
-            <SectionLabel>Poslední trénink</SectionLabel>
-
-            {/* ── Compact header row ── */}
-            <div className="flex items-center gap-3">
-              <span className="text-xl">{trainingLabel?.icon ?? "🏃"}</span>
+          <>
+            {/* ── Last training header — inline summary row ── */}
+            <div className="card p-3 sm:p-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-pitch-500 flex items-center justify-center text-white text-base shrink-0">
+                {trainingLabel?.icon ?? "🏃"}
+              </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-baseline gap-1.5">
                   <span className="font-heading font-bold text-sm">{trainingLabel?.label ?? "Trénink"}</span>
                   {(result as any).day && <span className="text-xs text-muted capitalize">{(result as any).day}</span>}
+                  <span className="text-xs text-muted">·</span>
+                  <span className="font-heading font-bold text-sm tabular-nums">
+                    <span className="text-pitch-500">{result.attendedCount}</span>
+                    <span className="text-muted font-normal">/{result.totalCount}</span>
+                  </span>
                 </div>
-                <div className="bg-gray-100 rounded-full h-1.5 overflow-hidden mt-1">
-                  <div className="h-full bg-pitch-400 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {totalUpgrades > 0 && (
+                    <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-[11px] font-heading font-bold">+{totalUpgrades} zlepšení</span>
+                  )}
+                  {result.teamChemistry > 0 && (
+                    <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-[11px] font-heading font-bold">🤝 +{result.teamChemistry}</span>
+                  )}
+                  {absentList.length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded bg-red-50 text-card-red text-[11px] font-heading font-bold">{absentList.length} chyběl{absentList.length === 1 ? "" : absentList.length < 5 ? "i" : "o"}</span>
+                  )}
+                  {pct === 100 && (
+                    <span className="px-1.5 py-0.5 rounded bg-gold-300/20 text-gold-600 text-[11px] font-heading font-bold">Plná účast</span>
+                  )}
                 </div>
               </div>
-              <span className="font-heading font-[800] text-lg tabular-nums shrink-0">
-                <span className="text-pitch-500">{result.attendedCount}</span>
-                <span className="text-muted font-normal text-sm">/{result.totalCount}</span>
-              </span>
             </div>
 
-            {/* ── Stat badges ── */}
-            <div className="flex flex-wrap gap-1.5">
-              {totalUpgrades > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-pitch-50 text-pitch-600 text-xs font-heading font-bold">
-                  +{totalUpgrades} zlepšení
-                </span>
-              )}
-              {result.teamChemistry > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-pitch-50 text-pitch-600 text-xs font-heading font-bold">
-                  🤝 +{result.teamChemistry}
-                </span>
-              )}
-              {pct === 100 && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gold-300/20 text-gold-600 text-xs font-heading font-bold">
-                  Plná účast
-                </span>
-              )}
-              {absentList.length > 0 && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-red-50 text-card-red text-xs font-heading font-bold">
-                  {absentList.length} chyběl{absentList.length === 1 ? "" : absentList.length < 5 ? "i" : "o"}
-                </span>
-              )}
-            </div>
-
-            {/* ── Improvements — collapsible, grouped by player ── */}
+            {/* ── Improvements — own card, collapsible ── */}
             {(groupedPositive.length > 0 || groupedNegative.length > 0) && (
-              <details className="group">
-                <summary className="cursor-pointer select-none flex items-center gap-2 text-sm font-heading font-bold text-pitch-600 hover:text-pitch-500 transition-colors py-1">
+              <details className="card group">
+                <summary className="cursor-pointer select-none flex items-center gap-2 p-3 sm:p-4 font-heading font-bold text-sm text-pitch-600 hover:text-pitch-500 transition-colors">
                   <span className="text-[10px] text-muted group-open:rotate-90 transition-transform">&#9654;</span>
                   Zlepšení ({totalUpgrades})
+                  {groupedNegative.length > 0 && <span className="text-card-red font-normal text-xs ml-1">· {groupedNegative.length} pokles</span>}
                 </summary>
-                <div className="mt-1 space-y-0.5">
+                <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-0.5">
                   {groupedPositive.map(([name, data]) => (
                     <div key={name} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
                       <span className="font-heading font-[800] text-pitch-500 text-sm tabular-nums w-7 text-center shrink-0">
@@ -274,9 +263,7 @@ export default function TrainingPage() {
                       <PlayerLink id={data.playerId} name={name} playerMap={playerMap} />
                       <div className="flex flex-wrap gap-1 ml-auto shrink-0">
                         {data.attrs.filter((a) => a.change > 0).map((a, i) => (
-                          <span key={i} className="text-[11px] text-pitch-600">
-                            {ATTR_EMOJI[a.attribute] ?? ""}{ATTR_LABELS[a.attribute] ?? a.attribute}
-                          </span>
+                          <span key={i} className="text-[11px] text-pitch-600">{ATTR_EMOJI[a.attribute] ?? ""}{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
                         ))}
                       </div>
                     </div>
@@ -289,9 +276,7 @@ export default function TrainingPage() {
                       <PlayerLink id={data.playerId} name={name} playerMap={playerMap} />
                       <div className="flex flex-wrap gap-1 ml-auto shrink-0">
                         {data.attrs.map((a, i) => (
-                          <span key={i} className="text-[11px] text-card-red">
-                            {ATTR_EMOJI[a.attribute] ?? ""}{ATTR_LABELS[a.attribute] ?? a.attribute}
-                          </span>
+                          <span key={i} className="text-[11px] text-card-red">{ATTR_EMOJI[a.attribute] ?? ""}{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
                         ))}
                       </div>
                     </div>
@@ -301,34 +286,30 @@ export default function TrainingPage() {
             )}
 
             {result.improvements.length === 0 && (
-              <div className="text-sm text-muted italic py-1">Dnes bez zlepšení</div>
+              <div className="card p-3 sm:p-4 text-sm text-muted italic">Dnes bez zlepšení</div>
             )}
 
-            {/* ── Absences — collapsible ── */}
+            {/* ── Absences — own card, collapsible ── */}
             {absentList.length > 0 && (
-              <details className="group">
-                <summary className="cursor-pointer select-none flex items-center gap-2 text-sm font-heading font-bold text-card-red hover:text-red-600 transition-colors py-1">
+              <details className="card group">
+                <summary className="cursor-pointer select-none flex items-center gap-2 p-3 sm:p-4 font-heading font-bold text-sm text-card-red hover:text-red-600 transition-colors">
                   <span className="text-[10px] text-muted group-open:rotate-90 transition-transform">&#9654;</span>
                   Omluvenky ({absentList.length})
                 </summary>
-                <div className="mt-1 space-y-1.5">
+                <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-0.5">
                   {absentList.map((a, i) => (
-                    <div key={i} className="flex items-start gap-2 py-1 border-b border-gray-50 last:border-b-0">
+                    <div key={i} className="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
                       <span className="text-card-red text-[10px] mt-1 shrink-0">&#10005;</span>
                       <div className="min-w-0 flex-1">
-                        <span className="text-sm">
-                          <PlayerLink id={a.playerId} name={a.playerName} playerMap={playerMap} />
-                        </span>
-                        {a.reason && (
-                          <span className="text-xs text-muted italic ml-1">&mdash; {a.reason}</span>
-                        )}
+                        <span className="text-sm"><PlayerLink id={a.playerId} name={a.playerName} playerMap={playerMap} /></span>
+                        {a.reason && <span className="text-xs text-muted italic ml-1">&mdash; {a.reason}</span>}
                       </div>
                     </div>
                   ))}
                 </div>
               </details>
             )}
-          </div>
+          </>
         );
       })()}
 
