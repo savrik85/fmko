@@ -217,6 +217,18 @@ fmko/
 
 ---
 
+## 🎨 Design inspirace (`.claude/design-md/`)
+
+Kolekce DESIGN.md z 54 populárních webů ([awesome-design-md](https://github.com/VoltAgent/awesome-design-md)). Každá složka obsahuje `DESIGN.md` s kompletním design systémem dané aplikace — barvy, typografie, spacing, komponenty, interaction patterns.
+
+**Dostupné designy:**
+airbnb, airtable, apple, bmw, cal, claude, clay, clickhouse, cohere, coinbase, composio, cursor, elevenlabs, expo, figma, framer, hashicorp, ibm, intercom, kraken, linear.app, lovable, minimax, mintlify, miro, mistral.ai, mongodb, notion, nvidia, ollama, opencode.ai, pinterest, posthog, raycast, replicate, resend, revolut, runwayml, sanity, sentry, spacex, spotify, stripe, supabase, superhuman, together.ai, uber, vercel, voltagent, warp, webflow, wise, x.ai, zapier
+
+**Jak použít:**
+- Před designováním UI: `Read .claude/design-md/<name>/DESIGN.md`
+- Uživatel řekne "udělej to ve stylu Linear" → přečti `linear.app/DESIGN.md`
+- Pro fmko (béžový/sport) jsou relevantní: Stripe, Notion, Superhuman, Raycast (minimalismus + typografie)
+
 ## ⚡ Quick reference
 
 | Akce | Příkaz |
