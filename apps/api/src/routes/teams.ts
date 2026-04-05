@@ -477,8 +477,15 @@ teamsRouter.post("/", async (c) => {
         await c.env.DB.prepare("DELETE FROM teams WHERE id = ? AND id != ?").bind(oldId, teamId).run().catch(() => {});
       }
     } else {
-      // No AI team to replace — just join the league
-      await c.env.DB.prepare("UPDATE teams SET league_id = ? WHERE id = ?").bind(existingLeague.id, teamId).run();
+      // No AI team to replace — league is full
+      // Clean up the team we already created
+      await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "cleanup players on league_full", e));
+      await c.env.DB.prepare("DELETE FROM managers WHERE team_id = ?").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "cleanup managers on league_full", e));
+      await c.env.DB.prepare("DELETE FROM teams WHERE id = ?").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "cleanup team on league_full", e));
+      return c.json({
+        error: "league_full",
+        message: "Liga v tomto okrese je plná. Připravujeme nižší soutěž, kam se brzy budete moci zaregistrovat.",
+      }, 409);
     }
 
     // Sync game_date from existing league teams

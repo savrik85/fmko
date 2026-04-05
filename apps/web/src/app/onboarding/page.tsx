@@ -152,7 +152,11 @@ export default function OnboardingPage() {
 
       setStep(5);
     } catch (e) {
-      setError((e as Error).message);
+      if ((e as any).status === 409) {
+        setError("Liga v tomto okrese je plná. Připravujeme nižší soutěž, kam se brzy budete moci zaregistrovat. Zkuste jiný okres.");
+      } else {
+        setError((e as Error).message);
+      }
     } finally {
       setCreating(false);
     }
