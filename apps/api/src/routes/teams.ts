@@ -159,6 +159,29 @@ teamsRouter.post("/", async (c) => {
     return c.json({ id: existingTeam.id, name: existingName?.name ?? "", existing: true }, 200);
   }
 
+  // Check if league in this district is full (no AI slots left)
+  // Must happen BEFORE creating team to avoid orphan rows + FK issues
+  const districtForCheck = village.district as string;
+  const activeSeasonForCheck = await c.env.DB.prepare(
+    "SELECT id FROM seasons WHERE status = 'active' LIMIT 1"
+  ).first<{ id: string }>();
+  if (activeSeasonForCheck) {
+    const leagueForCheck = await c.env.DB.prepare(
+      "SELECT id FROM leagues WHERE district = ? AND season_id = ? AND status = 'active' LIMIT 1"
+    ).bind(districtForCheck, activeSeasonForCheck.id).first<{ id: string }>();
+    if (leagueForCheck) {
+      const aiCountRow = await c.env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM teams WHERE league_id = ? AND user_id = 'ai'"
+      ).bind(leagueForCheck.id).first<{ cnt: number }>();
+      if ((aiCountRow?.cnt ?? 0) === 0) {
+        return c.json({
+          error: "league_full",
+          message: "Liga v tomto okrese je plná. Připravujeme nižší soutěž, kam se brzy budete moci zaregistrovat.",
+        }, 409);
+      }
+    }
+  }
+
   const budget = (village.population as number) > 5000 ? 80000
     : (village.population as number) > 1000 ? 40000 : 20000;
 
@@ -477,11 +500,9 @@ teamsRouter.post("/", async (c) => {
         await c.env.DB.prepare("DELETE FROM teams WHERE id = ? AND id != ?").bind(oldId, teamId).run().catch(() => {});
       }
     } else {
-      // No AI team to replace — league is full
-      // Clean up the team we already created
-      await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "cleanup players on league_full", e));
-      await c.env.DB.prepare("DELETE FROM managers WHERE team_id = ?").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "cleanup managers on league_full", e));
-      await c.env.DB.prepare("DELETE FROM teams WHERE id = ?").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "cleanup team on league_full", e));
+      // Safety net — should never reach here because we checked league fullness at the top.
+      // But if it does (race condition), fail safely.
+      logger.error({ module: "teams" }, `league_full race condition for team ${teamId}`);
       return c.json({
         error: "league_full",
         message: "Liga v tomto okrese je plná. Připravujeme nižší soutěž, kam se brzy budete moci zaregistrovat.",
