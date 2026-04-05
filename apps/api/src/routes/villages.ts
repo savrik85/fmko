@@ -68,7 +68,15 @@ villagesRouter.get("/stats", async (c) => {
     regionCounts[r.region as string] = r.cnt as number;
   }
 
-  return c.json({ villageCounts, districtCounts, regionCounts });
+  // Find districts where the active league has 0 AI slots left (= full)
+  const fullLeagueRows = await c.env.DB.prepare(
+    `SELECT l.district FROM leagues l
+     WHERE l.status = 'active'
+     AND (SELECT COUNT(*) FROM teams t WHERE t.league_id = l.id AND t.user_id = 'ai') = 0`
+  ).all().catch((e) => { logger.warn({ module: "villages" }, "fetch full leagues", e); return { results: [] }; });
+  const fullDistricts: string[] = (fullLeagueRows.results as Array<{ district: string }>).map((r) => r.district);
+
+  return c.json({ villageCounts, districtCounts, regionCounts, fullDistricts });
 });
 
 // GET /api/villages/:id — detail

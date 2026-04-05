@@ -18,6 +18,7 @@ type Stats = {
   villageCounts: Record<string, number>;
   districtCounts: Record<string, number>;
   regionCounts: Record<string, number>;
+  fullDistricts?: string[];
 };
 
 type Step = "region" | "district" | "village";
@@ -46,13 +47,15 @@ export function StepLocation({ onSelect }: Props) {
   useEffect(() => {
     Promise.all([
       apiFetch<Village[]>("/api/villages"),
-      apiFetch<Stats>("/api/villages/stats").catch(() => ({ villageCounts: {}, districtCounts: {}, regionCounts: {} })),
+      apiFetch<Stats>("/api/villages/stats").catch(() => ({ villageCounts: {}, districtCounts: {}, regionCounts: {}, fullDistricts: [] })),
     ]).then(([v, s]) => {
       setVillages(v);
       setStats(s);
       setLoading(false);
     });
   }, []);
+
+  const fullDistrictsSet = useMemo(() => new Set(stats.fullDistricts ?? []), [stats]);
 
   // Derived data
   const regions = useMemo(() => {
@@ -83,9 +86,10 @@ export function StepLocation({ onSelect }: Props) {
         name,
         villages: villageCount,
         players: stats.districtCounts[name] ?? 0,
+        isFull: fullDistrictsSet.has(name),
       }))
       .sort((a, b) => a.name.localeCompare(b.name, "cs"));
-  }, [villages, selectedRegion, stats]);
+  }, [villages, selectedRegion, stats, fullDistrictsSet]);
 
   const districtVillages = useMemo(() => {
     if (!selectedDistrict) return [];
@@ -100,6 +104,7 @@ export function StepLocation({ onSelect }: Props) {
   }
 
   function handleDistrict(district: string) {
+    if (fullDistrictsSet.has(district)) return; // Blocked — full league
     setSelectedDistrict(district);
     setStep("village");
   }
@@ -165,13 +170,25 @@ export function StepLocation({ onSelect }: Props) {
             <button
               key={d.name}
               onClick={() => handleDistrict(d.name)}
-              className="card card-hover p-4 text-left flex items-center justify-between"
+              disabled={d.isFull}
+              className={`card p-4 text-left flex items-center justify-between ${
+                d.isFull ? "opacity-50 cursor-not-allowed" : "card-hover"
+              }`}
             >
-              <div>
-                <div className="font-heading font-bold text-base">{d.name}</div>
-                <div className="text-sm text-muted">{d.villages} obcí</div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <div className="font-heading font-bold text-base">{d.name}</div>
+                  {d.isFull && (
+                    <span className="text-[10px] font-heading font-bold px-2 py-0.5 rounded-md bg-card-red/10 text-card-red whitespace-nowrap">
+                      Liga plná
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm text-muted">
+                  {d.isFull ? "Připravujeme nižší soutěž" : `${d.villages} obcí`}
+                </div>
               </div>
-              <div className="text-right">
+              <div className="text-right shrink-0 ml-2">
                 <div className={`font-heading font-bold text-lg ${d.players > 0 ? "text-pitch-500" : "text-muted-light"}`}>{d.players}</div>
                 <div className="text-[10px] text-muted">hráčů</div>
               </div>
