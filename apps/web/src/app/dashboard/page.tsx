@@ -56,6 +56,7 @@ interface PreviewTeam {
   goalsFor: number; goalsAgainst: number;
   form: string[];
   avgRating: number; squadSize: number;
+  squad?: Array<{ age: number }>;
   isPlayer?: boolean;
 }
 
@@ -239,22 +240,29 @@ export default function DashboardPage() {
                 )}
 
                 {/* Stats comparison row */}
-                {preview && my && opp && (
-                  <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
-                    <div className="bg-gray-50 rounded-lg py-1.5 px-1">
-                      <div className="font-heading font-bold tabular-nums">{my.avgRating} : {opp.avgRating}</div>
-                      <div className="text-muted text-[9px] uppercase">Avg rating</div>
+                {preview && my && opp && (() => {
+                  const myAge = my.squad?.length ? Math.round(my.squad.reduce((s, p) => s + p.age, 0) / my.squad.length) : 0;
+                  const oppAge = opp.squad?.length ? Math.round(opp.squad.reduce((s, p) => s + p.age, 0) / opp.squad.length) : 0;
+                  const stats = [
+                    { label: "Rating", myVal: my.avgRating, oppVal: opp.avgRating },
+                    { label: "Góly", myVal: my.goalsFor, oppVal: opp.goalsFor },
+                    { label: "Věk", myVal: myAge, oppVal: oppAge },
+                  ];
+                  return (
+                    <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                      {stats.map((s) => (
+                        <div key={s.label} className="bg-gray-50 rounded-lg py-1.5 px-1">
+                          <div className="font-heading font-bold tabular-nums flex items-center justify-center gap-1">
+                            <span className={s.myVal > s.oppVal ? "text-pitch-500" : s.myVal < s.oppVal ? "text-card-red" : ""}>{s.myVal}</span>
+                            <span className="text-muted text-[9px]">vs</span>
+                            <span className={s.oppVal > s.myVal ? "text-pitch-500" : s.oppVal < s.myVal ? "text-card-red" : ""}>{s.oppVal}</span>
+                          </div>
+                          <div className="text-muted text-[9px] uppercase">{s.label}</div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="bg-gray-50 rounded-lg py-1.5 px-1">
-                      <div className="font-heading font-bold tabular-nums">{my.goalsFor} : {opp.goalsFor}</div>
-                      <div className="text-muted text-[9px] uppercase">Skóre</div>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg py-1.5 px-1">
-                      <div className="font-heading font-bold tabular-nums">{my.squadSize} : {opp.squadSize}</div>
-                      <div className="text-muted text-[9px] uppercase">Hráčů</div>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Weather + venue */}
                 {preview && (
