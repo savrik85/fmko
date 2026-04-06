@@ -231,6 +231,23 @@ export default function MatchPage() {
         <span className="text-[10px] text-muted shrink-0">{nextMatch.gameWeek}. kolo</span>
       </div>
 
+      {/* ═══ Absent players ═══ */}
+      {absentPlayers.length > 0 && (
+        <div className="card p-3">
+          <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Nedostupní ({absentPlayers.length})</div>
+          <div className="space-y-1">
+            {absentPlayers.map((p) => (
+              <div key={p.id} className="flex items-baseline gap-2 text-sm">
+                <span className="text-xs shrink-0">{p.absenceEmoji ?? "❌"}</span>
+                <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 shrink-0">{p.firstName} {p.lastName}</Link>
+                <PositionBadge position={p.position as Pos} />
+                <span className="text-xs text-muted italic">&mdash; {(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : (p.absenceSms ?? p.absenceReason ?? "Nedostupný")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ═══ Formation + Tactic — one row ═══ */}
       <div className="card p-3">
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
@@ -263,7 +280,8 @@ export default function MatchPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
         {/* ═══ PITCH — kompaktní ═══ */}
-        <div className="rounded-xl overflow-hidden relative bg-pitch-400" style={{ aspectRatio: "5/6" }}>
+        <div className="rounded-xl bg-pitch-400 overflow-hidden" style={{ aspectRatio: "5/6", padding: "2% 5%" }}>
+        <div className="relative w-full h-full overflow-visible">
           {/* Pitch markings */}
           <svg viewBox="0 0 68 100" className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid meet">
             {/* Outline */}
@@ -303,12 +321,13 @@ export default function MatchPage() {
                 </div>
                 <div className="text-center mt-0.5 leading-tight">
                   <div className="text-xs sm:text-sm font-heading font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-                    {player?.lastName ?? "—"}
+                    {player?.lastName ?? "—"}{isOOP && " ⚠️"}
                   </div>
                 </div>
               </button>
             );
           })}
+        </div>
         </div>
 
         {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
@@ -362,7 +381,7 @@ export default function MatchPage() {
                               <span className="font-heading font-bold text-sm line-through text-muted">{p.lastName}</span>
                             ) : (
                               <div>
-                                <span className="font-heading font-bold text-sm">{p.lastName}</span>
+                                <span className="font-heading font-bold text-sm">{isOOP && <span className="text-gold-500 mr-1">⚠️</span>}{p.lastName}</span>
                                 <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
                               </div>
                             )}
@@ -480,10 +499,7 @@ export default function MatchPage() {
                           </td>
                           <td className="py-1.5 px-1.5">
                             {isAbsent ? (
-                              <div>
-                                <span className="font-heading font-bold text-sm leading-tight line-through text-muted">{p.lastName}</span>
-                                <div className="text-xs text-card-red">❌ {p.absenceSms ?? p.absenceReason ?? "Nedostupný"}</div>
-                              </div>
+                              <span className="font-heading font-bold text-sm leading-tight line-through text-muted">{p.lastName}</span>
                             ) : (
                               <>
                                 <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-sm leading-tight hover:text-pitch-500 transition-colors">{p.lastName}</Link>
