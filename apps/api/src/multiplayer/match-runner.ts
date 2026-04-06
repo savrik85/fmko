@@ -104,6 +104,43 @@ export async function runScheduledMatches(
       for (const [k, v] of homeBuild.positionMap) fullPosMap.set(k, v);
       for (const [k, v] of awayBuild.positionMap) fullPosMap.set(k, v);
 
+      // ── Inject relationships into lineup players ──
+      try {
+        for (const [teamDbId, lineup, idMap] of [
+          [homeTeamId, homeLineup, homeBuild.idMap],
+          [awayTeamId, awayLineup, awayBuild.idMap],
+        ] as Array<[string, typeof homeLineup, Map<number, string>]>) {
+          const dbPlayerIds = [...idMap.entries()].filter(([engineId]) => lineup.some((p) => p.id === engineId)).map(([, dbId]) => dbId);
+          if (dbPlayerIds.length < 2) continue;
+          const placeholders = dbPlayerIds.map(() => "?").join(",");
+          const relRows = await db.prepare(
+            `SELECT player_a_id, player_b_id, type FROM relationships
+             WHERE player_a_id IN (${placeholders}) OR player_b_id IN (${placeholders})`
+          ).bind(...dbPlayerIds, ...dbPlayerIds).all().catch((e) => { logger.warn({ module: "match-runner" }, "relationships query", e); return { results: [] }; });
+
+          // Reverse map: DB ID → engine ID
+          const dbToEngine = new Map<string, number>();
+          for (const [engineId, dbId] of idMap) dbToEngine.set(dbId, engineId);
+
+          for (const p of lineup) {
+            const pDbId = idMap.get(p.id);
+            if (!pDbId) continue;
+            const rels: Array<{ withId: number; type: string }> = [];
+            for (const r of relRows.results as Array<{ player_a_id: string; player_b_id: string; type: string }>) {
+              const otherId = r.player_a_id === pDbId ? r.player_b_id : r.player_b_id === pDbId ? r.player_a_id : null;
+              if (!otherId) continue;
+              const otherEngineId = dbToEngine.get(otherId);
+              if (otherEngineId != null && lineup.some((lp) => lp.id === otherEngineId)) {
+                rels.push({ withId: otherEngineId, type: r.type });
+              }
+            }
+            if (rels.length > 0) p.relationshipsInLineup = rels as any;
+          }
+        }
+      } catch (e) {
+        logger.warn({ module: "match-runner" }, "relationship injection failed", e);
+      }
+
       const homeTactic = (homeLineupRow?.tactic as any) ?? "balanced";
       const awayTactic = (awayLineupRow?.tactic as any) ?? "balanced";
 

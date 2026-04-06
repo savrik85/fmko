@@ -145,6 +145,12 @@ function calcGoalProb(
     ratio *= 0.9 + (attacker.clutch / 100) * 0.2;
   }
 
+  // Relationship bonuses: mentor confidence (+3%), rival grit (+2%)
+  if (attacker.relationshipsInLineup) {
+    const hasMentor = attacker.relationshipsInLineup.some((r) => r.type === "mentor_pupil");
+    if (hasMentor) ratio *= 1.03;
+  }
+
   // Okresní level: víc gólů (slabší brankáři, horší obrana)
   return Math.min(0.70, Math.max(0.15, ratio * 0.90));
 }
@@ -183,7 +189,11 @@ function pickAssister(rng: Rng, lineup: MatchPlayer[], scorer: MatchPlayer): Mat
     const posW = p.position === "MID" ? 2.0 : p.position === "FWD" ? 1.5 : 0.8;
     const rawSkill = (p.passing * 0.4 + p.vision * 0.35 + p.creativity * 0.25);
     const skillFactor = (rawSkill / 50) ** 1.5; // exponential — star playmakers dominate
-    return posW * skillFactor;
+    // Relationship bonus: brothers/mentor-pupil assist each other more
+    const relBonus = scorer.relationshipsInLineup?.some(
+      (r) => r.withId === p.id && (r.type === "brothers" || r.type === "father_son" || r.type === "mentor_pupil")
+    ) ? 1.15 : 1.0;
+    return posW * skillFactor * relBonus;
   });
 
   const totalWeight = weights.reduce((a, b) => a + b, 0);
@@ -389,6 +399,22 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         const moraleHit = Math.round(1 + (1 - defLeadership) * 2); // 1-3 (was 2-5)
         for (const p of attacking.lineup) p.morale = Math.min(100, p.morale + moraleBoost);
         for (const p of defending.lineup) p.morale = Math.max(0, p.morale - moraleHit);
+
+        // ── Relationship morale bonuses after goal ──
+        if (attacker.relationshipsInLineup) {
+          for (const rel of attacker.relationshipsInLineup) {
+            const teammate = attacking.lineup.find((p) => p.id === rel.withId);
+            if (!teammate) continue;
+            if (rel.type === "brothers" || rel.type === "father_son") {
+              teammate.morale = Math.min(100, teammate.morale + 1);
+              attacker.morale = Math.min(100, attacker.morale + 1);
+            } else if (rel.type === "mentor_pupil") {
+              teammate.morale = Math.min(100, teammate.morale + 1);
+            } else if (rel.type === "drinking_buddies") {
+              teammate.morale = Math.min(100, teammate.morale + 1);
+            }
+          }
+        }
       } else {
         // Missed chance — credit GK save or defensive block
         const outcomes = ["vedle", "břevno", "tyč", "chytil brankář", "zblokováno"];
@@ -443,8 +469,12 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     if (rng.random() < 0.08) {
       const defenders = defending.lineup.filter((p) => p.position !== "GK");
       if (defenders.length > 0) {
-        // Weighted pick by aggression
-        const weights = defenders.map((p) => 1 + (p.aggression / 100) * 2);
+        // Weighted pick by aggression + rival bonus
+        const weights = defenders.map((p) => {
+          const base = 1 + (p.aggression / 100) * 2;
+          const rivalBonus = p.relationshipsInLineup?.some((r) => r.type === "rivals") ? 1.15 : 1.0;
+          return base * rivalBonus;
+        });
         const totalWeight = weights.reduce((a, b) => a + b, 0);
         let roll = rng.random() * totalWeight;
         let foulerIdx = 0;

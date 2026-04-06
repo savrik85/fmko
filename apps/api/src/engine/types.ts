@@ -2,6 +2,7 @@ import type { MatchEvent, EventType } from "@okresni-masina/shared";
 
 export type Tactic = "offensive" | "balanced" | "defensive" | "long_ball";
 export type Weather = "sunny" | "cloudy" | "rain" | "wind" | "snow";
+export type RelationType = "brothers" | "father_son" | "in_laws" | "classmates" | "coworkers" | "neighbors" | "drinking_buddies" | "rivals" | "mentor_pupil";
 
 export type PreferredFoot = "left" | "right" | "both";
 export type PreferredSide = "left" | "center" | "right" | "any";
@@ -42,6 +43,8 @@ export interface MatchPlayer {
   // Mutable state
   condition: number;
   morale: number;
+  // Relationships with other players in lineup (injected by match-runner)
+  relationshipsInLineup?: Array<{ withId: number; type: RelationType }>;
 }
 
 export interface TeamSetup {

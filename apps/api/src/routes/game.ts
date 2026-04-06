@@ -2282,6 +2282,26 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     : [];
   const absentPlayerIds = new Set(absences.map((a) => players.results[a.playerIndex]?.id as string).filter(Boolean));
 
+  // Load relationships for lineup visualization
+  const playerIds = players.results.map((p) => p.id as string);
+  let relMap: Record<string, Array<{ otherPlayerId: string; type: string }>> = {};
+  if (playerIds.length > 1) {
+    try {
+      const placeholders = playerIds.map(() => "?").join(",");
+      const relRows = await c.env.DB.prepare(
+        `SELECT player_a_id, player_b_id, type FROM relationships WHERE player_a_id IN (${placeholders}) OR player_b_id IN (${placeholders})`
+      ).bind(...playerIds, ...playerIds).all();
+      for (const r of relRows.results as Array<{ player_a_id: string; player_b_id: string; type: string }>) {
+        if (!relMap[r.player_a_id]) relMap[r.player_a_id] = [];
+        if (!relMap[r.player_b_id]) relMap[r.player_b_id] = [];
+        relMap[r.player_a_id].push({ otherPlayerId: r.player_b_id, type: r.type });
+        relMap[r.player_b_id].push({ otherPlayerId: r.player_a_id, type: r.type });
+      }
+    } catch (e) {
+      logger.warn({ module: "game" }, "relationships query for lineup", e);
+    }
+  }
+
   const available = players.results.map((p) => {
     const skills = (() => { try { return JSON.parse(p.skills as string); } catch (e) { logger.warn({ module: "game" }, "parse player skills for lineup", e); return {}; } })();
     const lc = (() => { try { return JSON.parse(p.life_context as string); } catch (e) { logger.warn({ module: "game" }, "parse player life_context for lineup", e); return {}; } })();
@@ -2305,6 +2325,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       absenceReason: suspended ? "Stopka" : injured ? "Zranění" : (absenceInfo?.reason ?? null),
       absenceSms: suspended ? `Mám stopku, ${p.suspended_matches} zápas(ů) nesmím hrát.` : injured ? `Jsem zraněný (${p.injury_type ?? "zranění"}), ještě ${p.injury_days} dní.` : (absenceInfo?.smsText ?? null),
       absenceEmoji: suspended ? "🟥" : injured ? "🩹" : (absenceInfo?.emoji ?? null),
+      relationships: relMap[p.id as string] ?? [],
     };
   });
 
