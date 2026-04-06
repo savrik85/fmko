@@ -67,6 +67,8 @@ html {
   scroll-behavior: smooth;
   /* Mobile: match bottom nav color so safe area / overscroll doesn't show beige gap */
   background-color: #1e2d1e;
+  /* Prevent body from scrolling past content — iOS Safari gap fix */
+  overflow: auto;
 }
 
 @media (min-width: 640px) {
