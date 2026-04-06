@@ -90,7 +90,7 @@ export default function NewsPage() {
   useEffect(() => {
     apiFetch<{ leagues: LeagueOption[] }>("/api/leagues")
       .then((data) => setAllLeagues(data.leagues))
-      .catch(() => {});
+      .catch((e) => console.error("fetch leagues:", e));
   }, []);
 
   const loadClassifieds = () => {
@@ -100,7 +100,7 @@ export default function NewsPage() {
         setClassifieds(data.classifieds);
         setCategories(data.categories);
         setAdCost(data.cost);
-      }).catch(() => {});
+      }).catch((e) => console.error("fetch classifieds:", e));
   };
 
   useEffect(() => {
@@ -168,7 +168,7 @@ export default function NewsPage() {
 
   const deleteAd = async (id: string) => {
     if (!teamId) return;
-    await apiFetch(`/api/teams/${teamId}/classifieds/${id}`, { method: "DELETE" }).catch(() => {});
+    await apiFetch(`/api/teams/${teamId}/classifieds/${id}`, { method: "DELETE" }).catch((e) => console.error("delete classified:", e));
     loadClassifieds();
   };
 
@@ -506,8 +506,9 @@ function ArticleWrapper({ article, children }: { article: Article; children: Rea
 }
 
 function RoundResults({ body }: { body: string }) {
-  // Parse "Team A porazil Team B 2:1. Team C remizoval s Team D 0:0." into structured results
-  const results = body.split(". ").filter(Boolean).map((sentence) => {
+  // Split on score endings (digits:digits followed by dot) to handle dots in team names like "1.FC" or "s.r.o."
+  const sentences = body.match(/[^.]*(?:\d+:\d+)[^.]*/g) || body.split(". ").filter(Boolean);
+  const results = sentences.map((sentence) => {
     const s = sentence.replace(/\.$/, "").trim();
 
     // Try to extract score
