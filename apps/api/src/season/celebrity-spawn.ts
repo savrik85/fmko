@@ -73,6 +73,11 @@ export async function spawnCelebrity(
   ).bind(leagueId).first<{ name: string; district: string }>();
   if (!leagueInfo) return null;
 
+  // Pick a random village in the district for the celebrity to live in
+  const villageRow = await db.prepare(
+    "SELECT id FROM villages WHERE district = ? ORDER BY RANDOM() LIMIT 1"
+  ).bind(leagueInfo.district).first<{ id: string }>().catch((e) => { logger.warn({ module: "celebrity-spawn" }, "pick village", e); return null; });
+
   // Calculate overall rating
   const skillKeys = ["speed", "technique", "shooting", "passing", "heading", "defense", "goalkeeping"] as const;
   const posWeights: Record<string, Record<string, number>> = {
@@ -134,12 +139,12 @@ export async function spawnCelebrity(
   await db.prepare(`
     INSERT INTO free_agents (id, first_name, last_name, nickname, age, position, overall_rating,
       skills, personality, life_context, physical, avatar, weekly_wage, district,
-      source, expires_at, is_celebrity, hidden_talent, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, 1, ?, datetime('now'))
+      source, village_id, expires_at, is_celebrity, hidden_talent, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, 1, ?, datetime('now'))
   `).bind(
     faId, celeb.firstName, celeb.lastName, nickname, celeb.age, celeb.position, overallRating,
     skills, personality, lifeContext, physical, avatar, weeklyWage, leagueInfo.district,
-    expiresAt.toISOString(), hiddenTalent,
+    villageRow?.id ?? null, expiresAt.toISOString(), hiddenTalent,
   ).run();
 
   // ── News article: celebrity arrival ──
