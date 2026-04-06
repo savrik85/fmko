@@ -205,13 +205,13 @@ export async function runScheduledMatches(
       const rawAttendance = Math.max(8, popBase + repBonus + formBonus + Math.round(Math.random() * 10 - 5));
       // Celebrity attendance bonus — check if any celebrity is in either lineup
       let celebAttendanceMultiplier = 1.0;
-      const allLineupPlayers = [...homeLineup, ...awayLineup];
-      for (const lp of allLineupPlayers) {
-        const pid = (lp as any).dbPlayerId ?? lp.id;
-        const celebRow = await db.prepare("SELECT is_celebrity, personality FROM players WHERE id = ? AND is_celebrity = 1")
-          .bind(pid).first<{ is_celebrity: number; personality: string }>().catch((e) => { logger.warn({ module: "match-runner" }, "celeb check", e); return null; });
-        if (celebRow) {
-          const pers = JSON.parse(celebRow.personality);
+      const allLineupIds = [...homeLineup, ...awayLineup].map(lp => fullIdMap.get(lp.id)).filter(Boolean) as string[];
+      if (allLineupIds.length > 0) {
+        const celebRows = await db.prepare(
+          `SELECT is_celebrity, personality FROM players WHERE id IN (${allLineupIds.map(() => "?").join(",")}) AND is_celebrity = 1`
+        ).bind(...allLineupIds).all().catch((e) => { logger.warn({ module: "match-runner" }, "celeb attendance check", e); return { results: [] }; });
+        for (const celebRow of celebRows.results) {
+          const pers = JSON.parse(celebRow.personality as string);
           const bonusMap: Record<string, number> = { S: 3.0, A: 2.0, B: 1.5, C: 1.25 };
           const typeBonus: Record<string, number> = { legend: bonusMap[pers.celebrityTier] ?? 1.5, fallen_star: 1.3, glass_man: 1.4 };
           const bonus = typeBonus[pers.celebrityType] ?? 1.25;
