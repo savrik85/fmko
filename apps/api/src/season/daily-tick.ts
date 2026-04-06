@@ -80,6 +80,7 @@ export async function executeDailyTick(
             leadership: personality.leadership ?? 30, workRate: personality.workRate ?? 50,
             aggression: personality.aggression ?? 40, consistency: personality.consistency ?? 50,
             clutch: personality.clutch ?? 50,
+            isCelebrity: !!(row.is_celebrity as number), celebrityType: personality.celebrityType,
           };
         });
 
@@ -372,7 +373,7 @@ export async function executeDailyTick(
                 ).bind(tomorrowMatch.id, teamId, teamId).first<Record<string, unknown>>().catch(() => null);
                 const opponentName = matchRow ? (matchRow.home_team_id === teamId ? matchRow.away_name : matchRow.home_name) as string : "Soupeř";
                 const squadRows = await env.DB.prepare(
-                  "SELECT id, first_name, last_name, personality, life_context, physical, commute_km FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
+                  "SELECT id, first_name, last_name, personality, life_context, physical, commute_km, is_celebrity FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
                 ).bind(teamId).all();
                 const absRng = createRng(seedFromString(tomorrowMatch.id));
                 const absSquad = squadRows.results.map((r) => {
@@ -381,7 +382,8 @@ export async function executeDailyTick(
                   const phys = (() => { try { return JSON.parse(r.physical as string); } catch { return {}; } })();
                   return { firstName: r.first_name as string, lastName: r.last_name as string, age: 25, occupation: lc.occupation ?? "",
                     discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
-                    morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0 };
+                    morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0,
+                    isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
                 });
                 const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, "day_before");
                 const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
@@ -461,7 +463,7 @@ export async function executeDailyTick(
               const { seedFromString } = await import("../lib/seed");
               const { generateAbsences } = await import("../events/absence");
               const squadRows = await env.DB.prepare(
-                "SELECT id, first_name, last_name, personality, life_context, physical, commute_km FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')"
+                "SELECT id, first_name, last_name, personality, life_context, physical, commute_km, is_celebrity FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')"
               ).bind(teamId).all();
 
               const mdRng = createRng(seedFromString(todayMatch.id) + 9999);
@@ -471,7 +473,8 @@ export async function executeDailyTick(
                 const phys = (() => { try { return JSON.parse(r.physical as string); } catch { return {}; } })();
                 return { firstName: r.first_name as string, lastName: r.last_name as string, age: 25, occupation: lc.occupation ?? "",
                   discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
-                  morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0 };
+                  morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0,
+                  isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
               });
               // Find the match conversation created day before
               const matchConvId = await env.DB.prepare(

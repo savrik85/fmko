@@ -600,6 +600,7 @@ export async function buildMatchPlayers(
           alcohol: personality.alcohol ?? 30, temper: personality.temper ?? 40,
           morale: lifeContext.morale ?? 50, stamina: physical.stamina ?? 50,
           injuryProneness: personality.injuryProneness ?? 50,
+          isCelebrity: !!(row.is_celebrity as number), celebrityType: personality.celebrityType, celebrityTier: personality.celebrityTier,
         };
       });
       // Get district for environment-specific excuses (Praha = urban, rest = rural)
