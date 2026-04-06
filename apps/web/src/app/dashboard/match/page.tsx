@@ -214,8 +214,15 @@ export default function MatchPage() {
   return (
     <div className="page-container space-y-3">
 
-      {/* ═══ Match header — compact ═══ */}
-      <div className="card p-3 flex items-center justify-center gap-3">
+      {/* ═══ Match header ═══ */}
+      {/* Mobile: jen soupeř + kolo */}
+      <div className="card p-3 sm:hidden flex items-center justify-center gap-2">
+        <span className="text-xs text-muted">vs</span>
+        <span className="font-heading font-bold text-base">{nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName}</span>
+        <span className="text-xs text-muted">· {nextMatch.gameWeek}. kolo</span>
+      </div>
+      {/* Desktop: oba týmy */}
+      <div className="card p-3 hidden sm:flex items-center justify-center gap-3">
         <BadgePreview primary={nextMatch.homeColor || "#2D5F2D"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.homeName)} size={24} />
         <span className={`font-heading font-bold text-sm truncate ${nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.homeName}</span>
         <span className="text-xs text-muted font-heading">vs</span>
@@ -253,7 +260,7 @@ export default function MatchPage() {
       </div>
 
       {/* Main layout: pitch left, player list right */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(300px,400px)_1fr] gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
         {/* ═══ PITCH — kompaktní ═══ */}
         <div className="rounded-xl overflow-hidden relative bg-pitch-400" style={{ aspectRatio: "5/6" }}>
@@ -291,7 +298,7 @@ export default function MatchPage() {
                     {num}
                   </div>
                   {pid === captainId && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-gold-500 text-white text-[8px] font-heading font-[800] flex items-center justify-center ring-1 ring-white">C</span>
+                    <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-gold-500 text-white text-[9px] font-heading font-[800] flex items-center justify-center shadow-sm ring-1 ring-white">C</span>
                   )}
                 </div>
                 <div className="text-center mt-0.5 leading-tight">
@@ -307,89 +314,71 @@ export default function MatchPage() {
         {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
         <div>
           {editSlot !== null ? (
-            <div className="card p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-heading font-bold text-base">Vybrat hráče — pozice {slots[editSlot].pos}</span>
-                <button onClick={() => setEditSlot(null)} className="text-muted hover:text-ink text-lg">✕</button>
+            <div className="card overflow-x-auto">
+              <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat hráče — {slots[editSlot].pos}</span>
+                <button onClick={() => setEditSlot(null)} className="text-muted hover:text-ink text-lg leading-none">✕</button>
               </div>
-              <div className="space-y-1 max-h-[400px] overflow-y-auto">
-                {players
-                  .filter((p) => !selected.includes(p.id) || p.id === selected[editSlot])
-                  .sort((a, b) => {
-                    // Absent players last
-                    if (a.absent && !b.absent) return 1;
-                    if (!a.absent && b.absent) return -1;
-                    return (a.position === slots[editSlot].pos ? -1 : 1) - (b.position === slots[editSlot].pos ? -1 : 1) || b.overallRating - a.overallRating;
-                  })
-                  .map((p) => {
-                    const isCurrent = p.id === selected[editSlot];
-                    const isOOP = p.position !== slots[editSlot].pos;
-                    const isAbsent = p.absent;
-                    return (
-                      <button key={p.id} disabled={isAbsent} onClick={() => {
-                        if (isAbsent) return;
-                        const s = [...selected]; s[editSlot] = p.id; setSelected(s); setEditSlot(null); setSaved(false);
-                      }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                        isAbsent ? "opacity-40 cursor-not-allowed" : isCurrent ? "bg-pitch-100 ring-1 ring-pitch-400" : "hover:bg-gray-50"
-                      }`}>
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-heading font-bold text-sm shrink-0 ${POS_BG[p.position]}`}>
-                          {p.squadNumber ?? "?"}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-heading font-bold text-sm">{p.firstName} {p.lastName}</span>
-                            {isOOP && !isAbsent && <span className="text-gold-500 text-xs">⚠️</span>}
-                          </div>
-                          {/* Relationship hints to players in lineup */}
-                          {!isAbsent && p.relationships && (() => {
-                            const relsToLineup = p.relationships.filter((r) => selected.includes(r.otherPlayerId));
-                            if (relsToLineup.length === 0) return null;
-                            return (
-                              <div className="text-[10px] text-pitch-600 mt-0.5">
-                                {relsToLineup.map((r) => {
-                                  const other = players.find((op) => op.id === r.otherPlayerId);
-                                  return `${REL_EMOJI[r.type] ?? "👥"} ${other?.lastName ?? "?"}`;
-                                }).join(" · ")}
-                              </div>
-                            );
-                          })()}
-                          {isAbsent ? (
-                            <div className="text-xs text-card-red">❌ Nedostupný</div>
-                          ) : (
-                            <div className="flex items-center gap-3 mt-0.5">
-                              <span className="text-xs text-muted">{p.position} · {p.overallRating}</span>
-                              <div className="flex items-center gap-1">
-                                <div className={`w-10 h-1.5 rounded-full overflow-hidden ${p.condition >= 70 ? "bg-pitch-200" : p.condition >= 40 ? "bg-gold-200" : "bg-red-200"}`}>
-                                  <div className={`h-full rounded-full ${p.condition >= 70 ? "bg-pitch-500" : p.condition >= 40 ? "bg-gold-500" : "bg-card-red"}`} style={{ width: `${p.condition}%` }} />
-                                </div>
-                                <span className="text-[10px] tabular-nums text-muted w-4">{p.condition}</span>
-                              </div>
-                              {(() => {
-                                const pos = slots[editSlot].pos;
-                                const attrs: [string, number][] = pos === "GK"
-                                  ? [["Bra", p.goalkeeping ?? 0]]
-                                  : pos === "DEF"
-                                  ? [["Obr", p.defense ?? 0], ["Hl", p.heading ?? 0]]
-                                  : pos === "MID"
-                                  ? [["Pas", p.passing ?? 0], ["Tch", p.technique ?? 0]]
-                                  : [["Stř", p.shooting ?? 0], ["Rch", p.speed ?? 0]];
-                                return (
-                                  <div className="flex gap-1.5">
-                                    {attrs.map(([label, val]) => (
-                                      <span key={label} className={`text-[10px] tabular-nums ${val >= 50 ? "text-pitch-600 font-medium" : val >= 30 ? "text-muted" : "text-card-red"}`}>
-                                        {label}&nbsp;{val}
-                                      </span>
-                                    ))}
-                                  </div>
-                                );
-                              })()}
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-muted">
+                    <th className="py-1.5 pl-3 w-8 text-center text-xs font-heading">#</th>
+                    <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
+                    <th className="py-1.5 text-center text-xs font-heading w-8">Rat</th>
+                    <th className="py-1.5 text-center text-xs font-heading w-8">Rch</th>
+                    <th className="py-1.5 text-center text-xs font-heading w-8">Tch</th>
+                    <th className="py-1.5 text-center text-xs font-heading w-8">Stř</th>
+                    <th className="py-1.5 text-center text-xs font-heading w-8">Obr</th>
+                    <th className="py-1.5 text-center text-xs font-heading w-8">Kon</th>
+                    <th className="py-1.5 pr-3 text-center text-xs font-heading w-8">Mor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {players
+                    .filter((p) => !selected.includes(p.id) || p.id === selected[editSlot])
+                    .sort((a, b) => {
+                      if (a.absent && !b.absent) return 1;
+                      if (!a.absent && b.absent) return -1;
+                      return (a.position === slots[editSlot].pos ? -1 : 1) - (b.position === slots[editSlot].pos ? -1 : 1) || b.overallRating - a.overallRating;
+                    })
+                    .map((p) => {
+                      const isCurrent = p.id === selected[editSlot];
+                      const isOOP = p.position !== slots[editSlot].pos;
+                      const isAbsent = p.absent;
+                      const s = p as any;
+                      return (
+                        <tr key={p.id}
+                          onClick={() => { if (!isAbsent) { const sel = [...selected]; sel[editSlot] = p.id; setSelected(sel); setEditSlot(null); setSaved(false); } }}
+                          className={`border-b border-gray-50 last:border-b-0 transition-colors ${
+                            isAbsent ? "opacity-35 cursor-not-allowed" : isCurrent ? "bg-pitch-100" : "hover:bg-gray-50 cursor-pointer"
+                          } ${isOOP && !isAbsent ? "bg-gold-50/50" : ""}`}>
+                          <td className="py-1.5 pl-3 text-center">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[p.position]}`}>
+                              {p.squadNumber ?? "?"}
                             </div>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-              </div>
+                          </td>
+                          <td className="py-1.5 px-1.5">
+                            {isAbsent ? (
+                              <span className="font-heading font-bold text-sm line-through text-muted">{p.lastName}</span>
+                            ) : (
+                              <div>
+                                <span className="font-heading font-bold text-sm">{p.lastName}</span>
+                                <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-1.5 text-center tabular-nums font-heading font-bold">{p.overallRating}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.speed)}`}>{s.speed}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.technique)}`}>{s.technique}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.shooting)}`}>{s.shooting}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.defense)}`}>{s.defense}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${condC(p.condition)}`}>{p.condition}%</td>
+                          <td className="py-1.5 pr-3 text-center">{moraleIcon(p.morale)}</td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
             </div>
           ) : (
             <>
@@ -434,8 +423,8 @@ export default function MatchPage() {
                                 <div className="text-xs text-muted">{player.firstName} · {player.age} let</div>
                               </div>
                               <button onClick={(e) => { e.stopPropagation(); setCaptainId(captainId === player.id ? null : player.id); setSaved(false); }}
-                                className={`shrink-0 w-5 h-5 rounded-full text-[9px] font-heading font-[800] flex items-center justify-center transition-all ${
-                                  captainId === player.id ? "bg-gold-500 text-white ring-1 ring-gold-600" : "bg-gray-100 text-muted hover:bg-gold-100 hover:text-gold-600"
+                                className={`shrink-0 w-6 h-6 rounded-full text-[10px] font-heading font-[800] flex items-center justify-center transition-all ${
+                                  captainId === player.id ? "bg-gold-500 text-white shadow-sm" : "bg-gray-100 text-muted hover:bg-gold-100 hover:text-gold-600"
                                 }`} title="Kapitán">C</button>
                             </div>
                           </td>
