@@ -1,0 +1,177 @@
+/**
+ * Celebrity spawn logic — generates special players (legend, fallen star, glass man)
+ * and inserts them into the free_agents table with is_celebrity = 1.
+ * Also generates news articles and broadcast messages.
+ */
+
+import { logger } from "../lib/logger";
+import type { Rng } from "../generators/rng";
+import {
+  generateCelebrityLegend,
+  generateFallenStar,
+  generateGlassMan,
+  TIER_CONFIG,
+  type CelebrityType,
+  type CelebrityTier,
+} from "../generators/player";
+import { generatePlayerFace } from "../routes/teams";
+
+const FIRSTNAMES: Record<string, Record<string, number>> = {
+  "1960s": { "Jiří": 0.08, "Jan": 0.07, "Petr": 0.06, "Josef": 0.06, "Jaroslav": 0.05 },
+  "1970s": { "Petr": 0.08, "Jan": 0.07, "Martin": 0.06, "Jiří": 0.06, "Pavel": 0.05 },
+  "1980s": { "Jan": 0.08, "Martin": 0.07, "Tomáš": 0.06, "Pavel": 0.05, "Michal": 0.05 },
+  "1990s": { "Jan": 0.09, "Tomáš": 0.07, "Jakub": 0.06, "David": 0.06, "Lukáš": 0.05 },
+  "2000s": { "Jakub": 0.08, "Jan": 0.07, "Adam": 0.06, "Matěj": 0.06, "Ondřej": 0.05 },
+  "2010s": { "Jakub": 0.07, "Jan": 0.07, "Adam": 0.06, "Vojtěch": 0.05, "Filip": 0.05 },
+};
+
+interface SpawnResult {
+  name: string;
+  type: CelebrityType;
+  tier?: CelebrityTier;
+}
+
+export async function spawnCelebrity(
+  db: D1Database,
+  leagueId: string,
+  rng: Rng,
+): Promise<SpawnResult | null> {
+  // Determine type: 50% legend, 25% fallen_star, 25% glass_man
+  const roll = rng.random();
+  let celebType: CelebrityType;
+  let tier: CelebrityTier | undefined;
+
+  if (roll < 0.50) {
+    celebType = "legend";
+    // Tier distribution: S=10%, A=25%, B=35%, C=30%
+    const tierRoll = rng.random();
+    tier = tierRoll < 0.10 ? "S" : tierRoll < 0.35 ? "A" : tierRoll < 0.70 ? "B" : "C";
+  } else if (roll < 0.75) {
+    celebType = "fallen_star";
+  } else {
+    celebType = "glass_man";
+  }
+
+  const firstnameData = { male: FIRSTNAMES, female: {} as Record<string, Record<string, number>> };
+
+  const celeb = celebType === "legend"
+    ? generateCelebrityLegend(rng, tier!, firstnameData)
+    : celebType === "fallen_star"
+      ? generateFallenStar(rng, firstnameData)
+      : generateGlassMan(rng, firstnameData);
+
+  // Get league info
+  const leagueInfo = await db.prepare(
+    "SELECT name, district FROM leagues WHERE id = ?"
+  ).bind(leagueId).first<{ name: string; district: string }>();
+  if (!leagueInfo) return null;
+
+  // Calculate overall rating
+  const skillKeys = ["speed", "technique", "shooting", "passing", "heading", "defense", "goalkeeping"] as const;
+  const posWeights: Record<string, Record<string, number>> = {
+    GK: { speed: 0.05, technique: 0.05, shooting: 0.02, passing: 0.08, heading: 0.05, defense: 0.15, goalkeeping: 0.60 },
+    DEF: { speed: 0.12, technique: 0.10, shooting: 0.05, passing: 0.12, heading: 0.18, defense: 0.35, goalkeeping: 0.08 },
+    MID: { speed: 0.12, technique: 0.20, shooting: 0.12, passing: 0.25, heading: 0.08, defense: 0.15, goalkeeping: 0.08 },
+    FWD: { speed: 0.18, technique: 0.18, shooting: 0.28, passing: 0.12, heading: 0.15, defense: 0.05, goalkeeping: 0.04 },
+  };
+  const w = posWeights[celeb.position] ?? posWeights.MID;
+  const overallRating = Math.round(skillKeys.reduce((sum, k) => sum + (celeb[k] ?? 0) * (w[k] ?? 0.14), 0));
+
+  const skills = JSON.stringify({
+    speed: celeb.speed, technique: celeb.technique, shooting: celeb.shooting,
+    passing: celeb.passing, heading: celeb.heading, defense: celeb.defense,
+    goalkeeping: celeb.goalkeeping, stamina: celeb.stamina, strength: celeb.strength,
+    creativity: Math.round((celeb.technique + celeb.passing) / 2),
+    setPieces: rng.int(30, 70),
+  });
+  const personality = JSON.stringify({
+    discipline: celeb.discipline, patriotism: celeb.patriotism,
+    alcohol: celeb.alcohol, temper: celeb.temper,
+    leadership: celeb.leadership, workRate: celeb.workRate,
+    aggression: celeb.aggression, consistency: celeb.consistency,
+    clutch: celeb.clutch,
+    celebrityType: celeb.celebrityType,
+    ...(celeb.celebrityTier ? { celebrityTier: celeb.celebrityTier } : {}),
+  });
+  const lifeContext = JSON.stringify({
+    occupation: celeb.occupation,
+    condition: celeb.condition,
+    morale: celeb.morale,
+    celebrityTransportCost: celeb.transportCost,
+  });
+  const physical = JSON.stringify({
+    stamina: celeb.stamina, strength: celeb.strength,
+    injuryProneness: celeb.injuryProneness,
+    height: rng.int(170, 195), weight: rng.int(70, 95),
+    preferredFoot: celeb.preferredFoot, preferredSide: celeb.preferredSide,
+  });
+
+  const faId = crypto.randomUUID();
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+
+  const weeklyWage = Math.round(10 + (overallRating / 100) * 400) + celeb.transportCost;
+  const avatar = JSON.stringify(celeb.avatarConfig);
+
+  const skillsMax = celeb.skillsMax ? JSON.stringify(celeb.skillsMax) : null;
+  const hiddenTalent = celeb.hiddenTalent ?? 0;
+  const nickname = celeb.nickname;
+  const fullName = `${celeb.firstName} ${celeb.lastName}`;
+
+  await db.prepare(`
+    INSERT INTO free_agents (id, first_name, last_name, nickname, age, position, overall_rating,
+      skills, personality, life_context, physical, avatar, weekly_wage, district,
+      source, expires_at, is_celebrity, hidden_talent, skills_max, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, 1, ?, ?, datetime('now'))
+  `).bind(
+    faId, celeb.firstName, celeb.lastName, nickname, celeb.age, celeb.position, overallRating,
+    skills, personality, lifeContext, physical, avatar, weeklyWage, leagueInfo.district,
+    expiresAt.toISOString(), hiddenTalent, skillsMax,
+  ).run();
+
+  // ── News article: celebrity arrival ──
+  const tierDesc = celebType === "legend"
+    ? TIER_CONFIG[tier!].tierLabel
+    : celeb.tierLabel;
+
+  const headlineMap: Record<CelebrityType, string> = {
+    legend: `BOMBA: ${fullName} se přistěhoval do okresu! ${tierDesc.charAt(0).toUpperCase() + tierDesc.slice(1)} hledá angažmá`,
+    fallen_star: `${fullName}, kdysi velká naděje české ligy, se vrátil do rodného kraje`,
+    glass_man: `${fullName} hledá nový začátek v okresním přeboru`,
+  };
+
+  const bodyMap: Record<CelebrityType, string> = {
+    legend: tier === "S"
+      ? `Okresním přeborem otřásla zpráva — do oblasti se přistěhoval ${fullName}, ${tierDesc} a legenda české kopané. Podle našich informací se zajímá o účast v místním přeboru. Fanoušci v celém okresu nevěří vlastním očím. Kdo si ho podepíše?`
+      : `Překvapivá zpráva: ${fullName}, ${tierDesc}, se usadil v okrese a hledá tým kde by si zakopal. Je k dispozici jako volný hráč.`,
+    fallen_star: `${fullName}, kdysi velká naděje na pozici ${celeb.position === "FWD" ? "útočníka" : celeb.position === "MID" ? "záložníka" : "obránce"}, se vrátil do rodného kraje. Kariéru v první lize mu zničil alkohol a životní styl. Talent ale zůstal — otázka zní, jestli ho někdo dokáže vychovat zpět.`,
+    glass_man: `${fullName}, talentovaný ${celeb.position === "FWD" ? "útočník" : celeb.position === "MID" ? "záložník" : "obránce"} v nejlepších letech, musel kvůli chronickým zraněním opustit profesionální fotbal. Teď hledá tým v okresním přeboru. Když hraje, je výborný — ale vydrží jeho kolena?`,
+  };
+
+  await db.prepare(
+    "INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, ?, 'celebrity_arrival', ?, ?, datetime('now'))"
+  ).bind(crypto.randomUUID(), leagueId, headlineMap[celebType], bodyMap[celebType]).run();
+
+  // ── Broadcast message to all human teams in league ──
+  const humanTeams = await db.prepare(
+    "SELECT t.id, c.id as conv_id FROM teams t LEFT JOIN conversations c ON c.team_id = t.id AND c.type = 'chairman' WHERE t.league_id = ? AND t.user_id != 'ai'"
+  ).bind(leagueId).all().catch((e) => { logger.warn({ module: "celebrity-spawn" }, "fetch teams for broadcast", e); return { results: [] }; });
+
+  const typeEmoji: Record<CelebrityType, string> = { legend: "⭐", fallen_star: "🍺", glass_man: "🩹" };
+  const broadcastText = `${typeEmoji[celebType]} NOVÝ VOLNÝ HRÁČ: ${fullName} (${celeb.position}, ${celeb.age} let, ${tierDesc}) je k dispozici! Podívejte se na trh volných hráčů.`;
+
+  for (const t of humanTeams.results) {
+    const convId = t.conv_id as string | null;
+    if (!convId) continue;
+    await db.prepare(
+      "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Předseda Přeboru', ?, datetime('now'))"
+    ).bind(crypto.randomUUID(), convId, broadcastText).run()
+      .catch((e) => logger.warn({ module: "celebrity-spawn" }, "broadcast msg", e));
+    await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+      .bind(broadcastText.slice(0, 100), convId).run()
+      .catch((e) => logger.warn({ module: "celebrity-spawn" }, "update conv", e));
+  }
+
+  logger.info({ module: "celebrity-spawn" }, `spawned ${celebType}${tier ? ` tier ${tier}` : ""}: ${fullName} in ${leagueInfo.district}`);
+  return { name: fullName, type: celebType, tier };
+}

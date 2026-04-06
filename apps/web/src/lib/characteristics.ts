@@ -19,6 +19,7 @@ interface PlayerInput {
   skills?: Record<string, number>;
   personality?: Record<string, number>;
   lifeContext?: Record<string, number>;
+  is_celebrity?: number;
 }
 
 export function generateCharacteristics(
@@ -27,6 +28,21 @@ export function generateCharacteristics(
   maxTags = 3,
 ): PlayerTag[] {
   const tags: PlayerTag[] = [];
+
+  // Celebrity tags — highest priority
+  if (player.is_celebrity) {
+    const celebType = String((player.personality as any)?.celebrityType ?? "legend");
+    if (celebType === "fallen_star") {
+      tags.push({ key: "fallen_star", label: "Padlá hvězda", emoji: "🍺", color: "purple", description: "Zkrachovalý talent z 1. ligy — propadl alkoholu", priority: 0 });
+    } else if (celebType === "glass_man") {
+      tags.push({ key: "glass_man", label: "Skleněný muž", emoji: "🩹", color: "red", description: "Věčně zraněný profík — skvělý když hraje", priority: 0 });
+    } else {
+      const tierLabel: Record<string, string> = { S: "Legenda", A: "Ex-ligista", B: "Druholigový matador", C: "Krajský borec" };
+      const t = String((player.personality as any)?.celebrityTier ?? "C");
+      tags.push({ key: "celebrity", label: tierLabel[t] ?? "Celebrita", emoji: "⭐", color: "gold", description: "Bývalý profesionální fotbalista", priority: 0 });
+    }
+  }
+
   const rating = player.overall_rating ?? 0;
   const age = player.age;
   const pos = player.position;

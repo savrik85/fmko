@@ -1,0 +1,2 @@
+ALTER TABLE players ADD COLUMN is_celebrity INTEGER DEFAULT 0;
+ALTER TABLE free_agents ADD COLUMN is_celebrity INTEGER DEFAULT 0;

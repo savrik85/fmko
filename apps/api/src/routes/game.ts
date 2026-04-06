@@ -2576,11 +2576,12 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   }
 
   const playerId = crypto.randomUUID();
+  const isCelebrity = (fa.is_celebrity as number) ?? 0;
   await c.env.DB.prepare(
-    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
+    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, status, is_celebrity)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
   ).bind(playerId, teamId, fa.first_name, fa.last_name, (fa.nickname as string) ?? "", fa.age, fa.position, fa.overall_rating,
-    fa.skills, fa.physical, fa.personality, fa.life_context, fa.avatar, fa.hidden_talent ?? 0, body.offeredWage).run();
+    fa.skills, fa.physical, fa.personality, fa.life_context, fa.avatar, fa.hidden_talent ?? 0, body.offeredWage, isCelebrity).run();
 
   // Set residence & commute for new signing
   const { generateResidence } = await import("../generators/residence");
@@ -2602,10 +2603,42 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   await c.env.DB.prepare("DELETE FROM free_agents WHERE id = ?").bind(faId).run();
 
   const { createTransferNews } = await import("../transfers/transfer-news");
-  await createTransferNews(c.env.DB, team.league_id as string, teamId, "player_signed", {
-    playerName: `${fa.first_name} ${fa.last_name}`, playerAge: fa.age as number,
-    playerPosition: fa.position as string, teamName: team.name as string,
-  }).catch((e) => logger.warn({ module: "game" }, "create signing news", e));
+  if (isCelebrity) {
+    // Celebrity signing — bombastic league-wide news + broadcast
+    const celebPers = (() => { try { return JSON.parse(fa.personality as string); } catch { return {}; } })();
+    const celebTier = celebPers.celebrityTier as string | undefined;
+    const celebTypeStr = celebPers.celebrityType as string ?? "legend";
+    const tierDesc = celebTypeStr === "legend"
+      ? { S: "bývalý reprezentant", A: "ex-ligista z 1. ligy", B: "hráč 2. ligy", C: "krajský přeborník" }[celebTier ?? "C"]
+      : celebTypeStr === "fallen_star" ? "zkrachovalý talent" : "věčně zraněný profík";
+    const headline = `HOTOVO: ${fa.first_name} ${fa.last_name} podepsal za ${team.name}!`;
+    const bodyText = celebTier === "S"
+      ? `Je to oficiální! ${fa.first_name} ${fa.last_name} bude hrát za ${team.name} v okresním přeboru. Celý okres je vzhůru nohama.`
+      : `${fa.first_name} ${fa.last_name}, ${tierDesc}, se dohodl s ${team.name}. Posílí kádr pro zbytek sezóny.`;
+    await c.env.DB.prepare("INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, ?, 'celebrity_signing', ?, ?, datetime('now'))")
+      .bind(crypto.randomUUID(), team.league_id, headline, bodyText).run()
+      .catch((e) => logger.warn({ module: "game" }, "celebrity signing news", e));
+    // Broadcast to all teams
+    const leagueTeams = await c.env.DB.prepare(
+      "SELECT c.id as conv_id FROM teams t JOIN conversations c ON c.team_id = t.id AND c.type = 'chairman' WHERE t.league_id = ? AND t.user_id != 'ai'"
+    ).bind(team.league_id).all().catch((e) => { logger.warn({ module: "game" }, "fetch league teams for celeb broadcast", e); return { results: [] }; });
+    for (const lt of leagueTeams.results) {
+      await c.env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Předseda Přeboru', ?, datetime('now'))")
+        .bind(crypto.randomUUID(), lt.conv_id, `⭐ ${fa.first_name} ${fa.last_name} podepsal smlouvu s ${team.name}!`)
+        .run().catch((e) => logger.warn({ module: "game" }, "celeb signing broadcast", e));
+    }
+    // Reputation + morale boost
+    const repBonus = { S: 15, A: 10, B: 7, C: 4 }[celebTier ?? "C"] ?? 5;
+    await c.env.DB.prepare("UPDATE teams SET reputation = MIN(100, reputation + ?) WHERE id = ?")
+      .bind(repBonus, teamId).run().catch((e) => logger.warn({ module: "game" }, "celeb rep boost", e));
+    await c.env.DB.prepare("UPDATE players SET life_context = json_set(life_context, '$.morale', MIN(100, json_extract(life_context, '$.morale') + 3)) WHERE team_id = ?")
+      .bind(teamId).run().catch((e) => logger.warn({ module: "game" }, "celeb morale boost", e));
+  } else {
+    await createTransferNews(c.env.DB, team.league_id as string, teamId, "player_signed", {
+      playerName: `${fa.first_name} ${fa.last_name}`, playerAge: fa.age as number,
+      playerPosition: fa.position as string, teamName: team.name as string,
+    }).catch((e) => logger.warn({ module: "game" }, "create signing news", e));
+  }
 
   // Return full player data for reveal card
   const newPlayer = await c.env.DB.prepare("SELECT * FROM players WHERE id = ?").bind(playerId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "game" }, "fetch new player after signing", e); return null; });

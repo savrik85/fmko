@@ -389,3 +389,231 @@ export function generateSquad(
     generatePlayer(rng, village, pos, surnameData, firstnameData)
   );
 }
+
+// ═══════════════════════════════════════════════
+// CELEBRITY / SPECIAL PLAYER GENERATORS
+// ═══════════════════════════════════════════════
+
+export type CelebrityType = "legend" | "fallen_star" | "glass_man";
+export type CelebrityTier = "S" | "A" | "B" | "C";
+
+const CELEBRITY_SURNAMES = [
+  "Nedvěd", "Koller", "Poborský", "Šmicer", "Baroš", "Čech",
+  "Rosický", "Berger", "Galásek", "Ujfaluši", "Jankulovski",
+  "Grygera", "Kadlec", "Skuhravý", "Kuka", "Siegl",
+  "Lička", "Nemec", "Johana", "Bejbl", "Horňák",
+  "Řepka", "Lokvenc", "Jarolím", "Rada", "Vítek",
+  "Lafata", "Hložek", "Souček", "Schick", "Coufal",
+  "Krejčí", "Darida", "Dočkal", "Hubník", "Gebre Selassie",
+];
+
+const CELEBRITY_NICKNAMES: Record<CelebrityTier, string[]> = {
+  S: ["Maestro", "Bombar", "Mašina", "Legenda", "Kanón", "Generál"],
+  A: ["Profík", "Buldok", "Raketa", "Střelec"],
+  B: ["Matador", "Veterán", "Borec"],
+  C: ["Mazák", "Rutinér"],
+};
+
+const TIER_CONFIG: Record<CelebrityTier, {
+  overallMin: number; overallMax: number;
+  ageMin: number; ageMax: number;
+  disciplineMin: number; disciplineMax: number;
+  alcoholMin: number; alcoholMax: number;
+  transportCost: number;
+  absenceRate: number;
+  attendanceBonus: number;
+  reputationBonus: number;
+  signingBonus: number;
+  tierLabel: string;
+}> = {
+  S: { overallMin: 75, overallMax: 90, ageMin: 38, ageMax: 48, disciplineMin: 3, disciplineMax: 10, alcoholMin: 70, alcoholMax: 95, transportCost: 2000, absenceRate: 0.67, attendanceBonus: 3.0, reputationBonus: 15, signingBonus: 5000, tierLabel: "bývalý reprezentant" },
+  A: { overallMin: 60, overallMax: 75, ageMin: 36, ageMax: 42, disciplineMin: 5, disciplineMax: 15, alcoholMin: 60, alcoholMax: 85, transportCost: 1000, absenceRate: 0.60, attendanceBonus: 2.0, reputationBonus: 10, signingBonus: 3000, tierLabel: "ex-ligista z 1. ligy" },
+  B: { overallMin: 50, overallMax: 65, ageMin: 35, ageMax: 40, disciplineMin: 8, disciplineMax: 20, alcoholMin: 50, alcoholMax: 75, transportCost: 500, absenceRate: 0.50, attendanceBonus: 1.5, reputationBonus: 7, signingBonus: 1500, tierLabel: "hrál 2. ligu" },
+  C: { overallMin: 45, overallMax: 55, ageMin: 34, ageMax: 38, disciplineMin: 12, disciplineMax: 30, alcoholMin: 40, alcoholMax: 65, transportCost: 200, absenceRate: 0.40, attendanceBonus: 1.25, reputationBonus: 4, signingBonus: 1000, tierLabel: "krajský přeborník" },
+};
+
+export { TIER_CONFIG };
+
+interface CelebrityResult extends GeneratedPlayer {
+  celebrityType: CelebrityType;
+  celebrityTier?: CelebrityTier;
+  transportCost: number;
+  nickname: string | null;
+  tierLabel: string;
+  hiddenTalent?: number;
+  skillsMax?: Record<string, number>;
+}
+
+export function generateCelebrityLegend(
+  rng: Rng,
+  tier: CelebrityTier,
+  firstnameData: FirstnameData,
+): CelebrityResult {
+  const cfg = TIER_CONFIG[tier];
+  const age = rng.int(cfg.ageMin, cfg.ageMax);
+  const position = rng.pick(["DEF", "MID", "FWD"] as PlayerPosition[]);
+  const decade = ageToDecade(age);
+  const firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1980s"]);
+  const lastName = rng.pick(CELEBRITY_SURNAMES);
+  const nickname = rng.random() < 0.6 ? rng.pick(CELEBRITY_NICKNAMES[tier]) : null;
+
+  const qualityBase = rng.int(cfg.overallMin, cfg.overallMax);
+  const attrs = generateAttributes(rng, position, Math.min(age, 32), qualityBase); // use peak-age for skill gen
+
+  let hairStyle = rng.pick(HAIR_STYLES);
+  if (age > 40 && rng.random() < 0.5) hairStyle = "bald";
+  else if (age > 36 && rng.random() < 0.4) hairStyle = "receding";
+  let hairColor = rng.pick(HAIR_COLORS);
+  if (age > 44) hairColor = rng.random() < 0.6 ? "gray" : "white";
+
+  const avatarConfig: AvatarConfig = {
+    bodyType: rng.pick(["athletic", "normal", "stocky"] as BodyType[]),
+    head: rng.int(1, 6), eyes: rng.int(1, 8), nose: rng.int(1, 6),
+    mouth: rng.int(1, 5), ears: rng.int(1, 4),
+    hair: hairStyle, hairColor,
+    skinTone: rng.weighted({ light: 0.45, medium_light: 0.40, medium: 0.12, medium_dark: 0.02, dark: 0.01 }),
+    facialHair: rng.pick(FACIAL_HAIR), glasses: rng.pick(GLASSES), accessories: [],
+  };
+
+  return {
+    firstName, lastName, age, position,
+    speed: attrs.speed, technique: attrs.technique, shooting: attrs.shooting,
+    passing: attrs.passing, heading: attrs.heading, defense: attrs.defense,
+    goalkeeping: attrs.goalkeeping,
+    stamina: Math.max(15, rng.int(25, 45)),
+    strength: Math.max(20, rng.int(35, 65)),
+    injuryProneness: rng.int(30, 70),
+    discipline: rng.int(cfg.disciplineMin, cfg.disciplineMax),
+    patriotism: rng.int(0, 15),
+    alcohol: rng.int(cfg.alcoholMin, cfg.alcoholMax),
+    temper: rng.int(20, 70),
+    occupation: "Fotbalový důchodce",
+    bodyType: avatarConfig.bodyType as BodyType,
+    avatarConfig,
+    condition: rng.int(40, 65),
+    morale: rng.int(55, 75),
+    preferredFoot: rng.random() < 0.7 ? "right" : rng.random() < 0.7 ? "left" : "both",
+    preferredSide: rng.pick(["left", "center", "right", "any"] as PreferredSide[]),
+    leadership: rng.int(50, 85),
+    workRate: rng.int(5, 20),
+    aggression: rng.int(15, 50),
+    consistency: rng.int(40, 75),
+    clutch: rng.int(50, 90),
+    celebrityType: "legend",
+    celebrityTier: tier,
+    transportCost: cfg.transportCost,
+    nickname,
+    tierLabel: cfg.tierLabel,
+  };
+}
+
+export function generateFallenStar(
+  rng: Rng,
+  firstnameData: FirstnameData,
+): CelebrityResult {
+  const age = rng.int(22, 28);
+  const position = rng.pick(["MID", "FWD"] as PlayerPosition[]);
+  const decade = ageToDecade(age);
+  const firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1990s"]);
+  const lastName = rng.pick(CELEBRITY_SURNAMES);
+
+  const qualityBase = rng.int(40, 55);
+  const attrs = generateAttributes(rng, position, age, qualityBase);
+
+  const avatarConfig: AvatarConfig = {
+    bodyType: rng.pick(["normal", "stocky"] as BodyType[]),
+    head: rng.int(1, 6), eyes: rng.int(1, 8), nose: rng.int(1, 6),
+    mouth: rng.int(1, 5), ears: rng.int(1, 4),
+    hair: rng.pick(HAIR_STYLES), hairColor: rng.pick(HAIR_COLORS),
+    skinTone: rng.weighted({ light: 0.45, medium_light: 0.40, medium: 0.12, medium_dark: 0.02, dark: 0.01 }),
+    facialHair: rng.pick(FACIAL_HAIR), glasses: rng.pick(GLASSES), accessories: [],
+  };
+
+  return {
+    firstName, lastName, age, position,
+    speed: attrs.speed, technique: attrs.technique, shooting: attrs.shooting,
+    passing: attrs.passing, heading: attrs.heading, defense: attrs.defense,
+    goalkeeping: attrs.goalkeeping,
+    stamina: rng.int(30, 50),
+    strength: rng.int(40, 65),
+    injuryProneness: rng.int(20, 55),
+    discipline: rng.int(5, 20),
+    patriotism: rng.int(5, 30),
+    alcohol: rng.int(80, 100),
+    temper: rng.int(40, 85),
+    occupation: "Nezaměstnaný",
+    bodyType: avatarConfig.bodyType as BodyType,
+    avatarConfig,
+    condition: rng.int(30, 55),
+    morale: rng.int(15, 35),
+    preferredFoot: rng.random() < 0.6 ? "right" : rng.random() < 0.6 ? "left" : "both",
+    preferredSide: rng.pick(["left", "center", "right"] as PreferredSide[]),
+    leadership: rng.int(5, 25),
+    workRate: rng.int(10, 30),
+    aggression: rng.int(30, 75),
+    consistency: rng.int(10, 35),
+    clutch: rng.int(20, 60),
+    celebrityType: "fallen_star",
+    transportCost: 300,
+    nickname: null,
+    tierLabel: "zkrachovalý talent z 1. ligy",
+    hiddenTalent: rng.int(70, 90),
+    skillsMax: {
+      speed: rng.int(65, 85), technique: rng.int(65, 85), shooting: rng.int(65, 85),
+      passing: rng.int(65, 85), heading: rng.int(55, 75), defense: rng.int(50, 70),
+    },
+  };
+}
+
+export function generateGlassMan(
+  rng: Rng,
+  firstnameData: FirstnameData,
+): CelebrityResult {
+  const age = rng.int(27, 33);
+  const position = rng.pick(["DEF", "MID", "FWD"] as PlayerPosition[]);
+  const decade = ageToDecade(age);
+  const firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1990s"]);
+  const lastName = rng.pick(CELEBRITY_SURNAMES);
+
+  const qualityBase = rng.int(55, 70);
+  const attrs = generateAttributes(rng, position, age, qualityBase);
+
+  const avatarConfig: AvatarConfig = {
+    bodyType: rng.pick(["thin", "athletic", "normal"] as BodyType[]),
+    head: rng.int(1, 6), eyes: rng.int(1, 8), nose: rng.int(1, 6),
+    mouth: rng.int(1, 5), ears: rng.int(1, 4),
+    hair: rng.pick(HAIR_STYLES), hairColor: rng.pick(HAIR_COLORS),
+    skinTone: rng.weighted({ light: 0.45, medium_light: 0.40, medium: 0.12, medium_dark: 0.02, dark: 0.01 }),
+    facialHair: rng.pick(FACIAL_HAIR), glasses: rng.pick(GLASSES), accessories: [],
+  };
+
+  return {
+    firstName, lastName, age, position,
+    speed: attrs.speed, technique: attrs.technique, shooting: attrs.shooting,
+    passing: attrs.passing, heading: attrs.heading, defense: attrs.defense,
+    goalkeeping: attrs.goalkeeping,
+    stamina: rng.int(25, 40),
+    strength: rng.int(35, 55),
+    injuryProneness: rng.int(85, 100),
+    discipline: rng.int(40, 70),
+    patriotism: rng.int(15, 45),
+    alcohol: rng.int(10, 40),
+    temper: rng.int(15, 50),
+    occupation: "Fyzioterapeut",
+    bodyType: avatarConfig.bodyType as BodyType,
+    avatarConfig,
+    condition: rng.int(35, 55),
+    morale: rng.int(40, 60),
+    preferredFoot: rng.random() < 0.7 ? "right" : rng.random() < 0.6 ? "left" : "both",
+    preferredSide: rng.pick(["left", "center", "right"] as PreferredSide[]),
+    leadership: rng.int(30, 60),
+    workRate: rng.int(50, 75),
+    aggression: rng.int(15, 40),
+    consistency: rng.int(45, 75),
+    clutch: rng.int(40, 70),
+    celebrityType: "glass_man",
+    transportCost: 500,
+    nickname: null,
+    tierLabel: "věčně zraněný profík",
+  };
+}

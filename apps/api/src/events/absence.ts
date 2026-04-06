@@ -37,6 +37,9 @@ interface PlayerForAbsence {
   stamina: number;       // 0-100
   injuryProneness: number; // 0-100
   commuteKm?: number;    // distance to ground — 0 = local
+  isCelebrity?: boolean;
+  celebrityType?: "legend" | "fallen_star" | "glass_man";
+  celebrityTier?: "S" | "A" | "B" | "C";
 }
 
 // ═══════════════════════════════════════════════
@@ -234,9 +237,29 @@ export function generateAbsences(
     const patriotismFactor = (100 - p.patriotism) / 200;
     const moraleFactor = (100 - p.morale) / 300;
     const commuteFactor = Math.min(0.04, (p.commuteKm ?? 0) * 0.002);
-    const baseChance = 0.02 + disciplineFactor * 0.10 + patriotismFactor * 0.03 + moraleFactor * 0.02 + commuteFactor;
+    let baseChance = 0.02 + disciplineFactor * 0.10 + patriotismFactor * 0.03 + moraleFactor * 0.02 + commuteFactor;
+
+    // ── Celebrity override — much higher absence rates ──
+    if (p.isCelebrity) {
+      const celebAbsenceRates: Record<string, Record<string, number>> = {
+        legend: { S: 0.67, A: 0.60, B: 0.50, C: 0.40 },
+        fallen_star: { _: 0.47 },
+        glass_man: { _: 0.42 },
+      };
+      const typeRates = celebAbsenceRates[p.celebrityType ?? "legend"] ?? celebAbsenceRates.legend;
+      baseChance = typeRates[p.celebrityTier ?? "_"] ?? typeRates._ ?? 0.45;
+    }
 
     if (rng.random() > baseChance) continue; // Přijde!
+
+    // ── Celebrity-specific excuses ──
+    if (p.isCelebrity) {
+      const celebResult = generateCelebrityExcuse(rng, p, timing);
+      if (celebResult) {
+        absences.push({ playerIndex: i, ...celebResult });
+        continue;
+      }
+    }
 
     // Vyber kategorii výmluvy — váhy závisí na atributech
     const occupation = getOccupationByName(p.occupation);
@@ -339,4 +362,104 @@ export function generateAbsences(
   }
 
   return absences;
+}
+
+// ═══════════════════════════════════════════════
+// CELEBRITY EXCUSE GENERATOR
+// ═══════════════════════════════════════════════
+
+const LEGEND_EXCUSES = [
+  // VIP / Byznys
+  "Natáčí reklamu pro regionální pekárnu", "Má autogramiádu v Kauflandu",
+  "Má rozhovor pro Deník", "Fotí se pro charitativní kalendář",
+  "Dnes podpisuje smlouvu se sponzorem", "Natáčí motivační video pro Instagram",
+  "Jede na galavečer Fotbalové asociace", "Točí reklamu na energetický nápoj",
+  "Jede na vernisáž — vystavuje vlastní obrazy", "Má schůzku s agentem kvůli knize",
+  // Sport / Exhibice
+  "Jede na exhibici starých gard", "Hraje charitativní zápas v Edenu",
+  "Jede na golfový turnaj celebrit", "Má trenérský kurz (říká to 3. sezónu)",
+  "Jede jako expert komentovat zápas na O2 TV", "Hraje futsalovou ligu v Praze",
+  "Jede na kemp mládeže jako host", "Trénuje dětský tábor jako celebrita",
+  // Zdraví / Fyzio
+  "Fyzioterapeut mu zakázal hrát", "Má preventivní prohlídku u sportovního lékaře",
+  "Bolí ho koleno (to samé co minulý měsíc)", "Říká že potřebuje regenerační den",
+  "Cítí se unavený z včerejšího tréninku (který vynechal)",
+  // Životní styl
+  "Nestíhá — zůstal na afterparty", "Jede na dovolenou (uprostřed sezóny)",
+  "Zaspání — včerejší degustace vín se protáhla", "Říká že auto je v servisu a nechce jet autobusem",
+  "Má oběd s kamarádem z reprezentace", "Dnes slaví narozeniny — 'kluci to zvládnou beze mě'",
+  "Jede na premiéru do kina", "Natáčí podcast o fotbale",
+  "Má event v rooftop baru na Žižkově", "Má meeting s agentem v centru",
+];
+
+const FALLEN_STAR_EXCUSES = [
+  "Včera to přehnal v hospodě a nemůže vstát", "Prý má 'chřipku' (cítit pivo na 3 metry)",
+  "Volal že je na detoxu", "Nemůže — řídil opilý a vzali mu řidičák",
+  "Spal u kamaráda a neví kde je", "Říká že je nemocný ale viděli ho v baru",
+  "Měl prý alergickou reakci (na střízlivost)", "Leží doma — říká že má migrény",
+  "Včera se pohádal s přítelkyní a spal v autě", "Prý ho bolí žaludek (diagnostika: 8 piv)",
+  "Říká že mu doktor zakázal sportovat (doktor = barman)",
+  "Má schůzku u psychologa (dobrý signál, ale zase chybí)",
+  "Volal že zaspání — budík prý nefunguje (3. týden po sobě)",
+  "Říká že ztratil kopačky (má je pod postelí)",
+];
+
+const GLASS_MAN_EXCUSES = [
+  "Zase to koleno — nemůže ani chodit", "Natáhl si sval při rozcvičce",
+  "Doktor říká minimálně týden pauza", "Bolí ho záda od včerejšího tréninku",
+  "Má otok kotníku — led a klid", "Koleno se mu zase zamklo",
+  "Cítí bodnutí v třísle, nechce riskovat", "Fyzioterapeut zakázal kontaktní sport na 3 dny",
+  "Noha ho bolí víc než minule", "Preventivně odpočívá — bojí se že se to vrátí",
+  "Ráno se probudil a nemohl ohnout koleno", "Říká že cítí něco v lýtku",
+  "Má zánět šlach — chronický problém", "Páteř mu zablokovala po cestě autem",
+];
+
+const CELEBRITY_TRAINING_EXCUSES = [
+  "Dnes má rehabilitaci u svého fyzioterapeuta", "Běhá si sám v parku, má vlastní program",
+  "Řekl že tohle cvičení je pod jeho úroveň", "Volal že je na golfu",
+  "Prý má natáčení pro ČT Sport", "Zaspání — včerejší charitativní akce se protáhla",
+  "Jel na soustředění veteránů", "Má trénink s osobním koučem",
+  "Doktor mu doporučil odpočinek", "Řekl: já tohle nepotřebuju, já to umím",
+];
+
+export { CELEBRITY_TRAINING_EXCUSES };
+
+function generateCelebrityExcuse(
+  rng: { pick: <T>(arr: T[]) => T; random: () => number },
+  player: PlayerForAbsence,
+  timing: AbsenceTiming,
+): Omit<AbsenceResult, "playerIndex"> | null {
+  const type = player.celebrityType ?? "legend";
+
+  let excuses: string[];
+  let emoji: string;
+  let category: AbsenceResult["category"];
+
+  switch (type) {
+    case "legend":
+      excuses = LEGEND_EXCUSES;
+      emoji = "⭐";
+      category = "personal";
+      break;
+    case "fallen_star":
+      excuses = FALLEN_STAR_EXCUSES;
+      emoji = "🍺";
+      category = "hangover";
+      break;
+    case "glass_man":
+      excuses = GLASS_MAN_EXCUSES;
+      emoji = "🩹";
+      category = "health";
+      break;
+    default:
+      return null;
+  }
+
+  return {
+    category,
+    timing: timing === "any" ? (rng.random() < 0.5 ? "day_before" : "match_day") : timing,
+    reason: type === "legend" ? "Celebrita" : type === "fallen_star" ? "Alkohol" : "Zranění",
+    emoji,
+    smsText: rng.pick(excuses),
+  };
 }

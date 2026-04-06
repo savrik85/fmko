@@ -595,6 +595,40 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "loan return check failed", e);
   }
 
+  // ── Celebrity spawn check (~10% per season = ~0.4% per day over 26 game weeks) ──
+  try {
+    const celebRng = createRng(now.getTime() + 55555);
+    // Check once per league — only if no celebrity already on market
+    const leagues = await env.DB.prepare(
+      "SELECT DISTINCT league_id FROM teams WHERE user_id != 'ai' AND league_id IS NOT NULL"
+    ).all().catch(() => ({ results: [] }));
+
+    for (const league of leagues.results) {
+      const leagueId = league.league_id as string;
+      const existingCeleb = await env.DB.prepare(
+        "SELECT id FROM free_agents WHERE is_celebrity = 1 AND district = (SELECT district FROM leagues WHERE id = ?)"
+      ).bind(leagueId).first().catch(() => null);
+      if (existingCeleb) continue;
+
+      // Also skip if a celebrity was already added to any team in this league this season
+      const recentCeleb = await env.DB.prepare(
+        "SELECT id FROM players WHERE is_celebrity = 1 AND team_id IN (SELECT id FROM teams WHERE league_id = ?)"
+      ).bind(leagueId).first().catch(() => null);
+      if (recentCeleb) continue;
+
+      if (celebRng.random() < 0.004) { // ~0.4% per day ≈ 10% per 26-day season
+        const { spawnCelebrity } = await import("./celebrity-spawn");
+        const result = await spawnCelebrity(env.DB, leagueId, celebRng);
+        if (result) {
+          events.push({ type: "day", description: `Celebrita ${result.name} se přistěhovala do okresu!` });
+          logger.info({ module: "daily-tick" }, `celebrity spawned: ${result.name} (${result.type}) in league ${leagueId}`);
+        }
+      }
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "celebrity spawn check failed", e);
+  }
+
   // ── Transfer expiry cleanup ──
   try {
     await env.DB.prepare("UPDATE transfer_offers SET status = 'expired' WHERE status = 'pending' AND expires_at < ?")

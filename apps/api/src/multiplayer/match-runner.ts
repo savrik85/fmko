@@ -203,9 +203,24 @@ export async function runScheduledMatches(
       ).bind(homeTeamId, homeTeamId, homeTeamId, homeTeamId).first<{ w: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load recent wins", e); return { w: 0 }; });
       const formBonus = Math.round((recentWins?.w ?? 0) * popBase * 0.08);
       const rawAttendance = Math.max(8, popBase + repBonus + formBonus + Math.round(Math.random() * 10 - 5));
-      // Apply facility attendance bonus (lighting + parking) and cap at stadium capacity
+      // Celebrity attendance bonus — check if any celebrity is in either lineup
+      let celebAttendanceMultiplier = 1.0;
+      const allLineupPlayers = [...homeLineup, ...awayLineup];
+      for (const lp of allLineupPlayers) {
+        const pid = (lp as any).dbPlayerId ?? lp.id;
+        const celebRow = await db.prepare("SELECT is_celebrity, personality FROM players WHERE id = ? AND is_celebrity = 1")
+          .bind(pid).first<{ is_celebrity: number; personality: string }>().catch((e) => { logger.warn({ module: "match-runner" }, "celeb check", e); return null; });
+        if (celebRow) {
+          const pers = JSON.parse(celebRow.personality);
+          const bonusMap: Record<string, number> = { S: 3.0, A: 2.0, B: 1.5, C: 1.25 };
+          const typeBonus: Record<string, number> = { legend: bonusMap[pers.celebrityTier] ?? 1.5, fallen_star: 1.3, glass_man: 1.4 };
+          const bonus = typeBonus[pers.celebrityType] ?? 1.25;
+          celebAttendanceMultiplier = Math.max(celebAttendanceMultiplier, bonus);
+        }
+      }
+      // Apply facility attendance bonus (lighting + parking) + celebrity bonus, cap at stadium capacity
       const attendance = Math.min(
-        Math.round(rawAttendance * (1 + facilityEffects.attendanceBonus)),
+        Math.round(rawAttendance * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier),
         stadiumCapacity,
       );
 

@@ -8,6 +8,14 @@ import type { GeneratedPlayer } from "../generators/player";
 export type TrainingType = "conditioning" | "technique" | "tactics" | "match_practice";
 export type TrainingApproach = "strict" | "balanced" | "relaxed";
 
+const CELEB_TRAINING_EXCUSES = [
+  "Dnes má rehabilitaci u svého fyzioterapeuta", "Běhá si sám v parku, má vlastní program",
+  "Řekl že tohle cvičení je pod jeho úroveň", "Volal že je na golfu",
+  "Prý má natáčení pro ČT Sport", "Zaspání — včerejší charitativní akce se protáhla",
+  "Jel na soustředění veteránů", "Má trénink s osobním koučem",
+  "Doktor mu doporučil odpočinek", "Řekl: já tohle nepotřebuju, já to umím",
+];
+
 export interface TrainingPlan {
   sessionsPerWeek: number; // 1-3
   type: TrainingType;
@@ -88,33 +96,43 @@ function simulateAttendance(
     // Base attendance from discipline
     let attendProb = player.discipline / 100 * 0.6 + 0.3;
 
-    // Approach modifiers
-    if (approach === "strict") attendProb += 0.1;
-    if (approach === "relaxed") attendProb -= 0.1;
-
-    // Age: older players skip more
-    if (player.age > 35) attendProb -= 0.1;
-
-    // Alcohol: party animals skip more
-    if (player.alcohol > 70) attendProb -= 0.1;
-
-    // Morale: low morale = less motivated
-    if (player.morale < 30) attendProb -= 0.15;
-
-    // Commute: farther players attend less
     const km = commuteKms?.[i] ?? 0;
-    if (km > 0) {
-      // 5km → -3%, 10km → -7%, 15km → -12%, 20km → -17%, 25km+ → -22%
-      attendProb -= Math.min(0.22, km * 0.008);
+
+    // Celebrity override: very low training attendance
+    const isCeleb = (player as any).isCelebrity;
+    const celebType = (player as any).celebrityType as string | undefined;
+    if (isCeleb) {
+      attendProb = celebType === "glass_man" ? 0.40 : celebType === "fallen_star" ? 0.25 : 0.15;
+    } else {
+      // Approach modifiers (only for non-celebrities)
+      if (approach === "strict") attendProb += 0.1;
+      if (approach === "relaxed") attendProb -= 0.1;
+
+      // Age: older players skip more
+      if (player.age > 35) attendProb -= 0.1;
+
+      // Alcohol: party animals skip more
+      if (player.alcohol > 70) attendProb -= 0.1;
+
+      // Morale: low morale = less motivated
+      if (player.morale < 30) attendProb -= 0.15;
+
+      // Commute: farther players attend less
+      if (km > 0) {
+        attendProb -= Math.min(0.22, km * 0.008);
+      }
     }
 
-    attendProb = Math.max(0.1, Math.min(0.95, attendProb));
+    attendProb = Math.max(0.05, Math.min(0.95, attendProb));
 
     if (rng.random() < attendProb) {
       return { playerIndex: i, attended: true };
     }
 
-    // Commuters more likely to have commute-specific excuse
+    // Celebrity-specific training excuses
+    if (isCeleb) {
+      return { playerIndex: i, attended: false, reason: rng.pick(CELEB_TRAINING_EXCUSES) };
+    }
     const reason = km > 10 && rng.random() < 0.4
       ? rng.pick(COMMUTE_ABSENCE_REASONS)
       : rng.pick(ABSENCE_REASONS);
