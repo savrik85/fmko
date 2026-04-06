@@ -326,6 +326,32 @@ export default {
         }
 
         log("info", `match tick done: ${totalMatches} matches simulated (league=${targetLeagueId ?? 'none'})`);
+
+        // ── Celebrity spawn check (runs after match tick, separate query budget) ──
+        try {
+          const { createRng } = await import("./generators/rng");
+          const celebRng = createRng(Date.now() + 55555);
+          const celebLeagues = await env.DB.prepare(
+            "SELECT DISTINCT league_id FROM teams WHERE user_id != 'ai' AND league_id IS NOT NULL"
+          ).all();
+          for (const cl of celebLeagues.results) {
+            const lid = cl.league_id as string;
+            const existing = await env.DB.prepare(
+              "SELECT id FROM free_agents WHERE is_celebrity = 1 AND district = (SELECT district FROM leagues WHERE id = ?)"
+            ).bind(lid).first().catch((e) => { log("error", "celeb check existing", e); return null; });
+            if (existing) continue;
+            const recent = await env.DB.prepare(
+              "SELECT id FROM players WHERE is_celebrity = 1 AND team_id IN (SELECT id FROM teams WHERE league_id = ?)"
+            ).bind(lid).first().catch((e) => { log("error", "celeb check recent", e); return null; });
+            if (recent) continue;
+            if (celebRng.random() < 0.004) {
+              const { spawnCelebrity } = await import("./season/celebrity-spawn");
+              const result = await spawnCelebrity(env.DB, lid, celebRng);
+              if (result) log("info", `celebrity spawned: ${result.name} (${result.type}) in league ${lid}`);
+            }
+          }
+        } catch (e) { log("error", "celebrity spawn failed", e); }
+
       } catch (e: any) {
         log("error", "match tick failed", e);
       }
