@@ -118,7 +118,7 @@ export async function spawnCelebrity(
   expiresAt.setDate(expiresAt.getDate() + 7);
 
   const weeklyWage = Math.round(10 + (overallRating / 100) * 400) + celeb.transportCost;
-  const avatar = JSON.stringify(celeb.avatarConfig);
+  const avatar = JSON.stringify(generatePlayerFace({ age: celeb.age, bodyType: celeb.bodyType }));
 
   const hiddenTalent = celeb.hiddenTalent ?? 0;
   const nickname = celeb.nickname;
