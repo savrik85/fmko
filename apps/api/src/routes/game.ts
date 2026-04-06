@@ -1797,7 +1797,7 @@ gameRouter.post("/game/spawn-celebrity", async (c) => {
   const body = await c.req.json<{ leagueId: string; type?: string; tier?: string }>().catch((e) => { logger.warn({ module: "game" }, "parse spawn-celebrity body", e); return null; });
   if (!body?.leagueId) return c.json({ error: "Missing leagueId" }, 400);
   const { spawnCelebrity } = await import("../season/celebrity-spawn");
-  const rng = createRng(Date.now());
+  const rng = createRng(Date.now() + Math.floor(Math.random() * 1000000));
   const result = await spawnCelebrity(c.env.DB, body.leagueId, rng, body.type as any, body.tier as any);
   return c.json({ ok: true, result });
 });
