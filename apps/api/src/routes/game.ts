@@ -2351,7 +2351,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 // POST save lineup for next match
 gameRouter.post("/teams/:teamId/lineup", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ calendarId: string; formation: string; tactic: string; players: Array<{ playerId: string; matchPosition: string }> }>();
+  const body = await c.req.json<{ calendarId: string; formation: string; tactic: string; captainId?: string; players: Array<{ playerId: string; matchPosition: string }> }>();
 
   if (!body.players || body.players.length !== 11) return c.json({ error: "Sestava musí mít přesně 11 hráčů" }, 400);
   const gkCount = body.players.filter((p) => p.matchPosition === "GK").length;
@@ -2377,12 +2377,12 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
     .bind(teamId, body.calendarId).first<{ id: string }>();
 
   if (existing) {
-    await c.env.DB.prepare("UPDATE lineups SET formation = ?, tactic = ?, players_data = ?, is_auto = 0, submitted_at = datetime('now') WHERE id = ?")
-      .bind(body.formation, body.tactic, JSON.stringify(body.players), existing.id).run();
+    await c.env.DB.prepare("UPDATE lineups SET formation = ?, tactic = ?, players_data = ?, captain_id = ?, is_auto = 0, submitted_at = datetime('now') WHERE id = ?")
+      .bind(body.formation, body.tactic, JSON.stringify(body.players), body.captainId ?? null, existing.id).run();
   } else {
     const id = crypto.randomUUID();
-    await c.env.DB.prepare("INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, 0, datetime('now'))")
-      .bind(id, teamId, body.calendarId, body.formation, body.tactic, JSON.stringify(body.players)).run();
+    await c.env.DB.prepare("INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, captain_id, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))")
+      .bind(id, teamId, body.calendarId, body.formation, body.tactic, JSON.stringify(body.players), body.captainId ?? null).run();
   }
 
   return c.json({ ok: true });

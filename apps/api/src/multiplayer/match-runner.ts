@@ -71,10 +71,10 @@ export async function runScheduledMatches(
         : homeIsHuman ? "pve_home" : awayIsHuman ? "pve_away" : "ai_vs_ai";
 
       // Read user lineups from DB — prefer user-saved (is_auto=0) over auto-generated
-      const homeLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
-        .bind(homeTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home lineup", e); return null; });
-      const awayLineupRow = await db.prepare("SELECT tactic, players_data, is_auto FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
-        .bind(awayTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load away lineup", e); return null; });
+      const homeLineupRow = await db.prepare("SELECT tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
+        .bind(homeTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number; captain_id: string | null }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home lineup", e); return null; });
+      const awayLineupRow = await db.prepare("SELECT tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
+        .bind(awayTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number; captain_id: string | null }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load away lineup", e); return null; });
 
       // Build match players — use absenceRng for deterministic absences (must match next-match endpoint)
       const homeBuild = await buildMatchPlayers(db, homeTeamId, absenceRng,
@@ -144,12 +144,17 @@ export async function runScheduledMatches(
       const homeTactic = (homeLineupRow?.tactic as any) ?? "balanced";
       const awayTactic = (awayLineupRow?.tactic as any) ?? "balanced";
 
+      // Map captain DB IDs to engine IDs
+      const homeCaptainEngineId = homeLineupRow?.captain_id ? [...homeBuild.idMap.entries()].find(([, dbId]) => dbId === homeLineupRow.captain_id)?.[0] : undefined;
+      const awayCaptainEngineId = awayLineupRow?.captain_id ? [...awayBuild.idMap.entries()].find(([, dbId]) => dbId === awayLineupRow.captain_id)?.[0] : undefined;
+
       const homeSetup: TeamSetup = {
         teamId: 1,
         teamName: (homeTeam?.name as string) ?? "Domácí",
         lineup: homeLineup,
         subs: homeSubs,
         tactic: homeTactic,
+        captainId: homeCaptainEngineId,
       };
       const awaySetup: TeamSetup = {
         teamId: 2,
@@ -157,6 +162,7 @@ export async function runScheduledMatches(
         lineup: awayLineup,
         subs: awaySubs,
         tactic: awayTactic,
+        captainId: awayCaptainEngineId,
       };
 
       // Load stadium info for pitch condition + facilities
@@ -246,7 +252,7 @@ export async function runScheduledMatches(
       // Apply manager tactics bonus to team skills
       const applyManagerBonus = async (teamId: string, lineup: typeof homeLineup, subs: typeof homeSubs) => {
         const mgr = await db.prepare("SELECT tactics, motivation FROM managers WHERE team_id = ?")
-          .bind(teamId).first<{ tactics: number; motivation: number }>().catch(() => null);
+          .bind(teamId).first<{ tactics: number; motivation: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "mgr query", e); return null; });
         if (!mgr) return;
         // Tactics: 40=0, 60=+1, 80=+2, 100=+3 to passing/defense for all players
         const tacticsBonus = Math.floor((mgr.tactics - 40) / 20);
@@ -393,10 +399,10 @@ export async function runScheduledMatches(
         for (const u of allUpdates) {
           if (u.yellowCards > 0) {
             const stats = await db.prepare("SELECT yellow_cards FROM player_stats WHERE player_id = ? AND season_id = ?")
-              .bind(u.playerId, season.id).first<{ yellow_cards: number }>().catch(() => null);
+              .bind(u.playerId, season.id).first<{ yellow_cards: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "query failed", e); return null; });
             if (stats && stats.yellow_cards > 0 && stats.yellow_cards % 4 === 0) {
               await db.prepare("UPDATE players SET suspended_matches = suspended_matches + 1 WHERE id = ?")
-                .bind(u.playerId).run().catch(() => {});
+                .bind(u.playerId).run().catch((e) => { logger.warn({ module: "match-runner" }, "op failed", e); });
             }
           }
         }
@@ -583,7 +589,7 @@ export async function buildMatchPlayers(
       });
       // Get district for environment-specific excuses (Praha = urban, rest = rural)
       const districtRow = await db.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
-        .bind(teamId).first<{ district: string }>().catch(() => null);
+        .bind(teamId).first<{ district: string }>().catch((e) => { logger.warn({ module: "match-runner" }, "query failed", e); return null; });
       const absences = generateAbsences(teamAbsenceRng as any, squadForAbsence, "any", districtRow?.district);
       absentIds = new Set(absences.map((a) => rows.results[a.playerIndex]?.id as string).filter(Boolean));
       for (const a of absences) {
@@ -848,7 +854,7 @@ export async function createAutoLineup(
 
   // Respect team's saved formation if exists
   const savedLineup = await db.prepare("SELECT formation FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC LIMIT 1")
-    .bind(teamId).first<{ formation: string }>().catch(() => null);
+    .bind(teamId).first<{ formation: string }>().catch((e) => { logger.warn({ module: "match-runner" }, "query failed", e); return null; });
   const formation = savedLineup?.formation ?? "4-4-2";
   const parts = formation.split("-").map(Number);
   const slots: Record<string, number> = { GK: 1, DEF: parts[0] || 4, MID: (parts[1] || 4) + (parts[2] && parts.length > 3 ? parts[2] : 0), FWD: parts[parts.length - 1] || 2 };

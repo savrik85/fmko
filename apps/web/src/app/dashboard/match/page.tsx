@@ -109,6 +109,7 @@ export default function MatchPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [captainId, setCaptainId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -122,6 +123,14 @@ export default function MatchPage() {
         setTactic(data.lineup.tactic);
         setSelected(data.lineup.players.map((p) => p.playerId));
       } else { autoFill(data.availablePlayers ?? [], "4-4-2"); }
+      // Auto-select captain: highest leadership in starting 11
+      const lineup11 = data.lineup?.players.map((p) => p.playerId) ?? [];
+      if (lineup11.length === 11) {
+        const best = (data.availablePlayers ?? [])
+          .filter((p) => lineup11.includes(p.id))
+          .sort((a, b) => ((b as any).leadership ?? 30) - ((a as any).leadership ?? 30))[0];
+        if (best) setCaptainId(best.id);
+      }
       setLoading(false);
     }).catch((e) => { console.error("Failed to load next match:", e); setLoading(false); });
   }, [teamId]);
@@ -149,7 +158,7 @@ export default function MatchPage() {
       const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
       const res = await apiFetch<{ ok?: boolean; error?: string }>(`/api/teams/${teamId}/lineup`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
+        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, captainId, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
       });
       if (res.ok) { setSaved(true); }
       else { setSaveError(res.error ?? "Nepodařilo se uložit sestavu"); }
@@ -171,93 +180,83 @@ export default function MatchPage() {
 
   const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
   const bench = players.filter((p) => !selected.includes(p.id));
+  const absentPlayers = players.filter((p) => p.absent);
+
+  // Relationship summary + chemistry score for selected 11
+  const { relSummary, chemistry } = (() => {
+    const counts: Record<string, number> = {};
+    let chemScore = 50; // base
+    const CHEM_BONUS: Record<string, number> = {
+      brothers: 5, father_son: 4, mentor_pupil: 4, classmates: 2,
+      coworkers: 2, neighbors: 1, drinking_buddies: 2, rivals: -3, in_laws: -1,
+    };
+    for (const pid of selected) {
+      if (!pid) continue;
+      const p = players.find((pl) => pl.id === pid);
+      if (!p?.relationships) continue;
+      for (const r of p.relationships) {
+        if (selected.includes(r.otherPlayerId)) {
+          counts[r.type] = (counts[r.type] ?? 0) + 1;
+        }
+      }
+    }
+    // Each relationship counted twice (A→B + B→A), divide by 2
+    const summary = Object.entries(counts).map(([type, count]) => {
+      const pairs = Math.floor(count / 2);
+      chemScore += pairs * (CHEM_BONUS[type] ?? 0);
+      return { type, count: pairs };
+    }).filter((r) => r.count > 0);
+    return { relSummary: summary, chemistry: Math.max(0, Math.min(100, chemScore)) };
+  })();
+  const chemColor = chemistry >= 65 ? "text-pitch-500" : chemistry >= 45 ? "text-gold-600" : "text-card-red";
+  const chemLabel = chemistry >= 70 ? "Skvělá" : chemistry >= 55 ? "Dobrá" : chemistry >= 40 ? "Průměrná" : "Špatná";
 
   return (
-    <div className="page-container space-y-4">
+    <div className="page-container space-y-3">
 
-      {/* Match header — mobil: jen soupeř, desktop: oba týmy */}
-      <div className="card p-4">
-        {/* Mobil: kompaktní — soupeř + kolo */}
-        <div className="flex items-center justify-center gap-3 sm:hidden">
-          <span className="font-heading font-bold text-sm text-muted">vs</span>
-          <JerseyPreview primary={nextMatch.isHome ? (nextMatch.awayColor || "#D94032") : (nextMatch.homeColor || "#2D5F2D")} secondary="#FFF" size={36} />
-          <BadgePreview primary={nextMatch.isHome ? (nextMatch.awayColor || "#D94032") : (nextMatch.homeColor || "#2D5F2D")} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName)} size={32} />
-          <span className="font-heading font-bold text-lg">{nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName}</span>
-          <span className="text-sm text-muted">· {nextMatch.gameWeek}. kolo</span>
-        </div>
-        {/* Desktop: plný header */}
-        <div className="hidden sm:flex items-center justify-center gap-6">
-          <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
-            <span className={`font-heading font-bold text-lg text-right ${nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.homeName}</span>
-            <BadgePreview primary={nextMatch.homeColor || "#2D5F2D"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.homeName)} size={28} />
-            <JerseyPreview primary={nextMatch.homeColor || "#2D5F2D"} secondary="#FFF" size={32} />
+      {/* ═══ Match header — compact ═══ */}
+      <div className="card p-3 flex items-center justify-center gap-3">
+        <BadgePreview primary={nextMatch.homeColor || "#2D5F2D"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.homeName)} size={24} />
+        <span className={`font-heading font-bold text-sm truncate ${nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.homeName}</span>
+        <span className="text-xs text-muted font-heading">vs</span>
+        <span className={`font-heading font-bold text-sm truncate ${!nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.awayName}</span>
+        <BadgePreview primary={nextMatch.awayColor || "#D94032"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.awayName)} size={24} />
+        <span className="text-[10px] text-muted shrink-0">{nextMatch.gameWeek}. kolo</span>
+      </div>
+
+      {/* ═══ Formation + Tactic — one row ═══ */}
+      <div className="card p-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1">Formace</div>
+            <div className="flex rounded-xl bg-gray-50 p-0.5">
+              {FORMATIONS.map((f) => (
+                <button key={f} onClick={() => { setFormation(f); autoFill(players, f); }}
+                  className={`flex-1 py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all ${formation === f ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                  {f}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="text-center shrink-0">
-            <div className="font-heading font-[800] text-xl text-muted">vs</div>
-            <div className="text-sm text-muted">{nextMatch.gameWeek}. kolo</div>
-          </div>
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <JerseyPreview primary={nextMatch.awayColor || "#D94032"} secondary="#FFF" size={32} />
-            <BadgePreview primary={nextMatch.awayColor || "#D94032"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.awayName)} size={28} />
-            <span className={`font-heading font-bold text-lg ${!nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.awayName}</span>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1">Taktika</div>
+            <div className="flex rounded-xl bg-gray-50 p-0.5">
+              {TACTICS.map((t) => (
+                <button key={t.key} onClick={() => { setTactic(t.key); setSaved(false); }}
+                  className={`flex-1 py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all ${tactic === t.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                  <span className="hidden sm:inline">{t.icon} </span>{t.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Formation + Tactic */}
-      <div className="space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-2 sm:justify-center">
-        <div className="flex gap-1 bg-surface rounded-xl p-1 justify-between sm:justify-start">
-          {FORMATIONS.map((f) => (
-            <button key={f} onClick={() => { setFormation(f); autoFill(players, f); }}
-              className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${formation === f ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"}`}>
-              {f}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-1 bg-surface rounded-xl p-1 justify-between sm:justify-start">
-          {TACTICS.map((t) => (
-            <button key={t.key} onClick={() => { setTactic(t.key); setSaved(false); }}
-              className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${tactic === t.key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"}`}>
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Absent players — summary table */}
-      {players.filter((p) => p.absent).length > 0 && (
-        <div className="card overflow-hidden">
-          <div className="px-4 py-2 bg-red-50 border-b border-red-100 flex items-center gap-2">
-            <span className="font-heading font-bold text-sm uppercase text-card-red">Nedostupní ({players.filter((p) => p.absent).length})</span>
-          </div>
-          <table className="w-full">
-            <tbody className="divide-y divide-gray-50">
-              {players.filter((p) => p.absent).map((p) => {
-                const reason = (p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : (p.absenceSms ?? p.absenceReason);
-                return (
-                  <tr key={p.id}>
-                    <td className="py-2 pl-4 pr-1 w-8 align-middle"><span>{p.absenceEmoji ?? "❌"}</span></td>
-                    <td className="py-2 px-1 align-middle">
-                      <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-sm hover:text-pitch-500 transition-colors">{p.firstName} {p.lastName}</Link>
-                      <p className="text-sm text-muted sm:hidden">{reason}</p>
-                    </td>
-                    <td className="py-2 px-1 align-middle hidden sm:table-cell">
-                      <span className="text-sm text-muted">{reason}</span>
-                    </td>
-                    <td className="py-2 pl-1 pr-4 align-middle text-right"><PositionBadge position={p.position as Pos} /></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
 
       {/* Main layout: pitch left, player list right */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(300px,400px)_1fr] gap-3">
 
-        {/* ═══ PITCH — vertikální, FM style ═══ */}
-        <div className="rounded-xl overflow-hidden relative bg-pitch-400" style={{ aspectRatio: "3/4" }}>
+        {/* ═══ PITCH — kompaktní ═══ */}
+        <div className="rounded-xl overflow-hidden relative bg-pitch-400" style={{ aspectRatio: "5/6" }}>
           {/* Pitch markings */}
           <svg viewBox="0 0 68 100" className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid meet">
             {/* Outline */}
@@ -285,29 +284,20 @@ export default function MatchPage() {
               <button key={i} onClick={() => setEditSlot(isEditing ? null : i)}
                 className="absolute transform -translate-x-1/2 -translate-y-1/2 group z-10"
                 style={{ left: `${slot.x}%`, top: `${slot.y}%` }}>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-heading font-[800] text-base shadow-md transition-all ${POS_BG[slot.pos]} ${
-                  isEditing ? "scale-125 ring-2 ring-white" : "group-hover:scale-110"
-                } ${isOOP ? "ring-2 ring-gold-400" : ""}`}>
-                  {num}
+                <div className="relative">
+                  <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-heading font-[800] text-sm sm:text-base shadow-md transition-all ${POS_BG[slot.pos]} ${
+                    isEditing ? "scale-125 ring-2 ring-white" : "group-hover:scale-110"
+                  } ${isOOP ? "ring-2 ring-gold-400" : ""}`}>
+                    {num}
+                  </div>
+                  {pid === captainId && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-gold-500 text-white text-[8px] font-heading font-[800] flex items-center justify-center ring-1 ring-white">C</span>
+                  )}
                 </div>
                 <div className="text-center mt-0.5 leading-tight">
-                  <div className="text-sm font-heading font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                  <div className="text-xs sm:text-sm font-heading font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
                     {player?.lastName ?? "—"}
                   </div>
-                  {player?.relationships && (() => {
-                    const relsInLineup = player.relationships.filter((r) => selected.includes(r.otherPlayerId));
-                    if (relsInLineup.length === 0) return null;
-                    return (
-                      <div className="flex gap-0.5 justify-center mt-0.5">
-                        {relsInLineup.map((r) => (
-                          <span key={r.otherPlayerId} className="text-[10px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
-                            title={`${REL_LABEL[r.type] ?? r.type}: ${players.find((p) => p.id === r.otherPlayerId)?.lastName ?? "?"}`}>
-                            {REL_EMOJI[r.type] ?? "👥"}
-                          </span>
-                        ))}
-                      </div>
-                    );
-                  })()}
                 </div>
               </button>
             );
@@ -438,8 +428,16 @@ export default function MatchPage() {
                             </div>
                           </td>
                           <td className="py-1.5 px-1.5">
-                            <Link href={`/dashboard/player/${player.id}`} className="font-heading font-bold text-sm leading-tight hover:text-pitch-500 transition-colors">{player.lastName}</Link>
-                            <div className="text-xs text-muted">{player.firstName} · {player.age} let</div>
+                            <div className="flex items-center gap-1.5">
+                              <div className="min-w-0">
+                                <Link href={`/dashboard/player/${player.id}`} className="font-heading font-bold text-sm leading-tight hover:text-pitch-500 transition-colors">{player.lastName}</Link>
+                                <div className="text-xs text-muted">{player.firstName} · {player.age} let</div>
+                              </div>
+                              <button onClick={(e) => { e.stopPropagation(); setCaptainId(captainId === player.id ? null : player.id); setSaved(false); }}
+                                className={`shrink-0 w-5 h-5 rounded-full text-[9px] font-heading font-[800] flex items-center justify-center transition-all ${
+                                  captainId === player.id ? "bg-gold-500 text-white ring-1 ring-gold-600" : "bg-gray-100 text-muted hover:bg-gold-100 hover:text-gold-600"
+                                }`} title="Kapitán">C</button>
+                            </div>
                           </td>
                           <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${player.overallRating}`}>{player.overallRating}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.speed)}`} title={`Rychlost: ${s.speed}`}>{s.speed}</td>
@@ -495,7 +493,7 @@ export default function MatchPage() {
                             {isAbsent ? (
                               <div>
                                 <span className="font-heading font-bold text-sm leading-tight line-through text-muted">{p.lastName}</span>
-                                <div className="text-xs text-card-red">❌ Nedostupný</div>
+                                <div className="text-xs text-card-red">❌ {p.absenceSms ?? p.absenceReason ?? "Nedostupný"}</div>
                               </div>
                             ) : (
                               <>
@@ -523,14 +521,46 @@ export default function MatchPage() {
         </div>
       </div>
 
-      {/* Save */}
-      <div className="pt-2">
+      {/* ═══ Chemistry + Relationship summary ═══ */}
+      <div className="card p-3">
+        <div className="flex items-center gap-3">
+          <div className="shrink-0 text-center">
+            <div className={`font-heading font-[800] text-2xl tabular-nums ${chemColor}`}>{chemistry}</div>
+            <div className="text-[9px] text-muted font-heading uppercase">Chemie</div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                <div className={`h-full rounded-full transition-all duration-500 ${chemistry >= 65 ? "bg-pitch-400" : chemistry >= 45 ? "bg-gold-400" : "bg-card-red"}`} style={{ width: `${chemistry}%` }} />
+              </div>
+              <span className={`text-xs font-heading font-bold ${chemColor} shrink-0`}>{chemLabel}</span>
+            </div>
+            {relSummary.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {relSummary.map((r) => (
+                  <span key={r.type} className={`text-[10px] font-heading font-bold px-1.5 py-0.5 rounded ${
+                    r.type === "rivals" ? "bg-red-50 text-card-red" : "bg-pitch-50 text-pitch-600"
+                  }`}>
+                    {REL_EMOJI[r.type]} {r.count}× {REL_LABEL[r.type]?.toLowerCase() ?? r.type}
+                  </span>
+                ))}
+              </div>
+            )}
+            {relSummary.length === 0 && (
+              <div className="text-[10px] text-muted">Žádné aktivní vztahy v sestavě</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+
+      {/* ═══ Save ═══ */}
+      <div>
         <button onClick={saveLineup} disabled={saving || selected.some((s) => !s)}
           className={`btn btn-lg w-full ${saved ? "btn-ghost" : "btn-primary"}`}>
           {saving ? "Ukládám..." : saved ? "Sestava uložena ✓" : "Uložit sestavu"}
         </button>
         {saveError && <p className="text-sm text-card-red mt-2 text-center">{saveError}</p>}
-        <p className="text-sm text-muted mt-2 text-center">Sestava se použije v příštím automatickém zápase.</p>
       </div>
     </div>
   );

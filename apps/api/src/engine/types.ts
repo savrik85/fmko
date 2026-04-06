@@ -53,6 +53,7 @@ export interface TeamSetup {
   lineup: MatchPlayer[];   // 11 hráčů na hřišti
   subs: MatchPlayer[];     // náhradníci
   tactic: Tactic;
+  captainId?: number;      // engine ID kapitána (ovlivňuje morale)
 }
 
 export interface EquipmentMods {

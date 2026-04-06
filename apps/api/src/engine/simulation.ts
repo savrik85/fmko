@@ -400,6 +400,17 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         for (const p of attacking.lineup) p.morale = Math.min(100, p.morale + moraleBoost);
         for (const p of defending.lineup) p.morale = Math.max(0, p.morale - moraleHit);
 
+        // ── Captain morale bonus ──
+        const attCaptain = attacking.captainId ? attacking.lineup.find((p) => p.id === attacking.captainId) : null;
+        if (attCaptain && attCaptain.leadership >= 65) {
+          const captainBonus = attCaptain.leadership >= 80 ? 2 : 1;
+          for (const p of attacking.lineup) p.morale = Math.min(100, p.morale + captainBonus);
+        }
+        const defCaptain = defending.captainId ? defending.lineup.find((p) => p.id === defending.captainId) : null;
+        if (defCaptain && defCaptain.leadership < 35) {
+          for (const p of defending.lineup) p.morale = Math.max(0, p.morale - 1);
+        }
+
         // ── Relationship morale bonuses after goal ──
         if (attacker.relationshipsInLineup) {
           for (const rel of attacker.relationshipsInLineup) {
