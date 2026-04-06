@@ -100,7 +100,7 @@ export async function spawnCelebrity(
     celebrityType: celeb.celebrityType,
     ...(celeb.celebrityTier ? { celebrityTier: celeb.celebrityTier } : {}),
   });
-  const lifeContext = JSON.stringify({
+  let lifeContext = JSON.stringify({
     occupation: celeb.occupation,
     condition: celeb.condition,
     morale: celeb.morale,
@@ -120,20 +120,26 @@ export async function spawnCelebrity(
   const weeklyWage = Math.round(10 + (overallRating / 100) * 400) + celeb.transportCost;
   const avatar = JSON.stringify(celeb.avatarConfig);
 
-  const skillsMax = celeb.skillsMax ? JSON.stringify(celeb.skillsMax) : null;
   const hiddenTalent = celeb.hiddenTalent ?? 0;
   const nickname = celeb.nickname;
   const fullName = `${celeb.firstName} ${celeb.lastName}`;
 
+  // Store skillsMax in life_context if present (for fallen_star)
+  if (celeb.skillsMax) {
+    const lc = JSON.parse(lifeContext);
+    lc.skillsMax = celeb.skillsMax;
+    lifeContext = JSON.stringify(lc);
+  }
+
   await db.prepare(`
     INSERT INTO free_agents (id, first_name, last_name, nickname, age, position, overall_rating,
       skills, personality, life_context, physical, avatar, weekly_wage, district,
-      source, expires_at, is_celebrity, hidden_talent, skills_max, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, 1, ?, ?, datetime('now'))
+      source, expires_at, is_celebrity, hidden_talent, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, 1, ?, datetime('now'))
   `).bind(
     faId, celeb.firstName, celeb.lastName, nickname, celeb.age, celeb.position, overallRating,
     skills, personality, lifeContext, physical, avatar, weeklyWage, leagueInfo.district,
-    expiresAt.toISOString(), hiddenTalent, skillsMax,
+    expiresAt.toISOString(), hiddenTalent,
   ).run();
 
   // ── News article: celebrity arrival ──
