@@ -33,8 +33,6 @@ export function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 sm:hidden" style={{ background: "#1e2d1e", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 8px)" }}>
-      {/* Extended background below nav to prevent iOS Safari gap on scroll */}
-      <div className="absolute left-0 right-0 top-full h-[80px]" style={{ background: "#1e2d1e" }} />
       <div className="flex justify-around items-center h-16 px-2">
         {items.map((item) => {
           const isActive = pathname === item.href ||

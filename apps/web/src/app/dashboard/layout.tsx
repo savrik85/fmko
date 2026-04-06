@@ -33,13 +33,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [teamId, pathname]);
 
   return (
-    <div className="min-h-dvh flex bg-paper overflow-x-hidden">
+    <div className="h-dvh flex bg-paper overflow-hidden">
       <FMSidebar />
 
-      <div className="flex-1 flex flex-col min-w-0 pb-20 sm:pb-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <FMTopBar />
         {!isDetailPage && !hasCustomHeader && <PageHeader />}
-        <main className="flex-1">{children}</main>
+        <main className="flex-1 overflow-y-auto pb-20 sm:pb-0">{children}</main>
       </div>
 
       <BottomNav />
