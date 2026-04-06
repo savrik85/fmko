@@ -538,7 +538,7 @@ export default function DashboardPage() {
 
       {/* ═══ Zpravodaj ═══ */}
       {news.length > 0 && (
-        <div className="card p-4 sm:p-5">
+        <div className="card p-4 sm:p-5 lg:max-w-[50%]">
           <SectionLabel>Okresní zpravodaj</SectionLabel>
           <div className="space-y-2">
             {news.map((article) => {
