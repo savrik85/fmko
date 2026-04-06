@@ -35,21 +35,28 @@ export async function spawnCelebrity(
   db: D1Database,
   leagueId: string,
   rng: Rng,
+  forceType?: CelebrityType,
+  forceTier?: CelebrityTier,
 ): Promise<SpawnResult | null> {
-  // Determine type: 50% legend, 25% fallen_star, 25% glass_man
-  const roll = rng.random();
   let celebType: CelebrityType;
   let tier: CelebrityTier | undefined;
 
-  if (roll < 0.50) {
-    celebType = "legend";
-    // Tier distribution: S=10%, A=25%, B=35%, C=30%
-    const tierRoll = rng.random();
-    tier = tierRoll < 0.10 ? "S" : tierRoll < 0.35 ? "A" : tierRoll < 0.70 ? "B" : "C";
-  } else if (roll < 0.75) {
-    celebType = "fallen_star";
+  if (forceType) {
+    celebType = forceType;
+    tier = forceTier ?? (celebType === "legend" ? "A" : undefined);
   } else {
-    celebType = "glass_man";
+    // Determine type: 50% legend, 25% fallen_star, 25% glass_man
+    const roll = rng.random();
+    if (roll < 0.50) {
+      celebType = "legend";
+      // Tier distribution: S=10%, A=25%, B=35%, C=30%
+      const tierRoll = rng.random();
+      tier = tierRoll < 0.10 ? "S" : tierRoll < 0.35 ? "A" : tierRoll < 0.70 ? "B" : "C";
+    } else if (roll < 0.75) {
+      celebType = "fallen_star";
+    } else {
+      celebType = "glass_man";
+    }
   }
 
   const firstnameData = { male: FIRSTNAMES, female: {} as Record<string, Record<string, number>> };

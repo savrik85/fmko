@@ -1792,6 +1792,16 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
   });
 });
 
+// POST /api/game/spawn-celebrity — force spawn celebrity for testing
+gameRouter.post("/game/spawn-celebrity", async (c) => {
+  const body = await c.req.json<{ leagueId: string; type?: string; tier?: string }>().catch((e) => { logger.warn({ module: "game" }, "parse spawn-celebrity body", e); return null; });
+  if (!body?.leagueId) return c.json({ error: "Missing leagueId" }, 400);
+  const { spawnCelebrity } = await import("../season/celebrity-spawn");
+  const rng = createRng(Date.now());
+  const result = await spawnCelebrity(c.env.DB, body.leagueId, rng, body.type as any, body.tier as any);
+  return c.json({ ok: true, result });
+});
+
 // POST /api/game/set-admin — nastavit admin roli (jen pro existující adminy nebo první uživatel)
 gameRouter.post("/game/set-admin", async (c) => {
   const body = await c.req.json<{ email: string; isAdmin: boolean }>().catch(() => null);
