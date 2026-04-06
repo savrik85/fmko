@@ -475,13 +475,22 @@ export function generateCelebrityLegend(
     facialHair: rng.pick(FACIAL_HAIR), glasses: rng.pick(GLASSES), accessories: [],
   };
 
+  // Age penalty for physical attributes — old pros lose speed but keep technique/shooting/defense
+  const agePenalty = Math.max(0, (age - 32) * 3); // 35→9, 40→24, 45→39
+  const speedPenalized = Math.max(10, attrs.speed - agePenalty - rng.int(0, 10));
+  const headingBoosted = Math.min(100, attrs.heading + rng.int(5, 15)); // experience = better heading
+
   return {
     firstName, lastName, age, position,
-    speed: attrs.speed, technique: attrs.technique, shooting: attrs.shooting,
-    passing: attrs.passing, heading: attrs.heading, defense: attrs.defense,
+    speed: speedPenalized,
+    technique: Math.min(100, attrs.technique + rng.int(0, 10)), // pros have great technique
+    shooting: attrs.shooting,
+    passing: Math.min(100, attrs.passing + rng.int(0, 10)),
+    heading: headingBoosted,
+    defense: attrs.defense,
     goalkeeping: attrs.goalkeeping,
-    stamina: Math.max(15, rng.int(25, 45)),
-    strength: Math.max(20, rng.int(35, 65)),
+    stamina: Math.max(15, rng.int(20, 35)),
+    strength: Math.max(20, rng.int(30, 55)),
     injuryProneness: rng.int(30, 70),
     discipline: rng.int(cfg.disciplineMin, cfg.disciplineMax),
     patriotism: rng.int(0, 15),
