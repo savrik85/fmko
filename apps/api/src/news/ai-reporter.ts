@@ -196,9 +196,42 @@ export async function generateAiRoundReport(
     highlights.push(`Červená karta: ${rc.first_name} ${rc.last_name} (${rc.team_name})`);
   }
 
+  // Celebrity info — check if any celebrities played in this round
+  const celebPlayers = await db.prepare(
+    `SELECT p.first_name, p.last_name, p.personality, t.name as team_name
+     FROM players p JOIN teams t ON p.team_id = t.id
+     WHERE p.is_celebrity = 1 AND t.league_id = ?`
+  ).bind(leagueId).all().catch((e) => { logger.warn({ module: "ai-reporter" }, "fetch celebrities", e); return { results: [] }; });
+
+  const celebLines: string[] = [];
+  for (const cp of celebPlayers.results) {
+    const pers = (() => { try { return JSON.parse(cp.personality as string); } catch { return {}; } })();
+    const tierLabels: Record<string, string> = {
+      S: "bývalý reprezentant, legenda české kopané",
+      A: "bývalý prvoligový hráč",
+      B: "bývalý druholigový hráč",
+      C: "bývalý krajský přeborník",
+    };
+    const typeLabels: Record<string, string> = {
+      legend: tierLabels[pers.celebrityTier] ?? "bývalý profesionál",
+      fallen_star: "bývalý prvoligový talent, který propadl alkoholu a vrátil se do okresu",
+      glass_man: "talentovaný profík, který musel kvůli chronickým zraněním opustit profi fotbal",
+    };
+    const label = typeLabels[pers.celebrityType] ?? "známý fotbalista";
+    // Check if this player has stats in this round
+    const celebStat = statsRows.results.find((s) =>
+      s.first_name === cp.first_name && s.last_name === cp.last_name
+    );
+    if (celebStat) {
+      celebLines.push(`CELEBRITA HRÁLA: ${cp.first_name} ${cp.last_name} (${cp.team_name}) — ${label}. Rating: ${(celebStat.rating as number).toFixed(1)}, góly: ${celebStat.goals}, asistence: ${celebStat.assists}. Zdůrazni jeho účast — je to velká událost pro celý okres!`);
+    } else {
+      celebLines.push(`CELEBRITA NEHRÁLA: ${cp.first_name} ${cp.last_name} (${cp.team_name}) — ${label}. V tomto kole chyběl. Zmiň to s humorem (typické pro celebrity).`);
+    }
+  }
+
   // Get league info for context
   const leagueInfo = await db.prepare("SELECT name, district FROM leagues WHERE id = ?")
-    .bind(leagueId).first<{ name: string; district: string }>().catch(() => null);
+    .bind(leagueId).first<{ name: string; district: string }>().catch((e) => { logger.warn({ module: "ai-reporter" }, "fetch league info", e); return null; });
   const district = leagueInfo?.district ?? "Prachatice";
   const leagueName = leagueInfo?.name ?? "Okresní přebor";
   const isPraha = district === "Praha";
@@ -217,6 +250,7 @@ ${tableLines.join("\n")}
 
 ZAJÍMAVOSTI:
 ${highlights.length > 0 ? highlights.join("\n") : "Žádné výrazné individuální výkony"}
+${celebLines.length > 0 ? "\nCELEBRITY V SOUTĚŽI:\n" + celebLines.join("\n") : ""}
 
 Pravidla:
 - Piš česky, styl místního ${isPraha ? "pražského" : "okresního"} zpravodaje, 200-400 slov
@@ -287,7 +321,7 @@ Pravidla:
       const tid = t.id as string;
       const conv = await db.prepare(
         "SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = 'Redakce Zpravodaje'"
-      ).bind(tid).first<{ id: string }>().catch(() => null);
+      ).bind(tid).first<{ id: string }>().catch((e) => { logger.warn({ module: "ai-reporter" }, "fetch conv", e); return null; });
 
       let convId = conv?.id;
       if (!convId) {
