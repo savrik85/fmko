@@ -48,6 +48,24 @@ interface UnseenMatch {
   isHome: boolean;
 }
 
+interface PreviewTeam {
+  id: string; name: string;
+  primaryColor: string; secondaryColor: string; badgePattern: string;
+  position: number; points: number; played: number;
+  wins: number; draws: number; losses: number;
+  goalsFor: number; goalsAgainst: number;
+  form: string[];
+  avgRating: number; squadSize: number;
+  isPlayer?: boolean;
+}
+
+interface MatchPreview {
+  matchId: string; round: number; scheduledAt: string | null; isHome: boolean;
+  home: PreviewTeam; away: PreviewTeam;
+  venue: { name: string; capacity: number; pitchCondition: number; pitchType: string };
+  weather: { icon: string; expected: string; temperature: number; description: string };
+}
+
 function conditionLabel(condition: number): { text: string; color: string } {
   if (condition >= 80) return { text: "Fit", color: "text-pitch-500" };
   if (condition >= 50) return { text: "OK", color: "text-gold-500" };
@@ -66,6 +84,7 @@ export default function DashboardPage() {
   const [manager, setManager] = useState<ManagerProfile | null>(null);
   const [matchResults, setMatchResults] = useState<TeamMatchResults | null>(null);
   const [loading, setLoading] = useState(true);
+  const [preview, setPreview] = useState<MatchPreview | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -84,6 +103,13 @@ export default function DashboardPage() {
       setManager(mgr);
       setMatchResults(mr);
       setLoading(false);
+      // Fetch match preview for next unplayed match
+      const next = m.matches.find((mx: ScheduleMatch) => mx.status !== "simulated");
+      if (next) {
+        apiFetch<MatchPreview>(`/api/teams/${teamId}/match-preview/${next.id}`)
+          .then(setPreview)
+          .catch((e) => console.error("match-preview fetch:", e));
+      }
     }).catch(() => setLoading(false));
   }, [teamId]);
 
@@ -158,36 +184,100 @@ export default function DashboardPage() {
       {/* ═══ Row 1: Next match + Form + League position ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        {/* Next match */}
+        {/* Next match — rich preview */}
         <div className="card p-4 sm:p-5">
           <SectionLabel>Další zápas</SectionLabel>
-          {nextMatch ? (
-            <Link href={`/dashboard/match/${nextMatch.id}/replay`} className="block group">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex flex-col items-center flex-1 min-w-0">
-                  <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"}
-                    pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                    initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={40} />
-                  <div className="font-heading font-bold text-sm mt-1.5 truncate max-w-full text-center">{team.name}</div>
+          {nextMatch ? (() => {
+            const my = preview?.isHome ? preview.home : preview?.away;
+            const opp = preview?.isHome ? preview.away : preview?.home;
+            const oppName = nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName;
+            const oppColor = nextMatch.isHome ? (nextMatch.awayColor || "#666") : (nextMatch.homeColor || "#666");
+            const oppSecondary = nextMatch.isHome ? (nextMatch.awaySecondary || "#FFF") : (nextMatch.homeSecondary || "#FFF");
+            const oppBadge = (nextMatch.isHome ? nextMatch.awayBadge : nextMatch.homeBadge) as BadgePattern || "shield";
+            return (
+              <div className="space-y-3">
+                {/* Badges + vs */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-col items-center flex-1 min-w-0">
+                    <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"}
+                      pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                      initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={36} />
+                    <div className="font-heading font-bold text-sm mt-1 truncate max-w-full text-center">{team.name}</div>
+                    {my && <div className="text-[10px] text-muted tabular-nums">{my.position}. místo</div>}
+                  </div>
+                  <div className="flex flex-col items-center shrink-0">
+                    <div className="font-heading font-[800] text-xl text-muted">vs</div>
+                    <div className="text-[10px] text-muted uppercase mt-0.5 whitespace-nowrap">{nextMatch.round}. kolo</div>
+                  </div>
+                  <div className="flex flex-col items-center flex-1 min-w-0">
+                    <BadgePreview primary={oppColor} secondary={oppSecondary} pattern={oppBadge}
+                      initials={oppName.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={36} />
+                    <div className="font-heading font-bold text-sm mt-1 truncate max-w-full text-center">{oppName}</div>
+                    {opp && <div className="text-[10px] text-muted tabular-nums">{opp.position}. místo</div>}
+                  </div>
                 </div>
-                <div className="flex flex-col items-center shrink-0">
-                  <div className="font-heading font-[800] text-2xl text-muted">vs</div>
-                  <div className="text-[10px] text-muted uppercase mt-1 whitespace-nowrap">{nextMatch.round}. kolo</div>
-                </div>
-                <div className="flex flex-col items-center flex-1 min-w-0">
-                  <BadgePreview
-                    primary={nextMatch.isHome ? (nextMatch.awayColor || "#666") : (nextMatch.homeColor || "#666")}
-                    secondary={nextMatch.isHome ? (nextMatch.awaySecondary || "#FFF") : (nextMatch.homeSecondary || "#FFF")}
-                    pattern={((nextMatch.isHome ? nextMatch.awayBadge : nextMatch.homeBadge) as BadgePattern) || "shield"}
-                    initials={(nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName).split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={40} />
-                  <div className="font-heading font-bold text-sm mt-1.5 truncate max-w-full text-center">{nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName}</div>
-                </div>
+
+                {/* Form comparison */}
+                {preview && my && opp && (
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex gap-0.5">
+                      {my.form.map((f, i) => (
+                        <span key={i} className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-bold text-white ${
+                          f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
+                        }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
+                      ))}
+                    </div>
+                    <span className="text-[9px] text-muted uppercase">Forma</span>
+                    <div className="flex gap-0.5">
+                      {opp.form.map((f, i) => (
+                        <span key={i} className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-bold text-white ${
+                          f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
+                        }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Stats comparison row */}
+                {preview && my && opp && (
+                  <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                    <div className="bg-gray-50 rounded-lg py-1.5 px-1">
+                      <div className="font-heading font-bold tabular-nums">{my.avgRating} : {opp.avgRating}</div>
+                      <div className="text-muted text-[9px] uppercase">Avg rating</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg py-1.5 px-1">
+                      <div className="font-heading font-bold tabular-nums">{my.goalsFor} : {opp.goalsFor}</div>
+                      <div className="text-muted text-[9px] uppercase">Skóre</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg py-1.5 px-1">
+                      <div className="font-heading font-bold tabular-nums">{my.squadSize} : {opp.squadSize}</div>
+                      <div className="text-muted text-[9px] uppercase">Hráčů</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Weather + venue */}
+                {preview && (
+                  <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-lg">{preview.weather.icon}</span>
+                      <span className="text-muted text-xs">{preview.weather.temperature}°C</span>
+                      {(preview.weather.expected === "rain" || preview.weather.expected === "snow" || preview.weather.expected === "wind") && (
+                        <span className="text-card-red text-[10px] font-heading font-bold">
+                          {preview.weather.expected === "rain" ? "-20% tech" : preview.weather.expected === "snow" ? "-30% tech" : "-10% tech"}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-muted truncate ml-2">{preview.venue.name}</span>
+                  </div>
+                )}
+
+                <Link href="/dashboard/match" className="text-center block">
+                  <span className="text-xs text-pitch-500 font-heading font-bold hover:underline">Sestava →</span>
+                </Link>
               </div>
-              <div className="text-center mt-3">
-                <span className="text-xs text-pitch-500 font-heading font-bold group-hover:underline">Přehled zápasu →</span>
-              </div>
-            </Link>
-          ) : (
+            );
+          })() : (
             <div className="text-center text-muted py-4">Žádný naplánovaný zápas</div>
           )}
         </div>
