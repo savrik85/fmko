@@ -37,6 +37,63 @@ export function evaluateSigningChance(
   rng: Rng,
 ): AgencyDecision {
   const factors: AgencyFactor[] = [];
+
+  // ── Celebrity override — special rejection logic ──
+  const celebType = agent.personality?.celebrityType as unknown as string | undefined;
+  const celebTier = agent.personality?.celebrityTier as unknown as string | undefined;
+  if (celebType) {
+    let distKm = 0;
+    if (agentVillage) {
+      distKm = haversineKm(team.villageLat, team.villageLon, agentVillage.lat, agentVillage.lng);
+    }
+    // Base rejection by type/tier
+    const baseReject: Record<string, number> = { S: 30, A: 20, B: 10, C: 5 };
+    let rejectChance = celebType === "legend"
+      ? (baseReject[celebTier ?? "C"] ?? 10)
+      : 10; // fallen_star/glass_man are more humble
+    // Distance penalty: +2% per km over 5km for legends, +1% for others
+    const distPenalty = celebType === "legend"
+      ? Math.max(0, (distKm - 5) * (celebTier === "S" ? 2 : 1.5))
+      : Math.max(0, (distKm - 5) * 1);
+    rejectChance += distPenalty;
+    // Reputation bonus
+    rejectChance -= Math.max(0, Math.min(15, (team.reputation - 50)));
+    // Capacity bonus (handled via reputation already)
+    rejectChance = Math.max(5, Math.min(60, rejectChance)); // cap 5-60%
+
+    const celebRejectReasons = [
+      "Je to moc daleko, nechce se mu dojíždět.",
+      "Říká, že by to bylo pod jeho úroveň.",
+      "Prý se mu nelíbí vaše zázemí.",
+      "Čeká na lepší nabídku.",
+      "Říká, že ho nebaví jezdit po okresu.",
+      "Nesedl mu trenér na první schůzce.",
+      "Řekl, že si to ještě rozmyslí. Pak přestal brát telefon.",
+      "Prý mu to kamarád z repre nedoporučil.",
+    ];
+    const celebAcceptReasons = [
+      "Říká, že se těší na kluky. Prý to bude sranda.",
+      "Kývnul! Prý mu připomíná jeho začátky.",
+      "Souhlasí — říká, že okresní fotbal je jiný level a chce to zažít.",
+      "Podepsal! Prý je rád, že si zase může zahrát.",
+    ];
+
+    if (rng.random() * 100 < rejectChance) {
+      return {
+        accepted: false,
+        probability: Math.round(100 - rejectChance),
+        explanation: rng.pick(celebRejectReasons),
+        factors: [{ name: "Celebrita", value: -Math.round(rejectChance), detail: `${celebType === "legend" ? `Tier ${celebTier}` : celebType} — má nároky` }],
+      };
+    }
+    return {
+      accepted: true,
+      probability: Math.round(100 - rejectChance),
+      explanation: rng.pick(celebAcceptReasons),
+      factors: [{ name: "Celebrita", value: Math.round(100 - rejectChance), detail: "Podepsal!" }],
+    };
+  }
+
   let total = 40; // base
 
   // 1. Reputace týmu (-15 až +25)

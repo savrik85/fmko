@@ -483,11 +483,11 @@ export function generateCelebrityLegend(
   return {
     firstName, lastName, age, position,
     speed: speedPenalized,
-    technique: Math.min(100, attrs.technique + rng.int(0, 10)), // pros have great technique
-    shooting: attrs.shooting,
-    passing: Math.min(100, attrs.passing + rng.int(0, 10)),
-    heading: headingBoosted,
-    defense: attrs.defense,
+    technique: Math.min(95, attrs.technique + rng.int(0, 10)), // pros have great technique
+    shooting: Math.min(95, attrs.shooting),
+    passing: Math.min(95, attrs.passing + rng.int(0, 10)),
+    heading: Math.min(95, headingBoosted),
+    defense: Math.min(95, attrs.defense),
     goalkeeping: attrs.goalkeeping,
     stamina: Math.max(15, rng.int(20, 35)),
     strength: Math.max(20, rng.int(30, 55)),
