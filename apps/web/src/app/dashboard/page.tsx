@@ -86,6 +86,7 @@ export default function DashboardPage() {
   const [matchResults, setMatchResults] = useState<TeamMatchResults | null>(null);
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState<MatchPreview | null>(null);
+  const [news, setNews] = useState<Array<{ id: string; type: string; headline: string; icon: string; date: string }>>([]);
 
   useEffect(() => {
     if (!teamId) return;
@@ -111,6 +112,10 @@ export default function DashboardPage() {
           .then(setPreview)
           .catch((e) => console.error("match-preview fetch:", e));
       }
+      // Fetch news
+      apiFetch<{ articles: typeof news }>(`/api/teams/${teamId}/news`)
+        .then((d) => setNews(d.articles.filter((a) => a.type !== "standing").slice(0, 3)))
+        .catch((e) => console.error("news fetch:", e));
     }).catch(() => setLoading(false));
   }, [teamId]);
 
@@ -530,6 +535,32 @@ export default function DashboardPage() {
         )}
 
       </div>
+
+      {/* ═══ Zpravodaj ═══ */}
+      {news.length > 0 && (
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Okresní zpravodaj</SectionLabel>
+          <div className="space-y-2">
+            {news.map((article) => {
+              const daysAgo = Math.floor((Date.now() - new Date(article.date).getTime()) / 86400000);
+              const timeLabel = daysAgo === 0 ? "dnes" : daysAgo === 1 ? "včera" : `před ${daysAgo}d`;
+              return (
+                <Link key={article.id} href="/dashboard/news"
+                  className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 -mx-1 px-1 rounded transition-colors">
+                  <span className="text-lg shrink-0">{article.icon}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-heading font-bold truncate">{article.headline}</div>
+                  </div>
+                  <span className="text-[10px] text-muted shrink-0">{timeLabel}</span>
+                </Link>
+              );
+            })}
+          </div>
+          <div className="text-center pt-2">
+            <Link href="/dashboard/news" className="text-xs text-pitch-500 font-heading font-bold hover:underline">Celý zpravodaj →</Link>
+          </div>
+        </div>
+      )}
 
       {/* ═══ Row 4: Top performers — 3 columns ═══ */}
       {matchResults && matchResults.topPlayers.length > 0 && (() => {
