@@ -506,31 +506,13 @@ function ArticleWrapper({ article, children }: { article: Article; children: Rea
 }
 
 function RoundResults({ body }: { body: string }) {
-  // Split on score endings (digits:digits followed by dot) to handle dots in team names like "1.FC" or "s.r.o."
-  const sentences = body.match(/[^.]*(?:\d+:\d+)[^.]*/g) || body.split(". ").filter(Boolean);
-  const results = sentences.map((sentence) => {
-    const s = sentence.replace(/\.$/, "").trim();
-
-    // Try to extract score
-    const scoreMatch = s.match(/(\d+:\d+)/);
-    const score = scoreMatch ? scoreMatch[1] : null;
-
-    if (!score) return { text: s, home: "", away: "", score: "" };
-
-    // "Team porazil Team 2:1" or "Team remizoval s Team 0:0" or "Team zvítězil nad Team 2:0"
-    const porazilMatch = s.match(/^(.+?)\s+porazil\s+(.+?)\s+\d+:\d+/);
-    const remizovalMatch = s.match(/^(.+?)\s+remizoval\s+s\s+(.+?)\s+\d+:\d+/);
-    const zvitezilMatch = s.match(/^(.+?)\s+zvítězil\s+nad\s+(.+?)\s+\d+:\d+/);
-
-    const match = porazilMatch || remizovalMatch || zvitezilMatch;
-    if (match) {
-      return { text: s, home: match[1].trim(), away: match[2].trim(), score };
-    }
-
-    return { text: s, home: "", away: "", score: score || "" };
-  });
-
-  const structured = results.filter((r) => r.home && r.away);
+  // Match each result as "TeamA verb TeamB score" — handles dots in team names (1.FC, s.r.o.)
+  const re = /(.+?)\s+(?:porazil|remizoval\s+s|zvítězil\s+nad)\s+(.+?)\s+(\d+:\d+)/g;
+  const structured: Array<{ home: string; away: string; score: string }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) !== null) {
+    structured.push({ home: m[1].replace(/^\.\s*/, "").trim(), away: m[2].trim(), score: m[3] });
+  }
 
   if (structured.length === 0) {
     return <p className="text-sm text-ink-light leading-relaxed">{body}</p>;
