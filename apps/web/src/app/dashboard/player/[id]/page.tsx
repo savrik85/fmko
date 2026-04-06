@@ -516,6 +516,7 @@ export default function PlayerDetailPage() {
           skills: player.skills as Record<string, number> | undefined,
           personality: profileExtras?.personality ?? (player as any).personality,
           lifeContext: player.lifeContext as unknown as Record<string, number> | undefined,
+          is_celebrity: (player as any).is_celebrity,
         };
         const teamInput = allPlayers.map((tp) => ({
           overall_rating: tp.overall_rating ?? 0,

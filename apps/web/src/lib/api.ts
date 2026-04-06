@@ -75,6 +75,7 @@ export interface Player {
   loan_until?: string | null;
   squad_number?: number | null;
   weekly_wage?: number | null;
+  is_celebrity?: number;
 }
 
 export interface CareerStats {
