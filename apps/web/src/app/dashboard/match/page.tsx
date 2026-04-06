@@ -79,7 +79,17 @@ interface AvailablePlayer {
   speed?: number; technique?: number; shooting?: number; passing?: number;
   heading?: number; defense?: number; goalkeeping?: number; stamina?: number;
   absent?: boolean; absenceReason?: string | null; absenceSms?: string | null; absenceEmoji?: string | null;
+  relationships?: Array<{ otherPlayerId: string; type: string }>;
 }
+
+const REL_EMOJI: Record<string, string> = {
+  brothers: "👨‍👦", father_son: "👴", in_laws: "🤝", classmates: "🎓",
+  coworkers: "💼", neighbors: "🏠", drinking_buddies: "🍻", rivals: "⚔️", mentor_pupil: "📚",
+};
+const REL_LABEL: Record<string, string> = {
+  brothers: "Bratři", father_son: "Otec a syn", in_laws: "Příbuzní", classmates: "Spolužáci",
+  coworkers: "Kolegové", neighbors: "Sousedi", drinking_buddies: "Kamarádi", rivals: "Rivalové", mentor_pupil: "Mentor",
+};
 
 interface NextMatchInfo {
   matchId: string; calendarId: string; gameWeek: number; scheduledAt: string;
@@ -284,6 +294,20 @@ export default function MatchPage() {
                   <div className="text-sm font-heading font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
                     {player?.lastName ?? "—"}
                   </div>
+                  {player?.relationships && (() => {
+                    const relsInLineup = player.relationships.filter((r) => selected.includes(r.otherPlayerId));
+                    if (relsInLineup.length === 0) return null;
+                    return (
+                      <div className="flex gap-0.5 justify-center mt-0.5">
+                        {relsInLineup.map((r) => (
+                          <span key={r.otherPlayerId} className="text-[10px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
+                            title={`${REL_LABEL[r.type] ?? r.type}: ${players.find((p) => p.id === r.otherPlayerId)?.lastName ?? "?"}`}>
+                            {REL_EMOJI[r.type] ?? "👥"}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               </button>
             );
@@ -326,6 +350,19 @@ export default function MatchPage() {
                             <span className="font-heading font-bold text-sm">{p.firstName} {p.lastName}</span>
                             {isOOP && !isAbsent && <span className="text-gold-500 text-xs">⚠️</span>}
                           </div>
+                          {/* Relationship hints to players in lineup */}
+                          {!isAbsent && p.relationships && (() => {
+                            const relsToLineup = p.relationships.filter((r) => selected.includes(r.otherPlayerId));
+                            if (relsToLineup.length === 0) return null;
+                            return (
+                              <div className="text-[10px] text-pitch-600 mt-0.5">
+                                {relsToLineup.map((r) => {
+                                  const other = players.find((op) => op.id === r.otherPlayerId);
+                                  return `${REL_EMOJI[r.type] ?? "👥"} ${other?.lastName ?? "?"}`;
+                                }).join(" · ")}
+                              </div>
+                            );
+                          })()}
                           {isAbsent ? (
                             <div className="text-xs text-card-red">❌ Nedostupný</div>
                           ) : (
