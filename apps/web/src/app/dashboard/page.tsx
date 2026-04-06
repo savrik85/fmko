@@ -487,13 +487,13 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══ Row 3: Recent matches ═══ */}
-      <div className="grid grid-cols-1 gap-5">
+      {/* ═══ Row 3: Recent matches + Zpravodaj ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {matchResults && matchResults.matches.length > 0 && (
           <div className="card p-4 sm:p-5">
             <SectionLabel>Poslední zápasy</SectionLabel>
             <div className="overflow-x-auto -mx-4 sm:-mx-5">
-              <table className="w-full text-sm min-w-[420px]">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-label border-b border-gray-200 text-[11px] uppercase tracking-wide">
                     <th className="pb-2 pl-4 sm:pl-5 pr-2 w-10">Kolo</th>
@@ -534,33 +534,31 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {news.length > 0 && (
+          <div className="card p-4 sm:p-5">
+            <SectionLabel>Okresní zpravodaj</SectionLabel>
+            <div className="space-y-2">
+              {news.map((article) => {
+                const daysAgo = Math.floor((Date.now() - new Date(article.date).getTime()) / 86400000);
+                const timeLabel = daysAgo === 0 ? "dnes" : daysAgo === 1 ? "včera" : `před ${daysAgo}d`;
+                return (
+                  <Link key={article.id} href="/dashboard/news"
+                    className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 -mx-1 px-1 rounded transition-colors">
+                    <span className="text-lg shrink-0">{article.icon}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-heading font-bold truncate">{article.headline}</div>
+                    </div>
+                    <span className="text-[10px] text-muted shrink-0">{timeLabel}</span>
+                  </Link>
+                );
+              })}
+            </div>
+            <div className="text-center pt-2">
+              <Link href="/dashboard/news" className="text-xs text-pitch-500 font-heading font-bold hover:underline">Celý zpravodaj →</Link>
+            </div>
+          </div>
+        )}
       </div>
-
-      {/* ═══ Zpravodaj ═══ */}
-      {news.length > 0 && (
-        <div className="card p-4 sm:p-5 lg:max-w-[50%]">
-          <SectionLabel>Okresní zpravodaj</SectionLabel>
-          <div className="space-y-2">
-            {news.map((article) => {
-              const daysAgo = Math.floor((Date.now() - new Date(article.date).getTime()) / 86400000);
-              const timeLabel = daysAgo === 0 ? "dnes" : daysAgo === 1 ? "včera" : `před ${daysAgo}d`;
-              return (
-                <Link key={article.id} href="/dashboard/news"
-                  className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 -mx-1 px-1 rounded transition-colors">
-                  <span className="text-lg shrink-0">{article.icon}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-heading font-bold truncate">{article.headline}</div>
-                  </div>
-                  <span className="text-[10px] text-muted shrink-0">{timeLabel}</span>
-                </Link>
-              );
-            })}
-          </div>
-          <div className="text-center pt-2">
-            <Link href="/dashboard/news" className="text-xs text-pitch-500 font-heading font-bold hover:underline">Celý zpravodaj →</Link>
-          </div>
-        </div>
-      )}
 
       {/* ═══ Row 4: Top performers — 3 columns ═══ */}
       {matchResults && matchResults.topPlayers.length > 0 && (() => {
