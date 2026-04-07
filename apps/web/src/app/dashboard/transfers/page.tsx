@@ -1622,10 +1622,7 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose }: {
             className="flex-1 py-3.5 text-sm font-heading font-bold text-muted hover:bg-gray-50 transition-colors">
             Zrušit
           </button>
-          <button onClick={async () => {
-              try { await onConfirm(price); } catch { /* ignore */ }
-              onClose();
-            }}
+          <button onClick={async () => { await onConfirm(price); }}
             className="flex-1 py-3.5 text-sm font-heading font-bold text-pitch-500 hover:bg-pitch-50 transition-colors border-l border-gray-100">
             Potvrdit
           </button>
