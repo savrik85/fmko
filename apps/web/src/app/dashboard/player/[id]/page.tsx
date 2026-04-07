@@ -568,6 +568,9 @@ export default function PlayerDetailPage() {
             <DetailRow label="Povolání" value={player.lifeContext?.occupation ?? "—"} />
             <DetailRow label="Bydliště" value={player.residence ?? "—"} />
             <DetailRow label="Dojíždění" value={player.commute_km != null ? `${player.commute_km} km` : "—"} />
+            {isOwnPlayer && player.weekly_wage != null && (
+              <DetailRow label="Mzda" value={`${player.weekly_wage.toLocaleString("cs")} Kč/týd`} />
+            )}
             <DetailRow label="Výška" value={player.physical?.height ? `${player.physical.height} cm` : "—"} />
             <DetailRow label="Váha" value={player.physical?.weight ? `${player.physical.weight} kg` : "—"} />
             <DetailRow label="Noha" value={footLabel(player.physical?.preferredFoot)} />
