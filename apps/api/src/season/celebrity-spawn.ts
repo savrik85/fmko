@@ -194,24 +194,23 @@ export async function spawnCelebrity(
     ],
   };
 
-  // Scout report — risks and benefits analysis from assistant coach
+  // Scout report — general risks without specific numbers
   const scoutReports: Record<CelebrityType, string> = {
-    legend: `Tak já se na to podíval. ${fullName} — rating ${overallRating}, to je úplně jiná liga. `
-      + `Ale pozor: disciplína ${celeb.discipline}, alkohol ${celeb.alcohol}. `
-      + `Na tréninky moc nechodí, má vlastní program. Na zápasy taky ne vždycky — má spoustu svých akcí. `
-      + `Týdně ho to stojí ${celeb.transportCost} Kč jen za dopravu navíc k mzdě. `
-      + `Ale když nastoupí, diváci se pohrnou. A ten přehled na hřišti — to se nedá naučit. `
-      + `Já bych do toho šel, ale počítejte s tím, že to nebude zadarmo a spolehlivý taky ne.`,
-    fallen_star: `Podíval jsem se na to. ${fullName} — teď má rating jen ${overallRating}, ale talent tam pořád je. `
-      + `Kdyby se dal dohromady, mohl by mít klidně ${celeb.hiddenTalent ?? 80}+. `
-      + `Problém: alkohol ${celeb.alcohol}, disciplína ${celeb.discipline}. Bude chodit na kocovinu, bude vynechávat tréninky. `
-      + `Pokud ho dokážeme vychovat, může z něj být hvězda kádru. Pokud ne, budeme mít v kabině problém. `
-      + `Za mě — zkusit to, ale mít realistická očekávání.`,
-    glass_man: `Prověřil jsem ho. ${fullName} — rating ${overallRating}, to je výborný hráč! `
-      + `Odešel z profi fotbalu kvůli zraněním. Disciplína ${celeb.discipline} je v pohodě, alkohol ${celeb.alcohol} taky OK. `
-      + `Problém je tělo — náchylnost ke zranění ${celeb.injuryProneness}, výdrž jen ${celeb.stamina}. `
-      + `Bude chybět na spoustě zápasů kvůli zdraví. Když ale nastoupí, bude nejlepší hráč na hřišti. `
-      + `Za mě jednoznačně podepsat — jen počítejte s tím, že ho budeme mít k dispozici tak na polovinu zápasů.`,
+    legend: `Tak já se na to podíval. ${fullName} je kvalitou úplně jinde než naši kluci, to je jasný. `
+      + `Ale pozor — tenhle typ hráče má svoje návyky. Na tréninky moc nechodí, má vlastní program. `
+      + `Na zápasy taky ne vždycky — má spoustu akcí a povinností mimo fotbal. `
+      + `A nebude to zadarmo — bude chtít příplatek za dojíždění. `
+      + `Ale když nastoupí, diváci se pohrnou a na hřišti to bude vidět. `
+      + `Já bych do toho šel, ale počítejte s tím, že spolehlivý nebude.`,
+    fallen_star: `Podíval jsem se na to. ${fullName} teď na tom není nejlíp, ale talent tam furt je — a velkej. `
+      + `Problém je životní styl. Hodně pije a disciplínu moc neřeší. Bude vynechávat tréninky, bude chodit na kocovinu. `
+      + `Pokud ho dokážeme vychovat a dostat zpátky do formy, může z něj být hvězda kádru. `
+      + `Pokud ne, budeme mít v kabině problém. Za mě — zkusit to, ale mít realistický očekávání.`,
+    glass_man: `Prověřil jsem ho. ${fullName} je fakt kvalitní hráč, o tom žádná. `
+      + `Odešel z profi fotbalu kvůli zraněním — a to je taky ten hlavní háček. Tělo ho zrazuje. `
+      + `Jinak je disciplinovanej, žádnej průšvihář. Ale bude chybět na spoustě zápasů kvůli zdraví. `
+      + `Když ale nastoupí, bude nejlepší hráč na hřišti. `
+      + `Za mě jednoznačně podepsat — jen počítejte s tím, že ho budeme mít tak na polovinu zápasů.`,
   };
 
   for (const t of humanTeams.results) {
@@ -235,9 +234,9 @@ export async function spawnCelebrity(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at) VALUES (?, ?, 'player', ?, ?, ?, datetime('now'))"
     ).bind(crypto.randomUUID(), squadConv.id, randomPlayer?.id ?? teamId, playerName, tipText).run()
       .catch((e) => logger.warn({ module: "celebrity-spawn" }, "player tip msg", e));
-    // Assistant coach analysis
+    // Assistant coach analysis — use 'player' type so it renders as a chat bubble
     await db.prepare(
-      "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Asistent trenéra', ?, datetime('now', '+10 seconds'))"
+      "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'player', 'Asistent trenéra', ?, datetime('now', '+10 seconds'))"
     ).bind(crypto.randomUUID(), squadConv.id, scoutReports[celebType]).run()
       .catch((e) => logger.warn({ module: "celebrity-spawn" }, "scout report msg", e));
     await db.prepare("UPDATE conversations SET unread_count = unread_count + 2, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
