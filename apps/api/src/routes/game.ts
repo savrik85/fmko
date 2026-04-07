@@ -2814,6 +2814,81 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
   const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
   if (!team || team.budget < body.amount) return c.json({ error: `Nedostatek peněz. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
 
+  // Check if this is an AI listing — auto-accept immediately
+  const listing = await c.env.DB.prepare("SELECT is_ai_listing, ai_player_data, asking_price FROM transfer_listings WHERE id = ? AND status = 'active'")
+    .bind(listingId).first<{ is_ai_listing: number; ai_player_data: string; asking_price: number }>();
+  if (!listing) return c.json({ error: "Listing nenalezen" }, 404);
+
+  if (listing.is_ai_listing) {
+    // AI listing — auto-accept: generate player, transfer to buyer
+    if (body.amount < listing.asking_price) {
+      return c.json({ error: `Nabídka je příliš nízká. Požadovaná cena: ${listing.asking_price.toLocaleString("cs")} Kč.` }, 400);
+    }
+    const aiData = JSON.parse(listing.ai_player_data);
+    const playerId = crypto.randomUUID();
+    const skills = JSON.stringify(aiData.skills ?? {});
+    const physical = JSON.stringify(aiData.physical ?? {});
+    const personality = JSON.stringify(aiData.personality ?? {});
+    const lifeContext = JSON.stringify({ occupation: "Fotbalista", condition: 80, morale: 55 });
+    const avatar = JSON.stringify(aiData.avatar ?? {});
+    const weeklyWage = aiData.weeklyWage ?? Math.round(10 + ((aiData.overallRating ?? 40) / 100) * 400);
+
+    await c.env.DB.prepare(
+      `INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
+    ).bind(playerId, teamId, aiData.firstName, aiData.lastName, aiData.age, aiData.position, aiData.overallRating,
+      skills, physical, personality, lifeContext, avatar, weeklyWage).run();
+
+    // Deduct budget
+    await c.env.DB.prepare("UPDATE teams SET budget = budget - ? WHERE id = ?").bind(body.amount, teamId).run();
+    const { recordTransaction } = await import("../season/finance-processor");
+    const gameDate = (await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>().catch(() => null))?.game_date ?? new Date().toISOString();
+    await recordTransaction(c.env.DB, teamId, "transfer_fee", -body.amount, `Přestup: ${aiData.firstName} ${aiData.lastName} z ${aiData.fromTeam}`, gameDate);
+
+    // Residence + commute
+    const { generateResidence } = await import("../generators/residence");
+    const teamVillage = await c.env.DB.prepare("SELECT v.name, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
+      .bind(teamId).first<{ name: string; size: string; district: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch village for AI transfer", e); return null; });
+    if (teamVillage) {
+      const resRng = createRng(playerId.charCodeAt(0) + Date.now());
+      const res = generateResidence(resRng, teamVillage.name, teamVillage.size, teamVillage.district);
+      await c.env.DB.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
+        .bind(res.residence, res.commuteKm, playerId).run().catch((e) => logger.warn({ module: "game" }, "set residence AI transfer", e));
+    }
+
+    // Contract
+    const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for AI transfer", e); return null; });
+    await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
+      .bind(crypto.randomUUID(), playerId, teamId, season?.id ?? "unknown", body.amount).run().catch((e) => logger.warn({ module: "game" }, "AI transfer contract", e));
+
+    // Mark listing sold
+    await c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE id = ?").bind(listingId).run();
+
+    // News
+    const teamRow = await c.env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(teamId).first<{ name: string; league_id: string }>();
+    if (teamRow) {
+      const { createTransferNews } = await import("../transfers/transfer-news");
+      await createTransferNews(c.env.DB, teamRow.league_id, teamId, "transfer_completed", {
+        playerName: `${aiData.firstName} ${aiData.lastName}`, playerAge: aiData.age,
+        playerPosition: aiData.position, teamName: teamRow.name, fromTeamName: aiData.fromTeam, fee: body.amount,
+      }).catch((e) => logger.warn({ module: "game" }, "AI transfer news", e));
+    }
+
+    // Return new player for reveal card
+    const newPlayer = await c.env.DB.prepare("SELECT * FROM players WHERE id = ?").bind(playerId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "game" }, "fetch new AI transfer player", e); return null; });
+    const playerData = newPlayer ? {
+      ...newPlayer,
+      skills: JSON.parse((newPlayer.skills as string) ?? "{}"),
+      physical: JSON.parse((newPlayer.physical as string) ?? "{}"),
+      personality: JSON.parse((newPlayer.personality as string) ?? "{}"),
+      lifeContext: JSON.parse((newPlayer.life_context as string) ?? "{}"),
+      avatar: JSON.parse((newPlayer.avatar as string) ?? "{}"),
+    } : null;
+
+    return c.json({ ok: true, autoAccepted: true, playerId, player: playerData });
+  }
+
+  // Normal (human) listing — just place bid
   const id = crypto.randomUUID();
   await c.env.DB.prepare("INSERT INTO transfer_bids (id, listing_id, team_id, amount) VALUES (?, ?, ?, ?)")
     .bind(id, listingId, teamId, body.amount).run();
