@@ -178,15 +178,41 @@ export async function spawnCelebrity(
   const typeEmoji: Record<CelebrityType, string> = { legend: "⭐", fallen_star: "🍺", glass_man: "🩹" };
   const broadcastText = `${typeEmoji[celebType]} NOVÝ VOLNÝ HRÁČ: ${fullName} (${celeb.position}, ${celeb.age} let, ${tierDesc}) je k dispozici! Podívejte se na trh volných hráčů.`;
 
+  // Scout report — risks and benefits analysis
+  const scoutReports: Record<CelebrityType, string> = {
+    legend: `Trenére, ${fullName} je na trhu! Rating ${overallRating}, to je úplně jiná liga. `
+      + `Ale pozor — disciplína ${celeb.discipline}, alkohol ${celeb.alcohol}. `
+      + `Na tréninky moc nechodí, má vlastní program. Na zápasy taky ne vždycky — má spoustu akcí a povinností. `
+      + `Týdně ho to stojí ${celeb.transportCost} Kč jen za dopravu navíc k mzdě. `
+      + `Ale když nastoupí, diváci se pohrnou. A ten přehled na hřišti — to se nedá naučit. `
+      + `Já bych do toho šel, ale počítejte s tím, že to nebude zadarmo a spolehlivý taky ne.`,
+    fallen_star: `Trenére, na trhu je ${fullName} — mladý kluk, co to dotáhl do ligy, ale pak to s ním šlo z kopce. `
+      + `Rating teď jen ${overallRating}, ale talent tam pořád je — kdyby se dal dohromady, mohl by mít i ${celeb.hiddenTalent ?? 80}+. `
+      + `Problém: alkohol ${celeb.alcohol}, disciplína ${celeb.discipline}. Bude chodit na kocovinu, bude vynechávat tréninky. `
+      + `Stojí za to riskovat? Pokud ho dokážete vychovat, může z něj být hvězda. Pokud ne, budete mít v kabině problém. `
+      + `Za mě — zkusit to, ale mít realistická očekávání.`,
+    glass_man: `Trenére, ${fullName} je volný — a to je hráč s ratingem ${overallRating}! `
+      + `Odešel z profi fotbalu kvůli zraněním. Disciplína ${celeb.discipline} je v pohodě, alkohol ${celeb.alcohol} taky OK. `
+      + `Problém je tělo — náchylnost ke zranění ${celeb.injuryProneness}, výdrž jen ${celeb.stamina}. `
+      + `Bude chybět na spoustě zápasů kvůli zdraví. Když ale nastoupí, bude nejlepší hráč na hřišti. `
+      + `Za mě jednoznačně podepsat — jen počítejte s tím, že ho budete mít k dispozici tak na polovinu zápasů.`,
+  };
+
   for (const t of humanTeams.results) {
     const convId = t.conv_id as string | null;
     if (!convId) continue;
+    // Broadcast from chairman
     await db.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Předseda Přeboru', ?, datetime('now'))"
     ).bind(crypto.randomUUID(), convId, broadcastText).run()
       .catch((e) => logger.warn({ module: "celebrity-spawn" }, "broadcast msg", e));
-    await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
-      .bind(broadcastText.slice(0, 100), convId).run()
+    // Scout report from assistant coach
+    await db.prepare(
+      "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Asistent trenéra', ?, datetime('now', '+5 seconds'))"
+    ).bind(crypto.randomUUID(), convId, scoutReports[celebType]).run()
+      .catch((e) => logger.warn({ module: "celebrity-spawn" }, "scout report msg", e));
+    await db.prepare("UPDATE conversations SET unread_count = unread_count + 2, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+      .bind("Analýza nového hráče na trhu", convId).run()
       .catch((e) => logger.warn({ module: "celebrity-spawn" }, "update conv", e));
   }
 
