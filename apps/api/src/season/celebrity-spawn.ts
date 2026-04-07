@@ -203,7 +203,7 @@ export async function spawnCelebrity(
       + `Ale když nastoupí, diváci se pohrnou a na hřišti to bude vidět. `
       + `Já bych do toho šel, ale počítejte s tím, že spolehlivý nebude.`,
     fallen_star: `Podíval jsem se na to. ${fullName} teď na tom není nejlíp, ale talent tam furt je — a velkej. `
-      + `Problém je životní styl. Hodně pije a disciplínu moc neřeší. Bude vynechávat tréninky, bude chodit na kocovinu. `
+      + `Problém je životní styl. Hodně pije a disciplínu moc neřeší. Bude vynechávat tréninky, bude přicházet s kocovinou. `
       + `Pokud ho dokážeme vychovat a dostat zpátky do formy, může z něj být hvězda kádru. `
       + `Pokud ne, budeme mít v kabině problém. Za mě — zkusit to, ale mít realistický očekávání.`,
     glass_man: `Prověřil jsem ho. ${fullName} je fakt kvalitní hráč, o tom žádná. `
