@@ -80,8 +80,13 @@ export async function createTransferNews(
       break;
 
     case "transfer_completed":
-      headline = `Přestup! ${data.playerName} míří z ${data.fromTeamName} do ${data.toTeamName}`;
-      body = `${data.playerName} (${data.playerAge}, ${data.playerPosition}) přestupuje z ${data.fromTeamName} do ${data.toTeamName}${data.fee ? ` za ${data.fee.toLocaleString("cs")} Kč` : ""}. ${humor}`;
+      if (data.isCrossDistrict) {
+        headline = `Posila z jiného okresu! ${data.playerName} přichází z ${data.fromTeamName}`;
+        body = `${data.toTeamName} přivedl ${data.playerName} (${data.playerAge}, ${data.playerPosition}) až z ${data.fromTeamName}${data.fee ? ` za ${data.fee.toLocaleString("cs")} Kč` : ""}. Meziokresní přestup vzbudil pozornost — uvidíme, jestli se novému prostředí přizpůsobí.`;
+      } else {
+        headline = `Přestup! ${data.playerName} míří z ${data.fromTeamName} do ${data.toTeamName}`;
+        body = `${data.playerName} (${data.playerAge}, ${data.playerPosition}) přestupuje z ${data.fromTeamName} do ${data.toTeamName}${data.fee ? ` za ${data.fee.toLocaleString("cs")} Kč` : ""}. ${humor}`;
+      }
       break;
 
     case "loan_completed":
