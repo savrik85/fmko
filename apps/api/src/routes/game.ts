@@ -2485,6 +2485,7 @@ gameRouter.get("/teams/:teamId/free-agents", async (c) => {
         skills: (() => { try { return JSON.parse(fa.skills as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent skills", e); return {}; } })(),
         physical: (() => { try { return JSON.parse(fa.physical as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent physical", e); return {}; } })(),
         personality: (() => { try { return JSON.parse(fa.personality as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent personality", e); return {}; } })(),
+        isCelebrity: !!(fa.is_celebrity as number),
       };
     });
     return c.json({ freeAgents: result });

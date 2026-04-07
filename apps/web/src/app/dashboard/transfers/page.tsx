@@ -43,7 +43,8 @@ interface FreeAgent {
   expiresAt: string; avatar: Record<string, unknown>;
   skills: { speed?: number; technique?: number; shooting?: number; passing?: number; heading?: number; defense?: number; goalkeeping?: number; creativity?: number; setPieces?: number };
   physical: { stamina?: number; strength?: number; preferredFoot?: string };
-  personality: { discipline?: number; workRate?: number; leadership?: number };
+  personality: { discipline?: number; workRate?: number; leadership?: number; celebrityType?: string; celebrityTier?: string };
+  isCelebrity?: boolean;
 }
 
 interface MarketListing {
@@ -305,7 +306,7 @@ export default function TransfersPage() {
   useEffect(() => {
     apiFetch<{ leagues: Array<{ id: string; name: string; team_count: number }> }>("/api/leagues")
       .then((data) => setSearchLeagues(data.leagues))
-      .catch(() => {});
+      .catch((e) => console.error("fetch leagues:", e));
   }, []);
 
   const loadSearch = async (leagueOverride?: string) => {
@@ -967,7 +968,7 @@ export default function TransfersPage() {
               {filteredAgents.map((fa) => {
                 const isExpanded = expandedSkills.has(fa.id);
                 return (
-                  <div key={fa.id} className="card p-4">
+                  <div key={fa.id} className={`card p-4 ${fa.isCelebrity ? "ring-2 ring-gold-400 bg-amber-50/30" : ""}`}>
                     <div className="flex items-start gap-3">
                       <div className="shrink-0 w-11 h-11 rounded-full bg-gray-100">
                         {fa.avatar && Object.keys(fa.avatar).length > 0
@@ -975,9 +976,14 @@ export default function TransfersPage() {
                           : <div className="w-full h-full flex items-center justify-center font-heading font-bold text-sm text-muted">{fa.firstName[0]}{fa.lastName[0]}</div>}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                           <span className="font-heading font-bold text-base">{fa.firstName} {fa.lastName}</span>
                           <PositionBadge position={fa.position as "GK" | "DEF" | "MID" | "FWD"} />
+                          {fa.isCelebrity && (
+                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200">
+                              ⭐ {fa.personality?.celebrityType === "fallen_star" ? "Padlá hvězda" : fa.personality?.celebrityType === "glass_man" ? "Skleněný muž" : "Celebrita"}
+                            </span>
+                          )}
                           <span className="text-sm text-muted">{fa.age} let</span>
                           <span className="text-sm font-heading font-bold tabular-nums">{fa.overallRating}</span>
                         </div>
