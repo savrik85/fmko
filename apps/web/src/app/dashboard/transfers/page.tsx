@@ -1585,9 +1585,10 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
 
 function PriceDialog({ title, description, defaultPrice, onConfirm, onClose }: {
   title: string; description: string; defaultPrice: number;
-  onConfirm: (price: number) => void; onClose: () => void;
+  onConfirm: (price: number) => Promise<void> | void; onClose: () => void;
 }) {
   const [price, setPrice] = useState(defaultPrice);
+  const [loading, setLoading] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -1622,9 +1623,13 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose }: {
             className="flex-1 py-3.5 text-sm font-heading font-bold text-muted hover:bg-gray-50 transition-colors">
             Zrušit
           </button>
-          <button onClick={async () => { await onConfirm(price); }}
-            className="flex-1 py-3.5 text-sm font-heading font-bold text-pitch-500 hover:bg-pitch-50 transition-colors border-l border-gray-100">
-            Potvrdit
+          <button disabled={loading} onClick={async () => {
+              setLoading(true);
+              try { await onConfirm(price); } catch (e) { console.error("PriceDialog confirm error:", e); }
+              setLoading(false);
+            }}
+            className="flex-1 py-3.5 text-sm font-heading font-bold text-pitch-500 hover:bg-pitch-50 transition-colors border-l border-gray-100 disabled:opacity-50">
+            {loading ? "Zpracovávám..." : "Potvrdit"}
           </button>
         </div>
       </div>
