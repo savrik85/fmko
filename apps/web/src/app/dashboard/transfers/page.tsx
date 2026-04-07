@@ -1135,22 +1135,25 @@ export default function TransfersPage() {
                               defaultPrice: l.askingPrice,
                               onConfirm: async (price) => {
                                 if (!teamId) return;
-                                setPriceDialog(null);
+                                let res: { ok: boolean; autoAccepted?: boolean; rejected?: boolean; explanation?: string; player?: Player; error?: string } | null = null;
+                                let errorMsg: string | null = null;
                                 try {
-                                  const res = await apiFetch<{ ok: boolean; autoAccepted?: boolean; rejected?: boolean; explanation?: string; player?: Player; error?: string }>(`/api/teams/${teamId}/market/${l.id}/bid`, {
+                                  res = await apiFetch(`/api/teams/${teamId}/market/${l.id}/bid`, {
                                     method: "POST", headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({ amount: price }),
                                   });
-                                  if (res.rejected) {
-                                    await confirm({ title: "Odmítl přestup", description: res.explanation ?? "Hráč nemá zájem." });
-                                  } else if (res.autoAccepted && res.player) {
-                                    setRevealPlayer(res.player);
-                                  }
-                                  await refresh();
                                 } catch (e: any) {
-                                  const msg = e?.message ?? String(e);
-                                  await confirm({ title: "Chyba", description: msg.includes("nízká") ? msg : `Nabídka se nezdařila: ${msg}` });
+                                  errorMsg = e?.message ?? String(e);
                                 }
+                                setPriceDialog(null);
+                                if (errorMsg) {
+                                  await confirm({ title: "Chyba", description: errorMsg });
+                                } else if (res?.rejected) {
+                                  await confirm({ title: "Odmítl přestup", description: res.explanation ?? "Hráč nemá zájem." });
+                                } else if (res?.autoAccepted && res?.player) {
+                                  setRevealPlayer(res.player);
+                                }
+                                await refresh();
                               },
                             });
                           }}
