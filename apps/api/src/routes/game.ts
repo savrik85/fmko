@@ -1792,6 +1792,23 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
   });
 });
 
+// POST /api/game/ai-market — force AI market activity for testing
+gameRouter.post("/game/ai-market", async (c) => {
+  const body = await c.req.json<{ leagueId: string }>().catch((e) => { logger.warn({ module: "game" }, "parse ai-market body", e); return null; });
+  if (!body?.leagueId) return c.json({ error: "Missing leagueId" }, 400);
+  const league = await c.env.DB.prepare("SELECT district FROM leagues WHERE id = ?").bind(body.leagueId).first<{ district: string }>();
+  if (!league) return c.json({ error: "League not found" }, 404);
+  const { generateAiListings, generateAiOffers } = await import("../transfers/virtual-teams");
+  const rng = createRng(Date.now() + Math.floor(Math.random() * 1000000));
+  // Force: override 30%/10% chance by calling multiple times
+  let listings = 0, offers = 0;
+  for (let i = 0; i < 5; i++) {
+    listings += await generateAiListings(c.env.DB, league.district, body.leagueId, rng);
+    offers += await generateAiOffers(c.env.DB, league.district, body.leagueId, rng);
+  }
+  return c.json({ ok: true, listings, offers, district: league.district });
+});
+
 // POST /api/game/spawn-celebrity — force spawn celebrity for testing
 gameRouter.post("/game/spawn-celebrity", async (c) => {
   const body = await c.req.json<{ leagueId: string; type?: string; tier?: string }>().catch((e) => { logger.warn({ module: "game" }, "parse spawn-celebrity body", e); return null; });
