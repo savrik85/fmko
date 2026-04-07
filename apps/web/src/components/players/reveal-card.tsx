@@ -93,18 +93,26 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
     return () => clearInterval(interval);
   }, [phase, player.overall_rating, onRevealed]);
 
-  const ratingColor = getRatingColor(player.overall_rating);
+  const isCeleb = !!(player as any).is_celebrity;
+  const ratingColor = isCeleb ? "#C4A035" : getRatingColor(player.overall_rating);
   const topStats = getTopStats(player);
-  const barColor = ensureContrast(teamColor);
+  const barColor = isCeleb ? "#C4A035" : ensureContrast(teamColor);
 
   // Phase: hidden
   if (phase === "hidden") {
     return (
       <div className="w-full aspect-[3/4] rounded-2xl flex items-center justify-center"
-        style={{ background: "linear-gradient(145deg, #0d220d 0%, #153615 100%)", border: "1px solid rgba(45,95,45,0.3)" }}>
+        style={{
+          background: isCeleb
+            ? "linear-gradient(145deg, #3D2E0A 0%, #5C4A1A 50%, #3D2E0A 100%)"
+            : "linear-gradient(145deg, #0d220d 0%, #153615 100%)",
+          border: isCeleb ? "2px solid rgba(196,160,53,0.5)" : "1px solid rgba(45,95,45,0.3)",
+        }}>
         <div className="text-center">
-          <div className="w-8 h-8 rounded-full border-2 border-pitch-500/40 border-t-pitch-400 animate-spin mx-auto mb-2" />
-          <span className="text-pitch-500/40 text-[10px] font-heading uppercase tracking-wider">Odhaluji...</span>
+          <div className={`w-8 h-8 rounded-full border-2 animate-spin mx-auto mb-2 ${isCeleb ? "border-gold-500/40 border-t-gold-400" : "border-pitch-500/40 border-t-pitch-400"}`} />
+          <span className={`text-[10px] font-heading uppercase tracking-wider ${isCeleb ? "text-gold-500/60" : "text-pitch-500/40"}`}>
+            {isCeleb ? "Hvězda přichází..." : "Odhaluji..."}
+          </span>
         </div>
       </div>
     );
@@ -115,7 +123,13 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
       className={`w-full rounded-2xl overflow-hidden transition-all duration-500 ${
         phase === "flipping" ? "animate-[cardFlip_0.6s_ease-out]" : ""
       } ${phase === "rating" ? "animate-[cardGlow_0.8s_ease-out]" : ""}`}
-      style={{
+      style={isCeleb ? {
+        background: "linear-gradient(145deg, #FFF9E6 0%, #FFFFFF 30%, #FFF9E6 100%)",
+        border: "2px solid #C4A035",
+        boxShadow: phase === "rating"
+          ? "0 0 40px rgba(196,160,53,0.35), 0 8px 30px rgba(0,0,0,0.12)"
+          : "0 8px 30px rgba(196,160,53,0.15)",
+      } : {
         background: "#FFFFFF",
         border: "1px solid #e5e7eb",
         boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
@@ -165,8 +179,17 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
         )}
       </div>
 
+      {/* Celebrity badge */}
+      {isCeleb && (
+        <div className="text-center pb-1">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+            ⭐ Celebrita
+          </span>
+        </div>
+      )}
+
       {/* Divider */}
-      <div className="mx-4 h-px" style={{ backgroundColor: `${teamColor}10` }} />
+      <div className="mx-4 h-px" style={{ backgroundColor: isCeleb ? "rgba(196,160,53,0.15)" : `${teamColor}10` }} />
 
       {/* Top 3 stats — revealed with delay */}
       <div className="px-4 py-3">
