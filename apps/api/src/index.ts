@@ -352,6 +352,25 @@ export default {
           }
         } catch (e) { log("error", "celebrity spawn failed", e); }
 
+        // ── Virtual AI market activity (listings + offers from neighboring districts) ──
+        try {
+          const { createRng } = await import("./generators/rng");
+          const marketRng = createRng(Date.now() + 77777);
+          const { generateAiListings, generateAiOffers } = await import("./transfers/virtual-teams");
+          const marketLeagues = await env.DB.prepare(
+            "SELECT l.id, l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.user_id != 'ai' GROUP BY l.id"
+          ).all().catch((e) => { log("error", "fetch leagues for AI market", e); return { results: [] }; });
+          for (const ml of marketLeagues.results) {
+            const lid = ml.id as string;
+            const dist = ml.district as string;
+            const listings = await generateAiListings(env.DB, dist, lid, marketRng);
+            const offers = await generateAiOffers(env.DB, dist, lid, marketRng);
+            if (listings > 0 || offers > 0) {
+              log("info", `AI market: ${dist} — ${listings} listings, ${offers} offers`);
+            }
+          }
+        } catch (e) { log("error", "AI market activity failed", e); }
+
       } catch (e: any) {
         log("error", "match tick failed", e);
       }
