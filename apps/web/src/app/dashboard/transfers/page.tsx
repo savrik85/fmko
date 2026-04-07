@@ -1135,12 +1135,20 @@ export default function TransfersPage() {
                               defaultPrice: l.askingPrice,
                               onConfirm: async (price) => {
                                 if (!teamId) return;
-                                await apiFetch(`/api/teams/${teamId}/market/${l.id}/bid`, {
-                                  method: "POST", headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ amount: price }),
-                                }).catch((e) => console.error("Transfer action failed:", e));
-                                setPriceDialog(null);
-                                await refresh();
+                                try {
+                                  const res = await apiFetch<{ ok: boolean; autoAccepted?: boolean; player?: Player; error?: string }>(`/api/teams/${teamId}/market/${l.id}/bid`, {
+                                    method: "POST", headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ amount: price }),
+                                  });
+                                  setPriceDialog(null);
+                                  if (res.autoAccepted && res.player) {
+                                    setRevealPlayer(res.player);
+                                  }
+                                  await refresh();
+                                } catch (e: any) {
+                                  const msg = e?.message ?? String(e);
+                                  await confirm({ title: "Chyba", description: msg.includes("nízká") ? msg : `Nabídka se nezdařila: ${msg}` });
+                                }
                               },
                             });
                           }}
