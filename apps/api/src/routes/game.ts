@@ -2916,7 +2916,7 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
       const { createTransferNews } = await import("../transfers/transfer-news");
       await createTransferNews(c.env.DB, teamRow.league_id, teamId, "transfer_completed", {
         playerName: `${aiData.firstName} ${aiData.lastName}`, playerAge: aiData.age,
-        playerPosition: aiData.position, toTeamName: teamRow.name, fromTeamName: aiData.fromTeam ?? "Neznámý tým",
+        playerPosition: aiData.position, teamName: teamRow.name, toTeamName: teamRow.name, fromTeamName: aiData.fromTeam ?? "Neznámý tým",
         fee: body.amount, isCrossDistrict: true,
       }).catch((e) => logger.warn({ module: "game" }, "AI transfer news", e));
     }

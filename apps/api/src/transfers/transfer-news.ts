@@ -54,6 +54,7 @@ export async function createTransferNews(
     toTeamName?: string;
     fee?: number;
     reason?: string;
+    isCrossDistrict?: boolean;
   },
   rng?: { pick: <T>(arr: T[]) => T },
 ): Promise<void> {
