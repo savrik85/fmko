@@ -216,9 +216,9 @@ export async function spawnCelebrity(
 
   for (const t of humanTeams.results) {
     const teamId = t.id as string;
-    // Find squad group conversation (or chairman if no squad group)
+    // Find "Kabina" squad group conversation (the main team chat, not match-specific ones)
     const squadConv = await db.prepare(
-      "SELECT id FROM conversations WHERE team_id = ? AND type = 'chairman' ORDER BY created_at LIMIT 1"
+      "SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group' AND title = 'Kabina' ORDER BY created_at DESC LIMIT 1"
     ).bind(teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "celebrity-spawn" }, "find conv", e); return null; });
     if (!squadConv) continue;
 
