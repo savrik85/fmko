@@ -395,6 +395,21 @@ body::before {
 @media (pointer: coarse) { button, a, [role="button"] { min-height: 44px; } }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0); }
 
+/* Green shield below bottom nav — covers iOS Safari bounce/overscroll gap */
+@media (max-width: 639px) {
+  body::after {
+    content: "";
+    position: fixed;
+    bottom: -100px;
+    left: 0;
+    right: 0;
+    height: 200px;
+    background: #1e2d1e;
+    z-index: 49;
+    pointer-events: none;
+  }
+}
+
 .divider { height: 1px; background: rgba(139,133,120,0.08); }
 
 .text-gradient-gold {

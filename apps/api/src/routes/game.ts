@@ -2732,10 +2732,12 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
   if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
   const listings = await c.env.DB.prepare(
-    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at,
+    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at, tl.is_ai_listing, tl.ai_player_data,
      p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.skills,
      t.name as team_name
-     FROM transfer_listings tl JOIN players p ON tl.player_id = p.id JOIN teams t ON tl.team_id = t.id
+     FROM transfer_listings tl
+     LEFT JOIN players p ON tl.player_id = p.id AND tl.is_ai_listing = 0
+     LEFT JOIN teams t ON tl.team_id = t.id AND tl.is_ai_listing = 0
      WHERE tl.league_id = ? AND tl.status = 'active' AND tl.team_id != ? ORDER BY tl.created_at DESC`
   ).bind(team.league_id, teamId).all();
 
@@ -2768,14 +2770,29 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
   }
 
   return c.json({
-    listings: listings.results.map((l) => ({
-      id: l.id, playerId: l.player_id, askingPrice: l.asking_price,
-      playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,
-      overallRating: l.overall_rating, teamName: l.team_name, expiresAt: l.expires_at,
-      avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "game" }, `parse market avatar: ${e}`); return {}; } })(),
-      skills: (() => { try { const s = JSON.parse(l.skills as string); const blur = (v: number) => Math.round(v / 5) * 5; return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === "number" ? blur(v) : v])); } catch { return {}; } })(),
-      myBidAmount: myBids[l.id as string] ?? null,
-    })),
+    listings: listings.results.map((l) => {
+      const isAi = !!(l.is_ai_listing as number);
+      if (isAi) {
+        const ai = (() => { try { return JSON.parse(l.ai_player_data as string); } catch { return {}; } })();
+        const blur = (v: number) => Math.round(v / 5) * 5;
+        return {
+          id: l.id, playerId: "virtual_ai", askingPrice: l.asking_price, isAiListing: true,
+          playerName: `${ai.firstName ?? "?"} ${ai.lastName ?? "?"}`, playerAge: ai.age, position: ai.position,
+          overallRating: ai.overallRating, teamName: ai.fromTeam ?? "Neznámý tým", expiresAt: l.expires_at,
+          avatar: ai.avatar ?? {},
+          skills: ai.skills ? Object.fromEntries(Object.entries(ai.skills).map(([k, v]) => [k, typeof v === "number" ? blur(v as number) : v])) : {},
+          myBidAmount: myBids[l.id as string] ?? null,
+        };
+      }
+      return {
+        id: l.id, playerId: l.player_id, askingPrice: l.asking_price, isAiListing: false,
+        playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,
+        overallRating: l.overall_rating, teamName: l.team_name, expiresAt: l.expires_at,
+        avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "game" }, `parse market avatar: ${e}`); return {}; } })(),
+        skills: (() => { try { const s = JSON.parse(l.skills as string); const blur = (v: number) => Math.round(v / 5) * 5; return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === "number" ? blur(v) : v])); } catch { return {}; } })(),
+        myBidAmount: myBids[l.id as string] ?? null,
+      };
+    }),
     myListings: myListings.results.map((l) => ({
       id: l.id, playerId: l.player_id, askingPrice: l.asking_price,
       playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,
