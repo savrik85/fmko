@@ -256,7 +256,7 @@ export async function generateAiOffers(
 
   const offerId = crypto.randomUUID();
   await db.prepare(
-    `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, amount, offer_type, status, message, expires_at, created_at)
+    `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, message, expires_at, created_at)
      VALUES (?, ?, 'virtual_ai', ?, ?, 'transfer', 'pending', ?, datetime('now', '+7 days'), datetime('now'))`
   ).bind(
     offerId, target.id, targetTeamId, offerPrice, `Nabídka od ${virtualTeam.name}`,
