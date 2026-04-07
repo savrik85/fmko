@@ -2820,11 +2820,40 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
   if (!listing) return c.json({ error: "Listing nenalezen" }, 404);
 
   if (listing.is_ai_listing) {
-    // AI listing — auto-accept: generate player, transfer to buyer
+    // AI listing — check price, then player agency decision, then transfer
     if (body.amount < listing.asking_price) {
       return c.json({ error: `Nabídka je příliš nízká. Požadovaná cena: ${listing.asking_price.toLocaleString("cs")} Kč.` }, 400);
     }
     const aiData = JSON.parse(listing.ai_player_data);
+
+    // Player agency decision — will the player agree to move here?
+    const teamInfo = await c.env.DB.prepare(
+      "SELECT t.reputation, v.lat, v.lng, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
+    ).bind(teamId).first<{ reputation: number; lat: number; lng: number; district: string }>();
+    const squadCount = await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM players WHERE team_id = ?")
+      .bind(teamId).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "game" }, "count squad for AI bid", e); return { cnt: 15 }; });
+
+    // Get approximate coordinates for the AI team's city from village table
+    const aiVillage = await c.env.DB.prepare(
+      "SELECT lat, lng FROM villages WHERE name = ? OR name LIKE ? LIMIT 1"
+    ).bind(aiData.fromCity ?? "", `${aiData.fromCity ?? ""}%`).first<{ lat: number; lng: number }>()
+      .catch((e) => { logger.warn({ module: "game" }, "fetch AI city coords", e); return null; });
+
+    if (teamInfo) {
+      const { evaluateSigningChance } = await import("../transfers/player-agency");
+      const agencyRng = createRng(Date.now() + listingId.charCodeAt(0));
+      const pers = aiData.personality ?? {};
+      const decision = evaluateSigningChance(
+        { weekly_wage: aiData.weeklyWage ?? 200, personality: pers, district: aiData.fromCity ? null : null },
+        { reputation: teamInfo.reputation, villageLat: teamInfo.lat, villageLon: teamInfo.lng, squadSize: squadCount?.cnt ?? 15, district: teamInfo.district },
+        aiVillage, body.amount / 10, // offered wage proxy
+        agencyRng,
+      );
+      if (!decision.accepted) {
+        return c.json({ ok: false, rejected: true, explanation: decision.explanation, factors: decision.factors });
+      }
+    }
+
     const playerId = crypto.randomUUID();
     const skills = JSON.stringify(aiData.skills ?? {});
     const physical = JSON.stringify(aiData.physical ?? {});
