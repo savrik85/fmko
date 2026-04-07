@@ -170,13 +170,11 @@ export async function generateAiListings(
   expiresAt.setDate(expiresAt.getDate() + rng.int(7, 14));
 
   await db.prepare(
-    `INSERT INTO transfer_listings (id, team_id, player_id, player_name, player_age, player_position, player_rating,
+    `INSERT INTO transfer_listings (id, team_id, player_id,
       asking_price, league_id, status, is_ai_listing, ai_player_data, expires_at, created_at)
-    VALUES (?, 'virtual_ai', 'virtual_ai', ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, datetime('now'))`
+    VALUES (?, 'virtual_ai', 'virtual_ai', ?, ?, 'active', 1, ?, ?, datetime('now'))`
   ).bind(
-    listingId,
-    `${player.firstName} ${player.lastName}`,
-    age, position, overallRating, askingPrice, leagueId,
+    listingId, askingPrice, leagueId,
     playerData, expiresAt.toISOString(),
   ).run();
 
