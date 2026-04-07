@@ -2732,7 +2732,7 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
   if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
   const listings = await c.env.DB.prepare(
-    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at, tl.is_ai_listing, tl.ai_player_data,
+    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at, tl.is_ai_listing, tl.ai_player_data, tl.rejected_by,
      p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.skills,
      t.name as team_name
      FROM transfer_listings tl
@@ -2740,6 +2740,11 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
      LEFT JOIN teams t ON tl.team_id = t.id AND tl.is_ai_listing = 0
      WHERE tl.league_id = ? AND tl.status = 'active' AND tl.team_id != ? ORDER BY tl.created_at DESC`
   ).bind(team.league_id, teamId).all();
+
+  // Filter out listings where this team was rejected (same as free agents)
+  listings.results = listings.results.filter((l) => {
+    try { const rej = JSON.parse((l.rejected_by as string) ?? "[]"); return !rej.includes(teamId); } catch { return true; }
+  });
 
   const myListings = await c.env.DB.prepare(
     `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at,
