@@ -1110,8 +1110,16 @@ export default function TransfersPage() {
                         )}
                         {expandedSkills.has(l.id) && (l as any).skills && (() => {
                           const s = (l as any).skills as Record<string, number>;
-                          const allLabels: [string, string][] = [["Rych", "speed"],["Tech", "technique"],["Stř", "shooting"],["Přih", "passing"],["Hl", "heading"],["Obr", "defense"],["Výd", "stamina"]];
-                          return <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">{allLabels.map(([lbl, key]) => s[key] != null ? <span key={key} className={`text-sm tabular-nums ${skillColor(s[key])}`}>{lbl} <span className="font-bold">{s[key]}</span></span> : null)}</div>;
+                          return (
+                            <div className="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 text-sm tabular-nums">
+                              <div><span className="text-muted font-heading">Rych </span><span className={skillColor(s.speed ?? 0)}>{s.speed ?? "—"}</span></div>
+                              <div><span className="text-muted font-heading">Tech </span><span className={skillColor(s.technique ?? 0)}>{s.technique ?? "—"}</span></div>
+                              <div><span className="text-muted font-heading">Stř </span><span className={skillColor(s.shooting ?? 0)}>{s.shooting ?? "—"}</span></div>
+                              <div><span className="text-muted font-heading">Přih </span><span className={skillColor(s.passing ?? 0)}>{s.passing ?? "—"}</span></div>
+                              <div><span className="text-muted font-heading">Obr </span><span className={skillColor(s.defense ?? 0)}>{s.defense ?? "—"}</span></div>
+                              <div><span className="text-muted font-heading">Výd </span><span className={skillColor(s.stamina ?? 0)}>{s.stamina ?? "—"}</span></div>
+                            </div>
+                          );
                         })()}
                       </div>
                       {l.myBidAmount ? (
