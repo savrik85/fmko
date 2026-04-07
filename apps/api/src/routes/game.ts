@@ -2854,11 +2854,12 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     if (teamInfo) {
       const { evaluateSigningChance } = await import("../transfers/player-agency");
       const agencyRng = createRng(Date.now() + listingId.charCodeAt(0));
-      const pers = aiData.personality ?? {};
+      // AI players have patriotism to their home district — cross-district transfer is harder
+      const pers = { ...(aiData.personality ?? {}), patriotism: 65 };
       const decision = evaluateSigningChance(
-        { weekly_wage: aiData.weeklyWage ?? 200, personality: pers, district: aiData.fromCity ? null : null },
+        { weekly_wage: aiData.weeklyWage ?? 200, personality: pers, district: aiData.fromDistrict ?? null },
         { reputation: teamInfo.reputation, villageLat: teamInfo.lat, villageLon: teamInfo.lng, squadSize: squadCount?.cnt ?? 15, district: teamInfo.district },
-        aiVillage, body.amount / 10, // offered wage proxy
+        aiVillage, aiData.weeklyWage ?? 200,
         agencyRng,
       );
       if (!decision.accepted) {

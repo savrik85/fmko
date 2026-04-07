@@ -163,6 +163,7 @@ export async function generateAiListings(
     avatar,
     fromTeam: team.name,
     fromCity: team.city,
+    fromDistrict: team.district,
   });
 
   const listingId = crypto.randomUUID();
