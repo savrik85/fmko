@@ -2826,6 +2826,17 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     }
     const aiData = JSON.parse(listing.ai_player_data);
 
+    // Cooldown check — rejected teams can't try again for 3 days
+    const rejectedBy: Record<string, string> = aiData._rejectedBy ?? {};
+    if (rejectedBy[teamId]) {
+      const rejectedAt = new Date(rejectedBy[teamId]);
+      const cooldownMs = 3 * 24 * 60 * 60 * 1000;
+      if (Date.now() - rejectedAt.getTime() < cooldownMs) {
+        const daysLeft = Math.ceil((cooldownMs - (Date.now() - rejectedAt.getTime())) / (24 * 60 * 60 * 1000));
+        return c.json({ ok: false, rejected: true, explanation: `Hráč vás už jednou odmítl. Zkuste to znovu za ${daysLeft} ${daysLeft === 1 ? "den" : "dny"}.` });
+      }
+    }
+
     // Player agency decision — will the player agree to move here?
     const teamInfo = await c.env.DB.prepare(
       "SELECT t.reputation, v.lat, v.lng, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
@@ -2850,6 +2861,12 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
         agencyRng,
       );
       if (!decision.accepted) {
+        // Save rejection with cooldown
+        aiData._rejectedBy = aiData._rejectedBy ?? {};
+        aiData._rejectedBy[teamId] = new Date().toISOString();
+        await c.env.DB.prepare("UPDATE transfer_listings SET ai_player_data = ? WHERE id = ?")
+          .bind(JSON.stringify(aiData), listingId).run()
+          .catch((e) => logger.warn({ module: "game" }, "save AI rejection cooldown", e));
         return c.json({ ok: false, rejected: true, explanation: decision.explanation, factors: decision.factors });
       }
     }
