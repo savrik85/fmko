@@ -1135,12 +1135,12 @@ export default function TransfersPage() {
                               defaultPrice: l.askingPrice,
                               onConfirm: async (price) => {
                                 if (!teamId) return;
+                                setPriceDialog(null);
                                 try {
                                   const res = await apiFetch<{ ok: boolean; autoAccepted?: boolean; rejected?: boolean; explanation?: string; player?: Player; error?: string }>(`/api/teams/${teamId}/market/${l.id}/bid`, {
                                     method: "POST", headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({ amount: price }),
                                   });
-                                  setPriceDialog(null);
                                   if (res.rejected) {
                                     await confirm({ title: "Odmítl přestup", description: res.explanation ?? "Hráč nemá zájem." });
                                   } else if (res.autoAccepted && res.player) {
