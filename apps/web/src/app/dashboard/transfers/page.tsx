@@ -1091,10 +1091,11 @@ export default function TransfersPage() {
                         ? <FaceAvatar faceConfig={lAvatar} size={40} className="rounded-full shrink-0" />
                         : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <Link href={`/dashboard/player/${l.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
-                            {l.playerName}
-                          </Link>
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                          {(l as any).isAiListing
+                            ? <span className="font-heading font-bold">{l.playerName}</span>
+                            : <Link href={`/dashboard/player/${l.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">{l.playerName}</Link>
+                          }
                           <PositionBadge position={l.position as "GK" | "DEF" | "MID" | "FWD"} />
                           <span className="text-sm text-muted">{l.playerAge} let</span>
                           <span className="text-sm font-heading font-bold tabular-nums">{l.overallRating}</span>
@@ -1102,10 +1103,15 @@ export default function TransfersPage() {
                         <div className="text-xs text-muted">
                           <span className="font-heading font-bold text-ink">{formatCZK(l.askingPrice)}</span> — {l.teamName}
                         </div>
-                        {(l as any).skills && Object.keys((l as any).skills).length > 0 && (() => {
+                        {(l as any).skills && Object.keys((l as any).skills).length > 0 && (
+                          <button onClick={() => toggleSkills(l.id)} className="text-sm font-heading font-bold text-pitch-500 hover:text-pitch-600 transition-colors mt-1">
+                            Dovednosti {expandedSkills.has(l.id) ? "▲" : "▼"}
+                          </button>
+                        )}
+                        {expandedSkills.has(l.id) && (l as any).skills && (() => {
                           const s = (l as any).skills as Record<string, number>;
-                          const labels: [string, string][] = l.position === "GK" ? [["Bra", "goalkeeping"]] : l.position === "DEF" ? [["Obr", "defense"],["Hl", "heading"],["Rch", "speed"]] : l.position === "MID" ? [["Pas", "passing"],["Tch", "technique"],["Kre", "creativity"]] : [["Stř", "shooting"],["Rch", "speed"],["Tch", "technique"]];
-                          return <div className="flex gap-2 mt-0.5">{labels.map(([lbl, key]) => <span key={key} className={`text-[10px] tabular-nums ${skillColor(s[key] ?? 0)}`}>~{lbl} {s[key] ?? 0}</span>)}</div>;
+                          const allLabels: [string, string][] = [["Rych", "speed"],["Tech", "technique"],["Stř", "shooting"],["Přih", "passing"],["Hl", "heading"],["Obr", "defense"],["Výd", "stamina"]];
+                          return <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">{allLabels.map(([lbl, key]) => s[key] != null ? <span key={key} className={`text-sm tabular-nums ${skillColor(s[key])}`}>{lbl} <span className="font-bold">{s[key]}</span></span> : null)}</div>;
                         })()}
                       </div>
                       {l.myBidAmount ? (
