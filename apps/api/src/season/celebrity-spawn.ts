@@ -170,49 +170,78 @@ export async function spawnCelebrity(
     "INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, ?, 'celebrity_arrival', ?, ?, datetime('now'))"
   ).bind(crypto.randomUUID(), leagueId, headlineMap[celebType], bodyMap[celebType]).run();
 
-  // ── Broadcast message to all human teams in league ──
+  // ── Messages to human teams — player tips off + assistant analyzes ──
   const humanTeams = await db.prepare(
-    "SELECT t.id, c.id as conv_id FROM teams t LEFT JOIN conversations c ON c.team_id = t.id AND c.type = 'chairman' WHERE t.league_id = ? AND t.user_id != 'ai'"
+    "SELECT t.id FROM teams t WHERE t.league_id = ? AND t.user_id != 'ai'"
   ).bind(leagueId).all().catch((e) => { logger.warn({ module: "celebrity-spawn" }, "fetch teams for broadcast", e); return { results: [] }; });
 
-  const typeEmoji: Record<CelebrityType, string> = { legend: "⭐", fallen_star: "🍺", glass_man: "🩹" };
-  const broadcastText = `${typeEmoji[celebType]} NOVÝ VOLNÝ HRÁČ: ${fullName} (${celeb.position}, ${celeb.age} let, ${tierDesc}) je k dispozici! Podívejte se na trh volných hráčů.`;
+  // Player tip-off messages — different reactions per type
+  const playerReactions: Record<CelebrityType, string[]> = {
+    legend: [
+      `Trenére, četl jste noviny?! ${fullName} se přistěhoval sem do okresu! To je přece ${tierDesc}! To by bylo něco, kdyby hrál za nás!`,
+      `Šéfe! Slyšel jsem v hospodě, že ${fullName} je tady v okrese! Prej hledá tým! Musíme ho mít!`,
+      `Trenére, nevěřím vlastním očím — ${fullName} je na trhu volných hráčů! Ten hrál přece za repre! Můžem ho podepsat?`,
+    ],
+    fallen_star: [
+      `Trenére, víte co se povídá? ${fullName} je zpátky v kraji. Prej to s ním šlo z kopce, ale talent tam prej furt je. Co říkáte?`,
+      `Šéfe, ${fullName} je na trhu. Znám ho ze školy — byl to bůh na hřišti. Teď prej pije, ale třeba by se dal dohromady u nás?`,
+      `Trenére, četl jsem v novinách o ${fullName}. Ten mladej co hrál za ligu a pak to zabalil. Prej je v okrese, nechceme ho zkusit?`,
+    ],
+    glass_man: [
+      `Trenére, ${fullName} je volnej! Ten hrál přece profi fotbal, akorát ho zradily nohy. Ale když hraje, je to jiná třída. Stojí to za to?`,
+      `Šéfe, slyšel jsem že ${fullName} hledá tým. Prej odešel z profíků kvůli zraněním, ale jinak je to bombarďák. Co říkáte?`,
+      `Trenére, víte o ${fullName}? Prej seknul s ligou kvůli kolenům, ale je mu teprv ${celeb.age}. Kdyby vydržel zdravej...`,
+    ],
+  };
 
-  // Scout report — risks and benefits analysis
+  // Scout report — risks and benefits analysis from assistant coach
   const scoutReports: Record<CelebrityType, string> = {
-    legend: `Trenére, ${fullName} je na trhu! Rating ${overallRating}, to je úplně jiná liga. `
-      + `Ale pozor — disciplína ${celeb.discipline}, alkohol ${celeb.alcohol}. `
-      + `Na tréninky moc nechodí, má vlastní program. Na zápasy taky ne vždycky — má spoustu akcí a povinností. `
+    legend: `Tak já se na to podíval. ${fullName} — rating ${overallRating}, to je úplně jiná liga. `
+      + `Ale pozor: disciplína ${celeb.discipline}, alkohol ${celeb.alcohol}. `
+      + `Na tréninky moc nechodí, má vlastní program. Na zápasy taky ne vždycky — má spoustu svých akcí. `
       + `Týdně ho to stojí ${celeb.transportCost} Kč jen za dopravu navíc k mzdě. `
       + `Ale když nastoupí, diváci se pohrnou. A ten přehled na hřišti — to se nedá naučit. `
       + `Já bych do toho šel, ale počítejte s tím, že to nebude zadarmo a spolehlivý taky ne.`,
-    fallen_star: `Trenére, na trhu je ${fullName} — mladý kluk, co to dotáhl do ligy, ale pak to s ním šlo z kopce. `
-      + `Rating teď jen ${overallRating}, ale talent tam pořád je — kdyby se dal dohromady, mohl by mít i ${celeb.hiddenTalent ?? 80}+. `
+    fallen_star: `Podíval jsem se na to. ${fullName} — teď má rating jen ${overallRating}, ale talent tam pořád je. `
+      + `Kdyby se dal dohromady, mohl by mít klidně ${celeb.hiddenTalent ?? 80}+. `
       + `Problém: alkohol ${celeb.alcohol}, disciplína ${celeb.discipline}. Bude chodit na kocovinu, bude vynechávat tréninky. `
-      + `Stojí za to riskovat? Pokud ho dokážete vychovat, může z něj být hvězda. Pokud ne, budete mít v kabině problém. `
+      + `Pokud ho dokážeme vychovat, může z něj být hvězda kádru. Pokud ne, budeme mít v kabině problém. `
       + `Za mě — zkusit to, ale mít realistická očekávání.`,
-    glass_man: `Trenére, ${fullName} je volný — a to je hráč s ratingem ${overallRating}! `
+    glass_man: `Prověřil jsem ho. ${fullName} — rating ${overallRating}, to je výborný hráč! `
       + `Odešel z profi fotbalu kvůli zraněním. Disciplína ${celeb.discipline} je v pohodě, alkohol ${celeb.alcohol} taky OK. `
       + `Problém je tělo — náchylnost ke zranění ${celeb.injuryProneness}, výdrž jen ${celeb.stamina}. `
       + `Bude chybět na spoustě zápasů kvůli zdraví. Když ale nastoupí, bude nejlepší hráč na hřišti. `
-      + `Za mě jednoznačně podepsat — jen počítejte s tím, že ho budete mít k dispozici tak na polovinu zápasů.`,
+      + `Za mě jednoznačně podepsat — jen počítejte s tím, že ho budeme mít k dispozici tak na polovinu zápasů.`,
   };
 
   for (const t of humanTeams.results) {
-    const convId = t.conv_id as string | null;
-    if (!convId) continue;
-    // Broadcast from chairman
+    const teamId = t.id as string;
+    // Find squad group conversation (or chairman if no squad group)
+    const squadConv = await db.prepare(
+      "SELECT id FROM conversations WHERE team_id = ? AND type = 'chairman' ORDER BY created_at LIMIT 1"
+    ).bind(teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "celebrity-spawn" }, "find conv", e); return null; });
+    if (!squadConv) continue;
+
+    // Pick a random player from the team to "tip off" the coach
+    const randomPlayer = await db.prepare(
+      "SELECT id, first_name, last_name FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') AND is_celebrity = 0 ORDER BY RANDOM() LIMIT 1"
+    ).bind(teamId).first<{ id: string; first_name: string; last_name: string }>().catch((e) => { logger.warn({ module: "celebrity-spawn" }, "pick random player", e); return null; });
+
+    const playerName = randomPlayer ? `${randomPlayer.first_name} ${randomPlayer.last_name}` : "Hráč";
+    const tipText = rng.pick(playerReactions[celebType]);
+
+    // Player message
     await db.prepare(
-      "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Předseda Přeboru', ?, datetime('now'))"
-    ).bind(crypto.randomUUID(), convId, broadcastText).run()
-      .catch((e) => logger.warn({ module: "celebrity-spawn" }, "broadcast msg", e));
-    // Scout report from assistant coach
+      "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at) VALUES (?, ?, 'player', ?, ?, ?, datetime('now'))"
+    ).bind(crypto.randomUUID(), squadConv.id, randomPlayer?.id ?? teamId, playerName, tipText).run()
+      .catch((e) => logger.warn({ module: "celebrity-spawn" }, "player tip msg", e));
+    // Assistant coach analysis
     await db.prepare(
-      "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Asistent trenéra', ?, datetime('now', '+5 seconds'))"
-    ).bind(crypto.randomUUID(), convId, scoutReports[celebType]).run()
+      "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Asistent trenéra', ?, datetime('now', '+10 seconds'))"
+    ).bind(crypto.randomUUID(), squadConv.id, scoutReports[celebType]).run()
       .catch((e) => logger.warn({ module: "celebrity-spawn" }, "scout report msg", e));
     await db.prepare("UPDATE conversations SET unread_count = unread_count + 2, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
-      .bind("Analýza nového hráče na trhu", convId).run()
+      .bind(`⭐ ${playerName} upozorňuje na ${fullName}`, squadConv.id).run()
       .catch((e) => logger.warn({ module: "celebrity-spawn" }, "update conv", e));
   }
 
