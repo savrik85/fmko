@@ -472,16 +472,8 @@ export default function MatchPage() {
                       const isOOP = player.position !== slots[i].pos;
                       const s = player as any;
                       return (
-                        <tr key={i} className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer ${isOOP ? "bg-gold-50/50" : ""} ${swapSource === i ? "bg-gold-100 ring-1 ring-gold-400" : swapSource !== null ? "hover:bg-pitch-50" : ""}`}
-                          onClick={() => {
-                            if (swapSource !== null && swapSource !== i) {
-                              const sel = [...selected]; [sel[swapSource], sel[i]] = [sel[i], sel[swapSource]]; setSelected(sel); setSwapSource(null); setSaved(false);
-                            } else if (swapSource === i) {
-                              setSwapSource(null);
-                            } else {
-                              setSwapSource(i); setEditSlot(null);
-                            }
-                          }}>
+                        <tr key={i} className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer ${isOOP ? "bg-gold-50/50" : ""} ${swapSource === i ? "bg-gold-100 ring-1 ring-gold-400" : ""}`}
+                          onClick={() => { setEditSlot(i); setSwapSource(null); }}>
                           <td className="py-1.5 pl-3 text-center">
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[slots[i].pos]}`}>
                               {player.squadNumber ?? i + 1}
@@ -547,13 +539,10 @@ export default function MatchPage() {
                           onClick={() => {
                             if (isAbsent) return;
                             if (swapSource !== null) {
-                              // Swap: bench player replaces XI player at swapSource position
-                              const sel = [...selected];
-                              sel[swapSource] = p.id;
-                              setSelected(sel); setSwapSource(null); setSaved(false);
+                              const sel = [...selected]; sel[swapSource] = p.id; setSelected(sel); setSwapSource(null); setSaved(false);
                             }
                           }}
-                          className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : swapSource !== null ? "hover:bg-pitch-50 cursor-pointer" : ""}`}>
+                          className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : ""} ${swapSource !== null && !isAbsent ? "hover:bg-pitch-50 cursor-pointer" : ""}`}>
                           <td className="py-1.5 pl-3 w-8 text-center">
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[p.position]}`}>
                               {p.squadNumber ?? "?"}
