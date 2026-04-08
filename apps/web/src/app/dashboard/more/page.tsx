@@ -15,6 +15,7 @@ const SECTIONS = [
   ]},
   { title: "Sout\u011B\u017E", items: [
     { href: "/dashboard/liga", icon: "\u{1F3C6}", label: "Liga", color: "#B8860B" },
+    { href: "/dashboard/schedule", icon: "\u{1F4C5}", label: "Rozpis", color: "#3D6B5C" },
     { href: "/dashboard/friendly", icon: "\u{1F91C}", label: "P\u0159\u00E1tel\u00E1ky", color: "#4A7A5C" },
     { href: "/dashboard/calendar", icon: "\u{1F5D3}\uFE0F", label: "Kalend\u00E1\u0159", color: "#6B7B3D" },
     { href: "/dashboard/news", icon: "\u{1F4F0}", label: "Zpravodaj", color: "#556B2F" },

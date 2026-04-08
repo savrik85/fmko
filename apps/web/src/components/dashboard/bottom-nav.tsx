@@ -26,7 +26,7 @@ export function BottomNav() {
   const items = [
     { href: "/dashboard", label: "Domů", icon: "\u{1F3DF}" },
     { href: "/dashboard/phone", label: "Zprávy", icon: "\u{1F4F1}", badge: unreadMessages },
-    { href: "/dashboard/match", label: "Zápas", icon: "\u26BD" },
+    { href: "/dashboard/match", label: "Sestava", icon: "\u{1F4CB}" },
     { href: "/dashboard/liga", label: "Liga", icon: "\u{1F3C6}" },
     { href: "/dashboard/more", label: "Více", icon: "\u2699" },
   ];
