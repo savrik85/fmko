@@ -2403,6 +2403,22 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   });
 });
 
+// GET lineup for specific calendar entry
+gameRouter.get("/teams/:teamId/lineup/:calendarId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const calendarId = c.req.param("calendarId");
+  const row = await c.env.DB.prepare(
+    "SELECT formation, tactic, players_data FROM lineups WHERE team_id = ? AND calendar_id = ?"
+  ).bind(teamId, calendarId).first<{ formation: string; tactic: string; players_data: string }>();
+  if (!row) return c.json({ lineup: null });
+  return c.json({
+    lineup: {
+      formation: row.formation, tactic: row.tactic,
+      players: (() => { try { return JSON.parse(row.players_data); } catch { return []; } })(),
+    },
+  });
+});
+
 // POST save lineup for next match
 gameRouter.post("/teams/:teamId/lineup", async (c) => {
   const teamId = c.req.param("teamId");

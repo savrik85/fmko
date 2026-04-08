@@ -254,20 +254,47 @@ export default function MatchPage() {
       {/* ═══ Upcoming matches strip ═══ */}
       {upcomingMatches.length > 1 && (
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-          {upcomingMatches.map((um, idx) => {
+          {upcomingMatches.map((um) => {
             const isActive = um.calendarId === nextMatch?.calendarId;
             const d = new Date(um.scheduledAt);
             const dayStr = d.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" });
             return (
-              <div key={um.calendarId}
-                className={`shrink-0 rounded-xl px-3 py-2 text-center cursor-default transition-all min-w-[100px] ${
-                  isActive ? "bg-pitch-500 text-white shadow-md" : "bg-white border border-gray-200 text-ink"
+              <button key={um.calendarId}
+                onClick={() => {
+                  if (isActive) return;
+                  // Switch to this match — update header + reload lineup
+                  setNextMatch((prev) => prev ? {
+                    ...prev,
+                    calendarId: um.calendarId,
+                    gameWeek: um.gameWeek,
+                    scheduledAt: um.scheduledAt,
+                    isHome: um.isHome,
+                    homeName: um.isHome ? prev.homeName : um.opponentName,
+                    awayName: um.isHome ? um.opponentName : prev.awayName,
+                  } : prev);
+                  // Load lineup for this match
+                  if (teamId) {
+                    apiFetch<{ lineup: { formation: string; tactic: string; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${um.calendarId}`)
+                      .then((data) => {
+                        if (data.lineup && data.lineup.players.length === 11) {
+                          setFormation(data.lineup.formation);
+                          setTactic(data.lineup.tactic);
+                          setSelected(data.lineup.players.map((p) => p.playerId));
+                        }
+                        setSaved(!!data.lineup);
+                      })
+                      .catch(() => { setSaved(false); });
+                  }
+                  setEditSlot(null); setSwapSource(null);
+                }}
+                className={`shrink-0 rounded-xl px-3 py-2 text-center transition-all min-w-[100px] ${
+                  isActive ? "bg-pitch-500 text-white shadow-md" : "bg-white border border-gray-200 text-ink hover:border-pitch-300 hover:shadow-sm cursor-pointer"
                 }`}>
                 <div className={`text-[10px] font-heading uppercase ${isActive ? "text-white/70" : "text-muted"}`}>{um.gameWeek}. kolo</div>
                 <div className={`text-xs font-heading font-bold truncate max-w-[100px] ${isActive ? "text-white" : ""}`}>{um.opponentName}</div>
                 <div className={`text-[9px] ${isActive ? "text-white/60" : "text-muted"}`}>{dayStr} · {um.isHome ? "D" : "V"}</div>
                 <div className="mt-0.5">{um.hasLineup || isActive ? <span className="text-[9px]">✅</span> : <span className="text-[9px] opacity-40">❌</span>}</div>
-              </div>
+              </button>
             );
           })}
         </div>
