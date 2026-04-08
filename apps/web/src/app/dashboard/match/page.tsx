@@ -406,8 +406,9 @@ function MatchPage() {
 
         {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
         <div>
-          {editSlot !== null ? (
-            <div className="hidden lg:block card overflow-x-auto">
+          {/* Desktop selector — inline, replaces XI table */}
+          {editSlot !== null && (
+            <div className="hidden lg:block card overflow-x-auto mb-3">
               <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                 <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat hráče — {slots[editSlot].pos}</span>
                 <button onClick={() => setEditSlot(null)} className="text-muted hover:text-ink text-lg leading-none">✕</button>
@@ -479,9 +480,10 @@ function MatchPage() {
                 </tbody>
               </table>
             </div>
-          ) : (
-            <>
-              {/* Starting XI table */}
+          )}
+          {/* XI table + bench — always visible */}
+          <>
+            {/* Starting XI table */}
               <div className="card overflow-x-auto mb-3">
                 <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
                   <span className="font-heading font-bold text-sm uppercase text-muted">Základní sestava</span>
@@ -614,8 +616,7 @@ function MatchPage() {
                   </tbody>
                 </table>
               </div>
-            </>
-          )}
+          </>
         </div>
       </div>
 
