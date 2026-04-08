@@ -37,6 +37,7 @@ export async function executeDailyTick(
   const dayOfWeek = effectiveDate.getUTCDay();
   const isTrainingDay = dayOfWeek >= 1 && dayOfWeek <= 5;
   const events: DailyTickEvent[] = [];
+  const advancedLeagues = new Set<string>();
   const tickStart = Date.now();
   logger.info({ module: "daily-tick" }, `START dayOfWeek=${dayOfWeek} training=${isTrainingDay} date=${now.toISOString()}`);
 
@@ -335,14 +336,26 @@ export async function executeDailyTick(
       }
     }
     if (gameDate) {
-      // Advance the date FIRST
+      // Advance the date — bulk update per league to keep all teams in sync
       const gd = new Date(gameDate);
       gd.setDate(gd.getDate() + 1);
       const newDayOfWeek = gd.getUTCDay();
       const newGameDate = gd.toISOString();
 
-      await env.DB.prepare("UPDATE teams SET game_date = ? WHERE id = ?")
-        .bind(newGameDate, teamId).run();
+      // Skip if this league was already advanced by another team in this tick
+      const leagueKey = team.league_id as string | null;
+      if (leagueKey && advancedLeagues.has(leagueKey)) {
+        // Already advanced — just read the new date for this team's logic below
+      } else if (leagueKey) {
+        await env.DB.prepare("UPDATE teams SET game_date = ? WHERE league_id = ?")
+          .bind(newGameDate, leagueKey).run()
+          .catch((e) => logger.warn({ module: "daily-tick" }, "bulk advance league date", e));
+        advancedLeagues.add(leagueKey);
+      } else {
+        await env.DB.prepare("UPDATE teams SET game_date = ? WHERE id = ?")
+          .bind(newGameDate, teamId).run()
+          .catch((e) => logger.warn({ module: "daily-tick" }, "advance team date", e));
+      }
 
       events.push({ type: "day", description: `Herní den: ${gd.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" })}` });
 
