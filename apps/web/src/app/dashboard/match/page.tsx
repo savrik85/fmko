@@ -404,12 +404,10 @@ function MatchPage() {
         )}
         </div>
 
-        {/* ═══ RIGHT PANEL — XI table + bench (or desktop selector) ═══ */}
+        {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
         <div>
           {editSlot !== null ? (
-            <>
-            {/* Desktop only: inline selector */}
-            <div className="hidden lg:block card overflow-x-auto">
+            <div className="card overflow-x-auto">
               <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                 <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat hráče — {slots[editSlot].pos}</span>
                 <button onClick={() => setEditSlot(null)} className="text-muted hover:text-ink text-lg leading-none">✕</button>
@@ -481,9 +479,7 @@ function MatchPage() {
                 </tbody>
               </table>
             </div>
-            </>
           ) : (
-            /* XI table + bench shown when no editSlot */
             <>
               {/* Starting XI table */}
               <div className="card overflow-x-auto mb-3">
@@ -664,70 +660,6 @@ function MatchPage() {
         </button>
         {saveError && <p className="text-sm text-card-red mt-2 text-center">{saveError}</p>}
       </div>
-
-      {/* ═══ Mobile bottom sheet selector (outside grid to avoid overflow issues) ═══ */}
-      {editSlot !== null && (
-        <div className="lg:hidden">
-          <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setEditSlot(null)} />
-          <div className="fixed bottom-0 left-0 right-0 z-50 bg-paper rounded-t-2xl shadow-modal max-h-[70vh] overflow-y-auto">
-            <div className="sticky top-0 z-10 px-3 py-2 bg-paper border-b border-gray-100 flex items-center justify-between rounded-t-2xl">
-              <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat hráče — {slots[editSlot].pos}</span>
-              <button onClick={() => setEditSlot(null)} className="text-muted hover:text-ink text-lg leading-none">✕</button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 text-muted">
-                    <th className="py-1.5 pl-3 w-6 text-center text-xs font-heading">#</th>
-                    <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-7">Rat</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-7">Kon</th>
-                    <th className="py-1.5 pr-3 text-center text-xs font-heading w-7">Mor</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {players
-                    .filter((p) => !selected.includes(p.id) || p.id === selected[editSlot])
-                    .sort((a, b) => {
-                      if (a.absent && !b.absent) return 1;
-                      if (!a.absent && b.absent) return -1;
-                      return (a.position === slots[editSlot].pos ? -1 : 1) - (b.position === slots[editSlot].pos ? -1 : 1) || b.overallRating - a.overallRating;
-                    })
-                    .map((p) => {
-                      const isCurrent = p.id === selected[editSlot];
-                      const isAbsent = p.absent;
-                      return (
-                        <tr key={p.id}
-                          onClick={() => { if (!isAbsent) { const sel = [...selected]; sel[editSlot] = p.id; setSelected(sel); setEditSlot(null); setSaved(false); } }}
-                          className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35 cursor-not-allowed" : isCurrent ? "bg-pitch-100" : "hover:bg-gray-50 cursor-pointer active:bg-pitch-50"}`}>
-                          <td className="py-2.5 pl-3 text-center">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[p.position]}`}>
-                              {p.squadNumber ?? "?"}
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-1.5">
-                            {isAbsent ? (
-                              <span className="font-heading font-bold text-sm line-through text-muted">{p.lastName}</span>
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                <span className="font-heading font-bold text-sm">{p.lastName}</span>
-                                <PositionBadge position={p.position as Pos} />
-                                <span className="text-xs text-muted">{p.overallRating}</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-2.5 text-center tabular-nums font-heading font-bold">{p.overallRating}</td>
-                          <td className={`py-2.5 text-center tabular-nums ${condC(p.condition)}`}>{p.condition}%</td>
-                          <td className="py-2.5 pr-3 text-center">{moraleIcon(p.morale)}</td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
