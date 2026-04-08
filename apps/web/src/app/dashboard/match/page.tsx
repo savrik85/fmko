@@ -96,17 +96,23 @@ interface NextMatchInfo {
   isHome: boolean; homeName: string; awayName: string; homeColor: string; awayColor: string;
 }
 
+interface UpcomingMatch {
+  calendarId: string; gameWeek: number; scheduledAt: string;
+  opponentName: string; isHome: boolean; hasLineup: boolean;
+}
+
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
 
 export default function MatchPage() {
   const { teamId } = useTeam();
   const [nextMatch, setNextMatch] = useState<NextMatchInfo | null>(null);
+  const [upcomingMatches, setUpcomingMatches] = useState<UpcomingMatch[]>([]);
   const [players, setPlayers] = useState<AvailablePlayer[]>([]);
   const [formation, setFormation] = useState("4-4-2");
   const [tactic, setTactic] = useState("balanced");
   const [selected, setSelected] = useState<(string | null)[]>(Array(11).fill(null));
   const [editSlot, setEditSlot] = useState<number | null>(null);
-  const [swapSource, setSwapSource] = useState<number | null>(null); // for 2-click swap on pitch
+  const [swapSource, setSwapSource] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -114,11 +120,12 @@ export default function MatchPage() {
 
   useEffect(() => {
     if (!teamId) return;
-    apiFetch<{ nextMatch: NextMatchInfo | null; lineup: { formation: string; tactic: string; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(
+    apiFetch<{ nextMatch: NextMatchInfo | null; lineup: { formation: string; tactic: string; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
       `/api/teams/${teamId}/next-match`
     ).then((data) => {
       setNextMatch(data.nextMatch);
       setPlayers(data.availablePlayers ?? []);
+      setUpcomingMatches(data.upcomingMatches ?? []);
       if (data.lineup && data.lineup.players.length === 11) {
         setFormation(data.lineup.formation);
         setTactic(data.lineup.tactic);
@@ -243,6 +250,28 @@ export default function MatchPage() {
           </>
         );
       })()}
+
+      {/* ═══ Upcoming matches strip ═══ */}
+      {upcomingMatches.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          {upcomingMatches.map((um, idx) => {
+            const isActive = um.calendarId === nextMatch?.calendarId;
+            const d = new Date(um.scheduledAt);
+            const dayStr = d.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" });
+            return (
+              <div key={um.calendarId}
+                className={`shrink-0 rounded-xl px-3 py-2 text-center cursor-default transition-all min-w-[100px] ${
+                  isActive ? "bg-pitch-500 text-white shadow-md" : "bg-white border border-gray-200 text-ink"
+                }`}>
+                <div className={`text-[10px] font-heading uppercase ${isActive ? "text-white/70" : "text-muted"}`}>{um.gameWeek}. kolo</div>
+                <div className={`text-xs font-heading font-bold truncate max-w-[100px] ${isActive ? "text-white" : ""}`}>{um.opponentName}</div>
+                <div className={`text-[9px] ${isActive ? "text-white/60" : "text-muted"}`}>{dayStr} · {um.isHome ? "D" : "V"}</div>
+                <div className="mt-0.5">{um.hasLineup || isActive ? <span className="text-[9px]">✅</span> : <span className="text-[9px] opacity-40">❌</span>}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ═══ Absent players ═══ */}
       {absentPlayers.length > 0 && (

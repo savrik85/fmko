@@ -2356,6 +2356,33 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     };
   });
 
+  // Upcoming matches (next 5) for multi-match strip
+  let upcomingMatches: Array<{ calendarId: string; gameWeek: number; scheduledAt: string; opponentName: string; isHome: boolean; hasLineup: boolean }> = [];
+  if (team.league_id && !isFriendly) {
+    try {
+      const upcoming = await c.env.DB.prepare(
+        `SELECT sc.id as cal_id, sc.game_week, sc.scheduled_at,
+          m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name,
+          (SELECT COUNT(*) FROM lineups l WHERE l.team_id = ? AND l.calendar_id = sc.id) as has_lineup
+        FROM season_calendar sc
+        JOIN matches m ON m.calendar_id = sc.id
+        JOIN teams t1 ON m.home_team_id = t1.id
+        JOIN teams t2 ON m.away_team_id = t2.id
+        WHERE sc.league_id = ? AND sc.scheduled_at >= ? AND sc.status = 'scheduled'
+          AND (m.home_team_id = ? OR m.away_team_id = ?)
+        ORDER BY sc.scheduled_at ASC LIMIT 5`
+      ).bind(teamId, team.league_id, gameDate.toISOString(), teamId, teamId).all();
+      upcomingMatches = upcoming.results.map((u) => ({
+        calendarId: u.cal_id as string,
+        gameWeek: u.game_week as number,
+        scheduledAt: u.scheduled_at as string,
+        opponentName: (u.home_team_id === teamId ? u.away_name : u.home_name) as string,
+        isHome: u.home_team_id === teamId,
+        hasLineup: (u.has_lineup as number) > 0,
+      }));
+    } catch (e) { logger.warn({ module: "game" }, "fetch upcoming matches", e); }
+  }
+
   return c.json({
     nextMatch: {
       matchId: match.id,
@@ -2372,6 +2399,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       players: (() => { try { return JSON.parse(lineup.players_data); } catch (e) { logger.warn({ module: "game" }, "parse lineup players_data", e); return []; } })(),
     } : null,
     availablePlayers: available,
+    upcomingMatches,
   });
 });
 
