@@ -378,7 +378,10 @@ export default function MatchPage() {
                           </td>
                           <td className="py-1.5 px-1.5">
                             {isAbsent ? (
-                              <span className="font-heading font-bold text-sm line-through text-muted">{p.lastName}</span>
+                              <div>
+                                <span className="font-heading font-bold text-sm line-through text-muted">{p.lastName}</span>
+                                <div className="text-[10px] text-muted italic">{(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : ((p as any).absenceSms ?? (p as any).absenceReason ?? "Nedostupný")}</div>
+                              </div>
                             ) : (
                               <div>
                                 <span className="font-heading font-bold text-sm">{isOOP && <span className="text-gold-500 mr-1">⚠️</span>}{p.lastName}</span>
@@ -499,7 +502,10 @@ export default function MatchPage() {
                           </td>
                           <td className="py-1.5 px-1.5">
                             {isAbsent ? (
-                              <span className="font-heading font-bold text-sm leading-tight line-through text-muted">{p.lastName}</span>
+                              <div>
+                                <span className="font-heading font-bold text-sm leading-tight line-through text-muted">{p.lastName}</span>
+                                <div className="text-[10px] text-muted italic">{(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : ((p as any).absenceSms ?? (p as any).absenceReason ?? "Nedostupný")}</div>
+                              </div>
                             ) : (
                               <>
                                 <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-sm leading-tight hover:text-pitch-500 transition-colors">{p.lastName}</Link>

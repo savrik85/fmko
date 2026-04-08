@@ -49,6 +49,7 @@ const VILLAGE_FLAVOR: Record<string, string> = {
   "Břevnov": "nejstarší pražská čtvrť s klášterem z roku 993",
   "Michle": "rezidenční čtvrť pod Pankrácem",
   "Podolí": "čtvrť se slavným plaveckým stadionem",
+  "Dvorce": "malebná čtvrť mezi Podolím a Pankrácem, kdysi samostatná ves s mlýny na Botiči",
   "Hlubočepy": "údolí pod Barrandovem s filmovými ateliéry nedaleko",
   "Zbraslav": "bývalé královské město na soutoku Vltavy a Berounky",
   "Chodov": "sídlištní čtvrť s obřím nákupním centrem",
