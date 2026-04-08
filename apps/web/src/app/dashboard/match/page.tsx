@@ -407,7 +407,7 @@ function MatchPage() {
         {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
         <div>
           {editSlot !== null ? (
-            <div className="card overflow-x-auto">
+            <div className="hidden lg:block card overflow-x-auto">
               <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                 <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat hráče — {slots[editSlot].pos}</span>
                 <button onClick={() => setEditSlot(null)} className="text-muted hover:text-ink text-lg leading-none">✕</button>
@@ -660,6 +660,51 @@ function MatchPage() {
         </button>
         {saveError && <p className="text-sm text-card-red mt-2 text-center">{saveError}</p>}
       </div>
+
+      {/* ═══ Mobile bottom sheet selector ═══ */}
+      {editSlot !== null && (
+        <>
+          <div className="lg:hidden fixed inset-0 z-[60] bg-black/50" onClick={() => setEditSlot(null)} />
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[60] bg-white rounded-t-2xl" style={{ maxHeight: "65vh" }}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat — {slots[editSlot].pos}</span>
+              <button onClick={() => setEditSlot(null)} className="w-8 h-8 flex items-center justify-center text-muted hover:text-ink text-xl">✕</button>
+            </div>
+            <div className="overflow-y-auto" style={{ maxHeight: "calc(65vh - 48px)" }}>
+              {players
+                .filter((p) => !selected.includes(p.id) || p.id === selected[editSlot])
+                .sort((a, b) => {
+                  if (a.absent && !b.absent) return 1;
+                  if (!a.absent && b.absent) return -1;
+                  return (a.position === slots[editSlot].pos ? -1 : 1) - (b.position === slots[editSlot].pos ? -1 : 1) || b.overallRating - a.overallRating;
+                })
+                .map((p) => {
+                  const isCurrent = p.id === selected[editSlot];
+                  const isAbsent = p.absent;
+                  return (
+                    <button key={p.id} disabled={isAbsent}
+                      onClick={() => { const sel = [...selected]; sel[editSlot] = p.id; setSelected(sel); setEditSlot(null); setSaved(false); }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 text-left ${
+                        isAbsent ? "opacity-30" : isCurrent ? "bg-pitch-50" : "active:bg-gray-100"
+                      }`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs shrink-0 ${POS_BG[p.position]}`}>
+                        {p.squadNumber ?? "?"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-heading font-bold text-sm">{p.lastName}</span>
+                          <PositionBadge position={p.position as Pos} />
+                        </div>
+                        <div className="text-xs text-muted">{p.firstName} · {p.overallRating} rat · {p.condition}%</div>
+                      </div>
+                      <span className="text-sm shrink-0">{moraleIcon(p.morale)}</span>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
