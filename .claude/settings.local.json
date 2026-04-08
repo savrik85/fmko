@@ -158,7 +158,9 @@
       "Bash(git:*)",
       "Bash(xargs kill:*)",
       "Bash(xargs -I{} gh run view {} --log-failed)",
-      "Bash(xargs -I{} gh run rerun {})"
+      "Bash(xargs -I{} gh run rerun {})",
+      "WebFetch(domain:devblog.hattrick.org)",
+      "WebFetch(domain:wiki.hattrick.org)"
     ]
   }
 }

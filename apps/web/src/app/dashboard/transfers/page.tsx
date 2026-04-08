@@ -1004,6 +1004,12 @@ export default function TransfersPage() {
                         </button>
                         {isExpanded && (
                           <div className="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 text-sm tabular-nums">
+                            {fa.position === "GK" && (
+                              <div>
+                                <span className="text-muted font-heading">Bra </span>
+                                <span className={skillColor(fa.skills?.goalkeeping ?? 0)}>{fa.skills?.goalkeeping ?? "—"}</span>
+                              </div>
+                            )}
                             <div>
                               <span className="text-muted font-heading">Rych </span>
                               <span className={skillColor(fa.skills?.speed ?? 0)}>{fa.skills?.speed ?? "—"}</span>
@@ -1012,10 +1018,12 @@ export default function TransfersPage() {
                               <span className="text-muted font-heading">Tech </span>
                               <span className={skillColor(fa.skills?.technique ?? 0)}>{fa.skills?.technique ?? "—"}</span>
                             </div>
-                            <div>
-                              <span className="text-muted font-heading">Stř </span>
-                              <span className={skillColor(fa.skills?.shooting ?? 0)}>{fa.skills?.shooting ?? "—"}</span>
-                            </div>
+                            {fa.position !== "GK" && (
+                              <div>
+                                <span className="text-muted font-heading">Stř </span>
+                                <span className={skillColor(fa.skills?.shooting ?? 0)}>{fa.skills?.shooting ?? "—"}</span>
+                              </div>
+                            )}
                             <div>
                               <span className="text-muted font-heading">Přih </span>
                               <span className={skillColor(fa.skills?.passing ?? 0)}>{fa.skills?.passing ?? "—"}</span>
@@ -1113,11 +1121,13 @@ export default function TransfersPage() {
                         )}
                         {expandedSkills.has(l.id) && (l as any).skills && (() => {
                           const s = (l as any).skills as Record<string, number>;
+                          const isGK = l.position === "GK";
                           return (
                             <div className="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 text-sm tabular-nums">
+                              {isGK && <div><span className="text-muted font-heading">Bra </span><span className={skillColor(s.goalkeeping ?? 0)}>{s.goalkeeping ?? "—"}</span></div>}
                               <div><span className="text-muted font-heading">Rych </span><span className={skillColor(s.speed ?? 0)}>{s.speed ?? "—"}</span></div>
                               <div><span className="text-muted font-heading">Tech </span><span className={skillColor(s.technique ?? 0)}>{s.technique ?? "—"}</span></div>
-                              <div><span className="text-muted font-heading">Stř </span><span className={skillColor(s.shooting ?? 0)}>{s.shooting ?? "—"}</span></div>
+                              {!isGK && <div><span className="text-muted font-heading">Stř </span><span className={skillColor(s.shooting ?? 0)}>{s.shooting ?? "—"}</span></div>}
                               <div><span className="text-muted font-heading">Přih </span><span className={skillColor(s.passing ?? 0)}>{s.passing ?? "—"}</span></div>
                               <div><span className="text-muted font-heading">Obr </span><span className={skillColor(s.defense ?? 0)}>{s.defense ?? "—"}</span></div>
                               <div><span className="text-muted font-heading">Výd </span><span className={skillColor(s.stamina ?? 0)}>{s.stamina ?? "—"}</span></div>
