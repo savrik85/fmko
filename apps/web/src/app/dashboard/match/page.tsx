@@ -282,7 +282,10 @@ function MatchPage() {
               <div className="font-heading font-bold text-base truncate">
                 vs {opponentName} · <span className="text-pitch-500">{nextMatch.isHome ? "doma" : "venku"}</span> · <span className="text-muted">{daysLabel}</span>
               </div>
-              <div className="text-xs text-muted">{nextMatch.gameWeek}. kolo · {dateStr}</div>
+              <div className="text-xs text-muted">
+                {nextMatch.gameWeek}. kolo · {dateStr}
+                {absentPlayers.length > 0 && <span className="ml-2 text-card-red font-heading font-bold">⚠ {absentPlayers.length} nedostupných</span>}
+              </div>
             </div>
             <button disabled={currentIdx >= upcomingMatches.length - 1} onClick={() => { if (currentIdx < upcomingMatches.length - 1) switchToMatch(upcomingMatches[currentIdx + 1]); }}
               className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors text-lg font-bold">
@@ -292,22 +295,7 @@ function MatchPage() {
         );
       })()}
 
-      {/* ═══ Absent players ═══ */}
-      {absentPlayers.length > 0 && (
-        <div className="card p-3">
-          <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Nedostupní ({absentPlayers.length})</div>
-          <div className="space-y-1">
-            {absentPlayers.map((p) => (
-              <div key={p.id} className="flex items-baseline gap-2 text-sm">
-                <span className="text-xs shrink-0">{p.absenceEmoji ?? "❌"}</span>
-                <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 shrink-0">{p.firstName} {p.lastName}</Link>
-                <PositionBadge position={p.position as Pos} />
-                <span className="text-xs text-muted italic">&mdash; {(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : (p.absenceSms ?? p.absenceReason ?? "Nedostupný")}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Absent players shown inline in bench table + selector, not as separate card */}
 
       {/* ═══ Formation + Tactic — one row ═══ */}
       <div className="card p-3">
