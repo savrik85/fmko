@@ -269,8 +269,8 @@ export default function MatchPage() {
                     gameWeek: um.gameWeek,
                     scheduledAt: um.scheduledAt,
                     isHome: um.isHome,
-                    homeName: um.isHome ? prev.homeName : um.opponentName,
-                    awayName: um.isHome ? um.opponentName : prev.awayName,
+                    homeName: um.isHome ? (prev.isHome ? prev.homeName : prev.awayName) : um.opponentName,
+                    awayName: um.isHome ? um.opponentName : (prev.isHome ? prev.homeName : prev.awayName),
                   } : prev);
                   // Load lineup for this match
                   if (teamId) {
