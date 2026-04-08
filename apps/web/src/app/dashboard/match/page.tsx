@@ -490,7 +490,7 @@ export default function MatchPage() {
                           <td className="py-1.5 px-1.5">
                             <div className="flex items-center gap-1.5">
                               <div className="min-w-0">
-                                <Link href={`/dashboard/player/${player.id}`} className="font-heading font-bold text-sm leading-tight hover:text-pitch-500 transition-colors">{player.lastName}</Link>
+                                <span className="font-heading font-bold text-sm leading-tight">{player.lastName}</span>
                                 <div className="text-xs text-muted">{player.firstName} · {player.age} let</div>
                               </div>
                               <button onClick={(e) => { e.stopPropagation(); setCaptainId(captainId === player.id ? null : player.id); setSaved(false); }}
