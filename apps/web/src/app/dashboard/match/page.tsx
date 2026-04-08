@@ -106,7 +106,6 @@ export default function MatchPage() {
   const [tactic, setTactic] = useState("balanced");
   const [selected, setSelected] = useState<(string | null)[]>(Array(11).fill(null));
   const [editSlot, setEditSlot] = useState<number | null>(null);
-  const [swapSource, setSwapSource] = useState<number | null>(null); // for 2-click swap on pitch
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -215,34 +214,22 @@ export default function MatchPage() {
   return (
     <div className="page-container space-y-3">
 
-      {/* ═══ Match header — with date ═══ */}
-      {(() => {
-        const matchDate = nextMatch.scheduledAt ? new Date(nextMatch.scheduledAt) : null;
-        const dateStr = matchDate ? matchDate.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) : "";
-        return (
-          <>
-            {/* Mobile */}
-            <div className="card p-3 sm:hidden">
-              <div className="flex items-center justify-center gap-2">
-                <span className="text-xs text-muted">vs</span>
-                <span className="font-heading font-bold text-base">{nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName}</span>
-              </div>
-              <div className="text-center text-xs text-muted mt-1">
-                {nextMatch.gameWeek}. kolo · {dateStr} · {nextMatch.isHome ? "doma" : "venku"}
-              </div>
-            </div>
-            {/* Desktop */}
-            <div className="card p-3 hidden sm:flex items-center justify-center gap-3">
-              <BadgePreview primary={nextMatch.homeColor || "#2D5F2D"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.homeName)} size={24} />
-              <span className={`font-heading font-bold text-sm truncate ${nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.homeName}</span>
-              <span className="text-xs text-muted font-heading">vs</span>
-              <span className={`font-heading font-bold text-sm truncate ${!nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.awayName}</span>
-              <BadgePreview primary={nextMatch.awayColor || "#D94032"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.awayName)} size={24} />
-              <span className="text-[10px] text-muted shrink-0">{nextMatch.gameWeek}. kolo · {dateStr}</span>
-            </div>
-          </>
-        );
-      })()}
+      {/* ═══ Match header ═══ */}
+      {/* Mobile: jen soupeř + kolo */}
+      <div className="card p-3 sm:hidden flex items-center justify-center gap-2">
+        <span className="text-xs text-muted">vs</span>
+        <span className="font-heading font-bold text-base">{nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName}</span>
+        <span className="text-xs text-muted">· {nextMatch.gameWeek}. kolo</span>
+      </div>
+      {/* Desktop: oba týmy */}
+      <div className="card p-3 hidden sm:flex items-center justify-center gap-3">
+        <BadgePreview primary={nextMatch.homeColor || "#2D5F2D"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.homeName)} size={24} />
+        <span className={`font-heading font-bold text-sm truncate ${nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.homeName}</span>
+        <span className="text-xs text-muted font-heading">vs</span>
+        <span className={`font-heading font-bold text-sm truncate ${!nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.awayName}</span>
+        <BadgePreview primary={nextMatch.awayColor || "#D94032"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.awayName)} size={24} />
+        <span className="text-[10px] text-muted shrink-0">{nextMatch.gameWeek}. kolo</span>
+      </div>
 
       {/* ═══ Absent players ═══ */}
       {absentPlayers.length > 0 && (
@@ -318,33 +305,14 @@ export default function MatchPage() {
             const num = player?.squadNumber ?? (i + 1);
             const isEditing = editSlot === i;
 
-            const isSwapSource = swapSource === i;
-            const isSwapTarget = swapSource !== null && swapSource !== i;
-
             return (
-              <button key={i} onClick={() => {
-                if (swapSource !== null && swapSource !== i) {
-                  // Swap two players in XI
-                  const sel = [...selected];
-                  [sel[swapSource], sel[i]] = [sel[i], sel[swapSource]];
-                  setSelected(sel); setSwapSource(null); setSaved(false);
-                } else if (swapSource === i) {
-                  // Deselect swap source, open selector instead
-                  setSwapSource(null); setEditSlot(i);
-                } else if (selected[i]) {
-                  // First click on occupied slot: mark as swap source
-                  setSwapSource(i); setEditSlot(null);
-                } else {
-                  // Empty slot: open selector
-                  setEditSlot(isEditing ? null : i); setSwapSource(null);
-                }
-              }}
+              <button key={i} onClick={() => setEditSlot(isEditing ? null : i)}
                 className="absolute transform -translate-x-1/2 -translate-y-1/2 group z-10"
                 style={{ left: `${slot.x}%`, top: `${slot.y}%` }}>
                 <div className="relative">
                   <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-heading font-[800] text-sm sm:text-base shadow-md transition-all ${POS_BG[slot.pos]} ${
-                    isEditing ? "scale-125 ring-2 ring-white" : isSwapSource ? "scale-125 ring-2 ring-gold-400 animate-pulse" : isSwapTarget ? "ring-2 ring-white/60" : "group-hover:scale-110"
-                  } ${isOOP && !isSwapSource ? "ring-2 ring-gold-400" : ""}`}>
+                    isEditing ? "scale-125 ring-2 ring-white" : "group-hover:scale-110"
+                  } ${isOOP ? "ring-2 ring-gold-400" : ""}`}>
                     {num}
                   </div>
                   {pid === captainId && (
@@ -360,12 +328,6 @@ export default function MatchPage() {
             );
           })}
         </div>
-        {swapSource !== null && (
-          <div className="text-center py-1.5 bg-gold-500/10 rounded-b-xl -mt-1">
-            <span className="text-xs font-heading font-bold text-gold-600">Klikni na pozici kam chceš hráče přesunout</span>
-            <button onClick={() => setSwapSource(null)} className="ml-2 text-xs text-muted hover:text-ink">✕ Zrušit</button>
-          </div>
-        )}
         </div>
 
         {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
@@ -422,10 +384,7 @@ export default function MatchPage() {
                               </div>
                             ) : (
                               <div>
-                                <div className="flex items-center gap-1">
-                                  <span className="font-heading font-bold text-sm">{isOOP && <span className="text-gold-500 mr-1">⚠️</span>}{p.lastName}</span>
-                                  <PositionBadge position={p.position as Pos} />
-                                </div>
+                                <span className="font-heading font-bold text-sm">{isOOP && <span className="text-gold-500 mr-1">⚠️</span>}{p.lastName}</span>
                                 <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
                               </div>
                             )}
@@ -472,8 +431,8 @@ export default function MatchPage() {
                       const isOOP = player.position !== slots[i].pos;
                       const s = player as any;
                       return (
-                        <tr key={i} className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer ${isOOP ? "bg-gold-50/50" : ""} ${swapSource === i ? "bg-gold-100 ring-1 ring-gold-400" : ""}`}
-                          onClick={() => { setEditSlot(i); setSwapSource(null); }}>
+                        <tr key={i} className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer ${isOOP ? "bg-gold-50/50" : ""}`}
+                          onClick={() => setEditSlot(i)}>
                           <td className="py-1.5 pl-3 text-center">
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[slots[i].pos]}`}>
                               {player.squadNumber ?? i + 1}
@@ -482,7 +441,7 @@ export default function MatchPage() {
                           <td className="py-1.5 px-1.5">
                             <div className="flex items-center gap-1.5">
                               <div className="min-w-0">
-                                <span className="font-heading font-bold text-sm leading-tight">{player.lastName}</span>
+                                <Link href={`/dashboard/player/${player.id}`} className="font-heading font-bold text-sm leading-tight hover:text-pitch-500 transition-colors">{player.lastName}</Link>
                                 <div className="text-xs text-muted">{player.firstName} · {player.age} let</div>
                               </div>
                               <button onClick={(e) => { e.stopPropagation(); setCaptainId(captainId === player.id ? null : player.id); setSaved(false); }}
@@ -535,14 +494,7 @@ export default function MatchPage() {
                       const s = p as any;
                       const isAbsent = p.absent;
                       return (
-                        <tr key={p.id}
-                          onClick={() => {
-                            if (isAbsent) return;
-                            if (swapSource !== null) {
-                              const sel = [...selected]; sel[swapSource] = p.id; setSelected(sel); setSwapSource(null); setSaved(false);
-                            }
-                          }}
-                          className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : ""} ${swapSource !== null && !isAbsent ? "hover:bg-pitch-50 cursor-pointer" : ""}`}>
+                        <tr key={p.id} className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : ""}`}>
                           <td className="py-1.5 pl-3 w-8 text-center">
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[p.position]}`}>
                               {p.squadNumber ?? "?"}
@@ -555,13 +507,10 @@ export default function MatchPage() {
                                 <div className="text-[10px] text-muted italic">{(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : ((p as any).absenceSms ?? (p as any).absenceReason ?? "Nedostupný")}</div>
                               </div>
                             ) : (
-                              <div>
-                                <div className="flex items-center gap-1">
-                                  <span className="font-heading font-bold text-sm leading-tight">{p.lastName}</span>
-                                  <PositionBadge position={p.position as Pos} />
-                                </div>
+                              <>
+                                <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-sm leading-tight hover:text-pitch-500 transition-colors">{p.lastName}</Link>
                                 <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
-                              </div>
+                              </>
                             )}
                           </td>
                           <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${p.overallRating}`}>{p.overallRating}</td>
