@@ -407,8 +407,12 @@ function MatchPage() {
         {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
         <div>
           {editSlot !== null ? (
-            <div className="card overflow-x-auto">
-              <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+            <>
+            {/* Mobile backdrop */}
+            <div className="lg:hidden fixed inset-0 z-50 bg-black/40" onClick={() => setEditSlot(null)} />
+            {/* Selector — bottom sheet on mobile, inline card on desktop */}
+            <div className="fixed bottom-0 left-0 right-0 z-50 bg-paper rounded-t-2xl shadow-modal max-h-[70vh] overflow-y-auto lg:static lg:rounded-none lg:shadow-none lg:max-h-none lg:overflow-visible">
+              <div className="sticky top-0 z-10 px-3 py-2 bg-paper lg:bg-gray-50 border-b border-gray-100 flex items-center justify-between rounded-t-2xl lg:rounded-none">
                 <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat hráče — {slots[editSlot].pos}</span>
                 <button onClick={() => setEditSlot(null)} className="text-muted hover:text-ink text-lg leading-none">✕</button>
               </div>
@@ -479,7 +483,9 @@ function MatchPage() {
                 </tbody>
               </table>
             </div>
+            </>
           ) : (
+            /* XI table + bench shown when no editSlot */
             <>
               {/* Starting XI table */}
               <div className="card overflow-x-auto mb-3">
