@@ -294,6 +294,12 @@ export default function PlayerDetailPage() {
                   {displayTeam.name}
                 </a>
               </div>
+              {(player as any).injury && (
+                <div className="mt-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+                  <span className="text-card-red text-sm">🩹</span>
+                  <span className="text-sm font-heading font-bold text-card-red">Zraněný — {(player as any).injury.daysRemaining} {(player as any).injury.daysRemaining === 1 ? "den" : "dní"} do uzdravení</span>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
               <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>

@@ -889,6 +889,12 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     lifeContext.morale = Math.round((lifeContext.morale ?? 50) / 10) * 10;
   }
 
+  // Check for active injury
+  const injury = await c.env.DB.prepare(
+    "SELECT type, days_remaining FROM injuries WHERE player_id = ? AND days_remaining > 0 ORDER BY days_remaining DESC LIMIT 1"
+  ).bind(c.req.param("playerId")).first<{ type: string; days_remaining: number }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "fetch injury for player detail", e); return null; });
+
   return c.json({
     ...row,
     isOwn,
@@ -897,6 +903,7 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     personality,
     lifeContext: lifeContext,
     avatar: JSON.parse(row.avatar as string),
+    injury: injury ? { type: injury.type, daysRemaining: injury.days_remaining } : null,
   });
 });
 

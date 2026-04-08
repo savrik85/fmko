@@ -1102,6 +1102,9 @@ export default function TransfersPage() {
                         </div>
                         <div className="text-xs text-muted">
                           <span className="font-heading font-bold text-ink">{formatCZK(l.askingPrice)}</span> — {l.teamName}
+                          {(l as any).injuryDays > 0 && (
+                            <span className="ml-2 text-card-red font-heading font-bold">🩹 Zraněný ({(l as any).injuryDays}d)</span>
+                          )}
                         </div>
                         {(l as any).skills && Object.keys((l as any).skills).length > 0 && (
                           <button onClick={() => toggleSkills(l.id)} className="text-sm font-heading font-bold text-pitch-500 hover:text-pitch-600 transition-colors mt-1">
