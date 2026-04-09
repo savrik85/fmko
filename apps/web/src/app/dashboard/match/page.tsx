@@ -404,13 +404,7 @@ function MatchPage() {
             <button onClick={() => setSwapSource(null)} className="ml-2 text-xs text-muted hover:text-ink">✕ Zrušit</button>
           </div>
         ) : editSlot === null && (
-          <div className="card px-4 py-2.5 mt-2 flex items-start gap-2 text-sm">
-            <span className="shrink-0 mt-0.5">💡</span>
-            <div className="text-ink leading-snug">
-              <span className="font-heading font-bold">Klikni na hráče</span> na hřišti pro prohození pozic.
-              Klikni <span className="font-heading font-bold">podruhé</span> na stejného hráče pro výběr náhradníka.
-            </div>
-          </div>
+          <p className="text-center text-xs text-muted mt-1">Klik = prohodit · Dvojklik = vybrat jiného</p>
         )}
 
         {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
