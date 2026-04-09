@@ -331,14 +331,15 @@ function MatchPage() {
 
         {/* ═══ PITCH — kompaktní ═══ */}
         <div>
-        {swapSource !== null ? (
-          <div className="text-center py-2 mb-1 bg-gold-500/10 rounded-xl">
-            <span className="text-sm font-heading font-bold text-gold-600">Klikni na pozici kam chceš hráče přesunout</span>
-            <button onClick={() => setSwapSource(null)} className="ml-2 text-sm text-muted hover:text-ink">✕</button>
-          </div>
-        ) : (
-          <p className="text-center text-sm text-ink/50 mb-1">Klik na hráče = prohodit pozice · Dvojklik = vybrat jiného</p>
-        )}
+        <p className="text-center text-sm h-8 flex items-center justify-center gap-1 mb-1">
+          {swapSource !== null ? (
+            <><span className="font-heading font-bold text-gold-600">Vyber pozici kam přesunout</span><button onClick={() => setSwapSource(null)} className="text-muted hover:text-ink">✕</button></>
+          ) : editSlot !== null ? (
+            <span className="font-heading font-bold text-pitch-600">Vyber hráče ze seznamu vpravo</span>
+          ) : (
+            <span className="text-ink/50">Klik na hráče = prohodit · Dvojklik = vybrat jiného</span>
+          )}
+        </p>
         <div className="rounded-xl bg-pitch-400 overflow-hidden" style={{ aspectRatio: "5/6", padding: "2% 5%" }}>
         <div className="relative w-full h-full overflow-visible">
           {/* Pitch markings */}
@@ -407,14 +408,15 @@ function MatchPage() {
           })}
         </div>
         </div>
-        {swapSource !== null ? (
-          <div className="text-center py-1.5 mt-1 bg-gold-500/10 rounded-xl">
-            <span className="text-sm font-heading font-bold text-gold-600">Vyber pozici kam přesunout</span>
-            <button onClick={() => setSwapSource(null)} className="ml-2 text-sm text-muted hover:text-ink">✕</button>
-          </div>
-        ) : (
-          <p className="text-center text-sm text-ink/50 mt-1">Klik na hráče = prohodit pozice · Dvojklik = vybrat jiného</p>
-        )}
+        <p className="text-center text-sm h-8 flex items-center justify-center gap-1 mt-1">
+          {swapSource !== null ? (
+            <><span className="font-heading font-bold text-gold-600">Vyber pozici kam přesunout</span><button onClick={() => setSwapSource(null)} className="text-muted hover:text-ink">✕</button></>
+          ) : editSlot !== null ? (
+            <span className="font-heading font-bold text-pitch-600">Vyber hráče ze seznamu vpravo</span>
+          ) : (
+            <span className="text-ink/50">Klik na hráče = prohodit · Dvojklik = vybrat jiného</span>
+          )}
+        </p>
         </div>
 
         {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
