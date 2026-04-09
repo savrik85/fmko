@@ -7,7 +7,7 @@ import { useTeam } from "@/context/team-context";
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Domů",
   "/dashboard/squad": "Kádr",
-  "/dashboard/match": "Zápas",
+  "/dashboard/match": "Sestava",
   "/dashboard/friendly": "Přáteláky",
   "/dashboard/training": "Tréninky",
   "/dashboard/transfers": "Přestupy",
@@ -53,7 +53,7 @@ export function FMTopBar() {
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 4L6 9l5 5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </button>
         <button
-          onClick={() => { try { window.history.forward(); } catch {} }}
+          onClick={() => { try { window.history.forward(); } catch (e) { console.error("history forward:", e); } }}
           className="w-8 h-8 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
           title="Vpřed"
         >

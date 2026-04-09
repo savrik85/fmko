@@ -248,7 +248,15 @@ function MatchRow({ match: m, myTeamId }: { match: ScheduleMatch; myTeamId: stri
   );
 
   if (isPlayed) return <Link href={`/dashboard/match/${m.id}`}>{inner}</Link>;
-  return inner;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1">{inner}</div>
+      <Link href={`/dashboard/match?calendarId=${m.id}`}
+        className="shrink-0 py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+        Sestava
+      </Link>
+    </div>
+  );
 }
 
 function LeagueMatchRow({ match: m, myTeamId }: {

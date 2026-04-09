@@ -26,7 +26,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/equipment", label: "Vybavení", icon: "\u{1F45F}", group: "club" },
   { href: "/dashboard/stadium", label: "Stadion", icon: "\u{1F3DF}", group: "club" },
   { href: "/dashboard/events", label: "Události", icon: "\u{1F389}", group: "club" },
-  { href: "/dashboard/match", label: "Zápas", icon: "\u26BD", group: "league" },
+  { href: "/dashboard/match", label: "Sestava", icon: "\u{1F4CB}", group: "league" },
+  { href: "/dashboard/schedule", label: "Rozpis", icon: "\u{1F4C5}", group: "league" },
   { href: "/dashboard/friendly", label: "Přáteláky", icon: "\u{1F91C}", group: "league" },
   { href: "/dashboard/liga", label: "Liga", icon: "\u{1F3C6}", group: "league" },
   { href: "/dashboard/calendar", label: "Kalendář", icon: "\u{1F5D3}", group: "league" },
@@ -51,10 +52,10 @@ export function FMSidebar() {
     const load = () => {
       apiFetch<Array<{ unreadCount: number }>>(`/api/teams/${teamId}/conversations`)
         .then((convs) => setUnreadMessages(convs.reduce((s, c) => s + (c.unreadCount ?? 0), 0)))
-        .catch(() => {});
+        .catch((e) => console.error("fetch conversations:", e));
       apiFetch<{ incoming: unknown[] }>(`/api/teams/${teamId}/offers`)
         .then((o) => setIncomingOffers(o.incoming?.length ?? 0))
-        .catch(() => {});
+        .catch((e) => console.error("fetch offers:", e));
     };
     load();
     const interval = setInterval(load, 30000);

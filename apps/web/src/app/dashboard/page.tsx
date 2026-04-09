@@ -202,32 +202,46 @@ export default function DashboardPage() {
             const oppBadge = (nextMatch.isHome ? nextMatch.awayBadge : nextMatch.homeBadge) as BadgePattern || "shield";
             return (
               <div className="space-y-3">
-                {/* Badges + vs */}
+                {/* Badges + vs — home team always on the left */}
+                {(() => {
+                  const homeTeam = nextMatch.isHome
+                    ? { name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my }
+                    : { name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp };
+                  const awayTeam = nextMatch.isHome
+                    ? { name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp }
+                    : { name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my };
+                  return (
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex flex-col items-center flex-1 min-w-0">
-                    <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"}
-                      pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                      initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={36} />
-                    <div className="font-heading font-bold text-sm mt-1 truncate max-w-full text-center">{team.name}</div>
-                    {my && <div className="text-[10px] text-muted tabular-nums">{my.position}. místo</div>}
+                    <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary}
+                      pattern={homeTeam.badge}
+                      initials={homeTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={36} />
+                    <div className="font-heading font-bold text-sm mt-1 truncate max-w-full text-center">{homeTeam.name}</div>
+                    {homeTeam.pos && <div className="text-[10px] text-muted tabular-nums">{homeTeam.pos.position}. místo</div>}
                   </div>
                   <div className="flex flex-col items-center shrink-0">
                     <div className="font-heading font-[800] text-xl text-muted">vs</div>
                     <div className="text-[10px] text-muted uppercase mt-0.5 whitespace-nowrap">{nextMatch.round}. kolo</div>
                   </div>
                   <div className="flex flex-col items-center flex-1 min-w-0">
-                    <BadgePreview primary={oppColor} secondary={oppSecondary} pattern={oppBadge}
-                      initials={oppName.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={36} />
-                    <div className="font-heading font-bold text-sm mt-1 truncate max-w-full text-center">{oppName}</div>
-                    {opp && <div className="text-[10px] text-muted tabular-nums">{opp.position}. místo</div>}
+                    <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary}
+                      pattern={awayTeam.badge}
+                      initials={awayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={36} />
+                    <div className="font-heading font-bold text-sm mt-1 truncate max-w-full text-center">{awayTeam.name}</div>
+                    {awayTeam.pos && <div className="text-[10px] text-muted tabular-nums">{awayTeam.pos.position}. místo</div>}
                   </div>
                 </div>
+                  );
+                })()}
 
-                {/* Form comparison */}
-                {preview && my && opp && (
+                {/* Form comparison — home left, away right */}
+                {preview && my && opp && (() => {
+                  const homeForm = nextMatch.isHome ? my : opp;
+                  const awayForm = nextMatch.isHome ? opp : my;
+                  return (
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex gap-0.5">
-                      {my.form.map((f, i) => (
+                      {homeForm.form.map((f, i) => (
                         <span key={i} className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-bold text-white ${
                           f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
                         }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
@@ -235,32 +249,35 @@ export default function DashboardPage() {
                     </div>
                     <span className="text-[9px] text-muted uppercase">Forma</span>
                     <div className="flex gap-0.5">
-                      {opp.form.map((f, i) => (
+                      {awayForm.form.map((f, i) => (
                         <span key={i} className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-bold text-white ${
                           f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
                         }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
                       ))}
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
-                {/* Stats comparison row */}
+                {/* Stats comparison row — home left, away right */}
                 {preview && my && opp && (() => {
-                  const myAge = my.squad?.length ? Math.round(my.squad.reduce((s, p) => s + p.age, 0) / my.squad.length) : 0;
-                  const oppAge = opp.squad?.length ? Math.round(opp.squad.reduce((s, p) => s + p.age, 0) / opp.squad.length) : 0;
+                  const home = nextMatch.isHome ? my : opp;
+                  const away = nextMatch.isHome ? opp : my;
+                  const homeAge = home.squad?.length ? Math.round(home.squad.reduce((s, p) => s + p.age, 0) / home.squad.length) : 0;
+                  const awayAge = away.squad?.length ? Math.round(away.squad.reduce((s, p) => s + p.age, 0) / away.squad.length) : 0;
                   const stats = [
-                    { label: "Rating", myVal: my.avgRating, oppVal: opp.avgRating },
-                    { label: "Góly", myVal: my.goalsFor, oppVal: opp.goalsFor },
-                    { label: "Věk", myVal: myAge, oppVal: oppAge },
+                    { label: "Rating", hVal: home.avgRating, aVal: away.avgRating },
+                    { label: "Góly", hVal: home.goalsFor, aVal: away.goalsFor },
+                    { label: "Věk", hVal: homeAge, aVal: awayAge },
                   ];
                   return (
                     <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
                       {stats.map((s) => (
                         <div key={s.label} className="bg-gray-50 rounded-lg py-1.5 px-1">
                           <div className="font-heading font-bold tabular-nums flex items-center justify-center gap-1">
-                            <span className={s.myVal > s.oppVal ? "text-pitch-500" : s.myVal < s.oppVal ? "text-card-red" : ""}>{s.myVal}</span>
+                            <span className={s.hVal > s.aVal ? "text-pitch-500" : s.hVal < s.aVal ? "text-card-red" : ""}>{s.hVal}</span>
                             <span className="text-muted text-[9px]">vs</span>
-                            <span className={s.oppVal > s.myVal ? "text-pitch-500" : s.oppVal < s.myVal ? "text-card-red" : ""}>{s.oppVal}</span>
+                            <span className={s.aVal > s.hVal ? "text-pitch-500" : s.aVal < s.hVal ? "text-card-red" : ""}>{s.aVal}</span>
                           </div>
                           <div className="text-muted text-[9px] uppercase">{s.label}</div>
                         </div>

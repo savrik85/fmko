@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTeam } from "@/context/team-context";
 
 const SECTIONS = [
   { title: "Klub", items: [
@@ -15,6 +16,7 @@ const SECTIONS = [
   ]},
   { title: "Sout\u011B\u017E", items: [
     { href: "/dashboard/liga", icon: "\u{1F3C6}", label: "Liga", color: "#B8860B" },
+    { href: "/dashboard/schedule", icon: "\u{1F4C5}", label: "Rozpis", color: "#3D6B5C" },
     { href: "/dashboard/friendly", icon: "\u{1F91C}", label: "P\u0159\u00E1tel\u00E1ky", color: "#4A7A5C" },
     { href: "/dashboard/calendar", icon: "\u{1F5D3}\uFE0F", label: "Kalend\u00E1\u0159", color: "#6B7B3D" },
     { href: "/dashboard/news", icon: "\u{1F4F0}", label: "Zpravodaj", color: "#556B2F" },
@@ -26,6 +28,7 @@ const SECTIONS = [
 ];
 
 export default function MorePage() {
+  const { logout } = useTeam();
   return (
     <div className="page-container pb-24">
       {SECTIONS.map((section) => (
@@ -51,6 +54,10 @@ export default function MorePage() {
           </div>
         </div>
       ))}
+      <button onClick={logout}
+        className="w-full mt-6 py-3 rounded-xl text-center text-sm font-heading font-bold text-card-red bg-red-50 hover:bg-red-100 transition-colors">
+        🚪 Odhlásit se
+      </button>
     </div>
   );
 }

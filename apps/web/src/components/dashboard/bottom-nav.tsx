@@ -24,11 +24,11 @@ export function BottomNav() {
   }, [teamId, pathname]);
 
   const items = [
-    { href: "/dashboard", label: "Domů", icon: "\u{1F3DF}" },
-    { href: "/dashboard/phone", label: "Zprávy", icon: "\u{1F4F1}", badge: unreadMessages },
-    { href: "/dashboard/match", label: "Zápas", icon: "\u26BD" },
-    { href: "/dashboard/liga", label: "Liga", icon: "\u{1F3C6}" },
-    { href: "/dashboard/more", label: "Více", icon: "\u2699" },
+    { href: "/dashboard", label: "Domů", icon: "🏟" },
+    { href: "/dashboard/phone", label: "Zprávy", icon: "📱", badge: unreadMessages },
+    { href: "/dashboard/match", label: "Sestava", icon: "📋" },
+    { href: "/dashboard/liga", label: "Liga", icon: "🏆" },
+    { href: "/dashboard/more", label: "Více", icon: "⚙" },
   ];
 
   return (

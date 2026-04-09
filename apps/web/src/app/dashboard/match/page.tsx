@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Player } from "@/lib/api";
 import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview } from "@/components/ui";
@@ -96,16 +98,28 @@ interface NextMatchInfo {
   isHome: boolean; homeName: string; awayName: string; homeColor: string; awayColor: string;
 }
 
+interface UpcomingMatch {
+  calendarId: string; gameWeek: number; scheduledAt: string;
+  opponentName: string; isHome: boolean; hasLineup: boolean;
+}
+
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
 
-export default function MatchPage() {
+export default function MatchPageWrapper() {
+  return <Suspense><MatchPage /></Suspense>;
+}
+
+function MatchPage() {
   const { teamId } = useTeam();
+  const searchParams = useSearchParams();
   const [nextMatch, setNextMatch] = useState<NextMatchInfo | null>(null);
+  const [upcomingMatches, setUpcomingMatches] = useState<UpcomingMatch[]>([]);
   const [players, setPlayers] = useState<AvailablePlayer[]>([]);
   const [formation, setFormation] = useState("4-4-2");
   const [tactic, setTactic] = useState("balanced");
   const [selected, setSelected] = useState<(string | null)[]>(Array(11).fill(null));
   const [editSlot, setEditSlot] = useState<number | null>(null);
+  const [swapSource, setSwapSource] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -113,11 +127,12 @@ export default function MatchPage() {
 
   useEffect(() => {
     if (!teamId) return;
-    apiFetch<{ nextMatch: NextMatchInfo | null; lineup: { formation: string; tactic: string; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(
+    apiFetch<{ nextMatch: NextMatchInfo | null; lineup: { formation: string; tactic: string; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
       `/api/teams/${teamId}/next-match`
     ).then((data) => {
       setNextMatch(data.nextMatch);
       setPlayers(data.availablePlayers ?? []);
+      setUpcomingMatches(data.upcomingMatches ?? []);
       if (data.lineup && data.lineup.players.length === 11) {
         setFormation(data.lineup.formation);
         setTactic(data.lineup.tactic);
@@ -132,6 +147,21 @@ export default function MatchPage() {
         if (best) setCaptainId(best.id);
       }
       setLoading(false);
+      // If calendarId in URL, switch to that match
+      const urlCalId = searchParams.get("calendarId");
+      if (urlCalId && data.upcomingMatches) {
+        const target = data.upcomingMatches.find((um: UpcomingMatch) => um.calendarId === urlCalId);
+        if (target && data.nextMatch && target.calendarId !== data.nextMatch.calendarId) {
+          setNextMatch((prev) => prev ? {
+            ...prev, calendarId: target.calendarId, gameWeek: target.gameWeek, scheduledAt: target.scheduledAt, isHome: target.isHome,
+            homeName: target.isHome ? prev.homeName : target.opponentName,
+            awayName: target.isHome ? target.opponentName : prev.homeName,
+          } : prev);
+          apiFetch<{ lineup: { formation: string; tactic: string; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
+            .then((ld) => { if (ld.lineup?.players.length === 11) { setFormation(ld.lineup.formation); setTactic(ld.lineup.tactic); setSelected(ld.lineup.players.map((p) => p.playerId)); } setSaved(!!ld.lineup); })
+            .catch((e) => console.error("load lineup from URL:", e));
+        }
+      }
     }).catch((e) => { console.error("Failed to load next match:", e); setLoading(false); });
   }, [teamId]);
 
@@ -214,39 +244,59 @@ export default function MatchPage() {
   return (
     <div className="page-container space-y-3">
 
-      {/* ═══ Match header ═══ */}
-      {/* Mobile: jen soupeř + kolo */}
-      <div className="card p-3 sm:hidden flex items-center justify-center gap-2">
-        <span className="text-xs text-muted">vs</span>
-        <span className="font-heading font-bold text-base">{nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName}</span>
-        <span className="text-xs text-muted">· {nextMatch.gameWeek}. kolo</span>
-      </div>
-      {/* Desktop: oba týmy */}
-      <div className="card p-3 hidden sm:flex items-center justify-center gap-3">
-        <BadgePreview primary={nextMatch.homeColor || "#2D5F2D"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.homeName)} size={24} />
-        <span className={`font-heading font-bold text-sm truncate ${nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.homeName}</span>
-        <span className="text-xs text-muted font-heading">vs</span>
-        <span className={`font-heading font-bold text-sm truncate ${!nextMatch.isHome ? "text-pitch-600" : ""}`}>{nextMatch.awayName}</span>
-        <BadgePreview primary={nextMatch.awayColor || "#D94032"} secondary="#FFF" pattern={"shield" as BadgePattern} initials={ini(nextMatch.awayName)} size={24} />
-        <span className="text-[10px] text-muted shrink-0">{nextMatch.gameWeek}. kolo</span>
-      </div>
+      {/* ═══ Scrollable match header ═══ */}
+      {(() => {
+        const currentIdx = upcomingMatches.findIndex((um) => um.calendarId === nextMatch?.calendarId);
+        const matchDate = nextMatch.scheduledAt ? new Date(nextMatch.scheduledAt) : null;
+        const dateStr = matchDate ? matchDate.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) : "";
+        const now = new Date();
+        const daysUntil = matchDate ? Math.max(0, Math.round((matchDate.getTime() - now.getTime()) / 86400000)) : 0;
+        const daysLabel = daysUntil === 0 ? "dnes" : daysUntil === 1 ? "zítra" : `za ${daysUntil} dní`;
+        const opponentName = nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName;
 
-      {/* ═══ Absent players ═══ */}
-      {absentPlayers.length > 0 && (
-        <div className="card p-3">
-          <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Nedostupní ({absentPlayers.length})</div>
-          <div className="space-y-1">
-            {absentPlayers.map((p) => (
-              <div key={p.id} className="flex items-baseline gap-2 text-sm">
-                <span className="text-xs shrink-0">{p.absenceEmoji ?? "❌"}</span>
-                <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 shrink-0">{p.firstName} {p.lastName}</Link>
-                <PositionBadge position={p.position as Pos} />
-                <span className="text-xs text-muted italic">&mdash; {(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : (p.absenceSms ?? p.absenceReason ?? "Nedostupný")}</span>
+        const switchToMatch = (um: UpcomingMatch) => {
+          setNextMatch((prev) => prev ? {
+            ...prev, calendarId: um.calendarId, gameWeek: um.gameWeek, scheduledAt: um.scheduledAt, isHome: um.isHome,
+            homeName: um.isHome ? (prev.isHome ? prev.homeName : prev.awayName) : um.opponentName,
+            awayName: um.isHome ? um.opponentName : (prev.isHome ? prev.homeName : prev.awayName),
+          } : prev);
+          if (teamId) {
+            apiFetch<{ lineup: { formation: string; tactic: string; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${um.calendarId}`)
+              .then((data) => {
+                if (data.lineup && data.lineup.players.length === 11) {
+                  setFormation(data.lineup.formation); setTactic(data.lineup.tactic); setSelected(data.lineup.players.map((p) => p.playerId));
+                }
+                setSaved(!!data.lineup);
+              })
+              .catch((e) => { console.error("load lineup:", e); setSaved(false); });
+          }
+          setEditSlot(null); setSwapSource(null);
+        };
+
+        return (
+          <div className="card p-3 flex items-center gap-2">
+            <button disabled={currentIdx <= 0} onClick={() => { if (currentIdx > 0) switchToMatch(upcomingMatches[currentIdx - 1]); }}
+              className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors text-lg font-bold">
+              ◀
+            </button>
+            <div className="flex-1 text-center min-w-0">
+              <div className="font-heading font-bold text-base truncate">
+                vs {opponentName} · <span className="text-pitch-500">{nextMatch.isHome ? "doma" : "venku"}</span> · <span className="text-muted">{daysLabel}</span>
               </div>
-            ))}
+              <div className="text-xs text-muted">
+                {nextMatch.gameWeek}. kolo · {dateStr}
+                {absentPlayers.length > 0 && <span className="ml-2 text-card-red font-heading font-bold">⚠ {absentPlayers.length} nedostupných</span>}
+              </div>
+            </div>
+            <button disabled={currentIdx >= upcomingMatches.length - 1} onClick={() => { if (currentIdx < upcomingMatches.length - 1) switchToMatch(upcomingMatches[currentIdx + 1]); }}
+              className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors text-lg font-bold">
+              ▶
+            </button>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* Absent players shown inline in bench table + selector, not as separate card */}
 
       {/* ═══ Formation + Tactic — one row ═══ */}
       <div className="card p-3">
@@ -280,6 +330,16 @@ export default function MatchPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
         {/* ═══ PITCH — kompaktní ═══ */}
+        <div>
+        <p className="text-center text-sm h-8 flex items-center justify-center gap-1 mb-1">
+          {swapSource !== null ? (
+            <><span className="font-heading font-bold text-gold-600">Vyber pozici kam přesunout</span><button onClick={() => setSwapSource(null)} className="text-muted hover:text-ink">✕</button></>
+          ) : editSlot !== null ? (
+            <span className="font-heading font-bold text-pitch-600">Vyber hráče ze seznamu vpravo</span>
+          ) : (
+            <span className="text-ink/50">Klik na hráče = prohodit · Dvojklik = vybrat jiného</span>
+          )}
+        </p>
         <div className="rounded-xl bg-pitch-400 overflow-hidden" style={{ aspectRatio: "5/6", padding: "2% 5%" }}>
         <div className="relative w-full h-full overflow-visible">
           {/* Pitch markings */}
@@ -305,14 +365,33 @@ export default function MatchPage() {
             const num = player?.squadNumber ?? (i + 1);
             const isEditing = editSlot === i;
 
+            const isSwapSource = swapSource === i;
+            const isSwapTarget = swapSource !== null && swapSource !== i;
+
             return (
-              <button key={i} onClick={() => setEditSlot(isEditing ? null : i)}
+              <button key={i} onClick={() => {
+                if (swapSource !== null && swapSource !== i) {
+                  // Swap two players in XI
+                  const sel = [...selected];
+                  [sel[swapSource], sel[i]] = [sel[i], sel[swapSource]];
+                  setSelected(sel); setSwapSource(null); setSaved(false);
+                } else if (swapSource === i) {
+                  // Deselect swap source, open selector instead
+                  setSwapSource(null); setEditSlot(i);
+                } else if (selected[i]) {
+                  // First click on occupied slot: mark as swap source
+                  setSwapSource(i); setEditSlot(null);
+                } else {
+                  // Empty slot: open selector
+                  setEditSlot(isEditing ? null : i); setSwapSource(null);
+                }
+              }}
                 className="absolute transform -translate-x-1/2 -translate-y-1/2 group z-10"
                 style={{ left: `${slot.x}%`, top: `${slot.y}%` }}>
                 <div className="relative">
                   <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-heading font-[800] text-sm sm:text-base shadow-md transition-all ${POS_BG[slot.pos]} ${
-                    isEditing ? "scale-125 ring-2 ring-white" : "group-hover:scale-110"
-                  } ${isOOP ? "ring-2 ring-gold-400" : ""}`}>
+                    isEditing ? "scale-125 ring-2 ring-white" : isSwapSource ? "scale-125 ring-2 ring-gold-400 animate-pulse" : isSwapTarget ? "ring-2 ring-white/60" : "group-hover:scale-110"
+                  } ${isOOP && !isSwapSource ? "ring-2 ring-orange-400/60" : ""}`}>
                     {num}
                   </div>
                   {pid === captainId && (
@@ -329,11 +408,22 @@ export default function MatchPage() {
           })}
         </div>
         </div>
+        <p className="text-center text-sm h-8 flex items-center justify-center gap-1 mt-1">
+          {swapSource !== null ? (
+            <><span className="font-heading font-bold text-gold-600">Vyber pozici kam přesunout</span><button onClick={() => setSwapSource(null)} className="text-muted hover:text-ink">✕</button></>
+          ) : editSlot !== null ? (
+            <span className="font-heading font-bold text-pitch-600">Vyber hráče ze seznamu vpravo</span>
+          ) : (
+            <span className="text-ink/50">Klik na hráče = prohodit · Dvojklik = vybrat jiného</span>
+          )}
+        </p>
+        </div>
 
         {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
         <div>
-          {editSlot !== null ? (
-            <div className="card overflow-x-auto">
+          {/* Desktop selector — inline, replaces XI table */}
+          {editSlot !== null && (
+            <div className="hidden lg:block card overflow-x-auto mb-3">
               <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                 <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat hráče — {slots[editSlot].pos}</span>
                 <button onClick={() => setEditSlot(null)} className="text-muted hover:text-ink text-lg leading-none">✕</button>
@@ -384,7 +474,10 @@ export default function MatchPage() {
                               </div>
                             ) : (
                               <div>
-                                <span className="font-heading font-bold text-sm">{isOOP && <span className="text-gold-500 mr-1">⚠️</span>}{p.lastName}</span>
+                                <div className="flex items-center gap-1">
+                                  <span className="font-heading font-bold text-sm">{isOOP && <span className="text-gold-500 mr-1">⚠️</span>}{p.lastName}</span>
+                                  <PositionBadge position={p.position as Pos} />
+                                </div>
                                 <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
                               </div>
                             )}
@@ -402,9 +495,10 @@ export default function MatchPage() {
                 </tbody>
               </table>
             </div>
-          ) : (
-            <>
-              {/* Starting XI table */}
+          )}
+          {/* XI table + bench — always visible */}
+          <>
+            {/* Starting XI table */}
               <div className="card overflow-x-auto mb-3">
                 <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
                   <span className="font-heading font-bold text-sm uppercase text-muted">Základní sestava</span>
@@ -431,8 +525,8 @@ export default function MatchPage() {
                       const isOOP = player.position !== slots[i].pos;
                       const s = player as any;
                       return (
-                        <tr key={i} className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer ${isOOP ? "bg-gold-50/50" : ""}`}
-                          onClick={() => setEditSlot(i)}>
+                        <tr key={i} className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer ${isOOP ? "bg-gold-50/50" : ""} ${swapSource === i ? "bg-gold-100 ring-1 ring-gold-400" : ""}`}
+                          onClick={() => { setEditSlot(i); setSwapSource(null); }}>
                           <td className="py-1.5 pl-3 text-center">
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[slots[i].pos]}`}>
                               {player.squadNumber ?? i + 1}
@@ -441,7 +535,7 @@ export default function MatchPage() {
                           <td className="py-1.5 px-1.5">
                             <div className="flex items-center gap-1.5">
                               <div className="min-w-0">
-                                <Link href={`/dashboard/player/${player.id}`} className="font-heading font-bold text-sm leading-tight hover:text-pitch-500 transition-colors">{player.lastName}</Link>
+                                <span className="font-heading font-bold text-sm leading-tight">{player.lastName}</span>
                                 <div className="text-xs text-muted">{player.firstName} · {player.age} let</div>
                               </div>
                               <button onClick={(e) => { e.stopPropagation(); setCaptainId(captainId === player.id ? null : player.id); setSaved(false); }}
@@ -494,7 +588,14 @@ export default function MatchPage() {
                       const s = p as any;
                       const isAbsent = p.absent;
                       return (
-                        <tr key={p.id} className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : ""}`}>
+                        <tr key={p.id}
+                          onClick={() => {
+                            if (isAbsent) return;
+                            if (swapSource !== null) {
+                              const sel = [...selected]; sel[swapSource] = p.id; setSelected(sel); setSwapSource(null); setSaved(false);
+                            }
+                          }}
+                          className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : ""} ${swapSource !== null && !isAbsent ? "hover:bg-pitch-50 cursor-pointer" : ""}`}>
                           <td className="py-1.5 pl-3 w-8 text-center">
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[p.position]}`}>
                               {p.squadNumber ?? "?"}
@@ -507,10 +608,13 @@ export default function MatchPage() {
                                 <div className="text-[10px] text-muted italic">{(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : ((p as any).absenceSms ?? (p as any).absenceReason ?? "Nedostupný")}</div>
                               </div>
                             ) : (
-                              <>
-                                <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-sm leading-tight hover:text-pitch-500 transition-colors">{p.lastName}</Link>
+                              <div>
+                                <div className="flex items-center gap-1">
+                                  <span className="font-heading font-bold text-sm leading-tight">{p.lastName}</span>
+                                  <PositionBadge position={p.position as Pos} />
+                                </div>
                                 <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
-                              </>
+                              </div>
                             )}
                           </td>
                           <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${p.overallRating}`}>{p.overallRating}</td>
@@ -527,8 +631,7 @@ export default function MatchPage() {
                   </tbody>
                 </table>
               </div>
-            </>
-          )}
+          </>
         </div>
       </div>
 
@@ -573,6 +676,52 @@ export default function MatchPage() {
         </button>
         {saveError && <p className="text-sm text-card-red mt-2 text-center">{saveError}</p>}
       </div>
+
+      {/* ═══ Mobile bottom sheet selector — rendered via portal to escape overflow ═══ */}
+      {editSlot !== null && typeof document !== "undefined" && createPortal(
+        <div className="lg:hidden">
+          <div className="fixed inset-0 z-[9998] bg-black/50" onClick={() => setEditSlot(null)} />
+          <div className="fixed bottom-0 left-0 right-0 z-[9999] bg-white rounded-t-2xl" style={{ maxHeight: "65vh" }}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat — {slots[editSlot].pos}</span>
+              <button onClick={() => setEditSlot(null)} className="w-8 h-8 flex items-center justify-center text-muted hover:text-ink text-xl">✕</button>
+            </div>
+            <div className="overflow-y-auto" style={{ maxHeight: "calc(65vh - 48px)" }}>
+              {players
+                .filter((p) => !selected.includes(p.id) || p.id === selected[editSlot])
+                .sort((a, b) => {
+                  if (a.absent && !b.absent) return 1;
+                  if (!a.absent && b.absent) return -1;
+                  return (a.position === slots[editSlot].pos ? -1 : 1) - (b.position === slots[editSlot].pos ? -1 : 1) || b.overallRating - a.overallRating;
+                })
+                .map((p) => {
+                  const isCurrent = p.id === selected[editSlot];
+                  const isAbsent = p.absent;
+                  return (
+                    <button key={p.id} disabled={isAbsent}
+                      onClick={() => { const sel = [...selected]; sel[editSlot] = p.id; setSelected(sel); setEditSlot(null); setSaved(false); }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 text-left ${
+                        isAbsent ? "opacity-30" : isCurrent ? "bg-pitch-50" : "active:bg-gray-100"
+                      }`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs shrink-0 ${POS_BG[p.position]}`}>
+                        {p.squadNumber ?? "?"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-heading font-bold text-sm">{p.lastName}</span>
+                          <PositionBadge position={p.position as Pos} />
+                        </div>
+                        <div className="text-xs text-muted">{p.firstName} · {p.overallRating} rat · {p.condition}%</div>
+                      </div>
+                      <span className="text-sm shrink-0">{moraleIcon(p.morale)}</span>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
