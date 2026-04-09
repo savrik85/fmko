@@ -395,15 +395,15 @@ body::before {
 @media (pointer: coarse) { button, a, [role="button"] { min-height: 44px; } }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0); }
 
-/* Green shield below bottom nav — covers iOS Safari bounce/overscroll gap */
+/* Green shield — only covers area BELOW viewport for iOS overscroll */
 @media (max-width: 639px) {
   body::after {
     content: "";
     position: fixed;
-    bottom: -100px;
+    bottom: -80px;
     left: 0;
     right: 0;
-    height: 200px;
+    height: 80px;
     background: #1e2d1e;
     z-index: 49;
     pointer-events: none;
