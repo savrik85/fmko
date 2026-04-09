@@ -391,7 +391,7 @@ function MatchPage() {
                 <div className="relative">
                   <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-heading font-[800] text-sm sm:text-base shadow-md transition-all ${POS_BG[slot.pos]} ${
                     isEditing ? "scale-125 ring-2 ring-white" : isSwapSource ? "scale-125 ring-2 ring-gold-400 animate-pulse" : isSwapTarget ? "ring-2 ring-white/60" : "group-hover:scale-110"
-                  } ${isOOP && !isSwapSource ? "ring-2 ring-gold-400" : ""}`}>
+                  } ${isOOP && !isSwapSource ? "ring-2 ring-orange-400/60" : ""}`}>
                     {num}
                   </div>
                   {pid === captainId && (
