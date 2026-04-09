@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTeam } from "@/context/team-context";
 
 const SECTIONS = [
   { title: "Klub", items: [
@@ -27,6 +28,7 @@ const SECTIONS = [
 ];
 
 export default function MorePage() {
+  const { logout } = useTeam();
   return (
     <div className="page-container pb-24">
       {SECTIONS.map((section) => (
@@ -52,6 +54,10 @@ export default function MorePage() {
           </div>
         </div>
       ))}
+      <button onClick={logout}
+        className="w-full mt-6 py-3 rounded-xl text-center text-sm font-heading font-bold text-card-red bg-red-50 hover:bg-red-100 transition-colors">
+        🚪 Odhlásit se
+      </button>
     </div>
   );
 }
