@@ -14,3 +14,4 @@ export type { BadgePattern } from "./badge-preview";
 export { JerseyPreview } from "./jersey-preview";
 export { ConfirmDialog, useConfirm } from "./confirm-dialog";
 export { PageHeader, HeaderStat } from "../dashboard/page-header";
+export { TeamName } from "./team-name";

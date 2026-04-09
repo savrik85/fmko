@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader } from "@/components/ui";
+import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader, TeamName } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 // ═══ Types ═══
@@ -342,10 +342,10 @@ function StandingsTab({ standings, teamId }: { standings: Standing[]; teamId: st
                 <td className="py-3 px-1.5" style={{ verticalAlign: "middle" }}>
                   {row.teamId && !row.isAi ? (
                     <Link href={`/dashboard/team/${row.teamId}`} className={`font-heading font-bold hover:text-pitch-500 transition-colors ${row.isPlayer ? "text-pitch-600" : ""}`}>
-                      {row.team}
+                      <TeamName name={row.team} />
                     </Link>
                   ) : (
-                    <span className={`font-heading font-bold ${row.isAi ? "text-muted" : ""}`}>{row.team}</span>
+                    <span className={`font-heading font-bold ${row.isAi ? "text-muted" : ""}`}><TeamName name={row.team} /></span>
                   )}
                 </td>
                 {/* Stats — hidden on mobile */}
@@ -410,7 +410,7 @@ function ScheduleTab({ rounds, loaded, teamId, showAll }: { rounds: LeagueRound[
               const content = (
                 <div className={`flex items-center px-4 py-3 ${i < round.matches.length - 1 ? "border-b border-gray-50" : ""} ${isMyMatch ? "bg-pitch-50/40" : ""} ${isPlayed ? "hover:bg-gray-50 transition-colors cursor-pointer" : ""}`}>
                   <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
-                    <span className={`text-sm font-heading truncate ${m.homeTeamId === teamId ? "font-bold text-pitch-600" : ""}`}>{m.homeName}</span>
+                    <TeamName name={m.homeName} className={`font-heading ${m.homeTeamId === teamId ? "font-bold text-pitch-600" : ""}`} />
                     <BadgePreview primary={m.homeColor} secondary={m.homeSecondary} pattern={m.homeBadge as BadgePattern} initials={ini(m.homeName)} size={22} />
                   </div>
                   <div className="shrink-0 w-20 text-center">
@@ -422,7 +422,7 @@ function ScheduleTab({ rounds, loaded, teamId, showAll }: { rounds: LeagueRound[
                   </div>
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <BadgePreview primary={m.awayColor} secondary={m.awaySecondary} pattern={m.awayBadge as BadgePattern} initials={ini(m.awayName)} size={22} />
-                    <span className={`text-sm font-heading truncate ${m.awayTeamId === teamId ? "font-bold text-pitch-600" : ""}`}>{m.awayName}</span>
+                    <TeamName name={m.awayName} className={`font-heading ${m.awayTeamId === teamId ? "font-bold text-pitch-600" : ""}`} />
                   </div>
                 </div>
               );
