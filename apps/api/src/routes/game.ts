@@ -1355,14 +1355,20 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   const mainContract = activeRows.results.find((r) => (r.category || "main") === "main");
   const stadiumContract = activeRows.results.find((r) => r.category === "stadium");
 
-  // Load district sponsors for generating offers
+  // Load district sponsors — stable ordering (no RANDOM)
   const sponsorRows = await c.env.DB.prepare(
-    "SELECT * FROM district_sponsors WHERE district = ? ORDER BY RANDOM()"
+    "SELECT * FROM district_sponsors WHERE district = ? ORDER BY name"
   ).bind(team.district).all().catch((e) => { logger.warn({ module: "game" }, "fetch district sponsors", e); return { results: [] }; });
+
+  // Get current season for stable seed
+  const seasonForSeed = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ number: number }>().catch((e) => { logger.warn({ module: "sponsors" }, "fetch season for seed", e); return null; });
+  const seedSeason = seasonForSeed?.number ?? 1;
 
   const repMod = team.reputation / 50;
   const sizeMod = team.size === "mesto" ? 1.3 : team.size === "mestys" ? 1.1 : team.size === "obec" ? 1.0 : 0.8;
-  const rng = createRng(Date.now() + teamId.charCodeAt(0));
+  // Stable seed: same team + same season = same offers
+  const { seedFromString } = await import("../lib/seed");
+  const rng = createRng(seedFromString(teamId + "sponsors" + seedSeason));
 
   type Offer = {
     sponsorName: string; sponsorType: string;
