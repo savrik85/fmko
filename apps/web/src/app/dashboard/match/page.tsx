@@ -110,7 +110,7 @@ export default function MatchPageWrapper() {
 }
 
 function MatchPage() {
-  const { teamId } = useTeam();
+  const { teamId, gameDate: teamGameDate } = useTeam();
   const searchParams = useSearchParams();
   const [nextMatch, setNextMatch] = useState<NextMatchInfo | null>(null);
   const [upcomingMatches, setUpcomingMatches] = useState<UpcomingMatch[]>([]);
@@ -249,7 +249,7 @@ function MatchPage() {
         const currentIdx = upcomingMatches.findIndex((um) => um.calendarId === nextMatch?.calendarId);
         const matchDate = nextMatch.scheduledAt ? new Date(nextMatch.scheduledAt) : null;
         const dateStr = matchDate ? matchDate.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) : "";
-        const now = new Date();
+        const now = teamGameDate ? new Date(teamGameDate) : new Date();
         const daysUntil = matchDate ? Math.max(0, Math.round((matchDate.getTime() - now.getTime()) / 86400000)) : 0;
         const daysLabel = daysUntil === 0 ? "dnes" : daysUntil === 1 ? "zítra" : `za ${daysUntil} dní`;
         const opponentName = nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName;
