@@ -404,8 +404,12 @@ function MatchPage() {
             <button onClick={() => setSwapSource(null)} className="ml-2 text-xs text-muted hover:text-ink">✕ Zrušit</button>
           </div>
         ) : editSlot === null && (
-          <div className="text-center py-1 text-[10px] text-muted">
-            1× klik = prohodit pozice · 2× klik = vybrat jiného hráče
+          <div className="card px-4 py-2.5 mt-2 flex items-start gap-2 text-sm">
+            <span className="shrink-0 mt-0.5">💡</span>
+            <div className="text-ink leading-snug">
+              <span className="font-heading font-bold">Klikni na hráče</span> na hřišti pro prohození pozic.
+              Klikni <span className="font-heading font-bold">podruhé</span> na stejného hráče pro výběr náhradníka.
+            </div>
           </div>
         )}
 
