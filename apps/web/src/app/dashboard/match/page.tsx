@@ -330,6 +330,7 @@ function MatchPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
         {/* ═══ PITCH — kompaktní ═══ */}
+        <div>
         <div className="rounded-xl bg-pitch-400 overflow-hidden" style={{ aspectRatio: "5/6", padding: "2% 5%" }}>
         <div className="relative w-full h-full overflow-visible">
           {/* Pitch markings */}
@@ -406,6 +407,7 @@ function MatchPage() {
         ) : editSlot === null && (
           <p className="text-center text-xs text-muted mt-1">Klik = prohodit · Dvojklik = vybrat jiného</p>
         )}
+        </div>
 
         {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
         <div>
