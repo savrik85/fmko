@@ -200,111 +200,123 @@ export default function DashboardPage() {
             const oppColor = nextMatch.isHome ? (nextMatch.awayColor || "#666") : (nextMatch.homeColor || "#666");
             const oppSecondary = nextMatch.isHome ? (nextMatch.awaySecondary || "#FFF") : (nextMatch.homeSecondary || "#FFF");
             const oppBadge = (nextMatch.isHome ? nextMatch.awayBadge : nextMatch.homeBadge) as BadgePattern || "shield";
+            const homeTeam = nextMatch.isHome
+              ? { name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my }
+              : { name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp };
+            const awayTeam = nextMatch.isHome
+              ? { name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp }
+              : { name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my };
+            const homeForm = preview ? (nextMatch.isHome ? my : opp) : null;
+            const awayForm = preview ? (nextMatch.isHome ? opp : my) : null;
+            const ini = (n: string) => n.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
             return (
-              <div className="space-y-3">
-                {/* Badges + vs — home team always on the left */}
-                {(() => {
-                  const homeTeam = nextMatch.isHome
-                    ? { name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my }
-                    : { name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp };
-                  const awayTeam = nextMatch.isHome
-                    ? { name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp }
-                    : { name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my };
-                  return (
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex flex-col items-center flex-1 min-w-0">
-                    <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary}
-                      pattern={homeTeam.badge}
-                      initials={homeTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={36} />
-                    <div className="font-heading font-bold text-sm mt-1 truncate max-w-full text-center">{homeTeam.name}</div>
-                    {homeTeam.pos && <div className="text-[10px] text-muted tabular-nums">{homeTeam.pos.position}. místo</div>}
+              <div className="overflow-hidden rounded-xl border border-gray-100">
+                {/* Dark header — kolo + badges + jména */}
+                <div className="bg-gradient-to-b from-[#1e2d1e] to-[#2a3f2a] px-4 py-5 text-white">
+                  <div className="text-center mb-4">
+                    <span className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40">{nextMatch.round}. kolo</span>
                   </div>
-                  <div className="flex flex-col items-center shrink-0">
-                    <div className="font-heading font-[800] text-xl text-muted">vs</div>
-                    <div className="text-[10px] text-muted uppercase mt-0.5 whitespace-nowrap">{nextMatch.round}. kolo</div>
-                  </div>
-                  <div className="flex flex-col items-center flex-1 min-w-0">
-                    <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary}
-                      pattern={awayTeam.badge}
-                      initials={awayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={36} />
-                    <div className="font-heading font-bold text-sm mt-1 truncate max-w-full text-center">{awayTeam.name}</div>
-                    {awayTeam.pos && <div className="text-[10px] text-muted tabular-nums">{awayTeam.pos.position}. místo</div>}
+                  <div className="flex items-start gap-3">
+                    {/* Domácí */}
+                    <div className="flex-1 text-center">
+                      <div className="flex justify-center mb-2">
+                        <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary} pattern={homeTeam.badge} initials={ini(homeTeam.name)} size={48} />
+                      </div>
+                      <div className="font-heading font-bold text-sm leading-tight">{homeTeam.name}</div>
+                      {homeTeam.pos && <div className="text-[10px] text-white/40 tabular-nums mt-0.5">{homeTeam.pos.position}. místo</div>}
+                    </div>
+                    {/* VS */}
+                    <div className="shrink-0 flex flex-col items-center pt-3">
+                      <div className="w-10 h-10 rounded-full border-2 border-white/10 flex items-center justify-center">
+                        <span className="font-heading font-[800] text-sm text-white/30">VS</span>
+                      </div>
+                    </div>
+                    {/* Hosté */}
+                    <div className="flex-1 text-center">
+                      <div className="flex justify-center mb-2">
+                        <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary} pattern={awayTeam.badge} initials={ini(awayTeam.name)} size={48} />
+                      </div>
+                      <div className="font-heading font-bold text-sm leading-tight">{awayTeam.name}</div>
+                      {awayTeam.pos && <div className="text-[10px] text-white/40 tabular-nums mt-0.5">{awayTeam.pos.position}. místo</div>}
+                    </div>
                   </div>
                 </div>
-                  );
-                })()}
 
-                {/* Form comparison — home left, away right */}
-                {preview && my && opp && (() => {
-                  const homeForm = nextMatch.isHome ? my : opp;
-                  const awayForm = nextMatch.isHome ? opp : my;
-                  return (
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex gap-0.5">
+                {/* Forma */}
+                {homeForm && awayForm && (
+                  <div className="flex items-center px-4 py-3 border-b border-gray-100">
+                    <div className="flex-1 flex gap-1 justify-end">
                       {homeForm.form.map((f, i) => (
-                        <span key={i} className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-bold text-white ${
-                          f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
+                        <span key={i} className={`w-6 h-6 rounded-md text-[10px] flex items-center justify-center font-bold text-white ${
+                          f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-300"
                         }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
                       ))}
                     </div>
-                    <span className="text-[9px] text-muted uppercase">Forma</span>
-                    <div className="flex gap-0.5">
+                    <div className="shrink-0 w-12 text-center text-[9px] text-muted uppercase font-heading">Forma</div>
+                    <div className="flex-1 flex gap-1">
                       {awayForm.form.map((f, i) => (
-                        <span key={i} className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-bold text-white ${
-                          f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
+                        <span key={i} className={`w-6 h-6 rounded-md text-[10px] flex items-center justify-center font-bold text-white ${
+                          f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-300"
                         }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
                       ))}
                     </div>
                   </div>
-                  );
-                })()}
+                )}
 
-                {/* Stats comparison row — home left, away right */}
+                {/* Stats — horizontal bars */}
                 {preview && my && opp && (() => {
                   const home = nextMatch.isHome ? my : opp;
                   const away = nextMatch.isHome ? opp : my;
                   const homeAge = home.squad?.length ? Math.round(home.squad.reduce((s, p) => s + p.age, 0) / home.squad.length) : 0;
                   const awayAge = away.squad?.length ? Math.round(away.squad.reduce((s, p) => s + p.age, 0) / away.squad.length) : 0;
                   const stats = [
-                    { label: "Rating", hVal: home.avgRating, aVal: away.avgRating },
-                    { label: "Góly", hVal: home.goalsFor, aVal: away.goalsFor },
-                    { label: "Věk", hVal: homeAge, aVal: awayAge },
+                    { label: "Rating", h: home.avgRating, a: away.avgRating },
+                    { label: "Góly", h: home.goalsFor, a: away.goalsFor },
+                    { label: "Věk", h: homeAge, a: awayAge },
                   ];
                   return (
-                    <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
-                      {stats.map((s) => (
-                        <div key={s.label} className="bg-gray-50 rounded-lg py-1.5 px-1">
-                          <div className="font-heading font-bold tabular-nums flex items-center justify-center gap-1">
-                            <span className={s.hVal > s.aVal ? "text-pitch-500" : s.hVal < s.aVal ? "text-card-red" : ""}>{s.hVal}</span>
-                            <span className="text-muted text-[9px]">vs</span>
-                            <span className={s.aVal > s.hVal ? "text-pitch-500" : s.aVal < s.hVal ? "text-card-red" : ""}>{s.aVal}</span>
+                    <div className="px-4 py-3 space-y-2.5 border-b border-gray-100">
+                      {stats.map((s) => {
+                        const total = (s.h + s.a) || 1;
+                        const hPct = Math.round((s.h / total) * 100);
+                        return (
+                          <div key={s.label}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`text-xs font-heading font-bold tabular-nums ${s.h > s.a ? "text-pitch-600" : s.h < s.a ? "text-card-red" : "text-ink"}`}>{s.h}</span>
+                              <span className="text-[9px] text-muted uppercase font-heading">{s.label}</span>
+                              <span className={`text-xs font-heading font-bold tabular-nums ${s.a > s.h ? "text-pitch-600" : s.a < s.h ? "text-card-red" : "text-ink"}`}>{s.a}</span>
+                            </div>
+                            <div className="flex h-1.5 rounded-full overflow-hidden bg-gray-100">
+                              <div className="rounded-full transition-all" style={{ width: `${hPct}%`, background: s.h >= s.a ? "#3D7A3D" : "#dc6b6b" }} />
+                            </div>
                           </div>
-                          <div className="text-muted text-[9px] uppercase">{s.label}</div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
                 })()}
 
-                {/* Weather + venue */}
-                {preview && (
-                  <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-lg">{preview.weather.icon}</span>
-                      <span className="text-muted text-xs">{preview.weather.temperature}°C</span>
-                      {(preview.weather.expected === "rain" || preview.weather.expected === "snow" || preview.weather.expected === "wind") && (
-                        <span className="text-card-red text-[10px] font-heading font-bold">
-                          {preview.weather.expected === "rain" ? "-20% tech" : preview.weather.expected === "snow" ? "-30% tech" : "-10% tech"}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-muted truncate ml-2">{preview.venue.name}</span>
+                {/* Footer — weather + venue + CTA */}
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-2 text-xs text-muted">
+                    {preview && (
+                      <>
+                        <span className="text-base">{preview.weather.icon}</span>
+                        <span>{preview.weather.temperature}°C</span>
+                        {(preview.weather.expected === "rain" || preview.weather.expected === "snow" || preview.weather.expected === "wind") && (
+                          <span className="text-card-red text-[10px] font-heading font-bold">
+                            {preview.weather.expected === "rain" ? "-20%" : preview.weather.expected === "snow" ? "-30%" : "-10%"}
+                          </span>
+                        )}
+                        <span className="text-muted/40">·</span>
+                        <span className="text-[10px]">{preview.venue.name}</span>
+                      </>
+                    )}
                   </div>
-                )}
-
-                <Link href="/dashboard/match" className="text-center block">
-                  <span className="text-xs text-pitch-500 font-heading font-bold hover:underline">Sestava →</span>
-                </Link>
+                  <Link href="/dashboard/match" className="bg-pitch-500 hover:bg-pitch-600 text-white text-xs font-heading font-bold px-3 py-1.5 rounded-lg transition-colors">
+                    Sestava →
+                  </Link>
+                </div>
               </div>
             );
           })() : (
