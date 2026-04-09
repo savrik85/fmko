@@ -407,6 +407,14 @@ function MatchPage() {
           })}
         </div>
         </div>
+        {swapSource !== null ? (
+          <div className="text-center py-1.5 mt-1 bg-gold-500/10 rounded-xl">
+            <span className="text-sm font-heading font-bold text-gold-600">Vyber pozici kam přesunout</span>
+            <button onClick={() => setSwapSource(null)} className="ml-2 text-sm text-muted hover:text-ink">✕</button>
+          </div>
+        ) : (
+          <p className="text-center text-sm text-ink/50 mt-1">Klik na hráče = prohodit pozice · Dvojklik = vybrat jiného</p>
+        )}
         </div>
 
         {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
