@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PageHeader, TeamName } from "@/components/ui";
+import { Spinner, SectionLabel, BadgePreview, PageHeader } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface ScheduleMatch {
@@ -211,7 +211,9 @@ function MatchRow({ match: m, myTeamId }: { match: ScheduleMatch; myTeamId: stri
       </div>
 
       <div className="flex-1 min-w-0 flex items-center gap-2 justify-end">
-        <TeamName name={m.homeName} className={`font-heading ${m.homeTeamId === myTeamId ? "font-bold" : ""}`} />
+        <span className={`text-sm font-heading truncate ${m.homeTeamId === myTeamId ? "font-bold" : ""}`}>
+          {m.homeName}
+        </span>
         <BadgePreview primary={m.homeColor} secondary={m.homeSecondary} pattern={m.homeBadge as BadgePattern}
           initials={m.homeName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
       </div>
@@ -230,7 +232,9 @@ function MatchRow({ match: m, myTeamId }: { match: ScheduleMatch; myTeamId: stri
       <div className="flex-1 min-w-0 flex items-center gap-2">
         <BadgePreview primary={m.awayColor} secondary={m.awaySecondary} pattern={m.awayBadge as BadgePattern}
           initials={m.awayName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
-        <TeamName name={m.awayName} className={`font-heading ${m.awayTeamId === myTeamId ? "font-bold" : ""}`} />
+        <span className={`text-sm font-heading truncate ${m.awayTeamId === myTeamId ? "font-bold" : ""}`}>
+          {m.awayName}
+        </span>
       </div>
 
       <div className="shrink-0 w-7">

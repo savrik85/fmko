@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player, type ManagerProfile, type TeamMatchResults } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { Spinner, SectionLabel, PositionBadge, BadgePreview, TeamName } from "@/components/ui";
+import { Spinner, SectionLabel, PositionBadge, BadgePreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface Standing {
@@ -216,7 +216,7 @@ export default function DashboardPage() {
                     <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary}
                       pattern={homeTeam.badge}
                       initials={homeTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={36} />
-                    <div className="font-heading font-bold mt-1 max-w-full text-center leading-tight"><TeamName name={homeTeam.name} /></div>
+                    <div className="font-heading font-bold text-sm mt-1 truncate max-w-full text-center">{homeTeam.name}</div>
                     {homeTeam.pos && <div className="text-[10px] text-muted tabular-nums">{homeTeam.pos.position}. místo</div>}
                   </div>
                   <div className="flex flex-col items-center shrink-0">
@@ -227,7 +227,7 @@ export default function DashboardPage() {
                     <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary}
                       pattern={awayTeam.badge}
                       initials={awayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={36} />
-                    <div className="font-heading font-bold mt-1 max-w-full text-center leading-tight"><TeamName name={awayTeam.name} /></div>
+                    <div className="font-heading font-bold text-sm mt-1 truncate max-w-full text-center">{awayTeam.name}</div>
                     {awayTeam.pos && <div className="text-[10px] text-muted tabular-nums">{awayTeam.pos.position}. místo</div>}
                   </div>
                 </div>
