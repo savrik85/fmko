@@ -32,7 +32,7 @@ export function BottomNav() {
   ];
 
   return (
-    <nav className="bottom-nav fixed bottom-0 left-0 right-0 z-50 sm:hidden" style={{ background: "#1e2d1e", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+    <nav className="fixed bottom-0 left-0 right-0 z-50 sm:hidden" style={{ background: "#1e2d1e", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
       <div className="flex justify-around items-center h-16 px-2">
         {items.map((item) => {
           const isActive = pathname === item.href ||
@@ -42,7 +42,6 @@ export function BottomNav() {
             <Link
               key={item.label}
               href={item.href}
-              style={{ minHeight: "unset" }}
               className={`relative flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-lg transition-colors min-w-[56px] ${
                 isActive
                   ? "text-white"
