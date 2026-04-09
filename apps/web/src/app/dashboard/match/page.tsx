@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTeam } from "@/context/team-context";
@@ -662,11 +663,11 @@ function MatchPage() {
         {saveError && <p className="text-sm text-card-red mt-2 text-center">{saveError}</p>}
       </div>
 
-      {/* ═══ Mobile bottom sheet selector ═══ */}
-      {editSlot !== null && (
-        <>
-          <div className="lg:hidden fixed inset-0 z-[60] bg-black/50" onClick={() => setEditSlot(null)} />
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[60] bg-white rounded-t-2xl" style={{ maxHeight: "65vh" }}>
+      {/* ═══ Mobile bottom sheet selector — rendered via portal to escape overflow ═══ */}
+      {editSlot !== null && typeof document !== "undefined" && createPortal(
+        <div className="lg:hidden">
+          <div className="fixed inset-0 z-[9998] bg-black/50" onClick={() => setEditSlot(null)} />
+          <div className="fixed bottom-0 left-0 right-0 z-[9999] bg-white rounded-t-2xl" style={{ maxHeight: "65vh" }}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat — {slots[editSlot].pos}</span>
               <button onClick={() => setEditSlot(null)} className="w-8 h-8 flex items-center justify-center text-muted hover:text-ink text-xl">✕</button>
@@ -704,7 +705,8 @@ function MatchPage() {
                 })}
             </div>
           </div>
-        </>
+        </div>,
+        document.body
       )}
     </div>
   );
