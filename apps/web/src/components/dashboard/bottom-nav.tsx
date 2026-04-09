@@ -33,7 +33,7 @@ export function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 sm:hidden" style={{ background: "#1e2d1e", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-      <div className="flex justify-around items-center h-12 px-2">
+      <div className="flex justify-around items-center h-16 px-2">
         {items.map((item) => {
           const isActive = pathname === item.href ||
             (item.href !== "/dashboard" && pathname.startsWith(item.href)) ||
@@ -42,17 +42,16 @@ export function BottomNav() {
             <Link
               key={item.label}
               href={item.href}
-              style={{ minHeight: "unset" }}
-              className={`relative flex flex-col items-center justify-center gap-0 py-0.5 px-3 rounded-lg transition-colors min-w-[48px] ${
+              className={`relative flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-lg transition-colors min-w-[56px] ${
                 isActive
                   ? "text-white"
                   : "text-white/50 hover:text-white"
               }`}
             >
-              <span className="text-base leading-none">{item.icon}</span>
-              <span className="text-[9px] font-medium leading-tight">{item.label}</span>
+              <span className="text-xl">{item.icon}</span>
+              <span className="text-[10px] font-medium">{item.label}</span>
               {item.badge != null && item.badge > 0 && (
-                <span className="absolute -top-0.5 right-1 bg-card-red text-white text-[8px] font-bold min-w-[14px] h-3.5 px-0.5 rounded-full flex items-center justify-center">
+                <span className="absolute top-0 right-2 bg-card-red text-white text-[9px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">
                   {item.badge > 99 ? "99+" : item.badge}
                 </span>
               )}
