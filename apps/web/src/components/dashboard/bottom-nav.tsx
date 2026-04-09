@@ -33,7 +33,7 @@ export function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 sm:hidden" style={{ background: "#1e2d1e", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-      <div className="flex justify-around items-center h-16 px-2">
+      <div className="flex justify-around items-center h-14 px-2">
         {items.map((item) => {
           const isActive = pathname === item.href ||
             (item.href !== "/dashboard" && pathname.startsWith(item.href)) ||
