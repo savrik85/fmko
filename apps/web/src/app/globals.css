@@ -392,7 +392,7 @@ body::before {
    ═══════════════════════════════════════════════ */
 
 .tabular-nums { font-variant-numeric: tabular-nums; }
-@media (pointer: coarse) { button, a, [role="button"] { min-height: 44px; } }
+@media (pointer: coarse) { button, a, [role="button"] { min-height: 44px; } nav.bottom-nav a { min-height: unset; } }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0); }
 
 /* Green shield below bottom nav — covers iOS Safari bounce/overscroll gap */
