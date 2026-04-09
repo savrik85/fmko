@@ -331,7 +331,14 @@ function MatchPage() {
 
         {/* ═══ PITCH — kompaktní ═══ */}
         <div>
-        <p className="text-center text-xs text-muted mb-1">Klik = prohodit · Dvojklik = vybrat jiného</p>
+        {swapSource !== null ? (
+          <div className="text-center py-2 mb-1 bg-gold-500/10 rounded-xl">
+            <span className="text-sm font-heading font-bold text-gold-600">Klikni na pozici kam chceš hráče přesunout</span>
+            <button onClick={() => setSwapSource(null)} className="ml-2 text-sm text-muted hover:text-ink">✕</button>
+          </div>
+        ) : (
+          <p className="text-center text-sm text-ink/50 mb-1">Klik na hráče = prohodit pozice · Dvojklik = vybrat jiného</p>
+        )}
         <div className="rounded-xl bg-pitch-400 overflow-hidden" style={{ aspectRatio: "5/6", padding: "2% 5%" }}>
         <div className="relative w-full h-full overflow-visible">
           {/* Pitch markings */}
@@ -400,12 +407,6 @@ function MatchPage() {
           })}
         </div>
         </div>
-        {swapSource !== null && (
-          <div className="text-center py-1.5 bg-gold-500/10 rounded-xl mt-1">
-            <span className="text-xs font-heading font-bold text-gold-600">Klikni na pozici kam chceš hráče přesunout</span>
-            <button onClick={() => setSwapSource(null)} className="ml-2 text-xs text-muted hover:text-ink">✕ Zrušit</button>
-          </div>
-        )}
         </div>
 
         {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
