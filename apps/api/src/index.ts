@@ -74,8 +74,7 @@ export default {
       }
     }
 
-    // ── MATCH TICK: 18:00-18:15 CEST — simuluje zápasy, 1 liga za invokaci ──
-    // Každý cron trigger zpracuje 1 nezpracovanou ligu (KV tracking)
+    // ── MATCH TICK: 18:00 CEST — simuluje zápasy, všechny ligy najednou ──
     const isMatchTick = cron?.startsWith("0 16") || cron?.startsWith("5 16") || cron?.startsWith("10 16") || cron?.startsWith("15 16") || !cron;
     if (isMatchTick) {
       try {
@@ -84,34 +83,12 @@ export default {
           "SELECT league_id, MAX(game_date) as max_game_date FROM teams WHERE league_id IS NOT NULL AND game_date IS NOT NULL GROUP BY league_id"
         ).all();
 
-        // KV tracking — process only ONE league per cron invocation
-        const today = new Date().toISOString().slice(0, 10);
-        const processedKey = `match-tick-${today}`;
-        const processedStr = await env.CACHE_KV.get(processedKey).catch(() => null) ?? "[]";
-        const processedLeagues = JSON.parse(processedStr) as string[];
-
-        // Find first unprocessed league with pending matches
-        let targetLeagueId: string | null = null;
-        let targetGameDate: string | null = null;
-        for (const league of leagues.results) {
-          const lid = league.league_id as string;
-          if (processedLeagues.includes(lid)) continue;
-          targetLeagueId = lid;
-          targetGameDate = league.max_game_date as string;
-          break;
-        }
-
-        if (!targetLeagueId) {
-          log("info", "all leagues already processed today");
-        }
-
+        // Process ALL leagues in one invocation (no KV tracking needed)
         let totalMatches = 0;
         for (const league of leagues.results) {
           const gameDate = league.max_game_date as string | null;
           const leagueId = league.league_id as string | null;
           if (!gameDate || !leagueId) continue;
-          // Only process the target league
-          if (targetLeagueId && leagueId !== targetLeagueId) continue;
 
           const gd = new Date(gameDate);
           const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
@@ -318,14 +295,7 @@ export default {
           if (friendlyCount > 0) log("info", `${friendlyCount} friendly matches simulated`);
         } catch (e) { log("error", "friendly matches failed", e); }
 
-        // Mark this league as processed today
-        if (targetLeagueId && totalMatches > 0) {
-          processedLeagues.push(targetLeagueId);
-          await env.CACHE_KV.put(processedKey, JSON.stringify(processedLeagues), { expirationTtl: 86400 })
-            .catch((e) => log("error", "KV put failed", e));
-        }
-
-        log("info", `match tick done: ${totalMatches} matches simulated (league=${targetLeagueId ?? 'none'})`);
+        log("info", `match tick done: ${totalMatches} matches simulated (all leagues)`);
 
         // ── Celebrity spawn check (runs after match tick, separate query budget) ──
         try {
