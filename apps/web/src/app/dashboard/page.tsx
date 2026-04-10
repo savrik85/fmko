@@ -201,11 +201,11 @@ export default function DashboardPage() {
             const oppSecondary = nextMatch.isHome ? (nextMatch.awaySecondary || "#FFF") : (nextMatch.homeSecondary || "#FFF");
             const oppBadge = (nextMatch.isHome ? nextMatch.awayBadge : nextMatch.homeBadge) as BadgePattern || "shield";
             const homeTeam = nextMatch.isHome
-              ? { name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my }
-              : { name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp };
+              ? { id: teamId!, name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my }
+              : { id: preview?.away?.id ?? "", name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp };
             const awayTeam = nextMatch.isHome
-              ? { name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp }
-              : { name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my };
+              ? { id: preview?.away?.id ?? "", name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp }
+              : { id: teamId!, name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my };
             const homeForm = preview ? (nextMatch.isHome ? my : opp) : null;
             const awayForm = preview ? (nextMatch.isHome ? opp : my) : null;
             const ini = (n: string) => n.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
@@ -218,12 +218,12 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-start gap-3">
                     {/* Domácí */}
-                    <div className="flex-1 text-center">
+                    <Link href={`/dashboard/team/${homeTeam.id}`} className="flex-1 text-center hover:opacity-80 transition-opacity">
                       <div className="flex justify-center mb-2">
                         <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary} pattern={homeTeam.badge} initials={ini(homeTeam.name)} size={48} />
                       </div>
                       <div className="font-heading font-bold text-sm leading-tight">{homeTeam.name}</div>
-                    </div>
+                    </Link>
                     {/* VS */}
                     <div className="shrink-0 flex flex-col items-center pt-3">
                       <div className="w-10 h-10 rounded-full border-2 border-white/10 flex items-center justify-center">
@@ -231,12 +231,12 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     {/* Hosté */}
-                    <div className="flex-1 text-center">
+                    <Link href={`/dashboard/team/${awayTeam.id}`} className="flex-1 text-center hover:opacity-80 transition-opacity">
                       <div className="flex justify-center mb-2">
                         <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary} pattern={awayTeam.badge} initials={ini(awayTeam.name)} size={48} />
                       </div>
                       <div className="font-heading font-bold text-sm leading-tight">{awayTeam.name}</div>
-                    </div>
+                    </Link>
                   </div>
                   {/* Pozice — vždy na vlastním řádku, zarovnané */}
                   {(homeTeam.pos || awayTeam.pos) && (
@@ -277,11 +277,15 @@ export default function DashboardPage() {
                     const players = (squad ?? []).filter(p => p.position === pos);
                     return players.length ? Math.round(players.reduce((s, p) => s + (p.rating ?? 0), 0) / players.length) : 0;
                   };
+                  const homeAge = home.squad?.length ? Math.round(home.squad.reduce((s, p) => s + p.age, 0) / home.squad.length) : 0;
+                  const awayAge = away.squad?.length ? Math.round(away.squad.reduce((s, p) => s + p.age, 0) / away.squad.length) : 0;
                   const stats = [
+                    { label: "Rating", h: home.avgRating, a: away.avgRating, higherBetter: true },
                     { label: "BRA", h: avgByPos(home.squad, "GK"), a: avgByPos(away.squad, "GK"), higherBetter: true },
                     { label: "OBR", h: avgByPos(home.squad, "DEF"), a: avgByPos(away.squad, "DEF"), higherBetter: true },
                     { label: "ZÁL", h: avgByPos(home.squad, "MID"), a: avgByPos(away.squad, "MID"), higherBetter: true },
                     { label: "ÚTO", h: avgByPos(home.squad, "FWD"), a: avgByPos(away.squad, "FWD"), higherBetter: true },
+                    { label: "Věk", h: homeAge, a: awayAge, higherBetter: false },
                   ];
                   return (
                     <div className="px-4 py-3 space-y-2.5 border-b border-gray-100">
@@ -336,111 +340,6 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Form + Results */}
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Forma</SectionLabel>
-          {matchResults && matchResults.matches.length > 0 ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-center gap-1.5">
-                {matchResults.form.map((f, i) => (
-                  <span key={i} className={`w-8 h-8 rounded-md flex items-center justify-center text-sm font-heading font-bold text-white ${
-                    f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
-                  }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
-                ))}
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-gray-50 rounded-lg py-1.5">
-                  <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">{matchResults.summary.wins}</div>
-                  <div className="text-[9px] text-muted uppercase">Výhry</div>
-                </div>
-                <div className="bg-gray-50 rounded-lg py-1.5">
-                  <div className="font-heading font-bold text-lg tabular-nums">{matchResults.summary.draws}</div>
-                  <div className="text-[9px] text-muted uppercase">Remízy</div>
-                </div>
-                <div className="bg-gray-50 rounded-lg py-1.5">
-                  <div className="font-heading font-bold text-lg tabular-nums text-card-red">{matchResults.summary.losses}</div>
-                  <div className="text-[9px] text-muted uppercase">Prohry</div>
-                </div>
-              </div>
-              <div className="text-center text-sm text-muted">
-                Skóre <span className="font-heading font-bold text-ink">{matchResults.summary.goalsFor}:{matchResults.summary.goalsAgainst}</span>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center text-muted py-4">Zatím bez zápasů</div>
-          )}
-        </div>
-
-        {/* League position */}
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Liga</SectionLabel>
-          {myStanding ? (
-            <div className="text-center">
-              <div className="font-heading font-[800] text-5xl tabular-nums" style={{ color: safeColor }}>{myStanding.pos}.</div>
-              <div className="text-sm text-muted mt-1">{myStanding.points} bodů · {myStanding.played} zápasů</div>
-              {myStanding.goalsFor != null && myStanding.goalsAgainst != null && (
-                <div className="text-xs text-muted mt-0.5">
-                  {myStanding.goalsFor}:{myStanding.goalsAgainst} ({myStanding.goalsFor - myStanding.goalsAgainst >= 0 ? "+" : ""}{myStanding.goalsFor - myStanding.goalsAgainst})
-                </div>
-              )}
-              <Link href="/dashboard/liga" className="text-sm text-pitch-500 font-heading font-bold hover:underline mt-2 inline-block">
-                Zobrazit tabulku →
-              </Link>
-            </div>
-          ) : (
-            <div className="text-center text-muted py-4">
-              <div>Zatím žádné výsledky</div>
-              <Link href="/dashboard/match" className="text-sm text-pitch-500 font-heading font-bold hover:underline mt-2 inline-block">Hrát zápas →</Link>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ═══ Row 2: Squad health + Mini league table + Manager ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-        {/* Squad health */}
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Stav kádru</SectionLabel>
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
-                <div className="font-heading font-bold text-2xl tabular-nums" style={{ color: safeColor }}>{players.length}</div>
-                <div className="text-[10px] text-muted uppercase">Hráčů</div>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
-                <div className={`font-heading font-bold text-2xl tabular-nums ${conditionLabel(avgCondition).color}`}>{avgCondition}%</div>
-                <div className="text-[10px] text-muted uppercase">Prům. kondice</div>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              {injuredCount > 0 && (
-                <div className="flex items-center justify-between text-sm py-1">
-                  <span className="text-muted">Zranění / vyčerpaní</span>
-                  <span className="font-heading font-bold text-card-red">{injuredCount}</span>
-                </div>
-              )}
-              {lowMoraleCount > 0 && (
-                <div className="flex items-center justify-between text-sm py-1">
-                  <span className="text-muted">Nízká morálka</span>
-                  <span className="font-heading font-bold text-gold-600">{lowMoraleCount}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between text-sm py-1">
-                <span className="text-muted">Prům. morálka</span>
-                <span className="font-heading font-bold">{avgMorale}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm py-1">
-                <span className="text-muted">Prům. rating</span>
-                <span className="font-heading font-bold">{players.length > 0 ? Math.round(players.reduce((s, p) => s + p.overall_rating, 0) / players.length) : 0}</span>
-              </div>
-            </div>
-            <Link href="/dashboard/squad" className="text-xs text-pitch-500 font-heading font-bold hover:underline block text-center pt-1">
-              Zobrazit kádr →
-            </Link>
-          </div>
-        </div>
-
         {/* Mini league table */}
         <div className="card p-4 sm:p-5">
           <SectionLabel>Tabulka</SectionLabel>
@@ -463,9 +362,13 @@ export default function DashboardPage() {
                     <tr key={s.teamId ?? s.pos} className={`border-b border-gray-50 ${s.isPlayer ? "bg-pitch-50/50 font-bold" : ""}`}>
                       <td className="py-1.5 pl-4 sm:pl-5 pr-1 tabular-nums text-muted text-xs">{s.pos}</td>
                       <td className="py-1.5 pr-2">
-                        <span className={`text-xs truncate block max-w-[140px] ${s.isPlayer ? "font-heading font-bold" : ""}`}>
-                          {s.team}
-                        </span>
+                        {s.teamId ? (
+                          <Link href={`/dashboard/team/${s.teamId}`} className={`text-xs block max-w-[140px] hover:text-pitch-500 transition-colors ${s.isPlayer ? "font-heading font-bold" : ""}`}>
+                            {s.team}
+                          </Link>
+                        ) : (
+                          <span className={`text-xs block max-w-[140px] ${s.isPlayer ? "font-heading font-bold" : ""}`}>{s.team}</span>
+                        )}
                       </td>
                       <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.played}</td>
                       <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.wins}</td>
@@ -484,6 +387,72 @@ export default function DashboardPage() {
             <div className="text-center text-muted py-4">Žádná data</div>
           )}
         </div>
+
+        {/* Squad health — rozšířený */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Stav kádru</SectionLabel>
+          <div className="space-y-2">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                <div className="font-heading font-bold text-xl tabular-nums" style={{ color: safeColor }}>{players.length}</div>
+                <div className="text-[9px] text-muted uppercase">Hráčů</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                <div className={`font-heading font-bold text-xl tabular-nums ${conditionLabel(avgCondition).color}`}>{avgCondition}%</div>
+                <div className="text-[9px] text-muted uppercase">Kondice</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                <div className="font-heading font-bold text-xl tabular-nums">{players.length > 0 ? Math.round(players.reduce((s, p) => s + p.overall_rating, 0) / players.length) : 0}</div>
+                <div className="text-[9px] text-muted uppercase">Rating</div>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                <span className="text-muted">Prům. morálka</span>
+                <span className="font-heading font-bold">{avgMorale}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                <span className="text-muted">Prům. věk</span>
+                <span className="font-heading font-bold">{players.length > 0 ? Math.round(players.reduce((s, p) => s + p.age, 0) / players.length * 10) / 10 : 0}</span>
+              </div>
+              {injuredCount > 0 && (
+                <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                  <span className="text-muted">Zranění</span>
+                  <span className="font-heading font-bold text-card-red">{injuredCount}</span>
+                </div>
+              )}
+              {lowMoraleCount > 0 && (
+                <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                  <span className="text-muted">Nízká morálka</span>
+                  <span className="font-heading font-bold text-gold-600">{lowMoraleCount}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                <span className="text-muted">Brankáři</span>
+                <span className="font-heading font-bold tabular-nums">{players.filter(p => p.position === "GK").length}× · ø{players.filter(p => p.position === "GK").length > 0 ? Math.round(players.filter(p => p.position === "GK").reduce((s, p) => s + p.overall_rating, 0) / players.filter(p => p.position === "GK").length) : 0}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                <span className="text-muted">Obránci</span>
+                <span className="font-heading font-bold tabular-nums">{players.filter(p => p.position === "DEF").length}× · ø{players.filter(p => p.position === "DEF").length > 0 ? Math.round(players.filter(p => p.position === "DEF").reduce((s, p) => s + p.overall_rating, 0) / players.filter(p => p.position === "DEF").length) : 0}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                <span className="text-muted">Záložníci</span>
+                <span className="font-heading font-bold tabular-nums">{players.filter(p => p.position === "MID").length}× · ø{players.filter(p => p.position === "MID").length > 0 ? Math.round(players.filter(p => p.position === "MID").reduce((s, p) => s + p.overall_rating, 0) / players.filter(p => p.position === "MID").length) : 0}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm py-1">
+                <span className="text-muted">Útočníci</span>
+                <span className="font-heading font-bold tabular-nums">{players.filter(p => p.position === "FWD").length}× · ø{players.filter(p => p.position === "FWD").length > 0 ? Math.round(players.filter(p => p.position === "FWD").reduce((s, p) => s + p.overall_rating, 0) / players.filter(p => p.position === "FWD").length) : 0}</span>
+              </div>
+            </div>
+            <Link href="/dashboard/squad" className="text-xs text-pitch-500 font-heading font-bold hover:underline block text-center pt-1">
+              Zobrazit kádr →
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ Row 2: Manager + Finance + Trenér ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
         {/* Manager */}
         <div className="card p-4 sm:p-5">
