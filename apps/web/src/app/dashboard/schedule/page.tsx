@@ -141,7 +141,7 @@ export default function SchedulePage() {
           {upcoming.length > 0 && (
             <div className="mb-6">
               <SectionLabel>Nadcházející</SectionLabel>
-              <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-3">
                 {upcoming.map((m) => (
                   <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={upcomingIds.has(m.id)} />
                 ))}
@@ -152,7 +152,7 @@ export default function SchedulePage() {
           {played.length > 0 && (
             <div>
               <SectionLabel>Odehrané</SectionLabel>
-              <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-3">
                 {played.map((m) => (
                   <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={false} />
                 ))}
