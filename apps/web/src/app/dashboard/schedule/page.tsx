@@ -142,7 +142,7 @@ export default function SchedulePage() {
           {upcoming.length > 0 && (
             <div className="mb-6">
               <SectionLabel>Nadcházející</SectionLabel>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {upcoming.map((m) => (
                   <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={lineupEditableIds.has(m.id)} />
                 ))}
@@ -153,7 +153,7 @@ export default function SchedulePage() {
           {played.length > 0 && (
             <div>
               <SectionLabel>Odehrané</SectionLabel>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {played.map((m) => (
                   <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={false} />
                 ))}
@@ -238,9 +238,6 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
         ) : (
           <div className="shrink-0 text-xs font-heading font-bold tabular-nums">{formatDate(m.scheduledAt)}</div>
         )}
-        {linkLabel && (
-          <div className="shrink-0 text-xs font-heading font-bold text-pitch-600">{linkLabel} →</div>
-        )}
       </div>
 
       {/* Desktop layout */}
@@ -283,13 +280,14 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
             </span>
           )}
         </div>
-
-        <div className="shrink-0 w-20 text-right">
-          {linkLabel && (
-            <span className="text-sm font-heading font-bold text-pitch-600">{linkLabel} →</span>
-          )}
-        </div>
       </div>
+
+      {/* Link centered at bottom */}
+      {linkLabel && (
+        <div className="mt-2 pt-2 border-t border-gray-100 text-center">
+          <span className="text-sm font-heading font-bold text-pitch-600">{linkLabel} →</span>
+        </div>
+      )}
     </div>
   );
 
