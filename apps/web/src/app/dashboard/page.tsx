@@ -529,9 +529,9 @@ export default function DashboardPage() {
                           </a>
                         </td>
                         <td className="py-2 pr-4 sm:pr-5 text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-heading font-bold ${resultBg} ${resultText}`}>
+                          <a href={`/dashboard/match/${m.id}/replay`} className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-heading font-bold hover:opacity-80 transition-opacity ${resultBg} ${resultText}`}>
                             {m.homeScore}:{m.awayScore}
-                          </span>
+                          </a>
                         </td>
                       </tr>
                     );
