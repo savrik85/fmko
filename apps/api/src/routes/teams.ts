@@ -901,6 +901,14 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
   ).bind(teamId, c.req.param("playerId")).first<{ 1: number }>()
     .catch((e) => { logger.warn({ module: "teams" }, "fetch watchlist status", e); return null; });
 
+  // Teams watching this player (scouting visibility)
+  const watchers = await c.env.DB.prepare(
+    `SELECT t.id, t.name, t.primary_color, t.secondary_color, t.badge_pattern
+     FROM player_watchlist w JOIN teams t ON w.team_id = t.id
+     WHERE w.player_id = ? ORDER BY w.created_at ASC`
+  ).bind(c.req.param("playerId")).all<{ id: string; name: string; primary_color: string; secondary_color: string; badge_pattern: string }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "fetch watchers", e); return { results: [] }; });
+
   return c.json({
     ...row,
     isOwn,
@@ -911,6 +919,7 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     avatar: JSON.parse(row.avatar as string),
     injury: injury ? { type: injury.type, daysRemaining: injury.days_remaining } : null,
     isWatched: !!watched,
+    watchers: watchers.results ?? [],
   });
 });
 
