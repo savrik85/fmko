@@ -160,7 +160,9 @@
       "Bash(xargs -I{} gh run view {} --log-failed)",
       "Bash(xargs -I{} gh run rerun {})",
       "WebFetch(domain:devblog.hattrick.org)",
-      "WebFetch(domain:wiki.hattrick.org)"
+      "WebFetch(domain:wiki.hattrick.org)",
+      "Bash(md5)",
+      "Bash(xargs -I{} gh run rerun {} --failed)"
     ]
   }
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader } from "@/components/ui";
+import { Spinner, BadgePreview, PositionBadge } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
@@ -86,10 +86,12 @@ export default function WatchlistPage() {
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
+  const countLabel = `${players.length} ${players.length === 1 ? "hráč" : players.length >= 2 && players.length <= 4 ? "hráči" : "hráčů"}`;
+
   return (
     <>
-      <PageHeader name="Sledovaní hráči" detail={`${players.length} ${players.length === 1 ? "hráč" : players.length >= 2 && players.length <= 4 ? "hráči" : "hráčů"}`}>{null}</PageHeader>
       <div className="page-container space-y-4">
+        <div className="text-sm text-muted font-heading">{countLabel}</div>
         {players.length === 0 ? (
           <div className="card p-8 text-center text-muted">
             <div className="text-4xl mb-3">☆</div>
