@@ -56,7 +56,7 @@ interface PreviewTeam {
   goalsFor: number; goalsAgainst: number;
   form: string[];
   avgRating: number; squadSize: number;
-  squad?: Array<{ age: number }>;
+  squad?: Array<{ age: number; position?: string; rating?: number }>;
   isPlayer?: boolean;
 }
 
@@ -273,12 +273,15 @@ export default function DashboardPage() {
                 {preview && my && opp && (() => {
                   const home = nextMatch.isHome ? my : opp;
                   const away = nextMatch.isHome ? opp : my;
-                  const homeAge = home.squad?.length ? Math.round(home.squad.reduce((s, p) => s + p.age, 0) / home.squad.length) : 0;
-                  const awayAge = away.squad?.length ? Math.round(away.squad.reduce((s, p) => s + p.age, 0) / away.squad.length) : 0;
+                  const avgByPos = (squad: typeof home.squad, pos: string) => {
+                    const players = (squad ?? []).filter(p => p.position === pos);
+                    return players.length ? Math.round(players.reduce((s, p) => s + (p.rating ?? 0), 0) / players.length) : 0;
+                  };
                   const stats = [
-                    { label: "Rating", h: home.avgRating, a: away.avgRating, higherBetter: true },
-                    { label: "Góly", h: home.goalsFor, a: away.goalsFor, higherBetter: true },
-                    { label: "Věk", h: homeAge, a: awayAge, higherBetter: false },
+                    { label: "BRA", h: avgByPos(home.squad, "GK"), a: avgByPos(away.squad, "GK"), higherBetter: true },
+                    { label: "OBR", h: avgByPos(home.squad, "DEF"), a: avgByPos(away.squad, "DEF"), higherBetter: true },
+                    { label: "ZÁL", h: avgByPos(home.squad, "MID"), a: avgByPos(away.squad, "MID"), higherBetter: true },
+                    { label: "ÚTO", h: avgByPos(home.squad, "FWD"), a: avgByPos(away.squad, "FWD"), higherBetter: true },
                   ];
                   return (
                     <div className="px-4 py-3 space-y-2.5 border-b border-gray-100">
