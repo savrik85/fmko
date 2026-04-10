@@ -119,40 +119,51 @@ export default function CalendarPage() {
             const dow = (i % 7);
             const isWeekend = dow >= 5;
 
+            const isFriendly = match?.title.startsWith("Přátelák");
+            const matchLabel = match ? (isFriendly ? match.title.replace("Přátelák — ", "") : match.title.replace(/^\d+\. kolo — /, "")) : null;
+            const isLineupNeeded = match?.status === "Nastav sestavu!";
+            const matchBg = !match ? "" :
+              isLineupNeeded ? "bg-amber-100 text-amber-700 ring-1 ring-amber-300" :
+              match.status && match.status !== "Naplánováno" ? "bg-pitch-100 text-pitch-700" :
+              isFriendly ? "bg-amber-500 text-white" : "bg-pitch-500 text-white";
+            const tr = events.find((e) => e.type === "training");
+            const trainingLabel = tr?.title?.replace("Trénink — ", "") ?? "Trénink";
+
             return (
-              <div key={i} className={`min-h-[80px] border-b border-r border-gray-50 px-1.5 py-1 ${isToday ? "bg-pitch-50 ring-2 ring-inset ring-pitch-400" : isWeekend ? "bg-gray-50/40" : ""}`}>
+              <div key={i} className={`min-h-[60px] sm:min-h-[80px] border-b border-r border-gray-50 px-0.5 sm:px-1.5 py-1 ${isToday ? "bg-pitch-50 ring-2 ring-inset ring-pitch-400" : isWeekend ? "bg-gray-50/40" : ""}`}>
                 {/* Day number */}
-                <div className={`text-right text-sm tabular-nums mb-1 ${isToday ? "font-bold text-pitch-600" : "text-muted"}`}>
+                <div className={`text-center sm:text-right text-xs sm:text-sm tabular-nums mb-0.5 sm:mb-1 ${isToday ? "font-bold text-pitch-600" : "text-muted"}`}>
                   {dayNum}
                 </div>
-                {/* Events */}
-                {match && (() => {
-                  const isFriendly = match.title.startsWith("Přátelák");
-                  const label = isFriendly ? match.title.replace("Přátelák — ", "") : match.title.replace(/^\d+\. kolo — /, "");
-                  const isLineupNeeded = match.status === "Nastav sestavu!";
-                  return (
-                    <div className={`text-[11px] font-heading font-bold leading-tight px-1.5 py-1 rounded truncate ${
-                      isLineupNeeded
-                        ? "bg-amber-100 text-amber-700 ring-1 ring-amber-300"
-                        : match.status && match.status !== "Naplánováno"
-                          ? "bg-pitch-100 text-pitch-700"
-                          : isFriendly ? "bg-amber-500 text-white" : "bg-pitch-500 text-white"
-                    }`}>
-                      {isFriendly ? "🤝" : "⚽"} {label}
+                {/* Mobile: icons only centered */}
+                <div className="sm:hidden flex flex-col items-center gap-0.5">
+                  {match && (
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${matchBg}`} title={matchLabel ?? ""}>
+                      {isFriendly ? "🤝" : "⚽"}
+                    </span>
+                  )}
+                  {hasTraining && (
+                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] bg-amber-50 text-amber-700" title={trainingLabel}>
+                      🏋️
+                    </span>
+                  )}
+                </div>
+                {/* Desktop: full label pills */}
+                <div className="hidden sm:block">
+                  {match && (
+                    <div className={`text-[11px] font-heading font-bold leading-tight px-1.5 py-1 rounded truncate ${matchBg}`}>
+                      {isFriendly ? "🤝" : "⚽"} {matchLabel}
                       {match.status && match.status !== "Naplánováno" && (
                         <span className="ml-1 font-[800]">{match.status}</span>
                       )}
                     </div>
-                  );
-                })()}
-                {hasTraining && (() => {
-                  const tr = events.find((e) => e.type === "training");
-                  return (
+                  )}
+                  {hasTraining && (
                     <div className="text-[11px] font-heading leading-tight px-1.5 py-1 rounded bg-amber-50 text-amber-700 truncate">
-                      🏋️ {tr?.title?.replace("Trénink — ", "") ?? "Trénink"}
+                      🏋️ {trainingLabel}
                     </div>
-                  );
-                })()}
+                  )}
+                </div>
               </div>
             );
           })}

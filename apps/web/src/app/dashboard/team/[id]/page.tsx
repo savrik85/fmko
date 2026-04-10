@@ -46,6 +46,11 @@ function attrColor(value: number): string {
   return "text-card-red";
 }
 
+/** Round to nearest 5 — used when displaying foreign player attributes. */
+function roundTo5(v: number): number {
+  return Math.round(v / 5) * 5;
+}
+
 function getPlayerSortValue(p: Player, key: SortKey): number | string {
   switch (key) {
     case "position": return POS_ORDER[p.position] ?? 9;
@@ -87,10 +92,10 @@ export default function TeamPage() {
     Promise.all([
       apiFetch<Team>(`/api/teams/${teamId}`),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
-      apiFetch<Array<{ id: string; name: string }>>(`/api/teams/${teamId}/league-teams`).catch(() => []),
-      apiFetch<{ leagueName: string; standings: Array<{ teamId: string | null; pos: number }> }>(`/api/teams/${teamId}/standings`).catch(() => null),
-      apiFetch<TeamMatchResults>(`/api/teams/${teamId}/match-results`).catch(() => null),
-      apiFetch<ManagerProfile>(`/api/teams/${teamId}/manager`).catch(() => null),
+      apiFetch<Array<{ id: string; name: string }>>(`/api/teams/${teamId}/league-teams`).catch((e) => { console.error("load league teams:", e); return []; }),
+      apiFetch<{ leagueName: string; standings: Array<{ teamId: string | null; pos: number }> }>(`/api/teams/${teamId}/standings`).catch((e) => { console.error("load standings:", e); return null; }),
+      apiFetch<TeamMatchResults>(`/api/teams/${teamId}/match-results`).catch((e) => { console.error("load match results:", e); return null; }),
+      apiFetch<ManagerProfile>(`/api/teams/${teamId}/manager`).catch((e) => { console.error("load manager:", e); return null; }),
     ]).then(([t, p, lt, standings, results, mgr]) => {
       setTeam(t);
       setPlayers(p);
@@ -190,7 +195,7 @@ export default function TeamPage() {
                   if (!myTeamId) return;
                   const res = await apiFetch<{ conversationId: string }>(`/api/teams/${myTeamId}/conversation-with/${teamId}`, {
                     method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-                  }).catch(() => null);
+                  }).catch((e) => { console.error("create conversation:", e); return null; });
                   if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
                 }}
                   className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer`}>
@@ -250,7 +255,7 @@ export default function TeamPage() {
                     if (!myTeamId) return;
                     const res = await apiFetch<{ conversationId: string }>(`/api/teams/${myTeamId}/conversation-with/${teamId}`, {
                       method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-                    }).catch(() => null);
+                    }).catch((e) => { console.error("create conversation (mobile):", e); return null; });
                     if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
                   }}
                     className={`${boxBg} ${boxBgHover} rounded-lg px-3 py-1.5 text-center transition-colors cursor-pointer`}>
@@ -460,17 +465,17 @@ export default function TeamPage() {
         </div>
       )}
 
-      {/* ═══ Squad — FM-style sortable table ═══ */}
+      {/* ═══ Squad ═══ */}
       <div className="card p-4 sm:p-5">
         <div className="flex items-center justify-between mb-4">
           <SectionLabel>Kádr ({players.length})</SectionLabel>
         </div>
 
         {/* Position filter */}
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2 mb-4 overflow-x-auto">
           {(["all", "GK", "DEF", "MID", "FWD"] as PosFilter[]).map((pos) => (
             <button key={pos} onClick={() => setFilter(pos)}
-              className={`px-3 py-1.5 rounded-full text-sm font-heading font-bold transition-colors ${
+              className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-heading font-bold transition-colors ${
                 filter === pos ? "text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
               }`} style={filter === pos ? { backgroundColor: color } : undefined}>
               {pos === "all" ? "Všichni" : `${POS_LABELS[pos]} (${players.filter((p) => p.position === pos).length})`}
@@ -478,78 +483,133 @@ export default function TeamPage() {
           ))}
         </div>
 
-        {/* Sortable table */}
-        <div className="overflow-x-auto -mx-4 sm:-mx-5">
-          <table className="w-full text-sm min-w-[900px]">
-            <thead>
-              <tr className="text-left border-b border-gray-200">
-                <SortHeader label="" sortKey="position" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 pl-4 sm:pl-5" />
-                <SortHeader label="Hráč" sortKey="name" current={sortKey} dir={sortDir} onSort={handleSort} className="min-w-[160px]" />
-                <SortHeader label="Věk" sortKey="age" current={sortKey} dir={sortDir} onSort={handleSort} className="w-12 text-center" />
-                {isOwnTeam && (
-                  <>
-                    <SortHeader label="Hod." sortKey="rating" current={sortKey} dir={sortDir} onSort={handleSort} className="w-12 text-center" />
-                    <SortHeader label="Rch" sortKey="speed" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Rychlost" />
-                    <SortHeader label="Tch" sortKey="technique" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Technika" />
-                    <SortHeader label="Stř" sortKey="shooting" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Střelba" />
-                    <SortHeader label="Při" sortKey="passing" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Přihrávky" />
-                    <SortHeader label="Hlv" sortKey="heading" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Hlavičky" />
-                    <SortHeader label="Obr" sortKey="defense" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Obrana" />
-                    <SortHeader label="Brn" sortKey="goalkeeping" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Brankář" />
-                    <SortHeader label="Kon" sortKey="condition" current={sortKey} dir={sortDir} onSort={handleSort} className="w-14 text-center" title="Kondice" />
-                    <th className="pb-2 pr-4 sm:pr-5 text-center text-[11px] uppercase tracking-wide text-label w-10">Mor</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((p) => {
-                const cond = conditionLabel(p.lifeContext?.condition ?? 50);
-                return (
-                  <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors cursor-pointer"
-                    onClick={() => router.push(`/dashboard/player/${p.id}`)}>
-                    <td className="py-2 pl-4 sm:pl-5 pr-1"><PositionBadge position={p.position} /></td>
-                    <td className="py-2 pr-2">
-                      <div className="flex items-center gap-2">
-                        {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
-                          <FaceAvatar faceConfig={p.avatar} size={28} className="shrink-0" />
-                        ) : (
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: color }}>
-                            {p.first_name[0]}
+        {/* Own team: FM-style detailed table (desktop), compact card list (mobile) */}
+        {isOwnTeam && (
+          <div className="hidden md:block overflow-x-auto -mx-4 sm:-mx-5">
+            <table className="w-full text-sm min-w-[900px]">
+              <thead>
+                <tr className="text-left border-b border-gray-200">
+                  <SortHeader label="" sortKey="position" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 pl-4 sm:pl-5" />
+                  <SortHeader label="Hráč" sortKey="name" current={sortKey} dir={sortDir} onSort={handleSort} className="min-w-[160px]" />
+                  <SortHeader label="Věk" sortKey="age" current={sortKey} dir={sortDir} onSort={handleSort} className="w-12 text-center" />
+                  <SortHeader label="Hod." sortKey="rating" current={sortKey} dir={sortDir} onSort={handleSort} className="w-12 text-center" />
+                  <SortHeader label="Rch" sortKey="speed" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Rychlost" />
+                  <SortHeader label="Tch" sortKey="technique" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Technika" />
+                  <SortHeader label="Stř" sortKey="shooting" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Střelba" />
+                  <SortHeader label="Při" sortKey="passing" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Přihrávky" />
+                  <SortHeader label="Hlv" sortKey="heading" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Hlavičky" />
+                  <SortHeader label="Obr" sortKey="defense" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Obrana" />
+                  <SortHeader label="Brn" sortKey="goalkeeping" current={sortKey} dir={sortDir} onSort={handleSort} className="w-10 text-center" title="Brankář" />
+                  <SortHeader label="Kon" sortKey="condition" current={sortKey} dir={sortDir} onSort={handleSort} className="w-14 text-center" title="Kondice" />
+                  <th className="pb-2 pr-4 sm:pr-5 text-center text-[11px] uppercase tracking-wide text-label w-10">Mor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((p) => {
+                  const cond = conditionLabel(p.lifeContext?.condition ?? 50);
+                  return (
+                    <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/dashboard/player/${p.id}`)}>
+                      <td className="py-2 pl-4 sm:pl-5 pr-1"><PositionBadge position={p.position} /></td>
+                      <td className="py-2 pr-2">
+                        <div className="flex items-center gap-2">
+                          {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
+                            <FaceAvatar faceConfig={p.avatar} size={28} className="shrink-0" />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: color }}>
+                              {p.first_name[0]}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="font-heading font-bold truncate block">{p.first_name} {p.last_name}</span>
+                            {p.nickname && <span className="text-[10px] text-gold-500 block">&bdquo;{p.nickname}&ldquo;</span>}
                           </div>
-                        )}
-                        <div className="min-w-0">
-                          <span className="font-heading font-bold truncate block">{p.first_name} {p.last_name}</span>
-                          {p.nickname && <span className="text-[10px] text-gold-500 block">&bdquo;{p.nickname}&ldquo;</span>}
                         </div>
-                      </div>
-                    </td>
-                    <td className="py-2 pr-2 text-center tabular-nums text-muted">{p.age}</td>
-                    {isOwnTeam && (
+                      </td>
+                      <td className="py-2 pr-2 text-center tabular-nums text-muted">{p.age}</td>
                       <td className="py-2 pr-2 text-center">
                         <span className="font-heading font-bold tabular-nums" style={{ color }}>{p.overall_rating}</span>
                       </td>
-                    )}
-                    {isOwnTeam ? (
-                      <>
-                        <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.speed ?? 0)}`}>{p.skills?.speed ?? 0}</td>
-                        <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.technique ?? 0)}`}>{p.skills?.technique ?? 0}</td>
-                        <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.shooting ?? 0)}`}>{p.skills?.shooting ?? 0}</td>
-                        <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.passing ?? 0)}`}>{p.skills?.passing ?? 0}</td>
-                        <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.heading ?? 0)}`}>{p.skills?.heading ?? 0}</td>
-                        <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.defense ?? 0)}`}>{p.skills?.defense ?? 0}</td>
-                        <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.goalkeeping ?? 0)}`}>{p.skills?.goalkeeping ?? 0}</td>
-                        <td className={`py-2 pr-2 text-center tabular-nums text-xs ${cond.color}`}>{p.lifeContext?.condition ?? 0}%</td>
-                        <td className="py-2 pr-4 sm:pr-5 text-center">{getMoraleEmoji(p.lifeContext?.morale ?? 50)}</td>
-                      </>
-                    ) : (
-                      <td colSpan={9} className="py-2 pr-4 sm:pr-5"></td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.speed ?? 0)}`}>{p.skills?.speed ?? 0}</td>
+                      <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.technique ?? 0)}`}>{p.skills?.technique ?? 0}</td>
+                      <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.shooting ?? 0)}`}>{p.skills?.shooting ?? 0}</td>
+                      <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.passing ?? 0)}`}>{p.skills?.passing ?? 0}</td>
+                      <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.heading ?? 0)}`}>{p.skills?.heading ?? 0}</td>
+                      <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.defense ?? 0)}`}>{p.skills?.defense ?? 0}</td>
+                      <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.goalkeeping ?? 0)}`}>{p.skills?.goalkeeping ?? 0}</td>
+                      <td className={`py-2 pr-2 text-center tabular-nums text-xs ${cond.color}`}>{p.lifeContext?.condition ?? 0}%</td>
+                      <td className="py-2 pr-4 sm:pr-5 text-center">{getMoraleEmoji(p.lifeContext?.morale ?? 50)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Card list — always for foreign team, mobile for own team */}
+        <div className={`flex flex-col gap-2 ${isOwnTeam ? "md:hidden" : ""}`}>
+          {sorted.map((p) => {
+            // Position-specific key skills, rounded to nearest 5
+            const pos = p.position;
+            type AttrKey = "speed" | "technique" | "shooting" | "passing" | "heading" | "defense" | "goalkeeping";
+            const attrSpec: Array<{ key: AttrKey; label: string }> =
+              pos === "GK" ? [
+                { key: "goalkeeping", label: "Brn" },
+                { key: "defense", label: "Obr" },
+                { key: "heading", label: "Hlv" },
+                { key: "passing", label: "Při" },
+              ] : pos === "DEF" ? [
+                { key: "defense", label: "Obr" },
+                { key: "heading", label: "Hlv" },
+                { key: "speed", label: "Rch" },
+                { key: "passing", label: "Při" },
+              ] : pos === "MID" ? [
+                { key: "technique", label: "Tch" },
+                { key: "passing", label: "Při" },
+                { key: "shooting", label: "Stř" },
+                { key: "speed", label: "Rch" },
+              ] : [
+                { key: "shooting", label: "Stř" },
+                { key: "speed", label: "Rch" },
+                { key: "technique", label: "Tch" },
+                { key: "heading", label: "Hlv" },
+              ];
+            const attrs = attrSpec.map((a) => ({ ...a, value: roundTo5(p.skills?.[a.key] ?? 0) }));
+            const ratingValue = p.overall_rating;
+            return (
+              <div key={p.id}
+                onClick={() => router.push(`/dashboard/player/${p.id}`)}
+                className="card px-3 py-2 flex items-center gap-3 hover:bg-gray-50 transition-colors cursor-pointer">
+                <PositionBadge position={p.position} />
+                {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
+                  <FaceAvatar faceConfig={p.avatar} size={36} className="shrink-0" />
+                ) : (
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0" style={{ backgroundColor: color }}>
+                    {p.first_name[0]}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="font-heading font-bold text-sm truncate">{p.first_name} {p.last_name}</div>
+                  <div className="flex items-center gap-2 text-[11px] text-muted">
+                    <span>{p.age} let</span>
+                    {p.nickname && <span className="text-gold-500 truncate">&bdquo;{p.nickname}&ldquo;</span>}
+                  </div>
+                </div>
+                {/* Position-specific rounded attributes + exact overall rating */}
+                <div className="shrink-0 flex items-center gap-1">
+                  <div className="hidden min-[480px]:grid grid-cols-4 gap-0.5 text-[10px] font-heading font-bold">
+                    {attrs.map((a) => (
+                      <span key={a.key} className={`w-6 text-center py-0.5 rounded ${attrColor(a.value)}`} title={a.label}>{a.value}</span>
+                    ))}
+                  </div>
+                  <span className="px-2 py-1 rounded-lg font-heading font-bold text-sm tabular-nums text-white ml-1" style={{ backgroundColor: color }}>
+                    {ratingValue}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
