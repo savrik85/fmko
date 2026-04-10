@@ -187,8 +187,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══ Row 1: Next match + Form + League position ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      {/* ═══ Row 1: Next match + (Tabulka + Stav kádru) ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         {/* Next match — rich preview */}
         <div className="card p-4 sm:p-5">
@@ -340,7 +340,8 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Mini league table */}
+        {/* Right column: Tabulka + Stav kádru stacked */}
+        <div className="space-y-5">
         <div className="card p-4 sm:p-5">
           <SectionLabel>Tabulka</SectionLabel>
           {standings.length > 0 ? (
@@ -449,9 +450,10 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+        </div>
       </div>
 
-      {/* ═══ Row 2: Manager + Finance + Trenér ═══ */}
+      {/* ═══ Row 2: Trenér + Finance + Poslední zápasy ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
         {/* Manager */}
@@ -495,10 +497,7 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
-      </div>
 
-      {/* ═══ Row 3: Recent matches + Zpravodaj ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {matchResults && matchResults.matches.length > 0 && (
           <div className="card p-4 sm:p-5">
             <SectionLabel>Poslední zápasy</SectionLabel>
@@ -543,7 +542,10 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+      </div>
 
+      {/* ═══ Row 3: Zpravodaj ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {news.length > 0 && (
           <div className="card p-4 sm:p-5">
             <SectionLabel>Okresní zpravodaj</SectionLabel>
