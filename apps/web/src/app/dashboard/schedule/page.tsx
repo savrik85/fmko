@@ -113,8 +113,6 @@ export default function SchedulePage() {
 
   const played = matches.filter((m) => m.status === "simulated");
   const upcoming = matches.filter((m) => m.status !== "simulated");
-  // Sestava button jen pro prvních 5 — tolik podporuje lineup page (multi-match strip)
-  const lineupEditableIds = new Set(upcoming.slice(0, 5).map((m) => m.id));
 
   return (
     <>
@@ -144,8 +142,13 @@ export default function SchedulePage() {
               <SectionLabel>Nadcházející</SectionLabel>
               <div className="space-y-2">
                 {upcoming.map((m) => (
-                  <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={lineupEditableIds.has(m.id)} />
+                  <MatchRow key={m.id} match={m} myTeamId={teamId!} />
                 ))}
+              </div>
+              <div className="mt-4 text-center">
+                <Link href="/dashboard/match" className="text-sm font-heading font-bold text-pitch-600 hover:text-pitch-700 transition-colors">
+                  Sestava →
+                </Link>
               </div>
             </div>
           )}
@@ -155,7 +158,7 @@ export default function SchedulePage() {
               <SectionLabel>Odehrané</SectionLabel>
               <div className="space-y-2">
                 {played.map((m) => (
-                  <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={false} />
+                  <MatchRow key={m.id} match={m} myTeamId={teamId!} />
                 ))}
               </div>
             </div>
@@ -203,7 +206,7 @@ export default function SchedulePage() {
   );
 }
 
-function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch; myTeamId: string; canEditLineup: boolean }) {
+function MatchRow({ match: m, myTeamId }: { match: ScheduleMatch; myTeamId: string }) {
   const result = matchResult(m);
   const isPlayed = m.status === "simulated";
 
@@ -251,16 +254,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
   );
 
   if (isPlayed) return <Link href={`/dashboard/match/${m.id}`}>{inner}</Link>;
-  if (!canEditLineup) return inner;
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1">{inner}</div>
-      <Link href={m.calendarId ? `/dashboard/match?calendarId=${m.calendarId}` : "/dashboard/match"}
-        className="shrink-0 py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
-        Sestava
-      </Link>
-    </div>
-  );
+  return inner;
 }
 
 function LeagueMatchRow({ match: m, myTeamId }: {
