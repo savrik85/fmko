@@ -416,71 +416,85 @@ export default function PlayerDetailPage() {
           </div>
 
           {/* ─── Action row — same styling mobile + desktop ─── */}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {/* Nabídka / Odkoupit */}
-            {canSendOffer && !offerSent && (
-              <button onClick={() => { if (isLoanedToUs) setOfferType("transfer"); setOfferOpen(!offerOpen); }}
-                className={`flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5 ${
-                  offerOpen ? "bg-white/25 text-white" : "bg-white/10 hover:bg-white/20 text-white"
-                }`}>
-                {offerOpen ? "✕ Zavřít" : isLoanedToUs ? "💰 Odkoupit" : "🤝 Nabídka"}
-              </button>
-            )}
-            {/* Ukončit hostování — jen pokud je hráč u nás na hostování */}
-            {isLoanedToUs && (
-              <button onClick={async () => {
-                if (!teamId || !player) return;
-                const ok = await confirm({
-                  title: "Ukončit hostování?",
-                  description: `${player.first_name} ${player.last_name} se ihned vrátí do původního klubu.`,
-                  confirmLabel: "Ukončit",
-                });
-                if (!ok) return;
-                try {
-                  await apiFetch(`/api/teams/${teamId}/loans/${player.id}/terminate`, { method: "POST" });
-                  router.push("/dashboard/transfers");
-                } catch (e) {
-                  console.error("terminate loan:", e);
-                }
-              }}
-                className="flex-1 sm:flex-initial min-w-[140px] rounded-xl px-4 py-2 text-sm font-heading font-bold bg-red-500/20 hover:bg-red-500/30 text-white transition-colors">
-                ✕ Ukončit hostování
-              </button>
-            )}
-            {/* Sledovat — for any non-own player */}
-            {!isOwnPlayer && (
-              <button onClick={toggleWatch} disabled={watchLoading}
-                className={`flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 ${
-                  isWatched ? "bg-gold-400/30 text-white ring-1 ring-gold-300/50" : "bg-white/10 hover:bg-white/20 text-white"
-                }`}>
-                {isWatched ? "★ Sleduji" : "☆ Sledovat"}
-              </button>
-            )}
-            {/* Own player actions — ne pro hostující */}
-            {isOwnPlayer && !isLoanedToUs && (myListing ? (
-              <>
-                <div className="flex-1 sm:flex-initial rounded-xl px-4 py-2 bg-gold-500/20 text-white text-sm font-heading font-bold flex items-center justify-center gap-2">
-                  <span>🏷️</span>
-                  <span>Na trhu za {myListing.askingPrice.toLocaleString("cs")} Kč</span>
-                </div>
-                <button onClick={withdrawFromMarket} disabled={actionLoading}
-                  className="flex-1 sm:flex-initial min-w-[140px] rounded-xl px-4 py-2 text-sm font-heading font-bold bg-white/10 hover:bg-white/20 text-white transition-colors disabled:opacity-50">
-                  ✕ Stáhnout z trhu
-                </button>
-              </>
-            ) : (
-              <button onClick={() => setPriceDialogOpen(true)} disabled={actionLoading}
-                className="flex-1 sm:flex-initial min-w-[140px] rounded-xl px-4 py-2 text-sm font-heading font-bold bg-white/10 hover:bg-white/20 text-white transition-colors disabled:opacity-50">
-                🏷️ Nabídnout na trh
-              </button>
-            ))}
-            {isOwnPlayer && !isLoanedToUs && (
-              <button onClick={releasePlayer} disabled={actionLoading}
-                className="flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold bg-red-500/20 hover:bg-red-500/30 text-white transition-colors disabled:opacity-50">
-                🗑️ Propustit
-              </button>
-            )}
-          </div>
+          {(() => {
+            const btnBase = `flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5`;
+            const btnNeutral = light
+              ? "bg-black/10 hover:bg-black/20 text-gray-900"
+              : "bg-white/10 hover:bg-white/20 text-white";
+            const btnNeutralActive = light ? "bg-black/25 text-gray-900" : "bg-white/25 text-white";
+            const btnWatched = light
+              ? "bg-gold-500/40 text-gray-900 ring-1 ring-gold-600/50"
+              : "bg-gold-400/30 text-white ring-1 ring-gold-300/50";
+            const btnDanger = light
+              ? "bg-red-500/20 hover:bg-red-500/30 text-red-700"
+              : "bg-red-500/20 hover:bg-red-500/30 text-white";
+            const btnListing = light
+              ? "bg-gold-500/30 text-gray-900"
+              : "bg-gold-500/20 text-white";
+            return (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {/* Nabídka / Odkoupit */}
+                {canSendOffer && !offerSent && (
+                  <button onClick={() => { if (isLoanedToUs) setOfferType("transfer"); setOfferOpen(!offerOpen); }}
+                    className={`${btnBase} ${offerOpen ? btnNeutralActive : btnNeutral}`}>
+                    {offerOpen ? "✕ Zavřít" : isLoanedToUs ? "💰 Odkoupit" : "🤝 Nabídka"}
+                  </button>
+                )}
+                {/* Ukončit hostování — jen pokud je hráč u nás na hostování */}
+                {isLoanedToUs && (
+                  <button onClick={async () => {
+                    if (!teamId || !player) return;
+                    const ok = await confirm({
+                      title: "Ukončit hostování?",
+                      description: `${player.first_name} ${player.last_name} se ihned vrátí do původního klubu.`,
+                      confirmLabel: "Ukončit",
+                    });
+                    if (!ok) return;
+                    try {
+                      await apiFetch(`/api/teams/${teamId}/loans/${player.id}/terminate`, { method: "POST" });
+                      router.push("/dashboard/transfers");
+                    } catch (e) {
+                      console.error("terminate loan:", e);
+                    }
+                  }}
+                    className={`${btnBase} min-w-[140px] ${btnDanger}`}>
+                    ✕ Ukončit hostování
+                  </button>
+                )}
+                {/* Sledovat — for any non-own player */}
+                {!isOwnPlayer && (
+                  <button onClick={toggleWatch} disabled={watchLoading}
+                    className={`${btnBase} disabled:opacity-50 ${isWatched ? btnWatched : btnNeutral}`}>
+                    {isWatched ? "★ Sleduji" : "☆ Sledovat"}
+                  </button>
+                )}
+                {/* Own player actions — ne pro hostující */}
+                {isOwnPlayer && !isLoanedToUs && (myListing ? (
+                  <>
+                    <div className={`${btnBase} ${btnListing}`}>
+                      <span>🏷️</span>
+                      <span>Na trhu za {myListing.askingPrice.toLocaleString("cs")} Kč</span>
+                    </div>
+                    <button onClick={withdrawFromMarket} disabled={actionLoading}
+                      className={`${btnBase} min-w-[140px] disabled:opacity-50 ${btnNeutral}`}>
+                      ✕ Stáhnout z trhu
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => setPriceDialogOpen(true)} disabled={actionLoading}
+                    className={`${btnBase} min-w-[140px] disabled:opacity-50 ${btnNeutral}`}>
+                    🏷️ Nabídnout na trh
+                  </button>
+                ))}
+                {isOwnPlayer && !isLoanedToUs && (
+                  <button onClick={releasePlayer} disabled={actionLoading}
+                    className={`${btnBase} disabled:opacity-50 ${btnDanger}`}>
+                    🗑️ Propustit
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Transfer offer inline below hero — same banner bg */}

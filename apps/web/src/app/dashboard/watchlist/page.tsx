@@ -42,6 +42,14 @@ interface WatchedPlayer {
   }>;
 }
 
+function isLightColor(hex: string): boolean {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 160;
+}
+
 function attrColor(value: number): string {
   if (value >= 70) return "text-pitch-400 font-bold";
   if (value >= 50) return "text-pitch-600";
@@ -135,7 +143,7 @@ export default function WatchlistPage() {
                       {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
                         <FaceAvatar faceConfig={p.avatar as any} size={48} className="rounded-lg" />
                       ) : (
-                        <div className="w-12 h-12 rounded-lg flex items-center justify-center text-white text-lg font-bold" style={{ backgroundColor: teamColor }}>
+                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-lg font-bold border ${isLightColor(teamColor) ? "text-gray-900 border-gray-300" : "text-white border-transparent"}`} style={{ backgroundColor: teamColor }}>
                           {p.firstName[0]}
                         </div>
                       )}
@@ -185,7 +193,10 @@ export default function WatchlistPage() {
 
                     {/* Rating + remove */}
                     <div className="shrink-0 flex flex-col items-end gap-1">
-                      <span className="px-2 py-1 rounded-lg font-heading font-bold text-sm tabular-nums text-white" style={{ backgroundColor: teamColor }}>
+                      <span
+                        className={`px-2 py-1 rounded-lg font-heading font-bold text-sm tabular-nums tabular-nums border ${isLightColor(teamColor) ? "text-gray-900 border-gray-300" : "text-white border-transparent"}`}
+                        style={{ backgroundColor: teamColor }}
+                      >
                         {p.overallRating}
                       </span>
                       <button
