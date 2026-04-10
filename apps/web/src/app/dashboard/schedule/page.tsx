@@ -235,7 +235,10 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
             </span>
           </>
         ) : (
-          <div className="shrink-0 text-xs font-heading font-bold tabular-nums">{formatDate(m.scheduledAt)}</div>
+          <div className="shrink-0 text-right">
+            <div className="text-xs font-heading font-bold tabular-nums">{formatDate(m.scheduledAt)}</div>
+            <div className="text-[11px] text-muted font-heading tabular-nums">{formatTime(m.scheduledAt)}</div>
+          </div>
         )}
       </div>
 
