@@ -327,11 +327,8 @@ export default function DashboardPage() {
                     <span className="text-[10px] text-muted">{preview.venue.name}</span>
                   </div>
                 )}
-                {/* CTA */}
-                <div className="px-4 py-3 text-center">
-                  <Link href="/dashboard/match" className="inline-block bg-pitch-500 hover:bg-pitch-600 text-white text-sm font-heading font-bold px-6 py-2 rounded-lg transition-colors w-full">
-                    Sestava →
-                  </Link>
+                <div className="text-center px-4 py-2">
+                  <Link href="/dashboard/match" className="text-xs text-pitch-500 font-heading font-bold hover:underline">Sestava →</Link>
                 </div>
               </div>
             );
@@ -361,21 +358,21 @@ export default function DashboardPage() {
                 <tbody>
                   {standings.slice(0, 8).map((s) => (
                     <tr key={s.teamId ?? s.pos} className={`border-b border-gray-50 ${s.isPlayer ? "bg-pitch-50/50 font-bold" : ""}`}>
-                      <td className="py-1.5 pl-4 sm:pl-5 pr-1 tabular-nums text-muted text-xs">{s.pos}</td>
-                      <td className="py-1.5 pr-2">
+                      <td className="py-1 pl-3 sm:pl-5 pr-1 tabular-nums text-muted text-xs">{s.pos}</td>
+                      <td className="py-1 pr-1">
                         {s.teamId ? (
-                          <Link href={`/dashboard/team/${s.teamId}`} className={`text-xs block max-w-[140px] hover:text-pitch-500 transition-colors ${s.isPlayer ? "font-heading font-bold" : ""}`}>
+                          <Link href={`/dashboard/team/${s.teamId}`} className={`text-xs truncate block hover:text-pitch-500 transition-colors ${s.isPlayer ? "font-heading font-bold" : ""}`}>
                             {s.team}
                           </Link>
                         ) : (
-                          <span className={`text-xs block max-w-[140px] ${s.isPlayer ? "font-heading font-bold" : ""}`}>{s.team}</span>
+                          <span className={`text-xs truncate block ${s.isPlayer ? "font-heading font-bold" : ""}`}>{s.team}</span>
                         )}
                       </td>
-                      <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.played}</td>
-                      <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.wins}</td>
-                      <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.draws}</td>
-                      <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.losses}</td>
-                      <td className="py-1.5 pr-4 sm:pr-5 text-center tabular-nums text-xs font-heading font-bold">{s.points}</td>
+                      <td className="py-1 px-1 text-center tabular-nums text-xs">{s.played}</td>
+                      <td className="py-1 px-1 text-center tabular-nums text-xs">{s.wins}</td>
+                      <td className="py-1 px-1 text-center tabular-nums text-xs">{s.draws}</td>
+                      <td className="py-1 px-1 text-center tabular-nums text-xs">{s.losses}</td>
+                      <td className="py-1 pr-3 sm:pr-5 text-center tabular-nums text-xs font-heading font-bold">{s.points}</td>
                     </tr>
                   ))}
                 </tbody>
