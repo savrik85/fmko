@@ -188,10 +188,10 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══ Row 1: Next match | Tabulka | Stav kádru ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-[auto_auto] gap-5">
 
-        {/* Next match — rich preview */}
-        <div className="card p-4 sm:p-5">
+        {/* Next match — rich preview, spans both rows */}
+        <div className="card p-4 sm:p-5 lg:col-start-1 lg:row-start-1 lg:row-span-2">
           <SectionLabel>Další zápas</SectionLabel>
           {nextMatch ? (() => {
             const my = preview?.isHome ? preview.home : preview?.away;
@@ -349,9 +349,8 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Col 2: Tabulka + Trenér+Finance */}
-        <div className="flex flex-col gap-5">
-        <div className="card p-4 sm:p-5">
+        {/* Tabulka — row 1 col 2 */}
+        <div className="card p-4 sm:p-5 lg:col-start-2 lg:row-start-1">
           <SectionLabel>Tabulka</SectionLabel>
           {standings.length > 0 ? (
             <div className="overflow-x-auto -mx-4 sm:-mx-5">
@@ -398,8 +397,8 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Trenér + Finance — pod tabulkou */}
-        <div className="card p-4 sm:p-5">
+        {/* Trenér + Finance — row 2 col 2 */}
+        <div className="card p-4 sm:p-5 lg:col-start-2 lg:row-start-2">
           <SectionLabel>Trenér</SectionLabel>
           {manager ? (
             <a href={`/dashboard/manager/${teamId}`} className="block group">
@@ -437,11 +436,9 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
-        </div>
 
-        {/* Col 3: Stav kádru + Poslední zápasy */}
-        <div className="flex flex-col gap-5">
-        <div className="card p-4 sm:p-5">
+        {/* Stav kádru — row 1 col 3 */}
+        <div className="card p-4 sm:p-5 lg:col-start-3 lg:row-start-1">
           <SectionLabel>Stav kádru</SectionLabel>
           <div className="space-y-2">
             <div className="grid grid-cols-3 gap-2">
@@ -502,9 +499,9 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Poslední zápasy — pod Stav kádru */}
+        {/* Poslední zápasy — row 2 col 3 */}
         {matchResults && matchResults.matches.length > 0 && (
-          <div className="card p-4 sm:p-5">
+          <div className="card p-4 sm:p-5 lg:col-start-3 lg:row-start-2">
             <SectionLabel>Poslední zápasy</SectionLabel>
             <div className="overflow-x-auto -mx-4 sm:-mx-5">
               <table className="w-full text-sm">
@@ -547,7 +544,6 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
-        </div>
       </div>
 
       {/* ═══ Row 2: Rozpis + Bilance + Zpravodaj ═══ */}
