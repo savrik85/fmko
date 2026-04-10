@@ -201,9 +201,9 @@ export default function MatchDetailPage() {
                       {g.players.map((p) => {
                         jersey += 1;
                         const s = statsFor(p.name);
-                        const ratingColor = p.rating >= 60 ? "bg-pitch-100 text-pitch-700"
-                          : p.rating >= 40 ? "bg-amber-100 text-amber-700"
-                          : "bg-red-100 text-red-700";
+                        const ratingColor = p.rating >= 50 ? "bg-pitch-100 text-pitch-700"
+                          : p.rating >= 30 ? "bg-amber-100 text-amber-700"
+                          : "bg-gray-100 text-gray-600";
                         return (
                         <div key={p.id} className={`flex items-center gap-2 px-3 py-1.5 border-l-3 ${cfg.border}`}>
                           <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-[11px] font-heading font-bold flex items-center justify-center tabular-nums">{jersey}</span>
@@ -224,7 +224,7 @@ export default function MatchDetailPage() {
                             {s.yellow > 0 && <span className="text-xs ml-1 align-middle" title="Žlutá karta">🟨</span>}
                             {s.red > 0 && <span className="text-xs ml-1 align-middle" title="Červená karta">🟥</span>}
                           </span>
-                          <span className={`shrink-0 px-2 py-0.5 rounded-md text-xs font-heading font-bold tabular-nums ${ratingColor}`}>{p.rating}</span>
+                          <span className={`shrink-0 px-2 py-0.5 rounded-md text-xs font-heading font-bold tabular-nums ${ratingColor}`} title="Hodnocení hráče">ø{p.rating}</span>
                         </div>
                         );
                       })}
@@ -336,10 +336,22 @@ export default function MatchDetailPage() {
             <span className="text-sm font-heading font-bold text-pitch-500">{showCommentary ? "Skrýt" : "Zobrazit"}</span>
           </button>
           {showCommentary && (
-            <div className="px-4 sm:px-5 pb-4 space-y-1.5 max-h-[500px] overflow-y-auto border-t border-gray-100 pt-3">
-              {match.commentary.map((line, i) => (
-                <p key={i} className="text-sm text-ink leading-relaxed">{line}</p>
-              ))}
+            <div className="max-h-[500px] overflow-y-auto border-t border-gray-100 divide-y divide-gray-50">
+              {match.commentary.map((line, i) => {
+                const m = line.match(/^(\d+)'\s*[—–-]\s*(.+)$/);
+                const minute = m?.[1];
+                const text = m?.[2] ?? line;
+                return (
+                  <div key={i} className="flex items-start gap-3 px-4 sm:px-5 py-2.5 hover:bg-gray-50/50 transition-colors">
+                    {minute && (
+                      <span className="shrink-0 min-w-[2.25rem] text-center inline-flex items-center justify-center h-6 px-1.5 rounded-md bg-pitch-50 text-pitch-700 text-xs font-heading font-bold tabular-nums">
+                        {minute}&apos;
+                      </span>
+                    )}
+                    <span className="text-sm text-ink leading-relaxed flex-1">{text}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

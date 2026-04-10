@@ -242,32 +242,36 @@ export default function MatchReplayPage() {
   return (
     <div className="max-w-4xl mx-auto px-3 py-2 space-y-1.5">
 
-      {/* ═══ SCOREBOARD ═══ */}
+      {/* ═══ SCOREBOARD — mobile: stacked badge+name columns, desktop: horizontal ═══ */}
       <div className="rounded-t-xl overflow-hidden" style={{ background: "#0a0a0a" }}>
-        <div className="flex items-center px-4 py-2.5">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <BadgePreview primary={hc} secondary={match.home_secondary} pattern={match.home_badge as BadgePattern} initials={ini(match.home_name)} size={32} />
-            <JerseyPreview primary={hc} secondary={match.home_secondary} size={28} />
-            <span className="font-heading font-bold text-white text-base sm:text-lg truncate">{match.home_name}</span>
+        <div className="flex items-start sm:items-center px-3 sm:px-4 py-3">
+          <div className="flex flex-col sm:flex-row items-center sm:gap-2 gap-2 flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <BadgePreview primary={hc} secondary={match.home_secondary} pattern={match.home_badge as BadgePattern} initials={ini(match.home_name)} size={36} />
+              <JerseyPreview primary={hc} secondary={match.home_secondary} size={28} />
+            </div>
+            <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-left break-words leading-tight">{match.home_name}</span>
           </div>
-          <div className="text-center shrink-0 px-5">
+          <div className="text-center shrink-0 px-3 sm:px-5">
             <div className="font-heading font-[800] text-5xl sm:text-6xl tabular-nums leading-none" style={{ textShadow: "0 0 10px rgba(255,255,255,0.3)" }}>
               <span style={{ color: `color-mix(in srgb, ${hc} 60%, white)` }}>{hg}</span><span className="text-white/20 mx-2">:</span><span style={{ color: `color-mix(in srgb, ${ac} 60%, white)` }}>{ag}</span>
             </div>
             <div className="flex items-center justify-center gap-1.5 mt-1">
               {!finished && !htPause && <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
-              <span className="text-white/50 text-base font-heading font-bold">{finished ? "Konec" : htPause ? "Poločas" : `${curMin}'`}</span>
-              {match.round && <span className="text-white/25 text-base font-heading">· {match.round}. kolo</span>}
+              <span className="text-white/50 text-xs sm:text-base font-heading font-bold">{finished ? "Konec" : htPause ? "Poločas" : `${curMin}'`}</span>
+              {match.round && <span className="text-white/25 text-xs sm:text-base font-heading">· {match.round}. kolo</span>}
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
-            <span className="font-heading font-bold text-white text-base sm:text-lg truncate">{match.away_name}</span>
-            <JerseyPreview primary={ac} secondary={match.away_secondary} size={28} />
-            <BadgePreview primary={ac} secondary={match.away_secondary} pattern={match.away_badge as BadgePattern} initials={ini(match.away_name)} size={32} />
+          <div className="flex flex-col sm:flex-row items-center sm:gap-2 gap-2 flex-1 min-w-0 sm:justify-end">
+            <div className="flex items-center gap-2 sm:order-last">
+              <JerseyPreview primary={ac} secondary={match.away_secondary} size={28} />
+              <BadgePreview primary={ac} secondary={match.away_secondary} pattern={match.away_badge as BadgePattern} initials={ini(match.away_name)} size={36} />
+            </div>
+            <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-right break-words leading-tight">{match.away_name}</span>
           </div>
         </div>
-        {/* Match info bar */}
-        <div className="flex items-center justify-center gap-5 px-4 py-2 text-white/60 text-sm font-heading" style={{ background: "#060d06" }}>
+        {/* Match info bar — wrap on mobile */}
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4 py-2 text-white/60 text-xs sm:text-sm font-heading" style={{ background: "#060d06" }}>
           {(match.stadium_name || stadiumInfo?.name) && <span>{match.stadium_name || stadiumInfo?.name}</span>}
           {match.attendance != null && <span>{match.attendance} diváků</span>}
           {(match.pitch_condition ?? stadiumInfo?.pitchCondition) != null && (
