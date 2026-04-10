@@ -2376,7 +2376,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
         JOIN teams t2 ON m.away_team_id = t2.id
         WHERE sc.league_id = ? AND sc.scheduled_at >= ? AND sc.status = 'scheduled'
           AND (m.home_team_id = ? OR m.away_team_id = ?)
-        ORDER BY sc.scheduled_at ASC LIMIT 5`
+        ORDER BY sc.scheduled_at ASC LIMIT 30`
       ).bind(teamId, team.league_id, gameDate.toISOString(), teamId, teamId).all();
       upcomingMatches = upcoming.results.map((u) => ({
         calendarId: u.cal_id as string,
