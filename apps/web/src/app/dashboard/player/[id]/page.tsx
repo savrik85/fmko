@@ -688,28 +688,6 @@ export default function PlayerDetailPage() {
       {/* ═══ Tréninkový vývoj (jen pro vlastníka) ═══ */}
       {player.team_id === teamId && <TrainingDevelopment teamId={teamId} playerId={playerId} />}
 
-      {/* ═══ Sledují hráče ═══ */}
-      {(player as any).watchers && (player as any).watchers.length > 0 && (
-        <div className="card p-4 sm:p-5 max-w-lg">
-          <SectionLabel>Sledují hráče ({(player as any).watchers.length})</SectionLabel>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {((player as any).watchers as Array<{ id: string; name: string; primary_color: string; secondary_color: string; badge_pattern: string }>).map((w) => (
-              <Link key={w.id} href={`/dashboard/team/${w.id}`}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gray-50 hover:bg-pitch-500/10 border border-gray-100 transition-colors">
-                <BadgePreview
-                  primary={w.primary_color || "#2D5F2D"}
-                  secondary={w.secondary_color || "#FFF"}
-                  pattern={(w.badge_pattern as BadgePattern) || "shield"}
-                  initials={(w.name || "").split(" ").map((x) => x[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
-                  size={18}
-                />
-                <span className="text-xs font-heading font-bold text-ink">{w.name}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* ═══ Vztahy v kádru (jen vlastní hráči) ═══ */}
       {isOwnPlayer && profileExtras && profileExtras.relationships.length > 0 && (
         <div className="card p-4 sm:p-5 max-w-lg">
@@ -857,8 +835,9 @@ export default function PlayerDetailPage() {
         </div>
       </div>
 
-      {/* ═══ Row 3: Match history ═══ */}
+      {/* ═══ Row 3: Match history + Watchers ═══ */}
       {matchHistory.length > 0 && (
+      <div className={`grid grid-cols-1 ${(player as any).watchers && (player as any).watchers.length > 0 ? "lg:grid-cols-[1fr_320px]" : ""} gap-5`}>
         <div className="card p-4 sm:p-5">
           <SectionLabel>Historie zápasů ({matchHistory.length})</SectionLabel>
           <div className="overflow-x-auto -mx-4 sm:-mx-5">
@@ -937,6 +916,51 @@ export default function PlayerDetailPage() {
             <div className="text-sm text-muted">
               Prům. <span className="font-heading font-bold text-ink">{(matchHistory.reduce((s, m) => s + m.rating, 0) / matchHistory.length).toFixed(1)}</span>
             </div>
+          </div>
+        </div>
+
+        {/* ═══ Sledují hráče ═══ */}
+        {(player as any).watchers && (player as any).watchers.length > 0 && (
+          <div className="card p-4 sm:p-5 h-fit">
+            <SectionLabel>Sledují hráče ({(player as any).watchers.length})</SectionLabel>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {((player as any).watchers as Array<{ id: string; name: string; primary_color: string; secondary_color: string; badge_pattern: string }>).map((w) => (
+                <Link key={w.id} href={`/dashboard/team/${w.id}`}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gray-50 hover:bg-pitch-500/10 border border-gray-100 transition-colors">
+                  <BadgePreview
+                    primary={w.primary_color || "#2D5F2D"}
+                    secondary={w.secondary_color || "#FFF"}
+                    pattern={(w.badge_pattern as BadgePattern) || "shield"}
+                    initials={(w.name || "").split(" ").map((x) => x[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
+                    size={18}
+                  />
+                  <span className="text-xs font-heading font-bold text-ink">{w.name}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      )}
+
+      {/* Sledují hráče — samostatně, pokud není match history */}
+      {matchHistory.length === 0 && (player as any).watchers && (player as any).watchers.length > 0 && (
+        <div className="card p-4 sm:p-5 max-w-lg">
+          <SectionLabel>Sledují hráče ({(player as any).watchers.length})</SectionLabel>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {((player as any).watchers as Array<{ id: string; name: string; primary_color: string; secondary_color: string; badge_pattern: string }>).map((w) => (
+              <Link key={w.id} href={`/dashboard/team/${w.id}`}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gray-50 hover:bg-pitch-500/10 border border-gray-100 transition-colors">
+                <BadgePreview
+                  primary={w.primary_color || "#2D5F2D"}
+                  secondary={w.secondary_color || "#FFF"}
+                  pattern={(w.badge_pattern as BadgePattern) || "shield"}
+                  initials={(w.name || "").split(" ").map((x) => x[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
+                  size={18}
+                />
+                <span className="text-xs font-heading font-bold text-ink">{w.name}</span>
+              </Link>
+            ))}
           </div>
         </div>
       )}
