@@ -388,6 +388,46 @@ export default function DashboardPage() {
             <div className="text-center text-muted py-4">Žádná data</div>
           )}
         </div>
+
+        {/* Trenér + Finance — pod tabulkou */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Trenér</SectionLabel>
+          {manager ? (
+            <a href={`/dashboard/manager/${teamId}`} className="block group">
+              <div className="flex items-center gap-3">
+                {manager.avatar && Object.keys(manager.avatar).length > 2 ? (
+                  <FaceAvatar faceConfig={manager.avatar} size={48} className="shrink-0 rounded-xl" />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-heading font-bold text-lg shrink-0" style={{ backgroundColor: color }}>
+                    {manager.name[0]}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="font-heading font-bold group-hover:underline truncate">{manager.name}</div>
+                  {manager.birthplace && <div className="text-xs text-muted">{manager.birthplace}</div>}
+                </div>
+              </div>
+              <div className="flex gap-2 mt-3">
+                <AttrPill label="Kou" value={manager.coaching ?? 40} />
+                <AttrPill label="Mot" value={manager.motivation ?? 40} />
+                <AttrPill label="Tak" value={manager.tactics ?? 40} />
+                <AttrPill label="Dis" value={manager.discipline ?? 40} />
+              </div>
+            </a>
+          ) : (
+            <div className="text-muted text-sm">Bez trenéra</div>
+          )}
+          <div className="mt-4 pt-3 border-t border-gray-100">
+            <SectionLabel>Finance</SectionLabel>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted">Rozpočet</span>
+              <span className="font-heading font-bold">{team.budget.toLocaleString("cs")} Kč</span>
+            </div>
+            <Link href="/dashboard/finances" className="text-xs text-pitch-500 font-heading font-bold hover:underline block mt-2">
+              Detail financí →
+            </Link>
+          </div>
+        </div>
         </div>
 
         {/* Col 3: Stav kádru + Poslední zápasy */}
@@ -452,54 +492,8 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
-        </div>
-      </div>
 
-      {/* ═══ Row 2: Trenér+Finance | Poslední zápasy | Zpravodaj ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-        {/* Trenér + Finance */}
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Trenér</SectionLabel>
-          {manager ? (
-            <a href={`/dashboard/manager/${teamId}`} className="block group">
-              <div className="flex items-center gap-3">
-                {manager.avatar && Object.keys(manager.avatar).length > 2 ? (
-                  <FaceAvatar faceConfig={manager.avatar} size={48} className="shrink-0 rounded-xl" />
-                ) : (
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-heading font-bold text-lg shrink-0" style={{ backgroundColor: color }}>
-                    {manager.name[0]}
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="font-heading font-bold group-hover:underline truncate">{manager.name}</div>
-                  {manager.birthplace && <div className="text-xs text-muted">{manager.birthplace}</div>}
-                </div>
-              </div>
-              <div className="flex gap-2 mt-3">
-                <AttrPill label="Kou" value={manager.coaching ?? 40} />
-                <AttrPill label="Mot" value={manager.motivation ?? 40} />
-                <AttrPill label="Tak" value={manager.tactics ?? 40} />
-                <AttrPill label="Dis" value={manager.discipline ?? 40} />
-              </div>
-            </a>
-          ) : (
-            <div className="text-muted text-sm">Bez trenéra</div>
-          )}
-
-          {/* Finance quick view */}
-          <div className="mt-4 pt-3 border-t border-gray-100">
-            <SectionLabel>Finance</SectionLabel>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted">Rozpočet</span>
-              <span className="font-heading font-bold">{team.budget.toLocaleString("cs")} Kč</span>
-            </div>
-            <Link href="/dashboard/finances" className="text-xs text-pitch-500 font-heading font-bold hover:underline block mt-2">
-              Detail financí →
-            </Link>
-          </div>
-        </div>
-
+        {/* Poslední zápasy — pod Stav kádru */}
         {matchResults && matchResults.matches.length > 0 && (
           <div className="card p-4 sm:p-5">
             <SectionLabel>Poslední zápasy</SectionLabel>
@@ -544,6 +538,11 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+        </div>
+      </div>
+
+      {/* ═══ Row 2: Zpravodaj ═══ */}
+      <div className="grid grid-cols-1 gap-5">
         {news.length > 0 && (
           <div className="card p-4 sm:p-5">
             <SectionLabel>Okresní zpravodaj</SectionLabel>
