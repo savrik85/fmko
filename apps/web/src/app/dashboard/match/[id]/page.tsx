@@ -156,9 +156,9 @@ export default function MatchDetailPage() {
       {(match.home_lineup_data || match.away_lineup_data) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
-            { label: match.home_name, data: match.home_lineup_data, color: hc },
-            { label: match.away_name, data: match.away_lineup_data, color: ac },
-          ].map(({ label, data, color }) => {
+            { label: match.home_name, data: match.home_lineup_data, color: hc, teamId: 1 },
+            { label: match.away_name, data: match.away_lineup_data, color: ac, teamId: 2 },
+          ].map(({ label, data, color, teamId }) => {
             if (!data) return null;
             const posOrder = { GK: 0, DEF: 1, MID: 2, FWD: 3 } as Record<string, number>;
             const sorted = [...data.starters].sort((a, b) => (posOrder[a.position] ?? 9) - (posOrder[b.position] ?? 9));
@@ -174,6 +174,17 @@ export default function MatchDetailPage() {
               if (last && last.pos === p.position) { last.players.push(p); }
               else { groups.push({ pos: p.position, players: [p] }); }
             }
+            // Per-player stats from events (match by name + teamId)
+            const statsFor = (name: string) => {
+              const ev = match.events.filter((e) => e.teamId === teamId && e.playerName === name);
+              return {
+                goals: ev.filter((e) => e.type === "goal").length,
+                yellow: ev.filter((e) => e.type === "card" && e.detail !== "red").length,
+                red: ev.filter((e) => e.type === "card" && e.detail === "red").length,
+              };
+            };
+            // Sequential number 1..11 for starters, index preserved by sort order
+            let jersey = 0;
             return (
             <div key={label} className="card overflow-hidden">
               <div className="px-3 py-2 border-b border-gray-100" style={{ backgroundColor: `color-mix(in srgb, ${color} 10%, white)` }}>
@@ -187,40 +198,61 @@ export default function MatchDetailPage() {
                       <div className={`px-3 py-1 ${cfg.bg} ${cfg.text} text-[11px] font-heading font-bold uppercase tracking-wider`}>
                         {cfg.label}
                       </div>
-                      {g.players.map((p) => (
+                      {g.players.map((p) => {
+                        jersey += 1;
+                        const s = statsFor(p.name);
+                        const ratingColor = p.rating >= 60 ? "bg-pitch-100 text-pitch-700"
+                          : p.rating >= 40 ? "bg-amber-100 text-amber-700"
+                          : "bg-red-100 text-red-700";
+                        return (
                         <div key={p.id} className={`flex items-center gap-2 px-3 py-1.5 border-l-3 ${cfg.border}`}>
-                          <span className="shrink-0"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></span>
-                          <span className="flex-1 min-w-0 truncate">
+                          <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-[11px] font-heading font-bold flex items-center justify-center tabular-nums">{jersey}</span>
+                          <span className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
                             {p.id ? (
                               <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 transition-colors">{p.name}</Link>
                             ) : (
                               <span className="font-heading font-bold text-base">{p.name}</span>
                             )}
                             {p.position !== p.naturalPosition && (
-                              <span className="text-amber-500 text-xs ml-1.5" title={`Přirozená pozice: ${p.naturalPosition}`}>({p.naturalPosition})</span>
+                              <span className="text-amber-500 text-xs" title={`Přirozená pozice: ${p.naturalPosition}`}>({p.naturalPosition})</span>
                             )}
+                            {s.goals > 0 && (
+                              <span className="text-sm" title={`${s.goals} gól${s.goals > 1 ? "y" : ""}`}>
+                                ⚽{s.goals > 1 ? ` ${s.goals}` : ""}
+                              </span>
+                            )}
+                            {s.yellow > 0 && <span className="text-xs" title="Žlutá karta">🟨</span>}
+                            {s.red > 0 && <span className="text-xs" title="Červená karta">🟥</span>}
                           </span>
-                          <span className="text-sm text-muted tabular-nums shrink-0">{p.rating}</span>
+                          <span className={`shrink-0 px-2 py-0.5 rounded-md text-xs font-heading font-bold tabular-nums ${ratingColor}`}>{p.rating}</span>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
                 })}
                 {data.subs.length > 0 && (
                   <div>
                     <div className="px-3 py-1 bg-gray-100 text-[11px] text-muted font-heading font-bold uppercase tracking-wider">Lavička</div>
-                    {data.subs.map((p) => (
+                    {data.subs.map((p) => {
+                      jersey += 1;
+                      const s = statsFor(p.name);
+                      return (
                       <div key={p.id} className="flex items-center gap-2 px-3 py-1 border-l-3 border-l-gray-300 text-muted">
-                        <span className="shrink-0"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></span>
-                        <span className="flex-1 min-w-0 truncate">
+                        <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-[11px] font-heading font-bold flex items-center justify-center tabular-nums">{jersey}</span>
+                        <span className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
                           {p.id ? (
                             <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
                           ) : (
                             <span className="font-heading font-bold">{p.name}</span>
                           )}
+                          {s.goals > 0 && <span className="text-sm">⚽{s.goals > 1 ? ` ${s.goals}` : ""}</span>}
+                          {s.yellow > 0 && <span className="text-xs">🟨</span>}
+                          {s.red > 0 && <span className="text-xs">🟥</span>}
                         </span>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
