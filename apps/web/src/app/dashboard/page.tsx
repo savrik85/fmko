@@ -56,7 +56,7 @@ interface PreviewTeam {
   goalsFor: number; goalsAgainst: number;
   form: string[];
   avgRating: number; squadSize: number;
-  squad?: Array<{ age: number }>;
+  squad?: Array<{ age: number; position?: string; rating?: number }>;
   isPlayer?: boolean;
 }
 
@@ -187,7 +187,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══ Row 1: Next match + Form + League position ═══ */}
+      {/* ═══ Row 1: Next match | Tabulka | Stav kádru ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
         {/* Next match — rich preview */}
@@ -200,111 +200,136 @@ export default function DashboardPage() {
             const oppColor = nextMatch.isHome ? (nextMatch.awayColor || "#666") : (nextMatch.homeColor || "#666");
             const oppSecondary = nextMatch.isHome ? (nextMatch.awaySecondary || "#FFF") : (nextMatch.homeSecondary || "#FFF");
             const oppBadge = (nextMatch.isHome ? nextMatch.awayBadge : nextMatch.homeBadge) as BadgePattern || "shield";
+            const homeTeam = nextMatch.isHome
+              ? { id: teamId!, name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my }
+              : { id: preview?.away?.id ?? "", name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp };
+            const awayTeam = nextMatch.isHome
+              ? { id: preview?.away?.id ?? "", name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp }
+              : { id: teamId!, name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my };
+            const homeForm = preview ? (nextMatch.isHome ? my : opp) : null;
+            const awayForm = preview ? (nextMatch.isHome ? opp : my) : null;
+            const ini = (n: string) => n.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
             return (
-              <div className="space-y-3">
-                {/* Badges + vs — home team always on the left */}
-                {(() => {
-                  const homeTeam = nextMatch.isHome
-                    ? { name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my }
-                    : { name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp };
-                  const awayTeam = nextMatch.isHome
-                    ? { name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp }
-                    : { name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my };
-                  return (
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex flex-col items-center flex-1 min-w-0">
-                    <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary}
-                      pattern={homeTeam.badge}
-                      initials={homeTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={36} />
-                    <div className="font-heading font-bold text-sm mt-1 truncate max-w-full text-center">{homeTeam.name}</div>
-                    {homeTeam.pos && <div className="text-[10px] text-muted tabular-nums">{homeTeam.pos.position}. místo</div>}
+              <div className="overflow-hidden rounded-xl border border-gray-100">
+                {/* Dark header — kolo + badges + jména */}
+                <div className="bg-gradient-to-b from-[#1e2d1e] to-[#2a3f2a] px-4 py-5 text-white">
+                  <div className="text-center mb-4">
+                    <span className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40">{nextMatch.round}. kolo</span>
                   </div>
-                  <div className="flex flex-col items-center shrink-0">
-                    <div className="font-heading font-[800] text-xl text-muted">vs</div>
-                    <div className="text-[10px] text-muted uppercase mt-0.5 whitespace-nowrap">{nextMatch.round}. kolo</div>
+                  <div className="flex items-start gap-3">
+                    {/* Domácí */}
+                    <Link href={`/dashboard/team/${homeTeam.id}`} className="flex-1 text-center hover:opacity-80 transition-opacity">
+                      <div className="flex justify-center mb-2">
+                        <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary} pattern={homeTeam.badge} initials={ini(homeTeam.name)} size={48} />
+                      </div>
+                      <div className="font-heading font-bold text-sm leading-tight">{homeTeam.name}</div>
+                    </Link>
+                    {/* VS */}
+                    <div className="shrink-0 flex flex-col items-center pt-3">
+                      <div className="w-10 h-10 rounded-full border-2 border-white/10 flex items-center justify-center">
+                        <span className="font-heading font-[800] text-sm text-white/30">VS</span>
+                      </div>
+                    </div>
+                    {/* Hosté */}
+                    <Link href={`/dashboard/team/${awayTeam.id}`} className="flex-1 text-center hover:opacity-80 transition-opacity">
+                      <div className="flex justify-center mb-2">
+                        <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary} pattern={awayTeam.badge} initials={ini(awayTeam.name)} size={48} />
+                      </div>
+                      <div className="font-heading font-bold text-sm leading-tight">{awayTeam.name}</div>
+                    </Link>
                   </div>
-                  <div className="flex flex-col items-center flex-1 min-w-0">
-                    <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary}
-                      pattern={awayTeam.badge}
-                      initials={awayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={36} />
-                    <div className="font-heading font-bold text-sm mt-1 truncate max-w-full text-center">{awayTeam.name}</div>
-                    {awayTeam.pos && <div className="text-[10px] text-muted tabular-nums">{awayTeam.pos.position}. místo</div>}
-                  </div>
+                  {/* Pozice — vždy na vlastním řádku, zarovnané */}
+                  {(homeTeam.pos || awayTeam.pos) && (
+                    <div className="flex items-center gap-3 mt-2">
+                      <div className="flex-1 text-center text-[10px] text-white/40 tabular-nums">{homeTeam.pos ? `${homeTeam.pos.position}. místo` : ""}</div>
+                      <div className="shrink-0 w-10" />
+                      <div className="flex-1 text-center text-[10px] text-white/40 tabular-nums">{awayTeam.pos ? `${awayTeam.pos.position}. místo` : ""}</div>
+                    </div>
+                  )}
                 </div>
-                  );
-                })()}
 
-                {/* Form comparison — home left, away right */}
-                {preview && my && opp && (() => {
-                  const homeForm = nextMatch.isHome ? my : opp;
-                  const awayForm = nextMatch.isHome ? opp : my;
-                  return (
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex gap-0.5">
+                {/* Forma */}
+                {homeForm && awayForm && (
+                  <div className="flex items-center px-4 py-3 border-b border-gray-100">
+                    <div className="flex-1 flex gap-1 justify-end">
                       {homeForm.form.map((f, i) => (
-                        <span key={i} className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-bold text-white ${
-                          f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
+                        <span key={i} className={`w-6 h-6 rounded-md text-[10px] flex items-center justify-center font-bold text-white ${
+                          f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-300"
                         }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
                       ))}
                     </div>
-                    <span className="text-[9px] text-muted uppercase">Forma</span>
-                    <div className="flex gap-0.5">
+                    <div className="shrink-0 w-12 text-center text-[9px] text-muted uppercase font-heading">Forma</div>
+                    <div className="flex-1 flex gap-1">
                       {awayForm.form.map((f, i) => (
-                        <span key={i} className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-bold text-white ${
-                          f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
+                        <span key={i} className={`w-6 h-6 rounded-md text-[10px] flex items-center justify-center font-bold text-white ${
+                          f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-300"
                         }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
                       ))}
                     </div>
-                  </div>
-                  );
-                })()}
-
-                {/* Stats comparison row — home left, away right */}
-                {preview && my && opp && (() => {
-                  const home = nextMatch.isHome ? my : opp;
-                  const away = nextMatch.isHome ? opp : my;
-                  const homeAge = home.squad?.length ? Math.round(home.squad.reduce((s, p) => s + p.age, 0) / home.squad.length) : 0;
-                  const awayAge = away.squad?.length ? Math.round(away.squad.reduce((s, p) => s + p.age, 0) / away.squad.length) : 0;
-                  const stats = [
-                    { label: "Rating", hVal: home.avgRating, aVal: away.avgRating },
-                    { label: "Góly", hVal: home.goalsFor, aVal: away.goalsFor },
-                    { label: "Věk", hVal: homeAge, aVal: awayAge },
-                  ];
-                  return (
-                    <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
-                      {stats.map((s) => (
-                        <div key={s.label} className="bg-gray-50 rounded-lg py-1.5 px-1">
-                          <div className="font-heading font-bold tabular-nums flex items-center justify-center gap-1">
-                            <span className={s.hVal > s.aVal ? "text-pitch-500" : s.hVal < s.aVal ? "text-card-red" : ""}>{s.hVal}</span>
-                            <span className="text-muted text-[9px]">vs</span>
-                            <span className={s.aVal > s.hVal ? "text-pitch-500" : s.aVal < s.hVal ? "text-card-red" : ""}>{s.aVal}</span>
-                          </div>
-                          <div className="text-muted text-[9px] uppercase">{s.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-
-                {/* Weather + venue */}
-                {preview && (
-                  <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-lg">{preview.weather.icon}</span>
-                      <span className="text-muted text-xs">{preview.weather.temperature}°C</span>
-                      {(preview.weather.expected === "rain" || preview.weather.expected === "snow" || preview.weather.expected === "wind") && (
-                        <span className="text-card-red text-[10px] font-heading font-bold">
-                          {preview.weather.expected === "rain" ? "-20% tech" : preview.weather.expected === "snow" ? "-30% tech" : "-10% tech"}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-muted truncate ml-2">{preview.venue.name}</span>
                   </div>
                 )}
 
-                <Link href="/dashboard/match" className="text-center block">
-                  <span className="text-xs text-pitch-500 font-heading font-bold hover:underline">Sestava →</span>
-                </Link>
+                {/* Stats — horizontal bars */}
+                {preview && my && opp && (() => {
+                  const home = nextMatch.isHome ? my : opp;
+                  const away = nextMatch.isHome ? opp : my;
+                  const avgByPos = (squad: typeof home.squad, pos: string) => {
+                    const players = (squad ?? []).filter(p => p.position === pos);
+                    return players.length ? Math.round(players.reduce((s, p) => s + (p.rating ?? 0), 0) / players.length) : 0;
+                  };
+                  const homeAge = home.squad?.length ? Math.round(home.squad.reduce((s, p) => s + p.age, 0) / home.squad.length) : 0;
+                  const awayAge = away.squad?.length ? Math.round(away.squad.reduce((s, p) => s + p.age, 0) / away.squad.length) : 0;
+                  const stats = [
+                    { label: "Rating", h: home.avgRating, a: away.avgRating, higherBetter: true },
+                    { label: "BRA", h: avgByPos(home.squad, "GK"), a: avgByPos(away.squad, "GK"), higherBetter: true },
+                    { label: "OBR", h: avgByPos(home.squad, "DEF"), a: avgByPos(away.squad, "DEF"), higherBetter: true },
+                    { label: "ZÁL", h: avgByPos(home.squad, "MID"), a: avgByPos(away.squad, "MID"), higherBetter: true },
+                    { label: "ÚTO", h: avgByPos(home.squad, "FWD"), a: avgByPos(away.squad, "FWD"), higherBetter: true },
+                    { label: "Věk", h: homeAge, a: awayAge, higherBetter: false },
+                  ];
+                  return (
+                    <div className="px-4 py-3 space-y-2.5 border-b border-gray-100">
+                      {stats.map((s) => {
+                        const total = (s.h + s.a) || 1;
+                        const hPct = Math.round((s.h / total) * 100);
+                        const hBetter = s.higherBetter ? s.h > s.a : s.h < s.a;
+                        const aBetter = s.higherBetter ? s.a > s.h : s.a < s.h;
+                        return (
+                          <div key={s.label}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`text-xs font-heading font-bold tabular-nums ${hBetter ? "text-pitch-600" : aBetter ? "text-card-red" : "text-ink"}`}>{s.h}</span>
+                              <span className="text-[9px] text-muted uppercase font-heading">{s.label}</span>
+                              <span className={`text-xs font-heading font-bold tabular-nums ${aBetter ? "text-pitch-600" : hBetter ? "text-card-red" : "text-ink"}`}>{s.a}</span>
+                            </div>
+                            <div className="flex h-1.5 rounded-full overflow-hidden">
+                              <div className="transition-all" style={{ width: `${hPct}%`, background: hBetter ? "#3D7A3D" : "#dc6b6b" }} />
+                              <div className="transition-all flex-1" style={{ background: aBetter ? "#3D7A3D" : "#dc6b6b" }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+                {/* Footer — weather + venue */}
+                {preview && (
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+                    <div className="flex items-center gap-1.5 text-xs text-muted">
+                      <span className="text-base">{preview.weather.icon}</span>
+                      <span>{preview.weather.temperature}°C</span>
+                      {(preview.weather.expected === "rain" || preview.weather.expected === "snow" || preview.weather.expected === "wind") && (
+                        <span className="text-card-red text-[10px] font-heading font-bold">
+                          {preview.weather.expected === "rain" ? "-20%" : preview.weather.expected === "snow" ? "-30%" : "-10%"}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-muted">{preview.venue.name}</span>
+                  </div>
+                )}
+                <div className="text-center px-4 py-2">
+                  <Link href="/dashboard/match" className="text-xs text-pitch-500 font-heading font-bold hover:underline">Sestava →</Link>
+                </div>
               </div>
             );
           })() : (
@@ -312,113 +337,9 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Form + Results */}
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Forma</SectionLabel>
-          {matchResults && matchResults.matches.length > 0 ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-center gap-1.5">
-                {matchResults.form.map((f, i) => (
-                  <span key={i} className={`w-8 h-8 rounded-md flex items-center justify-center text-sm font-heading font-bold text-white ${
-                    f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
-                  }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
-                ))}
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-gray-50 rounded-lg py-1.5">
-                  <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">{matchResults.summary.wins}</div>
-                  <div className="text-[9px] text-muted uppercase">Výhry</div>
-                </div>
-                <div className="bg-gray-50 rounded-lg py-1.5">
-                  <div className="font-heading font-bold text-lg tabular-nums">{matchResults.summary.draws}</div>
-                  <div className="text-[9px] text-muted uppercase">Remízy</div>
-                </div>
-                <div className="bg-gray-50 rounded-lg py-1.5">
-                  <div className="font-heading font-bold text-lg tabular-nums text-card-red">{matchResults.summary.losses}</div>
-                  <div className="text-[9px] text-muted uppercase">Prohry</div>
-                </div>
-              </div>
-              <div className="text-center text-sm text-muted">
-                Skóre <span className="font-heading font-bold text-ink">{matchResults.summary.goalsFor}:{matchResults.summary.goalsAgainst}</span>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center text-muted py-4">Zatím bez zápasů</div>
-          )}
-        </div>
-
-        {/* League position */}
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Liga</SectionLabel>
-          {myStanding ? (
-            <div className="text-center">
-              <div className="font-heading font-[800] text-5xl tabular-nums" style={{ color: safeColor }}>{myStanding.pos}.</div>
-              <div className="text-sm text-muted mt-1">{myStanding.points} bodů · {myStanding.played} zápasů</div>
-              {myStanding.goalsFor != null && myStanding.goalsAgainst != null && (
-                <div className="text-xs text-muted mt-0.5">
-                  {myStanding.goalsFor}:{myStanding.goalsAgainst} ({myStanding.goalsFor - myStanding.goalsAgainst >= 0 ? "+" : ""}{myStanding.goalsFor - myStanding.goalsAgainst})
-                </div>
-              )}
-              <Link href="/dashboard/liga" className="text-sm text-pitch-500 font-heading font-bold hover:underline mt-2 inline-block">
-                Zobrazit tabulku →
-              </Link>
-            </div>
-          ) : (
-            <div className="text-center text-muted py-4">
-              <div>Zatím žádné výsledky</div>
-              <Link href="/dashboard/match" className="text-sm text-pitch-500 font-heading font-bold hover:underline mt-2 inline-block">Hrát zápas →</Link>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ═══ Row 2: Squad health + Mini league table + Manager ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-        {/* Squad health */}
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Stav kádru</SectionLabel>
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
-                <div className="font-heading font-bold text-2xl tabular-nums" style={{ color: safeColor }}>{players.length}</div>
-                <div className="text-[10px] text-muted uppercase">Hráčů</div>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
-                <div className={`font-heading font-bold text-2xl tabular-nums ${conditionLabel(avgCondition).color}`}>{avgCondition}%</div>
-                <div className="text-[10px] text-muted uppercase">Prům. kondice</div>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              {injuredCount > 0 && (
-                <div className="flex items-center justify-between text-sm py-1">
-                  <span className="text-muted">Zranění / vyčerpaní</span>
-                  <span className="font-heading font-bold text-card-red">{injuredCount}</span>
-                </div>
-              )}
-              {lowMoraleCount > 0 && (
-                <div className="flex items-center justify-between text-sm py-1">
-                  <span className="text-muted">Nízká morálka</span>
-                  <span className="font-heading font-bold text-gold-600">{lowMoraleCount}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between text-sm py-1">
-                <span className="text-muted">Prům. morálka</span>
-                <span className="font-heading font-bold">{avgMorale}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm py-1">
-                <span className="text-muted">Prům. rating</span>
-                <span className="font-heading font-bold">{players.length > 0 ? Math.round(players.reduce((s, p) => s + p.overall_rating, 0) / players.length) : 0}</span>
-              </div>
-            </div>
-            <Link href="/dashboard/squad" className="text-xs text-pitch-500 font-heading font-bold hover:underline block text-center pt-1">
-              Zobrazit kádr →
-            </Link>
-          </div>
-        </div>
-
-        {/* Mini league table */}
-        <div className="card p-4 sm:p-5">
+        {/* Col 2: Tabulka + Trenér+Finance */}
+        <div className="flex flex-col gap-5">
+        <div className="card p-4 sm:p-5 flex-1">
           <SectionLabel>Tabulka</SectionLabel>
           {standings.length > 0 ? (
             <div className="overflow-x-auto -mx-4 sm:-mx-5">
@@ -437,17 +358,21 @@ export default function DashboardPage() {
                 <tbody>
                   {standings.slice(0, 8).map((s) => (
                     <tr key={s.teamId ?? s.pos} className={`border-b border-gray-50 ${s.isPlayer ? "bg-pitch-50/50 font-bold" : ""}`}>
-                      <td className="py-1.5 pl-4 sm:pl-5 pr-1 tabular-nums text-muted text-xs">{s.pos}</td>
-                      <td className="py-1.5 pr-2">
-                        <span className={`text-xs truncate block max-w-[140px] ${s.isPlayer ? "font-heading font-bold" : ""}`}>
-                          {s.team}
-                        </span>
+                      <td className="py-1 pl-3 sm:pl-5 pr-1 tabular-nums text-muted text-xs align-top pt-2">{s.pos}</td>
+                      <td className="py-1 pr-1 align-top pt-2">
+                        {s.teamId ? (
+                          <Link href={`/dashboard/team/${s.teamId}`} className={`text-xs hover:text-pitch-500 transition-colors leading-tight ${s.isPlayer ? "font-heading font-bold" : ""}`}>
+                            {s.team}
+                          </Link>
+                        ) : (
+                          <span className={`text-xs leading-tight ${s.isPlayer ? "font-heading font-bold" : ""}`}>{s.team}</span>
+                        )}
                       </td>
-                      <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.played}</td>
-                      <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.wins}</td>
-                      <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.draws}</td>
-                      <td className="py-1.5 pr-1 text-center tabular-nums text-xs">{s.losses}</td>
-                      <td className="py-1.5 pr-4 sm:pr-5 text-center tabular-nums text-xs font-heading font-bold">{s.points}</td>
+                      <td className="py-1 px-1 text-center tabular-nums text-xs">{s.played}</td>
+                      <td className="py-1 px-1 text-center tabular-nums text-xs">{s.wins}</td>
+                      <td className="py-1 px-1 text-center tabular-nums text-xs">{s.draws}</td>
+                      <td className="py-1 px-1 text-center tabular-nums text-xs">{s.losses}</td>
+                      <td className="py-1 pr-3 sm:pr-5 text-center tabular-nums text-xs font-heading font-bold">{s.points}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -461,7 +386,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Manager */}
+        {/* Trenér + Finance — pod tabulkou */}
         <div className="card p-4 sm:p-5">
           <SectionLabel>Trenér</SectionLabel>
           {manager ? (
@@ -489,8 +414,6 @@ export default function DashboardPage() {
           ) : (
             <div className="text-muted text-sm">Bez trenéra</div>
           )}
-
-          {/* Finance quick view */}
           <div className="mt-4 pt-3 border-t border-gray-100">
             <SectionLabel>Finance</SectionLabel>
             <div className="flex items-center justify-between text-sm">
@@ -502,10 +425,72 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
-      </div>
+        </div>
 
-      {/* ═══ Row 3: Recent matches + Zpravodaj ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Col 3: Stav kádru + Poslední zápasy */}
+        <div className="flex flex-col gap-5">
+        <div className="card p-4 sm:p-5 flex-1">
+          <SectionLabel>Stav kádru</SectionLabel>
+          <div className="space-y-2">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                <div className="font-heading font-bold text-xl tabular-nums" style={{ color: safeColor }}>{players.length}</div>
+                <div className="text-[9px] text-muted uppercase">Hráčů</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                <div className={`font-heading font-bold text-xl tabular-nums ${conditionLabel(avgCondition).color}`}>{avgCondition}%</div>
+                <div className="text-[9px] text-muted uppercase">Kondice</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                <div className="font-heading font-bold text-xl tabular-nums">{players.length > 0 ? Math.round(players.reduce((s, p) => s + p.overall_rating, 0) / players.length) : 0}</div>
+                <div className="text-[9px] text-muted uppercase">Rating</div>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                <span className="text-muted">Prům. morálka</span>
+                <span className="font-heading font-bold">{avgMorale}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                <span className="text-muted">Prům. věk</span>
+                <span className="font-heading font-bold">{players.length > 0 ? Math.round(players.reduce((s, p) => s + p.age, 0) / players.length * 10) / 10 : 0}</span>
+              </div>
+              {injuredCount > 0 && (
+                <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                  <span className="text-muted">Zranění</span>
+                  <span className="font-heading font-bold text-card-red">{injuredCount}</span>
+                </div>
+              )}
+              {lowMoraleCount > 0 && (
+                <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                  <span className="text-muted">Nízká morálka</span>
+                  <span className="font-heading font-bold text-gold-600">{lowMoraleCount}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                <span className="text-muted">Brankáři</span>
+                <span className="font-heading font-bold tabular-nums">{players.filter(p => p.position === "GK").length}× · ø{players.filter(p => p.position === "GK").length > 0 ? Math.round(players.filter(p => p.position === "GK").reduce((s, p) => s + p.overall_rating, 0) / players.filter(p => p.position === "GK").length) : 0}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                <span className="text-muted">Obránci</span>
+                <span className="font-heading font-bold tabular-nums">{players.filter(p => p.position === "DEF").length}× · ø{players.filter(p => p.position === "DEF").length > 0 ? Math.round(players.filter(p => p.position === "DEF").reduce((s, p) => s + p.overall_rating, 0) / players.filter(p => p.position === "DEF").length) : 0}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                <span className="text-muted">Záložníci</span>
+                <span className="font-heading font-bold tabular-nums">{players.filter(p => p.position === "MID").length}× · ø{players.filter(p => p.position === "MID").length > 0 ? Math.round(players.filter(p => p.position === "MID").reduce((s, p) => s + p.overall_rating, 0) / players.filter(p => p.position === "MID").length) : 0}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm py-1">
+                <span className="text-muted">Útočníci</span>
+                <span className="font-heading font-bold tabular-nums">{players.filter(p => p.position === "FWD").length}× · ø{players.filter(p => p.position === "FWD").length > 0 ? Math.round(players.filter(p => p.position === "FWD").reduce((s, p) => s + p.overall_rating, 0) / players.filter(p => p.position === "FWD").length) : 0}</span>
+              </div>
+            </div>
+            <Link href="/dashboard/squad" className="text-xs text-pitch-500 font-heading font-bold hover:underline block text-center pt-1">
+              Zobrazit kádr →
+            </Link>
+          </div>
+        </div>
+
+        {/* Poslední zápasy — pod Stav kádru */}
         {matchResults && matchResults.matches.length > 0 && (
           <div className="card p-4 sm:p-5">
             <SectionLabel>Poslední zápasy</SectionLabel>
@@ -550,10 +535,89 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+        </div>
+      </div>
 
-        {news.length > 0 && (
+      {/* ═══ Row 2: Rozpis + Bilance + Zpravodaj ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Rozpis — nadcházející zápasy */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Rozpis</SectionLabel>
+          {(() => {
+            const upcoming = matches.filter((m) => m.status !== "simulated").slice(0, 4);
+            return upcoming.length > 0 ? (
+              <div className="space-y-2">
+                {upcoming.map((m) => {
+                  const opp = m.isHome ? m.awayName : m.homeName;
+                  const date = m.scheduledAt ? new Date(m.scheduledAt).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "";
+                  return (
+                    <div key={m.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+                      <span className="text-xs text-muted tabular-nums w-5">{m.round}.</span>
+                      <span className="text-sm font-heading font-bold flex-1 truncate">{opp}</span>
+                      <span className={`text-[9px] font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
+                      <span className="text-[10px] text-muted tabular-nums">{date}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center text-muted py-4 text-sm">Žádné naplánované</div>
+            );
+          })()}
+          <Link href="/dashboard/schedule" className="text-xs text-pitch-500 font-heading font-bold hover:underline block text-center pt-2">
+            Celý rozpis →
+          </Link>
+        </div>
+
+        {/* Bilance sezóny */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Bilance</SectionLabel>
+          {myStanding ? (
+            <div className="space-y-2">
+              <div className="text-center mb-3">
+                <div className="font-heading font-[800] text-4xl tabular-nums" style={{ color: safeColor }}>{myStanding.pos}.</div>
+                <div className="text-xs text-muted">{myStanding.points} bodů · {myStanding.played} zápasů</div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-gray-50 rounded-lg py-1.5">
+                  <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">{myStanding.wins}</div>
+                  <div className="text-[9px] text-muted uppercase">Výhry</div>
+                </div>
+                <div className="bg-gray-50 rounded-lg py-1.5">
+                  <div className="font-heading font-bold text-lg tabular-nums">{myStanding.draws}</div>
+                  <div className="text-[9px] text-muted uppercase">Remízy</div>
+                </div>
+                <div className="bg-gray-50 rounded-lg py-1.5">
+                  <div className="font-heading font-bold text-lg tabular-nums text-card-red">{myStanding.losses}</div>
+                  <div className="text-[9px] text-muted uppercase">Prohry</div>
+                </div>
+              </div>
+              <div className="text-center text-sm text-muted">
+                Skóre <span className="font-heading font-bold text-ink">{myStanding.goalsFor}:{myStanding.goalsAgainst}</span>
+                <span className="ml-1 text-xs">({(myStanding.goalsFor ?? 0) - (myStanding.goalsAgainst ?? 0) >= 0 ? "+" : ""}{(myStanding.goalsFor ?? 0) - (myStanding.goalsAgainst ?? 0)})</span>
+              </div>
+              {matchResults && matchResults.form.length > 0 && (
+                <div className="flex items-center justify-center gap-1 pt-1">
+                  {matchResults.form.map((f, i) => (
+                    <span key={i} className={`w-6 h-6 rounded-md text-[10px] flex items-center justify-center font-bold text-white ${
+                      f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
+                    }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
+                  ))}
+                </div>
+              )}
+              <Link href="/dashboard/liga" className="text-xs text-pitch-500 font-heading font-bold hover:underline block text-center pt-1">
+                Zobrazit tabulku →
+              </Link>
+            </div>
+          ) : (
+            <div className="text-center text-muted py-4">Zatím bez zápasů</div>
+          )}
+        </div>
+
+        {/* Zpravodaj */}
+        {news.length > 0 ? (
           <div className="card p-4 sm:p-5">
-            <SectionLabel>Okresní zpravodaj</SectionLabel>
+            <SectionLabel>Zpravodaj</SectionLabel>
             <div className="space-y-2">
               {news.map((article) => {
                 const daysAgo = Math.floor((Date.now() - new Date(article.date).getTime()) / 86400000);
@@ -574,7 +638,7 @@ export default function DashboardPage() {
               <Link href="/dashboard/news" className="text-xs text-pitch-500 font-heading font-bold hover:underline">Celý zpravodaj →</Link>
             </div>
           </div>
-        )}
+        ) : <div />}
       </div>
 
       {/* ═══ Row 4: Top performers — 3 columns ═══ */}
