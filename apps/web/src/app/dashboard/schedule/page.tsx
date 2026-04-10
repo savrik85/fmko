@@ -113,8 +113,7 @@ export default function SchedulePage() {
 
   const played = matches.filter((m) => m.status === "simulated");
   const upcoming = matches.filter((m) => m.status !== "simulated");
-  // První 5 upcoming má klikatelný link na sestavu (tolik podporuje lineup page multi-match strip)
-  const lineupEditableIds = new Set(upcoming.slice(0, 5).map((m) => m.id));
+  const upcomingIds = new Set(upcoming.map((m) => m.id));
 
   return (
     <>
@@ -142,9 +141,9 @@ export default function SchedulePage() {
           {upcoming.length > 0 && (
             <div className="mb-6">
               <SectionLabel>Nadcházející</SectionLabel>
-              <div className="space-y-6">
+              <div className="space-y-3">
                 {upcoming.map((m) => (
-                  <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={lineupEditableIds.has(m.id)} />
+                  <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={upcomingIds.has(m.id)} />
                 ))}
               </div>
             </div>
@@ -153,7 +152,7 @@ export default function SchedulePage() {
           {played.length > 0 && (
             <div>
               <SectionLabel>Odehrané</SectionLabel>
-              <div className="space-y-6">
+              <div className="space-y-3">
                 {played.map((m) => (
                   <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={false} />
                 ))}
@@ -216,7 +215,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
   const isClickable = isPlayed || canEditLineup;
   const linkLabel = isPlayed ? "Přehled" : canEditLineup ? "Sestava" : null;
   const inner = (
-    <div className={`card px-3 py-3 md:px-4 border border-gray-200 ${isClickable ? "hover:bg-gray-50 transition-colors" : ""}`}>
+    <div className={`card px-3 py-3 md:px-4 ${isClickable ? "hover:bg-gray-50 transition-colors" : ""}`}>
       {/* Mobile layout */}
       <div className="flex md:hidden items-center gap-2">
         <div className="shrink-0 w-6 text-center text-xs text-muted font-heading">
@@ -282,10 +281,10 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
         </div>
       </div>
 
-      {/* Link centered at bottom */}
+      {/* Link centered at bottom — compact, no divider */}
       {linkLabel && (
-        <div className="mt-2 pt-2 border-t border-gray-100 text-center">
-          <span className="text-sm font-heading font-bold text-pitch-600">{linkLabel} →</span>
+        <div className="mt-1 text-center">
+          <span className="text-xs font-heading font-bold text-pitch-600">{linkLabel} →</span>
         </div>
       )}
     </div>
