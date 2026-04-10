@@ -113,8 +113,6 @@ export default function SchedulePage() {
 
   const played = matches.filter((m) => m.status === "simulated");
   const upcoming = matches.filter((m) => m.status !== "simulated");
-  // Sestava button jen pro prvních 5 — tolik podporuje lineup page (multi-match strip)
-  const lineupEditableIds = new Set(upcoming.slice(0, 5).map((m) => m.id));
 
   return (
     <>
@@ -144,8 +142,13 @@ export default function SchedulePage() {
               <SectionLabel>Nadcházející</SectionLabel>
               <div className="space-y-2">
                 {upcoming.map((m) => (
-                  <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={lineupEditableIds.has(m.id)} />
+                  <MatchRow key={m.id} match={m} myTeamId={teamId!} />
                 ))}
+              </div>
+              <div className="mt-4 text-center">
+                <Link href="/dashboard/match" className="text-sm font-heading font-bold text-pitch-600 hover:text-pitch-700 transition-colors">
+                  Sestava →
+                </Link>
               </div>
             </div>
           )}
@@ -155,7 +158,7 @@ export default function SchedulePage() {
               <SectionLabel>Odehrané</SectionLabel>
               <div className="space-y-2">
                 {played.map((m) => (
-                  <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={false} />
+                  <MatchRow key={m.id} match={m} myTeamId={teamId!} />
                 ))}
               </div>
             </div>
@@ -203,64 +206,92 @@ export default function SchedulePage() {
   );
 }
 
-function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch; myTeamId: string; canEditLineup: boolean }) {
+function MatchRow({ match: m, myTeamId }: { match: ScheduleMatch; myTeamId: string }) {
   const result = matchResult(m);
   const isPlayed = m.status === "simulated";
 
+  // Opponent info for mobile layout
+  const opp = m.isHome
+    ? { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge }
+    : { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge };
+  const oppInitials = opp.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+
   const inner = (
-    <div className={`card flex items-center gap-3 px-4 py-3 ${isPlayed ? "hover:bg-gray-50 transition-colors" : ""}`}>
-      <div className="shrink-0 w-8 text-center">
-        <div className="text-xs text-muted font-heading">{m.round ? `${m.round}.` : ""}</div>
-      </div>
-
-      <div className="flex-1 min-w-0 flex items-center gap-2 justify-end">
-        <span className={`text-sm font-heading truncate ${m.homeTeamId === myTeamId ? "font-bold" : ""}`}>
-          {m.homeName}
-        </span>
-        <BadgePreview primary={m.homeColor} secondary={m.homeSecondary} pattern={m.homeBadge as BadgePattern}
-          initials={m.homeName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
-      </div>
-
-      <div className="shrink-0 w-20 text-center">
+    <div className={`card px-3 py-3 md:px-4 ${isPlayed ? "hover:bg-gray-50 transition-colors" : ""}`}>
+      {/* Mobile layout */}
+      <div className="flex md:hidden items-center gap-2">
+        <div className="shrink-0 w-6 text-center text-xs text-muted font-heading">
+          {m.round ? `${m.round}.` : ""}
+        </div>
+        <BadgePreview primary={opp.color} secondary={opp.secondary} pattern={opp.badge as BadgePattern}
+          initials={oppInitials} size={22} />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-heading font-bold truncate">{opp.name}</div>
+          <div className="text-[11px] text-muted font-heading">{m.isHome ? "doma" : "venku"}</div>
+        </div>
         {isPlayed ? (
-          <div className="font-heading font-[800] text-lg tabular-nums">{m.homeScore} : {m.awayScore}</div>
+          <>
+            <div className="shrink-0 font-heading font-[800] text-base tabular-nums">{m.homeScore}:{m.awayScore}</div>
+            <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${result.color}`}>
+              {result.label}
+            </span>
+          </>
         ) : (
-          <div>
-            <div className="text-xs font-heading font-bold">{formatDate(m.scheduledAt)}</div>
-            <div className="text-xs text-muted">{formatTime(m.scheduledAt)}</div>
-          </div>
+          <div className="shrink-0 text-xs font-heading font-bold tabular-nums">{formatDate(m.scheduledAt)}</div>
         )}
+        {isPlayed && <div className="shrink-0 text-muted text-sm font-heading" aria-hidden="true">→</div>}
       </div>
 
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        <BadgePreview primary={m.awayColor} secondary={m.awaySecondary} pattern={m.awayBadge as BadgePattern}
-          initials={m.awayName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
-        <span className={`text-sm font-heading truncate ${m.awayTeamId === myTeamId ? "font-bold" : ""}`}>
-          {m.awayName}
-        </span>
-      </div>
+      {/* Desktop layout */}
+      <div className="hidden md:flex items-center gap-3">
+        <div className="shrink-0 w-8 text-center">
+          <div className="text-xs text-muted font-heading">{m.round ? `${m.round}.` : ""}</div>
+        </div>
 
-      <div className="shrink-0 w-7">
-        {isPlayed && (
-          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${result.color}`}>
-            {result.label}
+        <div className="flex-1 min-w-0 flex items-center gap-2 justify-end">
+          <span className={`text-sm font-heading truncate ${m.homeTeamId === myTeamId ? "font-bold" : ""}`}>
+            {m.homeName}
           </span>
+          <BadgePreview primary={m.homeColor} secondary={m.homeSecondary} pattern={m.homeBadge as BadgePattern}
+            initials={m.homeName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
+        </div>
+
+        <div className="shrink-0 w-20 text-center">
+          {isPlayed ? (
+            <div className="font-heading font-[800] text-lg tabular-nums">{m.homeScore} : {m.awayScore}</div>
+          ) : (
+            <div>
+              <div className="text-xs font-heading font-bold">{formatDate(m.scheduledAt)}</div>
+              <div className="text-xs text-muted">{formatTime(m.scheduledAt)}</div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <BadgePreview primary={m.awayColor} secondary={m.awaySecondary} pattern={m.awayBadge as BadgePattern}
+            initials={m.awayName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
+          <span className={`text-sm font-heading truncate ${m.awayTeamId === myTeamId ? "font-bold" : ""}`}>
+            {m.awayName}
+          </span>
+        </div>
+
+        <div className="shrink-0 w-7">
+          {isPlayed && (
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${result.color}`}>
+              {result.label}
+            </span>
+          )}
+        </div>
+
+        {isPlayed && (
+          <div className="shrink-0 text-muted text-sm font-heading" aria-hidden="true">→</div>
         )}
       </div>
     </div>
   );
 
   if (isPlayed) return <Link href={`/dashboard/match/${m.id}`}>{inner}</Link>;
-  if (!canEditLineup) return inner;
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1">{inner}</div>
-      <Link href={m.calendarId ? `/dashboard/match?calendarId=${m.calendarId}` : "/dashboard/match"}
-        className="shrink-0 py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
-        Sestava
-      </Link>
-    </div>
-  );
+  return inner;
 }
 
 function LeagueMatchRow({ match: m, myTeamId }: {
