@@ -187,8 +187,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══ Row 1: Next match + (Tabulka + Stav kádru) ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* ═══ Row 1: Next match + Tabulka + Stav kádru ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
         {/* Next match — rich preview */}
         <div className="card p-4 sm:p-5">
@@ -288,26 +288,23 @@ export default function DashboardPage() {
                     { label: "Věk", h: homeAge, a: awayAge, higherBetter: false },
                   ];
                   return (
-                    <div className="px-4 py-3 space-y-2.5 border-b border-gray-100">
-                      {stats.map((s) => {
-                        const total = (s.h + s.a) || 1;
-                        const hPct = Math.round((s.h / total) * 100);
-                        const hBetter = s.higherBetter ? s.h > s.a : s.h < s.a;
-                        const aBetter = s.higherBetter ? s.a > s.h : s.a < s.h;
-                        return (
-                          <div key={s.label}>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className={`text-xs font-heading font-bold tabular-nums ${hBetter ? "text-pitch-600" : aBetter ? "text-card-red" : "text-ink"}`}>{s.h}</span>
-                              <span className="text-[9px] text-muted uppercase font-heading">{s.label}</span>
-                              <span className={`text-xs font-heading font-bold tabular-nums ${aBetter ? "text-pitch-600" : hBetter ? "text-card-red" : "text-ink"}`}>{s.a}</span>
+                    <div className="px-3 py-2.5 border-b border-gray-100">
+                      <div className="grid grid-cols-3 gap-x-3 gap-y-1.5 text-center text-[11px]">
+                        {stats.map((s) => {
+                          const hBetter = s.higherBetter ? s.h > s.a : s.h < s.a;
+                          const aBetter = s.higherBetter ? s.a > s.h : s.a < s.h;
+                          return (
+                            <div key={s.label} className="bg-gray-50 rounded-lg py-1.5 px-1">
+                              <div className="font-heading font-bold tabular-nums flex items-center justify-center gap-1">
+                                <span className={hBetter ? "text-pitch-600" : aBetter ? "text-card-red" : ""}>{s.h}</span>
+                                <span className="text-muted/40">:</span>
+                                <span className={aBetter ? "text-pitch-600" : hBetter ? "text-card-red" : ""}>{s.a}</span>
+                              </div>
+                              <div className="text-muted text-[8px] uppercase font-heading">{s.label}</div>
                             </div>
-                            <div className="flex h-1.5 rounded-full overflow-hidden">
-                              <div className="transition-all" style={{ width: `${hPct}%`, background: hBetter ? "#3D7A3D" : "#dc6b6b" }} />
-                              <div className="transition-all flex-1" style={{ background: aBetter ? "#3D7A3D" : "#dc6b6b" }} />
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })()}
@@ -340,8 +337,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Right column: Tabulka + Stav kádru stacked */}
-        <div className="space-y-5">
+        {/* Tabulka */}
         <div className="card p-4 sm:p-5">
           <SectionLabel>Tabulka</SectionLabel>
           {standings.length > 0 ? (
@@ -449,7 +445,6 @@ export default function DashboardPage() {
               Zobrazit kádr →
             </Link>
           </div>
-        </div>
         </div>
       </div>
 
