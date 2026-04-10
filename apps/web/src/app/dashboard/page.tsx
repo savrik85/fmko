@@ -223,7 +223,6 @@ export default function DashboardPage() {
                         <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary} pattern={homeTeam.badge} initials={ini(homeTeam.name)} size={48} />
                       </div>
                       <div className="font-heading font-bold text-sm leading-tight">{homeTeam.name}</div>
-                      {homeTeam.pos && <div className="text-[10px] text-white/40 tabular-nums mt-0.5">{homeTeam.pos.position}. místo</div>}
                     </div>
                     {/* VS */}
                     <div className="shrink-0 flex flex-col items-center pt-3">
@@ -237,9 +236,16 @@ export default function DashboardPage() {
                         <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary} pattern={awayTeam.badge} initials={ini(awayTeam.name)} size={48} />
                       </div>
                       <div className="font-heading font-bold text-sm leading-tight">{awayTeam.name}</div>
-                      {awayTeam.pos && <div className="text-[10px] text-white/40 tabular-nums mt-0.5">{awayTeam.pos.position}. místo</div>}
                     </div>
                   </div>
+                  {/* Pozice — vždy na vlastním řádku, zarovnané */}
+                  {(homeTeam.pos || awayTeam.pos) && (
+                    <div className="flex items-center gap-3 mt-2">
+                      <div className="flex-1 text-center text-[10px] text-white/40 tabular-nums">{homeTeam.pos ? `${homeTeam.pos.position}. místo` : ""}</div>
+                      <div className="shrink-0 w-10" />
+                      <div className="flex-1 text-center text-[10px] text-white/40 tabular-nums">{awayTeam.pos ? `${awayTeam.pos.position}. místo` : ""}</div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Forma */}
@@ -270,24 +276,27 @@ export default function DashboardPage() {
                   const homeAge = home.squad?.length ? Math.round(home.squad.reduce((s, p) => s + p.age, 0) / home.squad.length) : 0;
                   const awayAge = away.squad?.length ? Math.round(away.squad.reduce((s, p) => s + p.age, 0) / away.squad.length) : 0;
                   const stats = [
-                    { label: "Rating", h: home.avgRating, a: away.avgRating },
-                    { label: "Góly", h: home.goalsFor, a: away.goalsFor },
-                    { label: "Věk", h: homeAge, a: awayAge },
+                    { label: "Rating", h: home.avgRating, a: away.avgRating, higherBetter: true },
+                    { label: "Góly", h: home.goalsFor, a: away.goalsFor, higherBetter: true },
+                    { label: "Věk", h: homeAge, a: awayAge, higherBetter: false },
                   ];
                   return (
                     <div className="px-4 py-3 space-y-2.5 border-b border-gray-100">
                       {stats.map((s) => {
                         const total = (s.h + s.a) || 1;
                         const hPct = Math.round((s.h / total) * 100);
+                        const hBetter = s.higherBetter ? s.h > s.a : s.h < s.a;
+                        const aBetter = s.higherBetter ? s.a > s.h : s.a < s.h;
                         return (
                           <div key={s.label}>
                             <div className="flex items-center justify-between mb-1">
-                              <span className={`text-xs font-heading font-bold tabular-nums ${s.h > s.a ? "text-pitch-600" : s.h < s.a ? "text-card-red" : "text-ink"}`}>{s.h}</span>
+                              <span className={`text-xs font-heading font-bold tabular-nums ${hBetter ? "text-pitch-600" : aBetter ? "text-card-red" : "text-ink"}`}>{s.h}</span>
                               <span className="text-[9px] text-muted uppercase font-heading">{s.label}</span>
-                              <span className={`text-xs font-heading font-bold tabular-nums ${s.a > s.h ? "text-pitch-600" : s.a < s.h ? "text-card-red" : "text-ink"}`}>{s.a}</span>
+                              <span className={`text-xs font-heading font-bold tabular-nums ${aBetter ? "text-pitch-600" : hBetter ? "text-card-red" : "text-ink"}`}>{s.a}</span>
                             </div>
-                            <div className="flex h-1.5 rounded-full overflow-hidden bg-gray-100">
-                              <div className="rounded-full transition-all" style={{ width: `${hPct}%`, background: s.h >= s.a ? "#3D7A3D" : "#dc6b6b" }} />
+                            <div className="flex h-1.5 rounded-full overflow-hidden">
+                              <div className="transition-all" style={{ width: `${hPct}%`, background: hBetter ? "#3D7A3D" : "#dc6b6b" }} />
+                              <div className="transition-all flex-1" style={{ background: aBetter ? "#3D7A3D" : "#dc6b6b" }} />
                             </div>
                           </div>
                         );
@@ -296,24 +305,24 @@ export default function DashboardPage() {
                   );
                 })()}
 
-                {/* Footer — weather + venue + CTA */}
-                <div className="flex items-center justify-between px-4 py-3">
-                  <div className="flex items-center gap-2 text-xs text-muted">
-                    {preview && (
-                      <>
-                        <span className="text-base">{preview.weather.icon}</span>
-                        <span>{preview.weather.temperature}°C</span>
-                        {(preview.weather.expected === "rain" || preview.weather.expected === "snow" || preview.weather.expected === "wind") && (
-                          <span className="text-card-red text-[10px] font-heading font-bold">
-                            {preview.weather.expected === "rain" ? "-20%" : preview.weather.expected === "snow" ? "-30%" : "-10%"}
-                          </span>
-                        )}
-                        <span className="text-muted/40">·</span>
-                        <span className="text-[10px]">{preview.venue.name}</span>
-                      </>
-                    )}
+                {/* Footer — weather + venue */}
+                {preview && (
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+                    <div className="flex items-center gap-1.5 text-xs text-muted">
+                      <span className="text-base">{preview.weather.icon}</span>
+                      <span>{preview.weather.temperature}°C</span>
+                      {(preview.weather.expected === "rain" || preview.weather.expected === "snow" || preview.weather.expected === "wind") && (
+                        <span className="text-card-red text-[10px] font-heading font-bold">
+                          {preview.weather.expected === "rain" ? "-20%" : preview.weather.expected === "snow" ? "-30%" : "-10%"}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-muted">{preview.venue.name}</span>
                   </div>
-                  <Link href="/dashboard/match" className="bg-pitch-500 hover:bg-pitch-600 text-white text-xs font-heading font-bold px-3 py-1.5 rounded-lg transition-colors">
+                )}
+                {/* CTA */}
+                <div className="px-4 py-3 text-center">
+                  <Link href="/dashboard/match" className="inline-block bg-pitch-500 hover:bg-pitch-600 text-white text-sm font-heading font-bold px-6 py-2 rounded-lg transition-colors w-full">
                     Sestava →
                   </Link>
                 </div>
