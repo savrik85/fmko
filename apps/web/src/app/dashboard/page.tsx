@@ -351,7 +351,7 @@ export default function DashboardPage() {
 
         {/* Col 2: Tabulka + Trenér+Finance */}
         <div className="flex flex-col gap-5">
-        <div className="card p-4 sm:p-5 flex-1">
+        <div className="card p-4 sm:p-5">
           <SectionLabel>Tabulka</SectionLabel>
           {standings.length > 0 ? (
             <div className="overflow-x-auto -mx-4 sm:-mx-5">
@@ -399,7 +399,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Trenér + Finance — pod tabulkou */}
-        <div className="card p-4 sm:p-5 flex-1">
+        <div className="card p-4 sm:p-5">
           <SectionLabel>Trenér</SectionLabel>
           {manager ? (
             <a href={`/dashboard/manager/${teamId}`} className="block group">
@@ -441,7 +441,7 @@ export default function DashboardPage() {
 
         {/* Col 3: Stav kádru + Poslední zápasy */}
         <div className="flex flex-col gap-5">
-        <div className="card p-4 sm:p-5 flex-1">
+        <div className="card p-4 sm:p-5">
           <SectionLabel>Stav kádru</SectionLabel>
           <div className="space-y-2">
             <div className="grid grid-cols-3 gap-2">
@@ -504,7 +504,7 @@ export default function DashboardPage() {
 
         {/* Poslední zápasy — pod Stav kádru */}
         {matchResults && matchResults.matches.length > 0 && (
-          <div className="card p-4 sm:p-5 flex-1">
+          <div className="card p-4 sm:p-5">
             <SectionLabel>Poslední zápasy</SectionLabel>
             <div className="overflow-x-auto -mx-4 sm:-mx-5">
               <table className="w-full text-sm">
