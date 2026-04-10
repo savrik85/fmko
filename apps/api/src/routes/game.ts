@@ -2938,8 +2938,7 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     ).bind(playerId, teamId, aiData.firstName, aiData.lastName, aiData.age, aiData.position, aiData.overallRating,
       skills, physical, personality, lifeContext, avatar, weeklyWage).run();
 
-    // Deduct budget
-    await c.env.DB.prepare("UPDATE teams SET budget = budget - ? WHERE id = ?").bind(body.amount, teamId).run();
+    // Deduct budget (recordTransaction handles both budget update + logging)
     const { recordTransaction } = await import("../season/finance-processor");
     const gameDate = (await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>().catch(() => null))?.game_date ?? new Date().toISOString();
     await recordTransaction(c.env.DB, teamId, "transfer_fee", -body.amount, `Přestup: ${aiData.firstName} ${aiData.lastName} z ${aiData.fromTeam}`, gameDate);
