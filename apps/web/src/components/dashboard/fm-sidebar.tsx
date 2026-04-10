@@ -11,6 +11,7 @@ interface NavItem {
   label: string;
   icon: string;
   group: "main" | "club" | "league";
+  isNew?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -21,7 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/squad", label: "Kádr", icon: "\u{1F465}", group: "club" },
   { href: "/dashboard/training", label: "Tréninky", icon: "\u{1F3CB}", group: "club" },
   { href: "/dashboard/transfers", label: "Přestupy", icon: "\u{1F91D}", group: "club" },
-  { href: "/dashboard/watchlist", label: "Sledovaní", icon: "\u{2B50}", group: "club" },
+  { href: "/dashboard/watchlist", label: "Sledovaní", icon: "\u{2B50}", group: "club", isNew: true },
   { href: "/dashboard/finances", label: "Finance", icon: "\u{1F4B0}", group: "club" },
   { href: "/dashboard/sponsors", label: "Sponzoři", icon: "\u{1F4BC}", group: "club" },
   { href: "/dashboard/equipment", label: "Vybavení", icon: "\u{1F45F}", group: "club" },
@@ -143,7 +144,13 @@ export function FMSidebar() {
                           {item.href === "/dashboard/transfers" && incomingOffers > 0 && (
                             <span className="ml-1.5 bg-card-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{incomingOffers}</span>
                           )}
+                          {item.isNew && (
+                            <span className="ml-1.5 bg-gold-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">Nové</span>
+                          )}
                         </span>
+                      )}
+                      {!expanded && item.isNew && (
+                        <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-gold-500 rounded-full" />
                       )}
                     </Link>
                   );
