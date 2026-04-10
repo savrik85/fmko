@@ -142,7 +142,7 @@ export default function SchedulePage() {
           {upcoming.length > 0 && (
             <div className="mb-6">
               <SectionLabel>Nadcházející</SectionLabel>
-              <div className="space-y-3">
+              <div className="space-y-6">
                 {upcoming.map((m) => (
                   <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={lineupEditableIds.has(m.id)} />
                 ))}
@@ -153,7 +153,7 @@ export default function SchedulePage() {
           {played.length > 0 && (
             <div>
               <SectionLabel>Odehrané</SectionLabel>
-              <div className="space-y-3">
+              <div className="space-y-6">
                 {played.map((m) => (
                   <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={false} />
                 ))}
@@ -216,7 +216,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
   const isClickable = isPlayed || canEditLineup;
   const linkLabel = isPlayed ? "Přehled" : canEditLineup ? "Sestava" : null;
   const inner = (
-    <div className={`card px-3 py-3 md:px-4 ${isClickable ? "hover:bg-gray-50 transition-colors" : ""}`}>
+    <div className={`card px-3 py-3 md:px-4 border border-gray-200 ${isClickable ? "hover:bg-gray-50 transition-colors" : ""}`}>
       {/* Mobile layout */}
       <div className="flex md:hidden items-center gap-2">
         <div className="shrink-0 w-6 text-center text-xs text-muted font-heading">
