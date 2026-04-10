@@ -108,31 +108,31 @@ export default function MatchDetailPage() {
           )}
         </div>
 
-        {/* Score */}
-        <div className="flex items-center px-4 py-4">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <BadgePreview primary={hc} secondary={match.home_secondary || "#FFF"} pattern={(match.home_badge as BadgePattern) || "shield"} initials={ini(match.home_name)} size={44} />
-            <span className="font-heading font-bold text-white text-lg truncate">{match.home_name}</span>
+        {/* Score — mobile: stacked badge+name columns with larger names; desktop: horizontal */}
+        <div className="flex items-start sm:items-center px-3 sm:px-4 py-4">
+          <div className="flex flex-col sm:flex-row items-center sm:gap-3 gap-2 flex-1 min-w-0">
+            <BadgePreview primary={hc} secondary={match.home_secondary || "#FFF"} pattern={(match.home_badge as BadgePattern) || "shield"} initials={ini(match.home_name)} size={40} />
+            <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-left break-words leading-tight">{match.home_name}</span>
           </div>
-          <div className="text-center shrink-0 px-6">
-            <div className="font-heading font-[800] text-6xl tabular-nums leading-none" style={{ textShadow: "0 0 10px rgba(255,255,255,0.2)" }}>
+          <div className="text-center shrink-0 px-3 sm:px-6">
+            <div className="font-heading font-[800] text-5xl sm:text-6xl tabular-nums leading-none" style={{ textShadow: "0 0 10px rgba(255,255,255,0.2)" }}>
               <span style={{ color: `color-mix(in srgb, ${hc} 60%, white)` }}>{match.home_score}</span>
-              <span className="text-white/20 mx-3">:</span>
+              <span className="text-white/20 mx-2 sm:mx-3">:</span>
               <span style={{ color: `color-mix(in srgb, ${ac} 60%, white)` }}>{match.away_score}</span>
             </div>
             <div className="flex items-center justify-center gap-1.5 mt-1.5">
-              <span className="text-white/40 text-sm font-heading">Konec</span>
-              {match.round && <span className="text-white/25 text-sm font-heading">· {match.round}. kolo</span>}
+              <span className="text-white/40 text-xs sm:text-sm font-heading">Konec</span>
+              {match.round && <span className="text-white/25 text-xs sm:text-sm font-heading">· {match.round}. kolo</span>}
             </div>
           </div>
-          <div className="flex items-center gap-3 flex-1 min-w-0 justify-end">
-            <span className="font-heading font-bold text-white text-lg truncate">{match.away_name}</span>
-            <BadgePreview primary={ac} secondary={match.away_secondary || "#FFF"} pattern={(match.away_badge as BadgePattern) || "shield"} initials={ini(match.away_name)} size={44} />
+          <div className="flex flex-col sm:flex-row items-center sm:gap-3 gap-2 flex-1 min-w-0 sm:justify-end">
+            <BadgePreview primary={ac} secondary={match.away_secondary || "#FFF"} pattern={(match.away_badge as BadgePattern) || "shield"} initials={ini(match.away_name)} size={40} />
+            <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-right break-words leading-tight sm:order-first">{match.away_name}</span>
           </div>
         </div>
 
-        {/* Match info bar */}
-        <div className="flex items-center justify-center gap-5 px-4 py-2 text-white/50 text-sm font-heading" style={{ background: "#060d06" }}>
+        {/* Match info bar — wrap on mobile */}
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4 py-2 text-white/50 text-xs sm:text-sm font-heading" style={{ background: "#060d06" }}>
           {match.stadium_name && <span>{match.stadium_name}</span>}
           {match.attendance != null && <span>{match.attendance} diváků</span>}
           {match.pitch_condition != null && (
@@ -152,9 +152,9 @@ export default function MatchDetailPage() {
         </div>
       </div>
 
-      {/* ═══ LINEUPS ═══ */}
+      {/* ═══ LINEUPS — mobile: stacked, desktop: 2 columns ═══ */}
       {(match.home_lineup_data || match.away_lineup_data) && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
             { label: match.home_name, data: match.home_lineup_data, color: hc },
             { label: match.away_name, data: match.away_lineup_data, color: ac },
