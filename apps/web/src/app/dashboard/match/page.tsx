@@ -136,7 +136,25 @@ function MatchPage() {
       if (data.lineup && data.lineup.players.length === 11) {
         setFormation(data.lineup.formation);
         setTactic(data.lineup.tactic);
-        setSelected(data.lineup.players.map((p) => p.playerId));
+        // Auto-replace any stored player who is now unavailable (injury/suspension)
+        // with the best available player for that slot's position
+        const pool = data.availablePlayers ?? [];
+        const playerMap = new Map(pool.map((p) => [p.id, p]));
+        const slots = POSITIONS[data.lineup.formation] ?? POSITIONS["4-4-2"];
+        const used = new Set<string>();
+        const nextSelected = data.lineup.players.map((p, i) => {
+          const stored = playerMap.get(p.playerId);
+          if (stored && !stored.absent) { used.add(p.playerId); return p.playerId; }
+          // Find replacement: best available at this slot's position (or any)
+          const slotPos = slots[i].pos;
+          const repl = pool.filter((x) => !x.absent && !used.has(x.id) && x.position === slotPos)
+            .sort((a, b) => b.overallRating - a.overallRating)[0]
+            ?? pool.filter((x) => !x.absent && !used.has(x.id))
+              .sort((a, b) => b.overallRating - a.overallRating)[0];
+          if (repl) { used.add(repl.id); return repl.id; }
+          return p.playerId; // keep stale if nothing available
+        });
+        setSelected(nextSelected);
       } else { autoFill(data.availablePlayers ?? [], "4-4-2"); }
       // Auto-select captain: highest leadership in starting 11
       const lineup11 = data.lineup?.players.map((p) => p.playerId) ?? [];
