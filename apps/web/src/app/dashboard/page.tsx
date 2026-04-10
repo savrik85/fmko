@@ -387,7 +387,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Trenér + Finance — pod tabulkou */}
-        <div className="card p-4 sm:p-5">
+        <div className="card p-4 sm:p-5 flex-1">
           <SectionLabel>Trenér</SectionLabel>
           {manager ? (
             <a href={`/dashboard/manager/${teamId}`} className="block group">
@@ -492,7 +492,7 @@ export default function DashboardPage() {
 
         {/* Poslední zápasy — pod Stav kádru */}
         {matchResults && matchResults.matches.length > 0 && (
-          <div className="card p-4 sm:p-5">
+          <div className="card p-4 sm:p-5 flex-1">
             <SectionLabel>Poslední zápasy</SectionLabel>
             <div className="overflow-x-auto -mx-4 sm:-mx-5">
               <table className="w-full text-sm">
