@@ -520,7 +520,7 @@ export default function DashboardPage() {
                       <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                         <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "—"}</td>
                         <td className="py-2 pr-2">
-                          <a href={`/dashboard/match/${m.id}/replay`} className="flex items-center gap-2 hover:underline">
+                          <a href={`/dashboard/match/${m.id}`} className="flex items-center gap-2 hover:underline">
                             <BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
                               pattern={(m.opponentBadge as BadgePattern) || "shield"}
                               initials={(m.opponent ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={20} />
@@ -529,7 +529,7 @@ export default function DashboardPage() {
                           </a>
                         </td>
                         <td className="py-2 pr-4 sm:pr-5 text-center">
-                          <a href={`/dashboard/match/${m.id}/replay`} className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-heading font-bold hover:opacity-80 transition-opacity ${resultBg} ${resultText}`}>
+                          <a href={`/dashboard/match/${m.id}`} className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-heading font-bold hover:opacity-80 transition-opacity ${resultBg} ${resultText}`}>
                             {m.homeScore}:{m.awayScore}
                           </a>
                         </td>
