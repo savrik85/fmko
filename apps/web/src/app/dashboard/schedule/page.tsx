@@ -214,6 +214,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
   const oppInitials = opp.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
   const isClickable = isPlayed || canEditLineup;
+  const linkLabel = isPlayed ? "Přehled" : canEditLineup ? "Sestava" : null;
   const inner = (
     <div className={`card px-3 py-3 md:px-4 ${isClickable ? "hover:bg-gray-50 transition-colors" : ""}`}>
       {/* Mobile layout */}
@@ -237,7 +238,9 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
         ) : (
           <div className="shrink-0 text-xs font-heading font-bold tabular-nums">{formatDate(m.scheduledAt)}</div>
         )}
-        {isClickable && <div className="shrink-0 text-muted text-sm font-heading" aria-hidden="true">→</div>}
+        {linkLabel && (
+          <div className="shrink-0 text-xs font-heading font-bold text-pitch-600">{linkLabel} →</div>
+        )}
       </div>
 
       {/* Desktop layout */}
@@ -281,9 +284,11 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
           )}
         </div>
 
-        {isClickable && (
-          <div className="shrink-0 text-muted text-sm font-heading" aria-hidden="true">→</div>
-        )}
+        <div className="shrink-0 w-20 text-right">
+          {linkLabel && (
+            <span className="text-sm font-heading font-bold text-pitch-600">{linkLabel} →</span>
+          )}
+        </div>
       </div>
     </div>
   );
