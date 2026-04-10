@@ -113,6 +113,8 @@ export default function SchedulePage() {
 
   const played = matches.filter((m) => m.status === "simulated");
   const upcoming = matches.filter((m) => m.status !== "simulated");
+  // První 5 upcoming má klikatelný link na sestavu (tolik podporuje lineup page multi-match strip)
+  const lineupEditableIds = new Set(upcoming.slice(0, 5).map((m) => m.id));
 
   return (
     <>
@@ -142,13 +144,8 @@ export default function SchedulePage() {
               <SectionLabel>Nadcházející</SectionLabel>
               <div className="space-y-2">
                 {upcoming.map((m) => (
-                  <MatchRow key={m.id} match={m} myTeamId={teamId!} />
+                  <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={lineupEditableIds.has(m.id)} />
                 ))}
-              </div>
-              <div className="mt-4 text-center">
-                <Link href="/dashboard/match" className="text-sm font-heading font-bold text-pitch-600 hover:text-pitch-700 transition-colors">
-                  Sestava →
-                </Link>
               </div>
             </div>
           )}
@@ -158,7 +155,7 @@ export default function SchedulePage() {
               <SectionLabel>Odehrané</SectionLabel>
               <div className="space-y-2">
                 {played.map((m) => (
-                  <MatchRow key={m.id} match={m} myTeamId={teamId!} />
+                  <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={false} />
                 ))}
               </div>
             </div>
@@ -206,7 +203,7 @@ export default function SchedulePage() {
   );
 }
 
-function MatchRow({ match: m, myTeamId }: { match: ScheduleMatch; myTeamId: string }) {
+function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch; myTeamId: string; canEditLineup: boolean }) {
   const result = matchResult(m);
   const isPlayed = m.status === "simulated";
 
@@ -216,8 +213,9 @@ function MatchRow({ match: m, myTeamId }: { match: ScheduleMatch; myTeamId: stri
     : { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge };
   const oppInitials = opp.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
+  const isClickable = isPlayed || canEditLineup;
   const inner = (
-    <div className={`card px-3 py-3 md:px-4 ${isPlayed ? "hover:bg-gray-50 transition-colors" : ""}`}>
+    <div className={`card px-3 py-3 md:px-4 ${isClickable ? "hover:bg-gray-50 transition-colors" : ""}`}>
       {/* Mobile layout */}
       <div className="flex md:hidden items-center gap-2">
         <div className="shrink-0 w-6 text-center text-xs text-muted font-heading">
@@ -239,7 +237,7 @@ function MatchRow({ match: m, myTeamId }: { match: ScheduleMatch; myTeamId: stri
         ) : (
           <div className="shrink-0 text-xs font-heading font-bold tabular-nums">{formatDate(m.scheduledAt)}</div>
         )}
-        {isPlayed && <div className="shrink-0 text-muted text-sm font-heading" aria-hidden="true">→</div>}
+        {isClickable && <div className="shrink-0 text-muted text-sm font-heading" aria-hidden="true">→</div>}
       </div>
 
       {/* Desktop layout */}
@@ -283,7 +281,7 @@ function MatchRow({ match: m, myTeamId }: { match: ScheduleMatch; myTeamId: stri
           )}
         </div>
 
-        {isPlayed && (
+        {isClickable && (
           <div className="shrink-0 text-muted text-sm font-heading" aria-hidden="true">→</div>
         )}
       </div>
@@ -291,6 +289,9 @@ function MatchRow({ match: m, myTeamId }: { match: ScheduleMatch; myTeamId: stri
   );
 
   if (isPlayed) return <Link href={`/dashboard/match/${m.id}`}>{inner}</Link>;
+  if (canEditLineup) {
+    return <Link href={m.calendarId ? `/dashboard/match?calendarId=${m.calendarId}` : "/dashboard/match"}>{inner}</Link>;
+  }
   return inner;
 }
 
