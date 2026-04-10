@@ -9,6 +9,7 @@ import type { BadgePattern } from "@/components/ui";
 
 interface ScheduleMatch {
   id: string;
+  calendarId: string | null;
   round: number | null;
   status: string;
   homeTeamId: string;
@@ -111,7 +112,8 @@ export default function SchedulePage() {
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
   const played = matches.filter((m) => m.status === "simulated");
-  const upcoming = matches.filter((m) => m.status !== "simulated");
+  // Omezit nadcházející na 5 zápasů — tolik podporuje lineup page (multi-match strip)
+  const upcoming = matches.filter((m) => m.status !== "simulated").slice(0, 5);
 
   return (
     <>
@@ -251,7 +253,7 @@ function MatchRow({ match: m, myTeamId }: { match: ScheduleMatch; myTeamId: stri
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1">{inner}</div>
-      <Link href={`/dashboard/match?calendarId=${m.id}`}
+      <Link href={m.calendarId ? `/dashboard/match?calendarId=${m.calendarId}` : "/dashboard/match"}
         className="shrink-0 py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
         Sestava
       </Link>

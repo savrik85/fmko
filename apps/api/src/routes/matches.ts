@@ -425,6 +425,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
 
   const matches = result.results.map((row) => ({
     id: row.id,
+    calendarId: row.calendar_id,
     round: row.round,
     status: row.status,
     homeTeamId: row.home_team_id,
@@ -736,16 +737,20 @@ matchesRouter.post("/admin/backfill-match-stats", async (c) => {
 
 async function sendSMS(db: D1Database, teamId: string, senderName: string, roleTitle: string, body: string) {
   let convId = await db.prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?")
-    .bind(teamId, roleTitle).first<{ id: string }>().then((r) => r?.id).catch(() => null);
+    .bind(teamId, roleTitle).first<{ id: string }>().then((r) => r?.id)
+    .catch((e) => { logger.warn({ module: "matches" }, "sendSMS find conversation", e); return null; });
   if (!convId) {
     convId = uuid();
     await db.prepare("INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', datetime('now'), datetime('now'))")
-      .bind(convId, teamId, roleTitle).run().catch(() => {});
+      .bind(convId, teamId, roleTitle).run()
+      .catch((e) => logger.warn({ module: "matches" }, "sendSMS insert conversation", e));
   }
   await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', ?, ?, datetime('now'))")
-    .bind(uuid(), convId, senderName, body).run().catch(() => {});
+    .bind(uuid(), convId, senderName, body).run()
+    .catch((e) => logger.warn({ module: "matches" }, "sendSMS insert message", e));
   await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
-    .bind(body.slice(0, 100), convId).run().catch(() => {});
+    .bind(body.slice(0, 100), convId).run()
+    .catch((e) => logger.warn({ module: "matches" }, "sendSMS update conversation", e));
 }
 
 // POST /api/teams/:teamId/challenge/:opponentTeamId — poslat výzvu na přátelák
@@ -770,7 +775,8 @@ matchesRouter.post("/teams/:teamId/challenge/:opponentTeamId", async (c) => {
   // Cooldown: 3 game days since last challenge
   const lastChallenge = await c.env.DB.prepare(
     "SELECT created_at FROM challenges WHERE (challenger_team_id = ? OR challenged_team_id = ?) AND status IN ('accepted','played') ORDER BY created_at DESC LIMIT 1"
-  ).bind(teamId, teamId).first<{ created_at: string }>().catch(() => null);
+  ).bind(teamId, teamId).first<{ created_at: string }>()
+    .catch((e) => { logger.warn({ module: "matches" }, "fetch last challenge cooldown", e); return null; });
 
   if (lastChallenge) {
     const daysDiff = (new Date(team.game_date).getTime() - new Date(lastChallenge.created_at).getTime()) / (1000 * 60 * 60 * 24);
@@ -780,7 +786,8 @@ matchesRouter.post("/teams/:teamId/challenge/:opponentTeamId", async (c) => {
   // Check no pending challenge already exists between these teams
   const existing = await c.env.DB.prepare(
     "SELECT id FROM challenges WHERE challenger_team_id = ? AND challenged_team_id = ? AND status = 'pending'"
-  ).bind(teamId, opponentTeamId).first<{ id: string }>().catch(() => null);
+  ).bind(teamId, opponentTeamId).first<{ id: string }>()
+    .catch((e) => { logger.warn({ module: "matches" }, "fetch existing pending challenge", e); return null; });
   if (existing) return c.json({ error: "Výzva už byla odeslána" }, 400);
 
   // Check neither team has a league match or friendly today (same game_date)
@@ -942,7 +949,8 @@ matchesRouter.get("/teams/:teamId/challenges", async (c) => {
   // Cooldown check
   const lastChallenge = await c.env.DB.prepare(
     "SELECT created_at FROM challenges WHERE (challenger_team_id = ? OR challenged_team_id = ?) AND status IN ('accepted','played') ORDER BY created_at DESC LIMIT 1"
-  ).bind(teamId, teamId).first<{ created_at: string }>().catch(() => null);
+  ).bind(teamId, teamId).first<{ created_at: string }>()
+    .catch((e) => { logger.warn({ module: "matches" }, "fetch last challenge cooldown (list)", e); return null; });
 
   let cooldownDaysLeft = 0;
   if (lastChallenge && team) {
