@@ -178,10 +178,18 @@ export default function MatchDetailPage() {
             // Per-player stats from events (match by name + teamId)
             const statsFor = (name: string) => {
               const ev = match.events.filter((e) => e.teamId === teamId && e.playerName === name);
+              // Sub IN: this player IS the sub (playerName matches and event is substitution)
+              const subInEvent = ev.find((e) => e.type === "substitution");
+              // Sub OUT: another sub event mentions "za {name}" in description
+              const subOutEvent = match.events.find((e) =>
+                e.teamId === teamId && e.type === "substitution" && e.description.includes(`za ${name}`)
+              );
               return {
                 goals: ev.filter((e) => e.type === "goal").length,
                 yellow: ev.filter((e) => e.type === "card" && e.detail !== "red").length,
                 red: ev.filter((e) => e.type === "card" && e.detail === "red").length,
+                subInMin: subInEvent?.minute ?? null,
+                subOutMin: subOutEvent?.minute ?? null,
               };
             };
             const ratings = match.player_ratings ?? {};
@@ -224,6 +232,11 @@ export default function MatchDetailPage() {
                             )}
                             {s.yellow > 0 && <span className="text-xs ml-1 align-middle" title="Žlutá karta">🟨</span>}
                             {s.red > 0 && <span className="text-xs ml-1 align-middle" title="Červená karta">🟥</span>}
+                            {s.subOutMin != null && (
+                              <span className="text-[11px] ml-1.5 align-middle text-red-600 font-heading font-bold inline-flex items-center gap-0.5" title={`Vystřídán v ${s.subOutMin}. minutě`}>
+                                <span>↑</span><span className="tabular-nums">{s.subOutMin}&apos;</span>
+                              </span>
+                            )}
                           </span>
                           <span className={`shrink-0 px-2 py-0.5 rounded-md text-xs font-heading font-bold tabular-nums ${ratingColor}`} title="Hodnocení hráče v zápase">{matchRating != null ? matchRating.toFixed(1) : "—"}</span>
                         </div>
@@ -245,6 +258,11 @@ export default function MatchDetailPage() {
                             <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
                           ) : (
                             <span className="font-heading font-bold">{p.name}</span>
+                          )}
+                          {s.subInMin != null && (
+                            <span className="text-[11px] ml-1.5 align-middle text-pitch-600 font-heading font-bold inline-flex items-center gap-0.5" title={`Nastoupil v ${s.subInMin}. minutě`}>
+                              <span>↓</span><span className="tabular-nums">{s.subInMin}&apos;</span>
+                            </span>
                           )}
                           {s.goals > 0 && <span className="text-sm ml-1.5 align-middle">⚽{s.goals > 1 ? ` ${s.goals}` : ""}</span>}
                           {s.yellow > 0 && <span className="text-xs ml-1 align-middle">🟨</span>}
