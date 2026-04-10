@@ -215,7 +215,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
   const isClickable = isPlayed || canEditLineup;
   const linkLabel = isPlayed ? "Přehled" : canEditLineup ? "Sestava" : null;
   const inner = (
-    <div className={`card px-3 py-3 md:px-4 ${isClickable ? "hover:bg-gray-50 transition-colors" : ""}`}>
+    <div className={`card px-3 py-3 md:px-4 shadow-lg ${isClickable ? "hover:bg-gray-50 transition-colors" : ""}`}>
       {/* Mobile layout */}
       <div className="flex md:hidden items-center gap-2">
         <div className="shrink-0 w-6 text-center text-xs text-muted font-heading">
@@ -286,7 +286,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
 
       {/* Link centered at bottom — compact, no divider */}
       {linkLabel && (
-        <div className="mt-3 text-center">
+        <div className="mt-1 text-center">
           <span className="text-xs font-heading font-bold text-pitch-600">{linkLabel} →</span>
         </div>
       )}
