@@ -541,11 +541,86 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══ Row 2: Zpravodaj ═══ */}
-      <div className="grid grid-cols-1 gap-5">
-        {news.length > 0 && (
+      {/* ═══ Row 2: Rozpis + Bilance + Zpravodaj ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Rozpis — nadcházející zápasy */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Rozpis</SectionLabel>
+          {(() => {
+            const upcoming = matches.filter((m) => m.status !== "simulated").slice(0, 4);
+            return upcoming.length > 0 ? (
+              <div className="space-y-2">
+                {upcoming.map((m) => {
+                  const opp = m.isHome ? m.awayName : m.homeName;
+                  const date = m.scheduledAt ? new Date(m.scheduledAt).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "";
+                  return (
+                    <div key={m.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+                      <span className="text-xs text-muted tabular-nums w-5">{m.round}.</span>
+                      <span className="text-sm font-heading font-bold flex-1 truncate">{opp}</span>
+                      <span className={`text-[9px] font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
+                      <span className="text-[10px] text-muted tabular-nums">{date}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center text-muted py-4 text-sm">Žádné naplánované</div>
+            );
+          })()}
+          <Link href="/dashboard/schedule" className="text-xs text-pitch-500 font-heading font-bold hover:underline block text-center pt-2">
+            Celý rozpis →
+          </Link>
+        </div>
+
+        {/* Bilance sezóny */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Bilance</SectionLabel>
+          {myStanding ? (
+            <div className="space-y-2">
+              <div className="text-center mb-3">
+                <div className="font-heading font-[800] text-4xl tabular-nums" style={{ color: safeColor }}>{myStanding.pos}.</div>
+                <div className="text-xs text-muted">{myStanding.points} bodů · {myStanding.played} zápasů</div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-gray-50 rounded-lg py-1.5">
+                  <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">{myStanding.wins}</div>
+                  <div className="text-[9px] text-muted uppercase">Výhry</div>
+                </div>
+                <div className="bg-gray-50 rounded-lg py-1.5">
+                  <div className="font-heading font-bold text-lg tabular-nums">{myStanding.draws}</div>
+                  <div className="text-[9px] text-muted uppercase">Remízy</div>
+                </div>
+                <div className="bg-gray-50 rounded-lg py-1.5">
+                  <div className="font-heading font-bold text-lg tabular-nums text-card-red">{myStanding.losses}</div>
+                  <div className="text-[9px] text-muted uppercase">Prohry</div>
+                </div>
+              </div>
+              <div className="text-center text-sm text-muted">
+                Skóre <span className="font-heading font-bold text-ink">{myStanding.goalsFor}:{myStanding.goalsAgainst}</span>
+                <span className="ml-1 text-xs">({(myStanding.goalsFor ?? 0) - (myStanding.goalsAgainst ?? 0) >= 0 ? "+" : ""}{(myStanding.goalsFor ?? 0) - (myStanding.goalsAgainst ?? 0)})</span>
+              </div>
+              {matchResults && matchResults.form.length > 0 && (
+                <div className="flex items-center justify-center gap-1 pt-1">
+                  {matchResults.form.map((f, i) => (
+                    <span key={i} className={`w-6 h-6 rounded-md text-[10px] flex items-center justify-center font-bold text-white ${
+                      f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
+                    }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
+                  ))}
+                </div>
+              )}
+              <Link href="/dashboard/liga" className="text-xs text-pitch-500 font-heading font-bold hover:underline block text-center pt-1">
+                Zobrazit tabulku →
+              </Link>
+            </div>
+          ) : (
+            <div className="text-center text-muted py-4">Zatím bez zápasů</div>
+          )}
+        </div>
+
+        {/* Zpravodaj */}
+        {news.length > 0 ? (
           <div className="card p-4 sm:p-5">
-            <SectionLabel>Okresní zpravodaj</SectionLabel>
+            <SectionLabel>Zpravodaj</SectionLabel>
             <div className="space-y-2">
               {news.map((article) => {
                 const daysAgo = Math.floor((Date.now() - new Date(article.date).getTime()) / 86400000);
@@ -566,7 +641,7 @@ export default function DashboardPage() {
               <Link href="/dashboard/news" className="text-xs text-pitch-500 font-heading font-bold hover:underline">Celý zpravodaj →</Link>
             </div>
           </div>
-        )}
+        ) : <div />}
       </div>
 
       {/* ═══ Row 4: Top performers — 3 columns ═══ */}
