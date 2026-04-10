@@ -12,7 +12,7 @@ interface MatchEvent {
   teamId: number; description: string; detail?: string;
 }
 
-interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number }
+interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number; squadNumber?: number | null }
 interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[] }
 
 interface MatchDetail {
@@ -24,6 +24,7 @@ interface MatchDetail {
   attendance: number | null; stadium_name: string | null;
   pitch_condition: number | null; weather: string | null;
   home_lineup_data: LineupData | null; away_lineup_data: LineupData | null;
+  player_ratings?: Record<string, number>;
 }
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
@@ -183,8 +184,7 @@ export default function MatchDetailPage() {
                 red: ev.filter((e) => e.type === "card" && e.detail === "red").length,
               };
             };
-            // Sequential number 1..11 for starters, index preserved by sort order
-            let jersey = 0;
+            const ratings = match.player_ratings ?? {};
             return (
             <div key={label} className="card overflow-hidden">
               <div className="px-3 py-2 border-b border-gray-100" style={{ backgroundColor: `color-mix(in srgb, ${color} 10%, white)` }}>
@@ -199,14 +199,15 @@ export default function MatchDetailPage() {
                         {cfg.label}
                       </div>
                       {g.players.map((p) => {
-                        jersey += 1;
                         const s = statsFor(p.name);
-                        const ratingColor = p.rating >= 50 ? "bg-pitch-100 text-pitch-700"
-                          : p.rating >= 30 ? "bg-amber-100 text-amber-700"
-                          : "bg-gray-100 text-gray-600";
+                        const matchRating = ratings[p.id];
+                        const ratingColor = matchRating == null ? "bg-gray-100 text-gray-500"
+                          : matchRating >= 7.5 ? "bg-pitch-100 text-pitch-700"
+                          : matchRating >= 6.5 ? "bg-amber-100 text-amber-700"
+                          : "bg-red-100 text-red-700";
                         return (
                         <div key={p.id} className={`flex items-center gap-2 px-3 py-1.5 border-l-3 ${cfg.border}`}>
-                          <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-[11px] font-heading font-bold flex items-center justify-center tabular-nums">{jersey}</span>
+                          <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-[11px] font-heading font-bold flex items-center justify-center tabular-nums">{p.squadNumber ?? "?"}</span>
                           <span className="flex-1 min-w-0 truncate text-base leading-6">
                             {p.id ? (
                               <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
@@ -224,7 +225,7 @@ export default function MatchDetailPage() {
                             {s.yellow > 0 && <span className="text-xs ml-1 align-middle" title="Žlutá karta">🟨</span>}
                             {s.red > 0 && <span className="text-xs ml-1 align-middle" title="Červená karta">🟥</span>}
                           </span>
-                          <span className={`shrink-0 px-2 py-0.5 rounded-md text-xs font-heading font-bold tabular-nums ${ratingColor}`} title="Hodnocení hráče">ø{p.rating}</span>
+                          <span className={`shrink-0 px-2 py-0.5 rounded-md text-xs font-heading font-bold tabular-nums ${ratingColor}`} title="Hodnocení hráče v zápase">{matchRating != null ? matchRating.toFixed(1) : "—"}</span>
                         </div>
                         );
                       })}
@@ -235,11 +236,10 @@ export default function MatchDetailPage() {
                   <div>
                     <div className="px-3 py-1 bg-gray-100 text-[11px] text-muted font-heading font-bold uppercase tracking-wider">Lavička</div>
                     {data.subs.map((p) => {
-                      jersey += 1;
                       const s = statsFor(p.name);
                       return (
                       <div key={p.id} className="flex items-center gap-2 px-3 py-1 border-l-3 border-l-gray-300 text-muted">
-                        <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-[11px] font-heading font-bold flex items-center justify-center tabular-nums">{jersey}</span>
+                        <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-[11px] font-heading font-bold flex items-center justify-center tabular-nums">{p.squadNumber ?? "?"}</span>
                         <span className="flex-1 min-w-0 truncate leading-6">
                           {p.id ? (
                             <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>

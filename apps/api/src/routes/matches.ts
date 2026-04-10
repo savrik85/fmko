@@ -530,13 +530,44 @@ matchesRouter.get("/matches/:id", async (c) => {
      WHERE m.id = ?`
   ).bind(c.req.param("id")).first<Record<string, unknown>>();
   if (!row) return c.json({ error: "Match not found" }, 404);
+
+  const homeLineup = JSON.parse((row.home_lineup_data as string) ?? "null");
+  const awayLineup = JSON.parse((row.away_lineup_data as string) ?? "null");
+
+  // Merge current squad_number from players table (stored lineup_data
+  // doesn't have it). Match rating is in player_ratings JSON.
+  type LP = { id: string; name: string; position: string; naturalPosition: string; rating: number; squadNumber?: number | null };
+  const collectIds = (ld: { starters: LP[]; subs: LP[] } | null): string[] =>
+    ld ? [...ld.starters, ...ld.subs].map((p) => p.id).filter(Boolean) : [];
+  const allIds = [...collectIds(homeLineup), ...collectIds(awayLineup)];
+  if (allIds.length > 0) {
+    try {
+      const placeholders = allIds.map(() => "?").join(",");
+      const players = await c.env.DB.prepare(
+        `SELECT id, squad_number FROM players WHERE id IN (${placeholders})`
+      ).bind(...allIds).all<{ id: string; squad_number: number | null }>();
+      const byId = new Map(players.results.map((p) => [p.id, p.squad_number]));
+      const merge = (ld: { starters: LP[]; subs: LP[] } | null) => {
+        if (!ld) return;
+        for (const list of [ld.starters, ld.subs]) {
+          for (const p of list) {
+            const num = byId.get(p.id);
+            if (num != null) p.squadNumber = num;
+          }
+        }
+      };
+      merge(homeLineup);
+      merge(awayLineup);
+    } catch (e) { logger.warn({ module: "matches" }, "merge squad numbers", e); }
+  }
+
   return c.json({
     ...row,
     events: JSON.parse((row.events as string) ?? "[]"),
     commentary: JSON.parse((row.commentary as string) ?? "[]"),
     player_ratings: JSON.parse((row.player_ratings as string) ?? "{}"),
-    home_lineup_data: JSON.parse((row.home_lineup_data as string) ?? "null"),
-    away_lineup_data: JSON.parse((row.away_lineup_data as string) ?? "null"),
+    home_lineup_data: homeLineup,
+    away_lineup_data: awayLineup,
   });
 });
 
