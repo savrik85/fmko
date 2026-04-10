@@ -187,8 +187,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══ Row 1: Next match + (Tabulka + Stav kádru) ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* ═══ Row 1: Next match | Tabulka | Stav kádru ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
         {/* Next match — rich preview */}
         <div className="card p-4 sm:p-5">
