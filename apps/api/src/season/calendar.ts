@@ -1,13 +1,32 @@
 /**
  * FMK-52: Season calendar — generátor rozpisu zápasů s reálnými časy.
  *
- * St 20:00 CET — liga/pohár
- * So 15:00 CET — liga
- * Ne 15:00 CET — liga (jen nabitý týden)
+ * St 18:00 Europe/Prague — liga/pohár
+ * So 18:00 Europe/Prague — liga
+ * Ne 18:00 Europe/Prague — liga (jen nabitý týden)
  *
  * 30 kol, 2 zápasy/týden = ~15 týdnů podzim + 15 jaro
  * + zimní přestávka (1 týden) + letní (1-2 týdny)
  */
+
+/**
+ * Nastaví datum na 18:00 Europe/Prague (bere DST v potaz).
+ * Cloudflare Workers běží v UTC, takže setHours() by nastavil UTC čas.
+ * European DST: last Sunday of March → last Sunday of October.
+ */
+function setPrague18(d: Date): void {
+  const y = d.getUTCFullYear();
+  // Poslední neděle v březnu
+  const marchEnd = new Date(Date.UTC(y, 2, 31));
+  const lastSunMarch = new Date(Date.UTC(y, 2, 31 - marchEnd.getUTCDay()));
+  // Poslední neděle v říjnu
+  const octEnd = new Date(Date.UTC(y, 9, 31));
+  const lastSunOct = new Date(Date.UTC(y, 9, 31 - octEnd.getUTCDay()));
+  const isDST = d >= lastSunMarch && d < lastSunOct;
+  // CEST (DST): UTC+2 → 18:00 CEST = 16:00 UTC
+  // CET: UTC+1 → 18:00 CET = 17:00 UTC
+  d.setUTCHours(isDST ? 16 : 17, 0, 0, 0);
+}
 
 export interface CalendarEntry {
   id: string;
@@ -55,10 +74,10 @@ export function generateSeasonCalendar(
 
   // AUTUMN: 8 weeks, 2 rounds per week (St + So)
   for (let week = 0; week < 8 && round <= 15; week++) {
-    // Wednesday 20:00 CET
+    // Wednesday 18:00 Europe/Prague
     const wed = new Date(currentDate);
     wed.setDate(currentDate.getDate() + week * 7);
-    wed.setHours(20, 0, 0, 0);
+    setPrague18(wed);
 
     // Check if this is a cup week (week 5, 8) — still a match slot
     entries.push({
@@ -74,10 +93,10 @@ export function generateSeasonCalendar(
 
     if (round > 15) break;
 
-    // Saturday 15:00 CET
+    // Saturday 18:00 Europe/Prague
     const sat = new Date(wed);
     sat.setDate(wed.getDate() + 3);
-    sat.setHours(15, 0, 0, 0);
+    setPrague18(sat);
 
     entries.push({
       id: crypto.randomUUID(),
@@ -109,7 +128,7 @@ export function generateSeasonCalendar(
   for (let week = 0; week < 8 && round <= 30; week++) {
     const wed = new Date(springStart);
     wed.setDate(springStart.getDate() + week * 7);
-    wed.setHours(20, 0, 0, 0);
+    setPrague18(wed);
 
     entries.push({
       id: crypto.randomUUID(),
@@ -126,7 +145,7 @@ export function generateSeasonCalendar(
 
     const sat = new Date(wed);
     sat.setDate(wed.getDate() + 3);
-    sat.setHours(15, 0, 0, 0);
+    setPrague18(sat);
 
     entries.push({
       id: crypto.randomUUID(),
