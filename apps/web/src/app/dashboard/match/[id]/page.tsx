@@ -207,22 +207,22 @@ export default function MatchDetailPage() {
                         return (
                         <div key={p.id} className={`flex items-center gap-2 px-3 py-1.5 border-l-3 ${cfg.border}`}>
                           <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-[11px] font-heading font-bold flex items-center justify-center tabular-nums">{jersey}</span>
-                          <span className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+                          <span className="flex-1 min-w-0 truncate text-base leading-6">
                             {p.id ? (
-                              <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 transition-colors">{p.name}</Link>
+                              <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
                             ) : (
-                              <span className="font-heading font-bold text-base">{p.name}</span>
+                              <span className="font-heading font-bold">{p.name}</span>
                             )}
                             {p.position !== p.naturalPosition && (
-                              <span className="text-amber-500 text-xs" title={`Přirozená pozice: ${p.naturalPosition}`}>({p.naturalPosition})</span>
+                              <span className="text-amber-500 text-xs ml-1.5" title={`Přirozená pozice: ${p.naturalPosition}`}>({p.naturalPosition})</span>
                             )}
                             {s.goals > 0 && (
-                              <span className="text-sm" title={`${s.goals} gól${s.goals > 1 ? "y" : ""}`}>
+                              <span className="text-sm ml-1.5 align-middle" title={`${s.goals} gól${s.goals > 1 ? "y" : ""}`}>
                                 ⚽{s.goals > 1 ? ` ${s.goals}` : ""}
                               </span>
                             )}
-                            {s.yellow > 0 && <span className="text-xs" title="Žlutá karta">🟨</span>}
-                            {s.red > 0 && <span className="text-xs" title="Červená karta">🟥</span>}
+                            {s.yellow > 0 && <span className="text-xs ml-1 align-middle" title="Žlutá karta">🟨</span>}
+                            {s.red > 0 && <span className="text-xs ml-1 align-middle" title="Červená karta">🟥</span>}
                           </span>
                           <span className={`shrink-0 px-2 py-0.5 rounded-md text-xs font-heading font-bold tabular-nums ${ratingColor}`}>{p.rating}</span>
                         </div>
@@ -240,15 +240,15 @@ export default function MatchDetailPage() {
                       return (
                       <div key={p.id} className="flex items-center gap-2 px-3 py-1 border-l-3 border-l-gray-300 text-muted">
                         <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-[11px] font-heading font-bold flex items-center justify-center tabular-nums">{jersey}</span>
-                        <span className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+                        <span className="flex-1 min-w-0 truncate leading-6">
                           {p.id ? (
                             <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
                           ) : (
                             <span className="font-heading font-bold">{p.name}</span>
                           )}
-                          {s.goals > 0 && <span className="text-sm">⚽{s.goals > 1 ? ` ${s.goals}` : ""}</span>}
-                          {s.yellow > 0 && <span className="text-xs">🟨</span>}
-                          {s.red > 0 && <span className="text-xs">🟥</span>}
+                          {s.goals > 0 && <span className="text-sm ml-1.5 align-middle">⚽{s.goals > 1 ? ` ${s.goals}` : ""}</span>}
+                          {s.yellow > 0 && <span className="text-xs ml-1 align-middle">🟨</span>}
+                          {s.red > 0 && <span className="text-xs ml-1 align-middle">🟥</span>}
                         </span>
                       </div>
                       );
