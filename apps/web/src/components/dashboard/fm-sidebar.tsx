@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/squad", label: "Kádr", icon: "\u{1F465}", group: "club" },
   { href: "/dashboard/training", label: "Tréninky", icon: "\u{1F3CB}", group: "club" },
   { href: "/dashboard/transfers", label: "Přestupy", icon: "\u{1F91D}", group: "club" },
+  { href: "/dashboard/watchlist", label: "Sledovaní", icon: "\u{2B50}", group: "club" },
   { href: "/dashboard/finances", label: "Finance", icon: "\u{1F4B0}", group: "club" },
   { href: "/dashboard/sponsors", label: "Sponzoři", icon: "\u{1F4BC}", group: "club" },
   { href: "/dashboard/equipment", label: "Vybavení", icon: "\u{1F45F}", group: "club" },

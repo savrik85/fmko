@@ -92,6 +92,8 @@ export default function PlayerDetailPage() {
   const [myListing, setMyListing] = useState<{ listingId: string; askingPrice: number } | null>(null);
   const [priceDialogOpen, setPriceDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [isWatched, setIsWatched] = useState(false);
+  const [watchLoading, setWatchLoading] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [profileExtras, setProfileExtras] = useState<{
     personality: Record<string, number>;
@@ -102,9 +104,10 @@ export default function PlayerDetailPage() {
   useEffect(() => {
     if (!teamId) return;
     // First fetch the player to find which team they belong to
-    apiFetch<Player>(`/api/teams/${teamId}/players/${playerId}`)
+    apiFetch<Player & { isWatched?: boolean }>(`/api/teams/${teamId}/players/${playerId}`)
       .then(async (p) => {
         setPlayer(p);
+        setIsWatched(!!p.isWatched);
         const playerOwnerTeamId = p.team_id || teamId;
         const isForeign = playerOwnerTeamId !== teamId;
 
@@ -186,6 +189,26 @@ export default function PlayerDetailPage() {
     }
   };
 
+  const toggleWatch = async () => {
+    if (!teamId || !player || watchLoading) return;
+    setWatchLoading(true);
+    const wasWatched = isWatched;
+    // Optimistic update
+    setIsWatched(!wasWatched);
+    try {
+      if (wasWatched) {
+        await apiFetch(`/api/teams/${teamId}/watchlist/${playerId}`, { method: "DELETE" });
+      } else {
+        await apiFetch(`/api/teams/${teamId}/watchlist/${playerId}`, { method: "POST" });
+      }
+    } catch (e) {
+      console.error("toggle watchlist failed:", e);
+      setIsWatched(wasWatched); // Revert on error
+    } finally {
+      setWatchLoading(false);
+    }
+  };
+
   const releasePlayer = async () => {
     if (!teamId || !player || actionLoading) return;
     const ok = await confirm({
@@ -251,6 +274,15 @@ export default function PlayerDetailPage() {
   const boxBgHover = light ? "hover:bg-black/10" : "hover:bg-white/20";
   const boxLabel = light ? "text-gray-400" : "text-white/50";
 
+  // Injury info (rendered as inline pill on both layouts)
+  const injuryInfo = (player as any).injury as { daysRemaining: number; type?: string } | null;
+  const injuryPill = injuryInfo ? (
+    <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-50 border border-red-300/30 rounded-md px-2 py-0.5 text-[11px] font-heading font-bold whitespace-nowrap">
+      <span>🩹</span>
+      <span>Zraněný · {injuryInfo.daysRemaining} {injuryInfo.daysRemaining === 1 ? "den" : "dní"}</span>
+    </span>
+  ) : null;
+
   return (
     <>
       {/* ═══ Player header ═══ */}
@@ -293,13 +325,8 @@ export default function PlayerDetailPage() {
                     initials={displayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
                   {displayTeam.name}
                 </a>
+                {injuryPill}
               </div>
-              {(player as any).injury && (
-                <div className="mt-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
-                  <span className="text-card-red text-sm">🩹</span>
-                  <span className="text-sm font-heading font-bold text-card-red">Zraněný — {(player as any).injury.daysRemaining} {(player as any).injury.daysRemaining === 1 ? "den" : "dní"} do uzdravení</span>
-                </div>
-              )}
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
               <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>
@@ -353,8 +380,8 @@ export default function PlayerDetailPage() {
                 </div>
               )}
             </div>
-            {/* Řádek 2: pozice, věk, povolání, tým */}
-            <div className="flex items-center gap-2.5 mt-2 flex-wrap">
+            {/* Řádek 2: pozice, věk, povolání, tým, injury pill */}
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
               <PositionBadge position={player.position} />
               <span className={`${txtMuted} text-sm`}>{player.age} let</span>
               <span className={txtSoft}>&middot;</span>
@@ -365,6 +392,7 @@ export default function PlayerDetailPage() {
                   initials={displayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={16} />
                 {displayTeam.name}
               </a>
+              {injuryPill}
             </div>
             {/* Řádek 3: staty přes celou šířku */}
             <div className="flex gap-2 mt-3">
@@ -385,49 +413,51 @@ export default function PlayerDetailPage() {
             </div>
           </div>
 
-          {/* Nabídka tlačítko — pod headerem */}
-          {isForeignHumanPlayer && !offerSent && (
-            <div className="max-w-[1280px] mx-auto mt-3">
-              <button onClick={() => setOfferOpen(!offerOpen)}
-                className={`rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors ${offerOpen ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white/80"}`}>
-                {offerOpen ? "✕ Zavřít" : "🤝 Nabídka"}
-              </button>
-            </div>
-          )}
-
-          {/* Own player actions */}
-          {isOwnPlayer && (
-            <div className="max-w-[1280px] mx-auto mt-3 flex flex-wrap gap-2">
-              {myListing ? (
+          {/* ─── Action row — same styling mobile + desktop ─── */}
+          {(!isOwnPlayer || isOwnPlayer) && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {/* Foreign human: Nabídka */}
+              {isForeignHumanPlayer && !offerSent && (
+                <button onClick={() => setOfferOpen(!offerOpen)}
+                  className={`flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5 ${
+                    offerOpen ? "bg-white/25 text-white" : "bg-white/10 hover:bg-white/20 text-white"
+                  }`}>
+                  {offerOpen ? "✕ Zavřít" : "🤝 Nabídka"}
+                </button>
+              )}
+              {/* Sledovat — for any non-own player */}
+              {!isOwnPlayer && (
+                <button onClick={toggleWatch} disabled={watchLoading}
+                  className={`flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 ${
+                    isWatched ? "bg-gold-400/30 text-white ring-1 ring-gold-300/50" : "bg-white/10 hover:bg-white/20 text-white"
+                  }`}>
+                  {isWatched ? "★ Sleduji" : "☆ Sledovat"}
+                </button>
+              )}
+              {/* Own player actions */}
+              {isOwnPlayer && (myListing ? (
                 <>
-                  <div className="rounded-xl px-4 py-2 bg-gold-500/20 text-white text-sm font-heading font-bold flex items-center gap-2">
+                  <div className="flex-1 sm:flex-initial rounded-xl px-4 py-2 bg-gold-500/20 text-white text-sm font-heading font-bold flex items-center justify-center gap-2">
                     <span>🏷️</span>
                     <span>Na trhu za {myListing.askingPrice.toLocaleString("cs")} Kč</span>
                   </div>
-                  <button
-                    onClick={withdrawFromMarket}
-                    disabled={actionLoading}
-                    className="rounded-xl px-4 py-2 text-sm font-heading font-bold bg-white/10 hover:bg-white/20 text-white/80 transition-colors disabled:opacity-50"
-                  >
+                  <button onClick={withdrawFromMarket} disabled={actionLoading}
+                    className="flex-1 sm:flex-initial min-w-[140px] rounded-xl px-4 py-2 text-sm font-heading font-bold bg-white/10 hover:bg-white/20 text-white transition-colors disabled:opacity-50">
                     ✕ Stáhnout z trhu
                   </button>
                 </>
               ) : (
-                <button
-                  onClick={() => setPriceDialogOpen(true)}
-                  disabled={actionLoading}
-                  className="rounded-xl px-4 py-2 text-sm font-heading font-bold bg-white/10 hover:bg-white/20 text-white/80 transition-colors disabled:opacity-50"
-                >
+                <button onClick={() => setPriceDialogOpen(true)} disabled={actionLoading}
+                  className="flex-1 sm:flex-initial min-w-[140px] rounded-xl px-4 py-2 text-sm font-heading font-bold bg-white/10 hover:bg-white/20 text-white transition-colors disabled:opacity-50">
                   🏷️ Nabídnout na trh
                 </button>
+              ))}
+              {isOwnPlayer && (
+                <button onClick={releasePlayer} disabled={actionLoading}
+                  className="flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold bg-red-500/20 hover:bg-red-500/30 text-white transition-colors disabled:opacity-50">
+                  🗑️ Propustit
+                </button>
               )}
-              <button
-                onClick={releasePlayer}
-                disabled={actionLoading}
-                className="rounded-xl px-4 py-2 text-sm font-heading font-bold bg-red-500/20 hover:bg-red-500/30 text-white transition-colors disabled:opacity-50"
-              >
-                🗑️ Propustit
-              </button>
             </div>
           )}
         </div>

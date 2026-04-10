@@ -366,7 +366,7 @@ teamsRouter.post("/", async (c) => {
       .sort((a, b) => posOrder.indexOf(a.pos) - posOrder.indexOf(b.pos));
     let num = 1;
     for (const { pid } of sorted) {
-      await c.env.DB.prepare("UPDATE players SET squad_number = ? WHERE id = ?").bind(num, pid).run().catch(() => {});
+      await c.env.DB.prepare("UPDATE players SET squad_number = ? WHERE id = ?").bind(num, pid).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
       num++;
     }
   }
@@ -386,7 +386,7 @@ teamsRouter.post("/", async (c) => {
 
   step = "league-setup";
   // Ensure AI user exists
-  await c.env.DB.prepare("INSERT OR IGNORE INTO users (id, email, password_hash) VALUES ('ai', 'ai@system', 'none')").run().catch(() => {});
+  await c.env.DB.prepare("INSERT OR IGNORE INTO users (id, email, password_hash) VALUES ('ai', 'ai@system', 'none')").run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
   const district = village.district as string;
 
   // Get current active season (or create season 1)
@@ -431,23 +431,23 @@ teamsRouter.post("/", async (c) => {
       for (const ap of aiPlayers.results) {
         for (const t of ["relationships", "match_player_stats", "player_stats", "player_contracts", "injuries", "training_log"]) {
           const col = t === "relationships" ? "player_a_id" : "player_id";
-          await c.env.DB.prepare(`DELETE FROM ${t} WHERE ${col} = ?`).bind(ap.id).run().catch(() => {});
-          if (t === "relationships") await c.env.DB.prepare("DELETE FROM relationships WHERE player_b_id = ?").bind(ap.id).run().catch(() => {});
+          await c.env.DB.prepare(`DELETE FROM ${t} WHERE ${col} = ?`).bind(ap.id).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
+          if (t === "relationships") await c.env.DB.prepare("DELETE FROM relationships WHERE player_b_id = ?").bind(ap.id).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
         }
       }
-      await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(teamId).run().catch(() => {});
+      await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
 
       // 2. Move newly generated players + manager from origTeamId → teamId (oldId)
-      await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch(() => {});
-      await c.env.DB.prepare("UPDATE managers SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch(() => {});
+      await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
+      await c.env.DB.prepare("UPDATE managers SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
 
       // Clean old AI equipment/stadium/conversations/messages (human gets fresh start)
       const oldConvIds = await c.env.DB.prepare("SELECT id FROM conversations WHERE team_id = ?").bind(teamId).all().catch(() => ({ results: [] }));
       for (const conv of oldConvIds.results) {
-        await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
+        await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
       }
       for (const t of ["equipment", "stadiums", "conversations", "sponsor_contracts", "transactions"]) {
-        await c.env.DB.prepare(`DELETE FROM ${t} WHERE team_id = ?`).bind(teamId).run().catch(() => {});
+        await c.env.DB.prepare(`DELETE FROM ${t} WHERE team_id = ?`).bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
       }
 
       // Create fresh stadium for the new human player
@@ -464,25 +464,25 @@ teamsRouter.post("/", async (c) => {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).bind(uuid(), teamId, config.capacity, config.pitchCondition, config.pitchType,
           config.changingRooms, config.showers, config.refreshments, config.lighting,
-          config.stands, config.parking, config.fence).run().catch(() => {});
+          config.stands, config.parking, config.fence).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
       }
 
       // Delete the duplicate team row created at line 159
       // First clean any FK references to origTeamId — move sponsor to takeover team, delete rest
-      await c.env.DB.prepare("UPDATE sponsor_contracts SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch(() => {});
-      await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
-      await c.env.DB.prepare("DELETE FROM managers WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
-      await c.env.DB.prepare("DELETE FROM conversations WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
-      await c.env.DB.prepare("DELETE FROM stadiums WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
-      await c.env.DB.prepare("DELETE FROM equipment WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
-      await c.env.DB.prepare("DELETE FROM transactions WHERE team_id = ?").bind(origTeamId).run().catch(() => {});
+      await c.env.DB.prepare("UPDATE sponsor_contracts SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
+      await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
+      await c.env.DB.prepare("DELETE FROM managers WHERE team_id = ?").bind(origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
+      await c.env.DB.prepare("DELETE FROM conversations WHERE team_id = ?").bind(origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
+      await c.env.DB.prepare("DELETE FROM stadiums WHERE team_id = ?").bind(origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
+      await c.env.DB.prepare("DELETE FROM equipment WHERE team_id = ?").bind(origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
+      await c.env.DB.prepare("DELETE FROM transactions WHERE team_id = ?").bind(origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
       await c.env.DB.prepare("DELETE FROM teams WHERE id = ?").bind(origTeamId).run().catch((e) => {
         logger.error({ module: "teams" }, `FAILED to delete duplicate team ${origTeamId}`, e);
       });
 
       // Mark all existing matches as seen
-      await c.env.DB.prepare("UPDATE matches SET home_seen_at = datetime('now') WHERE home_team_id = ? AND status = 'simulated'").bind(teamId).run().catch(() => {});
-      await c.env.DB.prepare("UPDATE matches SET away_seen_at = datetime('now') WHERE away_team_id = ? AND status = 'simulated'").bind(teamId).run().catch(() => {});
+      await c.env.DB.prepare("UPDATE matches SET home_seen_at = datetime('now') WHERE home_team_id = ? AND status = 'simulated'").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
+      await c.env.DB.prepare("UPDATE matches SET away_seen_at = datetime('now') WHERE away_team_id = ? AND status = 'simulated'").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
 
       // Update references from oldId to teamId (if ID changed — shouldn't happen now)
       if (oldId !== teamId) {
@@ -495,9 +495,9 @@ teamsRouter.post("/", async (c) => {
           "UPDATE transactions SET team_id = ? WHERE team_id = ?",
           "UPDATE injuries SET team_id = ? WHERE team_id = ?",
           "UPDATE training_log SET team_id = ? WHERE team_id = ?",
-        ]) { await c.env.DB.prepare(sql).bind(teamId, oldId).run().catch(() => {}); }
+        ]) { await c.env.DB.prepare(sql).bind(teamId, oldId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e)); }
         // Delete old team row if it still exists
-        await c.env.DB.prepare("DELETE FROM teams WHERE id = ? AND id != ?").bind(oldId, teamId).run().catch(() => {});
+        await c.env.DB.prepare("DELETE FROM teams WHERE id = ? AND id != ?").bind(oldId, teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
       }
     } else {
       // Safety net — should never reach here because we checked league fullness at the top.
@@ -511,7 +511,7 @@ teamsRouter.post("/", async (c) => {
 
     // Sync game_date from existing league teams
     const peerDate = await c.env.DB.prepare("SELECT game_date FROM teams WHERE league_id = ? AND game_date IS NOT NULL AND id != ? LIMIT 1")
-      .bind(existingLeague.id, teamId).first<{ game_date: string }>().catch(() => null);
+      .bind(existingLeague.id, teamId).first<{ game_date: string }>().catch((e) => { logger.warn({ module: "teams" }, "db op failed", e); return null; });
     if (peerDate?.game_date) {
       await c.env.DB.prepare("UPDATE teams SET game_date = ? WHERE id = ?").bind(peerDate.game_date, teamId).run();
     }
@@ -599,7 +599,7 @@ teamsRouter.post("/", async (c) => {
 
   step = "create-league";
   // Ensure AI user exists (required for FK on AI team inserts)
-  await c.env.DB.prepare("INSERT OR IGNORE INTO users (id, email, password_hash) VALUES ('ai', 'ai@system', 'none')").run().catch(() => {});
+  await c.env.DB.prepare("INSERT OR IGNORE INTO users (id, email, password_hash) VALUES ('ai', 'ai@system', 'none')").run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
   const leagueId = uuid();
   const LEAGUE_NAMES: Record<string, string> = { 'Praha': 'Přebor Prahy' };
   const leagueName = LEAGUE_NAMES[district] ?? `Okresní přebor ${district}`;
@@ -837,7 +837,7 @@ teamsRouter.get("/:id", async (c) => {
 
   const stadium = await c.env.DB.prepare(
     "SELECT capacity, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1"
-  ).bind(c.req.param("id")).first().catch(() => null);
+  ).bind(c.req.param("id")).first().catch((e) => { logger.warn({ module: "teams" }, "db op failed", e); return null; });
 
   return c.json({
     ...team,
@@ -895,6 +895,12 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
   ).bind(c.req.param("playerId")).first<{ type: string; days_remaining: number }>()
     .catch((e) => { logger.warn({ module: "teams" }, "fetch injury for player detail", e); return null; });
 
+  // Check if this player is on viewing team's watchlist
+  const watched = await c.env.DB.prepare(
+    "SELECT 1 FROM player_watchlist WHERE team_id = ? AND player_id = ? LIMIT 1"
+  ).bind(teamId, c.req.param("playerId")).first<{ 1: number }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "fetch watchlist status", e); return null; });
+
   return c.json({
     ...row,
     isOwn,
@@ -904,6 +910,7 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     lifeContext: lifeContext,
     avatar: JSON.parse(row.avatar as string),
     injury: injury ? { type: injury.type, daysRemaining: injury.days_remaining } : null,
+    isWatched: !!watched,
   });
 });
 
