@@ -142,7 +142,7 @@ export default function SchedulePage() {
           {upcoming.length > 0 && (
             <div className="mb-6">
               <SectionLabel>Nadcházející</SectionLabel>
-              <div className="space-y-3">
+              <div className="space-y-5">
                 {upcoming.map((m) => (
                   <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={lineupEditableIds.has(m.id)} />
                 ))}
@@ -153,7 +153,7 @@ export default function SchedulePage() {
           {played.length > 0 && (
             <div>
               <SectionLabel>Odehrané</SectionLabel>
-              <div className="space-y-3">
+              <div className="space-y-5">
                 {played.map((m) => (
                   <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={false} />
                 ))}
