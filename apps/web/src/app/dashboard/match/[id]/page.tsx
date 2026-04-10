@@ -12,7 +12,7 @@ interface MatchEvent {
   teamId: number; description: string; detail?: string;
 }
 
-interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number }
+interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number; squadNumber?: number | null }
 interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[] }
 
 interface MatchDetail {
@@ -24,6 +24,7 @@ interface MatchDetail {
   attendance: number | null; stadium_name: string | null;
   pitch_condition: number | null; weather: string | null;
   home_lineup_data: LineupData | null; away_lineup_data: LineupData | null;
+  player_ratings?: Record<string, number>;
 }
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
@@ -108,31 +109,31 @@ export default function MatchDetailPage() {
           )}
         </div>
 
-        {/* Score */}
-        <div className="flex items-center px-4 py-4">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <BadgePreview primary={hc} secondary={match.home_secondary || "#FFF"} pattern={(match.home_badge as BadgePattern) || "shield"} initials={ini(match.home_name)} size={44} />
-            <span className="font-heading font-bold text-white text-lg truncate">{match.home_name}</span>
+        {/* Score — mobile: stacked badge+name columns with larger names; desktop: horizontal */}
+        <div className="flex items-start sm:items-center px-3 sm:px-4 py-4">
+          <div className="flex flex-col sm:flex-row items-center sm:gap-3 gap-2 flex-1 min-w-0">
+            <BadgePreview primary={hc} secondary={match.home_secondary || "#FFF"} pattern={(match.home_badge as BadgePattern) || "shield"} initials={ini(match.home_name)} size={40} />
+            <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-left break-words leading-tight">{match.home_name}</span>
           </div>
-          <div className="text-center shrink-0 px-6">
-            <div className="font-heading font-[800] text-6xl tabular-nums leading-none" style={{ textShadow: "0 0 10px rgba(255,255,255,0.2)" }}>
+          <div className="text-center shrink-0 px-3 sm:px-6">
+            <div className="font-heading font-[800] text-5xl sm:text-6xl tabular-nums leading-none" style={{ textShadow: "0 0 10px rgba(255,255,255,0.2)" }}>
               <span style={{ color: `color-mix(in srgb, ${hc} 60%, white)` }}>{match.home_score}</span>
-              <span className="text-white/20 mx-3">:</span>
+              <span className="text-white/20 mx-2 sm:mx-3">:</span>
               <span style={{ color: `color-mix(in srgb, ${ac} 60%, white)` }}>{match.away_score}</span>
             </div>
             <div className="flex items-center justify-center gap-1.5 mt-1.5">
-              <span className="text-white/40 text-sm font-heading">Konec</span>
-              {match.round && <span className="text-white/25 text-sm font-heading">· {match.round}. kolo</span>}
+              <span className="text-white/40 text-xs sm:text-sm font-heading">Konec</span>
+              {match.round && <span className="text-white/25 text-xs sm:text-sm font-heading">· {match.round}. kolo</span>}
             </div>
           </div>
-          <div className="flex items-center gap-3 flex-1 min-w-0 justify-end">
-            <span className="font-heading font-bold text-white text-lg truncate">{match.away_name}</span>
-            <BadgePreview primary={ac} secondary={match.away_secondary || "#FFF"} pattern={(match.away_badge as BadgePattern) || "shield"} initials={ini(match.away_name)} size={44} />
+          <div className="flex flex-col sm:flex-row items-center sm:gap-3 gap-2 flex-1 min-w-0 sm:justify-end">
+            <BadgePreview primary={ac} secondary={match.away_secondary || "#FFF"} pattern={(match.away_badge as BadgePattern) || "shield"} initials={ini(match.away_name)} size={40} />
+            <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-right break-words leading-tight sm:order-first">{match.away_name}</span>
           </div>
         </div>
 
-        {/* Match info bar */}
-        <div className="flex items-center justify-center gap-5 px-4 py-2 text-white/50 text-sm font-heading" style={{ background: "#060d06" }}>
+        {/* Match info bar — wrap on mobile */}
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4 py-2 text-white/50 text-xs sm:text-sm font-heading" style={{ background: "#060d06" }}>
           {match.stadium_name && <span>{match.stadium_name}</span>}
           {match.attendance != null && <span>{match.attendance} diváků</span>}
           {match.pitch_condition != null && (
@@ -152,13 +153,13 @@ export default function MatchDetailPage() {
         </div>
       </div>
 
-      {/* ═══ LINEUPS ═══ */}
+      {/* ═══ LINEUPS — mobile: stacked, desktop: 2 columns ═══ */}
       {(match.home_lineup_data || match.away_lineup_data) && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
-            { label: match.home_name, data: match.home_lineup_data, color: hc },
-            { label: match.away_name, data: match.away_lineup_data, color: ac },
-          ].map(({ label, data, color }) => {
+            { label: match.home_name, data: match.home_lineup_data, color: hc, teamId: 1 },
+            { label: match.away_name, data: match.away_lineup_data, color: ac, teamId: 2 },
+          ].map(({ label, data, color, teamId }) => {
             if (!data) return null;
             const posOrder = { GK: 0, DEF: 1, MID: 2, FWD: 3 } as Record<string, number>;
             const sorted = [...data.starters].sort((a, b) => (posOrder[a.position] ?? 9) - (posOrder[b.position] ?? 9));
@@ -174,6 +175,24 @@ export default function MatchDetailPage() {
               if (last && last.pos === p.position) { last.players.push(p); }
               else { groups.push({ pos: p.position, players: [p] }); }
             }
+            // Per-player stats from events (match by name + teamId)
+            const statsFor = (name: string) => {
+              const ev = match.events.filter((e) => e.teamId === teamId && e.playerName === name);
+              // Sub IN: this player IS the sub (playerName matches and event is substitution)
+              const subInEvent = ev.find((e) => e.type === "substitution");
+              // Sub OUT: another sub event mentions "za {name}" in description
+              const subOutEvent = match.events.find((e) =>
+                e.teamId === teamId && e.type === "substitution" && e.description.includes(`za ${name}`)
+              );
+              return {
+                goals: ev.filter((e) => e.type === "goal").length,
+                yellow: ev.filter((e) => e.type === "card" && e.detail !== "red").length,
+                red: ev.filter((e) => e.type === "card" && e.detail === "red").length,
+                subInMin: subInEvent?.minute ?? null,
+                subOutMin: subOutEvent?.minute ?? null,
+              };
+            };
+            const ratings = match.player_ratings ?? {};
             return (
             <div key={label} className="card overflow-hidden">
               <div className="px-3 py-2 border-b border-gray-100" style={{ backgroundColor: `color-mix(in srgb, ${color} 10%, white)` }}>
@@ -187,40 +206,71 @@ export default function MatchDetailPage() {
                       <div className={`px-3 py-1 ${cfg.bg} ${cfg.text} text-[11px] font-heading font-bold uppercase tracking-wider`}>
                         {cfg.label}
                       </div>
-                      {g.players.map((p) => (
+                      {g.players.map((p) => {
+                        const s = statsFor(p.name);
+                        const matchRating = ratings[p.id];
+                        const ratingColor = matchRating == null ? "bg-gray-100 text-gray-500"
+                          : matchRating >= 7.5 ? "bg-pitch-100 text-pitch-700"
+                          : matchRating >= 6.5 ? "bg-amber-100 text-amber-700"
+                          : "bg-red-100 text-red-700";
+                        return (
                         <div key={p.id} className={`flex items-center gap-2 px-3 py-1.5 border-l-3 ${cfg.border}`}>
-                          <span className="shrink-0"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></span>
-                          <span className="flex-1 min-w-0 truncate">
+                          <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-[11px] font-heading font-bold flex items-center justify-center tabular-nums">{p.squadNumber ?? "?"}</span>
+                          <span className="flex-1 min-w-0 truncate text-base leading-6">
                             {p.id ? (
-                              <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 transition-colors">{p.name}</Link>
+                              <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
                             ) : (
-                              <span className="font-heading font-bold text-base">{p.name}</span>
+                              <span className="font-heading font-bold">{p.name}</span>
                             )}
                             {p.position !== p.naturalPosition && (
                               <span className="text-amber-500 text-xs ml-1.5" title={`Přirozená pozice: ${p.naturalPosition}`}>({p.naturalPosition})</span>
                             )}
+                            {s.goals > 0 && (
+                              <span className="text-sm ml-1.5 align-middle" title={`${s.goals} gól${s.goals > 1 ? "y" : ""}`}>
+                                ⚽{s.goals > 1 ? ` ${s.goals}` : ""}
+                              </span>
+                            )}
+                            {s.yellow > 0 && <span className="text-xs ml-1 align-middle" title="Žlutá karta">🟨</span>}
+                            {s.red > 0 && <span className="text-xs ml-1 align-middle" title="Červená karta">🟥</span>}
+                            {s.subOutMin != null && (
+                              <span className="text-[11px] ml-1.5 align-middle text-red-600 font-heading font-bold inline-flex items-center gap-0.5" title={`Vystřídán v ${s.subOutMin}. minutě`}>
+                                <span>↑</span><span className="tabular-nums">{s.subOutMin}&apos;</span>
+                              </span>
+                            )}
                           </span>
-                          <span className="text-sm text-muted tabular-nums shrink-0">{p.rating}</span>
+                          <span className={`shrink-0 px-2 py-0.5 rounded-md text-xs font-heading font-bold tabular-nums ${ratingColor}`} title="Hodnocení hráče v zápase">{matchRating != null ? matchRating.toFixed(1) : "—"}</span>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
                 })}
                 {data.subs.length > 0 && (
                   <div>
                     <div className="px-3 py-1 bg-gray-100 text-[11px] text-muted font-heading font-bold uppercase tracking-wider">Lavička</div>
-                    {data.subs.map((p) => (
+                    {data.subs.map((p) => {
+                      const s = statsFor(p.name);
+                      return (
                       <div key={p.id} className="flex items-center gap-2 px-3 py-1 border-l-3 border-l-gray-300 text-muted">
-                        <span className="shrink-0"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></span>
-                        <span className="flex-1 min-w-0 truncate">
+                        <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-[11px] font-heading font-bold flex items-center justify-center tabular-nums">{p.squadNumber ?? "?"}</span>
+                        <span className="flex-1 min-w-0 truncate leading-6">
                           {p.id ? (
                             <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
                           ) : (
                             <span className="font-heading font-bold">{p.name}</span>
                           )}
+                          {s.subInMin != null && (
+                            <span className="text-[11px] ml-1.5 align-middle text-pitch-600 font-heading font-bold inline-flex items-center gap-0.5" title={`Nastoupil v ${s.subInMin}. minutě`}>
+                              <span>↓</span><span className="tabular-nums">{s.subInMin}&apos;</span>
+                            </span>
+                          )}
+                          {s.goals > 0 && <span className="text-sm ml-1.5 align-middle">⚽{s.goals > 1 ? ` ${s.goals}` : ""}</span>}
+                          {s.yellow > 0 && <span className="text-xs ml-1 align-middle">🟨</span>}
+                          {s.red > 0 && <span className="text-xs ml-1 align-middle">🟥</span>}
                         </span>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -304,10 +354,22 @@ export default function MatchDetailPage() {
             <span className="text-sm font-heading font-bold text-pitch-500">{showCommentary ? "Skrýt" : "Zobrazit"}</span>
           </button>
           {showCommentary && (
-            <div className="px-4 sm:px-5 pb-4 space-y-1.5 max-h-[500px] overflow-y-auto border-t border-gray-100 pt-3">
-              {match.commentary.map((line, i) => (
-                <p key={i} className="text-sm text-ink leading-relaxed">{line}</p>
-              ))}
+            <div className="max-h-[500px] overflow-y-auto border-t border-gray-100 divide-y divide-gray-50">
+              {match.commentary.map((line, i) => {
+                const m = line.match(/^(\d+)'\s*[—–-]\s*(.+)$/);
+                const minute = m?.[1];
+                const text = m?.[2] ?? line;
+                return (
+                  <div key={i} className="flex items-start gap-3 px-4 sm:px-5 py-2.5 hover:bg-gray-50/50 transition-colors">
+                    {minute && (
+                      <span className="shrink-0 min-w-[2.25rem] text-center inline-flex items-center justify-center h-6 px-1.5 rounded-md bg-pitch-50 text-pitch-700 text-xs font-heading font-bold tabular-nums">
+                        {minute}&apos;
+                      </span>
+                    )}
+                    <span className="text-sm text-ink leading-relaxed flex-1">{text}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
