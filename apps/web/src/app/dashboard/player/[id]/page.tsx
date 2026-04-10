@@ -232,7 +232,9 @@ export default function PlayerDetailPage() {
   const nextPlayer = allPlayers.length > 1 ? allPlayers[(currentIndex + 1) % allPlayers.length] : null;
 
   const isOwnPlayer = player?.team_id === teamId;
+  const isLoanedToUs = isOwnPlayer && !!player?.loan_from_team_id;
   const isForeignHumanPlayer = !isOwnPlayer && playerTeam && playerTeam.user_id !== "ai";
+  const canSendOffer = isForeignHumanPlayer || isLoanedToUs;
 
   async function sendOffer() {
     if (!teamId || !player || offerSending) return;
@@ -414,52 +416,71 @@ export default function PlayerDetailPage() {
           </div>
 
           {/* ─── Action row — same styling mobile + desktop ─── */}
-          {(!isOwnPlayer || isOwnPlayer) && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {/* Foreign human: Nabídka */}
-              {isForeignHumanPlayer && !offerSent && (
-                <button onClick={() => setOfferOpen(!offerOpen)}
-                  className={`flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5 ${
-                    offerOpen ? "bg-white/25 text-white" : "bg-white/10 hover:bg-white/20 text-white"
-                  }`}>
-                  {offerOpen ? "✕ Zavřít" : "🤝 Nabídka"}
-                </button>
-              )}
-              {/* Sledovat — for any non-own player */}
-              {!isOwnPlayer && (
-                <button onClick={toggleWatch} disabled={watchLoading}
-                  className={`flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 ${
-                    isWatched ? "bg-gold-400/30 text-white ring-1 ring-gold-300/50" : "bg-white/10 hover:bg-white/20 text-white"
-                  }`}>
-                  {isWatched ? "★ Sleduji" : "☆ Sledovat"}
-                </button>
-              )}
-              {/* Own player actions */}
-              {isOwnPlayer && (myListing ? (
-                <>
-                  <div className="flex-1 sm:flex-initial rounded-xl px-4 py-2 bg-gold-500/20 text-white text-sm font-heading font-bold flex items-center justify-center gap-2">
-                    <span>🏷️</span>
-                    <span>Na trhu za {myListing.askingPrice.toLocaleString("cs")} Kč</span>
-                  </div>
-                  <button onClick={withdrawFromMarket} disabled={actionLoading}
-                    className="flex-1 sm:flex-initial min-w-[140px] rounded-xl px-4 py-2 text-sm font-heading font-bold bg-white/10 hover:bg-white/20 text-white transition-colors disabled:opacity-50">
-                    ✕ Stáhnout z trhu
-                  </button>
-                </>
-              ) : (
-                <button onClick={() => setPriceDialogOpen(true)} disabled={actionLoading}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {/* Nabídka / Odkoupit */}
+            {canSendOffer && !offerSent && (
+              <button onClick={() => { if (isLoanedToUs) setOfferType("transfer"); setOfferOpen(!offerOpen); }}
+                className={`flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5 ${
+                  offerOpen ? "bg-white/25 text-white" : "bg-white/10 hover:bg-white/20 text-white"
+                }`}>
+                {offerOpen ? "✕ Zavřít" : isLoanedToUs ? "💰 Odkoupit" : "🤝 Nabídka"}
+              </button>
+            )}
+            {/* Ukončit hostování — jen pokud je hráč u nás na hostování */}
+            {isLoanedToUs && (
+              <button onClick={async () => {
+                if (!teamId || !player) return;
+                const ok = await confirm({
+                  title: "Ukončit hostování?",
+                  description: `${player.first_name} ${player.last_name} se ihned vrátí do původního klubu.`,
+                  confirmLabel: "Ukončit",
+                });
+                if (!ok) return;
+                try {
+                  await apiFetch(`/api/teams/${teamId}/loans/${player.id}/terminate`, { method: "POST" });
+                  router.push("/dashboard/transfers");
+                } catch (e) {
+                  console.error("terminate loan:", e);
+                }
+              }}
+                className="flex-1 sm:flex-initial min-w-[140px] rounded-xl px-4 py-2 text-sm font-heading font-bold bg-red-500/20 hover:bg-red-500/30 text-white transition-colors">
+                ✕ Ukončit hostování
+              </button>
+            )}
+            {/* Sledovat — for any non-own player */}
+            {!isOwnPlayer && (
+              <button onClick={toggleWatch} disabled={watchLoading}
+                className={`flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 ${
+                  isWatched ? "bg-gold-400/30 text-white ring-1 ring-gold-300/50" : "bg-white/10 hover:bg-white/20 text-white"
+                }`}>
+                {isWatched ? "★ Sleduji" : "☆ Sledovat"}
+              </button>
+            )}
+            {/* Own player actions — ne pro hostující */}
+            {isOwnPlayer && !isLoanedToUs && (myListing ? (
+              <>
+                <div className="flex-1 sm:flex-initial rounded-xl px-4 py-2 bg-gold-500/20 text-white text-sm font-heading font-bold flex items-center justify-center gap-2">
+                  <span>🏷️</span>
+                  <span>Na trhu za {myListing.askingPrice.toLocaleString("cs")} Kč</span>
+                </div>
+                <button onClick={withdrawFromMarket} disabled={actionLoading}
                   className="flex-1 sm:flex-initial min-w-[140px] rounded-xl px-4 py-2 text-sm font-heading font-bold bg-white/10 hover:bg-white/20 text-white transition-colors disabled:opacity-50">
-                  🏷️ Nabídnout na trh
+                  ✕ Stáhnout z trhu
                 </button>
-              ))}
-              {isOwnPlayer && (
-                <button onClick={releasePlayer} disabled={actionLoading}
-                  className="flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold bg-red-500/20 hover:bg-red-500/30 text-white transition-colors disabled:opacity-50">
-                  🗑️ Propustit
-                </button>
-              )}
-            </div>
-          )}
+              </>
+            ) : (
+              <button onClick={() => setPriceDialogOpen(true)} disabled={actionLoading}
+                className="flex-1 sm:flex-initial min-w-[140px] rounded-xl px-4 py-2 text-sm font-heading font-bold bg-white/10 hover:bg-white/20 text-white transition-colors disabled:opacity-50">
+                🏷️ Nabídnout na trh
+              </button>
+            ))}
+            {isOwnPlayer && !isLoanedToUs && (
+              <button onClick={releasePlayer} disabled={actionLoading}
+                className="flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold bg-red-500/20 hover:bg-red-500/30 text-white transition-colors disabled:opacity-50">
+                🗑️ Propustit
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Transfer offer inline below hero — same banner bg */}
@@ -471,21 +492,28 @@ export default function PlayerDetailPage() {
         {offerOpen && (
           <div className="max-w-[1280px] mx-auto mt-2 px-5 sm:px-8 pb-2">
             <div className="bg-white/10 backdrop-blur rounded-xl p-4 space-y-3">
-              {/* Type toggle */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setOfferType("transfer")}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "transfer" ? "bg-white/20 text-white" : "bg-white/5 text-white/50 hover:text-white/80"}`}
-                >
-                  Trvalý přestup
-                </button>
-                <button
-                  onClick={() => setOfferType("loan")}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "loan" ? "bg-white/20 text-white" : "bg-white/5 text-white/50 hover:text-white/80"}`}
-                >
-                  Hostování
-                </button>
-              </div>
+              {isLoanedToUs && (
+                <div className="text-white/80 text-xs font-heading">
+                  Nabídka půjde původnímu klubu. Pokud bude akceptována, hráč u nás zůstane natrvalo.
+                </div>
+              )}
+              {/* Type toggle — skryté u buyout (jen trvalý přestup) */}
+              {!isLoanedToUs && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setOfferType("transfer")}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "transfer" ? "bg-white/20 text-white" : "bg-white/5 text-white/50 hover:text-white/80"}`}
+                  >
+                    Trvalý přestup
+                  </button>
+                  <button
+                    onClick={() => setOfferType("loan")}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "loan" ? "bg-white/20 text-white" : "bg-white/5 text-white/50 hover:text-white/80"}`}
+                  >
+                    Hostování
+                  </button>
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
                 <div className="flex-1 min-w-0">
