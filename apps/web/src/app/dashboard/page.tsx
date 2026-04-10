@@ -213,8 +213,20 @@ export default function DashboardPage() {
               <div className="overflow-hidden rounded-xl border border-gray-100">
                 {/* Dark header — kolo + badges + jména */}
                 <div className="bg-gradient-to-b from-[#1e2d1e] to-[#2a3f2a] px-4 py-5 text-white">
-                  <div className="text-center mb-4">
+                  <div className="text-center mb-4 flex items-center justify-center gap-2">
                     <span className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40">{nextMatch.round}. kolo</span>
+                    {(() => {
+                      if (!nextMatch.scheduledAt || !gameDate) return null;
+                      const matchDate = new Date(nextMatch.scheduledAt);
+                      const daysUntil = Math.max(0, Math.round((matchDate.getTime() - gameDate.getTime()) / 86400000));
+                      const label = daysUntil === 0 ? "dnes!" : daysUntil === 1 ? "zítra" : `za ${daysUntil} dní`;
+                      return (
+                        <>
+                          <span className="text-white/20">•</span>
+                          <span className={`text-[10px] font-heading font-bold uppercase tracking-widest ${daysUntil === 0 ? "text-pitch-400" : "text-white/60"}`}>{label}</span>
+                        </>
+                      );
+                    })()}
                   </div>
                   <div className="flex items-start gap-3">
                     {/* Domácí */}
