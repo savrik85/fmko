@@ -340,7 +340,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Right column: Tabulka + Stav kádru stacked */}
+        {/* Col 2: Tabulka + Trenér+Finance */}
         <div className="space-y-5">
         <div className="card p-4 sm:p-5">
           <SectionLabel>Tabulka</SectionLabel>
@@ -388,8 +388,10 @@ export default function DashboardPage() {
             <div className="text-center text-muted py-4">Žádná data</div>
           )}
         </div>
+        </div>
 
-        {/* Squad health — rozšířený */}
+        {/* Col 3: Stav kádru + Poslední zápasy */}
+        <div className="space-y-5">
         <div className="card p-4 sm:p-5">
           <SectionLabel>Stav kádru</SectionLabel>
           <div className="space-y-2">
@@ -453,10 +455,10 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══ Row 2: Trenér + Finance + Poslední zápasy ═══ */}
+      {/* ═══ Row 2: Trenér+Finance | Poslední zápasy | Zpravodaj ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        {/* Manager */}
+        {/* Trenér + Finance */}
         <div className="card p-4 sm:p-5">
           <SectionLabel>Trenér</SectionLabel>
           {manager ? (
@@ -542,10 +544,6 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* ═══ Row 3: Zpravodaj ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {news.length > 0 && (
           <div className="card p-4 sm:p-5">
             <SectionLabel>Okresní zpravodaj</SectionLabel>
