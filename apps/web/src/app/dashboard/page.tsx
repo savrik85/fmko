@@ -338,8 +338,8 @@ export default function DashboardPage() {
         </div>
 
         {/* Col 2: Tabulka + Trenér+Finance */}
-        <div className="space-y-5">
-        <div className="card p-4 sm:p-5">
+        <div className="flex flex-col gap-5">
+        <div className="card p-4 sm:p-5 flex-1">
           <SectionLabel>Tabulka</SectionLabel>
           {standings.length > 0 ? (
             <div className="overflow-x-auto -mx-4 sm:-mx-5">
@@ -358,14 +358,14 @@ export default function DashboardPage() {
                 <tbody>
                   {standings.slice(0, 8).map((s) => (
                     <tr key={s.teamId ?? s.pos} className={`border-b border-gray-50 ${s.isPlayer ? "bg-pitch-50/50 font-bold" : ""}`}>
-                      <td className="py-1 pl-3 sm:pl-5 pr-1 tabular-nums text-muted text-xs">{s.pos}</td>
-                      <td className="py-1 pr-1">
+                      <td className="py-1 pl-3 sm:pl-5 pr-1 tabular-nums text-muted text-xs align-top pt-2">{s.pos}</td>
+                      <td className="py-1 pr-1 align-top pt-2">
                         {s.teamId ? (
-                          <Link href={`/dashboard/team/${s.teamId}`} className={`text-xs truncate block hover:text-pitch-500 transition-colors ${s.isPlayer ? "font-heading font-bold" : ""}`}>
+                          <Link href={`/dashboard/team/${s.teamId}`} className={`text-xs hover:text-pitch-500 transition-colors leading-tight ${s.isPlayer ? "font-heading font-bold" : ""}`}>
                             {s.team}
                           </Link>
                         ) : (
-                          <span className={`text-xs truncate block ${s.isPlayer ? "font-heading font-bold" : ""}`}>{s.team}</span>
+                          <span className={`text-xs leading-tight ${s.isPlayer ? "font-heading font-bold" : ""}`}>{s.team}</span>
                         )}
                       </td>
                       <td className="py-1 px-1 text-center tabular-nums text-xs">{s.played}</td>
@@ -428,8 +428,8 @@ export default function DashboardPage() {
         </div>
 
         {/* Col 3: Stav kádru + Poslední zápasy */}
-        <div className="space-y-5">
-        <div className="card p-4 sm:p-5">
+        <div className="flex flex-col gap-5">
+        <div className="card p-4 sm:p-5 flex-1">
           <SectionLabel>Stav kádru</SectionLabel>
           <div className="space-y-2">
             <div className="grid grid-cols-3 gap-2">
