@@ -550,12 +550,33 @@ export default function TeamPage() {
         {/* Card list — always for foreign team, mobile for own team */}
         <div className={`flex flex-col gap-2 ${isOwnTeam ? "md:hidden" : ""}`}>
           {sorted.map((p) => {
-            // For foreign teams: 4 key skills rounded to nearest 5
-            const speed = roundTo5(p.skills?.speed ?? 0);
-            const technique = roundTo5(p.skills?.technique ?? 0);
-            const shooting = roundTo5(p.skills?.shooting ?? 0);
-            const defense = roundTo5(p.skills?.defense ?? 0);
-            const ownRating = roundTo5(p.overall_rating);
+            // Position-specific key skills, rounded to nearest 5
+            const pos = p.position;
+            type AttrKey = "speed" | "technique" | "shooting" | "passing" | "heading" | "defense" | "goalkeeping";
+            const attrSpec: Array<{ key: AttrKey; label: string }> =
+              pos === "GK" ? [
+                { key: "goalkeeping", label: "Brn" },
+                { key: "defense", label: "Obr" },
+                { key: "heading", label: "Hlv" },
+                { key: "passing", label: "Při" },
+              ] : pos === "DEF" ? [
+                { key: "defense", label: "Obr" },
+                { key: "heading", label: "Hlv" },
+                { key: "speed", label: "Rch" },
+                { key: "passing", label: "Při" },
+              ] : pos === "MID" ? [
+                { key: "technique", label: "Tch" },
+                { key: "passing", label: "Při" },
+                { key: "shooting", label: "Stř" },
+                { key: "speed", label: "Rch" },
+              ] : [
+                { key: "shooting", label: "Stř" },
+                { key: "speed", label: "Rch" },
+                { key: "technique", label: "Tch" },
+                { key: "heading", label: "Hlv" },
+              ];
+            const attrs = attrSpec.map((a) => ({ ...a, value: roundTo5(p.skills?.[a.key] ?? 0) }));
+            const ratingValue = p.overall_rating;
             return (
               <div key={p.id}
                 onClick={() => router.push(`/dashboard/player/${p.id}`)}
@@ -575,16 +596,15 @@ export default function TeamPage() {
                     {p.nickname && <span className="text-gold-500 truncate">&bdquo;{p.nickname}&ldquo;</span>}
                   </div>
                 </div>
-                {/* Rounded attributes (right side) */}
+                {/* Position-specific rounded attributes + exact overall rating */}
                 <div className="shrink-0 flex items-center gap-1">
                   <div className="hidden min-[480px]:grid grid-cols-4 gap-0.5 text-[10px] font-heading font-bold">
-                    <span className={`w-6 text-center py-0.5 rounded ${attrColor(speed)}`} title="Rychlost">{speed}</span>
-                    <span className={`w-6 text-center py-0.5 rounded ${attrColor(technique)}`} title="Technika">{technique}</span>
-                    <span className={`w-6 text-center py-0.5 rounded ${attrColor(shooting)}`} title="Střelba">{shooting}</span>
-                    <span className={`w-6 text-center py-0.5 rounded ${attrColor(defense)}`} title="Obrana">{defense}</span>
+                    {attrs.map((a) => (
+                      <span key={a.key} className={`w-6 text-center py-0.5 rounded ${attrColor(a.value)}`} title={a.label}>{a.value}</span>
+                    ))}
                   </div>
                   <span className="px-2 py-1 rounded-lg font-heading font-bold text-sm tabular-nums text-white ml-1" style={{ backgroundColor: color }}>
-                    {ownRating}
+                    {ratingValue}
                   </span>
                 </div>
               </div>
