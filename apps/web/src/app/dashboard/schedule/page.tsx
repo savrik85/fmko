@@ -250,6 +250,10 @@ function MatchRow({ match: m, myTeamId }: { match: ScheduleMatch; myTeamId: stri
           </span>
         )}
       </div>
+
+      {isPlayed && (
+        <div className="shrink-0 text-muted text-sm font-heading" aria-hidden="true">→</div>
+      )}
     </div>
   );
 
