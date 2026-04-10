@@ -1295,7 +1295,7 @@ export default function TransfersPage() {
                         {o.message && <div className="text-xs text-muted mt-1 italic">&ldquo;{o.message}&rdquo;</div>}
                         {o.status === "countered" && <div className="text-xs text-gold-600 mt-1">Protinabídka: {formatCZK(o.counter_amount!)}</div>}
                       </div>
-                      <div className="flex gap-2 shrink-0">
+                      <div className="flex flex-wrap gap-2 shrink-0 justify-end">
                         <button onClick={async () => {
                           const amount = o.counter_amount ?? o.offer_amount;
                           const isCrossLeague = myLeagueId && (o as any).from_league_id && (o as any).from_league_id !== myLeagueId;
@@ -1310,6 +1310,27 @@ export default function TransfersPage() {
                         }} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                           Přijmout
                         </button>
+                        {o.status !== "countered" && (
+                          <button onClick={() => {
+                            setPriceDialog({
+                              title: `Protinabídka za ${o.first_name} ${o.last_name}`,
+                              description: `${o.from_team_name} nabízí ${formatCZK(o.offer_amount)}. Zadej částku, za kterou jsi ochotný hráče pustit.`,
+                              defaultPrice: Math.round(o.offer_amount * 1.25),
+                              onConfirm: async (price) => {
+                                if (!teamId) return;
+                                await apiFetch(`/api/teams/${teamId}/offers/${o.id}/counter`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ amount: price }),
+                                }).catch((e) => console.error("counter offer:", e));
+                                setPriceDialog(null);
+                                await refresh();
+                              },
+                            });
+                          }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
+                            Protinabídka
+                          </button>
+                        )}
                         <button onClick={async () => {
                           if (!teamId) return;
                           await apiFetch(`/api/teams/${teamId}/offers/${o.id}/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch((e) => console.error("Transfer action failed:", e));
@@ -1407,7 +1428,7 @@ export default function TransfersPage() {
               <SectionLabel>Na hostování (příchozí)</SectionLabel>
               <div className="space-y-2">
                 {loanedIn.map((p) => (
-                  <div key={p.id} className="card p-3 flex items-center gap-3">
+                  <div key={p.id} className="card p-3 flex items-center gap-3 flex-wrap">
                     <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-sm hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
                       {p.first_name} {p.last_name}
                     </Link>
@@ -1416,6 +1437,22 @@ export default function TransfersPage() {
                     <span className="ml-auto text-xs text-yellow-600 font-heading font-bold">
                       do {new Date(p.loan_until).toLocaleDateString("cs")}
                     </span>
+                    <button
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: "Ukončit hostování?",
+                          description: `${p.first_name} ${p.last_name} se ihned vrátí do ${p.owner_team_name}.`,
+                          confirmLabel: "Ukončit",
+                        });
+                        if (!ok || !teamId) return;
+                        await apiFetch(`/api/teams/${teamId}/loans/${p.id}/terminate`, { method: "POST" })
+                          .catch((e) => console.error("terminate loan:", e));
+                        await refresh();
+                      }}
+                      className="shrink-0 py-1 px-3 rounded-lg text-xs font-heading font-bold bg-card-red/10 text-card-red hover:bg-card-red/20 transition-colors"
+                    >
+                      Ukončit
+                    </button>
                   </div>
                 ))}
               </div>

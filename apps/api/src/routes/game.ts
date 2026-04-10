@@ -3208,9 +3208,21 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   const body = await c.req.json<{ playerId: string; amount: number; message?: string; offerType?: "transfer" | "loan"; loanDuration?: number }>();
   const player = await c.env.DB.prepare("SELECT p.*, t.user_id FROM players p JOIN teams t ON p.team_id = t.id WHERE p.id = ?").bind(body.playerId).first<Record<string, unknown>>();
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
-  if (player.team_id === teamId) return c.json({ error: "Nemůžeš nabídnout na vlastního hráče" }, 400);
-  if (player.user_id === "ai") return c.json({ error: "Nabídky lze posílat jen lidským týmům" }, 400);
-  if (player.loan_from_team_id) return c.json({ error: "Hráč je již na hostování" }, 400);
+
+  // Buyout případ: hráč je u nás na hostování a chceme ho odkoupit od původního klubu
+  const isBuyout = player.team_id === teamId && !!player.loan_from_team_id;
+  let targetOwnerId = player.team_id as string;
+  if (isBuyout) {
+    targetOwnerId = player.loan_from_team_id as string;
+    if (body.offerType === "loan") return c.json({ error: "Na hostujícího hráče lze poslat jen trvalý odkup" }, 400);
+  } else {
+    if (player.team_id === teamId) return c.json({ error: "Nemůžeš nabídnout na vlastního hráče" }, 400);
+    if (player.loan_from_team_id) return c.json({ error: "Hráč je již na hostování" }, 400);
+  }
+
+  // Owner user check — only human teams can receive offers
+  const ownerTeam = await c.env.DB.prepare("SELECT user_id FROM teams WHERE id = ?").bind(targetOwnerId).first<{ user_id: string }>();
+  if (!ownerTeam || ownerTeam.user_id === "ai") return c.json({ error: "Nabídky lze posílat jen lidským týmům" }, 400);
 
   // Budget check — nelze nabídnout víc než máme
   if (body.amount > 0) {
@@ -3229,17 +3241,21 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   expiresAt.setDate(expiresAt.getDate() + 7);
   const id = crypto.randomUUID();
   await c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, body.playerId, teamId, player.team_id, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration).run();
+    .bind(id, body.playerId, teamId, targetOwnerId, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration).run();
 
-  // SMS to the player's team about the incoming offer
+  // SMS to the owner team about the incoming offer
   const buyerTeam = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
   const pName = `${player.first_name} ${player.last_name}`;
-  if (offerType === "loan") {
-    await sendPhoneSMS(c.env.DB, player.team_id as string, "Sportovní ředitel", "Sportovní ředitel",
+  if (isBuyout) {
+    await sendPhoneSMS(c.env.DB, targetOwnerId, "Sportovní ředitel", "Sportovní ředitel",
+      `📩 ${buyerTeam?.name ?? "Neznámý klub"} chce odkoupit ${pName} (aktuálně u nich na hostování) za ${body.amount.toLocaleString("cs")} Kč.`
+    ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
+  } else if (offerType === "loan") {
+    await sendPhoneSMS(c.env.DB, targetOwnerId, "Sportovní ředitel", "Sportovní ředitel",
       `📩 ${buyerTeam?.name ?? "Neznámý klub"} má zájem o hostování ${pName}.${body.amount > 0 ? ` Nabízí poplatek ${body.amount.toLocaleString("cs")} Kč.` : ""} Podívejte se na to v přestupech.`
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   } else {
-    await sendPhoneSMS(c.env.DB, player.team_id as string, "Sportovní ředitel", "Sportovní ředitel",
+    await sendPhoneSMS(c.env.DB, targetOwnerId, "Sportovní ředitel", "Sportovní ředitel",
       `📩 Přišla nabídka na ${pName} od ${buyerTeam?.name ?? "neznámého klubu"} za ${body.amount.toLocaleString("cs")} Kč. Podívejte se na to v přestupech.`
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   }
@@ -3321,17 +3337,33 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       fromTeamName: seller?.name, toTeamName: buyer.name, fee: amount,
     }).catch((e) => logger.warn({ module: "game" }, "create loan news", e));
   } else {
-    // Trvalý přestup
-    // Close old contract
-    await c.env.DB.prepare("UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'transfer' WHERE player_id = ? AND team_id = ? AND is_active = 1")
-      .bind(gameDate, playerId, teamId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
-    // Create new contract
+    // Trvalý přestup — zjisti jestli jde o buyout hostujícího hráče
+    const currentPlayer = await c.env.DB.prepare("SELECT team_id, loan_from_team_id FROM players WHERE id = ?")
+      .bind(playerId).first<{ team_id: string; loan_from_team_id: string | null }>();
+    const isBuyoutAccept = !!currentPlayer?.loan_from_team_id && currentPlayer.loan_from_team_id === teamId && currentPlayer.team_id === buyerTeamId;
+
+    // Close old contract (u buyout uzavíráme loan kontrakt na straně kupujícího; jinak stávající kontrakt u prodávajícího)
+    if (isBuyoutAccept) {
+      await c.env.DB.prepare("UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'loan_bought' WHERE player_id = ? AND team_id = ? AND is_active = 1")
+        .bind(gameDate, playerId, buyerTeamId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
+    } else {
+      await c.env.DB.prepare("UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'transfer' WHERE player_id = ? AND team_id = ? AND is_active = 1")
+        .bind(gameDate, playerId, teamId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
+    }
+    // Create new permanent contract
     await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, joined_at, join_type, fee, is_active) VALUES (?, ?, ?, ?, ?, 'transfer', ?, 1)")
       .bind(crypto.randomUUID(), playerId, buyerTeamId, seasonId, gameDate, amount).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
 
     await recordTransaction(c.env.DB, buyerTeamId, "transfer_fee", -amount, `Přestup: ${player?.first_name} ${player?.last_name}`, gameDate);
     await recordTransaction(c.env.DB, teamId, "transfer_income", amount, `Prodej: ${player?.first_name} ${player?.last_name}`, gameDate);
-    await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ?").bind(buyerTeamId, playerId).run();
+
+    if (isBuyoutAccept) {
+      // Buyout: hráč zůstává fyzicky u kupujícího, jen vyčistit loan flagy
+      await c.env.DB.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL WHERE id = ?")
+        .bind(buyerTeamId, playerId).run();
+    } else {
+      await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ?").bind(buyerTeamId, playerId).run();
+    }
 
     const { createTransferNews } = await import("../transfers/transfer-news");
     await createTransferNews(c.env.DB, seller?.league_id ?? "", null, "transfer_completed", {
@@ -3395,6 +3427,75 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   const body = await c.req.json<{ amount: number }>();
   await c.env.DB.prepare("UPDATE transfer_offers SET status = 'countered', counter_amount = ? WHERE id = ? AND to_team_id = ?")
     .bind(body.amount, offerId, teamId).run();
+
+  // SMS to the buyer team
+  const offer = await c.env.DB.prepare("SELECT player_id, from_team_id FROM transfer_offers WHERE id = ?")
+    .bind(offerId).first<{ player_id: string; from_team_id: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
+  if (offer) {
+    const player = await c.env.DB.prepare("SELECT first_name, last_name FROM players WHERE id = ?")
+      .bind(offer.player_id).first<{ first_name: string; last_name: string }>()
+      .catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
+    const sellerTeam = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
+      .bind(teamId).first<{ name: string }>()
+      .catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
+    const pName = player ? `${player.first_name} ${player.last_name}` : "hráče";
+    await sendPhoneSMS(c.env.DB, offer.from_team_id, "Sportovní ředitel", "Sportovní ředitel",
+      `💰 ${sellerTeam?.name ?? "Klub"} poslal protinabídku na ${pName}: ${body.amount.toLocaleString("cs")} Kč. Podívej se na ni v přestupech.`
+    ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
+  }
+
+  return c.json({ ok: true });
+});
+
+// Předčasné ukončení hostování — hráč se ihned vrací do původního klubu
+gameRouter.post("/teams/:teamId/loans/:playerId/terminate", async (c) => {
+  const teamId = c.req.param("teamId");
+  const playerId = c.req.param("playerId");
+
+  const player = await c.env.DB.prepare(
+    "SELECT id, first_name, last_name, age, position, team_id, loan_from_team_id FROM players WHERE id = ?"
+  ).bind(playerId).first<Record<string, unknown>>();
+  if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
+  if (player.team_id !== teamId) return c.json({ error: "Hráč není ve tvém klubu" }, 403);
+  if (!player.loan_from_team_id) return c.json({ error: "Hráč není na hostování" }, 400);
+
+  const ownerTeamId = player.loan_from_team_id as string;
+  const gameDate = (await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>())?.game_date ?? new Date().toISOString();
+
+  // Vrátit hráče do původního týmu
+  await c.env.DB.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL WHERE id = ?")
+    .bind(ownerTeamId, playerId).run();
+
+  // Uzavřít loan kontrakt
+  await c.env.DB.prepare("UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'loan_terminated' WHERE player_id = ? AND team_id = ? AND is_active = 1")
+    .bind(gameDate, playerId, teamId).run()
+    .catch((e) => logger.warn({ module: "game" }, "close loan contract failed", e));
+
+  // Update commute + reset squad number
+  await onPlayerTransferred(c.env.DB, playerId, ownerTeamId);
+
+  const borrower = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>();
+  const owner = await c.env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(ownerTeamId).first<{ name: string; league_id: string }>();
+  const pName = `${player.first_name} ${player.last_name}`;
+
+  // News event
+  const { createTransferNews } = await import("../transfers/transfer-news");
+  await createTransferNews(c.env.DB, owner?.league_id ?? "", null, "loan_return", {
+    playerName: pName, playerAge: player.age as number,
+    playerPosition: player.position as string, teamName: owner?.name ?? "",
+    fromTeamName: borrower?.name, toTeamName: owner?.name, fee: 0,
+  }).catch((e) => logger.warn({ module: "game" }, "create loan return news", e));
+
+  // SMS oběma stranám
+  const role = "Sportovní ředitel";
+  await sendPhoneSMS(c.env.DB, teamId, role, role,
+    `📤 Hostování ${pName} bylo předčasně ukončeno. Hráč se vrátil do ${owner?.name ?? "původního klubu"}.`
+  ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
+  await sendPhoneSMS(c.env.DB, ownerTeamId, role, role,
+    `📥 ${borrower?.name ?? "Klub"} předčasně ukončil hostování ${pName}. Hráč je zpět u tebe.`
+  ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
+
   return c.json({ ok: true });
 });
 
