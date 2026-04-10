@@ -96,7 +96,7 @@ export default function WatchlistPage() {
           <div className="card p-8 text-center text-muted">
             <div className="text-4xl mb-3">☆</div>
             <p className="text-lg font-heading font-bold mb-2">Žádní sledovaní hráči</p>
-            <p className="text-sm">Přidej hráče na profil pomocí tlačítka „Sledovat&ldquo;.</p>
+            <p className="text-sm">Otevři profil hráče a klikni na tlačítko „☆ Sledovat&ldquo; — přidá se sem do seznamu.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
