@@ -60,6 +60,19 @@ interface MyListing {
   bids: Array<{ id: string; amount: number; bidderName: string; teamId: string }>;
 }
 
+interface PlayerOffer {
+  id: string;
+  source: "pub" | "youth" | "friend" | "recommendation";
+  sourceName: string;
+  message: string;
+  firstName: string; lastName: string; age: number; position: string;
+  overallRating: number; weeklyWage: number; expiresAt: string;
+  skills: Record<string, number>;
+  physical: Record<string, number>;
+  personality: Record<string, unknown>;
+  avatar: Record<string, unknown>;
+}
+
 interface TransferOffer {
   id: string; player_id: string; offer_amount: number; counter_amount: number | null;
   message: string | null; reject_message: string | null; status: string;
@@ -164,6 +177,10 @@ export default function TransfersPage() {
   const [loading, setLoading] = useState(true);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
+  // Player offers (organické nabídky)
+  const [playerOffers, setPlayerOffers] = useState<PlayerOffer[]>([]);
+  const [playerOfferLoading, setPlayerOfferLoading] = useState<string | null>(null);
+
   // Free agents
   const [freeAgents, setFreeAgents] = useState<FreeAgent[]>([]);
   // Market
@@ -230,11 +247,12 @@ export default function TransfersPage() {
 
   const refresh = async () => {
     if (!teamId) return;
-    const [fa, market, offers, squad] = await Promise.all([
+    const [fa, market, offers, squad, poRaw] = await Promise.all([
       apiFetch<{ freeAgents: FreeAgent[] }>(`/api/teams/${teamId}/free-agents`).catch((e) => { console.error("Failed to load free agents:", e); return { freeAgents: [] }; }),
       apiFetch<{ listings: MarketListing[]; myListings: MyListing[] }>(`/api/teams/${teamId}/market`).catch((e) => { console.error("Failed to load market:", e); return { listings: [], myListings: [] }; }),
       apiFetch<{ incoming: TransferOffer[]; outgoing: TransferOffer[]; loanedOut: typeof loanedOut; loanedIn: typeof loanedIn; myLeagueId?: string | null }>(`/api/teams/${teamId}/offers`).catch((e) => { console.error("Failed to load offers:", e); return { incoming: [], outgoing: [], loanedOut: [], loanedIn: [] }; }),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`).catch((e) => { console.error("Failed to load players:", e); return []; }),
+      apiFetch<PlayerOffer[]>(`/api/teams/${teamId}/player-offers`).catch((e) => { console.error("Failed to load player offers:", e); return []; }),
     ]);
     setFreeAgents(fa.freeAgents);
     setListings(market.listings);
@@ -245,6 +263,7 @@ export default function TransfersPage() {
     setLoanedOut(offers.loanedOut ?? []);
     setLoanedIn(offers.loanedIn ?? []);
     setPlayers(squad);
+    setPlayerOffers(Array.isArray(poRaw) ? poRaw : []);
   };
 
   useEffect(() => {
@@ -363,7 +382,7 @@ export default function TransfersPage() {
     ["search", "Hledání", 0],
     ["free_agents", "Volní", 0],
     ["market", "Trh", listings.length],
-    ["offers", "Nabídky", incoming.length],
+    ["offers", "Nabídky", incoming.length + playerOffers.length],
     ["squad", "Můj tým", players.filter((p) => (p as any).status === "quit").length],
   ];
 
@@ -1257,6 +1276,102 @@ export default function TransfersPage() {
       {/* ═══ TAB: Nabídky ═══ */}
       {tab === "offers" && (
         <div className="space-y-5">
+
+          {/* ── Organické nabídky hráčů (skauting) ── */}
+          {playerOffers.length > 0 && (
+            <div>
+              <SectionLabel>Noví zájemci ({playerOffers.length})</SectionLabel>
+              <div className="space-y-3">
+                {playerOffers.map((o) => {
+                  const sourceIcon: Record<string, string> = {
+                    pub: "🍺", youth: "🌱", friend: "🤝", recommendation: "🏛️",
+                  };
+                  const isYouth = o.source === "youth";
+                  const hiddenTalent = (o.personality as any)?.hiddenTalent as number | undefined;
+                  const daysLeft = Math.max(0, Math.ceil((new Date(o.expiresAt).getTime() - Date.now()) / 86400000));
+                  return (
+                    <div key={o.id} className="card p-4">
+                      <div className="flex items-start gap-3">
+                        {o.avatar && Object.keys(o.avatar).length > 0
+                          ? <FaceAvatar faceConfig={o.avatar} size={44} className="rounded-full shrink-0 mt-0.5" />
+                          : <div className="w-11 h-11 rounded-full bg-surface shrink-0 mt-0.5 flex items-center justify-center text-xl">{sourceIcon[o.source] ?? "👤"}</div>}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                            <span className="font-heading font-bold text-base">{o.firstName} {o.lastName}</span>
+                            <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
+                            <span className="text-sm text-muted">{o.age} let</span>
+                            {isYouth && <span className="text-xs bg-pitch-100 text-pitch-700 px-2 py-0.5 rounded-full font-heading font-bold">Dorostenec</span>}
+                          </div>
+                          <div className="text-xs text-muted mb-1">
+                            {sourceIcon[o.source]} <span className="font-heading font-bold text-ink">{o.sourceName}</span>
+                          </div>
+                          <div className="text-sm italic text-muted mb-2">&ldquo;{o.message}&rdquo;</div>
+                          {/* Skills preview */}
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1">
+                            {(() => {
+                              const s = o.skills;
+                              const pos = o.position;
+                              const entries: [string, string][] =
+                                pos === "GK" ? [["Bra", "goalkeeping"], ["Síl", "strength"], ["Výd", "stamina"]]
+                                : pos === "DEF" ? [["Obr", "defense"], ["Hl", "heading"], ["Rch", "speed"], ["Pas", "passing"]]
+                                : pos === "MID" ? [["Pas", "passing"], ["Tch", "technique"], ["Výd", "stamina"], ["Rch", "speed"]]
+                                : [["Stř", "shooting"], ["Rch", "speed"], ["Tch", "technique"], ["Hl", "heading"]];
+                              return entries.map(([lbl, key]) => (
+                                <span key={key} className={`text-xs tabular-nums ${skillColor(s[key] ?? 0)}`}>
+                                  {lbl} <span className="font-heading font-bold">{s[key] ?? 0}</span>
+                                </span>
+                              ));
+                            })()}
+                            {isYouth && hiddenTalent !== undefined && (
+                              <span className="text-xs text-amber-600 font-heading font-bold" title="Skrytý talent — odhalí se postupně tréninkem">
+                                ✨ Talent {hiddenTalent >= 30 ? "vysoký" : hiddenTalent >= 18 ? "střední" : "nízký"}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted">
+                            Plat: <span className="font-heading font-bold text-ink">{o.weeklyWage} Kč/týden</span>
+                            <span className="ml-3">Vyprší za: <span className={daysLeft <= 1 ? "text-card-red font-bold" : ""}>{daysLeft} {daysLeft === 1 ? "den" : daysLeft < 5 ? "dny" : "dní"}</span></span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2 shrink-0">
+                          <button
+                            disabled={playerOfferLoading === o.id}
+                            onClick={async () => {
+                              if (!teamId) return;
+                              setPlayerOfferLoading(o.id);
+                              try {
+                                const result = await apiFetch<{ ok: boolean; player: Player }>(`/api/teams/${teamId}/player-offers/${o.id}/accept`, { method: "POST" });
+                                if (result.player) setRevealPlayer(result.player);
+                                await refresh();
+                              } catch (e) { console.error("player offer accept:", e); }
+                              finally { setPlayerOfferLoading(null); }
+                            }}
+                            className="py-2 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors disabled:opacity-50">
+                            {playerOfferLoading === o.id ? "..." : "Přijmout"}
+                          </button>
+                          <button
+                            disabled={playerOfferLoading === o.id}
+                            onClick={async () => {
+                              if (!teamId) return;
+                              setPlayerOfferLoading(o.id);
+                              try {
+                                await apiFetch(`/api/teams/${teamId}/player-offers/${o.id}/reject`, { method: "POST" });
+                                await refresh();
+                              } catch (e) { console.error("player offer reject:", e); }
+                              finally { setPlayerOfferLoading(null); }
+                            }}
+                            className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors disabled:opacity-50">
+                            Odmítnout
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {incoming.length > 0 && (
             <div>
               <SectionLabel>Příchozí nabídky ({incoming.length})</SectionLabel>
@@ -1503,7 +1618,7 @@ export default function TransfersPage() {
             </div>
           )}
 
-          {incoming.length === 0 && outgoing.length === 0 && loanedOut.length === 0 && loanedIn.length === 0 && (
+          {playerOffers.length === 0 && incoming.length === 0 && outgoing.length === 0 && loanedOut.length === 0 && loanedIn.length === 0 && (
             <div className="card p-6 text-center text-muted">Žádné aktivní nabídky ani hostování.</div>
           )}
         </div>

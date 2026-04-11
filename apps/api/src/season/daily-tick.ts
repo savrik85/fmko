@@ -338,7 +338,7 @@ export async function executeDailyTick(
   logger.info({ module: "daily-tick" }, "reached game date advancement section");
   // ── Advance game date for ALL teams (including AI) ──
   const allTeams = await env.DB.prepare(
-    "SELECT t.id, t.user_id, t.league_id, t.game_date, t.training_type, t.training_sessions, v.size as village_size FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
+    "SELECT t.id, t.user_id, t.league_id, t.game_date, t.training_type, t.training_sessions, v.size as village_size, v.district as village_district, v.population as village_population FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
   ).all();
   for (const team of allTeams.results) {
     const teamId = team.id as string;
@@ -548,6 +548,34 @@ export async function executeDailyTick(
         } catch (e) { logger.warn({ module: "daily-tick" }, "match_day absences failed", e); }
       }
     }
+  }
+
+  // ── Player offer generation (organické nabídky — hospodský, kamarád, dorost, starosta) ──
+  try {
+    const { generatePlayerOffer } = await import("../events/player-offers");
+    const sizeMap: Record<string, string> = { hamlet: "vesnice", village: "obec", town: "mestys", small_city: "mesto", city: "mesto" };
+    const humanTeams = allTeams.results.filter((t) => t.user_id !== "ai" && t.game_date && t.village_district);
+
+    for (const team of humanTeams) {
+      const teamId = team.id as string;
+      const offerRng = createRng(now.getTime() + teamId.charCodeAt(0) + 22222);
+      // ~28% per day ≈ 2 nabídky týdně
+      if (offerRng.random() > 0.28) continue;
+
+      const district = team.village_district as string;
+      const villageInfo = {
+        region_code: district,
+        category: (sizeMap[(team.village_size as string)] ?? "obec") as "vesnice" | "obec" | "mestys" | "mesto",
+        population: (team.village_population as number) ?? 500,
+        district,
+      };
+
+      await generatePlayerOffer(
+        env.DB, offerRng, teamId, district, villageInfo, team.game_date as string,
+      ).catch((e) => logger.warn({ module: "daily-tick" }, `player offer gen failed for ${teamId}`, e));
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "player offer generation failed", e);
   }
 
   // ── Free agent pool maintenance ──
