@@ -32,7 +32,7 @@ export async function executeDailyTick(
   // Use GAME DATE for day-of-week, not real date
   // Find any human team's game_date to determine the in-game day
   const gameDateRow = await env.DB.prepare("SELECT game_date FROM teams WHERE user_id != 'ai' AND game_date IS NOT NULL LIMIT 1")
-    .first<{ game_date: string }>().catch(() => null);
+    .first<{ game_date: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "load game_date failed", e); return null; });
   const effectiveDate = gameDateRow?.game_date ? new Date(gameDateRow.game_date) : now;
   const dayOfWeek = effectiveDate.getUTCDay();
   const isTrainingDay = dayOfWeek >= 1 && dayOfWeek <= 5;
@@ -102,7 +102,7 @@ export async function executeDailyTick(
 
         // Load manager attributes for training bonuses
         const mgr = await env.DB.prepare("SELECT coaching, discipline, youth_development FROM managers WHERE team_id = ?")
-          .bind(teamId).first<{ coaching: number; discipline: number; youth_development: number }>().catch(() => null);
+          .bind(teamId).first<{ coaching: number; discipline: number; youth_development: number }>().catch((e) => { logger.warn({ module: "daily-tick" }, "load manager for training", e); return null; });
         const mgrBonus = { coaching: mgr?.coaching ?? 40, discipline: mgr?.discipline ?? 40, youthDev: mgr?.youth_development ?? 40 };
 
         const rng = createRng(now.getTime() + teamId.charCodeAt(0));
@@ -196,7 +196,7 @@ export async function executeDailyTick(
         // Update cumulative training attendance
         try {
           const attRow = await env.DB.prepare("SELECT training_attendance FROM teams WHERE id = ?")
-            .bind(teamId).first<{ training_attendance: string }>().catch(() => null);
+            .bind(teamId).first<{ training_attendance: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "load training_attendance", e); return null; });
           const attData: Record<string, { attended: number; total: number }> = (() => {
             try { return JSON.parse(attRow?.training_attendance ?? "{}"); } catch { return {}; }
           })();
@@ -286,11 +286,11 @@ export async function executeDailyTick(
   try {
     const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
     const stadiums = await env.DB.prepare(
-      "SELECT team_id, changing_rooms, showers, refreshments, lighting, stands, parking, fence FROM stadiums"
+      "SELECT team_id, changing_rooms, showers, refreshments, stands, parking, fence FROM stadiums"
     ).all();
     for (const row of stadiums.results) {
       const facilities: Record<string, number> = {};
-      for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "parking", "fence"]) {
+      for (const key of ["changing_rooms", "showers", "refreshments", "stands", "parking", "fence"]) {
         facilities[key] = (row[key] as number) ?? 0;
       }
       const fx = calculateFacilityEffects(facilities);
@@ -317,6 +317,24 @@ export async function executeDailyTick(
   ).run();
   events.push({ type: "morale", description: "Morálka se stabilizuje" });
 
+  // Fans satisfaction drift toward loyalty (1 bod denně)
+  await env.DB.prepare(
+    `UPDATE fans SET satisfaction = CASE
+       WHEN satisfaction > loyalty + 1 THEN satisfaction - 1
+       WHEN satisfaction < loyalty - 1 THEN satisfaction + 1
+       ELSE satisfaction
+     END, updated_at = datetime('now')`,
+  ).run().catch((e) => logger.warn({ module: "daily-tick" }, "fans satisfaction drift", e));
+
+  // Fans loyalty slowly tracks team reputation (1 bod denně)
+  await env.DB.prepare(
+    `UPDATE fans SET loyalty = CASE
+       WHEN (SELECT reputation FROM teams WHERE teams.id = fans.team_id) > loyalty THEN MIN(100, loyalty + 1)
+       WHEN (SELECT reputation FROM teams WHERE teams.id = fans.team_id) < loyalty THEN MAX(0, loyalty - 1)
+       ELSE loyalty
+     END`,
+  ).run().catch((e) => logger.warn({ module: "daily-tick" }, "fans loyalty drift", e));
+
   logger.info({ module: "daily-tick" }, "reached game date advancement section");
   // ── Advance game date for ALL teams (including AI) ──
   const allTeams = await env.DB.prepare(
@@ -328,10 +346,10 @@ export async function executeDailyTick(
     // If game_date is NULL, sync from another team in the same league
     if (!gameDate && team.league_id) {
       const peer = await env.DB.prepare("SELECT game_date FROM teams WHERE league_id = ? AND game_date IS NOT NULL LIMIT 1")
-        .bind(team.league_id).first<{ game_date: string }>().catch(() => null);
+        .bind(team.league_id).first<{ game_date: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "sync game_date peer lookup", e); return null; });
       if (peer?.game_date) {
         gameDate = peer.game_date;
-        await env.DB.prepare("UPDATE teams SET game_date = ? WHERE id = ?").bind(gameDate, teamId).run().catch(() => {});
+        await env.DB.prepare("UPDATE teams SET game_date = ? WHERE id = ?").bind(gameDate, teamId).run().catch((e) => logger.warn({ module: "daily-tick" }, "sync game_date update", e));
         logger.info({ module: "daily-tick" }, `synced game_date for team ${teamId} from league peer`);
       }
     }
@@ -372,18 +390,18 @@ export async function executeDailyTick(
           if (lid) {
             const tomorrowMatch = await env.DB.prepare(
               "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled'"
-            ).bind(lid, checkDayStart.toISOString(), checkDayEnd.toISOString()).first<{ id: string }>().catch(() => null);
+            ).bind(lid, checkDayStart.toISOString(), checkDayEnd.toISOString()).first<{ id: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "tomorrow match lookup", e); return null; });
             if (tomorrowMatch) {
               const alreadySent = await env.DB.prepare(
                 "SELECT id FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group') AND metadata LIKE ?"
-              ).bind(teamId, `%${tomorrowMatch.id}%`).first().catch(() => null);
+              ).bind(teamId, `%${tomorrowMatch.id}%`).first().catch((e) => { logger.warn({ module: "daily-tick" }, "tomorrow match alreadySent check", e); return null; });
               if (!alreadySent) {
                 const { seedFromString } = await import("../lib/seed");
                 const { generateAbsences } = await import("../events/absence");
                 const { generateAttendanceMessage } = await import("../messaging/message-generator");
                 const matchRow = await env.DB.prepare(
                   "SELECT m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1"
-                ).bind(tomorrowMatch.id, teamId, teamId).first<Record<string, unknown>>().catch(() => null);
+                ).bind(tomorrowMatch.id, teamId, teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "daily-tick" }, "tomorrow match row", e); return null; });
                 const opponentName = matchRow ? (matchRow.home_team_id === teamId ? matchRow.away_name : matchRow.home_name) as string : "Soupeř";
                 const squadRows = await env.DB.prepare(
                   "SELECT id, first_name, last_name, personality, life_context, physical, commute_km, is_celebrity FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
@@ -403,10 +421,10 @@ export async function executeDailyTick(
                 const matchConvId = crypto.randomUUID();
                 await env.DB.prepare(
                   "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_at, created_at) VALUES (?, ?, 'squad_group', ?, 0, 0, datetime('now'), datetime('now'))"
-                ).bind(matchConvId, teamId, `⚽ vs ${opponentName}`).run().catch(() => {});
+                ).bind(matchConvId, teamId, `⚽ vs ${opponentName}`).run().catch((e) => logger.warn({ module: "daily-tick" }, "create match conversation", e));
                 await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'user', ?, 'Trenér', ?, ?, datetime('now'))")
                   .bind(crypto.randomUUID(), matchConvId, teamId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`, JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }))
-                  .run().catch(() => {});
+                  .run().catch((e) => logger.warn({ module: "daily-tick" }, "match announce msg", e));
                 let msgCount = 1;
                 for (const row of squadRows.results) {
                   const pid = row.id as string;
@@ -422,7 +440,7 @@ export async function executeDailyTick(
                   msgCount++;
                 }
                 await env.DB.prepare("UPDATE conversations SET unread_count = ?, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
-                  .bind(msgCount, `📋 ${dayBeforeAbsences.length} omluvených z ${squadRows.results.length}`, matchConvId).run().catch(() => {});
+                  .bind(msgCount, `📋 ${dayBeforeAbsences.length} omluvených z ${squadRows.results.length}`, matchConvId).run().catch((e) => logger.warn({ module: "daily-tick" }, "day_before conversation update", e));
                 logger.info({ module: "daily-tick", teamId }, `day_before attendance: ${msgCount} msgs → ⚽ vs ${opponentName}`);
               }
             }
@@ -465,12 +483,12 @@ export async function executeDailyTick(
           const todayEnd = new Date(gd); todayEnd.setUTCHours(23, 59, 59, 999);
           const todayMatch = await env.DB.prepare(
             "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
-          ).bind(team.league_id, todayEnd.toISOString()).first<{ id: string }>().catch(() => null);
+          ).bind(team.league_id, todayEnd.toISOString()).first<{ id: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "today match lookup", e); return null; });
 
           if (todayMatch) {
             const alreadySentMatchDay = await env.DB.prepare(
               "SELECT id FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group') AND metadata LIKE ? AND metadata LIKE '%match_day%'"
-            ).bind(teamId, `%${todayMatch.id}%`).first().catch(() => null);
+            ).bind(teamId, `%${todayMatch.id}%`).first().catch((e) => { logger.warn({ module: "daily-tick" }, "today match already sent check", e); return null; });
 
             if (!alreadySentMatchDay) {
               const { seedFromString } = await import("../lib/seed");
@@ -492,7 +510,7 @@ export async function executeDailyTick(
               // Find the match conversation created day before
               const matchConvId = await env.DB.prepare(
                 "SELECT c.id FROM conversations c JOIN messages m ON m.conversation_id = c.id WHERE c.team_id = ? AND c.type = 'squad_group' AND m.metadata LIKE ? LIMIT 1"
-              ).bind(teamId, `%${todayMatch.id}%`).first<{ id: string }>().then((r) => r?.id).catch(() => null);
+              ).bind(teamId, `%${todayMatch.id}%`).first<{ id: string }>().then((r) => r?.id).catch((e) => { logger.warn({ module: "daily-tick" }, "match_day find conversation", e); return null; });
 
               if (matchConvId) {
                 // Exclude players who already sent day_before messages
@@ -510,7 +528,7 @@ export async function executeDailyTick(
                 if (matchDayAbsences.length > 0) {
                   await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', 'Systém', ?, ?, datetime('now'))")
                     .bind(crypto.randomUUID(), matchConvId, "⚠️ Nové omluvenky v den zápasu:", JSON.stringify({ type: "match_day_announce", calendarId: todayMatch.id }))
-                    .run().catch(() => {});
+                    .run().catch((e) => logger.warn({ module: "daily-tick" }, "match_day announce insert", e));
                   let cnt = 1;
                   for (const a of matchDayAbsences) {
                     const row = squadRows.results[a.playerIndex]; if (!row) continue;
@@ -521,7 +539,7 @@ export async function executeDailyTick(
                     cnt++;
                   }
                   await env.DB.prepare("UPDATE conversations SET unread_count = unread_count + ?, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
-                    .bind(cnt, `⚠️ ${matchDayAbsences.length} nových omluvenek!`, matchConvId).run().catch(() => {});
+                    .bind(cnt, `⚠️ ${matchDayAbsences.length} nových omluvenek!`, matchConvId).run().catch((e) => logger.warn({ module: "daily-tick" }, "match_day conversation update", e));
                   logger.info({ module: "daily-tick", teamId }, `match_day absences: ${matchDayAbsences.length}`);
                 }
               }
@@ -589,7 +607,7 @@ export async function executeDailyTick(
         .bind(originalTeamId, playerId).run();
       // Close loan contract
       await env.DB.prepare("UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'loan_end' WHERE player_id = ? AND team_id = ? AND join_type = 'loan' AND is_active = 1")
-        .bind(now.toISOString(), playerId, loanTeamId).run().catch(() => {});
+        .bind(now.toISOString(), playerId, loanTeamId).run().catch((e) => logger.warn({ module: "daily-tick" }, "close loan contract", e));
       logger.info({ module: "daily-tick" }, `loan return: ${p.first_name} ${p.last_name} → team ${originalTeamId}`);
       // News about loan return
       try {

@@ -177,7 +177,7 @@ export async function runScheduledMatches(
       const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
       const facilities: Record<string, number> = {};
       if (stadiumRow) {
-        for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "parking", "fence"]) {
+        for (const key of ["changing_rooms", "showers", "refreshments", "stands", "parking", "fence"]) {
           facilities[key] = (stadiumRow[key] as number) ?? 0;
         }
       }
@@ -218,9 +218,16 @@ export async function runScheduledMatches(
           celebAttendanceMultiplier = Math.max(celebAttendanceMultiplier, bonus);
         }
       }
-      // Apply facility attendance bonus (lighting + parking) + celebrity bonus, cap at stadium capacity
+      // Fan satisfaction multiplier — happy fans = víc lidí chodí, nespokojení zůstanou doma.
+      // 0.75 (nespokojení) -> 1.25 (nadšení), default 1.0 pokud fans row neexistuje
+      const fansSatRow = await db.prepare("SELECT satisfaction FROM fans WHERE team_id = ?")
+        .bind(homeTeamId).first<{ satisfaction: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "load fans satisfaction", e); return null; });
+      const fansSat = fansSatRow?.satisfaction ?? 50;
+      const satisfactionAttendanceMul = 0.75 + (Math.max(0, Math.min(100, fansSat)) / 100) * 0.5;
+
+      // Apply facility attendance bonus (parking) + celebrity bonus + satisfaction, cap at stadium capacity
       const attendance = Math.min(
-        Math.round(rawAttendance * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier),
+        Math.round(rawAttendance * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul),
         stadiumCapacity,
       );
 
@@ -457,8 +464,18 @@ export async function runScheduledMatches(
         const homeResult = result.homeScore > result.awayScore ? "win" : result.homeScore < result.awayScore ? "loss" : "draw";
         const awayResult = result.awayScore > result.homeScore ? "win" : result.awayScore < result.homeScore ? "loss" : "draw";
         const gameDate = new Date().toISOString();
-        await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate);
-        await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate);
+        // Load both teams reputation — slouží pro satisfaction expectations calc
+        const repRows = await db.prepare(
+          "SELECT id, reputation FROM teams WHERE id IN (?, ?)",
+        ).bind(homeTeamId, awayTeamId).all<{ id: string; reputation: number }>().catch((e) => {
+          logger.warn({ module: "match-runner" }, "load team reputations for finances", e);
+          return { results: [] };
+        });
+        const repMap = new Map(repRows.results.map((r) => [r.id, r.reputation ?? 50]));
+        const homeRep = repMap.get(homeTeamId) ?? 50;
+        const awayRep = repMap.get(awayTeamId) ?? 50;
+        await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate, awayRep);
+        await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate, homeRep);
       } catch (e) {
         logger.error({ module: "match-runner" }, `Match finances failed for ${matchId}`, e);
       }

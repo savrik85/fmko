@@ -47,7 +47,6 @@ const FACILITY_ICONS: Record<string, string> = {
   changing_rooms: "🚪",
   showers: "🚿",
   refreshments: "🍺",
-  lighting: "💡",
   stands: "🏟",
   parking: "🚗",
   fence: "🏗",
@@ -57,7 +56,6 @@ const FACILITY_LABELS: Record<string, string> = {
   changing_rooms: "Šatny",
   showers: "Sprchy",
   refreshments: "Občerstvení",
-  lighting: "Osvětlení",
   stands: "Tribuny",
   parking: "Parkoviště",
   fence: "Oplocení",
@@ -67,7 +65,6 @@ const FACILITY_DESCRIPTIONS: Record<string, string[]> = {
   changing_rooms: ["Převlékání za autem", "Bouda s lavicí", "Šatna se skříňkami", "Moderní šatny s vyhříváním"],
   showers: ["Hadice na dvoře", "Jedna sprcha se studenou vodou", "Sprchy s teplou vodou", "Sprchy s masážními tryskami"],
   refreshments: ["Žádné", "Termoska s čajem", "Stánek s pivem a párkem", "Bufet s grillem a točeným"],
-  lighting: ["Žádné", "Pár lamp na stožáru", "Základní osvětlení hřiště", "Plné floodlighty"],
   stands: ["Diváci stojí kolem hřiště", "Pár laviček", "Dřevěná tribuna se střechou", "Betonová tribuna se sedačkami"],
   parking: ["Žádné", "Louka vedle hřiště", "Štěrkové parkoviště", "Asfaltové parkoviště s čarami"],
   fence: ["Žádné", "Provizorní páska", "Drátěný plot", "Zděné oplocení s branami"],
@@ -126,7 +123,7 @@ export default function StadiumPage() {
     await apiFetch(`/api/teams/${teamId}/stadium/upgrade`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ facility }),
-    }).catch(() => {});
+    }).catch((e) => console.error("stadium upgrade failed:", e));
     await refresh();
     setActing(null);
   };
@@ -214,7 +211,7 @@ export default function StadiumPage() {
                         await apiFetch(`/api/teams/${teamId}/stadium/maintain-pitch`, {
                           method: "POST", headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ level: a.level }),
-                        }).catch(() => {});
+                        }).catch((e) => console.error("maintain pitch failed:", e));
                         await refresh();
                         setActing(null);
                       }}
@@ -258,7 +255,7 @@ export default function StadiumPage() {
                         await apiFetch(`/api/teams/${teamId}/stadium/upgrade-pitch`, {
                           method: "POST", headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ pitchType: u.pitchType }),
-                        }).catch(() => {});
+                        }).catch((e) => console.error("upgrade pitch failed:", e));
                         await refresh();
                         setActing(null);
                       }}

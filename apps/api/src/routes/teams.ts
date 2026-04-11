@@ -460,10 +460,10 @@ teamsRouter.post("/", async (c) => {
         const villageSize = (village as any).size as string || "small";
         const config = generateStadium(rng, villageSize);
         await c.env.DB.prepare(
-          `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, lighting, stands, parking, fence)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, stands, parking, fence)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).bind(uuid(), teamId, config.capacity, config.pitchCondition, config.pitchType,
-          config.changingRooms, config.showers, config.refreshments, config.lighting,
+          config.changingRooms, config.showers, config.refreshments,
           config.stands, config.parking, config.fence).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
       }
 

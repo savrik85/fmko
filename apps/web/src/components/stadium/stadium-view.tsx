@@ -24,7 +24,6 @@ const FACILITY_CONFIG: Record<string, { icon: string; label: string }> = {
   changing_rooms: { icon: "\u{1F6AA}", label: "Šatny" },
   showers: { icon: "\u{1F6BF}", label: "Sprchy" },
   refreshments: { icon: "\u{1F37A}", label: "Občerstvení" },
-  lighting: { icon: "\u{1F4A1}", label: "Osvětlení" },
   fence: { icon: "\u{1F3D7}\uFE0F", label: "Oplocení" },
 };
 
@@ -40,7 +39,7 @@ export function StadiumView({ pitchCondition, pitchType, facilities, teamColor =
   // Small building chips (bottom row)
   const bottomFacilities = ["changing_rooms", "showers", "refreshments"].filter((k) => f[k] > 0);
   // Icon chips (top row)
-  const topChips = ["lighting", "fence"].filter((k) => f[k] > 0);
+  const topChips = ["fence"].filter((k) => f[k] > 0);
 
   // Parking dimensions
   const parkW = f.parking > 0 ? 80 + f.parking * 40 : 0;
