@@ -316,25 +316,28 @@ export default function FansPage() {
           Základní cena se řídí velikostí obce a vybavením stadionu. Tady ji můžeš přebít vlastní hodnotou.
           Cena přes 1.2× běžné úrovně rozzlobí fanoušky.
         </div>
-        <div className="flex items-end gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <div className="flex-1 min-w-0">
-            <label className="input-label">Tvoje cena (0 = automaticky podle obce)</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={0}
-                max={500}
-                value={ticketPriceDraft}
-                onChange={(e) => setTicketPriceDraft(e.target.value)}
-                className="input tabular-nums flex-1"
-              />
-              <span className="text-sm text-muted font-heading font-bold shrink-0">Kč</span>
-            </div>
+            <div className="text-sm font-heading font-bold text-ink leading-tight">Tvoje cena</div>
+            <div className="text-xs text-muted">0 = automaticky podle obce</div>
           </div>
+          <input
+            type="number"
+            min={0}
+            max={500}
+            value={ticketPriceDraft}
+            onChange={(e) => setTicketPriceDraft(e.target.value)}
+            className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+          />
+          <span className="text-xs text-muted shrink-0">Kč</span>
           <button
             onClick={saveTicketPrice}
             disabled={acting === "ticket" || ticketPriceDraft === String(fans.baseTicketPrice)}
-            className="btn btn-primary btn-md shrink-0"
+            className={`shrink-0 py-1.5 px-4 rounded-lg text-xs font-heading font-bold transition-colors ${
+              acting === "ticket" || ticketPriceDraft === String(fans.baseTicketPrice)
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                : "bg-pitch-500 text-white hover:bg-pitch-600"
+            }`}
           >
             {acting === "ticket" ? "..." : "Uložit"}
           </button>
@@ -450,48 +453,54 @@ export default function FansPage() {
                   </div>
 
                   {/* Price + restock */}
-                  <div className="pt-3 border-t border-gray-100 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                      <label className="input-label sm:mb-0 sm:flex-1 sm:min-w-0">
-                        Prodejní cena <span className="text-muted font-normal">(doporučeno {currentTier.defaultSellPrice} Kč)</span>
-                      </label>
-                      <div className="w-full sm:w-28 shrink-0">
-                        <input
-                          type="number"
-                          min={0}
-                          value={priceDraft}
-                          onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
-                          className="input tabular-nums text-right"
-                        />
+                  <div className="pt-3 border-t border-gray-100 space-y-2">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-heading font-bold text-ink leading-tight">Prodejní cena</div>
+                        <div className="text-xs text-muted">doporučeno {currentTier.defaultSellPrice} Kč</div>
                       </div>
-                      <span className="hidden sm:inline text-sm text-muted font-heading font-bold shrink-0 -ml-1">Kč</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={priceDraft}
+                        onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
+                        className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+                      />
+                      <span className="text-xs text-muted shrink-0">Kč</span>
                       <button
                         onClick={() => saveSellPrice(p.key)}
                         disabled={acting === "price-" + p.key || priceDraft === String(p.sellPrice)}
-                        className="btn btn-primary btn-sm shrink-0 sm:w-24"
+                        className={`shrink-0 py-1.5 px-4 rounded-lg text-xs font-heading font-bold transition-colors ${
+                          acting === "price-" + p.key || priceDraft === String(p.sellPrice)
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : "bg-pitch-500 text-white hover:bg-pitch-600"
+                        }`}
                       >
                         {acting === "price-" + p.key ? "..." : "Uložit"}
                       </button>
                     </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                      <label className="input-label sm:mb-0 sm:flex-1 sm:min-w-0">
-                        Doplnit sklad <span className="text-muted font-normal">({currentTier.wholesalePrice} Kč/ks)</span>
-                      </label>
-                      <div className="w-full sm:w-28 shrink-0">
-                        <input
-                          type="number"
-                          min={0}
-                          placeholder="0"
-                          value={qty}
-                          onChange={(e) => setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))}
-                          className="input tabular-nums text-right"
-                        />
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-heading font-bold text-ink leading-tight">Doplnit sklad</div>
+                        <div className="text-xs text-muted">{currentTier.wholesalePrice} Kč/ks</div>
                       </div>
-                      <span className="hidden sm:inline text-sm text-muted font-heading font-bold shrink-0 -ml-1">ks</span>
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="0"
+                        value={qty}
+                        onChange={(e) => setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))}
+                        className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+                      />
+                      <span className="text-xs text-muted shrink-0">ks</span>
                       <button
                         onClick={() => doRestock(p.key)}
                         disabled={acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)}
-                        className="btn btn-secondary btn-sm shrink-0 sm:min-w-24"
+                        className={`shrink-0 py-1.5 px-4 rounded-lg text-xs font-heading font-bold transition-colors ${
+                          acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : "bg-gold-500 text-white hover:bg-gold-600"
+                        }`}
                       >
                         {acting === "restock-" + p.key
                           ? "..."
