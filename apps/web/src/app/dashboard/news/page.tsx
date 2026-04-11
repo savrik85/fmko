@@ -239,6 +239,12 @@ export default function NewsPage() {
     ["transfer", "celebrity_arrival", "celebrity_signing"].includes(a.type),
   );
   const interviewArticles = articles.filter((a) => a.type === "interview");
+  const latestInterviewWeek = interviewArticles.length > 0
+    ? Math.max(...interviewArticles.map((a) => (a as any).game_week ?? 0))
+    : null;
+  const currentWeekInterviews = latestInterviewWeek != null
+    ? interviewArticles.filter((a) => (a as any).game_week === latestInterviewWeek)
+    : [];
   const otherArticles = articles.filter(
     (a) => !["match", "round_results", "standing", "ai_report", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview"].includes(a.type),
   );
@@ -378,43 +384,49 @@ export default function NewsPage() {
             </div>
           )}
 
-          {/* ═══ Rozhovor kola ═══ */}
-          {interviewArticles.length > 0 && (() => {
-            const iv = interviewArticles[0];
-            let meta: { managerName?: string; managerAvatar?: Record<string, unknown> | null; teamName?: string; article?: string } = {};
-            try { meta = JSON.parse(iv.body); } catch { meta = {}; }
-            return (
-              <div id={`news-${iv.id}`} className="border-b border-gray-200 pb-5">
-                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-ink">
-                  <span className="text-base">🎙️</span>
-                  <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">Rozhovor kola</h3>
-                  <span className="text-xs text-muted ml-auto italic">{timeAgo(iv.date)}</span>
-                </div>
-                <div className="flex items-start gap-4">
-                  {meta.managerAvatar && Object.keys(meta.managerAvatar).length > 0 && (
-                    <div className="shrink-0">
-                      <FaceAvatar faceConfig={meta.managerAvatar} size={64} className="rounded-full border-2 border-sand-200" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="mb-2">
-                      <span className="font-heading font-bold text-base">{meta.managerName ?? "Trenér"}</span>
-                      {meta.teamName && <span className="text-sm text-muted ml-2">· {meta.teamName}</span>}
-                    </div>
-                    <h4 className="font-heading font-[800] text-lg leading-snug mb-3">{iv.headline}</h4>
-                    <div className="text-sm text-ink-light leading-relaxed space-y-2">
-                      {(meta.article ?? iv.body).split("\n").filter(Boolean).map((p, i) => (
-                        <p key={i}>{p}</p>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-3 mt-3">
-                      <ShareButton articleId={iv.id} />
-                    </div>
-                  </div>
-                </div>
+          {/* ═══ Rozhovory kola ═══ */}
+          {currentWeekInterviews.length > 0 && (
+            <div className="border-b border-gray-200 pb-5">
+              <div className="flex items-center gap-2 mb-4 pb-2 border-b border-ink">
+                <span className="text-base">🎙️</span>
+                <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">
+                  {currentWeekInterviews.length === 1 ? "Rozhovor kola" : "Rozhovory kola"}
+                </h3>
               </div>
-            );
-          })()}
+              <div className="space-y-6">
+                {currentWeekInterviews.map((iv, idx) => {
+                  let meta: { managerName?: string; managerAvatar?: Record<string, unknown> | null; teamName?: string; article?: string } = {};
+                  try { meta = JSON.parse(iv.body); } catch { meta = {}; }
+                  return (
+                    <div key={iv.id} id={`news-${iv.id}`} className={idx > 0 ? "pt-5 border-t border-gray-100" : ""}>
+                      <div className="flex items-start gap-4">
+                        {meta.managerAvatar && Object.keys(meta.managerAvatar).length > 0 && (
+                          <div className="shrink-0">
+                            <FaceAvatar faceConfig={meta.managerAvatar} size={64} className="rounded-full border-2 border-sand-200" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="mb-2">
+                            <span className="font-heading font-bold text-base">{meta.managerName ?? "Trenér"}</span>
+                            {meta.teamName && <span className="text-sm text-muted ml-2">· {meta.teamName}</span>}
+                          </div>
+                          <h4 className="font-heading font-[800] text-lg leading-snug mb-3">{iv.headline}</h4>
+                          <div className="text-sm text-ink-light leading-relaxed space-y-2">
+                            {(meta.article ?? iv.body).split("\n").filter(Boolean).map((p, i) => (
+                              <p key={i}>{p}</p>
+                            ))}
+                          </div>
+                          <div className="mt-3">
+                            <ShareButton articleId={iv.id} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* ═══ Přestupy a spekulace (dole pod Lead) ═══ */}
           {transferArticles.length > 0 && (

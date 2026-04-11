@@ -447,12 +447,12 @@ export async function executeDailyTick(
           }
         } catch (e) { logger.warn({ module: "daily-tick" }, "day_before attendance failed", e); }
 
-        // ── Interview před zápasem (1x per zápas per liga, round-robin po lidských trenérech) ──
+        // ── Interview před zápasem — 2 dny dopředu, každý lidský trenér dostane svůj rozhovor ──
         const interviewLeagueId = team.league_id as string | null;
         if (interviewLeagueId) {
           try {
             const checkDayStart2 = new Date(newGameDate);
-            checkDayStart2.setDate(checkDayStart2.getDate() + 1);
+            checkDayStart2.setDate(checkDayStart2.getDate() + 2);
             const cs2 = new Date(checkDayStart2); cs2.setUTCHours(0, 0, 0, 0);
             const ce2 = new Date(checkDayStart2); ce2.setUTCHours(23, 59, 59, 999);
             const tomorrowCalEntry = await env.DB.prepare(
