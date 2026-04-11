@@ -174,32 +174,31 @@ export default function SchedulePage() {
         <>
           {/* Promo banner — nejbližší domácí zápas */}
           {nextHome && (
-            <div className="card p-4 sm:p-5 bg-gradient-to-r from-gold-50 to-pitch-50 border border-gold-200">
-              <div className="flex items-start sm:items-center gap-3 flex-col sm:flex-row">
-                <div className="text-3xl shrink-0">📢</div>
+            <div className="card px-3 py-2.5 sm:p-5 bg-gradient-to-r from-gold-50 to-pitch-50 border border-gold-200">
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className="text-xl sm:text-3xl shrink-0">📢</div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-heading font-bold text-base">
-                    {nextHome.promoted ? "Zápas je propagovaný" : "Propagace dalšího domácího zápasu"}
+                  <div className="font-heading font-bold text-sm sm:text-base leading-tight">
+                    {nextHome.promoted ? "Zápas je propagovaný" : "Propagace dalšího zápasu"}
                   </div>
-                  <div className="text-sm text-muted mt-0.5">
-                    {nextHome.isHome ? `Doma proti ${nextHome.awayName}` : ""} ·{" "}
-                    {formatDate(nextHome.scheduledAt)}
-                    {nextHome.promoted
-                      ? ` — propagace (+25 % diváků) zaplacena${nextHome.promotionCost ? ` za ${nextHome.promotionCost.toLocaleString("cs")} Kč` : ""}`
-                      : " — vyjde článek ve Zpravodaji a přijde více diváků"}
+                  <div className="text-xs sm:text-sm text-muted mt-0.5 leading-tight">
+                    vs {nextHome.awayName} · {formatDate(nextHome.scheduledAt)}
+                    {nextHome.promoted && nextHome.promotionCost
+                      ? <span className="hidden sm:inline"> — zaplaceno {nextHome.promotionCost.toLocaleString("cs")} Kč</span>
+                      : null}
                   </div>
                 </div>
                 {!nextHome.promoted ? (
                   <button
                     onClick={() => promoteMatch(nextHome)}
                     disabled={acting}
-                    className="shrink-0 py-2 px-4 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 disabled:opacity-50 transition-colors"
+                    className="shrink-0 py-1.5 px-3 sm:py-2 sm:px-4 rounded-lg text-xs sm:text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 disabled:opacity-50 transition-colors"
                   >
                     {acting ? "..." : "Propagovat"}
                   </button>
                 ) : (
-                  <span className="shrink-0 py-2 px-4 rounded-lg text-xs font-heading font-bold bg-gold-500/15 text-gold-700">
-                    ✓ Propagováno
+                  <span className="shrink-0 py-1.5 px-3 text-xs font-heading font-bold text-gold-700">
+                    ✓
                   </span>
                 )}
               </div>

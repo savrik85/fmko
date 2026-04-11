@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player, type ManagerProfile, type TeamMatchResults } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { Spinner, SectionLabel, PositionBadge, BadgePreview } from "@/components/ui";
+import { Spinner, SectionLabel, PositionBadge, BadgePreview, useConfirm } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface Standing {
@@ -39,6 +39,8 @@ interface ScheduleMatch {
   awayScore: number | null;
   scheduledAt: string | null;
   isHome: boolean;
+  promoted?: boolean;
+  promotionCost?: number | null;
 }
 
 interface UnseenMatch {
@@ -87,6 +89,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState<MatchPreview | null>(null);
   const [news, setNews] = useState<Array<{ id: string; type: string; headline: string; icon: string; date: string }>>([]);
+  const [promoting, setPromoting] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
     if (!teamId) return;
@@ -132,6 +136,26 @@ export default function DashboardPage() {
     return (r * 299 + g * 587 + b * 114) / 1000 > 200 ? "#2D5F2D" : color;
   })();
   const nextMatch = matches.find((m) => m.status !== "simulated");
+
+  const promoteNextMatch = async () => {
+    if (!teamId || !nextMatch || promoting) return;
+    const ok = await confirm({
+      title: `Propagovat zápas proti ${nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName}?`,
+      description: "Vyjde článek ve Zpravodaji a přijde +25 % diváků. Cena 500–2 500 Kč dle velikosti obce.",
+      confirmLabel: "Propagovat",
+    });
+    if (!ok) return;
+    setPromoting(true);
+    const res = await apiFetch<{ ok?: boolean; cost?: number; error?: string }>(
+      `/api/teams/${teamId}/matches/${nextMatch.id}/promote`,
+      { method: "POST" },
+    ).catch((e) => { console.error("promote:", e); return { error: "Chyba při propagaci" }; });
+    setPromoting(false);
+    if (res?.error) { alert(res.error); return; }
+    const refreshed = await apiFetch<{ matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`)
+      .catch((e) => { console.error("refresh schedule:", e); return null; });
+    if (refreshed) setMatches(refreshed.matches);
+  };
   const myStanding = standings.find((s) => s.isPlayer);
   const avgCondition = players.length > 0 ? Math.round(players.reduce((s, p) => s + (p.lifeContext?.condition ?? 50), 0) / players.length) : 0;
   const avgMorale = players.length > 0 ? Math.round(players.reduce((s, p) => s + (p.lifeContext?.morale ?? 50), 0) / players.length) : 0;
@@ -155,6 +179,7 @@ export default function DashboardPage() {
 
   return (
     <div className="page-container space-y-5">
+      {confirmDialog}
 
       {/* ═══ Today's program ═══ */}
       <div className={`card p-4 sm:p-5 ${isMatchDay ? "ring-2 ring-pitch-400 bg-pitch-50/30" : ""}`}>
@@ -339,8 +364,21 @@ export default function DashboardPage() {
                     <span className="text-[10px] text-muted">{preview.venue.name}</span>
                   </div>
                 )}
-                <div className="text-center px-4 py-2">
+                <div className="flex items-center justify-center gap-3 px-4 py-2">
                   <Link href="/dashboard/match" className="text-xs text-pitch-500 font-heading font-bold hover:underline">Sestava →</Link>
+                  {nextMatch.isHome && (
+                    nextMatch.promoted ? (
+                      <span className="text-xs text-gold-600 font-heading font-bold">📢 Propagováno</span>
+                    ) : (
+                      <button
+                        onClick={promoteNextMatch}
+                        disabled={promoting}
+                        className="text-xs text-gold-600 font-heading font-bold hover:underline disabled:opacity-50"
+                      >
+                        {promoting ? "..." : "📢 Propagovat"}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
             );
