@@ -469,6 +469,55 @@ export async function executeDailyTick(
             }
           } catch (e) { logger.warn({ module: "daily-tick" }, "interview creation failed", e); }
         }
+
+        // ── Retry generování článku pro answered rozhovory bez article_news_id ──
+        try {
+          const pendingArticle = await env.DB.prepare(
+            `SELECT ci.id, ci.answers, ci.questions, ci.match_calendar_id, ci.game_week, ci.league_id
+             FROM coach_interviews ci
+             WHERE ci.team_id = ? AND ci.status = 'answered' AND ci.article_news_id IS NULL
+             ORDER BY ci.created_at DESC LIMIT 1`
+          ).bind(teamId).first<{ id: string; answers: string; questions: string; match_calendar_id: string; game_week: number; league_id: string }>()
+            .catch((e) => { logger.warn({ module: "daily-tick" }, "interview retry lookup", e); return null; });
+
+          if (pendingArticle?.answers) {
+            const answers: string[] = (() => { try { return JSON.parse(pendingArticle.answers); } catch { return []; } })();
+            const questions: string[] = (() => { try { return JSON.parse(pendingArticle.questions); } catch { return []; } })();
+            if (answers.length > 0 && questions.length > 0) {
+              const managerRow = await env.DB.prepare(
+                "SELECT m.name as manager_name, m.avatar as manager_avatar, t.name as team_name, t.league_id FROM managers m JOIN teams t ON t.id = m.team_id WHERE m.team_id = ?"
+              ).bind(teamId).first<{ manager_name: string; manager_avatar: string | null; team_name: string; league_id: string }>()
+                .catch((e) => { logger.warn({ module: "daily-tick" }, "interview retry load manager", e); return null; });
+              const calRow = await env.DB.prepare(
+                `SELECT m.home_team_id, m.away_team_id, ht.name as home_name, at.name as away_name
+                 FROM matches m JOIN teams ht ON m.home_team_id = ht.id JOIN teams at ON m.away_team_id = at.id
+                 WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1`
+              ).bind(pendingArticle.match_calendar_id, teamId, teamId)
+                .first<{ home_team_id: string; away_team_id: string; home_name: string; away_name: string }>()
+                .catch((e) => { logger.warn({ module: "daily-tick" }, "interview retry load cal", e); return null; });
+
+              if (managerRow) {
+                const opponentName = calRow ? (calRow.home_team_id === teamId ? calRow.away_name : calRow.home_name) : "soupeř";
+                const qa = questions.map((q, i) => ({ q, a: answers[i] ?? "" }));
+                const { generateInterviewArticle } = await import("../news/interview-generator");
+                const article = await generateInterviewArticle((env as any).GEMINI_API_KEY, qa, managerRow.manager_name, managerRow.team_name, opponentName);
+                if (article) {
+                  const newsId = crypto.randomUUID();
+                  const managerAvatar = (() => { try { return managerRow.manager_avatar ? JSON.parse(managerRow.manager_avatar) : null; } catch { return null; } })();
+                  const newsBody = JSON.stringify({ managerName: managerRow.manager_name, managerAvatar, teamName: managerRow.team_name, article: article.body, qa });
+                  await env.DB.prepare(
+                    "INSERT INTO news (id, league_id, team_id, type, headline, body, game_week, created_at) VALUES (?, ?, ?, 'interview', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+                  ).bind(newsId, managerRow.league_id, teamId, article.headline, newsBody, pendingArticle.game_week).run()
+                    .catch((e) => { logger.warn({ module: "daily-tick" }, "insert retry interview news", e); });
+                  await env.DB.prepare("UPDATE coach_interviews SET article_news_id = ? WHERE id = ?")
+                    .bind(newsId, pendingArticle.id).run()
+                    .catch((e) => { logger.warn({ module: "daily-tick" }, "update retry interview article_news_id", e); });
+                  logger.info({ module: "daily-tick", teamId }, `interview article retry OK -> ${newsId}`);
+                }
+              }
+            }
+          }
+        } catch (e) { logger.warn({ module: "daily-tick" }, "interview article retry failed", e); }
       }
 
       // ── Weekly finances (Monday) ──

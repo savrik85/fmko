@@ -3669,29 +3669,40 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
   // Sanitize answers — max 500 chars each
   const answers = body.answers.map((a) => String(a).slice(0, 500).trim());
 
-  // Manager + team info for article
-  const managerRow = await c.env.DB.prepare(
-    "SELECT m.name as manager_name, m.avatar as manager_avatar, t.name as team_name, t.league_id FROM managers m JOIN teams t ON t.id = m.team_id WHERE m.team_id = ?"
-  ).bind(teamId).first<{ manager_name: string; manager_avatar: string | null; team_name: string; league_id: string }>()
-    .catch((e) => { logger.warn({ module: "game.ts" }, "load manager for interview article", e); return null; });
-  if (!managerRow) return c.json({ error: "Trenér nenalezen" }, 404);
+  // KROK 1: Okamžitě ulož odpovědi před Gemini — odpovědi se neztratí při selhání generování
+  await c.env.DB.prepare(
+    "UPDATE coach_interviews SET status = 'answered', answers = ? WHERE id = ?"
+  ).bind(JSON.stringify(answers), interviewId)
+    .run()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "save interview answers", e); });
 
-  // Opponent name from match
-  const calRow = await c.env.DB.prepare(
-    `SELECT m.home_team_id, m.away_team_id, ht.name as home_name, at.name as away_name
-     FROM matches m
-     JOIN teams ht ON m.home_team_id = ht.id
-     JOIN teams at ON m.away_team_id = at.id
-     WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1`
-  ).bind(interview.match_calendar_id, teamId, teamId)
-    .first<{ home_team_id: string; away_team_id: string; home_name: string; away_name: string }>()
-    .catch((e) => { logger.warn({ module: "game.ts" }, "load match for interview article", e); return null; });
+  // KROK 2: Načti kontext pro generování článku
+  const [managerRow, calRow] = await Promise.all([
+    c.env.DB.prepare(
+      "SELECT m.name as manager_name, m.avatar as manager_avatar, t.name as team_name, t.league_id FROM managers m JOIN teams t ON t.id = m.team_id WHERE m.team_id = ?"
+    ).bind(teamId).first<{ manager_name: string; manager_avatar: string | null; team_name: string; league_id: string }>()
+      .catch((e) => { logger.warn({ module: "game.ts" }, "load manager for interview article", e); return null; }),
+    c.env.DB.prepare(
+      `SELECT m.home_team_id, m.away_team_id, ht.name as home_name, at.name as away_name
+       FROM matches m
+       JOIN teams ht ON m.home_team_id = ht.id
+       JOIN teams at ON m.away_team_id = at.id
+       WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1`
+    ).bind(interview.match_calendar_id, teamId, teamId)
+      .first<{ home_team_id: string; away_team_id: string; home_name: string; away_name: string }>()
+      .catch((e) => { logger.warn({ module: "game.ts" }, "load match for interview article", e); return null; }),
+  ]);
+
+  if (!managerRow) {
+    logger.warn({ module: "game.ts", teamId }, "manager not found, answers saved but article skipped");
+    return c.json({ ok: true, articlePending: true });
+  }
 
   const opponentName = calRow
     ? (calRow.home_team_id === teamId ? calRow.away_name : calRow.home_name)
     : "soupeř";
 
-  // Generate article via Gemini
+  // KROK 3: Generuj článek přes Gemini — pokud selže, odpovědi jsou bezpečně uloženy a daily-tick je zretryuje
   const qa = questions.map((q, i) => ({ q, a: answers[i] ?? "" }));
   const { generateInterviewArticle } = await import("../news/interview-generator");
   const article = await generateInterviewArticle(
@@ -3703,10 +3714,11 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
   );
 
   if (!article) {
-    return c.json({ error: "Generování článku se nezdařilo, zkuste znovu" }, 500);
+    logger.warn({ module: "game.ts", teamId }, "Gemini failed for interview article, answers saved, will retry");
+    return c.json({ ok: true, articlePending: true });
   }
 
-  // Store article in news
+  // KROK 4: Ulož článek + aktualizuj odkaz
   const newsId = crypto.randomUUID();
   const managerAvatar = (() => {
     try { return managerRow.manager_avatar ? JSON.parse(managerRow.manager_avatar) : null; } catch { return null; }
@@ -3726,14 +3738,13 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
     .run()
     .catch((e) => { logger.warn({ module: "game.ts" }, "insert interview news", e); });
 
-  // Update interview status
   await c.env.DB.prepare(
-    "UPDATE coach_interviews SET status = 'answered', answers = ?, article_news_id = ? WHERE id = ?"
-  ).bind(JSON.stringify(answers), newsId, interviewId)
+    "UPDATE coach_interviews SET article_news_id = ? WHERE id = ?"
+  ).bind(newsId, interviewId)
     .run()
-    .catch((e) => { logger.warn({ module: "game.ts" }, "update interview status", e); });
+    .catch((e) => { logger.warn({ module: "game.ts" }, "update interview article_news_id", e); });
 
-  // Notifikace vsem lidskym tymum v lize
+  // KROK 5: Notifikace ostatnim trenérum v lize
   try {
     const humanTeams = await c.env.DB.prepare(
       "SELECT id FROM teams WHERE league_id = ? AND user_id != 'ai' AND id != ?"
