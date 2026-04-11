@@ -21,12 +21,12 @@ async function sendPhoneSMS(db: D1Database, teamId: string, senderName: string, 
     .bind(teamId, roleTitle).first<{ id: string }>().then((r) => r?.id).catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
   if (!convId) {
     convId = crypto.randomUUID();
-    await db.prepare("INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', datetime('now'), datetime('now'))")
+    await db.prepare("INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
       .bind(convId, teamId, roleTitle).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   }
-  await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', ?, ?, datetime('now'))")
+  await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
     .bind(crypto.randomUUID(), convId, senderName, body).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
-  await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+  await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
     .bind(body.slice(0, 100), convId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
 }
 
@@ -1498,7 +1498,7 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
 
     // News for entire league
     await c.env.DB.prepare(
-      "INSERT INTO news (id, league_id, type, title, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, datetime('now'))"
+      "INSERT INTO news (id, league_id, type, title, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
     ).bind(crypto.randomUUID(), teamId,
       `${oldName} mění název na ${newName}`,
       `Klub ${oldName} podepsal sponzorskou smlouvu s ${body.sponsorName} a mění svůj název na ${newName}. Fanoušci nejsou nadšení (-3 reputace).`,
@@ -1558,7 +1558,7 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
 
     // News for entire league
     await c.env.DB.prepare(
-      "INSERT INTO news (id, league_id, type, title, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, datetime('now'))"
+      "INSERT INTO news (id, league_id, type, title, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
     ).bind(crypto.randomUUID(), teamId,
       `${oldName} se přejmenovává na ${defaultName}`,
       `Klub ${oldName} ukončil sponzorskou smlouvu a vrací se k názvu ${defaultName}. Fanoušci zmatení (-2 reputace).`,
@@ -1612,7 +1612,7 @@ gameRouter.post("/teams/:teamId/rename", async (c) => {
 
   // News for entire league
   await c.env.DB.prepare(
-    "INSERT INTO news (id, league_id, type, title, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, datetime('now'))"
+    "INSERT INTO news (id, league_id, type, title, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
   ).bind(crypto.randomUUID(), teamId,
     `${oldName} se přejmenovává na ${newName}`,
     `Klub ${oldName} mění svůj název na ${newName}. Fanoušci reagují rozpačitě (-3 reputace).`,
@@ -2071,7 +2071,7 @@ gameRouter.post("/game/run-matches", async (c) => {
             else if (hs < as_) lines.push(`${an} zvítězil nad ${hn} ${as_}:${hs}`);
             else lines.push(`${hn} remizoval s ${an} ${hs}:${as_}`);
           }
-          await c.env.DB.prepare("INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, datetime('now'))")
+          await c.env.DB.prepare("INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
             .bind(crypto.randomUUID(), leagueId, `${gameWeek}. kolo: přehled výsledků`, lines.join(". ") + ".", gameWeek).run();
 
           if (c.env.GEMINI_API_KEY) {
@@ -2456,11 +2456,11 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
     .bind(teamId, body.calendarId).first<{ id: string }>();
 
   if (existing) {
-    await c.env.DB.prepare("UPDATE lineups SET formation = ?, tactic = ?, players_data = ?, captain_id = ?, is_auto = 0, submitted_at = datetime('now') WHERE id = ?")
+    await c.env.DB.prepare("UPDATE lineups SET formation = ?, tactic = ?, players_data = ?, captain_id = ?, is_auto = 0, submitted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
       .bind(body.formation, body.tactic, JSON.stringify(body.players), body.captainId ?? null, existing.id).run();
   } else {
     const id = crypto.randomUUID();
-    await c.env.DB.prepare("INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, captain_id, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))")
+    await c.env.DB.prepare("INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, captain_id, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
       .bind(id, teamId, body.calendarId, body.formation, body.tactic, JSON.stringify(body.players), body.captainId ?? null).run();
   }
 
@@ -2496,7 +2496,7 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   ).run();
 
   await c.env.DB.prepare(
-    "UPDATE player_contracts SET leave_type = 'released', is_active = 0, left_at = datetime('now') WHERE player_id = ? AND team_id = ? AND is_active = 1"
+    "UPDATE player_contracts SET leave_type = 'released', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1"
   ).bind(playerId, teamId).run().catch((e) => logger.warn({ module: "game" }, "deactivate player contract on release", e));
 
   await c.env.DB.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE player_id = ? AND status = 'active'").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "withdraw listings on release", e));
@@ -2528,7 +2528,7 @@ gameRouter.get("/teams/:teamId/free-agents", async (c) => {
     if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
     const agents = await c.env.DB.prepare(
-      "SELECT fa.*, v.lat as v_lat, v.lng as v_lon, v.name as village_name FROM free_agents fa LEFT JOIN villages v ON fa.village_id = v.id WHERE fa.district = ? AND fa.expires_at > datetime('now') ORDER BY fa.overall_rating DESC"
+      "SELECT fa.*, v.lat as v_lat, v.lng as v_lon, v.name as village_name FROM free_agents fa LEFT JOIN villages v ON fa.village_id = v.id WHERE fa.district = ? AND fa.expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now') ORDER BY fa.overall_rating DESC"
     ).bind(team.district).all();
 
     // Filter out agents who rejected this team
@@ -2698,7 +2698,7 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
     const bodyText = celebTier === "S"
       ? `Je to oficiální! ${fa.first_name} ${fa.last_name} bude hrát za ${team.name} v okresním přeboru. Celý okres je vzhůru nohama.`
       : `${fa.first_name} ${fa.last_name}, ${tierDesc}, se dohodl s ${team.name}. Posílí kádr pro zbytek sezóny.`;
-    await c.env.DB.prepare("INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, ?, 'celebrity_signing', ?, ?, datetime('now'))")
+    await c.env.DB.prepare("INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, ?, 'celebrity_signing', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
       .bind(crypto.randomUUID(), team.league_id, headline, bodyText).run()
       .catch((e) => logger.warn({ module: "game" }, "celebrity signing news", e));
     // Broadcast to all teams
@@ -2706,7 +2706,7 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
       "SELECT c.id as conv_id FROM teams t JOIN conversations c ON c.team_id = t.id AND c.type = 'chairman' WHERE t.league_id = ? AND t.user_id != 'ai'"
     ).bind(team.league_id).all().catch((e) => { logger.warn({ module: "game" }, "fetch league teams for celeb broadcast", e); return { results: [] }; });
     for (const lt of leagueTeams.results) {
-      await c.env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Předseda Přeboru', ?, datetime('now'))")
+      await c.env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Předseda Přeboru', ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
         .bind(crypto.randomUUID(), lt.conv_id, `⭐ ${fa.first_name} ${fa.last_name} podepsal smlouvu s ${team.name}!`)
         .run().catch((e) => logger.warn({ module: "game" }, "celeb signing broadcast", e));
     }
@@ -3181,7 +3181,7 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
   await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ?").bind(buyerTeamId, playerId).run();
   await onPlayerTransferred(c.env.DB, playerId, buyerTeamId);
 
-  await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = datetime('now') WHERE player_id = ? AND team_id = ? AND is_active = 1").bind(playerId, teamId).run().catch((e) => logger.warn({ module: "game" }, "deactivate contract on transfer", e));
+  await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1").bind(playerId, teamId).run().catch((e) => logger.warn({ module: "game" }, "deactivate contract on transfer", e));
   const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for transfer contract", e); return null; });
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
     .bind(crypto.randomUUID(), playerId, buyerTeamId, season?.id ?? "unknown", amount).run().catch((e) => logger.warn({ module: "game" }, "insert transfer contract", e));
@@ -3378,7 +3378,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     }).catch((e) => logger.warn({ module: "game" }, "create offer accepted news", e));
   }
 
-  await c.env.DB.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = datetime('now') WHERE id = ?").bind(offerId).run();
+  await c.env.DB.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(offerId).run();
 
   // Update commute + reset squad number
   await onPlayerTransferred(c.env.DB, playerId, buyerTeamId);
@@ -3406,7 +3406,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
   const offer = await c.env.DB.prepare("SELECT player_id, from_team_id, offer_type FROM transfer_offers WHERE id = ? AND to_team_id = ?")
     .bind(offerId, teamId).first<{ player_id: string; from_team_id: string; offer_type: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
 
-  await c.env.DB.prepare("UPDATE transfer_offers SET status = 'rejected', reject_message = ?, resolved_at = datetime('now') WHERE id = ? AND to_team_id = ?")
+  await c.env.DB.prepare("UPDATE transfer_offers SET status = 'rejected', reject_message = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND to_team_id = ?")
     .bind((body as { message?: string }).message ?? null, offerId, teamId).run();
 
   // SMS to the offering team
@@ -3517,7 +3517,7 @@ gameRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
 gameRouter.get("/teams/:teamId/player-offers", async (c) => {
   const teamId = c.req.param("teamId");
   const offers = await c.env.DB.prepare(
-    "SELECT * FROM player_offers WHERE team_id = ? AND status = 'pending' AND expires_at > datetime('now') ORDER BY created_at DESC"
+    "SELECT * FROM player_offers WHERE team_id = ? AND status = 'pending' AND expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now') ORDER BY created_at DESC"
   ).bind(teamId).all().catch(() => ({ results: [] }));
   return c.json(offers.results.map((o) => ({
     id: o.id, source: o.source, sourceName: o.source_name, message: o.message,
@@ -3721,7 +3721,7 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
   });
 
   await c.env.DB.prepare(
-    "INSERT INTO news (id, league_id, team_id, type, headline, body, game_week, created_at) VALUES (?, ?, ?, 'interview', ?, ?, ?, datetime('now'))"
+    "INSERT INTO news (id, league_id, team_id, type, headline, body, game_week, created_at) VALUES (?, ?, ?, 'interview', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
   ).bind(newsId, managerRow.league_id, teamId, article.headline, newsBody, interview.game_week as number)
     .run()
     .catch((e) => { logger.warn({ module: "game.ts" }, "insert interview news", e); });
@@ -4126,7 +4126,7 @@ gameRouter.patch("/teams/:teamId/fans/ticket-price", async (c) => {
   await ensureFansRow(c.env.DB, teamId);
 
   await c.env.DB.prepare(
-    "UPDATE fans SET base_ticket_price = ?, updated_at = datetime('now') WHERE team_id = ?",
+    "UPDATE fans SET base_ticket_price = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ?",
   ).bind(price, teamId).run().catch((e) => logger.warn({ module: "game" }, "update ticket price", e));
 
   return c.json({ ok: true, baseTicketPrice: price });
@@ -4254,7 +4254,7 @@ gameRouter.patch("/teams/:teamId/concession/products/:key", async (c) => {
     : (existing?.sell_price ?? catalog.tiers[newQuality]?.defaultSellPrice ?? 0);
 
   await c.env.DB.prepare(
-    "UPDATE concession_products SET quality_level = ?, sell_price = ?, updated_at = datetime('now') WHERE team_id = ? AND product_key = ?",
+    "UPDATE concession_products SET quality_level = ?, sell_price = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ? AND product_key = ?",
   ).bind(newQuality, newPrice, teamId, key).run().catch((e) => logger.warn({ module: "game" }, "update concession product", e));
 
   return c.json({ ok: true, qualityLevel: newQuality, sellPrice: newPrice });
@@ -4302,7 +4302,7 @@ gameRouter.post("/teams/:teamId/concession/restock", async (c) => {
 
   const newStock = product.stock_quantity + quantity;
   await c.env.DB.prepare(
-    "UPDATE concession_products SET stock_quantity = ?, updated_at = datetime('now') WHERE team_id = ? AND product_key = ?",
+    "UPDATE concession_products SET stock_quantity = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ? AND product_key = ?",
   ).bind(newStock, teamId, body.productKey).run().catch((e) => logger.warn({ module: "game" }, "update stock after restock", e));
 
   return c.json({ ok: true, newStock, totalCost });

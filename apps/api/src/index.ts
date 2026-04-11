@@ -136,7 +136,7 @@ export default {
                 const headline = `${gameWeek}. kolo: přehled výsledků`;
                 const body = lines.join(". ") + "." + (topScore >= 4 ? ` Nejvíce gólů padlo v utkání ${topMatch}.` : "");
                 await env.DB.prepare(
-                  "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, datetime('now'))"
+                  "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
                 ).bind(crypto.randomUUID(), leagueId, headline, body, gameWeek).run();
               } catch (e) { log("error", "news generation failed", e); }
 
@@ -241,13 +241,13 @@ export default {
                       .bind(humanTeamId, roleConvTitle).first<{ id: string }>().then((r) => r?.id).catch(() => null);
                     if (!roleConvId) {
                       roleConvId = crypto.randomUUID();
-                      await env.DB.prepare("INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', datetime('now'), datetime('now'))")
+                      await env.DB.prepare("INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
                         .bind(roleConvId, humanTeamId, roleConvTitle).run().catch(() => {});
                     }
-                    await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', ?, ?, ?, datetime('now'))")
+                    await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
                       .bind(crypto.randomUUID(), roleConvId, sender.name, `${ev.emoji} ${ev.description}`, JSON.stringify({ type: "event", category: ev.category }))
                       .run().catch(() => {});
-                    await env.DB.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+                    await env.DB.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
                       .bind(`${ev.emoji} ${ev.title}`, roleConvId).run().catch(() => {});
                   }
                 }

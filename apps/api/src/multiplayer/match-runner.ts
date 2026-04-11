@@ -343,7 +343,7 @@ export async function runScheduledMatches(
         `UPDATE matches SET status = 'simulated', home_score = ?, away_score = ?,
          events = ?, commentary = ?, attendance = ?, stadium_name = ?, pitch_condition = ?, weather = ?,
          home_lineup_data = ?, away_lineup_data = ?, absences = ?,
-         simulated_at = datetime('now') WHERE id = ?`
+         simulated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?`
       ).bind(
         result.homeScore, result.awayScore,
         JSON.stringify(result.events), JSON.stringify(commentary),
@@ -864,7 +864,7 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
     if (validPicks.length >= 11) {
       try {
         await db.prepare(
-          "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, 0, datetime('now'))"
+          "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
         ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, JSON.stringify(validPicks.slice(0, 11))).run();
         return;
       } catch (e) {

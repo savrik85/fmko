@@ -173,7 +173,7 @@ export async function generateAiListings(
   await db.prepare(
     `INSERT INTO transfer_listings (id, team_id, player_id,
       asking_price, league_id, status, is_ai_listing, ai_player_data, expires_at, created_at)
-    VALUES (?, 'virtual_ai', 'virtual_ai', ?, ?, 'active', 1, ?, ?, datetime('now'))`
+    VALUES (?, 'virtual_ai', 'virtual_ai', ?, ?, 'active', 1, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
   ).bind(
     listingId, askingPrice, leagueId,
     playerData, expiresAt.toISOString(),
@@ -256,7 +256,7 @@ export async function generateAiOffers(
   const offerId = crypto.randomUUID();
   await db.prepare(
     `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, message, expires_at, created_at)
-     VALUES (?, ?, 'virtual_ai', ?, ?, 'transfer', 'pending', ?, datetime('now', '+7 days'), datetime('now'))`
+     VALUES (?, ?, 'virtual_ai', ?, ?, 'transfer', 'pending', ?, datetime('now', '+7 days'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
   ).bind(
     offerId, target.id, targetTeamId, offerPrice, `Nabídka od ${virtualTeam.name}`,
   ).run();
@@ -280,13 +280,13 @@ export async function generateAiOffers(
       .replace("{price}", offerPrice.toLocaleString("cs"));
 
     await db.prepare(
-      "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at) VALUES (?, ?, 'player', ?, ?, ?, datetime('now'))"
+      "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at) VALUES (?, ?, 'player', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
     ).bind(
       crypto.randomUUID(), kabinaConv.id, target.id,
       `${target.first_name} ${target.last_name}`, msgText,
     ).run().catch((e) => logger.warn({ module: "virtual-teams" }, "kabina msg", e));
 
-    await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+    await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
       .bind(`Nabídka na ${target.first_name} ${target.last_name}`, kabinaConv.id).run()
       .catch((e) => logger.warn({ module: "virtual-teams" }, "update conv", e));
   }

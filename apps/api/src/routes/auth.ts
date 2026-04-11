@@ -137,7 +137,7 @@ authRouter.post("/login", async (c) => {
     if (leaguePosition === 0) leaguePosition = null;
   }
 
-  await c.env.DB.prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?")
+  await c.env.DB.prepare("UPDATE users SET last_login_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
     .bind(user.id).run().catch((e) => console.error("Failed to update last_login_at:", e));
 
   const token = await createSession(c.env.SESSION_KV, user.id as string, body.email.toLowerCase(), teamId);
@@ -189,7 +189,7 @@ authRouter.get("/me", async (c) => {
   if (!session) return c.json({ error: "Neplatná session" }, 401);
 
   // Track last activity
-  await c.env.DB.prepare("UPDATE users SET last_activity_at = datetime('now') WHERE id = ?")
+  await c.env.DB.prepare("UPDATE users SET last_activity_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
     .bind(session.userId).run().catch((e) => console.error("Failed to update last_activity_at:", e));
 
   // Refresh team info

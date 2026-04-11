@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Card, CardBody, Spinner, SectionLabel, useConfirm } from "@/components/ui";
@@ -26,6 +27,13 @@ interface SeasonalEvent {
   choices: EventChoice[] | null;
   gameWeek: number;
   status: "pending" | "active" | "resolved";
+}
+
+interface CoachInterview {
+  id: string;
+  gameWeek: number;
+  questions: string[];
+  expiresAt: string;
 }
 
 const EVENT_ICONS: Record<string, string> = {
@@ -87,13 +95,58 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [choosing, setChoosing] = useState<string | null>(null);
   const [appliedEffects, setAppliedEffects] = useState<Record<string, EventEffect[]>>({});
+  const [interviews, setInterviews] = useState<CoachInterview[]>([]);
+  const [interviewAnswers, setInterviewAnswers] = useState<Record<string, string[]>>({});
+  const [interviewSubmitting, setInterviewSubmitting] = useState<string | null>(null);
+  const [interviewDone, setInterviewDone] = useState<string | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
     apiFetch<{ events: SeasonalEvent[]; currentGameWeek: number }>(`/api/teams/${teamId}/seasonal-events`)
       .then((d) => { setEvents(d.events); setCurrentGameWeek(d.currentGameWeek ?? 0); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch((e) => { console.error("seasonal-events fetch:", e); setLoading(false); });
+    apiFetch<{ interviews: CoachInterview[] }>(`/api/teams/${teamId}/coach-interviews`)
+      .then((d) => setInterviews(d.interviews ?? []))
+      .catch((e) => { console.error("coach-interviews fetch:", e); });
   }, [teamId]);
+
+  const handleInterviewAnswer = (interviewId: string, idx: number, value: string) => {
+    setInterviewAnswers((prev) => {
+      const cur = prev[interviewId] ?? [];
+      const next = [...cur];
+      next[idx] = value;
+      return { ...prev, [interviewId]: next };
+    });
+  };
+
+  const handleInterviewSubmit = async (interview: CoachInterview) => {
+    if (!teamId || interviewSubmitting) return;
+    const answers = interviewAnswers[interview.id] ?? [];
+    if (answers.filter((a) => a?.trim()).length < interview.questions.length) return;
+    setInterviewSubmitting(interview.id);
+    try {
+      await apiFetch(`/api/teams/${teamId}/coach-interviews/${interview.id}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers }),
+      });
+      setInterviews((prev) => prev.filter((iv) => iv.id !== interview.id));
+      setInterviewDone(interview.id);
+    } catch (e) {
+      console.error("submit interview answers:", e);
+    }
+    setInterviewSubmitting(null);
+  };
+
+  const handleInterviewDecline = async (interviewId: string) => {
+    if (!teamId) return;
+    try {
+      await apiFetch(`/api/teams/${teamId}/coach-interviews/${interviewId}/decline`, { method: "POST" });
+      setInterviews((prev) => prev.filter((iv) => iv.id !== interviewId));
+    } catch (e) {
+      console.error("decline interview:", e);
+    }
+  };
 
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -134,6 +187,69 @@ export default function EventsPage() {
 
       {/* Permanent actions */}
       <PubAction teamId={teamId} />
+
+      {/* Rozhovor kola */}
+      {interviews.length > 0 && (
+        <div>
+          <SectionLabel>📰 Zpravodaj žádá o rozhovor</SectionLabel>
+          <div className="space-y-4">
+            {interviews.map((iv) => {
+              const answers = interviewAnswers[iv.id] ?? [];
+              const allFilled = iv.questions.every((_, i) => answers[i]?.trim());
+              const expiryDate = new Date(iv.expiresAt);
+              const expiryStr = expiryDate.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" });
+              return (
+                <div key={iv.id} className="card border-2 p-5 bg-amber-50 border-amber-300">
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                      <h3 className="font-heading font-bold text-lg">🎙️ Rozhovor kola · Týden {iv.gameWeek}</h3>
+                      <p className="text-sm text-ink-light mt-1">Redaktor Okresního zpravodaje se chce zeptat před nadcházejícím zápasem.</p>
+                      <div className="text-xs text-muted mt-1">Vyprší: {expiryStr}</div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    {iv.questions.map((q, i) => (
+                      <div key={i}>
+                        <label className="block text-sm font-heading font-bold mb-1">{q}</label>
+                        <textarea
+                          value={answers[i] ?? ""}
+                          onChange={(e) => handleInterviewAnswer(iv.id, i, e.target.value)}
+                          maxLength={500}
+                          rows={3}
+                          placeholder="Vaše odpověď..."
+                          className="w-full rounded-xl border border-sand-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-500/30 resize-none"
+                        />
+                        <div className="text-right text-xs text-muted mt-0.5">{(answers[i] ?? "").length}/500</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between mt-4">
+                    <button
+                      onClick={() => handleInterviewDecline(iv.id)}
+                      className="text-xs text-muted hover:text-ink-light transition-colors"
+                    >
+                      Odmítnout rozhovor
+                    </button>
+                    <button
+                      onClick={() => handleInterviewSubmit(iv)}
+                      disabled={!allFilled || interviewSubmitting === iv.id}
+                      className="btn-primary text-sm px-4 py-2 disabled:opacity-40"
+                    >
+                      {interviewSubmitting === iv.id ? "Odesílám…" : "Odeslat odpovědi"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {interviewDone && interviews.length === 0 && (
+        <div className="card p-4 bg-pitch-50 border border-pitch-200 text-sm text-pitch-700 font-heading font-medium">
+          ✅ Odpovědi odeslány — článek vyjde ve{" "}
+          <Link href="/dashboard/news" className="underline hover:text-pitch-900">Zpravodaji</Link>.
+        </div>
+      )}
 
       {/* Pending — needs decision */}
       {pending.length > 0 && (
@@ -265,7 +381,7 @@ function PubAction({ teamId }: { teamId: string | null }) {
     if (!teamId) return;
     apiFetch<{ available: boolean; daysLeft?: number }>(`/api/teams/${teamId}/pub-status`)
       .then((d) => { setAvailable(d.available); setDaysLeft(d.daysLeft ?? 0); })
-      .catch(() => {});
+      .catch((e) => { console.error("pub-status fetch:", e); });
   }, [teamId]);
 
   const visit = async (choice: "all" | "one" | "no") => {

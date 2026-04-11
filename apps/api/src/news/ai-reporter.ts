@@ -306,7 +306,7 @@ Pravidla:
 
   // Uložení do news
   await db.prepare(
-    "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'ai_report', ?, ?, ?, datetime('now'))"
+    "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'ai_report', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
   ).bind(crypto.randomUUID(), leagueId, headline, body, gameWeek).run();
 
   logger.info({ module: "ai-reporter" }, `AI report generated for game week ${gameWeek}: "${headline}"`);
@@ -328,16 +328,16 @@ Pravidla:
       if (!convId) {
         convId = crypto.randomUUID();
         await db.prepare(
-          "INSERT INTO conversations (id, team_id, type, title, unread_count, last_message_text, last_message_at) VALUES (?, ?, 'system', 'Redakce Zpravodaje', 1, ?, datetime('now'))"
+          "INSERT INTO conversations (id, team_id, type, title, unread_count, last_message_text, last_message_at) VALUES (?, ?, 'system', 'Redakce Zpravodaje', 1, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
         ).bind(convId, tid, smsBody.slice(0, 100)).run().catch((e) => logger.warn({ module: "ai-reporter" }, "create conversation failed", e));
       }
 
       if (convId) {
         await db.prepare(
-          "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Redakce Zpravodaje', ?, datetime('now'))"
+          "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Redakce Zpravodaje', ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
         ).bind(crypto.randomUUID(), convId, smsBody).run().catch((e) => logger.warn({ module: "ai-reporter" }, "send message failed", e));
         await db.prepare(
-          "UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?"
+          "UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
         ).bind(smsBody.slice(0, 100), convId).run().catch((e) => logger.warn({ module: "ai-reporter" }, "update conversation failed", e));
       }
     }

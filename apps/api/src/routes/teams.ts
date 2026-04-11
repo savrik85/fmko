@@ -481,8 +481,8 @@ teamsRouter.post("/", async (c) => {
       });
 
       // Mark all existing matches as seen
-      await c.env.DB.prepare("UPDATE matches SET home_seen_at = datetime('now') WHERE home_team_id = ? AND status = 'simulated'").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
-      await c.env.DB.prepare("UPDATE matches SET away_seen_at = datetime('now') WHERE away_team_id = ? AND status = 'simulated'").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
+      await c.env.DB.prepare("UPDATE matches SET home_seen_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE home_team_id = ? AND status = 'simulated'").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
+      await c.env.DB.prepare("UPDATE matches SET away_seen_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE away_team_id = ? AND status = 'simulated'").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
 
       // Update references from oldId to teamId (if ID changed — shouldn't happen now)
       if (oldId !== teamId) {
@@ -576,7 +576,7 @@ teamsRouter.post("/", async (c) => {
       const headline = `${body.name} má nového trenéra: ${managerLabel}!`;
       const newsBody = `${managerLabel} přebírá vedení ${body.name} z ${village.name as string}. V kádru je ${squad.length} hráčů, oporami by měli být ${topList}. Fanoušci jsou zvědaví, co přinese nová éra.`;
       await c.env.DB.prepare(
-        "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'manager_arrival', ?, ?, datetime('now'))"
+        "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'manager_arrival', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
       ).bind(uuid(), existingLeague.id, teamId, headline, newsBody).run();
     } catch { /* news optional */ }
 
@@ -802,7 +802,7 @@ teamsRouter.post("/", async (c) => {
     ];
     const idx = Math.floor(Math.random() * headlines.length);
     await c.env.DB.prepare(
-      "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'manager_arrival', ?, ?, datetime('now'))"
+      "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'manager_arrival', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
     ).bind(uuid(), leagueId, teamId, headlines[idx], bodies[idx]).run();
   } catch (e) { logger.warn({ module: "teams" }, "news generation for manager arrival", e); }
 
