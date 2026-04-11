@@ -451,50 +451,54 @@ export default function FansPage() {
 
                   {/* Price + restock */}
                   <div className="pt-3 border-t border-gray-100 space-y-3">
-                    <div>
-                      <label className="input-label">Prodejní cena <span className="text-muted font-normal">(doporučeno {currentTier.defaultSellPrice} Kč)</span></label>
-                      <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                      <label className="input-label sm:mb-0 sm:flex-1 sm:min-w-0">
+                        Prodejní cena <span className="text-muted font-normal">(doporučeno {currentTier.defaultSellPrice} Kč)</span>
+                      </label>
+                      <div className="w-full sm:w-28 shrink-0">
                         <input
                           type="number"
                           min={0}
                           value={priceDraft}
                           onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
-                          className="input tabular-nums flex-1"
+                          className="input tabular-nums text-right"
                         />
-                        <span className="text-sm text-muted font-heading font-bold shrink-0">Kč</span>
-                        <button
-                          onClick={() => saveSellPrice(p.key)}
-                          disabled={acting === "price-" + p.key || priceDraft === String(p.sellPrice)}
-                          className="btn btn-primary btn-sm shrink-0"
-                        >
-                          {acting === "price-" + p.key ? "..." : "Uložit"}
-                        </button>
                       </div>
+                      <span className="hidden sm:inline text-sm text-muted font-heading font-bold shrink-0 -ml-1">Kč</span>
+                      <button
+                        onClick={() => saveSellPrice(p.key)}
+                        disabled={acting === "price-" + p.key || priceDraft === String(p.sellPrice)}
+                        className="btn btn-primary btn-sm shrink-0 sm:w-24"
+                      >
+                        {acting === "price-" + p.key ? "..." : "Uložit"}
+                      </button>
                     </div>
-                    <div>
-                      <label className="input-label">Doplnit sklad <span className="text-muted font-normal">({currentTier.wholesalePrice} Kč/ks)</span></label>
-                      <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                      <label className="input-label sm:mb-0 sm:flex-1 sm:min-w-0">
+                        Doplnit sklad <span className="text-muted font-normal">({currentTier.wholesalePrice} Kč/ks)</span>
+                      </label>
+                      <div className="w-full sm:w-28 shrink-0">
                         <input
                           type="number"
                           min={0}
                           placeholder="0"
                           value={qty}
                           onChange={(e) => setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))}
-                          className="input tabular-nums flex-1"
+                          className="input tabular-nums text-right"
                         />
-                        <span className="text-sm text-muted font-heading font-bold shrink-0">ks</span>
-                        <button
-                          onClick={() => doRestock(p.key)}
-                          disabled={acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)}
-                          className="btn btn-secondary btn-sm shrink-0"
-                        >
-                          {acting === "restock-" + p.key
-                            ? "..."
-                            : total > 0
-                            ? `Nakoupit za ${formatCZK(total)}`
-                            : "Nakoupit"}
-                        </button>
                       </div>
+                      <span className="hidden sm:inline text-sm text-muted font-heading font-bold shrink-0 -ml-1">ks</span>
+                      <button
+                        onClick={() => doRestock(p.key)}
+                        disabled={acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)}
+                        className="btn btn-secondary btn-sm shrink-0 sm:min-w-24"
+                      >
+                        {acting === "restock-" + p.key
+                          ? "..."
+                          : total > 0
+                          ? `Nakoupit za ${formatCZK(total)}`
+                          : "Nakoupit"}
+                      </button>
                     </div>
                   </div>
                 </div>
