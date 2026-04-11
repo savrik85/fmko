@@ -3733,7 +3733,24 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
     .run()
     .catch((e) => { logger.warn({ module: "game.ts" }, "update interview status", e); });
 
-  logger.info({ module: "game.ts", teamId }, `interview answered → article ${newsId}`);
+  // Notifikace vsem lidskym tymum v lize
+  try {
+    const humanTeams = await c.env.DB.prepare(
+      "SELECT id FROM teams WHERE league_id = ? AND user_id != 'ai' AND id != ?"
+    ).bind(managerRow.league_id, teamId)
+      .all<{ id: string }>()
+      .then((r) => r.results ?? []);
+
+    const msgBody = `📰 Vyšel nový Rozhovor kola: "${article.headline}"`;
+    for (const t of humanTeams) {
+      await sendPhoneSMS(c.env.DB, t.id, "Redakce Zpravodaje", "Redakce Zpravodaje", msgBody)
+        .catch((e) => logger.warn({ module: "game.ts" }, "interview notify team", e));
+    }
+  } catch (e) {
+    logger.warn({ module: "game.ts" }, "interview league notifications", e);
+  }
+
+  logger.info({ module: "game.ts", teamId }, `interview answered -> article ${newsId}`);
   return c.json({ ok: true, articleId: newsId });
 });
 
