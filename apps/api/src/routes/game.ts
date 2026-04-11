@@ -1083,10 +1083,10 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
 
     const id = crypto.randomUUID();
     await c.env.DB.prepare(
-      `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, lighting, stands, parking, fence)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, stands, parking, fence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(id, teamId, config.capacity, config.pitchCondition, config.pitchType,
-      config.changingRooms, config.showers, config.refreshments, config.lighting,
+      config.changingRooms, config.showers, config.refreshments,
       config.stands, config.parking, config.fence,
     ).run().catch((e) => logger.warn({ module: "game" }, "insert stadium", e));
 
@@ -1101,7 +1101,6 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     changing_rooms: stadium.changing_rooms as number ?? 0,
     showers: stadium.showers as number ?? 0,
     refreshments: stadium.refreshments as number ?? 0,
-    lighting: stadium.lighting as number ?? 0,
     stands: stadium.stands as number ?? 0,
     parking: stadium.parking as number ?? 0,
     fence: stadium.fence as number ?? 0,
@@ -1169,7 +1168,6 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
     changing_rooms: stadium.changing_rooms as number ?? 0,
     showers: stadium.showers as number ?? 0,
     refreshments: stadium.refreshments as number ?? 0,
-    lighting: stadium.lighting as number ?? 0,
     stands: stadium.stands as number ?? 0,
     parking: stadium.parking as number ?? 0,
     fence: stadium.fence as number ?? 0,
@@ -3726,6 +3724,438 @@ gameRouter.put("/admin/seed-data/:table/:id", async (c) => {
   values.push(id);
   await c.env.DB.prepare(`UPDATE ${table} SET ${updates.join(", ")} WHERE ${idCol} = ?`).bind(...values).run();
   return c.json({ ok: true });
+});
+
+// ─────────────────────────────────────────────────────────────
+// Fanoušci + Občerstvení (self concession mode)
+// ─────────────────────────────────────────────────────────────
+
+// GET /api/teams/:id/fans — stav fanoušků, vstupné override, last match delta
+gameRouter.get("/teams/:teamId/fans", async (c) => {
+  const teamId = c.req.param("teamId");
+  const { ensureFansRow } = await import("../season/fans-processor");
+  await ensureFansRow(c.env.DB, teamId);
+
+  const fans = await c.env.DB.prepare(
+    "SELECT satisfaction, loyalty, expected_performance, base_ticket_price, last_match_delta, last_match_reasons FROM fans WHERE team_id = ?",
+  ).bind(teamId).first<{
+    satisfaction: number;
+    loyalty: number;
+    expected_performance: number;
+    base_ticket_price: number;
+    last_match_delta: number;
+    last_match_reasons: string | null;
+  }>().catch((e) => { logger.warn({ module: "game" }, "load fans", e); return null; });
+
+  if (!fans) return c.json({ error: "Fans not found" }, 404);
+
+  // Load village size pro village base ticket price (prefill v UI)
+  const { mapVillageSize, getBaseTicketPrice } = await import("../season/finance-processor");
+  const villageRow = await c.env.DB.prepare(
+    "SELECT v.size FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?",
+  ).bind(teamId).first<{ size: string }>().catch((e) => {
+    logger.warn({ module: "game" }, "load village for base ticket", e);
+    return null;
+  });
+  const villageBaseTicketPrice = getBaseTicketPrice(mapVillageSize(villageRow?.size ?? "village"));
+
+  const mgr = await c.env.DB.prepare(
+    "SELECT reputation, motivation FROM managers WHERE team_id = ?",
+  ).bind(teamId).first<{ reputation: number; motivation: number }>().catch((e) => {
+    logger.warn({ module: "game" }, "load manager for fans", e);
+    return null;
+  });
+
+  const mgrMatchBoost = mgr
+    ? Math.round((mgr.reputation - 50) * 0.03 + (mgr.motivation - 50) * 0.02)
+    : 0;
+  const mgrWeeklyLoyaltyBoost = mgr
+    ? Math.round((mgr.reputation - 50) * 0.02 + (mgr.motivation - 50) * 0.015)
+    : 0;
+
+  let reasons: string[] = [];
+  try {
+    reasons = fans.last_match_reasons ? JSON.parse(fans.last_match_reasons) : [];
+  } catch (e) {
+    logger.warn({ module: "game" }, "parse last_match_reasons", e);
+  }
+
+  return c.json({
+    satisfaction: fans.satisfaction,
+    loyalty: fans.loyalty,
+    expectedPerformance: fans.expected_performance,
+    baseTicketPrice: fans.base_ticket_price,
+    villageBaseTicketPrice,
+    lastMatchDelta: fans.last_match_delta,
+    lastMatchReasons: reasons,
+    manager: mgr
+      ? {
+          reputation: mgr.reputation,
+          motivation: mgr.motivation,
+          matchBoost: mgrMatchBoost,
+          weeklyLoyaltyBoost: mgrWeeklyLoyaltyBoost,
+        }
+      : null,
+  });
+});
+
+// GET /api/teams/:id/fans/history — posledních N zápasů s satisfaction delta
+gameRouter.get("/teams/:teamId/fans/history", async (c) => {
+  const teamId = c.req.param("teamId");
+  const limit = Math.min(50, Math.max(1, parseInt(c.req.query("limit") ?? "20", 10)));
+  const rows = await c.env.DB.prepare(
+    `SELECT id, match_id, gamedate, satisfaction_before, satisfaction_after, delta,
+            reasons, opponent_name, result, attendance, created_at
+     FROM fans_match_history
+     WHERE team_id = ?
+     ORDER BY created_at DESC
+     LIMIT ?`,
+  )
+    .bind(teamId, limit)
+    .all<{
+      id: string;
+      match_id: string | null;
+      gamedate: string;
+      satisfaction_before: number;
+      satisfaction_after: number;
+      delta: number;
+      reasons: string | null;
+      opponent_name: string | null;
+      result: string | null;
+      attendance: number;
+      created_at: string;
+    }>()
+    .catch((e) => {
+      logger.warn({ module: "game" }, "load fans history", e);
+      return { results: [] };
+    });
+
+  const items = (rows.results ?? []).map((r) => ({
+    id: r.id,
+    matchId: r.match_id,
+    gamedate: r.gamedate,
+    satisfactionBefore: r.satisfaction_before,
+    satisfactionAfter: r.satisfaction_after,
+    delta: r.delta,
+    reasons: r.reasons ? (JSON.parse(r.reasons) as string[]) : [],
+    opponentName: r.opponent_name,
+    result: r.result,
+    attendance: r.attendance,
+    createdAt: r.created_at,
+  }));
+
+  return c.json({ items });
+});
+
+// GET /api/teams/:id/concession/sales — detailní historie prodejů občerstvení (jen self mode)
+gameRouter.get("/teams/:teamId/concession/sales", async (c) => {
+  const teamId = c.req.param("teamId");
+  const limit = Math.min(100, Math.max(1, parseInt(c.req.query("limit") ?? "30", 10)));
+
+  const rows = await c.env.DB.prepare(
+    `SELECT s.id, s.match_id, s.gamedate, s.product_key, s.quality_level, s.sell_price,
+            s.wholesale_price, s.sold_count, s.revenue, s.profit, s.stockout, s.attendance,
+            s.created_at,
+            CASE WHEN m.home_team_id = ? THEN at.name ELSE ht.name END as opponent_name,
+            CASE
+              WHEN m.home_team_id = ? AND m.home_score > m.away_score THEN 'win'
+              WHEN m.away_team_id = ? AND m.away_score > m.home_score THEN 'win'
+              WHEN m.home_score = m.away_score THEN 'draw'
+              ELSE 'loss'
+            END as result
+     FROM concession_match_sales s
+     LEFT JOIN matches m ON m.id = s.match_id
+     LEFT JOIN teams ht ON ht.id = m.home_team_id
+     LEFT JOIN teams at ON at.id = m.away_team_id
+     WHERE s.team_id = ?
+     ORDER BY s.created_at DESC, s.product_key
+     LIMIT ?`,
+  )
+    .bind(teamId, teamId, teamId, teamId, limit)
+    .all<{
+      id: string;
+      match_id: string | null;
+      gamedate: string;
+      product_key: string;
+      quality_level: number;
+      sell_price: number;
+      wholesale_price: number;
+      sold_count: number;
+      revenue: number;
+      profit: number;
+      stockout: number;
+      attendance: number;
+      created_at: string;
+      opponent_name: string | null;
+      result: string | null;
+    }>()
+    .catch((e) => {
+      logger.warn({ module: "game" }, "load concession sales", e);
+      return { results: [] };
+    });
+
+  // Grupování podle zápasu
+  const byMatch = new Map<
+    string,
+    {
+      matchId: string | null;
+      gamedate: string;
+      opponentName: string | null;
+      result: string | null;
+      attendance: number;
+      products: {
+        productKey: string;
+        qualityLevel: number;
+        sellPrice: number;
+        wholesalePrice: number;
+        soldCount: number;
+        revenue: number;
+        profit: number;
+        stockout: boolean;
+      }[];
+      totalRevenue: number;
+      totalProfit: number;
+    }
+  >();
+
+  for (const r of rows.results ?? []) {
+    const key = r.match_id ?? r.created_at;
+    if (!byMatch.has(key)) {
+      byMatch.set(key, {
+        matchId: r.match_id,
+        gamedate: r.gamedate,
+        opponentName: r.opponent_name,
+        result: r.result,
+        attendance: r.attendance,
+        products: [],
+        totalRevenue: 0,
+        totalProfit: 0,
+      });
+    }
+    const group = byMatch.get(key)!;
+    group.products.push({
+      productKey: r.product_key,
+      qualityLevel: r.quality_level,
+      sellPrice: r.sell_price,
+      wholesalePrice: r.wholesale_price,
+      soldCount: r.sold_count,
+      revenue: r.revenue,
+      profit: r.profit,
+      stockout: r.stockout === 1,
+    });
+    group.totalRevenue += r.revenue;
+    group.totalProfit += r.profit;
+  }
+
+  return c.json({ matches: Array.from(byMatch.values()) });
+});
+
+// PATCH /api/teams/:id/fans/ticket-price — user override ceny vstupného
+gameRouter.patch("/teams/:teamId/fans/ticket-price", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ baseTicketPrice: number }>().catch((e) => {
+    logger.warn({ module: "game" }, "parse ticket-price body", e);
+    return { baseTicketPrice: 0 };
+  });
+  const price = Math.max(0, Math.min(500, Math.round(body.baseTicketPrice ?? 0)));
+
+  const { ensureFansRow } = await import("../season/fans-processor");
+  await ensureFansRow(c.env.DB, teamId);
+
+  await c.env.DB.prepare(
+    "UPDATE fans SET base_ticket_price = ?, updated_at = datetime('now') WHERE team_id = ?",
+  ).bind(price, teamId).run().catch((e) => logger.warn({ module: "game" }, "update ticket price", e));
+
+  return c.json({ ok: true, baseTicketPrice: price });
+});
+
+// GET /api/teams/:id/concession — mód + stav produktů (+ katalog pro UI)
+gameRouter.get("/teams/:teamId/concession", async (c) => {
+  const teamId = c.req.param("teamId");
+  const { ensureFansRow } = await import("../season/fans-processor");
+  const { CONCESSION_CATALOG, CONCESSION_PRODUCT_KEYS } = await import("../season/concession-catalog");
+  await ensureFansRow(c.env.DB, teamId);
+
+  const stadium = await c.env.DB.prepare(
+    "SELECT concession_mode, refreshments FROM stadiums WHERE team_id = ?",
+  ).bind(teamId).first<{ concession_mode: string; refreshments: number }>().catch((e) => {
+    logger.warn({ module: "game" }, "load stadium for concession", e);
+    return null;
+  });
+
+  const mode = stadium?.concession_mode === "self" ? "self" : "external";
+  const refreshmentsLevel = stadium?.refreshments ?? 0;
+  const canSwitchToSelf = refreshmentsLevel >= 1;
+
+  const productsResult = await c.env.DB.prepare(
+    "SELECT product_key, quality_level, sell_price, stock_quantity FROM concession_products WHERE team_id = ?",
+  ).bind(teamId).all<{
+    product_key: string;
+    quality_level: number;
+    sell_price: number;
+    stock_quantity: number;
+  }>().catch((e) => { logger.warn({ module: "game" }, "load concession products", e); return { results: [] }; });
+
+  const productsByKey = new Map(productsResult.results.map((r) => [r.product_key, r]));
+
+  // Team reputation pro external income preview
+  const teamRow = await c.env.DB.prepare("SELECT reputation FROM teams WHERE id = ?")
+    .bind(teamId).first<{ reputation: number }>().catch((e) => { logger.warn({ module: "game" }, "load team rep", e); return null; });
+  const { computeExternalWeeklyConcession } = await import("../season/finance-processor");
+  const externalWeeklyIncome = computeExternalWeeklyConcession(refreshmentsLevel, teamRow?.reputation ?? 50);
+
+  const products = CONCESSION_PRODUCT_KEYS.map((key) => {
+    const row = productsByKey.get(key);
+    const catalog = CONCESSION_CATALOG[key];
+    return {
+      key,
+      label: catalog.label,
+      baseDemandRate: catalog.baseDemandRate,
+      qualityLevel: row?.quality_level ?? 1,
+      sellPrice: row?.sell_price ?? catalog.tiers[1].defaultSellPrice,
+      stockQuantity: row?.stock_quantity ?? 0,
+      tiers: catalog.tiers.map((t, i) => ({
+        level: i,
+        label: t.label,
+        wholesalePrice: t.wholesalePrice,
+        defaultSellPrice: t.defaultSellPrice,
+      })),
+    };
+  });
+
+  return c.json({
+    mode,
+    canSwitchToSelf,
+    refreshmentsLevel,
+    externalWeeklyIncome,
+    products,
+  });
+});
+
+// PATCH /api/teams/:id/concession/mode — přepínání mezi external a self
+gameRouter.patch("/teams/:teamId/concession/mode", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ mode: "external" | "self" }>().catch((e) => {
+    logger.warn({ module: "game" }, "parse mode body", e);
+    return { mode: "external" as const };
+  });
+  const mode = body.mode === "self" ? "self" : "external";
+
+  if (mode === "self") {
+    const stadium = await c.env.DB.prepare(
+      "SELECT refreshments FROM stadiums WHERE team_id = ?",
+    ).bind(teamId).first<{ refreshments: number }>().catch((e) => {
+      logger.warn({ module: "game" }, "check refreshments for self mode", e);
+      return null;
+    });
+    if ((stadium?.refreshments ?? 0) < 1) {
+      return c.json({ error: "Pro vlastní provoz je potřeba alespoň L1 občerstvení ve stadionu" }, 400);
+    }
+  }
+
+  await c.env.DB.prepare(
+    "UPDATE stadiums SET concession_mode = ? WHERE team_id = ?",
+  ).bind(mode, teamId).run().catch((e) => logger.warn({ module: "game" }, "update concession mode", e));
+
+  return c.json({ ok: true, mode });
+});
+
+// PATCH /api/teams/:id/concession/products/:key — kvalita + prodejní cena
+gameRouter.patch("/teams/:teamId/concession/products/:key", async (c) => {
+  const teamId = c.req.param("teamId");
+  const key = c.req.param("key");
+  const body = await c.req.json<{ qualityLevel?: number; sellPrice?: number }>().catch((e) => {
+    logger.warn({ module: "game" }, "parse concession product body", e);
+    return {} as { qualityLevel?: number; sellPrice?: number };
+  });
+
+  const { CONCESSION_CATALOG } = await import("../season/concession-catalog");
+  const catalog = CONCESSION_CATALOG[key as keyof typeof CONCESSION_CATALOG];
+  if (!catalog) return c.json({ error: "Neznámý produkt" }, 400);
+
+  const { ensureFansRow } = await import("../season/fans-processor");
+  await ensureFansRow(c.env.DB, teamId);
+
+  const existing = await c.env.DB.prepare(
+    "SELECT quality_level, sell_price FROM concession_products WHERE team_id = ? AND product_key = ?",
+  ).bind(teamId, key).first<{ quality_level: number; sell_price: number }>().catch((e) => {
+    logger.warn({ module: "game" }, "load concession product", e);
+    return null;
+  });
+
+  const newQuality = body.qualityLevel !== undefined
+    ? Math.max(0, Math.min(3, Math.round(body.qualityLevel)))
+    : (existing?.quality_level ?? 1);
+  const newPrice = body.sellPrice !== undefined
+    ? Math.max(0, Math.min(1000, Math.round(body.sellPrice)))
+    : (existing?.sell_price ?? catalog.tiers[newQuality]?.defaultSellPrice ?? 0);
+
+  await c.env.DB.prepare(
+    "UPDATE concession_products SET quality_level = ?, sell_price = ?, updated_at = datetime('now') WHERE team_id = ? AND product_key = ?",
+  ).bind(newQuality, newPrice, teamId, key).run().catch((e) => logger.warn({ module: "game" }, "update concession product", e));
+
+  return c.json({ ok: true, qualityLevel: newQuality, sellPrice: newPrice });
+});
+
+// POST /api/teams/:id/concession/restock — nákup skladu (strhne wholesale × quantity z rozpočtu)
+gameRouter.post("/teams/:teamId/concession/restock", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ productKey: string; quantity: number }>().catch((e) => {
+    logger.warn({ module: "game" }, "parse restock body", e);
+    return { productKey: "", quantity: 0 };
+  });
+
+  const { CONCESSION_CATALOG } = await import("../season/concession-catalog");
+  const catalog = CONCESSION_CATALOG[body.productKey as keyof typeof CONCESSION_CATALOG];
+  if (!catalog) return c.json({ error: "Neznámý produkt" }, 400);
+
+  const quantity = Math.max(0, Math.min(10000, Math.round(body.quantity ?? 0)));
+  if (quantity <= 0) return c.json({ error: "Množství musí být kladné" }, 400);
+
+  const product = await c.env.DB.prepare(
+    "SELECT quality_level, stock_quantity FROM concession_products WHERE team_id = ? AND product_key = ?",
+  ).bind(teamId, body.productKey).first<{ quality_level: number; stock_quantity: number }>().catch((e) => {
+    logger.warn({ module: "game" }, "load restock product", e);
+    return null;
+  });
+  if (!product) return c.json({ error: "Produkt nenalezen" }, 404);
+
+  const tier = catalog.tiers[product.quality_level];
+  if (!tier || tier.wholesalePrice === 0) {
+    return c.json({ error: "Tento produkt se nenabízí (L0)" }, 400);
+  }
+  const totalCost = tier.wholesalePrice * quantity;
+
+  const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?")
+    .bind(teamId).first<{ budget: number }>().catch((e) => { logger.warn({ module: "game" }, "load team budget", e); return null; });
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+  if (team.budget < totalCost) return c.json({ error: "Nedostatek peněz" }, 400);
+
+  const gameDate = new Date().toISOString();
+  await recordTransaction(
+    c.env.DB, teamId, "concession_wholesale", -totalCost,
+    `Nákup ${catalog.label} (${quantity} ks × ${tier.wholesalePrice} Kč)`, gameDate,
+  );
+
+  const newStock = product.stock_quantity + quantity;
+  await c.env.DB.prepare(
+    "UPDATE concession_products SET stock_quantity = ?, updated_at = datetime('now') WHERE team_id = ? AND product_key = ?",
+  ).bind(newStock, teamId, body.productKey).run().catch((e) => logger.warn({ module: "game" }, "update stock after restock", e));
+
+  return c.json({ ok: true, newStock, totalCost });
+});
+
+// POST /api/admin/backfill-fans — dev-only backfill pro existující týmy
+gameRouter.post("/admin/backfill-fans", async (c) => {
+  const { ensureFansRow } = await import("../season/fans-processor");
+  const teams = await c.env.DB.prepare("SELECT id FROM teams").all<{ id: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "backfill list teams", e); return { results: [] }; });
+  let created = 0;
+  for (const team of teams.results) {
+    await ensureFansRow(c.env.DB, team.id);
+    created++;
+  }
+  return c.json({ ok: true, teamsProcessed: created });
 });
 
 export { gameRouter };

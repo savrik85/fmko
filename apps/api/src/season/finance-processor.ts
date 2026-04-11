@@ -27,7 +27,27 @@ export type TransactionType =
   | "loan_fee"
   | "loan_income"
   | "transfer_admin_fee"
+  | "concession_wholesale"
+  | "concession_income_external"
+  | "concession_income_self"
   | "other";
+
+/** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */
+export function getBaseTicketPrice(category: string): number {
+  return category === "vesnice" ? 20 : category === "obec" ? 30 : category === "mestys" ? 40 : 50;
+}
+
+/**
+ * Týdenní příjem z externího provozovatele občerstvení.
+ * I bez vlastního bufetu (refreshments=0) externí firma přijde s vlastním stánkem a platí za pronájem plochy.
+ * S levelem refreshments roste pronájem (lepší lokace, víc zákazníků).
+ */
+export function computeExternalWeeklyConcession(refreshmentsLevel: number, reputation: number): number {
+  // External = passivní income z pronájmu. Záměrně nižší než self — self má být výhodnější.
+  const baseLease = 50; // minimální pronájem plochy i bez facility
+  const levelBonus = refreshmentsLevel * 250;
+  return Math.round((baseLease + levelBonus) * (Math.max(10, reputation) / 50));
+}
 
 /** Maps DB village size to economy.ts Czech category */
 export function mapVillageSize(dbSize: string): string {
@@ -152,10 +172,48 @@ export async function processWeeklyFinances(
     await recordTransaction(db, teamId, "other", weeklyContributions,
       `Členské příspěvky: ${playerCount} hráčů`, gameDate);
   }
+
+  // 8. Concession external income (týdenní pasivní příjem při 'external' módu)
+  // Funguje i bez vlastního bufetu — externí firma přijede s vlastním vybavením za pronájem plochy.
+  const stadiumRow = await db.prepare(
+    "SELECT refreshments, concession_mode FROM stadiums WHERE team_id = ?",
+  ).bind(teamId).first<{ refreshments: number; concession_mode: string }>().catch((e) => {
+    logger.warn({ module: "finance" }, "load stadium for concession", e);
+    return null;
+  });
+  if (stadiumRow && stadiumRow.concession_mode === "external") {
+    const refLevel = stadiumRow.refreshments ?? 0;
+    const weeklyConcession = computeExternalWeeklyConcession(refLevel, reputation);
+    if (weeklyConcession > 0) {
+      await recordTransaction(db, teamId, "concession_income_external", weeklyConcession,
+        refLevel > 0 ? "Pronájem bufetu (externí provozovatel)" : "Pronájem plochy (externí s vlastním vybavením)",
+        gameDate);
+    }
+  }
+
+  // 9. Manager → fans loyalty boost (weekly drift)
+  const mgrRow = await db.prepare(
+    "SELECT reputation, motivation FROM managers WHERE team_id = ?",
+  ).bind(teamId).first<{ reputation: number; motivation: number }>().catch((e) => {
+    logger.warn({ module: "finance" }, "load manager for loyalty drift", e);
+    return null;
+  });
+  if (mgrRow) {
+    const loyaltyDelta = Math.round(
+      (mgrRow.reputation - 50) * 0.02 + (mgrRow.motivation - 50) * 0.015,
+    );
+    if (loyaltyDelta !== 0) {
+      await db.prepare(
+        "UPDATE fans SET loyalty = MAX(0, MIN(100, loyalty + ?)), updated_at = datetime('now') WHERE team_id = ?",
+      ).bind(loyaltyDelta, teamId).run().catch((e) => logger.warn({ module: "finance" }, "mgr loyalty drift", e));
+    }
+  }
 }
 
 /**
  * Zápasové finance — volá se z match-runneru po každém zápase.
+ *
+ * @param opponentReputation Reputace soupeře (pro satisfaction expectations calc). Nepovinné — default 50.
  */
 export async function processMatchDayFinances(
   db: D1Database,
@@ -165,38 +223,109 @@ export async function processMatchDayFinances(
   result: "win" | "draw" | "loss",
   attendance: number,
   gameDate: string,
+  opponentReputation: number = 50,
 ): Promise<void> {
   // Get village info for ticket price calculation
   const team = await db.prepare(
     "SELECT v.size FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
   ).bind(teamId).first<{ size: string }>();
   const category = mapVillageSize(team?.size ?? "village");
+  const baseTicketPrice = getBaseTicketPrice(category);
 
   // Load stadium facility effects
   const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
   const stadiumRow = await db.prepare("SELECT * FROM stadiums WHERE team_id = ?")
-    .bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "finance" }, "query", e); return null; });
+    .bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "finance" }, "query stadium", e); return null; });
   const facilities: Record<string, number> = {};
   if (stadiumRow) {
-    for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "parking", "fence"]) {
+    for (const key of ["changing_rooms", "showers", "refreshments", "stands", "parking", "fence"]) {
       facilities[key] = (stadiumRow[key] as number) ?? 0;
     }
   }
   const facilityFx = calculateFacilityEffects(facilities);
 
-  if (isHome && attendance > 0) {
-    // Home team: ticket income (fence bonus increases ticket price)
-    const baseTicketPrice = category === "vesnice" ? 10 : category === "obec" ? 20 : category === "mestys" ? 30 : 50;
-    const ticketPrice = Math.round(baseTicketPrice * (1 + facilityFx.ticketPriceBonus));
-    const ticketIncome = attendance * ticketPrice;
-    await recordTransaction(db, teamId, "match_income", ticketIncome,
-      `Vstupné: ${attendance} diváků × ${ticketPrice} Kč`, gameDate, matchId);
+  // Load fans context (may not exist for older teams — ensure row exists)
+  const { ensureFansRow, loadFansContext, computeMatchSatisfactionDelta, computeSelfConcessionMatch, applyFansMatchDelta } = await import("./fans-processor");
+  await ensureFansRow(db, teamId);
+  const fansCtx = await loadFansContext(db, teamId);
 
-    // Refreshment sales income (scales with attendance)
-    if (facilityFx.refreshmentPerAttendee > 0) {
+  // Satisfaction multiplier pro ticket price: 0.7 (unhappy) -> 1.3 (nadšení)
+  const satisfaction = fansCtx?.fans.satisfaction ?? 50;
+  const satisfactionTicketMul = 0.7 + (Math.max(0, Math.min(100, satisfaction)) / 100) * 0.6;
+
+  // Effective base price (user override wins if > 0)
+  const userBase = fansCtx?.fans.base_ticket_price ?? 0;
+  const effectiveBase = userBase > 0 ? userBase : baseTicketPrice;
+  const ticketPrice = Math.round(effectiveBase * (1 + facilityFx.ticketPriceBonus) * satisfactionTicketMul);
+
+  let soldProducts: Awaited<ReturnType<typeof computeSelfConcessionMatch>>["products"] = [];
+
+  if (isHome && attendance > 0) {
+    // Fence guard: bez plnohodnotného plotu platí jen část diváků
+    const payingAttendance = Math.round(attendance * facilityFx.fencePayingRatio);
+    const ticketIncome = payingAttendance * ticketPrice;
+    const fenceLevel = facilities.fence ?? 0;
+    const fenceNote = facilityFx.fencePayingRatio < 1
+      ? ` (${fenceLevel === 0 ? "bez plotu" : "provizorní plot"}: ${payingAttendance} z ${attendance})`
+      : "";
+    await recordTransaction(db, teamId, "match_income", ticketIncome,
+      `Vstupné: ${payingAttendance} × ${ticketPrice} Kč${fenceNote}`, gameDate, matchId);
+
+    // Concession income — podle módu
+    if (fansCtx?.concessionMode === "self") {
+      const sale = computeSelfConcessionMatch(attendance, satisfaction, fansCtx.products);
+      soldProducts = sale.products;
+
+      // Persist stock decrements + zaznamenat příjem
+      for (const p of sale.products) {
+        if (p.sold > 0) {
+          await db.prepare(
+            "UPDATE concession_products SET stock_quantity = ?, updated_at = datetime('now') WHERE team_id = ? AND product_key = ?",
+          ).bind(p.stockLeft, teamId, p.key).run().catch((e) => logger.warn({ module: "finance" }, "concession stock update", e));
+        }
+      }
+
+      if (sale.totalRevenue > 0) {
+        const breakdown = sale.products
+          .filter((p) => p.sold > 0)
+          .map((p) => `${p.sold}× ${p.key}`)
+          .join(", ");
+        await recordTransaction(db, teamId, "concession_income_self", sale.totalRevenue,
+          `Tržby z vlastního občerstvení: ${breakdown}`, gameDate, matchId);
+      }
+
+      // Persist per-produkt sales pro historii prodejů
+      const { getWholesalePrice } = await import("./concession-catalog");
+      for (const p of sale.products) {
+        if (p.qualityLevel <= 0) continue;
+        const wholesale = getWholesalePrice(p.key, p.qualityLevel);
+        const revenue = p.sold * p.sellPrice;
+        const profit = revenue - p.sold * wholesale;
+        await db.prepare(
+          `INSERT INTO concession_match_sales
+           (id, team_id, match_id, gamedate, product_key, quality_level, sell_price, wholesale_price, sold_count, revenue, profit, stockout, attendance)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          crypto.randomUUID(),
+          teamId,
+          matchId,
+          gameDate,
+          p.key,
+          p.qualityLevel,
+          p.sellPrice,
+          wholesale,
+          p.sold,
+          revenue,
+          profit,
+          p.soldOut ? 1 : 0,
+          attendance,
+        ).run().catch((e) => logger.warn({ module: "finance" }, "concession sales insert", e));
+      }
+    } else if (facilityFx.refreshmentPerAttendee > 0) {
+      // External mode — použijeme původní jednoduchý model (zůstává pro zpětnou kompatibilitu před přepnutím módu)
       const refreshmentIncome = attendance * facilityFx.refreshmentPerAttendee;
       await recordTransaction(db, teamId, "match_income", refreshmentIncome,
-        `Tržby z občerstvení: ${attendance} diváků × ${facilityFx.refreshmentPerAttendee} Kč`, gameDate, matchId);
+        `Tržby z občerstvení: ${attendance} × ${facilityFx.refreshmentPerAttendee} Kč`, gameDate, matchId);
     }
 
     // Home team: referee costs
@@ -240,6 +369,47 @@ export async function processMatchDayFinances(
     await recordTransaction(db, teamId, "match_reward", totalReward,
       `Bonusy za ${resultLabel}${sponsorBonus > 0 ? ` (sponzoři ${sponsorBonus} Kč)` : ""}`,
       gameDate, matchId);
+  }
+
+  // Satisfaction delta — aplikuje se i pro venkovní zápas (fanoušci sledují výsledek)
+  if (fansCtx) {
+    const mgrRow = await db.prepare(
+      "SELECT reputation, motivation FROM managers WHERE team_id = ?",
+    ).bind(teamId).first<{ reputation: number; motivation: number }>().catch((e) => {
+      logger.warn({ module: "finance" }, "load manager for fans delta", e);
+      return null;
+    });
+
+    const satCalc = computeMatchSatisfactionDelta({
+      result,
+      fans: fansCtx.fans,
+      opponentReputation,
+      effectiveTicketPrice: isHome ? ticketPrice : baseTicketPrice,
+      villageBaseTicketPrice: baseTicketPrice,
+      concessionMode: fansCtx.concessionMode,
+      soldProducts: isHome ? soldProducts : [],
+      manager: mgrRow ?? undefined,
+    });
+
+    // Načíst jméno soupeře pro archivaci v historii
+    const opponentRow = await db.prepare(
+      `SELECT CASE WHEN home_team_id = ? THEN at.name ELSE ht.name END as opponent_name
+       FROM matches m
+       LEFT JOIN teams ht ON ht.id = m.home_team_id
+       LEFT JOIN teams at ON at.id = m.away_team_id
+       WHERE m.id = ?`,
+    ).bind(teamId, matchId).first<{ opponent_name: string }>().catch((e) => {
+      logger.warn({ module: "finance" }, "load opponent for fans history", e);
+      return null;
+    });
+
+    await applyFansMatchDelta(db, teamId, satCalc.delta, satCalc.reasons, {
+      matchId,
+      gamedate: gameDate,
+      opponentName: opponentRow?.opponent_name ?? undefined,
+      result,
+      attendance,
+    });
   }
 }
 

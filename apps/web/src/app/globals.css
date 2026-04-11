@@ -393,6 +393,14 @@ body::before {
 
 .tabular-nums { font-variant-numeric: tabular-nums; }
 @media (pointer: coarse) { button, a, [role="button"] { min-height: 44px; } }
+
+/* Hide browser default number input spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] { -moz-appearance: textfield; }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0); }
 
 /* Green shield — only covers area BELOW viewport for iOS overscroll */

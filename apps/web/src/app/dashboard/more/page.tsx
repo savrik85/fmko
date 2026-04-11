@@ -13,6 +13,7 @@ const SECTIONS = [
     { href: "/dashboard/sponsors", icon: "\u{1F4BC}", label: "Sponzo\u0159i", color: "#8B7355" },
     { href: "/dashboard/equipment", icon: "\u{1F45F}", label: "Vybaven\u00ED", color: "#7B6B4E" },
     { href: "/dashboard/stadium", icon: "\u{1F3DF}\uFE0F", label: "Stadion", color: "#5C7A3D" },
+    { href: "/dashboard/fans", icon: "\u{1F4E3}", label: "Fanou\u0161ci", color: "#8B4513", isNew: true },
     { href: "/dashboard/events", icon: "\u{1F389}", label: "Ud\u00E1losti", color: "#8B6914" },
   ]},
   { title: "Sout\u011B\u017E", items: [

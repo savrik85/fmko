@@ -67,6 +67,7 @@ interface TransferOffer {
   from_team_name?: string; to_team_name?: string; expires_at: string;
   offer_type?: "transfer" | "loan"; loan_duration?: number | null;
   avatar?: Record<string, unknown>;
+  on_turn?: boolean; // true = já jsem na tahu (druhá strana čeká)
 }
 
 type FASortKey = "rating" | "wage" | "age" | "distance";
@@ -1294,8 +1295,10 @@ export default function TransfersPage() {
                         </div>
                         {o.message && <div className="text-xs text-muted mt-1 italic">&ldquo;{o.message}&rdquo;</div>}
                         {o.status === "countered" && <div className="text-xs text-gold-600 mt-1">Protinabídka: {formatCZK(o.counter_amount!)}</div>}
+                        {o.on_turn === false && <div className="text-xs text-muted mt-1 italic">Čeká se na odpověď soupeře</div>}
                       </div>
                       <div className="flex flex-wrap gap-2 shrink-0 justify-end">
+                        {o.on_turn !== false && (<>
                         <button onClick={async () => {
                           const amount = o.counter_amount ?? o.offer_amount;
                           const isCrossLeague = myLeagueId && (o as any).from_league_id && (o as any).from_league_id !== myLeagueId;
@@ -1310,27 +1313,26 @@ export default function TransfersPage() {
                         }} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                           Přijmout
                         </button>
-                        {o.status !== "countered" && (
-                          <button onClick={() => {
-                            setPriceDialog({
-                              title: `Protinabídka za ${o.first_name} ${o.last_name}`,
-                              description: `${o.from_team_name} nabízí ${formatCZK(o.offer_amount)}. Zadej částku, za kterou jsi ochotný hráče pustit.`,
-                              defaultPrice: Math.round(o.offer_amount * 1.25),
-                              onConfirm: async (price) => {
-                                if (!teamId) return;
-                                await apiFetch(`/api/teams/${teamId}/offers/${o.id}/counter`, {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ amount: price }),
-                                }).catch((e) => console.error("counter offer:", e));
-                                setPriceDialog(null);
-                                await refresh();
-                              },
-                            });
-                          }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
-                            Protinabídka
-                          </button>
-                        )}
+                        <button onClick={() => {
+                          const currentAmount = o.counter_amount ?? o.offer_amount;
+                          setPriceDialog({
+                            title: `Protinabídka za ${o.first_name} ${o.last_name}`,
+                            description: `${o.from_team_name} nabízí ${formatCZK(currentAmount)}. Zadej částku, za kterou jsi ochotný hráče pustit.`,
+                            defaultPrice: Math.round(currentAmount * 1.25),
+                            onConfirm: async (price) => {
+                              if (!teamId) return;
+                              await apiFetch(`/api/teams/${teamId}/offers/${o.id}/counter`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ amount: price }),
+                              }).catch((e) => console.error("counter offer:", e));
+                              setPriceDialog(null);
+                              await refresh();
+                            },
+                          });
+                        }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
+                          Protinabídka
+                        </button>
                         <button onClick={async () => {
                           if (!teamId) return;
                           await apiFetch(`/api/teams/${teamId}/offers/${o.id}/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch((e) => console.error("Transfer action failed:", e));
@@ -1338,6 +1340,7 @@ export default function TransfersPage() {
                         }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                           Odmítnout
                         </button>
+                        </>)}
                       </div>
                     </div>
                   </div>
@@ -1387,13 +1390,54 @@ export default function TransfersPage() {
                           })()}
                         </div>
                       </div>
-                      <button onClick={async () => {
-                        if (!teamId) return;
-                        await apiFetch(`/api/teams/${teamId}/offers/${o.id}`, { method: "DELETE" }).catch((e) => console.error("Transfer action failed:", e));
-                        await refresh();
-                      }} className="shrink-0 py-1 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
-                        Stáhnout
-                      </button>
+                      <div className="flex flex-wrap gap-2 shrink-0 justify-end">
+                        {o.on_turn && (<>
+                          <button onClick={async () => {
+                            const amount = o.counter_amount ?? o.offer_amount;
+                            const isCrossLeague = myLeagueId && (o as any).to_league_id && (o as any).to_league_id !== myLeagueId;
+                            const adminFee = isCrossLeague ? Math.round(amount * 0.20) : 0;
+                            const desc = isCrossLeague
+                              ? `Za ${o.first_name} ${o.last_name}\n\nMeziligový přestup — zaplatíš navíc administrační poplatek ${formatCZK(adminFee)} (15%)`
+                              : `Za ${o.first_name} ${o.last_name}`;
+                            const ok = await confirm({ title: `Přijmout protinabídku ${formatCZK(amount)}?`, description: desc, confirmLabel: "Přijmout" });
+                            if (!ok || !teamId) return;
+                            await apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }).catch((e) => console.error("Transfer action failed:", e));
+                            await refresh();
+                          }} className="py-1.5 px-4 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                            Přijmout
+                          </button>
+                          <button onClick={() => {
+                            const currentAmount = o.counter_amount ?? o.offer_amount;
+                            setPriceDialog({
+                              title: `Protinabídka za ${o.first_name} ${o.last_name}`,
+                              description: `${o.to_team_name} chce ${formatCZK(currentAmount)}. Zadej novou částku.`,
+                              defaultPrice: Math.round(currentAmount * 0.9),
+                              onConfirm: async (price) => {
+                                if (!teamId) return;
+                                await apiFetch(`/api/teams/${teamId}/offers/${o.id}/counter`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ amount: price }),
+                                }).catch((e) => console.error("counter offer:", e));
+                                setPriceDialog(null);
+                                await refresh();
+                              },
+                            });
+                          }} className="py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
+                            Protinabídka
+                          </button>
+                        </>)}
+                        {!o.on_turn && (
+                          <span className="text-xs text-muted italic self-center">Čeká se na {o.to_team_name}</span>
+                        )}
+                        <button onClick={async () => {
+                          if (!teamId) return;
+                          await apiFetch(`/api/teams/${teamId}/offers/${o.id}`, { method: "DELETE" }).catch((e) => console.error("Transfer action failed:", e));
+                          await refresh();
+                        }} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                          Stáhnout
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ); })}
