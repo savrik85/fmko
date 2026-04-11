@@ -293,9 +293,9 @@ ${qaPairs}`;
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 /**
- * Zkontroluje zda pro daný zápas (match_calendar_id) v lize ještě neexistuje
- * interview request. Pokud ne, vybere dalšího trenéra v round-robin pořadí
- * a vytvoří žádost o rozhovor s Gemini-generovanými otázkami.
+ * Vybere dalšího trenéra v round-robin pořadí, který ještě nemá interview
+ * pro daný zápas (team_id + match_calendar_id), a vytvoří žádost o rozhovor
+ * s Gemini-generovanými otázkami. Volat opakovaně = každý lidský tým dostane svůj.
  */
 export async function tryCreateInterviewRequest(
   db: D1Database,
@@ -307,19 +307,8 @@ export async function tryCreateInterviewRequest(
     return;
   }
 
-  // 1. Zkontroluj: existuje interview pro tento zápas?
-  const existing = await db
-    .prepare("SELECT id FROM coach_interviews WHERE league_id = ? AND match_calendar_id = ?")
-    .bind(ctx.leagueId, ctx.calendarId)
-    .first<{ id: string }>()
-    .catch((e) => {
-      logger.warn({ module: "interview-generator" }, "check existing interview", e);
-      return null;
-    });
-
-  if (existing) return; // Already created for this match
-
-  // 2. Round-robin výběr: lidský tým s nejstarším posledním rozhovorem (nebo bez rozhovoru)
+  // 1. Round-robin výběr: lidský tým, který pro tento zápas ještě nemá interview
+  //    (seřazeno podle nejstaršího posledního rozhovoru — NULLS FIRST = kdo ještě nikdy nedostal)
   const teamRow = await db
     .prepare(
       `SELECT t.id as team_id, t.user_id, t.name as team_name, t.village_id, t.league_id,
@@ -327,12 +316,16 @@ export async function tryCreateInterviewRequest(
        FROM teams t
        JOIN managers m ON m.team_id = t.id
        WHERE t.league_id = ? AND t.user_id != 'ai'
+         AND NOT EXISTS (
+           SELECT 1 FROM coach_interviews ci
+           WHERE ci.team_id = t.id AND ci.match_calendar_id = ?
+         )
        ORDER BY (
          SELECT MAX(ci.created_at) FROM coach_interviews ci WHERE ci.team_id = t.id
        ) ASC NULLS FIRST
        LIMIT 1`,
     )
-    .bind(ctx.leagueId)
+    .bind(ctx.leagueId, ctx.calendarId)
     .first<{
       team_id: string;
       user_id: string;
@@ -348,10 +341,7 @@ export async function tryCreateInterviewRequest(
       return null;
     });
 
-  if (!teamRow) {
-    logger.warn({ module: "interview-generator" }, "no human teams in league", ctx.leagueId);
-    return;
-  }
+  if (!teamRow) return; // Vsichni lidsti treneri uz maji interview pro tento zapas
 
   // 3. Načti expires_at ze season_calendar
   const calRow = await db
