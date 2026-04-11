@@ -582,8 +582,8 @@ export async function executeDailyTick(
     for (const team of humanTeams) {
       const teamId = team.id as string;
       const offerRng = createRng(now.getTime() + teamId.charCodeAt(0) + 22222);
-      // ~28% per day ≈ 2 nabídky týdně
-      if (offerRng.random() > 0.28) continue;
+      // ~14% per day ≈ 1 nabídka týdně
+      if (offerRng.random() > 0.14) continue;
 
       const district = team.village_district as string;
       const villageInfo = {
