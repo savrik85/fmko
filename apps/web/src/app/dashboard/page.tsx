@@ -136,7 +136,6 @@ export default function DashboardPage() {
     return (r * 299 + g * 587 + b * 114) / 1000 > 200 ? "#2D5F2D" : color;
   })();
   const nextMatch = matches.find((m) => m.status !== "simulated");
-  const nextHomeMatch = matches.find((m) => m.status !== "simulated" && m.isHome);
 
   const promoteMatch = async (m: ScheduleMatch) => {
     if (!teamId || promoting) return;
@@ -367,19 +366,16 @@ export default function DashboardPage() {
                 )}
                 <div className="flex items-center justify-center gap-3 px-4 py-2">
                   <Link href="/dashboard/match" className="text-xs text-pitch-500 font-heading font-bold hover:underline">Sestava →</Link>
-                  {nextHomeMatch && (
-                    nextHomeMatch.promoted ? (
-                      <span className="text-xs text-gold-600 font-heading font-bold" title={`Domácí zápas vs ${nextHomeMatch.awayName} je propagovaný`}>
-                        📢 Propagováno
-                      </span>
+                  {nextMatch.isHome && (
+                    nextMatch.promoted ? (
+                      <span className="text-xs text-gold-600 font-heading font-bold">📢 Propagováno</span>
                     ) : (
                       <button
-                        onClick={() => promoteMatch(nextHomeMatch)}
+                        onClick={() => promoteMatch(nextMatch)}
                         disabled={promoting}
                         className="text-xs text-gold-600 font-heading font-bold hover:underline disabled:opacity-50"
-                        title={nextHomeMatch.id === nextMatch.id ? "Propagovat tento zápas" : `Propagovat nejbližší domácí: vs ${nextHomeMatch.awayName}`}
                       >
-                        {promoting ? "..." : "📢 Propagovat domácí"}
+                        {promoting ? "..." : "📢 Propagovat"}
                       </button>
                     )
                   )}
