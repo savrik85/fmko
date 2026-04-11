@@ -35,6 +35,7 @@ const TXN_ICONS: Record<string, string> = {
   transfer_fee: "🤝", transfer_income: "💵", signing_fee: "✍",
   loan_fee: "📄", loan_income: "📄", transfer_admin_fee: "🗂",
   concession_wholesale: "📦", concession_income_external: "🏪", concession_income_self: "🍺",
+  promotional_campaign: "📢",
   other: "📋",
 };
 
@@ -47,6 +48,7 @@ const TXN_LABELS: Record<string, string> = {
   transfer_fee: "Přestupová cena", transfer_income: "Prodej hráče", signing_fee: "Podpisový bonus",
   loan_fee: "Hostování — platba", loan_income: "Hostování — příjem", transfer_admin_fee: "Přestupní poplatek",
   concession_wholesale: "Nákup zboží", concession_income_external: "Pronájem bufetu", concession_income_self: "Tržby z občerstvení",
+  promotional_campaign: "Propagace zápasu",
   other: "Ostatní",
 };
 

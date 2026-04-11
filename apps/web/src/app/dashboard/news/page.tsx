@@ -46,6 +46,43 @@ function renderMarkdown(text: string): React.ReactNode {
   });
 }
 
+/** Sdílení/kopírování odkazu na konkrétní článek */
+function ShareButton({ articleId }: { articleId: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleShare = async () => {
+    if (typeof window === "undefined") return;
+    const url = `${window.location.origin}/dashboard/news?article=${articleId}`;
+    // Web Share API (mobile)
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Zpravodaj", url });
+        return;
+      } catch (e) {
+        // User canceled or not supported — fallback to clipboard
+        console.warn("share canceled:", e);
+      }
+    }
+    // Clipboard fallback
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      console.error("clipboard write:", e);
+    }
+  };
+  return (
+    <button
+      onClick={handleShare}
+      className="inline-flex items-center gap-1 text-[10px] text-muted hover:text-pitch-500 font-heading font-bold transition-colors"
+      title="Sdílet odkaz"
+      type="button"
+    >
+      {copied ? "✓ Zkopírováno" : "🔗 Sdílet"}
+    </button>
+  );
+}
+
 function formatDate(iso: string): string {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("cs", { day: "numeric", month: "long", year: "numeric" });
@@ -116,6 +153,22 @@ export default function NewsPage() {
     loadClassifieds();
   }, [teamId]);
 
+  // Scroll to article pokud URL obsahuje ?article=ID
+  useEffect(() => {
+    if (loading || articles.length === 0 || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const targetId = params.get("article");
+    if (!targetId) return;
+    const el = document.getElementById(`news-${targetId}`);
+    if (el) {
+      setTimeout(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-2", "ring-pitch-500", "ring-offset-2", "rounded-lg");
+        setTimeout(() => el.classList.remove("ring-2", "ring-pitch-500", "ring-offset-2", "rounded-lg"), 3000);
+      }, 100);
+    }
+  }, [loading, articles]);
+
   // Load other league news when selected
   useEffect(() => {
     if (!selectedLeagueId) return;
@@ -180,13 +233,18 @@ export default function NewsPage() {
   const aiReportArticles = articles.filter((a) => a.type === "ai_report");
   const roundArticles = articles.filter((a) => a.type === "round_results").slice(0, 1);
   const standingArticles = articles.filter((a) => a.type === "standing");
-  const otherArticles = articles.filter((a) => !["match", "round_results", "standing", "ai_report"].includes(a.type));
+  const promotionArticles = articles.filter((a) => a.type === "promotion");
+  const transferArticles = articles.filter((a) => a.type === "transfer");
+  const otherArticles = articles.filter(
+    (a) => !["match", "round_results", "standing", "ai_report", "promotion", "transfer"].includes(a.type),
+  );
 
   // Lead story = latest AI report only
   const leadStory = aiReportArticles[0] || matchArticles[0] || standingArticles[0] || articles[0];
-  const olderAiReports = aiReportArticles.slice(1);
-  const secondaryStories = matchArticles.slice(leadStory?.type === "match" ? 1 : 0, 3);
-  const restArticles = [...otherArticles, ...matchArticles.slice(3)];
+  // Všechny match stories sjednocené (bez lead story pokud je match)
+  const matchStories = matchArticles.slice(leadStory?.type === "match" ? 1 : 0);
+  // Ostatní drobnosti (classified ads apod.) — bez duplicit s promocemi / přestupy
+  const miscArticles = otherArticles;
 
   const today = new Date().toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const selectedLeague = selectedLeagueId ? allLeagues.find(l => l.id === selectedLeagueId) : null;
@@ -236,108 +294,200 @@ export default function NewsPage() {
       ) : (
         <div className="space-y-5">
 
-          {/* ═══ Lead story — full width ═══ */}
+          {/* ═══ Lead story + Placená propagace vedle sebe ═══ */}
           {leadStory && (
-            <div className="border-b border-gray-200 pb-5">
-              <ArticleWrapper article={leadStory}>
-                {leadStory.type === "ai_report" ? (
-                  <div>
-                    <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">Komentář kola</div>
-                    <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
-                      {leadStory.headline}
-                    </h2>
-                    <div className="text-base text-ink-light leading-relaxed space-y-3 columns-1 sm:columns-2 gap-8">
-                      {leadStory.body.split("\n").filter(Boolean).map((p, i) => (
-                        <p key={i} className="break-inside-avoid">{renderMarkdown(p)}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 border-b border-gray-200 pb-5">
+              {/* Lead story */}
+              <div id={`news-${leadStory.id}`}>
+                <ArticleWrapper article={leadStory}>
+                  {leadStory.type === "ai_report" ? (
+                    <div>
+                      <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">Komentář kola</div>
+                      <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
+                        {leadStory.headline}
+                      </h2>
+                      <div className="text-base text-ink-light leading-relaxed space-y-3 columns-1 sm:columns-2 gap-8">
+                        {leadStory.body.split("\n").filter(Boolean).map((p, i) => (
+                          <p key={i} className="break-inside-avoid">{renderMarkdown(p)}</p>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-center gap-3 mt-3">
+                        <div className="text-xs text-muted italic">{timeAgo(leadStory.date)}</div>
+                        <span className="text-muted/40">·</span>
+                        <ShareButton articleId={leadStory.id} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center max-w-3xl mx-auto">
+                      <div className="text-xs uppercase tracking-widest text-muted mb-2">
+                        {leadStory.type === "match" ? "Zápasová zpráva" : leadStory.type === "standing" ? "Tabulka" : "Aktualita"}
+                      </div>
+                      <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-3 hover:underline decoration-2 underline-offset-4">
+                        {leadStory.headline}
+                      </h2>
+                      <p className="text-base text-ink-light leading-relaxed max-w-xl mx-auto">
+                        {leadStory.body}
+                      </p>
+                      <div className="flex items-center justify-center gap-3 mt-3">
+                        <div className="text-xs text-muted italic">{timeAgo(leadStory.date)}</div>
+                        <span className="text-muted/40">·</span>
+                        <ShareButton articleId={leadStory.id} />
+                      </div>
+                    </div>
+                  )}
+                </ArticleWrapper>
+              </div>
+
+              {/* Placená propagace sidebar */}
+              {promotionArticles.length > 0 && (
+                <aside className="lg:border-l lg:border-gray-200 lg:pl-6">
+                  <div className="sticky top-4">
+                    <div className="flex items-center justify-center gap-1.5 mb-3 pb-2 border-b-2 border-double border-gold-400">
+                      <span className="text-base">📢</span>
+                      <span className="font-heading font-[900] text-xs uppercase tracking-[0.15em] text-gold-700">
+                        Placená propagace
+                      </span>
+                    </div>
+                    <div className="space-y-4">
+                      {promotionArticles.slice(0, 3).map((p) => (
+                        <div
+                          key={p.id}
+                          id={`news-${p.id}`}
+                          className="bg-gradient-to-br from-gold-50/60 to-transparent rounded-lg p-3 border border-gold-100"
+                        >
+                          <h4 className="font-heading font-[800] text-sm leading-snug mb-2">
+                            {p.headline}
+                          </h4>
+                          <p className="text-xs text-ink-light leading-relaxed whitespace-pre-line">
+                            {p.body}
+                          </p>
+                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-gold-100">
+                            <span className="text-[10px] text-muted italic">{timeAgo(p.date)}</span>
+                            <ShareButton articleId={p.id} />
+                          </div>
+                        </div>
                       ))}
                     </div>
-                    <div className="text-xs text-muted mt-3 italic text-center">{timeAgo(leadStory.date)}</div>
                   </div>
-                ) : (
-                  <div className="text-center max-w-3xl mx-auto">
-                    <div className="text-xs uppercase tracking-widest text-muted mb-2">
-                      {leadStory.type === "match" ? "Zápasová zpráva" : leadStory.type === "standing" ? "Tabulka" : "Aktualita"}
-                    </div>
-                    <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-3 hover:underline decoration-2 underline-offset-4">
-                      {leadStory.headline}
-                    </h2>
-                    <p className="text-base text-ink-light leading-relaxed max-w-xl mx-auto">
-                      {leadStory.body}
-                    </p>
-                    <div className="text-xs text-muted mt-3 italic">{timeAgo(leadStory.date)}</div>
-                  </div>
-                )}
-              </ArticleWrapper>
+                </aside>
+              )}
             </div>
           )}
 
-          {/* ═══ Older AI reports ═══ */}
-          {olderAiReports.length > 0 && (
-            <div className="border-b border-gray-200 pb-4">
-              <div className="text-[10px] uppercase tracking-widest text-muted mb-2">Starší komentáře</div>
-              <div className="space-y-1.5">
-                {olderAiReports.map((a) => (
-                  <div key={a.id} className="flex items-baseline gap-3 text-sm">
-                    <span className="text-muted shrink-0">{a.icon}</span>
-                    <span className="font-heading font-bold truncate">{a.headline}</span>
-                    <span className="text-xs text-muted shrink-0 ml-auto">{timeAgo(a.date)}</span>
+          {/* ═══ Přestupy a spekulace (dole pod Lead) ═══ */}
+          {transferArticles.length > 0 && (
+            <div className="border-b border-gray-200 pb-5">
+              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-ink">
+                <span className="text-base">🤝</span>
+                <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">
+                  Přestupy a spekulace
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {transferArticles.slice(0, 9).map((t) => (
+                  <div
+                    key={t.id}
+                    id={`news-${t.id}`}
+                    className="border-l-2 border-gray-200 pl-3 hover:border-pitch-500 transition-colors"
+                  >
+                    <h4 className="font-heading font-bold text-sm leading-snug">
+                      {t.headline}
+                    </h4>
+                    <p className="text-xs text-ink-light mt-1 leading-relaxed line-clamp-3">{t.body}</p>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-[10px] text-muted italic">{timeAgo(t.date)}</span>
+                      <ShareButton articleId={t.id} />
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* ═══ Secondary stories — 2 or 3 column ═══ */}
-          {secondaryStories.length > 0 && (
-            <div className={`grid gap-5 border-b border-gray-200 pb-5 ${secondaryStories.length >= 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
-              {secondaryStories.map((article) => (
-                <ArticleWrapper key={article.id} article={article}>
-                  <div className="border-l-2 border-ink pl-4">
-                    <div className="text-[10px] uppercase tracking-widest text-muted mb-1">Zápasová zpráva</div>
-                    <h3 className="font-heading font-[800] text-lg leading-snug mb-2 hover:underline">
-                      {article.headline}
-                    </h3>
-                    <p className="text-sm text-ink-light leading-relaxed">{article.body}</p>
-                    <div className="text-[10px] text-muted mt-2 italic">{timeAgo(article.date)}</div>
-                  </div>
-                </ArticleWrapper>
-              ))}
-            </div>
-          )}
 
-          {/* ═══ Round results + Sidebar layout ═══ */}
-          {(roundArticles.length > 0 || restArticles.length > 0 || standingArticles.length > 0) && (
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5">
+          {/* ═══ Hlavní sekce — Main + Sidebar (novinový layout) ═══ */}
+          {(roundArticles.length > 0 || matchStories.length > 0 || standingArticles.length > 0 || miscArticles.length > 0) && (
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-0 lg:gap-8">
 
-              {/* Main column — round results */}
-              <div className="space-y-5">
+              {/* Main column */}
+              <div className="lg:pr-8 lg:border-r lg:border-gray-300 space-y-6">
+
+                {/* Round results — přehled výsledků */}
                 {roundArticles.map((article) => (
-                  <div key={article.id} className="border-b border-gray-100 pb-4">
-                    <div className="flex items-center gap-2 mb-2">
+                  <div key={article.id} className="border-b-2 border-double border-ink pb-5">
+                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-300">
                       <span className="text-lg">{article.icon}</span>
-                      <h3 className="font-heading font-[800] text-base uppercase tracking-wide">{article.headline}</h3>
+                      <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">{article.headline}</h3>
                       <span className="text-[10px] text-muted italic ml-auto">{timeAgo(article.date)}</span>
                     </div>
-                    {/* Parse round results into a table-like format */}
                     <RoundResults body={article.body} />
                   </div>
                 ))}
 
-                {/* Other articles */}
-                {restArticles.map((article) => (
-                  <ArticleWrapper key={article.id} article={article}>
-                    <div className="border-b border-gray-100 pb-4">
-                      <div className="flex items-start gap-3">
-                        <span className="text-xl shrink-0">{article.icon}</span>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-heading font-bold text-base leading-snug hover:underline">{article.headline}</h3>
-                          <p className="text-sm text-ink-light mt-1 leading-relaxed">{article.body}</p>
-                          <div className="text-[10px] text-muted mt-1.5 italic">{timeAgo(article.date)}</div>
-                        </div>
-                      </div>
+                {/* Zápasové zprávy — 2-col novinový styl */}
+                {matchStories.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3 pb-2 border-b-2 border-double border-ink">
+                      <span className="text-base">⚽</span>
+                      <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">Zápasové zprávy</h3>
                     </div>
-                  </ArticleWrapper>
-                ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 sm:divide-x sm:divide-gray-200">
+                      {matchStories.map((article, idx) => {
+                        const isEven = idx % 2 === 0;
+                        return (
+                          <ArticleWrapper key={article.id} article={article}>
+                            <div
+                              id={`news-${article.id}`}
+                              className={`pb-3 border-b border-gray-100 h-full ${!isEven ? "sm:pl-6" : ""}`}
+                            >
+                              <div className="flex items-start gap-2">
+                                <span className="text-base shrink-0 leading-none mt-0.5">{article.icon}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-[9px] uppercase tracking-widest text-muted mb-1">Zápasová zpráva</div>
+                                  <h4 className="font-heading font-[800] text-sm leading-snug mb-1 hover:underline">
+                                    {article.headline}
+                                  </h4>
+                                  <p className="text-xs text-ink-light leading-relaxed line-clamp-2">{article.body}</p>
+                                  <div className="flex items-center justify-between mt-1.5">
+                                    <span className="text-[10px] text-muted italic">{timeAgo(article.date)}</span>
+                                    <ShareButton articleId={article.id} />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </ArticleWrapper>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Misc / ostatní články */}
+                {miscArticles.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3 pb-2 border-b-2 border-double border-ink">
+                      <span className="text-base">📰</span>
+                      <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">Další zprávy</h3>
+                    </div>
+                    <div className="space-y-3">
+                      {miscArticles.map((article) => (
+                        <ArticleWrapper key={article.id} article={article}>
+                          <div id={`news-${article.id}`} className="border-b border-gray-100 pb-3 flex items-start gap-3">
+                            <span className="text-lg shrink-0">{article.icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-heading font-bold text-sm leading-snug hover:underline">{article.headline}</h4>
+                              <p className="text-xs text-ink-light mt-1 leading-relaxed">{article.body}</p>
+                              <div className="flex items-center justify-between mt-1">
+                                <span className="text-[10px] text-muted italic">{timeAgo(article.date)}</span>
+                                <ShareButton articleId={article.id} />
+                              </div>
+                            </div>
+                          </div>
+                        </ArticleWrapper>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Sidebar */}

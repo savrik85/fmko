@@ -14,7 +14,7 @@ interface MatchEvent {
   detail?: string;
 }
 
-const VILLAGE_FLAVOR: Record<string, string> = {
+export const VILLAGE_FLAVOR: Record<string, string> = {
   "Vlachovo Březí": "městečko s barokním zámkem a pivovarem z roku 1670, městská památková zóna",
   "Vimperk": "brána Šumavy, město knihtisku a sklářství, pod gotickým zámkem",
   "Čkyně": "městečko na řece Volyňce z roku 1243, s gotickým kostelem sv. Maří Magdaleny a keltským hradištěm Věnec",
@@ -67,7 +67,7 @@ const VILLAGE_FLAVOR: Record<string, string> = {
   "Bohdalec": "malá čtvrť mezi Vršovicemi a Strašnicemi",
 };
 
-const WEATHER_CZ: Record<string, string> = {
+export const WEATHER_CZ: Record<string, string> = {
   sunny: "slunečno",
   cloudy: "zataženo",
   rain: "déšť",
