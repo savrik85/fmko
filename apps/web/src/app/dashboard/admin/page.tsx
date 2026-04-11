@@ -310,7 +310,7 @@ function UserManagement() {
                 <td className="py-1.5 px-3">{u.team_name ?? "—"}</td>
                 <td className="py-1.5 px-3 text-xs text-muted">{u.district ?? "—"}</td>
                 <td className="py-1.5 px-3">{u.is_admin ? "✓" : ""}</td>
-                <td className="py-1.5 px-3 text-xs text-muted">{u.last_activity_at ? new Date(u.last_activity_at + "Z").toLocaleString("cs", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : u.last_login_at ? new Date(u.last_login_at + "Z").toLocaleString("cs", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                <td className="py-1.5 px-3 text-xs text-muted">{u.last_activity_at ? new Date(u.last_activity_at.endsWith("Z") ? u.last_activity_at : u.last_activity_at.replace(" ", "T") + "Z").toLocaleString("cs", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : u.last_login_at ? new Date(u.last_login_at.endsWith("Z") ? u.last_login_at : u.last_login_at.replace(" ", "T") + "Z").toLocaleString("cs", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                 <td className="py-1.5 px-3">
                   {resetId === u.id ? (
                     <div className="flex gap-1 items-center">
@@ -362,7 +362,7 @@ function SeedDataSection() {
   const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
   useEffect(() => {
-    fetch(`${API}/api/admin/seed-data`).then((r) => r.json()).then(setTables).catch(() => {});
+    fetch(`${API}/api/admin/seed-data`).then((r) => r.json()).then(setTables).catch((e) => console.error("load seed tables:", e));
   }, []);
 
   const loadTable = async (key: string, dist?: string) => {
@@ -375,7 +375,7 @@ function SeedDataSection() {
   };
 
   const deleteRow = async (table: string, id: unknown) => {
-    await fetch(`${API}/api/admin/seed-data/${table}/${id}`, { method: "DELETE" }).catch(() => {});
+    await fetch(`${API}/api/admin/seed-data/${table}/${id}`, { method: "DELETE" }).catch((e) => console.error("delete row:", e));
     loadTable(table, district || undefined);
   };
 
@@ -391,7 +391,7 @@ function SeedDataSection() {
     await fetch(`${API}/api/admin/seed-data/${activeTable}/${id}`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }).catch(() => {});
+    }).catch((e) => console.error("save cell:", e));
     setEditCell(null);
     loadTable(activeTable, district || undefined);
   };
@@ -403,7 +403,7 @@ function SeedDataSection() {
     await fetch(`${API}/api/admin/seed-data/${activeTable}`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }).catch(() => {});
+    }).catch((e) => console.error("add row:", e));
     setNewRow({});
     setAdding(false);
     loadTable(activeTable, district || undefined);
