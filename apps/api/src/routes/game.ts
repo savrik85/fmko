@@ -3592,6 +3592,28 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/reject", async (c) => {
   return c.json({ ok: true });
 });
 
+// ── TEMP: Admin — manuální generování player offer pro testování ──
+gameRouter.post("/admin/generate-player-offer/:teamId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const { generatePlayerOffer } = await import("../events/player-offers");
+  const { createRng } = await import("../generators/rng");
+  const team = await c.env.DB.prepare(
+    "SELECT v.district, v.population, v.size FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
+  ).bind(teamId).first<{ district: string; population: number; size: string }>().catch((e) => { logger.warn({ module: "game" }, "admin offer gen", e); return null; });
+  if (!team) return c.json({ error: "team not found" }, 404);
+  const sizeMap: Record<string, string> = { hamlet: "vesnice", village: "obec", town: "mestys", small_city: "mesto", city: "mesto" };
+  const villageInfo = {
+    region_code: team.district,
+    category: (sizeMap[team.size] ?? "obec") as "vesnice" | "obec" | "mestys" | "mesto",
+    population: team.population ?? 500,
+    district: team.district,
+  };
+  const rng = createRng(Date.now());
+  const gameDate = new Date().toISOString();
+  const result = await generatePlayerOffer(c.env.DB, rng, teamId, team.district, villageInfo, gameDate);
+  return c.json({ ok: true, result });
+});
+
 // ── Coach interviews (Rozhovor kola) ──
 
 // GET /api/teams/:teamId/coach-interviews — pending interviews
