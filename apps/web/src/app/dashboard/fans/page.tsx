@@ -393,7 +393,7 @@ export default function FansPage() {
           </div>
           <div>
             <div className="flex justify-between text-xs text-muted mb-1">
-              <span>Loajalita (dlouhodobý baseline)</span>
+              <span>Loajalita — dlouhodobá důvěra ke klubu</span>
               <span>{fans.loyalty} / 100</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2.5">
@@ -542,6 +542,76 @@ export default function FansPage() {
         )}
       </div>
 
+      {/* ═══ Trenér → Fanoušci ═══ */}
+      {fans.manager && (() => {
+        const rep = fans.manager.reputation;
+        const mot = fans.manager.motivation;
+        const match = fans.manager.matchBoost;
+        const weekly = fans.manager.weeklyLoyaltyBoost;
+        const strong = rep >= 65 || mot >= 65;
+        const weak = rep < 40 || mot < 40;
+        const mood = match > 0 ? "pozitivní" : match < 0 ? "negativní" : "neutrální";
+        const moodColor = match > 0 ? "text-pitch-500" : match < 0 ? "text-card-red" : "text-muted";
+        return (
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Vliv trenéra na fanoušky</SectionLabel>
+          <div className="text-sm text-muted mb-4">
+            Trenér s reputací a motivací nad průměrem (50) pomáhá spokojenosti fanoušků. Slabý nebo
+            nemotivovaný trenér naopak fanoušky zklamává.
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-xs text-muted uppercase tracking-wide mb-1">Reputace</div>
+              <div className="flex items-baseline gap-1.5">
+                <span className={`font-heading font-bold text-2xl tabular-nums ${rep >= 50 ? "text-pitch-500" : "text-card-red"}`}>
+                  {rep}
+                </span>
+                <span className="text-xs text-muted">/ 100</span>
+              </div>
+              <div className="text-xs text-muted mt-0.5">
+                {rep >= 65 ? "Respektovaný" : rep >= 50 ? "Průměrný" : rep >= 35 ? "Slabší" : "Nezkušený"}
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-xs text-muted uppercase tracking-wide mb-1">Motivace</div>
+              <div className="flex items-baseline gap-1.5">
+                <span className={`font-heading font-bold text-2xl tabular-nums ${mot >= 50 ? "text-pitch-500" : "text-card-red"}`}>
+                  {mot}
+                </span>
+                <span className="text-xs text-muted">/ 100</span>
+              </div>
+              <div className="text-xs text-muted mt-0.5">
+                {mot >= 65 ? "Nadšený" : mot >= 50 ? "V pohodě" : mot >= 35 ? "Unavený" : "Vyhořelý"}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-gray-100">
+            <div className={`text-sm mb-3 ${moodColor}`}>
+              <span className="font-heading font-bold">{mood === "pozitivní" ? "✓ Pozitivní vliv" : mood === "negativní" ? "✗ Negativní vliv" : "◯ Neutrální vliv"}</span>
+              {strong && " — silný trenér, fanoušci ho mají rádi"}
+              {weak && " — fanoušci jsou zklamaní"}
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted">Po každém zápase spokojenost</span>
+                <span className={`font-heading font-bold text-base tabular-nums ${match > 0 ? "text-pitch-500" : match < 0 ? "text-card-red" : "text-ink"}`}>
+                  {match > 0 ? "+" : ""}{match}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted">Týdně loajalita</span>
+                <span className={`font-heading font-bold text-base tabular-nums ${weekly > 0 ? "text-pitch-500" : weekly < 0 ? "text-card-red" : "text-ink"}`}>
+                  {weekly > 0 ? "+" : ""}{weekly}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
+
       </>)}
 
 
@@ -588,14 +658,14 @@ export default function FansPage() {
             <div className="text-sm text-muted mb-1">
               {concession.refreshmentsLevel === 0
                 ? "Týdenní příjem z pronájmu plochy"
-                : "Týdenní pasivní příjem z pronájmu bufetu"}
+                : "Týdenní pasivní příjem z pronájmu občerstvení"}
             </div>
             <div className="font-heading font-bold text-xl tabular-nums text-pitch-500">
               {formatCZK(concession.externalWeeklyIncome)}
             </div>
             <div className="text-xs text-muted mt-1">
               {concession.refreshmentsLevel === 0
-                ? <>Externí provozovatel přijede s vlastním stánkem. Postav bufet na <a href="/dashboard/stadium" className="text-pitch-500 underline">stadionu</a> pro vyšší příjem.</>
+                ? <>Externí provozovatel přijede s vlastním stánkem. Postav občerstvení na <a href="/dashboard/stadium" className="text-pitch-500 underline">stadionu</a> pro vyšší příjem.</>
                 : "Bez starostí. Příjem škáluje s levelem občerstvení a reputací klubu."}
             </div>
           </div>
@@ -717,56 +787,6 @@ export default function FansPage() {
         )}
       </div>
 
-      {/* ═══ Trenér → Fanoušci ═══ */}
-      {fans.manager && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Vliv trenéra na fanoušky</SectionLabel>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <div className="text-xs text-muted">Reputace trenéra</div>
-              <div className="font-heading font-bold text-lg tabular-nums">
-                {fans.manager.reputation}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-muted">Motivace</div>
-              <div className="font-heading font-bold text-lg tabular-nums">
-                {fans.manager.motivation}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-muted">Dopad na každý zápas</div>
-              <div
-                className={`font-heading font-bold text-lg tabular-nums ${
-                  fans.manager.matchBoost > 0
-                    ? "text-pitch-500"
-                    : fans.manager.matchBoost < 0
-                    ? "text-card-red"
-                    : "text-ink"
-                }`}
-              >
-                {fans.manager.matchBoost > 0 ? "+" : ""}
-                {fans.manager.matchBoost}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-muted">Týdenní drift loajality</div>
-              <div
-                className={`font-heading font-bold text-lg tabular-nums ${
-                  fans.manager.weeklyLoyaltyBoost > 0
-                    ? "text-pitch-500"
-                    : fans.manager.weeklyLoyaltyBoost < 0
-                    ? "text-card-red"
-                    : "text-ink"
-                }`}
-              >
-                {fans.manager.weeklyLoyaltyBoost > 0 ? "+" : ""}
-                {fans.manager.weeklyLoyaltyBoost}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       </>)}
 
       {currentTab === "sales" && concession.mode === "self" && (<>
