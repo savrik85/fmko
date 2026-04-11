@@ -505,9 +505,9 @@ export default function PlayerDetailPage() {
         )}
         {offerOpen && (
           <div className="max-w-[1280px] mx-auto mt-2 px-5 sm:px-8 pb-2">
-            <div className="bg-white/10 backdrop-blur rounded-xl p-4 space-y-3">
+            <div className={`${light ? "bg-black/10" : "bg-white/10"} backdrop-blur rounded-xl p-4 space-y-3`}>
               {isLoanedToUs && (
-                <div className="text-white/80 text-xs font-heading">
+                <div className={`${light ? "text-gray-700" : "text-white/80"} text-xs font-heading`}>
                   Nabídka půjde původnímu klubu. Pokud bude akceptována, hráč u nás zůstane natrvalo.
                 </div>
               )}
@@ -516,13 +516,13 @@ export default function PlayerDetailPage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setOfferType("transfer")}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "transfer" ? "bg-white/20 text-white" : "bg-white/5 text-white/50 hover:text-white/80"}`}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "transfer" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
                   >
                     Trvalý přestup
                   </button>
                   <button
                     onClick={() => setOfferType("loan")}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "loan" ? "bg-white/20 text-white" : "bg-white/5 text-white/50 hover:text-white/80"}`}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "loan" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
                   >
                     Hostování
                   </button>
@@ -531,7 +531,7 @@ export default function PlayerDetailPage() {
 
               <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
                 <div className="flex-1 min-w-0">
-                  <label className="text-white/60 text-xs font-heading uppercase mb-1 block">
+                  <label className={`${light ? "text-gray-500" : "text-white/60"} text-xs font-heading uppercase mb-1 block`}>
                     {offerType === "loan" ? "Poplatek za hostování (Kč)" : "Nabízená částka (Kč)"}
                   </label>
                   <input
@@ -540,34 +540,34 @@ export default function PlayerDetailPage() {
                     value={offerAmount}
                     onChange={(e) => setOfferAmount(e.target.value.replace(/[^\d]/g, ""))}
                     placeholder={offerType === "loan" ? "0 = zdarma" : "např. 50000"}
-                    className="w-full bg-white/10 text-white placeholder:text-white/30 border border-white/20 rounded-lg px-3 py-2 text-sm font-heading font-bold focus:outline-none focus:border-white/50"
+                    className={`w-full rounded-lg px-3 py-2 text-sm font-heading font-bold focus:outline-none ${light ? "bg-black/5 text-gray-900 placeholder:text-gray-400 border border-black/20 focus:border-black/40" : "bg-white/10 text-white placeholder:text-white/30 border border-white/20 focus:border-white/50"}`}
                   />
                 </div>
                 {offerType === "loan" && (
                   <div className="w-32 shrink-0">
-                    <label className="text-white/60 text-xs font-heading uppercase mb-1 block">Délka (dní)</label>
+                    <label className={`${light ? "text-gray-500" : "text-white/60"} text-xs font-heading uppercase mb-1 block`}>Délka (dní)</label>
                     <select
                       value={loanDuration}
                       onChange={(e) => setLoanDuration(e.target.value)}
-                      className="w-full bg-white/10 text-white border border-white/20 rounded-lg px-3 py-2 text-sm font-heading font-bold focus:outline-none focus:border-white/50"
+                      className={`w-full rounded-lg px-3 py-2 text-sm font-heading font-bold focus:outline-none ${light ? "bg-black/5 text-gray-900 border border-black/20 focus:border-black/40" : "bg-white/10 text-white border border-white/20 focus:border-white/50"}`}
                     >
-                      <option value="14" className="bg-gray-800">14 dní</option>
-                      <option value="30" className="bg-gray-800">30 dní</option>
-                      <option value="60" className="bg-gray-800">60 dní</option>
-                      <option value="90" className="bg-gray-800">90 dní</option>
-                      <option value="120" className="bg-gray-800">Půl sezóny</option>
-                      <option value="180" className="bg-gray-800">Celá sezóna</option>
+                      <option value="14" className="bg-gray-800 text-white">14 dní</option>
+                      <option value="30" className="bg-gray-800 text-white">30 dní</option>
+                      <option value="60" className="bg-gray-800 text-white">60 dní</option>
+                      <option value="90" className="bg-gray-800 text-white">90 dní</option>
+                      <option value="120" className="bg-gray-800 text-white">Půl sezóny</option>
+                      <option value="180" className="bg-gray-800 text-white">Celá sezóna</option>
                     </select>
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <label className="text-white/60 text-xs font-heading uppercase mb-1 block">Zpráva (volitelné)</label>
+                  <label className={`${light ? "text-gray-500" : "text-white/60"} text-xs font-heading uppercase mb-1 block`}>Zpráva (volitelné)</label>
                   <input
                     type="text"
                     value={offerMessage}
                     onChange={(e) => setOfferMessage(e.target.value)}
                     placeholder="Nabízím vám spolupráci..."
-                    className="w-full bg-white/10 text-white placeholder:text-white/30 border border-white/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-white/50"
+                    className={`w-full rounded-lg px-3 py-2 text-sm focus:outline-none ${light ? "bg-black/5 text-gray-900 placeholder:text-gray-400 border border-black/20 focus:border-black/40" : "bg-white/10 text-white placeholder:text-white/30 border border-white/20 focus:border-white/50"}`}
                   />
                 </div>
                 <button
