@@ -312,28 +312,29 @@ export default function FansPage() {
       {/* ═══ Vstupné ═══ */}
       <div className="card p-4 sm:p-5">
         <SectionLabel>Vstupné</SectionLabel>
-        <div className="text-sm text-muted mb-3">
+        <div className="text-sm text-muted mb-4">
           Základní cena se řídí velikostí obce a vybavením stadionu. Tady ji můžeš přebít vlastní hodnotou.
           Cena přes 1.2× běžné úrovně rozzlobí fanoušky.
         </div>
         <div className="flex items-end gap-3">
-          <div className="flex-1">
-            <label className="text-xs text-muted block mb-1">
-              Tvoje cena (0 = automaticky podle obce)
-            </label>
-            <input
-              type="number"
-              min={0}
-              max={500}
-              value={ticketPriceDraft}
-              onChange={(e) => setTicketPriceDraft(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-base tabular-nums"
-            />
+          <div className="flex-1 min-w-0">
+            <label className="input-label">Tvoje cena (0 = automaticky podle obce)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                max={500}
+                value={ticketPriceDraft}
+                onChange={(e) => setTicketPriceDraft(e.target.value)}
+                className="input tabular-nums flex-1"
+              />
+              <span className="text-sm text-muted font-heading font-bold shrink-0">Kč</span>
+            </div>
           </div>
           <button
             onClick={saveTicketPrice}
             disabled={acting === "ticket" || ticketPriceDraft === String(fans.baseTicketPrice)}
-            className="py-2 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:bg-gray-200 disabled:text-gray-400"
+            className="btn btn-primary btn-md shrink-0"
           >
             {acting === "ticket" ? "..." : "Uložit"}
           </button>
@@ -450,52 +451,48 @@ export default function FansPage() {
 
                   {/* Price + restock */}
                   <div className="pt-3 border-t border-gray-100 space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <div className="text-sm font-medium text-ink">Prodejní cena</div>
-                        <div className="text-xs text-muted">doporučeno {currentTier.defaultSellPrice} Kč/ks</div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                    <div>
+                      <label className="input-label">Prodejní cena <span className="text-muted font-normal">(doporučeno {currentTier.defaultSellPrice} Kč)</span></label>
+                      <div className="flex items-center gap-2">
                         <input
                           type="number"
                           min={0}
                           value={priceDraft}
                           onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
-                          className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white"
+                          className="input tabular-nums flex-1"
                         />
-                        <span className="text-sm text-muted">Kč</span>
+                        <span className="text-sm text-muted font-heading font-bold shrink-0">Kč</span>
                         <button
                           onClick={() => saveSellPrice(p.key)}
                           disabled={acting === "price-" + p.key || priceDraft === String(p.sellPrice)}
-                          className="py-1.5 px-3 rounded-lg text-xs font-heading font-bold transition-colors bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="btn btn-primary btn-sm shrink-0"
                         >
                           {acting === "price-" + p.key ? "..." : "Uložit"}
                         </button>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <div className="text-sm font-medium text-ink">Doplnit sklad</div>
-                        <div className="text-xs text-muted">
-                          {total > 0 ? <>celkem <span className="font-heading font-bold text-ink">{formatCZK(total)}</span></> : <>{currentTier.wholesalePrice} Kč/ks</>}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                    <div>
+                      <label className="input-label">Doplnit sklad <span className="text-muted font-normal">({currentTier.wholesalePrice} Kč/ks)</span></label>
+                      <div className="flex items-center gap-2">
                         <input
                           type="number"
                           min={0}
                           placeholder="0"
                           value={qty}
                           onChange={(e) => setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))}
-                          className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white"
+                          className="input tabular-nums flex-1"
                         />
-                        <span className="text-sm text-muted">ks</span>
+                        <span className="text-sm text-muted font-heading font-bold shrink-0">ks</span>
                         <button
                           onClick={() => doRestock(p.key)}
                           disabled={acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)}
-                          className="py-1.5 px-3 rounded-lg text-xs font-heading font-bold transition-colors bg-gold-500 text-white hover:bg-gold-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="btn btn-secondary btn-sm shrink-0"
                         >
-                          {acting === "restock-" + p.key ? "..." : "Nakoupit"}
+                          {acting === "restock-" + p.key
+                            ? "..."
+                            : total > 0
+                            ? `Nakoupit za ${formatCZK(total)}`
+                            : "Nakoupit"}
                         </button>
                       </div>
                     </div>
