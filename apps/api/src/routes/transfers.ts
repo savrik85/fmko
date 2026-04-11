@@ -411,8 +411,8 @@ transfersRouter.post("/teams/:teamId/offers", async (c) => {
 
   const id = crypto.randomUUID();
   await c.env.DB.prepare(
-    "INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).bind(id, body.playerId, teamId, player.team_id, body.amount, body.message ?? null, expiresAt.toISOString()).run();
+    "INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, last_action_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(id, body.playerId, teamId, player.team_id, body.amount, body.message ?? null, expiresAt.toISOString(), teamId).run();
 
   return c.json({ ok: true, offerId: id });
 });
@@ -437,20 +437,32 @@ transfersRouter.get("/teams/:teamId/offers", async (c) => {
      WHERE to2.from_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
   ).bind(teamId).all();
 
-  return c.json({ incoming: incoming.results, outgoing: outgoing.results, myLeagueId: myTeam?.league_id ?? null });
+  // Přidat onTurn flag — true pokud jsem na tahu (poslední akce nebyla moje)
+  const addOnTurn = (rows: Record<string, unknown>[]) =>
+    rows.map((r) => ({ ...r, on_turn: r.last_action_by !== teamId }));
+
+  return c.json({
+    incoming: addOnTurn(incoming.results as Record<string, unknown>[]),
+    outgoing: addOnTurn(outgoing.results as Record<string, unknown>[]),
+    myLeagueId: myTeam?.league_id ?? null,
+  });
 });
 
 transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
 
+  // Accept je povolen tomu kdo je na tahu — tj. NEUDĚLAL poslední akci
+  // (původní from_team_id při pending, nebo to_team_id při counter-counter)
   const offer = await c.env.DB.prepare(
-    "SELECT * FROM transfer_offers WHERE id = ? AND to_team_id = ? AND status IN ('pending','countered')"
-  ).bind(offerId, teamId).first<Record<string, unknown>>();
-  if (!offer) return c.json({ error: "Nabídka nenalezena" }, 404);
+    "SELECT * FROM transfer_offers WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered') AND last_action_by != ?"
+  ).bind(offerId, teamId, teamId, teamId).first<Record<string, unknown>>();
+  if (!offer) return c.json({ error: "Nabídka nenalezena nebo nejsi na tahu" }, 404);
 
+  // Kupující je vždy from_team_id (nemění se mezi counterama)
   const amount = (offer.counter_amount as number) ?? (offer.offer_amount as number);
   const buyerTeamId = offer.from_team_id as string;
+  const sellerTeamId = offer.to_team_id as string;
   const playerId = offer.player_id as string;
 
   // Check buyer budget
@@ -458,7 +470,7 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     .bind(buyerTeamId).first<{ budget: number; name: string; game_date: string; league_id: string }>();
   if (!buyer) return c.json({ error: "Kupující nenalezen" }, 400);
 
-  const seller = await c.env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(teamId).first<{ name: string; league_id: string }>();
+  const seller = await c.env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(sellerTeamId).first<{ name: string; league_id: string }>();
   const player = await c.env.DB.prepare("SELECT first_name, last_name, age, position FROM players WHERE id = ?").bind(playerId).first<Record<string, unknown>>();
   const gameDate = buyer.game_date ?? new Date().toISOString();
 
@@ -476,12 +488,12 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   if (adminFee > 0) {
     await recordTransaction(c.env.DB, buyerTeamId, "transfer_admin_fee", -adminFee, `Administrační poplatek za meziligový přestup`, gameDate);
   }
-  await recordTransaction(c.env.DB, teamId, "transfer_income", amount, `Prodej: ${player?.first_name} ${player?.last_name}`, gameDate);
+  await recordTransaction(c.env.DB, sellerTeamId, "transfer_income", amount, `Prodej: ${player?.first_name} ${player?.last_name}`, gameDate);
   await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ?").bind(buyerTeamId, playerId).run();
 
   // Contracts
   await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = datetime('now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
-    .bind(playerId, teamId).run().catch((e) => logger.warn({ module: "transfers" }, "deactivate seller contract on offer accept", e));
+    .bind(playerId, sellerTeamId).run().catch((e) => logger.warn({ module: "transfers" }, "deactivate seller contract on offer accept", e));
   const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch active season for offer accept", e); return null; });
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
     .bind(crypto.randomUUID(), playerId, buyerTeamId, season?.id ?? "unknown", amount).run().catch((e) => logger.warn({ module: "transfers" }, "insert buyer contract on offer accept", e));
@@ -508,9 +520,10 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
   const body = await c.req.json<{ message?: string }>().catch((e) => { logger.warn({ module: "transfers" }, "parse reject body", e); return {}; });
+  // Reject může ten kdo je na tahu — tj. neudělal poslední akci
   await c.env.DB.prepare(
-    "UPDATE transfer_offers SET status = 'rejected', reject_message = ?, resolved_at = datetime('now') WHERE id = ? AND to_team_id = ?"
-  ).bind((body as { message?: string }).message ?? null, offerId, teamId).run();
+    "UPDATE transfer_offers SET status = 'rejected', reject_message = ?, resolved_at = datetime('now') WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered') AND last_action_by != ?"
+  ).bind((body as { message?: string }).message ?? null, offerId, teamId, teamId, teamId).run();
   return c.json({ ok: true });
 });
 
@@ -518,18 +531,20 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
   const body = await c.req.json<{ amount: number }>();
+  // Counter může ten kdo je na tahu; nastaví last_action_by na sebe
   await c.env.DB.prepare(
-    "UPDATE transfer_offers SET status = 'countered', counter_amount = ? WHERE id = ? AND to_team_id = ?"
-  ).bind(body.amount, offerId, teamId).run();
+    "UPDATE transfer_offers SET status = 'countered', counter_amount = ?, last_action_by = ? WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered') AND last_action_by != ?"
+  ).bind(body.amount, teamId, offerId, teamId, teamId, teamId).run();
   return c.json({ ok: true });
 });
 
 transfersRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
+  // Stáhnout může kdokoliv v nabídce, pokud ještě není vyřešená
   await c.env.DB.prepare(
-    "UPDATE transfer_offers SET status = 'withdrawn' WHERE id = ? AND from_team_id = ? AND status = 'pending'"
-  ).bind(offerId, teamId).run();
+    "UPDATE transfer_offers SET status = 'withdrawn', resolved_at = datetime('now') WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered')"
+  ).bind(offerId, teamId, teamId).run();
   return c.json({ ok: true });
 });
 
