@@ -452,53 +452,57 @@ export default function FansPage() {
                     })}
                   </div>
 
-                  {/* Price + restock — one row on desktop */}
-                  <div className="pt-3 border-t border-gray-100 flex flex-col sm:flex-row gap-3 sm:gap-6 sm:divide-x sm:divide-gray-100">
-                    <div className="flex items-center gap-2 sm:flex-1 sm:min-w-0">
+                  {/* Price + restock — grid panels */}
+                  <div className="pt-3 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="bg-gray-50 rounded-lg px-3 py-2.5 flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-heading font-bold text-ink leading-tight">Prodejní cena</div>
-                        <div className="text-xs text-muted truncate">doporučeno {currentTier.defaultSellPrice} Kč</div>
+                        <div className="text-xs text-muted">doporučeno {currentTier.defaultSellPrice} Kč</div>
                       </div>
-                      <input
-                        type="number"
-                        min={0}
-                        value={priceDraft}
-                        onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
-                        className="w-16 px-2 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
-                      />
-                      <span className="text-xs text-muted shrink-0">Kč</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          min={0}
+                          value={priceDraft}
+                          onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
+                          className="w-14 px-2 py-1.5 border border-gray-200 rounded-md text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500"
+                        />
+                        <span className="text-xs text-muted">Kč</span>
+                      </div>
                       <button
                         onClick={() => saveSellPrice(p.key)}
                         disabled={acting === "price-" + p.key || priceDraft === String(p.sellPrice)}
                         className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-heading font-bold transition-colors ${
                           acting === "price-" + p.key || priceDraft === String(p.sellPrice)
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                             : "bg-pitch-500 text-white hover:bg-pitch-600"
                         }`}
                       >
                         {acting === "price-" + p.key ? "..." : "Uložit"}
                       </button>
                     </div>
-                    <div className="flex items-center gap-2 sm:flex-1 sm:min-w-0 sm:pl-6">
+                    <div className="bg-gray-50 rounded-lg px-3 py-2.5 flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-heading font-bold text-ink leading-tight">Doplnit sklad</div>
-                        <div className="text-xs text-muted truncate">{currentTier.wholesalePrice} Kč/ks</div>
+                        <div className="text-xs text-muted">{currentTier.wholesalePrice} Kč/ks</div>
                       </div>
-                      <input
-                        type="number"
-                        min={0}
-                        placeholder="0"
-                        value={qty}
-                        onChange={(e) => setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))}
-                        className="w-16 px-2 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
-                      />
-                      <span className="text-xs text-muted shrink-0">ks</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          min={0}
+                          placeholder="0"
+                          value={qty}
+                          onChange={(e) => setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))}
+                          className="w-14 px-2 py-1.5 border border-gray-200 rounded-md text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500"
+                        />
+                        <span className="text-xs text-muted">ks</span>
+                      </div>
                       <button
                         onClick={() => doRestock(p.key)}
                         disabled={acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)}
                         className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-heading font-bold transition-colors ${
                           acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                             : "bg-gold-500 text-white hover:bg-gold-600"
                         }`}
                       >
