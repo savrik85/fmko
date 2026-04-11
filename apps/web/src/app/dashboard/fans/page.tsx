@@ -472,7 +472,7 @@ export default function FansPage() {
                       <button
                         onClick={() => saveSellPrice(p.key)}
                         disabled={acting === "price-" + p.key || priceDraft === String(p.sellPrice)}
-                        className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-heading font-bold transition-colors ${
+                        className={`shrink-0 min-w-[90px] py-1.5 px-3 rounded-lg text-xs font-heading font-bold transition-colors ${
                           acting === "price-" + p.key || priceDraft === String(p.sellPrice)
                             ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                             : "bg-pitch-500 text-white hover:bg-pitch-600"
@@ -500,7 +500,7 @@ export default function FansPage() {
                       <button
                         onClick={() => doRestock(p.key)}
                         disabled={acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)}
-                        className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-heading font-bold transition-colors ${
+                        className={`shrink-0 min-w-[90px] py-1.5 px-3 rounded-lg text-xs font-heading font-bold transition-colors ${
                           acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)
                             ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                             : "bg-gold-500 text-white hover:bg-gold-600"
