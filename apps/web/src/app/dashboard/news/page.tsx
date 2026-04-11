@@ -240,11 +240,11 @@ export default function NewsPage() {
   );
   const interviewArticles = articles.filter((a) => a.type === "interview");
   const latestInterviewWeek = interviewArticles.length > 0
-    ? Math.max(...interviewArticles.map((a) => (a as any).game_week ?? 0))
+    ? Math.max(...interviewArticles.map((a) => (a as any).gameWeek ?? 0))
     : null;
-  const currentWeekInterviews = latestInterviewWeek != null
-    ? interviewArticles.filter((a) => (a as any).game_week === latestInterviewWeek)
-    : [];
+  const currentWeekInterviews = latestInterviewWeek != null && latestInterviewWeek > 0
+    ? interviewArticles.filter((a) => (a as any).gameWeek === latestInterviewWeek)
+    : interviewArticles;
   const otherArticles = articles.filter(
     (a) => !["match", "round_results", "standing", "ai_report", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview"].includes(a.type),
   );
