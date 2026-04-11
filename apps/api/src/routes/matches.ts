@@ -546,14 +546,32 @@ matchesRouter.post("/teams/:teamId/matches/:matchId/promote", async (c) => {
     "UPDATE matches SET promoted = 1, promotion_cost = ?, promotion_boost = ? WHERE id = ?",
   ).bind(cost, PROMO_BOOST, matchId).run();
 
-  // 3. Vložit news
-  const headline = pickOne(PROMO_HEADLINES)
-    .replace("{team}", homeName)
-    .replace("{opp}", awayName);
-  const body = pickOne(PROMO_BODIES)
-    .replace(/\{team\}/g, homeName)
-    .replace(/\{opp\}/g, awayName)
-    .replace(/\{village\}/g, villageName);
+  // 3. Pokusit se vygenerovat AI článek, fallback na statický pool
+  const { generatePromotionalArticle } = await import("../news/promo-generator");
+  const ai = await generatePromotionalArticle(
+    c.env.DB,
+    c.env.GEMINI_API_KEY,
+    matchId,
+    teamId,
+  ).catch((e) => {
+    logger.warn({ module: "matches" }, "ai promo generation failed", e);
+    return null;
+  });
+
+  let headline: string;
+  let body: string;
+  if (ai) {
+    headline = ai.headline;
+    body = ai.body;
+  } else {
+    headline = pickOne(PROMO_HEADLINES)
+      .replace("{team}", homeName)
+      .replace("{opp}", awayName);
+    body = pickOne(PROMO_BODIES)
+      .replace(/\{team\}/g, homeName)
+      .replace(/\{opp\}/g, awayName)
+      .replace(/\{village\}/g, villageName);
+  }
 
   await c.env.DB.prepare(
     "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'promotion', ?, ?, datetime('now'))",
