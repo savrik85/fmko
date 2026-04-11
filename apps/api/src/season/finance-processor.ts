@@ -34,7 +34,7 @@ export type TransactionType =
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */
 export function getBaseTicketPrice(category: string): number {
-  return category === "vesnice" ? 10 : category === "obec" ? 20 : category === "mestys" ? 30 : 50;
+  return category === "vesnice" ? 20 : category === "obec" ? 30 : category === "mestys" ? 40 : 50;
 }
 
 /**

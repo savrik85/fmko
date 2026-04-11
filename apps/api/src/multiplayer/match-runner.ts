@@ -190,8 +190,8 @@ export async function runScheduledMatches(
       ).bind(homeTeamId).first<{ population: number; size: string; reputation: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home village info", e); return null; });
       const pop = homeInfo?.population ?? 500;
       const rep = homeInfo?.reputation ?? 50;
-      // Base from population — okresní fotbal: realisticky 0.5-1.5% obyvatel
-      const popBase = Math.round(pop * (0.005 + Math.random() * 0.01));
+      // Base from population — okresní fotbal: 2-4.5% obyvatel
+      const popBase = Math.round(pop * (0.02 + Math.random() * 0.025));
       // Reputation bonus (higher rep = more fans)
       const repBonus = Math.round(popBase * (rep / 100) * 0.3);
       // Recent form — count wins in last 5 matches
@@ -202,7 +202,7 @@ export async function runScheduledMatches(
         ) WHERE win = 1`
       ).bind(homeTeamId, homeTeamId, homeTeamId, homeTeamId).first<{ w: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load recent wins", e); return { w: 0 }; });
       const formBonus = Math.round((recentWins?.w ?? 0) * popBase * 0.08);
-      const rawAttendance = Math.max(8, popBase + repBonus + formBonus + Math.round(Math.random() * 10 - 5));
+      const rawAttendance = Math.max(15, popBase + repBonus + formBonus + Math.round(Math.random() * 10 - 5));
       // Celebrity attendance bonus — check if any celebrity is in either lineup
       let celebAttendanceMultiplier = 1.0;
       const allLineupIds = [...homeLineup, ...awayLineup].map(lp => fullIdMap.get(lp.id)).filter(Boolean) as string[];
