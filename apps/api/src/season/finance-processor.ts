@@ -43,8 +43,9 @@ export function getBaseTicketPrice(category: string): number {
  * S levelem refreshments roste pronájem (lepší lokace, víc zákazníků).
  */
 export function computeExternalWeeklyConcession(refreshmentsLevel: number, reputation: number): number {
-  const baseLease = 200; // základní pronájem plochy i bez facility
-  const levelBonus = refreshmentsLevel * 400;
+  // External = passivní income z pronájmu. Záměrně nižší než self — self má být výhodnější.
+  const baseLease = 50; // minimální pronájem plochy i bez facility
+  const levelBonus = refreshmentsLevel * 250;
   return Math.round((baseLease + levelBonus) * (Math.max(10, reputation) / 50));
 }
 
@@ -362,7 +363,25 @@ export async function processMatchDayFinances(
       manager: mgrRow ?? undefined,
     });
 
-    await applyFansMatchDelta(db, teamId, satCalc.delta, satCalc.reasons);
+    // Načíst jméno soupeře pro archivaci v historii
+    const opponentRow = await db.prepare(
+      `SELECT CASE WHEN home_team_id = ? THEN at.name ELSE ht.name END as opponent_name
+       FROM matches m
+       LEFT JOIN teams ht ON ht.id = m.home_team_id
+       LEFT JOIN teams at ON at.id = m.away_team_id
+       WHERE m.id = ?`,
+    ).bind(teamId, matchId).first<{ opponent_name: string }>().catch((e) => {
+      logger.warn({ module: "finance" }, "load opponent for fans history", e);
+      return null;
+    });
+
+    await applyFansMatchDelta(db, teamId, satCalc.delta, satCalc.reasons, {
+      matchId,
+      gamedate: gameDate,
+      opponentName: opponentRow?.opponent_name ?? undefined,
+      result,
+      attendance,
+    });
   }
 }
 

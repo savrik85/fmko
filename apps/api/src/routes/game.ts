@@ -3799,6 +3799,54 @@ gameRouter.get("/teams/:teamId/fans", async (c) => {
   });
 });
 
+// GET /api/teams/:id/fans/history — posledních N zápasů s satisfaction delta
+gameRouter.get("/teams/:teamId/fans/history", async (c) => {
+  const teamId = c.req.param("teamId");
+  const limit = Math.min(50, Math.max(1, parseInt(c.req.query("limit") ?? "20", 10)));
+  const rows = await c.env.DB.prepare(
+    `SELECT id, match_id, gamedate, satisfaction_before, satisfaction_after, delta,
+            reasons, opponent_name, result, attendance, created_at
+     FROM fans_match_history
+     WHERE team_id = ?
+     ORDER BY created_at DESC
+     LIMIT ?`,
+  )
+    .bind(teamId, limit)
+    .all<{
+      id: string;
+      match_id: string | null;
+      gamedate: string;
+      satisfaction_before: number;
+      satisfaction_after: number;
+      delta: number;
+      reasons: string | null;
+      opponent_name: string | null;
+      result: string | null;
+      attendance: number;
+      created_at: string;
+    }>()
+    .catch((e) => {
+      logger.warn({ module: "game" }, "load fans history", e);
+      return { results: [] };
+    });
+
+  const items = (rows.results ?? []).map((r) => ({
+    id: r.id,
+    matchId: r.match_id,
+    gamedate: r.gamedate,
+    satisfactionBefore: r.satisfaction_before,
+    satisfactionAfter: r.satisfaction_after,
+    delta: r.delta,
+    reasons: r.reasons ? (JSON.parse(r.reasons) as string[]) : [],
+    opponentName: r.opponent_name,
+    result: r.result,
+    attendance: r.attendance,
+    createdAt: r.created_at,
+  }));
+
+  return c.json({ items });
+});
+
 // PATCH /api/teams/:id/fans/ticket-price — user override ceny vstupného
 gameRouter.patch("/teams/:teamId/fans/ticket-price", async (c) => {
   const teamId = c.req.param("teamId");

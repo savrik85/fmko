@@ -64,7 +64,7 @@ const FACILITY_LABELS: Record<string, string> = {
 const FACILITY_DESCRIPTIONS: Record<string, string[]> = {
   changing_rooms: ["Převlékání za autem", "Bouda s lavicí", "Šatna se skříňkami", "Moderní šatny s vyhříváním"],
   showers: ["Hadice na dvoře", "Jedna sprcha se studenou vodou", "Sprchy s teplou vodou", "Sprchy s masážními tryskami"],
-  refreshments: ["Žádné", "Termoska s čajem", "Stánek s pivem a párkem", "Bufet s grillem a točeným"],
+  refreshments: ["Žádné", "Pivní stan z bazaru", "Karavan", "Hospůdka"],
   stands: ["Diváci stojí kolem hřiště", "Pár laviček", "Dřevěná tribuna se střechou", "Betonová tribuna se sedačkami"],
   parking: ["Žádné", "Louka vedle hřiště", "Štěrkové parkoviště", "Asfaltové parkoviště s čarami"],
   fence: ["Žádné", "Provizorní páska", "Drátěný plot", "Zděné oplocení s branami"],

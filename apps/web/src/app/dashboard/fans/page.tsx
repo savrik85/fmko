@@ -46,6 +46,20 @@ interface ConcessionData {
   products: ConcessionProduct[];
 }
 
+interface FansHistoryItem {
+  id: string;
+  matchId: string | null;
+  gamedate: string;
+  satisfactionBefore: number;
+  satisfactionAfter: number;
+  delta: number;
+  reasons: string[];
+  opponentName: string | null;
+  result: "win" | "draw" | "loss" | null;
+  attendance: number;
+  createdAt: string;
+}
+
 const PRODUCT_ICONS: Record<string, string> = {
   sausage: "🌭",
   beer: "🍺",
@@ -70,11 +84,64 @@ function satTextColor(value: number): string {
   return "text-card-red";
 }
 
+function formatGamedate(s: string): string {
+  const d = new Date(s.length > 10 ? s : s + "T00:00:00");
+  if (isNaN(d.getTime())) return s;
+  return `${d.getDate()}.${d.getMonth() + 1}.`;
+}
+
+function resultBadge(r: string | null): { label: string; cls: string } {
+  if (r === "win") return { label: "V", cls: "bg-pitch-500 text-white" };
+  if (r === "draw") return { label: "R", cls: "bg-gold-500 text-white" };
+  if (r === "loss") return { label: "P", cls: "bg-card-red text-white" };
+  return { label: "?", cls: "bg-gray-200 text-gray-500" };
+}
+
+/** SVG sparkline graf pro satisfaction history. Body jsou chronologicky od nejstaršího vlevo. */
+function SatisfactionSparkline({ points }: { points: number[] }) {
+  if (points.length < 2) {
+    return <div className="text-xs text-muted italic">Nedostatek dat pro graf (potřeba alespoň 2 zápasy)</div>;
+  }
+  const w = 600;
+  const h = 80;
+  const padX = 8;
+  const padY = 8;
+  const innerW = w - padX * 2;
+  const innerH = h - padY * 2;
+  const step = points.length > 1 ? innerW / (points.length - 1) : 0;
+  const toXY = (v: number, i: number) => {
+    const x = padX + i * step;
+    const y = padY + innerH - (Math.max(0, Math.min(100, v)) / 100) * innerH;
+    return { x, y };
+  };
+  const path = points.map((v, i) => {
+    const { x, y } = toXY(v, i);
+    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  const areaPath = `${path} L${(padX + (points.length - 1) * step).toFixed(1)},${(padY + innerH).toFixed(1)} L${padX.toFixed(1)},${(padY + innerH).toFixed(1)} Z`;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-20" preserveAspectRatio="none">
+      {/* Gridline 50% */}
+      <line x1={padX} y1={padY + innerH / 2} x2={w - padX} y2={padY + innerH / 2} stroke="#e5e7eb" strokeDasharray="2,3" strokeWidth={1} />
+      {/* Area fill */}
+      <path d={areaPath} fill="rgba(45,95,45,0.08)" />
+      {/* Line */}
+      <path d={path} fill="none" stroke="#2d5f2d" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+      {/* Body */}
+      {points.map((v, i) => {
+        const { x, y } = toXY(v, i);
+        return <circle key={i} cx={x} cy={y} r={2.5} fill="#2d5f2d" />;
+      })}
+    </svg>
+  );
+}
+
 export default function FansPage() {
   const { teamId } = useTeam();
   const [fans, setFans] = useState<FansData | null>(null);
   const [concession, setConcession] = useState<ConcessionData | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
+  const [history, setHistory] = useState<FansHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [ticketPriceDraft, setTicketPriceDraft] = useState<string>("");
   const [productDrafts, setProductDrafts] = useState<Record<string, { sellPrice: string }>>({});
@@ -84,14 +151,16 @@ export default function FansPage() {
 
   const refresh = async () => {
     if (!teamId) return;
-    const [f, co, t] = await Promise.all([
+    const [f, co, t, h] = await Promise.all([
       apiFetch<FansData>(`/api/teams/${teamId}/fans`),
       apiFetch<ConcessionData>(`/api/teams/${teamId}/concession`),
       apiFetch<Team>(`/api/teams/${teamId}`),
+      apiFetch<{ items: FansHistoryItem[] }>(`/api/teams/${teamId}/fans/history?limit=20`),
     ]);
     setFans(f);
     setConcession(co);
     setTeam(t);
+    setHistory(h.items ?? []);
     // Předvyplnit cenu vstupenky: user override, jinak automatická podle obce
     const prefillPrice = f.baseTicketPrice > 0 ? f.baseTicketPrice : f.villageBaseTicketPrice;
     setTicketPriceDraft(String(prefillPrice));
@@ -308,6 +377,69 @@ export default function FansPage() {
           </div>
         )}
       </div>
+
+      {/* ═══ Historie spokojenosti ═══ */}
+      {history.length > 0 && (
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Historie spokojenosti (posledních {history.length})</SectionLabel>
+          {/* Sparkline — chronologicky od nejstaršího vlevo */}
+          <div className="mb-4 pb-4 border-b border-gray-100">
+            <div className="flex items-center justify-between text-xs text-muted mb-1">
+              <span>Vývoj spokojenosti</span>
+              <span className="tabular-nums">
+                {history.length > 0 ? history[history.length - 1].satisfactionAfter : 50} → {history[0].satisfactionAfter}
+              </span>
+            </div>
+            <SatisfactionSparkline
+              points={[...history].reverse().map((h) => h.satisfactionAfter)}
+            />
+          </div>
+
+          {/* Seznam zápasů */}
+          <div className="space-y-2">
+            {history.map((h) => {
+              const badge = resultBadge(h.result);
+              return (
+                <div key={h.id} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-b-0">
+                  <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-heading font-bold ${badge.cls}`}>
+                    {badge.label}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-heading font-bold text-ink">
+                        {h.opponentName ?? "Neznámý soupeř"}
+                      </span>
+                      <span className="text-xs text-muted">{formatGamedate(h.gamedate)}</span>
+                      {h.attendance > 0 && (
+                        <span className="text-xs text-muted">· {h.attendance} diváků</span>
+                      )}
+                    </div>
+                    {h.reasons.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                        {h.reasons.map((r, i) => (
+                          <span key={i} className="text-xs text-muted">
+                            {r}{i < h.reasons.length - 1 ? " ·" : ""}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className={`font-heading font-bold text-sm tabular-nums ${
+                      h.delta > 0 ? "text-pitch-500" : h.delta < 0 ? "text-card-red" : "text-muted"
+                    }`}>
+                      {h.delta > 0 ? "+" : ""}{h.delta}
+                    </div>
+                    <div className="text-xs text-muted tabular-nums">
+                      {h.satisfactionBefore}→{h.satisfactionAfter}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ═══ Vstupné ═══ */}
       <div className="card p-4 sm:p-5">

@@ -263,25 +263,68 @@ export async function ensureFansRow(
 
 /**
  * Po zápase uloží satisfaction delta do DB + last match reasons.
+ * Zároveň archivuje záznam do fans_match_history pro pozdější zobrazení historie.
  */
 export async function applyFansMatchDelta(
   db: D1Database,
   teamId: string,
   delta: number,
   reasons: string[],
+  context?: {
+    matchId?: string;
+    gamedate?: string;
+    opponentName?: string;
+    result?: "win" | "draw" | "loss";
+    attendance?: number;
+  },
 ): Promise<void> {
+  // Načíst current satisfaction pro before/after snapshot
+  const before = await db
+    .prepare("SELECT satisfaction FROM fans WHERE team_id = ?")
+    .bind(teamId)
+    .first<{ satisfaction: number }>()
+    .catch((e) => {
+      logger.warn({ module: "fans-processor" }, "load satisfaction before", e);
+      return null;
+    });
+  const satBefore = before?.satisfaction ?? 50;
+  const satAfter = Math.max(0, Math.min(100, satBefore + delta));
+
   await db
     .prepare(
       `UPDATE fans
-       SET satisfaction = MAX(0, MIN(100, satisfaction + ?)),
+       SET satisfaction = ?,
            last_match_delta = ?,
            last_match_reasons = ?,
            updated_at = datetime('now')
        WHERE team_id = ?`,
     )
-    .bind(delta, delta, JSON.stringify(reasons), teamId)
+    .bind(satAfter, delta, JSON.stringify(reasons), teamId)
     .run()
     .catch((e) => logger.warn({ module: "fans-processor" }, "apply delta", e));
+
+  // Insert do historie
+  await db
+    .prepare(
+      `INSERT INTO fans_match_history
+       (id, team_id, match_id, gamedate, satisfaction_before, satisfaction_after, delta, reasons, opponent_name, result, attendance)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      crypto.randomUUID(),
+      teamId,
+      context?.matchId ?? null,
+      context?.gamedate ?? new Date().toISOString().slice(0, 10),
+      satBefore,
+      satAfter,
+      delta,
+      JSON.stringify(reasons),
+      context?.opponentName ?? null,
+      context?.result ?? null,
+      context?.attendance ?? 0,
+    )
+    .run()
+    .catch((e) => logger.warn({ module: "fans-processor" }, "insert history", e));
 }
 
 /**
