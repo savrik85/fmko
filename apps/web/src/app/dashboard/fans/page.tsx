@@ -52,11 +52,6 @@ const PRODUCT_ICONS: Record<string, string> = {
   lemonade: "🥤",
 };
 
-const PRODUCT_ACCENT: Record<string, string> = {
-  sausage: "border-t-2 border-orange-300",
-  beer: "border-t-2 border-amber-400",
-  lemonade: "border-t-2 border-pitch-400",
-};
 
 function formatCZK(v: number): string {
   return v.toLocaleString("cs") + " Kč";
@@ -401,156 +396,94 @@ export default function FansPage() {
         )}
 
         {concession.mode === "self" && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {concession.products.map((p) => {
               const currentTier = p.tiers[p.qualityLevel];
               const priceDraft = productDrafts[p.key]?.sellPrice ?? String(p.sellPrice);
               const qty = restockQty[p.key] ?? "";
               const qtyNum = parseInt(qty, 10);
-              const total =
-                !isNaN(qtyNum) && qtyNum > 0 ? qtyNum * currentTier.wholesalePrice : 0;
-              const stockLow = p.stockQuantity > 0 && p.stockQuantity < 20;
+              const total = !isNaN(qtyNum) && qtyNum > 0 ? qtyNum * currentTier.wholesalePrice : 0;
               const stockEmpty = p.stockQuantity === 0;
+              const stockLow = p.stockQuantity > 0 && p.stockQuantity < 20;
               return (
-                <div key={p.key} className={`card overflow-hidden ${PRODUCT_ACCENT[p.key] ?? ""}`}>
+                <div key={p.key} className="card p-4">
                   {/* Header */}
-                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
-                    <span className="text-3xl leading-none">{PRODUCT_ICONS[p.key] ?? "🍽"}</span>
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <span className="text-2xl">{PRODUCT_ICONS[p.key] ?? "🍽"}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="font-heading font-bold text-lg leading-tight">{p.label}</div>
-                      <div className="text-sm text-muted truncate">{currentTier.label}</div>
+                      <div className="font-heading font-bold">{p.label}</div>
+                      <div className="text-xs text-muted">{currentTier.label}</div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <div
-                        className={`font-heading font-bold text-2xl tabular-nums leading-tight ${
-                          stockEmpty
-                            ? "text-card-red"
-                            : stockLow
-                            ? "text-gold-600"
-                            : "text-pitch-500"
-                        }`}
-                      >
+                    <div className="text-right">
+                      <div className={`font-heading font-bold text-lg tabular-nums ${stockEmpty ? "text-card-red" : stockLow ? "text-gold-600" : "text-pitch-500"}`}>
                         {p.stockQuantity}
                       </div>
-                      <div className="text-xs text-muted">
-                        {stockEmpty ? "prázdný sklad" : stockLow ? "málo zásob" : "ks na skladě"}
-                      </div>
+                      <div className="text-xs text-muted">{stockEmpty ? "prázdno" : "ks"}</div>
                     </div>
                   </div>
 
-                  <div className="p-4 space-y-4">
-                    {/* Quality selector */}
-                    <div>
-                      <div className="text-xs font-heading font-bold text-muted uppercase tracking-widest mb-2">
-                        Kvalita
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        {p.tiers.slice(1).map((tier, idx) => {
-                          const lvl = idx + 1;
-                          const isActive = lvl === p.qualityLevel;
-                          return (
-                            <button
-                              key={lvl}
-                              onClick={() => upgradeQuality(p.key, lvl)}
-                              disabled={isActive || !!acting}
-                              className={`p-2.5 rounded-lg text-left border transition-all ${
-                                isActive
-                                  ? "bg-gold-50 border-gold-400"
-                                  : "bg-gray-50 border-gray-100 hover:bg-gray-100 hover:border-gray-200"
-                              }`}
-                            >
-                              <div
-                                className={`text-[10px] font-heading font-bold uppercase tracking-wide mb-1 ${
-                                  isActive ? "text-gold-600" : "text-muted"
-                                }`}
-                              >
-                                {isActive ? "✓ aktivní" : `L${lvl}`}
-                              </div>
-                              <div className="text-xs font-medium leading-tight text-ink">
-                                {tier.label}
-                              </div>
-                              <div
-                                className={`text-[11px] tabular-nums mt-1.5 ${
-                                  isActive ? "text-gold-600" : "text-muted"
-                                }`}
-                              >
-                                {tier.wholesalePrice} Kč/ks
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Sell price */}
-                    <div>
-                      <div className="text-xs font-heading font-bold text-muted uppercase tracking-widest mb-2">
-                        Prodejní cena
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={0}
-                          value={priceDraft}
-                          onChange={(e) =>
-                            setProductDrafts((d) => ({
-                              ...d,
-                              [p.key]: { sellPrice: e.target.value },
-                            }))
-                          }
-                          className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-base tabular-nums"
-                        />
-                        <span className="text-sm text-muted whitespace-nowrap">Kč / ks</span>
+                  {/* Quality tiers */}
+                  <div className="flex gap-1 mb-3">
+                    {p.tiers.slice(1).map((tier, idx) => {
+                      const lvl = idx + 1;
+                      const isActive = lvl === p.qualityLevel;
+                      return (
                         <button
-                          onClick={() => saveSellPrice(p.key)}
-                          disabled={
-                            acting === "price-" + p.key || priceDraft === String(p.sellPrice)
-                          }
-                          className="py-2 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:bg-gray-200 disabled:text-gray-400 shrink-0"
+                          key={lvl}
+                          onClick={() => upgradeQuality(p.key, lvl)}
+                          disabled={isActive || !!acting}
+                          className={`flex-1 py-1.5 px-1 rounded text-center transition-colors ${
+                            isActive ? "bg-gold-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"
+                          }`}
                         >
-                          {acting === "price-" + p.key ? "..." : "Uložit"}
+                          <div className="text-xs font-heading font-bold leading-tight truncate">{tier.label}</div>
+                          <div className={`text-[10px] tabular-nums mt-0.5 ${isActive ? "text-white/80" : "text-muted"}`}>{tier.wholesalePrice} Kč/ks</div>
                         </button>
-                      </div>
-                      <div className="text-xs text-muted mt-1">
-                        Doporučená cena: {currentTier.defaultSellPrice} Kč
-                      </div>
-                    </div>
+                      );
+                    })}
+                  </div>
 
-                    {/* Restock */}
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <div className="text-xs font-heading font-bold text-muted uppercase tracking-widest mb-2">
-                        Doplnit sklad
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={0}
-                          placeholder="Počet ks"
-                          value={qty}
-                          onChange={(e) =>
-                            setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))
-                          }
-                          className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-base tabular-nums bg-white"
-                        />
-                        <span className="text-sm text-muted whitespace-nowrap">
-                          ks × {currentTier.wholesalePrice} Kč
-                        </span>
-                        <button
-                          onClick={() => doRestock(p.key)}
-                          disabled={
-                            acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)
-                          }
-                          className="py-2 px-4 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 disabled:bg-gray-200 disabled:text-gray-400 shrink-0"
-                        >
-                          {acting === "restock-" + p.key ? "..." : "Nakoupit"}
-                        </button>
-                      </div>
-                      {total > 0 && (
-                        <div className="text-xs text-muted mt-2">
-                          Celkem: <span className="font-bold text-ink">{formatCZK(total)}</span>
-                        </div>
-                      )}
+                  {/* Sell price */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex-1">
+                      <div className="text-xs text-muted mb-1">Prodejní cena <span className="text-ink">(doporučeno {currentTier.defaultSellPrice} Kč)</span></div>
+                      <input
+                        type="number"
+                        min={0}
+                        value={priceDraft}
+                        onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
+                        className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums"
+                      />
                     </div>
+                    <button
+                      onClick={() => saveSellPrice(p.key)}
+                      disabled={acting === "price-" + p.key || priceDraft === String(p.sellPrice)}
+                      className="py-1.5 px-4 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:bg-gray-100 disabled:text-gray-400 self-end shrink-0"
+                    >
+                      {acting === "price-" + p.key ? "..." : "Uložit"}
+                    </button>
+                  </div>
+
+                  {/* Restock */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="Počet ks"
+                      value={qty}
+                      onChange={(e) => setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))}
+                      className="w-24 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums"
+                    />
+                    <div className="flex-1 text-xs text-muted">
+                      {total > 0 ? <>= <span className="font-heading font-bold text-ink">{formatCZK(total)}</span></> : <>ks × {currentTier.wholesalePrice} Kč</>}
+                    </div>
+                    <button
+                      onClick={() => doRestock(p.key)}
+                      disabled={acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)}
+                      className="py-1.5 px-4 rounded-lg text-xs font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 disabled:bg-gray-100 disabled:text-gray-400 shrink-0"
+                    >
+                      {acting === "restock-" + p.key ? "..." : "Nakoupit"}
+                    </button>
                   </div>
                 </div>
               );
