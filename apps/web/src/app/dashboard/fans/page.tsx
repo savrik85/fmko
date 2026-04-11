@@ -434,6 +434,41 @@ export default function FansPage() {
         )}
       </div>
 
+      {/* ═══ Vstupné ═══ */}
+      <div className="card p-4 sm:p-5">
+        <SectionLabel>Vstupné</SectionLabel>
+        <div className="text-sm text-muted mb-4">
+          Základní cena se řídí velikostí obce a vybavením stadionu. Tady ji můžeš přebít vlastní hodnotou.
+          Cena přes 1.2× běžné úrovně rozzlobí fanoušky.
+        </div>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-heading font-bold text-ink leading-tight">Tvoje cena</div>
+            <div className="text-xs text-muted">0 = automaticky podle obce</div>
+          </div>
+          <input
+            type="number"
+            min={0}
+            max={500}
+            value={ticketPriceDraft}
+            onChange={(e) => setTicketPriceDraft(e.target.value)}
+            className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+          />
+          <span className="text-xs text-muted shrink-0">Kč</span>
+          <button
+            onClick={saveTicketPrice}
+            disabled={acting === "ticket" || ticketPriceDraft === String(fans.baseTicketPrice)}
+            className={`shrink-0 py-1.5 px-4 rounded-lg text-xs font-heading font-bold transition-colors ${
+              acting === "ticket" || ticketPriceDraft === String(fans.baseTicketPrice)
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                : "bg-pitch-500 text-white hover:bg-pitch-600"
+            }`}
+          >
+            {acting === "ticket" ? "..." : "Uložit"}
+          </button>
+        </div>
+      </div>
+
       {/* ═══ Historie spokojenosti ═══ */}
       <div className="card p-4 sm:p-5">
         <SectionLabel>
@@ -505,41 +540,6 @@ export default function FansPage() {
             </div>
           </>
         )}
-      </div>
-
-      {/* ═══ Vstupné ═══ */}
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>Vstupné</SectionLabel>
-        <div className="text-sm text-muted mb-4">
-          Základní cena se řídí velikostí obce a vybavením stadionu. Tady ji můžeš přebít vlastní hodnotou.
-          Cena přes 1.2× běžné úrovně rozzlobí fanoušky.
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-heading font-bold text-ink leading-tight">Tvoje cena</div>
-            <div className="text-xs text-muted">0 = automaticky podle obce</div>
-          </div>
-          <input
-            type="number"
-            min={0}
-            max={500}
-            value={ticketPriceDraft}
-            onChange={(e) => setTicketPriceDraft(e.target.value)}
-            className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
-          />
-          <span className="text-xs text-muted shrink-0">Kč</span>
-          <button
-            onClick={saveTicketPrice}
-            disabled={acting === "ticket" || ticketPriceDraft === String(fans.baseTicketPrice)}
-            className={`shrink-0 py-1.5 px-4 rounded-lg text-xs font-heading font-bold transition-colors ${
-              acting === "ticket" || ticketPriceDraft === String(fans.baseTicketPrice)
-                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                : "bg-pitch-500 text-white hover:bg-pitch-600"
-            }`}
-          >
-            {acting === "ticket" ? "..." : "Uložit"}
-          </button>
-        </div>
       </div>
 
       </>)}
