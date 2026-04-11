@@ -3850,9 +3850,8 @@ gameRouter.get("/teams/:teamId/concession", async (c) => {
   // Team reputation pro external income preview
   const teamRow = await c.env.DB.prepare("SELECT reputation FROM teams WHERE id = ?")
     .bind(teamId).first<{ reputation: number }>().catch((e) => { logger.warn({ module: "game" }, "load team rep", e); return null; });
-  const externalWeeklyIncome = refreshmentsLevel > 0
-    ? Math.round(refreshmentsLevel * 400 * ((teamRow?.reputation ?? 50) / 50))
-    : 0;
+  const { computeExternalWeeklyConcession } = await import("../season/finance-processor");
+  const externalWeeklyIncome = computeExternalWeeklyConcession(refreshmentsLevel, teamRow?.reputation ?? 50);
 
   const products = CONCESSION_PRODUCT_KEYS.map((key) => {
     const row = productsByKey.get(key);

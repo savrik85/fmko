@@ -37,6 +37,17 @@ export function getBaseTicketPrice(category: string): number {
   return category === "vesnice" ? 10 : category === "obec" ? 20 : category === "mestys" ? 30 : 50;
 }
 
+/**
+ * Týdenní příjem z externího provozovatele občerstvení.
+ * I bez vlastního bufetu (refreshments=0) externí firma přijde s vlastním stánkem a platí za pronájem plochy.
+ * S levelem refreshments roste pronájem (lepší lokace, víc zákazníků).
+ */
+export function computeExternalWeeklyConcession(refreshmentsLevel: number, reputation: number): number {
+  const baseLease = 200; // základní pronájem plochy i bez facility
+  const levelBonus = refreshmentsLevel * 400;
+  return Math.round((baseLease + levelBonus) * (Math.max(10, reputation) / 50));
+}
+
 /** Maps DB village size to economy.ts Czech category */
 export function mapVillageSize(dbSize: string): string {
   switch (dbSize) {
@@ -162,6 +173,7 @@ export async function processWeeklyFinances(
   }
 
   // 8. Concession external income (týdenní pasivní příjem při 'external' módu)
+  // Funguje i bez vlastního bufetu — externí firma přijede s vlastním vybavením za pronájem plochy.
   const stadiumRow = await db.prepare(
     "SELECT refreshments, concession_mode FROM stadiums WHERE team_id = ?",
   ).bind(teamId).first<{ refreshments: number; concession_mode: string }>().catch((e) => {
@@ -170,13 +182,11 @@ export async function processWeeklyFinances(
   });
   if (stadiumRow && stadiumRow.concession_mode === "external") {
     const refLevel = stadiumRow.refreshments ?? 0;
-    if (refLevel > 0) {
-      // Scale: refLevel * 400 * (reputation / 50) per week
-      const weeklyConcession = Math.round(refLevel * 400 * (reputation / 50));
-      if (weeklyConcession > 0) {
-        await recordTransaction(db, teamId, "concession_income_external", weeklyConcession,
-          `Pronájem bufetu (externí provozovatel)`, gameDate);
-      }
+    const weeklyConcession = computeExternalWeeklyConcession(refLevel, reputation);
+    if (weeklyConcession > 0) {
+      await recordTransaction(db, teamId, "concession_income_external", weeklyConcession,
+        refLevel > 0 ? "Pronájem bufetu (externí provozovatel)" : "Pronájem plochy (externí s vlastním vybavením)",
+        gameDate);
     }
   }
 

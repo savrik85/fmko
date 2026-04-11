@@ -378,29 +378,19 @@ export default function FansPage() {
 
         {concession.mode === "external" && (
           <div className="bg-gray-50 rounded-lg p-3">
-            {concession.refreshmentsLevel === 0 ? (
-              <>
-                <div className="text-sm text-muted mb-1">Týdenní pasivní příjem z pronájmu bufetu</div>
-                <div className="font-heading font-bold text-base text-gold-600">
-                  Zatím žádný — není kde prodávat
-                </div>
-                <div className="text-xs text-muted mt-1">
-                  Postav alespoň L1 občerstvení na{" "}
-                  <a href="/dashboard/stadium" className="text-pitch-500 underline">stadionu</a>,
-                  aby bufet vůbec mohl fungovat.
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-sm text-muted mb-1">Týdenní pasivní příjem z pronájmu bufetu</div>
-                <div className="font-heading font-bold text-xl tabular-nums text-pitch-500">
-                  {formatCZK(concession.externalWeeklyIncome)}
-                </div>
-                <div className="text-xs text-muted mt-1">
-                  Bez starostí. Příjem škáluje s levelem občerstvení a reputací klubu.
-                </div>
-              </>
-            )}
+            <div className="text-sm text-muted mb-1">
+              {concession.refreshmentsLevel === 0
+                ? "Týdenní příjem z pronájmu plochy"
+                : "Týdenní pasivní příjem z pronájmu bufetu"}
+            </div>
+            <div className="font-heading font-bold text-xl tabular-nums text-pitch-500">
+              {formatCZK(concession.externalWeeklyIncome)}
+            </div>
+            <div className="text-xs text-muted mt-1">
+              {concession.refreshmentsLevel === 0
+                ? <>Externí provozovatel přijede s vlastním stánkem. Postav bufet na <a href="/dashboard/stadium" className="text-pitch-500 underline">stadionu</a> pro vyšší příjem.</>
+                : "Bez starostí. Příjem škáluje s levelem občerstvení a reputací klubu."}
+            </div>
           </div>
         )}
 
