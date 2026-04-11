@@ -548,63 +548,83 @@ export default function FansPage() {
         const mot = fans.manager.motivation;
         const match = fans.manager.matchBoost;
         const weekly = fans.manager.weeklyLoyaltyBoost;
+        const isPositive = match > 0;
+        const isNegative = match < 0;
         const strong = rep >= 65 || mot >= 65;
         const weak = rep < 40 || mot < 40;
-        const mood = match > 0 ? "pozitivní" : match < 0 ? "negativní" : "neutrální";
-        const moodColor = match > 0 ? "text-pitch-500" : match < 0 ? "text-card-red" : "text-muted";
+        const repLabel = rep >= 65 ? "Respektovaný" : rep >= 50 ? "Průměrný" : rep >= 35 ? "Slabší" : "Nezkušený";
+        const motLabel = mot >= 65 ? "Nadšený" : mot >= 50 ? "V pohodě" : mot >= 35 ? "Unavený" : "Vyhořelý";
+        const impactBg = isPositive ? "bg-pitch-50" : isNegative ? "bg-red-50" : "bg-gray-50";
+        const impactTint = isPositive ? "text-pitch-600" : isNegative ? "text-card-red" : "text-muted";
         return (
         <div className="card p-4 sm:p-5">
           <SectionLabel>Vliv trenéra na fanoušky</SectionLabel>
           <div className="text-sm text-muted mb-4">
-            Trenér s reputací a motivací nad průměrem (50) pomáhá spokojenosti fanoušků. Slabý nebo
-            nemotivovaný trenér naopak fanoušky zklamává.
+            Trenér s reputací a motivací nad průměrem (50) pomáhá spokojenosti fanoušků.
+            Slabý nebo nemotivovaný trenér naopak fanoušky zklamává.
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="bg-gray-50 rounded-lg p-3">
-              <div className="text-xs text-muted uppercase tracking-wide mb-1">Reputace</div>
-              <div className="flex items-baseline gap-1.5">
-                <span className={`font-heading font-bold text-2xl tabular-nums ${rep >= 50 ? "text-pitch-500" : "text-card-red"}`}>
+          {/* Stats s progress bary */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div>
+              <div className="flex items-baseline justify-between mb-1.5">
+                <span className="text-xs font-heading font-bold text-muted uppercase tracking-widest">Reputace</span>
+                <span className="text-xs text-muted">{repLabel}</span>
+              </div>
+              <div className="flex items-baseline gap-2 mb-1.5">
+                <span className={`font-heading font-bold text-3xl tabular-nums leading-none ${rep >= 50 ? "text-pitch-500" : "text-card-red"}`}>
                   {rep}
                 </span>
                 <span className="text-xs text-muted">/ 100</span>
               </div>
-              <div className="text-xs text-muted mt-0.5">
-                {rep >= 65 ? "Respektovaný" : rep >= 50 ? "Průměrný" : rep >= 35 ? "Slabší" : "Nezkušený"}
+              <div className="w-full bg-gray-200 rounded-full h-1.5">
+                <div
+                  className={`h-1.5 rounded-full transition-all ${rep >= 65 ? "bg-pitch-500" : rep >= 50 ? "bg-pitch-400" : rep >= 35 ? "bg-gold-500" : "bg-card-red"}`}
+                  style={{ width: `${rep}%` }}
+                />
               </div>
             </div>
-            <div className="bg-gray-50 rounded-lg p-3">
-              <div className="text-xs text-muted uppercase tracking-wide mb-1">Motivace</div>
-              <div className="flex items-baseline gap-1.5">
-                <span className={`font-heading font-bold text-2xl tabular-nums ${mot >= 50 ? "text-pitch-500" : "text-card-red"}`}>
+            <div>
+              <div className="flex items-baseline justify-between mb-1.5">
+                <span className="text-xs font-heading font-bold text-muted uppercase tracking-widest">Motivace</span>
+                <span className="text-xs text-muted">{motLabel}</span>
+              </div>
+              <div className="flex items-baseline gap-2 mb-1.5">
+                <span className={`font-heading font-bold text-3xl tabular-nums leading-none ${mot >= 50 ? "text-pitch-500" : "text-card-red"}`}>
                   {mot}
                 </span>
                 <span className="text-xs text-muted">/ 100</span>
               </div>
-              <div className="text-xs text-muted mt-0.5">
-                {mot >= 65 ? "Nadšený" : mot >= 50 ? "V pohodě" : mot >= 35 ? "Unavený" : "Vyhořelý"}
+              <div className="w-full bg-gray-200 rounded-full h-1.5">
+                <div
+                  className={`h-1.5 rounded-full transition-all ${mot >= 65 ? "bg-pitch-500" : mot >= 50 ? "bg-pitch-400" : mot >= 35 ? "bg-gold-500" : "bg-card-red"}`}
+                  style={{ width: `${mot}%` }}
+                />
               </div>
             </div>
           </div>
 
-          <div className="pt-3 border-t border-gray-100">
-            <div className={`text-sm mb-3 ${moodColor}`}>
-              <span className="font-heading font-bold">{mood === "pozitivní" ? "✓ Pozitivní vliv" : mood === "negativní" ? "✗ Negativní vliv" : "◯ Neutrální vliv"}</span>
-              {strong && " — silný trenér, fanoušci ho mají rádi"}
+          {/* Dopad - tinted panel */}
+          <div className={`${impactBg} rounded-lg p-4`}>
+            <div className={`text-sm font-heading font-bold mb-3 ${impactTint}`}>
+              {isPositive ? "✓ Pozitivní vliv na fanoušky" : isNegative ? "✗ Negativní vliv na fanoušky" : "◯ Neutrální vliv"}
+              {strong && " — fanoušci trenéra respektují"}
               {weak && " — fanoušci jsou zklamaní"}
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted">Po každém zápase spokojenost</span>
-                <span className={`font-heading font-bold text-base tabular-nums ${match > 0 ? "text-pitch-500" : match < 0 ? "text-card-red" : "text-ink"}`}>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white/70 rounded-lg p-3">
+                <div className="text-xs text-muted mb-1">Po každém zápase</div>
+                <div className={`font-heading font-bold text-2xl tabular-nums ${match > 0 ? "text-pitch-500" : match < 0 ? "text-card-red" : "text-ink"}`}>
                   {match > 0 ? "+" : ""}{match}
-                </span>
+                </div>
+                <div className="text-xs text-muted mt-0.5">spokojenost</div>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted">Týdně loajalita</span>
-                <span className={`font-heading font-bold text-base tabular-nums ${weekly > 0 ? "text-pitch-500" : weekly < 0 ? "text-card-red" : "text-ink"}`}>
+              <div className="bg-white/70 rounded-lg p-3">
+                <div className="text-xs text-muted mb-1">Týdně</div>
+                <div className={`font-heading font-bold text-2xl tabular-nums ${weekly > 0 ? "text-pitch-500" : weekly < 0 ? "text-card-red" : "text-ink"}`}>
                   {weekly > 0 ? "+" : ""}{weekly}
-                </span>
+                </div>
+                <div className="text-xs text-muted mt-0.5">loajalita</div>
               </div>
             </div>
           </div>
