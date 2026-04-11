@@ -30,6 +30,7 @@ export type TransactionType =
   | "concession_wholesale"
   | "concession_income_external"
   | "concession_income_self"
+  | "promotional_campaign"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */

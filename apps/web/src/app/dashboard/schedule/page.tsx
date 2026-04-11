@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PageHeader } from "@/components/ui";
+import { Spinner, SectionLabel, BadgePreview, PageHeader, useConfirm } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface ScheduleMatch {
@@ -28,6 +28,9 @@ interface ScheduleMatch {
   gameWeek: number | null;
   isHome: boolean;
   simulatedAt: string | null;
+  promoted?: boolean;
+  promotionCost?: number | null;
+  promotionBoost?: number | null;
 }
 
 interface LeagueRound {
@@ -83,18 +86,46 @@ export default function SchedulePage() {
   const [loading, setLoading] = useState(true);
   const [leagueLoading, setLeagueLoading] = useState(false);
   const [leagueLoaded, setLeagueLoaded] = useState(false);
+  const [acting, setActing] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
+
+  const loadSchedule = async () => {
+    if (!teamId) return;
+    const data = await apiFetch<{ leagueName: string; season: number; matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`);
+    setLeagueName(data.season ? `${data.leagueName} — Sezóna ${data.season}` : data.leagueName);
+    setMatches(data.matches);
+  };
 
   // Load my schedule
   useEffect(() => {
     if (!teamId) return;
-    apiFetch<{ leagueName: string; season: number; matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`)
-      .then((data) => {
-        setLeagueName(data.season ? `${data.leagueName} — Sezóna ${data.season}` : data.leagueName);
-        setMatches(data.matches);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    loadSchedule()
+      .then(() => setLoading(false))
+      .catch((e) => { console.error("load schedule:", e); setLoading(false); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId]);
+
+  const promoteMatch = async (m: ScheduleMatch) => {
+    if (!teamId || acting) return;
+    const villageGuess = ""; // cena se spočítá na BE
+    const ok = await confirm({
+      title: `Propagovat zápas proti ${m.isHome ? m.awayName : m.homeName}?`,
+      description: `Vyjde článek ve Zpravodaji a přijde více diváků (+25 %). Přesná cena závisí na velikosti tvé obce (500–2 500 Kč).${villageGuess}`,
+      confirmLabel: "Propagovat",
+    });
+    if (!ok) return;
+    setActing(true);
+    const res = await apiFetch<{ ok?: boolean; cost?: number; error?: string }>(
+      `/api/teams/${teamId}/matches/${m.id}/promote`,
+      { method: "POST" },
+    ).catch((e) => { console.error("promote match:", e); return { error: "Chyba při propagaci" }; });
+    setActing(false);
+    if (res?.error) {
+      alert(res.error);
+      return;
+    }
+    await loadSchedule();
+  };
 
   // Lazy-load league schedule on tab switch
   useEffect(() => {
@@ -115,8 +146,11 @@ export default function SchedulePage() {
   const upcoming = matches.filter((m) => m.status !== "simulated");
   const upcomingIds = new Set(upcoming.map((m) => m.id));
 
+  const nextHome = upcoming.find((m) => m.isHome);
+
   return (
     <>
+      {confirmDialog}
       <PageHeader name={leagueName || "Rozpis zápasů"} detail={`${played.length} odehráno · ${upcoming.length} zbývá`}>{null}</PageHeader>
     <div className="page-container space-y-5">
 
@@ -138,6 +172,40 @@ export default function SchedulePage() {
       {/* My team schedule */}
       {tab === "my" && (
         <>
+          {/* Promo banner — nejbližší domácí zápas */}
+          {nextHome && (
+            <div className="card p-4 sm:p-5 bg-gradient-to-r from-gold-50 to-pitch-50 border border-gold-200">
+              <div className="flex items-start sm:items-center gap-3 flex-col sm:flex-row">
+                <div className="text-3xl shrink-0">📢</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-heading font-bold text-base">
+                    {nextHome.promoted ? "Zápas je propagovaný" : "Propagace dalšího domácího zápasu"}
+                  </div>
+                  <div className="text-sm text-muted mt-0.5">
+                    {nextHome.isHome ? `Doma proti ${nextHome.awayName}` : ""} ·{" "}
+                    {formatDate(nextHome.scheduledAt)}
+                    {nextHome.promoted
+                      ? ` — propagace (+25 % diváků) zaplacena${nextHome.promotionCost ? ` za ${nextHome.promotionCost.toLocaleString("cs")} Kč` : ""}`
+                      : " — vyjde článek ve Zpravodaji a přijde více diváků"}
+                  </div>
+                </div>
+                {!nextHome.promoted ? (
+                  <button
+                    onClick={() => promoteMatch(nextHome)}
+                    disabled={acting}
+                    className="shrink-0 py-2 px-4 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 disabled:opacity-50 transition-colors"
+                  >
+                    {acting ? "..." : "Propagovat"}
+                  </button>
+                ) : (
+                  <span className="shrink-0 py-2 px-4 rounded-lg text-xs font-heading font-bold bg-gold-500/15 text-gold-700">
+                    ✓ Propagováno
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           {upcoming.length > 0 && (
             <div className="mb-6">
               <SectionLabel>Nadcházející</SectionLabel>

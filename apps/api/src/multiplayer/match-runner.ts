@@ -225,9 +225,14 @@ export async function runScheduledMatches(
       const fansSat = fansSatRow?.satisfaction ?? 50;
       const satisfactionAttendanceMul = 0.75 + (Math.max(0, Math.min(100, fansSat)) / 100) * 0.5;
 
-      // Apply facility attendance bonus (parking) + celebrity bonus + satisfaction, cap at stadium capacity
+      // Promotion boost — tým zaplatil propagaci, přitáhne víc diváků
+      const promoRow = await db.prepare("SELECT promotion_boost FROM matches WHERE id = ?")
+        .bind(matchId).first<{ promotion_boost: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "load promotion", e); return null; });
+      const promoBoost = promoRow?.promotion_boost ?? 1.0;
+
+      // Apply facility attendance bonus (parking) + celebrity bonus + satisfaction + promo, cap at stadium capacity
       const attendance = Math.min(
-        Math.round(rawAttendance * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul),
+        Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul),
         stadiumCapacity,
       );
 

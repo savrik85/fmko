@@ -444,6 +444,9 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     gameWeek: row.game_week,
     isHome: row.home_team_id === teamId,
     simulatedAt: row.simulated_at,
+    promoted: (row.promoted as number | null) === 1,
+    promotionCost: (row.promotion_cost as number | null) ?? null,
+    promotionBoost: (row.promotion_boost as number | null) ?? 1.0,
   }));
 
   return c.json({
@@ -451,6 +454,115 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     season: league?.season_number ?? 1,
     matches,
   });
+});
+
+// POST /api/teams/:teamId/matches/:matchId/promote — zaplatit propagaci nadcházejícího domácího zápasu
+const PROMO_BOOST = 1.25;
+const PROMO_HEADLINES: string[] = [
+  "{team} láká na zápas s {opp}!",
+  "{team} pálí do propagace zápasu s {opp}",
+  "Přijď na {team} vs {opp} — propagace běží",
+  "Plakáty, rozhlas a tlampače: {team} zve na derby s {opp}",
+  "{team}: „Na {opp} přijďte všichni!“",
+];
+const PROMO_BODIES: string[] = [
+  "V {village} se rozjela propagační kampaň — fotbalisté {team} slibují parádní zápas proti {opp}. Vedení klubu nešetří na plakátech ani na hlášeních v obecním rozhlase. „Stánek s pivem bude připraven, grill roztopen a tribuna vyčištěna,“ hlásí pořadatelé.",
+  "Klub {team} tentokrát sází na reklamu. Před zápasem s {opp} se v {village} objevily plakáty na každé druhé zastávce a místní trafika hlásí, že se o zápase mluví víc než obvykle. Očekává se vyprodaný stadion.",
+  "„Takový zápas si nenecháme ujít,“ píše se na plakátech {team}. V {village} se připravuje na soupeření s {opp} a vedení klubu posílá pozvánku všem, kdo mají rádi dobrý fotbal. Kdo přijde, dostane atmosféru.",
+  "V {village} je rušno: {team} vyrukoval s propagační kampaní před zápasem s {opp}. Starosta prý přislíbil účast i s rodinou, místní restaurace nabízí akci na pivo a fanoušci se těší na plný stadion.",
+  "Před zápasem {team} vs {opp} proudí do {village} nezvyklé množství propagace. Reklamy visí u hřiště, na zastávkách i v hospodách. Očekává se znatelně vyšší návštěva než obvykle.",
+];
+
+function promoCost(category: string): number {
+  return category === "vesnice" ? 500
+       : category === "obec" ? 1000
+       : category === "mestys" ? 1500
+       : 2500;
+}
+
+function pickOne<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+matchesRouter.post("/teams/:teamId/matches/:matchId/promote", async (c) => {
+  const teamId = c.req.param("teamId");
+  const matchId = c.req.param("matchId");
+
+  // Načíst zápas a ověřit validaci
+  const match = await c.env.DB.prepare(
+    `SELECT m.*, ht.name as home_name, at.name as away_name, ht.league_id as league_id,
+            v.name as village_name, v.size as village_size, ht.game_date as game_date
+     FROM matches m
+     JOIN teams ht ON m.home_team_id = ht.id
+     JOIN teams at ON m.away_team_id = at.id
+     JOIN villages v ON ht.village_id = v.id
+     WHERE m.id = ? AND m.home_team_id = ?`,
+  ).bind(matchId, teamId).first<Record<string, unknown>>().catch((e) => {
+    logger.warn({ module: "matches" }, "load match for promote", e);
+    return null;
+  });
+
+  if (!match) {
+    return c.json({ error: "Zápas nenalezen nebo nejsi domácí tým" }, 404);
+  }
+  const status = match.status as string;
+  if (status !== "scheduled" && status !== "lineups_open") {
+    return c.json({ error: "Propagovat lze jen nadcházející zápas" }, 409);
+  }
+  if ((match.promoted as number) === 1) {
+    return c.json({ error: "Tento zápas je už propagovaný" }, 409);
+  }
+
+  const { mapVillageSize } = await import("../season/finance-processor");
+  const category = mapVillageSize((match.village_size as string) ?? "village");
+  const cost = promoCost(category);
+
+  const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?")
+    .bind(teamId).first<{ budget: number }>();
+  if (!team || team.budget < cost) {
+    return c.json({ error: `Nedostatek prostředků (${cost} Kč)` }, 400);
+  }
+
+  const gameDate = (match.game_date as string) ?? new Date().toISOString();
+  const homeName = match.home_name as string;
+  const awayName = match.away_name as string;
+  const villageName = match.village_name as string;
+  const leagueId = match.league_id as string;
+
+  // 1. Odečíst cenu
+  const { recordTransaction } = await import("../season/finance-processor");
+  await recordTransaction(
+    c.env.DB,
+    teamId,
+    "promotional_campaign",
+    -cost,
+    `Propagace zápasu vs ${awayName}`,
+    gameDate,
+    matchId,
+  );
+
+  // 2. Označit zápas
+  await c.env.DB.prepare(
+    "UPDATE matches SET promoted = 1, promotion_cost = ?, promotion_boost = ? WHERE id = ?",
+  ).bind(cost, PROMO_BOOST, matchId).run();
+
+  // 3. Vložit news
+  const headline = pickOne(PROMO_HEADLINES)
+    .replace("{team}", homeName)
+    .replace("{opp}", awayName);
+  const body = pickOne(PROMO_BODIES)
+    .replace(/\{team\}/g, homeName)
+    .replace(/\{opp\}/g, awayName)
+    .replace(/\{village\}/g, villageName);
+
+  await c.env.DB.prepare(
+    "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'promotion', ?, ?, datetime('now'))",
+  ).bind(uuid(), leagueId, teamId, headline, body).run().catch((e) => {
+    logger.warn({ module: "matches" }, "insert promo news", e);
+  });
+
+  const newBudget = team.budget - cost;
+  return c.json({ ok: true, cost, newBudget, promotionBoost: PROMO_BOOST });
 });
 
 // GET /api/teams/:teamId/league-schedule — full league schedule by rounds
