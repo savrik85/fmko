@@ -46,6 +46,43 @@ function renderMarkdown(text: string): React.ReactNode {
   });
 }
 
+/** Sdílení/kopírování odkazu na konkrétní článek */
+function ShareButton({ articleId }: { articleId: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleShare = async () => {
+    if (typeof window === "undefined") return;
+    const url = `${window.location.origin}/dashboard/news?article=${articleId}`;
+    // Web Share API (mobile)
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Zpravodaj", url });
+        return;
+      } catch (e) {
+        // User canceled or not supported — fallback to clipboard
+        console.warn("share canceled:", e);
+      }
+    }
+    // Clipboard fallback
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      console.error("clipboard write:", e);
+    }
+  };
+  return (
+    <button
+      onClick={handleShare}
+      className="inline-flex items-center gap-1 text-[10px] text-muted hover:text-pitch-500 font-heading font-bold transition-colors"
+      title="Sdílet odkaz"
+      type="button"
+    >
+      {copied ? "✓ Zkopírováno" : "🔗 Sdílet"}
+    </button>
+  );
+}
+
 function formatDate(iso: string): string {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("cs", { day: "numeric", month: "long", year: "numeric" });
@@ -116,6 +153,22 @@ export default function NewsPage() {
     loadClassifieds();
   }, [teamId]);
 
+  // Scroll to article pokud URL obsahuje ?article=ID
+  useEffect(() => {
+    if (loading || articles.length === 0 || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const targetId = params.get("article");
+    if (!targetId) return;
+    const el = document.getElementById(`news-${targetId}`);
+    if (el) {
+      setTimeout(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-2", "ring-pitch-500", "ring-offset-2", "rounded-lg");
+        setTimeout(() => el.classList.remove("ring-2", "ring-pitch-500", "ring-offset-2", "rounded-lg"), 3000);
+      }, 100);
+    }
+  }, [loading, articles]);
+
   // Load other league news when selected
   useEffect(() => {
     if (!selectedLeagueId) return;
@@ -180,7 +233,11 @@ export default function NewsPage() {
   const aiReportArticles = articles.filter((a) => a.type === "ai_report");
   const roundArticles = articles.filter((a) => a.type === "round_results").slice(0, 1);
   const standingArticles = articles.filter((a) => a.type === "standing");
-  const otherArticles = articles.filter((a) => !["match", "round_results", "standing", "ai_report"].includes(a.type));
+  const promotionArticles = articles.filter((a) => a.type === "promotion");
+  const transferArticles = articles.filter((a) => a.type === "transfer");
+  const otherArticles = articles.filter(
+    (a) => !["match", "round_results", "standing", "ai_report", "promotion", "transfer"].includes(a.type),
+  );
 
   // Lead story = latest AI report only
   const leadStory = aiReportArticles[0] || matchArticles[0] || standingArticles[0] || articles[0];
@@ -236,38 +293,113 @@ export default function NewsPage() {
       ) : (
         <div className="space-y-5">
 
-          {/* ═══ Lead story — full width ═══ */}
+          {/* ═══ Lead story + Placená propagace vedle sebe ═══ */}
           {leadStory && (
-            <div className="border-b border-gray-200 pb-5">
-              <ArticleWrapper article={leadStory}>
-                {leadStory.type === "ai_report" ? (
-                  <div>
-                    <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">Komentář kola</div>
-                    <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
-                      {leadStory.headline}
-                    </h2>
-                    <div className="text-base text-ink-light leading-relaxed space-y-3 columns-1 sm:columns-2 gap-8">
-                      {leadStory.body.split("\n").filter(Boolean).map((p, i) => (
-                        <p key={i} className="break-inside-avoid">{renderMarkdown(p)}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 border-b border-gray-200 pb-5">
+              {/* Lead story */}
+              <div id={`news-${leadStory.id}`}>
+                <ArticleWrapper article={leadStory}>
+                  {leadStory.type === "ai_report" ? (
+                    <div>
+                      <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">Komentář kola</div>
+                      <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
+                        {leadStory.headline}
+                      </h2>
+                      <div className="text-base text-ink-light leading-relaxed space-y-3 columns-1 sm:columns-2 gap-8">
+                        {leadStory.body.split("\n").filter(Boolean).map((p, i) => (
+                          <p key={i} className="break-inside-avoid">{renderMarkdown(p)}</p>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-center gap-3 mt-3">
+                        <div className="text-xs text-muted italic">{timeAgo(leadStory.date)}</div>
+                        <span className="text-muted/40">·</span>
+                        <ShareButton articleId={leadStory.id} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center max-w-3xl mx-auto">
+                      <div className="text-xs uppercase tracking-widest text-muted mb-2">
+                        {leadStory.type === "match" ? "Zápasová zpráva" : leadStory.type === "standing" ? "Tabulka" : "Aktualita"}
+                      </div>
+                      <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-3 hover:underline decoration-2 underline-offset-4">
+                        {leadStory.headline}
+                      </h2>
+                      <p className="text-base text-ink-light leading-relaxed max-w-xl mx-auto">
+                        {leadStory.body}
+                      </p>
+                      <div className="flex items-center justify-center gap-3 mt-3">
+                        <div className="text-xs text-muted italic">{timeAgo(leadStory.date)}</div>
+                        <span className="text-muted/40">·</span>
+                        <ShareButton articleId={leadStory.id} />
+                      </div>
+                    </div>
+                  )}
+                </ArticleWrapper>
+              </div>
+
+              {/* Placená propagace sidebar */}
+              {promotionArticles.length > 0 && (
+                <aside className="lg:border-l lg:border-gray-200 lg:pl-6">
+                  <div className="sticky top-4">
+                    <div className="flex items-center justify-center gap-1.5 mb-3 pb-2 border-b-2 border-double border-gold-400">
+                      <span className="text-base">📢</span>
+                      <span className="font-heading font-[900] text-xs uppercase tracking-[0.15em] text-gold-700">
+                        Placená propagace
+                      </span>
+                    </div>
+                    <div className="space-y-4">
+                      {promotionArticles.slice(0, 3).map((p) => (
+                        <div
+                          key={p.id}
+                          id={`news-${p.id}`}
+                          className="bg-gradient-to-br from-gold-50/60 to-transparent rounded-lg p-3 border border-gold-100"
+                        >
+                          <h4 className="font-heading font-[800] text-sm leading-snug mb-2">
+                            {p.headline}
+                          </h4>
+                          <p className="text-xs text-ink-light leading-relaxed whitespace-pre-line">
+                            {p.body}
+                          </p>
+                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-gold-100">
+                            <span className="text-[10px] text-muted italic">{timeAgo(p.date)}</span>
+                            <ShareButton articleId={p.id} />
+                          </div>
+                        </div>
                       ))}
                     </div>
-                    <div className="text-xs text-muted mt-3 italic text-center">{timeAgo(leadStory.date)}</div>
                   </div>
-                ) : (
-                  <div className="text-center max-w-3xl mx-auto">
-                    <div className="text-xs uppercase tracking-widest text-muted mb-2">
-                      {leadStory.type === "match" ? "Zápasová zpráva" : leadStory.type === "standing" ? "Tabulka" : "Aktualita"}
+                </aside>
+              )}
+            </div>
+          )}
+
+          {/* ═══ Přestupy a spekulace (dole pod Lead) ═══ */}
+          {transferArticles.length > 0 && (
+            <div className="border-b border-gray-200 pb-5">
+              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-ink">
+                <span className="text-base">🤝</span>
+                <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">
+                  Přestupy a spekulace
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {transferArticles.slice(0, 9).map((t) => (
+                  <div
+                    key={t.id}
+                    id={`news-${t.id}`}
+                    className="border-l-2 border-gray-200 pl-3 hover:border-pitch-500 transition-colors"
+                  >
+                    <h4 className="font-heading font-bold text-sm leading-snug">
+                      {t.headline}
+                    </h4>
+                    <p className="text-xs text-ink-light mt-1 leading-relaxed line-clamp-3">{t.body}</p>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-[10px] text-muted italic">{timeAgo(t.date)}</span>
+                      <ShareButton articleId={t.id} />
                     </div>
-                    <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-3 hover:underline decoration-2 underline-offset-4">
-                      {leadStory.headline}
-                    </h2>
-                    <p className="text-base text-ink-light leading-relaxed max-w-xl mx-auto">
-                      {leadStory.body}
-                    </p>
-                    <div className="text-xs text-muted mt-3 italic">{timeAgo(leadStory.date)}</div>
                   </div>
-                )}
-              </ArticleWrapper>
+                ))}
+              </div>
             </div>
           )}
 

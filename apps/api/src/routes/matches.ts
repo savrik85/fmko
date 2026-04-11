@@ -573,9 +573,12 @@ matchesRouter.post("/teams/:teamId/matches/:matchId/promote", async (c) => {
       .replace(/\{village\}/g, villageName);
   }
 
+  // Článek se v zpravodaji zobrazí jako 18:00 herního dne (2 hodiny po tréninkovém ticku)
+  const gameDayDate = gameDate.slice(0, 10); // YYYY-MM-DD
+  const newsCreatedAt = `${gameDayDate} 18:00:00`;
   await c.env.DB.prepare(
-    "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'promotion', ?, ?, datetime('now'))",
-  ).bind(uuid(), leagueId, teamId, headline, body).run().catch((e) => {
+    "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'promotion', ?, ?, ?)",
+  ).bind(uuid(), leagueId, teamId, headline, body, newsCreatedAt).run().catch((e) => {
     logger.warn({ module: "matches" }, "insert promo news", e);
   });
 
