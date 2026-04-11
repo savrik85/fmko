@@ -397,6 +397,10 @@ export default function FansPage() {
 
         {concession.mode === "self" && (
           <div className="space-y-3">
+            <div className="text-sm text-muted bg-gray-50 rounded-lg px-3 py-2.5">
+              Sklad se nečerpá automaticky — před každým domácím zápasem doplň zásoby. Bez zásob = nespokojení fanoušci.
+            </div>
+
             {concession.products.map((p) => {
               const currentTier = p.tiers[p.qualityLevel];
               const priceDraft = productDrafts[p.key]?.sellPrice ?? String(p.sellPrice);
@@ -416,9 +420,10 @@ export default function FansPage() {
                     </div>
                     <div className="text-right">
                       <div className={`font-heading font-bold text-lg tabular-nums ${stockEmpty ? "text-card-red" : stockLow ? "text-gold-600" : "text-pitch-500"}`}>
-                        {p.stockQuantity}
+                        {p.stockQuantity} <span className="text-xs font-normal text-muted">ks</span>
                       </div>
-                      <div className="text-xs text-muted">{stockEmpty ? "prázdno" : "ks"}</div>
+                      {stockEmpty && <div className="text-xs text-card-red">prázdno</div>}
+                      {stockLow && <div className="text-xs text-gold-600">málo</div>}
                     </div>
                   </div>
 
@@ -443,47 +448,51 @@ export default function FansPage() {
                     })}
                   </div>
 
-                  {/* Sell price */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="flex-1">
-                      <div className="text-xs text-muted mb-1">Prodejní cena <span className="text-ink">(doporučeno {currentTier.defaultSellPrice} Kč)</span></div>
-                      <input
-                        type="number"
-                        min={0}
-                        value={priceDraft}
-                        onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
-                        className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums"
-                      />
+                  {/* Price + restock */}
+                  <div className="space-y-2 pt-2 border-t border-gray-100">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-muted shrink-0">Prodejní cena <span className="text-ink">(doporučeno {currentTier.defaultSellPrice} Kč)</span></span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          min={0}
+                          value={priceDraft}
+                          onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
+                          className="w-16 px-2 py-1 border border-gray-200 rounded text-sm tabular-nums text-right"
+                        />
+                        <span className="text-xs text-muted">Kč</span>
+                        <button
+                          onClick={() => saveSellPrice(p.key)}
+                          disabled={acting === "price-" + p.key || priceDraft === String(p.sellPrice)}
+                          className="py-1 px-3 rounded text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:bg-gray-100 disabled:text-gray-400"
+                        >
+                          {acting === "price-" + p.key ? "..." : "Uložit"}
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => saveSellPrice(p.key)}
-                      disabled={acting === "price-" + p.key || priceDraft === String(p.sellPrice)}
-                      className="py-1.5 px-4 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:bg-gray-100 disabled:text-gray-400 self-end shrink-0"
-                    >
-                      {acting === "price-" + p.key ? "..." : "Uložit"}
-                    </button>
-                  </div>
-
-                  {/* Restock */}
-                  <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="Počet ks"
-                      value={qty}
-                      onChange={(e) => setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))}
-                      className="w-24 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums"
-                    />
-                    <div className="flex-1 text-xs text-muted">
-                      {total > 0 ? <>= <span className="font-heading font-bold text-ink">{formatCZK(total)}</span></> : <>ks × {currentTier.wholesalePrice} Kč</>}
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-muted shrink-0">
+                        {total > 0 ? <>Doplnit — celkem <span className="font-heading font-bold text-ink">{formatCZK(total)}</span></> : <>Doplnit sklad · {currentTier.wholesalePrice} Kč/ks</>}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          min={0}
+                          placeholder="0"
+                          value={qty}
+                          onChange={(e) => setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))}
+                          className="w-16 px-2 py-1 border border-gray-200 rounded text-sm tabular-nums text-right"
+                        />
+                        <span className="text-xs text-muted">ks</span>
+                        <button
+                          onClick={() => doRestock(p.key)}
+                          disabled={acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)}
+                          className="py-1 px-3 rounded text-xs font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 disabled:bg-gray-100 disabled:text-gray-400"
+                        >
+                          {acting === "restock-" + p.key ? "..." : "Nakoupit"}
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => doRestock(p.key)}
-                      disabled={acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)}
-                      className="py-1.5 px-4 rounded-lg text-xs font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 disabled:bg-gray-100 disabled:text-gray-400 shrink-0"
-                    >
-                      {acting === "restock-" + p.key ? "..." : "Nakoupit"}
-                    </button>
                   </div>
                 </div>
               );
