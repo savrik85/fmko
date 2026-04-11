@@ -60,6 +60,30 @@ interface FansHistoryItem {
   createdAt: string;
 }
 
+interface SalesProduct {
+  productKey: string;
+  qualityLevel: number;
+  sellPrice: number;
+  wholesalePrice: number;
+  soldCount: number;
+  revenue: number;
+  profit: number;
+  stockout: boolean;
+}
+
+interface SalesMatch {
+  matchId: string | null;
+  gamedate: string;
+  opponentName: string | null;
+  result: "win" | "draw" | "loss" | null;
+  attendance: number;
+  products: SalesProduct[];
+  totalRevenue: number;
+  totalProfit: number;
+}
+
+type TabKey = "satisfaction" | "ticket" | "concession" | "sales";
+
 const PRODUCT_ICONS: Record<string, string> = {
   sausage: "🌭",
   beer: "🍺",
@@ -142,7 +166,9 @@ export default function FansPage() {
   const [concession, setConcession] = useState<ConcessionData | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
   const [history, setHistory] = useState<FansHistoryItem[]>([]);
+  const [salesHistory, setSalesHistory] = useState<SalesMatch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabKey>("satisfaction");
   const [ticketPriceDraft, setTicketPriceDraft] = useState<string>("");
   const [productDrafts, setProductDrafts] = useState<Record<string, { sellPrice: string }>>({});
   const [restockQty, setRestockQty] = useState<Record<string, string>>({});
@@ -151,16 +177,18 @@ export default function FansPage() {
 
   const refresh = async () => {
     if (!teamId) return;
-    const [f, co, t, h] = await Promise.all([
+    const [f, co, t, h, s] = await Promise.all([
       apiFetch<FansData>(`/api/teams/${teamId}/fans`),
       apiFetch<ConcessionData>(`/api/teams/${teamId}/concession`),
       apiFetch<Team>(`/api/teams/${teamId}`),
       apiFetch<{ items: FansHistoryItem[] }>(`/api/teams/${teamId}/fans/history?limit=20`),
+      apiFetch<{ matches: SalesMatch[] }>(`/api/teams/${teamId}/concession/sales?limit=60`),
     ]);
     setFans(f);
     setConcession(co);
     setTeam(t);
     setHistory(h.items ?? []);
+    setSalesHistory(s.matches ?? []);
     // Předvyplnit cenu vstupenky: user override, jinak automatická podle obce
     const prefillPrice = f.baseTicketPrice > 0 ? f.baseTicketPrice : f.villageBaseTicketPrice;
     setTicketPriceDraft(String(prefillPrice));
@@ -293,10 +321,39 @@ export default function FansPage() {
     return <div className="page-container">Nepodařilo se načíst data fanoušků.</div>;
   }
 
+  const tabs: { key: TabKey; label: string; icon: string; visible: boolean }[] = [
+    { key: "satisfaction", label: "Spokojenost", icon: "\u{1F4CA}", visible: true },
+    { key: "ticket", label: "Vstupné", icon: "\u{1F39F}", visible: true },
+    { key: "concession", label: "Občerstvení", icon: "\u{1F37A}", visible: true },
+    { key: "sales", label: "Prodeje", icon: "\u{1F4C8}", visible: concession.mode === "self" },
+  ];
+  const visibleTabs = tabs.filter((t) => t.visible);
+  const currentTab = visibleTabs.some((t) => t.key === activeTab) ? activeTab : "satisfaction";
+
   return (
     <div className="page-container space-y-5">
       {confirmDialog}
 
+      {/* ═══ Tab nav ═══ */}
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg overflow-x-auto">
+        {visibleTabs.map((t) => {
+          const active = t.key === currentTab;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={`flex-1 min-w-fit py-2 px-3 rounded-md text-sm font-heading font-bold transition-colors whitespace-nowrap ${
+                active ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink"
+              }`}
+            >
+              <span className="mr-1.5">{t.icon}</span>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {currentTab === "satisfaction" && (<>
       {/* ═══ Satisfaction ═══ */}
       <div className="card p-4 sm:p-5">
         <SectionLabel>Spokojenost fanoušků</SectionLabel>
@@ -379,68 +436,81 @@ export default function FansPage() {
       </div>
 
       {/* ═══ Historie spokojenosti ═══ */}
-      {history.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Historie spokojenosti (posledních {history.length})</SectionLabel>
-          {/* Sparkline — chronologicky od nejstaršího vlevo */}
-          <div className="mb-4 pb-4 border-b border-gray-100">
-            <div className="flex items-center justify-between text-xs text-muted mb-1">
-              <span>Vývoj spokojenosti</span>
-              <span className="tabular-nums">
-                {history.length > 0 ? history[history.length - 1].satisfactionAfter : 50} → {history[0].satisfactionAfter}
-              </span>
-            </div>
-            <SatisfactionSparkline
-              points={[...history].reverse().map((h) => h.satisfactionAfter)}
-            />
-          </div>
+      <div className="card p-4 sm:p-5">
+        <SectionLabel>
+          {history.length > 0 ? `Historie spokojenosti (posledních ${history.length})` : "Historie spokojenosti"}
+        </SectionLabel>
 
-          {/* Seznam zápasů */}
-          <div className="space-y-2">
-            {history.map((h) => {
-              const badge = resultBadge(h.result);
-              return (
-                <div key={h.id} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-b-0">
-                  <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-heading font-bold ${badge.cls}`}>
-                    {badge.label}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-heading font-bold text-ink">
-                        {h.opponentName ?? "Neznámý soupeř"}
-                      </span>
-                      <span className="text-xs text-muted">{formatGamedate(h.gamedate)}</span>
-                      {h.attendance > 0 && (
-                        <span className="text-xs text-muted">· {h.attendance} diváků</span>
+        {history.length === 0 ? (
+          <div className="py-4 text-sm text-muted text-center">
+            Zatím žádná historie. Po každém odehraném zápase se zde zobrazí vývoj spokojenosti,
+            důvody její změny a návštěvnost.
+          </div>
+        ) : (
+          <>
+            {/* Sparkline — chronologicky od nejstaršího vlevo */}
+            <div className="mb-4 pb-4 border-b border-gray-100">
+              <div className="flex items-center justify-between text-xs text-muted mb-1">
+                <span>Vývoj spokojenosti</span>
+                <span className="tabular-nums">
+                  {history[history.length - 1].satisfactionAfter} → {history[0].satisfactionAfter}
+                </span>
+              </div>
+              <SatisfactionSparkline
+                points={[...history].reverse().map((h) => h.satisfactionAfter)}
+              />
+            </div>
+
+            {/* Seznam zápasů */}
+            <div className="space-y-2">
+              {history.map((h) => {
+                const badge = resultBadge(h.result);
+                return (
+                  <div key={h.id} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-b-0">
+                    <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-heading font-bold ${badge.cls}`}>
+                      {badge.label}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-heading font-bold text-ink">
+                          {h.opponentName ?? "Neznámý soupeř"}
+                        </span>
+                        <span className="text-xs text-muted">{formatGamedate(h.gamedate)}</span>
+                        {h.attendance > 0 && (
+                          <span className="text-xs text-muted">· {h.attendance} diváků</span>
+                        )}
+                      </div>
+                      {h.reasons.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                          {h.reasons.map((r, i) => (
+                            <span key={i} className="text-xs text-muted">
+                              {r}{i < h.reasons.length - 1 ? " ·" : ""}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    {h.reasons.length > 0 && (
-                      <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                        {h.reasons.map((r, i) => (
-                          <span key={i} className="text-xs text-muted">
-                            {r}{i < h.reasons.length - 1 ? " ·" : ""}
-                          </span>
-                        ))}
+                    <div className="shrink-0 text-right">
+                      <div className={`font-heading font-bold text-sm tabular-nums ${
+                        h.delta > 0 ? "text-pitch-500" : h.delta < 0 ? "text-card-red" : "text-muted"
+                      }`}>
+                        {h.delta > 0 ? "+" : ""}{h.delta}
                       </div>
-                    )}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className={`font-heading font-bold text-sm tabular-nums ${
-                      h.delta > 0 ? "text-pitch-500" : h.delta < 0 ? "text-card-red" : "text-muted"
-                    }`}>
-                      {h.delta > 0 ? "+" : ""}{h.delta}
-                    </div>
-                    <div className="text-xs text-muted tabular-nums">
-                      {h.satisfactionBefore}→{h.satisfactionAfter}
+                      <div className="text-xs text-muted tabular-nums">
+                        {h.satisfactionBefore}→{h.satisfactionAfter}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
 
+      </>)}
+
+      {currentTab === "ticket" && (<>
       {/* ═══ Vstupné ═══ */}
       <div className="card p-4 sm:p-5">
         <SectionLabel>Vstupné</SectionLabel>
@@ -476,6 +546,9 @@ export default function FansPage() {
         </div>
       </div>
 
+      </>)}
+
+      {currentTab === "concession" && (<>
       {/* ═══ Občerstvení ═══ */}
       <div className="card p-4 sm:p-5">
         <SectionLabel>Občerstvení</SectionLabel>
@@ -703,6 +776,92 @@ export default function FansPage() {
           </div>
         </div>
       )}
+      </>)}
+
+      {currentTab === "sales" && concession.mode === "self" && (<>
+        {/* ═══ Prodeje občerstvení ═══ */}
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Prodeje občerstvení — posledních {salesHistory.length}</SectionLabel>
+
+          {salesHistory.length === 0 ? (
+            <div className="py-4 text-sm text-muted text-center">
+              Zatím žádné prodeje. Po odehraném domácím zápase v režimu vlastního provozu
+              zde uvidíš kolik jsi prodal každého produktu, výnos, zisk a jestli došlo zboží.
+            </div>
+          ) : (<>
+            {/* Souhrn */}
+            <div className="grid grid-cols-3 gap-3 mb-4 pb-4 border-b border-gray-100">
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="text-xs text-muted uppercase mb-1">Celkový výnos</div>
+                <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">
+                  {formatCZK(salesHistory.reduce((s, m) => s + m.totalRevenue, 0))}
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="text-xs text-muted uppercase mb-1">Čistý zisk</div>
+                <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">
+                  {formatCZK(salesHistory.reduce((s, m) => s + m.totalProfit, 0))}
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="text-xs text-muted uppercase mb-1">Ø na zápas</div>
+                <div className="font-heading font-bold text-lg tabular-nums text-ink">
+                  {formatCZK(Math.round(salesHistory.reduce((s, m) => s + m.totalProfit, 0) / salesHistory.length))}
+                </div>
+              </div>
+            </div>
+
+            {/* Per match list */}
+            <div className="space-y-3">
+              {salesHistory.map((m, idx) => {
+                const badge = resultBadge(m.result);
+                return (
+                  <div key={(m.matchId ?? "") + idx} className="border border-gray-100 rounded-lg p-3">
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-heading font-bold ${badge.cls}`}>
+                        {badge.label}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-heading font-bold text-sm text-ink">
+                          {m.opponentName ?? "Neznámý soupeř"}
+                        </div>
+                        <div className="text-xs text-muted">
+                          {formatGamedate(m.gamedate)} · {m.attendance} diváků
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-heading font-bold text-sm tabular-nums text-pitch-500">
+                          {formatCZK(m.totalRevenue)}
+                        </div>
+                        <div className="text-xs text-muted">zisk {formatCZK(m.totalProfit)}</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-gray-50">
+                      {m.products.map((p) => (
+                        <div key={p.productKey} className="text-xs">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <span>{PRODUCT_ICONS[p.productKey] ?? "🍽"}</span>
+                            <span className="font-heading font-bold tabular-nums text-ink">
+                              {p.soldCount} ks
+                            </span>
+                            {p.stockout && <span className="text-card-red">⚠</span>}
+                          </div>
+                          <div className="text-muted tabular-nums">
+                            {p.sellPrice} Kč → {formatCZK(p.revenue)}
+                          </div>
+                          <div className={`tabular-nums ${p.profit >= 0 ? "text-pitch-500" : "text-card-red"}`}>
+                            {p.profit > 0 ? "+" : ""}{formatCZK(p.profit)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>)}
+        </div>
+      </>)}
     </div>
   );
 }

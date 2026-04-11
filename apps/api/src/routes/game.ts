@@ -3847,6 +3847,109 @@ gameRouter.get("/teams/:teamId/fans/history", async (c) => {
   return c.json({ items });
 });
 
+// GET /api/teams/:id/concession/sales — detailní historie prodejů občerstvení (jen self mode)
+gameRouter.get("/teams/:teamId/concession/sales", async (c) => {
+  const teamId = c.req.param("teamId");
+  const limit = Math.min(100, Math.max(1, parseInt(c.req.query("limit") ?? "30", 10)));
+
+  const rows = await c.env.DB.prepare(
+    `SELECT s.id, s.match_id, s.gamedate, s.product_key, s.quality_level, s.sell_price,
+            s.wholesale_price, s.sold_count, s.revenue, s.profit, s.stockout, s.attendance,
+            s.created_at,
+            CASE WHEN m.home_team_id = ? THEN at.name ELSE ht.name END as opponent_name,
+            CASE
+              WHEN m.home_team_id = ? AND m.home_score > m.away_score THEN 'win'
+              WHEN m.away_team_id = ? AND m.away_score > m.home_score THEN 'win'
+              WHEN m.home_score = m.away_score THEN 'draw'
+              ELSE 'loss'
+            END as result
+     FROM concession_match_sales s
+     LEFT JOIN matches m ON m.id = s.match_id
+     LEFT JOIN teams ht ON ht.id = m.home_team_id
+     LEFT JOIN teams at ON at.id = m.away_team_id
+     WHERE s.team_id = ?
+     ORDER BY s.created_at DESC, s.product_key
+     LIMIT ?`,
+  )
+    .bind(teamId, teamId, teamId, teamId, limit)
+    .all<{
+      id: string;
+      match_id: string | null;
+      gamedate: string;
+      product_key: string;
+      quality_level: number;
+      sell_price: number;
+      wholesale_price: number;
+      sold_count: number;
+      revenue: number;
+      profit: number;
+      stockout: number;
+      attendance: number;
+      created_at: string;
+      opponent_name: string | null;
+      result: string | null;
+    }>()
+    .catch((e) => {
+      logger.warn({ module: "game" }, "load concession sales", e);
+      return { results: [] };
+    });
+
+  // Grupování podle zápasu
+  const byMatch = new Map<
+    string,
+    {
+      matchId: string | null;
+      gamedate: string;
+      opponentName: string | null;
+      result: string | null;
+      attendance: number;
+      products: {
+        productKey: string;
+        qualityLevel: number;
+        sellPrice: number;
+        wholesalePrice: number;
+        soldCount: number;
+        revenue: number;
+        profit: number;
+        stockout: boolean;
+      }[];
+      totalRevenue: number;
+      totalProfit: number;
+    }
+  >();
+
+  for (const r of rows.results ?? []) {
+    const key = r.match_id ?? r.created_at;
+    if (!byMatch.has(key)) {
+      byMatch.set(key, {
+        matchId: r.match_id,
+        gamedate: r.gamedate,
+        opponentName: r.opponent_name,
+        result: r.result,
+        attendance: r.attendance,
+        products: [],
+        totalRevenue: 0,
+        totalProfit: 0,
+      });
+    }
+    const group = byMatch.get(key)!;
+    group.products.push({
+      productKey: r.product_key,
+      qualityLevel: r.quality_level,
+      sellPrice: r.sell_price,
+      wholesalePrice: r.wholesale_price,
+      soldCount: r.sold_count,
+      revenue: r.revenue,
+      profit: r.profit,
+      stockout: r.stockout === 1,
+    });
+    group.totalRevenue += r.revenue;
+    group.totalProfit += r.profit;
+  }
+
+  return c.json({ matches: Array.from(byMatch.values()) });
+});
+
 // PATCH /api/teams/:id/fans/ticket-price — user override ceny vstupného
 gameRouter.patch("/teams/:teamId/fans/ticket-price", async (c) => {
   const teamId = c.req.param("teamId");

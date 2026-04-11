@@ -293,6 +293,34 @@ export async function processMatchDayFinances(
         await recordTransaction(db, teamId, "concession_income_self", sale.totalRevenue,
           `Tržby z vlastního občerstvení: ${breakdown}`, gameDate, matchId);
       }
+
+      // Persist per-produkt sales pro historii prodejů
+      const { getWholesalePrice } = await import("./concession-catalog");
+      for (const p of sale.products) {
+        if (p.qualityLevel <= 0) continue;
+        const wholesale = getWholesalePrice(p.key, p.qualityLevel);
+        const revenue = p.sold * p.sellPrice;
+        const profit = revenue - p.sold * wholesale;
+        await db.prepare(
+          `INSERT INTO concession_match_sales
+           (id, team_id, match_id, gamedate, product_key, quality_level, sell_price, wholesale_price, sold_count, revenue, profit, stockout, attendance)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          crypto.randomUUID(),
+          teamId,
+          matchId,
+          gameDate,
+          p.key,
+          p.qualityLevel,
+          p.sellPrice,
+          wholesale,
+          p.sold,
+          revenue,
+          profit,
+          p.soldOut ? 1 : 0,
+          attendance,
+        ).run().catch((e) => logger.warn({ module: "finance" }, "concession sales insert", e));
+      }
     } else if (facilityFx.refreshmentPerAttendee > 0) {
       // External mode — použijeme původní jednoduchý model (zůstává pro zpětnou kompatibilitu před přepnutím módu)
       const refreshmentIncome = attendance * facilityFx.refreshmentPerAttendee;
