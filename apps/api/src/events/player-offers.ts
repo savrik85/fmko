@@ -156,7 +156,8 @@ export async function generatePlayerOffer(
 
   // Pošli SMS notifikaci — najdi nebo vytvoř konverzaci pro tohoto odesílatele
   try {
-    const smsBody = `${message} — ${player.firstName} ${player.lastName}, ${age} let (${pos})`;
+    const posLabel: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
+    const smsBody = `${message} — ${player.firstName} ${player.lastName}, ${age} let (${posLabel[pos] ?? pos}). Nabídku najdeš v Přestupy → Noví zájemci.`;
     let convId = await db.prepare(
       "SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?"
     ).bind(teamId, sourceType.senderTitle).first<{ id: string }>().then((r) => r?.id).catch((e) => { logger.warn({ module: "player-offers" }, "find conv", e); return null; });
