@@ -58,8 +58,11 @@ function formatCZK(amount: number): string {
 
 function timeAgo(iso: string): string {
   if (!iso) return "";
-  const diff = Date.now() - new Date(iso).getTime();
+  // SQLite datetime('now') je UTC bez Z suffixu — přidáme aby JS parsoval správně
+  const utcIso = iso.endsWith("Z") || iso.includes("+") ? iso : iso.replace(" ", "T") + "Z";
+  const diff = Date.now() - new Date(utcIso).getTime();
   const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "teď";
   if (mins < 60) return `${mins}m`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h`;

@@ -90,8 +90,8 @@ function formatDate(iso: string): string {
 
 function timeAgo(iso: string): string {
   if (!iso) return "";
-  // SQLite datetime('now') ukládá UTC bez Z suffixu — přidáme ho
-  const utcIso = iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z";
+  // SQLite datetime('now') ukládá "YYYY-MM-DD HH:MM:SS" (UTC, bez Z) — normalizuj
+  const utcIso = iso.endsWith("Z") || iso.includes("+") ? iso : iso.replace(" ", "T") + "Z";
   const diff = Date.now() - new Date(utcIso).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "Právě teď";
