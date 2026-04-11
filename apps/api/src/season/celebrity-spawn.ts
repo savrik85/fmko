@@ -144,7 +144,7 @@ export async function spawnCelebrity(
     INSERT INTO free_agents (id, first_name, last_name, nickname, age, position, overall_rating,
       skills, personality, life_context, physical, avatar, weekly_wage, district,
       source, village_id, expires_at, is_celebrity, hidden_talent, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, 1, ?, datetime('now'))
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   `).bind(
     faId, celeb.firstName, celeb.lastName, nickname, celeb.age, celeb.position, overallRating,
     skills, personality, lifeContext, physical, avatar, weeklyWage, leagueInfo.district,
@@ -171,7 +171,7 @@ export async function spawnCelebrity(
   };
 
   await db.prepare(
-    "INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, ?, 'celebrity_arrival', ?, ?, datetime('now'))"
+    "INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, ?, 'celebrity_arrival', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
   ).bind(crypto.randomUUID(), leagueId, headlineMap[celebType], bodyMap[celebType]).run();
 
   // ── Messages to human teams — player tips off + assistant analyzes ──
@@ -235,7 +235,7 @@ export async function spawnCelebrity(
 
     // Player message
     await db.prepare(
-      "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at) VALUES (?, ?, 'player', ?, ?, ?, datetime('now'))"
+      "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at) VALUES (?, ?, 'player', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
     ).bind(crypto.randomUUID(), squadConv.id, randomPlayer?.id ?? teamId, playerName, tipText).run()
       .catch((e) => logger.warn({ module: "celebrity-spawn" }, "player tip msg", e));
     // Assistant coach analysis — use 'player' type so it renders as a chat bubble
@@ -243,7 +243,7 @@ export async function spawnCelebrity(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'player', 'Asistent trenéra', ?, datetime('now', '+10 seconds'))"
     ).bind(crypto.randomUUID(), squadConv.id, scoutReports[celebType]).run()
       .catch((e) => logger.warn({ module: "celebrity-spawn" }, "scout report msg", e));
-    await db.prepare("UPDATE conversations SET unread_count = unread_count + 2, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+    await db.prepare("UPDATE conversations SET unread_count = unread_count + 2, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
       .bind(`⭐ ${playerName} upozorňuje na ${fullName}`, squadConv.id).run()
       .catch((e) => logger.warn({ module: "celebrity-spawn" }, "update conv", e));
   }

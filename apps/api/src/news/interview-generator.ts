@@ -441,7 +441,7 @@ export async function tryCreateInterviewRequest(
     .prepare(
       `INSERT INTO coach_interviews
          (id, league_id, team_id, manager_id, match_calendar_id, game_week, questions, status, expires_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now'))`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
     )
     .bind(
       id,

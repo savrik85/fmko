@@ -84,7 +84,7 @@ export async function getPendingChallenges(
      FROM challenges c
      JOIN teams t ON c.challenger_team_id = t.id
      JOIN villages v ON t.village_id = v.id
-     WHERE c.challenged_team_id = ? AND c.status = 'pending' AND c.expires_at > datetime('now')
+     WHERE c.challenged_team_id = ? AND c.status = 'pending' AND c.expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
      ORDER BY c.created_at DESC`
   ).bind(teamId).all();
   return result.results;

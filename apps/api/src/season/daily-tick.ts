@@ -323,7 +323,7 @@ export async function executeDailyTick(
        WHEN satisfaction > loyalty + 1 THEN satisfaction - 1
        WHEN satisfaction < loyalty - 1 THEN satisfaction + 1
        ELSE satisfaction
-     END, updated_at = datetime('now')`,
+     END, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
   ).run().catch((e) => logger.warn({ module: "daily-tick" }, "fans satisfaction drift", e));
 
   // Fans loyalty slowly tracks team reputation (1 bod denně)
@@ -420,9 +420,9 @@ export async function executeDailyTick(
                 const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
                 const matchConvId = crypto.randomUUID();
                 await env.DB.prepare(
-                  "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_at, created_at) VALUES (?, ?, 'squad_group', ?, 0, 0, datetime('now'), datetime('now'))"
+                  "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_at, created_at) VALUES (?, ?, 'squad_group', ?, 0, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
                 ).bind(matchConvId, teamId, `⚽ vs ${opponentName}`).run().catch((e) => logger.warn({ module: "daily-tick" }, "create match conversation", e));
-                await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'user', ?, 'Trenér', ?, ?, datetime('now'))")
+                await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'user', ?, 'Trenér', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
                   .bind(crypto.randomUUID(), matchConvId, teamId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`, JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }))
                   .run().catch((e) => logger.warn({ module: "daily-tick" }, "match announce msg", e));
                 let msgCount = 1;
@@ -439,13 +439,36 @@ export async function executeDailyTick(
                   ).run().catch((e) => logger.warn({ module: "daily-tick" }, "day_before attendance msg", e));
                   msgCount++;
                 }
-                await env.DB.prepare("UPDATE conversations SET unread_count = ?, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+                await env.DB.prepare("UPDATE conversations SET unread_count = ?, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
                   .bind(msgCount, `📋 ${dayBeforeAbsences.length} omluvených z ${squadRows.results.length}`, matchConvId).run().catch((e) => logger.warn({ module: "daily-tick" }, "day_before conversation update", e));
                 logger.info({ module: "daily-tick", teamId }, `day_before attendance: ${msgCount} msgs → ⚽ vs ${opponentName}`);
               }
             }
           }
         } catch (e) { logger.warn({ module: "daily-tick" }, "day_before attendance failed", e); }
+
+        // ── Interview před zápasem (1x per zápas per liga, round-robin po lidských trenérech) ──
+        const interviewLeagueId = team.league_id as string | null;
+        if (interviewLeagueId) {
+          try {
+            const checkDayStart2 = new Date(newGameDate);
+            checkDayStart2.setDate(checkDayStart2.getDate() + 1);
+            const cs2 = new Date(checkDayStart2); cs2.setUTCHours(0, 0, 0, 0);
+            const ce2 = new Date(checkDayStart2); ce2.setUTCHours(23, 59, 59, 999);
+            const tomorrowCalEntry = await env.DB.prepare(
+              "SELECT id, game_week FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled' LIMIT 1"
+            ).bind(interviewLeagueId, cs2.toISOString(), ce2.toISOString()).first<{ id: string; game_week: number }>()
+              .catch((e) => { logger.warn({ module: "daily-tick" }, "interview tomorrow cal lookup", e); return null; });
+            if (tomorrowCalEntry) {
+              const { tryCreateInterviewRequest } = await import("../news/interview-generator");
+              await tryCreateInterviewRequest(env.DB, (env as any).GEMINI_API_KEY, {
+                leagueId: interviewLeagueId,
+                calendarId: tomorrowCalEntry.id,
+                gameWeek: tomorrowCalEntry.game_week,
+              });
+            }
+          } catch (e) { logger.warn({ module: "daily-tick" }, "interview creation failed", e); }
+        }
       }
 
       // ── Weekly finances (Monday) ──
@@ -526,7 +549,7 @@ export async function executeDailyTick(
                   });
 
                 if (matchDayAbsences.length > 0) {
-                  await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', 'Systém', ?, ?, datetime('now'))")
+                  await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', 'Systém', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
                     .bind(crypto.randomUUID(), matchConvId, "⚠️ Nové omluvenky v den zápasu:", JSON.stringify({ type: "match_day_announce", calendarId: todayMatch.id }))
                     .run().catch((e) => logger.warn({ module: "daily-tick" }, "match_day announce insert", e));
                   let cnt = 1;
@@ -538,7 +561,7 @@ export async function executeDailyTick(
                       ).run().catch((e) => logger.warn({ module: "daily-tick" }, "match_day absence msg", e));
                     cnt++;
                   }
-                  await env.DB.prepare("UPDATE conversations SET unread_count = unread_count + ?, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+                  await env.DB.prepare("UPDATE conversations SET unread_count = unread_count + ?, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
                     .bind(cnt, `⚠️ ${matchDayAbsences.length} nových omluvenek!`, matchConvId).run().catch((e) => logger.warn({ module: "daily-tick" }, "match_day conversation update", e));
                   logger.info({ module: "daily-tick", teamId }, `match_day absences: ${matchDayAbsences.length}`);
                 }
@@ -667,6 +690,9 @@ export async function executeDailyTick(
       .bind(now.toISOString()).run();
     await env.DB.prepare("UPDATE player_offers SET status = 'expired' WHERE status = 'pending' AND expires_at < ?")
       .bind(now.toISOString()).run();
+    await env.DB.prepare("UPDATE coach_interviews SET status = 'expired' WHERE status = 'pending' AND expires_at < ?")
+      .bind(now.toISOString()).run()
+      .catch((e) => logger.warn({ module: "daily-tick" }, "expire coach_interviews", e));
     await env.DB.prepare("UPDATE transfer_bids SET status = 'withdrawn' WHERE status = 'pending' AND listing_id IN (SELECT id FROM transfer_listings WHERE status != 'active')")
       .run().catch((e) => logger.warn({ module: "daily-tick" }, "withdraw bids for expired listings", e));
   } catch (e) {

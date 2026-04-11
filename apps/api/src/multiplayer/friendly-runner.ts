@@ -133,7 +133,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         `UPDATE matches SET status = 'simulated', home_score = ?, away_score = ?,
          events = ?, commentary = ?, attendance = ?, stadium_name = ?, pitch_condition = ?, weather = ?,
          home_lineup_data = ?, away_lineup_data = ?,
-         simulated_at = datetime('now') WHERE id = ?`
+         simulated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?`
       ).bind(
         result.homeScore, result.awayScore,
         JSON.stringify(result.events), JSON.stringify(commentary),
@@ -214,9 +214,9 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         let convId = await db.prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = 'Sportovní ředitel'")
           .bind(tid).first<{ id: string }>().then((r) => r?.id).catch(() => null);
         if (convId) {
-          await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Sportovní ředitel', ?, datetime('now'))")
+          await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Sportovní ředitel', ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
             .bind(crypto.randomUUID(), convId, smsBody).run().catch(() => {});
-          await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+          await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
             .bind(smsBody.slice(0, 100), convId).run().catch(() => {});
         }
       }

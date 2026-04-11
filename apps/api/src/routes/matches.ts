@@ -148,7 +148,7 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
   // Save match
   const matchId = uuid();
   await c.env.DB.prepare(
-    "INSERT INTO matches (id, home_team_id, away_team_id, home_score, away_score, status, events, commentary, simulated_at) VALUES (?, ?, ?, ?, ?, 'simulated', ?, ?, datetime('now'))"
+    "INSERT INTO matches (id, home_team_id, away_team_id, home_score, away_score, status, events, commentary, simulated_at) VALUES (?, ?, ?, ?, ?, 'simulated', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
   ).bind(matchId, teamId, "ai-opponent", result.homeScore, result.awayScore,
     JSON.stringify(result.events), JSON.stringify(commentary)).run();
 
@@ -748,7 +748,7 @@ matchesRouter.post("/matches/:id/mark-seen", async (c) => {
   if (!match) return c.json({ error: "Match not found" }, 404);
 
   const col = match.home_team_id === body.teamId ? "home_seen_at" : "away_seen_at";
-  await c.env.DB.prepare(`UPDATE matches SET ${col} = datetime('now') WHERE id = ?`).bind(matchId).run();
+  await c.env.DB.prepare(`UPDATE matches SET ${col} = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?`).bind(matchId).run();
 
   return c.json({ ok: true });
 });
@@ -911,14 +911,14 @@ async function sendSMS(db: D1Database, teamId: string, senderName: string, roleT
     .catch((e) => { logger.warn({ module: "matches" }, "sendSMS find conversation", e); return null; });
   if (!convId) {
     convId = uuid();
-    await db.prepare("INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', datetime('now'), datetime('now'))")
+    await db.prepare("INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
       .bind(convId, teamId, roleTitle).run()
       .catch((e) => logger.warn({ module: "matches" }, "sendSMS insert conversation", e));
   }
-  await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', ?, ?, datetime('now'))")
+  await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
     .bind(uuid(), convId, senderName, body).run()
     .catch((e) => logger.warn({ module: "matches" }, "sendSMS insert message", e));
-  await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = datetime('now') WHERE id = ?")
+  await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
     .bind(body.slice(0, 100), convId).run()
     .catch((e) => logger.warn({ module: "matches" }, "sendSMS update conversation", e));
 }

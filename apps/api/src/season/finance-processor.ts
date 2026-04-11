@@ -206,7 +206,7 @@ export async function processWeeklyFinances(
     );
     if (loyaltyDelta !== 0) {
       await db.prepare(
-        "UPDATE fans SET loyalty = MAX(0, MIN(100, loyalty + ?)), updated_at = datetime('now') WHERE team_id = ?",
+        "UPDATE fans SET loyalty = MAX(0, MIN(100, loyalty + ?)), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ?",
       ).bind(loyaltyDelta, teamId).run().catch((e) => logger.warn({ module: "finance" }, "mgr loyalty drift", e));
     }
   }
@@ -282,7 +282,7 @@ export async function processMatchDayFinances(
       for (const p of sale.products) {
         if (p.sold > 0) {
           await db.prepare(
-            "UPDATE concession_products SET stock_quantity = ?, updated_at = datetime('now') WHERE team_id = ? AND product_key = ?",
+            "UPDATE concession_products SET stock_quantity = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ? AND product_key = ?",
           ).bind(p.stockLeft, teamId, p.key).run().catch((e) => logger.warn({ module: "finance" }, "concession stock update", e));
         }
       }

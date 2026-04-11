@@ -41,7 +41,7 @@ transfersRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
 
   // Update contract
   await c.env.DB.prepare(
-    "UPDATE player_contracts SET leave_type = 'released', is_active = 0, left_at = datetime('now') WHERE player_id = ? AND team_id = ? AND is_active = 1"
+    "UPDATE player_contracts SET leave_type = 'released', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1"
   ).bind(playerId, teamId).run().catch((e) => logger.warn({ module: "transfers" }, "update contract on release", e));
 
   // Remove from listings/offers
@@ -73,7 +73,7 @@ transfersRouter.get("/teams/:teamId/free-agents", async (c) => {
   if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
   const agents = await c.env.DB.prepare(
-    "SELECT fa.*, v.latitude as v_lat, v.longitude as v_lon, v.name as village_name FROM free_agents fa LEFT JOIN villages v ON fa.village_id = v.id WHERE fa.district = ? AND fa.expires_at > datetime('now') ORDER BY fa.overall_rating DESC"
+    "SELECT fa.*, v.latitude as v_lat, v.longitude as v_lon, v.name as village_name FROM free_agents fa LEFT JOIN villages v ON fa.village_id = v.id WHERE fa.district = ? AND fa.expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now') ORDER BY fa.overall_rating DESC"
   ).bind(team.district).all();
 
   const result = agents.results.map((fa) => {
@@ -357,7 +357,7 @@ transfersRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
     .bind(buyerTeamId, playerId).run();
 
   // Contracts
-  await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = datetime('now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
+  await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
     .bind(playerId, teamId).run().catch((e) => logger.warn({ module: "transfers" }, "deactivate seller contract on bid accept", e));
   const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch active season for bid accept", e); return null; });
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
@@ -492,14 +492,14 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ?").bind(buyerTeamId, playerId).run();
 
   // Contracts
-  await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = datetime('now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
+  await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
     .bind(playerId, sellerTeamId).run().catch((e) => logger.warn({ module: "transfers" }, "deactivate seller contract on offer accept", e));
   const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch active season for offer accept", e); return null; });
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
     .bind(crypto.randomUUID(), playerId, buyerTeamId, season?.id ?? "unknown", amount).run().catch((e) => logger.warn({ module: "transfers" }, "insert buyer contract on offer accept", e));
 
   // Update offer + any listings
-  await c.env.DB.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = datetime('now') WHERE id = ?").bind(offerId).run();
+  await c.env.DB.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(offerId).run();
   await c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE player_id = ? AND status = 'active'").bind(playerId).run().catch((e) => logger.warn({ module: "transfers" }, "mark listings sold on offer accept", e));
 
   // News
@@ -522,7 +522,7 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
   const body = await c.req.json<{ message?: string }>().catch((e) => { logger.warn({ module: "transfers" }, "parse reject body", e); return {}; });
   // Reject může ten kdo je na tahu — tj. neudělal poslední akci
   await c.env.DB.prepare(
-    "UPDATE transfer_offers SET status = 'rejected', reject_message = ?, resolved_at = datetime('now') WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered') AND last_action_by != ?"
+    "UPDATE transfer_offers SET status = 'rejected', reject_message = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered') AND last_action_by != ?"
   ).bind((body as { message?: string }).message ?? null, offerId, teamId, teamId, teamId).run();
   return c.json({ ok: true });
 });
@@ -543,7 +543,7 @@ transfersRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
   const offerId = c.req.param("offerId");
   // Stáhnout může kdokoliv v nabídce, pokud ještě není vyřešená
   await c.env.DB.prepare(
-    "UPDATE transfer_offers SET status = 'withdrawn', resolved_at = datetime('now') WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered')"
+    "UPDATE transfer_offers SET status = 'withdrawn', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered')"
   ).bind(offerId, teamId, teamId).run();
   return c.json({ ok: true });
 });

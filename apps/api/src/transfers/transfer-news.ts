@@ -116,6 +116,6 @@ export async function createTransferNews(
 
   const id = crypto.randomUUID();
   await db.prepare(
-    "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'transfer', ?, ?, datetime('now'))"
+    "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'transfer', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
   ).bind(id, leagueId, teamId, headline, body).run().catch((e) => logger.warn({ module: "transfer-news" }, "insert news", e));
 }

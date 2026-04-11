@@ -296,7 +296,7 @@ export async function applyFansMatchDelta(
        SET satisfaction = ?,
            last_match_delta = ?,
            last_match_reasons = ?,
-           updated_at = datetime('now')
+           updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
        WHERE team_id = ?`,
     )
     .bind(satAfter, delta, JSON.stringify(reasons), teamId)
