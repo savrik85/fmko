@@ -322,12 +322,9 @@ export async function processMatchDayFinances(
           attendance,
         ).run().catch((e) => logger.warn({ module: "finance" }, "concession sales insert", e));
       }
-    } else if (facilityFx.refreshmentPerAttendee > 0) {
-      // External mode — použijeme původní jednoduchý model (zůstává pro zpětnou kompatibilitu před přepnutím módu)
-      const refreshmentIncome = attendance * facilityFx.refreshmentPerAttendee;
-      await recordTransaction(db, teamId, "match_income", refreshmentIncome,
-        `Tržby z občerstvení: ${attendance} × ${facilityFx.refreshmentPerAttendee} Kč`, gameDate, matchId);
     }
+    // External mode: income je čistě týdenní přes computeExternalWeeklyConcession,
+    // per-match accounting zde odstraněn aby nedocházelo k dvojitému započítání.
 
     // Home team: referee costs
     const refereeCost = 800 + Math.round(Math.random() * 700);

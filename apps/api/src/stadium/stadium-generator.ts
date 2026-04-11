@@ -93,7 +93,7 @@ const UPGRADE_COSTS: Record<string, number[]> = {
 const UPGRADE_EFFECTS: Record<string, string[]> = {
   changing_rooms: ["", "+3 morálka domácích", "+5 morálka, -5% zranění doma", "+8 morálka, -10% zranění"],
   showers: ["", "+2 regenerace kondice/den", "+4 regenerace kondice/den", "+6 regenerace kondice/den"],
-  refreshments: ["", "+8 Kč/divák z prodeje", "+18 Kč/divák z prodeje", "+30 Kč/divák + bez nákladů na občerstvení"],
+  refreshments: ["", "Umožní vlastní provoz občerstvení", "Vyšší pronájem pro externí provozovatele", "Prémiové zázemí, bez výdajů za občerstvení po zápase"],
   stands: ["", "+50 kapacita", "+150 kapacita", "+300 kapacita"],
   parking: ["", "+5% návštěvnost", "+10% návštěvnost", "+15% návštěvnost"],
   fence: ["", "Víc lidí zaplatí vstupné", "Platí všichni diváci", "Platí všichni, prémiový stadion"],
