@@ -241,7 +241,6 @@ export default function NewsPage() {
 
   // Lead story = latest AI report only
   const leadStory = aiReportArticles[0] || matchArticles[0] || standingArticles[0] || articles[0];
-  const olderAiReports = aiReportArticles.slice(1);
   const secondaryStories = matchArticles.slice(leadStory?.type === "match" ? 1 : 0, 3);
   const restArticles = [...otherArticles, ...matchArticles.slice(3)];
 
@@ -403,21 +402,6 @@ export default function NewsPage() {
             </div>
           )}
 
-          {/* ═══ Older AI reports ═══ */}
-          {olderAiReports.length > 0 && (
-            <div className="border-b border-gray-200 pb-4">
-              <div className="text-[10px] uppercase tracking-widest text-muted mb-2">Starší komentáře</div>
-              <div className="space-y-1.5">
-                {olderAiReports.map((a) => (
-                  <div key={a.id} className="flex items-baseline gap-3 text-sm">
-                    <span className="text-muted shrink-0">{a.icon}</span>
-                    <span className="font-heading font-bold truncate">{a.headline}</span>
-                    <span className="text-xs text-muted shrink-0 ml-auto">{timeAgo(a.date)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* ═══ Secondary stories — 2 or 3 column ═══ */}
           {secondaryStories.length > 0 && (
