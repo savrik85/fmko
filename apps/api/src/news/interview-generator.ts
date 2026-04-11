@@ -203,18 +203,20 @@ export async function generateInterviewQuestions(
     .map((p) => `${p.name} (${p.position}${p.goals ? `, ${p.goals} gólů` : ""})`)
     .join(", ");
 
-  const prompt = `Jsi redaktor Okresního zpravodaje v Čechách. Napiš 3–4 konkrétní otázky pro trenéra
-fotbalového týmu ${ctx.teamName} (${ctx.villageFlavor}) před nadcházejícím zápasem s ${ctx.opponentName}.
+  const prompt = `Jsi redaktor Okresního zpravodaje v Čechách. Napiš přesně 3 otázky pro trenéra
+fotbalového týmu ${ctx.teamName} před zápasem ${ctx.isHome ? "doma" : "venku"} s ${ctx.opponentName} (kolo ${ctx.gameWeek}).
 
 INSTRUKCE:
+- KAŽDÁ otázka musí být konkrétní — zmiň jméno hráče, přesný výsledek, nebo konkrétního soupeře
+- Nepokládej obecné otázky jako "jak hodnotíte formu" nebo "co od zápasu čekáte" — to je nuda
+- Střídej témata: 1 otázka o soupeři nebo nadcházejícím zápase, 1 o konkrétním hráči nebo výkonu, 1 o situaci v tabulce nebo formě
 - Otázky piš jednu per řádek, bez číslování, bez odrážek, bez markdown
-- Ptej se na kontext: soupeře, poslední zápas, hráče, formu — střídej témata
-- Jazyk: hovorová čeština, přirozený novinářský tón, vykání trenéru
+- Jazyk: hovorová čeština, novinářský tón, vykání trenéru
 - Délka každé otázky: 1–2 věty max
-- PŘESNĚ 3 otázky (ne více, ne méně)
+- PŘESNĚ 3 otázky
 
-KONTEXT:
-- Tým: ${ctx.teamName}, ${ctx.isHome ? "hraje doma" : "hraje venku"}
+KONTEXT (používej konkrétní data z toho níže):
+- Tým: ${ctx.teamName} (${ctx.villageFlavor}), ${ctx.isHome ? "hraje doma" : "hraje venku"}
 - Soupeř: ${ctx.opponentName}
 - Kolo: ${ctx.gameWeek}
 - Pozice v tabulce: ${ctx.leaguePos ? `${ctx.leaguePos}. místo, ${ctx.leaguePoints} bodů` : "start sezóny"}
@@ -222,6 +224,9 @@ KONTEXT:
 - Poslední výsledek: ${ctx.lastMatchResult ?? "první zápas sezóny"}
 - Klíčoví hráči: ${topStr || "info nedostupné"}
 ${ctx.injuredStr ? `- Zranění: ${ctx.injuredStr}` : ""}
+
+Příklady DOBRÉ otázky: "Po výhře 3:1 nad Lokomotivou přichází těžší soupeř — čím vás ${ctx.opponentName} může překvapit?"
+Příklady ŠPATNÉ otázky: "Jaká je forma týmu?" nebo "Co od zápasu čekáte?"
 
 Napiš pouze 3 otázky, každou na samostatném řádku.`;
 
@@ -457,6 +462,52 @@ export async function tryCreateInterviewRequest(
     .catch((e) => {
       logger.warn({ module: "interview-generator" }, "insert coach_interview", e);
     });
+
+  // 9. Notifikace — zpráva v "Redakce Zpravodaje" konverzaci
+  try {
+    const convTitle = "Redakce Zpravodaje";
+    let convId: string | null = null;
+
+    const existingConv = await db
+      .prepare(
+        `SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ? LIMIT 1`,
+      )
+      .bind(teamRow.team_id, convTitle)
+      .first<{ id: string }>();
+
+    if (existingConv) {
+      convId = existingConv.id;
+    } else {
+      convId = crypto.randomUUID();
+      await db
+        .prepare(
+          `INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_at, created_at)
+           VALUES (?, ?, 'system', ?, 0, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
+        )
+        .bind(convId, teamRow.team_id, convTitle)
+        .run();
+    }
+
+    const msgBody = `📰 Redaktor Zpravodaje se chce zeptat před zápasem s ${opponentName}. Odpověz na 3 otázky ve svých Událostech — článek vyjde ve Zpravodaji.`;
+    const msgId = crypto.randomUUID();
+
+    await db
+      .prepare(
+        `INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at)
+         VALUES (?, ?, 'system', 'Redakce Zpravodaje', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
+      )
+      .bind(msgId, convId, msgBody, JSON.stringify({ type: "interview_request", interviewId: id }))
+      .run();
+
+    await db
+      .prepare(
+        `UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?`,
+      )
+      .bind(msgBody.slice(0, 100), convId)
+      .run();
+  } catch (e) {
+    logger.warn({ module: "interview-generator" }, "send interview notification", e);
+  }
 
   logger.info(
     { module: "interview-generator", teamId: teamRow.team_id },
