@@ -136,18 +136,19 @@ export default function DashboardPage() {
     return (r * 299 + g * 587 + b * 114) / 1000 > 200 ? "#2D5F2D" : color;
   })();
   const nextMatch = matches.find((m) => m.status !== "simulated");
+  const nextHomeMatch = matches.find((m) => m.status !== "simulated" && m.isHome);
 
-  const promoteNextMatch = async () => {
-    if (!teamId || !nextMatch || promoting) return;
+  const promoteMatch = async (m: ScheduleMatch) => {
+    if (!teamId || promoting) return;
     const ok = await confirm({
-      title: `Propagovat zápas proti ${nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName}?`,
-      description: "Vyjde článek ve Zpravodaji a přijde +25 % diváků. Cena 500–2 500 Kč dle velikosti obce.",
+      title: `Propagovat zápas proti ${m.awayName}?`,
+      description: `Doma · ${m.scheduledAt ? new Date(m.scheduledAt).toLocaleDateString("cs") : ""}. Vyjde článek ve Zpravodaji a přijde +25 % diváků. Cena 500–2 500 Kč dle velikosti obce.`,
       confirmLabel: "Propagovat",
     });
     if (!ok) return;
     setPromoting(true);
     const res = await apiFetch<{ ok?: boolean; cost?: number; error?: string }>(
-      `/api/teams/${teamId}/matches/${nextMatch.id}/promote`,
+      `/api/teams/${teamId}/matches/${m.id}/promote`,
       { method: "POST" },
     ).catch((e) => { console.error("promote:", e); return { error: "Chyba při propagaci" }; });
     setPromoting(false);
@@ -366,16 +367,19 @@ export default function DashboardPage() {
                 )}
                 <div className="flex items-center justify-center gap-3 px-4 py-2">
                   <Link href="/dashboard/match" className="text-xs text-pitch-500 font-heading font-bold hover:underline">Sestava →</Link>
-                  {nextMatch.isHome && (
-                    nextMatch.promoted ? (
-                      <span className="text-xs text-gold-600 font-heading font-bold">📢 Propagováno</span>
+                  {nextHomeMatch && (
+                    nextHomeMatch.promoted ? (
+                      <span className="text-xs text-gold-600 font-heading font-bold" title={`Domácí zápas vs ${nextHomeMatch.awayName} je propagovaný`}>
+                        📢 Propagováno
+                      </span>
                     ) : (
                       <button
-                        onClick={promoteNextMatch}
+                        onClick={() => promoteMatch(nextHomeMatch)}
                         disabled={promoting}
                         className="text-xs text-gold-600 font-heading font-bold hover:underline disabled:opacity-50"
+                        title={nextHomeMatch.id === nextMatch.id ? "Propagovat tento zápas" : `Propagovat nejbližší domácí: vs ${nextHomeMatch.awayName}`}
                       >
-                        {promoting ? "..." : "📢 Propagovat"}
+                        {promoting ? "..." : "📢 Propagovat domácí"}
                       </button>
                     )
                   )}
