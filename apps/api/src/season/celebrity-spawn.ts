@@ -120,7 +120,11 @@ export async function spawnCelebrity(
 
   const faId = crypto.randomUUID();
   const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
+  // Tier S = vzácná legenda → víc času; tier A/B = 14 dní; tier C / ostatní = 10 dní
+  const expiryDays = celebType === "legend"
+    ? (tier === "S" ? 21 : tier === "A" ? 14 : 10)
+    : 14;
+  expiresAt.setDate(expiresAt.getDate() + expiryDays);
 
   const weeklyWage = Math.round(10 + (overallRating / 100) * 400) + celeb.transportCost;
   const avatar = JSON.stringify(generatePlayerFace({ age: celeb.age, bodyType: celeb.bodyType }));

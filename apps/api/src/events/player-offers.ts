@@ -97,15 +97,23 @@ export async function generatePlayerOffer(
 
   // Override age for source-specific ranges
   const age = rng.int(ageRange[0], ageRange[1]);
+  const isYouth = sourceType.source === "youth";
+  // Youth players are local kids — higher patriotism
+  if (isYouth) player.patriotism = Math.min(20, (player.patriotism ?? 10) + rng.int(3, 6));
 
   // Calculate rating — fallback if generatePlayer returns undefined props
-  const fb = () => rng.int(15, 45);
+  // Youth players have lower base skills (0-30) but hidden talent potential
+  const fb = () => isYouth ? rng.int(3, 30) : rng.int(15, 45);
   const skills = {
-    speed: player.speed ?? fb(), technique: player.technique ?? fb(),
-    shooting: player.shooting ?? fb(), passing: player.passing ?? fb(),
-    heading: player.heading ?? fb(), defense: player.defense ?? fb(),
-    goalkeeping: player.goalkeeping ?? (pos === "GK" ? rng.int(30, 60) : 0),
-    stamina: player.stamina ?? fb(), strength: player.strength ?? fb(),
+    speed: isYouth ? rng.int(3, 30) : (player.speed ?? fb()),
+    technique: isYouth ? rng.int(3, 30) : (player.technique ?? fb()),
+    shooting: isYouth ? rng.int(3, 28) : (player.shooting ?? fb()),
+    passing: isYouth ? rng.int(3, 28) : (player.passing ?? fb()),
+    heading: isYouth ? rng.int(2, 25) : (player.heading ?? fb()),
+    defense: isYouth ? rng.int(3, 28) : (player.defense ?? fb()),
+    goalkeeping: isYouth ? (pos === "GK" ? rng.int(10, 35) : 0) : (player.goalkeeping ?? (pos === "GK" ? rng.int(30, 60) : 0)),
+    stamina: isYouth ? rng.int(15, 45) : (player.stamina ?? fb()),
+    strength: isYouth ? rng.int(5, 25) : (player.strength ?? fb()),
   };
   const posWeights: Record<string, Record<string, number>> = {
     GK: { goalkeeping: 4, strength: 2, stamina: 1 },
@@ -134,7 +142,11 @@ export async function generatePlayerOffer(
     player.firstName, player.lastName, null, age, pos, overallRating,
     JSON.stringify(skills),
     JSON.stringify({ stamina: player.stamina, strength: player.strength, injuryProneness: player.injuryProneness ?? 50, preferredFoot: player.preferredFoot, preferredSide: player.preferredSide }),
-    JSON.stringify({ discipline: player.discipline, patriotism: player.patriotism, alcohol: player.alcohol, temper: player.temper }),
+    JSON.stringify({
+      discipline: player.discipline, patriotism: player.patriotism,
+      alcohol: player.alcohol, temper: player.temper,
+      ...(isYouth ? { hiddenTalent: rng.int(5, 45) } : {}),
+    }),
     JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
     JSON.stringify(generatePlayerFace({ age: player.age ?? age, bodyType: player.bodyType ?? "normal" })),
     weeklyWage, expiresAt.toISOString(),

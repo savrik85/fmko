@@ -2654,11 +2654,14 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
 
   const playerId = crypto.randomUUID();
   const isCelebrity = (fa.is_celebrity as number) ?? 0;
+  // Extract skillsMax from life_context (fallen_star celebrities have it stored there)
+  const faLifeCtx = (() => { try { return JSON.parse(fa.life_context as string); } catch { return {}; } })();
+  const faSkillsMax = faLifeCtx.skillsMax ? JSON.stringify(faLifeCtx.skillsMax) : null;
   await c.env.DB.prepare(
-    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, status, is_celebrity)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
+    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, status, is_celebrity, skills_max)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`
   ).bind(playerId, teamId, fa.first_name, fa.last_name, (fa.nickname as string) ?? "", fa.age, fa.position, fa.overall_rating,
-    fa.skills, fa.physical, fa.personality, fa.life_context, fa.avatar, fa.hidden_talent ?? 0, body.offeredWage, isCelebrity).run();
+    fa.skills, fa.physical, fa.personality, fa.life_context, fa.avatar, fa.hidden_talent ?? 0, body.offeredWage, isCelebrity, faSkillsMax).run();
 
   // Set residence & commute for new signing
   const { generateResidence } = await import("../generators/residence");
