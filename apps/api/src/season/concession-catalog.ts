@@ -51,8 +51,8 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
     priceElasticity: 0.8,
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
-      { wholesalePrice: 14, defaultSellPrice: 25, label: "Měšťan 11" },
-      { wholesalePrice: 20, defaultSellPrice: 35, label: "Kozel 11" },
+      { wholesalePrice: 14, defaultSellPrice: 25, label: "Měšťan 10°" },
+      { wholesalePrice: 20, defaultSellPrice: 35, label: "Kozel 11°" },
       { wholesalePrice: 30, defaultSellPrice: 50, label: "Plzeň 12°" },
     ],
   },
