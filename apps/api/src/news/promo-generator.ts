@@ -270,6 +270,27 @@ export async function generatePromotionalArticle(
   const stadiumName = match.stadium_name ?? `stadion v ${match.home_village}`;
   const capacity = match.stadium_capacity ?? 200;
 
+  // Spočítej relativní čas do zápasu z pohledu aktuálního herního data
+  const teamGameDateRow = await db
+    .prepare("SELECT game_date FROM teams WHERE id = ?")
+    .bind(homeTeamId)
+    .first<{ game_date: string }>()
+    .catch((e) => { logger.warn({ module: "promo-generator" }, "load team game_date", e); return null; });
+  const gameNow = teamGameDateRow?.game_date ? new Date(teamGameDateRow.game_date) : new Date();
+  const matchTime = match.scheduled_at ? new Date(match.scheduled_at) : null;
+  let relativeTime = "v nejbližším termínu";
+  if (matchTime && !isNaN(matchTime.getTime())) {
+    const diffMs = matchTime.getTime() - gameNow.getTime();
+    const diffDays = Math.round(diffMs / 86400000);
+    if (diffDays <= 0) relativeTime = "už dnes";
+    else if (diffDays === 1) relativeTime = "zítra";
+    else if (diffDays === 2) relativeTime = "pozítří";
+    else if (diffDays <= 6) relativeTime = `za ${diffDays} dny`;
+    else if (diffDays === 7) relativeTime = "za týden";
+    else if (diffDays <= 13) relativeTime = `za ${diffDays} dní`;
+    else relativeTime = `za ${Math.round(diffDays / 7)} týdny`;
+  }
+
   const prompt = `Jsi sportovní komentátor ${isPraha ? "pražského" : "okresního"} fotbalu. Napiš krátký propagační článek
 (maximálně 150 slov) z pohledu domácího týmu ${match.home_name}, který zve fanoušky
 na nadcházející zápas s ${match.away_name}. Má být lákavý, motivující a realistický pro
@@ -282,10 +303,12 @@ STRIKTNĚ:
 - Čeština, lehký humor, živý jazyk
 - NEVYMÝŠLEJ čísla — použij jen ta v kontextu níže
 - Pokud chybí klíčový hráč (zranění), zmiň to stručně jako motivaci „i přes oslabení"
+- NEPIŠ konkrétní datum ani den v týdnu — použij výhradně relativní čas z pole "Kdy" níže
+  (např. "zítra", "pozítří", "za 3 dny"). Nepřidávej vlastní datumové formulace.
 - ${localHint}
 
 KONTEXT ZÁPASU:
-Datum: ${match.scheduled_at ?? "blízká budoucnost"}
+Kdy: ${relativeTime}
 
 DOMÁCÍ: ${match.home_name}
   Obec: ${match.home_village} (${match.home_pop} obyv.) — ${homeFlavor}
