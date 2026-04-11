@@ -397,12 +397,17 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
 matchesRouter.get("/teams/:teamId/schedule", async (c) => {
   const teamId = c.req.param("teamId");
 
-  // Get team's league
+  // Get team's league + village size pro promotion price
   const team = await c.env.DB.prepare(
-    "SELECT t.name, t.league_id FROM teams t WHERE t.id = ?"
-  ).bind(teamId).first<{ name: string; league_id: string | null }>();
+    "SELECT t.name, t.league_id, v.size as village_size FROM teams t LEFT JOIN villages v ON v.id = t.village_id WHERE t.id = ?"
+  ).bind(teamId).first<{ name: string; league_id: string | null; village_size: string | null }>();
   if (!team) return c.json({ error: "Team not found" }, 404);
   if (!team.league_id) return c.json({ matches: [], leagueName: "" });
+
+  // Promotion price dle kategorie obce — reuse promoCost logiky
+  const { mapVillageSize } = await import("../season/finance-processor");
+  const teamCategory = mapVillageSize(team.village_size ?? "village");
+  const teamPromotionPrice = promoCost(teamCategory);
 
   // Get league info
   const league = await c.env.DB.prepare(
@@ -453,6 +458,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     leagueName: league?.name ?? "Liga",
     season: league?.season_number ?? 1,
     matches,
+    promotionPrice: teamPromotionPrice,
   });
 });
 

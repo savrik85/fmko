@@ -81,6 +81,7 @@ export default function SchedulePage() {
   const { teamId } = useTeam();
   const [tab, setTab] = useState<Tab>("my");
   const [matches, setMatches] = useState<ScheduleMatch[]>([]);
+  const [promotionPrice, setPromotionPrice] = useState<number | null>(null);
   const [rounds, setRounds] = useState<LeagueRound[]>([]);
   const [leagueName, setLeagueName] = useState("");
   const [loading, setLoading] = useState(true);
@@ -91,9 +92,10 @@ export default function SchedulePage() {
 
   const loadSchedule = async () => {
     if (!teamId) return;
-    const data = await apiFetch<{ leagueName: string; season: number; matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`);
+    const data = await apiFetch<{ leagueName: string; season: number; matches: ScheduleMatch[]; promotionPrice?: number }>(`/api/teams/${teamId}/schedule`);
     setLeagueName(data.season ? `${data.leagueName} — Sezóna ${data.season}` : data.leagueName);
     setMatches(data.matches);
+    setPromotionPrice(data.promotionPrice ?? null);
   };
 
   // Load my schedule
@@ -107,11 +109,12 @@ export default function SchedulePage() {
 
   const promoteMatch = async (m: ScheduleMatch) => {
     if (!teamId || acting) return;
-    const villageGuess = ""; // cena se spočítá na BE
+    const priceStr = promotionPrice != null ? `${promotionPrice.toLocaleString("cs")} Kč` : "500–2 500 Kč";
     const ok = await confirm({
       title: `Propagovat zápas proti ${m.isHome ? m.awayName : m.homeName}?`,
-      description: `Vyjde článek ve Zpravodaji a přijde více diváků (+25 %). Přesná cena závisí na velikosti tvé obce (500–2 500 Kč).${villageGuess}`,
-      confirmLabel: "Propagovat",
+      description: "Vyjde článek ve Zpravodaji a přijde více diváků (+25 %).",
+      details: [{ label: "Cena", value: `-${priceStr}`, color: "text-card-red" }],
+      confirmLabel: promotionPrice != null ? `Propagovat za ${priceStr}` : "Propagovat",
     });
     if (!ok) return;
     setActing(true);

@@ -83,6 +83,7 @@ export default function DashboardPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [matches, setMatches] = useState<ScheduleMatch[]>([]);
+  const [promotionPrice, setPromotionPrice] = useState<number | null>(null);
   // unseen state removed — redirect handled inline in useEffect
   const [manager, setManager] = useState<ManagerProfile | null>(null);
   const [matchResults, setMatchResults] = useState<TeamMatchResults | null>(null);
@@ -98,7 +99,7 @@ export default function DashboardPage() {
       apiFetch<Team>(`/api/teams/${teamId}`),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
       apiFetch<{ standings: Standing[] }>(`/api/teams/${teamId}/standings`).catch(() => ({ standings: [] })),
-      apiFetch<{ matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`).catch(() => ({ matches: [] })),
+      apiFetch<{ matches: ScheduleMatch[]; promotionPrice?: number }>(`/api/teams/${teamId}/schedule`).catch(() => ({ matches: [] })),
       apiFetch<ManagerProfile>(`/api/teams/${teamId}/manager`).catch((e) => { console.error("manager fetch:", e); return null; }),
       apiFetch<TeamMatchResults>(`/api/teams/${teamId}/match-results`).catch((e) => { console.error("match-results fetch:", e); return null; }),
     ]).then(([t, p, s, m, mgr, mr]) => {
@@ -106,6 +107,7 @@ export default function DashboardPage() {
       setPlayers(p);
       setStandings(s.standings);
       setMatches(m.matches);
+      setPromotionPrice((m as { promotionPrice?: number }).promotionPrice ?? null);
       setManager(mgr);
       setMatchResults(mr);
       setLoading(false);
@@ -139,10 +141,12 @@ export default function DashboardPage() {
 
   const promoteMatch = async (m: ScheduleMatch) => {
     if (!teamId || promoting) return;
+    const priceStr = promotionPrice != null ? `${promotionPrice.toLocaleString("cs")} Kč` : "500–2 500 Kč";
     const ok = await confirm({
       title: `Propagovat zápas proti ${m.awayName}?`,
-      description: `Doma · ${m.scheduledAt ? new Date(m.scheduledAt).toLocaleDateString("cs") : ""}. Vyjde článek ve Zpravodaji a přijde +25 % diváků. Cena 500–2 500 Kč dle velikosti obce.`,
-      confirmLabel: "Propagovat",
+      description: `Doma · ${m.scheduledAt ? new Date(m.scheduledAt).toLocaleDateString("cs") : ""}. Vyjde článek ve Zpravodaji a přijde +25 % diváků.`,
+      details: [{ label: "Cena", value: `-${priceStr}`, color: "text-card-red" }],
+      confirmLabel: promotionPrice != null ? `Propagovat za ${priceStr}` : "Propagovat",
     });
     if (!ok) return;
     setPromoting(true);
