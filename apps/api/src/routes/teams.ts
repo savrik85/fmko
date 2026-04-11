@@ -1150,6 +1150,9 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
     free_agent: "Volný hráč",
     youth: "Z mládeže",
     loan: "Hostování",
+    pub: "Tip od hospodského",
+    friend: "Tip kapitána",
+    recommendation: "Tip starosty",
   };
 
   return c.json({
