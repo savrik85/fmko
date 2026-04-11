@@ -3749,6 +3749,16 @@ gameRouter.get("/teams/:teamId/fans", async (c) => {
 
   if (!fans) return c.json({ error: "Fans not found" }, 404);
 
+  // Load village size pro village base ticket price (prefill v UI)
+  const { mapVillageSize, getBaseTicketPrice } = await import("../season/finance-processor");
+  const villageRow = await c.env.DB.prepare(
+    "SELECT v.size FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?",
+  ).bind(teamId).first<{ size: string }>().catch((e) => {
+    logger.warn({ module: "game" }, "load village for base ticket", e);
+    return null;
+  });
+  const villageBaseTicketPrice = getBaseTicketPrice(mapVillageSize(villageRow?.size ?? "village"));
+
   const mgr = await c.env.DB.prepare(
     "SELECT reputation, motivation FROM managers WHERE team_id = ?",
   ).bind(teamId).first<{ reputation: number; motivation: number }>().catch((e) => {
@@ -3775,6 +3785,7 @@ gameRouter.get("/teams/:teamId/fans", async (c) => {
     loyalty: fans.loyalty,
     expectedPerformance: fans.expected_performance,
     baseTicketPrice: fans.base_ticket_price,
+    villageBaseTicketPrice,
     lastMatchDelta: fans.last_match_delta,
     lastMatchReasons: reasons,
     manager: mgr

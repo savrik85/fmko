@@ -84,7 +84,7 @@ const FACILITY_LABELS: Record<string, string> = {
 const UPGRADE_COSTS: Record<string, number[]> = {
   changing_rooms: [0, 25000, 85000, 220000],
   showers: [0, 18000, 60000, 160000],
-  refreshments: [0, 35000, 110000, 280000],
+  refreshments: [0, 10000, 110000, 280000],
   stands: [0, 55000, 170000, 450000],
   parking: [0, 20000, 60000, 150000],
   fence: [0, 15000, 50000, 130000],

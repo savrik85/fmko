@@ -10,6 +10,7 @@ interface FansData {
   loyalty: number;
   expectedPerformance: number;
   baseTicketPrice: number;
+  villageBaseTicketPrice: number;
   lastMatchDelta: number;
   lastMatchReasons: string[];
   manager: {
@@ -90,7 +91,9 @@ export default function FansPage() {
     setFans(f);
     setConcession(co);
     setTeam(t);
-    setTicketPriceDraft(String(f.baseTicketPrice));
+    // Předvyplnit cenu vstupenky: user override, jinak automatická podle obce
+    const prefillPrice = f.baseTicketPrice > 0 ? f.baseTicketPrice : f.villageBaseTicketPrice;
+    setTicketPriceDraft(String(prefillPrice));
     const drafts: Record<string, { sellPrice: string }> = {};
     for (const p of co.products) {
       drafts[p.key] = { sellPrice: String(p.sellPrice) };
@@ -375,13 +378,29 @@ export default function FansPage() {
 
         {concession.mode === "external" && (
           <div className="bg-gray-50 rounded-lg p-3">
-            <div className="text-sm text-muted mb-1">Týdenní pasivní příjem z pronájmu bufetu</div>
-            <div className="font-heading font-bold text-xl tabular-nums text-pitch-500">
-              {formatCZK(concession.externalWeeklyIncome)}
-            </div>
-            <div className="text-xs text-muted mt-1">
-              Bez starostí. Příjem škáluje s levelem občerstvení a reputací klubu.
-            </div>
+            {concession.refreshmentsLevel === 0 ? (
+              <>
+                <div className="text-sm text-muted mb-1">Týdenní pasivní příjem z pronájmu bufetu</div>
+                <div className="font-heading font-bold text-base text-gold-600">
+                  Zatím žádný — není kde prodávat
+                </div>
+                <div className="text-xs text-muted mt-1">
+                  Postav alespoň L1 občerstvení na{" "}
+                  <a href="/dashboard/stadium" className="text-pitch-500 underline">stadionu</a>,
+                  aby bufet vůbec mohl fungovat.
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-sm text-muted mb-1">Týdenní pasivní příjem z pronájmu bufetu</div>
+                <div className="font-heading font-bold text-xl tabular-nums text-pitch-500">
+                  {formatCZK(concession.externalWeeklyIncome)}
+                </div>
+                <div className="text-xs text-muted mt-1">
+                  Bez starostí. Příjem škáluje s levelem občerstvení a reputací klubu.
+                </div>
+              </>
+            )}
           </div>
         )}
 
