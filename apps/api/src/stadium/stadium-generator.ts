@@ -96,7 +96,7 @@ const UPGRADE_EFFECTS: Record<string, string[]> = {
   refreshments: ["", "+8 Kč/divák z prodeje", "+18 Kč/divák z prodeje", "+30 Kč/divák + bez nákladů na občerstvení"],
   stands: ["", "+50 kapacita", "+150 kapacita", "+300 kapacita"],
   parking: ["", "+5% návštěvnost", "+10% návštěvnost", "+15% návštěvnost"],
-  fence: ["", "Platí všichni diváci", "+10% cena vstupného", "+20% cena vstupného"],
+  fence: ["", "Víc lidí zaplatí vstupné", "Platí všichni diváci", "Platí všichni, prémiový stadion"],
 };
 
 // Unlock requirements per level
@@ -194,7 +194,7 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
     attendanceBonus: [0, 0.05, 0.10, 0.15][pa] ?? 0,
     capacityBonus: [0, 50, 150, 300][st] ?? 0,
     ticketPriceBonus: [0, 0, 0.10, 0.20][fe] ?? 0,
-    fencePayingRatio: fe === 0 ? 0.3 : 1.0,
+    fencePayingRatio: [0.3, 0.65, 1.0, 1.0][fe] ?? 0.3,
   };
 }
 

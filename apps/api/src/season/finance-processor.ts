@@ -250,11 +250,12 @@ export async function processMatchDayFinances(
   let soldProducts: Awaited<ReturnType<typeof computeSelfConcessionMatch>>["products"] = [];
 
   if (isHome && attendance > 0) {
-    // Fence guard: bez plotu platí jen část diváků
+    // Fence guard: bez plnohodnotného plotu platí jen část diváků
     const payingAttendance = Math.round(attendance * facilityFx.fencePayingRatio);
     const ticketIncome = payingAttendance * ticketPrice;
+    const fenceLevel = facilities.fence ?? 0;
     const fenceNote = facilityFx.fencePayingRatio < 1
-      ? ` (bez plotu: ${payingAttendance} z ${attendance})`
+      ? ` (${fenceLevel === 0 ? "bez plotu" : "provizorní plot"}: ${payingAttendance} z ${attendance})`
       : "";
     await recordTransaction(db, teamId, "match_income", ticketIncome,
       `Vstupné: ${payingAttendance} × ${ticketPrice} Kč${fenceNote}`, gameDate, matchId);
