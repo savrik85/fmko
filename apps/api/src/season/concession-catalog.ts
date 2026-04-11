@@ -35,7 +35,7 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
   sausage: {
     key: "sausage",
     label: "Klobása",
-    baseDemandRate: 0.40,
+    baseDemandRate: 0.4,
     priceElasticity: 0.6,
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
@@ -47,7 +47,7 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
   beer: {
     key: "beer",
     label: "Pivo",
-    baseDemandRate: 0.65,
+    baseDemandRate: 4.0,
     priceElasticity: 0.8,
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
@@ -59,7 +59,7 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
   lemonade: {
     key: "lemonade",
     label: "Limonáda",
-    baseDemandRate: 0.30,
+    baseDemandRate: 1.0,
     priceElasticity: 0.4,
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
