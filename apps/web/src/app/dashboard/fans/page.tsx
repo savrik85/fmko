@@ -82,7 +82,7 @@ interface SalesMatch {
   totalProfit: number;
 }
 
-type TabKey = "satisfaction" | "prices" | "concession" | "sales";
+type TabKey = "satisfaction" | "concession" | "sales";
 
 const PRODUCT_ICONS: Record<string, string> = {
   sausage: "🌭",
@@ -323,7 +323,6 @@ export default function FansPage() {
 
   const tabs: { key: TabKey; label: string; icon: string; visible: boolean }[] = [
     { key: "satisfaction", label: "Spokojenost", icon: "\u{1F4CA}", visible: true },
-    { key: "prices", label: "Ceny", icon: "\u{1F4B0}", visible: true },
     { key: "concession", label: "Občerstvení", icon: "\u{1F37A}", visible: true },
     { key: "sales", label: "Prodeje", icon: "\u{1F4C8}", visible: concession.mode === "self" },
   ];
@@ -508,9 +507,6 @@ export default function FansPage() {
         )}
       </div>
 
-      </>)}
-
-      {currentTab === "prices" && (<>
       {/* ═══ Vstupné ═══ */}
       <div className="card p-4 sm:p-5">
         <SectionLabel>Vstupné</SectionLabel>
@@ -546,90 +542,8 @@ export default function FansPage() {
         </div>
       </div>
 
-      {/* ═══ Ceny občerstvení (jen self) ═══ */}
-      {concession.mode === "self" ? (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Ceny občerstvení</SectionLabel>
-          <div className="text-sm text-muted mb-4">
-            Nastav kvalitu a prodejní cenu každého produktu. Vyšší cena než 1.8× velkoobchodu = méně zákazníků.
-          </div>
-          <div className="space-y-3">
-            {concession.products.map((p) => {
-              const currentTier = p.tiers[p.qualityLevel];
-              const priceDraft = productDrafts[p.key]?.sellPrice ?? String(p.sellPrice);
-              return (
-                <div key={p.key} className="border border-gray-100 rounded-lg p-3">
-                  <div className="flex items-center gap-2.5 mb-3">
-                    <span className="text-2xl">{PRODUCT_ICONS[p.key] ?? "🍽"}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-heading font-bold">{p.label}</div>
-                      <div className="text-xs text-muted">{currentTier.label}</div>
-                    </div>
-                  </div>
-
-                  {/* Quality tiers */}
-                  <div className="flex gap-1 mb-3">
-                    {p.tiers.slice(1).map((tier, idx) => {
-                      const lvl = idx + 1;
-                      const isActive = lvl === p.qualityLevel;
-                      return (
-                        <button
-                          key={lvl}
-                          onClick={() => upgradeQuality(p.key, lvl)}
-                          disabled={isActive || !!acting}
-                          className={`flex-1 py-1.5 px-1 rounded text-center transition-colors ${
-                            isActive ? "bg-gold-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"
-                          }`}
-                        >
-                          <div className="text-xs font-heading font-bold leading-tight truncate">{tier.label}</div>
-                          <div className={`text-[10px] tabular-nums mt-0.5 ${isActive ? "text-white/80" : "text-muted"}`}>{tier.wholesalePrice} Kč/ks</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Sell price */}
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-heading font-bold text-ink leading-tight">Prodejní cena</div>
-                      <div className="text-xs text-muted">doporučeno {currentTier.defaultSellPrice} Kč</div>
-                    </div>
-                    <input
-                      type="number"
-                      min={0}
-                      value={priceDraft}
-                      onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
-                      className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
-                    />
-                    <span className="text-xs text-muted shrink-0">Kč</span>
-                    <button
-                      onClick={() => saveSellPrice(p.key)}
-                      disabled={acting === "price-" + p.key || priceDraft === String(p.sellPrice)}
-                      className={`shrink-0 py-1.5 px-4 rounded-lg text-xs font-heading font-bold transition-colors ${
-                        acting === "price-" + p.key || priceDraft === String(p.sellPrice)
-                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                          : "bg-pitch-500 text-white hover:bg-pitch-600"
-                      }`}
-                    >
-                      {acting === "price-" + p.key ? "..." : "Uložit"}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Ceny občerstvení</SectionLabel>
-          <div className="text-sm text-muted">
-            V režimu externího provozovatele ceny občerstvení neřídíš — bufet si spravuje sám a platí ti
-            týdenní pronájem. Pokud chceš prodávat vlastní produkty, přepni v tabu Občerstvení na vlastní provoz.
-          </div>
-        </div>
-      )}
-
       </>)}
+
 
       {currentTab === "concession" && (<>
       {/* ═══ Občerstvení ═══ */}
@@ -695,6 +609,7 @@ export default function FansPage() {
 
             {concession.products.map((p) => {
               const currentTier = p.tiers[p.qualityLevel];
+              const priceDraft = productDrafts[p.key]?.sellPrice ?? String(p.sellPrice);
               const qty = restockQty[p.key] ?? "";
               const qtyNum = parseInt(qty, 10);
               const total = !isNaN(qtyNum) && qtyNum > 0 ? qtyNum * currentTier.wholesalePrice : 0;
@@ -702,13 +617,12 @@ export default function FansPage() {
               const stockLow = p.stockQuantity > 0 && p.stockQuantity < 20;
               return (
                 <div key={p.key} className="border border-gray-100 rounded-lg p-3">
+                  {/* Header: ikona, název, aktuální tier, sklad */}
                   <div className="flex items-center gap-2.5 mb-3">
                     <span className="text-2xl">{PRODUCT_ICONS[p.key] ?? "🍽"}</span>
                     <div className="flex-1 min-w-0">
                       <div className="font-heading font-bold">{p.label}</div>
-                      <div className="text-xs text-muted">
-                        {currentTier.label} · prodává se za {p.sellPrice} Kč
-                      </div>
+                      <div className="text-xs text-muted">{currentTier.label}</div>
                     </div>
                     <div className="text-right">
                       <div className={`font-heading font-bold text-lg tabular-nums ${stockEmpty ? "text-card-red" : stockLow ? "text-gold-600" : "text-pitch-500"}`}>
@@ -719,7 +633,56 @@ export default function FansPage() {
                     </div>
                   </div>
 
+                  {/* Quality tiers */}
+                  <div className="flex gap-1 mb-3">
+                    {p.tiers.slice(1).map((tier, idx) => {
+                      const lvl = idx + 1;
+                      const isActive = lvl === p.qualityLevel;
+                      return (
+                        <button
+                          key={lvl}
+                          onClick={() => upgradeQuality(p.key, lvl)}
+                          disabled={isActive || !!acting}
+                          className={`flex-1 py-1.5 px-1 rounded text-center transition-colors ${
+                            isActive ? "bg-gold-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"
+                          }`}
+                        >
+                          <div className="text-xs font-heading font-bold leading-tight truncate">{tier.label}</div>
+                          <div className={`text-[10px] tabular-nums mt-0.5 ${isActive ? "text-white/80" : "text-muted"}`}>{tier.wholesalePrice} Kč/ks</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Sell price */}
                   <div className="flex items-center gap-2 sm:gap-3 pt-3 border-t border-gray-100">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-heading font-bold text-ink leading-tight">Prodejní cena</div>
+                      <div className="text-xs text-muted">doporučeno {currentTier.defaultSellPrice} Kč</div>
+                    </div>
+                    <input
+                      type="number"
+                      min={0}
+                      value={priceDraft}
+                      onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
+                      className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+                    />
+                    <span className="text-xs text-muted shrink-0">Kč</span>
+                    <button
+                      onClick={() => saveSellPrice(p.key)}
+                      disabled={acting === "price-" + p.key || priceDraft === String(p.sellPrice)}
+                      className={`shrink-0 py-1.5 px-4 rounded-lg text-xs font-heading font-bold transition-colors ${
+                        acting === "price-" + p.key || priceDraft === String(p.sellPrice)
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-pitch-500 text-white hover:bg-pitch-600"
+                      }`}
+                    >
+                      {acting === "price-" + p.key ? "..." : "Uložit"}
+                    </button>
+                  </div>
+
+                  {/* Restock */}
+                  <div className="flex items-center gap-2 sm:gap-3 mt-2">
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-heading font-bold text-ink leading-tight">Doplnit sklad</div>
                       <div className="text-xs text-muted">{currentTier.wholesalePrice} Kč/ks</div>
