@@ -263,8 +263,10 @@ PRAVIDLA:
 - Piš v er-formě (ne Q&A formát, ne otázky a odpovědi)
 - Délka: 180–250 slov
 - Používej přímou řeč v uvozovkách pro klíčové výroky trenéra
-- Pokud jsou odpovědi vulgární nebo obsahují nadávky: přepiš je novinářsky (zachovej smysl, odstraň vulgaritu)
-- Pokud jsou odpovědi nesmyslné nebo příliš krátké: novinářsky je doplň realistickým kontextem
+- KRITICKÉ: NIKDY nevymýšlej obsah odpovědí. Článek musí vycházet VÝHRADNĚ z toho, co trenér skutečně řekl.
+- Pokud jsou odpovědi krátké nebo strohé: napiš že trenér byl stručný/neochotný. Např. "Trenér byl před utkáním mlčenlivý." nebo "Na otázku ohledně X trenér odpověděl jen stroze."
+- Pokud jsou odpovědi vulgární: přepiš je novinářsky zachováním SMYSLU (ne obsahu), odstraň vulgaritu. Např. "Trenér svého soupeře odbyl jednou větou."
+- Pokud jsou odpovědi pozitivní/zajímavé: cituj je nebo parafrázuj věrně
 - Tón: vážný novinář regionálního sportu, lehký humor kde to sedí
 - Čeština, bez markdown, bez odrážek
 - Bez uvozovek kolem celého textu
