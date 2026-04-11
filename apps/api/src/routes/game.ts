@@ -819,8 +819,11 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
         round_results: "\u26BD",
         seasonal: "\u{1F389}",
         transfer: "\u{1F91D}",
+        celebrity_arrival: "\u{1F31F}",
+        celebrity_signing: "\u{1F4DD}",
         ai_report: "\u270D\uFE0F",
         promotion: "\u{1F4E2}",
+        interview: "\u{1F399}\uFE0F",
       };
       articles.push({
         id: n.id as string,
@@ -3586,6 +3589,140 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/reject", async (c) => {
   const offerId = c.req.param("offerId");
   const teamId = c.req.param("teamId");
   await c.env.DB.prepare("UPDATE player_offers SET status = 'rejected' WHERE id = ? AND team_id = ?").bind(offerId, teamId).run();
+  return c.json({ ok: true });
+});
+
+// ── Coach interviews (Rozhovor kola) ──
+
+// GET /api/teams/:teamId/coach-interviews — pending interviews
+gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
+  const teamId = c.req.param("teamId");
+  const rows = await c.env.DB.prepare(
+    "SELECT * FROM coach_interviews WHERE team_id = ? AND status = 'pending' ORDER BY created_at DESC"
+  ).bind(teamId).all<Record<string, unknown>>().catch((e) => {
+    logger.warn({ module: "game.ts" }, "get coach_interviews", e);
+    return { results: [] };
+  });
+
+  const interviews = (rows.results ?? []).map((r) => ({
+    id: r.id,
+    leagueId: r.league_id,
+    teamId: r.team_id,
+    managerId: r.manager_id,
+    matchCalendarId: r.match_calendar_id,
+    gameWeek: r.game_week,
+    questions: (() => { try { return JSON.parse(r.questions as string); } catch { return []; } })(),
+    status: r.status,
+    expiresAt: r.expires_at,
+    createdAt: r.created_at,
+  }));
+
+  return c.json({ interviews });
+});
+
+// POST /api/teams/:teamId/coach-interviews/:interviewId/answer — submit answers + generate article
+gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c) => {
+  const teamId = c.req.param("teamId");
+  const interviewId = c.req.param("interviewId");
+
+  const interview = await c.env.DB.prepare(
+    "SELECT * FROM coach_interviews WHERE id = ? AND team_id = ? AND status = 'pending'"
+  ).bind(interviewId, teamId).first<Record<string, unknown>>().catch((e) => {
+    logger.warn({ module: "game.ts" }, "get interview for answer", e);
+    return null;
+  });
+  if (!interview) return c.json({ error: "Rozhovor nenalezen nebo již zpracován" }, 404);
+
+  const body = await c.req.json<{ answers: string[] }>().catch((e) => { logger.warn({ module: "game.ts" }, "parse interview answer body", e); return null; });
+  if (!body?.answers?.length) return c.json({ error: "Chybí odpovědi" }, 400);
+
+  const questions: string[] = (() => {
+    try { return JSON.parse(interview.questions as string); } catch { return []; }
+  })();
+
+  if (body.answers.length !== questions.length) {
+    return c.json({ error: `Očekáváno ${questions.length} odpovědí, dostáno ${body.answers.length}` }, 400);
+  }
+
+  // Sanitize answers — max 500 chars each
+  const answers = body.answers.map((a) => String(a).slice(0, 500).trim());
+
+  // Manager + team info for article
+  const managerRow = await c.env.DB.prepare(
+    "SELECT m.name as manager_name, m.avatar as manager_avatar, t.name as team_name, t.league_id FROM managers m JOIN teams t ON t.id = m.team_id WHERE m.team_id = ?"
+  ).bind(teamId).first<{ manager_name: string; manager_avatar: string | null; team_name: string; league_id: string }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "load manager for interview article", e); return null; });
+  if (!managerRow) return c.json({ error: "Trenér nenalezen" }, 404);
+
+  // Opponent name from match
+  const calRow = await c.env.DB.prepare(
+    `SELECT m.home_team_id, m.away_team_id, ht.name as home_name, at.name as away_name
+     FROM matches m
+     JOIN teams ht ON m.home_team_id = ht.id
+     JOIN teams at ON m.away_team_id = at.id
+     WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1`
+  ).bind(interview.match_calendar_id, teamId, teamId)
+    .first<{ home_team_id: string; away_team_id: string; home_name: string; away_name: string }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "load match for interview article", e); return null; });
+
+  const opponentName = calRow
+    ? (calRow.home_team_id === teamId ? calRow.away_name : calRow.home_name)
+    : "soupeř";
+
+  // Generate article via Gemini
+  const qa = questions.map((q, i) => ({ q, a: answers[i] ?? "" }));
+  const { generateInterviewArticle } = await import("../news/interview-generator");
+  const article = await generateInterviewArticle(
+    (c.env as any).GEMINI_API_KEY,
+    qa,
+    managerRow.manager_name,
+    managerRow.team_name,
+    opponentName,
+  );
+
+  if (!article) {
+    return c.json({ error: "Generování článku se nezdařilo, zkuste znovu" }, 500);
+  }
+
+  // Store article in news
+  const newsId = crypto.randomUUID();
+  const managerAvatar = (() => {
+    try { return managerRow.manager_avatar ? JSON.parse(managerRow.manager_avatar) : null; } catch { return null; }
+  })();
+
+  const newsBody = JSON.stringify({
+    managerName: managerRow.manager_name,
+    managerAvatar,
+    teamName: managerRow.team_name,
+    article: article.body,
+    qa,
+  });
+
+  await c.env.DB.prepare(
+    "INSERT INTO news (id, league_id, team_id, type, headline, body, game_week, created_at) VALUES (?, ?, ?, 'interview', ?, ?, ?, datetime('now'))"
+  ).bind(newsId, managerRow.league_id, teamId, article.headline, newsBody, interview.game_week as number)
+    .run()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "insert interview news", e); });
+
+  // Update interview status
+  await c.env.DB.prepare(
+    "UPDATE coach_interviews SET status = 'answered', answers = ?, article_news_id = ? WHERE id = ?"
+  ).bind(JSON.stringify(answers), newsId, interviewId)
+    .run()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "update interview status", e); });
+
+  logger.info({ module: "game.ts", teamId }, `interview answered → article ${newsId}`);
+  return c.json({ ok: true, articleId: newsId });
+});
+
+// POST /api/teams/:teamId/coach-interviews/:interviewId/decline — odmítnutí rozhovoru
+gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/decline", async (c) => {
+  const teamId = c.req.param("teamId");
+  const interviewId = c.req.param("interviewId");
+  await c.env.DB.prepare(
+    "UPDATE coach_interviews SET status = 'declined' WHERE id = ? AND team_id = ? AND status = 'pending'"
+  ).bind(interviewId, teamId).run()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "decline interview", e); });
   return c.json({ ok: true });
 });
 
