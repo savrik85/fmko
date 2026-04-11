@@ -39,9 +39,9 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
     priceElasticity: 0.6,
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
-      { wholesalePrice: 15, defaultSellPrice: 30, label: "Masokombinát" },
-      { wholesalePrice: 25, defaultSellPrice: 45, label: "Řezník z okolí" },
-      { wholesalePrice: 40, defaultSellPrice: 65, label: "Farmářská domácí" },
+      { wholesalePrice: 15, defaultSellPrice: 30, label: "Kostelecké uzeniny" },
+      { wholesalePrice: 25, defaultSellPrice: 45, label: "Místní uzenářství" },
+      { wholesalePrice: 40, defaultSellPrice: 65, label: "Premium farmářská" },
     ],
   },
   beer: {
@@ -51,9 +51,9 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
     priceElasticity: 0.8,
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
-      { wholesalePrice: 14, defaultSellPrice: 25, label: "Sudové lacino" },
-      { wholesalePrice: 20, defaultSellPrice: 35, label: "Měšťan 11°" },
-      { wholesalePrice: 30, defaultSellPrice: 50, label: "Pivovar 12° prémium" },
+      { wholesalePrice: 14, defaultSellPrice: 25, label: "Měšťan 11" },
+      { wholesalePrice: 20, defaultSellPrice: 35, label: "Kozel 11" },
+      { wholesalePrice: 30, defaultSellPrice: 50, label: "Plzeň 12°" },
     ],
   },
   lemonade: {
