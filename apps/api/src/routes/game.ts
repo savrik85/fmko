@@ -810,7 +810,7 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
   // 3. Persistent news articles (zpravodaj, round results, manager arrival)
   if (team.league_id) {
     const newsRows = await c.env.DB.prepare(
-      "SELECT id, type, headline, body, created_at FROM news WHERE league_id = ? OR team_id = ? ORDER BY created_at DESC LIMIT 20"
+      "SELECT id, type, headline, body, game_week, created_at FROM news WHERE league_id = ? OR team_id = ? ORDER BY created_at DESC LIMIT 20"
     ).bind(team.league_id, teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch news articles", e); return { results: [] }; });
 
     for (const n of newsRows.results) {
@@ -832,7 +832,8 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
         body: n.body as string,
         icon: iconMap[n.type as string] ?? "\u{1F4F0}",
         date: n.created_at as string,
-      });
+        gameWeek: n.game_week as number | null,
+      } as any);
     }
   }
 
