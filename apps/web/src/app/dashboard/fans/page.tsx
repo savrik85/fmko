@@ -667,11 +667,11 @@ export default function FansPage() {
                       onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
                       className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
                     />
-                    <span className="text-xs text-muted shrink-0">Kč</span>
+                    <span className="text-xs text-muted shrink-0 w-3 text-center">Kč</span>
                     <button
                       onClick={() => saveSellPrice(p.key)}
                       disabled={acting === "price-" + p.key || priceDraft === String(p.sellPrice)}
-                      className={`shrink-0 py-1.5 px-4 rounded-lg text-xs font-heading font-bold transition-colors ${
+                      className={`shrink-0 w-[88px] py-1.5 px-2 rounded-lg text-xs font-heading font-bold transition-colors ${
                         acting === "price-" + p.key || priceDraft === String(p.sellPrice)
                           ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                           : "bg-pitch-500 text-white hover:bg-pitch-600"
@@ -695,11 +695,11 @@ export default function FansPage() {
                       onChange={(e) => setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))}
                       className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
                     />
-                    <span className="text-xs text-muted shrink-0">ks</span>
+                    <span className="text-xs text-muted shrink-0 w-3 text-center">ks</span>
                     <button
                       onClick={() => doRestock(p.key)}
                       disabled={acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)}
-                      className={`shrink-0 py-1.5 px-4 rounded-lg text-xs font-heading font-bold transition-colors ${
+                      className={`shrink-0 w-[88px] py-1.5 px-2 rounded-lg text-xs font-heading font-bold transition-colors ${
                         acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)
                           ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                           : "bg-gold-500 text-white hover:bg-gold-600"
@@ -707,8 +707,6 @@ export default function FansPage() {
                     >
                       {acting === "restock-" + p.key
                         ? "..."
-                        : total > 0
-                        ? `Nakoupit ${formatCZK(total)}`
                         : "Nakoupit"}
                     </button>
                   </div>
