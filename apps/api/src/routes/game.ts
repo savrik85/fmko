@@ -3748,6 +3748,36 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/decline", async (c
   return c.json({ ok: true });
 });
 
+// POST /api/admin/teams/:teamId/generate-interview — dev trigger pro testovani
+gameRouter.post("/admin/teams/:teamId/generate-interview", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  // Najdi nejblizsi nadchazejici zapas tohoto tymu
+  const nextMatch = await c.env.DB.prepare(
+    `SELECT sc.id as calendar_id, sc.game_week, sc.scheduled_at, t.league_id
+     FROM season_calendar sc
+     JOIN matches m ON m.calendar_id = sc.id
+     JOIN teams t ON t.id = ?
+     WHERE (m.home_team_id = ? OR m.away_team_id = ?)
+       AND sc.scheduled_at > datetime('now')
+       AND sc.status = 'scheduled'
+     ORDER BY sc.scheduled_at ASC LIMIT 1`
+  ).bind(teamId, teamId, teamId)
+    .first<{ calendar_id: string; game_week: number; scheduled_at: string; league_id: string }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "admin generate-interview lookup", e); return null; });
+
+  if (!nextMatch) return c.json({ error: "Zadny nadchazejici zapas" }, 404);
+
+  const { tryCreateInterviewRequest } = await import("../news/interview-generator");
+  await tryCreateInterviewRequest(c.env.DB, (c.env as any).GEMINI_API_KEY, {
+    leagueId: nextMatch.league_id,
+    calendarId: nextMatch.calendar_id,
+    gameWeek: nextMatch.game_week,
+  });
+
+  return c.json({ ok: true, calendarId: nextMatch.calendar_id, gameWeek: nextMatch.game_week });
+});
+
 // ── Admin: Seed data management ──
 
 gameRouter.get("/admin/seed-data", async (c) => {
