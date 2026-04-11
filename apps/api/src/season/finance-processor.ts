@@ -114,9 +114,9 @@ export async function processWeeklyFinances(
 
   // ── VÝDAJE ──
 
-  // 1. Player wages
+  // 1. Player wages — jen aktivní hráči, released se neplatí
   const wageResult = await db.prepare(
-    "SELECT COUNT(*) as cnt, COALESCE(SUM(weekly_wage), 0) as total FROM players WHERE team_id = ?"
+    "SELECT COUNT(*) as cnt, COALESCE(SUM(weekly_wage), 0) as total FROM players WHERE team_id = ? AND (status IS NULL OR status != 'released')"
   ).bind(teamId).first<{ cnt: number; total: number }>();
 
   if (wageResult && wageResult.total > 0) {
