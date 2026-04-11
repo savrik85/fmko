@@ -246,6 +246,18 @@ export async function generatePromotionalArticle(
     loadForm(db, match.away_team_id),
   ]);
 
+  // 5b. Jména trenérů (pro možnou zmínku v textu)
+  const homeManager = await db
+    .prepare("SELECT name FROM managers WHERE team_id = ?")
+    .bind(match.home_team_id)
+    .first<{ name: string }>()
+    .catch((e) => { logger.warn({ module: "promo-generator" }, "load home manager", e); return null; });
+  const awayManager = await db
+    .prepare("SELECT name FROM managers WHERE team_id = ?")
+    .bind(match.away_team_id)
+    .first<{ name: string }>()
+    .catch((e) => { logger.warn({ module: "promo-generator" }, "load away manager", e); return null; });
+
   // 6. Village flavor
   const homeFlavor = VILLAGE_FLAVOR[match.home_village] ?? "tradiční česká obec se smyslem pro fotbal";
   const awayFlavor = VILLAGE_FLAVOR[match.away_village] ?? "";
@@ -313,6 +325,7 @@ Kdy: ${relativeTime}
 DOMÁCÍ: ${match.home_name}
   Obec: ${match.home_village} (${match.home_pop} obyv.) — ${homeFlavor}
   Stadion: ${stadiumName}, kapacita ${capacity}
+  Trenér: ${homeManager?.name ?? "neznámý"}
   Pozice v tabulce: ${homeStand ? `${homeStand.pos}. místo, ${homeStand.points} bodů (${homeStand.wins}V ${homeStand.draws}R ${homeStand.losses}P, skóre ${homeStand.gf}:${homeStand.ga})` : "start sezóny"}
   Forma (posledních 5): ${formStr(homeForm)}
   Klíčoví hráči:
@@ -322,8 +335,11 @@ ${injuredStr}
 
 HOSTÉ: ${match.away_name}
   Obec: ${match.away_village}${awayFlavor ? ` — ${awayFlavor}` : ""}
+  Trenér: ${awayManager?.name ?? "neznámý"}
   Pozice v tabulce: ${awayStand ? `${awayStand.pos}. místo, ${awayStand.points} bodů` : "start sezóny"}
   Forma: ${formStr(awayForm)}
+
+POZNÁMKA: Jména trenérů můžeš (ale nemusíš) zmínit pro koloritovost (např. „trenér Novák slibuje..."). Nepovinné.
 `;
 
   // 8. Volání Gemini
