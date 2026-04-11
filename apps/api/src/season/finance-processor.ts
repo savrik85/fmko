@@ -43,10 +43,11 @@ export function getBaseTicketPrice(category: string): number {
  * S levelem refreshments roste pronájem (lepší lokace, víc zákazníků).
  */
 export function computeExternalWeeklyConcession(refreshmentsLevel: number, reputation: number): number {
-  // External = passivní income z pronájmu. Záměrně nižší než self — self má být výhodnější.
-  const baseLease = 50; // minimální pronájem plochy i bez facility
-  const levelBonus = refreshmentsLevel * 250;
-  return Math.round((baseLease + levelBonus) * (Math.max(10, reputation) / 50));
+  // External = pasivní týdenní income z pronájmu. Nižší než self, ale realistický fallback.
+  // L0=500, L1=900, L2=1400, L3=2000 Kč/týden (rep 50)
+  const table = [500, 900, 1400, 2000];
+  const base = table[Math.max(0, Math.min(3, refreshmentsLevel))] ?? 500;
+  return Math.round(base * (Math.max(10, reputation) / 50));
 }
 
 /** Maps DB village size to economy.ts Czech category */
@@ -321,12 +322,9 @@ export async function processMatchDayFinances(
           attendance,
         ).run().catch((e) => logger.warn({ module: "finance" }, "concession sales insert", e));
       }
-    } else if (facilityFx.refreshmentPerAttendee > 0) {
-      // External mode — použijeme původní jednoduchý model (zůstává pro zpětnou kompatibilitu před přepnutím módu)
-      const refreshmentIncome = attendance * facilityFx.refreshmentPerAttendee;
-      await recordTransaction(db, teamId, "match_income", refreshmentIncome,
-        `Tržby z občerstvení: ${attendance} × ${facilityFx.refreshmentPerAttendee} Kč`, gameDate, matchId);
     }
+    // External mode: income je čistě týdenní přes computeExternalWeeklyConcession,
+    // per-match accounting zde odstraněn aby nedocházelo k dvojitému započítání.
 
     // Home team: referee costs
     const refereeCost = 800 + Math.round(Math.random() * 700);
