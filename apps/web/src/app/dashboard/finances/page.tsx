@@ -31,7 +31,11 @@ const TXN_ICONS: Record<string, string> = {
   match_reward: "🏆", training_cost: "🏋", pitch_maintenance: "🌿",
   equipment_expense: "👟", equipment_upgrade: "⬆", stadium_upgrade: "🏗",
   pitch_repair: "🛠", pitch_upgrade: "🌿", classified_ad: "📰",
-  sponsor_termination: "❌", season_reward: "🏆", event: "⚡", other: "📋",
+  sponsor_termination: "❌", season_reward: "🏆", event: "⚡",
+  transfer_fee: "🤝", transfer_income: "💵", signing_fee: "✍",
+  loan_fee: "📄", loan_income: "📄", transfer_admin_fee: "🗂",
+  concession_wholesale: "📦", concession_income_external: "🏪", concession_income_self: "🍺",
+  other: "📋",
 };
 
 const TXN_LABELS: Record<string, string> = {
@@ -39,7 +43,11 @@ const TXN_LABELS: Record<string, string> = {
   match_reward: "Bonus za výsledek", training_cost: "Trénink", pitch_maintenance: "Údržba hřiště",
   equipment_expense: "Vybavení", equipment_upgrade: "Upgrade vybavení", stadium_upgrade: "Upgrade stadionu",
   pitch_repair: "Oprava hřiště", pitch_upgrade: "Změna povrchu", classified_ad: "Inzerát",
-  sponsor_termination: "Ukončení smlouvy", season_reward: "Sezónní odměna", event: "Událost", other: "Ostatní",
+  sponsor_termination: "Ukončení smlouvy", season_reward: "Sezónní odměna", event: "Událost",
+  transfer_fee: "Přestupová cena", transfer_income: "Prodej hráče", signing_fee: "Podpisový bonus",
+  loan_fee: "Hostování — platba", loan_income: "Hostování — příjem", transfer_admin_fee: "Přestupní poplatek",
+  concession_wholesale: "Nákup zboží", concession_income_external: "Pronájem bufetu", concession_income_self: "Tržby z občerstvení",
+  other: "Ostatní",
 };
 
 function formatCZK(amount: number): string {
@@ -86,7 +94,7 @@ export default function FinancesPage() {
     const params = filter === "all" ? "" : `&direction=${filter}`;
     apiFetch<{ transactions: Transaction[]; total: number }>(`/api/teams/${teamId}/transactions?limit=30${params}`)
       .then((t) => { setTransactions(t.transactions); setTxnTotal(t.total); })
-      .catch(() => {});
+      .catch((e) => console.error("load transactions:", e));
   };
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
