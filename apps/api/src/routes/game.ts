@@ -4509,7 +4509,7 @@ gameRouter.post("/admin/news/:newsId/regenerate-interview", async (c) => {
   const opponentMatch = row.headline.match(/vs\.\s+(.+?)["„]/);
   const opponentName = opponentMatch?.[1]?.trim() ?? "soupeř";
 
-  const geminiKey = (c.env as Record<string, string>).GEMINI_API_KEY;
+  const geminiKey = (c.env as unknown as Record<string, string>).GEMINI_API_KEY;
   const result = await generateInterviewArticle(geminiKey, body.qa, body.managerName, body.teamName, opponentName);
   if (!result) return c.json({ error: "gemini failed" }, 500);
 
