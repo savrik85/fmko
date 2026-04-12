@@ -4491,4 +4491,38 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
   return c.json({ ok: true, leagueId, processed });
 });
 
+// POST /api/admin/news/:newsId/regenerate-interview — přegeneruje článek z uložených QA
+gameRouter.post("/admin/news/:newsId/regenerate-interview", async (c) => {
+  const newsId = c.req.param("newsId");
+  const { generateInterviewArticle } = await import("../news/interview-generator");
+
+  const row = await c.env.DB.prepare("SELECT * FROM news WHERE id = ?")
+    .bind(newsId)
+    .first<{ id: string; headline: string; body: string; team_id: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "regenerate-interview fetch", e); return null; });
+
+  if (!row) return c.json({ error: "news not found" }, 404);
+
+  const body = JSON.parse(row.body) as { managerName: string; teamName: string; qa: Array<{ q: string; a: string }>; [k: string]: unknown };
+  if (!body.qa?.length) return c.json({ error: "no qa in article" }, 400);
+
+  const opponentMatch = row.headline.match(/vs\.\s+(.+?)["„]/);
+  const opponentName = opponentMatch?.[1]?.trim() ?? "soupeř";
+
+  const geminiKey = (c.env as Record<string, string>).GEMINI_API_KEY;
+  const result = await generateInterviewArticle(geminiKey, body.qa, body.managerName, body.teamName, opponentName);
+  if (!result) return c.json({ error: "gemini failed" }, 500);
+
+  const correctionNote = "\n\n— Oprava: Předchozí verze článku chybně upravila záměrné slovní hříčky trenéra jako překlepy. Za nedorozumění se omlouváme — chyba byla na straně redaktora.";
+  const newBody = JSON.stringify({ ...body, article: result.body + correctionNote }, );
+  const newHeadline = result.headline.replace(/\[oprava\]$/, "").trim() + " [oprava]";
+
+  await c.env.DB.prepare("UPDATE news SET headline = ?, body = ? WHERE id = ?")
+    .bind(newHeadline, newBody, newsId)
+    .run()
+    .catch((e) => { logger.warn({ module: "game" }, "regenerate-interview update", e); });
+
+  return c.json({ ok: true, newsId, headline: newHeadline, articlePreview: result.body.slice(0, 200) });
+});
+
 export { gameRouter };
