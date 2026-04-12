@@ -399,27 +399,23 @@ export default function NewsPage() {
                   try { meta = JSON.parse(iv.body); } catch { meta = {}; }
                   return (
                     <div key={iv.id} id={`news-${iv.id}`} className={idx > 0 ? "pt-5 border-t border-gray-100" : ""}>
-                      <div className="flex items-start gap-4">
+                      <div className="flex items-center gap-2 mb-2">
                         {meta.managerAvatar && Object.keys(meta.managerAvatar).length > 0 && (
-                          <div className="shrink-0">
-                            <FaceAvatar faceConfig={meta.managerAvatar} size={64} className="rounded-full border-2 border-sand-200" />
-                          </div>
+                          <FaceAvatar faceConfig={meta.managerAvatar} size={40} className="rounded-full border-2 border-sand-200 shrink-0" />
                         )}
-                        <div className="flex-1 min-w-0">
-                          <div className="mb-2">
-                            <span className="font-heading font-bold text-base">{meta.managerName ?? "Trenér"}</span>
-                            {meta.teamName && <span className="text-sm text-muted ml-2">· {meta.teamName}</span>}
-                          </div>
-                          <h4 className="font-heading font-[800] text-lg leading-snug mb-3">{iv.headline}</h4>
-                          <div className="text-sm text-ink-light leading-relaxed space-y-2">
-                            {(meta.article ?? iv.body).split("\n").filter(Boolean).map((p, i) => (
-                              <p key={i}>{p}</p>
-                            ))}
-                          </div>
-                          <div className="mt-3">
-                            <ShareButton articleId={iv.id} />
-                          </div>
+                        <div>
+                          <span className="font-heading font-bold text-base">{meta.managerName ?? "Trenér"}</span>
+                          {meta.teamName && <span className="text-sm text-muted ml-2">· {meta.teamName}</span>}
                         </div>
+                      </div>
+                      <h4 className="font-heading font-[800] text-lg leading-snug mb-3">{iv.headline}</h4>
+                      <div className="text-sm text-ink-light leading-relaxed space-y-2">
+                        {(meta.article ?? iv.body).split("\n").filter(Boolean).map((p, i) => (
+                          <p key={i}>{p}</p>
+                        ))}
+                      </div>
+                      <div className="mt-3">
+                        <ShareButton articleId={iv.id} />
                       </div>
                     </div>
                   );
