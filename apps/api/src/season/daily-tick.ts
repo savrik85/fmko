@@ -422,8 +422,10 @@ export async function executeDailyTick(
                 await env.DB.prepare(
                   "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_at, created_at) VALUES (?, ?, 'squad_group', ?, 0, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
                 ).bind(matchConvId, teamId, `⚽ vs ${opponentName}`).run().catch((e) => logger.warn({ module: "daily-tick" }, "create match conversation", e));
-                await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'user', ?, 'Trenér', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
-                  .bind(crypto.randomUUID(), matchConvId, teamId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`, JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }))
+                // Systémová zpráva dostane offset (počet hráčů + 1) * 10s → bude mít největší sent_at → v DESC řazení se zobrazí nahoře
+                const totalSquad = squadRows.results.length;
+                await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'user', ?, 'Trenér', ?, ?, datetime('now', '+' || ? || ' seconds'))")
+                  .bind(crypto.randomUUID(), matchConvId, teamId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`, JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }), (totalSquad + 1) * 10)
                   .run().catch((e) => logger.warn({ module: "daily-tick" }, "match announce msg", e));
                 let msgCount = 1;
                 for (const row of squadRows.results) {
@@ -598,8 +600,9 @@ export async function executeDailyTick(
                   });
 
                 if (matchDayAbsences.length > 0) {
-                  await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', 'Systém', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
-                    .bind(crypto.randomUUID(), matchConvId, "⚠️ Nové omluvenky v den zápasu:", JSON.stringify({ type: "match_day_announce", calendarId: todayMatch.id }))
+                  const totalMatchDay = matchDayAbsences.length;
+                  await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', 'Systém', ?, ?, datetime('now', '+' || ? || ' seconds'))")
+                    .bind(crypto.randomUUID(), matchConvId, "⚠️ Nové omluvenky v den zápasu:", JSON.stringify({ type: "match_day_announce", calendarId: todayMatch.id }), (totalMatchDay + 1) * 10)
                     .run().catch((e) => logger.warn({ module: "daily-tick" }, "match_day announce insert", e));
                   let cnt = 1;
                   for (const a of matchDayAbsences) {
