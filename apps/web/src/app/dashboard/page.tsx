@@ -670,7 +670,7 @@ export default function DashboardPage() {
             <SectionLabel>Zpravodaj</SectionLabel>
             <div className="space-y-2">
               {news.map((article) => {
-                const daysAgo = Math.floor((Date.now() - new Date(article.date).getTime()) / 86400000);
+                const daysAgo = Math.max(0, Math.floor((Date.now() - new Date(article.date).getTime()) / 86400000));
                 const timeLabel = daysAgo === 0 ? "dnes" : daysAgo === 1 ? "včera" : `před ${daysAgo}d`;
                 return (
                   <Link key={article.id} href="/dashboard/news"
