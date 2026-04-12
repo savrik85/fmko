@@ -243,7 +243,7 @@ export default function DashboardPage() {
                 {/* Dark header — kolo + badges + jména */}
                 <div className="bg-gradient-to-b from-[#1e2d1e] to-[#2a3f2a] px-4 py-5 text-white">
                   <div className="text-center mb-4 flex items-center justify-center gap-2">
-                    <span className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40">{nextMatch.round}. kolo</span>
+                    <span className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40">{nextMatch.round != null ? `${nextMatch.round}. kolo` : "Přátelák"}</span>
                     {(() => {
                       if (!nextMatch.scheduledAt || !gameDate) return null;
                       const matchDate = new Date(nextMatch.scheduledAt);
