@@ -4438,7 +4438,7 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
       "SELECT id, first_name, last_name, personality, life_context, physical, commute_km, is_celebrity FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
     ).bind(teamId).all();
 
-    const absRng = createRng(seedFromString(tomorrowMatch.id));
+    const absRng = createRng(seedFromString(teamId));
     const absSquad = squadRows.results.map((r) => {
       const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
       const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();

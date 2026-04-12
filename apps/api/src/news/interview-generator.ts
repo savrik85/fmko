@@ -264,6 +264,7 @@ PRAVIDLA:
 - Délka: 180–250 slov
 - Používej přímou řeč v uvozovkách pro klíčové výroky trenéra
 - KRITICKÉ: NIKDY nevymýšlej obsah odpovědí. Článek musí vycházet VÝHRADNĚ z toho, co trenér skutečně řekl.
+- KRITICKÉ: NIKDY neopravuj pravopis ani překlepy v citacích trenéra. Nestandardní slova (např. "stašný", "stašně", "stašilo") mohou být záměrné slovní hříčky — zachovej je PŘESNĚ jak je trenér napsal, včetně přímých řečí v uvozovkách.
 - Pokud jsou odpovědi krátké nebo strohé: napiš že trenér byl stručný/neochotný. Např. "Trenér byl před utkáním mlčenlivý." nebo "Na otázku ohledně X trenér odpověděl jen stroze."
 - Pokud jsou odpovědi vulgární: přepiš je novinářsky zachováním SMYSLU (ne obsahu), odstraň vulgaritu. Např. "Trenér svého soupeře odbyl jednou větou."
 - Pokud jsou odpovědi pozitivní/zajímavé: cituj je nebo parafrázuj věrně
