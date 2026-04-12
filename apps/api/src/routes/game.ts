@@ -4462,7 +4462,7 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
     await c.env.DB.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'user', ?, 'Trenér', ?, ?, datetime('now', '+' || ? || ' seconds'))"
     ).bind(crypto.randomUUID(), matchConvId, teamId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`,
-      JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }), (totalSquad + 1) * 10).run()
+      JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }), 0).run()
       .catch((e) => logger.warn({ module: "game" }, "trigger-day-before announce", e));
 
     let msgCount = 1;
