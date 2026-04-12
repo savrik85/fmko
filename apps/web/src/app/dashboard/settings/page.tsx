@@ -1,8 +1,129 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTeam } from "@/context/team-context";
 import { SectionLabel } from "@/components/ui";
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+
+type NotifPrefs = {
+  match_reminder: boolean;
+  match_result: boolean;
+  transfer: boolean;
+  challenge: boolean;
+  event: boolean;
+  season: boolean;
+  system: boolean;
+};
+
+const PREF_LABELS: { key: keyof NotifPrefs; label: string }[] = [
+  { key: "match_reminder", label: "Sestava před zápasem (den předem)" },
+  { key: "match_result", label: "Výsledek zápasu" },
+  { key: "transfer", label: "Nabídka přestupu / odpověď" },
+  { key: "challenge", label: "Výzva od jiného týmu" },
+  { key: "event", label: "Sezónní event" },
+  { key: "season", label: "Konec sezóny / postup / sestup" },
+  { key: "system", label: "Systémové zprávy" },
+];
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
+
+function usePushNotifications() {
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [prefs, setPrefs] = useState<NotifPrefs>({
+    match_reminder: true, match_result: true, transfer: true,
+    challenge: true, event: true, season: true, system: true,
+  });
+  const [prefsSaving, setPrefsSaving] = useState(false);
+
+  useEffect(() => {
+    const supported = "serviceWorker" in navigator && "PushManager" in window;
+    setPushSupported(supported);
+    if (!supported) return;
+
+    const stored = localStorage.getItem("push_enabled") === "true";
+    setPushEnabled(stored);
+
+    fetch(`${API}/api/push/preferences`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => setPrefs(data as NotifPrefs))
+      .catch((e) => console.error("Failed to load push prefs:", e));
+  }, []);
+
+  const enablePush = useCallback(async () => {
+    if (!("serviceWorker" in navigator)) return;
+    try {
+      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") return;
+
+      const res = await fetch(`${API}/api/push/vapid-key`, { credentials: "include" });
+      const { publicKey } = await res.json() as { publicKey: string };
+
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+      });
+
+      await fetch(`${API}/api/push/subscribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(sub.toJSON()),
+      });
+
+      localStorage.setItem("push_enabled", "true");
+      setPushEnabled(true);
+    } catch (e) {
+      console.error("enablePush failed:", e);
+    }
+  }, []);
+
+  const disablePush = useCallback(async () => {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+      const sub = await reg?.pushManager.getSubscription();
+      if (sub) {
+        await fetch(`${API}/api/push/unsubscribe`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        });
+        await sub.unsubscribe();
+      }
+      localStorage.setItem("push_enabled", "false");
+      setPushEnabled(false);
+    } catch (e) {
+      console.error("disablePush failed:", e);
+    }
+  }, []);
+
+  const savePrefs = useCallback(async (updated: NotifPrefs) => {
+    setPrefs(updated);
+    setPrefsSaving(true);
+    try {
+      await fetch(`${API}/api/push/preferences`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(updated),
+      });
+    } catch (e) {
+      console.error("Failed to save push prefs:", e);
+    } finally {
+      setPrefsSaving(false);
+    }
+  }, []);
+
+  return { pushEnabled, pushSupported, prefs, prefsSaving, enablePush, disablePush, savePrefs };
+}
 
 function checkPassword(pw: string): string[] {
   const errors: string[] = [];
@@ -20,8 +141,7 @@ export default function SettingsPage() {
   const [newPw2, setNewPw2] = useState("");
   const [status, setStatus] = useState<{ type: "ok" | "error"; msg: string } | null>(null);
   const [saving, setSaving] = useState(false);
-
-  const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+  const { pushEnabled, pushSupported, prefs, prefsSaving, enablePush, disablePush, savePrefs } = usePushNotifications();
   const pwErrors = newPw ? checkPassword(newPw) : [];
   const pwMatch = newPw2 && newPw !== newPw2;
   const canSubmit = currentPw && newPw && newPw2 && pwErrors.length === 0 && newPw === newPw2;
@@ -101,6 +221,50 @@ export default function SettingsPage() {
             {saving ? "Ukládám..." : "Změnit heslo"}
           </button>
         </form>
+      </div>
+
+      {/* Push notifikace */}
+      <div className="card p-5 max-w-md">
+        <h3 className="font-heading font-bold text-base mb-1">Push notifikace</h3>
+        {!pushSupported ? (
+          <p className="text-sm text-muted">Tvůj prohlížeč nepodporuje push notifikace.</p>
+        ) : (
+          <>
+            <p className="text-sm text-muted mb-4">
+              Dostávej upozornění i když nemáš Prales otevřený.
+            </p>
+
+            {/* Master toggle */}
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-100">
+              <span className="text-sm font-heading font-bold">Zapnout notifikace</span>
+              <button
+                onClick={pushEnabled ? disablePush : enablePush}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${pushEnabled ? "bg-pitch-500" : "bg-gray-200"}`}
+              >
+                <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${pushEnabled ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+            </div>
+
+            {/* Preference jednotlivých typů */}
+            {pushEnabled && (
+              <div className="space-y-3">
+                <p className="text-xs text-muted uppercase font-heading font-bold">Co tě má upozornit</p>
+                {PREF_LABELS.map(({ key, label }) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <span className="text-sm">{label}</span>
+                    <button
+                      onClick={() => savePrefs({ ...prefs, [key]: !prefs[key] })}
+                      disabled={prefsSaving}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${prefs[key] ? "bg-pitch-500" : "bg-gray-200"}`}
+                    >
+                      <span className={`inline-block h-3 w-3 rounded-full bg-white shadow transition-transform ${prefs[key] ? "translate-x-5" : "translate-x-1"}`} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
