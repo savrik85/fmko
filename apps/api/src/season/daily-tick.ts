@@ -422,10 +422,9 @@ export async function executeDailyTick(
                 await env.DB.prepare(
                   "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_at, created_at) VALUES (?, ?, 'squad_group', ?, 0, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
                 ).bind(matchConvId, teamId, `⚽ vs ${opponentName}`).run().catch((e) => logger.warn({ module: "daily-tick" }, "create match conversation", e));
-                // Systémová zpráva dostane offset (počet hráčů + 1) * 10s → bude mít největší sent_at → v DESC řazení se zobrazí nahoře
                 const totalSquad = squadRows.results.length;
                 await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'user', ?, 'Trenér', ?, ?, datetime('now', '+' || ? || ' seconds'))")
-                  .bind(crypto.randomUUID(), matchConvId, teamId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`, JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }), (totalSquad + 1) * 10)
+                  .bind(crypto.randomUUID(), matchConvId, teamId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`, JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }), 0)
                   .run().catch((e) => logger.warn({ module: "daily-tick" }, "match announce msg", e));
                 let msgCount = 1;
                 for (const row of squadRows.results) {
