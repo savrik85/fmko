@@ -2660,7 +2660,8 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   const isCelebrity = (fa.is_celebrity as number) ?? 0;
   // Extract skillsMax from life_context (fallen_star celebrities have it stored there)
   const faLifeCtx = (() => { try { return JSON.parse(fa.life_context as string); } catch { return {}; } })();
-  const faSkillsMax = faLifeCtx.skillsMax ? JSON.stringify(faLifeCtx.skillsMax) : null;
+  // celebrities (fallen_star) have skillsMax stored in life_context; regular FAs use current skills as max
+  const faSkillsMax = faLifeCtx.skillsMax ? JSON.stringify(faLifeCtx.skillsMax) : fa.skills as string;
   await c.env.DB.prepare(
     `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, status, is_celebrity, skills_max)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`
@@ -4392,6 +4393,102 @@ gameRouter.post("/admin/leagues/:leagueId/set-game-date", async (c) => {
 
   if (!result) return c.json({ error: "DB error" }, 500);
   return c.json({ ok: true, leagueId, gameDate: body.gameDate, rowsAffected: result.meta.changes });
+});
+
+// POST /api/admin/leagues/:leagueId/trigger-day-before — vygeneruje day-before attendance zprávy
+gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
+  const leagueId = c.req.param("leagueId");
+  const { seedFromString } = await import("../lib/seed");
+  const { generateAbsences } = await import("../events/absence");
+  const { generateAttendanceMessage } = await import("../messaging/message-generator");
+
+  const teams = await c.env.DB.prepare(
+    "SELECT id, user_id, game_date FROM teams WHERE league_id = ? AND user_id != 'ai'"
+  ).bind(leagueId).all<{ id: string; user_id: string; game_date: string }>();
+
+  let processed = 0;
+  for (const team of teams.results) {
+    const teamId = team.id;
+    if (!team.game_date) continue;
+
+    const tomorrow = new Date(team.game_date);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tStart = new Date(tomorrow); tStart.setUTCHours(0, 0, 0, 0);
+    const tEnd = new Date(tomorrow); tEnd.setUTCHours(23, 59, 59, 999);
+
+    const tomorrowMatch = await c.env.DB.prepare(
+      "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled'"
+    ).bind(leagueId, tStart.toISOString(), tEnd.toISOString()).first<{ id: string }>()
+      .catch((e) => { logger.warn({ module: "game" }, "trigger-day-before match lookup", e); return null; });
+    if (!tomorrowMatch) continue;
+
+    const alreadySent = await c.env.DB.prepare(
+      "SELECT id FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group') AND metadata LIKE ?"
+    ).bind(teamId, `%${tomorrowMatch.id}%`).first()
+      .catch((e) => { logger.warn({ module: "game" }, "trigger-day-before already sent check", e); return null; });
+    if (alreadySent) continue;
+
+    const matchRow = await c.env.DB.prepare(
+      "SELECT m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1"
+    ).bind(tomorrowMatch.id, teamId, teamId).first<Record<string, unknown>>()
+      .catch((e) => { logger.warn({ module: "game" }, "trigger-day-before match row", e); return null; });
+    const opponentName = matchRow ? (matchRow.home_team_id === teamId ? matchRow.away_name : matchRow.home_name) as string : "Soupeř";
+
+    const squadRows = await c.env.DB.prepare(
+      "SELECT id, first_name, last_name, personality, life_context, physical, commute_km, is_celebrity FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
+    ).bind(teamId).all();
+
+    const absRng = createRng(seedFromString(tomorrowMatch.id));
+    const absSquad = squadRows.results.map((r) => {
+      const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
+      const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();
+      const phys = (() => { try { return JSON.parse(r.physical as string); } catch { return {}; } })();
+      return { firstName: r.first_name as string, lastName: r.last_name as string, age: 25, occupation: lc.occupation ?? "",
+        discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
+        morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0,
+        isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
+    });
+
+    const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, "day_before");
+    const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
+    const matchConvId = crypto.randomUUID();
+
+    await c.env.DB.prepare(
+      "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_at, created_at) VALUES (?, ?, 'squad_group', ?, 0, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+    ).bind(matchConvId, teamId, `⚽ vs ${opponentName}`).run()
+      .catch((e) => logger.warn({ module: "game" }, "trigger-day-before create conv", e));
+
+    const totalSquad = squadRows.results.length;
+    await c.env.DB.prepare(
+      "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'user', ?, 'Trenér', ?, ?, datetime('now', '+' || ? || ' seconds'))"
+    ).bind(crypto.randomUUID(), matchConvId, teamId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`,
+      JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }), (totalSquad + 1) * 10).run()
+      .catch((e) => logger.warn({ module: "game" }, "trigger-day-before announce", e));
+
+    let msgCount = 1;
+    for (const row of squadRows.results) {
+      const pid = row.id as string;
+      const absence = dayBeforeAbsences.find((a) => squadRows.results[a.playerIndex]?.id === pid);
+      const available = !absentIds.has(pid);
+      const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
+      const msg = generateAttendanceMessage(`${row.first_name} ${row.last_name}`, available, lc.condition ?? 100, absRng as any);
+      await c.env.DB.prepare(
+        "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'))"
+      ).bind(crypto.randomUUID(), matchConvId, pid, msg.senderName,
+        absence ? absence.smsText : msg.body,
+        JSON.stringify({ type: "attendance", response: available ? "yes" : "no", timing: "day_before", calendarId: tomorrowMatch.id }), msgCount * 10,
+      ).run().catch((e) => logger.warn({ module: "game" }, "trigger-day-before player msg", e));
+      msgCount++;
+    }
+
+    await c.env.DB.prepare(
+      "UPDATE conversations SET unread_count = ?, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
+    ).bind(msgCount, `📋 ${dayBeforeAbsences.length} omluvených z ${squadRows.results.length}`, matchConvId).run()
+      .catch((e) => logger.warn({ module: "game" }, "trigger-day-before conv update", e));
+
+    processed++;
+  }
+  return c.json({ ok: true, leagueId, processed });
 });
 
 export { gameRouter };
