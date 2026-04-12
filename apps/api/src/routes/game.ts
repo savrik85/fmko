@@ -4380,4 +4380,18 @@ gameRouter.post("/admin/backfill-fans", async (c) => {
   return c.json({ ok: true, teamsProcessed: created });
 });
 
+// POST /api/admin/leagues/:leagueId/set-game-date — ruční sync herního data ligy
+gameRouter.post("/admin/leagues/:leagueId/set-game-date", async (c) => {
+  const leagueId = c.req.param("leagueId");
+  const body = await c.req.json<{ gameDate: string }>();
+  if (!body.gameDate) return c.json({ error: "gameDate required" }, 400);
+
+  const result = await c.env.DB.prepare("UPDATE teams SET game_date = ? WHERE league_id = ?")
+    .bind(body.gameDate, leagueId).run()
+    .catch((e) => { logger.warn({ module: "game" }, "set-game-date", e); return null; });
+
+  if (!result) return c.json({ error: "DB error" }, 500);
+  return c.json({ ok: true, leagueId, gameDate: body.gameDate, rowsAffected: result.meta.changes });
+});
+
 export { gameRouter };
