@@ -425,7 +425,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
      JOIN teams at ON m.away_team_id = at.id
      LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
      WHERE (m.home_team_id = ? OR m.away_team_id = ?)
-     ORDER BY COALESCE(m.round, sc.game_week, 999), sc.scheduled_at ASC`
+     ORDER BY COALESCE(sc.scheduled_at, m.created_at) ASC`
   ).bind(teamId, teamId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team schedule", e); return { results: [] }; });
 
   const matches = result.results.map((row) => ({
