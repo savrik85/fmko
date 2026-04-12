@@ -279,8 +279,8 @@ export default function DashboardPage() {
                       <div className="font-heading font-bold text-sm leading-tight">{awayTeam.name}</div>
                     </Link>
                   </div>
-                  {/* Pozice — vždy na vlastním řádku, zarovnané */}
-                  {(homeTeam.pos || awayTeam.pos) && (
+                  {/* Pozice — jen pro ligové zápasy */}
+                  {nextMatch.round != null && (homeTeam.pos || awayTeam.pos) && (
                     <div className="flex items-center gap-3 mt-2">
                       <div className="flex-1 text-center text-[10px] text-white/40 tabular-nums">{homeTeam.pos ? `${homeTeam.pos.position}. místo` : ""}</div>
                       <div className="shrink-0 w-10" />
