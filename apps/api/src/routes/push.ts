@@ -100,4 +100,28 @@ pushRouter.put("/push/preferences", async (c) => {
   return c.json({ ok: true });
 });
 
+/** POST /api/push/test — odešle testovací push na přihlášený tým */
+pushRouter.post("/push/test", async (c) => {
+  const token = getTokenFromRequest(c);
+  if (!token) return c.json({ error: "Nepřihlášen" }, 401);
+
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session?.teamId) return c.json({ error: "Nepřihlášen nebo bez týmu" }, 401);
+
+  if (!c.env.VAPID_PUBLIC_KEY || !c.env.VAPID_PRIVATE_KEY) {
+    return c.json({ error: "VAPID klíče nejsou nastaveny" }, 503);
+  }
+
+  const { sendWebPushToTeam } = await import("../community/web-push");
+  await sendWebPushToTeam(
+    { DB: c.env.DB, VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT },
+    session.teamId,
+    "🏟 Test notifikace",
+    "Prales FM push funguje!",
+    "/dashboard",
+  );
+
+  return c.json({ ok: true });
+});
+
 export { pushRouter };

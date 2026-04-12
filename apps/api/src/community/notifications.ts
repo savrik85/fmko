@@ -83,10 +83,10 @@ export async function markAllAsRead(db: D1Database, teamId: string): Promise<voi
 }
 
 // Helper: create common notifications
-export async function notifyMatchReminder(db: D1Database, teamId: string, opponent: string, time: string): Promise<void> {
-  await createNotification(db, teamId, "match_reminder", `Zápas za ${time}`, `Proti ${opponent}. Nastav sestavu!`, "/dashboard/match");
+export async function notifyMatchReminder(db: D1Database, teamId: string, opponent: string, time: string, env?: PushEnv): Promise<void> {
+  await createNotification(db, teamId, "match_reminder", `Zápas za ${time}`, `Proti ${opponent}. Nastav sestavu!`, "/dashboard/match", env);
 }
 
-export async function notifyMatchResult(db: D1Database, teamId: string, homeTeam: string, awayTeam: string, homeScore: number, awayScore: number): Promise<void> {
-  await createNotification(db, teamId, "match_result", `${homeTeam} ${homeScore}:${awayScore} ${awayTeam}`, "Podívej se na detail zápasu.", "/dashboard/match");
+export async function notifyMatchResult(db: D1Database, teamId: string, homeTeam: string, awayTeam: string, homeScore: number, awayScore: number, env?: PushEnv): Promise<void> {
+  await createNotification(db, teamId, "match_result", `${homeTeam} ${homeScore}:${awayScore} ${awayTeam}`, "Podívej se na detail zápasu.", "/dashboard/match", env);
 }
