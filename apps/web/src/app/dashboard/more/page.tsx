@@ -24,6 +24,7 @@ const SECTIONS = [
     { href: "/dashboard/news", icon: "\u{1F4F0}", label: "Zpravodaj", color: "#556B2F" },
   ]},
   { title: "Ostatn\u00ED", items: [
+    { href: "/dashboard/app", icon: "\u{1F4F2}", label: "Nainstaluj", color: "#153615", isNew: true },
     { href: "/dashboard/invite", icon: "\u2709\uFE0F", label: "Pozvi kamar\u00E1da", color: "#3D6B5C" },
     { href: "/dashboard/settings", icon: "\u2699\uFE0F", label: "Nastaven\u00ED", color: "#6B6B6B" },
   ]},

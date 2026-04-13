@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit, Barlow_Condensed, JetBrains_Mono } from "next/font/google";
 import { TeamProvider } from "@/context/team-context";
+import { PushNotificationManager } from "@/components/PushNotificationManager";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -42,8 +43,16 @@ export default function RootLayout({
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#153615" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Prales FM" />
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
-      <body className="min-h-screen"><TeamProvider>{children}</TeamProvider></body>
+      <body className="min-h-screen">
+        <TeamProvider>{children}</TeamProvider>
+        <PushNotificationManager />
+      </body>
     </html>
   );
 }

@@ -1,6 +1,10 @@
 name = "prales-api"
 main = "src/index.ts"
 compatibility_date = "2025-03-14"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+VAPID_SUBJECT = "mailto:admin@prales.fun"
 
 # ═══ PRODUCTION (default — main branch) ═══
 
@@ -37,9 +41,13 @@ custom_domain = true
 
 [env.testing]
 name = "prales-api-test"
+compatibility_flags = ["nodejs_compat"]
 routes = [
   { pattern = "api-test.prales.fun", custom_domain = true }
 ]
+
+[env.testing.vars]
+VAPID_SUBJECT = "mailto:admin@prales.fun"
 
 [[env.testing.d1_databases]]
 binding = "DB"

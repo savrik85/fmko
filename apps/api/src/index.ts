@@ -7,6 +7,7 @@ import { matchesRouter } from "./routes/matches";
 import { leagueRouter } from "./routes/league";
 import { gameRouter } from "./routes/game";
 import { messagingRouter } from "./routes/messaging";
+import { pushRouter } from "./routes/push";
 // transfers endpoints are in gameRouter
 import { runScheduledMatches } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -17,6 +18,9 @@ export type Bindings = {
   CACHE_KV: KVNamespace;
   SEED_DATA: R2Bucket;
   GEMINI_API_KEY: string;
+  VAPID_PUBLIC_KEY: string;
+  VAPID_PRIVATE_KEY: string;
+  VAPID_SUBJECT: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -49,6 +53,7 @@ app.route("/api", matchesRouter);
 app.route("/api", leagueRouter);
 app.route("/api", gameRouter);
 app.route("/api", messagingRouter);
+app.route("/api", pushRouter);
 
 export default {
   fetch: app.fetch,
@@ -140,6 +145,23 @@ export default {
                 ).bind(crypto.randomUUID(), leagueId, headline, body, gameWeek).run();
               } catch (e) { log("error", "news generation failed", e); }
 
+              // match_result notifikace pro lidské týmy
+              try {
+                const { createNotification } = await import("./community/notifications");
+                const pushEnv = { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB };
+                for (const mr of results) {
+                  if (mr.matchType === "ai_vs_ai") continue;
+                  const md = await env.DB.prepare(
+                    "SELECT m.home_score, m.away_score, m.home_team_id, m.away_team_id, t1.name as hn, t2.name as an, t1.user_id as hu, t2.user_id as au FROM matches m JOIN teams t1 ON m.home_team_id=t1.id JOIN teams t2 ON m.away_team_id=t2.id WHERE m.id=?"
+                  ).bind(mr.matchId).first<Record<string, unknown>>();
+                  if (!md) continue;
+                  const title = `${md.hn} ${md.home_score}:${md.away_score} ${md.an}`;
+                  const body = "Podívej se na detail zápasu.";
+                  if (md.hu !== "ai") await createNotification(env.DB, md.home_team_id as string, "match_result", title, body, "/dashboard/match", pushEnv).catch((e) => log("warn", "match_result notif home", e));
+                  if (md.au !== "ai") await createNotification(env.DB, md.away_team_id as string, "match_result", title, body, "/dashboard/match", pushEnv).catch((e) => log("warn", "match_result notif away", e));
+                }
+              } catch (e) { log("warn", "match_result notifications failed", e); }
+
               // AI zpravodajský článek (async, neblokuje)
               if (env.GEMINI_API_KEY) {
                 try {
@@ -182,7 +204,7 @@ export default {
                   });
 
                   const lastWon = mr.matchType === "pve_home" ? mr.homeScore > mr.awayScore : mr.awayScore > mr.homeScore;
-                  const teamDistrict = await env.DB.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.id=?").bind(humanTeamId).first<{district:string}>().catch(() => null);
+                  const teamDistrict = await env.DB.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.id=?").bind(humanTeamId).first<{district:string}>().catch((e) => { log("warn", "Failed to get team district", e); return null; });
                   const brEvents = generateBetweenRoundEvents(brRng, squad, td?.budget??0, td?.reputation??50, lastWon, gameWeek, teamDistrict?.district);
 
                   for (const ev of brEvents) {
@@ -190,20 +212,20 @@ export default {
                       const eff = ev.effect;
                       if (eff.type === "morale" && eff.value) {
                         await env.DB.prepare("UPDATE players SET life_context = json_set(life_context, '$.morale', MIN(100, MAX(0, json_extract(life_context, '$.morale') + ?))) WHERE team_id = ?")
-                          .bind(eff.value, humanTeamId).run().catch(() => {});
+                          .bind(eff.value, humanTeamId).run().catch((e) => log("warn", "morale effect failed", e));
                       }
                       if (eff.type === "budget" && eff.value) {
-                        await recordTransaction(env.DB, humanTeamId, "event", eff.value, ev.title, td?.game_date ?? new Date().toISOString()).catch(() => {});
+                        await recordTransaction(env.DB, humanTeamId, "event", eff.value, ev.title, td?.game_date ?? new Date().toISOString()).catch((e) => log("warn", "budget effect failed", e));
                       }
                       if (eff.type === "reputation" && eff.value) {
                         await env.DB.prepare("UPDATE teams SET reputation = MIN(100, MAX(0, reputation + ?)) WHERE id = ?")
-                          .bind(eff.value, humanTeamId).run().catch(() => {});
+                          .bind(eff.value, humanTeamId).run().catch((e) => log("warn", "reputation effect failed", e));
                       }
                       if (eff.type === "player_leave" && eff.playerIndex != null) {
                         // Mark player as quit (wants to leave)
                         const leaver = sqRows.results[eff.playerIndex];
                         if (leaver) {
-                          await env.DB.prepare("UPDATE players SET status = 'quit' WHERE id = ?").bind(leaver.id).run().catch(() => {});
+                          await env.DB.prepare("UPDATE players SET status = 'quit' WHERE id = ?").bind(leaver.id).run().catch((e) => log("warn", "player_leave effect failed", e));
                         }
                       }
                       if (eff.type === "injury" && eff.playerIndex != null) {
@@ -211,7 +233,7 @@ export default {
                         if (injured) {
                           const days = (eff.duration ?? 1) * 7; // rounds to days
                           await env.DB.prepare("INSERT OR IGNORE INTO injuries (id, player_id, type, days_remaining) VALUES (?, ?, 'training', ?)")
-                            .bind(crypto.randomUUID(), injured.id, days).run().catch(() => {});
+                            .bind(crypto.randomUUID(), injured.id, days).run().catch((e) => log("warn", "injury effect failed", e));
                         }
                       }
                       // player_add → creates a free agent offer (shows in transfers)
@@ -238,17 +260,17 @@ export default {
                     // Find or create conversation for this sender role
                     const roleConvTitle = sender.title;
                     let roleConvId = await env.DB.prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?")
-                      .bind(humanTeamId, roleConvTitle).first<{ id: string }>().then((r) => r?.id).catch(() => null);
+                      .bind(humanTeamId, roleConvTitle).first<{ id: string }>().then((r) => r?.id).catch((e) => { log("warn", "Failed to find role conversation", e); return null; });
                     if (!roleConvId) {
                       roleConvId = crypto.randomUUID();
                       await env.DB.prepare("INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
-                        .bind(roleConvId, humanTeamId, roleConvTitle).run().catch(() => {});
+                        .bind(roleConvId, humanTeamId, roleConvTitle).run().catch((e) => log("warn", "Failed to create role conversation", e));
                     }
                     await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
                       .bind(crypto.randomUUID(), roleConvId, sender.name, `${ev.emoji} ${ev.description}`, JSON.stringify({ type: "event", category: ev.category }))
-                      .run().catch(() => {});
+                      .run().catch((e) => log("warn", "Failed to insert event message", e));
                     await env.DB.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
-                      .bind(`${ev.emoji} ${ev.title}`, roleConvId).run().catch(() => {});
+                      .bind(`${ev.emoji} ${ev.title}`, roleConvId).run().catch((e) => log("warn", "Failed to update conversation unread", e));
                   }
                 }
               } catch (e) { log("error", "between-round events failed", e); }
@@ -269,7 +291,12 @@ export default {
                       "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?, 'pending')"
                     ).bind(crypto.randomUUID(), ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
                       JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), adhocEvent.gameWeek
-                    ).run().catch(() => {});
+                    ).run().catch((e) => log("warn", "adhoc event insert failed", e));
+                    // event notifikace
+                    const { createNotification } = await import("./community/notifications");
+                    await createNotification(env.DB, ht.id as string, "event", `${adhocEvent.title}`, adhocEvent.description ?? "Nová událost v klubu", "/dashboard/events",
+                      { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB }
+                    ).catch((e) => log("warn", "event notification failed", e));
                   }
                 }
               } catch (e) { log("error", "adhoc events failed", e); }
@@ -278,12 +305,12 @@ export default {
               try {
                 const matchConvs = await env.DB.prepare(
                   "SELECT c.id FROM conversations c JOIN messages m ON m.conversation_id = c.id WHERE c.team_id IN (SELECT DISTINCT home_team_id FROM matches WHERE calendar_id = ? UNION SELECT DISTINCT away_team_id FROM matches WHERE calendar_id = ?) AND c.type = 'squad_group' AND c.title LIKE '⚽ vs %' AND m.metadata LIKE ?"
-                ).bind(matchCal.id, matchCal.id, `%${matchCal.id}%`).all().catch(() => ({ results: [] }));
+                ).bind(matchCal.id, matchCal.id, `%${matchCal.id}%`).all().catch((e) => { log("warn", "Failed to fetch match conversations for cleanup", e); return { results: [] }; });
                 for (const conv of matchConvs.results) {
-                  await env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch(() => {});
-                  await env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch(() => {});
+                  await env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch((e) => log("warn", "Failed to delete match messages", e));
+                  await env.DB.prepare("DELETE FROM conversations WHERE id = ?").bind(conv.id).run().catch((e) => log("warn", "Failed to delete match conversation", e));
                 }
-              } catch { /* cleanup optional */ }
+              } catch (e) { log("warn", "match conversation cleanup failed", e); }
             }
           }
         }

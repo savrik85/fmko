@@ -443,6 +443,11 @@ export async function executeDailyTick(
                 await env.DB.prepare("UPDATE conversations SET unread_count = ?, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
                   .bind(msgCount, `📋 ${dayBeforeAbsences.length} omluvených z ${squadRows.results.length}`, matchConvId).run().catch((e) => logger.warn({ module: "daily-tick" }, "day_before conversation update", e));
                 logger.info({ module: "daily-tick", teamId }, `day_before attendance: ${msgCount} msgs → ⚽ vs ${opponentName}`);
+                // match_reminder push notifikace
+                const { createNotification } = await import("../community/notifications");
+                await createNotification(env.DB, teamId, "match_reminder", `Zítra hrajeme! Nastav sestavu`, `Zápas proti ${opponentName}`, "/dashboard/match",
+                  { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB }
+                ).catch((e) => logger.warn({ module: "daily-tick" }, "match_reminder notification", e));
               }
             }
           }
