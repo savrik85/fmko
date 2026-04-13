@@ -2508,9 +2508,9 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   await c.env.DB.prepare("UPDATE teams SET captain_id = NULL WHERE captain_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "clear captain on release", e));
   await c.env.DB.prepare("UPDATE teams SET penalty_taker_id = NULL WHERE penalty_taker_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "clear penalty taker on release", e));
   await c.env.DB.prepare("UPDATE teams SET freekick_taker_id = NULL WHERE freekick_taker_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "clear freekick taker on release", e));
-  // Instead of deleting (FK constraints in D1), mark player as released
-  // Keep team_id but set status so they don't show up in squad queries
-  await c.env.DB.prepare("UPDATE players SET status = 'released' WHERE id = ?").bind(playerId).run();
+  await c.env.DB.prepare("DELETE FROM player_stats WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "delete player_stats on release", e));
+  await c.env.DB.prepare("DELETE FROM injuries WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "delete injuries on release", e));
+  await c.env.DB.prepare("DELETE FROM players WHERE id = ?").bind(playerId).run();
 
   const { createTransferNews } = await import("../transfers/transfer-news");
   await createTransferNews(c.env.DB, player.league_id as string, teamId, "player_released", {
