@@ -236,7 +236,7 @@ export async function updatePlayerStats(
     db.prepare(
       `INSERT INTO player_stats (id, player_id, team_id, season_id, appearances, goals, assists, yellow_cards, red_cards, minutes_played, avg_rating, clean_sheets)
        VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(player_id, season_id) DO UPDATE SET
+       ON CONFLICT(player_id, team_id, season_id) DO UPDATE SET
          appearances = appearances + 1,
          goals = goals + ?,
          assists = assists + ?,

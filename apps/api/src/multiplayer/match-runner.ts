@@ -425,7 +425,7 @@ export async function runScheduledMatches(
         // Yellow card accumulation check (needs reads, do sequentially but only for players with yellows)
         for (const u of allUpdates) {
           if (u.yellowCards > 0) {
-            const stats = await db.prepare("SELECT yellow_cards FROM player_stats WHERE player_id = ? AND season_id = ?")
+            const stats = await db.prepare("SELECT COALESCE(SUM(yellow_cards), 0) as yellow_cards FROM player_stats WHERE player_id = ? AND season_id = ?")
               .bind(u.playerId, season.id).first<{ yellow_cards: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "query failed", e); return null; });
             if (stats && stats.yellow_cards > 0 && stats.yellow_cards % 4 === 0) {
               await db.prepare("UPDATE players SET suspended_matches = suspended_matches + 1 WHERE id = ?")
