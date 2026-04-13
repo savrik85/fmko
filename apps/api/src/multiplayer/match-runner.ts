@@ -670,7 +670,7 @@ export async function buildMatchPlayers(
   if (userLineupJson) {
     try {
       const userPicks = JSON.parse(userLineupJson) as Array<{ playerId: string; matchPosition?: string }>;
-      const pickedIds = userPicks.map((p) => p.playerId);
+      const pickedIds = [...new Set(userPicks.map((p) => p.playerId))];
       const allAvailIds = new Set(allAvailable.map((r) => r.id as string));
       const allDbIds = new Set(rows.results.map((r) => r.id as string));
 

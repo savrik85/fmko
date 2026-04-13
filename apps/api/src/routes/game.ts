@@ -2439,6 +2439,9 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
 
   // Validate players belong to team and are available
   const playerIds = body.players.map((p) => p.playerId);
+  if (new Set(playerIds).size !== playerIds.length) {
+    return c.json({ error: "Sestava obsahuje duplicitního hráče" }, 400);
+  }
   const placeholders = playerIds.map(() => "?").join(",");
   const validPlayers = await c.env.DB.prepare(
     `SELECT p.id FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0

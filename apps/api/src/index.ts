@@ -98,12 +98,12 @@ export default {
           const gd = new Date(gameDate);
           const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
 
-          // Process ALL unplayed rounds up to current game_date
-          const pendingCals = await env.DB.prepare(
-            "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC"
-          ).bind(leagueId, dayEnd.toISOString()).all();
+          // Process exactly 1 round per invocation — never more
+          const matchCal = await env.DB.prepare(
+            "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
+          ).bind(leagueId, dayEnd.toISOString()).first<{ id: string }>();
 
-          for (const matchCal of pendingCals.results) {
+          if (matchCal) {
             // Snapshot tabulky PŘED kolem (pro AI reportera)
             const { calculateStandings } = await import("./stats/standings");
             const standingsBefore = await calculateStandings(env.DB, leagueId);
@@ -155,8 +155,8 @@ export default {
                     "SELECT m.home_score, m.away_score, m.home_team_id, m.away_team_id, t1.name as hn, t2.name as an, t1.user_id as hu, t2.user_id as au FROM matches m JOIN teams t1 ON m.home_team_id=t1.id JOIN teams t2 ON m.away_team_id=t2.id WHERE m.id=?"
                   ).bind(mr.matchId).first<Record<string, unknown>>();
                   if (!md) continue;
-                  const title = `${md.hn} ${md.home_score}:${md.away_score} ${md.an}`;
-                  const body = "Podívej se na detail zápasu.";
+                  const title = `⚽ Zápas skončil!`;
+                  const body = `${md.hn} vs ${md.an} — výsledek čeká v aplikaci.`;
                   if (md.hu !== "ai") await createNotification(env.DB, md.home_team_id as string, "match_result", title, body, "/dashboard/match", pushEnv).catch((e) => log("warn", "match_result notif home", e));
                   if (md.au !== "ai") await createNotification(env.DB, md.away_team_id as string, "match_result", title, body, "/dashboard/match", pushEnv).catch((e) => log("warn", "match_result notif away", e));
                 }

@@ -144,7 +144,7 @@ function MatchPage() {
         const used = new Set<string>();
         const nextSelected = data.lineup.players.map((p, i) => {
           const stored = playerMap.get(p.playerId);
-          if (stored && !stored.absent) { used.add(p.playerId); return p.playerId; }
+          if (stored && !stored.absent && !used.has(p.playerId)) { used.add(p.playerId); return p.playerId; }
           // Find replacement: best available at this slot's position (or any)
           const slotPos = slots[i].pos;
           const repl = pool.filter((x) => !x.absent && !used.has(x.id) && x.position === slotPos)
@@ -282,7 +282,7 @@ function MatchPage() {
             apiFetch<{ lineup: { formation: string; tactic: string; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${um.calendarId}`)
               .then((data) => {
                 if (data.lineup && data.lineup.players.length === 11) {
-                  setFormation(data.lineup.formation); setTactic(data.lineup.tactic); setSelected(data.lineup.players.map((p) => p.playerId));
+                  setFormation(data.lineup.formation); setTactic(data.lineup.tactic); setSelected([...new Set(data.lineup.players.map((p) => p.playerId))].slice(0, 11));
                 }
                 setSaved(!!data.lineup);
               })
