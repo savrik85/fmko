@@ -145,6 +145,23 @@ export default {
                 ).bind(crypto.randomUUID(), leagueId, headline, body, gameWeek).run();
               } catch (e) { log("error", "news generation failed", e); }
 
+              // match_result notifikace pro lidské týmy
+              try {
+                const { createNotification } = await import("./community/notifications");
+                const pushEnv = { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB };
+                for (const mr of results) {
+                  if (mr.matchType === "ai_vs_ai") continue;
+                  const md = await env.DB.prepare(
+                    "SELECT m.home_score, m.away_score, m.home_team_id, m.away_team_id, t1.name as hn, t2.name as an, t1.user_id as hu, t2.user_id as au FROM matches m JOIN teams t1 ON m.home_team_id=t1.id JOIN teams t2 ON m.away_team_id=t2.id WHERE m.id=?"
+                  ).bind(mr.matchId).first<Record<string, unknown>>();
+                  if (!md) continue;
+                  const title = `${md.hn} ${md.home_score}:${md.away_score} ${md.an}`;
+                  const body = "Podívej se na detail zápasu.";
+                  if (md.hu !== "ai") await createNotification(env.DB, md.home_team_id as string, "match_result", title, body, "/dashboard/match", pushEnv).catch((e) => log("warn", "match_result notif home", e));
+                  if (md.au !== "ai") await createNotification(env.DB, md.away_team_id as string, "match_result", title, body, "/dashboard/match", pushEnv).catch((e) => log("warn", "match_result notif away", e));
+                }
+              } catch (e) { log("warn", "match_result notifications failed", e); }
+
               // AI zpravodajský článek (async, neblokuje)
               if (env.GEMINI_API_KEY) {
                 try {
@@ -275,6 +292,11 @@ export default {
                     ).bind(crypto.randomUUID(), ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
                       JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), adhocEvent.gameWeek
                     ).run().catch((e) => log("warn", "adhoc event insert failed", e));
+                    // event notifikace
+                    const { createNotification } = await import("./community/notifications");
+                    await createNotification(env.DB, ht.id as string, "event", `${adhocEvent.title}`, adhocEvent.description ?? "Nová událost v klubu", "/dashboard/events",
+                      { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB }
+                    ).catch((e) => log("warn", "event notification failed", e));
                   }
                 }
               } catch (e) { log("error", "adhoc events failed", e); }

@@ -513,6 +513,15 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     fee: amount,
   });
 
+  // transfer notifikace oběma stranám
+  try {
+    const { createNotification } = await import("../community/notifications");
+    const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+    const pName = `${player?.first_name} ${player?.last_name}`;
+    await createNotification(c.env.DB, buyerTeamId, "transfer", `✅ Přestup ${pName} dokončen`, `Koupili jste od ${seller?.name ?? "prodávajícího"} za ${amount.toLocaleString("cs-CZ")} Kč.`, "/dashboard/transfers", pushEnv);
+    await createNotification(c.env.DB, sellerTeamId, "transfer", `✅ Prodej ${pName} dokončen`, `${buyer.name} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.`, "/dashboard/transfers", pushEnv);
+  } catch (e) { logger.warn({ module: "transfers" }, "transfer accept notifications", e); }
+
   return c.json({ ok: true });
 });
 
@@ -520,10 +529,30 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
   const body = await c.req.json<{ message?: string }>().catch((e) => { logger.warn({ module: "transfers" }, "parse reject body", e); return {}; });
+
+  // Načteme nabídku pro notifikaci druhé strany
+  const offerForNotif = await c.env.DB.prepare(
+    "SELECT from_team_id, to_team_id, player_id FROM transfer_offers WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered') AND last_action_by != ?"
+  ).bind(offerId, teamId, teamId, teamId).first<{ from_team_id: string; to_team_id: string; player_id: string }>()
+    .catch((e) => { logger.warn({ module: "transfers" }, "fetch offer for reject notif", e); return null; });
+
   // Reject může ten kdo je na tahu — tj. neudělal poslední akci
   await c.env.DB.prepare(
     "UPDATE transfer_offers SET status = 'rejected', reject_message = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered') AND last_action_by != ?"
   ).bind((body as { message?: string }).message ?? null, offerId, teamId, teamId, teamId).run();
+
+  // Notifikace druhé straně
+  if (offerForNotif) {
+    try {
+      const { createNotification } = await import("../community/notifications");
+      const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+      const otherTeamId = offerForNotif.from_team_id === teamId ? offerForNotif.to_team_id : offerForNotif.from_team_id;
+      const playerRow = await c.env.DB.prepare("SELECT first_name, last_name FROM players WHERE id = ?").bind(offerForNotif.player_id).first<{ first_name: string; last_name: string }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch player for reject notif", e); return null; });
+      const pName = playerRow ? `${playerRow.first_name} ${playerRow.last_name}` : "hráče";
+      await createNotification(c.env.DB, otherTeamId, "transfer", `❌ Nabídka za ${pName} zamítnuta`, "Druhá strana odmítla nabídku.", "/dashboard/transfers", pushEnv);
+    } catch (e) { logger.warn({ module: "transfers" }, "transfer reject notification", e); }
+  }
+
   return c.json({ ok: true });
 });
 
