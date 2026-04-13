@@ -42,6 +42,11 @@ function usePushNotifications() {
   });
   const [prefsSaving, setPrefsSaving] = useState(false);
 
+  const authHeaders = useCallback((): HeadersInit => {
+    const token = localStorage.getItem("om_token");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }, []);
+
   useEffect(() => {
     const supported = "serviceWorker" in navigator && "PushManager" in window;
     setPushSupported(supported);
@@ -50,7 +55,9 @@ function usePushNotifications() {
     const stored = localStorage.getItem("push_enabled") === "true";
     setPushEnabled(stored);
 
-    fetch(`${API}/api/push/preferences`, { credentials: "include" })
+    const token = localStorage.getItem("om_token");
+    if (!token) return;
+    fetch(`${API}/api/push/preferences`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((data) => setPrefs(data as NotifPrefs))
       .catch((e) => console.error("Failed to load push prefs:", e));
@@ -63,7 +70,7 @@ function usePushNotifications() {
       const permission = await Notification.requestPermission();
       if (permission !== "granted") return;
 
-      const res = await fetch(`${API}/api/push/vapid-key`, { credentials: "include" });
+      const res = await fetch(`${API}/api/push/vapid-key`);
       const { publicKey } = await res.json() as { publicKey: string };
 
       const sub = await reg.pushManager.subscribe({
@@ -71,19 +78,19 @@ function usePushNotifications() {
         applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
       });
 
-      await fetch(`${API}/api/push/subscribe`, {
+      const saveRes = await fetch(`${API}/api/push/subscribe`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify(sub.toJSON()),
       });
+      if (!saveRes.ok) throw new Error(`subscribe failed: ${saveRes.status}`);
 
       localStorage.setItem("push_enabled", "true");
       setPushEnabled(true);
     } catch (e) {
       console.error("enablePush failed:", e);
     }
-  }, []);
+  }, [authHeaders]);
 
   const disablePush = useCallback(async () => {
     try {
@@ -92,8 +99,7 @@ function usePushNotifications() {
       if (sub) {
         await fetch(`${API}/api/push/unsubscribe`, {
           method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify({ endpoint: sub.endpoint }),
         });
         await sub.unsubscribe();
@@ -103,7 +109,7 @@ function usePushNotifications() {
     } catch (e) {
       console.error("disablePush failed:", e);
     }
-  }, []);
+  }, [authHeaders]);
 
   const savePrefs = useCallback(async (updated: NotifPrefs) => {
     setPrefs(updated);
@@ -111,8 +117,7 @@ function usePushNotifications() {
     try {
       await fetch(`${API}/api/push/preferences`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify(updated),
       });
     } catch (e) {
@@ -120,7 +125,7 @@ function usePushNotifications() {
     } finally {
       setPrefsSaving(false);
     }
-  }, []);
+  }, [authHeaders]);
 
   return { pushEnabled, pushSupported, prefs, prefsSaving, enablePush, disablePush, savePrefs };
 }

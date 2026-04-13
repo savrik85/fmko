@@ -46,10 +46,13 @@ async function registerAndSubscribe(): Promise<void> {
       applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
     });
 
+    const token = localStorage.getItem("om_token");
     await fetch(`${API}/api/push/subscribe`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(subscription.toJSON()),
     });
   } catch (e) {
