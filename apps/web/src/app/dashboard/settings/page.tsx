@@ -16,14 +16,14 @@ type NotifPrefs = {
   system: boolean;
 };
 
-const PREF_LABELS: { key: keyof NotifPrefs; label: string }[] = [
-  { key: "match_reminder", label: "Sestava před zápasem (den předem)" },
-  { key: "match_result", label: "Výsledek zápasu" },
-  { key: "transfer", label: "Nabídka přestupu / odpověď" },
-  { key: "challenge", label: "Výzva od jiného týmu" },
-  { key: "event", label: "Sezónní event" },
-  { key: "season", label: "Konec sezóny / postup / sestup" },
-  { key: "system", label: "Systémové zprávy" },
+const PREF_LABELS: { key: keyof NotifPrefs; label: string; desc: string; icon: string }[] = [
+  { key: "match_result",   icon: "⚽", label: "Výsledek zápasu",           desc: "Hned po odehrání zápasu" },
+  { key: "match_reminder", icon: "📋", label: "Sestava před zápasem",       desc: "Připomenutí den předem" },
+  { key: "transfer",       icon: "🤝", label: "Přestupy",                   desc: "Nabídka nebo odpověď na přestup" },
+  { key: "challenge",      icon: "⚡", label: "Výzvy",                      desc: "Výzva od jiného týmu" },
+  { key: "event",          icon: "🎉", label: "Sezónní eventy",             desc: "Speciální příležitosti v sezoně" },
+  { key: "season",         icon: "🏆", label: "Konec sezóny",               desc: "Postup, sestup, finální tabulka" },
+  { key: "system",         icon: "⚙️", label: "Systémové zprávy",           desc: "Technické a herní oznámení" },
 ];
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -229,46 +229,76 @@ export default function SettingsPage() {
       </div>
 
       {/* Push notifikace */}
-      <div className="card p-5 max-w-md">
-        <h3 className="font-heading font-bold text-base mb-1">Push notifikace</h3>
-        {!pushSupported ? (
-          <p className="text-sm text-muted">Tvůj prohlížeč nepodporuje push notifikace.</p>
-        ) : (
-          <>
-            <p className="text-sm text-muted mb-4">
-              Dostávej upozornění i když nemáš Prales otevřený.
-            </p>
-
-            {/* Master toggle */}
-            <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-100">
-              <span className="text-sm font-heading font-bold">Zapnout notifikace</span>
-              <button
-                onClick={pushEnabled ? disablePush : enablePush}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${pushEnabled ? "bg-pitch-500" : "bg-gray-200"}`}
-              >
-                <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${pushEnabled ? "translate-x-6" : "translate-x-1"}`} />
-              </button>
+      <div className="card max-w-md overflow-hidden">
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4 flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0 transition-colors ${pushEnabled ? "bg-pitch-100" : "bg-gray-100"}`}>
+              🔔
             </div>
+            <div>
+              <h3 className="font-heading font-bold text-base leading-tight">Push notifikace</h3>
+              <p className="text-xs text-muted mt-0.5">
+                {!pushSupported
+                  ? "Prohlížeč nepodporuje push"
+                  : pushEnabled
+                  ? "Zapnuto — dostáváš upozornění"
+                  : "Vypnuto"}
+              </p>
+            </div>
+          </div>
+          {pushSupported && (
+            <button
+              onClick={pushEnabled ? disablePush : enablePush}
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors flex-shrink-0 mt-1.5 ${pushEnabled ? "bg-pitch-500" : "bg-gray-200"}`}
+            >
+              <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${pushEnabled ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          )}
+        </div>
 
-            {/* Preference jednotlivých typů */}
-            {pushEnabled && (
-              <div className="space-y-3">
-                <p className="text-xs text-muted uppercase font-heading font-bold">Co tě má upozornit</p>
-                {PREF_LABELS.map(({ key, label }) => (
-                  <div key={key} className="flex items-center justify-between">
-                    <span className="text-sm">{label}</span>
+        {/* Preference typů */}
+        {pushSupported && pushEnabled && (
+          <>
+            <div className="mx-5 mb-3 border-t border-gray-100" />
+            <div className="px-5 pb-2">
+              <p className="text-[11px] text-muted uppercase font-heading font-bold tracking-wide mb-3">Co tě má budit</p>
+              <div className="space-y-1">
+                {PREF_LABELS.map(({ key, icon, label, desc }) => (
+                  <div
+                    key={key}
+                    className="flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="text-base w-6 text-center flex-shrink-0">{icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium leading-tight">{label}</p>
+                      <p className="text-[11px] text-muted leading-tight mt-0.5">{desc}</p>
+                    </div>
                     <button
                       onClick={() => savePrefs({ ...prefs, [key]: !prefs[key] })}
                       disabled={prefsSaving}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${prefs[key] ? "bg-pitch-500" : "bg-gray-200"}`}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-40 flex-shrink-0 ${prefs[key] ? "bg-pitch-500" : "bg-gray-200"}`}
                     >
-                      <span className={`inline-block h-3 w-3 rounded-full bg-white shadow transition-transform ${prefs[key] ? "translate-x-5" : "translate-x-1"}`} />
+                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${prefs[key] ? "translate-x-[18px]" : "translate-x-0.5"}`} />
                     </button>
                   </div>
                 ))}
               </div>
-            )}
+            </div>
+            <div className="px-5 pt-1 pb-4">
+              <p className="text-[10px] text-muted/60 leading-snug">
+                Vypnutí notifikací odhlásí toto zařízení. Ostatní zařízení nejsou ovlivněna.
+              </p>
+            </div>
           </>
+        )}
+
+        {pushSupported && !pushEnabled && (
+          <div className="px-5 pb-5">
+            <p className="text-xs text-muted">
+              Zapni a dostávej upozornění na výsledky, přestupy nebo výzvy — i když máš Prales zavřený.
+            </p>
+          </div>
         )}
       </div>
     </div>
