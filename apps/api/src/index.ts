@@ -98,12 +98,12 @@ export default {
           const gd = new Date(gameDate);
           const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
 
-          // Process ALL unplayed rounds up to current game_date
-          const pendingCals = await env.DB.prepare(
-            "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC"
-          ).bind(leagueId, dayEnd.toISOString()).all();
+          // Process exactly 1 round per invocation — never more
+          const matchCal = await env.DB.prepare(
+            "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
+          ).bind(leagueId, dayEnd.toISOString()).first<{ id: string }>();
 
-          for (const matchCal of pendingCals.results) {
+          if (matchCal) {
             // Snapshot tabulky PŘED kolem (pro AI reportera)
             const { calculateStandings } = await import("./stats/standings");
             const standingsBefore = await calculateStandings(env.DB, leagueId);
