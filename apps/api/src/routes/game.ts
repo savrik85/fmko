@@ -2966,7 +2966,7 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
 
   // Filter out listings where this team was rejected (same as free agents)
   listings.results = listings.results.filter((l) => {
-    try { const rej = JSON.parse((l.rejected_by as string) ?? "[]"); return !rej.includes(teamId); } catch { return true; }
+    try { const rej = JSON.parse((l.rejected_by as string) ?? "[]"); return !rej.includes(teamId); } catch (e) { logger.warn({ module: "game" }, "parse rejected_by in market filter", e); return true; }
   });
 
   const myListings = await c.env.DB.prepare(
