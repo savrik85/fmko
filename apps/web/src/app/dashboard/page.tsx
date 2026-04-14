@@ -291,18 +291,18 @@ export default function DashboardPage() {
 
                 {/* Forma */}
                 {homeForm && awayForm && (
-                  <div className="flex items-center px-4 py-3 border-b border-gray-100">
-                    <div className="flex-1 flex gap-1 justify-end">
-                      {homeForm.form.map((f, i) => (
-                        <span key={i} className={`w-6 h-6 rounded-md text-[10px] flex items-center justify-center font-bold text-white ${
+                  <div className="flex items-center px-4 py-3 border-b border-gray-100 overflow-hidden">
+                    <div className="flex-1 min-w-0 flex gap-1 justify-end overflow-hidden">
+                      {homeForm.form.slice(0, 5).map((f, i) => (
+                        <span key={i} className={`shrink-0 w-5 h-5 rounded-md text-[9px] flex items-center justify-center font-bold text-white ${
                           f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-300"
                         }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
                       ))}
                     </div>
                     <div className="shrink-0 w-12 text-center text-[9px] text-muted uppercase font-heading">Forma</div>
-                    <div className="flex-1 flex gap-1">
-                      {awayForm.form.map((f, i) => (
-                        <span key={i} className={`w-6 h-6 rounded-md text-[10px] flex items-center justify-center font-bold text-white ${
+                    <div className="flex-1 min-w-0 flex gap-1 overflow-hidden">
+                      {awayForm.form.slice(0, 5).map((f, i) => (
+                        <span key={i} className={`shrink-0 w-5 h-5 rounded-md text-[9px] flex items-center justify-center font-bold text-white ${
                           f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-300"
                         }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
                       ))}
@@ -368,7 +368,7 @@ export default function DashboardPage() {
                     <span className="text-[10px] text-muted">{preview.venue.name}</span>
                   </div>
                 )}
-                <div className="flex items-center justify-center flex-wrap gap-x-4 gap-y-1 px-4 py-2">
+                <div className="flex items-center justify-center gap-4 px-4 py-2">
                   <Link href="/dashboard/match" className="text-xs text-pitch-500 font-heading font-bold hover:underline whitespace-nowrap">Sestava →</Link>
                   {nextMatch.isHome && (
                     nextMatch.promoted ? (
