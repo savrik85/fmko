@@ -158,10 +158,10 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         const awayTeamRow = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(awayTeamId).first<{ user_id: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "fetch away team user_id", e); return null; });
 
         if (homeTeamRow?.user_id && homeTeamRow.user_id !== "ai") {
-          await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate);
+          await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate, 50, true);
         }
         if (awayTeamRow?.user_id && awayTeamRow.user_id !== "ai") {
-          await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate);
+          await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate, 50, true);
         }
       } catch (e) {
         logger.error({ module: "friendly-runner" }, "Finance processing failed", e);

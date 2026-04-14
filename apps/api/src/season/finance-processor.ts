@@ -226,6 +226,7 @@ export async function processMatchDayFinances(
   attendance: number,
   gameDate: string,
   opponentReputation: number = 50,
+  isFriendly: boolean = false,
 ): Promise<void> {
   // Get village info for ticket price calculation
   const team = await db.prepare(
@@ -327,21 +328,23 @@ export async function processMatchDayFinances(
     // External mode: income je čistě týdenní přes computeExternalWeeklyConcession,
     // per-match accounting zde odstraněn aby nedocházelo k dvojitému započítání.
 
-    // Home team: referee costs
-    const refereeCost = 800 + Math.round(Math.random() * 700);
-    await recordTransaction(db, teamId, "match_expense", -refereeCost,
-      `Rozhodčí`, gameDate, matchId);
+    // Home team: referee costs (ne u přáteláků)
+    if (!isFriendly) {
+      const refereeCost = 800 + Math.round(Math.random() * 700);
+      await recordTransaction(db, teamId, "match_expense", -refereeCost,
+        `Rozhodčí`, gameDate, matchId);
+    }
   }
 
-  if (!isHome) {
+  if (!isHome && !isFriendly) {
     // Away team: travel costs (simplified — random 200-600 Kč)
     const travelCost = 200 + Math.round(Math.random() * 400);
     await recordTransaction(db, teamId, "match_expense", -travelCost,
       `Cestovné (venkovní zápas)`, gameDate, matchId);
   }
 
-  // Both teams: refreshments expense (pivo po zápase) — L3 občerstvení eliminuje
-  if (!facilityFx.noRefreshmentExpense) {
+  // Both teams: refreshments expense (pivo po zápase) — L3 občerstvení eliminuje (ne u přáteláků)
+  if (!isFriendly && !facilityFx.noRefreshmentExpense) {
     const refreshments = 200 + Math.round(Math.random() * 400);
     await recordTransaction(db, teamId, "match_expense", -refreshments,
       `Občerstvení po zápase`, gameDate, matchId);
