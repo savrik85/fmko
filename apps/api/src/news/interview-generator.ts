@@ -21,6 +21,7 @@ interface MatchContext {
   injuredStr: string | null;
   villageFlavor: string;
   gameWeek: number;
+  opponentIsHuman?: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -203,17 +204,21 @@ export async function generateInterviewQuestions(
     .map((p) => `${p.name} (${p.position}${p.goals ? `, ${p.goals} gólů` : ""})`)
     .join(", ");
 
-  const prompt = `Jsi redaktor Okresního zpravodaje v Čechách. Napiš přesně 3 otázky pro trenéra
+  const bulvarInstruction = ctx.opponentIsHuman
+    ? `4. BULVÁR — zákulisní nebo mírně provokativní otázka o trenérovi či týmu ${ctx.opponentName}. Naznač rivalitu, pochybnosti o jejich přístupu, nebo zákulisní drby. Tón: novinář z bulváru, ale stále vykání. Příklady: "Říká se, že v kabině ${ctx.opponentName} to teď docela vře — jak hodnotíte jejich atmosféru?" nebo "Soupeřův kouč prý vsadil na neobvyklou taktiku. Myslíte, že vás tím překvapí?"`
+    : `4. BULVÁR — zákulisní nebo lehce provokativní otázka o soupeři ${ctx.opponentName}. Zajímej se o jejich slabá místa, případné neshody, nebo zákulisí. Tón: novinář z bulváru, ale stále vykání.`;
+
+  const prompt = `Jsi redaktor Okresního zpravodaje v Čechách. Napiš přesně 4 otázky pro trenéra
 fotbalového týmu ${ctx.teamName} před zápasem ${ctx.isHome ? "doma" : "venku"} s ${ctx.opponentName} (kolo ${ctx.gameWeek}).
 
 INSTRUKCE:
 - KAŽDÁ otázka musí být konkrétní — zmiň jméno hráče, přesný výsledek, nebo konkrétního soupeře
 - Nepokládej obecné otázky jako "jak hodnotíte formu" nebo "co od zápasu čekáte" — to je nuda
-- Střídej témata: 1 otázka o soupeři nebo nadcházejícím zápase, 1 o konkrétním hráči nebo výkonu, 1 o situaci v tabulce nebo formě
+- Střídej témata: 1 otázka o soupeři nebo nadcházejícím zápase, 1 o konkrétním hráči nebo výkonu, 1 o situaci v tabulce nebo formě, 1 bulvárnější
 - Otázky piš jednu per řádek, bez číslování, bez odrážek, bez markdown
 - Jazyk: hovorová čeština, novinářský tón, vykání trenéru
 - Délka každé otázky: 1–2 věty max
-- PŘESNĚ 3 otázky
+- PŘESNĚ 4 otázky
 
 KONTEXT (používej konkrétní data z toho níže):
 - Tým: ${ctx.teamName} (${ctx.villageFlavor}), ${ctx.isHome ? "hraje doma" : "hraje venku"}
@@ -225,10 +230,11 @@ KONTEXT (používej konkrétní data z toho níže):
 - Klíčoví hráči: ${topStr || "info nedostupné"}
 ${ctx.injuredStr ? `- Zranění: ${ctx.injuredStr}` : ""}
 
-Příklady DOBRÉ otázky: "Po výhře 3:1 nad Lokomotivou přichází těžší soupeř — čím vás ${ctx.opponentName} může překvapit?"
+Příklady DOBRÉ otázky 1-3: "Po výhře 3:1 nad Lokomotivou přichází těžší soupeř — čím vás ${ctx.opponentName} může překvapit?"
 Příklady ŠPATNÉ otázky: "Jaká je forma týmu?" nebo "Co od zápasu čekáte?"
+${bulvarInstruction}
 
-Napiš pouze 3 otázky, každou na samostatném řádku.`;
+Napiš pouze 4 otázky, každou na samostatném řádku.`;
 
   const text = await callGemini(apiKey, prompt, 512);
   if (!text) return null;
@@ -237,7 +243,7 @@ Napiš pouze 3 otázky, každou na samostatném řádku.`;
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.length > 10)
-    .slice(0, 4);
+    .slice(0, 5);
 
   if (questions.length < 2) return null;
   return questions;
@@ -387,6 +393,13 @@ export async function tryCreateInterviewRequest(
 
   const isHome = matchRow.home_team_id === teamRow.team_id;
   const opponentName = isHome ? matchRow.away_name : matchRow.home_name;
+  const opponentTeamId = isHome ? matchRow.away_team_id : matchRow.home_team_id;
+
+  // Je soupeř lidský tým? (pro bulvárnější otázku)
+  const opponentRow = await db.prepare("SELECT user_id FROM teams WHERE id = ?")
+    .bind(opponentTeamId).first<{ user_id: string }>()
+    .catch((e) => { logger.warn({ module: "interview-generator" }, "load opponent", e); return null; });
+  const opponentIsHuman = opponentRow?.user_id != null && opponentRow.user_id !== "ai";
 
   // 5. Village flavor
   let villageFlavor = "tradiční fotbalový klub";
@@ -424,6 +437,7 @@ export async function tryCreateInterviewRequest(
     injuredStr,
     villageFlavor,
     gameWeek: ctx.gameWeek,
+    opponentIsHuman,
   };
 
   // 7. Generuj otázky přes Gemini
@@ -481,7 +495,7 @@ export async function tryCreateInterviewRequest(
         .run();
     }
 
-    const msgBody = `📰 Redaktor Zpravodaje se chce zeptat před zápasem s ${opponentName}. Odpověz na 3 otázky ve svých Událostech — článek vyjde ve Zpravodaji.`;
+    const msgBody = `📰 Redaktor Zpravodaje se chce zeptat před zápasem s ${opponentName}. Odpověz na 4 otázky ve svých Událostech — článek vyjde ve Zpravodaji.`;
     const msgId = crypto.randomUUID();
 
     await db
