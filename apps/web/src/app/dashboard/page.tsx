@@ -368,16 +368,16 @@ export default function DashboardPage() {
                     <span className="text-[10px] text-muted">{preview.venue.name}</span>
                   </div>
                 )}
-                <div className="flex flex-nowrap items-center justify-center gap-4 px-4 py-2">
-                  <Link href="/dashboard/match" className="shrink-0 text-xs text-pitch-500 font-heading font-bold hover:underline whitespace-nowrap">Sestava →</Link>
+                <div className="text-center px-4 py-2">
+                  <Link href="/dashboard/match" className="inline text-xs text-pitch-500 font-heading font-bold hover:underline">Sestava →</Link>
                   {nextMatch.isHome && nextMatch.promoted && (
-                    <span className="shrink-0 text-xs text-gold-600 font-heading font-bold whitespace-nowrap">📢 Propagováno</span>
+                    <span className="inline ml-4 text-xs text-gold-600 font-heading font-bold">📢 Propagováno</span>
                   )}
                   {nextMatch.isHome && !nextMatch.promoted && (
                     <button
                       onClick={() => promoteMatch(nextMatch)}
                       disabled={promoting}
-                      className="shrink-0 text-xs text-gold-600 font-heading font-bold hover:underline disabled:opacity-50 whitespace-nowrap"
+                      className="inline ml-4 text-xs text-gold-600 font-heading font-bold hover:underline disabled:opacity-50"
                     >
                       {promoting ? "..." : "📢 Propagovat"}
                     </button>
