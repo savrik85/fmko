@@ -599,14 +599,13 @@ export async function buildMatchPlayers(
     "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
   ).bind(teamId).all();
 
-  // Generate absences — only for AI teams (no user lineup saved)
-  // If user saved a lineup, respect it — they chose those players consciously
+  // Generate absences — for all teams, including human teams with saved lineups
   let absentIds = new Set<string>();
   const absentInfo: Array<{ name: string; reason: string; smsText: string }> = [];
   const hasUserLineup = !!userLineupJson;
   const allDbIds = rows.results.map(r => (r.id as string).slice(0,8));
   logger.info({ module: "match-runner" }, `buildMatchPlayers team=${teamId.slice(0,8)} total=${rows.results.length} hasLineup=${hasUserLineup} dbIDs=[${allDbIds.join(",")}]`);
-  if (rng && !hasUserLineup) {
+  if (rng) {
     try {
       const { generateAbsences } = await import("../events/absence");
       const { seedFromString } = await import("../lib/seed");
@@ -671,44 +670,26 @@ export async function buildMatchPlayers(
     try {
       const userPicks = JSON.parse(userLineupJson) as Array<{ playerId: string; matchPosition?: string }>;
       const pickedIds = [...new Set(userPicks.map((p) => p.playerId))];
-      const allAvailIds = new Set(allAvailable.map((r) => r.id as string));
-      const allDbIds = new Set(rows.results.map((r) => r.id as string));
-
-      console.log(`[LINEUP-DEBUG] pickedIds=${pickedIds.map(id=>id.slice(0,8)).join(",")}`);
-      console.log(`[LINEUP-DEBUG] allAvail=${allAvailIds.size} allDb=${allDbIds.size}`);
+      // Build starters from allAvailable (excludes absent/injured/suspended players)
+      // If a picked player is unavailable, they are silently skipped — rest fills the gap
+      const starters: typeof allAvailable = [];
       for (const id of pickedIds) {
-        const inDb = allDbIds.has(id);
-        const inAvail = allAvailIds.has(id);
-        if (!inDb) console.log(`[LINEUP-DEBUG] ${id.slice(0,8)} NOT IN DB`);
-        else if (!inAvail) console.log(`[LINEUP-DEBUG] ${id.slice(0,8)} IN DB but NOT IN AVAILABLE`);
-        if (!allDbIds.has(id)) {
-          logger.error({ module: "match-runner" }, `LINEUP PLAYER ${id} NOT IN DB AT ALL`);
-        } else if (!allAvailIds.has(id)) {
+        const player = allAvailable.find(r => (r.id as string) === id);
+        if (player) {
+          starters.push(player);
+        } else {
           const isAbsent = absentIds.has(id);
           const isSusp = suspendedIds.has(id);
           const isInj = injuredIds.has(id);
-          const player = rows.results.find(r => r.id === id);
-          logger.warn({ module: "match-runner" }, `LINEUP PLAYER ${player?.first_name} ${player?.last_name} (${id}) EXCLUDED: absent=${isAbsent} suspended=${isSusp} injured=${isInj}`);
-        }
-      }
-
-      // For user-saved lineups: use ONLY rows.results (already fetched from DB)
-      // Just find each picked player by iterating through all rows
-      const starters: typeof allAvailable = [];
-      for (const id of pickedIds) {
-        let found = false;
-        for (let ri = 0; ri < rows.results.length; ri++) {
-          if ((rows.results[ri].id as string) === id) {
-            starters.push(rows.results[ri]);
-            found = true;
-            break;
+          const dbPlayer = rows.results.find(r => r.id === id);
+          if (dbPlayer) {
+            logger.warn({ module: "match-runner" }, `LINEUP PLAYER ${dbPlayer.first_name} ${dbPlayer.last_name} (${id}) EXCLUDED: absent=${isAbsent} suspended=${isSusp} injured=${isInj}`);
+          } else {
+            const msg = `MISSING: ${id} not in ${rows.results.length} rows.`;
+            console.log(`[LINEUP-BUG] ${msg}`);
+            if (!(globalThis as any).__lineupDebug) (globalThis as any).__lineupDebug = [];
+            (globalThis as any).__lineupDebug.push(msg);
           }
-        }
-        if (!found) {
-          const msg = `MISSING: ${id} not in ${rows.results.length} rows. All IDs: ${rows.results.map(r => (r.id as string)).join(",")}`;
-          console.log(`[LINEUP-BUG] ${msg}`);
-          if (!(globalThis as any).__lineupDebug) (globalThis as any).__lineupDebug = [];
-          (globalThis as any).__lineupDebug.push(msg);
         }
       }
 
