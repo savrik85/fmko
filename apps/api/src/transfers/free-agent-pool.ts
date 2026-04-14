@@ -104,7 +104,7 @@ export async function maintainFreeAgentPool(
         : null;
 
       const expiresAt = new Date(gameDate);
-      expiresAt.setDate(expiresAt.getDate() + rng.int(7, 14));
+      expiresAt.setDate(expiresAt.getDate() + rng.int(5, 7));
 
       const id = crypto.randomUUID();
       await db.prepare(
