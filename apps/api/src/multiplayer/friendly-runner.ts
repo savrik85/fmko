@@ -43,18 +43,18 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       // Ensure lineups exist — copy last saved or auto-generate
       const { copyOrCreateLineup } = await import("./match-runner");
       const hasHomeLineup = await db.prepare("SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?")
-        .bind(homeTeamId, matchId).first().catch(() => null);
+        .bind(homeTeamId, matchId).first().catch((e) => { logger.warn({ module: "friendly-runner" }, "check home lineup", e); return null; });
       if (!hasHomeLineup) await copyOrCreateLineup(db, homeTeamId, matchId);
 
       const hasAwayLineup = await db.prepare("SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?")
-        .bind(awayTeamId, matchId).first().catch(() => null);
+        .bind(awayTeamId, matchId).first().catch((e) => { logger.warn({ module: "friendly-runner" }, "check away lineup", e); return null; });
       if (!hasAwayLineup) await copyOrCreateLineup(db, awayTeamId, matchId);
 
       // Load lineups
       const homeLineupRow = await db.prepare("SELECT players_data FROM lineups WHERE team_id = ? AND calendar_id = ?")
-        .bind(homeTeamId, matchId).first<{ players_data: string }>().catch(() => null);
+        .bind(homeTeamId, matchId).first<{ players_data: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load home lineup", e); return null; });
       const awayLineupRow = await db.prepare("SELECT players_data FROM lineups WHERE team_id = ? AND calendar_id = ?")
-        .bind(awayTeamId, matchId).first<{ players_data: string }>().catch(() => null);
+        .bind(awayTeamId, matchId).first<{ players_data: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load away lineup", e); return null; });
 
       const homeBuild = await buildMatchPlayers(db, homeTeamId, absenceRng, homeLineupRow?.players_data ?? null);
       const awayBuild = await buildMatchPlayers(db, awayTeamId, absenceRng, awayLineupRow?.players_data ?? null, 100);
@@ -90,9 +90,9 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
 
       // Stadium info
       const stadiumRow = await db.prepare("SELECT pitch_condition FROM stadiums WHERE team_id = ?")
-        .bind(homeTeamId).first<{ pitch_condition: number }>().catch(() => null);
+        .bind(homeTeamId).first<{ pitch_condition: number }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load stadium", e); return null; });
       const stadiumNameRow = await db.prepare("SELECT stadium_name FROM teams WHERE id = ?")
-        .bind(homeTeamId).first<{ stadium_name: string }>().catch(() => null);
+        .bind(homeTeamId).first<{ stadium_name: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load stadium name", e); return null; });
 
       // Simulate
       const result = simulateMatch(rng, {
@@ -144,7 +144,28 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       ).run();
 
       // Update challenge status
-      await db.prepare("UPDATE challenges SET status = 'played' WHERE match_id = ?").bind(matchId).run().catch(() => {});
+      await db.prepare("UPDATE challenges SET status = 'played' WHERE match_id = ?").bind(matchId).run().catch((e) => logger.warn({ module: "friendly-runner" }, "update challenge status", e));
+
+      // Concession + finance processing (jen pro lidské týmy)
+      try {
+        const { processMatchDayFinances } = await import("../season/finance-processor");
+        const gameDate = new Date().toISOString().split("T")[0];
+        const attendance = Math.round(20 + Math.random() * 50);
+        const homeResult = result.homeScore > result.awayScore ? "win" : result.homeScore < result.awayScore ? "loss" : "draw";
+        const awayResult = homeResult === "win" ? "loss" : homeResult === "loss" ? "win" : "draw";
+
+        const homeTeamRow = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(homeTeamId).first<{ user_id: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "fetch home team user_id", e); return null; });
+        const awayTeamRow = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(awayTeamId).first<{ user_id: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "fetch away team user_id", e); return null; });
+
+        if (homeTeamRow?.user_id && homeTeamRow.user_id !== "ai") {
+          await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate, 50, true);
+        }
+        if (awayTeamRow?.user_id && awayTeamRow.user_id !== "ai") {
+          await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate, 50, true);
+        }
+      } catch (e) {
+        logger.error({ module: "friendly-runner" }, "Finance processing failed", e);
+      }
 
       // Persist condition + morale changes for players who actually played
       try {
@@ -177,7 +198,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
           if (minutes < 15) continue;
 
           const playerRow = await db.prepare("SELECT age, skills, position, team_id FROM players WHERE id = ?")
-            .bind(dbId).first<{ age: number; skills: string; position: string; team_id: string }>().catch(() => null);
+            .bind(dbId).first<{ age: number; skills: string; position: string; team_id: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load player for experience", e); return null; });
           if (!playerRow) continue;
 
           const age = playerRow.age;
@@ -200,7 +221,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
                 .bind(JSON.stringify(skills), dbId).run();
               await db.prepare(
                 "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'friendly', ?)"
-              ).bind(dbId, playerRow.team_id, attr, current, current + 1, new Date().toISOString()).run().catch(() => {});
+              ).bind(dbId, playerRow.team_id, attr, current, current + 1, new Date().toISOString()).run().catch((e) => logger.warn({ module: "friendly-runner" }, "training log insert", e));
             }
           }
         }
@@ -212,12 +233,12 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       const smsBody = `⚽ Přátelák odehrán! ${homeSetup.teamName} ${result.homeScore}:${result.awayScore} ${awaySetup.teamName}`;
       for (const tid of [homeTeamId, awayTeamId]) {
         let convId = await db.prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = 'Sportovní ředitel'")
-          .bind(tid).first<{ id: string }>().then((r) => r?.id).catch(() => null);
+          .bind(tid).first<{ id: string }>().then((r) => r?.id).catch((e) => { logger.warn({ module: "friendly-runner" }, "find sportovni reditel conv", e); return null; });
         if (convId) {
           await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Sportovní ředitel', ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
-            .bind(crypto.randomUUID(), convId, smsBody).run().catch(() => {});
+            .bind(crypto.randomUUID(), convId, smsBody).run().catch((e) => logger.warn({ module: "friendly-runner" }, "insert sms message", e));
           await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
-            .bind(smsBody.slice(0, 100), convId).run().catch(() => {});
+            .bind(smsBody.slice(0, 100), convId).run().catch((e) => logger.warn({ module: "friendly-runner" }, "update conv unread", e));
         }
       }
 
