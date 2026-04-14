@@ -241,14 +241,14 @@ transfersRouter.get("/teams/:teamId/market", async (c) => {
     .bind(teamId).first<{ league_id: string }>();
   if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
-  // Listings from other teams in same league
+  // Listings from other teams in same league (real players)
   const listings = await c.env.DB.prepare(
-    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at,
+    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at, tl.is_ai_listing, tl.ai_player_data,
      p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
      t.name as team_name
      FROM transfer_listings tl
-     JOIN players p ON tl.player_id = p.id
-     JOIN teams t ON tl.team_id = t.id
+     LEFT JOIN players p ON tl.player_id = p.id AND tl.is_ai_listing = 0
+     LEFT JOIN teams t ON tl.team_id = t.id AND tl.is_ai_listing = 0
      WHERE tl.league_id = ? AND tl.status = 'active' AND tl.team_id != ?
      ORDER BY tl.created_at DESC`
   ).bind(team.league_id, teamId).all();
@@ -273,12 +273,26 @@ transfersRouter.get("/teams/:teamId/market", async (c) => {
   }
 
   return c.json({
-    listings: listings.results.map((l) => ({
-      id: l.id, playerId: l.player_id, askingPrice: l.asking_price,
-      playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,
-      overallRating: l.overall_rating, teamName: l.team_name, expiresAt: l.expires_at,
-      avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "transfers" }, `parse listing avatar: ${e}`); return {}; } })(),
-    })),
+    listings: listings.results.map((l) => {
+      const isAi = !!(l.is_ai_listing as number);
+      const aiData = isAi ? (() => { try { return JSON.parse(l.ai_player_data as string); } catch (e) { logger.warn({ module: "transfers" }, `parse ai_player_data: ${e}`); return null; } })() : null;
+      return {
+        id: l.id,
+        playerId: isAi ? null : l.player_id,
+        askingPrice: l.asking_price,
+        playerName: isAi ? `${aiData?.firstName ?? ""} ${aiData?.lastName ?? ""}` : `${l.first_name} ${l.last_name}`,
+        playerAge: isAi ? aiData?.age : l.age,
+        position: isAi ? aiData?.position : l.position,
+        overallRating: isAi ? aiData?.overallRating : l.overall_rating,
+        teamName: isAi ? aiData?.fromTeam : l.team_name,
+        expiresAt: l.expires_at,
+        isAiListing: isAi,
+        skills: isAi ? aiData?.skills : null,
+        avatar: isAi
+          ? (aiData?.avatar ?? {})
+          : (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "transfers" }, `parse listing avatar: ${e}`); return {}; } })(),
+      };
+    }),
     myListings: myListings.results.map((l) => ({
       id: l.id, playerId: l.player_id, askingPrice: l.asking_price,
       playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,

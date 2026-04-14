@@ -168,7 +168,7 @@ export async function generateAiListings(
 
   const listingId = crypto.randomUUID();
   const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + rng.int(7, 14));
+  expiresAt.setDate(expiresAt.getDate() + 7);
 
   await db.prepare(
     `INSERT INTO transfer_listings (id, team_id, player_id,
