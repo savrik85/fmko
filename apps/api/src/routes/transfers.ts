@@ -23,6 +23,12 @@ transfersRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   ).bind(playerId, teamId).first<Record<string, unknown>>();
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
 
+  // Idempotency: zamezit duplicitám při double-click
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM free_agents WHERE released_from_team_id = ? AND first_name = ? AND last_name = ? AND created_at > datetime('now', '-5 minutes')"
+  ).bind(teamId, player.first_name, player.last_name).first().catch((e) => { logger.warn({ module: "transfers" }, "check duplicate free agent", e); return null; });
+  if (existing) return c.json({ ok: true });
+
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 
