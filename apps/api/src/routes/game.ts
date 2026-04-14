@@ -2485,7 +2485,7 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
 
   const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 14);
+  expiresAt.setDate(expiresAt.getDate() + 7);
 
   const faId = crypto.randomUUID();
   await c.env.DB.prepare(
@@ -2760,7 +2760,7 @@ gameRouter.post("/teams/:teamId/players/:playerId/list", async (c) => {
   if (existing) return c.json({ error: "Hráč je už na trhu" }, 400);
 
   const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 14);
+  expiresAt.setDate(expiresAt.getDate() + 7);
   const id = crypto.randomUUID();
 
   await c.env.DB.prepare(
