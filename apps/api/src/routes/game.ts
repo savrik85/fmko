@@ -1968,12 +1968,18 @@ gameRouter.post("/game/bootstrap-league", async (c) => {
       .run().catch((e: any) => logger.warn({ module: "bootstrap" }, "match insert", e));
   }
 
-  // Set game_date for all teams
+  // Set game_date — sync to the global max game_date across all leagues (prevents permanent offset)
   if (calendar.entries.length > 0) {
+    const globalDate = await db.prepare(
+      "SELECT MAX(game_date) as max_date FROM teams WHERE game_date IS NOT NULL AND league_id != ?"
+    ).bind(league.id).first<{ max_date: string }>().catch((e) => { logger.warn({ module: "bootstrap" }, "load global game_date for init", e); return null; });
     const firstMatch = new Date(calendar.entries[0].scheduledAt);
     firstMatch.setDate(firstMatch.getDate() - 1);
+    const initDate = globalDate?.max_date && globalDate.max_date > firstMatch.toISOString()
+      ? globalDate.max_date
+      : firstMatch.toISOString();
     await db.prepare("UPDATE teams SET game_date = ? WHERE league_id = ?")
-      .bind(firstMatch.toISOString(), league.id).run();
+      .bind(initDate, league.id).run();
   }
 
   // Simulate past rounds if requested
