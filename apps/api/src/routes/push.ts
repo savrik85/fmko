@@ -64,7 +64,10 @@ pushRouter.delete("/push/unsubscribe", async (c) => {
 
   if (!body?.endpoint) return c.json({ error: "Chybí endpoint" }, 400);
 
-  await deletePushSubscription(c.env.DB, body.endpoint);
+  // Ověřit, že subscription patří přihlášenému uživateli — zabraňuje odhlášení cizích subscriptions.
+  await c.env.DB.prepare(
+    "DELETE FROM push_subscriptions WHERE endpoint = ? AND team_id IN (SELECT id FROM teams WHERE user_id = ?)"
+  ).bind(body.endpoint, session.userId).run();
   return c.json({ ok: true });
 });
 

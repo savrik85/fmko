@@ -28,7 +28,7 @@ const app = new Hono<{ Bindings: Bindings }>();
 
 app.use("*", cors({ origin: "*" }));
 
-// Global error handler — structured JSON logging
+// Global error handler — structured JSON logging, bez expose interních detailů klientovi.
 app.onError((err, c) => {
   const reqId = crypto.randomUUID().slice(0, 8);
   const entry = {
@@ -41,7 +41,8 @@ app.onError((err, c) => {
     reqId,
   };
   console.error(JSON.stringify(entry));
-  return c.json({ error: err.message, reqId }, 500);
+  // Vracíme pouze reqId pro debugging, nikoli raw err.message (může obsahovat SQL detaily).
+  return c.json({ error: "Interní chyba serveru", reqId }, 500);
 });
 
 app.get("/", (c) => c.json({ name: "Prales API", version: "0.2.0" }));
