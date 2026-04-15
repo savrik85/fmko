@@ -145,13 +145,15 @@ export default function HlasovaniPage() {
 
   const loadVotes = useCallback(async () => {
     try {
-      const data = await apiFetch<Vote[]>("/api/votes");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const data = await apiFetch<Vote[]>("/api/votes", { headers });
       setVotes(data);
     } catch (e) {
       console.error("Chyba při načítání hlasování:", e);
     }
     setLoading(false);
-  }, []);
+  }, [token]);
 
   useEffect(() => { loadVotes(); }, [loadVotes]);
 
