@@ -2518,6 +2518,8 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   await c.env.DB.prepare("UPDATE teams SET freekick_taker_id = NULL WHERE freekick_taker_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "clear freekick taker on release", e));
   await c.env.DB.prepare("DELETE FROM player_stats WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "delete player_stats on release", e));
   await c.env.DB.prepare("DELETE FROM injuries WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "delete injuries on release", e));
+  // Smazat vazby — FK constraint na players(id) by blokoval DELETE FROM players
+  await c.env.DB.prepare("DELETE FROM relationships WHERE player_a_id = ? OR player_b_id = ?").bind(playerId, playerId).run().catch((e) => logger.warn({ module: "game" }, "delete relationships on release", e));
 
   // Atomic batch: INSERT free_agent + UPDATE contract + DELETE player
   // If any step fails, none of them commit — player won't silently disappear
@@ -3203,7 +3205,7 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
   const buyer = await c.env.DB.prepare("SELECT budget, name, game_date FROM teams WHERE id = ?").bind(buyerTeamId).first<{ budget: number; name: string; game_date: string }>();
   if (!buyer) return c.json({ error: "Kupující nenalezen" }, 400);
 
-  const seller = await c.env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(teamId).first<{ name: string; league_id: string }>();
+  const seller = await c.env.DB.prepare("SELECT name, league_id, budget FROM teams WHERE id = ?").bind(teamId).first<{ name: string; league_id: string; budget: number }>();
   const player = await c.env.DB.prepare("SELECT first_name, last_name, age, position FROM players WHERE id = ?").bind(playerId).first<Record<string, unknown>>();
   const gameDate = buyer.game_date ?? new Date().toISOString();
   const playerName = `${player?.first_name} ${player?.last_name}`;
@@ -3235,7 +3237,7 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
     c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_fee', ?, ?, ?, ?)")
       .bind(crypto.randomUUID(), buyerTeamId, -amount, buyer.budget - amount, `Přestup: ${playerName}`, gameDate),
     c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_income', ?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), teamId, amount, 0, `Prodej: ${playerName}`, gameDate),
+      .bind(crypto.randomUUID(), teamId, amount, (seller?.budget ?? 0) + amount, `Prodej: ${playerName}`, gameDate),
   ]).catch((e) => logger.warn({ module: "game" }, "log bid-accept transactions", e));
 
   await onPlayerTransferred(c.env.DB, playerId, buyerTeamId);
@@ -3377,7 +3379,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
 
   const buyer = await c.env.DB.prepare("SELECT budget, name, game_date FROM teams WHERE id = ?").bind(buyerTeamId).first<{ budget: number; name: string; game_date: string }>();
   if (!buyer) return c.json({ error: "Kupující nenalezen" }, 400);
-  const seller = await c.env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(teamId).first<{ name: string; league_id: string }>();
+  const seller = await c.env.DB.prepare("SELECT name, league_id, budget FROM teams WHERE id = ?").bind(teamId).first<{ name: string; league_id: string; budget: number }>();
   const player = await c.env.DB.prepare("SELECT first_name, last_name, age, position FROM players WHERE id = ?").bind(playerId).first<Record<string, unknown>>();
   const gameDate = buyer.game_date ?? new Date().toISOString();
   const offerPlayerName = `${player?.first_name} ${player?.last_name}`;
@@ -3416,7 +3418,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
           .bind(crypto.randomUUID(), buyerTeamId, -amount, buyer.budget - amount, `Hostování: ${offerPlayerName}`, gameDate),
         c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, teamId),
         c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'loan_income', ?, ?, ?, ?)")
-          .bind(crypto.randomUUID(), teamId, amount, 0, `Hostování (příjem): ${offerPlayerName}`, gameDate),
+          .bind(crypto.randomUUID(), teamId, amount, (seller?.budget ?? 0) + amount, `Hostování (příjem): ${offerPlayerName}`, gameDate),
       ]).catch((e) => logger.warn({ module: "game" }, "log loan transactions", e));
     }
 
@@ -3455,7 +3457,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_fee', ?, ?, ?, ?)")
         .bind(crypto.randomUUID(), buyerTeamId, -amount, buyer.budget - amount, `Přestup: ${offerPlayerName}`, gameDate),
       c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_income', ?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), teamId, amount, 0, `Prodej: ${offerPlayerName}`, gameDate),
+        .bind(crypto.randomUUID(), teamId, amount, (seller?.budget ?? 0) + amount, `Prodej: ${offerPlayerName}`, gameDate),
     ]).catch((e) => logger.warn({ module: "game" }, "log offer-accept transactions", e));
 
     const contractCloseTeam = isBuyoutAccept ? buyerTeamId : teamId;

@@ -62,14 +62,18 @@ votesRouter.get("/votes", async (c) => {
 
 // POST /api/admin/votes — vytvoření hlasování (jen admin — chráněno requireAdmin middleware)
 votesRouter.post("/admin/votes", async (c) => {
-  const session = await getSession(c.env.SESSION_KV, getTokenFromRequest(c)!);
+  const token = getTokenFromRequest(c);
+  if (!token) return c.json({ error: "Nepřihlášen" }, 401);
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return c.json({ error: "Neplatná session" }, 401);
+
   const body = await c.req.json<{ title: string; description?: string }>();
   if (!body.title?.trim()) return c.json({ error: "Název je povinný" }, 400);
 
   const id = crypto.randomUUID();
   await c.env.DB.prepare(
     "INSERT INTO prales_votes (id, title, description, created_by) VALUES (?, ?, ?, ?)"
-  ).bind(id, body.title.trim(), body.description?.trim() ?? null, session!.userId).run();
+  ).bind(id, body.title.trim(), body.description?.trim() ?? null, session.userId).run();
 
   logger.info({ module: "votes" }, `vote created: ${id} "${body.title.trim()}"`);
   return c.json({ id });

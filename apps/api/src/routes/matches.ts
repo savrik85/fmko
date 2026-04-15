@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { createRng, cryptoSeed } from "../generators/rng";
 import { requireTeamOwnership } from "../auth/middleware";
+import { getSession, getTokenFromRequest } from "../auth/session";
 import { generateAbsences } from "../events/absence";
 import { simulateMatch } from "../engine/simulation";
 import { generateMatchCommentary } from "../engine/commentary";
@@ -740,8 +741,18 @@ matchesRouter.get("/teams/:teamId/unseen-match", async (c) => {
 
 // POST /api/matches/:id/mark-seen — označí zápas jako přečtený
 matchesRouter.post("/matches/:id/mark-seen", async (c) => {
+  const token = getTokenFromRequest(c);
+  if (!token) return c.json({ error: "Nepřihlášen" }, 401);
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return c.json({ error: "Neplatná session" }, 401);
+
   const matchId = c.req.param("id");
   const body = await c.req.json<{ teamId: string }>().catch((e) => { logger.warn({ module: "matches" }, "parse mark-seen body", e); return { teamId: "" }; });
+
+  // Ověřit, že teamId patří přihlášenému uživateli
+  const ownTeam = await c.env.DB.prepare("SELECT id FROM teams WHERE id = ? AND user_id = ?")
+    .bind(body.teamId, session.userId).first();
+  if (!ownTeam) return c.json({ error: "Přístup odepřen" }, 403);
 
   const match = await c.env.DB.prepare("SELECT home_team_id, away_team_id FROM matches WHERE id = ?")
     .bind(matchId).first<Record<string, unknown>>();
