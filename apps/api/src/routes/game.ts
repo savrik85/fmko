@@ -2288,7 +2288,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   // Batch: existing lineup + all players (including injured)
   const [lineupRes, playersRes] = await c.env.DB.batch([
     lineupQuery,
-    c.env.DB.prepare("SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.weekly_wage, p.skills, p.life_context, p.personality, p.physical, p.squad_number, p.commute_km, p.suspended_matches, ps.avg_rating, i.days_remaining as injury_days, i.type as injury_type FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.team_id = p.team_id AND ps.season_id = (SELECT id FROM seasons WHERE status = 'active' LIMIT 1) WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') ORDER BY p.overall_rating DESC").bind(teamId),
+    c.env.DB.prepare("SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.weekly_wage, p.skills, p.life_context, p.personality, p.physical, p.squad_number, p.commute_km, p.suspended_matches, p.is_celebrity, ps.avg_rating, i.days_remaining as injury_days, i.type as injury_type FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.team_id = p.team_id AND ps.season_id = (SELECT id FROM seasons WHERE status = 'active' LIMIT 1) WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') ORDER BY p.overall_rating DESC").bind(teamId),
   ]);
   let lineup = (lineupRes.results[0] as { formation: string; tactic: string; players_data: string; is_auto: number } | undefined) ?? null;
 
@@ -2320,11 +2320,17 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       morale: lc.morale ?? 50, stamina: phys.stamina ?? 50,
       injuryProneness: pers.injuryProneness ?? 50,
       commuteKm: (row.commute_km as number) ?? 0,
+      isCelebrity: !!(row.is_celebrity as number),
+      celebrityType: pers.celebrityType,
+      celebrityTier: pers.celebrityTier,
     };
   });
+  // Get district for environment-specific excuses (Praha = urban, rest = rural)
+  const absenceDistrictRow = await c.env.DB.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
+    .bind(teamId).first<{ district: string }>().catch((e) => { logger.warn({ module: "game" }, "district query failed", e); return null; });
   // Only show absences day-before or match-day (not 2+ days before)
   const absences = daysUntilMatch <= 1
-    ? generateAbsences(absenceRng as any, absenceSquad, "any")
+    ? generateAbsences(absenceRng as any, absenceSquad, "any", absenceDistrictRow?.district)
     : [];
   const absentPlayerIds = new Set(absences.map((a) => players.results[a.playerIndex]?.id as string).filter(Boolean));
 
