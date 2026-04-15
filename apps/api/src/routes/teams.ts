@@ -26,6 +26,7 @@ import { generateResidence } from "../generators/residence";
 import { getDistrictDataFromDB } from "../data/districts";
 import type { ManagerBackstory } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
+import { updateSessionTeamId } from "../auth/session";
 
 const teamsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -587,6 +588,12 @@ teamsRouter.post("/", async (c) => {
       await maintainFreeAgentPool(c.env.DB, createRng(Date.now() + 7777), new Date());
     } catch { /* optional */ }
 
+    // Update KV session so teamId is no longer null (fixes post-onboarding auth)
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+      await updateSessionTeamId(c.env.SESSION_KV, token, teamId).catch((e) => logger.warn({ module: "teams" }, "updateSessionTeamId (join)", e));
+    }
+
     return c.json({
       id: teamId,
       name: body.name,
@@ -813,6 +820,12 @@ teamsRouter.post("/", async (c) => {
     const faRng = createRng(Date.now() + 7777);
     await maintainFreeAgentPool(c.env.DB, faRng, new Date());
   } catch (e) { logger.warn({ module: "teams" }, "initial free agent pool generation", e); }
+
+  // Update KV session so teamId is no longer null (fixes post-onboarding auth)
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    await updateSessionTeamId(c.env.SESSION_KV, token, teamId).catch((e) => logger.warn({ module: "teams" }, "updateSessionTeamId (create)", e));
+  }
 
   return c.json({
     id: teamId,

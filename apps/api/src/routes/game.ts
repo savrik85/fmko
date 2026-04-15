@@ -4,7 +4,7 @@
 
 import { Hono } from "hono";
 import type { Bindings } from "../index";
-import { createRng } from "../generators/rng";
+import { createRng, cryptoSeed } from "../generators/rng";
 import { generateSponsors } from "../season/economy";
 import { executeDailyTick } from "../season/daily-tick";
 import { recordTransaction } from "../season/finance-processor";
@@ -449,7 +449,7 @@ gameRouter.get("/teams/:teamId/wages", async (c) => {
 // GET /api/teams/:id/events — mezikolové události
 gameRouter.get("/teams/:teamId/events", async (c) => {
   const teamId = c.req.param("teamId");
-  const rng = createRng(Date.now());
+  const rng = createRng(cryptoSeed());
 
   const team = await c.env.DB.prepare("SELECT * FROM teams WHERE id = ?").bind(teamId).first<Record<string, unknown>>();
   if (!team) return c.json({ error: "Team not found" }, 404);
@@ -727,7 +727,7 @@ gameRouter.post("/teams/:teamId/youth", async (c) => {
 // POST /api/teams/:id/recruit — aktivní nábor
 gameRouter.post("/teams/:teamId/recruit", async (c) => {
   const body = await c.req.json<{ action: string }>();
-  const rng = createRng(Date.now());
+  const rng = createRng(cryptoSeed());
 
   const actions: Record<string, { cost: number; prob: number; desc: string }> = {
     poster: { cost: 200, prob: 0.15, desc: "Plakát na obecní nástěnce" },
@@ -1663,7 +1663,7 @@ gameRouter.post("/leagues/:leagueId/generate-schedule", async (c) => {
   const { generateSchedule } = await import("../league/schedule");
   const { generateSeasonCalendar } = await import("../season/calendar");
 
-  const rng = createRng(Date.now());
+  const rng = createRng(cryptoSeed());
   const schedule = generateSchedule(rng, teamIds.length);
   const calendar = generateSeasonCalendar(leagueId, league.season_number, new Date());
 
@@ -1824,7 +1824,7 @@ gameRouter.post("/game/ai-market", async (c) => {
   const league = await c.env.DB.prepare("SELECT district FROM leagues WHERE id = ?").bind(body.leagueId).first<{ district: string }>();
   if (!league) return c.json({ error: "League not found" }, 404);
   const { generateAiListings, generateAiOffers } = await import("../transfers/virtual-teams");
-  const rng = createRng(Date.now() + Math.floor(Math.random() * 1000000));
+  const rng = createRng(cryptoSeed());
   // Force: override 30%/10% chance by calling multiple times
   let listings = 0, offers = 0;
   for (let i = 0; i < 5; i++) {
@@ -1839,7 +1839,7 @@ gameRouter.post("/game/spawn-celebrity", async (c) => {
   const body = await c.req.json<{ leagueId: string; type?: string; tier?: string }>().catch((e) => { logger.warn({ module: "game" }, "parse spawn-celebrity body", e); return null; });
   if (!body?.leagueId) return c.json({ error: "Missing leagueId" }, 400);
   const { spawnCelebrity } = await import("../season/celebrity-spawn");
-  const rng = createRng(Date.now() + Math.floor(Math.random() * 1000000));
+  const rng = createRng(cryptoSeed());
   const result = await spawnCelebrity(c.env.DB, body.leagueId, rng, body.type as any, body.tier as any);
   return c.json({ ok: true, result });
 });
@@ -1897,7 +1897,7 @@ gameRouter.post("/game/bootstrap-league", async (c) => {
   const { getDistrictDataFromDB } = await import("../data/districts/index");
   const districtData = await getDistrictDataFromDB(db, league.district);
   const { createRng } = await import("../generators/rng");
-  const rng = createRng(Date.now());
+  const rng = createRng(cryptoSeed());
   const usedNames = new Set(existingTeams.results.map(t => t.name as string));
 
   // Determine village size for skill generation (use first available village's category)
@@ -2100,7 +2100,7 @@ gameRouter.post("/game/run-matches", async (c) => {
               "SELECT t.id, t.league_id, v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.league_id = ? AND t.user_id <> 'ai'"
             ).bind(leagueId).all();
             for (const ht of humanTeams.results) {
-              const adhocRng = createRng(Date.now() + (ht.id as string).charCodeAt(0));
+              const adhocRng = createRng(cryptoSeed());
               const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek, ht.district as string);
               if (adhocEvent) {
                 await c.env.DB.prepare(
@@ -2510,29 +2510,33 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   expiresAt.setDate(expiresAt.getDate() + 7);
 
   const faId = crypto.randomUUID();
-  await c.env.DB.prepare(
-    `INSERT INTO free_agents (id, district, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, source, released_from_team_id, village_id, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'released', ?, (SELECT village_id FROM teams WHERE id = ?), ?)`
-  ).bind(
-    faId, player.district, player.first_name, player.last_name, player.nickname ?? null,
-    player.age, player.position, player.overall_rating,
-    player.skills, player.physical ?? "{}", player.personality ?? "{}", player.life_context ?? "{}",
-    player.avatar ?? "{}", player.hidden_talent ?? 0, player.weekly_wage ?? 0,
-    teamId, teamId, expiresAt.toISOString(),
-  ).run();
 
-  await c.env.DB.prepare(
-    "UPDATE player_contracts SET leave_type = 'released', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1"
-  ).bind(playerId, teamId).run().catch((e) => logger.warn({ module: "game" }, "deactivate player contract on release", e));
-
+  // Cleanup references first (can fail independently, non-critical)
   await c.env.DB.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE player_id = ? AND status = 'active'").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "withdraw listings on release", e));
-  // Null out team references (captain, penalty, freekick taker)
   await c.env.DB.prepare("UPDATE teams SET captain_id = NULL WHERE captain_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "clear captain on release", e));
   await c.env.DB.prepare("UPDATE teams SET penalty_taker_id = NULL WHERE penalty_taker_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "clear penalty taker on release", e));
   await c.env.DB.prepare("UPDATE teams SET freekick_taker_id = NULL WHERE freekick_taker_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "clear freekick taker on release", e));
   await c.env.DB.prepare("DELETE FROM player_stats WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "delete player_stats on release", e));
   await c.env.DB.prepare("DELETE FROM injuries WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "delete injuries on release", e));
-  await c.env.DB.prepare("DELETE FROM players WHERE id = ?").bind(playerId).run();
+
+  // Atomic batch: INSERT free_agent + UPDATE contract + DELETE player
+  // If any step fails, none of them commit — player won't silently disappear
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO free_agents (id, district, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, source, released_from_team_id, village_id, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'released', ?, (SELECT village_id FROM teams WHERE id = ?), ?)`
+    ).bind(
+      faId, player.district, player.first_name, player.last_name, player.nickname ?? null,
+      player.age, player.position, player.overall_rating,
+      player.skills, player.physical ?? "{}", player.personality ?? "{}", player.life_context ?? "{}",
+      player.avatar ?? "{}", player.hidden_talent ?? 0, player.weekly_wage ?? 0,
+      teamId, teamId, expiresAt.toISOString(),
+    ),
+    c.env.DB.prepare(
+      "UPDATE player_contracts SET leave_type = 'released', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1"
+    ).bind(playerId, teamId),
+    c.env.DB.prepare("DELETE FROM players WHERE id = ?").bind(playerId),
+  ]);
 
   const { createTransferNews } = await import("../transfers/transfer-news");
   await createTransferNews(c.env.DB, player.league_id as string, teamId, "player_released", {
@@ -2665,7 +2669,7 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   const personality = (() => { try { return JSON.parse(fa.personality as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent personality", e); return {}; } })();
 
   const { evaluateSigningChance } = await import("../transfers/player-agency");
-  const rng = createRng(Date.now() + faId.charCodeAt(0));
+  const rng = createRng(cryptoSeed());
   const decision = evaluateSigningChance(
     { weekly_wage: fa.weekly_wage as number, personality, village_id: fa.village_id as string | null, district: fa.district as string | null },
     { reputation: team.reputation as number, villageLat: team.lat as number, villageLon: team.lng as number, squadSize: squadCount?.cnt ?? 15, district: team.district as string | null },
@@ -2698,7 +2702,7 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   const teamVillage = await c.env.DB.prepare("SELECT v.name, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
     .bind(teamId).first<{ name: string; size: string; district: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
   if (teamVillage) {
-    const resRng = createRng(playerId.charCodeAt(0) + Date.now());
+    const resRng = createRng(cryptoSeed());
     const res = generateResidence(resRng, teamVillage.name, teamVillage.size, teamVillage.district);
     await c.env.DB.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
       .bind(res.residence, res.commuteKm, playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
@@ -3093,7 +3097,7 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
 
     if (teamInfo) {
       const { evaluateSigningChance } = await import("../transfers/player-agency");
-      const agencyRng = createRng(Date.now() + listingId.charCodeAt(0));
+      const agencyRng = createRng(cryptoSeed());
       // AI players have patriotism to their home district — cross-district transfer is harder
       const pers = { ...(aiData.personality ?? {}), patriotism: 65 };
       const decision = evaluateSigningChance(
@@ -3136,7 +3140,7 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     const teamVillage = await c.env.DB.prepare("SELECT v.name, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
       .bind(teamId).first<{ name: string; size: string; district: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch village for AI transfer", e); return null; });
     if (teamVillage) {
-      const resRng = createRng(playerId.charCodeAt(0) + Date.now());
+      const resRng = createRng(cryptoSeed());
       const res = generateResidence(resRng, teamVillage.name, teamVillage.size, teamVillage.district);
       await c.env.DB.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
         .bind(res.residence, res.commuteKm, playerId).run().catch((e) => logger.warn({ module: "game" }, "set residence AI transfer", e));
@@ -3657,7 +3661,7 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/accept", async (c) => {
   const teamVillage = await c.env.DB.prepare("SELECT v.name, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
     .bind(teamId).first<{ name: string; size: string; district: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
   if (teamVillage) {
-    const resRng = createRng(playerId.charCodeAt(0) + Date.now());
+    const resRng = createRng(cryptoSeed());
     const res = generateResidence(resRng, teamVillage.name, teamVillage.size, teamVillage.district);
     await c.env.DB.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
       .bind(res.residence, res.commuteKm, playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
@@ -3713,7 +3717,7 @@ gameRouter.post("/admin/generate-player-offer/:teamId", async (c) => {
     population: team.population ?? 500,
     district: team.district,
   };
-  const rng = createRng(Date.now());
+  const rng = createRng(cryptoSeed());
   const gameDate = new Date().toISOString();
   const result = await generatePlayerOffer(c.env.DB, rng, teamId, team.district, villageInfo, gameDate);
   return c.json({ ok: true, result });
