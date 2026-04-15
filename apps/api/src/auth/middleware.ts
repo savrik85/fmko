@@ -42,12 +42,12 @@ export const requireTeamOwnership = createMiddleware<{ Bindings: Bindings }>(asy
   if (!session) return c.json({ error: "Neplatná session" }, 401);
 
   const teamId = c.req.param("teamId");
-  if (teamId) {
-    const ownTeam = await c.env.DB.prepare(
-      "SELECT id FROM teams WHERE id = ? AND user_id = ?"
-    ).bind(teamId, session.userId).first();
-    if (!ownTeam) return c.json({ error: "Přístup odepřen" }, 403);
-  }
+  if (!teamId) return c.json({ error: "Chybí teamId parametr" }, 400);
+
+  const ownTeam = await c.env.DB.prepare(
+    "SELECT id FROM teams WHERE id = ? AND user_id = ?"
+  ).bind(teamId, session.userId).first();
+  if (!ownTeam) return c.json({ error: "Přístup odepřen" }, 403);
 
   c.set("session" as never, session as never);
   return next();

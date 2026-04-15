@@ -3369,7 +3369,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
 
   // ?? přeskakuje jen null/undefined, ne 0 — proto explicitní kontrola.
   const amount = (offer.counter_amount != null ? (offer.counter_amount as number) : (offer.offer_amount as number));
-  if (!amount || amount <= 0) return c.json({ error: "Neplatná částka přestupu" }, 400);
+  if (amount <= 0) return c.json({ error: "Neplatná částka přestupu" }, 400);
   const buyerTeamId = offer.from_team_id as string;
   const playerId = offer.player_id as string;
   const offerType = (offer.offer_type as string) ?? "transfer";

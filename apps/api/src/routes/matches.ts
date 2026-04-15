@@ -4,7 +4,8 @@
 
 import { Hono } from "hono";
 import type { Bindings } from "../index";
-import { createRng } from "../generators/rng";
+import { createRng, cryptoSeed } from "../generators/rng";
+import { requireTeamOwnership } from "../auth/middleware";
 import { generateAbsences } from "../events/absence";
 import { simulateMatch } from "../engine/simulation";
 import { generateMatchCommentary } from "../engine/commentary";
@@ -16,6 +17,8 @@ import { logger } from "../lib/logger";
 
 const matchesRouter = new Hono<{ Bindings: Bindings }>();
 
+matchesRouter.use("/teams/:teamId/*", requireTeamOwnership);
+
 function uuid(): string { return crypto.randomUUID(); }
 
 // POST /api/teams/:teamId/simulate-match — simuluje zápas (Sprint 1: okamžitá simulace)
@@ -23,7 +26,7 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ tactic?: string }>().catch((e) => { logger.warn({ module: "matches" }, "parse simulate-match body", e); return { tactic: "balanced" }; });
 
-  const rng = createRng(Date.now());
+  const rng = createRng(cryptoSeed());
 
   // Load team + players
   const team = await c.env.DB.prepare(
@@ -216,7 +219,7 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
 // GET /api/teams/:teamId/absences — generovat absence pro příští zápas
 matchesRouter.get("/teams/:teamId/absences", async (c) => {
   const teamId = c.req.param("teamId");
-  const rng = createRng(Date.now());
+  const rng = createRng(cryptoSeed());
 
   const playersResult = await c.env.DB.prepare(
     "SELECT * FROM players WHERE team_id = ?"
