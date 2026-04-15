@@ -93,7 +93,7 @@ function LigaPage() {
   useEffect(() => {
     apiFetch<{ leagues: LeagueOption[] }>("/api/leagues")
       .then((data) => setAllLeagues(data.leagues))
-      .catch(() => {});
+      .catch((e) => console.error("fetch leagues:", e));
   }, []);
 
   // Load own league standings on mount
@@ -136,14 +136,14 @@ function LigaPage() {
         .then((data) => {
           setRounds(data.rounds);
           setLoadedTabs((s) => { const n = new Set(s); n.add("rozpis"); n.add("vysledky"); return n; });
-        }).catch(() => {});
+        }).catch((e) => console.error("fetch league-schedule:", e));
     }
     if (tab === "statistiky" && !loadedTabs.has("statistiky")) {
       apiFetch<StatsData>(`/api/teams/${teamId}/league-stats`)
         .then((data) => {
           setStatsData(data);
           setLoadedTabs((s) => new Set(s).add("statistiky"));
-        }).catch(() => {});
+        }).catch((e) => console.error("fetch league-stats:", e));
     }
   }, [tab, teamId, loadedTabs, isOtherLeague]);
 
@@ -155,7 +155,7 @@ function LigaPage() {
         .then((data) => {
           setNewsArticles(data.articles);
           setLoadedTabs((s) => new Set(s).add("zpravodaj"));
-        }).catch(() => {});
+        }).catch((e) => console.error("fetch league-news:", e));
     }
   }, [tab, selectedLeagueId, loadedTabs, isOtherLeague]);
 
@@ -239,7 +239,7 @@ function LigaPage() {
                   <span className="text-2xl">{a.icon}</span>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-heading font-bold text-base text-ink">{a.headline}</h3>
-                    <p className="text-sm text-muted mt-1 whitespace-pre-wrap">{a.body}</p>
+                    <ArticleBody article={a} />
                     <p className="text-xs text-muted/60 mt-2">{a.date ? formatDate(a.date) : ""}{a.gameWeek ? ` — ${a.gameWeek}. kolo` : ""}</p>
                   </div>
                 </div>
@@ -251,6 +251,47 @@ function LigaPage() {
     </div>
     </>
   );
+}
+
+// ═══ Article body renderer ═══
+
+function ArticleBody({ article }: { article: NewsArticle }) {
+  if (article.type === "interview") {
+    let meta: { article?: string } = {};
+    try { meta = JSON.parse(article.body); } catch (e) { console.error("parse interview body:", e); }
+    const text = meta.article ?? article.body;
+    return (
+      <div className="text-sm text-muted mt-1 space-y-1">
+        {text.split("\n").filter(Boolean).map((p, i) => <p key={i}>{p}</p>)}
+      </div>
+    );
+  }
+  if (article.type === "round_results") {
+    const re = /(.+?)\s+(?:porazil|remizoval\s+s|zvítězil\s+nad)\s+(.+?)\s+(\d+:\d+)/g;
+    const structured = Array.from(article.body.matchAll(re)).map((m) => ({
+      home: m[1].replace(/^\.\s*/, "").trim(), away: m[2].trim(), score: m[3],
+    }));
+    if (structured.length === 0) return <p className="text-sm text-muted mt-1 whitespace-pre-wrap">{article.body}</p>;
+    return (
+      <div className="mt-1 space-y-1">
+        {structured.map((r, i) => {
+          const [h, a] = r.score.split(":").map(Number);
+          const isDraw = h === a;
+          const homeWin = h > a;
+          return (
+            <div key={i} className="flex items-center text-sm py-1 border-b border-gray-50 last:border-b-0">
+              <span className={`flex-1 text-right truncate pr-2 ${homeWin ? "font-heading font-bold" : ""}`}>{r.home}</span>
+              <span className={`font-heading font-bold text-xs tabular-nums px-2 py-0.5 rounded min-w-[40px] text-center ${
+                isDraw ? "bg-gray-100 text-muted" : "bg-gray-50 text-ink"
+              }`}>{r.score}</span>
+              <span className={`flex-1 truncate pl-2 ${!homeWin && !isDraw ? "font-heading font-bold" : ""}`}>{r.away}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return <p className="text-sm text-muted mt-1 whitespace-pre-wrap">{article.body}</p>;
 }
 
 // ═══ Tabulka ═══

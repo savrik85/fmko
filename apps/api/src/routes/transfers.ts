@@ -434,6 +434,14 @@ transfersRouter.post("/teams/:teamId/offers", async (c) => {
     "INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, last_action_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
   ).bind(id, body.playerId, teamId, player.team_id, body.amount, body.message ?? null, expiresAt.toISOString(), teamId).run();
 
+  try {
+    const { createNotification } = await import("../community/notifications");
+    const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+    const pName = `${player.first_name} ${player.last_name}`;
+    const fromTeamName = player.team_name as string;
+    await createNotification(c.env.DB, player.team_id as string, "transfer", `💰 Nová nabídka za ${pName}`, `Tým ${fromTeamName} nabízí ${body.amount.toLocaleString("cs-CZ")} Kč.`, "/dashboard/transfers", pushEnv);
+  } catch (e) { logger.warn({ module: "transfers" }, "new offer notification", e); }
+
   return c.json({ ok: true, offerId: id });
 });
 
@@ -580,10 +588,23 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
   const body = await c.req.json<{ amount: number }>();
+  const offer = await c.env.DB.prepare(
+    "SELECT from_team_id, to_team_id, player_id FROM transfer_offers WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered') AND last_action_by != ?"
+  ).bind(offerId, teamId, teamId, teamId).first<{ from_team_id: string; to_team_id: string; player_id: string }>();
   // Counter může ten kdo je na tahu; nastaví last_action_by na sebe
   await c.env.DB.prepare(
     "UPDATE transfer_offers SET status = 'countered', counter_amount = ?, last_action_by = ? WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered') AND last_action_by != ?"
   ).bind(body.amount, teamId, offerId, teamId, teamId, teamId).run();
+  if (offer) {
+    try {
+      const { createNotification } = await import("../community/notifications");
+      const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+      const otherTeamId = offer.from_team_id === teamId ? offer.to_team_id : offer.from_team_id;
+      const player = await c.env.DB.prepare("SELECT first_name, last_name FROM players WHERE id = ?").bind(offer.player_id).first<{ first_name: string; last_name: string }>();
+      const pName = player ? `${player.first_name} ${player.last_name}` : "hráče";
+      await createNotification(c.env.DB, otherTeamId, "transfer", `🔄 Protinabídka za ${pName}`, `Druhá strana poslala protinabídku.`, "/dashboard/transfers", pushEnv);
+    } catch (e) { logger.warn({ module: "transfers" }, "counter offer notification", e); }
+  }
   return c.json({ ok: true });
 });
 
