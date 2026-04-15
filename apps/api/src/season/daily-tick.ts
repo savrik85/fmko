@@ -755,6 +755,27 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "transfer expiry failed", e);
   }
 
+  // ── Normalize all leagues to max game_date ──
+  // Prevents permanent date offset if leagues were initialized at different times.
+  try {
+    const leagueDates = await env.DB.prepare(
+      "SELECT league_id, MAX(game_date) as max_date FROM teams WHERE league_id IS NOT NULL AND game_date IS NOT NULL GROUP BY league_id"
+    ).all<{ league_id: string; max_date: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "league dates query", e); return { results: [] }; });
+    if (leagueDates.results.length > 1) {
+      const maxDate = leagueDates.results.map((r) => r.max_date).reduce((a, b) => (a > b ? a : b));
+      for (const row of leagueDates.results) {
+        if (row.max_date < maxDate) {
+          await env.DB.prepare("UPDATE teams SET game_date = ? WHERE league_id = ?")
+            .bind(maxDate, row.league_id).run()
+            .catch((e) => logger.warn({ module: "daily-tick" }, "normalize league game_date", e));
+          logger.info({ module: "daily-tick" }, `normalized league ${row.league_id} from ${row.max_date} to ${maxDate}`);
+        }
+      }
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "league game_date normalization failed", e);
+  }
+
   const duration = ((Date.now() - tickStart) / 1000).toFixed(1);
   logger.info({ module: "daily-tick" }, `DONE events=${events.length} duration=${duration}s`);
   return { date: now.toISOString(), dayOfWeek, isTrainingDay, events };
