@@ -10,16 +10,17 @@ import { getSession, getTokenFromRequest } from "../auth/session";
 
 const votesRouter = new Hono<{ Bindings: Bindings }>();
 
-// GET /api/votes — seznam všech hlasování + počty + můj hlas
+// GET /api/votes — seznam všech hlasování + počty + můj hlas (token volitelný)
 votesRouter.get("/votes", async (c) => {
+  // Token nepovinný — bez tokenu vrátí my_answer: null pro všechna hlasování
   const token = getTokenFromRequest(c);
-  if (!token) return c.json({ error: "Unauthorized" }, 401);
-  const session = await getSession(c.env.SESSION_KV, token);
-  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const session = token ? await getSession(c.env.SESSION_KV, token).catch((e) => { logger.warn({ module: "votes" }, "get session failed", e); return null; }) : null;
 
-  const team = await c.env.DB.prepare(
-    "SELECT id FROM teams WHERE user_id = ?"
-  ).bind(session.userId).first<{ id: string }>().catch((e) => { logger.warn({ module: "votes" }, "fetch team", e); return null; });
+  const team = session
+    ? await c.env.DB.prepare("SELECT id FROM teams WHERE user_id = ?")
+        .bind(session.userId).first<{ id: string }>()
+        .catch((e) => { logger.warn({ module: "votes" }, "fetch team", e); return null; })
+    : null;
 
   const votes = await c.env.DB.prepare(
     `SELECT v.id, v.title, v.description, v.status, v.created_at, v.closed_at,

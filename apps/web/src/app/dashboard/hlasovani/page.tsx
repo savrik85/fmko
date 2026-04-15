@@ -25,7 +25,7 @@ function formatDate(val: string | null | undefined): string {
   return d.toLocaleString("cs", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-function VoteCard({ vote, teamId, onVoted }: { vote: Vote; teamId: string | null; onVoted: () => void }) {
+function VoteCard({ vote, teamId, token, onVoted }: { vote: Vote; teamId: string | null; token: string | null; onVoted: () => void }) {
   const [voting, setVoting] = useState(false);
 
   const total = vote.ano_count + vote.ne_count;
@@ -33,12 +33,12 @@ function VoteCard({ vote, teamId, onVoted }: { vote: Vote; teamId: string | null
   const nePercent = total > 0 ? Math.round((vote.ne_count / total) * 100) : 0;
 
   const castVote = async (answer: "ano" | "ne") => {
-    if (!teamId || voting) return;
+    if (!teamId || !token || voting) return;
     setVoting(true);
     try {
       await apiFetch(`/api/teams/${teamId}/votes/${vote.id}/ballot`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({ answer }),
       });
       onVoted();
@@ -139,7 +139,7 @@ function VoteCard({ vote, teamId, onVoted }: { vote: Vote; teamId: string | null
 }
 
 export default function HlasovaniPage() {
-  const { teamId } = useTeam();
+  const { teamId, token } = useTeam();
   const [votes, setVotes] = useState<Vote[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -179,7 +179,7 @@ export default function HlasovaniPage() {
       {openVotes.length > 0 && (
         <div className="space-y-4">
           {openVotes.map((v) => (
-            <VoteCard key={v.id} vote={v} teamId={teamId} onVoted={loadVotes} />
+            <VoteCard key={v.id} vote={v} teamId={teamId} token={token} onVoted={loadVotes} />
           ))}
         </div>
       )}
@@ -189,7 +189,7 @@ export default function HlasovaniPage() {
           <SectionLabel>Archiv ukončených hlasování</SectionLabel>
           <div className="space-y-4">
             {closedVotes.map((v) => (
-              <VoteCard key={v.id} vote={v} teamId={teamId} onVoted={loadVotes} />
+              <VoteCard key={v.id} vote={v} teamId={teamId} token={token} onVoted={loadVotes} />
             ))}
           </div>
         </>
