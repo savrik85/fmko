@@ -3292,6 +3292,16 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   }
 
+  try {
+    const { createNotification } = await import("../community/notifications");
+    const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+    const offerLabel = offerType === "loan" ? "hostování" : "přestup";
+    await createNotification(c.env.DB, targetOwnerId, "transfer",
+      `💰 Nová nabídka za ${pName}`,
+      `${buyerTeam?.name ?? "Neznámý klub"} nabízí ${offerLabel} za ${body.amount.toLocaleString("cs-CZ")} Kč.`,
+      "/dashboard/transfers", pushEnv);
+  } catch (e) { logger.warn({ module: "game" }, "new offer notification", e); }
+
   return c.json({ ok: true, offerId: id });
 });
 
@@ -3448,6 +3458,14 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
     await sendPhoneSMS(c.env.DB, offer.from_team_id, "Sportovní ředitel", "Sportovní ředitel",
       `❌ ${sellerTeam?.name ?? "Klub"} odmítl vaši nabídku na ${isLoan ? "hostování" : "přestup"} ${playerName}.${rejectMsg ? ` Vzkaz: "${rejectMsg}"` : ""}`
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
+    try {
+      const { createNotification } = await import("../community/notifications");
+      const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+      await createNotification(c.env.DB, offer.from_team_id, "transfer",
+        `❌ Nabídka za ${playerName} zamítnuta`,
+        `${sellerTeam?.name ?? "Klub"} odmítl nabídku.`,
+        "/dashboard/transfers", pushEnv);
+    } catch (e) { logger.warn({ module: "game" }, "reject offer notification", e); }
   }
 
   return c.json({ ok: true });
@@ -3475,6 +3493,14 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
     await sendPhoneSMS(c.env.DB, offer.from_team_id, "Sportovní ředitel", "Sportovní ředitel",
       `💰 ${sellerTeam?.name ?? "Klub"} poslal protinabídku na ${pName}: ${body.amount.toLocaleString("cs")} Kč. Podívej se na ni v přestupech.`
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
+    try {
+      const { createNotification } = await import("../community/notifications");
+      const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+      await createNotification(c.env.DB, offer.from_team_id, "transfer",
+        `🔄 Protinabídka za ${pName}`,
+        `${sellerTeam?.name ?? "Klub"} poslal protinabídku ${body.amount.toLocaleString("cs-CZ")} Kč.`,
+        "/dashboard/transfers", pushEnv);
+    } catch (e) { logger.warn({ module: "game" }, "counter offer notification", e); }
   }
 
   return c.json({ ok: true });
