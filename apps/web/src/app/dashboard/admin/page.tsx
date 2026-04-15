@@ -112,6 +112,9 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* Hlasování */}
+      <VotesAdmin />
+
       {/* Broadcast */}
       <BroadcastSection />
 
@@ -131,6 +134,131 @@ export default function AdminPage() {
           <div><span className="text-muted">Admin:</span> <span className="font-mono text-pitch-500">true</span></div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Votes Admin ── */
+
+interface AdminVote {
+  id: string;
+  title: string;
+  status: "open" | "closed";
+  ano_count: number;
+  ne_count: number;
+}
+
+function VotesAdmin() {
+  const { token } = useTeam();
+  const [votes, setVotes] = useState<AdminVote[]>([]);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [status, setStatus] = useState("");
+
+  const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+  const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+  const loadVotes = async () => {
+    const data = await apiFetch<AdminVote[]>("/api/votes").catch((e) => { console.error("load votes:", e); return []; });
+    setVotes(data.filter((v) => v.status === "open"));
+  };
+
+  useEffect(() => { loadVotes(); }, []);
+
+  const createVote = async () => {
+    if (!title.trim()) return;
+    setCreating(true);
+    try {
+      await fetch(`${API}/api/admin/votes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ title: title.trim(), description: description.trim() || undefined }),
+      });
+      setTitle("");
+      setDescription("");
+      setStatus("Hlasování vytvořeno");
+      setTimeout(() => setStatus(""), 3000);
+      loadVotes();
+    } catch (e) {
+      console.error("create vote:", e);
+      setStatus("Chyba při vytváření");
+    }
+    setCreating(false);
+  };
+
+  const closeVote = async (voteId: string) => {
+    try {
+      await fetch(`${API}/api/admin/votes/${voteId}/close`, {
+        method: "POST",
+        headers: authHeaders,
+      });
+      setStatus("Hlasování ukončeno");
+      setTimeout(() => setStatus(""), 3000);
+      loadVotes();
+    } catch (e) {
+      console.error("close vote:", e);
+      setStatus("Chyba při ukončování");
+    }
+  };
+
+  return (
+    <div className="card p-4">
+      <SectionLabel>🗳️ Hlasování Pralesu</SectionLabel>
+
+      <div className="space-y-3 mb-4">
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Název hlasování (povinné)"
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-pitch-400"
+        />
+        <div className="flex gap-3 items-end">
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Popis (volitelné)"
+            rows={2}
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-pitch-400"
+          />
+          <button
+            onClick={createVote}
+            disabled={creating || !title.trim()}
+            className="px-4 py-2 bg-pitch-500 text-white rounded-lg font-heading font-bold text-sm disabled:opacity-50 shrink-0"
+          >
+            Vytvořit
+          </button>
+        </div>
+      </div>
+
+      {status && <div className="text-sm font-heading font-bold text-pitch-500 mb-3">{status}</div>}
+
+      {votes.length > 0 && (
+        <>
+          <SectionLabel>Aktivní hlasování</SectionLabel>
+          <div className="space-y-2">
+            {votes.map((v) => (
+              <div key={v.id} className="flex items-center justify-between gap-3 py-2 border-b border-gray-50 last:border-0">
+                <div className="flex-1 min-w-0">
+                  <div className="font-heading font-bold text-sm truncate">{v.title}</div>
+                  <div className="text-xs text-muted">ANO: {v.ano_count} · NE: {v.ne_count}</div>
+                </div>
+                <button
+                  onClick={() => closeVote(v.id)}
+                  className="shrink-0 text-xs px-3 py-1 rounded-lg border border-gray-200 text-gray-600 hover:bg-red-50 hover:border-card-red hover:text-card-red transition-colors font-heading font-bold"
+                >
+                  Ukončit
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {votes.length === 0 && (
+        <div className="text-sm text-muted">Žádná aktivní hlasování</div>
+      )}
     </div>
   );
 }
