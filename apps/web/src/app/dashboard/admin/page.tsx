@@ -204,14 +204,14 @@ function VotesAdmin() {
 
   return (
     <div className="card p-4">
-      <SectionLabel>🗳️ Hlasování Pralesu</SectionLabel>
+      <SectionLabel>🗳️ Sněm Pralesu</SectionLabel>
 
       <div className="space-y-3 mb-4">
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Název hlasování (povinné)"
+          placeholder="Název usnesení (povinné)"
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-pitch-400"
         />
         <div className="flex gap-3 items-end">
@@ -236,7 +236,7 @@ function VotesAdmin() {
 
       {votes.length > 0 && (
         <>
-          <SectionLabel>Aktivní hlasování</SectionLabel>
+          <SectionLabel>Aktivní usnesení</SectionLabel>
           <div className="space-y-2">
             {votes.map((v) => (
               <div key={v.id} className="flex items-center justify-between gap-3 py-2 border-b border-gray-50 last:border-0">
@@ -257,7 +257,7 @@ function VotesAdmin() {
       )}
 
       {votes.length === 0 && (
-        <div className="text-sm text-muted">Žádná aktivní hlasování</div>
+        <div className="text-sm text-muted">Žádná aktivní usnesení</div>
       )}
     </div>
   );

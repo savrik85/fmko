@@ -163,18 +163,18 @@ export default function HlasovaniPage() {
   if (loading) {
     return (
       <div className="page-container">
-        <div className="card p-8 text-center text-muted text-sm">Načítám hlasování…</div>
+        <div className="card p-8 text-center text-muted text-sm">Načítám sněm…</div>
       </div>
     );
   }
 
   return (
     <div className="page-container space-y-5">
-      <SectionLabel>Hlasování Pralesu</SectionLabel>
+      <SectionLabel>Sněm Pralesu</SectionLabel>
 
       {openVotes.length === 0 && closedVotes.length === 0 && (
         <div className="card p-8 text-center text-muted text-sm">
-          Žádná hlasování zatím neprobíhají.
+          Žádná usnesení Sněmu zatím neprobíhají.
         </div>
       )}
 
@@ -188,7 +188,7 @@ export default function HlasovaniPage() {
 
       {closedVotes.length > 0 && (
         <>
-          <SectionLabel>Archiv ukončených hlasování</SectionLabel>
+          <SectionLabel>Archiv ukončených sněmů</SectionLabel>
           <div className="space-y-4">
             {closedVotes.map((v) => (
               <VoteCard key={v.id} vote={v} teamId={teamId} token={token} onVoted={loadVotes} />

@@ -24,7 +24,7 @@ const SECTIONS = [
     { href: "/dashboard/friendly", icon: "\u{1F91C}", label: "P\u0159\u00E1tel\u00E1ky", color: "#4A7A5C" },
     { href: "/dashboard/calendar", icon: "\u{1F5D3}\uFE0F", label: "Kalend\u00E1\u0159", color: "#6B7B3D" },
     { href: "/dashboard/news", icon: "\u{1F4F0}", label: "Zpravodaj", color: "#556B2F" },
-    { href: "/dashboard/hlasovani", icon: "\u{1F5F3}\uFE0F", label: "Hlasov\u00E1n\u00ED", color: "#B8860B" },
+    { href: "/dashboard/hlasovani", icon: "\u{1F5F3}\uFE0F", label: "Sn\u011Bm", color: "#B8860B" },
   ]},
   { title: "Ostatn\u00ED", items: [
     { href: "/dashboard/app", icon: "\u{1F4F2}", label: "Nainstaluj", color: "#153615" },
