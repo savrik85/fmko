@@ -50,3 +50,13 @@ export function createRng(seed: number) {
 }
 
 export type Rng = ReturnType<typeof createRng>;
+
+/**
+ * Returns a cryptographically random 32-bit seed for createRng.
+ * Use instead of Date.now() to prevent predictable RNG sequences.
+ */
+export function cryptoSeed(): number {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return buf[0];
+}

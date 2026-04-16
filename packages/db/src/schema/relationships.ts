@@ -10,7 +10,7 @@ export const relationships = sqliteTable("relationships", {
     .notNull()
     .references(() => players.id),
   type: text("type", {
-    enum: ["brothers", "father_son", "in_laws", "classmates", "coworkers"],
+    enum: ["brothers", "father_son", "in_laws", "classmates", "coworkers", "neighbors", "drinking_buddies", "rivals", "mentor_pupil"],
   }).notNull(),
   strength: integer("strength").notNull().default(50), // 0–100
   createdAt: text("created_at")

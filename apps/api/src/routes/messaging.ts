@@ -6,8 +6,12 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
+import { requireTeamOwnership } from "../auth/middleware";
 
 const messagingRouter = new Hono<{ Bindings: Bindings }>();
+
+// Write operace (odesílání zpráv, mark-read, vytváření konverzací) vyžadují ownership.
+messagingRouter.use("/teams/:teamId/*", requireTeamOwnership);
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -321,22 +325,22 @@ messagingRouter.post("/admin/broadcast", async (c) => {
     // Find or create conversation
     let convId = await c.env.DB.prepare(
       "SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?"
-    ).bind(teamId, roleTitle).first<{ id: string }>().then((r) => r?.id).catch(() => null);
+    ).bind(teamId, roleTitle).first<{ id: string }>().then((r) => r?.id).catch((e) => { logger.warn({ module: "messaging" }, "fetch broadcast conv", e); return null; });
 
     if (!convId) {
       convId = uuid();
       await c.env.DB.prepare(
         "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', ?, ?)"
-      ).bind(convId, teamId, roleTitle, now, now).run().catch(() => {});
+      ).bind(convId, teamId, roleTitle, now, now).run().catch((e) => logger.warn({ module: "messaging" }, "insert broadcast conv", e));
     }
 
     await c.env.DB.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', ?, ?, ?)"
-    ).bind(uuid(), convId, roleTitle, msg, now).run().catch(() => {});
+    ).bind(uuid(), convId, roleTitle, msg, now).run().catch((e) => logger.warn({ module: "messaging" }, "insert broadcast msg", e));
 
     await c.env.DB.prepare(
       "UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = ? WHERE id = ?"
-    ).bind(msg.slice(0, 100), now, convId).run().catch(() => {});
+    ).bind(msg.slice(0, 100), now, convId).run().catch((e) => logger.warn({ module: "messaging" }, "update broadcast conv unread", e));
 
     sent++;
   }
@@ -384,22 +388,22 @@ messagingRouter.post("/admin/broadcast-reply/:teamId", async (c) => {
   // Find existing conversation
   let convId = await c.env.DB.prepare(
     "SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?"
-  ).bind(teamId, roleTitle).first<{ id: string }>().then((r) => r?.id).catch(() => null);
+  ).bind(teamId, roleTitle).first<{ id: string }>().then((r) => r?.id).catch((e) => { logger.warn({ module: "messaging" }, "fetch reply conv", e); return null; });
 
   if (!convId) {
     convId = uuid();
     await c.env.DB.prepare(
       "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', ?, ?)"
-    ).bind(convId, teamId, roleTitle, now, now).run().catch(() => {});
+    ).bind(convId, teamId, roleTitle, now, now).run().catch((e) => logger.warn({ module: "messaging" }, "insert reply conv", e));
   }
 
   await c.env.DB.prepare(
     "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', ?, ?, ?)"
-  ).bind(uuid(), convId, roleTitle, msg, now).run().catch(() => {});
+  ).bind(uuid(), convId, roleTitle, msg, now).run().catch((e) => logger.warn({ module: "messaging" }, "insert reply msg", e));
 
   await c.env.DB.prepare(
     "UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = ? WHERE id = ?"
-  ).bind(msg.slice(0, 100), now, convId).run().catch(() => {});
+  ).bind(msg.slice(0, 100), now, convId).run().catch((e) => logger.warn({ module: "messaging" }, "update reply conv unread", e));
 
   return c.json({ ok: true });
 });
