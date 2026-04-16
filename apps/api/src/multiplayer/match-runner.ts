@@ -608,8 +608,7 @@ export async function buildMatchPlayers(
   if (rng) {
     try {
       const { generateAbsences } = await import("../events/absence");
-      const { seedFromString } = await import("../lib/seed");
-      const teamAbsenceRng = createRng(seedFromString(teamId));
+      const teamAbsenceRng = rng;
       const squadForAbsence = rows.results.map((row) => {
         const personality = JSON.parse(row.personality as string);
         const lifeContext = JSON.parse(row.life_context as string);
