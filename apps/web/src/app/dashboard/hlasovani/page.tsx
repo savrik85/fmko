@@ -113,21 +113,20 @@ function VoteCard({ vote, teamId, token, onVoted }: { vote: Vote; teamId: string
 
       {/* Hlasující týmy */}
       {vote.voters.length > 0 && (
-        <div className="space-y-2 mb-4 pt-1">
+        <div className="space-y-3 mb-4 pt-1">
           {(["ano", "ne"] as const).map((side) => {
             const group = vote.voters.filter((v) => v.answer === side);
             if (group.length === 0) return null;
             return (
-              <div key={side} className="flex items-center gap-2 flex-wrap">
-                <span className={`text-[11px] font-heading font-bold uppercase tracking-wide w-7 shrink-0 ${side === "ano" ? "text-pitch-500" : "text-card-red"}`}>
+              <div key={side} className="flex items-start gap-2 flex-wrap">
+                <span className={`text-[11px] font-heading font-bold uppercase tracking-wide w-7 shrink-0 mt-1 ${side === "ano" ? "text-pitch-500" : "text-card-red"}`}>
                   {side}
                 </span>
                 {group.map((voter) => (
                   <Link
                     key={voter.team_id}
                     href={`/dashboard/team/${voter.team_id}`}
-                    title={voter.manager_name ?? voter.team_name}
-                    className="transition-transform hover:scale-110 active:scale-95"
+                    className="flex flex-col items-center gap-0.5 w-14 hover:opacity-80 active:scale-95 transition-all"
                   >
                     {voter.manager_avatar && Object.keys(voter.manager_avatar).length > 2 ? (
                       <FaceAvatar faceConfig={voter.manager_avatar} size={36} className="rounded-full" />
@@ -136,6 +135,8 @@ function VoteCard({ vote, teamId, token, onVoted }: { vote: Vote; teamId: string
                         {(voter.manager_name ?? voter.team_name)[0]}
                       </div>
                     )}
+                    <span className="text-[9px] text-muted text-center leading-tight line-clamp-1 w-full">{voter.manager_name ?? "—"}</span>
+                    <span className="text-[9px] font-heading font-bold text-ink text-center leading-tight line-clamp-2 w-full">{voter.team_name}</span>
                   </Link>
                 ))}
               </div>
