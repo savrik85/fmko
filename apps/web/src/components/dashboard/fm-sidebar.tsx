@@ -33,6 +33,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/friendly", label: "Přáteláky", icon: "\u{1F91C}", group: "league" },
   { href: "/dashboard/liga", label: "Liga", icon: "\u{1F3C6}", group: "league" },
   { href: "/dashboard/calendar", label: "Kalendář", icon: "\u{1F5D3}", group: "league" },
+  { href: "/dashboard/hlasovani", label: "Sněm", icon: "\u{1F5F3}\uFE0F", group: "league" },
 ];
 
 const GROUP_LABELS: Record<string, string> = {
@@ -45,8 +46,9 @@ export function FMSidebar() {
   const [expanded, setExpanded] = useState(true);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [incomingOffers, setIncomingOffers] = useState(0);
+  const [unvotedCount, setUnvotedCount] = useState(0);
   const pathname = usePathname();
-  const { teamId, isAdmin, logout } = useTeam();
+  const { teamId, isAdmin, logout, token } = useTeam();
 
   // Poll unread messages count — refresh on page change too
   useEffect(() => {
@@ -58,11 +60,16 @@ export function FMSidebar() {
       apiFetch<{ incoming: unknown[] }>(`/api/teams/${teamId}/offers`)
         .then((o) => setIncomingOffers(o.incoming?.length ?? 0))
         .catch((e) => console.error("fetch offers:", e));
+      // Aktivní ankety kde jsem ještě nehlasoval
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers })
+        .then((votes) => setUnvotedCount(votes.filter((v) => v.status === "open" && v.my_answer === null).length))
+        .catch((e) => console.error("fetch votes:", e));
     };
     load();
     const interval = setInterval(load, 30000);
     return () => clearInterval(interval);
-  }, [teamId, pathname]);
+  }, [teamId, token, pathname]);
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -143,6 +150,9 @@ export function FMSidebar() {
                           )}
                           {item.href === "/dashboard/transfers" && incomingOffers > 0 && (
                             <span className="ml-1.5 bg-card-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{incomingOffers}</span>
+                          )}
+                          {item.href === "/dashboard/hlasovani" && unvotedCount > 0 && (
+                            <span className="ml-1.5 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unvotedCount}</span>
                           )}
                         </span>
                       )}

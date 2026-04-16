@@ -8,27 +8,32 @@ import { apiFetch } from "@/lib/api";
 
 export function BottomNav() {
   const pathname = usePathname();
-  const { teamId } = useTeam();
+  const { teamId, token } = useTeam();
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [unvotedCount, setUnvotedCount] = useState(0);
 
   useEffect(() => {
     if (!teamId) return;
     const fetchUnread = () => {
       apiFetch<Array<{ unreadCount: number }>>(`/api/teams/${teamId}/conversations`)
         .then((convs) => setUnreadMessages(convs.reduce((s, c) => s + (c.unreadCount ?? 0), 0)))
-        .catch(() => { /* ignore */ });
+        .catch((e) => console.error("fetch conversations:", e));
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers })
+        .then((votes) => setUnvotedCount(votes.filter((v) => v.status === "open" && v.my_answer === null).length))
+        .catch((e) => console.error("fetch votes:", e));
     };
     fetchUnread();
     const interval = setInterval(fetchUnread, 30000);
     return () => clearInterval(interval);
-  }, [teamId, pathname]);
+  }, [teamId, token, pathname]);
 
   const items = [
     { href: "/dashboard", label: "Domů", icon: "🏟" },
     { href: "/dashboard/phone", label: "Zprávy", icon: "📱", badge: unreadMessages },
     { href: "/dashboard/match", label: "Sestava", icon: "📋" },
     { href: "/dashboard/liga", label: "Liga", icon: "🏆" },
-    { href: "/dashboard/more", label: "Více", icon: "⚙" },
+    { href: "/dashboard/more", label: "Více", icon: "⚙", badge: unvotedCount },
   ];
 
   return (

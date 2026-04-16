@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useTeam } from "@/context/team-context";
+import { apiFetch } from "@/lib/api";
 
 const SECTIONS = [
   { title: "Klub", items: [
@@ -22,6 +24,7 @@ const SECTIONS = [
     { href: "/dashboard/friendly", icon: "\u{1F91C}", label: "P\u0159\u00E1tel\u00E1ky", color: "#4A7A5C" },
     { href: "/dashboard/calendar", icon: "\u{1F5D3}\uFE0F", label: "Kalend\u00E1\u0159", color: "#6B7B3D" },
     { href: "/dashboard/news", icon: "\u{1F4F0}", label: "Zpravodaj", color: "#556B2F" },
+    { href: "/dashboard/hlasovani", icon: "\u{1F5F3}\uFE0F", label: "Sn\u011Bm", color: "#B8860B" },
   ]},
   { title: "Ostatn\u00ED", items: [
     { href: "/dashboard/app", icon: "\u{1F4F2}", label: "Nainstaluj", color: "#153615" },
@@ -31,29 +34,46 @@ const SECTIONS = [
 ];
 
 export default function MorePage() {
-  const { logout } = useTeam();
+  const { logout, token } = useTeam();
+  const [unvotedCount, setUnvotedCount] = useState(0);
+
+  useEffect(() => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers })
+      .then((votes) => setUnvotedCount(votes.filter((v) => v.status === "open" && v.my_answer === null).length))
+      .catch((e) => console.error("fetch votes:", e));
+  }, [token]);
+
   return (
     <div className="page-container pb-24">
       {SECTIONS.map((section) => (
         <div key={section.title} className="mb-6">
           <p className="text-xs font-heading font-bold text-muted uppercase tracking-wide mb-3 px-1">{section.title}</p>
           <div className="grid grid-cols-4 gap-2">
-            {section.items.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all active:scale-95"
-                style={{ background: `${item.color}12` }}
-              >
-                <div
-                  className="w-11 h-11 rounded-xl flex items-center justify-center text-xl"
-                  style={{ background: `${item.color}20` }}
+            {section.items.map((item) => {
+              const badge = item.href === "/dashboard/hlasovani" ? unvotedCount : 0;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all active:scale-95"
+                  style={{ background: `${item.color}12` }}
                 >
-                  {item.icon}
-                </div>
-                <span className="text-[11px] font-medium text-ink text-center leading-tight">{item.label}</span>
-              </Link>
-            ))}
+                  <div
+                    className="w-11 h-11 rounded-xl flex items-center justify-center text-xl"
+                    style={{ background: `${item.color}20` }}
+                  >
+                    {item.icon}
+                  </div>
+                  <span className="text-[11px] font-medium text-ink text-center leading-tight">{item.label}</span>
+                  {badge > 0 && (
+                    <span className="absolute top-1 right-1 bg-amber-500 text-white text-[9px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">
+                      {badge}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
           </div>
         </div>
       ))}

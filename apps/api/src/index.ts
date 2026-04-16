@@ -8,6 +8,7 @@ import { leagueRouter } from "./routes/league";
 import { gameRouter } from "./routes/game";
 import { messagingRouter } from "./routes/messaging";
 import { pushRouter } from "./routes/push";
+import { votesRouter } from "./routes/votes";
 // transfers endpoints are in gameRouter
 import { runScheduledMatches } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -54,6 +55,7 @@ app.route("/api", leagueRouter);
 app.route("/api", gameRouter);
 app.route("/api", messagingRouter);
 app.route("/api", pushRouter);
+app.route("/api", votesRouter);
 
 export default {
   fetch: app.fetch,

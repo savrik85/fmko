@@ -24,6 +24,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/dashboard/admin": "Administrace",
   "/dashboard/schedule": "Rozpis zápasů",
   "/dashboard/calendar": "Kalendář",
+  "/dashboard/hlasovani": "Sněm Pralesu",
 };
 
 export function FMTopBar() {
