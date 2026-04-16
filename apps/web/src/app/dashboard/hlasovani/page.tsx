@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel } from "@/components/ui";
+import { SectionLabel, BadgePreview } from "@/components/ui";
+import type { BadgePattern } from "@/components/ui";
 
 interface Vote {
   id: string;
@@ -16,6 +18,14 @@ interface Vote {
   ne_count: number;
   total_teams: number;
   my_answer: "ano" | "ne" | null;
+  voters: Array<{
+    team_id: string;
+    team_name: string;
+    primary_color: string;
+    secondary_color: string;
+    badge_pattern: string;
+    answer: "ano" | "ne";
+  }>;
 }
 
 function formatDate(val: string | null | undefined): string {
@@ -101,6 +111,39 @@ function VoteCard({ vote, teamId, token, onVoted }: { vote: Vote; teamId: string
           </div>
         </div>
       </div>
+
+      {/* Hlasující týmy */}
+      {vote.voters.length > 0 && (
+        <div className="space-y-2 mb-4 pt-1">
+          {(["ano", "ne"] as const).map((side) => {
+            const group = vote.voters.filter((v) => v.answer === side);
+            if (group.length === 0) return null;
+            return (
+              <div key={side} className="flex items-center gap-2 flex-wrap">
+                <span className={`text-[11px] font-heading font-bold uppercase tracking-wide w-7 shrink-0 ${side === "ano" ? "text-pitch-500" : "text-card-red"}`}>
+                  {side}
+                </span>
+                {group.map((voter) => (
+                  <Link
+                    key={voter.team_id}
+                    href={`/dashboard/team/${voter.team_id}`}
+                    title={voter.team_name}
+                    className="transition-transform hover:scale-110 active:scale-95"
+                  >
+                    <BadgePreview
+                      primary={voter.primary_color || "#2D5F2D"}
+                      secondary={voter.secondary_color || "#FFF"}
+                      pattern={(voter.badge_pattern as BadgePattern) || "shield"}
+                      initials={voter.team_name.split(" ").map((w: string) => w[0]).join("").slice(0, 3)}
+                      size={28}
+                    />
+                  </Link>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Footer */}
       <div className="flex items-center justify-between gap-3">
