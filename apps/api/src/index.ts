@@ -81,6 +81,31 @@ export default {
       }
     }
 
+    // ── WATCHDOG: před zápasy zkontroluj jestli daily tick ráno proběhl ──
+    // Pokud game_date neodpovídá dnešnímu datu, spusť daily tick znovu (záchrana při výpadku cronu)
+    if (cron === "0 16 * * *") {
+      try {
+        const row = await env.DB.prepare(
+          "SELECT game_date FROM teams WHERE user_id != 'ai' AND user_id IS NOT NULL AND game_date IS NOT NULL LIMIT 1"
+        ).first<{ game_date: string }>().catch((e) => { log("warn", "watchdog game_date lookup failed", e); return null; });
+        if (row?.game_date) {
+          const gameDate = new Date(row.game_date);
+          const today = new Date();
+          const diffMs = today.getTime() - gameDate.getTime();
+          const diffDays = diffMs / (1000 * 60 * 60 * 24);
+          if (diffDays > 1.5) {
+            log("warn", `watchdog: game_date zaostal o ${diffDays.toFixed(1)} dní — spouštím daily tick`);
+            const result = await executeDailyTick(env);
+            log("info", `watchdog daily tick done: ${result.events.length} events`);
+          } else {
+            log("info", `watchdog: game_date ok (diff=${diffDays.toFixed(2)} dní)`);
+          }
+        }
+      } catch (e: any) {
+        log("error", "watchdog failed", e);
+      }
+    }
+
     // ── MATCH TICK: 18:00 CEST — simuluje zápasy, všechny ligy najednou ──
     const isMatchTick = cron?.startsWith("0 16") || cron?.startsWith("5 16") || cron?.startsWith("10 16") || cron?.startsWith("15 16") || !cron;
     if (isMatchTick) {
