@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel, BadgePreview } from "@/components/ui";
-import type { BadgePattern } from "@/components/ui";
+import { SectionLabel } from "@/components/ui";
+import { FaceAvatar } from "@/components/players/face-avatar";
 
 interface Vote {
   id: string;
@@ -21,9 +21,8 @@ interface Vote {
   voters: Array<{
     team_id: string;
     team_name: string;
-    primary_color: string;
-    secondary_color: string;
-    badge_pattern: string;
+    manager_name: string | null;
+    manager_avatar: Record<string, unknown> | null;
     answer: "ano" | "ne";
   }>;
 }
@@ -127,16 +126,16 @@ function VoteCard({ vote, teamId, token, onVoted }: { vote: Vote; teamId: string
                   <Link
                     key={voter.team_id}
                     href={`/dashboard/team/${voter.team_id}`}
-                    title={voter.team_name}
+                    title={voter.manager_name ?? voter.team_name}
                     className="transition-transform hover:scale-110 active:scale-95"
                   >
-                    <BadgePreview
-                      primary={voter.primary_color || "#2D5F2D"}
-                      secondary={voter.secondary_color || "#FFF"}
-                      pattern={(voter.badge_pattern as BadgePattern) || "shield"}
-                      initials={voter.team_name.split(" ").map((w: string) => w[0]).join("").slice(0, 3)}
-                      size={28}
-                    />
+                    {voter.manager_avatar && Object.keys(voter.manager_avatar).length > 2 ? (
+                      <FaceAvatar faceConfig={voter.manager_avatar} size={36} className="rounded-full" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">
+                        {(voter.manager_name ?? voter.team_name)[0]}
+                      </div>
+                    )}
                   </Link>
                 ))}
               </div>
