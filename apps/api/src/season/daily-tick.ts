@@ -739,7 +739,7 @@ export async function executeDailyTick(
             playerPosition: "", teamName: origTeam.name, fromTeamName: loanTeam?.name,
           });
         }
-      } catch { /* optional */ }
+      } catch (e) { logger.warn({ module: "daily-tick" }, "createTransferNews loan_return", e); }
     }
     if (expiredLoans.results.length > 0) {
       events.push({ type: "loan_return", description: `${expiredLoans.results.length} hráčů se vrátilo z hostování` });
