@@ -4,30 +4,84 @@ import { useMemo } from "react";
 import { PITCH, pitchColor } from "./constants";
 
 interface PitchProps {
-  condition: number;   // 0-100
-  pitchType: string;   // natural | hybrid | artificial
+  condition: number;
+  pitchType: string;
 }
 
 const HALF_W = PITCH.width / 2;
 const HALF_D = PITCH.depth / 2;
 
-// Pre-computed damage spots: [x_norm (-1..1), z_norm (-1..1), rx_norm, rz_norm, conditionThreshold, opacity, color]
-const DAMAGE_SPOTS: Array<[number, number, number, number, number, number, string]> = [
-  [0,    -0.93, 0.42, 0.07, 80, 0.5,  "#8B7350"],   // S goal mouth
-  [0,     0.93, 0.42, 0.07, 80, 0.5,  "#8B7350"],   // N goal mouth
-  [-0.5, -0.5,  0.18, 0.05, 65, 0.3,  "#8B7B50"],
-  [0.6,   0.4,  0.16, 0.04, 65, 0.25, "#8B7B50"],
-  [0.4,  -0.6,  0.21, 0.05, 50, 0.4,  "#8B7350"],
-  [-0.6,  0.6,  0.19, 0.05, 50, 0.35, "#8B7350"],
-  [0.2,  -0.2,  0.24, 0.06, 40, 0.45, "#7A6840"],
-  [-0.4,  0.3,  0.23, 0.06, 40, 0.40, "#7A6840"],
-  [0.55,  0,    0.29, 0.07, 30, 0.55, "#6B5830"],
-  [-0.5, -0.8,  0.27, 0.06, 30, 0.50, "#6B5830"],
-  [0,     0.2,  0.38, 0.08, 20, 0.6,  "#5A4820"],
-];
+// Paleta hnědo-žlutých odstínů pro vyšlapaná místa
+const WEAR_COLORS = ["#8B6F47", "#9B7E55", "#A08560", "#7A5C3A", "#6B5836", "#B89868"];
+
+interface DamageSpot {
+  nx: number;     // -1..1
+  nz: number;
+  rx: number;     // 0..1 (relative)
+  rz: number;
+  threshold: number;
+  opacity: number;
+  color: string;
+  rotation: number;
+}
+
+// Generuje pseudo-random procedurální damage spoty (deterministic seed)
+function generateDamageSpots(): DamageSpot[] {
+  let seed = 1234567;
+  const rand = () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
+  const pickColor = () => WEAR_COLORS[Math.floor(rand() * WEAR_COLORS.length)];
+  const out: DamageSpot[] = [];
+
+  // Hotspoty: cluster centra + intensity (kde se nejvíc běhá)
+  const clusters = [
+    // Brankoviště - nejvíc opotřebené
+    { cx: 0,    cz: -0.9, range: 0.32, count: 35, baseThr: 85, sizeMin: 0.025, sizeMax: 0.055 },
+    { cx: 0,    cz: 0.9,  range: 0.32, count: 35, baseThr: 85, sizeMin: 0.025, sizeMax: 0.055 },
+    // Středový kruh
+    { cx: 0,    cz: 0,    range: 0.28, count: 25, baseThr: 70, sizeMin: 0.02,  sizeMax: 0.05 },
+    // Sideline koleje (kde čára běží)
+    { cx: -0.95, cz: 0,   range: 0.85, count: 18, baseThr: 55, sizeMin: 0.02,  sizeMax: 0.045 },
+    { cx: 0.95,  cz: 0,   range: 0.85, count: 18, baseThr: 55, sizeMin: 0.02,  sizeMax: 0.045 },
+    // Pokutové území rohy
+    { cx: -0.4,  cz: -0.7, range: 0.25, count: 12, baseThr: 50, sizeMin: 0.018, sizeMax: 0.04 },
+    { cx: 0.4,   cz: -0.7, range: 0.25, count: 12, baseThr: 50, sizeMin: 0.018, sizeMax: 0.04 },
+    { cx: -0.4,  cz: 0.7,  range: 0.25, count: 12, baseThr: 50, sizeMin: 0.018, sizeMax: 0.04 },
+    { cx: 0.4,   cz: 0.7,  range: 0.25, count: 12, baseThr: 50, sizeMin: 0.018, sizeMax: 0.04 },
+    // Náhodně rozházené
+    { cx: 0,    cz: 0,    range: 0.95, count: 50, baseThr: 35, sizeMin: 0.012, sizeMax: 0.035 },
+  ];
+
+  clusters.forEach((cl) => {
+    for (let i = 0; i < cl.count; i++) {
+      const angle = rand() * Math.PI * 2;
+      const dist = Math.pow(rand(), 0.7) * cl.range;
+      let nx = cl.cx + Math.cos(angle) * dist;
+      let nz = cl.cz + Math.sin(angle) * dist * 1.5;
+      // Clamp do hřiště
+      nx = Math.max(-0.97, Math.min(0.97, nx));
+      nz = Math.max(-0.97, Math.min(0.97, nz));
+      const sz = cl.sizeMin + rand() * (cl.sizeMax - cl.sizeMin);
+      out.push({
+        nx,
+        nz,
+        rx: sz,
+        rz: sz * (0.6 + rand() * 0.7),   // asymetrie
+        threshold: cl.baseThr - Math.floor(rand() * 25),
+        opacity: 0.45 + rand() * 0.4,
+        color: pickColor(),
+        rotation: rand() * Math.PI,
+      });
+    }
+  });
+  return out;
+}
+
+const DAMAGE_SPOTS = generateDamageSpots();
 
 export function Pitch({ condition, pitchType }: PitchProps) {
-  const grassColor = pitchColor(condition);
   const hasLines = condition >= 20;
   const hasCenter = condition >= 40;
   const hasFull = condition >= 65;
@@ -36,11 +90,22 @@ export function Pitch({ condition, pitchType }: PitchProps) {
   // Hřiště je naplocho na zemi (rotation -π/2 kolem X)
   const pitchRotation: [number, number, number] = [-Math.PI / 2, 0, 0];
 
-  // Přírodní ↔ umělý: artificial má sytější barvu, hybrid mezi
+  // Base barva trávníku - i pro nízkou condition zachovat trochu zeleně
+  // (poškození pak overlay přidává hnědou)
   const finalGrassColor = useMemo(() => {
     if (pitchType === "artificial") return condition >= 30 ? "#2E8B1F" : "#5A8245";
-    return grassColor;
-  }, [grassColor, pitchType, condition]);
+    // Pro natural/hybrid: condition ovlivňuje sytost zelené, ale nepřejde do hnědé
+    if (condition >= 70) return pitchColor(condition);
+    if (condition >= 40) return "#6B8240";
+    if (condition >= 20) return "#5C7138";
+    return "#566B30";
+  }, [pitchType, condition]);
+
+  // Vidím damage spoty s threshold > condition (čím nižší kondice, tím víc viditelných)
+  const visibleSpots = useMemo(
+    () => DAMAGE_SPOTS.filter((s) => condition < s.threshold),
+    [condition]
+  );
 
   return (
     <group>
@@ -62,16 +127,16 @@ export function Pitch({ condition, pitchType }: PitchProps) {
         </group>
       )}
 
-      {/* Damage spots — hnědé skvrny */}
-      {DAMAGE_SPOTS.filter(([, , , , thr]) => condition < thr).map(([nx, nz, rx, rz, , op, col], i) => (
+      {/* Damage spots — mnoho malých nepravidelných skvrn */}
+      {visibleSpots.map((s, i) => (
         <mesh
           key={i}
-          rotation={pitchRotation}
-          position={[nx * HALF_W, 0.03, nz * HALF_D]}
-          scale={[rx * PITCH.width, rz * PITCH.depth, 1]}
+          rotation={[-Math.PI / 2, 0, s.rotation]}
+          position={[s.nx * HALF_W, 0.025 + (i % 3) * 0.001, s.nz * HALF_D]}
+          scale={[s.rx * PITCH.width, s.rz * PITCH.depth, 1]}
         >
-          <circleGeometry args={[1, 16]} />
-          <meshStandardMaterial color={col} opacity={op} transparent depthWrite={false} />
+          <circleGeometry args={[1, 8]} />
+          <meshBasicMaterial color={s.color} opacity={s.opacity} transparent depthWrite={false} />
         </mesh>
       ))}
 
