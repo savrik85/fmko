@@ -206,6 +206,7 @@ export default function StadiumPage() {
               pitchType={stadium.pitchType}
               facilities={stadium.facilities}
               teamColor={team.primary_color}
+              stadiumName={stadium.stadiumName}
             />
             <div className="sm:hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-[10px] px-2 py-1 rounded pointer-events-none">
               dva prsty pro rotaci/zoom

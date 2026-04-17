@@ -35,23 +35,14 @@ function generateDamageSpots(): DamageSpot[] {
   const pickColor = () => WEAR_COLORS[Math.floor(rand() * WEAR_COLORS.length)];
   const out: DamageSpot[] = [];
 
-  // Hotspoty: cluster centra + intensity (kde se nejvíc běhá)
+  // Hotspoty: méně skvrn + skromnější rozšíření, viditelné jen při výrazném poškození
   const clusters = [
-    // Brankoviště - nejvíc opotřebené
-    { cx: 0,    cz: -0.9, range: 0.32, count: 35, baseThr: 85, sizeMin: 0.025, sizeMax: 0.055 },
-    { cx: 0,    cz: 0.9,  range: 0.32, count: 35, baseThr: 85, sizeMin: 0.025, sizeMax: 0.055 },
-    // Středový kruh
-    { cx: 0,    cz: 0,    range: 0.28, count: 25, baseThr: 70, sizeMin: 0.02,  sizeMax: 0.05 },
-    // Sideline koleje (kde čára běží)
-    { cx: -0.95, cz: 0,   range: 0.85, count: 18, baseThr: 55, sizeMin: 0.02,  sizeMax: 0.045 },
-    { cx: 0.95,  cz: 0,   range: 0.85, count: 18, baseThr: 55, sizeMin: 0.02,  sizeMax: 0.045 },
-    // Pokutové území rohy
-    { cx: -0.4,  cz: -0.7, range: 0.25, count: 12, baseThr: 50, sizeMin: 0.018, sizeMax: 0.04 },
-    { cx: 0.4,   cz: -0.7, range: 0.25, count: 12, baseThr: 50, sizeMin: 0.018, sizeMax: 0.04 },
-    { cx: -0.4,  cz: 0.7,  range: 0.25, count: 12, baseThr: 50, sizeMin: 0.018, sizeMax: 0.04 },
-    { cx: 0.4,   cz: 0.7,  range: 0.25, count: 12, baseThr: 50, sizeMin: 0.018, sizeMax: 0.04 },
-    // Náhodně rozházené
-    { cx: 0,    cz: 0,    range: 0.95, count: 50, baseThr: 35, sizeMin: 0.012, sizeMax: 0.035 },
+    { cx: 0,    cz: -0.9, range: 0.22, count: 14, baseThr: 70, sizeMin: 0.02,  sizeMax: 0.04 },   // S brankoviště
+    { cx: 0,    cz: 0.9,  range: 0.22, count: 14, baseThr: 70, sizeMin: 0.02,  sizeMax: 0.04 },   // N brankoviště
+    { cx: 0,    cz: 0,    range: 0.2,  count: 10, baseThr: 50, sizeMin: 0.018, sizeMax: 0.035 },  // střed
+    { cx: -0.92, cz: 0,   range: 0.7,  count: 8,  baseThr: 35, sizeMin: 0.015, sizeMax: 0.03 },   // Z sideline
+    { cx: 0.92,  cz: 0,   range: 0.7,  count: 8,  baseThr: 35, sizeMin: 0.015, sizeMax: 0.03 },   // V sideline
+    { cx: 0,    cz: 0,    range: 0.95, count: 20, baseThr: 18, sizeMin: 0.01,  sizeMax: 0.025 }, // náhodné, jen extreme damage
   ];
 
   clusters.forEach((cl) => {
@@ -60,7 +51,6 @@ function generateDamageSpots(): DamageSpot[] {
       const dist = Math.pow(rand(), 0.7) * cl.range;
       let nx = cl.cx + Math.cos(angle) * dist;
       let nz = cl.cz + Math.sin(angle) * dist * 1.5;
-      // Clamp do hřiště
       nx = Math.max(-0.97, Math.min(0.97, nx));
       nz = Math.max(-0.97, Math.min(0.97, nz));
       const sz = cl.sizeMin + rand() * (cl.sizeMax - cl.sizeMin);
@@ -68,9 +58,9 @@ function generateDamageSpots(): DamageSpot[] {
         nx,
         nz,
         rx: sz,
-        rz: sz * (0.6 + rand() * 0.7),   // asymetrie
-        threshold: cl.baseThr - Math.floor(rand() * 25),
-        opacity: 0.45 + rand() * 0.4,
+        rz: sz * (0.6 + rand() * 0.7),
+        threshold: cl.baseThr - Math.floor(rand() * 15),
+        opacity: 0.3 + rand() * 0.3,    // méně neprůhledné
         color: pickColor(),
         rotation: rand() * Math.PI,
       });
