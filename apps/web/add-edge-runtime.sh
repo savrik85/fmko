@@ -8,6 +8,7 @@ for f in \
   "src/app/dashboard/match/[id]/page.tsx" \
   "src/app/dashboard/manager/[id]/page.tsx" \
   "src/app/dashboard/team/[id]/page.tsx" \
+  "src/app/dashboard/team/[id]/stadium/page.tsx" \
   "src/app/dashboard/phone/[id]/page.tsx" \
   "src/app/dashboard/player/[id]/page.tsx" \
   "src/app/match-day/[id]/page.tsx"; do
