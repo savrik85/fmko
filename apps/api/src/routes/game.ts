@@ -1157,12 +1157,51 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     pitchUpgrades.push({ pitchType: "artificial", label: "Umělý trávník", desc: "Žádná údržba, hratelný za každého počasí", cost: 220000 });
   }
 
+  // Customizace
+  const customization = {
+    fenceColor: (stadium.fence_color as string | null) ?? null,
+    standColor: (stadium.stand_color as string | null) ?? null,
+    seatColor: (stadium.seat_color as string | null) ?? null,
+    roofColor: (stadium.roof_color as string | null) ?? null,
+    accentColor: (stadium.accent_color as string | null) ?? null,
+    scoreboardLevel: (stadium.scoreboard_level as number | null) ?? 0,
+    flagSize: (stadium.flag_size as number | null) ?? 0,
+  };
+
+  // Scoreboard a vlajka upgrady
+  const SCOREBOARD_COSTS = [0, 2000, 8000, 25000];
+  const SCOREBOARD_LABELS = ["Žádný", "Dřevěná tabule", "LED jednobarevná", "Full-color LED"];
+  const FLAG_COSTS = [0, 1500, 5000, 15000];
+  const FLAG_LABELS = ["Žádná", "Malá vlajka (3m)", "Střední vlajka (5m)", "Velká vlajka (8m)"];
+
+  const visualUpgrades: Array<{ kind: string; currentLevel: number; nextLevel: number; cost: number; label: string }> = [];
+  if (customization.scoreboardLevel < 3) {
+    visualUpgrades.push({
+      kind: "scoreboard",
+      currentLevel: customization.scoreboardLevel,
+      nextLevel: customization.scoreboardLevel + 1,
+      cost: SCOREBOARD_COSTS[customization.scoreboardLevel + 1],
+      label: SCOREBOARD_LABELS[customization.scoreboardLevel + 1],
+    });
+  }
+  if (customization.flagSize < 3) {
+    visualUpgrades.push({
+      kind: "flag",
+      currentLevel: customization.flagSize,
+      nextLevel: customization.flagSize + 1,
+      cost: FLAG_COSTS[customization.flagSize + 1],
+      label: FLAG_LABELS[customization.flagSize + 1],
+    });
+  }
+
   return c.json({
     stadiumName: teamInfo?.stadium_name ?? null,
     capacity: stadium.capacity,
     pitchCondition: stadium.pitch_condition,
     pitchType: stadium.pitch_type,
     facilities,
+    customization,
+    visualUpgrades,
     upgrades: getUpgradeOptions(facilities, teamInfo?.reputation ?? 0, matchCount?.cnt ?? 0, currentSeason?.number ?? 1),
     pitchActions,
     pitchUpgrades,
@@ -1226,6 +1265,55 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
   }
 
   return c.json({ ok: true, cost: upgrade.cost, newLevel: upgrade.nextLevel });
+});
+
+// PATCH /api/teams/:id/stadium/customize — set color (zdarma)
+gameRouter.patch("/teams/:teamId/stadium/customize", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ field: string; value: string | null }>();
+  const allowed = new Set(["fence_color", "stand_color", "seat_color", "roof_color", "accent_color"]);
+  if (!allowed.has(body.field)) return c.json({ error: "Invalid field" }, 400);
+  // Hex color validation (jednoduchá)
+  if (body.value !== null && !/^#[0-9A-Fa-f]{6}$/.test(body.value)) {
+    return c.json({ error: "Invalid color (must be hex #RRGGBB or null)" }, 400);
+  }
+  await c.env.DB.prepare(`UPDATE stadiums SET ${body.field} = ? WHERE team_id = ?`)
+    .bind(body.value, teamId).run();
+  return c.json({ ok: true });
+});
+
+// POST /api/teams/:id/stadium/visual-upgrade — koupit scoreboard nebo vlajku
+gameRouter.post("/teams/:teamId/stadium/visual-upgrade", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ kind: "scoreboard" | "flag" }>();
+
+  const SCOREBOARD_COSTS = [0, 2000, 8000, 25000];
+  const FLAG_COSTS = [0, 1500, 5000, 15000];
+
+  const stadium = await c.env.DB.prepare(
+    "SELECT scoreboard_level, flag_size FROM stadiums WHERE team_id = ?"
+  ).bind(teamId).first<{ scoreboard_level: number; flag_size: number }>();
+  if (!stadium) return c.json({ error: "Stadium not found" }, 404);
+
+  const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?")
+    .bind(teamId).first<{ budget: number }>();
+  if (!team) return c.json({ error: "Team not found" }, 404);
+
+  const currentLevel = body.kind === "scoreboard" ? stadium.scoreboard_level : stadium.flag_size;
+  const nextLevel = currentLevel + 1;
+  if (nextLevel > 3) return c.json({ error: "Už je na maxu" }, 400);
+  const cost = (body.kind === "scoreboard" ? SCOREBOARD_COSTS : FLAG_COSTS)[nextLevel];
+  if (team.budget < cost) return c.json({ error: "Nedostatek peněz" }, 400);
+
+  await recordTransaction(c.env.DB, teamId, "stadium_visual", -cost,
+    `Stadion vzhled: ${body.kind === "scoreboard" ? "scoreboard" : "vlajka"} L${nextLevel}`,
+    new Date().toISOString());
+
+  const column = body.kind === "scoreboard" ? "scoreboard_level" : "flag_size";
+  await c.env.DB.prepare(`UPDATE stadiums SET ${column} = ? WHERE team_id = ?`)
+    .bind(nextLevel, teamId).run();
+
+  return c.json({ ok: true, cost, newLevel: nextLevel });
 });
 
 // POST /api/teams/:id/stadium/maintain-pitch — improve pitch condition
@@ -1394,6 +1482,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
 
   const mainContract = activeRows.results.find((r) => (r.category || "main") === "main");
   const stadiumContract = activeRows.results.find((r) => r.category === "stadium");
+  const bannerContracts = activeRows.results.filter((r) => r.category === "banner");
 
   // Load district sponsors — stable ordering (no RANDOM)
   const sponsorRows = await c.env.DB.prepare(
@@ -1456,6 +1545,23 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     stadiumOffers.sort((a, b) => b.monthlyAmount - a.monthlyAmount);
   }
 
+  // Banner offers — vždy 12 možných, malé částky, bez naming/win bonus
+  const MAX_BANNERS = 6;
+  const bannerOffers: Offer[] = [];
+  const usedNames = new Set<string>(bannerContracts.map((c) => c.sponsor_name as string));
+  const bannerPool = sponsorRows.results.filter((s) => !usedNames.has(s.name as string));
+  for (let i = 0; i < Math.min(12, bannerPool.length); i++) {
+    const s = bannerPool[i];
+    const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod * 0.4);
+    const seasons = rng.int(1, 2);
+    const terminationFee = Math.round(monthly * seasons * 1.5);
+    bannerOffers.push({
+      sponsorName: s.name as string, sponsorType: s.type as string,
+      monthlyAmount: monthly, winBonus: 0, seasons, earlyTerminationFee: terminationFee,
+    });
+  }
+  bannerOffers.sort((a, b) => b.monthlyAmount - a.monthlyAmount);
+
   // Batch: current season + team sponsor change info
   const [currentSeasonRes, teamFullRes] = await c.env.DB.batch([
     c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"),
@@ -1469,10 +1575,13 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   return c.json({
     mainContract: mainContract ? mapContract(mainContract) : null,
     stadiumContract: stadiumContract ? mapContract(stadiumContract) : null,
+    bannerContracts: bannerContracts.map(mapContract),
     stadiumName: team.stadium_name,
     teamName: teamFull?.name ?? "",
-    mainOffers: changedThisSeason ? [] : mainOffers, // no offers if already changed
+    mainOffers: changedThisSeason ? [] : mainOffers,
     stadiumOffers,
+    bannerOffers: bannerContracts.length >= MAX_BANNERS ? [] : bannerOffers,
+    maxBanners: MAX_BANNERS,
     canChangeMainSponsor: !changedThisSeason,
     season: seasonNum,
   });
@@ -1482,7 +1591,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
 gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{
-    category: "main" | "stadium";
+    category: "main" | "stadium" | "banner";
     sponsorName: string; sponsorType: string;
     monthlyAmount: number; winBonus: number;
     seasons: number; earlyTerminationFee: number;
@@ -1490,14 +1599,22 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
   }>();
 
   const category = body.category || "main";
+  const MAX_BANNERS = 6;
 
-  // Check no active contract in this category
+  // Check no active contract in this category (banner: max 8 současně)
   const allActive = await c.env.DB.prepare(
     "SELECT id, category FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch active contracts for signing", e); return { results: [] }; });
 
-  const existing = allActive.results.find((r) => (r.category || "main") === category);
-  if (existing) return c.json({ error: `Už máš aktivní smlouvu pro ${category === "main" ? "hlavního sponzora" : "stadion"}` }, 400);
+  if (category === "banner") {
+    const bannerCount = allActive.results.filter((r) => r.category === "banner").length;
+    if (bannerCount >= MAX_BANNERS) {
+      return c.json({ error: `Maximální počet bannerů (${MAX_BANNERS}) je dosažen` }, 400);
+    }
+  } else {
+    const existing = allActive.results.find((r) => (r.category || "main") === category);
+    if (existing) return c.json({ error: `Už máš aktivní smlouvu pro ${category === "main" ? "hlavního sponzora" : "stadion"}` }, 400);
+  }
 
   // Season limit for main sponsor
   if (category === "main") {
@@ -1557,13 +1674,17 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
 // POST /api/teams/:id/sponsors/terminate — early termination (with fee)
 gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ category?: "main" | "stadium" }>().catch((e) => { logger.warn({ module: "game" }, "parse terminate body", e); return { category: "main" as const }; });
+  const body = await c.req.json<{ category?: "main" | "stadium" | "banner"; contractId?: string }>().catch((e) => { logger.warn({ module: "game" }, "parse terminate body", e); return { category: "main" as const, contractId: undefined as string | undefined }; });
   const category = body.category || "main";
 
   const allActiveT = await c.env.DB.prepare(
     "SELECT id, early_termination_fee, seasons_remaining, category FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch contracts for termination", e); return { results: [] }; });
-  const contractRow = allActiveT.results.find((r) => (r.category || "main") === category);
+
+  // Pro banner — vyžaduje contractId (může jich být víc)
+  const contractRow = category === "banner"
+    ? allActiveT.results.find((r) => r.id === body.contractId && r.category === "banner")
+    : allActiveT.results.find((r) => (r.category || "main") === category);
   const contract = contractRow ? {
     id: contractRow.id as string,
     early_termination_fee: contractRow.early_termination_fee as number,
@@ -1612,6 +1733,7 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
     }
   }
 
+  // Banner — žádné rename ani penalty na reputaci
   return c.json({ ok: true, fee });
 });
 

@@ -15,6 +15,7 @@ export type TransactionType =
   | "equipment_expense"
   | "equipment_upgrade"
   | "stadium_upgrade"
+  | "stadium_visual"
   | "pitch_repair"
   | "pitch_upgrade"
   | "classified_ad"

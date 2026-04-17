@@ -10,14 +10,21 @@ interface StandProps {
   side: Side;
   level: number;
   teamColor: string;
+  standColor?: string;
+  seatColor?: string;
+  accentColor?: string;
   reducedDetail?: boolean;
 }
 
 const STAND_GAP = 1;
 
-export function Stand({ side, level, teamColor, reducedDetail = false }: StandProps) {
+export function Stand({ side, level, teamColor, standColor, seatColor, accentColor, reducedDetail = false }: StandProps) {
   if (level <= 0) return null;
   const dims = STAND_DIMS[Math.min(level, 3)];
+  const baseColor = standColor ?? dims.color;          // null → původní per-level barva (dřevo/beton)
+  const finalSeatColor = seatColor ?? teamColor;
+  const finalAccent = accentColor ?? "#C9A84C";
+  const finalPanelColor = standColor ?? teamColor;
 
   const isEW = side === "east" || side === "west";
   const length = isEW ? PITCH.depth : PITCH.width;
@@ -50,7 +57,7 @@ export function Stand({ side, level, teamColor, reducedDetail = false }: StandPr
         rows={seatRows}
         seatDepth={seatDepth}
         seatRise={seatRise}
-        color={dims.color}
+        color={baseColor}
       />
 
       <Seats
@@ -60,7 +67,7 @@ export function Stand({ side, level, teamColor, reducedDetail = false }: StandPr
         seatDepth={seatDepth}
         seatRise={seatRise}
         length={length}
-        teamColor={teamColor}
+        teamColor={finalSeatColor}
       />
 
       <Spectators
@@ -85,7 +92,7 @@ export function Stand({ side, level, teamColor, reducedDetail = false }: StandPr
       {level >= 3 && (
         <mesh position={[0, dims.height * 0.55, dims.depth * 0.6]} castShadow>
           <boxGeometry args={[length * 0.3, 0.4, dims.depth * 0.7]} />
-          <meshStandardMaterial color="#C9A84C" emissive="#C9A84C" emissiveIntensity={0.2} />
+          <meshStandardMaterial color={finalAccent} emissive={finalAccent} emissiveIntensity={0.2} />
         </mesh>
       )}
 
@@ -93,7 +100,7 @@ export function Stand({ side, level, teamColor, reducedDetail = false }: StandPr
       {level >= 2 && (
         <mesh position={[0, 0.4, -0.05]} castShadow>
           <boxGeometry args={[length, 0.8, 0.15]} />
-          <meshStandardMaterial color={teamColor} />
+          <meshStandardMaterial color={finalPanelColor} />
         </mesh>
       )}
     </group>

@@ -31,33 +31,53 @@ export function StadiumSign({ name, position, teamColor }: StadiumSignProps) {
     // Bílý pruh uprostřed pro lepší kontrast
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(20, 20, canvas.width - 40, canvas.height - 40);
-    // Text v týmové barvě
+
     ctx.fillStyle = teamColor;
-    ctx.font = "bold 110px Arial, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    // Zalomení dlouhých názvů
-    const words = name.split(" ");
-    const lines: string[] = [];
-    let current = "";
+
     const maxWidth = canvas.width - 80;
-    for (const w of words) {
-      const test = current ? `${current} ${w}` : w;
-      if (ctx.measureText(test).width > maxWidth && current) {
-        lines.push(current);
-        current = w;
-      } else {
-        current = test;
+    const maxHeight = canvas.height - 60;
+    const words = name.split(/\s+/);
+
+    // Zkus seskupit slova do N řádků (1, 2, max 3) a najdi font size který vejde
+    const tryLayout = (numLines: number, fontSize: number): { lines: string[]; fits: boolean } => {
+      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+      const lines: string[] = [];
+      let current = "";
+      // Greedy: napln každý řádek max kolik se vejde
+      for (const w of words) {
+        const test = current ? `${current} ${w}` : w;
+        if (ctx.measureText(test).width > maxWidth && current) {
+          lines.push(current);
+          current = w;
+        } else {
+          current = test;
+        }
       }
+      if (current) lines.push(current);
+      // Vyhovuje pokud lines <= numLines a každý <= maxWidth a celková výška <= maxHeight
+      const lineHeight = fontSize * 1.15;
+      const totalH = lines.length * lineHeight;
+      const fits = lines.length <= numLines && totalH <= maxHeight;
+      return { lines, fits };
+    };
+
+    // Hledej největší font který se vejde do max 2 řádků
+    let chosen: { lines: string[]; fontSize: number } = { lines: [name], fontSize: 30 };
+    for (let fs = 110; fs >= 30; fs -= 4) {
+      const r1 = tryLayout(1, fs);
+      if (r1.fits) { chosen = { lines: r1.lines, fontSize: fs }; break; }
+      const r2 = tryLayout(2, fs);
+      if (r2.fits) { chosen = { lines: r2.lines, fontSize: fs }; break; }
     }
-    if (current) lines.push(current);
-    if (lines.length > 2) {
-      // Příliš dlouhé → zmenšit font a sjednotit na 2 řádky
-      ctx.font = "bold 80px Arial, sans-serif";
-    }
-    const lineHeight = lines.length > 1 ? canvas.height * 0.4 : 0;
-    lines.slice(0, 2).forEach((line, i) => {
-      ctx.fillText(line, canvas.width / 2, canvas.height / 2 + (i - (lines.length - 1) / 2) * lineHeight);
+
+    ctx.font = `bold ${chosen.fontSize}px Arial, sans-serif`;
+    ctx.fillStyle = teamColor;
+    const lineHeight = chosen.fontSize * 1.15;
+    const startY = canvas.height / 2 - ((chosen.lines.length - 1) * lineHeight) / 2;
+    chosen.lines.forEach((line, i) => {
+      ctx.fillText(line, canvas.width / 2, startY + i * lineHeight);
     });
 
     const tex = new THREE.CanvasTexture(canvas);

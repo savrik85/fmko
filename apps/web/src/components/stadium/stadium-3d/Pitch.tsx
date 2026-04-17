@@ -99,7 +99,7 @@ export function Pitch({ condition, pitchType }: PitchProps) {
 
   return (
     <group>
-      {/* Hlavní hřiště */}
+      {/* Hlavní hřiště — solid color (procedurální texture vypadala hůř) */}
       <mesh rotation={pitchRotation} position={[0, 0.01, 0]} receiveShadow>
         <planeGeometry args={[PITCH.width, PITCH.depth]} />
         <meshStandardMaterial color={finalGrassColor} roughness={0.95} />

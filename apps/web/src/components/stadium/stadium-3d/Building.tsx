@@ -8,31 +8,30 @@ interface BuildingProps {
   kind: BuildingKind;
   level: number;
   position: [number, number];
+  roofColorOverride?: string | null;
 }
 
-export function Building({ kind, level, position }: BuildingProps) {
+export function Building({ kind, level, position, roofColorOverride }: BuildingProps) {
   if (level <= 0) return null;
   const lvl = Math.min(level, 3);
-  // Vchod/pult lokálně na +Z. Pokud je budova na +Z straně hřiště (pos.z > 0),
-  // otoč ji o 180° aby front mířil k centru hřiště.
   const rotationY = position[1] > 0 ? Math.PI : 0;
   return (
     <group position={[position[0], 0, position[1]]} rotation={[0, rotationY, 0]}>
-      {kind === "refreshments" && <Refreshments level={lvl} />}
-      {kind === "changing_rooms" && <ChangingRooms level={lvl} />}
-      {kind === "showers" && <Showers level={lvl} />}
+      {kind === "refreshments" && <Refreshments level={lvl} roofColor={roofColorOverride} />}
+      {kind === "changing_rooms" && <ChangingRooms level={lvl} roofColor={roofColorOverride} />}
+      {kind === "showers" && <Showers level={lvl} roofColor={roofColorOverride} />}
     </group>
   );
 }
 
 // ─── OBČERSTVENÍ — pivní stan / karavan / hospůdka ───────────────
-function Refreshments({ level }: { level: number }) {
-  if (level === 1) return <BeerTent />;
-  if (level === 2) return <Caravan />;
-  return <PubBuilding />;
+function Refreshments({ level, roofColor }: { level: number; roofColor?: string | null }) {
+  if (level === 1) return <BeerTent roofColor={roofColor} />;
+  if (level === 2) return <Caravan roofColor={roofColor} />;
+  return <PubBuilding roofColor={roofColor} />;
 }
 
-function BeerTent() {
+function BeerTent({ roofColor }: { roofColor?: string | null }) {
   // Pivní stan z bazaru — barevný stan trojúhelníkový s "barem" vepředu
   const tentH = 2.8;
   return (
@@ -40,7 +39,7 @@ function BeerTent() {
       {/* Stan jako trojúhelníkový hranol */}
       <mesh position={[0, tentH / 2, 0]} rotation={[0, 0, 0]} castShadow>
         <cylinderGeometry args={[0.05, 2, tentH, 4, 1]} />
-        <meshStandardMaterial color="#C13A3A" roughness={0.7} />
+        <meshStandardMaterial color={roofColor ?? "#C13A3A"} roughness={0.7} />
       </mesh>
       {/* Bar vepředu */}
       <mesh position={[0, 0.6, 1.6]} castShadow>
@@ -56,15 +55,15 @@ function BeerTent() {
   );
 }
 
-function Caravan() {
-  // Karavan na kolech — protáhlý box s okny
+function Caravan({ roofColor }: { roofColor?: string | null }) {
+  // Karavan na kolech — protáhlý box s okny (roofColor mění tělo karavanu)
   const w = 4.5, h = 2.2, d = 2;
   return (
     <group>
       {/* Tělo karavanu */}
       <mesh position={[0, 0.6 + h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[w, h, d]} />
-        <meshStandardMaterial color="#E0C76A" roughness={0.5} />
+        <meshStandardMaterial color={roofColor ?? "#E0C76A"} roughness={0.5} />
       </mesh>
       {/* Pásek nad oken (typicky barevný retro) */}
       <mesh position={[0, 0.6 + h * 0.85, d / 2 + 0.005]}>
@@ -97,7 +96,7 @@ function Caravan() {
   );
 }
 
-function PubBuilding() {
+function PubBuilding({ roofColor }: { roofColor?: string | null }) {
   // Hospůdka — větší budova s komínem a cedulí
   const w = 6, h = 3.5, d = 5;
   const roofH = 1.8;
@@ -109,7 +108,7 @@ function PubBuilding() {
         <meshStandardMaterial color="#F5E6C8" roughness={0.85} />
       </mesh>
       {/* Sedlová střecha */}
-      <SaddleRoof width={w} depth={d} baseY={h} roofHeight={roofH} color="#8B3A2B" />
+      <SaddleRoof width={w} depth={d} baseY={h} roofHeight={roofH} color={roofColor ?? "#8B3A2B"} />
       {/* Dveře */}
       <mesh position={[0, h * 0.4, d / 2 + 0.01]}>
         <planeGeometry args={[w * 0.2, h * 0.7]} />
@@ -148,13 +147,13 @@ function PubBuilding() {
 }
 
 // ─── ŠATNY ─────────────────────────────────────────────────
-function ChangingRooms({ level }: { level: number }) {
-  if (level === 1) return <SmallShed />;       // Bouda s lavicí
-  if (level === 2) return <BasicCabin />;      // Šatna se skříňkami
-  return <ModernChangingRooms />;              // Moderní s vyhříváním
+function ChangingRooms({ level, roofColor }: { level: number; roofColor?: string | null }) {
+  if (level === 1) return <SmallShed roofColor={roofColor} />;
+  if (level === 2) return <BasicCabin roofColor={roofColor} />;
+  return <ModernChangingRooms roofColor={roofColor} />;
 }
 
-function SmallShed() {
+function SmallShed({ roofColor }: { roofColor?: string | null }) {
   const w = 3, h = 2, d = 2.5;
   return (
     <group>
@@ -165,7 +164,7 @@ function SmallShed() {
       {/* Plochá střecha mírně přečnívající */}
       <mesh position={[0, h + 0.05, 0]} castShadow>
         <boxGeometry args={[w + 0.4, 0.1, d + 0.4]} />
-        <meshStandardMaterial color="#5C3A1E" />
+        <meshStandardMaterial color={roofColor ?? "#5C3A1E"} />
       </mesh>
       {/* Dveře */}
       <mesh position={[0, h * 0.45, d / 2 + 0.01]}>
@@ -181,7 +180,7 @@ function SmallShed() {
   );
 }
 
-function BasicCabin() {
+function BasicCabin({ roofColor }: { roofColor?: string | null }) {
   const w = 4.5, h = 2.6, d = 3.5;
   const roofH = 1.2;
   return (
@@ -190,7 +189,7 @@ function BasicCabin() {
         <boxGeometry args={[w, h, d]} />
         <meshStandardMaterial color="#E8DCC4" roughness={0.85} />
       </mesh>
-      <SaddleRoof width={w} depth={d} baseY={h} roofHeight={roofH} color="#A0432C" />
+      <SaddleRoof width={w} depth={d} baseY={h} roofHeight={roofH} color={roofColor ?? "#A0432C"} />
       {/* Dveře */}
       <mesh position={[0, h * 0.4, d / 2 + 0.01]}>
         <planeGeometry args={[w * 0.22, h * 0.7]} />
@@ -209,7 +208,7 @@ function BasicCabin() {
   );
 }
 
-function ModernChangingRooms() {
+function ModernChangingRooms({ roofColor }: { roofColor?: string | null }) {
   const w = 6, h = 3, d = 4.5;
   return (
     <group>
@@ -221,7 +220,7 @@ function ModernChangingRooms() {
       {/* Plochá střecha s lehkým přesahem */}
       <mesh position={[0, h + 0.1, 0]} castShadow>
         <boxGeometry args={[w + 0.5, 0.2, d + 0.5]} />
-        <meshStandardMaterial color="#374151" roughness={0.7} />
+        <meshStandardMaterial color={roofColor ?? "#374151"} roughness={0.7} />
       </mesh>
       {/* Velká okenní výplň (moderní design) */}
       <mesh position={[0, h * 0.55, d / 2 + 0.01]}>
@@ -243,10 +242,10 @@ function ModernChangingRooms() {
 }
 
 // ─── SPRCHY ─────────────────────────────────────────────────
-function Showers({ level }: { level: number }) {
+function Showers({ level, roofColor }: { level: number; roofColor?: string | null }) {
   if (level === 1) return <HoseStand />;
-  if (level === 2) return <BasicShowerHouse />;
-  return <ModernShowerHouse />;
+  if (level === 2) return <BasicShowerHouse roofColor={roofColor} />;
+  return <ModernShowerHouse roofColor={roofColor} />;
 }
 
 function HoseStand() {
@@ -277,7 +276,7 @@ function HoseStand() {
   );
 }
 
-function BasicShowerHouse() {
+function BasicShowerHouse({ roofColor }: { roofColor?: string | null }) {
   const w = 4, h = 2.5, d = 3;
   const roofH = 1;
   return (
@@ -286,7 +285,7 @@ function BasicShowerHouse() {
         <boxGeometry args={[w, h, d]} />
         <meshStandardMaterial color="#D0DEE6" roughness={0.7} />
       </mesh>
-      <SaddleRoof width={w} depth={d} baseY={h} roofHeight={roofH} color="#3B6B8C" />
+      <SaddleRoof width={w} depth={d} baseY={h} roofHeight={roofH} color={roofColor ?? "#3B6B8C"} />
       {/* Vchody — dvě dvířka (M/Ž) */}
       <mesh position={[-w * 0.22, h * 0.4, d / 2 + 0.01]}>
         <planeGeometry args={[w * 0.18, h * 0.7]} />
@@ -305,7 +304,7 @@ function BasicShowerHouse() {
   );
 }
 
-function ModernShowerHouse() {
+function ModernShowerHouse({ roofColor }: { roofColor?: string | null }) {
   const w = 5, h = 3, d = 4;
   return (
     <group>
@@ -316,7 +315,7 @@ function ModernShowerHouse() {
       {/* Plochá střecha s lehkým přesahem */}
       <mesh position={[0, h + 0.1, 0]} castShadow>
         <boxGeometry args={[w + 0.4, 0.2, d + 0.4]} />
-        <meshStandardMaterial color="#3B6B8C" />
+        <meshStandardMaterial color={roofColor ?? "#3B6B8C"} />
       </mesh>
       {/* Modré sklo (relax/wellness vibe) */}
       <mesh position={[0, h * 0.55, d / 2 + 0.01]}>
