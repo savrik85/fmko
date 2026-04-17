@@ -1,0 +1,85 @@
+"use client";
+
+import { Suspense } from "react";
+import { Canvas } from "@react-three/fiber";
+import { OrbitControls, Sky } from "@react-three/drei";
+import { Pitch } from "./Pitch";
+import { Stand } from "./Stand";
+import { Building } from "./Building";
+import { Parking } from "./Parking";
+import { Fence } from "./Fence";
+import { Surroundings } from "./Surroundings";
+import { BUILDING_POSITIONS, SKY_SUN_POSITION } from "./constants";
+
+interface Stadium3DProps {
+  pitchCondition: number;
+  pitchType: string;
+  facilities: Record<string, number>;
+  teamColor: string;
+}
+
+export function Stadium3D({ pitchCondition, pitchType, facilities, teamColor }: Stadium3DProps) {
+  const f = facilities;
+
+  return (
+    <Canvas
+      shadows
+      camera={{ position: [55, 45, 55], fov: 35 }}
+      frameloop="demand"
+      dpr={[1, 2]}
+      gl={{ antialias: true, alpha: false }}
+    >
+      <color attach="background" args={["#B8DCEC"]} />
+      <Sky sunPosition={SKY_SUN_POSITION} turbidity={6} rayleigh={2} mieCoefficient={0.005} mieDirectionalG={0.8} />
+
+      {/* Lighting */}
+      <ambientLight intensity={0.65} />
+      <directionalLight
+        position={[40, 60, 25]}
+        intensity={1.2}
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-near={0.5}
+        shadow-camera-far={200}
+        shadow-camera-left={-60}
+        shadow-camera-right={60}
+        shadow-camera-top={60}
+        shadow-camera-bottom={-60}
+      />
+      <hemisphereLight args={["#B8DCEC", "#4A7A2C", 0.3]} />
+
+      <OrbitControls
+        enableZoom
+        enablePan={false}
+        maxPolarAngle={Math.PI / 2.15}
+        minDistance={25}
+        maxDistance={120}
+        target={[0, 0, 0]}
+      />
+
+      <Suspense fallback={null}>
+        <Surroundings />
+
+        <Fence level={f.fence ?? 0} />
+
+        <Pitch condition={pitchCondition} pitchType={pitchType} />
+
+        {/* 4 tribuny okolo hřiště - všechny na stejném levelu (jeden parametr stands) */}
+        <Stand side="north" level={f.stands ?? 0} teamColor={teamColor} />
+        <Stand side="south" level={f.stands ?? 0} teamColor={teamColor} />
+        {/* East/West tribuny renderujeme jen na L2+ aby vytvořily progresivní pocit růstu */}
+        {(f.stands ?? 0) >= 2 && <Stand side="east" level={f.stands} teamColor={teamColor} />}
+        {(f.stands ?? 0) >= 2 && <Stand side="west" level={f.stands} teamColor={teamColor} />}
+
+        {/* Budovy v rozích */}
+        <Building kind="changing_rooms" level={f.changing_rooms ?? 0} position={BUILDING_POSITIONS.changing_rooms} />
+        <Building kind="showers" level={f.showers ?? 0} position={BUILDING_POSITIONS.showers} />
+        <Building kind="refreshments" level={f.refreshments ?? 0} position={BUILDING_POSITIONS.refreshments} />
+
+        {/* Parkoviště */}
+        <Parking level={f.parking ?? 0} />
+      </Suspense>
+    </Canvas>
+  );
+}

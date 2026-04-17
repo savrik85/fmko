@@ -1,10 +1,25 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm } from "@/components/ui";
 import { StadiumView } from "@/components/stadium/stadium-view";
+
+const Stadium3D = dynamic(
+  () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full flex items-center justify-center text-muted text-sm">
+        <Spinner />
+      </div>
+    ),
+  }
+);
+
+type ViewMode = "2d" | "3d";
 
 interface UpgradeOption {
   facility: string;
@@ -94,7 +109,21 @@ export default function StadiumPage() {
   const [team, setTeam] = useState<Team | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("3d");
   const { confirm, dialog: confirmDialog } = useConfirm();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem("stadium-view-mode");
+    if (saved === "2d" || saved === "3d") setViewMode(saved);
+  }, []);
+
+  const switchView = (mode: ViewMode) => {
+    setViewMode(mode);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("stadium-view-mode", mode);
+    }
+  };
 
   const refresh = async () => {
     if (!teamId) return;
@@ -142,12 +171,49 @@ export default function StadiumPage() {
             <h2 className="font-heading font-bold text-xl">{stadium.stadiumName}</h2>
           </div>
         )}
-        <StadiumView
-          pitchCondition={stadium.pitchCondition}
-          pitchType={stadium.pitchType}
-          facilities={stadium.facilities}
-          teamColor={team.primary_color}
-        />
+
+        {/* Toggle 2D / 3D */}
+        <div className="flex justify-end gap-1 mb-3">
+          <button
+            onClick={() => switchView("2d")}
+            className={`px-3 py-1 rounded-lg text-xs font-heading font-bold transition-colors ${
+              viewMode === "2d"
+                ? "bg-pitch-500 text-white"
+                : "bg-gray-100 text-muted hover:bg-gray-200"
+            }`}
+          >
+            2D
+          </button>
+          <button
+            onClick={() => switchView("3d")}
+            className={`px-3 py-1 rounded-lg text-xs font-heading font-bold transition-colors ${
+              viewMode === "3d"
+                ? "bg-pitch-500 text-white"
+                : "bg-gray-100 text-muted hover:bg-gray-200"
+            }`}
+          >
+            3D
+          </button>
+        </div>
+
+        {viewMode === "3d" ? (
+          <div className="h-[400px] sm:h-[500px] rounded-xl overflow-hidden bg-gradient-to-b from-sky-100 to-sky-50">
+            <Stadium3D
+              pitchCondition={stadium.pitchCondition}
+              pitchType={stadium.pitchType}
+              facilities={stadium.facilities}
+              teamColor={team.primary_color}
+            />
+          </div>
+        ) : (
+          <StadiumView
+            pitchCondition={stadium.pitchCondition}
+            pitchType={stadium.pitchType}
+            facilities={stadium.facilities}
+            teamColor={team.primary_color}
+          />
+        )}
+
         <div className="grid grid-cols-3 gap-4 text-center mt-4 pt-4 border-t border-gray-100">
           <div>
             <div className="font-heading font-bold text-xl tabular-nums text-ink">{stadium.capacity}</div>
