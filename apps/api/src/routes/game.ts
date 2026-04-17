@@ -1188,6 +1188,11 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
     "SELECT COUNT(*) as cnt FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated'"
   ).bind(teamId, teamId).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "game" }, "count matches for stadium upgrade", e); return null; });
 
+  const seasonRow = await c.env.DB.prepare(
+    "SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+  ).first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for stadium upgrade", e); return null; });
+  const seasonNum = seasonRow?.number ?? 1;
+
   const { getUpgradeOptions } = await import("../stadium/stadium-generator");
   const facilities: Record<string, number> = {
     changing_rooms: stadium.changing_rooms as number ?? 0,
@@ -1198,7 +1203,7 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
     fence: stadium.fence as number ?? 0,
   };
 
-  const upgrades = getUpgradeOptions(facilities, team.reputation, matchCount?.cnt ?? 0);
+  const upgrades = getUpgradeOptions(facilities, team.reputation, matchCount?.cnt ?? 0, seasonNum);
   const upgrade = upgrades.find((u) => u.facility === body.facility);
   if (!upgrade) return c.json({ error: "No upgrade available" }, 400);
   if (upgrade.locked) return c.json({ error: upgrade.lockReason ?? "Zamčeno" }, 400);
