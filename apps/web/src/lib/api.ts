@@ -2,9 +2,21 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  // Automaticky přidáme Authorization header pokud je token v localStorage
+  const token = typeof window !== "undefined" ? localStorage.getItem("om_token") : null;
+  const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+  const mergedInit: RequestInit = {
+    ...init,
+    headers: {
+      ...authHeaders,
+      ...(init?.headers as Record<string, string> | undefined),
+    },
+  };
+
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, init);
+    res = await fetch(`${API_BASE}${path}`, mergedInit);
   } catch {
     // Network error (API unreachable) — throw with status 0
     const error = new Error("Network error");
