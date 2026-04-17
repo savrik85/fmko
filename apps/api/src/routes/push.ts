@@ -34,7 +34,8 @@ pushRouter.post("/push/subscribe", async (c) => {
   let body: PushSubscriptionData;
   try {
     body = await c.req.json();
-  } catch {
+  } catch (e) {
+    logger.warn({ module: "push" }, "parse subscribe body", e);
     return c.json({ error: "Neplatné tělo požadavku" }, 400);
   }
 
@@ -58,7 +59,8 @@ pushRouter.delete("/push/unsubscribe", async (c) => {
   let body: { endpoint: string };
   try {
     body = await c.req.json();
-  } catch {
+  } catch (e) {
+    logger.warn({ module: "push" }, "parse unsubscribe body", e);
     return c.json({ error: "Neplatné tělo požadavku" }, 400);
   }
 
@@ -94,7 +96,8 @@ pushRouter.put("/push/preferences", async (c) => {
   let body: Partial<Record<string, boolean>>;
   try {
     body = await c.req.json();
-  } catch {
+  } catch (e) {
+    logger.warn({ module: "push" }, "parse preferences body", e);
     return c.json({ error: "Neplatné tělo požadavku" }, 400);
   }
 
