@@ -566,6 +566,13 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
   const choice = choices.find((ch) => ch.id === body.choiceId);
   if (!choice) return c.json({ error: "Invalid choice" }, 400);
 
+  // Atomický claim — zabraňuje double-apply při souběžných requestech.
+  // WHERE status = 'pending' zajistí že jen první request proběhne.
+  const claimed = await c.env.DB.prepare(
+    "UPDATE seasonal_events SET status = 'resolved' WHERE id = ? AND status = 'pending'"
+  ).bind(eventId).run().catch((e) => { logger.warn({ module: "game" }, "claim seasonal event", e); return { meta: { changes: 0 } }; });
+  if (claimed.meta.changes === 0) return c.json({ error: "Already resolved" }, 400);
+
   // Apply effects
   for (const effect of choice.effects) {
     if (effect.type === "budget") {
@@ -613,10 +620,6 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
       ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "update pitch condition from event", e));
     }
   }
-
-  // Mark as resolved
-  await c.env.DB.prepare("UPDATE seasonal_events SET status = 'resolved' WHERE id = ?")
-    .bind(eventId).run();
 
   return c.json({ ok: true, appliedEffects: choice.effects });
 });
@@ -1299,6 +1302,18 @@ gameRouter.post("/teams/:teamId/roles", async (c) => {
 
   const updates: string[] = [];
   const binds: unknown[] = [];
+
+  // Ověřit že přiřazované hráče ID patří do týmu (nenastavit cizího hráče jako kapitána)
+  const idsToCheck = [body.captainId, body.penaltyTakerId, body.freekickTakerId].filter((id): id is string => !!id);
+  if (idsToCheck.length > 0) {
+    const placeholders = idsToCheck.map(() => "?").join(",");
+    const validCount = await c.env.DB.prepare(
+      `SELECT COUNT(*) as cnt FROM players WHERE team_id = ? AND id IN (${placeholders})`
+    ).bind(teamId, ...idsToCheck).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "game" }, "validate role player ids", e); return null; });
+    if (!validCount || validCount.cnt !== idsToCheck.length) {
+      return c.json({ error: "Hráč nenáleží do týmu" }, 400);
+    }
+  }
 
   if (body.captainId !== undefined) { updates.push("captain_id = ?"); binds.push(body.captainId || null); }
   if (body.penaltyTakerId !== undefined) { updates.push("penalty_taker_id = ?"); binds.push(body.penaltyTakerId || null); }
@@ -2513,6 +2528,7 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
 
   // Cleanup references first (can fail independently, non-critical)
   await c.env.DB.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE player_id = ? AND status = 'active'").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "withdraw listings on release", e));
+  await c.env.DB.prepare("UPDATE transfer_offers SET status = 'withdrawn' WHERE player_id = ? AND status IN ('pending','countered')").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "withdraw offers on release", e));
   await c.env.DB.prepare("UPDATE teams SET captain_id = NULL WHERE captain_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "clear captain on release", e));
   await c.env.DB.prepare("UPDATE teams SET penalty_taker_id = NULL WHERE penalty_taker_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "clear penalty taker on release", e));
   await c.env.DB.prepare("UPDATE teams SET freekick_taker_id = NULL WHERE freekick_taker_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "clear freekick taker on release", e));
