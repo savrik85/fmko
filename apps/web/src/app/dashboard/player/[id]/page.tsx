@@ -255,8 +255,8 @@ export default function PlayerDetailPage() {
       });
       setOfferSent(true);
       setOfferOpen(false);
-    } catch {
-      // silently handled
+    } catch (e) {
+      console.error("send transfer offer:", e);
     } finally {
       setOfferSending(false);
     }
@@ -1140,7 +1140,7 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
   useEffect(() => {
     apiFetch<{ log: TrainingLogEntry[] }>(`/api/teams/${teamId}/players/${playerId}/training-log`)
       .then((data) => { setLog(data.log); setLoaded(true); })
-      .catch(() => setLoaded(true));
+      .catch((e) => { console.error("training-log load:", e); setLoaded(true); });
   }, [teamId, playerId]);
 
   if (!loaded) return null;

@@ -49,6 +49,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { hashPassword, verifyPassword } from "../auth/password";
 import { createSession, getSession, deleteSession, getTokenFromRequest } from "../auth/session";
+import { logger } from "../lib/logger";
 
 const authRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -209,7 +210,7 @@ authRouter.get("/me", async (c) => {
   }
 
   const user = await c.env.DB.prepare("SELECT is_admin FROM users WHERE id = ?")
-    .bind(session.userId).first<{ is_admin: number }>().catch(() => null);
+    .bind(session.userId).first<{ is_admin: number }>().catch((e) => { logger.warn({ module: "auth" }, "fetch is_admin for /me", e); return null; });
 
   return c.json({
     id: session.userId,
@@ -261,6 +262,10 @@ authRouter.post("/change-password", async (c) => {
   const newHash = await hashPassword(body.newPassword);
   await c.env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
     .bind(newHash, session.userId).run();
+
+  // Invalidovat aktuální session — uživatel se musí znovu přihlásit
+  const { deleteSession } = await import("../auth/session");
+  await deleteSession(c.env.SESSION_KV, token).catch((e) => logger.warn({ module: "auth" }, "delete session after pw change", e));
 
   return c.json({ ok: true });
 });

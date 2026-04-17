@@ -97,7 +97,7 @@ export default function ConversationPage() {
             return prev;
           });
         })
-        .catch(() => {});
+        .catch((e) => console.error("phone poll messages:", e));
     }, 3000);
     return () => clearInterval(interval);
   }, [teamId, convId]);
@@ -120,7 +120,7 @@ export default function ConversationPage() {
         body: newMsg.trim(), metadata: null, sentAt: res.sentAt, read: true,
       }]);
       setNewMsg("");
-    } catch { /* ignore */ }
+    } catch (e) { console.error("send message:", e); }
     setSending(false);
   };
 

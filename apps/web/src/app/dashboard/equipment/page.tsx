@@ -68,7 +68,7 @@ export default function EquipmentPage() {
     await apiFetch(`/api/teams/${teamId}/equipment/upgrade`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ category: u.category }),
-    }).catch(() => {});
+    }).catch((e) => console.error("equipment upgrade failed:", e));
     await refresh();
     setActing(null);
   };
@@ -86,7 +86,7 @@ export default function EquipmentPage() {
     await apiFetch(`/api/teams/${teamId}/equipment/repair`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ category: r.category }),
-    }).catch(() => {});
+    }).catch((e) => console.error("equipment repair failed:", e));
     await refresh();
     setActing(null);
   };

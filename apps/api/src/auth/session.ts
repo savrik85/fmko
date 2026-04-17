@@ -58,6 +58,24 @@ export async function getSession(
 }
 
 /**
+ * Update session teamId after team creation (onboarding).
+ */
+export async function updateSessionTeamId(
+  kv: KVNamespace,
+  token: string,
+  teamId: string,
+): Promise<void> {
+  const data = await kv.get(`session:${token}`);
+  if (!data) return;
+  const session = JSON.parse(data) as Session;
+  session.teamId = teamId;
+  // Preserve remaining TTL by using SESSION_TTL (slight extension is acceptable)
+  await kv.put(`session:${token}`, JSON.stringify(session), {
+    expirationTtl: SESSION_TTL,
+  });
+}
+
+/**
  * Delete a session.
  */
 export async function deleteSession(

@@ -34,7 +34,8 @@ pushRouter.post("/push/subscribe", async (c) => {
   let body: PushSubscriptionData;
   try {
     body = await c.req.json();
-  } catch {
+  } catch (e) {
+    logger.warn({ module: "push" }, "parse subscribe body", e);
     return c.json({ error: "Neplatné tělo požadavku" }, 400);
   }
 
@@ -58,13 +59,17 @@ pushRouter.delete("/push/unsubscribe", async (c) => {
   let body: { endpoint: string };
   try {
     body = await c.req.json();
-  } catch {
+  } catch (e) {
+    logger.warn({ module: "push" }, "parse unsubscribe body", e);
     return c.json({ error: "Neplatné tělo požadavku" }, 400);
   }
 
   if (!body?.endpoint) return c.json({ error: "Chybí endpoint" }, 400);
 
-  await deletePushSubscription(c.env.DB, body.endpoint);
+  // Ověřit, že subscription patří přihlášenému uživateli — zabraňuje odhlášení cizích subscriptions.
+  await c.env.DB.prepare(
+    "DELETE FROM push_subscriptions WHERE endpoint = ? AND team_id IN (SELECT id FROM teams WHERE user_id = ?)"
+  ).bind(body.endpoint, session.userId).run();
   return c.json({ ok: true });
 });
 
@@ -91,7 +96,8 @@ pushRouter.put("/push/preferences", async (c) => {
   let body: Partial<Record<string, boolean>>;
   try {
     body = await c.req.json();
-  } catch {
+  } catch (e) {
+    logger.warn({ module: "push" }, "parse preferences body", e);
     return c.json({ error: "Neplatné tělo požadavku" }, 400);
   }
 

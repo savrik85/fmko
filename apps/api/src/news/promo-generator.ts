@@ -77,9 +77,7 @@ async function loadTopPlayers(
         if (p.celebrityType === "legend") celebrityLabel = tierLabels[p.celebrityTier] ?? "známá tvář";
         else if (p.celebrityType === "fallen_star") celebrityLabel = "pád profíka";
         else if (p.celebrityType === "glass_man") celebrityLabel = "talent zastavený zraněními";
-      } catch {
-        /* ignore */
-      }
+      } catch (e) { logger.warn({ module: "promo-generator" }, "parse celebrity personality", e); }
     }
     return {
       name: `${r.first_name} ${r.last_name}`,

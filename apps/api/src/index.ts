@@ -28,7 +28,7 @@ const app = new Hono<{ Bindings: Bindings }>();
 
 app.use("*", cors({ origin: "*" }));
 
-// Global error handler — structured JSON logging
+// Global error handler — structured JSON logging, bez expose interních detailů klientovi.
 app.onError((err, c) => {
   const reqId = crypto.randomUUID().slice(0, 8);
   const entry = {
@@ -41,7 +41,8 @@ app.onError((err, c) => {
     reqId,
   };
   console.error(JSON.stringify(entry));
-  return c.json({ error: err.message, reqId }, 500);
+  // Vracíme pouze reqId pro debugging, nikoli raw err.message (může obsahovat SQL detaily).
+  return c.json({ error: "Interní chyba serveru", reqId }, 500);
 });
 
 app.get("/", (c) => c.json({ name: "Prales API", version: "0.2.0" }));
@@ -178,9 +179,9 @@ export default {
               // Between-round events for human teams
               try {
                 const { generateBetweenRoundEvents } = await import("./events/between-rounds");
-                const { createRng } = await import("./generators/rng");
+                const { createRng, cryptoSeed } = await import("./generators/rng");
                 const { recordTransaction } = await import("./season/finance-processor");
-                const brRng = createRng(Date.now());
+                const brRng = createRng(cryptoSeed());
 
                 for (const mr of results) {
                   if (mr.matchType === "ai_vs_ai") continue;
@@ -244,7 +245,7 @@ export default {
                         try {
                           const { maintainFreeAgentPool } = await import("./transfers/free-agent-pool");
                           await maintainFreeAgentPool(env.DB, brRng, new Date());
-                        } catch { /* pool generation optional */ }
+                        } catch (e) { log("warn", "pool generation for player_add event", e); }
                       }
                     }
                     // Send as message from relevant role (NOT public zpravodaj)
@@ -280,13 +281,13 @@ export default {
               // Ad-hoc události pro human týmy
               try {
                 const { pickRandomAdhocEvent } = await import("./season/seasonal-events");
-                const { createRng: createAdhocRng } = await import("./generators/rng");
+                const { createRng: createAdhocRng, cryptoSeed: cryptoSeedAdhoc } = await import("./generators/rng");
                 const humanTeams = await env.DB.prepare(
                   "SELECT t.id, t.league_id, v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.league_id = ? AND t.user_id <> 'ai'"
                 ).bind(leagueId).all();
 
                 for (const ht of humanTeams.results) {
-                  const adhocRng = createAdhocRng(Date.now() + (ht.id as string).charCodeAt(0));
+                  const adhocRng = createAdhocRng(cryptoSeedAdhoc());
                   const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek, ht.district as string);
                   if (adhocEvent) {
                     await env.DB.prepare(
@@ -328,8 +329,8 @@ export default {
 
         // ── Celebrity spawn check (runs after match tick, separate query budget) ──
         try {
-          const { createRng } = await import("./generators/rng");
-          const celebRng = createRng(Date.now() + 55555);
+          const { createRng, cryptoSeed: cryptoSeedCeleb } = await import("./generators/rng");
+          const celebRng = createRng(cryptoSeedCeleb());
           const celebLeagues = await env.DB.prepare(
             "SELECT DISTINCT league_id FROM teams WHERE user_id != 'ai' AND league_id IS NOT NULL"
           ).all();
@@ -353,8 +354,8 @@ export default {
 
         // ── Virtual AI market activity (listings + offers from neighboring districts) ──
         try {
-          const { createRng } = await import("./generators/rng");
-          const marketRng = createRng(Date.now() + 77777);
+          const { createRng, cryptoSeed: cryptoSeedMarket } = await import("./generators/rng");
+          const marketRng = createRng(cryptoSeedMarket());
           const { generateAiListings, generateAiOffers } = await import("./transfers/virtual-teams");
           const marketLeagues = await env.DB.prepare(
             "SELECT l.id, l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.user_id != 'ai' GROUP BY l.id"

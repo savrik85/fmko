@@ -138,7 +138,7 @@ export async function generateAiRoundReport(
 
     // Góly z events
     let events: MatchEvent[] = [];
-    try { events = JSON.parse((m.events as string) ?? "[]"); } catch { /* */ }
+    try { events = JSON.parse((m.events as string) ?? "[]"); } catch (e) { logger.warn({ module: "ai-reporter" }, "parse match events", e); }
     const goals = events.filter((e) => e.type === "goal");
     const cards = events.filter((e) => e.type === "card");
 

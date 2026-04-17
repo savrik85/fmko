@@ -7,10 +7,14 @@ import type { Bindings } from "../index";
 import { recordTransaction } from "../season/finance-processor";
 import { createTransferNews } from "../transfers/transfer-news";
 import { evaluateSigningChance, haversineKm } from "../transfers/player-agency";
-import { createRng } from "../generators/rng";
+import { createRng, cryptoSeed } from "../generators/rng";
 import { logger } from "../lib/logger";
+import { requireTeamOwnership } from "../auth/middleware";
 
 const transfersRouter = new Hono<{ Bindings: Bindings }>();
+
+// Všechny write operace na týmových routách vyžadují ownership ověření.
+transfersRouter.use("/teams/:teamId/*", requireTeamOwnership);
 
 // ═══ PROPUŠTĚNÍ HRÁČE ═══
 
@@ -136,7 +140,7 @@ transfersRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
     .bind(teamId).first<{ cnt: number }>();
 
   const personality = (() => { try { return JSON.parse(fa.personality as string); } catch (e) { logger.warn({ module: "transfers" }, `parse sign personality: ${e}`); return {}; } })();
-  const rng = createRng(Date.now() + faId.charCodeAt(0));
+  const rng = createRng(cryptoSeed());
 
   const decision = evaluateSigningChance(
     { weekly_wage: fa.weekly_wage as number, personality, village_id: fa.village_id as string | null, district: fa.district as string | null },
@@ -202,6 +206,9 @@ transfersRouter.post("/teams/:teamId/players/:playerId/list", async (c) => {
   const teamId = c.req.param("teamId");
   const playerId = c.req.param("playerId");
   const body = await c.req.json<{ askingPrice: number }>();
+  if (!body.askingPrice || body.askingPrice <= 0 || !Number.isInteger(body.askingPrice)) {
+    return c.json({ error: "Cena musí být kladné celé číslo" }, 400);
+  }
 
   const player = await c.env.DB.prepare(
     "SELECT p.first_name, p.last_name, p.age, p.position, t.league_id, t.name as team_name FROM players p JOIN teams t ON p.team_id = t.id WHERE p.id = ? AND p.team_id = ?"
@@ -349,8 +356,8 @@ transfersRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
     .bind(buyerTeamId).first<{ budget: number; name: string; game_date: string; league_id: string }>();
   if (!buyer) return c.json({ error: "Kupující nenalezen" }, 400);
 
-  const seller = await c.env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?")
-    .bind(teamId).first<{ name: string; league_id: string }>();
+  const seller = await c.env.DB.prepare("SELECT name, league_id, budget FROM teams WHERE id = ?")
+    .bind(teamId).first<{ name: string; league_id: string; budget: number }>();
   const player = await c.env.DB.prepare("SELECT first_name, last_name, age, position FROM players WHERE id = ?")
     .bind(playerId).first<Record<string, unknown>>();
 
@@ -361,33 +368,57 @@ transfersRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
   const adminFee = isCrossLeague ? Math.round(amount * 0.20) : 0;
   const totalCost = amount + adminFee;
 
-  if (buyer.budget < totalCost) {
-    return c.json({ error: isCrossLeague ? `Nedostatek prostředků (cena ${amount} Kč + administrační poplatek ${adminFee} Kč)` : "Kupující nemá dostatek prostředků" }, 400);
+  const errMsg = isCrossLeague
+    ? `Nedostatek prostředků (cena ${amount} Kč + administrační poplatek ${adminFee} Kč)`
+    : "Kupující nemá dostatek prostředků";
+
+  // Atomický budget check + odečtení — zabraňuje race condition při souběžných requestech.
+  // WHERE budget >= ? zaručuje, že odečtení proběhne jen pokud je dostatek prostředků.
+  const deductResult = await c.env.DB.prepare(
+    "UPDATE teams SET budget = budget - ? WHERE id = ? AND budget >= ?"
+  ).bind(totalCost, buyerTeamId, totalCost).run();
+  if (deductResult.meta.changes === 0) {
+    return c.json({ error: errMsg }, 400);
   }
 
-  // Transfer money
-  await recordTransaction(c.env.DB, buyerTeamId, "transfer_fee", -amount, `Přestup: ${player?.first_name} ${player?.last_name}`, gameDate);
-  if (adminFee > 0) {
-    await recordTransaction(c.env.DB, buyerTeamId, "transfer_admin_fee", -adminFee, `Administrační poplatek za meziligový přestup`, gameDate);
-  }
-  await recordTransaction(c.env.DB, teamId, "transfer_income", amount, `Prodej: ${player?.first_name} ${player?.last_name}`, gameDate);
+  // Přičíst prodávajícímu + přesunout hráče atomicky v jednom batchi.
+  const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1")
+    .first<{ id: string }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch active season for bid accept", e); return null; });
+  const playerName = `${player?.first_name} ${player?.last_name}`;
 
-  // Transfer player
-  await c.env.DB.prepare("UPDATE players SET team_id = ?, weekly_wage = ROUND(10 + (overall_rating / 100.0) * 400) WHERE id = ?")
-    .bind(buyerTeamId, playerId).run();
+  await c.env.DB.batch([
+    // Přičíst prodávajícímu
+    c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, teamId),
+    // Přesunout hráče
+    c.env.DB.prepare("UPDATE players SET team_id = ?, weekly_wage = ROUND(10 + (overall_rating / 100.0) * 400) WHERE id = ?")
+      .bind(buyerTeamId, playerId),
+    // Uzavřít inzerát + bidy
+    c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE id = ?").bind(bid.listing_id),
+    c.env.DB.prepare("UPDATE transfer_bids SET status = 'accepted' WHERE id = ?").bind(bidId),
+  ]);
 
-  // Contracts
-  await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
-    .bind(playerId, teamId).run().catch((e) => logger.warn({ module: "transfers" }, "deactivate seller contract on bid accept", e));
-  const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch active season for bid accept", e); return null; });
-  await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
-    .bind(crypto.randomUUID(), playerId, buyerTeamId, season?.id ?? "unknown", amount).run().catch((e) => logger.warn({ module: "transfers" }, "insert buyer contract on bid accept", e));
-
-  // Update listing + bids
-  await c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE id = ?").bind(bid.listing_id).run();
-  await c.env.DB.prepare("UPDATE transfer_bids SET status = 'accepted' WHERE id = ?").bind(bidId).run();
+  // Odmítnout ostatní bidy (non-critical)
   await c.env.DB.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE listing_id = ? AND id != ? AND status = 'pending'")
     .bind(bid.listing_id, bidId).run().catch((e) => logger.warn({ module: "transfers" }, "reject other bids on accept", e));
+
+  // Zaznamenat transakce do transaction logu (budget již upraven výše)
+  const buyerBalanceAfter = buyer.budget - totalCost;
+  await c.env.DB.batch([
+    c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_fee', ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), buyerTeamId, -amount, buyerBalanceAfter + adminFee, `Přestup: ${playerName}`, gameDate),
+    ...(adminFee > 0 ? [
+      c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_admin_fee', ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), buyerTeamId, -adminFee, buyerBalanceAfter, `Administrační poplatek za meziligový přestup`, gameDate),
+    ] : []),
+    c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_income', ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), teamId, amount, (seller?.budget ?? 0) + amount, `Prodej: ${playerName}`, gameDate),
+  ]).catch((e) => logger.warn({ module: "transfers" }, "log bid-accept transactions", e));
+
+  // Contracts (non-critical, po přesunu)
+  await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
+    .bind(playerId, teamId).run().catch((e) => logger.warn({ module: "transfers" }, "deactivate seller contract on bid accept", e));
+  await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
+    .bind(crypto.randomUUID(), playerId, buyerTeamId, season?.id ?? "unknown", amount).run().catch((e) => logger.warn({ module: "transfers" }, "insert buyer contract on bid accept", e));
 
   // News
   await createTransferNews(c.env.DB, seller?.league_id ?? "", null, "transfer_completed", {
@@ -487,8 +518,10 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   ).bind(offerId, teamId, teamId, teamId).first<Record<string, unknown>>();
   if (!offer) return c.json({ error: "Nabídka nenalezena nebo nejsi na tahu" }, 404);
 
-  // Kupující je vždy from_team_id (nemění se mezi counterama)
-  const amount = (offer.counter_amount as number) ?? (offer.offer_amount as number);
+  // Kupující je vždy from_team_id (nemění se mezi counterama).
+  // Pozor: ?? přeskakuje jen null/undefined, ne 0 — proto explicitní kontrola.
+  const amount = (offer.counter_amount != null ? (offer.counter_amount as number) : (offer.offer_amount as number));
+  if (amount <= 0) return c.json({ error: "Neplatná částka přestupu" }, 400);
   const buyerTeamId = offer.from_team_id as string;
   const sellerTeamId = offer.to_team_id as string;
   const playerId = offer.player_id as string;
@@ -498,7 +531,7 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     .bind(buyerTeamId).first<{ budget: number; name: string; game_date: string; league_id: string }>();
   if (!buyer) return c.json({ error: "Kupující nenalezen" }, 400);
 
-  const seller = await c.env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(sellerTeamId).first<{ name: string; league_id: string }>();
+  const seller = await c.env.DB.prepare("SELECT name, league_id, budget FROM teams WHERE id = ?").bind(sellerTeamId).first<{ name: string; league_id: string; budget: number }>();
   const player = await c.env.DB.prepare("SELECT first_name, last_name, age, position FROM players WHERE id = ?").bind(playerId).first<Record<string, unknown>>();
   const gameDate = buyer.game_date ?? new Date().toISOString();
 
@@ -507,28 +540,51 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const adminFee = isCrossLeague ? Math.round(amount * 0.20) : 0;
   const totalCost = amount + adminFee;
 
-  if (buyer.budget < totalCost) {
-    return c.json({ error: isCrossLeague ? `Nedostatek prostředků (cena ${amount} Kč + administrační poplatek ${adminFee} Kč)` : "Kupující nemá dostatek prostředků" }, 400);
+  const offerErrMsg = isCrossLeague
+    ? `Nedostatek prostředků (cena ${amount} Kč + administrační poplatek ${adminFee} Kč)`
+    : "Kupující nemá dostatek prostředků";
+
+  // Atomický budget check + odečtení (zabraňuje race condition).
+  const offerDeductResult = await c.env.DB.prepare(
+    "UPDATE teams SET budget = budget - ? WHERE id = ? AND budget >= ?"
+  ).bind(totalCost, buyerTeamId, totalCost).run();
+  if (offerDeductResult.meta.changes === 0) {
+    return c.json({ error: offerErrMsg }, 400);
   }
 
-  // Transfer
-  await recordTransaction(c.env.DB, buyerTeamId, "transfer_fee", -amount, `Přestup: ${player?.first_name} ${player?.last_name}`, gameDate);
-  if (adminFee > 0) {
-    await recordTransaction(c.env.DB, buyerTeamId, "transfer_admin_fee", -adminFee, `Administrační poplatek za meziligový přestup`, gameDate);
-  }
-  await recordTransaction(c.env.DB, sellerTeamId, "transfer_income", amount, `Prodej: ${player?.first_name} ${player?.last_name}`, gameDate);
-  await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ?").bind(buyerTeamId, playerId).run();
+  const playerName = `${player?.first_name} ${player?.last_name}`;
+  const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1")
+    .first<{ id: string }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch active season for offer accept", e); return null; });
 
-  // Contracts
+  // Přičíst prodávajícímu + přesunout hráče + uzavřít nabídku atomicky.
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, sellerTeamId),
+    c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ?").bind(buyerTeamId, playerId),
+    c.env.DB.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(offerId),
+  ]);
+
+  // Listings uzavřít (non-critical)
+  await c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE player_id = ? AND status = 'active'")
+    .bind(playerId).run().catch((e) => logger.warn({ module: "transfers" }, "mark listings sold on offer accept", e));
+
+  // Transaction log (budget již upraven výše)
+  const offerBuyerBalanceAfter = buyer.budget - totalCost;
+  await c.env.DB.batch([
+    c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_fee', ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), buyerTeamId, -amount, offerBuyerBalanceAfter + adminFee, `Přestup: ${playerName}`, gameDate),
+    ...(adminFee > 0 ? [
+      c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_admin_fee', ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), buyerTeamId, -adminFee, offerBuyerBalanceAfter, `Administrační poplatek za meziligový přestup`, gameDate),
+    ] : []),
+    c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_income', ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), sellerTeamId, amount, (seller?.budget ?? 0) + amount, `Prodej: ${playerName}`, gameDate),
+  ]).catch((e) => logger.warn({ module: "transfers" }, "log offer-accept transactions", e));
+
+  // Contracts (non-critical)
   await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
     .bind(playerId, sellerTeamId).run().catch((e) => logger.warn({ module: "transfers" }, "deactivate seller contract on offer accept", e));
-  const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch active season for offer accept", e); return null; });
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
     .bind(crypto.randomUUID(), playerId, buyerTeamId, season?.id ?? "unknown", amount).run().catch((e) => logger.warn({ module: "transfers" }, "insert buyer contract on offer accept", e));
-
-  // Update offer + any listings
-  await c.env.DB.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(offerId).run();
-  await c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE player_id = ? AND status = 'active'").bind(playerId).run().catch((e) => logger.warn({ module: "transfers" }, "mark listings sold on offer accept", e));
 
   // News
   await createTransferNews(c.env.DB, seller?.league_id ?? "", null, "transfer_completed", {

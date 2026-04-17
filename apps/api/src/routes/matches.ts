@@ -4,7 +4,9 @@
 
 import { Hono } from "hono";
 import type { Bindings } from "../index";
-import { createRng } from "../generators/rng";
+import { createRng, cryptoSeed } from "../generators/rng";
+import { requireTeamOwnership } from "../auth/middleware";
+import { getSession, getTokenFromRequest } from "../auth/session";
 import { generateAbsences } from "../events/absence";
 import { simulateMatch } from "../engine/simulation";
 import { generateMatchCommentary } from "../engine/commentary";
@@ -16,6 +18,8 @@ import { logger } from "../lib/logger";
 
 const matchesRouter = new Hono<{ Bindings: Bindings }>();
 
+matchesRouter.use("/teams/:teamId/*", requireTeamOwnership);
+
 function uuid(): string { return crypto.randomUUID(); }
 
 // POST /api/teams/:teamId/simulate-match — simuluje zápas (Sprint 1: okamžitá simulace)
@@ -23,7 +27,7 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ tactic?: string }>().catch((e) => { logger.warn({ module: "matches" }, "parse simulate-match body", e); return { tactic: "balanced" }; });
 
-  const rng = createRng(Date.now());
+  const rng = createRng(cryptoSeed());
 
   // Load team + players
   const team = await c.env.DB.prepare(
@@ -216,7 +220,7 @@ matchesRouter.post("/teams/:teamId/simulate-match", async (c) => {
 // GET /api/teams/:teamId/absences — generovat absence pro příští zápas
 matchesRouter.get("/teams/:teamId/absences", async (c) => {
   const teamId = c.req.param("teamId");
-  const rng = createRng(Date.now());
+  const rng = createRng(cryptoSeed());
 
   const playersResult = await c.env.DB.prepare(
     "SELECT * FROM players WHERE team_id = ?"
@@ -737,8 +741,18 @@ matchesRouter.get("/teams/:teamId/unseen-match", async (c) => {
 
 // POST /api/matches/:id/mark-seen — označí zápas jako přečtený
 matchesRouter.post("/matches/:id/mark-seen", async (c) => {
+  const token = getTokenFromRequest(c);
+  if (!token) return c.json({ error: "Nepřihlášen" }, 401);
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return c.json({ error: "Neplatná session" }, 401);
+
   const matchId = c.req.param("id");
   const body = await c.req.json<{ teamId: string }>().catch((e) => { logger.warn({ module: "matches" }, "parse mark-seen body", e); return { teamId: "" }; });
+
+  // Ověřit, že teamId patří přihlášenému uživateli
+  const ownTeam = await c.env.DB.prepare("SELECT id FROM teams WHERE id = ? AND user_id = ?")
+    .bind(body.teamId, session.userId).first();
+  if (!ownTeam) return c.json({ error: "Přístup odepřen" }, 403);
 
   const match = await c.env.DB.prepare("SELECT home_team_id, away_team_id FROM matches WHERE id = ?")
     .bind(matchId).first<Record<string, unknown>>();
@@ -1005,10 +1019,12 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
   const teamId = c.req.param("teamId");
   const challengeId = c.req.param("challengeId");
 
-  const challenge = await c.env.DB.prepare(
-    "SELECT * FROM challenges WHERE id = ? AND challenged_team_id = ? AND status = 'pending'"
+  // Atomický claim — pouze první request projde, duplicitní vrátí 404
+  const claimed = await c.env.DB.prepare(
+    "UPDATE challenges SET status = 'accepted' WHERE id = ? AND challenged_team_id = ? AND status = 'pending' RETURNING *"
   ).bind(challengeId, teamId).first<Record<string, unknown>>();
-  if (!challenge) return c.json({ error: "Výzva nenalezena nebo už zpracována" }, 404);
+  if (!claimed) return c.json({ error: "Výzva nenalezena nebo už zpracována" }, 404);
+  const challenge = claimed;
 
   // Check budget
   const team = await c.env.DB.prepare("SELECT name, budget, game_date FROM teams WHERE id = ?")
@@ -1049,8 +1065,8 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
     "INSERT INTO matches (id, home_team_id, away_team_id, status, created_at) VALUES (?, ?, ?, 'lineups_open', ?)"
   ).bind(matchId, challengerTeamId, teamId, team.game_date).run();
 
-  // Update challenge
-  await c.env.DB.prepare("UPDATE challenges SET status = 'accepted', match_id = ? WHERE id = ?")
+  // Update match_id on challenge (status already set atomically above)
+  await c.env.DB.prepare("UPDATE challenges SET match_id = ? WHERE id = ?")
     .bind(matchId, challengeId).run();
 
   // SMS both teams

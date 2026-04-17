@@ -109,13 +109,13 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         const teamData = { teamId: user.teamId, teamName: user.teamName, primaryColor: user.primaryColor ?? null, secondaryColor: user.secondaryColor ?? null, badgePattern: user.badgePattern ?? null, villageName: user.villageName ?? null, district: user.district ?? null, budget: user.budget ?? null, leaguePosition: user.leaguePosition ?? null, season: user.season ?? null, seasonDay: user.seasonDay ?? null, seasonTotal: user.seasonTotal ?? null, gameDate: user.gameDate ?? null, nextMatch: user.nextMatch ?? null };
         localStorage.setItem(STORAGE_TEAM, JSON.stringify(teamData));
         setState((s) => ({ ...s, ...teamData, isAdmin: user.isAdmin ?? false }));
-      }).catch(() => {});
+      }).catch((e) => console.error("setTeam refresh failed:", e));
     }
   }
 
   function logout() {
     const t = state.token;
-    if (t) apiFetch("/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${t}` } }).catch(() => {});
+    if (t) apiFetch("/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${t}` } }).catch((e) => console.error("logout API call failed:", e));
     localStorage.removeItem(STORAGE_TOKEN);
     localStorage.removeItem(STORAGE_TEAM);
     setState({ token: null, userId: null, email: null, teamId: null, teamName: null, primaryColor: null, secondaryColor: null, badgePattern: null, villageName: null, district: null, budget: null, leaguePosition: null, season: null, seasonDay: null, seasonTotal: null, gameDate: null, nextMatch: null, isAdmin: false, isLoading: false });

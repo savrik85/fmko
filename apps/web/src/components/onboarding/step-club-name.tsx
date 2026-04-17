@@ -56,7 +56,7 @@ export function StepClubName({ village, initialTeamName, onBack, onSubmit }: Pro
   useEffect(() => {
     apiFetch<{ offers: SponsorOffer[] }>(`/api/villages/${village.id}/sponsors`)
       .then((d) => setSponsors(d.offers))
-      .catch(() => {});
+      .catch((e) => console.error("load village sponsors:", e));
   }, [village.id]);
 
   const stadiumSponsors = useMemo(() => {

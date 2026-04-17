@@ -90,7 +90,7 @@ export default function SponsorsPage() {
     const res = await apiFetch<{ ok: boolean; newTeamName?: string }>(`/api/teams/${teamId}/sponsors/sign`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...offer, category }),
-    }).catch(() => null);
+    }).catch((e) => { console.error("sponsors/sign:", e); return null; });
     if (res?.newTeamName && teamId) {
       setTeamCtx(teamId, res.newTeamName);
     }
@@ -128,7 +128,7 @@ export default function SponsorsPage() {
     const res = await apiFetch<{ ok: boolean; newTeamName?: string }>(`/api/teams/${teamId}/sponsors/terminate`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ category }),
-    }).catch(() => null);
+    }).catch((e) => { console.error("sponsors/terminate:", e); return null; });
     if (res?.newTeamName && teamId) {
       setTeamCtx(teamId, res.newTeamName);
     }
@@ -151,7 +151,7 @@ export default function SponsorsPage() {
     const res = await apiFetch<{ ok: boolean; newName?: string }>(`/api/teams/${teamId}/rename`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: renameInput.trim() }),
-    }).catch(() => null);
+    }).catch((e) => { console.error("team/rename:", e); return null; });
     if (res?.newName && teamId) {
       setTeamCtx(teamId, res.newName);
     }

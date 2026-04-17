@@ -9,7 +9,7 @@
 
 import { Hono } from "hono";
 import type { Bindings } from "../index";
-import { createRng } from "../generators/rng";
+import { createRng, cryptoSeed } from "../generators/rng";
 import { generateSquad, type GeneratedPlayer } from "../generators/player";
 import { generateNickname } from "../generators/nickname";
 import { generateRelationships } from "../generators/relationships";
@@ -26,6 +26,7 @@ import { generateResidence } from "../generators/residence";
 import { getDistrictDataFromDB } from "../data/districts";
 import type { ManagerBackstory } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
+import { updateSessionTeamId } from "../auth/session";
 
 const teamsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -194,6 +195,10 @@ teamsRouter.post("/", async (c) => {
 
   // Create sponsor contract if selected during onboarding (naming rights = main sponsor)
   if (body.sponsor) {
+    const { seasonBonus, seasons, terminationFee } = body.sponsor;
+    if (!seasonBonus || seasonBonus <= 0 || !seasons || seasons <= 0 || terminationFee == null || terminationFee < 0) {
+      return c.json({ error: "Neplatné hodnoty sponzorské smlouvy" }, 400);
+    }
     // Naming rights sponzor (jméno v názvu klubu/stadionu) by měl dávat více
     const baseMonthly = Math.round(body.sponsor.seasonBonus / 10);
     const monthlyAmount = body.sponsor.isNamingRights ? Math.max(3000, baseMonthly * 5) : Math.max(1000, baseMonthly * 3);
@@ -209,7 +214,7 @@ teamsRouter.post("/", async (c) => {
   }
 
   step = "generate-squad";
-  const rng = createRng(Date.now());
+  const rng = createRng(cryptoSeed());
   const villageInfo = {
     region_code: "CZ020",
     category: (village.size as string) === "hamlet" ? "vesnice" as const
@@ -578,14 +583,20 @@ teamsRouter.post("/", async (c) => {
       await c.env.DB.prepare(
         "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'manager_arrival', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
       ).bind(uuid(), existingLeague.id, teamId, headline, newsBody).run();
-    } catch { /* news optional */ }
+    } catch (e) { logger.warn({ module: "teams" }, "manager arrival news generation", e); }
 
     // Generate free agents if pool is empty
     try {
       const { maintainFreeAgentPool } = await import("../transfers/free-agent-pool");
       const { createRng } = await import("../generators/rng");
-      await maintainFreeAgentPool(c.env.DB, createRng(Date.now() + 7777), new Date());
-    } catch { /* optional */ }
+      await maintainFreeAgentPool(c.env.DB, createRng(cryptoSeed()), new Date());
+    } catch (e) { logger.warn({ module: "teams" }, "free agent pool generation (join)", e); }
+
+    // Update KV session so teamId is no longer null (fixes post-onboarding auth)
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+      await updateSessionTeamId(c.env.SESSION_KV, token, teamId).catch((e) => logger.warn({ module: "teams" }, "updateSessionTeamId (join)", e));
+    }
 
     return c.json({
       id: teamId,
@@ -810,9 +821,15 @@ teamsRouter.post("/", async (c) => {
   try {
     const { maintainFreeAgentPool } = await import("../transfers/free-agent-pool");
     const { createRng } = await import("../generators/rng");
-    const faRng = createRng(Date.now() + 7777);
+    const faRng = createRng(cryptoSeed());
     await maintainFreeAgentPool(c.env.DB, faRng, new Date());
   } catch (e) { logger.warn({ module: "teams" }, "initial free agent pool generation", e); }
+
+  // Update KV session so teamId is no longer null (fixes post-onboarding auth)
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    await updateSessionTeamId(c.env.SESSION_KV, token, teamId).catch((e) => logger.warn({ module: "teams" }, "updateSessionTeamId (create)", e));
+  }
 
   return c.json({
     id: teamId,

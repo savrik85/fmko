@@ -51,12 +51,13 @@ export default function MatchDayPage() {
         });
         setLoading(false);
       })
-      .catch(() => {
+      .catch((e) => {
+        console.error("load match-day failed:", e);
         // Mark as seen to prevent redirect loop, then go to dashboard
         apiFetch(`/api/matches/${matchId}/mark-seen`, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ teamId }),
-        }).catch(() => {});
+        }).catch((err) => console.error("mark-seen on error fallback:", err));
         setLoading(false);
         router.push("/dashboard");
       });
@@ -65,11 +66,10 @@ export default function MatchDayPage() {
   const skipMatch = async () => {
     setSkipping(true);
     const tid = teamId ?? (match?.isHome ? match.home_team_id : match?.away_team_id);
-    const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
-    await fetch(`${API}/api/matches/${matchId}/mark-seen`, {
+    await apiFetch(`/api/matches/${matchId}/mark-seen`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ teamId: tid }),
-    }).catch(() => {});
+    }).catch((e) => console.error("mark-seen on skip:", e));
     window.location.href = `/dashboard/match/${matchId}`;
   };
 
@@ -112,11 +112,10 @@ export default function MatchDayPage() {
             <button
               onClick={async () => {
                 const tid = teamId ?? (match?.isHome ? match.home_team_id : match?.away_team_id);
-                const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
-                await fetch(`${API}/api/matches/${matchId}/mark-seen`, {
+                await apiFetch(`/api/matches/${matchId}/mark-seen`, {
                   method: "POST", headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ teamId: tid }),
-                }).catch(() => {});
+                }).catch((e) => console.error("mark-seen on replay:", e));
                 window.location.href = `/dashboard/match/${matchId}/replay`;
               }}
               className="btn btn-primary btn-lg w-full font-heading font-bold text-lg py-4">

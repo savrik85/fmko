@@ -171,7 +171,7 @@ export default function EventsPage() {
       );
       setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, status: "resolved" } : e));
       setAppliedEffects((prev) => ({ ...prev, [eventId]: res.appliedEffects }));
-    } catch { /* ignore */ }
+    } catch (e) { console.error("resolve seasonal event:", e); }
     setChoosing(null);
   };
 
@@ -395,7 +395,8 @@ function PubAction({ teamId }: { teamId: string | null }) {
       );
       setResult(res.effects);
       setOpen(false);
-    } catch {
+    } catch (e) {
+      console.error("pub-visit:", e);
       setAvailable(true);
     }
     setSending(false);

@@ -7,8 +7,12 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { getSession, getTokenFromRequest } from "../auth/session";
+import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 
 const votesRouter = new Hono<{ Bindings: Bindings }>();
+
+votesRouter.use("/admin/*", requireAdmin);
+votesRouter.use("/teams/:teamId/*", requireTeamOwnership);
 
 // GET /api/votes — seznam všech hlasování + počty + můj hlas (token volitelný)
 votesRouter.get("/votes", async (c) => {
@@ -90,17 +94,12 @@ votesRouter.get("/votes", async (c) => {
   })));
 });
 
-// POST /api/admin/votes — vytvoření hlasování (jen admin)
+// POST /api/admin/votes — vytvoření hlasování (jen admin — chráněno requireAdmin middleware)
 votesRouter.post("/admin/votes", async (c) => {
   const token = getTokenFromRequest(c);
-  if (!token) return c.json({ error: "Unauthorized" }, 401);
+  if (!token) return c.json({ error: "Nepřihlášen" }, 401);
   const session = await getSession(c.env.SESSION_KV, token);
-  if (!session) return c.json({ error: "Unauthorized" }, 401);
-
-  const user = await c.env.DB.prepare(
-    "SELECT is_admin FROM users WHERE id = ?"
-  ).bind(session.userId).first<{ is_admin: number }>();
-  if (!user?.is_admin) return c.json({ error: "Access denied" }, 403);
+  if (!session) return c.json({ error: "Neplatná session" }, 401);
 
   const body = await c.req.json<{ title: string; description?: string }>();
   if (!body.title?.trim()) return c.json({ error: "Název je povinný" }, 400);
@@ -114,18 +113,8 @@ votesRouter.post("/admin/votes", async (c) => {
   return c.json({ id });
 });
 
-// POST /api/admin/votes/:voteId/close — ruční ukončení (jen admin)
+// POST /api/admin/votes/:voteId/close — ruční ukončení (jen admin — chráněno requireAdmin middleware)
 votesRouter.post("/admin/votes/:voteId/close", async (c) => {
-  const token = getTokenFromRequest(c);
-  if (!token) return c.json({ error: "Unauthorized" }, 401);
-  const session = await getSession(c.env.SESSION_KV, token);
-  if (!session) return c.json({ error: "Unauthorized" }, 401);
-
-  const user = await c.env.DB.prepare(
-    "SELECT is_admin FROM users WHERE id = ?"
-  ).bind(session.userId).first<{ is_admin: number }>();
-  if (!user?.is_admin) return c.json({ error: "Access denied" }, 403);
-
   const voteId = c.req.param("voteId");
   const result = await c.env.DB.prepare(
     "UPDATE prales_votes SET status = 'closed', closed_at = datetime('now') WHERE id = ? AND status = 'open'"
@@ -137,21 +126,10 @@ votesRouter.post("/admin/votes/:voteId/close", async (c) => {
   return c.json({ ok: true });
 });
 
-// POST /api/teams/:teamId/votes/:voteId/ballot — odevzdání hlasu
+// POST /api/teams/:teamId/votes/:voteId/ballot — odevzdání hlasu (chráněno requireTeamOwnership middleware)
 votesRouter.post("/teams/:teamId/votes/:voteId/ballot", async (c) => {
-  const token = getTokenFromRequest(c);
-  if (!token) return c.json({ error: "Unauthorized" }, 401);
-  const session = await getSession(c.env.SESSION_KV, token);
-  if (!session) return c.json({ error: "Unauthorized" }, 401);
-
   const teamId = c.req.param("teamId");
   const voteId = c.req.param("voteId");
-
-  // Ověřit, že tým patří přihlášenému uživateli
-  const team = await c.env.DB.prepare(
-    "SELECT id FROM teams WHERE id = ? AND user_id = ?"
-  ).bind(teamId, session.userId).first<{ id: string }>();
-  if (!team) return c.json({ error: "Tým nenalezen" }, 403);
 
   // Ověřit, že hlasování existuje a je otevřené
   const vote = await c.env.DB.prepare(
