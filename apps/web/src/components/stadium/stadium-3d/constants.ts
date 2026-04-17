@@ -23,16 +23,15 @@ export const STAND_DIMS = [
   { height: 6,   depth: 8,  rows: 10, color: "#9CA3AF" },          // L3 betonová s VIP
 ];
 
-// Pozice okolo hřiště pro budovy. [x, z]. y = 0 (na zemi).
-// Hřiště je centrované v 0,0,0. Tribuny budou těsně u okrajů (X: ±20, Z: ±30)
-// Budovy jsou v rozích za tribunami.
+// Hřiště 40x60 centrované v (0,0,0). Tribuny okolo: N/S z=±31..39, E/W x=±25..33.
+// Budovy a parkoviště jsou v rozích za tribunami (mimo stand zóny).
 export const BUILDING_POSITIONS = {
-  changing_rooms: [-26, -25] as [number, number],   // SW corner
-  showers:        [-26, 25]  as [number, number],   // NW corner
-  refreshments:   [26, 25]   as [number, number],   // NE corner
+  changing_rooms: [-40, -45] as [number, number],   // SW corner
+  showers:        [-40, 45]  as [number, number],   // NW corner
+  refreshments:   [40, 45]   as [number, number],   // NE corner
 };
 
-export const PARKING_POSITION: [number, number] = [26, -25];   // SE corner
+export const PARKING_POSITION: [number, number] = [42, -45];   // SE corner
 
 // Velikost parkoviště dle level
 export const PARKING_DIMS = [
@@ -48,25 +47,25 @@ export const CAR_COLORS = [
   "#6B6B6B", "#B8860B", "#556B2F",
 ];
 
-// Plot kolem celého areálu - obdélník
+// Plot kolem celého areálu - obdélník (zahrnuje budovy + parkoviště v rozích)
 export const FENCE_BOUNDS = {
-  width: 80,    // X axis
-  depth: 90,    // Z axis
+  width: 100,    // X axis
+  depth: 110,    // Z axis
 };
 
 // Stromy v okolí - statické pozice (mimo plot, kolem areálu)
 export const TREE_POSITIONS: Array<[number, number]> = [
-  [-50, -45], [-48, -20], [-50, 10], [-46, 35], [-50, 50],
-  [50, -48],  [48, -15],  [50, 15],  [46, 40],  [50, 55],
-  [-30, -55], [0, -58],   [25, -55], [-25, 55], [10, 58], [30, 55],
-  [-55, 0],   [55, 0],    [-42, -30], [42, 30],
+  [-60, -55], [-62, -25], [-60, 10], [-58, 40], [-62, 60],
+  [60, -58],  [62, -20],  [60, 20],  [58, 45],  [62, 65],
+  [-35, -68], [0, -70],   [30, -68], [-30, 68], [10, 70], [35, 68],
+  [-68, 0],   [68, 0],    [-52, -38], [52, 38],
 ];
 
 // Příjezdová cesta od jihu k parkovišti
 export const ROAD = {
-  start: [10, -55] as [number, number],
-  end:   [26, -32] as [number, number],
-  width: 4,
+  start: [42, -65] as [number, number],
+  end:   [42, -50] as [number, number],
+  width: 5,
 };
 
 // Building barvy podle typu

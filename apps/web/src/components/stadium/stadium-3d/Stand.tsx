@@ -29,8 +29,8 @@ export function Stand({ side, level, teamColor }: StandProps) {
   switch (side) {
     case "north": position = [0, 0, distance]; rotationY = 0; break;
     case "south": position = [0, 0, -distance]; rotationY = Math.PI; break;
-    case "east":  position = [distance, 0, 0]; rotationY = -Math.PI / 2; break;
-    case "west":  position = [-distance, 0, 0]; rotationY = Math.PI / 2; break;
+    case "east":  position = [distance, 0, 0]; rotationY = Math.PI / 2; break;
+    case "west":  position = [-distance, 0, 0]; rotationY = -Math.PI / 2; break;
   }
 
   const seatRows = dims.rows;
