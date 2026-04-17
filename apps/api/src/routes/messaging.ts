@@ -6,12 +6,14 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
-import { requireTeamOwnership } from "../auth/middleware";
+import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
 
 const messagingRouter = new Hono<{ Bindings: Bindings }>();
 
 // Write operace (odesílání zpráv, mark-read, vytváření konverzací) vyžadují ownership.
 messagingRouter.use("/teams/:teamId/*", requireTeamOwnership);
+// Admin broadcast endpointy vyžadují admin session.
+messagingRouter.use("/admin/*", requireAdmin);
 
 function uuid(): string {
   return crypto.randomUUID();

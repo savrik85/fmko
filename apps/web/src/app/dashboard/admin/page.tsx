@@ -21,11 +21,13 @@ export default function AdminPage() {
 
   const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
+  const authH: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
   const advanceDay = async () => {
     setRunning(true);
     addLog("Spouštím denní tick (posunutí dne, tréninky, zprávy)...");
     try {
-      const res = await fetch(`${API}/api/game/advance-day`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const res = await fetch(`${API}/api/game/advance-day`, { method: "POST", headers: { "Content-Type": "application/json", ...authH }, body: "{}" });
       const data = await res.json().catch(() => ({}));
       addLog(`Denní tick hotov: ${JSON.stringify(data).slice(0, 200)}`);
     } catch (e: any) { addLog(`CHYBA: ${e.message}`); }
@@ -36,7 +38,7 @@ export default function AdminPage() {
     setRunning(true);
     addLog("Spouštím zápasový tick (18:00 simulace)...");
     try {
-      const res = await fetch(`${API}/api/game/run-matches`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const res = await fetch(`${API}/api/game/run-matches`, { method: "POST", headers: { "Content-Type": "application/json", ...authH }, body: "{}" });
       const data = await res.json().catch(() => ({}));
       addLog(`Zápasový tick hotov: ${JSON.stringify(data).slice(0, 200)}`);
     } catch (e: any) { addLog(`CHYBA: ${e.message}`); }
@@ -48,8 +50,8 @@ export default function AdminPage() {
     addLog("Spouštím 7 dní (denní tick + zápasový tick)...");
     for (let i = 0; i < 7; i++) {
       try {
-        await fetch(`${API}/api/game/advance-day`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-        await fetch(`${API}/api/game/run-matches`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        await fetch(`${API}/api/game/advance-day`, { method: "POST", headers: { "Content-Type": "application/json", ...authH }, body: "{}" });
+        await fetch(`${API}/api/game/run-matches`, { method: "POST", headers: { "Content-Type": "application/json", ...authH }, body: "{}" });
         addLog(`Den ${i + 1}/7 hotov`);
       } catch (e: any) { addLog(`CHYBA den ${i + 1}: ${e.message}`); break; }
     }
@@ -477,6 +479,7 @@ const COLUMN_LABELS: Record<string, Record<string, string>> = {
 };
 
 function SeedDataSection() {
+  const { token } = useTeam();
   const [tables, setTables] = useState<SeedTable[]>([]);
   const [activeTable, setActiveTable] = useState<string | null>(null);
   const [rows, setRows] = useState<SeedRow[]>([]);
@@ -488,22 +491,23 @@ function SeedDataSection() {
   const [editValue, setEditValue] = useState("");
 
   const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+  const authH: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
   useEffect(() => {
-    fetch(`${API}/api/admin/seed-data`).then((r) => r.json()).then(setTables).catch((e) => console.error("load seed tables:", e));
+    fetch(`${API}/api/admin/seed-data`, { headers: authH }).then((r) => r.json()).then(setTables).catch((e) => console.error("load seed tables:", e));
   }, []);
 
   const loadTable = async (key: string, dist?: string) => {
     setActiveTable(key);
     setAdding(false);
     const q = dist ? `?district=${dist}` : "";
-    const data = await fetch(`${API}/api/admin/seed-data/${key}${q}`).then((r) => r.json()).catch(() => ({ rows: [], total: 0 }));
+    const data = await fetch(`${API}/api/admin/seed-data/${key}${q}`, { headers: authH }).then((r) => r.json()).catch(() => ({ rows: [], total: 0 }));
     setRows(data.rows);
     setTotal(data.total);
   };
 
   const deleteRow = async (table: string, id: unknown) => {
-    await fetch(`${API}/api/admin/seed-data/${table}/${id}`, { method: "DELETE" }).catch((e) => console.error("delete row:", e));
+    await fetch(`${API}/api/admin/seed-data/${table}/${id}`, { method: "DELETE", headers: authH }).catch((e) => console.error("delete row:", e));
     loadTable(table, district || undefined);
   };
 
@@ -517,7 +521,7 @@ function SeedDataSection() {
     const numCols = ["frequency", "monthly_min", "monthly_max", "win_bonus_min", "win_bonus_max", "min_skill"];
     const body = { [col]: numCols.includes(col) ? Number(value) : value };
     await fetch(`${API}/api/admin/seed-data/${activeTable}/${id}`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT", headers: { "Content-Type": "application/json", ...authH },
       body: JSON.stringify(body),
     }).catch((e) => console.error("save cell:", e));
     setEditCell(null);
@@ -529,7 +533,7 @@ function SeedDataSection() {
     const body: Record<string, string> = { ...newRow, district: district || newRow.district };
     if (newRow.frequency) body.frequency = String(Number(newRow.frequency));
     await fetch(`${API}/api/admin/seed-data/${activeTable}`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", ...authH },
       body: JSON.stringify(body),
     }).catch((e) => console.error("add row:", e));
     setNewRow({});
