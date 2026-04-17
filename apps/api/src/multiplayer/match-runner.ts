@@ -65,8 +65,8 @@ export async function runScheduledMatches(
       // Determine match type
       const homeTeam = await db.prepare("SELECT name, user_id FROM teams WHERE id = ?").bind(homeTeamId).first<Record<string, unknown>>();
       const awayTeam = await db.prepare("SELECT name, user_id FROM teams WHERE id = ?").bind(awayTeamId).first<Record<string, unknown>>();
-      const homeIsHuman = homeTeam?.user_id !== "ai";
-      const awayIsHuman = awayTeam?.user_id !== "ai";
+      const homeIsHuman = !!homeTeam && homeTeam.user_id !== "ai";
+      const awayIsHuman = !!awayTeam && awayTeam.user_id !== "ai";
       const matchType: MatchRunResult["matchType"] = homeIsHuman && awayIsHuman ? "pvp"
         : homeIsHuman ? "pve_home" : awayIsHuman ? "pve_away" : "ai_vs_ai";
 
