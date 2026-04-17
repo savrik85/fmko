@@ -99,11 +99,11 @@ export function Stadium3D({ pitchCondition, pitchType, facilities, teamColor, st
         {/* Parkoviště */}
         <Parking level={f.parking ?? 0} position={layout.parking} />
 
-        {/* Cedule s názvem stadionu před hlavním vchodem (jih, mimo plot) */}
+        {/* Cedule s názvem stadionu — těsně před jižním plotem zvenku */}
         {stadiumName && (
           <StadiumSign
             name={stadiumName}
-            position={[0, 0, -(layout.fence.depth / 2 + 4)]}
+            position={[0, 0, -(layout.fence.depth / 2 + 1.5)]}
             teamColor={teamColor}
           />
         )}
