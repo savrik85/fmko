@@ -77,6 +77,7 @@ export default function ConversationPage() {
 
   useEffect(() => {
     if (!teamId) return;
+    let stopped = false;
     Promise.all([
       apiFetch<Message[]>(`/api/teams/${teamId}/conversations/${convId}`),
       apiFetch<ConvInfo[]>(`/api/teams/${teamId}/conversations`).then((all) => all.find((c) => c.id === convId) ?? null),
@@ -84,23 +85,42 @@ export default function ConversationPage() {
       setMessages(msgs);
       setConv(c);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((e) => {
+      // 404 = konverzace neexistuje nebo nepatří uživateli → redirect
+      const msg = e?.message ?? "";
+      if (msg.includes("nenalezena") || msg.includes("404")) {
+        stopped = true;
+        router.replace("/dashboard");
+        return;
+      }
+      console.error("phone load messages:", e);
+      setLoading(false);
+    });
 
-    // Poll for new messages every 3s
+    // Poll for new messages every 3s — zastavit po 404
     const interval = setInterval(() => {
+      if (stopped) return;
       apiFetch<Message[]>(`/api/teams/${teamId}/conversations/${convId}`)
         .then((msgs) => {
           setMessages((prev) => {
             if (msgs.length !== prev.length) return msgs;
-            // Check if last message differs
             if (msgs.length > 0 && prev.length > 0 && msgs[msgs.length - 1].id !== prev[prev.length - 1].id) return msgs;
             return prev;
           });
         })
-        .catch((e) => console.error("phone poll messages:", e));
+        .catch((e) => {
+          const msg = e?.message ?? "";
+          if (msg.includes("nenalezena") || msg.includes("404")) {
+            // Konverzace zmizela — zastavit poll, tiše
+            stopped = true;
+            clearInterval(interval);
+            return;
+          }
+          console.error("phone poll messages:", e);
+        });
     }, 3000);
-    return () => clearInterval(interval);
-  }, [teamId, convId]);
+    return () => { stopped = true; clearInterval(interval); };
+  }, [teamId, convId, router]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
