@@ -38,13 +38,13 @@ export default function ManagerDetailPage() {
     if (!teamId) return;
     // Manager ID is the same as team ID for fetching (API uses team ID)
     Promise.all([
-      apiFetch<ManagerProfile>(`/api/teams/${managerId}/manager`).catch(() => null),
-      apiFetch<Team>(`/api/teams/${managerId}`).catch(() => null),
+      apiFetch<ManagerProfile>(`/api/teams/${managerId}/manager`).catch((e) => { console.error("manager profile load:", e); return null; }),
+      apiFetch<Team>(`/api/teams/${managerId}`).catch((e) => { console.error("manager team load:", e); return null; }),
     ]).then(([mgr, t]) => {
       setManager(mgr);
       setTeam(t);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((e) => { console.error("manager page load:", e); setLoading(false); });
   }, [teamId, managerId]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>;
@@ -94,7 +94,7 @@ export default function ManagerDetailPage() {
               if (!teamId) return;
               const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/conversation-with/${managerId}`, {
                 method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-              }).catch(() => null);
+              }).catch((e) => { console.error("conversation-with:", e); return null; });
               if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
             }}
               className="bg-white/10 hover:bg-white/20 rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0">

@@ -73,7 +73,7 @@ export default function TrainingPage() {
         `/api/teams/${teamId}/training`
       ),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
-      apiFetch<TrainingStats>(`/api/teams/${teamId}/training-stats`).catch(() => null),
+      apiFetch<TrainingStats>(`/api/teams/${teamId}/training-stats`).catch((e) => { console.error("training-stats load:", e); return null; }),
     ]).then(([data, players, statsData]) => {
       setType(data.type);
       setApproach(data.approach);
@@ -93,12 +93,16 @@ export default function TrainingPage() {
   const savePlan = async () => {
     if (!teamId || saving) return;
     setSaving(true);
-    await apiFetch(`/api/teams/${teamId}/training`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, approach, sessionsPerWeek: sessions }),
-    });
-    setDirty(false);
+    try {
+      await apiFetch(`/api/teams/${teamId}/training`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, approach, sessionsPerWeek: sessions }),
+      });
+      setDirty(false);
+    } catch (e) {
+      console.error("save training plan:", e);
+    }
     setSaving(false);
   };
 
