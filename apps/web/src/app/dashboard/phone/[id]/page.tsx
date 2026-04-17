@@ -97,7 +97,7 @@ export default function ConversationPage() {
             return prev;
           });
         })
-        .catch(() => {});
+        .catch((e) => console.error("phone poll messages:", e));
     }, 3000);
     return () => clearInterval(interval);
   }, [teamId, convId]);

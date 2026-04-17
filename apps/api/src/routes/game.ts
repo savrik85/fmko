@@ -2668,6 +2668,8 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
 
   const squadCount = await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM players WHERE team_id = ?")
     .bind(teamId).first<{ cnt: number }>();
+  if ((squadCount?.cnt ?? 0) >= 25) return c.json({ error: "Kádr je plný (max. 25 hráčů)" }, 400);
+
   const personality = (() => { try { return JSON.parse(fa.personality as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent personality", e); return {}; } })();
 
   const { evaluateSigningChance } = await import("../transfers/player-agency");
@@ -2714,9 +2716,17 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'free_agent', 0, 1)")
     .bind(crypto.randomUUID(), playerId, teamId, season?.id ?? "unknown").run().catch((e) => logger.warn({ module: "game" }, "insert signing contract", e));
 
+  // Atomický DELETE — pokud FA mezitím podepsal jiný tým, RETURNING vrátí 0 řádků.
+  const deleted = await c.env.DB.prepare("DELETE FROM free_agents WHERE id = ? RETURNING id").bind(faId).first<{ id: string }>();
+  if (!deleted) {
+    // Jiný tým ho stihl dřív — rollback: smazat hráče co jsme právě insertli
+    await c.env.DB.prepare("DELETE FROM players WHERE id = ?").bind(playerId).run()
+      .catch((e) => logger.warn({ module: "game" }, "rollback player after FA race condition", e));
+    return c.json({ error: "Hráč již byl podepsán jiným týmem" }, 409);
+  }
+
   const gameDate = (team.game_date as string) ?? new Date().toISOString();
   await recordTransaction(c.env.DB, teamId, "signing_fee", -500, `Registrace: ${fa.first_name} ${fa.last_name}`, gameDate);
-  await c.env.DB.prepare("DELETE FROM free_agents WHERE id = ?").bind(faId).run();
 
   const { createTransferNews } = await import("../transfers/transfer-news");
   if (isCelebrity) {

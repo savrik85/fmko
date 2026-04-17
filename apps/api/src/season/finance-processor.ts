@@ -76,21 +76,20 @@ export async function recordTransaction(
   gameDate: string,
   referenceId?: string,
 ): Promise<number> {
-  const team = await db.prepare("SELECT budget FROM teams WHERE id = ?")
-    .bind(teamId).first<{ budget: number }>();
-  if (!team) return 0;
+  // Atomická operace: budget += amount bez race condition.
+  // Přečteme aktuální budget až PO update, abychom měli správný balance_after.
+  const updated = await db.prepare(
+    "UPDATE teams SET budget = budget + ? WHERE id = ? RETURNING budget"
+  ).bind(amount, teamId).first<{ budget: number }>();
+  if (!updated) return 0;
 
-  const balanceAfter = team.budget + amount;
+  const balanceAfter = updated.budget;
   const id = crypto.randomUUID();
 
-  await db.batch([
-    db.prepare(
-      "INSERT INTO transactions (id, team_id, type, amount, balance_after, description, reference_id, game_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(id, teamId, type, amount, balanceAfter, description, referenceId ?? null, gameDate),
-    db.prepare(
-      "UPDATE teams SET budget = ? WHERE id = ?"
-    ).bind(balanceAfter, teamId),
-  ]);
+  await db.prepare(
+    "INSERT INTO transactions (id, team_id, type, amount, balance_after, description, reference_id, game_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(id, teamId, type, amount, balanceAfter, description, referenceId ?? null, gameDate).run()
+    .catch((e) => logger.warn({ module: "finance" }, "insert transaction record", e));
 
   return balanceAfter;
 }
