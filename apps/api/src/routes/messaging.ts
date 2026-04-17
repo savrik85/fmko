@@ -68,9 +68,15 @@ messagingRouter.get("/teams/:teamId/conversations", async (c) => {
 
 // GET /api/teams/:teamId/conversations/:convId — zprávy v konverzaci
 messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
+  const teamId = c.req.param("teamId");
   const convId = c.req.param("convId");
   const limit = Number(c.req.query("limit") || "50");
   const before = c.req.query("before"); // cursor pagination
+
+  // Ověřit že konverzace patří tomuto týmu
+  const convOwner = await c.env.DB.prepare("SELECT team_id FROM conversations WHERE id = ?")
+    .bind(convId).first<{ team_id: string }>().catch((e) => { logger.warn({ module: "messaging" }, "conv ownership check", e); return null; });
+  if (!convOwner || convOwner.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
 
   let query = "SELECT * FROM messages WHERE conversation_id = ?";
   const binds: unknown[] = [convId];
@@ -114,6 +120,11 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   const body = await c.req.json<{ body: string }>();
 
   if (!body.body?.trim()) return c.json({ error: "Empty message" }, 400);
+
+  // Ověřit že konverzace patří tomuto týmu
+  const convOwner = await c.env.DB.prepare("SELECT team_id FROM conversations WHERE id = ?")
+    .bind(convId).first<{ team_id: string }>().catch((e) => { logger.warn({ module: "messaging" }, "conv ownership check on send", e); return null; });
+  if (!convOwner || convOwner.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
 
   // Get team name for sender
   const team = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")

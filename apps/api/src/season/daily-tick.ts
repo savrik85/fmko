@@ -34,6 +34,18 @@ export async function executeDailyTick(
   const gameDateRow = await env.DB.prepare("SELECT game_date FROM teams WHERE user_id != 'ai' AND game_date IS NOT NULL LIMIT 1")
     .first<{ game_date: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "load game_date failed", e); return null; });
   const effectiveDate = gameDateRow?.game_date ? new Date(gameDateRow.game_date) : now;
+
+  // Idempotency: zabránit dvojitému spuštění pro stejný herní den
+  // Klíč je aktuální game_date (před posunem), takže druhé spuštění vidí novou hodnotu a přeskočí.
+  const todayKey = effectiveDate.toISOString().slice(0, 10); // YYYY-MM-DD
+  const alreadyRan = await env.CACHE_KV.get(`daily-tick:${todayKey}`).catch((e) => { logger.warn({ module: "daily-tick" }, "read tick KV flag failed", e); return null; });
+  if (alreadyRan) {
+    logger.warn({ module: "daily-tick" }, `SKIP — tick for ${todayKey} already ran`);
+    return { date: effectiveDate.toISOString(), dayOfWeek: effectiveDate.getUTCDay(), isTrainingDay: false, events: [] };
+  }
+  // Uložit příznak s TTL 36h (pokryje případ posunu na další den)
+  await env.CACHE_KV.put(`daily-tick:${todayKey}`, "1", { expirationTtl: 60 * 60 * 36 }).catch((e) => logger.warn({ module: "daily-tick" }, "set tick KV flag failed", e));
+
   const dayOfWeek = effectiveDate.getUTCDay();
   const isTrainingDay = dayOfWeek >= 1 && dayOfWeek <= 5;
   const events: DailyTickEvent[] = [];

@@ -2787,9 +2787,10 @@ gameRouter.post("/teams/:teamId/players/:playerId/list", async (c) => {
   const body = await c.req.json<{ askingPrice: number }>();
 
   const player = await c.env.DB.prepare(
-    "SELECT p.first_name, p.last_name, p.age, p.position, t.league_id, t.name as team_name FROM players p JOIN teams t ON p.team_id = t.id WHERE p.id = ? AND p.team_id = ?"
+    "SELECT p.first_name, p.last_name, p.age, p.position, p.loan_from_team_id, t.league_id, t.name as team_name FROM players p JOIN teams t ON p.team_id = t.id WHERE p.id = ? AND p.team_id = ?"
   ).bind(playerId, teamId).first<Record<string, unknown>>();
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
+  if (player.loan_from_team_id) return c.json({ error: "Hostující hráč nemůže být vylistován na trh" }, 400);
 
   // Check if already listed
   const existing = await c.env.DB.prepare(
