@@ -8,6 +8,7 @@ import { BottomNav } from "@/components/dashboard/bottom-nav";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Napoveda } from "@/components/ui/napoveda";
 import { useTeam } from "@/context/team-context";
+import { apiFetch } from "@/lib/api";
 
 const DETAIL_PREFIXES = ["/dashboard/player/", "/dashboard/team/", "/dashboard/match/"];
 const CUSTOM_HEADER_PAGES = ["/dashboard/liga", "/dashboard/schedule"];
@@ -21,9 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (!teamId) return;
     if (pathname.includes("/replay")) return; // don't redirect away from replay
-    const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
-    fetch(`${API}/api/teams/${teamId}/unseen-match`)
-      .then((r) => r.json())
+    apiFetch<{ matchId: string } | null>(`/api/teams/${teamId}/unseen-match`)
       .then((data) => {
         if (data && data.matchId) {
           window.location.replace(`/match-day/${data.matchId}`);

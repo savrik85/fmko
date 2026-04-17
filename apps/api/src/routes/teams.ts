@@ -195,6 +195,10 @@ teamsRouter.post("/", async (c) => {
 
   // Create sponsor contract if selected during onboarding (naming rights = main sponsor)
   if (body.sponsor) {
+    const { seasonBonus, seasons, terminationFee } = body.sponsor;
+    if (!seasonBonus || seasonBonus <= 0 || !seasons || seasons <= 0 || terminationFee == null || terminationFee < 0) {
+      return c.json({ error: "Neplatné hodnoty sponzorské smlouvy" }, 400);
+    }
     // Naming rights sponzor (jméno v názvu klubu/stadionu) by měl dávat více
     const baseMonthly = Math.round(body.sponsor.seasonBonus / 10);
     const monthlyAmount = body.sponsor.isNamingRights ? Math.max(3000, baseMonthly * 5) : Math.max(1000, baseMonthly * 3);

@@ -1019,10 +1019,12 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
   const teamId = c.req.param("teamId");
   const challengeId = c.req.param("challengeId");
 
-  const challenge = await c.env.DB.prepare(
-    "SELECT * FROM challenges WHERE id = ? AND challenged_team_id = ? AND status = 'pending'"
+  // Atomický claim — pouze první request projde, duplicitní vrátí 404
+  const claimed = await c.env.DB.prepare(
+    "UPDATE challenges SET status = 'accepted' WHERE id = ? AND challenged_team_id = ? AND status = 'pending' RETURNING *"
   ).bind(challengeId, teamId).first<Record<string, unknown>>();
-  if (!challenge) return c.json({ error: "Výzva nenalezena nebo už zpracována" }, 404);
+  if (!claimed) return c.json({ error: "Výzva nenalezena nebo už zpracována" }, 404);
+  const challenge = claimed;
 
   // Check budget
   const team = await c.env.DB.prepare("SELECT name, budget, game_date FROM teams WHERE id = ?")
@@ -1063,8 +1065,8 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
     "INSERT INTO matches (id, home_team_id, away_team_id, status, created_at) VALUES (?, ?, ?, 'lineups_open', ?)"
   ).bind(matchId, challengerTeamId, teamId, team.game_date).run();
 
-  // Update challenge
-  await c.env.DB.prepare("UPDATE challenges SET status = 'accepted', match_id = ? WHERE id = ?")
+  // Update match_id on challenge (status already set atomically above)
+  await c.env.DB.prepare("UPDATE challenges SET match_id = ? WHERE id = ?")
     .bind(matchId, challengeId).run();
 
   // SMS both teams
