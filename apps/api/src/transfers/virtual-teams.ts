@@ -6,6 +6,7 @@
 
 import type { Rng } from "../generators/rng";
 import { generatePlayer, type VillageInfo } from "../generators/player";
+import { generateHeightWeight } from "../generators/physicals";
 import { generatePlayerFace } from "../routes/teams";
 import { logger } from "../lib/logger";
 
@@ -157,7 +158,7 @@ export async function generateAiListings(
     position,
     overallRating,
     skills: adjustedSkills,
-    physical: { stamina: player.stamina, strength: player.strength, preferredFoot: player.preferredFoot },
+    physical: { stamina: player.stamina, strength: player.strength, ...generateHeightWeight(rng, position, player.bodyType ?? "normal"), preferredFoot: player.preferredFoot },
     personality: { discipline: player.discipline, workRate: player.workRate, leadership: player.leadership },
     weeklyWage,
     avatar,

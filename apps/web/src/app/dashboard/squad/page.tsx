@@ -204,6 +204,23 @@ export default function SquadPage() {
                     {p.loan_from_team_id && (
                       <span className="ml-1.5 text-[10px] bg-yellow-100 text-yellow-700 font-heading font-bold px-1.5 py-0.5 rounded-full">Host.</span>
                     )}
+                    {(() => {
+                      const inj = (p as unknown as { injury?: { type?: string; daysRemaining: number } | null }).injury;
+                      if (!inj) return null;
+                      const daysLabel = inj.daysRemaining === 1 ? "den" : inj.daysRemaining < 5 ? "dny" : "dní";
+                      const tip = `Zraněný${inj.type ? ` — ${inj.type}` : ""} · ${inj.daysRemaining} ${daysLabel} do návratu`;
+                      return (
+                        <span className="ml-1.5 text-[10px] bg-red-100 text-red-700 font-heading font-bold px-1.5 py-0.5 rounded-full cursor-help" title={tip} aria-label={tip}>🩹</span>
+                      );
+                    })()}
+                    {(() => {
+                      const abs = (p as unknown as { absence?: { reason?: string; category?: string } | null }).absence;
+                      if (!abs) return null;
+                      const tip = `Chybí dnes${abs.reason ? ` — ${abs.reason}` : ""}`;
+                      return (
+                        <span className="ml-1.5 text-[10px] bg-amber-100 text-amber-700 font-heading font-bold px-1.5 py-0.5 rounded-full cursor-help" title={tip} aria-label={tip}>🚫</span>
+                      );
+                    })()}
                   </td>
                   {/* Position */}
                   <td className="py-2 px-1.5 text-center"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></td>

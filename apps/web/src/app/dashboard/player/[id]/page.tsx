@@ -277,11 +277,20 @@ export default function PlayerDetailPage() {
   const boxLabel = light ? "text-gray-400" : "text-white/50";
 
   // Injury info (rendered as inline pill on both layouts)
-  const injuryInfo = (player as any).injury as { daysRemaining: number; type?: string } | null;
+  const injuryInfo = (player as unknown as { injury?: { daysRemaining: number; type?: string } | null }).injury ?? null;
   const injuryPill = injuryInfo ? (
     <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-50 border border-red-300/30 rounded-md px-2 py-0.5 text-[11px] font-heading font-bold whitespace-nowrap">
       <span>🩹</span>
       <span>Zraněný · {injuryInfo.daysRemaining} {injuryInfo.daysRemaining === 1 ? "den" : "dní"}</span>
+    </span>
+  ) : null;
+
+  // Absence info (trénink zmeškán, výmluva)
+  const absenceInfo = (player as unknown as { absence?: { reason?: string; category?: string } | null }).absence ?? null;
+  const absencePill = absenceInfo ? (
+    <span className="inline-flex items-center gap-1 bg-amber-500/20 text-amber-50 border border-amber-300/30 rounded-md px-2 py-0.5 text-[11px] font-heading font-bold whitespace-nowrap" title={absenceInfo.reason ?? ""}>
+      <span>🚫</span>
+      <span>Absence{absenceInfo.reason ? ` · ${absenceInfo.reason}` : ""}</span>
     </span>
   ) : null;
 
@@ -328,6 +337,7 @@ export default function PlayerDetailPage() {
                   {displayTeam.name}
                 </a>
                 {injuryPill}
+                {absencePill}
               </div>
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
@@ -395,6 +405,7 @@ export default function PlayerDetailPage() {
                 {displayTeam.name}
               </a>
               {injuryPill}
+              {absencePill}
             </div>
             {/* Řádek 3: staty přes celou šířku */}
             <div className="flex gap-2 mt-3">
