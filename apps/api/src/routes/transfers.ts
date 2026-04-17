@@ -206,6 +206,9 @@ transfersRouter.post("/teams/:teamId/players/:playerId/list", async (c) => {
   const teamId = c.req.param("teamId");
   const playerId = c.req.param("playerId");
   const body = await c.req.json<{ askingPrice: number }>();
+  if (!body.askingPrice || body.askingPrice <= 0 || !Number.isInteger(body.askingPrice)) {
+    return c.json({ error: "Cena musí být kladné celé číslo" }, 400);
+  }
 
   const player = await c.env.DB.prepare(
     "SELECT p.first_name, p.last_name, p.age, p.position, t.league_id, t.name as team_name FROM players p JOIN teams t ON p.team_id = t.id WHERE p.id = ? AND p.team_id = ?"

@@ -3088,6 +3088,9 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
   const teamId = c.req.param("teamId");
   const listingId = c.req.param("listingId");
   const body = await c.req.json<{ amount: number }>();
+  if (!body.amount || body.amount <= 0 || !Number.isInteger(body.amount)) {
+    return c.json({ error: "Nabídka musí být kladné celé číslo" }, 400);
+  }
 
   const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
   if (!team || team.budget < body.amount) return c.json({ error: `Nedostatek peněz. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
@@ -3313,11 +3316,10 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   const ownerTeam = await c.env.DB.prepare("SELECT user_id FROM teams WHERE id = ?").bind(targetOwnerId).first<{ user_id: string }>();
   if (!ownerTeam || ownerTeam.user_id === "ai") return c.json({ error: "Nabídky lze posílat jen lidským týmům" }, 400);
 
-  // Budget check — nelze nabídnout víc než máme
-  if (body.amount > 0) {
-    const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
-    if (!team || team.budget < body.amount) return c.json({ error: `Nedostatek peněz. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
-  }
+  // Budget check — nelze nabídnout zápornou ani nulovou částku nebo víc než máme
+  if (body.amount <= 0 || !Number.isInteger(body.amount)) return c.json({ error: "Nabídka musí být kladné celé číslo" }, 400);
+  const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
+  if (!team || team.budget < body.amount) return c.json({ error: `Nedostatek peněz. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
 
   const offerType = body.offerType ?? "transfer";
   const loanDuration = offerType === "loan" ? (body.loanDuration ?? 30) : null;
@@ -3560,6 +3562,9 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
   const body = await c.req.json<{ amount: number }>();
+  if (!body.amount || body.amount <= 0 || !Number.isInteger(body.amount)) {
+    return c.json({ error: "Protinabídka musí být kladné celé číslo" }, 400);
+  }
   await c.env.DB.prepare("UPDATE transfer_offers SET status = 'countered', counter_amount = ? WHERE id = ? AND to_team_id = ?")
     .bind(body.amount, offerId, teamId).run();
 
