@@ -299,7 +299,8 @@ function BroadcastSection() {
       setStatus(`Odesláno ${data.sent ?? 0} týmům`);
       setMessage("");
       setTimeout(() => setStatus(""), 4000);
-    } catch {
+    } catch (e) {
+      console.error("broadcast send:", e);
       setStatus("Chyba při odesílání");
     }
     setSending(false);
@@ -317,7 +318,8 @@ function BroadcastSection() {
       setReplyMsg("");
       setStatus("Odpověď odeslána");
       setTimeout(() => setStatus(""), 3000);
-    } catch {
+    } catch (e) {
+      console.error("broadcast reply:", e);
       setStatus("Chyba při odesílání odpovědi");
     }
   };

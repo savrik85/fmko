@@ -25,8 +25,8 @@ export function FaceAvatar({ faceConfig, size = 80, className = "" }: FaceAvatar
 
     try {
       display(innerRef.current, faceConfig as any, { width: size, height: renderHeight });
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.error("face-avatar display:", e);
     }
   }, [faceConfig, size, renderHeight]);
 

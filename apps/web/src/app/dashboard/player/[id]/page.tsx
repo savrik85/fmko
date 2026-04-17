@@ -255,8 +255,8 @@ export default function PlayerDetailPage() {
       });
       setOfferSent(true);
       setOfferOpen(false);
-    } catch {
-      // silently handled
+    } catch (e) {
+      console.error("send transfer offer:", e);
     } finally {
       setOfferSending(false);
     }
