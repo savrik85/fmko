@@ -157,10 +157,10 @@ export default function SettingsPage() {
     setSaving(true);
     setStatus(null);
     try {
+      const token = localStorage.getItem("om_token");
       const res = await fetch(`${API}/auth/change-password`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
       });
       const data = await res.json();
@@ -170,7 +170,8 @@ export default function SettingsPage() {
       } else {
         setStatus({ type: "error", msg: data.error ?? "Chyba" });
       }
-    } catch {
+    } catch (e) {
+      console.error("change-password failed:", e);
       setStatus({ type: "error", msg: "Nepodařilo se spojit se serverem" });
     }
     setSaving(false);

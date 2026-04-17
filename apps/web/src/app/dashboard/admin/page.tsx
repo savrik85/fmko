@@ -268,6 +268,7 @@ function VotesAdmin() {
 /* ── Broadcast Section ── */
 
 function BroadcastSection() {
+  const { token } = useTeam();
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState("");
@@ -276,9 +277,10 @@ function BroadcastSection() {
   const [replyMsg, setReplyMsg] = useState("");
 
   const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+  const authH: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
   const loadReplies = async () => {
-    const data = await fetch(`${API}/api/admin/broadcast-replies`).then((r) => r.json()).catch(() => []);
+    const data = await fetch(`${API}/api/admin/broadcast-replies`, { headers: authH }).then((r) => r.json()).catch((e) => { console.error("load broadcast replies:", e); return []; });
     setReplies(data);
   };
 
@@ -290,7 +292,7 @@ function BroadcastSection() {
     try {
       const res = await fetch(`${API}/api/admin/broadcast`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authH },
         body: JSON.stringify({ message: message.trim() }),
       });
       const data = await res.json();
@@ -308,7 +310,7 @@ function BroadcastSection() {
     try {
       await fetch(`${API}/api/admin/broadcast-reply/${teamId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authH },
         body: JSON.stringify({ message: replyMsg.trim() }),
       });
       setReplyTo(null);
