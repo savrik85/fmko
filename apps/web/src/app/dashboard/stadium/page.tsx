@@ -173,10 +173,10 @@ export default function StadiumPage() {
         )}
 
         {/* Toggle 2D / 3D */}
-        <div className="flex justify-end gap-1 mb-3">
+        <div className="flex justify-end gap-2 mb-3">
           <button
             onClick={() => switchView("2d")}
-            className={`px-3 py-1 rounded-lg text-xs font-heading font-bold transition-colors ${
+            className={`px-5 py-2 rounded-lg text-base font-heading font-bold transition-colors min-w-[64px] ${
               viewMode === "2d"
                 ? "bg-pitch-500 text-white"
                 : "bg-gray-100 text-muted hover:bg-gray-200"
@@ -186,7 +186,7 @@ export default function StadiumPage() {
           </button>
           <button
             onClick={() => switchView("3d")}
-            className={`px-3 py-1 rounded-lg text-xs font-heading font-bold transition-colors ${
+            className={`px-5 py-2 rounded-lg text-base font-heading font-bold transition-colors min-w-[64px] ${
               viewMode === "3d"
                 ? "bg-pitch-500 text-white"
                 : "bg-gray-100 text-muted hover:bg-gray-200"
@@ -197,13 +197,19 @@ export default function StadiumPage() {
         </div>
 
         {viewMode === "3d" ? (
-          <div className="h-[400px] sm:h-[500px] rounded-xl overflow-hidden bg-gradient-to-b from-sky-100 to-sky-50">
+          <div
+            className="h-[280px] sm:h-[500px] rounded-xl overflow-hidden bg-gradient-to-b from-sky-100 to-sky-50 relative"
+            style={{ touchAction: "pan-y" }}
+          >
             <Stadium3D
               pitchCondition={stadium.pitchCondition}
               pitchType={stadium.pitchType}
               facilities={stadium.facilities}
               teamColor={team.primary_color}
             />
+            <div className="sm:hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-[10px] px-2 py-1 rounded pointer-events-none">
+              dva prsty pro rotaci/zoom
+            </div>
           </div>
         ) : (
           <StadiumView

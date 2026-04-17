@@ -4,7 +4,11 @@ import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { GROUND_SIZE, GROUND_COLOR, TREE_POSITIONS, ROAD } from "./constants";
 
-export function Surroundings() {
+interface SurroundingsProps {
+  reduceTrees?: boolean;
+}
+
+export function Surroundings({ reduceTrees = false }: SurroundingsProps) {
   return (
     <group>
       {/* Ground plane */}
@@ -16,8 +20,8 @@ export function Surroundings() {
       {/* Příjezdová cesta */}
       <Road />
 
-      {/* Stromy */}
-      <Trees />
+      {/* Stromy — na mobilu jen polovina pro výkon */}
+      <Trees reduce={reduceTrees} />
     </group>
   );
 }
@@ -42,26 +46,27 @@ function Road() {
   );
 }
 
-function Trees() {
+function Trees({ reduce = false }: { reduce?: boolean }) {
   const trunkRef = useRef<THREE.InstancedMesh>(null);
   const crownRef = useRef<THREE.InstancedMesh>(null);
   const matrix = useMemo(() => new THREE.Matrix4(), []);
   const color = useMemo(() => new THREE.Color(), []);
 
-  // Pseudo-random varianty velikosti
+  // Pseudo-random varianty velikosti; na mobilu redukujeme na polovinu
   const trees = useMemo(() => {
     let seed = 7777;
     const rand = () => {
       seed = (seed * 9301 + 49297) % 233280;
       return seed / 233280;
     };
-    return TREE_POSITIONS.map(([x, z]) => ({
+    const positions = reduce ? TREE_POSITIONS.filter((_, i) => i % 2 === 0) : TREE_POSITIONS;
+    return positions.map(([x, z]) => ({
       x,
       z,
       scale: 0.7 + rand() * 0.6,
       crownColor: rand() > 0.6 ? "#3D5A28" : "#4A7A2C",
     }));
-  }, []);
+  }, [reduce]);
 
   useEffect(() => {
     if (!trunkRef.current || !crownRef.current) return;

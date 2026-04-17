@@ -10,16 +10,19 @@ interface StandProps {
   side: Side;
   level: number;
   teamColor: string;
+  reducedDetail?: boolean;
 }
 
 const STAND_GAP = 1;
 
-export function Stand({ side, level, teamColor }: StandProps) {
+export function Stand({ side, level, teamColor, reducedDetail = false }: StandProps) {
   if (level <= 0) return null;
   const dims = STAND_DIMS[Math.min(level, 3)];
 
   const isEW = side === "east" || side === "west";
   const length = isEW ? PITCH.depth : PITCH.width;
+  const spectatorDensity = reducedDetail ? 0.2 : 0.4;
+  const seatColMult = reducedDetail ? 0.7 : 1.2;
 
   const distance = (isEW ? PITCH.width : PITCH.depth) / 2 + STAND_GAP + dims.depth / 2;
   let position: [number, number, number];
@@ -34,7 +37,7 @@ export function Stand({ side, level, teamColor }: StandProps) {
   }
 
   const seatRows = dims.rows;
-  const seatColumns = Math.floor(length * 1.2);
+  const seatColumns = Math.floor(length * seatColMult);
   const seatSize = 0.7;
   const seatDepth = dims.depth / Math.max(seatRows, 1);
   const seatRise = dims.height / Math.max(seatRows, 1);
@@ -67,7 +70,7 @@ export function Stand({ side, level, teamColor }: StandProps) {
         seatDepth={seatDepth}
         seatRise={seatRise}
         length={length}
-        density={0.4}
+        density={spectatorDensity}
       />
 
       {/* Střecha (jen L3) */}
