@@ -204,6 +204,12 @@ export default function SquadPage() {
                     {p.loan_from_team_id && (
                       <span className="ml-1.5 text-[10px] bg-yellow-100 text-yellow-700 font-heading font-bold px-1.5 py-0.5 rounded-full">Host.</span>
                     )}
+                    {(p as unknown as { injury?: { daysRemaining: number } | null }).injury && (
+                      <span className="ml-1.5 text-[10px] bg-red-100 text-red-700 font-heading font-bold px-1.5 py-0.5 rounded-full" title={`Zraněný · ${(p as unknown as { injury: { daysRemaining: number } }).injury.daysRemaining} dní`}>🩹</span>
+                    )}
+                    {(p as unknown as { absence?: { reason?: string } | null }).absence && (
+                      <span className="ml-1.5 text-[10px] bg-amber-100 text-amber-700 font-heading font-bold px-1.5 py-0.5 rounded-full" title={(p as unknown as { absence: { reason?: string } }).absence.reason ?? "Absence"}>🚫</span>
+                    )}
                   </td>
                   {/* Position */}
                   <td className="py-2 px-1.5 text-center"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></td>

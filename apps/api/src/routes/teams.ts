@@ -406,6 +406,13 @@ teamsRouter.post("/", async (c) => {
     season = { id: seasonId, number: 1 };
   }
 
+  // Initial contract pro nové hráče (initial squad)
+  for (const pid of playerIds) {
+    await c.env.DB.prepare(
+      "INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'generated', 0, 1)"
+    ).bind(uuid(), pid, teamId, season.id).run().catch((e) => logger.warn({ module: "teams" }, "insert initial contract", e));
+  }
+
   // Check if a league already exists in this district for current season
   const existingLeague = await c.env.DB.prepare(
     "SELECT id, name FROM leagues WHERE district = ? AND season_id = ? AND status = 'active' LIMIT 1"
@@ -721,6 +728,11 @@ teamsRouter.post("/", async (c) => {
           isGK ? apGkSkills!.experience.current : apFieldSkills!.experience.current,
           Math.round(10 + apRating * 4),
         ).run();
+
+        // Initial contract for AI team player
+        await c.env.DB.prepare(
+          "INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'generated', 0, 1)"
+        ).bind(uuid(), apId, aiTeamId, season.id).run().catch((e) => logger.warn({ module: "teams" }, "insert AI initial contract", e));
       }
 
       // AI team relationships
@@ -864,19 +876,56 @@ teamsRouter.get("/:id", async (c) => {
 
 // GET /api/teams/:id/players
 teamsRouter.get("/:id/players", async (c) => {
+  const teamId = c.req.param("id");
   const result = await c.env.DB.prepare(
     "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status != 'released') ORDER BY CASE position WHEN 'GK' THEN 0 WHEN 'DEF' THEN 1 WHEN 'MID' THEN 2 WHEN 'FWD' THEN 3 END, overall_rating DESC"
-  ).bind(c.req.param("id")).all();
+  ).bind(teamId).all();
 
-  const players = result.results.map((row) => ({
-    ...row,
-    skills: JSON.parse(row.skills as string),
-    physical: JSON.parse(row.physical as string),
-    personality: JSON.parse(row.personality as string),
-    lifeContext: JSON.parse(row.life_context as string),
-    avatar: JSON.parse(row.avatar as string),
-  }));
+  const activeInjuries = await c.env.DB.prepare(
+    "SELECT player_id, type, days_remaining FROM injuries WHERE team_id = ? AND days_remaining > 0"
+  ).bind(teamId).all<{ player_id: string; type: string; days_remaining: number }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "fetch team injuries", e); return { results: [] }; });
+  const injuryByPlayer = new Map(activeInjuries.results.map((r) => [r.player_id, { type: r.type, daysRemaining: r.days_remaining }]));
+
+  const players = result.results.map((row) => {
+    const lifeContext = JSON.parse(row.life_context as string);
+    return {
+      ...row,
+      skills: JSON.parse(row.skills as string),
+      physical: JSON.parse(row.physical as string),
+      personality: JSON.parse(row.personality as string),
+      lifeContext,
+      avatar: JSON.parse(row.avatar as string),
+      injury: injuryByPlayer.get(row.id as string) ?? null,
+      absence: (lifeContext as Record<string, unknown>)?.absence ?? null,
+    };
+  });
   return c.json(players);
+});
+
+// GET /api/teams/:id/absences — seznam hráčů s aktivní absencí pro dnešek
+teamsRouter.get("/:id/absences", async (c) => {
+  const teamId = c.req.param("id");
+  const result = await c.env.DB.prepare(
+    `SELECT id, first_name, last_name, position, avatar, json_extract(life_context, '$.absence') as absence
+     FROM players
+     WHERE team_id = ? AND (status IS NULL OR status != 'released') AND json_extract(life_context, '$.absence') IS NOT NULL`
+  ).bind(teamId).all<{ id: string; first_name: string; last_name: string; position: string; avatar: string; absence: string }>();
+
+  const absences = result.results.map((r) => {
+    let parsed: Record<string, unknown> | null = null;
+    try { parsed = r.absence ? JSON.parse(r.absence) : null; } catch { parsed = null; }
+    return {
+      playerId: r.id,
+      firstName: r.first_name,
+      lastName: r.last_name,
+      position: r.position,
+      avatar: r.avatar ? JSON.parse(r.avatar) : null,
+      absence: parsed,
+    };
+  });
+
+  return c.json({ absences });
 });
 
 // GET /api/teams/:id/players/:playerId
@@ -926,6 +975,8 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
   ).bind(c.req.param("playerId")).all<{ id: string; name: string; primary_color: string; secondary_color: string; badge_pattern: string }>()
     .catch((e) => { logger.warn({ module: "teams" }, "fetch watchers", e); return { results: [] }; });
 
+  const absence = (lifeContext as Record<string, unknown>)?.absence ?? null;
+
   return c.json({
     ...row,
     isOwn,
@@ -935,6 +986,7 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     lifeContext: lifeContext,
     avatar: JSON.parse(row.avatar as string),
     injury: injury ? { type: injury.type, daysRemaining: injury.days_remaining } : null,
+    absence,
     isWatched: !!watched,
     watchers: watchers.results ?? [],
   });

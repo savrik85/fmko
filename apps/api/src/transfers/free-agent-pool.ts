@@ -6,6 +6,7 @@
 import { logger } from "../lib/logger";
 import type { Rng } from "../generators/rng";
 import { generatePlayer, type VillageInfo } from "../generators/player";
+import { generateHeightWeight } from "../generators/physicals";
 import { getDistrictDataFromDB } from "../data/districts";
 import { generatePlayerFace } from "../routes/teams";
 
@@ -113,7 +114,7 @@ export async function maintainFreeAgentPool(
       ).bind(
         id, district, player.firstName, player.lastName, player.age, pos, overallRating,
         JSON.stringify(skills),
-        JSON.stringify({ stamina: player.stamina, strength: player.strength, injuryProneness: player.injuryProneness ?? 50, preferredFoot: player.preferredFoot, preferredSide: player.preferredSide }),
+        JSON.stringify({ stamina: player.stamina, strength: player.strength, injuryProneness: player.injuryProneness ?? 50, ...generateHeightWeight(rng, pos, player.bodyType ?? "normal"), preferredFoot: player.preferredFoot, preferredSide: player.preferredSide }),
         JSON.stringify({ discipline: player.discipline, patriotism: player.patriotism, alcohol: player.alcohol, temper: player.temper, leadership: player.leadership ?? 30, workRate: player.workRate ?? 50, aggression: player.aggression ?? 40, consistency: player.consistency ?? 50, clutch: player.clutch ?? 50 }),
         JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
         JSON.stringify(generatePlayerFace({ age: player.age, bodyType: player.bodyType ?? "normal" })),

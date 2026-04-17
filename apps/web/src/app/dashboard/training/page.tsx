@@ -65,6 +65,7 @@ export default function TrainingPage() {
   const [stats, setStats] = useState<TrainingStats | null>(null);
   const [dirty, setDirty] = useState(false);
   const [playerMap, setPlayerMap] = useState<Map<string, string>>(new Map());
+  const [absences, setAbsences] = useState<Array<{ playerId: string; firstName: string; lastName: string; position: string; absence: { reason?: string; category?: string } | null }>>([]);
 
   useEffect(() => {
     if (!teamId) return;
@@ -74,12 +75,14 @@ export default function TrainingPage() {
       ),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
       apiFetch<TrainingStats>(`/api/teams/${teamId}/training-stats`).catch((e) => { console.error("training-stats load:", e); return null; }),
-    ]).then(([data, players, statsData]) => {
+      apiFetch<{ absences: Array<{ playerId: string; firstName: string; lastName: string; position: string; absence: { reason?: string; category?: string } | null }> }>(`/api/teams/${teamId}/absences`).catch((e) => { console.error("absences load:", e); return { absences: [] }; }),
+    ]).then(([data, players, statsData, absencesData]) => {
       setType(data.type);
       setApproach(data.approach);
       setSessions(data.sessionsPerWeek);
       setResult(data.lastResult);
       setStats(statsData);
+      setAbsences(absencesData.absences ?? []);
       // Build name → id map for linking (covers old results without playerId)
       const map = new Map<string, string>();
       for (const p of players) {
@@ -110,6 +113,22 @@ export default function TrainingPage() {
 
   return (
     <div className="page-container space-y-5">
+
+      {absences.length > 0 && (
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>🚫 Chybí dnes ({absences.length})</SectionLabel>
+          <div className="mt-2 space-y-1.5">
+            {absences.map((a) => (
+              <div key={a.playerId} className="flex items-center justify-between gap-3 text-sm">
+                <Link href={`/dashboard/player/${a.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20">
+                  {a.firstName} {a.lastName}
+                </Link>
+                <span className="text-muted text-xs flex-1 text-right">{a.absence?.reason ?? "Důvod neuveden"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Training settings */}
       <div className="card p-4 sm:p-5 space-y-4">

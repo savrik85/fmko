@@ -21,9 +21,16 @@ export async function insertAITeamsIntoDB(
   villageSize: string,
   district?: string,
 ): Promise<void> {
+  // Zjistit aktivní sezónu pro initial kontrakty
+  const activeSeason = await db.prepare(
+    "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+  ).first<{ id: string }>().catch((e) => { logger.warn({ module: "insert-ai-teams" }, "fetch active season", e); return null; });
+  const seasonId = activeSeason?.id ?? "season-1";
+
   // Collect all statements and batch them
   const teamStmts: D1PreparedStatement[] = [];
   const playerStmts: D1PreparedStatement[] = [];
+  const contractStmts: D1PreparedStatement[] = [];
   const relStmts: D1PreparedStatement[] = [];
 
   for (const lt of leagueSetup.teams) {
@@ -90,6 +97,11 @@ export async function insertAITeamsIntoDB(
               isGK ? apGkSkills!.experience.current : apFieldSkills!.experience.current,
               Math.round(10 + apRating * 4))
         );
+
+        contractStmts.push(
+          db.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'generated', 0, 1)")
+            .bind(crypto.randomUUID(), apId, aiTeamId, seasonId)
+        );
       }
 
       if (lt.aiTeam.relationships) {
@@ -124,6 +136,16 @@ export async function insertAITeamsIntoDB(
       await db.batch(batch);
     } catch (e) {
       logger.error({ module: "insert-ai-teams" }, `Batch insert players ${i}-${i + batch.length} failed`, e);
+    }
+  }
+
+  // Initial contracts (musí být AŽ po INSERT players kvůli FK)
+  for (let i = 0; i < contractStmts.length; i += BATCH_SIZE) {
+    const batch = contractStmts.slice(i, i + BATCH_SIZE);
+    try {
+      await db.batch(batch);
+    } catch (e) {
+      logger.error({ module: "insert-ai-teams" }, `Batch insert contracts ${i}-${i + batch.length} failed`, e);
     }
   }
 

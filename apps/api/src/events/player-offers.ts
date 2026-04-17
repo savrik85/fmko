@@ -5,6 +5,7 @@
 
 import type { Rng } from "../generators/rng";
 import { generatePlayer, type VillageInfo } from "../generators/player";
+import { generateHeightWeight } from "../generators/physicals";
 import { getDistrictDataFromDB } from "../data/districts";
 import { generatePlayerFace } from "../routes/teams";
 import { logger } from "../lib/logger";
@@ -141,7 +142,7 @@ export async function generatePlayerOffer(
     offerId, teamId, sourceType.source, sourceType.senderName, message,
     player.firstName, player.lastName, null, age, pos, overallRating,
     JSON.stringify(skills),
-    JSON.stringify({ stamina: player.stamina, strength: player.strength, injuryProneness: player.injuryProneness ?? 50, preferredFoot: player.preferredFoot, preferredSide: player.preferredSide }),
+    JSON.stringify({ stamina: player.stamina, strength: player.strength, injuryProneness: player.injuryProneness ?? 50, ...generateHeightWeight(rng, pos, player.bodyType ?? "normal"), preferredFoot: player.preferredFoot, preferredSide: player.preferredSide }),
     JSON.stringify({
       discipline: player.discipline, patriotism: player.patriotism,
       alcohol: player.alcohol, temper: player.temper,

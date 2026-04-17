@@ -53,6 +53,11 @@ export async function executeDailyTick(
   const tickStart = Date.now();
   logger.info({ module: "daily-tick" }, `START dayOfWeek=${dayOfWeek} training=${isTrainingDay} date=${now.toISOString()}`);
 
+  // Nový den: vyčistit včerejší absence (jednodenní flag v life_context.absence)
+  await env.DB.prepare(
+    "UPDATE players SET life_context = json_remove(life_context, '$.absence') WHERE json_extract(life_context, '$.absence') IS NOT NULL"
+  ).run().catch((e) => logger.warn({ module: "daily-tick" }, "clear yesterday absences", e));
+
   // ── Training (Mon-Fri, if plan is set) ──
   const teams = await env.DB.prepare(
     "SELECT id, training_type, training_approach, training_sessions FROM teams WHERE user_id != 'ai'"
@@ -197,11 +202,17 @@ export async function executeDailyTick(
         };
         const condDrain = drainMap[(team.training_type as string)] ?? 4;
         for (const a of result.attendance) {
+          const playerId = playersResult.results[a.playerIndex].id as string;
           if (a.attended) {
-            const playerId = playersResult.results[a.playerIndex].id as string;
             await env.DB.prepare(
               `UPDATE players SET life_context = json_set(life_context, '$.condition', MAX(5, json_extract(life_context, '$.condition') - ?)) WHERE id = ?`
             ).bind(condDrain, playerId).run().catch((e) => logger.warn({ module: "daily-tick" }, "drain condition after training", e));
+          } else if (a.reason) {
+            // Neúčast → uložit absence na life_context (vyčistí se následující den)
+            const absencePayload = JSON.stringify({ reason: a.reason, category: "training", date: now.toISOString().slice(0, 10) });
+            await env.DB.prepare(
+              `UPDATE players SET life_context = json_set(life_context, '$.absence', json(?)) WHERE id = ?`
+            ).bind(absencePayload, playerId).run().catch((e) => logger.warn({ module: "daily-tick" }, "set training absence", e));
           }
         }
 
