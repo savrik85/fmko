@@ -13,8 +13,11 @@ interface BuildingProps {
 export function Building({ kind, level, position }: BuildingProps) {
   if (level <= 0) return null;
   const lvl = Math.min(level, 3);
+  // Vchod/pult lokálně na +Z. Pokud je budova na +Z straně hřiště (pos.z > 0),
+  // otoč ji o 180° aby front mířil k centru hřiště.
+  const rotationY = position[1] > 0 ? Math.PI : 0;
   return (
-    <group position={[position[0], 0, position[1]]}>
+    <group position={[position[0], 0, position[1]]} rotation={[0, rotationY, 0]}>
       {kind === "refreshments" && <Refreshments level={lvl} />}
       {kind === "changing_rooms" && <ChangingRooms level={lvl} />}
       {kind === "showers" && <Showers level={lvl} />}
