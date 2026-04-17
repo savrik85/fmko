@@ -9,7 +9,7 @@ import { Building } from "./Building";
 import { Parking } from "./Parking";
 import { Fence } from "./Fence";
 import { Surroundings } from "./Surroundings";
-import { BUILDING_POSITIONS, SKY_SUN_POSITION } from "./constants";
+import { getStadiumLayout, SKY_SUN_POSITION } from "./constants";
 
 interface Stadium3DProps {
   pitchCondition: number;
@@ -20,6 +20,7 @@ interface Stadium3DProps {
 
 export function Stadium3D({ pitchCondition, pitchType, facilities, teamColor }: Stadium3DProps) {
   const f = facilities;
+  const layout = getStadiumLayout(f.stands ?? 0);
 
   return (
     <Canvas
@@ -61,7 +62,7 @@ export function Stadium3D({ pitchCondition, pitchType, facilities, teamColor }: 
       <Suspense fallback={null}>
         <Surroundings />
 
-        <Fence level={f.fence ?? 0} />
+        <Fence level={f.fence ?? 0} bounds={layout.fence} />
 
         <Pitch condition={pitchCondition} pitchType={pitchType} />
 
@@ -73,12 +74,12 @@ export function Stadium3D({ pitchCondition, pitchType, facilities, teamColor }: 
         {(f.stands ?? 0) >= 2 && <Stand side="west" level={f.stands} teamColor={teamColor} />}
 
         {/* Budovy v rozích */}
-        <Building kind="changing_rooms" level={f.changing_rooms ?? 0} position={BUILDING_POSITIONS.changing_rooms} />
-        <Building kind="showers" level={f.showers ?? 0} position={BUILDING_POSITIONS.showers} />
-        <Building kind="refreshments" level={f.refreshments ?? 0} position={BUILDING_POSITIONS.refreshments} />
+        <Building kind="changing_rooms" level={f.changing_rooms ?? 0} position={layout.buildings.changing_rooms} />
+        <Building kind="showers" level={f.showers ?? 0} position={layout.buildings.showers} />
+        <Building kind="refreshments" level={f.refreshments ?? 0} position={layout.buildings.refreshments} />
 
         {/* Parkoviště */}
-        <Parking level={f.parking ?? 0} />
+        <Parking level={f.parking ?? 0} position={layout.parking} />
       </Suspense>
     </Canvas>
   );

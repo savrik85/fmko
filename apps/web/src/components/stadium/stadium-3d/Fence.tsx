@@ -2,38 +2,30 @@
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
-import { FENCE_BOUNDS } from "./constants";
-
 interface FenceProps {
-  level: number;   // 0-3
+  level: number;
+  bounds: { width: number; depth: number };
 }
 
-// Plot kolem celého stadionu - obdélníkový perimeter
-const HALF_W = FENCE_BOUNDS.width / 2;
-const HALF_D = FENCE_BOUNDS.depth / 2;
-const GATE_WIDTH = 8;   // mezera pro bránu
+const GATE_WIDTH = 8;
 
-export function Fence({ level }: FenceProps) {
+export function Fence({ level, bounds }: FenceProps) {
   if (level <= 0) return null;
+  const halfW = bounds.width / 2;
+  const halfD = bounds.depth / 2;
 
-  if (level === 1) {
-    return <TapeFence />;
-  }
-  if (level === 2) {
-    return <WireFence />;
-  }
-  return <BrickWall />;
+  if (level === 1) return <TapeFence halfW={halfW} halfD={halfD} totalW={bounds.width} totalD={bounds.depth} />;
+  if (level === 2) return <WireFence halfW={halfW} halfD={halfD} totalW={bounds.width} totalD={bounds.depth} />;
+  return <BrickWall halfW={halfW} halfD={halfD} totalD={bounds.depth} />;
 }
 
 // L1 — žluto-černá páska (jednoduchý ohraničený obdélník)
-function TapeFence() {
+function TapeFence({ halfW, halfD, totalW, totalD }: { halfW: number; halfD: number; totalW: number; totalD: number }) {
   const lines: Array<{ pos: [number, number, number]; rot: [number, number, number]; len: number }> = [];
-
-  // 4 strany perimetru
-  lines.push({ pos: [0, 0.5, -HALF_D], rot: [0, 0, 0], len: FENCE_BOUNDS.width });
-  lines.push({ pos: [0, 0.5, HALF_D], rot: [0, 0, 0], len: FENCE_BOUNDS.width });
-  lines.push({ pos: [-HALF_W, 0.5, 0], rot: [0, Math.PI / 2, 0], len: FENCE_BOUNDS.depth });
-  lines.push({ pos: [HALF_W, 0.5, 0], rot: [0, Math.PI / 2, 0], len: FENCE_BOUNDS.depth });
+  lines.push({ pos: [0, 0.5, -halfD], rot: [0, 0, 0], len: totalW });
+  lines.push({ pos: [0, 0.5, halfD], rot: [0, 0, 0], len: totalW });
+  lines.push({ pos: [-halfW, 0.5, 0], rot: [0, Math.PI / 2, 0], len: totalD });
+  lines.push({ pos: [halfW, 0.5, 0], rot: [0, Math.PI / 2, 0], len: totalD });
 
   return (
     <group>
@@ -43,11 +35,10 @@ function TapeFence() {
           <meshStandardMaterial color="#F4C430" />
         </mesh>
       ))}
-      {/* Sloupky */}
       {[
-        [-HALF_W, -HALF_D], [HALF_W, -HALF_D],
-        [-HALF_W, HALF_D],  [HALF_W, HALF_D],
-        [0, -HALF_D],       [0, HALF_D],
+        [-halfW, -halfD], [halfW, -halfD],
+        [-halfW, halfD],  [halfW, halfD],
+        [0, -halfD],       [0, halfD],
       ].map((p, i) => (
         <mesh key={i} position={[p[0], 0.5, p[1]]} castShadow>
           <cylinderGeometry args={[0.07, 0.07, 1, 6]} />
@@ -59,28 +50,23 @@ function TapeFence() {
 }
 
 // L2 — drátěný plot (sloupky + vodorovné tyče, řídké)
-function WireFence() {
+function WireFence({ halfW, halfD, totalW, totalD }: { halfW: number; halfD: number; totalW: number; totalD: number }) {
   const ref = useRef<THREE.InstancedMesh>(null);
   const matrix = useMemo(() => new THREE.Matrix4(), []);
 
-  // Sloupky každé 3m podél perimetru
   const posts = useMemo(() => {
     const out: Array<[number, number]> = [];
     const spacing = 4;
-    // South + North walls (X axis), s mezerou pro bránu uprostřed na S
-    for (let x = -HALF_W; x <= HALF_W; x += spacing) {
-      if (Math.abs(x) > GATE_WIDTH / 2) {
-        out.push([x, -HALF_D]);
-      }
-      out.push([x, HALF_D]);
+    for (let x = -halfW; x <= halfW; x += spacing) {
+      if (Math.abs(x) > GATE_WIDTH / 2) out.push([x, -halfD]);
+      out.push([x, halfD]);
     }
-    // East + West walls (Z axis)
-    for (let z = -HALF_D + spacing; z <= HALF_D - spacing; z += spacing) {
-      out.push([-HALF_W, z]);
-      out.push([HALF_W, z]);
+    for (let z = -halfD + spacing; z <= halfD - spacing; z += spacing) {
+      out.push([-halfW, z]);
+      out.push([halfW, z]);
     }
     return out;
-  }, []);
+  }, [halfW, halfD]);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -97,42 +83,40 @@ function WireFence() {
         <cylinderGeometry args={[0.08, 0.08, 2, 6]} />
         <meshStandardMaterial color="#525252" />
       </instancedMesh>
-      {/* Vodorovné tyče - jen 2 (horní + dolní) */}
       {[0.4, 1.7].map((y) => (
         <group key={y}>
-          <mesh position={[0, y, -HALF_D]} castShadow>
-            <boxGeometry args={[FENCE_BOUNDS.width, 0.06, 0.06]} />
+          <mesh position={[0, y, -halfD]} castShadow>
+            <boxGeometry args={[totalW, 0.06, 0.06]} />
             <meshStandardMaterial color="#525252" />
           </mesh>
-          <mesh position={[0, y, HALF_D]} castShadow>
-            <boxGeometry args={[FENCE_BOUNDS.width, 0.06, 0.06]} />
+          <mesh position={[0, y, halfD]} castShadow>
+            <boxGeometry args={[totalW, 0.06, 0.06]} />
             <meshStandardMaterial color="#525252" />
           </mesh>
-          <mesh position={[-HALF_W, y, 0]} rotation={[0, Math.PI / 2, 0]} castShadow>
-            <boxGeometry args={[FENCE_BOUNDS.depth, 0.06, 0.06]} />
+          <mesh position={[-halfW, y, 0]} rotation={[0, Math.PI / 2, 0]} castShadow>
+            <boxGeometry args={[totalD, 0.06, 0.06]} />
             <meshStandardMaterial color="#525252" />
           </mesh>
-          <mesh position={[HALF_W, y, 0]} rotation={[0, Math.PI / 2, 0]} castShadow>
-            <boxGeometry args={[FENCE_BOUNDS.depth, 0.06, 0.06]} />
+          <mesh position={[halfW, y, 0]} rotation={[0, Math.PI / 2, 0]} castShadow>
+            <boxGeometry args={[totalD, 0.06, 0.06]} />
             <meshStandardMaterial color="#525252" />
           </mesh>
         </group>
       ))}
-      {/* Drátěná síť - tenké průhledné panely */}
-      <mesh position={[0, 1, -HALF_D]}>
-        <boxGeometry args={[FENCE_BOUNDS.width, 2, 0.02]} />
+      <mesh position={[0, 1, -halfD]}>
+        <boxGeometry args={[totalW, 2, 0.02]} />
         <meshStandardMaterial color="#888" wireframe transparent opacity={0.5} />
       </mesh>
-      <mesh position={[0, 1, HALF_D]}>
-        <boxGeometry args={[FENCE_BOUNDS.width, 2, 0.02]} />
+      <mesh position={[0, 1, halfD]}>
+        <boxGeometry args={[totalW, 2, 0.02]} />
         <meshStandardMaterial color="#888" wireframe transparent opacity={0.5} />
       </mesh>
-      <mesh position={[-HALF_W, 1, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <boxGeometry args={[FENCE_BOUNDS.depth, 2, 0.02]} />
+      <mesh position={[-halfW, 1, 0]} rotation={[0, Math.PI / 2, 0]}>
+        <boxGeometry args={[totalD, 2, 0.02]} />
         <meshStandardMaterial color="#888" wireframe transparent opacity={0.5} />
       </mesh>
-      <mesh position={[HALF_W, 1, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <boxGeometry args={[FENCE_BOUNDS.depth, 2, 0.02]} />
+      <mesh position={[halfW, 1, 0]} rotation={[0, Math.PI / 2, 0]}>
+        <boxGeometry args={[totalD, 2, 0.02]} />
         <meshStandardMaterial color="#888" wireframe transparent opacity={0.5} />
       </mesh>
     </group>
@@ -140,44 +124,41 @@ function WireFence() {
 }
 
 // L3 — zděná zídka s 2 branami (S + N)
-function BrickWall() {
+function BrickWall({ halfW, halfD, totalD }: { halfW: number; halfD: number; totalD: number }) {
   const wallHeight = 1.6;
   const wallThickness = 0.4;
   const color = "#A89078";
+  const segmentLen = halfW - GATE_WIDTH / 2;
 
   return (
     <group>
-      {/* Jih - 2 segmenty s mezerou pro bránu */}
-      <mesh position={[-(HALF_W + GATE_WIDTH / 2) / 2, wallHeight / 2, -HALF_D]} castShadow receiveShadow>
-        <boxGeometry args={[HALF_W - GATE_WIDTH / 2, wallHeight, wallThickness]} />
+      <mesh position={[-(halfW + GATE_WIDTH / 2) / 2, wallHeight / 2, -halfD]} castShadow receiveShadow>
+        <boxGeometry args={[segmentLen, wallHeight, wallThickness]} />
         <meshStandardMaterial color={color} roughness={0.95} />
       </mesh>
-      <mesh position={[(HALF_W + GATE_WIDTH / 2) / 2, wallHeight / 2, -HALF_D]} castShadow receiveShadow>
-        <boxGeometry args={[HALF_W - GATE_WIDTH / 2, wallHeight, wallThickness]} />
+      <mesh position={[(halfW + GATE_WIDTH / 2) / 2, wallHeight / 2, -halfD]} castShadow receiveShadow>
+        <boxGeometry args={[segmentLen, wallHeight, wallThickness]} />
         <meshStandardMaterial color={color} roughness={0.95} />
       </mesh>
-      {/* Sever */}
-      <mesh position={[-(HALF_W + GATE_WIDTH / 2) / 2, wallHeight / 2, HALF_D]} castShadow receiveShadow>
-        <boxGeometry args={[HALF_W - GATE_WIDTH / 2, wallHeight, wallThickness]} />
+      <mesh position={[-(halfW + GATE_WIDTH / 2) / 2, wallHeight / 2, halfD]} castShadow receiveShadow>
+        <boxGeometry args={[segmentLen, wallHeight, wallThickness]} />
         <meshStandardMaterial color={color} roughness={0.95} />
       </mesh>
-      <mesh position={[(HALF_W + GATE_WIDTH / 2) / 2, wallHeight / 2, HALF_D]} castShadow receiveShadow>
-        <boxGeometry args={[HALF_W - GATE_WIDTH / 2, wallHeight, wallThickness]} />
+      <mesh position={[(halfW + GATE_WIDTH / 2) / 2, wallHeight / 2, halfD]} castShadow receiveShadow>
+        <boxGeometry args={[segmentLen, wallHeight, wallThickness]} />
         <meshStandardMaterial color={color} roughness={0.95} />
       </mesh>
-      {/* Východ + Západ - celé */}
-      <mesh position={[-HALF_W, wallHeight / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[wallThickness, wallHeight, FENCE_BOUNDS.depth]} />
+      <mesh position={[-halfW, wallHeight / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[wallThickness, wallHeight, totalD]} />
         <meshStandardMaterial color={color} roughness={0.95} />
       </mesh>
-      <mesh position={[HALF_W, wallHeight / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[wallThickness, wallHeight, FENCE_BOUNDS.depth]} />
+      <mesh position={[halfW, wallHeight / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[wallThickness, wallHeight, totalD]} />
         <meshStandardMaterial color={color} roughness={0.95} />
       </mesh>
-      {/* Sloupky bran (4x na rozích bran) */}
       {[
-        [-GATE_WIDTH / 2, -HALF_D], [GATE_WIDTH / 2, -HALF_D],
-        [-GATE_WIDTH / 2, HALF_D],  [GATE_WIDTH / 2, HALF_D],
+        [-GATE_WIDTH / 2, -halfD], [GATE_WIDTH / 2, -halfD],
+        [-GATE_WIDTH / 2, halfD],  [GATE_WIDTH / 2, halfD],
       ].map((p, i) => (
         <mesh key={i} position={[p[0], wallHeight * 0.6, p[1]]} castShadow>
           <boxGeometry args={[wallThickness * 1.5, wallHeight * 1.2, wallThickness * 1.5]} />

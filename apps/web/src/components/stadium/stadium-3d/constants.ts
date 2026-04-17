@@ -24,14 +24,30 @@ export const STAND_DIMS = [
 ];
 
 // Hřiště 40x60 centrované v (0,0,0). Tribuny okolo: N/S z=±31..39, E/W x=±25..33.
-// Budovy a parkoviště jsou v rozích za tribunami (mimo stand zóny).
-export const BUILDING_POSITIONS = {
-  changing_rooms: [-40, -45] as [number, number],   // SW corner
-  showers:        [-40, 45]  as [number, number],   // NW corner
-  refreshments:   [40, 45]   as [number, number],   // NE corner
-};
-
-export const PARKING_POSITION: [number, number] = [42, -45];   // SE corner
+// Layout je dynamický podle stands levelu: bez tribun jsou budovy blíž hřišti,
+// s tribunami se odsouvají do rohů aby nepřekrývaly stand zóny.
+export function getStadiumLayout(standsLevel: number) {
+  if (standsLevel <= 0) {
+    return {
+      buildings: {
+        changing_rooms: [-25, -34] as [number, number],
+        showers:        [-25, 34]  as [number, number],
+        refreshments:   [25, 34]   as [number, number],
+      },
+      parking: [30, -34] as [number, number],
+      fence: { width: 80, depth: 90 },
+    };
+  }
+  return {
+    buildings: {
+      changing_rooms: [-40, -45] as [number, number],
+      showers:        [-40, 45]  as [number, number],
+      refreshments:   [40, 45]   as [number, number],
+    },
+    parking: [42, -45] as [number, number],
+    fence: { width: 100, depth: 110 },
+  };
+}
 
 // Velikost parkoviště dle level
 export const PARKING_DIMS = [
@@ -47,10 +63,10 @@ export const CAR_COLORS = [
   "#6B6B6B", "#B8860B", "#556B2F",
 ];
 
-// Plot kolem celého areálu - obdélník (zahrnuje budovy + parkoviště v rozích)
+// Default fence bounds — používá se pokud explicit fence není předán (kompatibilita)
 export const FENCE_BOUNDS = {
-  width: 100,    // X axis
-  depth: 110,    // Z axis
+  width: 100,
+  depth: 110,
 };
 
 // Stromy v okolí - statické pozice (mimo plot, kolem areálu)

@@ -2,16 +2,17 @@
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
-import { CAR_COLORS, PARKING_DIMS, PARKING_POSITION } from "./constants";
+import { CAR_COLORS, PARKING_DIMS } from "./constants";
 
 interface ParkingProps {
   level: number;
+  position: [number, number];
 }
 
-export function Parking({ level }: ParkingProps) {
+export function Parking({ level, position }: ParkingProps) {
   if (level <= 0) return null;
   const dims = PARKING_DIMS[Math.min(level, 3)];
-  const [px, pz] = PARKING_POSITION;
+  const [px, pz] = position;
 
   // Layout: počet sloupců/řad
   const carWidth = 1.4;
