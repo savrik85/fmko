@@ -369,7 +369,7 @@ export default function StadiumPage() {
                       <span className="text-muted text-[10px]">{isOpen ? "▲" : "▼"}</span>
                     </button>
                     {isOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1 z-10 p-2 bg-white border-2 border-pitch-500 rounded-lg shadow-lg grid grid-cols-6 gap-1.5">
+                      <div className="absolute left-0 right-0 top-full mt-1 z-10 p-3 bg-white border-2 border-pitch-500 rounded-lg shadow-lg grid grid-cols-6 gap-3">
                         <button
                           onClick={() => { handleCustomize(field, null); setOpenPicker(null); }}
                           className={`w-7 h-7 rounded-md border-2 flex items-center justify-center text-[10px] ${current === null ? "border-pitch-500" : "border-gray-300"}`}
