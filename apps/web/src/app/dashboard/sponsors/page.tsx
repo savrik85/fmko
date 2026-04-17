@@ -7,7 +7,7 @@ import { Card, CardBody, Spinner, SectionLabel, useConfirm } from "@/components/
 
 interface ActiveContract {
   id: string;
-  category: "main" | "stadium";
+  category: "main" | "stadium" | "banner";
   sponsorName: string;
   sponsorType: string;
   monthlyAmount: number;
@@ -18,6 +18,8 @@ interface ActiveContract {
   isNamingRights: boolean;
   signedAt: string;
 }
+
+type SponsorCategory = "main" | "stadium" | "banner";
 
 interface SponsorOffer {
   sponsorName: string;
@@ -32,10 +34,13 @@ interface SponsorOffer {
 interface SponsorsData {
   mainContract: ActiveContract | null;
   stadiumContract: ActiveContract | null;
+  bannerContracts: ActiveContract[];
   stadiumName: string | null;
   teamName: string;
   mainOffers: SponsorOffer[];
   stadiumOffers: SponsorOffer[];
+  bannerOffers: SponsorOffer[];
+  maxBanners: number;
   canChangeMainSponsor: boolean;
   season: number;
 }
@@ -65,9 +70,10 @@ export default function SponsorsPage() {
     refresh().then(() => setLoading(false)).catch(() => setLoading(false));
   }, [teamId]);
 
-  const handleSign = async (offer: SponsorOffer, category: "main" | "stadium") => {
+  const handleSign = async (offer: SponsorOffer, category: SponsorCategory) => {
     if (!teamId || acting) return;
     const isMain = category === "main";
+    const isBanner = category === "banner";
     const details = [
       { label: "Týdenní příjem", value: `+${formatCZK(Math.round(offer.monthlyAmount / 4.3))}`, color: "text-pitch-500" },
       ...(offer.winBonus > 0 ? [{ label: "Bonus za výhru", value: `+${formatCZK(offer.winBonus)}`, color: "text-pitch-400" }] : []),
@@ -77,11 +83,14 @@ export default function SponsorsPage() {
       details.push({ label: "Změna názvu", value: "Ano (název se změní)", color: "text-gold-600" });
       details.push({ label: "Dopad na reputaci", value: "-3 reputace", color: "text-card-red" });
     }
+    const description = isMain
+      ? `Název týmu se změní na sponzorský. Změna hlavního sponzora je možná max 1x za sezónu.`
+      : isBanner
+      ? `Reklamní banner kolem hřiště na ${offer.seasons} ${offer.seasons === 1 ? "sezónu" : "sezóny"}`
+      : `Smlouva na sponzora stadionu na ${offer.seasons} ${offer.seasons === 1 ? "sezónu" : "sezóny"}`;
     const ok = await confirm({
       title: `Podepsat smlouvu — ${offer.sponsorName}?`,
-      description: isMain
-        ? `Název týmu se změní na sponzorský. Změna hlavního sponzora je možná max 1x za sezónu.`
-        : `Smlouva na sponzora stadionu na ${offer.seasons} ${offer.seasons === 1 ? "sezónu" : "sezóny"}`,
+      description,
       details,
       confirmLabel: "Podepsat",
     });
@@ -98,9 +107,13 @@ export default function SponsorsPage() {
     setActing(false);
   };
 
-  const handleTerminate = async (category: "main" | "stadium") => {
+  const handleTerminate = async (category: SponsorCategory, contractId?: string) => {
     if (!teamId || acting) return;
-    const contract = category === "main" ? data?.mainContract : data?.stadiumContract;
+    const contract = category === "main"
+      ? data?.mainContract
+      : category === "stadium"
+      ? data?.stadiumContract
+      : data?.bannerContracts.find((c) => c.id === contractId);
     if (!contract) return;
     const fee = Math.round(contract.earlyTerminationFee * (contract.seasonsRemaining / 3));
     const isMain = category === "main";
@@ -127,7 +140,7 @@ export default function SponsorsPage() {
     setActing(true);
     const res = await apiFetch<{ ok: boolean; newTeamName?: string }>(`/api/teams/${teamId}/sponsors/terminate`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ category }),
+      body: JSON.stringify({ category, contractId }),
     }).catch((e) => { console.error("sponsors/terminate:", e); return null; });
     if (res?.newTeamName && teamId) {
       setTeamCtx(teamId, res.newTeamName);
@@ -237,6 +250,38 @@ export default function SponsorsPage() {
           <OffersList offers={data.stadiumOffers} category="stadium" onSign={handleSign} acting={acting} />
         )}
       </div>
+
+      {/* ── Reklamní bannery ── */}
+      <div>
+        <SectionLabel>
+          {"\u{1F3AF}"} Reklamní bannery ({data.bannerContracts.length}/{data.maxBanners})
+        </SectionLabel>
+
+        {data.bannerContracts.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {data.bannerContracts.map((c) => (
+              <ContractCard
+                key={c.id}
+                contract={c}
+                category="banner"
+                onTerminate={() => handleTerminate("banner", c.id)}
+                acting={acting}
+              />
+            ))}
+          </div>
+        )}
+
+        {data.bannerContracts.length >= data.maxBanners ? (
+          <Card><CardBody><p className="text-center text-muted py-3">Maximální počet bannerů ({data.maxBanners}) dosažen.</p></CardBody></Card>
+        ) : data.bannerOffers.length > 0 ? (
+          <>
+            <p className="text-xs text-muted mb-2">Můžeš podepsat až {data.maxBanners - data.bannerContracts.length} dalších bannerů.</p>
+            <OffersList offers={data.bannerOffers} category="banner" onSign={handleSign} acting={acting} />
+          </>
+        ) : (
+          <Card><CardBody><p className="text-center text-muted py-3">Žádné nabídky bannerů.</p></CardBody></Card>
+        )}
+      </div>
     </div>
   );
 }
@@ -244,9 +289,9 @@ export default function SponsorsPage() {
 // ═══ Components ═══
 
 function ContractCard({ contract, category, onTerminate, acting }: {
-  contract: ActiveContract; category: "main" | "stadium"; onTerminate: () => void; acting: boolean;
+  contract: ActiveContract; category: SponsorCategory; onTerminate: () => void; acting: boolean;
 }) {
-  const icon = category === "main" ? "\u{1F4DD}" : "\u{1F3DF}";
+  const icon = category === "main" ? "\u{1F4DD}" : category === "stadium" ? "\u{1F3DF}" : "\u{1F3AF}";
   return (
     <Card>
       <CardBody>
@@ -289,8 +334,8 @@ function ContractCard({ contract, category, onTerminate, acting }: {
 }
 
 function OffersList({ offers, category, onSign, acting }: {
-  offers: SponsorOffer[]; category: "main" | "stadium";
-  onSign: (offer: SponsorOffer, category: "main" | "stadium") => void; acting: boolean;
+  offers: SponsorOffer[]; category: SponsorCategory;
+  onSign: (offer: SponsorOffer, category: SponsorCategory) => void; acting: boolean;
 }) {
   if (offers.length === 0) {
     return (

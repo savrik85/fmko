@@ -13,16 +13,21 @@
     "@okresni-masina/shared": "*",
     "@okresni-masina/ui": "*",
     "@opennextjs/cloudflare": "^1.18.0",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.0",
+    "@react-three/postprocessing": "^3.0.4",
     "facesjs": "^5.0.2",
     "next": "^15.2.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "three": "^0.184.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.184.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0"
   }

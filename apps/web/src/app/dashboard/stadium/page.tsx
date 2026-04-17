@@ -1,10 +1,30 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm } from "@/components/ui";
 import { StadiumView } from "@/components/stadium/stadium-view";
+
+const Stadium3D = dynamic(
+  () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full flex items-center justify-center text-muted text-sm">
+        <Spinner />
+      </div>
+    ),
+  }
+);
+
+const Stadium3DViewer = dynamic(
+  () => import("@/components/stadium/stadium-3d/Stadium3DViewer").then((m) => m.Stadium3DViewer),
+  { ssr: false }
+);
+
+type ViewMode = "2d" | "3d";
 
 interface UpgradeOption {
   facility: string;
@@ -32,12 +52,32 @@ interface PitchUpgrade {
   cost: number;
 }
 
+interface Customization {
+  fenceColor: string | null;
+  standColor: string | null;
+  seatColor: string | null;
+  roofColor: string | null;
+  accentColor: string | null;
+  scoreboardLevel: number;
+  flagSize: number;
+}
+
+interface VisualUpgrade {
+  kind: "scoreboard" | "flag";
+  currentLevel: number;
+  nextLevel: number;
+  cost: number;
+  label: string;
+}
+
 interface StadiumData {
   stadiumName: string | null;
   capacity: number;
   pitchCondition: number;
   pitchType: string;
   facilities: Record<string, number>;
+  customization: Customization;
+  visualUpgrades: VisualUpgrade[];
   upgrades: UpgradeOption[];
   pitchActions: PitchAction[];
   pitchUpgrades: PitchUpgrade[];
@@ -88,27 +128,98 @@ function pitchBarColor(condition: number): string {
 
 function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
 
+function teamInitials(name: string): string {
+  return name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+}
+
+const COLOR_PALETTE = [
+  "#A89078", "#8B7355", "#9CA3AF", "#374151", "#3B6B8C",
+  "#558B2F", "#A0432C", "#C9A84C", "#E63946", "#F5E6C8",
+];
+
+const CUSTOM_FIELDS: Array<{ field: keyof Customization; label: string; defaultColor: string }> = [
+  { field: "fenceColor", label: "Plot", defaultColor: "#A89078" },
+  { field: "standColor", label: "Tribuny", defaultColor: "#9CA3AF" },
+  { field: "seatColor", label: "Sedačky", defaultColor: "#9CA3AF" },
+  { field: "roofColor", label: "Střechy", defaultColor: "#A0432C" },
+  { field: "accentColor", label: "Akcent (VIP)", defaultColor: "#C9A84C" },
+];
+
 export default function StadiumPage() {
   const { teamId } = useTeam();
   const [stadium, setStadium] = useState<StadiumData | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("3d");
+  const [openPicker, setOpenPicker] = useState<keyof Customization | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem("stadium-view-mode");
+    if (saved === "2d" || saved === "3d") setViewMode(saved);
+  }, []);
+
+  const switchView = (mode: ViewMode) => {
+    setViewMode(mode);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("stadium-view-mode", mode);
+    }
+  };
+
+  const [sponsorNames, setSponsorNames] = useState<string[]>([]);
 
   const refresh = async () => {
     if (!teamId) return;
-    const [s, t] = await Promise.all([
+    const [s, t, sp] = await Promise.all([
       apiFetch<StadiumData>(`/api/teams/${teamId}/stadium`),
       apiFetch<Team>(`/api/teams/${teamId}`),
+      apiFetch<{
+        mainContract: { sponsorName: string } | null;
+        stadiumContract: { sponsorName: string } | null;
+        bannerContracts: Array<{ sponsorName: string }>;
+      }>(
+        `/api/teams/${teamId}/sponsors`
+      ).catch((e) => { console.warn("sponsors fetch:", e); return null; }),
     ]);
     setStadium(s); setTeam(t);
+    // Pro 3D bannery jen aktivní banner kontrakty — bez bannerů žádné ploty kolem hřiště
+    setSponsorNames(sp?.bannerContracts?.map((c) => c.sponsorName) ?? []);
   };
 
   useEffect(() => {
     if (!teamId) return;
     refresh().then(() => setLoading(false)).catch(() => setLoading(false));
   }, [teamId]);
+
+  const handleCustomize = async (field: keyof Customization, value: string | null) => {
+    if (!teamId) return;
+    const dbField = field.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase());
+    await apiFetch(`/api/teams/${teamId}/stadium/customize`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ field: dbField, value }),
+    }).catch((e) => console.error("customize:", e));
+    await refresh();
+  };
+
+  const handleVisualUpgrade = async (kind: "scoreboard" | "flag", label: string, cost: number) => {
+    if (!teamId || acting) return;
+    const ok = await confirm({
+      title: `Pořídit: ${label}?`,
+      details: [{ label: "Cena", value: `-${formatCZK(cost)}`, color: "text-card-red" }],
+      confirmLabel: `Koupit za ${formatCZK(cost)}`,
+    });
+    if (!ok) return;
+    setActing("visual-" + kind);
+    await apiFetch(`/api/teams/${teamId}/stadium/visual-upgrade`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind }),
+    }).catch((e) => console.error("visual-upgrade:", e));
+    await refresh();
+    setActing(null);
+  };
 
   const handleUpgrade = async (facility: string, label: string, cost: number, effect: string) => {
     if (!teamId || acting) return;
@@ -135,6 +246,21 @@ export default function StadiumPage() {
     <div className="page-container space-y-5">
       {confirmDialog}
 
+      <Stadium3DViewer
+        open={viewerOpen}
+        onClose={() => setViewerOpen(false)}
+        pitchCondition={stadium.pitchCondition}
+        pitchType={stadium.pitchType}
+        facilities={stadium.facilities}
+        teamColor={team.primary_color}
+        secondaryColor={team.secondary_color}
+        badgePattern={team.badge_pattern}
+        badgeInitials={teamInitials(team.name)}
+        stadiumName={stadium.stadiumName}
+        sponsors={sponsorNames}
+        customization={stadium.customization}
+      />
+
       {/* ═══ Stadium visualization + stats ═══ */}
       <div className="card p-4 sm:p-5">
         {stadium.stadiumName && (
@@ -142,12 +268,69 @@ export default function StadiumPage() {
             <h2 className="font-heading font-bold text-xl">{stadium.stadiumName}</h2>
           </div>
         )}
-        <StadiumView
-          pitchCondition={stadium.pitchCondition}
-          pitchType={stadium.pitchType}
-          facilities={stadium.facilities}
-          teamColor={team.primary_color}
-        />
+
+        {/* Toggle 2D / 3D */}
+        <div className="flex justify-end gap-2 mb-3">
+          <button
+            onClick={() => switchView("2d")}
+            className={`px-5 py-2 rounded-lg text-base font-heading font-bold transition-colors min-w-[64px] ${
+              viewMode === "2d"
+                ? "bg-pitch-500 text-white"
+                : "bg-gray-100 text-muted hover:bg-gray-200"
+            }`}
+          >
+            2D
+          </button>
+          <button
+            onClick={() => switchView("3d")}
+            className={`px-5 py-2 rounded-lg text-base font-heading font-bold transition-colors min-w-[64px] ${
+              viewMode === "3d"
+                ? "bg-pitch-500 text-white"
+                : "bg-gray-100 text-muted hover:bg-gray-200"
+            }`}
+          >
+            3D
+          </button>
+        </div>
+
+        {viewMode === "3d" ? (
+          <div className="space-y-2">
+            <div
+              className="h-[280px] sm:h-[500px] rounded-xl overflow-hidden bg-gradient-to-b from-sky-100 to-sky-50 relative"
+              style={{ touchAction: "pan-y" }}
+            >
+              <Stadium3D
+                pitchCondition={stadium.pitchCondition}
+                pitchType={stadium.pitchType}
+                facilities={stadium.facilities}
+                teamColor={team.primary_color}
+                secondaryColor={team.secondary_color}
+                badgePattern={team.badge_pattern}
+                badgeInitials={teamInitials(team.name)}
+                stadiumName={stadium.stadiumName}
+                sponsors={sponsorNames}
+                customization={stadium.customization}
+              />
+              <div className="sm:hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-[10px] px-2 py-1 rounded pointer-events-none">
+                dva prsty pro rotaci/zoom
+              </div>
+            </div>
+            <button
+              onClick={() => setViewerOpen(true)}
+              className="w-full py-2 bg-pitch-500 hover:bg-pitch-600 text-white rounded-lg text-sm font-heading font-bold transition-colors"
+            >
+              🔍 Prohlédnout v plné velikosti
+            </button>
+          </div>
+        ) : (
+          <StadiumView
+            pitchCondition={stadium.pitchCondition}
+            pitchType={stadium.pitchType}
+            facilities={stadium.facilities}
+            teamColor={team.primary_color}
+          />
+        )}
+
         <div className="grid grid-cols-3 gap-4 text-center mt-4 pt-4 border-t border-gray-100">
           <div>
             <div className="font-heading font-bold text-xl tabular-nums text-ink">{stadium.capacity}</div>
@@ -164,6 +347,121 @@ export default function StadiumPage() {
             <div className="text-sm text-muted">Povrch</div>
           </div>
         </div>
+
+        {/* ─── Vzhled stadionu (jen v 3D) ─── */}
+        {viewMode === "3d" && (
+          <div className="mt-4 pt-4 border-t border-gray-100 space-y-4">
+            <div className="text-xs text-muted font-heading uppercase">Vzhled stadionu (zdarma)</div>
+
+            {/* Záložky – výběr položky */}
+            <div className="flex flex-wrap gap-1.5">
+              {CUSTOM_FIELDS.map(({ field, label, defaultColor }) => {
+                const current = stadium.customization[field] as string | null;
+                const displayColor = current ?? defaultColor;
+                const isActive = openPicker === field;
+                return (
+                  <button
+                    key={field}
+                    onClick={() => setOpenPicker(isActive ? null : field)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 transition-colors text-xs font-heading font-bold ${isActive ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-400 bg-white"}`}
+                  >
+                    <span className="w-5 h-5 rounded border border-gray-300 shrink-0" style={{ backgroundColor: displayColor }} />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Paleta barev pro aktivní položku – inline pod záložkami, full-width karty */}
+            {openPicker && (() => {
+              const cf = CUSTOM_FIELDS.find((c) => c.field === openPicker);
+              if (!cf) return null;
+              const current = stadium.customization[openPicker] as string | null;
+              return (
+                <div className="p-3 bg-pitch-50 border-2 border-pitch-500 rounded-lg flex flex-wrap gap-3">
+                  <button
+                    onClick={() => { handleCustomize(openPicker, null); setOpenPicker(null); }}
+                    className={`w-10 h-10 rounded-md border-2 flex items-center justify-center text-sm ${current === null ? "border-pitch-500" : "border-gray-300"}`}
+                    style={{ backgroundColor: cf.defaultColor }}
+                    title="Default"
+                  >
+                    ✕
+                  </button>
+                  {COLOR_PALETTE.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => { handleCustomize(openPicker, c); setOpenPicker(null); }}
+                      className={`w-10 h-10 rounded-md border-2 ${current === c ? "border-pitch-500" : "border-gray-200 hover:border-gray-400"}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              );
+            })()}
+
+            <div className="pt-2 border-t border-gray-50 space-y-1">
+              <div className="text-xs text-muted font-heading uppercase mb-1">Vybavení (placené)</div>
+
+              <div className="flex items-center justify-between gap-3 py-1.5">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-lg">🏟️</span>
+                  <div>
+                    <div className="font-heading font-bold text-sm">
+                      Scoreboard <span className="text-muted">L{stadium.customization.scoreboardLevel}/3</span>
+                    </div>
+                    <div className="text-xs text-muted">
+                      {stadium.customization.scoreboardLevel === 0 ? "Žádný" :
+                       stadium.customization.scoreboardLevel === 1 ? "Dřevěná tabule" :
+                       stadium.customization.scoreboardLevel === 2 ? "LED jednobarevná" : "Full-color LED"}
+                    </div>
+                  </div>
+                </div>
+                {stadium.visualUpgrades.find((u) => u.kind === "scoreboard") && (() => {
+                  const u = stadium.visualUpgrades.find((u) => u.kind === "scoreboard")!;
+                  const canAfford = team.budget >= u.cost;
+                  return (
+                    <button
+                      onClick={() => handleVisualUpgrade("scoreboard", u.label, u.cost)}
+                      disabled={!canAfford || !!acting}
+                      className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-heading font-bold ${canAfford ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400"}`}
+                    >
+                      {acting === "visual-scoreboard" ? "..." : `${u.label} — ${formatCZK(u.cost)}`}
+                    </button>
+                  );
+                })()}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 py-1.5">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-lg">🚩</span>
+                  <div>
+                    <div className="font-heading font-bold text-sm">
+                      Vlajka týmu <span className="text-muted">L{stadium.customization.flagSize}/3</span>
+                    </div>
+                    <div className="text-xs text-muted">
+                      {stadium.customization.flagSize === 0 ? "Žádná" :
+                       stadium.customization.flagSize === 1 ? "Malá (3m)" :
+                       stadium.customization.flagSize === 2 ? "Střední (5m)" : "Velká (8m)"}
+                    </div>
+                  </div>
+                </div>
+                {stadium.visualUpgrades.find((u) => u.kind === "flag") && (() => {
+                  const u = stadium.visualUpgrades.find((u) => u.kind === "flag")!;
+                  const canAfford = team.budget >= u.cost;
+                  return (
+                    <button
+                      onClick={() => handleVisualUpgrade("flag", u.label, u.cost)}
+                      disabled={!canAfford || !!acting}
+                      className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-heading font-bold ${canAfford ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400"}`}
+                    >
+                      {acting === "visual-flag" ? "..." : `${u.label} — ${formatCZK(u.cost)}`}
+                    </button>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ═══ Pitch maintenance ═══ */}

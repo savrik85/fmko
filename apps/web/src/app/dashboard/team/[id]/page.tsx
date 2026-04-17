@@ -213,6 +213,11 @@ export default function TeamPage() {
                   <div className={`${boxLabel} text-[10px] font-heading font-bold uppercase mt-1`}>Rating</div>
                 </div>
               )}
+              <button onClick={() => router.push(`/dashboard/team/${teamId}/stadium`)}
+                className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer`}>
+                <div className="text-xl leading-none">🏟</div>
+                <div className={`${boxLabel} text-[10px] font-heading font-bold uppercase mt-1`}>Stadion</div>
+              </button>
             </div>
             {leagueTeams.length > 1 && (
               <button onClick={() => nextTeam && router.push(`/dashboard/team/${nextTeam.id}`)}
