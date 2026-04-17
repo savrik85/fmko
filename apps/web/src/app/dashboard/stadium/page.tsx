@@ -353,45 +353,51 @@ export default function StadiumPage() {
           <div className="mt-4 pt-4 border-t border-gray-100 space-y-4">
             <div className="text-xs text-muted font-heading uppercase">Vzhled stadionu (zdarma)</div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {/* Záložky – výběr položky */}
+            <div className="flex flex-wrap gap-1.5">
               {CUSTOM_FIELDS.map(({ field, label, defaultColor }) => {
                 const current = stadium.customization[field] as string | null;
                 const displayColor = current ?? defaultColor;
-                const isOpen = openPicker === field;
+                const isActive = openPicker === field;
                 return (
-                  <div key={field} className="relative">
-                    <button
-                      onClick={() => setOpenPicker(isOpen ? null : field)}
-                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg border-2 transition-colors ${isOpen ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-400 bg-white"}`}
-                    >
-                      <span className="w-6 h-6 rounded-md border border-gray-300 shrink-0" style={{ backgroundColor: displayColor }} />
-                      <span className="font-heading font-bold text-xs flex-1 text-left truncate">{label}</span>
-                      <span className="text-muted text-[10px]">{isOpen ? "▲" : "▼"}</span>
-                    </button>
-                    {isOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1 z-10 p-3 bg-white border-2 border-pitch-500 rounded-lg shadow-lg grid grid-cols-6 gap-3">
-                        <button
-                          onClick={() => { handleCustomize(field, null); setOpenPicker(null); }}
-                          className={`w-7 h-7 rounded-md border-2 flex items-center justify-center text-[10px] ${current === null ? "border-pitch-500" : "border-gray-300"}`}
-                          style={{ backgroundColor: defaultColor }}
-                          title="Default"
-                        >
-                          ✕
-                        </button>
-                        {COLOR_PALETTE.map((c) => (
-                          <button
-                            key={c}
-                            onClick={() => { handleCustomize(field, c); setOpenPicker(null); }}
-                            className={`w-7 h-7 rounded-md border-2 ${current === c ? "border-pitch-500" : "border-gray-200 hover:border-gray-400"}`}
-                            style={{ backgroundColor: c }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <button
+                    key={field}
+                    onClick={() => setOpenPicker(isActive ? null : field)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 transition-colors text-xs font-heading font-bold ${isActive ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-400 bg-white"}`}
+                  >
+                    <span className="w-5 h-5 rounded border border-gray-300 shrink-0" style={{ backgroundColor: displayColor }} />
+                    <span>{label}</span>
+                  </button>
                 );
               })}
             </div>
+
+            {/* Paleta barev pro aktivní položku – inline pod záložkami, full-width karty */}
+            {openPicker && (() => {
+              const cf = CUSTOM_FIELDS.find((c) => c.field === openPicker);
+              if (!cf) return null;
+              const current = stadium.customization[openPicker] as string | null;
+              return (
+                <div className="p-3 bg-pitch-50 border-2 border-pitch-500 rounded-lg flex flex-wrap gap-3">
+                  <button
+                    onClick={() => { handleCustomize(openPicker, null); setOpenPicker(null); }}
+                    className={`w-10 h-10 rounded-md border-2 flex items-center justify-center text-sm ${current === null ? "border-pitch-500" : "border-gray-300"}`}
+                    style={{ backgroundColor: cf.defaultColor }}
+                    title="Default"
+                  >
+                    ✕
+                  </button>
+                  {COLOR_PALETTE.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => { handleCustomize(openPicker, c); setOpenPicker(null); }}
+                      className={`w-10 h-10 rounded-md border-2 ${current === c ? "border-pitch-500" : "border-gray-200 hover:border-gray-400"}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              );
+            })()}
 
             <div className="pt-2 border-t border-gray-50 space-y-1">
               <div className="text-xs text-muted font-heading uppercase mb-1">Vybavení (placené)</div>
