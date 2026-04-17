@@ -3316,13 +3316,17 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   const ownerTeam = await c.env.DB.prepare("SELECT user_id FROM teams WHERE id = ?").bind(targetOwnerId).first<{ user_id: string }>();
   if (!ownerTeam || ownerTeam.user_id === "ai") return c.json({ error: "Nabídky lze posílat jen lidským týmům" }, 400);
 
-  // Budget check — nelze nabídnout zápornou ani nulovou částku nebo víc než máme
-  if (body.amount <= 0 || !Number.isInteger(body.amount)) return c.json({ error: "Nabídka musí být kladné celé číslo" }, 400);
-  const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
-  if (!team || team.budget < body.amount) return c.json({ error: `Nedostatek peněz. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
-
   const offerType = body.offerType ?? "transfer";
   const loanDuration = offerType === "loan" ? (body.loanDuration ?? 30) : null;
+
+  // Validace částky: loan povoluje 0 (bezplatné hostování), transfer vyžaduje kladné celé číslo
+  if (!Number.isInteger(body.amount) || body.amount < 0 || (offerType !== "loan" && body.amount === 0)) {
+    return c.json({ error: "Nabídka musí být kladné celé číslo (0 povolena jen pro hostování)" }, 400);
+  }
+  if (body.amount > 0) {
+    const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
+    if (!team || team.budget < body.amount) return c.json({ error: `Nedostatek peněz. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
+  }
 
   if (offerType === "loan" && (!loanDuration || loanDuration < 7 || loanDuration > 180)) {
     return c.json({ error: "Délka hostování musí být 7–180 dní" }, 400);
