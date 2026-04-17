@@ -507,7 +507,7 @@ export async function runScheduledMatches(
             await db.prepare("UPDATE managers SET reputation = MIN(100, reputation + 1) WHERE team_id = ?")
               .bind(tid).run();
           }
-        } catch { /* manager xp optional */ }
+        } catch (e) { logger.warn({ module: "match-runner" }, "manager xp update", e); }
       }
 
       // Persist condition + morale changes back to DB (batched)
@@ -718,7 +718,7 @@ export async function buildMatchPlayers(
     try {
       const picks = JSON.parse(userLineupJson) as Array<{ playerId: string; matchPosition?: string }>;
       for (const p of picks) { if (p.matchPosition) matchPositionMap.set(p.playerId, p.matchPosition); }
-    } catch { /* ignore */ }
+    } catch (e) { logger.warn({ module: "match-runner" }, "parse userLineupJson", e); }
   }
 
   let idCounter = 1 + idOffset;
