@@ -16,8 +16,10 @@ const MATCH_BOOST = 3;
 const MATCH_DECAY = 0.4;
 const TRAINING_BOOST = 2;
 
+// Floor 15 — i nehraná formace má základní povědomí (každý tým ji někdy zkoušel)
+const FAM_FLOOR = 15;
 function clamp(v: number): number {
-  return Math.max(0, Math.min(100, v));
+  return Math.max(FAM_FLOOR, Math.min(100, v));
 }
 
 function parseMap(raw: string | null | undefined): Record<string, number> {

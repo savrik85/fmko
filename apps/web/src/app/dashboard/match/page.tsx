@@ -453,12 +453,12 @@ function MatchPage() {
             <div className="flex items-baseline justify-between mb-1">
               <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Formace</div>
               <div className="text-[10px] font-heading">
-                Sehranost: <span className={`font-bold ${famColor(formationFam[formation] ?? 0)}`}>{Math.round(formationFam[formation] ?? 0)}</span>/100
+                Sehranost: <span className={`font-bold ${famColor(formationFam[formation] ?? 15)}`}>{Math.round(formationFam[formation] ?? 15)}</span>/100
               </div>
             </div>
             <div className="grid grid-cols-3 sm:grid-cols-6 rounded-xl bg-gray-50 p-0.5 gap-0.5">
               {FORMATIONS.map((f) => {
-                const fam = formationFam[f] ?? 0;
+                const fam = formationFam[f] ?? 15;
                 return (
                   <button key={f} onClick={() => { setFormation(f); autoFill(players, f); }}
                     className={`py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all ${formation === f ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>

@@ -108,10 +108,11 @@ export function calcFormationSynergy(tactic: Tactic, formation?: string): number
 }
 
 /**
- * Sehranost faktor pro formaci — 0 = 0.8 (modifikátory tlumené k baseline), 100 = 1.0.
+ * Sehranost faktor pro formaci — 15 (default/floor) = ~0.83, 100 = 1.0.
+ * Žádná formace nikdy plně netlumená k 0.8 — i neznámou tým trochu umí.
  */
 export function formationChemistryFactor(familiarity: number | undefined): number {
-  const f = Math.max(0, Math.min(100, familiarity ?? 30));
+  const f = Math.max(15, Math.min(100, familiarity ?? 15));
   return 0.8 + 0.2 * (f / 100);
 }
 
