@@ -106,7 +106,6 @@ function Cars({
   carWidth,
   carDepth,
   padding,
-  dims,
 }: {
   count: number;
   cols: number;
@@ -116,40 +115,113 @@ function Cars({
   padding: number;
   dims: { width: number; depth: number };
 }) {
-  const bodyRef = useRef<THREE.InstancedMesh>(null);
-  const matrix = useMemo(() => new THREE.Matrix4(), []);
-  const color = useMemo(() => new THREE.Color(), []);
-
-  const totalW = cols * (carWidth + padding) + padding;
-  const totalD = rows * (carDepth + padding) + padding;
-  const startX = -totalW / 2;
-  const startZ = -totalD / 2;
-
-  useEffect(() => {
-    if (!bodyRef.current) return;
+  const cars = useMemo(() => {
+    const totalW = cols * (carWidth + padding) + padding;
+    const totalD = rows * (carDepth + padding) + padding;
+    const startX = -totalW / 2;
+    const startZ = -totalD / 2;
+    const out: Array<{ x: number; z: number; color: string; type: number }> = [];
     let idx = 0;
     for (let r = 0; r < rows && idx < count; r++) {
       for (let c = 0; c < cols && idx < count; c++) {
         const x = startX + padding + c * (carWidth + padding) + carWidth / 2;
         const z = startZ + padding + r * (carDepth + padding) + carDepth / 2;
-        matrix.makeTranslation(x, 0.5, z);
-        bodyRef.current.setMatrixAt(idx, matrix);
-        color.set(CAR_COLORS[idx % CAR_COLORS.length]);
-        bodyRef.current.setColorAt(idx, color);
+        out.push({
+          x, z,
+          color: CAR_COLORS[idx % CAR_COLORS.length],
+          type: idx % 3,    // 0=sedan, 1=suv, 2=hatchback
+        });
         idx++;
       }
     }
-    bodyRef.current.instanceMatrix.needsUpdate = true;
-    if (bodyRef.current.instanceColor) bodyRef.current.instanceColor.needsUpdate = true;
-  }, [count, cols, rows, carWidth, carDepth, padding, startX, startZ, matrix, color]);
+    return out;
+  }, [count, cols, rows, carWidth, carDepth, padding]);
 
   if (count === 0) return null;
   return (
     <group>
-      <instancedMesh ref={bodyRef} args={[undefined, undefined, count]} castShadow>
-        <boxGeometry args={[carWidth * 0.85, 0.8, carDepth * 0.85]} />
-        <meshStandardMaterial vertexColors roughness={0.4} metalness={0.3} />
-      </instancedMesh>
+      {cars.map((c, i) => (
+        <Car key={i} position={[c.x, 0, c.z]} color={c.color} type={c.type} />
+      ))}
+    </group>
+  );
+}
+
+/**
+ * Realističtější auto — tělo (spodní širší) + kabina (horní užší) + 4 kola + světla.
+ * 3 typy: 0=sedan (delší kapota), 1=SUV (vyšší), 2=hatchback (kratší zadek).
+ */
+function Car({ position, color, type }: { position: [number, number, number]; color: string; type: number }) {
+  const w = 1.4, d = 2.4;
+  const isSuv = type === 1;
+  const bodyH = 0.55;
+  const cabinH = isSuv ? 0.85 : 0.6;
+  const wheelR = 0.22;
+  const wheelW = 0.18;
+
+  // Sedan = kabina vzadu, SUV = uprostřed velký, hatchback = kabina blíže středu
+  const cabinZOffset = type === 0 ? -0.15 : type === 2 ? 0.05 : 0;
+  const cabinDepth = type === 0 ? d * 0.55 : type === 1 ? d * 0.7 : d * 0.6;
+
+  return (
+    <group position={position}>
+      {/* Tělo (spodní část) */}
+      <mesh position={[0, wheelR + bodyH / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, bodyH, d]} />
+        <meshStandardMaterial color={color} roughness={0.35} metalness={0.45} />
+      </mesh>
+      {/* Kabina (horní užší část) */}
+      <mesh position={[0, wheelR + bodyH + cabinH / 2, cabinZOffset]} castShadow>
+        <boxGeometry args={[w * 0.92, cabinH, cabinDepth]} />
+        <meshStandardMaterial color={color} roughness={0.35} metalness={0.45} />
+      </mesh>
+      {/* Okna (čtyři strany kabiny) */}
+      <mesh position={[0, wheelR + bodyH + cabinH * 0.55, cabinZOffset + cabinDepth / 2 + 0.001]}>
+        <planeGeometry args={[w * 0.7, cabinH * 0.55]} />
+        <meshStandardMaterial color="#1a2a3a" roughness={0.1} metalness={0.7} />
+      </mesh>
+      <mesh position={[0, wheelR + bodyH + cabinH * 0.55, cabinZOffset - cabinDepth / 2 - 0.001]} rotation={[0, Math.PI, 0]}>
+        <planeGeometry args={[w * 0.7, cabinH * 0.55]} />
+        <meshStandardMaterial color="#1a2a3a" roughness={0.1} metalness={0.7} />
+      </mesh>
+      <mesh position={[w * 0.46 + 0.001, wheelR + bodyH + cabinH * 0.55, cabinZOffset]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[cabinDepth * 0.85, cabinH * 0.55]} />
+        <meshStandardMaterial color="#1a2a3a" roughness={0.1} metalness={0.7} />
+      </mesh>
+      <mesh position={[-w * 0.46 - 0.001, wheelR + bodyH + cabinH * 0.55, cabinZOffset]} rotation={[0, -Math.PI / 2, 0]}>
+        <planeGeometry args={[cabinDepth * 0.85, cabinH * 0.55]} />
+        <meshStandardMaterial color="#1a2a3a" roughness={0.1} metalness={0.7} />
+      </mesh>
+      {/* 4 kola */}
+      {[
+        [-w / 2, d / 2 - 0.4],
+        [w / 2, d / 2 - 0.4],
+        [-w / 2, -d / 2 + 0.4],
+        [w / 2, -d / 2 + 0.4],
+      ].map((p, i) => (
+        <mesh key={i} position={[p[0], wheelR, p[1]]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <cylinderGeometry args={[wheelR, wheelR, wheelW, 12]} />
+          <meshStandardMaterial color="#1a1a1a" roughness={0.85} />
+        </mesh>
+      ))}
+      {/* Přední světla (bílá) */}
+      <mesh position={[-w * 0.3, wheelR + bodyH * 0.6, d / 2 + 0.001]}>
+        <planeGeometry args={[w * 0.22, bodyH * 0.35]} />
+        <meshStandardMaterial color="#FFF8E0" emissive="#FFF8E0" emissiveIntensity={0.5} />
+      </mesh>
+      <mesh position={[w * 0.3, wheelR + bodyH * 0.6, d / 2 + 0.001]}>
+        <planeGeometry args={[w * 0.22, bodyH * 0.35]} />
+        <meshStandardMaterial color="#FFF8E0" emissive="#FFF8E0" emissiveIntensity={0.5} />
+      </mesh>
+      {/* Zadní světla (červená) */}
+      <mesh position={[-w * 0.3, wheelR + bodyH * 0.6, -d / 2 - 0.001]} rotation={[0, Math.PI, 0]}>
+        <planeGeometry args={[w * 0.22, bodyH * 0.35]} />
+        <meshStandardMaterial color="#C13A3A" emissive="#C13A3A" emissiveIntensity={0.4} />
+      </mesh>
+      <mesh position={[w * 0.3, wheelR + bodyH * 0.6, -d / 2 - 0.001]} rotation={[0, Math.PI, 0]}>
+        <planeGeometry args={[w * 0.22, bodyH * 0.35]} />
+        <meshStandardMaterial color="#C13A3A" emissive="#C13A3A" emissiveIntensity={0.4} />
+      </mesh>
     </group>
   );
 }
