@@ -450,15 +450,6 @@ function MatchPage() {
                     {!filled && <span className="text-[10px] opacity-70">prázdná</span>}
                   </div>
                 </button>
-                {filled && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deletePreset(slot); }}
-                    title="Vymazat preset"
-                    className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-white border border-gray-300 text-card-red text-[10px] hover:bg-card-red hover:text-white transition-all"
-                  >
-                    ✕
-                  </button>
-                )}
               </div>
             );
           })}
