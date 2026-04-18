@@ -1552,7 +1552,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   const bannerPool = sponsorRows.results.filter((s) => !usedNames.has(s.name as string));
   for (let i = 0; i < Math.min(12, bannerPool.length); i++) {
     const s = bannerPool[i];
-    const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod * 0.4);
+    const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod * 0.8);
     const seasons = rng.int(1, 2);
     const terminationFee = Math.round(monthly * seasons * 1.5);
     bannerOffers.push({
