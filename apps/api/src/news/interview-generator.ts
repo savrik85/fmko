@@ -22,6 +22,11 @@ interface MatchContext {
   villageFlavor: string;
   gameWeek: number;
   opponentIsHuman?: boolean;
+  opponentManagerName?: string | null;
+  opponentLeaguePos?: number | null;
+  opponentLeaguePoints?: number | null;
+  opponentFormStr?: string | null;
+  opponentLastResult?: string | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -204,25 +209,36 @@ export async function generateInterviewQuestions(
     .map((p) => `${p.name} (${p.position}${p.goals ? `, ${p.goals} gólů` : ""})`)
     .join(", ");
 
-  const bulvarInstruction = ctx.opponentIsHuman
-    ? `4. BULVÁR — zákulisní nebo mírně provokativní otázka o trenérovi či týmu ${ctx.opponentName}. Naznač rivalitu, pochybnosti o jejich přístupu, nebo zákulisní drby. Tón: novinář z bulváru, ale stále vykání. Příklady: "Říká se, že v kabině ${ctx.opponentName} to teď docela vře — jak hodnotíte jejich atmosféru?" nebo "Soupeřův kouč prý vsadil na neobvyklou taktiku. Myslíte, že vás tím překvapí?"`
-    : `4. BULVÁR — zákulisní nebo lehce provokativní otázka o soupeři ${ctx.opponentName}. Zajímej se o jejich slabá místa, případné neshody, nebo zákulisí. Tón: novinář z bulváru, ale stále vykání.`;
+  const opponentCtxLines = [
+    ctx.opponentManagerName ? `- Trenér soupeře: ${ctx.opponentManagerName}` : null,
+    ctx.opponentLeaguePos
+      ? `- Soupeř v tabulce: ${ctx.opponentLeaguePos}. místo, ${ctx.opponentLeaguePoints} bodů`
+      : null,
+    ctx.opponentFormStr ? `- Forma soupeře (5 zápasů): ${ctx.opponentFormStr}` : null,
+    ctx.opponentLastResult ? `- Poslední výsledek soupeře: ${ctx.opponentLastResult}` : null,
+  ].filter(Boolean).join("\n");
 
-  const prompt = `Jsi redaktor Okresního zpravodaje v Čechách. Napiš přesně 4 otázky pro trenéra
+  const soupereOtazka = ctx.opponentManagerName
+    ? `Použij KONKRÉTNÍ data o soupeři výše — jeho jméno, pozici, formu nebo poslední výsledek. Např. "Trenér ${ctx.opponentManagerName} po poslední prohře 1:3 mluvil o smůle — věříte mu, nebo v tom vidíte spíš výmluvy?" Ať otázka vyvolává rivalitu, klidně provokativně, ale stále vykání.`
+    : `Ať otázka zmíní něco konkrétního o soupeři ${ctx.opponentName} — jeho pozici, formu, nebo drb.`;
+
+  const prompt = `Jsi bulvárnější redaktor Okresního zpravodaje v Čechách. Napiš přesně 3 otázky pro trenéra
 fotbalového týmu ${ctx.teamName} před zápasem ${ctx.isHome ? "doma" : "venku"} s ${ctx.opponentName} (kolo ${ctx.gameWeek}).
 
 INSTRUKCE:
-- KAŽDÁ otázka musí být konkrétní — zmiň jméno hráče, přesný výsledek, nebo konkrétního soupeře
+- KAŽDÁ otázka musí být konkrétní — zmiň jméno hráče, přesný výsledek, nebo konkrétního soupeře / trenéra soupeře
 - Nepokládej obecné otázky jako "jak hodnotíte formu" nebo "co od zápasu čekáte" — to je nuda
-- Střídej témata: 1 otázka o soupeři nebo nadcházejícím zápase, 1 o konkrétním hráči nebo výkonu, 1 o situaci v tabulce nebo formě, 1 bulvárnější
 - Otázky piš jednu per řádek, bez číslování, bez odrážek, bez markdown
-- Jazyk: hovorová čeština, novinářský tón, vykání trenéru
+- Jazyk: hovorová čeština, bulvárnější novinářský tón, vykání trenéru
 - Délka každé otázky: 1–2 věty max
-- PŘESNĚ 4 otázky
+- PŘESNĚ 3 otázky, v tomto pořadí:
 
-KONTEXT (používej konkrétní data z toho níže):
+OTÁZKA 1 — o vlastním týmu / nadcházejícím zápase: konkrétní fakt z formy, posledního výsledku nebo vlastního hráče
+OTÁZKA 2 — taktika, sestava, zranění nebo klíčový hráč: konkrétní jméno z kontextu
+OTÁZKA 3 — BULVÁRNÍ, MÍŘENÁ PŘÍMO NA TRENÉRA SOUPEŘE nebo jeho tým. ${soupereOtazka}
+
+KONTEXT (tým trenéra):
 - Tým: ${ctx.teamName} (${ctx.villageFlavor}), ${ctx.isHome ? "hraje doma" : "hraje venku"}
-- Soupeř: ${ctx.opponentName}
 - Kolo: ${ctx.gameWeek}
 - Pozice v tabulce: ${ctx.leaguePos ? `${ctx.leaguePos}. místo, ${ctx.leaguePoints} bodů` : "start sezóny"}
 - Forma posledních 5 zápasů: ${ctx.formStr} (V=výhra, R=remíza, P=prohra)
@@ -230,11 +246,10 @@ KONTEXT (používej konkrétní data z toho níže):
 - Klíčoví hráči: ${topStr || "info nedostupné"}
 ${ctx.injuredStr ? `- Zranění: ${ctx.injuredStr}` : ""}
 
-Příklady DOBRÉ otázky 1-3: "Po výhře 3:1 nad Lokomotivou přichází těžší soupeř — čím vás ${ctx.opponentName} může překvapit?"
-Příklady ŠPATNÉ otázky: "Jaká je forma týmu?" nebo "Co od zápasu čekáte?"
-${bulvarInstruction}
+KONTEXT (soupeř ${ctx.opponentName}):
+${opponentCtxLines || "- info nedostupné"}
 
-Napiš pouze 4 otázky, každou na samostatném řádku.`;
+Napiš pouze 3 otázky, každou na samostatném řádku.`;
 
   const text = await callGemini(apiKey, prompt, 512);
   if (!text) return null;
@@ -243,7 +258,7 @@ Napiš pouze 4 otázky, každou na samostatném řádku.`;
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.length > 10)
-    .slice(0, 5);
+    .slice(0, 3);
 
   if (questions.length < 2) return null;
   return questions;
@@ -262,22 +277,27 @@ export async function generateInterviewArticle(
     .map((pair, i) => `Otázka ${i + 1}: ${pair.q}\nOdpověď: ${pair.a}`)
     .join("\n\n");
 
-  const prompt = `Jsi zkušený redaktor Okresního zpravodaje. Dostal jsi přepis rozhovoru s trenérem
+  const prompt = `Jsi bulvárnější redaktor Okresního zpravodaje — regionálního plátku, který žije vesnickým fotbalem. Dostal jsi přepis rozhovoru s trenérem
 ${managerName} z týmu ${teamName} před zápasem s ${opponentName}. Sestav z toho novinový článek.
+
+KONTEXT — důležité pochopit:
+Tohle je okresní přebor. Vesnický fotbal. Rivalita mezi vesnicemi a manažery je přirozená a čtenáři ji milují. Narážky mezi trenéry, bulvární špeky, hospodské povídačky, náznaky o zákulisí soupeře, ironie a sarkasmus — to všechno patří do novin, ne do koše. Pokud trenér řekne něco peprného, pikantního nebo provokativního, NEŠKRTAT. Dát tomu prostor — klidně to zarámovat jako "překvapivé prohlášení", "bombu", "bulvární exkluzivitu" — ale NIKDY to úplně nevynechat.
 
 PRAVIDLA:
 - Piš v er-formě (ne Q&A formát, ne otázky a odpovědi)
-- Délka: 180–250 slov
-- Používej přímou řeč v uvozovkách pro klíčové výroky trenéra
+- Délka: 180–280 slov
+- Používej přímou řeč v uvozovkách pro klíčové výroky trenéra — čím šťavnatější hláška, tím spíš ji cituj doslovně
 - KRITICKÉ: NIKDY nevymýšlej obsah odpovědí. Článek musí vycházet VÝHRADNĚ z toho, co trenér skutečně řekl.
 - KRITICKÉ: NIKDY neopravuj pravopis ani překlepy v citacích trenéra. Nestandardní slova (např. "stašný", "stašně", "stašilo") mohou být záměrné slovní hříčky — zachovej je PŘESNĚ jak je trenér napsal, včetně přímých řečí v uvozovkách.
-- Pokud jsou odpovědi krátké nebo strohé: napiš že trenér byl stručný/neochotný. Např. "Trenér byl před utkáním mlčenlivý." nebo "Na otázku ohledně X trenér odpověděl jen stroze."
-- Pokud jsou odpovědi vulgární: přepiš je novinářsky zachováním SMYSLU (ne obsahu), odstraň vulgaritu. Např. "Trenér svého soupeře odbyl jednou větou."
+- PIKANTNÍ / BULVÁRNÍ obsah (prostitutky, pití, narážky na soupeře, drby, dámské delegace, zákulisí, voodoo, chobotnice ve svazu, ...) = ZACHOVAT a dát mu prostor. Klidně doslovná citace, nebo parafráze se zachováním obsahu i pointy. Čtenář chce srandu, ne sterilní text.
+- SPROSTÁ SLOVA (kurva, píča, zkurvenej atp.) = jen tyhle konkrétní výrazy měkčíme do bulvárního novinářského jazyka, ale pointu/smysl zachovat ("trenér nebral servítky", "ostře zkritizoval" apod.). Pikantní ≠ vulgární — zmínku o prostitutkách NECENZURUJ.
+- Pokud jsou odpovědi krátké nebo strohé: napiš, že trenér byl stručný/neochotný. Např. "Trenér byl před utkáním mlčenlivý." nebo "Na otázku ohledně X trenér odpověděl jen stroze."
 - Pokud jsou odpovědi pozitivní/zajímavé: cituj je nebo parafrázuj věrně
-- Tón: vážný novinář regionálního sportu, lehký humor kde to sedí
+- NARÁŽKY MEZI TRENÉRY: pokud trenér něco hodí na kolegu z jiného týmu (např. "Kopyto brečí do novin"), zachovej to — rivalita mezi manažery je koření okresního přeboru
+- Tón: bulvárnější regionální zpravodaj s humorem, ne suchý sportovní komentátor. Lehká ironie, občas pobavený podtón ("zda si v neděli budou hrát fotbalisté, nebo pacienti, ukáže až zápas"), ale bez výsměchu trenérovi
 - Čeština, bez markdown, bez odrážek
 - Bez uvozovek kolem celého textu
-- STRIKTNĚ: první řádek = titulek (max 80 znaků, bez "Titulek:" prefixu)
+- STRIKTNĚ: první řádek = titulek (max 80 znaků, bez "Titulek:" prefixu). Titulek má být chytlavý, klidně s klíčovou hláškou trenéra nebo narážkou na nejpikantnější část rozhovoru
 - Od druhého řádku = body článku
 
 PŘEPIS ROZHOVORU:
@@ -395,11 +415,20 @@ export async function tryCreateInterviewRequest(
   const opponentName = isHome ? matchRow.away_name : matchRow.home_name;
   const opponentTeamId = isHome ? matchRow.away_team_id : matchRow.home_team_id;
 
-  // Je soupeř lidský tým? (pro bulvárnější otázku)
-  const opponentRow = await db.prepare("SELECT user_id FROM teams WHERE id = ?")
-    .bind(opponentTeamId).first<{ user_id: string }>()
+  // Je soupeř lidský tým? + kontext pro bulvární otázku (jméno trenéra, forma, poslední výsledek)
+  const opponentRow = await db
+    .prepare(
+      `SELECT t.user_id, m.name as manager_name
+       FROM teams t
+       LEFT JOIN managers m ON m.team_id = t.id
+       WHERE t.id = ?`,
+    )
+    .bind(opponentTeamId)
+    .first<{ user_id: string; manager_name: string | null }>()
     .catch((e) => { logger.warn({ module: "interview-generator" }, "load opponent", e); return null; });
   const opponentIsHuman = opponentRow?.user_id != null && opponentRow.user_id !== "ai";
+  // U AI soupeřů jméno trenéra ignorujeme (nemá to být skutečná osobní narážka)
+  const opponentManagerName = opponentIsHuman ? opponentRow?.manager_name ?? null : null;
 
   // 5. Village flavor
   let villageFlavor = "tradiční fotbalový klub";
@@ -414,16 +443,20 @@ export async function tryCreateInterviewRequest(
     }
   }
 
-  // 6. Kontext pro otázky
-  const [form, lastMatch, topPlayers, injuredStr, standings] = await Promise.all([
-    loadTeamForm(db, teamRow.team_id),
-    loadLastMatchResult(db, teamRow.team_id),
-    loadTopPlayers(db, teamRow.team_id),
-    loadInjuredText(db, teamRow.team_id),
-    calculateStandings(db, ctx.leagueId).catch(() => []),
-  ]);
+  // 6. Kontext pro otázky (vlastní tým + soupeř)
+  const [form, lastMatch, topPlayers, injuredStr, standings, opponentForm, opponentLast] =
+    await Promise.all([
+      loadTeamForm(db, teamRow.team_id),
+      loadLastMatchResult(db, teamRow.team_id),
+      loadTopPlayers(db, teamRow.team_id),
+      loadInjuredText(db, teamRow.team_id),
+      calculateStandings(db, ctx.leagueId).catch(() => []),
+      loadTeamForm(db, opponentTeamId),
+      loadLastMatchResult(db, opponentTeamId),
+    ]);
 
   const myStanding = standings.find((s) => s.teamId === teamRow.team_id);
+  const opponentStanding = standings.find((s) => s.teamId === opponentTeamId);
 
   const matchCtx: MatchContext = {
     teamName: teamRow.team_name,
@@ -438,6 +471,11 @@ export async function tryCreateInterviewRequest(
     villageFlavor,
     gameWeek: ctx.gameWeek,
     opponentIsHuman,
+    opponentManagerName,
+    opponentLeaguePos: opponentStanding?.pos ?? null,
+    opponentLeaguePoints: opponentStanding?.points ?? null,
+    opponentFormStr: opponentForm,
+    opponentLastResult: opponentLast,
   };
 
   // 7. Generuj otázky přes Gemini
