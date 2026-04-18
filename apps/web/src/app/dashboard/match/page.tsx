@@ -146,7 +146,7 @@ function MatchPage() {
   const [captainId, setCaptainId] = useState<string | null>(null);
   const [formationFam, setFormationFam] = useState<Record<string, number>>({});
   const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; updatedAt: string } | null>>({ A: null, B: null, C: null });
-  const [presetMenu, setPresetMenu] = useState<string | null>(null);
+  const [activePreset, setActivePreset] = useState<"A" | "B" | "C" | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -257,8 +257,7 @@ function MatchPage() {
       });
       const d = await apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`);
       setPresets(d.presets ?? presets);
-      setPresetMenu(null);
-    } catch (e) { console.error("save preset:", e); setSaveError("Nepodařilo se uložit preset"); }
+    } catch (e) { console.error("save preset:", e); setSaveError("Nepodařilo se uložit preset"); throw e; }
   };
 
   const loadPreset = async (slot: "A" | "B" | "C") => {
@@ -274,7 +273,6 @@ function MatchPage() {
       setSelected(newSel);
       setCaptainId(data.captainId);
       setSaved(false);
-      setPresetMenu(null);
     } catch (e) { console.error("load preset:", e); }
   };
 
@@ -283,8 +281,20 @@ function MatchPage() {
     try {
       await apiFetch(`/api/teams/${teamId}/lineup-presets/${slot}`, { method: "DELETE" });
       setPresets({ ...presets, [slot]: null });
-      setPresetMenu(null);
+      if (activePreset === slot) setActivePreset(null);
     } catch (e) { console.error("delete preset:", e); }
+  };
+
+  // Klik na slot: pokud filled a ne aktivní → loadne. Pokud aktivní → odepne.
+  const onPresetClick = async (slot: "A" | "B" | "C") => {
+    if (activePreset === slot) {
+      setActivePreset(null);
+      return;
+    }
+    if (presets[slot]) {
+      await loadPreset(slot);
+    }
+    setActivePreset(slot);
   };
 
   const saveLineup = async () => {
@@ -297,7 +307,13 @@ function MatchPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, captainId, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
       });
-      if (res.ok) { setSaved(true); }
+      if (res.ok) {
+        // Pokud je aktivní preset slot, ulož i tam
+        if (activePreset) {
+          try { await savePreset(activePreset); } catch { /* už zalogováno */ }
+        }
+        setSaved(true);
+      }
       else { setSaveError(res.error ?? "Nepodařilo se uložit sestavu"); }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Nepodařilo se uložit sestavu";
@@ -405,40 +421,43 @@ function MatchPage() {
 
       {/* Absent players shown inline in bench table + selector, not as separate card */}
 
-      {/* ═══ Presety A / B / C ═══ */}
+      {/* ═══ Presety A / B / C — taby ═══ */}
       <div className="card p-3">
-        <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1">Uložené sestavy</div>
+        <div className="flex items-baseline justify-between mb-1">
+          <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Uložené sestavy</div>
+          <div className="text-[10px] text-muted">
+            {activePreset ? <>Editujete <span className="font-bold text-pitch-600">Sestavu {activePreset}</span></> : "Editujete sestavu pro nejbližší zápas"}
+          </div>
+        </div>
         <div className="grid grid-cols-3 gap-2">
           {(["A", "B", "C"] as const).map((slot) => {
             const preset = presets[slot];
             const filled = !!preset;
+            const active = activePreset === slot;
             return (
               <div key={slot} className="relative">
                 <button
-                  onClick={() => setPresetMenu(presetMenu === slot ? null : slot)}
-                  className={`w-full py-2 px-2 rounded-lg text-xs font-heading font-bold border transition-all ${filled ? "bg-cream border-pitch-300 text-ink" : "bg-gray-50 border-gray-200 text-muted hover:bg-gray-100"}`}
+                  onClick={() => { onPresetClick(slot); setSaved(false); }}
+                  className={`w-full py-2 px-2 rounded-lg text-xs font-heading font-bold border-2 transition-all ${
+                    active ? "bg-pitch-500 border-pitch-600 text-white shadow-md"
+                    : filled ? "bg-cream border-pitch-300 text-ink hover:border-pitch-500"
+                    : "bg-gray-50 border-gray-200 text-muted hover:bg-gray-100"
+                  }`}
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>Sestava {slot}</span>
-                    {filled && <span className="text-[10px] opacity-70">{preset.formation}</span>}
+                    {filled && <span className={`text-[10px] ${active ? "opacity-90" : "opacity-70"}`}>{preset.formation}</span>}
+                    {!filled && <span className="text-[10px] opacity-70">prázdná</span>}
                   </div>
                 </button>
-                {presetMenu === slot && (
-                  <div className="absolute z-30 left-0 right-0 mt-1 card p-1 shadow-lg flex flex-col gap-0.5">
-                    {filled && (
-                      <button onClick={() => loadPreset(slot)} className="text-left px-2 py-1.5 rounded text-xs hover:bg-pitch-50">
-                        📥 Načíst
-                      </button>
-                    )}
-                    <button onClick={() => savePreset(slot)} className="text-left px-2 py-1.5 rounded text-xs hover:bg-pitch-50">
-                      💾 Uložit aktuální
-                    </button>
-                    {filled && (
-                      <button onClick={() => deletePreset(slot)} className="text-left px-2 py-1.5 rounded text-xs hover:bg-card-red/10 text-card-red">
-                        🗑 Vymazat
-                      </button>
-                    )}
-                  </div>
+                {filled && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deletePreset(slot); }}
+                    title="Vymazat preset"
+                    className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-white border border-gray-300 text-card-red text-[10px] hover:bg-card-red hover:text-white transition-all"
+                  >
+                    ✕
+                  </button>
                 )}
               </div>
             );
@@ -829,7 +848,7 @@ function MatchPage() {
       <div>
         <button onClick={saveLineup} disabled={saving || selected.some((s) => !s)}
           className={`btn btn-lg w-full ${saved ? "btn-ghost" : "btn-primary"}`}>
-          {saving ? "Ukládám..." : saved ? "Sestava uložena ✓" : "Uložit sestavu"}
+          {saving ? "Ukládám..." : saved ? "Uloženo ✓" : activePreset ? `Uložit Sestavu ${activePreset}` : "Uložit sestavu"}
         </button>
         {saveError && <p className="text-sm text-card-red mt-2 text-center">{saveError}</p>}
       </div>
