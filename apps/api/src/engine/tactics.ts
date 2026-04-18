@@ -108,30 +108,27 @@ export function calcFormationSynergy(tactic: Tactic, formation?: string): number
 }
 
 /**
- * Sehranost faktor — jak moc tým "umí hrát" nastavenou taktiku/formaci.
- * 0 sehranost = 0.8 (modifikátory ztlumené k baseline), 100 = 1.0 (plný efekt).
+ * Sehranost faktor pro formaci — 0 = 0.8 (modifikátory tlumené k baseline), 100 = 1.0.
  */
-export function chemistryFactor(familiarity: number | undefined): number {
+export function formationChemistryFactor(familiarity: number | undefined): number {
   const f = Math.max(0, Math.min(100, familiarity ?? 30));
   return 0.8 + 0.2 * (f / 100);
 }
 
 /**
- * Celkový multiplikátor efektivity taktiky pro daný tým — kombinace všech 3.
- * Aplikuje se jako: effMod = 1 + (TACTIC_MODS[t].xMod - 1) * tacticEffectiveness
+ * Celkový multiplikátor efektivity taktiky — skill-fit × formation synergy × formation chemistry.
+ * Sehranost se počítá jen na formaci (taktika se v reálu adoptuje rychle, sehranost rozestavění je klíčová).
  */
 export function calcTacticEffectiveness(
   lineup: MatchPlayer[],
   tactic: Tactic,
   formation: string | undefined,
-  tacticFamiliarity: number | undefined,
   formationFamiliarity: number | undefined,
 ): number {
   const fit = calcTacticFit(lineup, tactic);
   const formSyn = calcFormationSynergy(tactic, formation);
-  const tactChem = chemistryFactor(tacticFamiliarity);
-  const formChem = 0.9 + 0.1 * (Math.max(0, Math.min(100, formationFamiliarity ?? 30)) / 100);
-  return fit * formSyn * tactChem * formChem;
+  const formChem = formationChemistryFactor(formationFamiliarity);
+  return fit * formSyn * formChem;
 }
 
 export function tacticDrainMod(tactic: Tactic): number {

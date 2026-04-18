@@ -155,16 +155,16 @@ export async function executeDailyTick(
           "UPDATE teams SET last_training_at = ?, last_training_result = ? WHERE id = ?"
         ).bind(now.toISOString(), JSON.stringify(summary), teamId).run();
 
-        // Tactics training → +2 pro aktuálně preferovanou taktiku (nejnovější uložená lineup)
+        // Tactics training → +2 pro aktuálně preferovanou formaci (nejnovější uložená lineup)
         if ((team.training_type as string) === "tactics") {
           try {
             const lastLineup = await env.DB.prepare(
-              "SELECT tactic FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
-            ).bind(teamId).first<{ tactic: string }>();
-            const tac = lastLineup?.tactic;
-            if (tac) {
+              "SELECT formation FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
+            ).bind(teamId).first<{ formation: string }>();
+            const form = lastLineup?.formation;
+            if (form) {
               const { applyTrainingBoost } = await import("../engine/chemistry");
-              await applyTrainingBoost(env.DB, teamId, tac);
+              await applyTrainingBoost(env.DB, teamId, form);
             }
           } catch (e) {
             logger.warn({ module: "daily-tick" }, "tactics training boost", e);

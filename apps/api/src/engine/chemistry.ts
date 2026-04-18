@@ -43,22 +43,16 @@ export async function readFamiliarity(db: D1Database, teamId: string): Promise<F
 }
 
 /**
- * Po odehraném zápase: hraná taktika + formace +3, ostatní -0.4.
+ * Po odehraném zápase: hraná formace +3, ostatní -0.4.
+ * (Sehranost taktiky jsme záměrně neevidovali — taktika se v reálu adoptuje rychle, řeší to skill-fit.)
  */
 export async function applyMatchResult(
   db: D1Database,
   teamId: string,
-  tactic: string,
+  _tactic: string,
   formation: string,
 ): Promise<void> {
   const snap = await readFamiliarity(db, teamId);
-
-  const nextTactic: Record<string, number> = {};
-  const knownTactics = new Set([...Object.keys(snap.tactic), tactic]);
-  for (const t of knownTactics) {
-    const current = snap.tactic[t] ?? 0;
-    nextTactic[t] = clamp(t === tactic ? current + MATCH_BOOST : current - MATCH_DECAY);
-  }
 
   const nextFormation: Record<string, number> = {};
   const knownFormations = new Set([...Object.keys(snap.formation), formation]);
@@ -68,23 +62,23 @@ export async function applyMatchResult(
   }
 
   await db.prepare(
-    "UPDATE teams SET tactic_familiarity = ?, formation_familiarity = ? WHERE id = ?"
-  ).bind(JSON.stringify(nextTactic), JSON.stringify(nextFormation), teamId).run()
+    "UPDATE teams SET formation_familiarity = ? WHERE id = ?"
+  ).bind(JSON.stringify(nextFormation), teamId).run()
     .catch((e) => logger.warn({ module: "chemistry" }, "write familiarity", e));
 }
 
 /**
- * Tactics training: +2 pro aktuálně zvolenou taktiku.
+ * Tactics training: +2 pro aktuálně zvolenou formaci (cvičíme rozestavění, ne abstraktní taktiku).
  */
 export async function applyTrainingBoost(
   db: D1Database,
   teamId: string,
-  tactic: string,
+  formation: string,
 ): Promise<void> {
   const snap = await readFamiliarity(db, teamId);
-  const next = { ...snap.tactic };
-  next[tactic] = clamp((next[tactic] ?? 0) + TRAINING_BOOST);
-  await db.prepare("UPDATE teams SET tactic_familiarity = ? WHERE id = ?")
+  const next = { ...snap.formation };
+  next[formation] = clamp((next[formation] ?? 0) + TRAINING_BOOST);
+  await db.prepare("UPDATE teams SET formation_familiarity = ? WHERE id = ?")
     .bind(JSON.stringify(next), teamId).run()
     .catch((e) => logger.warn({ module: "chemistry" }, "training boost", e));
 }
@@ -108,24 +102,16 @@ export async function backfillFromHistory(db: D1Database): Promise<{ teamsUpdate
      ORDER BY m.simulated_at ASC`
   ).all<{ match_id: string; simulated_at: string; team_id: string; tactic: string; formation: string }>();
 
-  const tacticByTeam = new Map<string, Record<string, number>>();
   const formationByTeam = new Map<string, Record<string, number>>();
 
   for (const t of teams.results) {
-    tacticByTeam.set(t.id, {});
     formationByTeam.set(t.id, {});
   }
 
   for (const m of matches.results) {
-    const tMap = tacticByTeam.get(m.team_id);
     const fMap = formationByTeam.get(m.team_id);
-    if (!tMap || !fMap) continue;
+    if (!fMap) continue;
 
-    const knownTactics = new Set([...Object.keys(tMap), m.tactic]);
-    for (const t of knownTactics) {
-      const current = tMap[t] ?? 0;
-      tMap[t] = clamp(t === m.tactic ? current + MATCH_BOOST : current - MATCH_DECAY);
-    }
     const knownForms = new Set([...Object.keys(fMap), m.formation]);
     for (const f of knownForms) {
       const current = fMap[f] ?? 0;
@@ -135,14 +121,12 @@ export async function backfillFromHistory(db: D1Database): Promise<{ teamsUpdate
 
   let teamsUpdated = 0;
   for (const t of teams.results) {
-    const tMap = tacticByTeam.get(t.id) ?? {};
     const fMap = formationByTeam.get(t.id) ?? {};
-    // Seed: pokud žádná historie, dej balanced/4-4-2 = 25 (něco aby chemistryFactor nebyl plně tlumený)
-    if (Object.keys(tMap).length === 0) tMap.balanced = 25;
+    // Seed: pokud žádná historie, 4-4-2 = 25 (aby formationChemistryFactor nebyl plně tlumený)
     if (Object.keys(fMap).length === 0) fMap["4-4-2"] = 25;
 
-    await db.prepare("UPDATE teams SET tactic_familiarity = ?, formation_familiarity = ? WHERE id = ?")
-      .bind(JSON.stringify(tMap), JSON.stringify(fMap), t.id).run()
+    await db.prepare("UPDATE teams SET formation_familiarity = ? WHERE id = ?")
+      .bind(JSON.stringify(fMap), t.id).run()
       .catch((e) => logger.warn({ module: "chemistry" }, "backfill team", e));
     teamsUpdated++;
   }

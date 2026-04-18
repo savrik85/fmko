@@ -89,8 +89,8 @@ function calcChanceProb(
 
   // Effectiveness: skill-fit × formation synergy × familiarity (taktika + formace).
   // Pokud je taktika neumělá / formace nesedí / tým ji nehrál → effectiveness < 1 → modifikátory se ztlumí k 1.0.
-  const attEff = calcTacticEffectiveness(attacking.lineup, attacking.tactic, attacking.formation, attacking.tacticFamiliarity, attacking.formationFamiliarity);
-  const defEff = calcTacticEffectiveness(defending.lineup, defending.tactic, defending.formation, defending.tacticFamiliarity, defending.formationFamiliarity);
+  const attEff = calcTacticEffectiveness(attacking.lineup, attacking.tactic, attacking.formation, attacking.formationFamiliarity);
+  const defEff = calcTacticEffectiveness(defending.lineup, defending.tactic, defending.formation, defending.formationFamiliarity);
 
   const outfield = attacking.lineup.filter((p) => p.position !== "GK");
   const mids = attacking.lineup.filter((p) => p.position === "MID");
@@ -463,7 +463,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
 
     // Counter-attack: defensive tactic team can break on opponent's possession
     const defTacticMods = TACTIC_MODS[defending.tactic];
-    const defEffForCounter = calcTacticEffectiveness(defending.lineup, defending.tactic, defending.formation, defending.tacticFamiliarity, defending.formationFamiliarity);
+    const defEffForCounter = calcTacticEffectiveness(defending.lineup, defending.tactic, defending.formation, defending.formationFamiliarity);
     const effectiveCounterMod = defTacticMods.counterMod * defEffForCounter;
     if (effectiveCounterMod > 0 && rng.random() < effectiveCounterMod * conditionMod) {
       const counterAttacker = pickAttacker(rng, defending.lineup);

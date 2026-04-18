@@ -11,7 +11,7 @@ import type { BadgePattern } from "@/components/ui";
 
 type Pos = "GK" | "DEF" | "MID" | "FWD";
 
-const FORMATIONS = ["4-4-2", "4-3-3", "3-5-2", "4-5-1", "5-3-2", "3-4-3", "4-2-3-1"] as const;
+const FORMATIONS = ["4-4-2", "4-3-3", "3-5-2", "4-5-1", "5-3-2", "3-4-3"] as const;
 const TACTICS = [
   { key: "offensive", label: "Útočná", icon: "⚔️" },
   { key: "balanced", label: "Vyrovnaná", icon: "⚖️" },
@@ -70,13 +70,6 @@ const POSITIONS: Record<string, Array<{ pos: Pos; x: number; y: number }>> = {
     { pos: "DEF", x: 28, y: 72 }, { pos: "DEF", x: 50, y: 72 }, { pos: "DEF", x: 72, y: 72 },
     { pos: "MID", x: 14, y: 48 }, { pos: "MID", x: 38, y: 45 }, { pos: "MID", x: 62, y: 45 }, { pos: "MID", x: 86, y: 48 },
     { pos: "FWD", x: 22, y: 18 }, { pos: "FWD", x: 50, y: 15 }, { pos: "FWD", x: 78, y: 18 },
-  ],
-  "4-2-3-1": [
-    { pos: "GK", x: 50, y: 90 },
-    { pos: "DEF", x: 18, y: 72 }, { pos: "DEF", x: 39, y: 72 }, { pos: "DEF", x: 61, y: 72 }, { pos: "DEF", x: 82, y: 72 },
-    { pos: "MID", x: 38, y: 56 }, { pos: "MID", x: 62, y: 56 },
-    { pos: "MID", x: 22, y: 36 }, { pos: "MID", x: 50, y: 33 }, { pos: "MID", x: 78, y: 36 },
-    { pos: "FWD", x: 50, y: 14 },
   ],
 };
 
@@ -151,16 +144,15 @@ function MatchPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [captainId, setCaptainId] = useState<string | null>(null);
-  const [tacticFam, setTacticFam] = useState<Record<string, number>>({});
   const [formationFam, setFormationFam] = useState<Record<string, number>>({});
   const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; updatedAt: string } | null>>({ A: null, B: null, C: null });
   const [presetMenu, setPresetMenu] = useState<string | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
-    // Načti sehranost taktik a formací (zobrazí se jako badge u tactic/formation selectoru)
+    // Načti sehranost formace (badge u formation selectoru)
     apiFetch<{ tactic: Record<string, number>; formation: Record<string, number> }>(`/api/teams/${teamId}/tactic-chemistry`)
-      .then((d) => { setTacticFam(d.tactic ?? {}); setFormationFam(d.formation ?? {}); })
+      .then((d) => { setFormationFam(d.formation ?? {}); })
       .catch((e) => console.warn("load chemistry:", e));
     // Načti presety
     apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`)
@@ -464,12 +456,12 @@ function MatchPage() {
                 Sehranost: <span className={`font-bold ${famColor(formationFam[formation] ?? 0)}`}>{Math.round(formationFam[formation] ?? 0)}</span>/100
               </div>
             </div>
-            <div className="flex flex-wrap rounded-xl bg-gray-50 p-0.5 gap-0.5">
+            <div className="grid grid-cols-3 sm:grid-cols-6 rounded-xl bg-gray-50 p-0.5 gap-0.5">
               {FORMATIONS.map((f) => {
                 const fam = formationFam[f] ?? 0;
                 return (
                   <button key={f} onClick={() => { setFormation(f); autoFill(players, f); }}
-                    className={`flex-1 min-w-[50px] py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all ${formation === f ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                    className={`py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all ${formation === f ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
                     {f}
                     <div className={`mt-0.5 h-1 rounded-full ${famBgColor(fam)}`} style={{ width: `${Math.max(8, fam)}%`, marginInline: "auto" }} />
                   </button>
@@ -478,23 +470,14 @@ function MatchPage() {
             </div>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-baseline justify-between mb-1">
-              <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Taktika</div>
-              <div className="text-[10px] font-heading">
-                Sehranost: <span className={`font-bold ${famColor(tacticFam[tactic] ?? 0)}`}>{Math.round(tacticFam[tactic] ?? 0)}</span>/100
-              </div>
-            </div>
-            <div className="flex flex-wrap rounded-xl bg-gray-50 p-0.5 gap-0.5">
-              {TACTICS.map((t) => {
-                const fam = tacticFam[t.key] ?? 0;
-                return (
-                  <button key={t.key} onClick={() => { setTactic(t.key); setSaved(false); }}
-                    className={`flex-1 min-w-[80px] py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all ${tactic === t.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
-                    <span className="hidden sm:inline">{t.icon} </span>{t.label}
-                    <div className={`mt-0.5 h-1 rounded-full ${famBgColor(fam)}`} style={{ width: `${Math.max(8, fam)}%`, marginInline: "auto" }} />
-                  </button>
-                );
-              })}
+            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1">Taktika</div>
+            <div className="grid grid-cols-3 sm:grid-cols-6 rounded-xl bg-gray-50 p-0.5 gap-0.5">
+              {TACTICS.map((t) => (
+                <button key={t.key} onClick={() => { setTactic(t.key); setSaved(false); }}
+                  className={`py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all ${tactic === t.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                  <span className="hidden sm:inline">{t.icon} </span>{t.label}
+                </button>
+              ))}
             </div>
           </div>
         </div>

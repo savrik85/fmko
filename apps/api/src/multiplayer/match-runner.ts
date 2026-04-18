@@ -163,7 +163,6 @@ export async function runScheduledMatches(
         tactic: homeTactic,
         formation: homeFormation,
         captainId: homeCaptainEngineId,
-        tacticFamiliarity: homeFam.tactic[homeTactic] ?? 0,
         formationFamiliarity: homeFam.formation[homeFormation] ?? 0,
       };
       const awaySetup: TeamSetup = {
@@ -174,7 +173,6 @@ export async function runScheduledMatches(
         tactic: awayTactic,
         formation: awayFormation,
         captainId: awayCaptainEngineId,
-        tacticFamiliarity: awayFam.tactic[awayTactic] ?? 0,
         formationFamiliarity: awayFam.formation[awayFormation] ?? 0,
       };
 

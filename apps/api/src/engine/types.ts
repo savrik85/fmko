@@ -55,7 +55,6 @@ export interface TeamSetup {
   tactic: Tactic;
   formation?: string;      // např. "4-4-2", "3-4-3" — pro formationSynergy
   captainId?: number;      // engine ID kapitána (ovlivňuje morale)
-  tacticFamiliarity?: number;     // 0-100, sehranost zvolené taktiky
   formationFamiliarity?: number;  // 0-100, sehranost zvolené formace
 }
 
