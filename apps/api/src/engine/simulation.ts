@@ -14,6 +14,7 @@ import type {
   Tactic,
   Weather,
 } from "./types";
+import { calcTacticEffectiveness, tacticDrainMod } from "./tactics";
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -35,13 +36,20 @@ function playerName(p: MatchPlayer): string {
   return `${p.firstName} ${p.lastName}`;
 }
 
-/** Tactic modifiers */
+/** Tactic modifiers — base values (will be scaled by tacticEffectiveness in engine) */
 const TACTIC_MODS: Record<Tactic, { attackMod: number; defenseMod: number; chanceMod: number; counterMod: number }> = {
   offensive:  { attackMod: 1.15, defenseMod: 0.85, chanceMod: 1.05, counterMod: 0.0 },
   balanced:   { attackMod: 1.0,  defenseMod: 1.0,  chanceMod: 1.0,  counterMod: 0.0 },
   defensive:  { attackMod: 0.75, defenseMod: 1.15, chanceMod: 0.75, counterMod: 0.03 },
   long_ball:  { attackMod: 1.05, defenseMod: 0.95, chanceMod: 0.95, counterMod: 0.0 },
+  possession: { attackMod: 1.05, defenseMod: 1.0,  chanceMod: 1.10, counterMod: 0.0 },
+  pressing:   { attackMod: 1.08, defenseMod: 1.08, chanceMod: 1.05, counterMod: 0.0 },
 };
+
+/** Scale a base modifier by team effectiveness — netrenovaná taktika klesá k 1.0 (baseline). */
+function effMod(baseMod: number, effectiveness: number): number {
+  return 1 + (baseMod - 1) * effectiveness;
+}
 
 /** Weather effects */
 const WEATHER_MODS: Record<Weather, { techniqueMod: number; longBallBonus: number; injuryMod: number }> = {
@@ -79,6 +87,11 @@ function calcChanceProb(
   const tacticMod = TACTIC_MODS[attacking.tactic];
   const weatherMod = WEATHER_MODS[weather];
 
+  // Effectiveness: skill-fit × formation synergy × familiarity (taktika + formace).
+  // Pokud je taktika neumělá / formace nesedí / tým ji nehrál → effectiveness < 1 → modifikátory se ztlumí k 1.0.
+  const attEff = calcTacticEffectiveness(attacking.lineup, attacking.tactic, attacking.formation, attacking.tacticFamiliarity, attacking.formationFamiliarity);
+  const defEff = calcTacticEffectiveness(defending.lineup, defending.tactic, defending.formation, defending.tacticFamiliarity, defending.formationFamiliarity);
+
   const outfield = attacking.lineup.filter((p) => p.position !== "GK");
   const mids = attacking.lineup.filter((p) => p.position === "MID");
   const midAndFwd = attacking.lineup.filter((p) => p.position === "MID" || p.position === "FWD");
@@ -92,14 +105,14 @@ function calcChanceProb(
     (mids.length > 0 ? teamAvg(mids, "vision") * 0.6 : 0) +
     (midAndFwd.length > 0 ? teamAvg(midAndFwd, "creativity") * 0.5 : 0) +
     teamAvg(outfield, "workRate") * 0.3
-  ) / 5 * tacticMod.attackMod * formFactor;
+  ) / 5 * effMod(tacticMod.attackMod, attEff) * formFactor;
 
   const defensePower = (
     teamAvg(defOutfield, "defense") * 1.0 +
     teamAvg(defOutfield, "strength") * 0.7 +
     (defs.length > 0 ? teamAvg(defs, "aggression") * 0.2 : 0) +
     teamAvg(defOutfield, "workRate") * 0.2
-  ) / 3 * TACTIC_MODS[defending.tactic].defenseMod;
+  ) / 3 * effMod(TACTIC_MODS[defending.tactic].defenseMod, defEff);
 
   // Use DIFFERENCE not ratio — so stronger teams create more chances
   // attackPower ~20 (weak) to ~35 (strong), defensePower ~18 to ~25
@@ -110,7 +123,7 @@ function calcChanceProb(
   // Underdog boost: weaker team gets small floor boost
   const underdogBoost = advantage < -0.05 ? 0.02 : 0;
   // Okresní přebor: skill advantage matters but not overwhelmingly
-  return Math.min(0.25, Math.max(0.07, baseChance + advantage + longBallBonus + underdogBoost)) * tacticMod.chanceMod;
+  return Math.min(0.25, Math.max(0.07, baseChance + advantage + longBallBonus + underdogBoost)) * effMod(tacticMod.chanceMod, attEff);
 }
 
 /**
@@ -450,7 +463,9 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
 
     // Counter-attack: defensive tactic team can break on opponent's possession
     const defTacticMods = TACTIC_MODS[defending.tactic];
-    if (defTacticMods.counterMod > 0 && rng.random() < defTacticMods.counterMod * conditionMod) {
+    const defEffForCounter = calcTacticEffectiveness(defending.lineup, defending.tactic, defending.formation, defending.tacticFamiliarity, defending.formationFamiliarity);
+    const effectiveCounterMod = defTacticMods.counterMod * defEffForCounter;
+    if (effectiveCounterMod > 0 && rng.random() < effectiveCounterMod * conditionMod) {
       const counterAttacker = pickAttacker(rng, defending.lineup);
       const counterGk = getGK(attacking.lineup);
       const counterDefAvg = teamAvg(attacking.lineup.filter((p) => p.position === "DEF"), "defense");
@@ -726,9 +741,9 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       }
     }
 
-    // Update condition (with equipment drain reduction)
-    updateCondition(home.lineup, minute, homeCondDrainMod);
-    updateCondition(away.lineup, minute, awayCondDrainMod);
+    // Update condition (equipment drain reduction × tactic drain — pressing = +30 %)
+    updateCondition(home.lineup, minute, homeCondDrainMod * tacticDrainMod(home.tactic));
+    updateCondition(away.lineup, minute, awayCondDrainMod * tacticDrainMod(away.tactic));
   }
 
   // Full-time event

@@ -1,6 +1,6 @@
 import type { MatchEvent, EventType } from "@okresni-masina/shared";
 
-export type Tactic = "offensive" | "balanced" | "defensive" | "long_ball";
+export type Tactic = "offensive" | "balanced" | "defensive" | "long_ball" | "possession" | "pressing";
 export type Weather = "sunny" | "cloudy" | "rain" | "wind" | "snow";
 export type RelationType = "brothers" | "father_son" | "in_laws" | "classmates" | "coworkers" | "neighbors" | "drinking_buddies" | "rivals" | "mentor_pupil";
 
@@ -53,7 +53,10 @@ export interface TeamSetup {
   lineup: MatchPlayer[];   // 11 hráčů na hřišti
   subs: MatchPlayer[];     // náhradníci
   tactic: Tactic;
+  formation?: string;      // např. "4-4-2", "3-4-3" — pro formationSynergy
   captainId?: number;      // engine ID kapitána (ovlivňuje morale)
+  tacticFamiliarity?: number;     // 0-100, sehranost zvolené taktiky
+  formationFamiliarity?: number;  // 0-100, sehranost zvolené formace
 }
 
 export interface EquipmentMods {

@@ -11,13 +11,27 @@ import type { BadgePattern } from "@/components/ui";
 
 type Pos = "GK" | "DEF" | "MID" | "FWD";
 
-const FORMATIONS = ["4-4-2", "4-3-3", "3-5-2", "4-5-1", "5-3-2"] as const;
+const FORMATIONS = ["4-4-2", "4-3-3", "3-5-2", "4-5-1", "5-3-2", "3-4-3", "4-2-3-1"] as const;
 const TACTICS = [
   { key: "offensive", label: "Útočná", icon: "⚔️" },
   { key: "balanced", label: "Vyrovnaná", icon: "⚖️" },
   { key: "defensive", label: "Defenzivní", icon: "🛡️" },
   { key: "long_ball", label: "Nakopávané", icon: "🏈" },
+  { key: "possession", label: "Držení míče", icon: "🎯" },
+  { key: "pressing", label: "Vysoký presink", icon: "🔥" },
 ] as const;
+
+// Sehranost (familiarity) UI — barva podle úrovně 0-100
+function famColor(v: number): string {
+  if (v >= 60) return "text-pitch-600";
+  if (v >= 30) return "text-gold-600";
+  return "text-card-red";
+}
+function famBgColor(v: number): string {
+  if (v >= 60) return "bg-pitch-500";
+  if (v >= 30) return "bg-gold-500";
+  return "bg-card-red";
+}
 
 // Vertikální hřiště — GK dole, FWD nahoře. Souřadnice v % (x=0-100, y=0-100)
 const POSITIONS: Record<string, Array<{ pos: Pos; x: number; y: number }>> = {
@@ -50,6 +64,19 @@ const POSITIONS: Record<string, Array<{ pos: Pos; x: number; y: number }>> = {
     { pos: "DEF", x: 12, y: 72 }, { pos: "DEF", x: 30, y: 72 }, { pos: "DEF", x: 50, y: 72 }, { pos: "DEF", x: 70, y: 72 }, { pos: "DEF", x: 88, y: 72 },
     { pos: "MID", x: 28, y: 45 }, { pos: "MID", x: 50, y: 42 }, { pos: "MID", x: 72, y: 45 },
     { pos: "FWD", x: 36, y: 18 }, { pos: "FWD", x: 64, y: 18 },
+  ],
+  "3-4-3": [
+    { pos: "GK", x: 50, y: 90 },
+    { pos: "DEF", x: 28, y: 72 }, { pos: "DEF", x: 50, y: 72 }, { pos: "DEF", x: 72, y: 72 },
+    { pos: "MID", x: 14, y: 48 }, { pos: "MID", x: 38, y: 45 }, { pos: "MID", x: 62, y: 45 }, { pos: "MID", x: 86, y: 48 },
+    { pos: "FWD", x: 22, y: 18 }, { pos: "FWD", x: 50, y: 15 }, { pos: "FWD", x: 78, y: 18 },
+  ],
+  "4-2-3-1": [
+    { pos: "GK", x: 50, y: 90 },
+    { pos: "DEF", x: 18, y: 72 }, { pos: "DEF", x: 39, y: 72 }, { pos: "DEF", x: 61, y: 72 }, { pos: "DEF", x: 82, y: 72 },
+    { pos: "MID", x: 38, y: 56 }, { pos: "MID", x: 62, y: 56 },
+    { pos: "MID", x: 22, y: 36 }, { pos: "MID", x: 50, y: 33 }, { pos: "MID", x: 78, y: 36 },
+    { pos: "FWD", x: 50, y: 14 },
   ],
 };
 
@@ -124,10 +151,26 @@ function MatchPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [captainId, setCaptainId] = useState<string | null>(null);
+  const [tacticFam, setTacticFam] = useState<Record<string, number>>({});
+  const [formationFam, setFormationFam] = useState<Record<string, number>>({});
+  const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; updatedAt: string } | null>>({ A: null, B: null, C: null });
+  const [presetMenu, setPresetMenu] = useState<string | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
-    apiFetch<{ nextMatch: NextMatchInfo | null; lineup: { formation: string; tactic: string; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
+    // Načti sehranost taktik a formací (zobrazí se jako badge u tactic/formation selectoru)
+    apiFetch<{ tactic: Record<string, number>; formation: Record<string, number> }>(`/api/teams/${teamId}/tactic-chemistry`)
+      .then((d) => { setTacticFam(d.tactic ?? {}); setFormationFam(d.formation ?? {}); })
+      .catch((e) => console.warn("load chemistry:", e));
+    // Načti presety
+    apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`)
+      .then((d) => setPresets(d.presets ?? { A: null, B: null, C: null }))
+      .catch((e) => console.warn("load presets:", e));
+  }, [teamId]);
+
+  useEffect(() => {
+    if (!teamId) return;
+    apiFetch<{ nextMatch: NextMatchInfo | null; lineup: { formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
       `/api/teams/${teamId}/next-match`
     ).then((data) => {
       setNextMatch(data.nextMatch);
@@ -156,13 +199,17 @@ function MatchPage() {
         });
         setSelected(nextSelected);
       } else { autoFill(data.availablePlayers ?? [], "4-4-2"); }
-      // Auto-select captain: highest leadership in starting 11
-      const lineup11 = data.lineup?.players.map((p) => p.playerId) ?? [];
-      if (lineup11.length === 11) {
-        const best = (data.availablePlayers ?? [])
-          .filter((p) => lineup11.includes(p.id))
-          .sort((a, b) => ((b as any).leadership ?? 30) - ((a as any).leadership ?? 30))[0];
-        if (best) setCaptainId(best.id);
+      // Captain: prefer saved captain_id from DB; only auto-pick if none saved
+      if (data.lineup?.captainId) {
+        setCaptainId(data.lineup.captainId);
+      } else {
+        const lineup11 = data.lineup?.players.map((p) => p.playerId) ?? [];
+        if (lineup11.length === 11) {
+          const best = (data.availablePlayers ?? [])
+            .filter((p) => lineup11.includes(p.id))
+            .sort((a, b) => ((b as any).leadership ?? 30) - ((a as any).leadership ?? 30))[0];
+          if (best) setCaptainId(best.id);
+        }
       }
       setLoading(false);
       // If calendarId in URL, switch to that match
@@ -175,8 +222,16 @@ function MatchPage() {
             homeName: target.isHome ? prev.homeName : target.opponentName,
             awayName: target.isHome ? target.opponentName : prev.homeName,
           } : prev);
-          apiFetch<{ lineup: { formation: string; tactic: string; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
-            .then((ld) => { if (ld.lineup?.players.length === 11) { setFormation(ld.lineup.formation); setTactic(ld.lineup.tactic); setSelected(ld.lineup.players.map((p) => p.playerId)); } setSaved(!!ld.lineup); })
+          apiFetch<{ lineup: { formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
+            .then((ld) => {
+              if (ld.lineup?.players.length === 11) {
+                setFormation(ld.lineup.formation);
+                setTactic(ld.lineup.tactic);
+                setSelected(ld.lineup.players.map((p) => p.playerId));
+                if (ld.lineup.captainId) setCaptainId(ld.lineup.captainId);
+              }
+              setSaved(!!ld.lineup);
+            })
             .catch((e) => console.error("load lineup from URL:", e));
         }
       }
@@ -196,6 +251,48 @@ function MatchPage() {
       else { const any = avail.filter((p) => !used.has(p.id)).sort((a, b) => b.overallRating - a.overallRating)[0]; if (any) { sel.push(any.id); used.add(any.id); } else sel.push(null); }
     }
     setSelected(sel); setSaved(false);
+  };
+
+  const savePreset = async (slot: "A" | "B" | "C") => {
+    if (!teamId) return;
+    const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
+    const players = selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId);
+    if (players.length !== 11) { setSaveError("Sestava musí mít 11 hráčů"); return; }
+    try {
+      await apiFetch(`/api/teams/${teamId}/lineup-presets/${slot}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formation, tactic, captainId, players }),
+      });
+      const d = await apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`);
+      setPresets(d.presets ?? presets);
+      setPresetMenu(null);
+    } catch (e) { console.error("save preset:", e); setSaveError("Nepodařilo se uložit preset"); }
+  };
+
+  const loadPreset = async (slot: "A" | "B" | "C") => {
+    if (!teamId) return;
+    try {
+      const data = await apiFetch<{ formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; warnings: string[] }>(
+        `/api/teams/${teamId}/lineup-presets/${slot}/apply`, { method: "POST" }
+      );
+      setFormation(data.formation);
+      setTactic(data.tactic);
+      const newSel = data.players.map((p) => p.playerId);
+      while (newSel.length < 11) newSel.push(null as any);
+      setSelected(newSel);
+      setCaptainId(data.captainId);
+      setSaved(false);
+      setPresetMenu(null);
+    } catch (e) { console.error("load preset:", e); }
+  };
+
+  const deletePreset = async (slot: "A" | "B" | "C") => {
+    if (!teamId) return;
+    try {
+      await apiFetch(`/api/teams/${teamId}/lineup-presets/${slot}`, { method: "DELETE" });
+      setPresets({ ...presets, [slot]: null });
+      setPresetMenu(null);
+    } catch (e) { console.error("delete preset:", e); }
   };
 
   const saveLineup = async () => {
@@ -316,29 +413,88 @@ function MatchPage() {
 
       {/* Absent players shown inline in bench table + selector, not as separate card */}
 
-      {/* ═══ Formation + Tactic — one row ═══ */}
+      {/* ═══ Presety A / B / C ═══ */}
+      <div className="card p-3">
+        <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1">Uložené sestavy</div>
+        <div className="grid grid-cols-3 gap-2">
+          {(["A", "B", "C"] as const).map((slot) => {
+            const preset = presets[slot];
+            const filled = !!preset;
+            return (
+              <div key={slot} className="relative">
+                <button
+                  onClick={() => setPresetMenu(presetMenu === slot ? null : slot)}
+                  className={`w-full py-2 px-2 rounded-lg text-xs font-heading font-bold border transition-all ${filled ? "bg-cream border-pitch-300 text-ink" : "bg-gray-50 border-gray-200 text-muted hover:bg-gray-100"}`}
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Sestava {slot}</span>
+                    {filled && <span className="text-[10px] opacity-70">{preset.formation}</span>}
+                  </div>
+                </button>
+                {presetMenu === slot && (
+                  <div className="absolute z-30 left-0 right-0 mt-1 card p-1 shadow-lg flex flex-col gap-0.5">
+                    {filled && (
+                      <button onClick={() => loadPreset(slot)} className="text-left px-2 py-1.5 rounded text-xs hover:bg-pitch-50">
+                        📥 Načíst
+                      </button>
+                    )}
+                    <button onClick={() => savePreset(slot)} className="text-left px-2 py-1.5 rounded text-xs hover:bg-pitch-50">
+                      💾 Uložit aktuální
+                    </button>
+                    {filled && (
+                      <button onClick={() => deletePreset(slot)} className="text-left px-2 py-1.5 rounded text-xs hover:bg-card-red/10 text-card-red">
+                        🗑 Vymazat
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ═══ Formation + Tactic — one row, with chemistry badge ═══ */}
       <div className="card p-3">
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1">Formace</div>
-            <div className="flex rounded-xl bg-gray-50 p-0.5">
-              {FORMATIONS.map((f) => (
-                <button key={f} onClick={() => { setFormation(f); autoFill(players, f); }}
-                  className={`flex-1 py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all ${formation === f ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
-                  {f}
-                </button>
-              ))}
+            <div className="flex items-baseline justify-between mb-1">
+              <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Formace</div>
+              <div className="text-[10px] font-heading">
+                Sehranost: <span className={`font-bold ${famColor(formationFam[formation] ?? 0)}`}>{Math.round(formationFam[formation] ?? 0)}</span>/100
+              </div>
+            </div>
+            <div className="flex flex-wrap rounded-xl bg-gray-50 p-0.5 gap-0.5">
+              {FORMATIONS.map((f) => {
+                const fam = formationFam[f] ?? 0;
+                return (
+                  <button key={f} onClick={() => { setFormation(f); autoFill(players, f); }}
+                    className={`flex-1 min-w-[50px] py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all ${formation === f ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                    {f}
+                    <div className={`mt-0.5 h-1 rounded-full ${famBgColor(fam)}`} style={{ width: `${Math.max(8, fam)}%`, marginInline: "auto" }} />
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1">Taktika</div>
-            <div className="flex rounded-xl bg-gray-50 p-0.5">
-              {TACTICS.map((t) => (
-                <button key={t.key} onClick={() => { setTactic(t.key); setSaved(false); }}
-                  className={`flex-1 py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all ${tactic === t.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
-                  <span className="hidden sm:inline">{t.icon} </span>{t.label}
-                </button>
-              ))}
+            <div className="flex items-baseline justify-between mb-1">
+              <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Taktika</div>
+              <div className="text-[10px] font-heading">
+                Sehranost: <span className={`font-bold ${famColor(tacticFam[tactic] ?? 0)}`}>{Math.round(tacticFam[tactic] ?? 0)}</span>/100
+              </div>
+            </div>
+            <div className="flex flex-wrap rounded-xl bg-gray-50 p-0.5 gap-0.5">
+              {TACTICS.map((t) => {
+                const fam = tacticFam[t.key] ?? 0;
+                return (
+                  <button key={t.key} onClick={() => { setTactic(t.key); setSaved(false); }}
+                    className={`flex-1 min-w-[80px] py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all ${tactic === t.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                    <span className="hidden sm:inline">{t.icon} </span>{t.label}
+                    <div className={`mt-0.5 h-1 rounded-full ${famBgColor(fam)}`} style={{ width: `${Math.max(8, fam)}%`, marginInline: "auto" }} />
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

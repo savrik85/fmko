@@ -71,10 +71,10 @@ export async function runScheduledMatches(
         : homeIsHuman ? "pve_home" : awayIsHuman ? "pve_away" : "ai_vs_ai";
 
       // Read user lineups from DB — prefer user-saved (is_auto=0) over auto-generated
-      const homeLineupRow = await db.prepare("SELECT tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
-        .bind(homeTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number; captain_id: string | null }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home lineup", e); return null; });
-      const awayLineupRow = await db.prepare("SELECT tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
-        .bind(awayTeamId, calendarId).first<{ tactic: string; players_data: string; is_auto: number; captain_id: string | null }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load away lineup", e); return null; });
+      const homeLineupRow = await db.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
+        .bind(homeTeamId, calendarId).first<{ formation: string; tactic: string; players_data: string; is_auto: number; captain_id: string | null }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home lineup", e); return null; });
+      const awayLineupRow = await db.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
+        .bind(awayTeamId, calendarId).first<{ formation: string; tactic: string; players_data: string; is_auto: number; captain_id: string | null }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load away lineup", e); return null; });
 
       // Build match players — use absenceRng for deterministic absences (must match next-match endpoint)
       const homeBuild = await buildMatchPlayers(db, homeTeamId, absenceRng,
@@ -143,10 +143,17 @@ export async function runScheduledMatches(
 
       const homeTactic = (homeLineupRow?.tactic as any) ?? "balanced";
       const awayTactic = (awayLineupRow?.tactic as any) ?? "balanced";
+      const homeFormation = homeLineupRow?.formation ?? "4-4-2";
+      const awayFormation = awayLineupRow?.formation ?? "4-4-2";
 
       // Map captain DB IDs to engine IDs
       const homeCaptainEngineId = homeLineupRow?.captain_id ? [...homeBuild.idMap.entries()].find(([, dbId]) => dbId === homeLineupRow.captain_id)?.[0] : undefined;
       const awayCaptainEngineId = awayLineupRow?.captain_id ? [...awayBuild.idMap.entries()].find(([, dbId]) => dbId === awayLineupRow.captain_id)?.[0] : undefined;
+
+      // Načti sehranost taktik a formací — vstup pro tactic effectiveness v simulaci
+      const { readFamiliarity } = await import("../engine/chemistry");
+      const homeFam = await readFamiliarity(db, homeTeamId);
+      const awayFam = await readFamiliarity(db, awayTeamId);
 
       const homeSetup: TeamSetup = {
         teamId: 1,
@@ -154,7 +161,10 @@ export async function runScheduledMatches(
         lineup: homeLineup,
         subs: homeSubs,
         tactic: homeTactic,
+        formation: homeFormation,
         captainId: homeCaptainEngineId,
+        tacticFamiliarity: homeFam.tactic[homeTactic] ?? 0,
+        formationFamiliarity: homeFam.formation[homeFormation] ?? 0,
       };
       const awaySetup: TeamSetup = {
         teamId: 2,
@@ -162,7 +172,10 @@ export async function runScheduledMatches(
         lineup: awayLineup,
         subs: awaySubs,
         tactic: awayTactic,
+        formation: awayFormation,
         captainId: awayCaptainEngineId,
+        tacticFamiliarity: awayFam.tactic[awayTactic] ?? 0,
+        formationFamiliarity: awayFam.formation[awayFormation] ?? 0,
       };
 
       // Load stadium info for pitch condition + facilities
@@ -353,6 +366,15 @@ export async function runScheduledMatches(
         matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null,
         matchId,
       ).run();
+
+      // Aktualizuj sehranost — hraná taktika+formace +3, ostatní -0.4
+      try {
+        const { applyMatchResult } = await import("../engine/chemistry");
+        await applyMatchResult(db, homeTeamId, homeTactic, homeFormation);
+        await applyMatchResult(db, awayTeamId, awayTactic, awayFormation);
+      } catch (e) {
+        logger.warn({ module: "match-runner" }, "apply chemistry post-match", e);
+      }
 
       // Player stats update
       const season = await db.prepare(
