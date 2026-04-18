@@ -1143,9 +1143,9 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   // Pitch maintenance options
   // Volume discount: větší údržba = levnější na procento (160/120/100 Kč/%).
   const pitchActions = [
-    { level: "basic", label: "Základní údržba", desc: "Posečení, zarovnání", cost: 1600, improvement: 10 },
-    { level: "thorough", label: "Důkladná údržba", desc: "Přesetí holých míst, hnojení", cost: 3000, improvement: 25 },
-    { level: "renovation", label: "Renovace trávníku", desc: "Kompletní obnova povrchu", cost: 5000, improvement: 50 },
+    { level: "basic", label: "Základní údržba", desc: "Posečení, zarovnání", cost: 500, improvement: 10 },
+    { level: "thorough", label: "Důkladná údržba", desc: "Přesetí holých míst, hnojení", cost: 1000, improvement: 25 },
+    { level: "renovation", label: "Renovace trávníku", desc: "Kompletní obnova povrchu", cost: 1700, improvement: 50 },
   ].filter((a) => (stadium.pitch_condition as number) + a.improvement <= 110); // only show useful actions
 
   // Pitch type upgrades
@@ -1322,9 +1322,9 @@ gameRouter.post("/teams/:teamId/stadium/maintain-pitch", async (c) => {
   const body = await c.req.json<{ level: "basic" | "thorough" | "renovation" }>();
 
   const costs: Record<string, { cost: number; improvement: number; label: string }> = {
-    basic:      { cost: 1600, improvement: 10, label: "Základní údržba (+10%)" },
-    thorough:   { cost: 3000, improvement: 25, label: "Důkladná údržba (+25%)" },
-    renovation: { cost: 5000, improvement: 50, label: "Renovace trávníku (+50%)" },
+    basic:      { cost: 500, improvement: 10, label: "Základní údržba (+10%)" },
+    thorough:   { cost: 1000, improvement: 25, label: "Důkladná údržba (+25%)" },
+    renovation: { cost: 1700, improvement: 50, label: "Renovace trávníku (+50%)" },
   };
 
   const action = costs[body.level];

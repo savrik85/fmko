@@ -278,6 +278,11 @@ export default function TeamPage() {
                     <div className={`${boxLabel} text-[8px] font-heading font-bold uppercase mt-0.5`}>Rating</div>
                   </div>
                 )}
+                <button onClick={() => router.push(`/dashboard/team/${teamId}/stadium`)}
+                  className={`${boxBg} ${boxBgHover} rounded-lg px-3 py-1.5 text-center transition-colors cursor-pointer`}>
+                  <div className="text-base leading-none">🏟</div>
+                  <div className={`${boxLabel} text-[8px] font-heading font-bold uppercase mt-0.5`}>Stadion</div>
+                </button>
               </div>
             </div>
           </div>
