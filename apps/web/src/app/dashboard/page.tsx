@@ -229,9 +229,11 @@ export default function DashboardPage() {
             const oppColor = nextMatch.isHome ? (nextMatch.awayColor || "#666") : (nextMatch.homeColor || "#666");
             const oppSecondary = nextMatch.isHome ? (nextMatch.awaySecondary || "#FFF") : (nextMatch.homeSecondary || "#FFF");
             const oppBadge = (nextMatch.isHome ? nextMatch.awayBadge : nextMatch.homeBadge) as BadgePattern || "shield";
+            // Domácí tým zápasu = my (pokud isHome) / soupeř (pokud venku, čili preview.home)
+            // Hostující = my (pokud venku) / soupeř (pokud doma, čili preview.away)
             const homeTeam = nextMatch.isHome
               ? { id: teamId!, name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my }
-              : { id: preview?.away?.id ?? "", name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp };
+              : { id: preview?.home?.id ?? "", name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp };
             const awayTeam = nextMatch.isHome
               ? { id: preview?.away?.id ?? "", name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp }
               : { id: teamId!, name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my };

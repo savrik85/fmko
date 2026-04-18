@@ -310,10 +310,16 @@ export default function TeamPage() {
           {(team as any).stadium && (
             <>
               <div className="h-px bg-gray-100 my-3" />
-              <div className="flex items-center gap-2 mb-2">
+              <button
+                onClick={() => router.push(`/dashboard/team/${teamId}/stadium`)}
+                className="flex items-center gap-2 mb-2 hover:text-pitch-500 transition-colors group"
+              >
                 <span className="text-lg">🏟️</span>
-                <span className="font-heading font-bold text-sm">{(team as any).stadium.name || "Obecní hřiště"}</span>
-              </div>
+                <span className="font-heading font-bold text-sm group-hover:underline">
+                  {(team as any).stadium.name || "Obecní hřiště"}
+                </span>
+                <span className="text-pitch-500 text-xs ml-1">→ navštívit</span>
+              </button>
               <div className="grid grid-cols-2 gap-y-2 gap-x-6">
                 <InfoRow label="Kapacita" value={`${(team as any).stadium.capacity} diváků`} />
                 <InfoRow label="Trávník" value={`${(team as any).stadium.pitchCondition}%`} />

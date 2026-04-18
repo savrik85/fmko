@@ -18,6 +18,11 @@ const Stadium3D = dynamic(
   }
 );
 
+const Stadium3DViewer = dynamic(
+  () => import("@/components/stadium/stadium-3d/Stadium3DViewer").then((m) => m.Stadium3DViewer),
+  { ssr: false }
+);
+
 interface Customization {
   fenceColor: string | null;
   standColor: string | null;
@@ -49,6 +54,7 @@ export default function VisitStadiumPage() {
   const [team, setTeam] = useState<Team | null>(null);
   const [sponsors, setSponsors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   useEffect(() => {
     if (!teamId) return;
@@ -82,9 +88,24 @@ export default function VisitStadiumPage() {
         </div>
       </div>
 
+      <Stadium3DViewer
+        open={viewerOpen}
+        onClose={() => setViewerOpen(false)}
+        pitchCondition={stadium.pitchCondition}
+        pitchType={stadium.pitchType}
+        facilities={stadium.facilities}
+        teamColor={team.primary_color}
+        secondaryColor={team.secondary_color}
+        badgePattern={team.badge_pattern}
+        badgeInitials={teamInitials(team.name)}
+        stadiumName={stadium.stadiumName}
+        sponsors={sponsors}
+        customization={stadium.customization}
+      />
+
       {/* 3D scéna */}
       <div className="card p-4 sm:p-5">
-        <div className="h-[400px] sm:h-[500px] rounded-xl overflow-hidden bg-gradient-to-b from-sky-100 to-sky-50">
+        <div className="h-[280px] sm:h-[500px] rounded-xl overflow-hidden bg-gradient-to-b from-sky-100 to-sky-50" style={{ touchAction: "pan-y" }}>
           <Stadium3D
             pitchCondition={stadium.pitchCondition}
             pitchType={stadium.pitchType}
@@ -98,6 +119,12 @@ export default function VisitStadiumPage() {
             customization={stadium.customization}
           />
         </div>
+        <button
+          onClick={() => setViewerOpen(true)}
+          className="w-full mt-2 py-2 bg-pitch-500 hover:bg-pitch-600 text-white rounded-lg text-sm font-heading font-bold transition-colors"
+        >
+          🔍 Prohlédnout v plné velikosti
+        </button>
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 text-center mt-4 pt-4 border-t border-gray-100">
