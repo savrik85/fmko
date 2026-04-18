@@ -1071,11 +1071,18 @@ export default function TransfersPage() {
                             confirmLabel: "Podepsat",
                           });
                           if (!ok || !teamId) return;
+                          let errMessage: string | null = null;
                           const res = await apiFetch<{ success: boolean; decision: { accepted: boolean; probability: number; explanation: string }; player?: Player }>(
                             `/api/teams/${teamId}/free-agents/${fa.id}/sign`,
                             { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offeredWage: fa.weeklyWage }) },
-                          ).catch((e) => { console.error("Transfer action failed:", e); return null; });
-                          if (res) {
+                          ).catch((e: Error) => {
+                            console.error("Transfer action failed:", e);
+                            errMessage = e.message || "Nepodařilo se podepsat hráče";
+                            return null;
+                          });
+                          if (errMessage) {
+                            await confirm({ title: "Chyba", description: errMessage, confirmLabel: "OK" });
+                          } else if (res) {
                             if (res.success && res.player) {
                               setRevealPlayer(res.player);
                             } else {

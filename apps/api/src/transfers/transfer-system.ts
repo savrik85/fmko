@@ -78,7 +78,7 @@ export function generateTransferOffers(
   const repMod = reputation / 50;
 
   // Free agent (self-offered)
-  if (rng.random() < 0.08 * repMod && squadSize < 25) {
+  if (rng.random() < 0.08 * repMod && squadSize < 30) {
     const positions = ["GK", "DEF", "MID", "FWD"] as const;
     const pos = rng.pick([...positions]);
     const player = generatePlayer(rng, villageInfo, pos, surnameData, firstnameData);

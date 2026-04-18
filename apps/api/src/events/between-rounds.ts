@@ -51,7 +51,7 @@ const EVENT_RULES: EventRule[] = [
     emoji: "\u{1F44B}",
     baseProb: 0.06,
     evaluate: (ctx) => {
-      if (ctx.squad.length >= 25) return null;
+      if (ctx.squad.length >= 30) return null;
       return {
         prob: 1.0,
         description: "V hospodě se ozval chlápek, že by chtěl chodit kopat. Prý hrával za sousední vesnici.",

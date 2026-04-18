@@ -2812,7 +2812,7 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
 
   const squadCount = await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM players WHERE team_id = ?")
     .bind(teamId).first<{ cnt: number }>();
-  if ((squadCount?.cnt ?? 0) >= 25) return c.json({ error: "Kádr je plný (max. 25 hráčů)" }, 400);
+  if ((squadCount?.cnt ?? 0) >= 30) return c.json({ error: "Kádr je plný (max. 30 hráčů)" }, 400);
 
   const personality = (() => { try { return JSON.parse(fa.personality as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent personality", e); return {}; } })();
 
