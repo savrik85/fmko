@@ -426,7 +426,9 @@ function MatchPage() {
         <div className="flex items-baseline justify-between mb-1">
           <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Uložené sestavy</div>
           <div className="text-[10px] text-muted">
-            {activePreset ? <>Editujete <span className="font-bold text-pitch-600">Sestavu {activePreset}</span></> : "Editujete sestavu pro nejbližší zápas"}
+            {activePreset
+              ? <>Vybrána <span className="font-bold text-pitch-600">Sestava {activePreset}</span> · uložením se nasadí pro zápas</>
+              : "Klik na sestavu = vybrat pro zápas"}
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -839,7 +841,7 @@ function MatchPage() {
       <div>
         <button onClick={saveLineup} disabled={saving || selected.some((s) => !s)}
           className={`btn btn-lg w-full ${saved ? "btn-ghost" : "btn-primary"}`}>
-          {saving ? "Ukládám..." : saved ? "Uloženo ✓" : activePreset ? `Uložit Sestavu ${activePreset}` : "Uložit sestavu"}
+          {saving ? "Ukládám..." : saved ? "Uloženo ✓" : activePreset ? `Použít Sestavu ${activePreset} pro zápas` : "Uložit sestavu"}
         </button>
         {saveError && <p className="text-sm text-card-red mt-2 text-center">{saveError}</p>}
       </div>
