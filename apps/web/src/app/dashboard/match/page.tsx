@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Player } from "@/lib/api";
 import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview } from "@/components/ui";
@@ -133,6 +133,7 @@ export default function MatchPageWrapper() {
 function MatchPage() {
   const { teamId, teamName: ourTeamName, gameDate: teamGameDate } = useTeam();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [nextMatch, setNextMatch] = useState<NextMatchInfo | null>(null);
   const [upcomingMatches, setUpcomingMatches] = useState<UpcomingMatch[]>([]);
   const [players, setPlayers] = useState<AvailablePlayer[]>([]);
@@ -390,6 +391,8 @@ function MatchPage() {
         const opponentName = nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName;
 
         const switchToMatch = (um: UpcomingMatch) => {
+          // Sync URL — bez toho F5 vrátí na původní zápas a state je nesynced
+          router.replace(`/dashboard/match?calendarId=${um.calendarId}`, { scroll: false });
           // myName z contextu — jinak by se mixovalo při přepínání doma↔venku
           const myName = ourTeamName ?? (nextMatch?.isHome ? nextMatch.homeName : nextMatch?.awayName ?? "");
           setNextMatch((prev) => prev ? {
