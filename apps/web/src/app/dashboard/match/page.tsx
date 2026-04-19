@@ -114,13 +114,14 @@ const REL_LABEL: Record<string, string> = {
 };
 
 interface NextMatchInfo {
-  matchId: string; calendarId: string; gameWeek: number; scheduledAt: string;
+  matchId: string; calendarId: string; gameWeek: number | null; scheduledAt: string;
   isHome: boolean; homeName: string; awayName: string; homeColor: string; awayColor: string;
+  isFriendly?: boolean;
 }
 
 interface UpcomingMatch {
-  calendarId: string; gameWeek: number; scheduledAt: string;
-  opponentName: string; isHome: boolean; hasLineup: boolean;
+  calendarId: string; gameWeek: number | null; scheduledAt: string;
+  opponentName: string; isHome: boolean; hasLineup: boolean; isFriendly: boolean;
 }
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
@@ -382,7 +383,7 @@ function MatchPage() {
 
         const switchToMatch = (um: UpcomingMatch) => {
           setNextMatch((prev) => prev ? {
-            ...prev, calendarId: um.calendarId, gameWeek: um.gameWeek, scheduledAt: um.scheduledAt, isHome: um.isHome,
+            ...prev, calendarId: um.calendarId, gameWeek: um.gameWeek, scheduledAt: um.scheduledAt, isHome: um.isHome, isFriendly: um.isFriendly,
             homeName: um.isHome ? (prev.isHome ? prev.homeName : prev.awayName) : um.opponentName,
             awayName: um.isHome ? um.opponentName : (prev.isHome ? prev.homeName : prev.awayName),
           } : prev);
@@ -413,7 +414,7 @@ function MatchPage() {
                 vs {opponentName} · <span className="text-pitch-500">{nextMatch.isHome ? "doma" : "venku"}</span> · <span className="text-muted">{daysLabel}</span>
               </div>
               <div className="text-xs text-muted">
-                {nextMatch.gameWeek}. kolo · {dateStr}
+                {nextMatch.isFriendly ? <span className="font-heading font-bold text-pitch-600">Přátelák</span> : `${nextMatch.gameWeek}. kolo`} · {dateStr}
                 {absentPlayers.length > 0 && <span className="ml-2 text-card-red font-heading font-bold">⚠ {absentPlayers.length} nedostupných</span>}
               </div>
             </div>
