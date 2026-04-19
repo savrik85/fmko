@@ -166,7 +166,7 @@ function MatchPage() {
     // Pokud URL má ?calendarId=X, načti přímo ten zápas. Jinak default = nejbližší.
     const urlCalIdInit = searchParams.get("calendarId");
     const url = urlCalIdInit ? `/api/teams/${teamId}/next-match?calendarId=${urlCalIdInit}` : `/api/teams/${teamId}/next-match`;
-    apiFetch<{ nextMatch: NextMatchInfo | null; lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
+    apiFetch<{ nextMatch: NextMatchInfo | null; lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
       url
     ).then((data) => {
       setNextMatch(data.nextMatch);
@@ -195,8 +195,10 @@ function MatchPage() {
         });
         setSelected(nextSelected);
       } else { autoFill(data.availablePlayers ?? [], "4-4-2"); }
-      // Active preset slot pro tento zápas — z DB
-      setActivePreset(data.lineup?.presetSlot ?? null);
+      // Active preset slot — pouze pokud lineup je EXPLICIT pro tento zápas (ne default fallback)
+      // Default fallback může mít presetSlot, ale UI nesmí tvrdit že je vybráno explicitně,
+      // protože by user nevěděl že musí kliknout "Použít" pro skutečné nasazení.
+      setActivePreset(data.lineup?.source === "explicit" ? (data.lineup.presetSlot ?? null) : null);
       // Captain: prefer saved captain_id from DB; only auto-pick if none saved
       if (data.lineup?.captainId) {
         setCaptainId(data.lineup.captainId);
@@ -396,15 +398,16 @@ function MatchPage() {
             awayName: um.isHome ? um.opponentName : myName,
           } : prev);
           if (teamId) {
-            apiFetch<{ lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${um.calendarId}`)
+            // Použij next-match endpoint s calendarId — vrací lineup+source (explicit/default)
+            apiFetch<{ lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
               .then((data) => {
                 if (data.lineup && data.lineup.players.length === 11) {
                   setFormation(data.lineup.formation); setTactic(data.lineup.tactic); setSelected([...new Set(data.lineup.players.map((p) => p.playerId))].slice(0, 11));
                   if (data.lineup.captainId) setCaptainId(data.lineup.captainId);
                 }
-                // Per-zápas preset slot — různé zápasy mohou mít různé sestavy
-                setActivePreset(data.lineup?.presetSlot ?? null);
-                setSaved(!!data.lineup);
+                // ActivePreset jen pokud je to explicit lineup pro tento zápas
+                setActivePreset(data.lineup?.source === "explicit" ? (data.lineup.presetSlot ?? null) : null);
+                setSaved(data.lineup?.source === "explicit");
               })
               .catch((e) => { console.error("load lineup:", e); setSaved(false); });
           }
