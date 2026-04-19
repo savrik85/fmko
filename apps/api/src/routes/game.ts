@@ -2477,7 +2477,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   // If no lineup for this specific match, use the last saved lineup as default
   if (!lineup) {
     lineup = await c.env.DB.prepare(
-      "SELECT formation, tactic, players_data, is_auto, captain_id, preset_slot FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
+      "SELECT formation, tactic, players_data, is_auto, captain_id, preset_slot FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1"
     ).bind(teamId).first<{ formation: string; tactic: string; players_data: string; is_auto: number; captain_id: string | null; preset_slot: string | null }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
     if (lineup) lineupSource = "default";
   }
@@ -2489,10 +2489,22 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 
   const { absenceSeedForMatch } = await import("../lib/seed");
   const { generateAbsences } = await import("../events/absence");
-  // Seed z (matchKey, teamId) — shodný s match-runner/friendly-runner/daily-tick, viz lib/seed.ts
   const matchKey = isFriendly ? (match.id as string) : calendarId!;
-  const absenceRng = createRng(absenceSeedForMatch({ matchKey, teamId }));
-  const absenceSquad = players.results.map((row) => {
+
+  // Healthy squad — shoda s match-runner/SMS filtrem. Zraněné a suspendované vynecháme,
+  // ti nedostávají absence (mají vlastní kanál).
+  const injuredPreviewIds = new Set<string>();
+  const suspendedPreviewIds = new Set<string>();
+  const injRows = await c.env.DB.prepare(
+    "SELECT player_id FROM injuries WHERE days_remaining > 0 AND player_id IN (SELECT id FROM players WHERE team_id = ?)"
+  ).bind(teamId).all().catch(() => ({ results: [] }));
+  for (const ir of injRows.results) injuredPreviewIds.add(ir.player_id as string);
+  for (const r of players.results) {
+    if ((r.suspended_matches as number) > 0) suspendedPreviewIds.add(r.id as string);
+  }
+  const healthyPlayers = players.results.filter((r) => !injuredPreviewIds.has(r.id as string) && !suspendedPreviewIds.has(r.id as string));
+
+  const absenceSquad = healthyPlayers.map((row) => {
     const pers = (() => { try { return JSON.parse(row.personality as string); } catch { return {}; } })();
     const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
     const phys = (() => { try { return JSON.parse(row.physical as string); } catch { return {}; } })();
@@ -2509,15 +2521,25 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       celebrityTier: pers.celebrityTier,
     };
   });
-  // Get district for environment-specific excuses (Praha = urban, rest = rural)
   const absenceDistrictRow = await c.env.DB.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
     .bind(teamId).first<{ district: string }>().catch((e) => { logger.warn({ module: "game" }, "district query failed", e); return null; });
-  // Only show absences day-before or match-day (not 2+ days before). Přátelák = vyšší šance absence.
+  // Preview spouští obě fáze se stejnými seedy jako SMS + simulace, pak deduplikuje dle playerIndex.
+  // Absence zobrazujeme jen day-before nebo match-day (ne 2+ dny předem). Přátelák = vyšší šance.
   const friendlyMultiplier = isFriendly ? 1.8 : undefined;
-  const absences = daysUntilMatch <= 1
-    ? generateAbsences(absenceRng as any, absenceSquad, "any", absenceDistrictRow?.district, friendlyMultiplier)
-    : [];
-  const absentPlayerIds = new Set(absences.map((a) => players.results[a.playerIndex]?.id as string).filter(Boolean));
+  let absences: ReturnType<typeof generateAbsences> = [];
+  if (daysUntilMatch <= 1) {
+    const dayBeforeRng = createRng(absenceSeedForMatch({ matchKey, teamId, phase: "day_before" }));
+    const matchDayRng = createRng(absenceSeedForMatch({ matchKey, teamId, phase: "match_day" }));
+    const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, "day_before", absenceDistrictRow?.district, friendlyMultiplier);
+    const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, "match_day", absenceDistrictRow?.district, friendlyMultiplier);
+    const seen = new Set<number>();
+    absences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
+      if (seen.has(a.playerIndex)) return false;
+      seen.add(a.playerIndex);
+      return true;
+    });
+  }
+  const absentPlayerIds = new Set(absences.map((a) => healthyPlayers[a.playerIndex]?.id as string).filter(Boolean));
 
   // Load relationships for lineup visualization
   const playerIds = players.results.map((p) => p.id as string);
@@ -2545,7 +2567,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     const injured = (p.injury_days as number) > 0;
     const suspended = ((p.suspended_matches as number) ?? 0) > 0;
     const absent = absentPlayerIds.has(p.id as string) || injured || suspended;
-    const absenceInfo = !injured && !suspended ? absences.find((a) => players.results[a.playerIndex]?.id === p.id) : null;
+    const absenceInfo = !injured && !suspended ? absences.find((a) => healthyPlayers[a.playerIndex]?.id === p.id) : null;
     return {
       id: p.id, firstName: p.first_name, lastName: p.last_name, position: p.position,
       overallRating: p.overall_rating, age: p.age, condition: lc.condition ?? 100, morale: lc.morale ?? 50, squadNumber: p.squad_number ?? null,
@@ -4955,7 +4977,7 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
          ORDER BY p.overall_rating DESC`
     ).bind(teamId).all();
 
-    const absRng = createRng(absenceSeedForMatch({ matchKey: tomorrowMatch.id, teamId }));
+    const absRng = createRng(absenceSeedForMatch({ matchKey: tomorrowMatch.id, teamId, phase: "day_before" }));
     const absSquad = squadRows.results.map((r) => {
       const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
       const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();

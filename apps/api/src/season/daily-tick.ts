@@ -159,7 +159,7 @@ export async function executeDailyTick(
         if ((team.training_type as string) === "tactics") {
           try {
             const lastLineup = await env.DB.prepare(
-              "SELECT formation FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
+              "SELECT formation FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1"
             ).bind(teamId).first<{ formation: string }>();
             const form = lastLineup?.formation;
             if (form) {
@@ -451,7 +451,7 @@ export async function executeDailyTick(
                        AND i.player_id IS NULL AND (p.suspended_matches IS NULL OR p.suspended_matches = 0)
                      ORDER BY p.overall_rating DESC`
                 ).bind(teamId).all();
-                const absRng = createRng(absenceSeedForMatch({ matchKey: tomorrowMatch.id, teamId }));
+                const absRng = createRng(absenceSeedForMatch({ matchKey: tomorrowMatch.id, teamId, phase: "day_before" }));
                 const absSquad = squadRows.results.map((r) => {
                   const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
                   const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();
@@ -616,17 +616,21 @@ export async function executeDailyTick(
             if (!alreadySentMatchDay) {
               const { absenceSeedForMatch } = await import("../lib/seed");
               const { generateAbsences } = await import("../events/absence");
-              // Vyloučit zraněné a suspendované
+              // Vyloučit zraněné a suspendované. ORDER BY MUSÍ být shodné se všemi ostatními místy
+              // (match-runner, next-match preview, day-before SMS) — jinak RNG indexuje do různě
+              // seřazeného pole a výsledky se liší.
               const squadRows = await env.DB.prepare(
                 `SELECT p.id, p.first_name, p.last_name, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity
                    FROM players p
                    LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0
                    WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
-                     AND i.player_id IS NULL AND (p.suspended_matches IS NULL OR p.suspended_matches = 0)`
+                     AND i.player_id IS NULL AND (p.suspended_matches IS NULL OR p.suspended_matches = 0)
+                   ORDER BY p.overall_rating DESC`
               ).bind(teamId).all();
 
-              // Seed shodný se simulací (match-runner) i day-before SMS — jen další RNG konzumace přeskočí day_before výmluvy
-              const mdRng = createRng(absenceSeedForMatch({ matchKey: todayMatch.id, teamId }));
+              // match_day phase má vlastní seed (offset), day_before a match_day tedy produkují
+              // disjoint RNG streamy → hráč nemůže být označen v obou (jinak by dostal dva omluvné SMS).
+              const mdRng = createRng(absenceSeedForMatch({ matchKey: todayMatch.id, teamId, phase: "match_day" }));
               const absSquad = squadRows.results.map((r) => {
                 const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
                 const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();

@@ -437,7 +437,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
 
   // Default fallback — poslední user-saved lineup (použije se pro zápasy bez explicit per-calendar)
   const defaultLineup = await c.env.DB.prepare(
-    "SELECT preset_slot, formation, tactic FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
+    "SELECT preset_slot, formation, tactic FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1"
   ).bind(teamId).first<{ preset_slot: string | null; formation: string; tactic: string }>()
     .catch((e) => { logger.warn({ module: "matches" }, "fetch default lineup for schedule", e); return null; });
   const hasAnyDefaultLineup = !!defaultLineup;

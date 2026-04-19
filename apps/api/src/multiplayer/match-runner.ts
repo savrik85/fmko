@@ -56,12 +56,9 @@ export async function runScheduledMatches(
       ).bind(awayTeamId, calendarId).first();
       if (!hasAwayLineup) await copyOrCreateLineup(db, awayTeamId, calendarId);
 
-      // Deterministické RNG pro absence — MUSÍ být per-team a shodné se všemi ostatními místy
-      // (preview endpoint, day-before SMS, match-day SMS). Helper v lib/seed.ts zajišťuje jednotu.
-      const { absenceSeedForMatch, seedFromString } = await import("../lib/seed");
-      const homeAbsenceRng = createRng(absenceSeedForMatch({ matchKey: calendarId, teamId: homeTeamId }));
-      const awayAbsenceRng = createRng(absenceSeedForMatch({ matchKey: calendarId, teamId: awayTeamId }));
-      // Separátní RNG pro simulaci zápasu — obsahuje Date.now() aby výsledky variovaly
+      // Absence RNG: buildMatchPlayers si obstarává interně přes matchKey (oba phase, jednotný seed
+      // s preview/SMS). Tady už jen seed pro samotnou simulaci zápasu.
+      const { seedFromString } = await import("../lib/seed");
       const rng = createRng(seedFromString(calendarId) + Date.now());
 
       // Determine match type
@@ -80,17 +77,18 @@ export async function runScheduledMatches(
           .bind(tid, calendarId).first<LineupRow>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load lineup exact", e); return null; });
         if (exact) return exact;
         // Fallback: poslední user-saved sestava (jakýkoliv calendar, ne auto)
-        return db.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1")
+        return db.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1")
           .bind(tid).first<LineupRow>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load lineup fallback", e); return null; });
       };
       const homeLineupRow = await loadLineup(homeTeamId);
       const awayLineupRow = await loadLineup(awayTeamId);
 
-      // Build match players — každý tým má svůj vlastní deterministický RNG (stejný seed jako preview/SMS)
-      const homeBuild = await buildMatchPlayers(db, homeTeamId, homeAbsenceRng,
-        homeLineupRow?.players_data ?? null);
-      const awayBuild = await buildMatchPlayers(db, awayTeamId, awayAbsenceRng,
-        awayLineupRow?.players_data ?? null, 100);
+      // Build match players — buildMatchPlayers si sama generuje day_before + match_day absence
+      // s jednotným seedem (matchKey + teamId + phase) shodným s preview/SMS.
+      const homeBuild = await buildMatchPlayers(db, homeTeamId,
+        homeLineupRow?.players_data ?? null, 0, { matchKey: calendarId });
+      const awayBuild = await buildMatchPlayers(db, awayTeamId,
+        awayLineupRow?.players_data ?? null, 100, { matchKey: calendarId });
 
       const homeLineup = homeBuild.players;
       const awayLineup = awayBuild.players;
@@ -622,26 +620,43 @@ interface BuildResult {
 
 export async function buildMatchPlayers(
   db: D1Database, teamId: string,
-  rng?: { random: () => number; pick: <T>(a: T[]) => T; int: (min: number, max: number) => number },
   userLineupJson?: string | null,
   idOffset: number = 0,
-  options?: { friendlyMultiplier?: number },
+  options?: { friendlyMultiplier?: number; matchKey?: string },
 ): Promise<BuildResult> {
   const rows = await db.prepare(
     "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
   ).bind(teamId).all();
 
-  // Generate absences — for all teams, including human teams with saved lineups
-  let absentIds = new Set<string>();
+  // Nejprve načíst injury/suspension informace, ať můžeme excludovat z absence RNG squad
+  // (stejný filtr jako v SMS — jinak by RNG indexoval do různě velkých polí a absence by se lišily)
+  const injuredIds = new Set<string>();
+  const suspendedIds = new Set<string>();
   const absentInfo: Array<{ name: string; reason: string; smsText: string }> = [];
+  for (const r of rows.results) {
+    if ((r.suspended_matches as number) > 0) {
+      suspendedIds.add(r.id as string);
+      absentInfo.push({ name: `${r.first_name} ${r.last_name}`, reason: "Stopka za karty", smsText: `Mám stopku, nesmím hrát.` });
+    }
+  }
+  const injuryRows = await db.prepare("SELECT player_id FROM injuries WHERE days_remaining > 0 AND player_id IN (SELECT id FROM players WHERE team_id = ?)")
+    .bind(teamId).all().catch(() => ({ results: [] }));
+  for (const ir of injuryRows.results) injuredIds.add(ir.player_id as string);
+
+  // Healthy pool — zdraví a nesuspendovaní. Tento subset je identický s SMS squadem.
+  // absences.playerIndex → indexuje do healthyRows, ne do celého rows.
+  const healthyRows = rows.results.filter((r) => !injuredIds.has(r.id as string) && !suspendedIds.has(r.id as string));
+
+  // Absence generation — jen pokud volající poskytl matchKey (seed kontext)
+  let absentIds = new Set<string>();
   const hasUserLineup = !!userLineupJson;
   const allDbIds = rows.results.map(r => (r.id as string).slice(0,8));
-  logger.info({ module: "match-runner" }, `buildMatchPlayers team=${teamId.slice(0,8)} total=${rows.results.length} hasLineup=${hasUserLineup} dbIDs=[${allDbIds.join(",")}]`);
-  if (rng) {
+  logger.info({ module: "match-runner" }, `buildMatchPlayers team=${teamId.slice(0,8)} total=${rows.results.length} healthy=${healthyRows.length} hasLineup=${hasUserLineup} dbIDs=[${allDbIds.join(",")}]`);
+  if (options?.matchKey) {
     try {
       const { generateAbsences } = await import("../events/absence");
-      const teamAbsenceRng = rng;
-      const squadForAbsence = rows.results.map((row) => {
+      const { absenceSeedForMatch } = await import("../lib/seed");
+      const squadForAbsence = healthyRows.map((row) => {
         const personality = JSON.parse(row.personality as string);
         const lifeContext = JSON.parse(row.life_context as string);
         const physical = row.physical ? JSON.parse(row.physical as string) : {};
@@ -652,34 +667,33 @@ export async function buildMatchPlayers(
           alcohol: personality.alcohol ?? 30, temper: personality.temper ?? 40,
           morale: lifeContext.morale ?? 50, stamina: physical.stamina ?? 50,
           injuryProneness: personality.injuryProneness ?? 50,
+          commuteKm: (row.commute_km as number) ?? 0,
           isCelebrity: !!(row.is_celebrity as number), celebrityType: personality.celebrityType, celebrityTier: personality.celebrityTier,
         };
       });
-      // Get district for environment-specific excuses (Praha = urban, rest = rural)
       const districtRow = await db.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
         .bind(teamId).first<{ district: string }>().catch((e) => { logger.warn({ module: "match-runner" }, "query failed", e); return null; });
-      const absences = generateAbsences(teamAbsenceRng as any, squadForAbsence, "any", districtRow?.district, options?.friendlyMultiplier);
-      absentIds = new Set(absences.map((a) => rows.results[a.playerIndex]?.id as string).filter(Boolean));
-      for (const a of absences) {
-        const r = rows.results[a.playerIndex];
+
+      // Dvě fáze s odlišnými seedy — shoda s day_before SMS i match_day SMS.
+      // Deduplikace dle playerIndex: hráč co dostane omluvenku den předem ji nedostane i v den zápasu.
+      const dayBeforeRng = createRng(absenceSeedForMatch({ matchKey: options.matchKey, teamId, phase: "day_before" }));
+      const matchDayRng = createRng(absenceSeedForMatch({ matchKey: options.matchKey, teamId, phase: "match_day" }));
+      const dayBeforeAbs = generateAbsences(dayBeforeRng, squadForAbsence, "day_before", districtRow?.district, options.friendlyMultiplier);
+      const matchDayAbs = generateAbsences(matchDayRng, squadForAbsence, "match_day", districtRow?.district, options.friendlyMultiplier);
+      const seen = new Set<number>();
+      const allAbsences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
+        if (seen.has(a.playerIndex)) return false;
+        seen.add(a.playerIndex);
+        return true;
+      });
+
+      absentIds = new Set(allAbsences.map((a) => healthyRows[a.playerIndex]?.id as string).filter(Boolean));
+      for (const a of allAbsences) {
+        const r = healthyRows[a.playerIndex];
         if (r) absentInfo.push({ name: `${r.first_name} ${r.last_name}`, reason: a.reason, smsText: a.smsText });
       }
     } catch (e) { logger.warn({ module: "match-runner" }, "absence generation", e); }
   }
-
-  // Also exclude suspended and injured players
-  const injuredIds = new Set<string>();
-  const suspendedIds = new Set<string>();
-  for (const r of rows.results) {
-    if ((r.suspended_matches as number) > 0) {
-      suspendedIds.add(r.id as string);
-      absentInfo.push({ name: `${r.first_name} ${r.last_name}`, reason: "Stopka za karty", smsText: `Mám stopku, nesmím hrát.` });
-    }
-  }
-  // Check injuries
-  const injuryRows = await db.prepare("SELECT player_id FROM injuries WHERE days_remaining > 0 AND player_id IN (SELECT id FROM players WHERE team_id = ?)")
-    .bind(teamId).all().catch(() => ({ results: [] }));
-  for (const ir of injuryRows.results) injuredIds.add(ir.player_id as string);
 
   // DEBUG: check each player's exclusion reason
   for (const r of rows.results) {
@@ -869,7 +883,7 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
   const lastLineup = await db.prepare(
     `SELECT l.formation, l.tactic, l.players_data, l.captain_id, l.preset_slot, l.submitted_at
      FROM lineups l WHERE l.team_id = ? AND l.is_auto = 0
-     ORDER BY l.submitted_at DESC LIMIT 1`
+     ORDER BY l.submitted_at DESC, l.id ASC LIMIT 1`
   ).bind(teamId).first<{ formation: string; tactic: string; players_data: string; captain_id: string | null; preset_slot: string | null; submitted_at: string }>().catch((e) => { logger.error({ module: "match-runner" }, "copyOrCreateLineup: query failed", e); return null; });
 
   if (lastLineup) {

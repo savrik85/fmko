@@ -150,7 +150,6 @@ function MatchPage() {
   const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; updatedAt: string } | null>>({ A: null, B: null, C: null });
   const [activePreset, setActivePreset] = useState<"A" | "B" | "C" | null>(null);
   const [lineupSource, setLineupSource] = useState<"explicit" | "default" | null>(null);
-  const [defaultPresetSlot, setDefaultPresetSlot] = useState<"A" | "B" | "C" | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -202,7 +201,6 @@ function MatchPage() {
       // user vidí "Sestava A vybraná" a může save-nout (pak se uloží per-zápas).
       setActivePreset((data.lineup?.presetSlot ?? null) as "A"|"B"|"C"|null);
       setLineupSource(data.lineup?.source ?? null);
-      setDefaultPresetSlot(null);
       // Captain: prefer saved captain_id from DB; only auto-pick if none saved
       if (data.lineup?.captainId) {
         setCaptainId(data.lineup.captainId);
@@ -324,13 +322,11 @@ function MatchPage() {
         body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, captainId, presetSlot: activePreset, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
       });
       if (res.ok) {
-        // Pokud je aktivní preset slot, ulož i tam
-        if (activePreset) {
-          try { await savePreset(activePreset); } catch { /* už zalogováno */ }
-        }
+        // POZN: pokud user změnil hráče vůči presetu, nechceme presetový snapshot
+        // přepsat — preset by měl zůstat tím co user explicitně uložil přes "Uložit jako preset".
+        // Per-zápas lineup se uloží s preset_slot referencí, ale samotný preset zůstane.
         setSaved(true);
         setLineupSource("explicit");
-        setDefaultPresetSlot(null);
       }
       else { setSaveError(res.error ?? "Nepodařilo se uložit sestavu"); }
     } catch (e: unknown) {
@@ -416,8 +412,7 @@ function MatchPage() {
                 // ActivePreset vždy pokud má preset_slot
                 setActivePreset((data.lineup?.presetSlot ?? null) as "A"|"B"|"C"|null);
                 setLineupSource(data.lineup?.source ?? null);
-                setDefaultPresetSlot(null);
-                setSaved(data.lineup?.source === "explicit");
+                          setSaved(data.lineup?.source === "explicit");
               })
               .catch((e) => { console.error("load lineup:", e); setSaved(false); });
           }
