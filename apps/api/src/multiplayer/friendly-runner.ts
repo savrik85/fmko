@@ -50,11 +50,13 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         .bind(awayTeamId, matchId).first().catch((e) => { logger.warn({ module: "friendly-runner" }, "check away lineup", e); return null; });
       if (!hasAwayLineup) await copyOrCreateLineup(db, awayTeamId, matchId);
 
-      // Load lineups
-      const homeLineupRow = await db.prepare("SELECT players_data FROM lineups WHERE team_id = ? AND calendar_id = ?")
-        .bind(homeTeamId, matchId).first<{ players_data: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load home lineup", e); return null; });
-      const awayLineupRow = await db.prepare("SELECT players_data FROM lineups WHERE team_id = ? AND calendar_id = ?")
-        .bind(awayTeamId, matchId).first<{ players_data: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load away lineup", e); return null; });
+      // Load lineups VČETNĚ formation, tactic, captain — bez nich by se ignorovalo co user nastavil
+      const homeLineupRow = await db.prepare("SELECT formation, tactic, players_data, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(homeTeamId, matchId).first<{ formation: string; tactic: string; players_data: string; captain_id: string | null }>()
+        .catch((e) => { logger.warn({ module: "friendly-runner" }, "load home lineup", e); return null; });
+      const awayLineupRow = await db.prepare("SELECT formation, tactic, players_data, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(awayTeamId, matchId).first<{ formation: string; tactic: string; players_data: string; captain_id: string | null }>()
+        .catch((e) => { logger.warn({ module: "friendly-runner" }, "load away lineup", e); return null; });
 
       const homeBuild = await buildMatchPlayers(db, homeTeamId, absenceRng, homeLineupRow?.players_data ?? null);
       const awayBuild = await buildMatchPlayers(db, awayTeamId, absenceRng, awayLineupRow?.players_data ?? null, 100);
@@ -73,19 +75,38 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       const homeTeam = await db.prepare("SELECT name FROM teams WHERE id = ?").bind(homeTeamId).first<{ name: string }>();
       const awayTeam = await db.prepare("SELECT name FROM teams WHERE id = ?").bind(awayTeamId).first<{ name: string }>();
 
+      // Použij user-uloženou taktiku/formaci/kapitána (přátelák je trénink → musí respektovat výběr)
+      const homeTactic = (homeLineupRow?.tactic as any) ?? "balanced";
+      const awayTactic = (awayLineupRow?.tactic as any) ?? "balanced";
+      const homeFormation = homeLineupRow?.formation ?? "4-4-2";
+      const awayFormation = awayLineupRow?.formation ?? "4-4-2";
+      const homeCaptainEngineId = homeLineupRow?.captain_id ? [...homeBuild.idMap.entries()].find(([, dbId]) => dbId === homeLineupRow.captain_id)?.[0] : undefined;
+      const awayCaptainEngineId = awayLineupRow?.captain_id ? [...awayBuild.idMap.entries()].find(([, dbId]) => dbId === awayLineupRow.captain_id)?.[0] : undefined;
+
+      // Načti sehranost formace pro effectiveness modifikátor
+      const { readFamiliarity } = await import("../engine/chemistry");
+      const homeFam = await readFamiliarity(db, homeTeamId);
+      const awayFam = await readFamiliarity(db, awayTeamId);
+
       const homeSetup: TeamSetup = {
         teamId: 1,
         teamName: homeTeam?.name ?? "Domácí",
         lineup: homeLineup,
         subs: homeSubs,
-        tactic: "balanced",
+        tactic: homeTactic,
+        formation: homeFormation,
+        captainId: homeCaptainEngineId,
+        formationFamiliarity: homeFam.formation[homeFormation] ?? 0,
       };
       const awaySetup: TeamSetup = {
         teamId: 2,
         teamName: awayTeam?.name ?? "Hosté",
         lineup: awayLineup,
         subs: awaySubs,
-        tactic: "balanced",
+        tactic: awayTactic,
+        formation: awayFormation,
+        captainId: awayCaptainEngineId,
+        formationFamiliarity: awayFam.formation[awayFormation] ?? 0,
       };
 
       // Stadium info
@@ -109,8 +130,8 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       await loadCommentaryFromDB(db);
       const commentary = generateMatchCommentary(rng, result.events, homeSetup.teamName, awaySetup.teamName);
 
-      // Build lineup data (max 1 GK in starters)
-      const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>) => {
+      // Build lineup data (max 1 GK in starters) — VČETNĚ formation/tactic/captain
+      const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>, formation: string, tactic: string, captainEngineId?: number) => {
         let gkCount = 0;
         const mapStarter = (p: typeof homeLineup[0]) => {
           let pos = p.matchPosition ?? p.position;
@@ -123,10 +144,11 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
           position: p.matchPosition ?? p.position, naturalPosition: p.position,
           rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5),
         });
-        return { starters: lineup.map(mapStarter), subs: subs.map(mapSub) };
+        const captainDbId = captainEngineId != null ? (idMap.get(captainEngineId) ?? null) : null;
+        return { starters: lineup.map(mapStarter), subs: subs.map(mapSub), formation, tactic, captainId: captainDbId };
       };
-      const homeLineupData = buildLineupData(homeLineupPreSim, homeSubsPreSim, homeBuild.idMap);
-      const awayLineupData = buildLineupData(awayLineupPreSim, awaySubsPreSim, awayBuild.idMap);
+      const homeLineupData = buildLineupData(homeLineupPreSim, homeSubsPreSim, homeBuild.idMap, homeFormation, homeTactic, homeCaptainEngineId);
+      const awayLineupData = buildLineupData(awayLineupPreSim, awaySubsPreSim, awayBuild.idMap, awayFormation, awayTactic, awayCaptainEngineId);
 
       // Save
       await db.prepare(
@@ -145,6 +167,15 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
 
       // Update challenge status
       await db.prepare("UPDATE challenges SET status = 'played' WHERE match_id = ?").bind(matchId).run().catch((e) => logger.warn({ module: "friendly-runner" }, "update challenge status", e));
+
+      // Aktualizuj sehranost — přátelák je trénink, MUSÍ se počítat do sehranosti
+      try {
+        const { applyMatchResult } = await import("../engine/chemistry");
+        await applyMatchResult(db, homeTeamId, homeTactic, homeFormation);
+        await applyMatchResult(db, awayTeamId, awayTactic, awayFormation);
+      } catch (e) {
+        logger.warn({ module: "friendly-runner" }, "apply chemistry post-friendly", e);
+      }
 
       // Concession + finance processing (jen pro lidské týmy)
       try {
