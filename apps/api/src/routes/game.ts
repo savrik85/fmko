@@ -2619,6 +2619,10 @@ gameRouter.get("/teams/:teamId/lineup/:calendarId", async (c) => {
   });
 });
 
+// Whitelist taktik a formací — drží sync se shared/engine. Neplatné hodnoty by jinak crashly engine.
+const VALID_TACTICS = ["offensive", "balanced", "defensive", "long_ball", "possession", "pressing"] as const;
+const VALID_FORMATIONS = ["4-4-2", "4-3-3", "3-5-2", "4-5-1", "5-3-2", "3-4-3"] as const;
+
 // POST save lineup for next match
 gameRouter.post("/teams/:teamId/lineup", async (c) => {
   const teamId = c.req.param("teamId");
@@ -2627,6 +2631,12 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
   if (!body.players || body.players.length !== 11) return c.json({ error: "Sestava musí mít přesně 11 hráčů" }, 400);
   const gkCount = body.players.filter((p) => p.matchPosition === "GK").length;
   if (gkCount !== 1) return c.json({ error: "Sestava musí mít přesně 1 brankáře" }, 400);
+  if (!VALID_TACTICS.includes(body.tactic as typeof VALID_TACTICS[number])) {
+    return c.json({ error: `Neplatná taktika "${body.tactic}"` }, 400);
+  }
+  if (!VALID_FORMATIONS.includes(body.formation as typeof VALID_FORMATIONS[number])) {
+    return c.json({ error: `Neplatná formace "${body.formation}"` }, 400);
+  }
 
   // Validate players belong to team and are available
   const playerIds = body.players.map((p) => p.playerId);
@@ -2646,6 +2656,9 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
     return c.json({ error: `${invalid.length} hráč(ů) není dostupných (zranění, suspendace nebo nepatří do týmu)` }, 400);
   }
 
+  // Captain musí být v lineupu (pokud je vyplněn). Jinak nullify.
+  const captainId = body.captainId && playerIds.includes(body.captainId) ? body.captainId : null;
+
   // Upsert lineup
   const existing = await c.env.DB.prepare("SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?")
     .bind(teamId, body.calendarId).first<{ id: string }>();
@@ -2653,11 +2666,11 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
   const presetSlot = body.presetSlot && ["A","B","C"].includes(body.presetSlot) ? body.presetSlot : null;
   if (existing) {
     await c.env.DB.prepare("UPDATE lineups SET formation = ?, tactic = ?, players_data = ?, captain_id = ?, preset_slot = ?, is_auto = 0, submitted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
-      .bind(body.formation, body.tactic, JSON.stringify(body.players), body.captainId ?? null, presetSlot, existing.id).run();
+      .bind(body.formation, body.tactic, JSON.stringify(body.players), captainId, presetSlot, existing.id).run();
   } else {
     const id = crypto.randomUUID();
     await c.env.DB.prepare("INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, captain_id, preset_slot, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
-      .bind(id, teamId, body.calendarId, body.formation, body.tactic, JSON.stringify(body.players), body.captainId ?? null, presetSlot).run();
+      .bind(id, teamId, body.calendarId, body.formation, body.tactic, JSON.stringify(body.players), captainId, presetSlot).run();
   }
 
   return c.json({ ok: true });
@@ -2695,6 +2708,15 @@ gameRouter.put("/teams/:teamId/lineup-presets/:slot", async (c) => {
 
   const body = await c.req.json<{ formation: string; tactic: string; captainId?: string; players: Array<{ playerId: string; matchPosition: string }> }>();
   if (!body.players || body.players.length !== 11) return c.json({ error: "Sestava musí mít 11 hráčů" }, 400);
+  if (!VALID_TACTICS.includes(body.tactic as typeof VALID_TACTICS[number])) {
+    return c.json({ error: `Neplatná taktika "${body.tactic}"` }, 400);
+  }
+  if (!VALID_FORMATIONS.includes(body.formation as typeof VALID_FORMATIONS[number])) {
+    return c.json({ error: `Neplatná formace "${body.formation}"` }, 400);
+  }
+  // Captain musí být v lineupu (pokud je vyplněn)
+  const playerIds = body.players.map((p) => p.playerId);
+  const captainId = body.captainId && playerIds.includes(body.captainId) ? body.captainId : null;
 
   await c.env.DB.prepare(
     `INSERT INTO lineup_presets (team_id, slot, formation, tactic, captain_id, players_data, updated_at)
@@ -2705,7 +2727,7 @@ gameRouter.put("/teams/:teamId/lineup-presets/:slot", async (c) => {
        captain_id = excluded.captain_id,
        players_data = excluded.players_data,
        updated_at = excluded.updated_at`
-  ).bind(teamId, slot, body.formation, body.tactic, body.captainId ?? null, JSON.stringify(body.players)).run();
+  ).bind(teamId, slot, body.formation, body.tactic, captainId, JSON.stringify(body.players)).run();
 
   return c.json({ ok: true });
 });

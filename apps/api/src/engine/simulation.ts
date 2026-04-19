@@ -84,7 +84,8 @@ function calcChanceProb(
   weather: Weather,
   formFactor: number = 1.0,
 ): number {
-  const tacticMod = TACTIC_MODS[attacking.tactic];
+  // Defensive — pokud se neznámá tactic prolomi (data corruption), použij balanced
+  const tacticMod = TACTIC_MODS[attacking.tactic] ?? TACTIC_MODS.balanced;
   const weatherMod = WEATHER_MODS[weather];
 
   // Effectiveness: skill-fit × formation synergy × familiarity (taktika + formace).
@@ -112,7 +113,7 @@ function calcChanceProb(
     teamAvg(defOutfield, "strength") * 0.7 +
     (defs.length > 0 ? teamAvg(defs, "aggression") * 0.2 : 0) +
     teamAvg(defOutfield, "workRate") * 0.2
-  ) / 3 * effMod(TACTIC_MODS[defending.tactic].defenseMod, defEff);
+  ) / 3 * effMod((TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced).defenseMod, defEff);
 
   // Use DIFFERENCE not ratio — so stronger teams create more chances
   // attackPower ~20 (weak) to ~35 (strong), defensePower ~18 to ~25
@@ -462,7 +463,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     }
 
     // Counter-attack: defensive tactic team can break on opponent's possession
-    const defTacticMods = TACTIC_MODS[defending.tactic];
+    const defTacticMods = TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced;
     const defEffForCounter = calcTacticEffectiveness(defending.lineup, defending.tactic, defending.formation, defending.formationFamiliarity);
     const effectiveCounterMod = defTacticMods.counterMod * defEffForCounter;
     if (effectiveCounterMod > 0 && rng.random() < effectiveCounterMod * conditionMod) {
