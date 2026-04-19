@@ -435,10 +435,13 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
      ORDER BY COALESCE(sc.scheduled_at, m.created_at) ASC`
   ).bind(teamId, teamId, teamId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team schedule", e); return { results: [] }; });
 
-  // Detect zda user má vůbec nějakou uloženou sestavu (default fallback pro budoucí zápasy)
-  const hasAnyDefaultLineup = await c.env.DB.prepare(
-    "SELECT 1 FROM lineups WHERE team_id = ? AND is_auto = 0 LIMIT 1"
-  ).bind(teamId).first().then((r) => !!r).catch(() => false);
+  // Default fallback — poslední user-saved lineup (použije se pro zápasy bez explicit per-calendar)
+  const defaultLineup = await c.env.DB.prepare(
+    "SELECT preset_slot, formation, tactic FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
+  ).bind(teamId).first<{ preset_slot: string | null; formation: string; tactic: string }>()
+    .catch((e) => { logger.warn({ module: "matches" }, "fetch default lineup for schedule", e); return null; });
+  const hasAnyDefaultLineup = !!defaultLineup;
+  const defaultPresetSlot = defaultLineup?.preset_slot ?? null;
 
   const matches = result.results.map((row) => ({
     id: row.id,
@@ -467,6 +470,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     presetSlot: (row.preset_slot as string | null) ?? null,
     hasLineup: row.lineup_is_auto !== null && row.lineup_is_auto === 0, // explicit per-calendar
     isDefaultLineup: (row.lineup_is_auto === null || row.lineup_is_auto !== 0) && hasAnyDefaultLineup, // má fallback default
+    defaultPresetSlot, // jaký preset slot má poslední uložená sestava (pro indikaci u "(výchozí)")
   }));
 
   return c.json({

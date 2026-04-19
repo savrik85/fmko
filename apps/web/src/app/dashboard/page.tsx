@@ -44,6 +44,7 @@ interface ScheduleMatch {
   presetSlot?: "A" | "B" | "C" | null;
   hasLineup?: boolean;
   isDefaultLineup?: boolean;
+  defaultPresetSlot?: "A" | "B" | "C" | null;
 }
 
 interface UnseenMatch {
@@ -614,7 +615,9 @@ export default function DashboardPage() {
                         : m.hasLineup
                           ? <span className="text-[9px] text-pitch-600" title="Sestava nastavena">✓</span>
                           : m.isDefaultLineup
-                            ? <span className="text-[9px] text-muted" title="Použije se výchozí sestava">✓</span>
+                            ? (m.defaultPresetSlot
+                                ? <span className="text-[9px] font-heading font-bold px-1.5 py-0.5 rounded bg-gray-100 text-muted" title="Výchozí sestava">{m.defaultPresetSlot}</span>
+                                : <span className="text-[9px] text-muted" title="Použije se výchozí sestava">✓</span>)
                             : <span className="text-[9px] text-card-red font-bold" title="Bez sestavy — použije se auto">!</span>}
                       <span className="text-[10px] text-muted tabular-nums">{date}</span>
                     </div>
