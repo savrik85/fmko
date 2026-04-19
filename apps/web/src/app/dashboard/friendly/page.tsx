@@ -157,7 +157,7 @@ export default function FriendlyPage() {
                         </div>
                       </div>
                       {isAccepted && ch.matchId && (
-                        <Link href="/dashboard/match"
+                        <Link href={`/dashboard/match?calendarId=${ch.matchId}`}
                           className="px-3 py-1.5 bg-pitch-500 text-white rounded-lg font-heading font-bold text-xs shrink-0">
                           Sestava ▶
                         </Link>
