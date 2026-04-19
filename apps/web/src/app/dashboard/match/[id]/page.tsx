@@ -63,10 +63,19 @@ export default function MatchDetailPage() {
   const [showCommentary, setShowCommentary] = useState(false);
 
   useEffect(() => {
-    apiFetch<MatchDetail>(`/api/matches/${matchId}`)
-      .then((m) => { setMatch(m); setLoading(false); })
+    apiFetch<MatchDetail & { calendar_id?: string | null }>(`/api/matches/${matchId}`)
+      .then((m) => {
+        // Pre-match (neodehráno) → redirect na editor sestavy. Tato stránka je jen pro výsledky.
+        if (m.status !== "simulated") {
+          const calId = (m as any).calendar_id ?? matchId;
+          router.replace(`/dashboard/match?calendarId=${calId}`);
+          return;
+        }
+        setMatch(m);
+        setLoading(false);
+      })
       .catch((e) => { console.error("Failed to load match:", e); setLoading(false); });
-  }, [matchId]);
+  }, [matchId, router]);
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;
   if (!match) return <div className="page-container">Zápas nenalezen.</div>;
