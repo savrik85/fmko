@@ -26,9 +26,14 @@ export function createRng(seed: number) {
       return arr[Math.floor(next() * arr.length)];
     },
 
-    /** Pick from weighted map { key: weight } */
+    /** Pick from weighted map { key: weight } — klíče s weight <= 0 se nikdy nevyberou */
     weighted(weights: Record<string, number>): string {
-      const entries = Object.entries(weights);
+      const entries = Object.entries(weights).filter(([, w]) => w > 0);
+      if (entries.length === 0) {
+        // Všechny váhy 0 — fallback na první klíč (volající musí zajistit ≥1 nenulovou)
+        const all = Object.entries(weights);
+        return all.length > 0 ? all[0][0] : "";
+      }
       const total = entries.reduce((sum, [, w]) => sum + w, 0);
       let r = next() * total;
       for (const [key, weight] of entries) {

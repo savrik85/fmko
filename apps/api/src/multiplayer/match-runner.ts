@@ -56,10 +56,12 @@ export async function runScheduledMatches(
       ).bind(awayTeamId, calendarId).first();
       if (!hasAwayLineup) await copyOrCreateLineup(db, awayTeamId, calendarId);
 
-      // Deterministic RNG for absences — MUST match next-match endpoint seed
-      const { seedFromString } = await import("../lib/seed");
-      const absenceRng = createRng(seedFromString(calendarId));
-      // Separate RNG for match simulation — includes Date.now() so results vary
+      // Deterministické RNG pro absence — MUSÍ být per-team a shodné se všemi ostatními místy
+      // (preview endpoint, day-before SMS, match-day SMS). Helper v lib/seed.ts zajišťuje jednotu.
+      const { absenceSeedForMatch, seedFromString } = await import("../lib/seed");
+      const homeAbsenceRng = createRng(absenceSeedForMatch({ matchKey: calendarId, teamId: homeTeamId }));
+      const awayAbsenceRng = createRng(absenceSeedForMatch({ matchKey: calendarId, teamId: awayTeamId }));
+      // Separátní RNG pro simulaci zápasu — obsahuje Date.now() aby výsledky variovaly
       const rng = createRng(seedFromString(calendarId) + Date.now());
 
       // Determine match type
@@ -84,10 +86,10 @@ export async function runScheduledMatches(
       const homeLineupRow = await loadLineup(homeTeamId);
       const awayLineupRow = await loadLineup(awayTeamId);
 
-      // Build match players — use absenceRng for deterministic absences (must match next-match endpoint)
-      const homeBuild = await buildMatchPlayers(db, homeTeamId, absenceRng,
+      // Build match players — každý tým má svůj vlastní deterministický RNG (stejný seed jako preview/SMS)
+      const homeBuild = await buildMatchPlayers(db, homeTeamId, homeAbsenceRng,
         homeLineupRow?.players_data ?? null);
-      const awayBuild = await buildMatchPlayers(db, awayTeamId, absenceRng,
+      const awayBuild = await buildMatchPlayers(db, awayTeamId, awayAbsenceRng,
         awayLineupRow?.players_data ?? null, 100);
 
       const homeLineup = homeBuild.players;
@@ -623,6 +625,7 @@ export async function buildMatchPlayers(
   rng?: { random: () => number; pick: <T>(a: T[]) => T; int: (min: number, max: number) => number },
   userLineupJson?: string | null,
   idOffset: number = 0,
+  options?: { friendlyMultiplier?: number },
 ): Promise<BuildResult> {
   const rows = await db.prepare(
     "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
@@ -655,7 +658,7 @@ export async function buildMatchPlayers(
       // Get district for environment-specific excuses (Praha = urban, rest = rural)
       const districtRow = await db.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
         .bind(teamId).first<{ district: string }>().catch((e) => { logger.warn({ module: "match-runner" }, "query failed", e); return null; });
-      const absences = generateAbsences(teamAbsenceRng as any, squadForAbsence, "any", districtRow?.district);
+      const absences = generateAbsences(teamAbsenceRng as any, squadForAbsence, "any", districtRow?.district, options?.friendlyMultiplier);
       absentIds = new Set(absences.map((a) => rows.results[a.playerIndex]?.id as string).filter(Boolean));
       for (const a of absences) {
         const r = rows.results[a.playerIndex];

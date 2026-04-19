@@ -2487,10 +2487,11 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   const matchDate = new Date(scheduledAt!);
   const daysUntilMatch = isFriendly ? 0 : Math.max(0, Math.round((matchDate.getTime() - gameDate.getTime()) / 86400000));
 
-  const { seedFromString } = await import("../lib/seed");
+  const { absenceSeedForMatch } = await import("../lib/seed");
   const { generateAbsences } = await import("../events/absence");
-  // Seed absence RNG from teamId — must match buildMatchPlayers
-  const absenceRng = createRng(seedFromString(teamId));
+  // Seed z (matchKey, teamId) — shodný s match-runner/friendly-runner/daily-tick, viz lib/seed.ts
+  const matchKey = isFriendly ? (match.id as string) : calendarId!;
+  const absenceRng = createRng(absenceSeedForMatch({ matchKey, teamId }));
   const absenceSquad = players.results.map((row) => {
     const pers = (() => { try { return JSON.parse(row.personality as string); } catch { return {}; } })();
     const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
@@ -2511,9 +2512,10 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   // Get district for environment-specific excuses (Praha = urban, rest = rural)
   const absenceDistrictRow = await c.env.DB.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
     .bind(teamId).first<{ district: string }>().catch((e) => { logger.warn({ module: "game" }, "district query failed", e); return null; });
-  // Only show absences day-before or match-day (not 2+ days before)
+  // Only show absences day-before or match-day (not 2+ days before). Přátelák = vyšší šance absence.
+  const friendlyMultiplier = isFriendly ? 1.8 : undefined;
   const absences = daysUntilMatch <= 1
-    ? generateAbsences(absenceRng as any, absenceSquad, "any", absenceDistrictRow?.district)
+    ? generateAbsences(absenceRng as any, absenceSquad, "any", absenceDistrictRow?.district, friendlyMultiplier)
     : [];
   const absentPlayerIds = new Set(absences.map((a) => players.results[a.playerIndex]?.id as string).filter(Boolean));
 
@@ -2904,14 +2906,15 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   // If any step fails, none of them commit — player won't silently disappear
   await c.env.DB.batch([
     c.env.DB.prepare(
-      `INSERT INTO free_agents (id, district, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, source, released_from_team_id, village_id, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'released', ?, (SELECT village_id FROM teams WHERE id = ?), ?)`
+      `INSERT INTO free_agents (id, district, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, source, released_from_team_id, village_id, expires_at, is_celebrity)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'released', ?, (SELECT village_id FROM teams WHERE id = ?), ?, ?)`
     ).bind(
       faId, player.district, player.first_name, player.last_name, player.nickname ?? null,
       player.age, player.position, player.overall_rating,
       player.skills, player.physical ?? "{}", player.personality ?? "{}", player.life_context ?? "{}",
       player.avatar ?? "{}", player.hidden_talent ?? 0, player.weekly_wage ?? 0,
       teamId, teamId, expiresAt.toISOString(),
+      (player.is_celebrity as number) ?? 0,
     ),
     c.env.DB.prepare(
       "UPDATE player_contracts SET leave_type = 'released', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1"
@@ -4906,7 +4909,7 @@ gameRouter.post("/admin/leagues/:leagueId/set-game-date", async (c) => {
 // POST /api/admin/leagues/:leagueId/trigger-day-before — vygeneruje day-before attendance zprávy
 gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
   const leagueId = c.req.param("leagueId");
-  const { seedFromString } = await import("../lib/seed");
+  const { absenceSeedForMatch } = await import("../lib/seed");
   const { generateAbsences } = await import("../events/absence");
   const { generateAttendanceMessage } = await import("../messaging/message-generator");
 
@@ -4942,16 +4945,22 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
       .catch((e) => { logger.warn({ module: "game" }, "trigger-day-before match row", e); return null; });
     const opponentName = matchRow ? (matchRow.home_team_id === teamId ? matchRow.away_name : matchRow.home_name) as string : "Soupeř";
 
+    // Vyloučit zraněné a suspendované — ti nedostanou absence SMS (mají vlastní kanál)
     const squadRows = await c.env.DB.prepare(
-      "SELECT id, first_name, last_name, personality, life_context, physical, commute_km, is_celebrity FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
+      `SELECT p.id, p.first_name, p.last_name, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity, p.suspended_matches
+         FROM players p
+         LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0
+         WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
+           AND i.player_id IS NULL AND (p.suspended_matches IS NULL OR p.suspended_matches = 0)
+         ORDER BY p.overall_rating DESC`
     ).bind(teamId).all();
 
-    const absRng = createRng(seedFromString(teamId));
+    const absRng = createRng(absenceSeedForMatch({ matchKey: tomorrowMatch.id, teamId }));
     const absSquad = squadRows.results.map((r) => {
       const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
       const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();
       const phys = (() => { try { return JSON.parse(r.physical as string); } catch { return {}; } })();
-      return { firstName: r.first_name as string, lastName: r.last_name as string, age: 25, occupation: lc.occupation ?? "",
+      return { firstName: r.first_name as string, lastName: r.last_name as string, age: (r.age as number) ?? 25, occupation: lc.occupation ?? "",
         discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
         morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0,
         isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };

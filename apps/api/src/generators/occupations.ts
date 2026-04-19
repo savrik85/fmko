@@ -53,6 +53,9 @@ export const OCCUPATIONS: Occupation[] = [
       "Musím dojet naftu, pumpa zavírá v pět",
       "Oru sousedovi pole, slíbil jsem mu to už třikrát",
       "Vlečka má defekt, musím to řešit",
+      "Hydraulika přestala fungovat, nezvednu radlici",
+      "Musím odvézt brambory do sklepa než začnou mrznout",
+      "Šéf poslal dělat cesty, nemůžu odjet",
     ],
   },
   {
@@ -62,6 +65,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Kácíme smrky, nemůžu odejít uprostřed",
       "Musím odvézt dřevo, náklaďák jede jen dneska",
       "Praskla mi motorovka, musím do servisu v Klatovech",
+      "Honíme kůrovce, nemůžu nechat kluky samotný",
+      "Musím vyčistit paseku, revír chce hotovo do pátku",
     ],
   },
   {
@@ -70,6 +75,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Spadl strom špatným směrem, musím to uklidit",
       "Mám zakázku na palivový dřevo, deadline je zítra",
+      "Zákazník si objednal pokácení, nemůžu odmítnout",
+      "Dostala mě motorová pila, píchla do boty",
+      "Musím štípat pro zákazníka, chce to před mrazy",
     ],
   },
   {
@@ -79,6 +87,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Rojí se mi včely, musím je chytit než odletí",
       "Musím stáčet med, je nejvyšší čas",
       "Včely jsou agresivní, nemůžu od úlů odejít",
+      "Dneska mám kontrolu veterináře, musím být u úlů",
+      "Jeden úl napadly sršně, řeším to celý den",
     ],
   },
   {
@@ -89,6 +99,7 @@ export const OCCUPATIONS: Occupation[] = [
       "Utekla mi koza, honím ji po vsi",
       "Veterinář přijede jen dneska, musím být doma",
       "Slepice přestaly nést, musím zjistit proč",
+      "Přijela zkontrolovat hygiena, nemůžu od ní odejít",
     ],
   },
   {
@@ -97,6 +108,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Žně nečekají, musím jet dokud je sucho",
       "Kombajn je objednanej, nemůžu ho vrátit",
+      "Zasekla se mi zrnovod, řeším to už druhou hodinu",
+      "Družstvo tlačí na dodávku, jedu do tmy",
+      "Stíhám poslední pole než přijde déšť",
     ],
   },
   {
@@ -106,6 +120,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Mám naháňku na divočáky, je nás málo",
       "Musím na posed, dneska je říje",
       "Vlk se potlouká u vesnice, musíme hlídkovat",
+      "Odlovná komise přijede v sobotu, musím připravit",
+      "Srnec zranil nohu na silnici, jedu ho dosledovat",
     ],
   },
   {
@@ -114,6 +130,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Musím dokovat mříž, slíbil jsem to na pondělí",
       "Rozjel se mi oheň ve výhni, nemůžu to nechat",
+      "Přivezli mi koně k okování, musím to hned",
+      "Udělal jsem si spáleninu, chlupy na ruce jsou pryč",
+      "Dodavatel přivezl ocel, musím ji hned zkontrolovat",
     ],
   },
   {
@@ -123,6 +142,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Mám obchůzku, pytláci zase řádí",
       "Musím počítat zvěř pro statistiku",
       "Spadlý strom blokuje cestu, musím to řešit",
+      "Turisti zase nechali oheň v lese, běžím to uhasit",
+      "Hledám zraněnou srnu, viděl ji řidič na silnici",
     ],
   },
   {
@@ -131,6 +152,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Výlov je tento víkend, nemůžu chybět",
       "Hráz teče, musím to zastavit než to bude horší",
+      "Stavidlo se zaseklo, rybník přetéká",
+      "Zjistili jsme úhyn ryb, řeším s veterinářem",
+      "Musím krmit, kapr chce jíst dvakrát denně",
     ],
   },
   {
@@ -139,6 +163,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Musím česat jablka, padaj ze stromů",
       "Stříkání stromů se nedá odložit",
+      "Přijela sezónní parta, musím jim vše zorganizovat",
+      "Moštárna bere jen dnes, musím odvézt sběr",
+      "Škůdce napadá, musím postříkat dřív než zaprší",
     ],
   },
   {
@@ -147,6 +174,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Mám brigádu, nemůžu si dovolit přijít o prachy",
       "Šéf zavolal že mě potřebuje, nemůžu říct ne",
+      "Dneska platí tyden práce za dva, nemůžu to zmeškat",
+      "Bus na brigádu jede od 5 ráno, vrátím se v osm večer",
+      "Pronajal jsem se do chmelnic, nejde odejít",
     ],
   },
   {
@@ -155,6 +185,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Opravuju střechu na chalupě, musím to dodělat než zaprší",
       "Přijeli hosté na chalupu, musím se o ně postarat",
+      "Musím sundat okenice a zazimovat vodu",
+      "Kamna přestala táhnout, řeším to s kominíkem",
+      "Sousedi se stěžovali na divoké prase u plotu, musím to řešit",
     ],
   },
 
@@ -168,6 +201,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Lijeme beton, nemůže to čekat",
       "Musím dodělat zeď, zákazník tlačí",
       "Lešení se rozklížilo, musím to opravit",
+      "Mix přijel s dvouhodinovým zpožděním, zdržujeme se",
+      "Stěna se začala bořit, nemůžu to opustit",
     ],
   },
   {
@@ -176,6 +211,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Stavíme krov, nemůžu nechat kluky samotný",
       "Dřevo přivezli o den dřív, musím ho zpracovat",
+      "Zákazník chce krov do neděle, jedeme i v noci",
+      "Přijel statik, musí mi potvrdit trámy",
+      "Jeřáb je objednaný, nemůžu ho nechat čekat",
     ],
   },
   {
@@ -184,6 +222,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Dokončuju kuchyň, zákazník si stěžuje na zpoždění",
       "Lak schne a musím nanést druhou vrstvu přesně za 4 hodiny",
+      "Zákazník si přijde pro skříň, musím ji dokončit",
+      "Frézka se zasekla, dělám to ručně",
+      "Objednal jsem dřevo, právě ho přivezli",
     ],
   },
   {
@@ -192,6 +233,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Havarijní výjezd, sousedům teče strop",
       "Musím dodělat topení, lidi by zmrzli",
+      "Stará paní má prasklou trubku, voda teče do bytu",
+      "Připojuju bojler, nemůžu to nechat v půlce",
+      "Čekám na materiál z velkoobchodu, přijede každou chvíli",
     ],
   },
   {
@@ -200,6 +244,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Musím dodělat střechu, prší od zítřka",
       "Spadla mi taška, musím to hned opravit než zateče",
+      "Vítr mi odfoukl taške z půlky střechy",
+      "Soused mě prosí o okamžitou opravu, teče mu do postele",
+      "Přivezli tašky, musím je naskládat na střechu dřív než začne pršet",
     ],
   },
   {
@@ -209,6 +256,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Přijela svině na porážku, to se nedá odložit",
       "Musím udělat klobásy na objednávku",
       "Bourám maso, přivezli ho pozdě",
+      "Zabijačka u souseda, slíbil jsem pomoct",
+      "Udírna se rozběhla, musím sledovat proces",
     ],
   },
   {
@@ -217,6 +266,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Musím péct na ráno, těsto kyne",
       "Pec se porouchala, nemůžu odejít",
+      "Kvásek selhal, musím dělat nové těsto",
+      "Zákaznice objednala svatební dort na víkend",
+      "Přivezli špatnou mouku, dělám rekvizici",
     ],
   },
   {
@@ -226,6 +278,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Nemám záskok za bar",
       "Dneska je karaoke, nemůžu zavřít",
       "Přijela inspekce, musím být v hospodě",
+      "Dovezli sud, musím ho napojit na pípu",
+      "Pivní reprezentant čeká na ochutnávku nových piv",
     ],
   },
   {
@@ -234,6 +288,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Inventura, musím počítat zboží",
       "Kolegyně onemocněla, musím ji zastoupit",
+      "Závoz přijel pozdě, musím to naskladnit",
+      "Dneska bereme velkou objednávku, šéf trvá na mé přítomnosti",
+      "Kasa se zasekla, čekám na servisáka",
     ],
   },
   {
@@ -242,6 +299,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Zákazník potřebuje auto na pondělí, musím to dodělat",
       "Rozebral jsem motor a nemůžu to nechat rozloženýho",
+      "Dodavatel přivezl díly, musím je zabudovat hned",
+      "Diagnostika hlásí chybu, už 3 hodiny hledám kde to je",
+      "Zvedák se zasekl s autem nahoře, čekám na technika",
     ],
   },
   {
@@ -250,6 +310,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Svařuju bránu, nemůžu to nechat napůl",
       "Musím dodělat zábradlí, slíbil jsem to na víkend",
+      "Dostal jsem varu do oka, musím k doktorovi",
+      "Objednal jsem plyn, právě ho přivezli",
+      "Zákazník čeká na garážová vrata",
     ],
   },
   {
@@ -258,6 +321,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Maluju byt, barva schne a musím nanést další vrstvu",
       "Zákazník chce hotovo do pondělka",
+      "Dělám výmalbu školky, děti přijdou v pondělí",
+      "Udělal jsem špatný odstín, míchám to znovu",
+      "Padl mi válec do barvy, čistím to hodinu",
     ],
   },
   {
@@ -266,6 +332,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Mám přesčas, balíků je jak o Vánocích",
       "Kolega je na nemocenský, jedu dvě trasy",
+      "Dneska je výplata důchodů, trvá to do večera",
+      "Pejsek u Novákových mě zase nepustil za branku",
+      "Auto se mi porouchalo na obhůzce, čekám na odtah",
     ],
   },
   {
@@ -274,6 +343,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Musím posekat trávník před zítřejším zápasem... mládeže",
       "Zalévám, potrubí prasklo",
+      "Někdo vyrazil dveře do šaten, volám policii",
+      "Zalévací systém se rozbil, musím to spravit ručně",
+      "Připravuju čáry na zítřek, nemůžu to přerušit",
     ],
   },
 
@@ -283,6 +355,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Mám jednání s dodavatelem, nemůžu zrušit",
       "Jedu na veletrh, vracím se až večer",
+      "Klient si vyžádal schůzku dnes, nemůžu odmítnout",
+      "Dělám reklamaci u velkého zákazníka",
+      "Prezentace pro nový kontrakt se protáhne",
     ],
   },
   {
@@ -291,6 +366,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Opravuju čerpadlo, nemůžu to nechat rozloženýho",
       "Volali mě k havárii, musím jet hned",
+      "Nefunguje výtah v paneláku, 8 pater bez něj",
+      "Objednal jsem náhradní díly, právě dorazily",
+      "Motor na mlýnku si vyžádal kompletní rozbor",
     ],
   },
   {
@@ -299,6 +377,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Musím zasadit stromy, přišly ze školky",
       "Stříhám živý plot, zákazník tlačí na termín",
+      "Koncentrát do postřiku zasychá, musím hned stříkat",
+      "Zákaznice chce mít před víkendem hotové, jedu i v neděli",
+      "Sekačka mě nepustila, musím do servisu",
     ],
   },
   {
@@ -307,6 +388,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Mám směnu, jezdím do Prachatic a zpět",
       "Kolega nepřišel, musím ho zastoupit",
+      "Porouchal se autobus, čekám na servis",
+      "Dělám školní zájezd, nevrátím se dřív než v sedm",
+      "Dispečink mě poslal nahradit nemocného kolegu",
     ],
   },
   {
@@ -315,6 +399,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Dodělávám schody, zákazník stěhuje za týden",
       "Musím nařezat materiál, fréza je volná jen dneska",
+      "Zákazník přijde pro nábytek, musím ho dokončit",
+      "Dřevo mi uschlo moc rychle, pracuju přes noc",
+      "Chybí mi pár dílů, čekám na doručení",
     ],
   },
   {
@@ -323,6 +410,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Máme přesčas v továrně, šéf nás nepustí",
       "Porouchala se linka, musím to řešit",
+      "Audit nás drží v práci déle než obvykle",
+      "Kontrola kvality mi hlásí zmetky, řeším to",
+      "Nemocenská v brigádě, převzal jsem dispečink",
     ],
   },
   {
@@ -331,6 +421,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Pořezali jsme velkou zakázku, musíme to dodělat",
       "Přivezli kmeny, musím je zpracovat dokud je čerstvý",
+      "Pás se mi zasekl, opravuji celé dopoledne",
+      "Šéf nabídl dvojnásobnou sazbu, nemůžu odmítnout",
+      "Musíme dokončit export do Rakouska před pátkem",
     ],
   },
   {
@@ -339,6 +432,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Odstřel se posunul na dnešek, musím být na místě",
       "Nakládáme štěrk, kamion čeká",
+      "Drtič se zastavil, musím pomoct s uvolněním",
+      "Kontrola bezpečnosti, všichni musí být přítomni",
+      "Přijela nová parta, musím jim vysvětlit postupy",
     ],
   },
 
@@ -352,6 +448,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Jsem v Německu, vracím se až v neděli večer",
       "Dodávka se zdržela, nemůžu odstavit kamion",
       "Šéf mě poslal na extra jízdu, nemohl jsem odmítnout",
+      "Mám tacho, musím držet povinnou pauzu",
+      "Zavřeli hranici, stojím v koloně",
     ],
   },
   {
@@ -360,6 +458,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Havarijní výjezd, někde spadl stožár",
       "Musím dodělat rozvody, jinak lidi nebudou mít proud",
+      "Zkrat v panelovém domě, hlídám to",
+      "Rozvaděč mi padá, jsem v objektu do večera",
+      "Revize, musí být hotovo do zítřka",
     ],
   },
   {
@@ -368,6 +469,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Máme pohotovost, nemůžu odejít ze stanice",
       "Výjezd k požáru, sorry",
+      "Záchrana osob z auta na D4",
+      "Cvičení, velitel nás nepustí",
+      "Technický zásah, kosmetický salón má plyn",
     ],
   },
   {
@@ -376,6 +480,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Mám službu, nedomluvil jsem si výměnu",
       "Vyšetřujeme případ, nemůžu odejít",
+      "Vloupání u benzínky, zajišťuju místo činu",
+      "Nasazení na fotbale v Budějcích",
+      "Kolega zranil ruku, musím ho doprovodit",
     ],
   },
   {
@@ -384,6 +491,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Máme plný restauraci, nemůžu odejít od plotny",
       "Kolega onemocněl, vařím sám",
+      "Šéf objednal rauty, pracuju přesčas",
+      "Přivezli špatnou dodávku, řeším reklamaci",
+      "Stroj se zasekl, musím to dělat ručně",
     ],
   },
   {
@@ -392,6 +502,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Máme svatbu v restauraci, potřebují mě",
       "Šéf mě nemůže uvolnit, je plno",
+      "Oslava sedmdesátin, předem objednané",
+      "Kolegyně odešla v poledne, obsluhuju celý salon",
+      "Pokladna se sekla, řešíme to s technikem",
     ],
   },
   {
@@ -400,6 +513,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Přijela dodávka, musím to naskladnit",
       "Inventura, nemůžu odejít",
+      "Vysokozdvih se rozbil, nakládáme to ručně",
+      "Zákazník si vyžádal okamžitou expedici",
+      "Kamion zapadl na rampě, řešíme to s technikou",
     ],
   },
   {
@@ -408,6 +524,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Mám službu na záchrance",
       "Kolega onemocněl, musím ho zastoupit",
+      "Výjezd na autohavárii, nekončíme do večera",
+      "Převoz pacienta do Prahy, vrátím se pozdě",
+      "Mimořádný výjezd na infarkt, nemůžu odejít",
     ],
   },
   {
@@ -415,6 +534,10 @@ export const OCCUPATIONS: Occupation[] = [
     injuryRisk: 0.1, overtimeRisk: 0.3, strengthBonus: 0,
     excuses: [
       "Mám deadline na projekt, musím to dokončit",
+      "Odběratel trvá na tom, abych byl u zkušebního provozu",
+      "Konstrukční výkresy mi odmítli, musím je přepracovat",
+      "Klient přiletěl na prohlídku závodu, nemůžu chybět",
+      "Zasedání vedení, šéf trvá na mé přítomnosti",
     ],
   },
   {
@@ -423,6 +546,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Mám jednání s odběratelem, nemůžu zrušit",
       "Daňový poradce přijede jen dneska",
+      "Finanční úřad volá, potřebuju odpovědět osobně",
+      "Nový zákazník chce vidět provoz",
+      "Zaměstnanec dal výpověď, řeším předávání",
     ],
   },
 
@@ -436,6 +562,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Mám deploy na produkci, nemůžu odejít",
       "Padl server, musím to fixnout remote",
       "Sprint review, šéf trvá na tom že musím být",
+      "Právě mi rozbili code review, potřebuju to přepsat",
+      "Mám volání s klientem v Americe, nemůžu přesunout",
     ],
   },
   {
@@ -444,6 +572,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Uzávěrka, počítám do noci",
       "Přiznání k DPH musí být dneska",
+      "Klient chce audit, řeším ho celý víkend",
+      "Finanční úřad chce doplňující podklady",
+      "Zasekly se mi faktury v systému, opravuji to",
     ],
   },
   {
@@ -452,6 +583,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Mám dozor na školním výletě",
       "Rodičovská schůzka, nemůžu to zrušit",
+      "Opravuji písemky do večera",
+      "Zastupuju nemocného kolegu, učím dvojnásobek",
+      "Pedagogická rada se protáhla, nevrátím se včas",
     ],
   },
   {
@@ -460,6 +594,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Musím dodělat podklady pro zastupitelstvo",
       "Audit, nemůžu chybět",
+      "Starosta svolal mimořádnou poradu",
+      "Dělám hlášení pro kraj, deadline je zítra",
+      "Zákazníků je dneska strašně moc, přesčasy",
     ],
   },
 
@@ -473,6 +610,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Mám kontrolní den na lince 22",
       "Revizoři mají poradu na Florenci",
       "Chytil jsem černého pasažéra, musím sepsat protokol",
+      "Cestující se bránil, volám parťáky",
+      "Nasazení na noční trase, končím v pět ráno",
     ],
   },
   {
@@ -502,6 +641,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Mám bonusovej cíl, ještě 3 jízdy",
       "Zákazník mě odvezl na Zličín",
       "Surge pricing, teď se nevyplatí zastavit",
+      "Dostal jsem 1 hvězdu, musím napsat podpůrné odvolání",
+      "Auto je v myčce, vrátím se až odpoledne",
     ],
   },
   {
@@ -511,6 +652,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Máme live music večer, nemůžu odejít",
       "Kolegyně onemocněla, musím zastoupit",
       "Rozlil se sud, uklízím",
+      "Hrajeme tequila párty, objednali 200 štamprlí",
+      "Bezpečnostní agentura přijela až ve dvě ráno",
     ],
   },
   {
@@ -520,6 +663,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Mám ještě 15 balíků do konce směny",
       "Navigace mě poslala na Jižák místo Žižkov",
       "Zásilkovna plná, čekám na vyzvednutí",
+      "Zákazník nebyl doma, jsem třikrát zpátky",
+      "Kolo se mi rozbilo, čekám na servisák",
     ],
   },
   {
@@ -529,6 +674,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Nemůžu opustit vrátnici, čekám na zásilku",
       "Střídání nepřišlo",
       "Alarm se spustil, musím počkat na policii",
+      "Ztratil se klíč od hlavních vrat, hledám",
+      "Kontrola vedení budovy, nemůžu opustit post",
     ],
   },
   {
@@ -538,6 +685,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Mám objednanou jízdu na letiště",
       "Stojím v koloně na magistrále",
       "Zákazník zapomněl věci, musím se vracet",
+      "Píchl jsem na dálnici, řeším to",
+      "Cestující mě žádá o jízdu do Plzně, nemůžu odmítnout",
     ],
   },
   {
@@ -546,6 +695,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Musím zavřít krám, kolega nepřijde",
       "Přišla kontrola z finančáku",
+      "Přivezli noviny pozdě, musím je roztřídit",
+      "Závoz loterie se opozdil, čekám",
+      "Někdo ukradl časopisy z výlohy, řeším to s policií",
     ],
   },
   {
@@ -555,6 +707,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Uklízíme po koncertu na Letné",
       "Dneska mi přidali Smíchov, nestíhám",
       "Zametám Karlák, nemůžu odejít",
+      "Spadl strom přes chodník, uklízím větve",
+      "Dokončujeme úklid po Silvestru — ještě v lednu",
     ],
   },
   {
@@ -564,6 +718,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Mám noční na lince B",
       "Kolega volal nemocného, musím ho zastoupit",
       "Výluka na Florenci, chaos",
+      "Zpoždění 20 minut, musím to dohnat",
+      "Technická kontrola soupravy, jsem v depu",
     ],
   },
   {
@@ -573,6 +729,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Střídání nedorazilo",
       "Řeším nabouraný auto na P+R",
       "Závora se zasekla, čekám na technika",
+      "Pokladna nefunguje, musím ručně přepočítat",
+      "Volal jsem odtahovku kvůli opuštěnému autu",
     ],
   },
   {
@@ -582,6 +740,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Mám dobré místo na Karláku, nemůžu odejít",
       "Kytaru mi zabavil strážník, řeším to",
       "Vydělávám na nový struny",
+      "Turisti dneska dávají víc, nemůžu jít",
+      "Buskerská licence mi propadla, jsem na úřadě",
     ],
   },
   {
@@ -591,6 +751,8 @@ export const OCCUPATIONS: Occupation[] = [
       "Mám směnu na 119 na letiště",
       "Kolaps na Smíchově, stojíme v koloně",
       "Ranní špička, jedeme nadoraz",
+      "Cestující nám dělá problémy, volám policii",
+      "Dispečink změnil rozpis, nemůžu to přehodit",
     ],
   },
   {
@@ -599,6 +761,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Uklízíme kanceláře na Pankráci, noční směna",
       "Šéf přidal extra zakázku",
+      "Mytí oken v Chodovské věži, stavíme lešení",
+      "Havarijní úklid po záplavě v suterénu",
+      "Strojový úklid, nemůžu to přerušit",
     ],
   },
 
@@ -612,6 +777,9 @@ export const OCCUPATIONS: Occupation[] = [
       "Mám zkoušku zítra, musím se učit",
       "Rodiče mě nepustili",
       "Mám brigádu v McDonaldu, nemůžu si vzít volno",
+      "Seminárka je na pondělí, nestihl jsem ji",
+      "Státnice mi hlásili na dneska, přesunuli to",
+      "Studijní skupina se sešla, nemůžu je vynechat",
     ],
   },
   {
@@ -620,6 +788,9 @@ export const OCCUPATIONS: Occupation[] = [
     excuses: [
       "Mám pohovor, nemůžu přijít",
       "Musím na úřad práce",
+      "Přišla mi nabídka práce, rozhodujeme se doma",
+      "Poradce mi domluvil schůzku, nemůžu odkládat",
+      "Manželka řekla že si musím hledat práci celý den",
     ],
   },
   {
@@ -629,6 +800,9 @@ export const OCCUPATIONS: Occupation[] = [
       "Doktor mi zakázal běhat",
       "Mám vyšetření v nemocnici",
       "Hlídám vnoučata",
+      "Stará paní u vedle potřebuje pomoct s nákupem",
+      "Mám klub důchodců, nemůžu vynechat",
+      "Manželka trvá na tom abych opravil plot",
     ],
   },
 ];

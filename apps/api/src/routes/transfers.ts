@@ -39,14 +39,15 @@ transfersRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   // Create free agent from player data
   const faId = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO free_agents (id, district, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, source, released_from_team_id, village_id, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'released', ?, (SELECT village_id FROM teams WHERE id = ?), ?)`
+    `INSERT INTO free_agents (id, district, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, source, released_from_team_id, village_id, expires_at, is_celebrity)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'released', ?, (SELECT village_id FROM teams WHERE id = ?), ?, ?)`
   ).bind(
     faId, player.district, player.first_name, player.last_name, player.nickname ?? null,
     player.age, player.position, player.overall_rating,
     player.skills, player.physical ?? "{}", player.personality ?? "{}", player.life_context ?? "{}",
     player.avatar ?? "{}", player.hidden_talent ?? 0, player.weekly_wage ?? 0,
     teamId, teamId, expiresAt.toISOString(),
+    (player.is_celebrity as number) ?? 0,
   ).run();
 
   // Update contract

@@ -435,22 +435,28 @@ export async function executeDailyTick(
                 "SELECT id FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group') AND metadata LIKE ?"
               ).bind(teamId, `%${tomorrowMatch.id}%`).first().catch((e) => { logger.warn({ module: "daily-tick" }, "tomorrow match alreadySent check", e); return null; });
               if (!alreadySent) {
-                const { seedFromString } = await import("../lib/seed");
+                const { absenceSeedForMatch } = await import("../lib/seed");
                 const { generateAbsences } = await import("../events/absence");
                 const { generateAttendanceMessage } = await import("../messaging/message-generator");
                 const matchRow = await env.DB.prepare(
                   "SELECT m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1"
                 ).bind(tomorrowMatch.id, teamId, teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "daily-tick" }, "tomorrow match row", e); return null; });
                 const opponentName = matchRow ? (matchRow.home_team_id === teamId ? matchRow.away_name : matchRow.home_name) as string : "Soupeř";
+                // Vynech zraněné a suspendované — ti nedostanou absence SMS (mají vlastní kanál)
                 const squadRows = await env.DB.prepare(
-                  "SELECT id, first_name, last_name, personality, life_context, physical, commute_km, is_celebrity FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
+                  `SELECT p.id, p.first_name, p.last_name, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity
+                     FROM players p
+                     LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0
+                     WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
+                       AND i.player_id IS NULL AND (p.suspended_matches IS NULL OR p.suspended_matches = 0)
+                     ORDER BY p.overall_rating DESC`
                 ).bind(teamId).all();
-                const absRng = createRng(seedFromString(teamId));
+                const absRng = createRng(absenceSeedForMatch({ matchKey: tomorrowMatch.id, teamId }));
                 const absSquad = squadRows.results.map((r) => {
                   const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
                   const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();
                   const phys = (() => { try { return JSON.parse(r.physical as string); } catch { return {}; } })();
-                  return { firstName: r.first_name as string, lastName: r.last_name as string, age: 25, occupation: lc.occupation ?? "",
+                  return { firstName: r.first_name as string, lastName: r.last_name as string, age: (r.age as number) ?? 25, occupation: lc.occupation ?? "",
                     discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
                     morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0,
                     isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
@@ -608,18 +614,24 @@ export async function executeDailyTick(
             ).bind(teamId, `%${todayMatch.id}%`).first().catch((e) => { logger.warn({ module: "daily-tick" }, "today match already sent check", e); return null; });
 
             if (!alreadySentMatchDay) {
-              const { seedFromString } = await import("../lib/seed");
+              const { absenceSeedForMatch } = await import("../lib/seed");
               const { generateAbsences } = await import("../events/absence");
+              // Vyloučit zraněné a suspendované
               const squadRows = await env.DB.prepare(
-                "SELECT id, first_name, last_name, personality, life_context, physical, commute_km, is_celebrity FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')"
+                `SELECT p.id, p.first_name, p.last_name, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity
+                   FROM players p
+                   LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0
+                   WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
+                     AND i.player_id IS NULL AND (p.suspended_matches IS NULL OR p.suspended_matches = 0)`
               ).bind(teamId).all();
 
-              const mdRng = createRng(seedFromString(todayMatch.id) + 9999);
+              // Seed shodný se simulací (match-runner) i day-before SMS — jen další RNG konzumace přeskočí day_before výmluvy
+              const mdRng = createRng(absenceSeedForMatch({ matchKey: todayMatch.id, teamId }));
               const absSquad = squadRows.results.map((r) => {
                 const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
                 const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();
                 const phys = (() => { try { return JSON.parse(r.physical as string); } catch { return {}; } })();
-                return { firstName: r.first_name as string, lastName: r.last_name as string, age: 25, occupation: lc.occupation ?? "",
+                return { firstName: r.first_name as string, lastName: r.last_name as string, age: (r.age as number) ?? 25, occupation: lc.occupation ?? "",
                   discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
                   morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0,
                   isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
