@@ -35,10 +35,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
     const awayTeamId = match.away_team_id as string;
 
     try {
-      // Per-team deterministické RNG pro absence (jednotný seed helper, nikdy nesdílet mezi týmy)
-      const { absenceSeedForMatch } = await import("../lib/seed");
-      const homeAbsenceRng = createRng(absenceSeedForMatch({ matchKey: matchId, teamId: homeTeamId }));
-      const awayAbsenceRng = createRng(absenceSeedForMatch({ matchKey: matchId, teamId: awayTeamId }));
+      // Absence RNG obstará buildMatchPlayers interně (matchKey = matchId; phase day_before+match_day).
       const rng = createRng(Date.now() + matchId.charCodeAt(0));
 
       // Ensure lineups exist — copy last saved or auto-generate
@@ -60,8 +57,8 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         .catch((e) => { logger.warn({ module: "friendly-runner" }, "load away lineup", e); return null; });
 
       // Přátelák = dobrovolný zápas → hráči mají výrazně vyšší šanci odmítnout (multiplikátor 1.8×)
-      const homeBuild = await buildMatchPlayers(db, homeTeamId, homeAbsenceRng, homeLineupRow?.players_data ?? null, 0, { friendlyMultiplier: 1.8 });
-      const awayBuild = await buildMatchPlayers(db, awayTeamId, awayAbsenceRng, awayLineupRow?.players_data ?? null, 100, { friendlyMultiplier: 1.8 });
+      const homeBuild = await buildMatchPlayers(db, homeTeamId, homeLineupRow?.players_data ?? null, 0, { friendlyMultiplier: 1.8, matchKey: matchId });
+      const awayBuild = await buildMatchPlayers(db, awayTeamId, awayLineupRow?.players_data ?? null, 100, { friendlyMultiplier: 1.8, matchKey: matchId });
 
       const homeLineup = homeBuild.players;
       const awayLineup = awayBuild.players;
