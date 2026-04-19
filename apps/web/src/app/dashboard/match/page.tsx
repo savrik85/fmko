@@ -201,6 +201,8 @@ function MatchPage() {
       // user vidí "Sestava A vybraná" a může save-nout (pak se uloží per-zápas).
       setActivePreset((data.lineup?.presetSlot ?? null) as "A"|"B"|"C"|null);
       setLineupSource(data.lineup?.source ?? null);
+      // Save button "Uloženo ✓" jen pokud lineup je explicit pro tento zápas
+      setSaved(data.lineup?.source === "explicit");
       // Captain: prefer saved captain_id from DB; only auto-pick if none saved
       if (data.lineup?.captainId) {
         setCaptainId(data.lineup.captainId);
