@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -294,12 +294,17 @@ function MatchPage() {
     } catch (e) { console.error("save preset:", e); setSaveError("Nepodařilo se uložit preset"); throw e; }
   };
 
+  // Ref pro race-condition guard při rychlém přepínání presetů A → B → A — jen poslední request platí.
+  const loadPresetReqId = useRef(0);
   const loadPreset = async (slot: "A" | "B" | "C") => {
     if (!teamId) return;
+    const myReqId = ++loadPresetReqId.current;
     try {
       const data = await apiFetch<{ formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; warnings: string[] }>(
         `/api/teams/${teamId}/lineup-presets/${slot}/apply`, { method: "POST" }
       );
+      // Pokud uživatel mezitím klikl jiný preset, zahodit stale response
+      if (myReqId !== loadPresetReqId.current) return;
       setFormation(data.formation);
       setTactic(data.tactic);
       const newSel = data.players.map((p) => p.playerId);
@@ -320,15 +325,17 @@ function MatchPage() {
   };
 
   // Klik na slot: pokud filled a ne aktivní → loadne. Pokud aktivní → odepne.
-  const onPresetClick = async (slot: "A" | "B" | "C") => {
+  const onPresetClick = (slot: "A" | "B" | "C") => {
     if (activePreset === slot) {
       setActivePreset(null);
       return;
     }
-    if (presets[slot]) {
-      await loadPreset(slot);
-    }
+    // Sync update activePreset hned aby UI reagovalo i když fetch běží pomalu
     setActivePreset(slot);
+    if (presets[slot]) {
+      // loadPreset má vlastní reqId guard proti race condition
+      loadPreset(slot);
+    }
   };
 
   const saveLineup = async () => {
