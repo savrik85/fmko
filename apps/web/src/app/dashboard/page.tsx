@@ -41,6 +41,8 @@ interface ScheduleMatch {
   isHome: boolean;
   promoted?: boolean;
   promotionCost?: number | null;
+  presetSlot?: "A" | "B" | "C" | null;
+  hasLineup?: boolean;
 }
 
 interface UnseenMatch {
@@ -606,6 +608,11 @@ export default function DashboardPage() {
                       <span className="text-xs text-muted tabular-nums w-5">{m.round}.</span>
                       <span className="text-sm font-heading font-bold flex-1 truncate">{opp}</span>
                       <span className={`text-[9px] font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
+                      {m.presetSlot
+                        ? <span className="text-[9px] font-heading font-bold px-1.5 py-0.5 rounded bg-pitch-100 text-pitch-700">{m.presetSlot}</span>
+                        : m.hasLineup
+                          ? <span className="text-[9px] text-pitch-600" title="Sestava nastavena">✓</span>
+                          : <span className="text-[9px] text-card-red font-bold" title="Bez sestavy — použije se auto">!</span>}
                       <span className="text-[10px] text-muted tabular-nums">{date}</span>
                     </div>
                   );

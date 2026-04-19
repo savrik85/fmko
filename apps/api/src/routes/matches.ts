@@ -419,18 +419,21 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
   ).bind(team.league_id).first<{ name: string; season_number: number }>().catch((e) => { logger.warn({ module: "matches" }, "fetch league for schedule", e); return null; });
 
   // Get all matches involving this team
+  // LEFT JOIN na lineups (per-team) — pro nadcházející zápasy zobrazí jakou má sestavu uloženou (preset_slot, is_auto)
   const result = await c.env.DB.prepare(
     `SELECT m.*,
        ht.name as home_name, ht.primary_color as home_color, ht.secondary_color as home_secondary, ht.badge_pattern as home_badge, ht.user_id as home_user_id,
        at.name as away_name, at.primary_color as away_color, at.secondary_color as away_secondary, at.badge_pattern as away_badge, at.user_id as away_user_id,
-       sc.scheduled_at, sc.game_week
+       sc.scheduled_at, sc.game_week,
+       l.preset_slot, l.is_auto as lineup_is_auto
      FROM matches m
      JOIN teams ht ON m.home_team_id = ht.id
      JOIN teams at ON m.away_team_id = at.id
      LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
+     LEFT JOIN lineups l ON l.team_id = ? AND l.calendar_id = COALESCE(m.calendar_id, m.id)
      WHERE (m.home_team_id = ? OR m.away_team_id = ?)
      ORDER BY COALESCE(sc.scheduled_at, m.created_at) ASC`
-  ).bind(teamId, teamId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team schedule", e); return { results: [] }; });
+  ).bind(teamId, teamId, teamId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team schedule", e); return { results: [] }; });
 
   const matches = result.results.map((row) => ({
     id: row.id,
@@ -456,6 +459,8 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     promoted: (row.promoted as number | null) === 1,
     promotionCost: (row.promotion_cost as number | null) ?? null,
     promotionBoost: (row.promotion_boost as number | null) ?? 1.0,
+    presetSlot: (row.preset_slot as string | null) ?? null,
+    hasLineup: row.lineup_is_auto !== null && row.lineup_is_auto === 0, // user-saved (ne auto-fallback)
   }));
 
   return c.json({

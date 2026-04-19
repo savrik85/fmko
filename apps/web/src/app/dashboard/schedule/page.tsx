@@ -31,6 +31,8 @@ interface ScheduleMatch {
   promoted?: boolean;
   promotionCost?: number | null;
   promotionBoost?: number | null;
+  presetSlot?: "A" | "B" | "C" | null;
+  hasLineup?: boolean;
 }
 
 interface LeagueRound {
@@ -283,7 +285,16 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
   const oppInitials = opp.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
   const isClickable = isPlayed || canEditLineup;
-  const linkLabel = isPlayed ? "Přehled" : canEditLineup ? "Sestava" : null;
+  // Decentní info o zvolené sestavě pro nadcházející zápas
+  const lineupInfo = !isPlayed && canEditLineup
+    ? (m.presetSlot
+        ? { label: `Sestava ${m.presetSlot}`, color: "text-pitch-600" }
+        : m.hasLineup
+          ? { label: "Sestava nastavena ✓", color: "text-pitch-600" }
+          : { label: "⚠ Bez sestavy", color: "text-card-red" })
+    : null;
+  const linkLabel = isPlayed ? "Přehled" : canEditLineup ? (lineupInfo?.label ?? "Sestava") : null;
+  const linkColor = isPlayed ? "text-pitch-600" : (lineupInfo?.color ?? "text-pitch-600");
   const inner = (
     <div className={`card px-3 py-3 md:px-4 shadow-lg ${isClickable ? "hover:bg-gray-50 transition-colors" : ""}`}>
       {/* Mobile layout */}
@@ -357,7 +368,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
       {/* Link centered at bottom — compact, no divider */}
       {linkLabel && (
         <div className="mt-1 text-center">
-          <span className="text-xs font-heading font-bold text-pitch-600">{linkLabel} →</span>
+          <span className={`text-xs font-heading font-bold ${linkColor}`}>{linkLabel} →</span>
         </div>
       )}
     </div>
