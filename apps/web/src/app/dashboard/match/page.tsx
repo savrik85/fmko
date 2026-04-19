@@ -198,11 +198,11 @@ function MatchPage() {
         });
         setSelected(nextSelected);
       } else { autoFill(data.availablePlayers ?? [], "4-4-2"); }
-      // Active preset slot — pouze pokud lineup je EXPLICIT pro tento zápas (ne default fallback)
-      setActivePreset(data.lineup?.source === "explicit" ? (data.lineup.presetSlot ?? null) : null);
+      // Pokud lineup má preset_slot, prostě ho aktivuj. Fallback vs explicit nás nezajímá v UI —
+      // user vidí "Sestava A vybraná" a může save-nout (pak se uloží per-zápas).
+      setActivePreset((data.lineup?.presetSlot ?? null) as "A"|"B"|"C"|null);
       setLineupSource(data.lineup?.source ?? null);
-      // Pokud default fallback, zachovat info kterou sestavu tam fallback ukazuje
-      setDefaultPresetSlot(data.lineup?.source === "default" ? ((data.lineup.presetSlot ?? null) as "A"|"B"|"C"|null) : null);
+      setDefaultPresetSlot(null);
       // Captain: prefer saved captain_id from DB; only auto-pick if none saved
       if (data.lineup?.captainId) {
         setCaptainId(data.lineup.captainId);
@@ -413,10 +413,10 @@ function MatchPage() {
                   setFormation(data.lineup.formation); setTactic(data.lineup.tactic); setSelected([...new Set(data.lineup.players.map((p) => p.playerId))].slice(0, 11));
                   if (data.lineup.captainId) setCaptainId(data.lineup.captainId);
                 }
-                // ActivePreset jen pokud je to explicit lineup pro tento zápas
-                setActivePreset(data.lineup?.source === "explicit" ? (data.lineup.presetSlot ?? null) : null);
+                // ActivePreset vždy pokud má preset_slot
+                setActivePreset((data.lineup?.presetSlot ?? null) as "A"|"B"|"C"|null);
                 setLineupSource(data.lineup?.source ?? null);
-                setDefaultPresetSlot(data.lineup?.source === "default" ? ((data.lineup.presetSlot ?? null) as "A"|"B"|"C"|null) : null);
+                setDefaultPresetSlot(null);
                 setSaved(data.lineup?.source === "explicit");
               })
               .catch((e) => { console.error("load lineup:", e); setSaved(false); });
@@ -440,13 +440,9 @@ function MatchPage() {
               </div>
               {/* Prominentní indikátor zvolené sestavy pro tento zápas */}
               <div className="mt-1 flex items-center justify-center gap-2 text-xs">
-                {lineupSource === "explicit" ? (
+                {lineupSource ? (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-pitch-500 text-white font-heading font-bold">
                     {activePreset ? `Sestava ${activePreset}` : "Vlastní sestava"} · {formation} · {(TACTICS.find((t) => t.key === tactic)?.label) ?? tactic}
-                  </span>
-                ) : lineupSource === "default" ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-200 text-muted font-heading">
-                    {defaultPresetSlot ? `Sestava ${defaultPresetSlot} (výchozí)` : "Výchozí sestava"} · {formation} · {(TACTICS.find((t) => t.key === tactic)?.label) ?? tactic}
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-card-red/10 text-card-red font-heading font-bold">
