@@ -252,13 +252,31 @@ function MatchPage() {
     const slots = POSITIONS[form] ?? POSITIONS["4-4-2"];
     const used = new Set<string>();
     const avail = pool.filter((p) => !p.absent);
+    // Priorizuj současně vybrané hráče (selected state) — když user změní formaci,
+    // chce zachovat svou sestavu co nejvíc, ne se mu náhodně přebudovala.
+    const currentlySelected = new Set(selected.filter((id): id is string => !!id));
+    const isCurrent = (p: AvailablePlayer) => currentlySelected.has(p.id);
     const sel: (string | null)[] = [];
     for (const slot of slots) {
-      const best = avail.filter((p) => !used.has(p.id) && p.position === slot.pos).sort((a, b) => b.overallRating - a.overallRating)[0];
-      if (best) { sel.push(best.id); used.add(best.id); }
-      else { const any = avail.filter((p) => !used.has(p.id)).sort((a, b) => b.overallRating - a.overallRating)[0]; if (any) { sel.push(any.id); used.add(any.id); } else sel.push(null); }
+      // 1) Hráč co je už v lineup A pasuje na pozici (zachovat)
+      let pick = avail.find((p) => !used.has(p.id) && p.position === slot.pos && isCurrent(p));
+      // 2) Jakýkoliv current lineup hráč co pasuje na pozici (jiný slot v staré formaci)
+      if (!pick) pick = avail.find((p) => !used.has(p.id) && p.position === slot.pos);
+      // 3) Best rating na pozici (nový hráč)
+      if (!pick) pick = avail.filter((p) => !used.has(p.id) && p.position === slot.pos).sort((a, b) => b.overallRating - a.overallRating)[0];
+      // 4) Cokoliv (out-of-position)
+      if (!pick) pick = avail.filter((p) => !used.has(p.id)).sort((a, b) => b.overallRating - a.overallRating)[0];
+      if (pick) { sel.push(pick.id); used.add(pick.id); } else sel.push(null);
     }
-    setSelected(sel); setSaved(false);
+    setSelected(sel);
+    setSaved(false);
+    // Pokud captain vypadl z lineup, najdi nového dle leadership
+    if (captainId && !sel.includes(captainId)) {
+      const newCaptain = avail
+        .filter((p) => sel.includes(p.id))
+        .sort((a, b) => ((b as any).leadership ?? 30) - ((a as any).leadership ?? 30))[0];
+      setCaptainId(newCaptain?.id ?? null);
+    }
   };
 
   const savePreset = async (slot: "A" | "B" | "C") => {
