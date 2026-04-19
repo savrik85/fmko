@@ -419,7 +419,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
   ).bind(team.league_id).first<{ name: string; season_number: number }>().catch((e) => { logger.warn({ module: "matches" }, "fetch league for schedule", e); return null; });
 
   // Get all matches involving this team
-  // LEFT JOIN na lineups (per-team) — pro nadcházející zápasy zobrazí jakou má sestavu uloženou (preset_slot, is_auto)
+  // LEFT JOIN na lineups (per-calendar) — pro nadcházející zobrazí explicitně uloženou sestavu
   const result = await c.env.DB.prepare(
     `SELECT m.*,
        ht.name as home_name, ht.primary_color as home_color, ht.secondary_color as home_secondary, ht.badge_pattern as home_badge, ht.user_id as home_user_id,
@@ -434,6 +434,11 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
      WHERE (m.home_team_id = ? OR m.away_team_id = ?)
      ORDER BY COALESCE(sc.scheduled_at, m.created_at) ASC`
   ).bind(teamId, teamId, teamId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team schedule", e); return { results: [] }; });
+
+  // Detect zda user má vůbec nějakou uloženou sestavu (default fallback pro budoucí zápasy)
+  const hasAnyDefaultLineup = await c.env.DB.prepare(
+    "SELECT 1 FROM lineups WHERE team_id = ? AND is_auto = 0 LIMIT 1"
+  ).bind(teamId).first().then((r) => !!r).catch(() => false);
 
   const matches = result.results.map((row) => ({
     id: row.id,
@@ -460,7 +465,8 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     promotionCost: (row.promotion_cost as number | null) ?? null,
     promotionBoost: (row.promotion_boost as number | null) ?? 1.0,
     presetSlot: (row.preset_slot as string | null) ?? null,
-    hasLineup: row.lineup_is_auto !== null && row.lineup_is_auto === 0, // user-saved (ne auto-fallback)
+    hasLineup: row.lineup_is_auto !== null && row.lineup_is_auto === 0, // explicit per-calendar
+    isDefaultLineup: (row.lineup_is_auto === null || row.lineup_is_auto !== 0) && hasAnyDefaultLineup, // má fallback default
   }));
 
   return c.json({

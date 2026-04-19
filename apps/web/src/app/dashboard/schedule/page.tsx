@@ -33,6 +33,7 @@ interface ScheduleMatch {
   promotionBoost?: number | null;
   presetSlot?: "A" | "B" | "C" | null;
   hasLineup?: boolean;
+  isDefaultLineup?: boolean;
 }
 
 interface LeagueRound {
@@ -291,7 +292,9 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
         ? { label: `Sestava ${m.presetSlot}`, color: "text-pitch-600" }
         : m.hasLineup
           ? { label: "Sestava nastavena ✓", color: "text-pitch-600" }
-          : { label: "⚠ Bez sestavy", color: "text-card-red" })
+          : m.isDefaultLineup
+            ? { label: "Sestava (výchozí) ✓", color: "text-muted" }
+            : { label: "⚠ Bez sestavy", color: "text-card-red" })
     : null;
   const linkLabel = isPlayed ? "Přehled" : canEditLineup ? (lineupInfo?.label ?? "Sestava") : null;
   const linkColor = isPlayed ? "text-pitch-600" : (lineupInfo?.color ?? "text-pitch-600");

@@ -70,11 +70,19 @@ export async function runScheduledMatches(
       const matchType: MatchRunResult["matchType"] = homeIsHuman && awayIsHuman ? "pvp"
         : homeIsHuman ? "pve_home" : awayIsHuman ? "pve_away" : "ai_vs_ai";
 
-      // Read user lineups from DB — prefer user-saved (is_auto=0) over auto-generated
-      const homeLineupRow = await db.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
-        .bind(homeTeamId, calendarId).first<{ formation: string; tactic: string; players_data: string; is_auto: number; captain_id: string | null }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home lineup", e); return null; });
-      const awayLineupRow = await db.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
-        .bind(awayTeamId, calendarId).first<{ formation: string; tactic: string; players_data: string; is_auto: number; captain_id: string | null }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load away lineup", e); return null; });
+      // Read user lineups: 1) explicit per-calendar (preferred), 2) fallback na poslední user-saved
+      // Tím simulace použije "default sestavu" pokud user explicitně nevybral pro tento zápas.
+      type LineupRow = { formation: string; tactic: string; players_data: string; is_auto: number; captain_id: string | null };
+      const loadLineup = async (tid: string): Promise<LineupRow | null> => {
+        const exact = await db.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
+          .bind(tid, calendarId).first<LineupRow>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load lineup exact", e); return null; });
+        if (exact) return exact;
+        // Fallback: poslední user-saved sestava (jakýkoliv calendar, ne auto)
+        return db.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1")
+          .bind(tid).first<LineupRow>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load lineup fallback", e); return null; });
+      };
+      const homeLineupRow = await loadLineup(homeTeamId);
+      const awayLineupRow = await loadLineup(awayTeamId);
 
       // Build match players — use absenceRng for deterministic absences (must match next-match endpoint)
       const homeBuild = await buildMatchPlayers(db, homeTeamId, absenceRng,
