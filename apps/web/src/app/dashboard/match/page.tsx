@@ -149,6 +149,8 @@ function MatchPage() {
   const [formationFam, setFormationFam] = useState<Record<string, number>>({});
   const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; updatedAt: string } | null>>({ A: null, B: null, C: null });
   const [activePreset, setActivePreset] = useState<"A" | "B" | "C" | null>(null);
+  const [lineupSource, setLineupSource] = useState<"explicit" | "default" | null>(null);
+  const [defaultPresetSlot, setDefaultPresetSlot] = useState<"A" | "B" | "C" | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -197,9 +199,10 @@ function MatchPage() {
         setSelected(nextSelected);
       } else { autoFill(data.availablePlayers ?? [], "4-4-2"); }
       // Active preset slot — pouze pokud lineup je EXPLICIT pro tento zápas (ne default fallback)
-      // Default fallback může mít presetSlot, ale UI nesmí tvrdit že je vybráno explicitně,
-      // protože by user nevěděl že musí kliknout "Použít" pro skutečné nasazení.
       setActivePreset(data.lineup?.source === "explicit" ? (data.lineup.presetSlot ?? null) : null);
+      setLineupSource(data.lineup?.source ?? null);
+      // Pokud default fallback, zachovat info kterou sestavu tam fallback ukazuje
+      setDefaultPresetSlot(data.lineup?.source === "default" ? ((data.lineup.presetSlot ?? null) as "A"|"B"|"C"|null) : null);
       // Captain: prefer saved captain_id from DB; only auto-pick if none saved
       if (data.lineup?.captainId) {
         setCaptainId(data.lineup.captainId);
@@ -326,6 +329,8 @@ function MatchPage() {
           try { await savePreset(activePreset); } catch { /* už zalogováno */ }
         }
         setSaved(true);
+        setLineupSource("explicit");
+        setDefaultPresetSlot(null);
       }
       else { setSaveError(res.error ?? "Nepodařilo se uložit sestavu"); }
     } catch (e: unknown) {
@@ -410,6 +415,8 @@ function MatchPage() {
                 }
                 // ActivePreset jen pokud je to explicit lineup pro tento zápas
                 setActivePreset(data.lineup?.source === "explicit" ? (data.lineup.presetSlot ?? null) : null);
+                setLineupSource(data.lineup?.source ?? null);
+                setDefaultPresetSlot(data.lineup?.source === "default" ? ((data.lineup.presetSlot ?? null) as "A"|"B"|"C"|null) : null);
                 setSaved(data.lineup?.source === "explicit");
               })
               .catch((e) => { console.error("load lineup:", e); setSaved(false); });
@@ -430,6 +437,22 @@ function MatchPage() {
               <div className="text-xs text-muted">
                 {nextMatch.isFriendly ? <span className="font-heading font-bold text-pitch-600">Přátelák</span> : `${nextMatch.gameWeek}. kolo`} · {dateStr}
                 {absentPlayers.length > 0 && <span className="ml-2 text-card-red font-heading font-bold">⚠ {absentPlayers.length} nedostupných</span>}
+              </div>
+              {/* Prominentní indikátor zvolené sestavy pro tento zápas */}
+              <div className="mt-1 flex items-center justify-center gap-2 text-xs">
+                {lineupSource === "explicit" ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-pitch-500 text-white font-heading font-bold">
+                    {activePreset ? `Sestava ${activePreset}` : "Vlastní sestava"} · {formation} · {(TACTICS.find((t) => t.key === tactic)?.label) ?? tactic}
+                  </span>
+                ) : lineupSource === "default" ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-200 text-muted font-heading">
+                    {defaultPresetSlot ? `Sestava ${defaultPresetSlot} (výchozí)` : "Výchozí sestava"} · {formation} · {(TACTICS.find((t) => t.key === tactic)?.label) ?? tactic}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-card-red/10 text-card-red font-heading font-bold">
+                    ⚠ Bez uložené sestavy — použije se auto
+                  </span>
+                )}
               </div>
             </div>
             <button disabled={currentIdx >= upcomingMatches.length - 1} onClick={() => { if (currentIdx < upcomingMatches.length - 1) switchToMatch(upcomingMatches[currentIdx + 1]); }}
