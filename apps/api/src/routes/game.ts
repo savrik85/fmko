@@ -2841,13 +2841,14 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
   const used = new Set<string>();
   const warnings: string[] = [];
 
-  const finalPlayers = presetPlayers.map((slot) => {
+  // Helper na slot s undefined-safe substitucí
+  const finalPlayersRaw: Array<{ playerId: string; matchPosition: string } | null> = presetPlayers.map((slot) => {
     const stored = playerMap.get(slot.playerId);
     if (stored && !stored.unavailable && !used.has(slot.playerId)) {
       used.add(slot.playerId);
       return slot;
     }
-    // substitute
+    // substitute — preferuj stejnou pozici, pak cokoliv dostupné
     const repl = allPlayers.results.filter((x) => !x.unavailable && !used.has(x.id) && x.position === slot.matchPosition)
       .sort((a, b) => b.overall_rating - a.overall_rating)[0]
       ?? allPlayers.results.filter((x) => !x.unavailable && !used.has(x.id))
@@ -2857,8 +2858,21 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
       warnings.push(`Hráč nahrazen na pozici ${slot.matchPosition}`);
       return { playerId: repl.id, matchPosition: slot.matchPosition };
     }
-    return slot;
+    // Žádná náhrada — slot zůstane prázdný (vrátí null)
+    warnings.push(`Slot ${slot.matchPosition} nemá náhradu (málo dostupných hráčů)`);
+    return null;
   });
+
+  const finalPlayers = finalPlayersRaw.filter((p): p is { playerId: string; matchPosition: string } => p !== null);
+
+  // Validace: musí být 11 hráčů, právě 1 GK
+  if (finalPlayers.length < 11) {
+    return c.json({ error: `Tým nemá dost dostupných hráčů (${finalPlayers.length}/11). Některé sloty jsou prázdné.`, warnings }, 400);
+  }
+  const gkCount = finalPlayers.filter((p) => p.matchPosition === "GK").length;
+  if (gkCount !== 1) {
+    return c.json({ error: `Sestava musí mít právě 1 brankáře (má ${gkCount}).`, warnings }, 400);
+  }
 
   // Validate captain still in lineup
   const captainStillIn = preset.captain_id && finalPlayers.some((p) => p.playerId === preset.captain_id);

@@ -429,17 +429,34 @@ function MatchPage() {
             awayName: um.isHome ? um.opponentName : myName,
           } : prev);
           if (teamId) {
-            // Použij next-match endpoint s calendarId — vrací lineup+source (explicit/default)
-            apiFetch<{ lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
+            // Použij next-match endpoint s calendarId — vrací lineup+source (explicit/default) + availablePlayers
+            apiFetch<{ lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
               .then((data) => {
+                if (data.availablePlayers) setPlayers(data.availablePlayers);
                 if (data.lineup && data.lineup.players.length === 11) {
-                  setFormation(data.lineup.formation); setTactic(data.lineup.tactic); setSelected([...new Set(data.lineup.players.map((p) => p.playerId))].slice(0, 11));
-                  if (data.lineup.captainId) setCaptainId(data.lineup.captainId);
+                  setFormation(data.lineup.formation);
+                  setTactic(data.lineup.tactic);
+                  setSelected(data.lineup.players.map((p) => p.playerId));
+                  // Captain reset — explicit setter i pro null aby se neudržoval starý captain z předchozího zápasu
+                  if (data.lineup.captainId) {
+                    setCaptainId(data.lineup.captainId);
+                  } else {
+                    // Pokud lineup nemá captain, najdi auto (nejvyšší leadership)
+                    const lineupIds = data.lineup.players.map((p) => p.playerId);
+                    const best = (data.availablePlayers ?? [])
+                      .filter((p) => lineupIds.includes(p.id))
+                      .sort((a, b) => ((b as any).leadership ?? 30) - ((a as any).leadership ?? 30))[0];
+                    setCaptainId(best?.id ?? null);
+                  }
+                } else if (data.availablePlayers) {
+                  // Žádný lineup → autoFill (jako v hlavním useEffect)
+                  autoFill(data.availablePlayers, "4-4-2");
+                  setCaptainId(null);
                 }
                 // ActivePreset vždy pokud má preset_slot
                 setActivePreset((data.lineup?.presetSlot ?? null) as "A"|"B"|"C"|null);
                 setLineupSource(data.lineup?.source ?? null);
-                          setSaved(data.lineup?.source === "explicit");
+                setSaved(data.lineup?.source === "explicit");
               })
               .catch((e) => { console.error("load lineup:", e); setSaved(false); });
           }

@@ -114,7 +114,8 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       const stadiumNameRow = await db.prepare("SELECT stadium_name FROM teams WHERE id = ?")
         .bind(homeTeamId).first<{ stadium_name: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load stadium name", e); return null; });
 
-      // Simulate
+      // Simulate — vypočítej attendance JEDNOU a použij ji všude (jinak by simulace + DB měly různá čísla)
+      const friendlyAttendance = Math.round(20 + Math.random() * 50);
       const result = simulateMatch(rng, {
         home: homeSetup,
         away: awaySetup,
@@ -122,7 +123,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         isHomeAdvantage: false, // přátelák = neutrální
         pitchCondition: stadiumRow?.pitch_condition ?? 50,
         stadiumName: stadiumNameRow?.stadium_name ?? undefined,
-        attendance: Math.round(20 + Math.random() * 50), // malá návštěva
+        attendance: friendlyAttendance,
       });
 
       // Commentary
@@ -158,7 +159,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       ).bind(
         result.homeScore, result.awayScore,
         JSON.stringify(result.events), JSON.stringify(commentary),
-        Math.round(20 + Math.random() * 50),
+        friendlyAttendance,
         stadiumNameRow?.stadium_name ?? null, stadiumRow?.pitch_condition ?? 50, weather,
         JSON.stringify(homeLineupData), JSON.stringify(awayLineupData),
         matchId,
@@ -180,7 +181,8 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       try {
         const { processMatchDayFinances } = await import("../season/finance-processor");
         const gameDate = new Date().toISOString().split("T")[0];
-        const attendance = Math.round(20 + Math.random() * 50);
+        // Reuse stejné attendance jako v simulaci a v matches DB row
+        const attendance = friendlyAttendance;
         const homeResult = result.homeScore > result.awayScore ? "win" : result.homeScore < result.awayScore ? "loss" : "draw";
         const awayResult = homeResult === "win" ? "loss" : homeResult === "loss" ? "win" : "draw";
 

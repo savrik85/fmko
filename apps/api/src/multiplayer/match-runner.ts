@@ -73,7 +73,8 @@ export async function runScheduledMatches(
       // Tím simulace použije "default sestavu" pokud user explicitně nevybral pro tento zápas.
       type LineupRow = { formation: string; tactic: string; players_data: string; is_auto: number; captain_id: string | null };
       const loadLineup = async (tid: string): Promise<LineupRow | null> => {
-        const exact = await db.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC LIMIT 1")
+        // Pokud je víc rows pro stejný (team, calendar) — kopie + user-saved — vyber nejnovější user-saved
+        const exact = await db.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC, submitted_at DESC, id ASC LIMIT 1")
           .bind(tid, calendarId).first<LineupRow>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load lineup exact", e); return null; });
         if (exact) return exact;
         // Fallback: poslední user-saved sestava (jakýkoliv calendar, ne auto)
@@ -398,13 +399,15 @@ export async function runScheduledMatches(
         // Calculate per-player ratings
         const ratings = calculatePlayerRatings(result.events, fullIdMap, 1, result.homeScore, result.awayScore, playerPositions);
 
-        // Home team stats
-        const homeStarterIds = [...homeBuild.idMap.values()].slice(0, 11);
+        // Home team stats — starter IDs musí pocházet z PRE-SIM lineupu (homeLineupPreSim),
+        // ne z idMap.values() která má insertion order. Při substituci by jinak střídající
+        // dostali started=true a starters started=false.
+        const homeStarterIds = homeLineupPreSim.map((p) => homeBuild.idMap.get(p.id) ?? "").filter(Boolean);
         const homeUpdates = extractStatsFromEvents(result.events, homeBuild.idMap, homeStarterIds, ratings, result.playerMinutes);
         await updatePlayerStats(db, season.id, homeTeamId, homeUpdates, result.awayScore === 0).catch((e) => logger.warn({ module: "match-runner" }, "Failed to update home player stats", e));
 
         // Away team stats
-        const awayStarterIds = [...awayBuild.idMap.values()].slice(0, 11);
+        const awayStarterIds = awayLineupPreSim.map((p) => awayBuild.idMap.get(p.id) ?? "").filter(Boolean);
         const awayUpdates = extractStatsFromEvents(result.events, awayBuild.idMap, awayStarterIds, ratings, result.playerMinutes);
         await updatePlayerStats(db, season.id, awayTeamId, awayUpdates, result.homeScore === 0).catch((e) => logger.warn({ module: "match-runner" }, "Failed to update away player stats", e));
 
