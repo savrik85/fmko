@@ -2569,6 +2569,8 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   try {
     // Ligové zápasy z kalendáře
     if (team.league_id) {
+      // Bez date filtru — match strip ukáže všechny scheduled (i ty co cron ještě
+      // nezpracoval), aby šipky odpovídaly tomu, co user vidí v Rozpisu.
       const upcomingLeague = await c.env.DB.prepare(
         `SELECT sc.id as cal_id, sc.game_week, sc.scheduled_at,
           m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name,
@@ -2577,10 +2579,10 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
         JOIN matches m ON m.calendar_id = sc.id
         JOIN teams t1 ON m.home_team_id = t1.id
         JOIN teams t2 ON m.away_team_id = t2.id
-        WHERE sc.league_id = ? AND sc.scheduled_at >= ? AND sc.status = 'scheduled'
+        WHERE sc.league_id = ? AND sc.status = 'scheduled'
           AND (m.home_team_id = ? OR m.away_team_id = ?)
         ORDER BY sc.scheduled_at ASC LIMIT 30`
-      ).bind(teamId, team.league_id, gameDate.toISOString(), teamId, teamId).all();
+      ).bind(teamId, team.league_id, teamId, teamId).all();
       for (const u of upcomingLeague.results) {
         upcomingMatches.push({
           calendarId: u.cal_id as string,
