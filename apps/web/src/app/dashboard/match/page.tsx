@@ -162,7 +162,7 @@ function MatchPage() {
 
   useEffect(() => {
     if (!teamId) return;
-    apiFetch<{ nextMatch: NextMatchInfo | null; lineup: { formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
+    apiFetch<{ nextMatch: NextMatchInfo | null; lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
       `/api/teams/${teamId}/next-match`
     ).then((data) => {
       setNextMatch(data.nextMatch);
@@ -191,6 +191,8 @@ function MatchPage() {
         });
         setSelected(nextSelected);
       } else { autoFill(data.availablePlayers ?? [], "4-4-2"); }
+      // Active preset slot pro tento zápas — z DB
+      setActivePreset(data.lineup?.presetSlot ?? null);
       // Captain: prefer saved captain_id from DB; only auto-pick if none saved
       if (data.lineup?.captainId) {
         setCaptainId(data.lineup.captainId);
@@ -214,7 +216,7 @@ function MatchPage() {
             homeName: target.isHome ? prev.homeName : target.opponentName,
             awayName: target.isHome ? target.opponentName : prev.homeName,
           } : prev);
-          apiFetch<{ lineup: { formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
+          apiFetch<{ lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
             .then((ld) => {
               if (ld.lineup?.players.length === 11) {
                 setFormation(ld.lineup.formation);
@@ -222,6 +224,7 @@ function MatchPage() {
                 setSelected(ld.lineup.players.map((p) => p.playerId));
                 if (ld.lineup.captainId) setCaptainId(ld.lineup.captainId);
               }
+              setActivePreset(ld.lineup?.presetSlot ?? null);
               setSaved(!!ld.lineup);
             })
             .catch((e) => console.error("load lineup from URL:", e));
@@ -305,7 +308,7 @@ function MatchPage() {
       const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
       const res = await apiFetch<{ ok?: boolean; error?: string }>(`/api/teams/${teamId}/lineup`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, captainId, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
+        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, captainId, presetSlot: activePreset, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
       });
       if (res.ok) {
         // Pokud je aktivní preset slot, ulož i tam
@@ -384,11 +387,14 @@ function MatchPage() {
             awayName: um.isHome ? um.opponentName : (prev.isHome ? prev.homeName : prev.awayName),
           } : prev);
           if (teamId) {
-            apiFetch<{ lineup: { formation: string; tactic: string; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${um.calendarId}`)
+            apiFetch<{ lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${um.calendarId}`)
               .then((data) => {
                 if (data.lineup && data.lineup.players.length === 11) {
                   setFormation(data.lineup.formation); setTactic(data.lineup.tactic); setSelected([...new Set(data.lineup.players.map((p) => p.playerId))].slice(0, 11));
+                  if (data.lineup.captainId) setCaptainId(data.lineup.captainId);
                 }
+                // Per-zápas preset slot — různé zápasy mohou mít různé sestavy
+                setActivePreset(data.lineup?.presetSlot ?? null);
                 setSaved(!!data.lineup);
               })
               .catch((e) => { console.error("load lineup:", e); setSaved(false); });

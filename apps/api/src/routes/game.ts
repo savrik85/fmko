@@ -2425,21 +2425,21 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 
   // For friendlies, lookup lineup by match_id; for league by calendar_id
   const lineupQuery = isFriendly
-    ? c.env.DB.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(teamId, match.id as string)
-    : c.env.DB.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(teamId, calendarId!);
+    ? c.env.DB.prepare("SELECT formation, tactic, players_data, is_auto, captain_id, preset_slot FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(teamId, match.id as string)
+    : c.env.DB.prepare("SELECT formation, tactic, players_data, is_auto, captain_id, preset_slot FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(teamId, calendarId!);
 
   // Batch: existing lineup + all players (including injured)
   const [lineupRes, playersRes] = await c.env.DB.batch([
     lineupQuery,
     c.env.DB.prepare("SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.weekly_wage, p.skills, p.life_context, p.personality, p.physical, p.squad_number, p.commute_km, p.suspended_matches, p.is_celebrity, ps.avg_rating, i.days_remaining as injury_days, i.type as injury_type FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.team_id = p.team_id AND ps.season_id = (SELECT id FROM seasons WHERE status = 'active' LIMIT 1) WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') ORDER BY p.overall_rating DESC").bind(teamId),
   ]);
-  let lineup = (lineupRes.results[0] as { formation: string; tactic: string; players_data: string; is_auto: number; captain_id: string | null } | undefined) ?? null;
+  let lineup = (lineupRes.results[0] as { formation: string; tactic: string; players_data: string; is_auto: number; captain_id: string | null; preset_slot: string | null } | undefined) ?? null;
 
   // If no lineup for this specific match, use the last saved lineup as default
   if (!lineup) {
     lineup = await c.env.DB.prepare(
-      "SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
-    ).bind(teamId).first<{ formation: string; tactic: string; players_data: string; is_auto: number; captain_id: string | null }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
+      "SELECT formation, tactic, players_data, is_auto, captain_id, preset_slot FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
+    ).bind(teamId).first<{ formation: string; tactic: string; players_data: string; is_auto: number; captain_id: string | null; preset_slot: string | null }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
   }
   const players = { results: playersRes.results as Record<string, unknown>[] };
 
@@ -2565,6 +2565,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     lineup: lineup ? {
       formation: lineup.formation, tactic: lineup.tactic, isAuto: lineup.is_auto === 1,
       captainId: lineup.captain_id ?? null,
+      presetSlot: lineup.preset_slot ?? null,
       players: (() => { try { return JSON.parse(lineup.players_data); } catch (e) { logger.warn({ module: "game" }, "parse lineup players_data", e); return []; } })(),
     } : null,
     availablePlayers: available,
@@ -2577,13 +2578,14 @@ gameRouter.get("/teams/:teamId/lineup/:calendarId", async (c) => {
   const teamId = c.req.param("teamId");
   const calendarId = c.req.param("calendarId");
   const row = await c.env.DB.prepare(
-    "SELECT formation, tactic, players_data, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ?"
-  ).bind(teamId, calendarId).first<{ formation: string; tactic: string; players_data: string; captain_id: string | null }>();
+    "SELECT formation, tactic, players_data, captain_id, preset_slot FROM lineups WHERE team_id = ? AND calendar_id = ?"
+  ).bind(teamId, calendarId).first<{ formation: string; tactic: string; players_data: string; captain_id: string | null; preset_slot: string | null }>();
   if (!row) return c.json({ lineup: null });
   return c.json({
     lineup: {
       formation: row.formation, tactic: row.tactic,
       captainId: row.captain_id ?? null,
+      presetSlot: row.preset_slot ?? null,
       players: (() => { try { return JSON.parse(row.players_data); } catch { return []; } })(),
     },
   });
@@ -2592,7 +2594,7 @@ gameRouter.get("/teams/:teamId/lineup/:calendarId", async (c) => {
 // POST save lineup for next match
 gameRouter.post("/teams/:teamId/lineup", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ calendarId: string; formation: string; tactic: string; captainId?: string; players: Array<{ playerId: string; matchPosition: string }> }>();
+  const body = await c.req.json<{ calendarId: string; formation: string; tactic: string; captainId?: string; presetSlot?: "A" | "B" | "C" | null; players: Array<{ playerId: string; matchPosition: string }> }>();
 
   if (!body.players || body.players.length !== 11) return c.json({ error: "Sestava musí mít přesně 11 hráčů" }, 400);
   const gkCount = body.players.filter((p) => p.matchPosition === "GK").length;
@@ -2620,13 +2622,14 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
   const existing = await c.env.DB.prepare("SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?")
     .bind(teamId, body.calendarId).first<{ id: string }>();
 
+  const presetSlot = body.presetSlot && ["A","B","C"].includes(body.presetSlot) ? body.presetSlot : null;
   if (existing) {
-    await c.env.DB.prepare("UPDATE lineups SET formation = ?, tactic = ?, players_data = ?, captain_id = ?, is_auto = 0, submitted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
-      .bind(body.formation, body.tactic, JSON.stringify(body.players), body.captainId ?? null, existing.id).run();
+    await c.env.DB.prepare("UPDATE lineups SET formation = ?, tactic = ?, players_data = ?, captain_id = ?, preset_slot = ?, is_auto = 0, submitted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
+      .bind(body.formation, body.tactic, JSON.stringify(body.players), body.captainId ?? null, presetSlot, existing.id).run();
   } else {
     const id = crypto.randomUUID();
-    await c.env.DB.prepare("INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, captain_id, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
-      .bind(id, teamId, body.calendarId, body.formation, body.tactic, JSON.stringify(body.players), body.captainId ?? null).run();
+    await c.env.DB.prepare("INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, captain_id, preset_slot, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
+      .bind(id, teamId, body.calendarId, body.formation, body.tactic, JSON.stringify(body.players), body.captainId ?? null, presetSlot).run();
   }
 
   return c.json({ ok: true });
