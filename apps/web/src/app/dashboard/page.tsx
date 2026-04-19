@@ -605,8 +605,10 @@ export default function DashboardPage() {
                 {upcoming.map((m) => {
                   const opp = m.isHome ? m.awayName : m.homeName;
                   const date = m.scheduledAt ? new Date(m.scheduledAt).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "";
+                  // Schedule endpoint vrací calendarId pro ligový, null pro friendly (kde id = match.id)
+                  const switchId = (m as any).calendarId ?? m.id;
                   return (
-                    <div key={m.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+                    <Link key={m.id} href={`/dashboard/match?calendarId=${switchId}`} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 -mx-2 px-2 rounded transition-colors">
                       <span className="text-xs text-muted tabular-nums w-5">{m.round}.</span>
                       <span className="text-sm font-heading font-bold flex-1 truncate">{opp}</span>
                       <span className={`text-[9px] font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
@@ -620,7 +622,7 @@ export default function DashboardPage() {
                                 : <span className="text-[9px] text-muted" title="Použije se výchozí sestava">✓</span>)
                             : <span className="text-[9px] text-card-red font-bold" title="Bez sestavy — použije se auto">!</span>}
                       <span className="text-[10px] text-muted tabular-nums">{date}</span>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>
