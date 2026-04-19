@@ -438,18 +438,14 @@ function MatchPage() {
                 {nextMatch.isFriendly ? <span className="font-heading font-bold text-pitch-600">Přátelák</span> : `${nextMatch.gameWeek}. kolo`} · {dateStr}
                 {absentPlayers.length > 0 && <span className="ml-2 text-card-red font-heading font-bold">⚠ {absentPlayers.length} nedostupných</span>}
               </div>
-              {/* Prominentní indikátor zvolené sestavy pro tento zápas */}
-              <div className="mt-1 flex items-center justify-center gap-2 text-xs">
-                {lineupSource ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-pitch-500 text-white font-heading font-bold">
-                    {activePreset ? `Sestava ${activePreset}` : "Vlastní sestava"} · {formation} · {(TACTICS.find((t) => t.key === tactic)?.label) ?? tactic}
-                  </span>
-                ) : (
+              {/* Warning jen pokud nic uloženého — info o sestavě je už v presetech + selectorech níže */}
+              {!lineupSource && (
+                <div className="mt-1 flex items-center justify-center gap-2 text-xs">
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-card-red/10 text-card-red font-heading font-bold">
                     ⚠ Bez uložené sestavy — použije se auto
                   </span>
-                )}
-              </div>
+                </div>
+              )}
             </div>
             <button disabled={currentIdx >= upcomingMatches.length - 1} onClick={() => { if (currentIdx < upcomingMatches.length - 1) switchToMatch(upcomingMatches[currentIdx + 1]); }}
               className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors text-lg font-bold">
