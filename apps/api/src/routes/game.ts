@@ -2375,8 +2375,10 @@ gameRouter.delete("/teams/:teamId/classifieds/:id", async (c) => {
 // ═══ LINEUP / NEXT MATCH ═══
 
 // GET next match info + current lineup
+// Optional ?calendarId=X — vrátí konkrétní zápas (calendar entry NEBO friendly match.id), jinak nejbližší
 gameRouter.get("/teams/:teamId/next-match", async (c) => {
   const teamId = c.req.param("teamId");
+  const requestedCalId = c.req.query("calendarId");
 
   const team = await c.env.DB.prepare("SELECT league_id, game_date FROM teams WHERE id = ?")
     .bind(teamId).first<{ league_id: string | null; game_date: string | null }>();
@@ -2384,41 +2386,77 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 
   const gameDate = team.game_date ? new Date(team.game_date) : new Date();
 
-  // Priority: friendly match with lineups_open (needs immediate lineup)
-  const friendlyMatch = await c.env.DB.prepare(
-    `SELECT m.id, m.home_team_id, m.away_team_id, m.created_at,
-       t1.name as home_name, t2.name as away_name,
-       t1.primary_color as home_color, t2.primary_color as away_color
-     FROM matches m
-     JOIN teams t1 ON m.home_team_id = t1.id
-     JOIN teams t2 ON m.away_team_id = t2.id
-     WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'lineups_open' AND m.calendar_id IS NULL
-     ORDER BY m.created_at ASC LIMIT 1`
-  ).bind(teamId, teamId).first<Record<string, unknown>>();
-
-  let match: Record<string, unknown> | null = friendlyMatch ?? null;
+  let match: Record<string, unknown> | null = null;
   let calendarId: string | null = null;
   let gameWeek: number | null = null;
   let scheduledAt: string | null = null;
   let isFriendly = false;
 
-  if (friendlyMatch) {
-    isFriendly = true;
-    scheduledAt = friendlyMatch.created_at as string;
-  } else if (team.league_id) {
-    // Fallback: next league match from calendar
-    const nextCal = await c.env.DB.prepare(
-      "SELECT sc.id, sc.scheduled_at, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.scheduled_at >= ? AND sc.status = 'scheduled' ORDER BY sc.scheduled_at ASC LIMIT 1"
-    ).bind(team.league_id, gameDate.toISOString()).first<{ id: string; scheduled_at: string; game_week: number }>();
-    if (!nextCal) return c.json({ nextMatch: null });
+  // Pokud klient požaduje konkrétní calendarId/matchId, najdi přesně ten zápas
+  if (requestedCalId) {
+    // Zkus calendar entry (ligový)
+    const reqCal = await c.env.DB.prepare(
+      "SELECT id, scheduled_at, game_week FROM season_calendar WHERE id = ?"
+    ).bind(requestedCalId).first<{ id: string; scheduled_at: string; game_week: number }>();
+    if (reqCal) {
+      calendarId = reqCal.id;
+      gameWeek = reqCal.game_week;
+      scheduledAt = reqCal.scheduled_at;
+      match = await c.env.DB.prepare(
+        "SELECT m.id, m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name, t1.primary_color as home_color, t2.primary_color as away_color FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?)"
+      ).bind(reqCal.id, teamId, teamId).first<Record<string, unknown>>();
+    } else {
+      // Možná je to friendly match.id
+      const friend = await c.env.DB.prepare(
+        `SELECT m.id, m.home_team_id, m.away_team_id, m.created_at,
+           t1.name as home_name, t2.name as away_name,
+           t1.primary_color as home_color, t2.primary_color as away_color
+         FROM matches m
+         JOIN teams t1 ON m.home_team_id = t1.id
+         JOIN teams t2 ON m.away_team_id = t2.id
+         WHERE m.id = ? AND m.calendar_id IS NULL AND (m.home_team_id = ? OR m.away_team_id = ?)`
+      ).bind(requestedCalId, teamId, teamId).first<Record<string, unknown>>();
+      if (friend) {
+        match = friend;
+        isFriendly = true;
+        scheduledAt = friend.created_at as string;
+      }
+    }
+  }
 
-    calendarId = nextCal.id;
-    gameWeek = nextCal.game_week;
-    scheduledAt = nextCal.scheduled_at;
+  // Pokud requestedCalId nedohledán nebo nebyl, fallback na default flow:
+  // Priority: friendly match with lineups_open (needs immediate lineup)
+  if (!match) {
+    const friendlyMatch = await c.env.DB.prepare(
+      `SELECT m.id, m.home_team_id, m.away_team_id, m.created_at,
+         t1.name as home_name, t2.name as away_name,
+         t1.primary_color as home_color, t2.primary_color as away_color
+       FROM matches m
+       JOIN teams t1 ON m.home_team_id = t1.id
+       JOIN teams t2 ON m.away_team_id = t2.id
+       WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'lineups_open' AND m.calendar_id IS NULL
+       ORDER BY m.created_at ASC LIMIT 1`
+    ).bind(teamId, teamId).first<Record<string, unknown>>();
 
-    match = await c.env.DB.prepare(
-      "SELECT m.id, m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name, t1.primary_color as home_color, t2.primary_color as away_color FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?)"
-    ).bind(nextCal.id, teamId, teamId).first<Record<string, unknown>>();
+    if (friendlyMatch) {
+      match = friendlyMatch;
+      isFriendly = true;
+      scheduledAt = friendlyMatch.created_at as string;
+    } else if (team.league_id) {
+      // Fallback: next league match from calendar
+      const nextCal = await c.env.DB.prepare(
+        "SELECT sc.id, sc.scheduled_at, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.scheduled_at >= ? AND sc.status = 'scheduled' ORDER BY sc.scheduled_at ASC LIMIT 1"
+      ).bind(team.league_id, gameDate.toISOString()).first<{ id: string; scheduled_at: string; game_week: number }>();
+      if (!nextCal) return c.json({ nextMatch: null });
+
+      calendarId = nextCal.id;
+      gameWeek = nextCal.game_week;
+      scheduledAt = nextCal.scheduled_at;
+
+      match = await c.env.DB.prepare(
+        "SELECT m.id, m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name, t1.primary_color as home_color, t2.primary_color as away_color FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?)"
+      ).bind(nextCal.id, teamId, teamId).first<Record<string, unknown>>();
+    }
   }
 
   if (!match) return c.json({ nextMatch: null });

@@ -131,7 +131,7 @@ export default function MatchPageWrapper() {
 }
 
 function MatchPage() {
-  const { teamId, gameDate: teamGameDate } = useTeam();
+  const { teamId, teamName: ourTeamName, gameDate: teamGameDate } = useTeam();
   const searchParams = useSearchParams();
   const [nextMatch, setNextMatch] = useState<NextMatchInfo | null>(null);
   const [upcomingMatches, setUpcomingMatches] = useState<UpcomingMatch[]>([]);
@@ -163,8 +163,11 @@ function MatchPage() {
 
   useEffect(() => {
     if (!teamId) return;
+    // Pokud URL má ?calendarId=X, načti přímo ten zápas. Jinak default = nejbližší.
+    const urlCalIdInit = searchParams.get("calendarId");
+    const url = urlCalIdInit ? `/api/teams/${teamId}/next-match?calendarId=${urlCalIdInit}` : `/api/teams/${teamId}/next-match`;
     apiFetch<{ nextMatch: NextMatchInfo | null; lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
-      `/api/teams/${teamId}/next-match`
+      url
     ).then((data) => {
       setNextMatch(data.nextMatch);
       setPlayers(data.availablePlayers ?? []);
@@ -212,10 +215,13 @@ function MatchPage() {
       if (urlCalId && data.upcomingMatches) {
         const target = data.upcomingMatches.find((um: UpcomingMatch) => um.calendarId === urlCalId);
         if (target && data.nextMatch && target.calendarId !== data.nextMatch.calendarId) {
+          // Při přepnutí: použij teamName z contextu jako naše jméno (jinak by se míchalo
+          // při přechodu doma↔venku — předchozí prev.homeName mohlo být kdokoliv)
+          const myName = ourTeamName ?? (data.nextMatch.isHome ? data.nextMatch.homeName : data.nextMatch.awayName);
           setNextMatch((prev) => prev ? {
-            ...prev, calendarId: target.calendarId, gameWeek: target.gameWeek, scheduledAt: target.scheduledAt, isHome: target.isHome,
-            homeName: target.isHome ? prev.homeName : target.opponentName,
-            awayName: target.isHome ? target.opponentName : prev.homeName,
+            ...prev, calendarId: target.calendarId, gameWeek: target.gameWeek, scheduledAt: target.scheduledAt, isHome: target.isHome, isFriendly: target.isFriendly,
+            homeName: target.isHome ? myName : target.opponentName,
+            awayName: target.isHome ? target.opponentName : myName,
           } : prev);
           apiFetch<{ lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
             .then((ld) => {
@@ -382,10 +388,12 @@ function MatchPage() {
         const opponentName = nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName;
 
         const switchToMatch = (um: UpcomingMatch) => {
+          // myName z contextu — jinak by se mixovalo při přepínání doma↔venku
+          const myName = ourTeamName ?? (nextMatch?.isHome ? nextMatch.homeName : nextMatch?.awayName ?? "");
           setNextMatch((prev) => prev ? {
             ...prev, calendarId: um.calendarId, gameWeek: um.gameWeek, scheduledAt: um.scheduledAt, isHome: um.isHome, isFriendly: um.isFriendly,
-            homeName: um.isHome ? (prev.isHome ? prev.homeName : prev.awayName) : um.opponentName,
-            awayName: um.isHome ? um.opponentName : (prev.isHome ? prev.homeName : prev.awayName),
+            homeName: um.isHome ? myName : um.opponentName,
+            awayName: um.isHome ? um.opponentName : myName,
           } : prev);
           if (teamId) {
             apiFetch<{ lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${um.calendarId}`)

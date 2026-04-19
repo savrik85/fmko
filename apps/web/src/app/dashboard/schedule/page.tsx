@@ -380,7 +380,9 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
 
   if (isPlayed) return <Link href={`/dashboard/match/${m.id}`}>{inner}</Link>;
   if (canEditLineup) {
-    return <Link href={m.calendarId ? `/dashboard/match?calendarId=${m.calendarId}` : "/dashboard/match"}>{inner}</Link>;
+    // Pro friendly (calendarId=null) použij m.id — BE next-match pro friendly mapuje match.id jako calendarId
+    const switchId = m.calendarId ?? m.id;
+    return <Link href={`/dashboard/match?calendarId=${switchId}`}>{inner}</Link>;
   }
   return inner;
 }
