@@ -10,7 +10,7 @@ import type { BadgePattern } from "@/components/ui";
 
 interface MatchEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; }
 interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number }
-interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[] }
+interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[]; formation?: string; tactic?: string; captainId?: string | null }
 
 interface MatchData {
   id: string; home_team_id: string; away_team_id: string; home_score: number; away_score: number; round: number | null;
@@ -20,6 +20,11 @@ interface MatchData {
   attendance: number | null; stadium_name: string | null; pitch_condition: number | null; weather: string | null;
   home_lineup_data: LineupData | null; away_lineup_data: LineupData | null;
 }
+
+const TACTIC_LABEL: Record<string, string> = {
+  offensive: "Útočná", balanced: "Vyrovnaná", defensive: "Defenzivní",
+  long_ball: "Nakopávané", possession: "Držení míče", pressing: "Vysoký presink",
+};
 
 type Speed = "live" | "fast" | "instant";
 const SPEED_MS: Record<Speed, number> = { live: 3500, fast: 600, instant: 0 };
@@ -657,7 +662,15 @@ export default function MatchReplayPage() {
               }
               return (
               <div key={name} className={ti === 0 ? "border-r border-gray-100" : ""}>
-                <div className="px-3 py-2 font-heading font-bold text-sm" style={{ backgroundColor: `color-mix(in srgb, ${color} 8%, white)` }}>{name}</div>
+                <div className="px-3 py-2 font-heading font-bold text-sm flex items-center justify-between gap-2 flex-wrap" style={{ backgroundColor: `color-mix(in srgb, ${color} 8%, white)` }}>
+                  <span>{name}</span>
+                  {(data.formation || data.tactic) && (
+                    <span className="text-[11px] font-normal text-muted">
+                      {data.formation && <span className="font-bold mr-2">{data.formation}</span>}
+                      {data.tactic && <span>{TACTIC_LABEL[data.tactic] ?? data.tactic}</span>}
+                    </span>
+                  )}
+                </div>
                 {groups.map((g) => {
                   const cfg = posStyle[g.pos] ?? posStyle.MID;
                   return (
@@ -666,7 +679,12 @@ export default function MatchReplayPage() {
                       {g.players.map((p) => (
                         <div key={p.id || p.name} className={`flex items-center gap-2 px-3 py-1.5 border-l-3 ${cfg.border}`}>
                           <PositionBadge position={p.position} />
-                          <span className="text-sm font-heading font-bold flex-1">{p.name}</span>
+                          <span className="text-sm font-heading font-bold flex-1">
+                            {p.name}
+                            {data.captainId && p.id === data.captainId && (
+                              <span className="text-gold-600 ml-1 font-bold" title="Kapitán">©</span>
+                            )}
+                          </span>
                           {p.position !== p.naturalPosition && (
                             <span className="text-amber-500 text-[10px]">({p.naturalPosition})</span>
                           )}

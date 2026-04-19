@@ -13,7 +13,12 @@ interface MatchEvent {
 }
 
 interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number; squadNumber?: number | null }
-interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[] }
+interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[]; formation?: string; tactic?: string; captainId?: string | null }
+
+const TACTIC_LABEL: Record<string, string> = {
+  offensive: "Útočná", balanced: "Vyrovnaná", defensive: "Defenzivní",
+  long_ball: "Nakopávané", possession: "Držení míče", pressing: "Vysoký presink",
+};
 
 interface MatchDetail {
   id: string; home_team_id: string; away_team_id: string;
@@ -196,7 +201,15 @@ export default function MatchDetailPage() {
             return (
             <div key={label} className="card overflow-hidden">
               <div className="px-3 py-2 border-b border-gray-100" style={{ backgroundColor: `color-mix(in srgb, ${color} 10%, white)` }}>
-                <span className="font-heading font-bold text-sm">{label}</span>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="font-heading font-bold text-sm">{label}</span>
+                  {(data.formation || data.tactic) && (
+                    <span className="text-[11px] text-muted">
+                      {data.formation && <span className="font-heading font-bold mr-2">{data.formation}</span>}
+                      {data.tactic && <span>{TACTIC_LABEL[data.tactic] ?? data.tactic}</span>}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="divide-y divide-gray-100">
                 {groups.map((g) => {
@@ -221,6 +234,9 @@ export default function MatchDetailPage() {
                               <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
                             ) : (
                               <span className="font-heading font-bold">{p.name}</span>
+                            )}
+                            {data.captainId && p.id === data.captainId && (
+                              <span className="text-gold-600 text-sm ml-1.5 font-bold align-middle" title="Kapitán">©</span>
                             )}
                             {p.position !== p.naturalPosition && (
                               <span className="text-amber-500 text-xs ml-1.5" title={`Přirozená pozice: ${p.naturalPosition}`}>({p.naturalPosition})</span>

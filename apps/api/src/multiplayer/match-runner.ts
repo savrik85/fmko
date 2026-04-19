@@ -342,13 +342,14 @@ export async function runScheduledMatches(
       );
 
       // Build lineup data for storage (name, position, number, rating)
-      const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>) => {
+      const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>, formation: string, tactic: string, captainEngineId?: number) => {
         const mapPlayer = (p: typeof homeLineup[0]) => ({
           id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`,
           position: p.matchPosition ?? p.position, naturalPosition: p.position,
           rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5),
         });
-        return { starters: lineup.map(mapPlayer), subs: subs.map(mapPlayer) };
+        const captainDbId = captainEngineId != null ? (idMap.get(captainEngineId) ?? null) : null;
+        return { starters: lineup.map(mapPlayer), subs: subs.map(mapPlayer), formation, tactic, captainId: captainDbId };
       };
 
       // Collect absence data for both teams
@@ -367,8 +368,8 @@ export async function runScheduledMatches(
         result.homeScore, result.awayScore,
         JSON.stringify(result.events), JSON.stringify(commentary),
         attendance, stadiumName, pitchCondition, weather,
-        JSON.stringify(buildLineupData(homeLineupPreSim, homeSubsPreSim, homeBuild.idMap)),
-        JSON.stringify(buildLineupData(awayLineupPreSim, awaySubsPreSim, awayBuild.idMap)),
+        JSON.stringify(buildLineupData(homeLineupPreSim, homeSubsPreSim, homeBuild.idMap, homeFormation, homeTactic, homeCaptainEngineId)),
+        JSON.stringify(buildLineupData(awayLineupPreSim, awaySubsPreSim, awayBuild.idMap, awayFormation, awayTactic, awayCaptainEngineId)),
         matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null,
         matchId,
       ).run();
