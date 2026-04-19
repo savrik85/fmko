@@ -962,10 +962,11 @@ matchesRouter.post("/teams/:teamId/challenge/:opponentTeamId", async (c) => {
     .bind(opponentTeamId).first<{ id: string; name: string; user_id: string }>();
   if (!opponent || opponent.user_id === "ai") return c.json({ error: "Přáteláky lze hrát pouze proti hráčským týmům" }, 400);
 
-  // Přátelské zápasy jsou zdarma (na trénink taktiky a sehranosti).
+  // Check budget
   const team = await c.env.DB.prepare("SELECT name, budget, game_date FROM teams WHERE id = ?")
     .bind(teamId).first<{ name: string; budget: number; game_date: string }>();
   if (!team) return c.json({ error: "Team not found" }, 404);
+  if (team.budget < 1000) return c.json({ error: "Nedostatek peněz (min 1 000 Kč)" }, 400);
 
   // Cooldown: 3 game days since last challenge
   const lastChallenge = await c.env.DB.prepare(
@@ -1040,10 +1041,10 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
   if (!claimed) return c.json({ error: "Výzva nenalezena nebo už zpracována" }, 404);
   const challenge = claimed;
 
-  // Přátelské zápasy jsou zdarma — žádná kontrola budgetu
+  // Check budget
   const team = await c.env.DB.prepare("SELECT name, budget, game_date FROM teams WHERE id = ?")
     .bind(teamId).first<{ name: string; budget: number; game_date: string }>();
-  if (!team) return c.json({ error: "Team not found" }, 404);
+  if (!team || team.budget < 1000) return c.json({ error: "Nedostatek peněz (min 1 000 Kč)" }, 400);
 
   const challengerTeamId = challenge.challenger_team_id as string;
   const challenger = await c.env.DB.prepare("SELECT name, game_date FROM teams WHERE id = ?")
@@ -1068,7 +1069,10 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
     if (friendlyRes.results.length > 0) return c.json({ error: "Jeden z týmů už dnes hrál nebo má naplánovaný přátelák" }, 400);
   }
 
-  // Přátelské zápasy jsou zdarma — bez transakce
+  // Charge both teams 1000 Kč
+  const { recordTransaction } = await import("../season/finance-processor");
+  await recordTransaction(c.env.DB, teamId, "event", -1000, `Přátelák: cestovné a rozhodčí`, team.game_date);
+  await recordTransaction(c.env.DB, challengerTeamId, "event", -1000, `Přátelák: cestovné a rozhodčí`, team.game_date);
 
   // Create match
   const matchId = uuid();

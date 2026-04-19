@@ -118,7 +118,7 @@ export default function FriendlyPage() {
                     <div className="flex-1 min-w-0">
                       <div className="font-heading font-bold text-base">{ch.challengerName}</div>
                       {ch.message && <div className="text-sm text-muted italic">"{ch.message}"</div>}
-                      <div className="text-xs text-muted">Přátelský zápas • <span className="text-pitch-600 font-bold">zdarma</span></div>
+                      <div className="text-xs text-muted">Přátelský zápas • 1 000 Kč</div>
                     </div>
                     <div className="flex gap-2 shrink-0">
                       <button onClick={() => acceptChallenge(ch.id)} disabled={sending === ch.id}
