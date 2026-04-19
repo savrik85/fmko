@@ -857,9 +857,11 @@ export async function buildMatchPlayers(
  * Validates that copied players still exist and are active.
  */
 export async function copyOrCreateLineup(db: D1Database, teamId: string, calendarId: string): Promise<void> {
+  // Načti poslední user-saved lineup VČETNĚ captain_id a preset_slot — tyto metadata
+  // se musí přenést do nové row pro daný calendar, jinak se UI/simulace tváří že je auto.
   const lastLineup = await db.prepare(
-    "SELECT formation, tactic, players_data FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
-  ).bind(teamId).first<{ formation: string; tactic: string; players_data: string }>().catch((e) => { logger.error({ module: "match-runner" }, "copyOrCreateLineup: query failed", e); return null; });
+    "SELECT formation, tactic, players_data, captain_id, preset_slot FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1"
+  ).bind(teamId).first<{ formation: string; tactic: string; players_data: string; captain_id: string | null; preset_slot: string | null }>().catch((e) => { logger.error({ module: "match-runner" }, "copyOrCreateLineup: query failed", e); return null; });
 
   if (lastLineup) {
     const picks = JSON.parse(lastLineup.players_data) as Array<{ playerId: string; matchPosition?: string }>;
@@ -870,10 +872,12 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
     const validPicks = picks.filter((p) => activeSet.has(p.playerId));
 
     if (validPicks.length >= 11) {
+      // Pokud captain je v aktivních hráčích, ponech; jinak null (engine pak najde podle leadership)
+      const captainStillActive = lastLineup.captain_id && activeSet.has(lastLineup.captain_id) ? lastLineup.captain_id : null;
       try {
         await db.prepare(
-          "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
-        ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, JSON.stringify(validPicks.slice(0, 11))).run();
+          "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, captain_id, preset_slot, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+        ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, JSON.stringify(validPicks.slice(0, 11)), captainStillActive, lastLineup.preset_slot).run();
         return;
       } catch (e) {
         logger.error({ module: "match-runner" }, `copyOrCreateLineup INSERT failed for ${teamId} cal=${calendarId}`, e);
