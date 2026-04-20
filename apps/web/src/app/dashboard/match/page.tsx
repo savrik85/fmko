@@ -351,11 +351,15 @@ function MatchPage() {
         body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, captainId, presetSlot: activePreset, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
       });
       if (res.ok) {
-        // POZN: pokud user změnil hráče vůči presetu, nechceme presetový snapshot
-        // přepsat — preset by měl zůstat tím co user explicitně uložil přes "Uložit jako preset".
-        // Per-zápas lineup se uloží s preset_slot referencí, ale samotný preset zůstane.
         setSaved(true);
         setLineupSource("explicit");
+        // Backend při save s presetSlot auto-upsertuje do lineup_presets —
+        // reload lokálního presets state aby tab "Sestava A prázdná" přešel na "Sestava A 4-4-2"
+        if (activePreset) {
+          apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`)
+            .then((d) => setPresets(d.presets ?? { A: null, B: null, C: null }))
+            .catch((e) => console.warn("reload presets:", e));
+        }
       }
       else { setSaveError(res.error ?? "Nepodařilo se uložit sestavu"); }
     } catch (e: unknown) {
