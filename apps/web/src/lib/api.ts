@@ -32,6 +32,22 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return res.json() as Promise<T>;
 }
 
+// Wrapper pro user-iniciované akce: při chybě zobrazí alert s API zprávou.
+// Vrací true při úspěchu, false při chybě (caller se rozhodne, jestli refreshovat).
+export async function apiAction<T>(promise: Promise<T>, fallbackMessage = "Akce se nezdařila"): Promise<boolean> {
+  try {
+    await promise;
+    return true;
+  } catch (e) {
+    console.error(fallbackMessage + ":", e);
+    if (typeof window !== "undefined") {
+      const msg = (e as Error)?.message;
+      alert(msg && msg !== "API error" ? msg : fallbackMessage);
+    }
+    return false;
+  }
+}
+
 export interface Village {
   id: string;
   name: string;

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { apiFetch, type Player } from "@/lib/api";
+import { apiFetch, apiAction, type Player } from "@/lib/api";
 import { Spinner, SectionLabel, PositionBadge, useConfirm } from "@/components/ui";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -1234,8 +1234,7 @@ export default function TransfersPage() {
                       <button
                         onClick={async () => {
                           if (!teamId) return;
-                          await apiFetch(`/api/teams/${teamId}/listings/${l.id}`, { method: "DELETE" }).catch((e) => console.error("Transfer action failed:", e));
-                          await refresh();
+                          if (await apiAction(apiFetch(`/api/teams/${teamId}/listings/${l.id}`, { method: "DELETE" }), "Stažení inzerátu se nezdařilo")) await refresh();
                         }}
                         className="shrink-0 py-1 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
                       >
@@ -1255,15 +1254,13 @@ export default function TransfersPage() {
                               <button onClick={async () => {
                                 const ok = await confirm({ title: `Přijmout nabídku ${formatCZK(b.amount)}?`, description: `Od: ${b.bidderName}`, confirmLabel: "Přijmout" });
                                 if (!ok || !teamId) return;
-                                await apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }).catch((e) => console.error("Transfer action failed:", e));
-                                await refresh();
+                                if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
                               }} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                                 Přijmout
                               </button>
                               <button onClick={async () => {
                                 if (!teamId) return;
-                                await apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }).catch((e) => console.error("Transfer action failed:", e));
-                                await refresh();
+                                if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }), "Odmítnutí nabídky se nezdařilo")) await refresh();
                               }} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                                 Odmítnout
                               </button>
@@ -1430,8 +1427,7 @@ export default function TransfersPage() {
                             : `Za ${o.first_name} ${o.last_name}`;
                           const ok = await confirm({ title: `Přijmout ${formatCZK(amount)}?`, description: desc, confirmLabel: "Přijmout" });
                           if (!ok || !teamId) return;
-                          await apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }).catch((e) => console.error("Transfer action failed:", e));
-                          await refresh();
+                          if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
                         }} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                           Přijmout
                         </button>
@@ -1443,13 +1439,13 @@ export default function TransfersPage() {
                             defaultPrice: Math.round(currentAmount * 1.25),
                             onConfirm: async (price) => {
                               if (!teamId) return;
-                              await apiFetch(`/api/teams/${teamId}/offers/${o.id}/counter`, {
+                              const ok = await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/counter`, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ amount: price }),
-                              }).catch((e) => console.error("counter offer:", e));
+                              }), "Protinabídka se nezdařila");
                               setPriceDialog(null);
-                              await refresh();
+                              if (ok) await refresh();
                             },
                           });
                         }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
@@ -1457,8 +1453,7 @@ export default function TransfersPage() {
                         </button>
                         <button onClick={async () => {
                           if (!teamId) return;
-                          await apiFetch(`/api/teams/${teamId}/offers/${o.id}/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch((e) => console.error("Transfer action failed:", e));
-                          await refresh();
+                          if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }), "Odmítnutí nabídky se nezdařilo")) await refresh();
                         }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                           Odmítnout
                         </button>
@@ -1523,8 +1518,7 @@ export default function TransfersPage() {
                               : `Za ${o.first_name} ${o.last_name}`;
                             const ok = await confirm({ title: `Přijmout protinabídku ${formatCZK(amount)}?`, description: desc, confirmLabel: "Přijmout" });
                             if (!ok || !teamId) return;
-                            await apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }).catch((e) => console.error("Transfer action failed:", e));
-                            await refresh();
+                            if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }), "Přijetí protinabídky se nezdařilo")) await refresh();
                           }} className="py-1.5 px-4 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                             Přijmout
                           </button>
@@ -1536,13 +1530,13 @@ export default function TransfersPage() {
                               defaultPrice: Math.round(currentAmount * 0.9),
                               onConfirm: async (price) => {
                                 if (!teamId) return;
-                                await apiFetch(`/api/teams/${teamId}/offers/${o.id}/counter`, {
+                                const ok = await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/counter`, {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({ amount: price }),
-                                }).catch((e) => console.error("counter offer:", e));
+                                }), "Protinabídka se nezdařila");
                                 setPriceDialog(null);
-                                await refresh();
+                                if (ok) await refresh();
                               },
                             });
                           }} className="py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
@@ -1554,8 +1548,7 @@ export default function TransfersPage() {
                         )}
                         <button onClick={async () => {
                           if (!teamId) return;
-                          await apiFetch(`/api/teams/${teamId}/offers/${o.id}`, { method: "DELETE" }).catch((e) => console.error("Transfer action failed:", e));
-                          await refresh();
+                          if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}`, { method: "DELETE" }), "Stažení nabídky se nezdařilo")) await refresh();
                         }} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                           Stáhnout
                         </button>
@@ -1611,9 +1604,7 @@ export default function TransfersPage() {
                           confirmLabel: "Ukončit",
                         });
                         if (!ok || !teamId) return;
-                        await apiFetch(`/api/teams/${teamId}/loans/${p.id}/terminate`, { method: "POST" })
-                          .catch((e) => console.error("terminate loan:", e));
-                        await refresh();
+                        if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${p.id}/terminate`, { method: "POST" }), "Ukončení hostování se nezdařilo")) await refresh();
                       }}
                       className="shrink-0 py-1 px-3 rounded-lg text-xs font-heading font-bold bg-card-red/10 text-card-red hover:bg-card-red/20 transition-colors"
                     >
@@ -1767,11 +1758,10 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
                             description: `${p.position}, ${p.age} let, rating ${p.overall_rating}`,
                             defaultPrice: Math.round((p.overall_rating ?? 50) * 50),
                             onConfirm: async (price: number) => {
-                              await apiFetch(`/api/teams/${teamId}/players/${p.id}/list`, {
+                              if (await apiAction(apiFetch(`/api/teams/${teamId}/players/${p.id}/list`, {
                                 method: "POST", headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ askingPrice: price }),
-                              }).catch((e) => console.error("Transfer action failed:", e));
-                              await refresh();
+                              }), "Vystavení na trh se nezdařilo")) await refresh();
                             },
                           });
                         }} className="py-1 px-2.5 rounded text-xs font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
@@ -1785,8 +1775,7 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
                           confirmLabel: "Uvolnit",
                         });
                         if (!ok) return;
-                        await apiFetch(`/api/teams/${teamId}/players/${p.id}/release`, { method: "POST" }).catch((e) => console.error("Transfer action failed:", e));
-                        await refresh();
+                        if (await apiAction(apiFetch(`/api/teams/${teamId}/players/${p.id}/release`, { method: "POST" }), "Uvolnění hráče se nezdařilo")) await refresh();
                       }} className="py-1 px-2.5 rounded text-xs font-heading font-bold bg-card-red text-white hover:bg-red-600 transition-colors">
                         Uvolnit
                       </button>
