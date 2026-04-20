@@ -356,13 +356,65 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
 
   const remainingInfo = await countRemainingMatchDays(c.env.DB, teamId);
 
-  // Forecast: weekly net pořád, ale nesmíme zapomenout na splátky půjčky
-  // Splátky jsou per-match, nikoliv per-week. Odhadneme ~2 zápasy/měsíc → ~0.5/týden
-  const weeklyLoanRepayment = activeLoan
-    ? Math.round(activeLoan.per_match_installment * 0.5)
+  // Přesný forecast: načteme datumy zbývajících ligových zápasů a pro každý
+  // příští týden spočítáme kolik splátek do té doby proběhne.
+  const matchDatesRows = remainingInfo.seasonId
+    ? await c.env.DB.prepare(
+        `SELECT sc.scheduled_at FROM matches m
+         JOIN season_calendar sc ON m.calendar_id = sc.id
+         JOIN leagues l ON sc.league_id = l.id
+         WHERE l.season_id = ?
+           AND (m.home_team_id = ? OR m.away_team_id = ?)
+           AND m.status = 'scheduled'
+         ORDER BY sc.scheduled_at`
+      ).bind(remainingInfo.seasonId, teamId, teamId).all<{ scheduled_at: string }>()
+        .catch((e) => { logger.warn({ module: "game" }, "load scheduled match dates", e); return { results: [] as { scheduled_at: string }[] }; })
+    : { results: [] as { scheduled_at: string }[] };
+
+  const matchTimestamps = (matchDatesRows.results ?? [])
+    .map((r) => new Date(r.scheduled_at).getTime())
+    .filter((t) => !Number.isNaN(t));
+
+  const perMatchInstallment = activeLoan?.per_match_installment ?? 0;
+  const installmentsRemaining = activeLoan
+    ? activeLoan.total_installments - activeLoan.installments_paid
+    : 0;
+  const loanRemaining = activeLoan?.remaining ?? 0;
+
+  const now = Date.now();
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+  // Vrátí kumulovanou částku splacenou po uplynutí N týdnů.
+  const loanDrainAfterWeeks = (weeks: number): number => {
+    if (installmentsRemaining <= 0 || perMatchInstallment <= 0) return 0;
+    const cutoff = now + weeks * WEEK_MS;
+    const matchesPlayedBy = matchTimestamps.filter((t) => t <= cutoff).length;
+    const installments = Math.min(installmentsRemaining, matchesPlayedBy);
+    // Poslední splátka dorovnává zbytek (kvůli ceil zaokrouhlení při uzavření)
+    if (installments >= installmentsRemaining) return loanRemaining;
+    return installments * perMatchInstallment;
+  };
+
+  // Forecast series: 17 bodů (dnes + 16 týdnů)
+  const forecastSeries = Array.from({ length: WEEKS_PER_SEASON + 1 }, (_, w) => ({
+    week: w,
+    budget: (team.budget as number) + weeklyNet * w - loanDrainAfterWeeks(w),
+  }));
+
+  const in4Weeks = forecastSeries[4]?.budget ?? (team.budget as number);
+  const inSeason = forecastSeries[WEEKS_PER_SEASON]?.budget ?? (team.budget as number);
+
+  // Bankrot: první týden kde budget < 0
+  const bankruptIdx = forecastSeries.findIndex((p, i) => i > 0 && p.budget < 0);
+  const weeksUntilBankrupt = bankruptIdx > 0 ? bankruptIdx : null;
+
+  // Reálný průměrný "loanRepayment / týden" pro zobrazení v UI
+  const weeklyLoanRepayment = installmentsRemaining > 0 && matchTimestamps.length > 0
+    ? Math.round(loanRemaining / Math.max(1, Math.ceil(
+        (matchTimestamps[Math.min(matchTimestamps.length, installmentsRemaining) - 1] - now) / WEEK_MS
+      )))
     : 0;
   const effectiveWeeklyNet = weeklyNet - weeklyLoanRepayment;
-  const weeksUntilBankrupt = effectiveWeeklyNet < 0 ? Math.floor((team.budget as number) / Math.abs(effectiveWeeklyNet)) : null;
 
   return c.json({
     budget: team.budget,
@@ -393,8 +445,9 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
     forecast: {
       weeklyNet: effectiveWeeklyNet,
       weeksUntilBankrupt,
-      in4Weeks: (team.budget as number) + effectiveWeeklyNet * 4,
-      inSeason: (team.budget as number) + effectiveWeeklyNet * WEEKS_PER_SEASON,
+      in4Weeks,
+      inSeason,
+      series: forecastSeries,
     },
     loan: activeLoan ? {
       id: activeLoan.id,

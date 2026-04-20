@@ -35,7 +35,13 @@ interface BudgetData {
     net: number;
     netWithLoan: number;
   };
-  forecast: { weeklyNet: number; weeksUntilBankrupt: number | null; in4Weeks: number; inSeason: number };
+  forecast: {
+    weeklyNet: number;
+    weeksUntilBankrupt: number | null;
+    in4Weeks: number;
+    inSeason: number;
+    series?: { week: number; budget: number }[];
+  };
   loan: ActiveLoan | null;
   remainingMatches: number;
   purchaseBlocked: boolean;
@@ -462,15 +468,18 @@ function FlowsTab({ data }: { data: BudgetData }) {
 // ────────────────────────────────────────────────────────────────────────────
 
 function ForecastTab({ data }: { data: BudgetData }) {
-  // 16-week line: vykreslíme jednoduchý CSS bar chart
-  const weeksToShow = 16;
+  // Použijeme přesnou sérii z BE (zahrnuje dynamické splátky půjčky podle kalendáře).
+  // Fallback: lineární aproximace pokud BE ještě neposílá series.
   const points = useMemo(() => {
+    if (data.forecast.series && data.forecast.series.length > 0) {
+      return data.forecast.series.map((p) => ({ week: p.week, value: p.budget }));
+    }
     const pts: { week: number; value: number }[] = [];
-    for (let w = 0; w <= weeksToShow; w++) {
+    for (let w = 0; w <= 16; w++) {
       pts.push({ week: w, value: data.budget + data.forecast.weeklyNet * w });
     }
     return pts;
-  }, [data.budget, data.forecast.weeklyNet]);
+  }, [data.forecast.series, data.budget, data.forecast.weeklyNet]);
 
   const values = points.map((p) => p.value);
   const minV = Math.min(0, ...values);
@@ -533,7 +542,10 @@ function ForecastTab({ data }: { data: BudgetData }) {
       <div className="card p-4 sm:p-5">
         <SectionLabel>Předpoklady výpočtu</SectionLabel>
         <ul className="mt-2 text-sm text-muted space-y-1">
-          <li>• Týdenní bilance <span className="font-heading font-bold text-ink tabular-nums">{data.weekly.netWithLoan >= 0 ? "+" : ""}{formatCZK(data.weekly.netWithLoan)}</span> (vč. splátky půjčky)</li>
+          <li>• Týdenní bilance <span className="font-heading font-bold text-ink tabular-nums">{data.weekly.net >= 0 ? "+" : ""}{formatCZK(data.weekly.net)}</span> (bez půjčky)</li>
+          {data.loan && (
+            <li>• Splátka <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(data.loan.perMatchInstallment)}</span> × {data.loan.installmentsRemaining} zápasů = {formatCZK(data.loan.remaining)} do doplacení</li>
+          )}
           <li>• Bez nepravidelných příjmů (vstupné, bufet, přestupy, bonusy)</li>
           <li>• Bez jednorázových nákupů (upgrady, inzeráty, registrace)</li>
           <li>• Zbývá zápasových dní v sezóně: <span className="font-heading font-bold text-ink tabular-nums">{data.remainingMatches}</span></li>
