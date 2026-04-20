@@ -531,8 +531,8 @@ export async function processCashLoanRepayment(
 
   if (newStatus === "paid") {
     await db.prepare(
-      "UPDATE cash_loans SET remaining = 0, installments_paid = ?, status = 'paid', paid_off_at = datetime('now') WHERE id = ?"
-    ).bind(newPaid, loan.id).run().catch((e) => logger.warn({ module: "finance" }, "mark loan paid", e));
+      "UPDATE cash_loans SET remaining = 0, installments_paid = ?, status = 'paid', paid_off_at = ? WHERE id = ?"
+    ).bind(newPaid, new Date().toISOString(), loan.id).run().catch((e) => logger.warn({ module: "finance" }, "mark loan paid", e));
   } else {
     await db.prepare(
       "UPDATE cash_loans SET remaining = ?, installments_paid = ? WHERE id = ?"

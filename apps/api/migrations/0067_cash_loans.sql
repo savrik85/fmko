@@ -6,16 +6,16 @@ CREATE TABLE IF NOT EXISTS cash_loans (
   id TEXT PRIMARY KEY,
   team_id TEXT NOT NULL,
   season_id TEXT NOT NULL,
-  principal INTEGER NOT NULL,                  -- půjčená částka (3000-40000)
-  interest_rate REAL NOT NULL DEFAULT 0.15,    -- 15%
-  total_to_repay INTEGER NOT NULL,             -- principal * (1 + interest_rate)
-  remaining INTEGER NOT NULL,                  -- kolik ještě doplatit
-  total_installments INTEGER NOT NULL,         -- počet splátek (zápasových dní při uzavření)
+  principal INTEGER NOT NULL,
+  interest_rate REAL NOT NULL DEFAULT 0.15,
+  total_to_repay INTEGER NOT NULL,
+  remaining INTEGER NOT NULL,
+  total_installments INTEGER NOT NULL,
   installments_paid INTEGER NOT NULL DEFAULT 0,
-  per_match_installment INTEGER NOT NULL,      -- rovnoměrná splátka
+  per_match_installment INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paid','defaulted')),
   taken_game_date TEXT NOT NULL,
-  taken_at TEXT NOT NULL DEFAULT (datetime('now')),
+  taken_at TEXT NOT NULL,
   paid_off_at TEXT
 );
 

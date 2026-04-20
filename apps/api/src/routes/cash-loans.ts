@@ -145,14 +145,15 @@ cashLoansRouter.post("/teams/:teamId/cash-loans", async (c) => {
   const gameDate = teamRow?.game_date ?? new Date().toISOString().slice(0, 10);
   const loanId = crypto.randomUUID();
 
+  const takenAt = new Date().toISOString();
   await c.env.DB.prepare(
     `INSERT INTO cash_loans
       (id, team_id, season_id, principal, interest_rate, total_to_repay, remaining,
-       total_installments, installments_paid, per_match_installment, status, taken_game_date)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'active', ?)`
+       total_installments, installments_paid, per_match_installment, status, taken_game_date, taken_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'active', ?, ?)`
   ).bind(
     loanId, teamId, remainingInfo.seasonId, amount, INTEREST_RATE, totalToRepay, totalToRepay,
-    totalInstallments, perMatchInstallment, gameDate,
+    totalInstallments, perMatchInstallment, gameDate, takenAt,
   ).run().catch((e) => { logger.error({ module: "cash-loans" }, "insert cash loan failed", e); throw e; });
 
   await recordTransaction(
