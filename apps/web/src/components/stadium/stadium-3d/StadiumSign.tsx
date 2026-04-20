@@ -9,6 +9,14 @@ interface StadiumSignProps {
   teamColor: string;
 }
 
+function isLightColor(hex: string): boolean {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 160;
+}
+
 /**
  * Reklamní cedule s názvem stadionu — velký billboard na 2 sloupcích.
  * Text je vyrenderovaný do canvas texture (bez external font dependencies).
@@ -28,11 +36,14 @@ export function StadiumSign({ name, position, teamColor }: StadiumSignProps) {
     // Pozadí v týmové barvě
     ctx.fillStyle = teamColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    // Bílý pruh uprostřed pro lepší kontrast
-    ctx.fillStyle = "#ffffff";
+    // Pro světlé teamColor použít tmavé pozadí + světlý text, jinak bílý pruh + barevný text
+    const lightTeam = isLightColor(teamColor);
+    const stripeColor = lightTeam ? "#1a1a1a" : "#ffffff";
+    const textColor = lightTeam ? "#ffffff" : teamColor;
+    ctx.fillStyle = stripeColor;
     ctx.fillRect(20, 20, canvas.width - 40, canvas.height - 40);
 
-    ctx.fillStyle = teamColor;
+    ctx.fillStyle = textColor;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
@@ -73,7 +84,7 @@ export function StadiumSign({ name, position, teamColor }: StadiumSignProps) {
     }
 
     ctx.font = `bold ${chosen.fontSize}px Arial, sans-serif`;
-    ctx.fillStyle = teamColor;
+    ctx.fillStyle = textColor;
     const lineHeight = chosen.fontSize * 1.15;
     const startY = canvas.height / 2 - ((chosen.lines.length - 1) * lineHeight) / 2;
     chosen.lines.forEach((line, i) => {
