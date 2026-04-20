@@ -2723,6 +2723,17 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
     return c.json({ error: `${invalid.length} hráč(ů) není dostupných (zranění, suspendace nebo nepatří do týmu)` }, 400);
   }
 
+  // Generátorové absence (Práce/Osobní/Zdraví/Jiné) — sdílený helper, stejný seed jako /next-match a simulace.
+  const { resolveMatchContext, getAbsentPlayerIds } = await import("../events/match-absences");
+  const absenceCtx = await resolveMatchContext(c.env.DB, teamId, body.calendarId);
+  if (absenceCtx) {
+    const absentIds = await getAbsentPlayerIds(c.env.DB, teamId, absenceCtx);
+    const absentInLineup = playerIds.filter((id) => absentIds.has(id));
+    if (absentInLineup.length > 0) {
+      return c.json({ error: `${absentInLineup.length} hráč(ů) má omluvu pro tento zápas a nemůže hrát` }, 400);
+    }
+  }
+
   // Captain musí být v lineupu (pokud je vyplněn). Jinak nullify.
   const captainId = body.captainId && playerIds.includes(body.captainId) ? body.captainId : null;
 
@@ -2820,6 +2831,11 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
   const slot = c.req.param("slot") as PresetSlot;
   if (!PRESET_SLOTS.includes(slot)) return c.json({ error: "Neplatný slot" }, 400);
 
+  // Optional calendarId — pokud je zadán, absentní hráče pro daný zápas auto-substituujeme.
+  // Bez calendarId funguje endpoint jako dřív (jen injury/suspension substituce).
+  const body = await c.req.json<{ calendarId?: string }>().catch(() => ({} as { calendarId?: string }));
+  const calendarId = body.calendarId;
+
   const preset = await c.env.DB.prepare(
     "SELECT formation, tactic, captain_id, players_data FROM lineup_presets WHERE team_id = ? AND slot = ?"
   ).bind(teamId, slot).first<{ formation: string; tactic: string; captain_id: string | null; players_data: string }>();
@@ -2827,9 +2843,15 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
 
   const presetPlayers: Array<{ playerId: string; matchPosition: string }> = (() => { try { return JSON.parse(preset.players_data); } catch { return []; } })();
 
-  // Auto-substitute: hráči co už nejsou v týmu / jsou zranění/sustpenduj
-  const playerIds = presetPlayers.map((p) => p.playerId);
-  const placeholders = playerIds.length > 0 ? playerIds.map(() => "?").join(",") : "''";
+  // Generátorové absence pro konkrétní zápas (pokud calendarId) — sdílený helper.
+  let absentIds = new Set<string>();
+  if (calendarId) {
+    const { resolveMatchContext, getAbsentPlayerIds } = await import("../events/match-absences");
+    const ctx = await resolveMatchContext(c.env.DB, teamId, calendarId);
+    if (ctx) absentIds = await getAbsentPlayerIds(c.env.DB, teamId, ctx);
+  }
+
+  // Auto-substitute: hráči co už nejsou v týmu / jsou zranění/suspendovaní / absentní pro daný zápas
   const allPlayers = await c.env.DB.prepare(
     `SELECT p.id, p.position, p.overall_rating,
        (CASE WHEN i.days_remaining > 0 OR (p.suspended_matches IS NOT NULL AND p.suspended_matches > 0) OR p.status != 'active' THEN 1 ELSE 0 END) as unavailable
@@ -2837,6 +2859,7 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
      WHERE p.team_id = ?`
   ).bind(teamId).all<{ id: string; position: string; overall_rating: number; unavailable: number }>();
 
+  const isUnavailable = (p: { id: string; unavailable: number }) => p.unavailable === 1 || absentIds.has(p.id);
   const playerMap = new Map(allPlayers.results.map((p) => [p.id, p]));
   const used = new Set<string>();
   const warnings: string[] = [];
@@ -2844,14 +2867,14 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
   // Helper na slot s undefined-safe substitucí
   const finalPlayersRaw: Array<{ playerId: string; matchPosition: string } | null> = presetPlayers.map((slot) => {
     const stored = playerMap.get(slot.playerId);
-    if (stored && !stored.unavailable && !used.has(slot.playerId)) {
+    if (stored && !isUnavailable(stored) && !used.has(slot.playerId)) {
       used.add(slot.playerId);
       return slot;
     }
     // substitute — preferuj stejnou pozici, pak cokoliv dostupné
-    const repl = allPlayers.results.filter((x) => !x.unavailable && !used.has(x.id) && x.position === slot.matchPosition)
+    const repl = allPlayers.results.filter((x) => !isUnavailable(x) && !used.has(x.id) && x.position === slot.matchPosition)
       .sort((a, b) => b.overall_rating - a.overall_rating)[0]
-      ?? allPlayers.results.filter((x) => !x.unavailable && !used.has(x.id))
+      ?? allPlayers.results.filter((x) => !isUnavailable(x) && !used.has(x.id))
         .sort((a, b) => b.overall_rating - a.overall_rating)[0];
     if (repl) {
       used.add(repl.id);

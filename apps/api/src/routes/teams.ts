@@ -13,6 +13,7 @@ import { createRng, cryptoSeed } from "../generators/rng";
 import { generateSquad, type GeneratedPlayer } from "../generators/player";
 import { generateNickname } from "../generators/nickname";
 import { generateRelationships } from "../generators/relationships";
+import type { AbsencePlayerInfo } from "../events/match-absences";
 import { generateDescription } from "../generators/description-generator";
 import { generateFieldSkills, generateGKSkills, generateHiddenTalent, calculateOverallRating } from "../skills/generator";
 import { generateSeasonCalendar } from "../season/calendar";
@@ -975,7 +976,16 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
   ).bind(c.req.param("playerId")).all<{ id: string; name: string; primary_color: string; secondary_color: string; badge_pattern: string }>()
     .catch((e) => { logger.warn({ module: "teams" }, "fetch watchers", e); return { results: [] }; });
 
-  const absence = (lifeContext as Record<string, unknown>)?.absence ?? null;
+  // Absence pro nejbližší zápas — jen pro vlastní hráče (u cizích to nedává smysl)
+  let absence: AbsencePlayerInfo | null = null;
+  if (isOwn) {
+    const { findUpcomingMatchContext, getAbsentPlayersMap } = await import("../events/match-absences");
+    const ctx = await findUpcomingMatchContext(c.env.DB, row.team_id as string);
+    if (ctx) {
+      const map = await getAbsentPlayersMap(c.env.DB, row.team_id as string, ctx);
+      absence = map.get(c.req.param("playerId")) ?? null;
+    }
+  }
 
   return c.json({
     ...row,

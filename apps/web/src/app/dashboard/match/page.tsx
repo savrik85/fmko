@@ -300,8 +300,10 @@ function MatchPage() {
     if (!teamId) return;
     const myReqId = ++loadPresetReqId.current;
     try {
+      const matchCalId = nextMatch?.calendarId ?? nextMatch?.matchId ?? null;
       const data = await apiFetch<{ formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; warnings: string[] }>(
-        `/api/teams/${teamId}/lineup-presets/${slot}/apply`, { method: "POST" }
+        `/api/teams/${teamId}/lineup-presets/${slot}/apply`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(matchCalId ? { calendarId: matchCalId } : {}) }
       );
       // Pokud uživatel mezitím klikl jiný preset, zahodit stale response
       if (myReqId !== loadPresetReqId.current) return;
