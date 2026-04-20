@@ -2805,17 +2805,10 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
   if (invalid.length > 0) {
     return c.json({ error: `${invalid.length} hráč(ů) není dostupných (zranění, suspendace nebo nepatří do týmu)` }, 400);
   }
-
-  // Generátorové absence (Práce/Osobní/Zdraví/Jiné) — sdílený helper, stejný seed jako /next-match a simulace.
-  const { resolveMatchContext, getAbsentPlayerIds } = await import("../events/match-absences");
-  const absenceCtx = await resolveMatchContext(c.env.DB, teamId, body.calendarId);
-  if (absenceCtx) {
-    const absentIds = await getAbsentPlayerIds(c.env.DB, teamId, absenceCtx);
-    const absentInLineup = playerIds.filter((id) => absentIds.has(id));
-    if (absentInLineup.length > 0) {
-      return c.json({ error: `${absentInLineup.length} hráč(ů) má omluvu pro tento zápas a nemůže hrát` }, 400);
-    }
-  }
+  // Pozn.: Generátorové absence (Práce/Osobní/Zdraví/Jiné) záměrně NEblokujeme — default lineup fallback
+  // i staré uložené sestavy mohou obsahovat dnes omluvené hráče. Match-runner je auto-substituuje při simulaci
+  // (buildMatchPlayers s matchKey seedem). Blokovat save by znamenalo že user nemůže uložit preset který má
+  // omluvence, i když UI už absentní substituuje v apply-preset.
 
   // Captain musí být v lineupu (pokud je vyplněn). Jinak nullify.
   const captainId = body.captainId && playerIds.includes(body.captainId) ? body.captainId : null;
