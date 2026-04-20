@@ -32,6 +32,8 @@ export type TransactionType =
   | "concession_income_external"
   | "concession_income_self"
   | "promotional_campaign"
+  | "cash_loan_disbursement"
+  | "cash_loan_repayment"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */
@@ -64,9 +66,20 @@ export function mapVillageSize(dbSize: string): string {
   }
 }
 
+/** Typy transakcí, které jsou diskrétním uživatelským nákupem — blokovány při záporném rozpočtu. */
+const PURCHASE_TYPES = new Set<TransactionType>([
+  "transfer_fee", "signing_fee", "classified_ad",
+  "equipment_upgrade", "stadium_upgrade", "stadium_visual",
+  "pitch_repair", "pitch_upgrade", "promotional_campaign",
+  "concession_wholesale", "transfer_admin_fee", "loan_fee",
+]);
+
 /**
  * Zaznamená finanční transakci a aktualizuje rozpočet.
  * Toto je JEDINÝ způsob jak měnit teams.budget.
+ *
+ * Guard: pokud je rozpočet záporný, blokuje všechny typy nákupů (viz PURCHASE_TYPES).
+ * Mzdy, maintenance a splátky půjčky blokovány nejsou — pro ty rozpočet jede dál.
  */
 export async function recordTransaction(
   db: D1Database,
@@ -77,6 +90,18 @@ export async function recordTransaction(
   gameDate: string,
   referenceId?: string,
 ): Promise<number> {
+  // Safety net: záporný rozpočet + typ nákupu → hodit error.
+  // Volající endpointy MAJÍ dělat vlastní pre-check s user-friendly hláškou.
+  if (amount < 0 && PURCHASE_TYPES.has(type)) {
+    const pre = await db.prepare("SELECT budget FROM teams WHERE id = ?")
+      .bind(teamId).first<{ budget: number }>();
+    if (pre && pre.budget < 0) {
+      const msg = `BUDGET_BLOCKED: Záporný rozpočet (${pre.budget.toLocaleString("cs")} Kč) — nákupy zakázány do vyrovnání.`;
+      logger.warn({ module: "finance" }, `${msg} type=${type} amount=${amount} team=${teamId}`);
+      throw new Error(msg);
+    }
+  }
+
   // Atomická operace: budget += amount bez race condition.
   // Přečteme aktuální budget až PO update, abychom měli správný balance_after.
   const updated = await db.prepare(
@@ -431,4 +456,113 @@ export async function processTrainingCost(
   const cost = costPerSession[category] ?? 400;
   await recordTransaction(db, teamId, "training_cost", -cost,
     `Trénink`, gameDate);
+}
+
+/**
+ * Kontrola zda tým může provést placenou akci (nákup, upgrade, inzerát, přestup).
+ * Pravidlo půjček: při záporném rozpočtu JSOU zakázány všechny nákupy do vyrovnání.
+ * Mzdy, údržba a splátky půjčky tímto nejsou omezeny — ty probíhají automaticky.
+ */
+export async function assertPurchaseAllowed(
+  db: D1Database,
+  teamId: string,
+  amount: number,
+): Promise<{ ok: true; budget: number } | { ok: false; reason: string; budget: number }> {
+  const team = await db.prepare("SELECT budget FROM teams WHERE id = ?")
+    .bind(teamId).first<{ budget: number }>();
+  if (!team) return { ok: false, reason: "Tým nenalezen", budget: 0 };
+  if (team.budget < 0) {
+    return {
+      ok: false,
+      budget: team.budget,
+      reason: `Záporný rozpočet (${team.budget.toLocaleString("cs")} Kč) — nákupy jsou zakázány do vyrovnání na nulu.`,
+    };
+  }
+  if (team.budget < amount) {
+    return {
+      ok: false,
+      budget: team.budget,
+      reason: `Nedostatek prostředků — potřeba ${amount.toLocaleString("cs")} Kč, k dispozici ${team.budget.toLocaleString("cs")} Kč.`,
+    };
+  }
+  return { ok: true, budget: team.budget };
+}
+
+/**
+ * Splátka aktivní hotovostní půjčky — volá se po každém zápasu (per-team).
+ * Rovnoměrně rozpočteno: per_match_installment se odečte. Poslední splátka
+ * dorovná zbytek (kvůli zaokrouhlování).
+ */
+export async function processCashLoanRepayment(
+  db: D1Database,
+  teamId: string,
+  matchId: string,
+  gameDate: string,
+): Promise<void> {
+  const loan = await db.prepare(
+    "SELECT id, remaining, per_match_installment, total_installments, installments_paid FROM cash_loans WHERE team_id = ? AND status = 'active' LIMIT 1"
+  ).bind(teamId).first<{
+    id: string;
+    remaining: number;
+    per_match_installment: number;
+    total_installments: number;
+    installments_paid: number;
+  }>().catch((e) => { logger.warn({ module: "finance" }, "load active cash loan", e); return null; });
+
+  if (!loan) return;
+
+  const isLastInstallment = loan.installments_paid + 1 >= loan.total_installments;
+  const payment = Math.min(loan.remaining, isLastInstallment ? loan.remaining : loan.per_match_installment);
+  if (payment <= 0) return;
+
+  const newRemaining = loan.remaining - payment;
+  const newPaid = loan.installments_paid + 1;
+  const newStatus = newRemaining <= 0 ? "paid" : "active";
+
+  await recordTransaction(
+    db,
+    teamId,
+    "cash_loan_repayment",
+    -payment,
+    `Splátka půjčky (${newPaid}/${loan.total_installments})`,
+    gameDate,
+    matchId,
+  );
+
+  if (newStatus === "paid") {
+    await db.prepare(
+      "UPDATE cash_loans SET remaining = 0, installments_paid = ?, status = 'paid', paid_off_at = datetime('now') WHERE id = ?"
+    ).bind(newPaid, loan.id).run().catch((e) => logger.warn({ module: "finance" }, "mark loan paid", e));
+  } else {
+    await db.prepare(
+      "UPDATE cash_loans SET remaining = ?, installments_paid = ? WHERE id = ?"
+    ).bind(newRemaining, newPaid, loan.id).run().catch((e) => logger.warn({ module: "finance" }, "update loan installment", e));
+  }
+}
+
+/**
+ * Spočítá kolik zbývá zápasových dní v aktuální sezóně pro daný tým.
+ * Sčítá home + away matches ve stavu 'scheduled' v aktivní sezóně.
+ */
+export async function countRemainingMatchDays(
+  db: D1Database,
+  teamId: string,
+): Promise<{ remainingMatches: number; seasonId: string | null }> {
+  const season = await db.prepare(
+    "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+  ).first<{ id: string }>().catch((e) => { logger.warn({ module: "finance" }, "load active season", e); return null; });
+  if (!season) return { remainingMatches: 0, seasonId: null };
+
+  const row = await db.prepare(
+    `SELECT COUNT(*) as cnt FROM matches m
+     JOIN leagues l ON m.league_id = l.id
+     WHERE l.season_id = ?
+       AND (m.home_team_id = ? OR m.away_team_id = ?)
+       AND m.status = 'scheduled'`
+  ).bind(season.id, teamId, teamId).first<{ cnt: number }>().catch((e) => {
+    logger.warn({ module: "finance" }, "count remaining matches", e);
+    return null;
+  });
+
+  return { remainingMatches: row?.cnt ?? 0, seasonId: season.id };
 }

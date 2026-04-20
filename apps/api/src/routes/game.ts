@@ -281,7 +281,7 @@ gameRouter.get("/teams/:teamId/training-stats", async (c) => {
 // GET /api/teams/:id/budget — rozpočet s kompletním přehledem
 gameRouter.get("/teams/:teamId/budget", async (c) => {
   const teamId = c.req.param("teamId");
-  const { mapVillageSize } = await import("../season/finance-processor");
+  const { mapVillageSize, countRemainingMatchDays } = await import("../season/finance-processor");
 
   // Batch: team info + wages + sponsors + top wages in single round-trip
   const [teamResult, wageResult, sponsorContracts, topWages] = await c.env.DB.batch([
@@ -346,8 +346,23 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
   const weeklyExpenses = weeklyWages + weeklyMaintenance + weeklyEquipment + weeklyTraining;
   const weeklyNet = weeklyIncome - weeklyExpenses;
 
-  // Forecast
-  const weeksUntilBankrupt = weeklyNet < 0 ? Math.floor((team.budget as number) / Math.abs(weeklyNet)) : null;
+  // Active cash loan + remaining match days
+  const activeLoan = await c.env.DB.prepare(
+    "SELECT id, principal, total_to_repay, remaining, total_installments, installments_paid, per_match_installment, status FROM cash_loans WHERE team_id = ? AND status = 'active' LIMIT 1"
+  ).bind(teamId).first<{
+    id: string; principal: number; total_to_repay: number; remaining: number;
+    total_installments: number; installments_paid: number; per_match_installment: number; status: string;
+  }>().catch((e) => { logger.warn({ module: "game" }, "load active cash loan", e); return null; });
+
+  const remainingInfo = await countRemainingMatchDays(c.env.DB, teamId);
+
+  // Forecast: weekly net pořád, ale nesmíme zapomenout na splátky půjčky
+  // Splátky jsou per-match, nikoliv per-week. Odhadneme ~2 zápasy/měsíc → ~0.5/týden
+  const weeklyLoanRepayment = activeLoan
+    ? Math.round(activeLoan.per_match_installment * 0.5)
+    : 0;
+  const effectiveWeeklyNet = weeklyNet - weeklyLoanRepayment;
+  const weeksUntilBankrupt = effectiveWeeklyNet < 0 ? Math.floor((team.budget as number) / Math.abs(effectiveWeeklyNet)) : null;
 
   return c.json({
     budget: team.budget,
@@ -368,16 +383,31 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
       },
       expenses: {
         wages: weeklyWages, maintenance: weeklyMaintenance,
-        equipment: weeklyEquipment, training: weeklyTraining, total: weeklyExpenses,
+        equipment: weeklyEquipment, training: weeklyTraining,
+        loanRepayment: weeklyLoanRepayment,
+        total: weeklyExpenses,
       },
       net: weeklyNet,
+      netWithLoan: effectiveWeeklyNet,
     },
     forecast: {
-      weeklyNet,
+      weeklyNet: effectiveWeeklyNet,
       weeksUntilBankrupt,
-      in4Weeks: (team.budget as number) + weeklyNet * 4,
-      inSeason: (team.budget as number) + weeklyNet * WEEKS_PER_SEASON,
+      in4Weeks: (team.budget as number) + effectiveWeeklyNet * 4,
+      inSeason: (team.budget as number) + effectiveWeeklyNet * WEEKS_PER_SEASON,
     },
+    loan: activeLoan ? {
+      id: activeLoan.id,
+      principal: activeLoan.principal,
+      totalToRepay: activeLoan.total_to_repay,
+      remaining: activeLoan.remaining,
+      totalInstallments: activeLoan.total_installments,
+      installmentsPaid: activeLoan.installments_paid,
+      installmentsRemaining: activeLoan.total_installments - activeLoan.installments_paid,
+      perMatchInstallment: activeLoan.per_match_installment,
+    } : null,
+    remainingMatches: remainingInfo.remainingMatches,
+    purchaseBlocked: (team.budget as number) < 0,
   });
 });
 

@@ -497,7 +497,7 @@ export async function runScheduledMatches(
 
       // Match-day finances for both teams
       try {
-        const { processMatchDayFinances } = await import("../season/finance-processor");
+        const { processMatchDayFinances, processCashLoanRepayment } = await import("../season/finance-processor");
         const homeResult = result.homeScore > result.awayScore ? "win" : result.homeScore < result.awayScore ? "loss" : "draw";
         const awayResult = result.awayScore > result.homeScore ? "win" : result.awayScore < result.homeScore ? "loss" : "draw";
         const gameDate = new Date().toISOString();
@@ -513,6 +513,9 @@ export async function runScheduledMatches(
         const awayRep = repMap.get(awayTeamId) ?? 50;
         await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate, awayRep);
         await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate, homeRep);
+        // Cash loan repayments — po všech ostatních match-day financích (na čerstvém budgetu)
+        await processCashLoanRepayment(db, homeTeamId, matchId, gameDate);
+        await processCashLoanRepayment(db, awayTeamId, matchId, gameDate);
       } catch (e) {
         logger.error({ module: "match-runner" }, `Match finances failed for ${matchId}`, e);
       }

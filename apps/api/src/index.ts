@@ -9,6 +9,7 @@ import { gameRouter } from "./routes/game";
 import { messagingRouter } from "./routes/messaging";
 import { pushRouter } from "./routes/push";
 import { votesRouter } from "./routes/votes";
+import { cashLoansRouter } from "./routes/cash-loans";
 // transfers endpoints are in gameRouter
 import { runScheduledMatches } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -30,6 +31,10 @@ app.use("*", cors({ origin: "*" }));
 
 // Global error handler — structured JSON logging, bez expose interních detailů klientovi.
 app.onError((err, c) => {
+  // Business-level guard z finance-processor: přeložit na 400 s uživatelskou hláškou.
+  if (err.message.startsWith("BUDGET_BLOCKED:")) {
+    return c.json({ error: err.message.replace(/^BUDGET_BLOCKED:\s*/, "") }, 400);
+  }
   const reqId = crypto.randomUUID().slice(0, 8);
   const entry = {
     ts: new Date().toISOString(),
@@ -57,6 +62,7 @@ app.route("/api", gameRouter);
 app.route("/api", messagingRouter);
 app.route("/api", pushRouter);
 app.route("/api", votesRouter);
+app.route("/api", cashLoansRouter);
 
 export default {
   fetch: app.fetch,
