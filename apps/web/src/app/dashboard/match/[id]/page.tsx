@@ -20,6 +20,8 @@ const TACTIC_LABEL: Record<string, string> = {
   long_ball: "Nakopávané", possession: "Držení míče", pressing: "Vysoký presink",
 };
 
+interface MatchAbsence { teamId?: string; name: string; reason: string; smsText: string }
+
 interface MatchDetail {
   id: string; home_team_id: string; away_team_id: string;
   home_name: string; away_name: string; home_color: string; away_color: string;
@@ -30,6 +32,7 @@ interface MatchDetail {
   pitch_condition: number | null; weather: string | null;
   home_lineup_data: LineupData | null; away_lineup_data: LineupData | null;
   player_ratings?: Record<string, number>;
+  absences?: MatchAbsence[];
 }
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
@@ -367,6 +370,55 @@ export default function MatchDetailPage() {
           </div>
         )}
       </div>
+
+      {/* ═══ OMLUVENÍ HRÁČI ═══ */}
+      {match.absences && match.absences.length > 0 && (() => {
+        const homeAbs = match.absences.filter((a) => a.teamId === match.home_team_id);
+        const awayAbs = match.absences.filter((a) => a.teamId === match.away_team_id);
+        // Starší data bez teamId — zobraz všechny dohromady
+        const legacy = match.absences.filter((a) => !a.teamId);
+        return (
+          <div className="card p-4 sm:p-5">
+            <SectionLabel>Omluvení hráči</SectionLabel>
+            {legacy.length > 0 ? (
+              <div className="space-y-2">
+                {legacy.map((a, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 shrink-0 mt-0.5">{a.reason}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-heading font-bold text-sm">{a.name}</div>
+                      <div className="text-xs text-muted italic">„{a.smsText}"</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[{ label: match.home_name, color: hc, list: homeAbs }, { label: match.away_name, color: ac, list: awayAbs }].map(({ label, color, list }) => (
+                  <div key={label} className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs font-heading uppercase">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                      <span className="text-muted">{label}</span>
+                      <span className="text-muted">({list.length})</span>
+                    </div>
+                    {list.length === 0 ? (
+                      <div className="text-xs text-muted italic">Všichni dorazili</div>
+                    ) : list.map((a, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-[10px] font-heading font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 shrink-0 mt-0.5">{a.reason}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-heading font-bold text-sm">{a.name}</div>
+                          <div className="text-xs text-muted italic">„{a.smsText}"</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ═══ COMMENTARY ═══ */}
       {match.commentary.length > 0 && (

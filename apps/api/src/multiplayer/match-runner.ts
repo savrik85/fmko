@@ -353,10 +353,10 @@ export async function runScheduledMatches(
         return { starters: lineup.map(mapPlayer), subs: subs.map(mapPlayer), formation, tactic, captainId: captainDbId };
       };
 
-      // Collect absence data for both teams
+      // Collect absence data for both teams with teamId tag (pro FE separaci domácí/hosté)
       const matchAbsences = [
-        ...Array.from(homeBuild.absentNames ?? []),
-        ...Array.from(awayBuild.absentNames ?? []),
+        ...(homeBuild.absentNames ?? []).map((a) => ({ ...a, teamId: homeTeamId })),
+        ...(awayBuild.absentNames ?? []).map((a) => ({ ...a, teamId: awayTeamId })),
       ];
 
       // Save results with events + commentary + match context + lineups + absences

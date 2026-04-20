@@ -416,8 +416,12 @@ function MatchPage() {
         const matchDate = nextMatch.scheduledAt ? new Date(nextMatch.scheduledAt) : null;
         const dateStr = matchDate ? matchDate.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) : "";
         const now = teamGameDate ? new Date(teamGameDate) : new Date();
-        const daysUntil = matchDate ? Math.max(0, Math.round((matchDate.getTime() - now.getTime()) / 86400000)) : 0;
-        const daysLabel = daysUntil === 0 ? "dnes" : daysUntil === 1 ? "zítra" : `za ${daysUntil} dní`;
+        const daysUntil = matchDate ? Math.round((matchDate.getTime() - now.getTime()) / 86400000) : 0;
+        const daysLabel = daysUntil === 0 ? "dnes"
+          : daysUntil === 1 ? "zítra"
+          : daysUntil === -1 ? "včera"
+          : daysUntil > 0 ? `za ${daysUntil} dní`
+          : `před ${-daysUntil} dny`;
         const opponentName = nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName;
 
         const switchToMatch = (um: UpcomingMatch) => {
@@ -504,7 +508,7 @@ function MatchPage() {
           <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Uložené sestavy</div>
           <div className="text-[10px] text-muted">
             {activePreset
-              ? <>Vybrána <span className="font-bold text-pitch-600">Sestava {activePreset}</span> · uložením se nasadí pro zápas</>
+              ? <>Vybrána <span className="font-bold text-pitch-600">Sestava {activePreset}</span> · {saved ? "použije se pro zápas" : "uložením se nasadí pro zápas"}</>
               : "Klik na sestavu = vybrat pro zápas"}
           </div>
         </div>

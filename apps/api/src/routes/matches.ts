@@ -723,6 +723,7 @@ matchesRouter.get("/matches/:id", async (c) => {
     player_ratings: JSON.parse((row.player_ratings as string) ?? "{}"),
     home_lineup_data: homeLineup,
     away_lineup_data: awayLineup,
+    absences: JSON.parse((row.absences as string) ?? "[]"),
   });
 });
 

@@ -150,11 +150,17 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       const homeLineupData = buildLineupData(homeLineupPreSim, homeSubsPreSim, homeBuild.idMap, homeFormation, homeTactic, homeCaptainEngineId);
       const awayLineupData = buildLineupData(awayLineupPreSim, awaySubsPreSim, awayBuild.idMap, awayFormation, awayTactic, awayCaptainEngineId);
 
+      // Absence data s team tagem (stejný formát jako league match-runner)
+      const matchAbsences = [
+        ...(homeBuild.absentNames ?? []).map((a) => ({ ...a, teamId: homeTeamId })),
+        ...(awayBuild.absentNames ?? []).map((a) => ({ ...a, teamId: awayTeamId })),
+      ];
+
       // Save
       await db.prepare(
         `UPDATE matches SET status = 'simulated', home_score = ?, away_score = ?,
          events = ?, commentary = ?, attendance = ?, stadium_name = ?, pitch_condition = ?, weather = ?,
-         home_lineup_data = ?, away_lineup_data = ?,
+         home_lineup_data = ?, away_lineup_data = ?, absences = ?,
          simulated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?`
       ).bind(
         result.homeScore, result.awayScore,
@@ -162,6 +168,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         friendlyAttendance,
         stadiumNameRow?.stadium_name ?? null, stadiumRow?.pitch_condition ?? 50, weather,
         JSON.stringify(homeLineupData), JSON.stringify(awayLineupData),
+        matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null,
         matchId,
       ).run();
 
