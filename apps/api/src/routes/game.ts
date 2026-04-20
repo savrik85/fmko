@@ -2832,6 +2832,24 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
       .bind(id, teamId, body.calendarId, body.formation, body.tactic, JSON.stringify(body.players), captainId, presetSlot).run();
   }
 
+  // Auto-upsert do lineup_presets když user ukládá sestavu s presetSlot A/B/C.
+  // Dřív preset vznikal jen přes explicitní PUT /lineup-presets/{slot}, takže běžný save lineupu
+  // s "presetSlot=A" preset A nevytvořil → UI rozpisu ukazoval "Sestava A prázdná". User myslí
+  // že jedna akce "Uložit Sestavu A" naplní slot i zápas naráz — to je teď skutečné chování.
+  if (presetSlot) {
+    await c.env.DB.prepare(
+      `INSERT INTO lineup_presets (team_id, slot, formation, tactic, captain_id, players_data, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+       ON CONFLICT(team_id, slot) DO UPDATE SET
+         formation = excluded.formation,
+         tactic = excluded.tactic,
+         captain_id = excluded.captain_id,
+         players_data = excluded.players_data,
+         updated_at = excluded.updated_at`
+    ).bind(teamId, presetSlot, body.formation, body.tactic, captainId, JSON.stringify(body.players))
+      .run().catch((e) => logger.warn({ module: "game" }, "auto-upsert preset", e));
+  }
+
   return c.json({ ok: true });
 });
 
