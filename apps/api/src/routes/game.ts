@@ -2817,15 +2817,12 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
   const existing = await c.env.DB.prepare("SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?")
     .bind(teamId, body.calendarId).first<{ id: string }>();
 
-  // Preset slot validace: musí být A/B/C A preset opravdu existuje (jinak nullify)
-  let presetSlot: string | null = null;
-  if (body.presetSlot && ["A","B","C"].includes(body.presetSlot)) {
-    const presetExists = await c.env.DB.prepare(
-      "SELECT 1 FROM lineup_presets WHERE team_id = ? AND slot = ?"
-    ).bind(teamId, body.presetSlot).first()
-      .catch((e) => { logger.warn({ module: "game" }, "check preset exists", e); return null; });
-    if (presetExists) presetSlot = body.presetSlot;
-  }
+  // Preset slot: jen A/B/C formát validujeme, existenci presetu NE — preset tabulka je oddělená
+  // a FE může chtít označit lineup "Sestava A" i pokud slot A zatím nemá uložený preset
+  // (teprve se ukládá). Nullifikace pak způsobovala že UI rozpis ukazoval "Bez sestavy"
+  // přestože lineup byl uložen.
+  const presetSlot: string | null = body.presetSlot && ["A","B","C"].includes(body.presetSlot)
+    ? body.presetSlot : null;
   if (existing) {
     await c.env.DB.prepare("UPDATE lineups SET formation = ?, tactic = ?, players_data = ?, captain_id = ?, preset_slot = ?, is_auto = 0, submitted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
       .bind(body.formation, body.tactic, JSON.stringify(body.players), captainId, presetSlot, existing.id).run();
