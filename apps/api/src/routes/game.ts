@@ -3730,10 +3730,12 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
   const teamId = c.req.param("teamId");
   const bidId = c.req.param("bidId");
 
+  // JOIN na players + p.team_id = tl.team_id zaručuje, že hráč stále patří prodávajícímu —
+  // jinak by bid mohl být přijat poté, co byl hráč mezitím prodán přes přímou nabídku (duplicitní transfer).
   const bid = await c.env.DB.prepare(
-    "SELECT tb.*, tl.player_id, tl.team_id as seller_team_id FROM transfer_bids tb JOIN transfer_listings tl ON tb.listing_id = tl.id WHERE tb.id = ? AND tl.team_id = ? AND tb.status = 'pending'"
+    "SELECT tb.*, tl.player_id, tl.team_id as seller_team_id FROM transfer_bids tb JOIN transfer_listings tl ON tb.listing_id = tl.id JOIN players p ON tl.player_id = p.id WHERE tb.id = ? AND tl.team_id = ? AND tb.status = 'pending' AND p.team_id = tl.team_id"
   ).bind(bidId, teamId).first<Record<string, unknown>>();
-  if (!bid) return c.json({ error: "Nabídka nenalezena" }, 404);
+  if (!bid) return c.json({ error: "Nabídka nenalezena nebo hráč už není váš" }, 404);
 
   const buyerTeamId = bid.team_id as string;
   const playerId = bid.player_id as string;
@@ -3990,6 +3992,10 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, teamId),
       playerUpdateStmt,
       c.env.DB.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(offerId),
+      // Uzavřít aktivní listing + odmítnout jeho bidy — jinak by mohly být přijaty
+      // a vznikl by duplicitní přestup (hráč už není seller's, ale bid prošel).
+      c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE player_id = ? AND status = 'active'").bind(playerId),
+      c.env.DB.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE listing_id IN (SELECT id FROM transfer_listings WHERE player_id = ?) AND status = 'pending'").bind(playerId),
     ]);
 
     // Transaction log + contracts (non-critical)
