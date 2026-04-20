@@ -51,8 +51,9 @@ interface LoanInfo {
   currentBudget: number;
 }
 
-type Tab = "overview" | "income" | "expenses" | "forecast" | "loan" | "history";
+type Tab = "overview" | "flows" | "forecast" | "loan";
 type TxnFilter = "all" | "income" | "expense";
+type FlowSide = "income" | "expenses";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Konstanty a formátování
@@ -164,11 +165,9 @@ export default function FinancesPage() {
 
   const tabs: [Tab, string, string][] = [
     ["overview", "Přehled", "📊"],
-    ["income", "Příjmy", "💰"],
-    ["expenses", "Výdaje", "💸"],
+    ["flows", "Pohyby", "💸"],
     ["forecast", "Prognóza", "🔮"],
-    ["loan", "Půjčka", data.loan ? "💳 •" : "💳"],
-    ["history", "Historie", "📜"],
+    ["loan", data.loan ? "Půjčka •" : "Půjčka", "💳"],
   ];
 
   return (
@@ -198,30 +197,35 @@ export default function FinancesPage() {
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-surface rounded-xl p-1 overflow-x-auto">
+      {/* Tab bar — 4 taby, plně na šířku i na mobilu */}
+      <div className="grid grid-cols-4 gap-1 bg-surface rounded-xl p-1">
         {tabs.map(([key, label, icon]) => (
           <button
             key={key}
             onClick={() => { setTab(key); if (key === "loan") loadLoanInfo(); }}
-            className={`flex-1 min-w-[80px] py-2 px-2 text-sm font-heading font-bold rounded-lg transition-colors whitespace-nowrap ${
+            className={`py-2 px-1 text-xs sm:text-sm font-heading font-bold rounded-lg transition-colors ${
               tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
             }`}
           >
-            <span className="mr-1">{icon}</span>
-            {label}
+            <span className="hidden sm:inline mr-1">{icon}</span>
+            <span className="sm:hidden block text-base leading-none mb-0.5">{icon}</span>
+            <span>{label}</span>
           </button>
         ))}
       </div>
 
-      {tab === "overview" && <OverviewTab data={data} />}
-      {tab === "income" && <IncomeTab data={data} />}
-      {tab === "expenses" && <ExpensesTab data={data} />}
+      {tab === "overview" && (
+        <OverviewTab
+          data={data}
+          transactions={transactions}
+          txnTotal={txnTotal}
+          txnFilter={txnFilter}
+          onFilter={loadTransactions}
+        />
+      )}
+      {tab === "flows" && <FlowsTab data={data} />}
       {tab === "forecast" && <ForecastTab data={data} />}
       {tab === "loan" && <LoanTab teamId={teamId!} data={data} info={loanInfo} onChange={refreshAll} reload={loadLoanInfo} />}
-      {tab === "history" && (
-        <HistoryTab transactions={transactions} total={txnTotal} filter={txnFilter} onFilter={loadTransactions} />
-      )}
     </div>
   );
 }
@@ -230,17 +234,24 @@ export default function FinancesPage() {
 // Tab: Přehled
 // ────────────────────────────────────────────────────────────────────────────
 
-function OverviewTab({ data }: { data: BudgetData }) {
+function OverviewTab({ data, transactions, txnTotal, txnFilter, onFilter }: {
+  data: BudgetData;
+  transactions: Transaction[];
+  txnTotal: number;
+  txnFilter: TxnFilter;
+  onFilter: (f: TxnFilter) => void;
+}) {
   const isPositive = data.weekly.netWithLoan >= 0;
+  const topInc = topIncomeItems(data);
+  const topExp = topExpenseItems(data);
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <MetricCard label="Týdenní příjmy" value={`+${formatCZK(data.weekly.income.total)}`} color="text-pitch-500" />
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <MetricCard label="Příjmy / týd" value={`+${formatCZK(data.weekly.income.total)}`} color="text-pitch-500" />
         <MetricCard
-          label="Týdenní výdaje"
+          label="Výdaje / týd"
           value={`-${formatCZK(data.weekly.expenses.total + data.weekly.expenses.loanRepayment)}`}
           color="text-card-red"
-          sub={data.weekly.expenses.loanRepayment > 0 ? `z toho splátka ~${formatCZK(data.weekly.expenses.loanRepayment)}` : undefined}
         />
         <MetricCard
           label="Bilance"
@@ -253,8 +264,8 @@ function OverviewTab({ data }: { data: BudgetData }) {
         <div className="card p-4 sm:p-5">
           <SectionLabel>Tři největší příjmy / týden</SectionLabel>
           <div className="mt-2 space-y-2">
-            {topIncomeItems(data).map((it) => (
-              <BarRow key={it.label} label={it.label} amount={it.amount} max={topIncomeItems(data)[0]?.amount ?? 1} positive />
+            {topInc.map((it) => (
+              <BarRow key={it.label} label={it.label} amount={it.amount} max={topInc[0]?.amount ?? 1} positive />
             ))}
           </div>
         </div>
@@ -262,8 +273,8 @@ function OverviewTab({ data }: { data: BudgetData }) {
         <div className="card p-4 sm:p-5">
           <SectionLabel>Tři největší výdaje / týden</SectionLabel>
           <div className="mt-2 space-y-2">
-            {topExpenseItems(data).map((it) => (
-              <BarRow key={it.label} label={it.label} amount={it.amount} max={topExpenseItems(data)[0]?.amount ?? 1} />
+            {topExp.map((it) => (
+              <BarRow key={it.label} label={it.label} amount={it.amount} max={topExp[0]?.amount ?? 1} />
             ))}
           </div>
         </div>
@@ -282,6 +293,13 @@ function OverviewTab({ data }: { data: BudgetData }) {
           />
         </div>
       </div>
+
+      <HistorySection
+        transactions={transactions}
+        total={txnTotal}
+        filter={txnFilter}
+        onFilter={onFilter}
+      />
     </div>
   );
 }
@@ -307,117 +325,134 @@ function topExpenseItems(d: BudgetData) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Tab: Příjmy
+// Tab: Pohyby (Příjmy + Výdaje v jednom přepínači)
 // ────────────────────────────────────────────────────────────────────────────
 
-function IncomeTab({ data }: { data: BudgetData }) {
+function FlowsTab({ data }: { data: BudgetData }) {
+  const [side, setSide] = useState<FlowSide>("income");
+  const totalExpWithLoan = data.weekly.expenses.total + data.weekly.expenses.loanRepayment;
   return (
     <div className="space-y-5">
-      <div className="card p-4 sm:p-5">
-        <div className="flex justify-between items-baseline mb-3">
-          <SectionLabel>Struktura příjmů / týden</SectionLabel>
-          <span className="font-heading font-bold text-pitch-500 tabular-nums">+{formatCZK(data.weekly.income.total)}</span>
-        </div>
-        <div className="space-y-2.5">
-          <BarRow label="Sponzorské smlouvy" amount={data.weekly.income.sponsors} max={data.weekly.income.total} positive icon="💰" />
-          <BarRow label="Místní podpora (reputace)" amount={data.weekly.income.baseSponsor} max={data.weekly.income.total} positive icon="🏪" />
-          <BarRow label="Dotace od obce" amount={data.weekly.income.subsidy} max={data.weekly.income.total} positive icon="🏛" />
-          <BarRow label="Členské příspěvky" amount={data.weekly.income.playerContributions} max={data.weekly.income.total} positive icon="👥" />
-        </div>
+      {/* Segmented control */}
+      <div className="grid grid-cols-2 gap-1 bg-surface rounded-xl p-1">
+        <button
+          onClick={() => setSide("income")}
+          className={`py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
+            side === "income" ? "bg-white text-pitch-600 shadow-sm" : "text-muted"
+          }`}
+        >
+          💰 Příjmy <span className="tabular-nums">+{formatCZK(data.weekly.income.total)}</span>
+        </button>
+        <button
+          onClick={() => setSide("expenses")}
+          className={`py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
+            side === "expenses" ? "bg-white text-pitch-600 shadow-sm" : "text-muted"
+          }`}
+        >
+          💸 Výdaje <span className="tabular-nums">-{formatCZK(totalExpWithLoan)}</span>
+        </button>
       </div>
 
-      {data.sponsors.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Sponzorské smlouvy ({data.sponsors.length})</SectionLabel>
-          <div className="mt-2 space-y-2">
-            {data.sponsors.map((s, i) => (
-              <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">{SPONSOR_ICONS[s.type] ?? "💰"}</span>
-                  <div>
-                    <div className="text-sm font-heading font-bold">{s.name}</div>
-                    <div className="text-[11px] text-muted">Typ: {s.type}{s.winBonus > 0 ? ` • bonus za výhru ${formatCZK(s.winBonus)}` : ""}</div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm tabular-nums text-pitch-500 font-heading font-bold">{formatCZK(s.weeklyAmount)}/týd</div>
-                  <div className="text-[10px] text-muted">{formatCZK(s.monthlyAmount)}/měs</div>
-                </div>
-              </div>
-            ))}
+      {side === "income" ? (
+        <>
+          <div className="card p-4 sm:p-5">
+            <div className="flex justify-between items-baseline mb-3">
+              <SectionLabel>Struktura příjmů / týden</SectionLabel>
+              <span className="font-heading font-bold text-pitch-500 tabular-nums">+{formatCZK(data.weekly.income.total)}</span>
+            </div>
+            <div className="space-y-2.5">
+              <BarRow label="Sponzorské smlouvy" amount={data.weekly.income.sponsors} max={data.weekly.income.total} positive icon="💰" />
+              <BarRow label="Místní podpora (reputace)" amount={data.weekly.income.baseSponsor} max={data.weekly.income.total} positive icon="🏪" />
+              <BarRow label="Dotace od obce" amount={data.weekly.income.subsidy} max={data.weekly.income.total} positive icon="🏛" />
+              <BarRow label="Členské příspěvky" amount={data.weekly.income.playerContributions} max={data.weekly.income.total} positive icon="👥" />
+            </div>
           </div>
-        </div>
-      )}
 
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>Nepravidelné příjmy</SectionLabel>
-        <div className="mt-2 text-sm text-muted space-y-1">
-          <div>• <span className="font-heading font-bold text-ink">Vstupné</span> — domácí zápasy podle návštěvy a ceny.</div>
-          <div>• <span className="font-heading font-bold text-ink">Bufet</span> — buď vlastní tržby, nebo pronájem externímu provozovateli.</div>
-          <div>• <span className="font-heading font-bold text-ink">Bonusy za výsledky</span> — výhra/remíza, sponzorské win-bonusy.</div>
-          <div>• <span className="font-heading font-bold text-ink">Přestupy</span> — prodej hráčů, jednorázové příjmy.</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Tab: Výdaje
-// ────────────────────────────────────────────────────────────────────────────
-
-function ExpensesTab({ data }: { data: BudgetData }) {
-  const totalWithLoan = data.weekly.expenses.total + data.weekly.expenses.loanRepayment;
-  return (
-    <div className="space-y-5">
-      <div className="card p-4 sm:p-5">
-        <div className="flex justify-between items-baseline mb-3">
-          <SectionLabel>Struktura výdajů / týden</SectionLabel>
-          <span className="font-heading font-bold text-card-red tabular-nums">-{formatCZK(totalWithLoan)}</span>
-        </div>
-        <div className="space-y-2.5">
-          <BarRow label="Mzdy hráčů" amount={data.weekly.expenses.wages} max={totalWithLoan} icon="💸" />
-          <BarRow label="Tréninky" amount={data.weekly.expenses.training} max={totalWithLoan} icon="🏋" />
-          <BarRow label="Údržba hřiště" amount={data.weekly.expenses.maintenance} max={totalWithLoan} icon="🌿" />
-          <BarRow label="Vybavení" amount={data.weekly.expenses.equipment} max={totalWithLoan} icon="👟" />
-          {data.weekly.expenses.loanRepayment > 0 && (
-            <BarRow label="Splátka půjčky (odhad)" amount={data.weekly.expenses.loanRepayment} max={totalWithLoan} icon="💳" />
+          {data.sponsors.length > 0 && (
+            <div className="card p-4 sm:p-5">
+              <SectionLabel>Sponzorské smlouvy ({data.sponsors.length})</SectionLabel>
+              <div className="mt-2 space-y-2">
+                {data.sponsors.map((s, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">{SPONSOR_ICONS[s.type] ?? "💰"}</span>
+                      <div>
+                        <div className="text-sm font-heading font-bold">{s.name}</div>
+                        <div className="text-[11px] text-muted">Typ: {s.type}{s.winBonus > 0 ? ` • bonus za výhru ${formatCZK(s.winBonus)}` : ""}</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm tabular-nums text-pitch-500 font-heading font-bold">{formatCZK(s.weeklyAmount)}/týd</div>
+                      <div className="text-[10px] text-muted">{formatCZK(s.monthlyAmount)}/měs</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
-        </div>
-      </div>
 
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>Mzdový rozpočet ({data.playerCount} hráčů)</SectionLabel>
-        <div className="bg-gray-50 rounded-lg py-3 text-center my-3">
-          <div className="font-heading font-bold text-2xl tabular-nums">{formatCZK(data.wageBill.weekly)}</div>
-          <div className="text-[11px] text-muted uppercase tracking-wide">týdně</div>
-        </div>
-        {data.wageBill.topPlayers.length > 0 && (
-          <>
-            <div className="text-[10px] text-muted uppercase mb-2">Nejlépe placení</div>
-            {data.wageBill.topPlayers.map((p) => (
-              <a key={p.id} href={`/dashboard/player/${p.id}`}
-                className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 transition-colors -mx-2 px-2 rounded">
-                <div className="flex items-center gap-2">
-                  <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                  <span className="text-sm font-heading font-bold">{p.name}</span>
-                </div>
-                <span className="text-sm tabular-nums font-heading font-bold">{formatCZK(p.weeklyWage)}/t</span>
-              </a>
-            ))}
-          </>
-        )}
-      </div>
+          <div className="card p-4 sm:p-5">
+            <SectionLabel>Nepravidelné příjmy</SectionLabel>
+            <div className="mt-2 text-sm text-muted space-y-1">
+              <div>• <span className="font-heading font-bold text-ink">Vstupné</span> — domácí zápasy podle návštěvy a ceny.</div>
+              <div>• <span className="font-heading font-bold text-ink">Bufet</span> — buď vlastní tržby, nebo pronájem externímu provozovateli.</div>
+              <div>• <span className="font-heading font-bold text-ink">Bonusy za výsledky</span> — výhra/remíza, sponzorské win-bonusy.</div>
+              <div>• <span className="font-heading font-bold text-ink">Přestupy</span> — prodej hráčů, jednorázové příjmy.</div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="card p-4 sm:p-5">
+            <div className="flex justify-between items-baseline mb-3">
+              <SectionLabel>Struktura výdajů / týden</SectionLabel>
+              <span className="font-heading font-bold text-card-red tabular-nums">-{formatCZK(totalExpWithLoan)}</span>
+            </div>
+            <div className="space-y-2.5">
+              <BarRow label="Mzdy hráčů" amount={data.weekly.expenses.wages} max={totalExpWithLoan} icon="💸" />
+              <BarRow label="Tréninky" amount={data.weekly.expenses.training} max={totalExpWithLoan} icon="🏋" />
+              <BarRow label="Údržba hřiště" amount={data.weekly.expenses.maintenance} max={totalExpWithLoan} icon="🌿" />
+              <BarRow label="Vybavení" amount={data.weekly.expenses.equipment} max={totalExpWithLoan} icon="👟" />
+              {data.weekly.expenses.loanRepayment > 0 && (
+                <BarRow label="Splátka půjčky (odhad)" amount={data.weekly.expenses.loanRepayment} max={totalExpWithLoan} icon="💳" />
+              )}
+            </div>
+          </div>
 
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>Nepravidelné výdaje</SectionLabel>
-        <div className="mt-2 text-sm text-muted space-y-1">
-          <div>• <span className="font-heading font-bold text-ink">Zápasové náklady</span> — rozhodčí, cestovné, občerstvení po zápase.</div>
-          <div>• <span className="font-heading font-bold text-ink">Přestupy</span> — přestupové ceny, registrace, hostování.</div>
-          <div>• <span className="font-heading font-bold text-ink">Upgrady</span> — stadion, hřiště, vybavení, propagace zápasu.</div>
-          <div>• <span className="font-heading font-bold text-ink">Inzeráty</span> — hledání volných hráčů.</div>
-        </div>
-      </div>
+          <div className="card p-4 sm:p-5">
+            <SectionLabel>Mzdový rozpočet ({data.playerCount} hráčů)</SectionLabel>
+            <div className="bg-gray-50 rounded-lg py-3 text-center my-3">
+              <div className="font-heading font-bold text-2xl tabular-nums">{formatCZK(data.wageBill.weekly)}</div>
+              <div className="text-[11px] text-muted uppercase tracking-wide">týdně</div>
+            </div>
+            {data.wageBill.topPlayers.length > 0 && (
+              <>
+                <div className="text-[10px] text-muted uppercase mb-2">Nejlépe placení</div>
+                {data.wageBill.topPlayers.map((p) => (
+                  <a key={p.id} href={`/dashboard/player/${p.id}`}
+                    className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 transition-colors -mx-2 px-2 rounded">
+                    <div className="flex items-center gap-2">
+                      <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
+                      <span className="text-sm font-heading font-bold">{p.name}</span>
+                    </div>
+                    <span className="text-sm tabular-nums font-heading font-bold">{formatCZK(p.weeklyWage)}/t</span>
+                  </a>
+                ))}
+              </>
+            )}
+          </div>
+
+          <div className="card p-4 sm:p-5">
+            <SectionLabel>Nepravidelné výdaje</SectionLabel>
+            <div className="mt-2 text-sm text-muted space-y-1">
+              <div>• <span className="font-heading font-bold text-ink">Zápasové náklady</span> — rozhodčí, cestovné, občerstvení po zápase.</div>
+              <div>• <span className="font-heading font-bold text-ink">Přestupy</span> — přestupové ceny, registrace, hostování.</div>
+              <div>• <span className="font-heading font-bold text-ink">Upgrady</span> — stadion, hřiště, vybavení, propagace zápasu.</div>
+              <div>• <span className="font-heading font-bold text-ink">Inzeráty</span> — hledání volných hráčů.</div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -682,7 +717,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
 // Tab: Historie transakcí
 // ────────────────────────────────────────────────────────────────────────────
 
-function HistoryTab({ transactions, total, filter, onFilter }: {
+function HistorySection({ transactions, total, filter, onFilter }: {
   transactions: Transaction[];
   total: number;
   filter: TxnFilter;
