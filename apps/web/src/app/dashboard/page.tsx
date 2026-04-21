@@ -94,6 +94,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState<MatchPreview | null>(null);
   const [news, setNews] = useState<Array<{ id: string; type: string; headline: string; icon: string; date: string }>>([]);
+  const [achievements, setAchievements] = useState<Array<{ key: string; icon: string; title: string; tier: string; earnedAt: string | null }>>([]);
   const [promoting, setPromoting] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -126,6 +127,15 @@ export default function DashboardPage() {
       apiFetch<{ articles: typeof news }>(`/api/teams/${teamId}/news`)
         .then((d) => setNews(d.articles.filter((a) => a.type !== "standing").slice(0, 3)))
         .catch((e) => console.error("news fetch:", e));
+      // Fetch recent achievements (last 3 earned)
+      apiFetch<{ achievements: Array<{ key: string; icon: string; title: string; tier: string; earnedAt: string | null }> }>(`/api/teams/${teamId}/achievements`)
+        .then((d) => setAchievements(
+          d.achievements
+            .filter((a) => a.earnedAt)
+            .sort((a, b) => (b.earnedAt ?? "").localeCompare(a.earnedAt ?? ""))
+            .slice(0, 3)
+        ))
+        .catch((e) => console.error("achievements fetch:", e));
     }).catch(() => setLoading(false));
   }, [teamId]);
 
@@ -706,6 +716,38 @@ export default function DashboardPage() {
           </div>
         ) : <div />}
       </div>
+
+      {/* ═══ Row 3: Naposledy odemčené úspěchy ═══ */}
+      {achievements.length > 0 && (
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Naposledy odemčené úspěchy</SectionLabel>
+          <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {achievements.map((a) => {
+              const days = a.earnedAt ? Math.max(0, Math.floor((Date.now() - new Date(a.earnedAt).getTime()) / 86400000)) : 0;
+              const timeLabel = days === 0 ? "dnes" : days === 1 ? "včera" : `před ${days}d`;
+              const tierBorder = a.tier === "gold" ? "#B8860B" : a.tier === "silver" ? "#8B8B8B" : "#8B4513";
+              const tierBg = a.tier === "gold" ? "#B8860B18" : a.tier === "silver" ? "#8B8B8B14" : "#8B451312";
+              return (
+                <Link
+                  key={a.key}
+                  href={`/dashboard/manager/${teamId}`}
+                  className="flex items-center gap-2.5 p-3 rounded-lg hover:opacity-80 transition-opacity"
+                  style={{ borderLeft: `4px solid ${tierBorder}`, background: tierBg }}
+                >
+                  <div className="text-2xl shrink-0 leading-none">{a.icon}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-heading font-bold text-sm truncate">{a.title}</div>
+                    <div className="text-[10px] text-muted mt-0.5">{timeLabel}</div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+          <div className="text-center pt-2">
+            <Link href={`/dashboard/manager/${teamId}`} className="text-xs text-pitch-500 font-heading font-bold hover:underline">Všechny úspěchy →</Link>
+          </div>
+        </div>
+      )}
 
       {/* ═══ Row 4: Top performers — 3 columns ═══ */}
       {matchResults && matchResults.topPlayers.length > 0 && (() => {
