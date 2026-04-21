@@ -28,7 +28,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { key: "win_streak_5", icon: "🪓", title: "Drvoštěp", desc: "5 vítězství v řadě", tier: "gold" },
   { key: "big_win", icon: "💥", title: "Demolice", desc: "Vyhrát o 5+ gólů rozdílem", tier: "silver" },
   { key: "hat_trick", icon: "🐗", title: "Zabijačkový šampion", desc: "Nastřílet 5+ gólů v jednom zápase", tier: "gold" },
-  { key: "clean_sheet", icon: "🧤", title: "Kluci mají vítr", desc: "Udržet čisté konto", tier: "bronze" },
+  { key: "clean_sheet", icon: "🧤", title: "Brankářský král", desc: "Udržet čisté konto (0 obdržených gólů)", tier: "bronze" },
   { key: "clean_sheets_5", icon: "🔒", title: "Nepropustný", desc: "5 čistých kont v kariéře", tier: "silver" },
 
   // ── Derby ──
