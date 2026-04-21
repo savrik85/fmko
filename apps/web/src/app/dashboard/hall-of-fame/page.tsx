@@ -49,17 +49,17 @@ export default function HallOfFamePage() {
         <p className="text-sm text-muted mt-0.5">Žebříček trenérů podle počtu úspěchů</p>
       </div>
 
-      <div className="card overflow-x-auto">
+      <div className="card">
         <table className="w-full text-xs sm:text-sm">
           <thead>
             <tr className="text-left text-label border-b border-gray-200 text-[10px] sm:text-[11px] uppercase tracking-wide">
               <th className="py-2 sm:py-3 pl-2 sm:pl-4 pr-1 w-8 sm:w-12">#</th>
               <th className="py-2 sm:py-3 px-1 sm:px-2">Trenér</th>
               <th className="py-2 sm:py-3 px-1 sm:px-2">Tým</th>
-              <th className="py-2 sm:py-3 px-1 sm:px-2 text-right w-8 sm:w-12">🥇</th>
-              <th className="py-2 sm:py-3 px-1 sm:px-2 text-right w-8 sm:w-12">🥈</th>
-              <th className="py-2 sm:py-3 px-1 sm:px-2 text-right w-8 sm:w-12">🥉</th>
-              <th className="py-2 sm:py-3 px-1 sm:px-2 pr-2 sm:pr-4 text-right w-8 sm:w-12">Σ</th>
+              <th className="hidden sm:table-cell py-2 sm:py-3 px-1 sm:px-2 text-right w-12">🥇</th>
+              <th className="hidden sm:table-cell py-2 sm:py-3 px-1 sm:px-2 text-right w-12">🥈</th>
+              <th className="hidden sm:table-cell py-2 sm:py-3 px-1 sm:px-2 text-right w-12">🥉</th>
+              <th className="py-2 sm:py-3 px-1 sm:px-2 pr-2 sm:pr-4 text-right w-10 sm:w-12">Σ</th>
             </tr>
           </thead>
           <tbody>
@@ -82,7 +82,7 @@ export default function HallOfFamePage() {
                   </td>
                   <td className="py-2 sm:py-2.5 px-1 sm:px-2">
                     {e.managerId && e.managerName ? (
-                      <Link href={`/dashboard/manager/${e.managerId}`} className="flex items-center gap-1.5 sm:gap-2 hover:text-pitch-500 transition-colors">
+                      <Link href={`/dashboard/manager/${e.teamId}`} className="flex items-center gap-1.5 sm:gap-2 hover:text-pitch-500 transition-colors">
                         {hasAvatar ? (
                           <FaceAvatar faceConfig={e.managerAvatar as Record<string, unknown>} size={24} className="shrink-0 bg-gray-100 rounded-full sm:!w-8 sm:!h-8" />
                         ) : (
@@ -111,9 +111,9 @@ export default function HallOfFamePage() {
                       </div>
                     </Link>
                   </td>
-                  <td className="py-2 sm:py-2.5 px-1 sm:px-2 text-right tabular-nums font-heading font-bold text-amber-600 text-xs sm:text-sm">{e.gold || ""}</td>
-                  <td className="py-2 sm:py-2.5 px-1 sm:px-2 text-right tabular-nums font-heading font-bold text-gray-500 text-xs sm:text-sm">{e.silver || ""}</td>
-                  <td className="py-2 sm:py-2.5 px-1 sm:px-2 text-right tabular-nums font-heading font-bold text-orange-700 text-xs sm:text-sm">{e.bronze || ""}</td>
+                  <td className="hidden sm:table-cell py-2 sm:py-2.5 px-1 sm:px-2 text-right tabular-nums font-heading font-bold text-amber-600 text-xs sm:text-sm">{e.gold || ""}</td>
+                  <td className="hidden sm:table-cell py-2 sm:py-2.5 px-1 sm:px-2 text-right tabular-nums font-heading font-bold text-gray-500 text-xs sm:text-sm">{e.silver || ""}</td>
+                  <td className="hidden sm:table-cell py-2 sm:py-2.5 px-1 sm:px-2 text-right tabular-nums font-heading font-bold text-orange-700 text-xs sm:text-sm">{e.bronze || ""}</td>
                   <td className="py-2 sm:py-2.5 px-1 sm:px-2 pr-2 sm:pr-4 text-right tabular-nums font-heading font-[800] text-xs sm:text-sm">{e.total}</td>
                 </tr>
               );
