@@ -29,6 +29,7 @@ bucket_name = "prales-seed"
 [triggers]
 crons = [
   "0 3 * * *",
+  "0 6 * * *",
   "0 16 * * *",
   "5 16 * * *",
 ]

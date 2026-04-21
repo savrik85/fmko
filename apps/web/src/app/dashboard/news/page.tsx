@@ -232,6 +232,7 @@ export default function NewsPage() {
   // Separate articles by type
   const matchArticles = articles.filter((a) => a.type === "match");
   const aiReportArticles = articles.filter((a) => a.type === "ai_report");
+  const previewArticles = articles.filter((a) => a.type === "matchday_preview");
   const roundArticles = articles.filter((a) => a.type === "round_results").slice(0, 1);
   const standingArticles = articles.filter((a) => a.type === "standing");
   const promotionArticles = articles.filter((a) => a.type === "promotion");
@@ -246,11 +247,11 @@ export default function NewsPage() {
     ? interviewArticles.filter((a) => (a as any).gameWeek === latestInterviewWeek)
     : interviewArticles;
   const otherArticles = articles.filter(
-    (a) => !["match", "round_results", "standing", "ai_report", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview"].includes(a.type),
+    (a) => !["match", "round_results", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview"].includes(a.type),
   );
 
-  // Lead story = latest AI report only
-  const leadStory = aiReportArticles[0] || matchArticles[0] || standingArticles[0] || articles[0];
+  // Lead story = nejnovější preview (před kolem) nebo AI report (po kole)
+  const leadStory = previewArticles[0] || aiReportArticles[0] || matchArticles[0] || standingArticles[0] || articles[0];
   // Všechny match stories sjednocené (bez lead story pokud je match)
   const matchStories = matchArticles.slice(leadStory?.type === "match" ? 1 : 0);
   // Ostatní drobnosti (classified ads apod.) — bez duplicit s promocemi / přestupy
@@ -310,9 +311,9 @@ export default function NewsPage() {
               {/* Lead story */}
               <div id={`news-${leadStory.id}`}>
                 <ArticleWrapper article={leadStory}>
-                  {leadStory.type === "ai_report" ? (
+                  {leadStory.type === "ai_report" || leadStory.type === "matchday_preview" ? (
                     <div>
-                      <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">Komentář kola</div>
+                      <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">{leadStory.type === "matchday_preview" ? "Předzápasové preview" : "Komentář kola"}</div>
                       <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
                         {leadStory.headline}
                       </h2>

@@ -116,10 +116,10 @@ npx wrangler d1 execute prales-db-test --remote --file /tmp/query.sql
 ## ☁️ Cloudflare gotchas
 
 ### Cron triggers
-- **Limit: 3 per account** (ne 5 jak tvrdí dokumentace)
-- Produkce (`wrangler.toml` top level): 3 crony (0 3 *, 0 16 *, 5 16 *)
-- Testing (`[env.testing.triggers]`): **MUSÍ BÝT** `crons = []` — jinak deploy selže
-- Nikdy nepřidávat další cron bez odebrání jiného
+- **Plán: Workers Paid ($5/měs)** — limit **250 cron triggers/účet**, prostor je volný
+- Produkce (`wrangler.toml` top level): aktuálně 3 crony (0 3 *, 0 16 *, 5 16 *) — můžeš přidávat další
+- Testing (`[env.testing.triggers]`): **MUSÍ BÝT** `crons = []` — testing env crony nemá
+- Před přidáním cronu zkontroluj že není už stejný (nebo podobný) jinde
 
 ### D1 migrace
 - `wrangler d1 migrations apply` často selhává na existující tabulky

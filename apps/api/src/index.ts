@@ -381,5 +381,44 @@ export default {
         log("error", "match tick failed", e);
       }
     }
+
+    // ── MATCHDAY PREVIEW: 6:00 UTC (8:00 CEST) — článek před kolem ──
+    // Izolovaný od daily i match ticku — selhání neohrozí ostatní.
+    if (cron === "0 6 * * *") {
+      try {
+        log("info", "matchday preview tick starting");
+        if (!env.GEMINI_API_KEY) {
+          log("warn", "skip matchday preview — no GEMINI_API_KEY");
+        } else {
+          const { generateMatchdayPreview } = await import("./news/matchday-preview");
+          const leagues = await env.DB.prepare(
+            "SELECT DISTINCT t.league_id, t.game_date FROM teams t WHERE t.league_id IS NOT NULL AND t.game_date IS NOT NULL AND t.user_id != 'ai'"
+          ).all();
+          let generated = 0;
+          for (const lg of leagues.results) {
+            const leagueId = lg.league_id as string;
+            const gameDate = lg.game_date as string;
+            if (!leagueId || !gameDate) continue;
+            const gd = new Date(gameDate);
+            const dayStart = new Date(gd); dayStart.setUTCHours(0, 0, 0, 0);
+            const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
+            const todayCal = await env.DB.prepare(
+              "SELECT id FROM season_calendar WHERE league_id = ? AND status = 'scheduled' AND scheduled_at BETWEEN ? AND ? LIMIT 1"
+            ).bind(leagueId, dayStart.toISOString(), dayEnd.toISOString()).first<{ id: string }>()
+              .catch((e) => { log("warn", `preview cal lookup ${leagueId}`, e); return null; });
+            if (!todayCal) continue;
+            try {
+              await generateMatchdayPreview(env.DB, env.GEMINI_API_KEY, leagueId, todayCal.id);
+              generated++;
+            } catch (e: any) {
+              log("error", `preview failed for league ${leagueId}`, e);
+            }
+          }
+          log("info", `matchday preview tick done: ${generated} articles`);
+        }
+      } catch (e: any) {
+        log("error", "matchday preview tick failed", e);
+      }
+    }
   },
 };
