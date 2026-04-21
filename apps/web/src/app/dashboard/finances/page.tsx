@@ -492,32 +492,58 @@ function ForecastTab({ data }: { data: BudgetData }) {
       <div className="card p-4 sm:p-5">
         <SectionLabel>Vývoj rozpočtu (16 týdnů)</SectionLabel>
         <div className="mt-4 relative h-44 bg-gradient-to-b from-gray-50 to-white rounded-lg overflow-hidden">
-          {/* Nulová osa */}
-          <div
-            className="absolute left-0 right-0 border-t border-dashed border-gray-300"
-            style={{ bottom: `${zeroRatio * 100}%` }}
+          {(() => {
+            const W = 100;
+            const H = 100;
+            const len = points.length;
+            const stepX = len > 1 ? W / (len - 1) : 0;
+            const toY = (v: number) => ((maxV - v) / range) * H;
+            const zeroY = toY(0);
+            const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${(i * stepX).toFixed(2)} ${toY(p.value).toFixed(2)}`).join(" ");
+            const lastX = (len > 0 ? (len - 1) * stepX : 0).toFixed(2);
+            const fillPath = `${linePath} L ${lastX} ${H} L 0 ${H} Z`;
+            return (
+              <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+                <defs>
+                  <linearGradient id="fc-pos" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#16a34a" stopOpacity="0.35" />
+                    <stop offset="100%" stopColor="#16a34a" stopOpacity="0" />
+                  </linearGradient>
+                  <linearGradient id="fc-neg" x1="0" y1="1" x2="0" y2="0">
+                    <stop offset="0%" stopColor="#dc2626" stopOpacity="0.45" />
+                    <stop offset="100%" stopColor="#dc2626" stopOpacity="0" />
+                  </linearGradient>
+                  <clipPath id="fc-above-zero" clipPathUnits="userSpaceOnUse">
+                    <rect x="0" y="0" width={W} height={Math.max(0, zeroY)} />
+                  </clipPath>
+                  <clipPath id="fc-below-zero" clipPathUnits="userSpaceOnUse">
+                    <rect x="0" y={Math.max(0, zeroY)} width={W} height={Math.max(0, H - zeroY)} />
+                  </clipPath>
+                </defs>
+                {zeroY < H && (
+                  <rect x="0" y={zeroY} width={W} height={H - zeroY} fill="#dc2626" fillOpacity="0.05" />
+                )}
+                <path d={fillPath} fill="url(#fc-pos)" clipPath="url(#fc-above-zero)" />
+                <path d={fillPath} fill="url(#fc-neg)" clipPath="url(#fc-below-zero)" />
+                <line x1="0" y1={zeroY} x2={W} y2={zeroY} stroke="#9ca3af" strokeWidth="0.5" strokeDasharray="1.5 1.5" vectorEffect="non-scaling-stroke" />
+                <path d={linePath} fill="none" stroke="#15803d" strokeWidth="1.25" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                {points.map((p, i) => (
+                  <g key={i}>
+                    <circle cx={(i * stepX).toFixed(2)} cy={toY(p.value).toFixed(2)} r="1.2" fill="#15803d" vectorEffect="non-scaling-stroke" />
+                    <circle cx={(i * stepX).toFixed(2)} cy={toY(p.value).toFixed(2)} r="3" fill="transparent">
+                      <title>{`Týden ${p.week}: ${formatCZK(p.value)}`}</title>
+                    </circle>
+                  </g>
+                ))}
+              </svg>
+            );
+          })()}
+          <span
+            className="absolute right-1 text-[10px] text-muted tabular-nums bg-white/80 px-1 pointer-events-none"
+            style={{ bottom: `${zeroRatio * 100}%`, transform: "translateY(50%)" }}
           >
-            <span className="absolute right-1 -top-4 text-[10px] text-muted tabular-nums bg-white/80 px-1">0</span>
-          </div>
-          {/* Sloupce */}
-          <div className="absolute inset-0 flex items-end justify-between px-2 pt-2 pb-0 gap-px">
-            {points.map((p, i) => {
-              const isPositive = p.value >= 0;
-              const heightRatio = Math.abs(p.value) / range;
-              const bottomRatio = isPositive ? zeroRatio : zeroRatio - heightRatio;
-              return (
-                <div
-                  key={i}
-                  className={`flex-1 ${isPositive ? "bg-pitch-500/70" : "bg-card-red/70"} rounded-t-sm relative group`}
-                  style={{
-                    height: `${heightRatio * 100}%`,
-                    marginBottom: `${bottomRatio * 100}%`,
-                  }}
-                  title={`Týden ${p.week}: ${formatCZK(p.value)}`}
-                />
-              );
-            })}
-          </div>
+            0
+          </span>
         </div>
         <div className="flex justify-between text-[10px] text-muted mt-1 px-2">
           <span>dnes</span>
