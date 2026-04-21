@@ -137,18 +137,20 @@ export default function DashboardPage() {
             .slice(0, 3)
         ))
         .catch((e) => console.error("achievements fetch:", e));
-      // Fetch Hall of Fame — compute my rank
-      apiFetch<{ entries: Array<{ rank: number; teamId: string; teamName: string; total: number; gold: number; silver: number; bronze: number }> }>(`/api/hall-of-fame`)
+      // Fetch Hall of Fame — compute my rank (humans only)
+      apiFetch<{ entries: Array<{ rank: number; teamId: string; teamName: string; isHuman: boolean; total: number; gold: number; silver: number; bronze: number }> }>(`/api/hall-of-fame`)
         .then((d) => {
-          const me = d.entries.find((e) => e.teamId === teamId);
+          const humans = d.entries.filter((e) => e.isHuman);
+          const meIdx = humans.findIndex((e) => e.teamId === teamId);
+          const me = meIdx >= 0 ? humans[meIdx] : null;
           setHofRank({
-            myRank: me?.rank ?? null,
+            myRank: me ? meIdx + 1 : null,
             myTotal: me?.total ?? 0,
             myGold: me?.gold ?? 0,
             mySilver: me?.silver ?? 0,
             myBronze: me?.bronze ?? 0,
-            top3: d.entries.slice(0, 3).map((e) => ({ rank: e.rank, teamName: e.teamName, total: e.total })),
-            totalEntries: d.entries.length,
+            top3: humans.slice(0, 3).map((e, i) => ({ rank: i + 1, teamName: e.teamName, total: e.total })),
+            totalEntries: humans.length,
           });
         })
         .catch((e) => console.error("hall of fame fetch:", e));

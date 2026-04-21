@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview } from "@/components/ui";
+import { Spinner, BadgePreview } from "@/components/ui";
+import { FaceAvatar } from "@/components/players/face-avatar";
 import type { BadgePattern } from "@/components/ui";
 
 interface HofEntry {
@@ -17,6 +18,7 @@ interface HofEntry {
   isHuman: boolean;
   managerId: string | null;
   managerName: string | null;
+  managerAvatar: Record<string, unknown> | null;
   villageName: string | null;
   total: number;
   gold: number;
@@ -27,7 +29,6 @@ interface HofEntry {
 export default function HallOfFamePage() {
   const { teamId } = useTeam();
   const [entries, setEntries] = useState<HofEntry[]>([]);
-  const [humansOnly, setHumansOnly] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,27 +39,14 @@ export default function HallOfFamePage() {
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;
 
-  const filtered = humansOnly ? entries.filter((e) => e.isHuman) : entries;
+  const filtered = entries.filter((e) => e.isHuman);
   const reranked = filtered.map((e, i) => ({ ...e, displayRank: i + 1 }));
 
   return (
     <div className="page-container pb-24 space-y-4">
       <div className="card p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="font-heading font-[800] text-2xl">🏆 Síň slávy</h1>
-            <p className="text-sm text-muted mt-0.5">Žebříček trenérů podle počtu úspěchů</p>
-          </div>
-          <label className="flex items-center gap-2 text-sm font-heading font-bold cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={humansOnly}
-              onChange={(e) => setHumansOnly(e.target.checked)}
-              className="w-4 h-4 accent-pitch-500"
-            />
-            Jen lidští
-          </label>
-        </div>
+        <h1 className="font-heading font-[800] text-2xl">🏆 Síň slávy</h1>
+        <p className="text-sm text-muted mt-0.5">Žebříček trenérů podle počtu úspěchů</p>
       </div>
 
       <div className="card overflow-x-auto">
@@ -77,6 +65,7 @@ export default function HallOfFamePage() {
           <tbody>
             {reranked.map((e) => {
               const isMe = e.teamId === teamId;
+              const hasAvatar = e.managerAvatar && Object.keys(e.managerAvatar).length > 2;
               return (
                 <tr
                   key={e.teamId}
@@ -93,13 +82,19 @@ export default function HallOfFamePage() {
                   </td>
                   <td className="py-2.5 px-2">
                     {e.managerId && e.managerName ? (
-                      <Link href={`/dashboard/manager/${e.managerId}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">
-                        {e.managerName}
+                      <Link href={`/dashboard/manager/${e.managerId}`} className="flex items-center gap-2 hover:text-pitch-500 transition-colors">
+                        {hasAvatar ? (
+                          <FaceAvatar faceConfig={e.managerAvatar as Record<string, unknown>} size={32} className="shrink-0 bg-gray-100 rounded-full" />
+                        ) : (
+                          <div className="shrink-0 w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center font-heading font-bold text-xs text-muted">
+                            {e.managerName[0]}
+                          </div>
+                        )}
+                        <span className="font-heading font-bold truncate">{e.managerName}</span>
                       </Link>
                     ) : (
                       <span className="text-muted italic">—</span>
                     )}
-                    {!e.isHuman && <span className="ml-2 text-[10px] text-muted uppercase">AI</span>}
                   </td>
                   <td className="py-2.5 px-2">
                     <Link href={`/dashboard/team/${e.teamId}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
