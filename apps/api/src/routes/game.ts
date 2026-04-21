@@ -3381,6 +3381,26 @@ gameRouter.delete("/teams/:teamId/watchlist/:playerId", async (c) => {
   return c.json({ ok: true });
 });
 
+// Kořaly — seznam získaných + katalog všech achievementů
+gameRouter.get("/teams/:teamId/achievements", async (c) => {
+  const teamId = c.req.param("teamId");
+  const { ACHIEVEMENTS, getTeamAchievements } = await import("../services/achievements");
+  const earned = await getTeamAchievements(c.env.DB, teamId);
+  const earnedMap = new Map(earned.map((e) => [e.key, e.earnedAt]));
+  return c.json({
+    achievements: ACHIEVEMENTS.map((a) => ({
+      key: a.key,
+      icon: a.icon,
+      title: a.title,
+      desc: a.desc,
+      tier: a.tier,
+      earnedAt: earnedMap.get(a.key) ?? null,
+    })),
+    earnedCount: earned.length,
+    totalCount: ACHIEVEMENTS.length,
+  });
+});
+
 // List watched players with enriched data (known attrs, last matches, transfers)
 gameRouter.get("/teams/:teamId/watchlist", async (c) => {
   const teamId = c.req.param("teamId");

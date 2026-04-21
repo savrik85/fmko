@@ -76,6 +76,12 @@ transfersRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
       .catch((e) => logger.warn({ module: "transfers" }, "cleanup watchlist on release", e));
   }
 
+  // Kořaly — první release
+  try {
+    const { checkReleaseAchievements } = await import("../services/achievements");
+    await checkReleaseAchievements(c.env.DB, teamId);
+  } catch (e) { logger.warn({ module: "transfers" }, "check release achievements", e); }
+
   // Delete player
   await c.env.DB.prepare("DELETE FROM players WHERE id = ?").bind(playerId).run();
 
@@ -461,6 +467,13 @@ transfersRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
     ).catch((e) => logger.warn({ module: "transfers" }, "notify watchers on bid accept", e));
   }
 
+  // Kořaly — transferové milníky
+  try {
+    const { checkTransferAchievements } = await import("../services/achievements");
+    const playerRow = await c.env.DB.prepare("SELECT is_celebrity FROM players WHERE id = ?").bind(playerId).first<{ is_celebrity: number }>();
+    await checkTransferAchievements(c.env.DB, buyerTeamId, { isCelebrity: (playerRow?.is_celebrity ?? 0) === 1 });
+  } catch (e) { logger.warn({ module: "transfers" }, "check transfer achievements (bid)", e); }
+
   return c.json({ ok: true });
 });
 
@@ -647,6 +660,13 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       "/dashboard/watchlist",
     ).catch((e) => logger.warn({ module: "transfers" }, "notify watchers on offer accept", e));
   }
+
+  // Kořaly — transferové milníky pro kupujícího
+  try {
+    const { checkTransferAchievements } = await import("../services/achievements");
+    const playerRow = await c.env.DB.prepare("SELECT is_celebrity FROM players WHERE id = ?").bind(playerId).first<{ is_celebrity: number }>();
+    await checkTransferAchievements(c.env.DB, buyerTeamId, { isCelebrity: (playerRow?.is_celebrity ?? 0) === 1 });
+  } catch (e) { logger.warn({ module: "transfers" }, "check transfer achievements (offer)", e); }
 
   return c.json({ ok: true });
 });

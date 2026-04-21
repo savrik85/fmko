@@ -7,29 +7,30 @@ import { apiFetch } from "@/lib/api";
 
 const SECTIONS = [
   { title: "Klub", items: [
-    { href: "/dashboard/squad", icon: "\u{1F465}", label: "K\u00E1dr", color: "#2D5F2D" },
-    { href: "/dashboard/training", icon: "\u{1F3CB}\uFE0F", label: "Tr\u00E9ninky", color: "#3D7A3D" },
-    { href: "/dashboard/transfers", icon: "\u{1F91D}", label: "P\u0159estupy", color: "#4A8A4A" },
-    { href: "/dashboard/watchlist", icon: "\u2B50", label: "Sledovan\u00ED", color: "#B8860B" },
+    { href: "/dashboard/squad", icon: "\u{1F465}", label: "Kádr", color: "#2D5F2D" },
+    { href: "/dashboard/training", icon: "\u{1F3CB}️", label: "Tréninky", color: "#3D7A3D" },
+    { href: "/dashboard/transfers", icon: "\u{1F91D}", label: "Přestupy", color: "#4A8A4A" },
+    { href: "/dashboard/watchlist", icon: "⭐", label: "Sledovaní", color: "#B8860B" },
     { href: "/dashboard/finances", icon: "\u{1F4B0}", label: "Finance", color: "#6B8E23" },
-    { href: "/dashboard/sponsors", icon: "\u{1F4BC}", label: "Sponzo\u0159i", color: "#8B7355" },
-    { href: "/dashboard/equipment", icon: "\u{1F45F}", label: "Vybaven\u00ED", color: "#7B6B4E" },
-    { href: "/dashboard/stadium", icon: "\u{1F3DF}\uFE0F", label: "Stadion", color: "#5C7A3D" },
-    { href: "/dashboard/fans", icon: "\u{1F4E3}", label: "Fanou\u0161ci", color: "#8B4513" },
-    { href: "/dashboard/events", icon: "\u{1F389}", label: "Ud\u00E1losti", color: "#8B6914" },
+    { href: "/dashboard/sponsors", icon: "\u{1F4BC}", label: "Sponzoři", color: "#8B7355" },
+    { href: "/dashboard/equipment", icon: "\u{1F45F}", label: "Vybavení", color: "#7B6B4E" },
+    { href: "/dashboard/stadium", icon: "\u{1F3DF}️", label: "Stadion", color: "#5C7A3D" },
+    { href: "/dashboard/fans", icon: "\u{1F4E3}", label: "Fanoušci", color: "#8B4513" },
+    { href: "/dashboard/events", icon: "\u{1F389}", label: "Události", color: "#8B6914" },
+    { href: "/dashboard/koraly", icon: "\u{1F37A}", label: "Kořaly", color: "#B8860B" },
   ]},
-  { title: "Sout\u011B\u017E", items: [
+  { title: "Soutěž", items: [
     { href: "/dashboard/liga", icon: "\u{1F3C6}", label: "Liga", color: "#B8860B" },
     { href: "/dashboard/schedule", icon: "\u{1F4C5}", label: "Rozpis", color: "#3D6B5C" },
-    { href: "/dashboard/friendly", icon: "\u{1F91C}", label: "P\u0159\u00E1tel\u00E1ky", color: "#4A7A5C" },
-    { href: "/dashboard/calendar", icon: "\u{1F5D3}\uFE0F", label: "Kalend\u00E1\u0159", color: "#6B7B3D" },
+    { href: "/dashboard/friendly", icon: "\u{1F91C}", label: "Přáteláky", color: "#4A7A5C" },
+    { href: "/dashboard/calendar", icon: "\u{1F5D3}️", label: "Kalendář", color: "#6B7B3D" },
     { href: "/dashboard/news", icon: "\u{1F4F0}", label: "Zpravodaj", color: "#556B2F" },
-    { href: "/dashboard/hlasovani", icon: "\u{1F5F3}\uFE0F", label: "Sn\u011Bm", color: "#B8860B" },
+    { href: "/dashboard/hlasovani", icon: "\u{1F5F3}️", label: "Sněm", color: "#B8860B" },
   ]},
-  { title: "Ostatn\u00ED", items: [
+  { title: "Ostatní", items: [
     { href: "/dashboard/app", icon: "\u{1F4F2}", label: "Nainstaluj", color: "#153615" },
-    { href: "/dashboard/invite", icon: "\u2709\uFE0F", label: "Pozvi kamar\u00E1da", color: "#3D6B5C" },
-    { href: "/dashboard/settings", icon: "\u2699\uFE0F", label: "Nastaven\u00ED", color: "#6B6B6B" },
+    { href: "/dashboard/invite", icon: "✉️", label: "Pozvi kamaráda", color: "#3D6B5C" },
+    { href: "/dashboard/settings", icon: "⚙️", label: "Nastavení", color: "#6B6B6B" },
   ]},
 ];
 

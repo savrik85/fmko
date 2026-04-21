@@ -576,6 +576,13 @@ export async function executeDailyTick(
         try {
           const { processWeeklyFinances } = await import("./finance-processor");
           await processWeeklyFinances(env.DB, teamId, newGameDate, (team.village_size as string) ?? "village");
+
+          // Kořaly — finanční milníky
+          const budgetRow = await env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
+          if (budgetRow) {
+            const { checkFinanceAchievements } = await import("../services/achievements");
+            await checkFinanceAchievements(env.DB, teamId, budgetRow.budget);
+          }
         } catch (e) {
           logger.error({ module: "daily-tick" }, `weekly finances failed for team ${teamId}`, e);
         }

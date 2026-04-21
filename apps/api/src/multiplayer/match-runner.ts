@@ -602,6 +602,19 @@ export async function runScheduledMatches(
         logger.error({ module: "match-runner" }, "Match experience failed", e);
       }
 
+      // Kořaly (achievements) — zápasové milníky pro oba týmy
+      try {
+        const vr = await db.prepare(
+          "SELECT CASE WHEN h.village_id = a.village_id AND h.village_id IS NOT NULL THEN 1 ELSE 0 END as d FROM teams h, teams a WHERE h.id = ? AND a.id = ?"
+        ).bind(homeTeamId, awayTeamId).first<{ d: number }>();
+        const isDerby = vr?.d === 1;
+        const { checkMatchAchievements } = await import("../services/achievements");
+        await checkMatchAchievements(db, homeTeamId, { own: result.homeScore, opp: result.awayScore, isDerby });
+        await checkMatchAchievements(db, awayTeamId, { own: result.awayScore, opp: result.homeScore, isDerby });
+      } catch (e) {
+        logger.warn({ module: "match-runner" }, "check achievements", e);
+      }
+
       results.push({
         matchId,
         homeScore: result.homeScore,
