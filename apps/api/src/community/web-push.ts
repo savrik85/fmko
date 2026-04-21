@@ -288,6 +288,33 @@ async function sendSinglePush(
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
+ * Odeslat push všem týmům, které mají daného hráče ve watchlistu (kromě stávajícího týmu).
+ * Respektuje notification_preferences.transfer.
+ */
+export async function sendWebPushToPlayerWatchers(
+  env: PushEnv,
+  playerId: string,
+  excludeTeamId: string | null,
+  title: string,
+  body: string,
+  url?: string,
+): Promise<void> {
+  const rows = await env.DB.prepare(
+    "SELECT DISTINCT w.team_id FROM player_watchlist w WHERE w.player_id = ?"
+  ).bind(playerId).all<{ team_id: string }>().catch((e) => { logger.warn({ module: "web-push" }, "load watchers", e); return { results: [] }; });
+
+  for (const r of rows.results) {
+    const teamId = r.team_id;
+    if (excludeTeamId && teamId === excludeTeamId) continue;
+    const prefs = await getNotificationPreferences(env.DB, teamId).catch((e) => { logger.warn({ module: "web-push" }, `load prefs for team ${teamId}`, e); return null; });
+    if (prefs && prefs.transfer === false) continue;
+    await sendWebPushToTeam(env, teamId, title, body, url).catch((e) =>
+      logger.warn({ module: "web-push" }, `watcher push failed for team ${teamId}`, e),
+    );
+  }
+}
+
+/**
  * Odeslat push notifikaci všem subscriptions týmu.
  * Fire-and-forget — nevolat await, nebo obalit try/catch.
  */

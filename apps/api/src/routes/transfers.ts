@@ -59,6 +59,23 @@ transfersRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   await c.env.DB.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE player_id = ? AND status = 'active'").bind(playerId).run().catch((e) => logger.warn({ module: "transfers" }, "withdraw listings on release", e));
   await c.env.DB.prepare("UPDATE transfer_offers SET status = 'withdrawn' WHERE player_id = ? AND status = 'pending'").bind(playerId).run().catch((e) => logger.warn({ module: "transfers" }, "withdraw offers on release", e));
 
+  // Push watcherům (před DELETE, aby lookup player_id ještě platil)
+  if (c.env.VAPID_PUBLIC_KEY && c.env.VAPID_PRIVATE_KEY) {
+    const { sendWebPushToPlayerWatchers } = await import("../community/web-push");
+    const playerName = `${player.first_name} ${player.last_name}`;
+    await sendWebPushToPlayerWatchers(
+      { DB: c.env.DB, VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT },
+      playerId, teamId,
+      "🟢 Sledovaný hráč uvolněn",
+      `${playerName} (${player.age}, ${player.position}) je k mání jako volný hráč`,
+      "/dashboard/transfers",
+    ).catch((e) => logger.warn({ module: "transfers" }, "notify watchers on release", e));
+
+    // Cleanup watchlist záznamů pro smazaného hráče
+    await c.env.DB.prepare("DELETE FROM player_watchlist WHERE player_id = ?").bind(playerId).run()
+      .catch((e) => logger.warn({ module: "transfers" }, "cleanup watchlist on release", e));
+  }
+
   // Delete player
   await c.env.DB.prepare("DELETE FROM players WHERE id = ?").bind(playerId).run();
 
@@ -432,6 +449,18 @@ transfersRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
     fee: amount,
   });
 
+  // Push notifikace týmům co hráče sledují (kromě kupujícího/prodávajícího)
+  if (c.env.VAPID_PUBLIC_KEY && c.env.VAPID_PRIVATE_KEY) {
+    const { sendWebPushToPlayerWatchers } = await import("../community/web-push");
+    await sendWebPushToPlayerWatchers(
+      { DB: c.env.DB, VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT },
+      playerId, buyerTeamId,
+      "🤝 Sledovaný hráč přestoupil",
+      `${playerName} → ${buyer.name} (${amount.toLocaleString("cs")} Kč)`,
+      "/dashboard/watchlist",
+    ).catch((e) => logger.warn({ module: "transfers" }, "notify watchers on bid accept", e));
+  }
+
   return c.json({ ok: true });
 });
 
@@ -606,6 +635,18 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     await createNotification(c.env.DB, buyerTeamId, "transfer", `✅ Přestup ${pName} dokončen`, `Koupili jste od ${seller?.name ?? "prodávajícího"} za ${amount.toLocaleString("cs-CZ")} Kč.`, "/dashboard/transfers", pushEnv);
     await createNotification(c.env.DB, sellerTeamId, "transfer", `✅ Prodej ${pName} dokončen`, `${buyer.name} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.`, "/dashboard/transfers", pushEnv);
   } catch (e) { logger.warn({ module: "transfers" }, "transfer accept notifications", e); }
+
+  // Push watcherům — buyer je excluded; seller měl hráče (ne na watchlistu).
+  if (c.env.VAPID_PUBLIC_KEY && c.env.VAPID_PRIVATE_KEY) {
+    const { sendWebPushToPlayerWatchers } = await import("../community/web-push");
+    await sendWebPushToPlayerWatchers(
+      { DB: c.env.DB, VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT },
+      playerId, buyerTeamId,
+      "🤝 Sledovaný hráč přestoupil",
+      `${playerName} → ${buyer.name} (${amount.toLocaleString("cs")} Kč)`,
+      "/dashboard/watchlist",
+    ).catch((e) => logger.warn({ module: "transfers" }, "notify watchers on offer accept", e));
+  }
 
   return c.json({ ok: true });
 });
