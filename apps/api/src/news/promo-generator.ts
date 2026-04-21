@@ -311,7 +311,9 @@ STRIKTNĚ:
 - První řádek = headline (max 90 znaků)
 - Od druhého řádku = body (max 150 slov)
 - Čeština, lehký humor, živý jazyk
-- NEVYMÝŠLEJ čísla — použij jen ta v kontextu níže
+- NIKDY NEVYMÝŠLEJ JMÉNA hráčů ani trenérů. Používej VÝHRADNĚ jména z KONTEXTU níže. Pokud hráč v kontextu není, nesmí se v článku objevit.
+- NIKDY NEVYMÝŠLEJ čísla (rating, body, skóre, věk, kapacitu). Použij jen ta v kontextu níže.
+- NIKDY NEVYMÝŠLEJ UDÁLOSTI (gól z minulého zápasu, hattrick, zranění detaily). Piš pouze o tom co je v kontextu.
 - Pokud chybí klíčový hráč (zranění), zmiň to stručně jako motivaci „i přes oslabení"
 - NEPIŠ konkrétní datum ani den v týdnu — použij výhradně relativní čas z pole "Kdy" níže
   (např. "zítra", "pozítří", "za 3 dny"). Nepřidávej vlastní datumové formulace.
@@ -350,7 +352,7 @@ POZNÁMKA: Jména trenérů můžeš (ale nemusíš) zmínit pro koloritovost (n
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           maxOutputTokens: 1024,
-          temperature: 0.9,
+          temperature: 0.6,
           thinkingConfig: { thinkingBudget: 0 },
         },
       }),

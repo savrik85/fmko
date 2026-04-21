@@ -197,6 +197,23 @@ export async function generateAiRoundReport(
     highlights.push(`Červená karta: ${rc.first_name} ${rc.last_name} (${rc.team_name})`);
   }
 
+  // Kompletní seznam hráčů, kteří hráli (jediný povolený zdroj jmen)
+  const playerLines: string[] = [];
+  for (const r of statsRows.results) {
+    const parts: string[] = [];
+    const goals = r.goals as number;
+    const assists = r.assists as number;
+    const yc = r.yellow_cards as number;
+    const rc = r.red_cards as number;
+    const rating = r.rating as number;
+    if (goals > 0) parts.push(`${goals}g`);
+    if (assists > 0) parts.push(`${assists}a`);
+    if (yc > 0) parts.push(`ŽK`);
+    if (rc > 0) parts.push(`ČK`);
+    parts.push(`rating ${rating.toFixed(1)}`);
+    playerLines.push(`${r.first_name} ${r.last_name} (${r.team_name}): ${parts.join(", ")}`);
+  }
+
   // Celebrity info — check if any celebrities played in this round
   const celebPlayers = await db.prepare(
     `SELECT p.first_name, p.last_name, p.personality, t.name as team_name
@@ -253,15 +270,23 @@ ZAJÍMAVOSTI:
 ${highlights.length > 0 ? highlights.join("\n") : "Žádné výrazné individuální výkony"}
 ${celebLines.length > 0 ? "\nCELEBRITY V SOUTĚŽI:\n" + celebLines.join("\n") : ""}
 
-Pravidla:
+HRÁČI, KTEŘÍ V KOLE HRÁLI (jediný povolený zdroj jmen — žádná jiná jména nepoužívej):
+${playerLines.join("\n")}
+
+ABSOLUTNÍ PRAVIDLA (porušení = článek je k ničemu):
+- NIKDY NEVYMÝŠLEJ JMÉNA. Používej VÝHRADNĚ jména uvedená v sekci HRÁČI/ZAJÍMAVOSTI/CELEBRITY/VÝSLEDKY výše. Pokud hráč v datech není, nesmí se v článku objevit.
+- NIKDY NEVYMÝŠLEJ ČÍSLA. Body, góly, asistence, skóre, návštěvnost, rating — všechno výhradně z dat výše. Pokud si nejsi jistý, číslo nezmiňuj.
+- NIKDY NEVYMÝŠLEJ UDÁLOSTI. Když v datech nepíše kdo dal gól / kdo dostal kartu, neříkej kdo. Popiš zápas obecně ("domácí dominovali", "hosté otočili"), bez konkrétních jmen u vymyšlených akcí.
+- Minuty gólů ber POUZE z dat ve VÝSLEDKY (formát "jméno minuta'"). Jiné minuty si nevymýšlej.
+
+Styl:
 - Piš česky, styl místního ${isPraha ? "pražského" : "okresního"} zpravodaje, 200-400 slov
 - První řádek = titulek článku (bez uvozovek, bez "Titulek:")
 - Zbytek = tělo článku
 - Vypíchni překvapení, zajímavé výkony, vývoj tabulky
 - Piš barvitě s humorem
 - ${localFlavor}
-- Nemusíš popsat každý zápas, vyber ty nejzajímavější
-- DŮLEŽITÉ: Nikdy nevymýšlej čísla — body, góly, skóre, počty diváků beri VÝHRADNĚ z dat výše. Pokud si nejsi jistý, číslo nezmiňuj.`;
+- Nemusíš popsat každý zápas, vyber ty nejzajímavější`;
 
   // Volání Gemini
   const res = await fetch(
@@ -271,7 +296,7 @@ Pravidla:
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 2048, temperature: 0.85, thinkingConfig: { thinkingBudget: 0 } },
+        generationConfig: { maxOutputTokens: 2048, temperature: 0.6, thinkingConfig: { thinkingBudget: 0 } },
       }),
     },
   );
