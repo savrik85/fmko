@@ -32,6 +32,7 @@ export default function ManagerDetailPage() {
 
   const [manager, setManager] = useState<ManagerProfile | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
+  const [achievements, setAchievements] = useState<AchievementsPayload | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,9 +41,11 @@ export default function ManagerDetailPage() {
     Promise.all([
       apiFetch<ManagerProfile>(`/api/teams/${managerId}/manager`).catch((e) => { console.error("manager profile load:", e); return null; }),
       apiFetch<Team>(`/api/teams/${managerId}`).catch((e) => { console.error("manager team load:", e); return null; }),
-    ]).then(([mgr, t]) => {
+      apiFetch<AchievementsPayload>(`/api/teams/${managerId}/achievements`).catch((e) => { console.error("achievements load:", e); return null; }),
+    ]).then(([mgr, t, ach]) => {
       setManager(mgr);
       setTeam(t);
+      setAchievements(ach);
       setLoading(false);
     }).catch((e) => { console.error("manager page load:", e); setLoading(false); });
   }, [teamId, managerId]);
@@ -150,8 +153,80 @@ export default function ManagerDetailPage() {
             )}
           </div>
         </div>
+
+        {achievements && achievements.achievements.length > 0 && (
+          <AchievementsSection data={achievements} />
+        )}
       </div>
     </>
+  );
+}
+
+interface AchievementItem {
+  key: string;
+  icon: string;
+  title: string;
+  desc: string;
+  tier: "bronze" | "silver" | "gold";
+  earnedAt: string | null;
+}
+
+interface AchievementsPayload {
+  achievements: AchievementItem[];
+  earnedCount: number;
+  totalCount: number;
+}
+
+const TIER_COLORS: Record<string, { bg: string; border: string; text: string; label: string }> = {
+  bronze: { bg: "#8B451312", border: "#8B4513", text: "#8B4513", label: "Bronz" },
+  silver: { bg: "#8B8B8B14", border: "#8B8B8B", text: "#595959", label: "Stříbro" },
+  gold:   { bg: "#B8860B18", border: "#B8860B", text: "#8B6914", label: "Zlato" },
+};
+
+function AchievementsSection({ data }: { data: AchievementsPayload }) {
+  const pct = data.totalCount > 0 ? (data.earnedCount / data.totalCount) * 100 : 0;
+  const byTier: Record<string, AchievementItem[]> = { gold: [], silver: [], bronze: [] };
+  for (const a of data.achievements) byTier[a.tier]?.push(a);
+
+  return (
+    <div className="card p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <SectionLabel>Úspěchy ({data.earnedCount}/{data.totalCount})</SectionLabel>
+        <div className="flex-1 max-w-[240px] bg-gray-100 rounded-full h-1.5 overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-amber-300 to-amber-600 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+      {(["gold", "silver", "bronze"] as const).map((tier) => {
+        const list = byTier[tier];
+        if (!list || list.length === 0) return null;
+        const tc = TIER_COLORS[tier];
+        const earned = list.filter((a) => a.earnedAt);
+        return (
+          <div key={tier} className="mt-3">
+            <div className="text-[10px] text-muted uppercase tracking-wide font-heading font-bold mb-1.5">{tc.label} ({earned.length}/{list.length})</div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+              {list.map((a) => {
+                const isEarned = !!a.earnedAt;
+                return (
+                  <div
+                    key={a.key}
+                    className={`rounded-lg p-2.5 flex items-start gap-2 ${isEarned ? "" : "opacity-40 grayscale"}`}
+                    style={isEarned ? { borderLeft: `3px solid ${tc.border}`, background: tc.bg } : { background: "#f5f5f5" }}
+                    title={a.desc}
+                  >
+                    <div className="text-xl shrink-0 leading-none">{a.icon}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-heading font-bold text-xs truncate">{a.title}</div>
+                      <div className="text-[10px] text-muted leading-snug line-clamp-2">{a.desc}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
