@@ -35,6 +35,7 @@ interface ScheduleMatch {
   hasLineup?: boolean;
   isDefaultLineup?: boolean;
   defaultPresetSlot?: "A" | "B" | "C" | null;
+  isLocalDerby?: boolean;
 }
 
 interface LeagueRound {
@@ -300,11 +301,11 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
   const linkLabel = isPlayed ? "Přehled" : canEditLineup ? (lineupInfo?.label ?? "Sestava") : null;
   const linkColor = isPlayed ? "text-pitch-600" : (lineupInfo?.color ?? "text-pitch-600");
   const inner = (
-    <div className={`card px-3 py-3 md:px-4 shadow-lg ${isClickable ? "hover:bg-gray-50 transition-colors" : ""}`}>
+    <div className={`card px-3 py-3 md:px-4 shadow-lg ${m.isLocalDerby ? "border-l-4 border-l-red-600" : ""} ${isClickable ? "hover:bg-gray-50 transition-colors" : ""}`}>
       {/* Mobile layout */}
       <div className="flex md:hidden items-center gap-2">
         <div className="shrink-0 w-6 text-center text-xs text-muted font-heading">
-          {m.round ? `${m.round}.` : ""}
+          {m.isLocalDerby ? <span title="Místní derby" className="text-red-600">🏘️</span> : (m.round ? `${m.round}.` : "")}
         </div>
         <BadgePreview primary={opp.color} secondary={opp.secondary} pattern={opp.badge as BadgePattern}
           initials={oppInitials} size={22} />
@@ -330,7 +331,11 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
       {/* Desktop layout */}
       <div className="hidden md:flex items-center gap-3">
         <div className="shrink-0 w-8 text-center">
-          <div className="text-xs text-muted font-heading">{m.round ? `${m.round}.` : ""}</div>
+          {m.isLocalDerby ? (
+            <div className="text-sm text-red-600" title="Místní derby">🏘️</div>
+          ) : (
+            <div className="text-xs text-muted font-heading">{m.round ? `${m.round}.` : ""}</div>
+          )}
         </div>
 
         <div className="flex-1 min-w-0 flex items-center gap-2 justify-end">

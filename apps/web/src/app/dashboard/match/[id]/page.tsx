@@ -33,6 +33,7 @@ interface MatchDetail {
   home_lineup_data: LineupData | null; away_lineup_data: LineupData | null;
   player_ratings?: Record<string, number>;
   absences?: MatchAbsence[];
+  isLocalDerby?: boolean;
 }
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
@@ -125,6 +126,13 @@ export default function MatchDetailPage() {
             </button>
           )}
         </div>
+
+        {match.isLocalDerby && (
+          <div className="mx-3 sm:mx-4 mt-1 mb-1 px-3 py-1.5 rounded-md text-center font-heading font-[800] text-xs sm:text-sm tracking-wide"
+            style={{ background: "linear-gradient(90deg, rgba(220,38,38,0.25), rgba(220,38,38,0.45), rgba(220,38,38,0.25))", color: "#fecaca", border: "1px solid rgba(220,38,38,0.5)" }}>
+            🏘️ MÍSTNÍ DERBY
+          </div>
+        )}
 
         {/* Score — mobile: stacked badge+name columns with larger names; desktop: horizontal */}
         <div className="flex items-start sm:items-center px-3 sm:px-4 py-4">

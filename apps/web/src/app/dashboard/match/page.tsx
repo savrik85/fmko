@@ -117,6 +117,7 @@ interface NextMatchInfo {
   matchId: string; calendarId: string; gameWeek: number | null; scheduledAt: string;
   isHome: boolean; homeName: string; awayName: string; homeColor: string; awayColor: string;
   isFriendly?: boolean;
+  isLocalDerby?: boolean;
 }
 
 interface UpcomingMatch {
@@ -474,6 +475,15 @@ function MatchPage() {
         };
 
         return (
+          <>
+            {nextMatch.isLocalDerby && (
+              <div
+                className="px-3 py-1.5 rounded-md text-center font-heading font-[800] text-sm tracking-wide"
+                style={{ background: "linear-gradient(90deg, rgba(220,38,38,0.15), rgba(220,38,38,0.35), rgba(220,38,38,0.15))", color: "#b91c1c", border: "1px solid rgba(220,38,38,0.45)" }}
+              >
+                🏘️ MÍSTNÍ DERBY
+              </div>
+            )}
           <div className="card p-3 flex items-center gap-2">
             <button disabled={currentIdx <= 0} onClick={() => { if (currentIdx > 0) switchToMatch(upcomingMatches[currentIdx - 1]); }}
               className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors text-lg font-bold">
@@ -501,6 +511,7 @@ function MatchPage() {
               ▶
             </button>
           </div>
+          </>
         );
       })()}
 

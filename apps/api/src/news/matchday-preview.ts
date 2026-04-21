@@ -16,6 +16,7 @@ interface MatchPreview {
   awayName: string;
   homeVillage: string | null;
   awayVillage: string | null;
+  isLocalDerby: boolean;
   stadiumName: string | null;
   homePos: number | null;
   awayPos: number | null;
@@ -156,6 +157,7 @@ export async function generateMatchdayPreview(
   const matchRows = await db.prepare(
     `SELECT m.id, m.home_team_id, m.away_team_id, m.stadium_name,
             th.name as home_name, ta.name as away_name,
+            th.village_id as home_village_id, ta.village_id as away_village_id,
             vh.name as home_village, va.name as away_village
      FROM matches m
      JOIN teams th ON m.home_team_id = th.id
@@ -216,6 +218,7 @@ export async function generateMatchdayPreview(
       awayName: m.away_name as string,
       homeVillage: (m.home_village as string) ?? null,
       awayVillage: (m.away_village as string) ?? null,
+      isLocalDerby: !!m.home_village_id && m.home_village_id === m.away_village_id,
       stadiumName: (m.stadium_name as string) ?? null,
       homePos: posMap[homeTeamId]?.pos ?? null,
       awayPos: posMap[awayTeamId]?.pos ?? null,
@@ -251,6 +254,7 @@ export async function generateMatchdayPreview(
   for (const p of previews) {
     const lines: string[] = [];
     lines.push(`ZÁPAS: ${p.homeName} vs ${p.awayName}`);
+    if (p.isLocalDerby) lines.push(`  🏘️ MÍSTNÍ DERBY — oba týmy z ${p.homeVillage ?? "stejné obce"}, napětí, prestiž, hospodský souboj`);
     if (p.stadiumName) lines.push(`  Stadion: ${p.stadiumName}`);
     if (p.homeVillage) {
       const fl = VILLAGE_FLAVOR[p.homeVillage];

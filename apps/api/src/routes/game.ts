@@ -2544,6 +2544,16 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 
   if (!match) return c.json({ nextMatch: null });
 
+  // Local derby detection — oba týmy ze stejné village_id
+  let isLocalDerby = false;
+  if (match.home_team_id && match.away_team_id) {
+    const vr = await c.env.DB.prepare(
+      "SELECT CASE WHEN h.village_id = a.village_id AND h.village_id IS NOT NULL THEN 1 ELSE 0 END as d FROM teams h, teams a WHERE h.id = ? AND a.id = ?"
+    ).bind(match.home_team_id as string, match.away_team_id as string).first<{ d: number }>()
+      .catch((e) => { logger.warn({ module: "game" }, "derby check", e); return null; });
+    isLocalDerby = vr?.d === 1;
+  }
+
   // For friendlies, lookup lineup by match_id; for league by calendar_id
   const lineupQuery = isFriendly
     ? c.env.DB.prepare("SELECT formation, tactic, players_data, is_auto, captain_id, preset_slot FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(teamId, match.id as string)
@@ -2738,6 +2748,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       homeName: match.home_name, awayName: match.away_name,
       homeColor: match.home_color, awayColor: match.away_color,
       isFriendly,
+      isLocalDerby,
     },
     lineup: lineup ? {
       formation: lineup.formation, tactic: lineup.tactic, isAuto: lineup.is_auto === 1,

@@ -286,6 +286,8 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
   ]);
   if (!homeTeam || !awayTeam) return c.json({ error: "Team not found" }, 404);
 
+  const isLocalDerby = !!homeTeam.village_id && homeTeam.village_id === awayTeam.village_id;
+
   // Get league standings for positions + form
   const leagueId = match.league_id as string;
   const allTeams = await c.env.DB.prepare("SELECT id FROM teams WHERE league_id = ?").bind(leagueId).all();
@@ -380,6 +382,7 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
     round: match.round,
     scheduledAt: schedAt,
     isHome: homeId === teamId,
+    isLocalDerby,
     home: mapTeam(homeTeam, homePlayers, homeManager),
     away: mapTeam(awayTeam, awayPlayers, awayManager),
     venue: {
@@ -422,8 +425,8 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
   // LEFT JOIN na lineups (per-calendar) — pro nadcházející zobrazí explicitně uloženou sestavu
   const result = await c.env.DB.prepare(
     `SELECT m.*,
-       ht.name as home_name, ht.primary_color as home_color, ht.secondary_color as home_secondary, ht.badge_pattern as home_badge, ht.user_id as home_user_id,
-       at.name as away_name, at.primary_color as away_color, at.secondary_color as away_secondary, at.badge_pattern as away_badge, at.user_id as away_user_id,
+       ht.name as home_name, ht.primary_color as home_color, ht.secondary_color as home_secondary, ht.badge_pattern as home_badge, ht.user_id as home_user_id, ht.village_id as home_village_id,
+       at.name as away_name, at.primary_color as away_color, at.secondary_color as away_secondary, at.badge_pattern as away_badge, at.user_id as away_user_id, at.village_id as away_village_id,
        sc.scheduled_at, sc.game_week,
        l.preset_slot, l.is_auto as lineup_is_auto
      FROM matches m
@@ -471,6 +474,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     hasLineup: row.lineup_is_auto !== null && row.lineup_is_auto === 0, // explicit per-calendar
     isDefaultLineup: (row.lineup_is_auto === null || row.lineup_is_auto !== 0) && hasAnyDefaultLineup, // má fallback default
     defaultPresetSlot, // jaký preset slot má poslední uložená sestava (pro indikaci u "(výchozí)")
+    isLocalDerby: !!row.home_village_id && row.home_village_id === row.away_village_id,
   }));
 
   return c.json({
@@ -677,14 +681,15 @@ matchesRouter.get("/teams/:teamId/league-schedule", async (c) => {
 matchesRouter.get("/matches/:id", async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT m.*,
-       ht.name as home_name, ht.primary_color as home_color, ht.badge_pattern as home_badge, ht.secondary_color as home_secondary,
-       at.name as away_name, at.primary_color as away_color, at.badge_pattern as away_badge, at.secondary_color as away_secondary
+       ht.name as home_name, ht.primary_color as home_color, ht.badge_pattern as home_badge, ht.secondary_color as home_secondary, ht.village_id as home_village_id,
+       at.name as away_name, at.primary_color as away_color, at.badge_pattern as away_badge, at.secondary_color as away_secondary, at.village_id as away_village_id
      FROM matches m
      LEFT JOIN teams ht ON m.home_team_id = ht.id
      LEFT JOIN teams at ON m.away_team_id = at.id
      WHERE m.id = ?`
   ).bind(c.req.param("id")).first<Record<string, unknown>>();
   if (!row) return c.json({ error: "Match not found" }, 404);
+  const isLocalDerby = !!row.home_village_id && row.home_village_id === row.away_village_id;
 
   const homeLineup = JSON.parse((row.home_lineup_data as string) ?? "null");
   const awayLineup = JSON.parse((row.away_lineup_data as string) ?? "null");
@@ -724,6 +729,7 @@ matchesRouter.get("/matches/:id", async (c) => {
     home_lineup_data: homeLineup,
     away_lineup_data: awayLineup,
     absences: JSON.parse((row.absences as string) ?? "[]"),
+    isLocalDerby,
   });
 });
 
