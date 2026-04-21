@@ -235,6 +235,18 @@ export async function generateMatchdayPreview(
   }
 
   // Build prompt
+  // Globální whitelist: hráč → tým (zabraňuje cross-attribution, kdy Gemini přiřadí reálného hráče k jinému týmu)
+  const allowedPlayers: { name: string; team: string; role: "key" | "injured" }[] = [];
+  for (const p of previews) {
+    for (const tp of p.homeTopPlayers) allowedPlayers.push({ name: tp.split(" (")[0], team: p.homeName, role: "key" });
+    for (const tp of p.awayTopPlayers) allowedPlayers.push({ name: tp.split(" (")[0], team: p.awayName, role: "key" });
+    for (const inj of p.homeInjured) allowedPlayers.push({ name: inj.split(" (")[0], team: p.homeName, role: "injured" });
+    for (const inj of p.awayInjured) allowedPlayers.push({ name: inj.split(" (")[0], team: p.awayName, role: "injured" });
+  }
+  const whitelistLines = allowedPlayers.map((ap) =>
+    `- ${ap.name} → ${ap.team}${ap.role === "injured" ? " (zraněn)" : ""}`
+  );
+
   const matchLines: string[] = [];
   for (const p of previews) {
     const lines: string[] = [];
@@ -248,14 +260,14 @@ export async function generateMatchdayPreview(
       const fl = VILLAGE_FLAVOR[p.awayVillage];
       lines.push(`  ${p.awayName} (${p.awayVillage}${fl ? ` — ${fl}` : ""})`);
     }
-    if (p.homePos !== null) lines.push(`  Domácí: ${p.homePos}. místo (${p.homePoints} bodů), forma ${p.homeForm}`);
-    if (p.awayPos !== null) lines.push(`  Hosté: ${p.awayPos}. místo (${p.awayPoints} bodů), forma ${p.awayForm}`);
-    if (p.homeTopPlayers.length > 0) lines.push(`  Klíčoví domácí: ${p.homeTopPlayers.join(", ")}`);
-    if (p.awayTopPlayers.length > 0) lines.push(`  Klíčoví hosté: ${p.awayTopPlayers.join(", ")}`);
-    if (p.homeInjured.length > 0) lines.push(`  Zranění domácí: ${p.homeInjured.join(", ")}`);
-    if (p.awayInjured.length > 0) lines.push(`  Zranění hosté: ${p.awayInjured.join(", ")}`);
-    if (p.homeManager) lines.push(`  Trenér domácích: ${p.homeManager}`);
-    if (p.awayManager) lines.push(`  Trenér hostů: ${p.awayManager}`);
+    if (p.homePos !== null) lines.push(`  ${p.homeName}: ${p.homePos}. místo (${p.homePoints} bodů), forma ${p.homeForm}`);
+    if (p.awayPos !== null) lines.push(`  ${p.awayName}: ${p.awayPos}. místo (${p.awayPoints} bodů), forma ${p.awayForm}`);
+    if (p.homeTopPlayers.length > 0) lines.push(`  Klíčoví hráči ${p.homeName}: ${p.homeTopPlayers.join(", ")}`);
+    if (p.awayTopPlayers.length > 0) lines.push(`  Klíčoví hráči ${p.awayName}: ${p.awayTopPlayers.join(", ")}`);
+    if (p.homeInjured.length > 0) lines.push(`  Zranění ${p.homeName}: ${p.homeInjured.join(", ")}`);
+    if (p.awayInjured.length > 0) lines.push(`  Zranění ${p.awayName}: ${p.awayInjured.join(", ")}`);
+    if (p.homeManager) lines.push(`  Trenér ${p.homeName}: ${p.homeManager}`);
+    if (p.awayManager) lines.push(`  Trenér ${p.awayName}: ${p.awayManager}`);
     if (p.homeInterviewQuote) lines.push(`  Citát trenéra ${p.homeManager ?? "domácích"}: „${p.homeInterviewQuote}"`);
     if (p.awayInterviewQuote) lines.push(`  Citát trenéra ${p.awayManager ?? "hostů"}: „${p.awayInterviewQuote}"`);
     if (p.h2hSummary) lines.push(`  Vzájemné: ${p.homeName} ${p.h2hSummary} proti ${p.awayName}`);
@@ -289,12 +301,18 @@ ${matchLines.join("\n\n")}
 AKTUÁLNÍ TABULKA PŘED KOLEM:
 ${standingsFull.join("\n")}
 
+POVOLENÍ HRÁČI (jediní, které smíš v článku zmínit + jejich tým):
+${whitelistLines.join("\n")}
+
 ABSOLUTNÍ PRAVIDLA (porušení = článek k ničemu):
-- NIKDY NEVYMÝŠLEJ JMÉNA (hráčů, trenérů, obcí). Používej VÝHRADNĚ jména uvedená výše. Pokud není v datech, neobjevuj se v článku.
+- Seznam POVOLENÍ HRÁČI je VYČERPÁVAJÍCÍ. Každé jméno hráče v článku MUSÍ být na tomto seznamu.
+- KAŽDÝ hráč MUSÍ být zmíněn JEN s týmem ke kterému je přiřazen v POVOLENÍ HRÁČI. NIKDY hráče nepřesouvej k jinému týmu.
+- Pokud hráč není na seznamu, NESMÍ se v článku objevit — ani jako střelec, ani jako kapitán, ani v narážce.
 - NIKDY NEVYMÝŠLEJ ČÍSLA (body, pozice, rating, forma). Beri POUZE z dat výše.
 - NIKDY NEVYMÝŠLEJ VÝROKY — citáty trenérů použij jen ty uvedené výše, v uvozovkách, PŘESNĚ jak jsou.
 - NEPREDIKUJ konkrétní výsledek čísly (nepiš "Lišov vyhraje 3:1"). Můžeš naznačit favorita.
 - Piš o tom co BUDE — zápasy se ještě nehrály. Nepiš minulým časem o nadcházejícím kole.
+- Když si nejsi jistý přiřazením, radši hráče nezmiňuj vůbec. Článek bez hráčů je lepší než článek se špatně přiřazenými hráči.
 
 Styl:
 - Česky, styl místního ${isPraha ? "pražského" : "okresního"} zpravodaje, 250-400 slov
@@ -313,7 +331,7 @@ Styl:
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 2048, temperature: 0.6, thinkingConfig: { thinkingBudget: 0 } },
+        generationConfig: { maxOutputTokens: 2048, temperature: 0.4, thinkingConfig: { thinkingBudget: 0 } },
       }),
     },
   ).catch((e) => { logger.warn({ module: "matchday-preview" }, "gemini fetch failed", e); return null; });
