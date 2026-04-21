@@ -282,33 +282,66 @@ export default function TrainingPage() {
                   Zlepšení ({totalUpgrades})
                   {groupedNegative.length > 0 && <span className="text-card-red font-normal text-xs ml-1">· {groupedNegative.length} pokles</span>}
                 </summary>
-                <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-0.5">
-                  {groupedPositive.map(([name, data]) => (
-                    <div key={name} className="flex items-baseline gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-                      <span className="font-heading font-[800] text-pitch-500 text-sm tabular-nums w-7 text-center shrink-0">
-                        +{data.attrs.reduce((s, a) => s + Math.max(0, a.change), 0)}
-                      </span>
-                      <span className="text-sm"><PlayerLink id={data.playerId} name={name} playerMap={playerMap} /></span>
-                      <div className="flex flex-wrap gap-1.5 ml-auto shrink-0">
-                        {data.attrs.filter((a) => a.change > 0).map((a, i) => (
-                          <span key={i} className="text-xs text-pitch-600">{ATTR_EMOJI[a.attribute] ?? ""} {ATTR_LABELS[a.attribute] ?? a.attribute}</span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                  {groupedNegative.map(([name, data]) => (
-                    <div key={name} className="flex items-baseline gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-                      <span className="font-heading font-[800] text-card-red text-sm tabular-nums w-7 text-center shrink-0">
-                        {data.attrs.reduce((s, a) => s + a.change, 0)}
-                      </span>
-                      <span className="text-sm"><PlayerLink id={data.playerId} name={name} playerMap={playerMap} /></span>
-                      <div className="flex flex-wrap gap-1.5 ml-auto shrink-0">
-                        {data.attrs.map((a, i) => (
-                          <span key={i} className="text-xs text-card-red">{ATTR_EMOJI[a.attribute] ?? ""} {ATTR_LABELS[a.attribute] ?? a.attribute}</span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-1">
+                  {(() => {
+                    const maxDelta = Math.max(
+                      1,
+                      ...[...groupedPositive, ...groupedNegative]
+                        .flatMap(([, d]) => d.attrs.map((a) => Math.abs(a.change))),
+                    );
+                    return (
+                      <>
+                        {groupedPositive.map(([name, data]) => {
+                          const posAttrs = data.attrs.filter((a) => a.change > 0).slice(0, 5);
+                          const totalGain = data.attrs.reduce((s, a) => s + Math.max(0, a.change), 0);
+                          return (
+                            <div key={name} className="py-1.5 border-b border-gray-50 last:border-b-0">
+                              <div className="flex items-baseline gap-2">
+                                <span className="font-heading font-[800] text-pitch-500 text-sm tabular-nums w-7 text-center shrink-0">+{totalGain}</span>
+                                <span className="text-sm"><PlayerLink id={data.playerId} name={name} playerMap={playerMap} /></span>
+                              </div>
+                              <div className="mt-1 ml-9 space-y-1">
+                                {posAttrs.map((a, i) => (
+                                  <div key={i} className="flex items-center gap-2">
+                                    <span className="text-xs w-4 text-center shrink-0">{ATTR_EMOJI[a.attribute] ?? ""}</span>
+                                    <span className="text-xs text-pitch-600 w-20 sm:w-24 shrink-0 truncate">{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
+                                    <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden min-w-0">
+                                      <div className="h-full bg-pitch-400 rounded-full transition-all duration-700" style={{ width: `${(a.change / maxDelta) * 100}%` }} />
+                                    </div>
+                                    <span className="font-heading font-bold text-xs tabular-nums text-pitch-500 w-7 text-right shrink-0">+{a.change}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {groupedNegative.map(([name, data]) => {
+                          const negAttrs = data.attrs.slice(0, 5);
+                          const totalLoss = data.attrs.reduce((s, a) => s + a.change, 0);
+                          return (
+                            <div key={name} className="py-1.5 border-b border-gray-50 last:border-b-0">
+                              <div className="flex items-baseline gap-2">
+                                <span className="font-heading font-[800] text-card-red text-sm tabular-nums w-7 text-center shrink-0">{totalLoss}</span>
+                                <span className="text-sm"><PlayerLink id={data.playerId} name={name} playerMap={playerMap} /></span>
+                              </div>
+                              <div className="mt-1 ml-9 space-y-1">
+                                {negAttrs.map((a, i) => (
+                                  <div key={i} className="flex items-center gap-2">
+                                    <span className="text-xs w-4 text-center shrink-0">{ATTR_EMOJI[a.attribute] ?? ""}</span>
+                                    <span className="text-xs text-card-red w-20 sm:w-24 shrink-0 truncate">{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
+                                    <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden min-w-0">
+                                      <div className="h-full bg-card-red rounded-full transition-all duration-700" style={{ width: `${(Math.abs(a.change) / maxDelta) * 100}%` }} />
+                                    </div>
+                                    <span className="font-heading font-bold text-xs tabular-nums text-card-red w-7 text-right shrink-0">{a.change}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
                 </div>
               </details>
             )}
