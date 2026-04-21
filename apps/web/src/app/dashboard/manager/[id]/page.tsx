@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { apiFetch, type ManagerProfile, type Team } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -33,6 +34,7 @@ export default function ManagerDetailPage() {
   const [manager, setManager] = useState<ManagerProfile | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
   const [achievements, setAchievements] = useState<AchievementsPayload | null>(null);
+  const [hofRank, setHofRank] = useState<{ rank: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,10 +44,16 @@ export default function ManagerDetailPage() {
       apiFetch<ManagerProfile>(`/api/teams/${managerId}/manager`).catch((e) => { console.error("manager profile load:", e); return null; }),
       apiFetch<Team>(`/api/teams/${managerId}`).catch((e) => { console.error("manager team load:", e); return null; }),
       apiFetch<AchievementsPayload>(`/api/teams/${managerId}/achievements`).catch((e) => { console.error("achievements load:", e); return null; }),
-    ]).then(([mgr, t, ach]) => {
+      apiFetch<{ entries: Array<{ teamId: string; isHuman: boolean }> }>(`/api/hall-of-fame`).catch((e) => { console.error("hof load:", e); return null; }),
+    ]).then(([mgr, t, ach, hof]) => {
       setManager(mgr);
       setTeam(t);
       setAchievements(ach);
+      if (hof) {
+        const humans = hof.entries.filter((e) => e.isHuman);
+        const idx = humans.findIndex((e) => e.teamId === managerId);
+        if (idx >= 0) setHofRank({ rank: idx + 1, total: humans.length });
+      }
       setLoading(false);
     }).catch((e) => { console.error("manager page load:", e); setLoading(false); });
   }, [teamId, managerId]);
@@ -135,6 +143,13 @@ export default function ManagerDetailPage() {
                 {manager.birthplace && <InfoRow label="Bydliště" value={manager.birthplace} />}
                 {manager.backstory && <InfoRow label="Pozadí" value={BACKSTORY_LABELS[manager.backstory] ?? manager.backstory} />}
                 <InfoRow label="Reputace" value={`${manager.reputation ?? 30}`} />
+                {hofRank && (
+                  <InfoRow label="Síň slávy" value={
+                    <Link href="/dashboard/hall-of-fame" className="text-ink hover:text-pitch-500 transition-colors">
+                      {hofRank.rank}. <span className="text-muted font-normal text-xs">z {hofRank.total}</span>
+                    </Link>
+                  } />
+                )}
                 <InfoRow label="Tým" value={
                   <a href={`/dashboard/team/${team.id}`} className="text-ink hover:underline flex items-center gap-1.5">
                     <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}

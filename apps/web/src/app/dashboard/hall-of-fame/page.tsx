@@ -50,16 +50,16 @@ export default function HallOfFamePage() {
       </div>
 
       <div className="card overflow-x-auto">
-        <table className="w-full text-sm min-w-[640px]">
+        <table className="w-full text-xs sm:text-sm">
           <thead>
-            <tr className="text-left text-label border-b border-gray-200 text-[11px] uppercase tracking-wide">
-              <th className="py-3 pl-4 pr-2 w-12">#</th>
-              <th className="py-3 px-2">Trenér</th>
-              <th className="py-3 px-2">Tým</th>
-              <th className="py-3 px-2 text-right w-16">🥇</th>
-              <th className="py-3 px-2 text-right w-16">🥈</th>
-              <th className="py-3 px-2 text-right w-16">🥉</th>
-              <th className="py-3 px-2 pr-4 text-right w-16">Σ</th>
+            <tr className="text-left text-label border-b border-gray-200 text-[10px] sm:text-[11px] uppercase tracking-wide">
+              <th className="py-2 sm:py-3 pl-2 sm:pl-4 pr-1 w-8 sm:w-12">#</th>
+              <th className="py-2 sm:py-3 px-1 sm:px-2">Trenér</th>
+              <th className="py-2 sm:py-3 px-1 sm:px-2">Tým</th>
+              <th className="py-2 sm:py-3 px-1 sm:px-2 text-right w-8 sm:w-12">🥇</th>
+              <th className="py-2 sm:py-3 px-1 sm:px-2 text-right w-8 sm:w-12">🥈</th>
+              <th className="py-2 sm:py-3 px-1 sm:px-2 text-right w-8 sm:w-12">🥉</th>
+              <th className="py-2 sm:py-3 px-1 sm:px-2 pr-2 sm:pr-4 text-right w-8 sm:w-12">Σ</th>
             </tr>
           </thead>
           <tbody>
@@ -71,7 +71,7 @@ export default function HallOfFamePage() {
                   key={e.teamId}
                   className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50/40 transition-colors ${isMe ? "bg-pitch-50/40" : ""}`}
                 >
-                  <td className="py-2.5 pl-4 pr-2 font-heading font-[800] tabular-nums">
+                  <td className="py-2 sm:py-2.5 pl-2 sm:pl-4 pr-1 font-heading font-[800] tabular-nums text-xs sm:text-sm">
                     {e.displayRank <= 3 ? (
                       <span className={e.displayRank === 1 ? "text-amber-600" : e.displayRank === 2 ? "text-gray-500" : "text-orange-700"}>
                         {e.displayRank}.
@@ -80,41 +80,41 @@ export default function HallOfFamePage() {
                       <span className="text-muted">{e.displayRank}.</span>
                     )}
                   </td>
-                  <td className="py-2.5 px-2">
+                  <td className="py-2 sm:py-2.5 px-1 sm:px-2">
                     {e.managerId && e.managerName ? (
-                      <Link href={`/dashboard/manager/${e.managerId}`} className="flex items-center gap-2 hover:text-pitch-500 transition-colors">
+                      <Link href={`/dashboard/manager/${e.managerId}`} className="flex items-center gap-1.5 sm:gap-2 hover:text-pitch-500 transition-colors">
                         {hasAvatar ? (
-                          <FaceAvatar faceConfig={e.managerAvatar as Record<string, unknown>} size={32} className="shrink-0 bg-gray-100 rounded-full" />
+                          <FaceAvatar faceConfig={e.managerAvatar as Record<string, unknown>} size={24} className="shrink-0 bg-gray-100 rounded-full sm:!w-8 sm:!h-8" />
                         ) : (
-                          <div className="shrink-0 w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center font-heading font-bold text-xs text-muted">
+                          <div className="shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gray-200 flex items-center justify-center font-heading font-bold text-[10px] sm:text-xs text-muted">
                             {e.managerName[0]}
                           </div>
                         )}
-                        <span className="font-heading font-bold truncate">{e.managerName}</span>
+                        <span className="font-heading font-bold truncate text-xs sm:text-sm">{e.managerName}</span>
                       </Link>
                     ) : (
                       <span className="text-muted italic">—</span>
                     )}
                   </td>
-                  <td className="py-2.5 px-2">
-                    <Link href={`/dashboard/team/${e.teamId}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                  <td className="py-2 sm:py-2.5 px-1 sm:px-2">
+                    <Link href={`/dashboard/team/${e.teamId}`} className="flex items-center gap-1.5 sm:gap-2 hover:opacity-80 transition-opacity">
                       <BadgePreview
                         primary={e.primaryColor}
                         secondary={e.secondaryColor}
                         pattern={e.badgePattern as BadgePattern}
                         initials={e.teamName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()}
-                        size={20}
+                        size={18}
                       />
                       <div className="min-w-0">
-                        <div className="truncate font-heading font-bold">{e.teamName}</div>
-                        {e.villageName && <div className="text-[10px] text-muted truncate">{e.villageName}</div>}
+                        <div className="truncate font-heading font-bold text-xs sm:text-sm">{e.teamName}</div>
+                        {e.villageName && <div className="text-[9px] sm:text-[10px] text-muted truncate">{e.villageName}</div>}
                       </div>
                     </Link>
                   </td>
-                  <td className="py-2.5 px-2 text-right tabular-nums font-heading font-bold text-amber-600">{e.gold || ""}</td>
-                  <td className="py-2.5 px-2 text-right tabular-nums font-heading font-bold text-gray-500">{e.silver || ""}</td>
-                  <td className="py-2.5 px-2 text-right tabular-nums font-heading font-bold text-orange-700">{e.bronze || ""}</td>
-                  <td className="py-2.5 px-2 pr-4 text-right tabular-nums font-heading font-[800]">{e.total}</td>
+                  <td className="py-2 sm:py-2.5 px-1 sm:px-2 text-right tabular-nums font-heading font-bold text-amber-600 text-xs sm:text-sm">{e.gold || ""}</td>
+                  <td className="py-2 sm:py-2.5 px-1 sm:px-2 text-right tabular-nums font-heading font-bold text-gray-500 text-xs sm:text-sm">{e.silver || ""}</td>
+                  <td className="py-2 sm:py-2.5 px-1 sm:px-2 text-right tabular-nums font-heading font-bold text-orange-700 text-xs sm:text-sm">{e.bronze || ""}</td>
+                  <td className="py-2 sm:py-2.5 px-1 sm:px-2 pr-2 sm:pr-4 text-right tabular-nums font-heading font-[800] text-xs sm:text-sm">{e.total}</td>
                 </tr>
               );
             })}
