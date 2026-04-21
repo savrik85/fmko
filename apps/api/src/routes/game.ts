@@ -3019,6 +3019,29 @@ gameRouter.post("/admin/backfill-chemistry", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+// POST /api/admin/backfill-achievements — přepočítat achievementy ze stavu DB pro všechny týmy (nebo jeden).
+gameRouter.post("/admin/backfill-achievements", async (c) => {
+  const targetTeamId = c.req.query("teamId");
+  const { backfillTeamAchievements } = await import("../services/achievements");
+
+  const teams = targetTeamId
+    ? [{ id: targetTeamId } as { id: string }]
+    : (await c.env.DB.prepare("SELECT id FROM teams").all<{ id: string }>()).results;
+
+  const summary: Record<string, number> = {};
+  let totalUnlocked = 0;
+  for (const t of teams) {
+    const unlocked = await backfillTeamAchievements(c.env.DB, t.id).catch((e) => {
+      logger.warn({ module: "game" }, `backfill achievements for ${t.id}`, e);
+      return [] as string[];
+    });
+    totalUnlocked += unlocked.length;
+    for (const key of unlocked) summary[key] = (summary[key] ?? 0) + 1;
+  }
+
+  return c.json({ ok: true, teams: teams.length, totalUnlocked, perAchievement: summary });
+});
+
 // ═══ TRANSFER SYSTEM ═══
 
 // Release player → free agent

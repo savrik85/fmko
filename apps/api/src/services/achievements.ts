@@ -203,6 +203,73 @@ export async function checkFinanceAchievements(db: D1Database, teamId: string, b
   return unlocked;
 }
 
+/**
+ * Backfill — projít historii týmu a odemknout všechny achievementy kterých už
+ * dosáhl. Bezpečně idempotentní (INSERT OR IGNORE).
+ * Pokrývá: zápasové milníky, derby, finance, transferové (podle DB stavu).
+ */
+export async function backfillTeamAchievements(db: D1Database, teamId: string): Promise<string[]> {
+  const unlocked: string[] = [];
+  const push = (key: string) => { unlocked.push(key); };
+
+  // ── Zápasové ──
+  const stats = await getMatchStats(db, teamId);
+  if (stats.wins >= 1 && await award(db, teamId, "first_win")) push("first_win");
+  if (stats.wins >= 10 && await award(db, teamId, "wins_10")) push("wins_10");
+  if (stats.wins >= 50 && await award(db, teamId, "wins_50")) push("wins_50");
+  if (stats.currentWinStreak >= 3 && await award(db, teamId, "win_streak_3")) push("win_streak_3");
+  if (stats.currentWinStreak >= 5 && await award(db, teamId, "win_streak_5")) push("win_streak_5");
+  if (stats.biggestWin >= 5 && await award(db, teamId, "big_win")) push("big_win");
+  if (stats.topScoreInMatch >= 5 && await award(db, teamId, "hat_trick")) push("hat_trick");
+  if (stats.cleanSheets >= 1 && await award(db, teamId, "clean_sheet")) push("clean_sheet");
+  if (stats.cleanSheets >= 5 && await award(db, teamId, "clean_sheets_5")) push("clean_sheets_5");
+  if (stats.matches >= 10 && await award(db, teamId, "matches_10")) push("matches_10");
+  if (stats.matches >= 50 && await award(db, teamId, "matches_50")) push("matches_50");
+  if (stats.matches >= 100 && await award(db, teamId, "matches_100")) push("matches_100");
+
+  // ── Derby ──
+  const derbyRow = await db.prepare(
+    `SELECT COUNT(*) as wins FROM matches m
+     JOIN teams ht ON m.home_team_id = ht.id
+     JOIN teams at ON m.away_team_id = at.id
+     WHERE m.status = 'simulated'
+       AND ht.village_id = at.village_id AND ht.village_id IS NOT NULL
+       AND ((m.home_team_id = ? AND m.home_score > m.away_score)
+         OR (m.away_team_id = ? AND m.away_score > m.home_score))`
+  ).bind(teamId, teamId).first<{ wins: number }>()
+    .catch((e) => { logger.warn({ module: "achievements" }, "backfill derby count", e); return null; });
+  if ((derbyRow?.wins ?? 0) >= 1 && await award(db, teamId, "derby_first_win")) push("derby_first_win");
+  if (stats.currentDerbyWinStreak >= 3 && await award(db, teamId, "derby_streak_3")) push("derby_streak_3");
+
+  // ── Finance ──
+  const budgetRow = await db.prepare("SELECT budget FROM teams WHERE id = ?")
+    .bind(teamId).first<{ budget: number }>().catch((e) => { logger.warn({ module: "achievements" }, "backfill budget", e); return null; });
+  if (budgetRow) {
+    if (budgetRow.budget >= 500_000 && await award(db, teamId, "budget_500k")) push("budget_500k");
+    if (budgetRow.budget >= 1_000_000 && await award(db, teamId, "budget_1m")) push("budget_1m");
+  }
+
+  // ── Transferové (z player_contracts historie) ──
+  const signingRow = await db.prepare(
+    "SELECT COUNT(*) as n FROM player_contracts WHERE team_id = ? AND join_type = 'transfer'"
+  ).bind(teamId).first<{ n: number }>().catch((e) => { logger.warn({ module: "achievements" }, "backfill signings", e); return null; });
+  if ((signingRow?.n ?? 0) >= 1 && await award(db, teamId, "first_signing")) push("first_signing");
+
+  const celebRow = await db.prepare(
+    `SELECT COUNT(*) as n FROM player_contracts pc
+     JOIN players p ON p.id = pc.player_id
+     WHERE pc.team_id = ? AND pc.join_type = 'transfer' AND p.is_celebrity = 1`
+  ).bind(teamId).first<{ n: number }>().catch((e) => { logger.warn({ module: "achievements" }, "backfill celeb", e); return null; });
+  if ((celebRow?.n ?? 0) >= 1 && await award(db, teamId, "celebrity_signing")) push("celebrity_signing");
+
+  const releasedRow = await db.prepare(
+    "SELECT COUNT(*) as n FROM player_contracts WHERE team_id = ? AND leave_type = 'released'"
+  ).bind(teamId).first<{ n: number }>().catch((e) => { logger.warn({ module: "achievements" }, "backfill released", e); return null; });
+  if ((releasedRow?.n ?? 0) >= 1 && await award(db, teamId, "released_first")) push("released_first");
+
+  return unlocked;
+}
+
 /** Načíst všechny získané achievementy týmu. */
 export async function getTeamAchievements(db: D1Database, teamId: string): Promise<Array<{
   key: string;
