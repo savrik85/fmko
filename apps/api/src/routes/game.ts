@@ -3404,6 +3404,48 @@ gameRouter.delete("/teams/:teamId/watchlist/:playerId", async (c) => {
   return c.json({ ok: true });
 });
 
+// Hall of Fame — žebříček všech týmů podle počtu achievementů (zlato > stříbro > bronz)
+gameRouter.get("/hall-of-fame", async (c) => {
+  const rows = await c.env.DB.prepare(
+    `SELECT
+       t.id as team_id, t.name as team_name, t.primary_color, t.secondary_color, t.badge_pattern,
+       t.user_id as user_id,
+       m.id as manager_id, m.name as manager_name,
+       v.name as village_name,
+       COUNT(ta.achievement_key) as total,
+       COALESCE(SUM(CASE WHEN ta.tier = 'gold' THEN 1 ELSE 0 END), 0) as gold,
+       COALESCE(SUM(CASE WHEN ta.tier = 'silver' THEN 1 ELSE 0 END), 0) as silver,
+       COALESCE(SUM(CASE WHEN ta.tier = 'bronze' THEN 1 ELSE 0 END), 0) as bronze
+     FROM teams t
+     LEFT JOIN managers m ON m.team_id = t.id
+     LEFT JOIN villages v ON v.id = t.village_id
+     LEFT JOIN team_achievements ta ON ta.team_id = t.id
+     GROUP BY t.id
+     ORDER BY gold DESC, silver DESC, bronze DESC, t.name ASC
+     LIMIT 100`
+  ).all<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: "game" }, "hall of fame query", e); return { results: [] as Record<string, unknown>[] }; });
+
+  const entries = rows.results.map((r, i) => ({
+    rank: i + 1,
+    teamId: r.team_id as string,
+    teamName: r.team_name as string,
+    primaryColor: (r.primary_color as string) || "#2D5F2D",
+    secondaryColor: (r.secondary_color as string) || "#FFFFFF",
+    badgePattern: (r.badge_pattern as string) || "shield",
+    isHuman: (r.user_id as string) !== "ai",
+    managerId: r.manager_id as string | null,
+    managerName: r.manager_name as string | null,
+    villageName: r.village_name as string | null,
+    total: (r.total as number) ?? 0,
+    gold: (r.gold as number) ?? 0,
+    silver: (r.silver as number) ?? 0,
+    bronze: (r.bronze as number) ?? 0,
+  }));
+
+  return c.json({ entries });
+});
+
 // Kořaly — seznam získaných + katalog všech achievementů
 gameRouter.get("/teams/:teamId/achievements", async (c) => {
   const teamId = c.req.param("teamId");

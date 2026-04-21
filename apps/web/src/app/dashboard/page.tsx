@@ -95,6 +95,7 @@ export default function DashboardPage() {
   const [preview, setPreview] = useState<MatchPreview | null>(null);
   const [news, setNews] = useState<Array<{ id: string; type: string; headline: string; icon: string; date: string }>>([]);
   const [achievements, setAchievements] = useState<Array<{ key: string; icon: string; title: string; tier: string; earnedAt: string | null }>>([]);
+  const [hofRank, setHofRank] = useState<{ myRank: number | null; myTotal: number; myGold: number; mySilver: number; myBronze: number; top3: Array<{ rank: number; teamName: string; total: number }>; totalEntries: number } | null>(null);
   const [promoting, setPromoting] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -136,6 +137,21 @@ export default function DashboardPage() {
             .slice(0, 3)
         ))
         .catch((e) => console.error("achievements fetch:", e));
+      // Fetch Hall of Fame — compute my rank
+      apiFetch<{ entries: Array<{ rank: number; teamId: string; teamName: string; total: number; gold: number; silver: number; bronze: number }> }>(`/api/hall-of-fame`)
+        .then((d) => {
+          const me = d.entries.find((e) => e.teamId === teamId);
+          setHofRank({
+            myRank: me?.rank ?? null,
+            myTotal: me?.total ?? 0,
+            myGold: me?.gold ?? 0,
+            mySilver: me?.silver ?? 0,
+            myBronze: me?.bronze ?? 0,
+            top3: d.entries.slice(0, 3).map((e) => ({ rank: e.rank, teamName: e.teamName, total: e.total })),
+            totalEntries: d.entries.length,
+          });
+        })
+        .catch((e) => console.error("hall of fame fetch:", e));
     }).catch(() => setLoading(false));
   }, [teamId]);
 
@@ -717,33 +733,65 @@ export default function DashboardPage() {
         ) : <div />}
       </div>
 
-      {/* ═══ Row 3: Naposledy odemčené úspěchy ═══ */}
-      {achievements.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Naposledy odemčené úspěchy</SectionLabel>
-          <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {achievements.map((a) => {
-              const days = a.earnedAt ? Math.max(0, Math.floor((Date.now() - new Date(a.earnedAt).getTime()) / 86400000)) : 0;
-              const timeLabel = days === 0 ? "dnes" : days === 1 ? "včera" : `před ${days}d`;
-              const tierColor = a.tier === "gold" ? "text-amber-600" : a.tier === "silver" ? "text-gray-500" : "text-orange-700";
-              return (
-                <Link
-                  key={a.key}
-                  href={`/dashboard/manager/${teamId}`}
-                  className="flex items-center gap-2.5 py-2 px-1 hover:bg-gray-50/60 rounded-md transition-colors"
-                >
-                  <div className="text-xl shrink-0 leading-none">{a.icon}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className={`font-heading font-bold text-sm truncate ${tierColor}`}>{a.title}</div>
-                    <div className="text-[10px] text-muted mt-0.5">{timeLabel}</div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-          <div className="text-center pt-2">
-            <Link href={`/dashboard/manager/${teamId}`} className="text-xs text-pitch-500 font-heading font-bold hover:underline">Všechny úspěchy →</Link>
-          </div>
+      {/* ═══ Row 3: Naposledy odemčené úspěchy + Žebříček ═══ */}
+      {(achievements.length > 0 || hofRank) && (
+        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-5">
+          {/* Naposledy odemčené */}
+          {achievements.length > 0 ? (
+            <div className="card p-4 sm:p-5">
+              <SectionLabel>Naposledy odemčené úspěchy</SectionLabel>
+              <div className="mt-2 space-y-1">
+                {achievements.map((a) => {
+                  const days = a.earnedAt ? Math.max(0, Math.floor((Date.now() - new Date(a.earnedAt).getTime()) / 86400000)) : 0;
+                  const timeLabel = days === 0 ? "dnes" : days === 1 ? "včera" : `před ${days}d`;
+                  const tierColor = a.tier === "gold" ? "text-amber-600" : a.tier === "silver" ? "text-gray-500" : "text-orange-700";
+                  return (
+                    <Link
+                      key={a.key}
+                      href={`/dashboard/manager/${teamId}`}
+                      className="flex items-center gap-2.5 py-1.5 px-1 hover:bg-gray-50/60 rounded-md transition-colors"
+                    >
+                      <div className="text-xl shrink-0 leading-none">{a.icon}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className={`font-heading font-bold text-sm truncate ${tierColor}`}>{a.title}</div>
+                        <div className="text-[10px] text-muted mt-0.5">{timeLabel}</div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+              <div className="text-center pt-2">
+                <Link href={`/dashboard/manager/${teamId}`} className="text-xs text-pitch-500 font-heading font-bold hover:underline">Všechny úspěchy →</Link>
+              </div>
+            </div>
+          ) : <div />}
+
+          {/* Žebříček — moje pořadí */}
+          {hofRank && (
+            <div className="card p-4 sm:p-5">
+              <SectionLabel>Síň slávy</SectionLabel>
+              <div className="mt-2 text-center">
+                {hofRank.myRank ? (
+                  <>
+                    <div className="font-heading font-[800] text-4xl tabular-nums" style={{ color: safeColor }}>{hofRank.myRank}.</div>
+                    <div className="text-xs text-muted mt-1">
+                      z {hofRank.totalEntries} trenérů
+                    </div>
+                    <div className="flex items-center justify-center gap-3 mt-3 text-sm tabular-nums">
+                      <span className="text-amber-600">🥇 {hofRank.myGold}</span>
+                      <span className="text-gray-500">🥈 {hofRank.mySilver}</span>
+                      <span className="text-orange-700">🥉 {hofRank.myBronze}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-sm text-muted py-3">Ještě bez úspěchů</div>
+                )}
+              </div>
+              <div className="text-center pt-3">
+                <Link href="/dashboard/hall-of-fame" className="text-xs text-pitch-500 font-heading font-bold hover:underline">Celý žebříček →</Link>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
