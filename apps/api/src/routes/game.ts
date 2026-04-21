@@ -4466,6 +4466,28 @@ gameRouter.post("/admin/teams/:teamId/generate-interview", async (c) => {
   return c.json({ ok: true, calendarId: nextMatch.calendar_id, gameWeek: nextMatch.game_week });
 });
 
+// POST /api/admin/leagues/:leagueId/generate-matchday-preview — dev trigger
+gameRouter.post("/admin/leagues/:leagueId/generate-matchday-preview", async (c) => {
+  const leagueId = c.req.param("leagueId");
+
+  // Najdi nejbližší nadcházející kolo (status='scheduled') této ligy
+  const nextCal = await c.env.DB.prepare(
+    `SELECT id, game_week, scheduled_at FROM season_calendar
+     WHERE league_id = ? AND status = 'scheduled'
+     ORDER BY scheduled_at ASC LIMIT 1`
+  ).bind(leagueId)
+    .first<{ id: string; game_week: number; scheduled_at: string }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "admin matchday-preview lookup", e); return null; });
+
+  if (!nextCal) return c.json({ error: "Žádné nadcházející kolo v této lize" }, 404);
+  if (!c.env.GEMINI_API_KEY) return c.json({ error: "GEMINI_API_KEY není nastaven" }, 500);
+
+  const { generateMatchdayPreview } = await import("../news/matchday-preview");
+  await generateMatchdayPreview(c.env.DB, c.env.GEMINI_API_KEY, leagueId, nextCal.id);
+
+  return c.json({ ok: true, calendarId: nextCal.id, gameWeek: nextCal.game_week, scheduledAt: nextCal.scheduled_at });
+});
+
 // ── Admin: Seed data management ──
 
 gameRouter.get("/admin/seed-data", async (c) => {
