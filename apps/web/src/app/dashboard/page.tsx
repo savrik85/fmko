@@ -725,18 +725,16 @@ export default function DashboardPage() {
             {achievements.map((a) => {
               const days = a.earnedAt ? Math.max(0, Math.floor((Date.now() - new Date(a.earnedAt).getTime()) / 86400000)) : 0;
               const timeLabel = days === 0 ? "dnes" : days === 1 ? "včera" : `před ${days}d`;
-              const tierBorder = a.tier === "gold" ? "#B8860B" : a.tier === "silver" ? "#8B8B8B" : "#8B4513";
-              const tierBg = a.tier === "gold" ? "#B8860B18" : a.tier === "silver" ? "#8B8B8B14" : "#8B451312";
+              const tierColor = a.tier === "gold" ? "text-amber-600" : a.tier === "silver" ? "text-gray-500" : "text-orange-700";
               return (
                 <Link
                   key={a.key}
                   href={`/dashboard/manager/${teamId}`}
-                  className="flex items-center gap-2.5 p-3 rounded-lg hover:opacity-80 transition-opacity"
-                  style={{ borderLeft: `4px solid ${tierBorder}`, background: tierBg }}
+                  className="flex items-center gap-2.5 py-2 px-1 hover:bg-gray-50/60 rounded-md transition-colors"
                 >
-                  <div className="text-2xl shrink-0 leading-none">{a.icon}</div>
+                  <div className="text-xl shrink-0 leading-none">{a.icon}</div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-heading font-bold text-sm truncate">{a.title}</div>
+                    <div className={`font-heading font-bold text-sm truncate ${tierColor}`}>{a.title}</div>
                     <div className="text-[10px] text-muted mt-0.5">{timeLabel}</div>
                   </div>
                 </Link>
