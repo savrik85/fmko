@@ -2223,7 +2223,7 @@ gameRouter.post("/game/bootstrap-league", async (c) => {
 
       await db.prepare("UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'")
         .bind(cal.id).run();
-      await runScheduledMatches(db, cal.id);
+      await runScheduledMatches(db, cal.id, c.env.GEMINI_API_KEY);
       await db.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?").bind(cal.id).run();
       simulatedRounds++;
     }
@@ -2287,7 +2287,7 @@ gameRouter.post("/game/run-matches", async (c) => {
 
       await c.env.DB.prepare("UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'")
         .bind(matchCal.id).run();
-      const results = await runScheduledMatches(c.env.DB, matchCal.id);
+      const results = await runScheduledMatches(c.env.DB, matchCal.id, c.env.GEMINI_API_KEY);
       await c.env.DB.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
         .bind(matchCal.id).run();
       totalMatches += results.length;
@@ -4586,6 +4586,17 @@ gameRouter.post("/admin/leagues/:leagueId/generate-matchday-preview", async (c) 
   await generateMatchdayPreview(c.env.DB, c.env.GEMINI_API_KEY, leagueId, nextCal.id);
 
   return c.json({ ok: true, calendarId: nextCal.id, gameWeek: nextCal.game_week, scheduledAt: nextCal.scheduled_at });
+});
+
+// POST /api/admin/generate-round-summary?calendarId=X — dev trigger pro Hráče+Trenéra kola
+gameRouter.post("/admin/generate-round-summary", async (c) => {
+  const calendarId = c.req.query("calendarId");
+  if (!calendarId) return c.json({ error: "calendarId query parameter required" }, 400);
+  if (!c.env.GEMINI_API_KEY) return c.json({ error: "GEMINI_API_KEY není nastaven" }, 503);
+
+  const { generateRoundSummary } = await import("../news/round-summary");
+  const result = await generateRoundSummary(c.env.DB, c.env.GEMINI_API_KEY, calendarId);
+  return c.json({ ok: true, ...result });
 });
 
 // ── Admin: Seed data management ──

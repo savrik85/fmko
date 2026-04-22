@@ -21,6 +21,7 @@ export interface MatchRunResult {
 export async function runScheduledMatches(
   db: D1Database,
   calendarId: string,
+  geminiApiKey?: string,
 ): Promise<MatchRunResult[]> {
   const results: MatchRunResult[] = [];
 
@@ -624,6 +625,16 @@ export async function runScheduledMatches(
       });
     } catch (e) {
       logger.error({ module: "match-runner" }, `Failed to simulate match ${matchId}`, e);
+    }
+  }
+
+  // Round summary — AI vybere Hráče a Trenéra kola + napíše článek
+  if (results.length > 0 && geminiApiKey) {
+    try {
+      const { generateRoundSummary } = await import("../news/round-summary");
+      await generateRoundSummary(db, geminiApiKey, calendarId);
+    } catch (e) {
+      logger.warn({ module: "match-runner" }, "round summary failed", e);
     }
   }
 

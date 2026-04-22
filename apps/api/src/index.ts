@@ -121,7 +121,7 @@ export default {
               "UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'"
             ).bind(matchCal.id).run();
 
-            const results = await runScheduledMatches(env.DB, matchCal.id as string);
+            const results = await runScheduledMatches(env.DB, matchCal.id as string, env.GEMINI_API_KEY);
             await env.DB.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
               .bind(matchCal.id).run();
             totalMatches += results.length;
