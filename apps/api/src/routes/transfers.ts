@@ -33,6 +33,12 @@ transfersRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   ).bind(teamId, player.first_name, player.last_name).first().catch((e) => { logger.warn({ module: "transfers" }, "check duplicate free agent", e); return null; });
   if (existing) return c.json({ ok: true });
 
+  // Smazat starší aktivní FA záznamy stejného hráče ze stejného týmu (pokud byl mezi release-coupí-release, starý záznam by jinak přežil)
+  await c.env.DB.prepare(
+    "DELETE FROM free_agents WHERE released_from_team_id = ? AND first_name = ? AND last_name = ? AND expires_at > datetime('now')"
+  ).bind(teamId, player.first_name, player.last_name).run()
+    .catch((e) => logger.warn({ module: "transfers" }, "cleanup old free agents on release", e));
+
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 
