@@ -189,6 +189,45 @@ const ABSURD_EXCUSES: Array<{ text: string; emoji: string; timing: AbsenceTiming
   { text: "Mám v plánu chodit na trh, musím stihnout než prodají řepu", emoji: "\u{1F955}", timing: "match_day", env: "urban" },
   { text: "Koncert v Rock Café, lístky jsem koupil před měsícem", emoji: "\u{1F3B8}", timing: "day_before", env: "urban" },
   { text: "Blázni v Krymské demonstrují proti něčemu, nedostanu se přes", emoji: "\u{1F4E2}", timing: "match_day", env: "urban" },
+
+  // Nové vesnické absurdní
+  { text: "Dědovi se zasekla protéza v zámku, musím k zámečníkovi", emoji: "\u{1F9B7}", timing: "match_day", env: "rural" },
+  { text: "Seno mokne venku, musím naházet do stodoly než začne lejt", emoji: "\u{1F33E}", timing: "match_day", env: "rural" },
+  { text: "Tchán mě zavolal hrát Karty u piva a já nemám sílu odmítnout", emoji: "\u{1F0CF}", timing: "match_day", env: "rural" },
+  { text: "Pálenka se destiluje, musím hlídat teplotu v kotli", emoji: "\u{1F377}", timing: "match_day", env: "rural" },
+  { text: "Vrátili se Jehovové, tentokrát to chci doposlouchat", emoji: "\u{1F6AA}", timing: "match_day", env: "rural" },
+  { text: "Dovezli štěrk a musím ho rozházet než přijede kontrola", emoji: "\u{1F69A}", timing: "match_day", env: "rural" },
+  { text: "Babička upekla buchty a volala že je musím sníst teď teplý", emoji: "\u{1F35E}", timing: "match_day", env: "rural" },
+  { text: "Koupil jsem kombajn v bazoši, musím ho vyzvednout do večera", emoji: "\u{1F69C}", timing: "match_day", env: "rural" },
+  { text: "Strejda se vrátil z Rakouska a nesu mu pálenku na oslavu", emoji: "\u{1F382}", timing: "day_before", env: "rural" },
+  { text: "Ztratil jsem se v kukuřičném poli cestou ze schůze hasičů", emoji: "\u{1F33D}", timing: "match_day", env: "rural" },
+  { text: "Kohout mi ráno napadl souseda, řeším to s policajtama", emoji: "\u{1F413}", timing: "match_day", env: "rural" },
+  { text: "Přišlo pozvání na soutěž v pojídání knedlíků, dal jsem čestné slovo", emoji: "\u{1F95F}", timing: "day_before", env: "rural" },
+  { text: "Zasekla se mi motorka mezi ploty, stojí tam s kolečkem nad příkopem", emoji: "\u{1F3CD}", timing: "match_day", env: "rural" },
+  { text: "Myslivci volají že je kanec u školky, nemůžu nechat malý", emoji: "\u{1F417}", timing: "match_day", env: "rural" },
+  { text: "V pivním stanu slaví obec, starosta říkal že je povinná účast", emoji: "\u{1F37B}", timing: "day_before", env: "rural" },
+  { text: "Dcera má hon na drába na školní zahradě, jsem porotce", emoji: "\u{1F950}", timing: "day_before", env: "rural" },
+  { text: "Spadl mi komín při vichřici, hasiči ho oplotili", emoji: "\u{1F3E0}", timing: "match_day", env: "rural" },
+  { text: "Soused půjčil sekačku a dneska je jediný den kdy ji můžu vrátit", emoji: "\u{1FAB4}", timing: "match_day", env: "rural" },
+  { text: "Pes mi sebral TV ovladač a hlídá ho jako kost", emoji: "\u{1F415}", timing: "match_day" },
+  { text: "Zatopil jsem pod kamny a nemůžu nechat oheň bez dozoru", emoji: "\u{1F525}", timing: "match_day", env: "rural" },
+  { text: "Vyhrál jsem v Sportce, musím jít reklamovat tiket", emoji: "\u{1F3B0}", timing: "match_day" },
+  { text: "Přijela cirkusová karavana a kůň mi stojí na zahradě", emoji: "\u{1F3AA}", timing: "match_day", env: "rural" },
+  { text: "Slíbil jsem soused že mu pomůžu s moštováním, už má nachystaný stroj", emoji: "\u{1F34E}", timing: "day_before", env: "rural" },
+
+  // Nové pražské/urbánní
+  { text: "Uber čeká dole, ale číslo ulice je špatně a řidič zlobí", emoji: "\u{1F695}", timing: "match_day", env: "urban" },
+  { text: "Tinder rande, tři týdny psal jsem tam srdíčka, nemůžu zrušit", emoji: "\u{1F495}", timing: "day_before", env: "urban" },
+  { text: "Boulder na Smíchově má otevírací event, uvidím tam známé", emoji: "\u{1F9D7}", timing: "day_before", env: "urban" },
+  { text: "Startup pitch v Node5, je to finální kolo", emoji: "\u{1F4BB}", timing: "match_day", env: "urban" },
+  { text: "Airbnb hosté nemůžou najít klíče ze schránky, čekám na ně", emoji: "\u{1F3E0}", timing: "match_day", env: "urban" },
+  { text: "Farmářské trhy na Kubáni, musím stihnout kozí sýr", emoji: "\u{1F9C0}", timing: "match_day", env: "urban" },
+  { text: "Promo akce Wolt, slevový kód vyprší za 2 hodiny", emoji: "\u{1F6F5}", timing: "match_day", env: "urban" },
+  { text: "Escape room na Žižkově, tým na mě čeká, už zaplatili", emoji: "\u{1F511}", timing: "day_before", env: "urban" },
+  { text: "Holčina z Bumblu chce na brunch, tohle nezkazím", emoji: "\u{1F373}", timing: "match_day", env: "urban" },
+  { text: "Rohlík doručuje ledničku, musel jsem být doma celé ráno", emoji: "\u{1F4E6}", timing: "match_day", env: "urban" },
+  { text: "Blokují nám domovní kanál, stojí tam fekálňák", emoji: "\u{1F6BB}", timing: "match_day", env: "urban" },
+  { text: "Vernisáž mé bývalky, slíbil jsem že nepřijdu, ale musím vidět kdo přijde", emoji: "\u{1F3A8}", timing: "day_before", env: "urban" },
 ];
 
 // ═══════════════════════════════════════════════
@@ -220,6 +259,18 @@ const HANGOVER_EXCUSES = [
   { text: "Ven si dneska ani nevyjdu, natož do kopaček", emoji: "\u{1F927}" },
   { text: "Včera jsem řekl: já dneska nepiju. Lhal jsem sám sobě", emoji: "\u{1F937}" },
   { text: "Trenere dám si jen černý čaj a budu ležet. Omlouvám se", emoji: "\u{1F375}" },
+
+  // Nové kocovinové
+  { text: "Vyhrál jsem včera flašku Metaxy v tombole a zkoušel každou skleničku", emoji: "\u{1F943}" },
+  { text: "Hospoda nás nechtěla pustit, zavírali až v 6 ráno", emoji: "\u{1F55C}" },
+  { text: "Zkoušeli jsme vyšší procenta než vodka, vyhrála absinth a já", emoji: "\u{1F49A}" },
+  { text: "Včera byl rockový večer v Rock café, hrdlo mi řve víc než já", emoji: "\u{1F3B8}" },
+  { text: "Dědek nališkal do šlivovice cukr a bylo to podezřele dobrý", emoji: "\u{1F377}" },
+  { text: "Sousedovi jsem musel říct pravdu, zapomněl jsem filtr. Celou noc mi odpouštěl", emoji: "\u{1F910}" },
+  { text: "Dneska rozhodně ne. Dal jsem si naposledy jen jedno a bylo jich 14", emoji: "\u{1F371}" },
+  { text: "Myslel jsem že brčály jsou nealko. Nebyly", emoji: "\u{1F37A}" },
+  { text: "Probudil jsem se v Plzni a vůbec nevím jak", emoji: "\u{1F646}" },
+  { text: "Oslava povýšení se zvrhla, v práci zítra koukám jak sejra", emoji: "\u{1F389}" },
 ];
 
 // ═══════════════════════════════════════════════
@@ -247,6 +298,18 @@ const HEALTH_EXCUSES = [
   { text: "Zvrtl jsem si koleno na schodech, doufám že to bude dobrý", emoji: "\u{1F9B5}" },
   { text: "Rýma a bolení v krku, beru paralen a ležím", emoji: "\u{1F927}" },
   { text: "Zvedla se mi teplota, rozhodně ne trénovat", emoji: "\u{1F321}" },
+
+  // Nové zdravotní
+  { text: "Vyskočil mi malíček, nemůžu zašněrovat kopačky", emoji: "\u{1F9B6}" },
+  { text: "Zapíchl jsem si zubní niť, mám natažený krk", emoji: "\u{1F9B7}" },
+  { text: "Bolí mě v koutku kyčle, říká fyzioterapeut že to může být rok", emoji: "\u{1FA7B}" },
+  { text: "Přetáhl jsem krk na polštáři, nemůžu otočit hlavou", emoji: "\u{1F634}" },
+  { text: "Pálí mě v žaludku od ranních brambůrek, asi to nemám od rána jíst", emoji: "\u{1F957}" },
+  { text: "Kleplo mě v uchu, doktor říkal nechodit na chlad", emoji: "\u{1F442}" },
+  { text: "Ptělo mě v oku celou noc, nemůžu na světlo", emoji: "\u{1F441}" },
+  { text: "Stuhla mi slintavka od zívání, nemůžu otevřít pusu", emoji: "\u{1F62E}" },
+  { text: "Otrávil jsem se vlastní guláškou, ženská říká to bylo nedovařený", emoji: "\u{1F927}" },
+  { text: "Zaseklo mi krční páteř když jsem kýchl", emoji: "\u{1F927}" },
 ];
 
 const COMMUTE_EXCUSES: Array<{ text: string; emoji: string; env?: ExcuseEnv }> = [
