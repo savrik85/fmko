@@ -253,6 +253,8 @@ export default function NewsPage() {
 
   // Lead story = nejnovější preview (před kolem) nebo AI report (po kole)
   const leadStory = roundSummaryArticles[0] || previewArticles[0] || aiReportArticles[0] || matchArticles[0] || standingArticles[0] || articles[0];
+  // Druhý hlavní článek — ai_report pokud není lead (typicky vedle round_summary nebo matchday_preview)
+  const secondaryStory = leadStory?.id !== aiReportArticles[0]?.id ? aiReportArticles[0] : null;
   // Všechny match stories sjednocené (bez lead story pokud je match)
   const matchStories = matchArticles.slice(leadStory?.type === "match" ? 1 : 0);
   // Ostatní drobnosti (classified ads apod.) — bez duplicit s promocemi / přestupy
@@ -387,6 +389,30 @@ export default function NewsPage() {
                   </div>
                 </aside>
               )}
+            </div>
+          )}
+
+          {/* ═══ Druhý hlavní článek (Komentář kola) — když je lead round_summary nebo preview ═══ */}
+          {secondaryStory && (
+            <div id={`news-${secondaryStory.id}`} className="border-b border-gray-200 pb-5">
+              <ArticleWrapper article={secondaryStory}>
+                <div>
+                  <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">Komentář kola</div>
+                  <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
+                    {secondaryStory.headline}
+                  </h2>
+                  <div className="text-base text-ink-light leading-relaxed space-y-3 columns-1 sm:columns-2 gap-8">
+                    {secondaryStory.body.split("\n").filter(Boolean).map((p, i) => (
+                      <p key={i} className="break-inside-avoid">{renderMarkdown(p)}</p>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-center gap-3 mt-3">
+                    <div className="text-xs text-muted italic">{timeAgo(secondaryStory.date)}</div>
+                    <span className="text-muted/40">·</span>
+                    <ShareButton articleId={secondaryStory.id} />
+                  </div>
+                </div>
+              </ArticleWrapper>
             </div>
           )}
 
