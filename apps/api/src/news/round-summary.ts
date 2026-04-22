@@ -184,36 +184,31 @@ export async function generateRoundSummary(
     `${s.pos}. ${teamNameMap.get(s.teamId) ?? s.teamId} — ${s.points} bodů (${s.gf}:${s.ga})`
   );
 
-  const prompt = `Jsi sportovní redaktor okresního fotbalového zpravodaje. Po ${gameWeek}. kole ${leagueName} vybereš 2 laureáty a napíšeš oslavný článek.
+  const prompt = `Jsi sportovní redaktor. Po ${gameWeek}. kole ${leagueName} vyhlásíš Hráče a Trenéra kola — STRUČNĚ, žádný obsáhlý článek o celém kole (ten má zpravodaj už jinde).
 
-KANDIDÁTI NA HRÁČE KOLA (seřazeno dle ratingu, TOP 10):
+KANDIDÁTI NA HRÁČE KOLA (TOP 10 dle ratingu):
 ${playerLines.join("\n")}
 
-VÝSLEDKY CELÉHO KOLA:
+VÝSLEDKY KOLA (pro kontext výběru trenéra):
 ${resultLines.join("\n")}
 
-AKTUÁLNÍ TABULKA (po kole):
-${standingsLines.join("\n")}
-
 ÚKOL:
-Vyber 1 HRÁČE KOLA (z kandidátů) a 1 TRENÉRA KOLA (z týmů co hráli).
-Zohledni nejen rating a čísla, ale i kontext — UPSET, dramatický obrat, klutchový gól, hrdinský výkon z horšího týmu může být cennější než suverénní rating favorita.
+Vyber 1 HRÁČE KOLA a 1 TRENÉRA KOLA. Zohledni kontext — UPSET, hrdinský výkon z horšího týmu, dramatický obrat — ne jen nejvyšší rating.
 
-Odpověz POUZE valid JSON (žádný text před ani za), ve formátu:
+Odpověz POUZE valid JSON:
 {
-  "playerOfRoundId": "<player_id PŘESNĚ z kandidátů>",
-  "playerReason": "<1-2 věty proč>",
-  "managerOfRoundTeamId": "<team_id PŘESNĚ ze seznamu team_home nebo team_away>",
-  "managerReason": "<1-2 věty proč>",
-  "headline": "<titulek článku bez uvozovek>",
-  "body": "<tělo článku 200-300 slov, vesnický okresní kolorit, humor, česky>"
+  "playerOfRoundId": "<player_id z kandidátů>",
+  "playerReason": "<1 věta>",
+  "managerOfRoundTeamId": "<team_id z výsledků>",
+  "managerReason": "<1 věta>",
+  "headline": "<krátký titulek, max 8 slov, např. 'Hráč a trenér 17. kola'>",
+  "body": "<tělo 60-100 slov. JEN 2 odstavce: prvně vyhlásíš Hráče kola s krátkým odůvodněním, druhý odstavec Trenéra kola. Žádné výsledky zápasů, žádná tabulka, žádné další hráče.>"
 }
 
 PRAVIDLA:
 - playerOfRoundId a managerOfRoundTeamId MUSÍ být doslova z uvedených seznamů
-- V body rozveď oba výběry + zmíň zajímavé výsledky/upsety kola
-- Nevymýšlej si další hráče ani týmy — jen ti uvedení výše
-- Body nesmí obsahovat nadpis ani JSON syntaxi
+- body je KRÁTKÝ (60-100 slov) — vyhlášení, ne článek o kole
+- Žádné jiné hráče než oceněného
 - Česky, přirozený tón`;
 
   // 7. Call Gemini
