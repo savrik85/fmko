@@ -175,8 +175,10 @@ export default function TeamPage() {
               <button onClick={() => prevTeam && router.push(`/dashboard/team/${prevTeam.id}`)}
                 className={`w-10 h-10 rounded-xl ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} shrink-0 transition-colors`}>&#9664;</button>
             )}
-            <BadgePreview primary={color} secondary={team.secondary_color || "#FFFFFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
-              initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={56} />
+            <BadgePreview primary={team.badge_primary_color || color} secondary={team.badge_secondary_color || team.secondary_color || "#FFFFFF"}
+              pattern={(team.badge_pattern as BadgePattern) || "shield"}
+              initials={team.badge_initials || team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
+              symbol={team.badge_symbol} size={56} />
             <div className="flex-1 min-w-0">
               <h1 className={`font-heading font-extrabold ${txt} text-2xl leading-tight truncate`}>{team.name}</h1>
               <div className={`${txtMuted} text-sm mt-0.5`}>
@@ -229,8 +231,10 @@ export default function TeamPage() {
           <div className="sm:hidden">
             {/* Řádek 1: badge + název + šipky */}
             <div className="flex items-center gap-3">
-              <BadgePreview primary={color} secondary={team.secondary_color || "#FFFFFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                initials={team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={44} />
+              <BadgePreview primary={team.badge_primary_color || color} secondary={team.badge_secondary_color || team.secondary_color || "#FFFFFF"}
+                pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                initials={team.badge_initials || team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
+                symbol={team.badge_symbol} size={44} />
               <div className="flex-1 min-w-0">
                 <h1 className={`font-heading font-extrabold ${txt} text-xl leading-tight truncate`}>{team.name}</h1>
                 <div className={`${txtMuted} text-sm`}>

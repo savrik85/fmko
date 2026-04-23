@@ -75,6 +75,10 @@ export interface Team {
   league_id?: string;
   jersey_pattern?: string;
   badge_pattern?: string;
+  badge_primary_color?: string | null;
+  badge_secondary_color?: string | null;
+  badge_initials?: string | null;
+  badge_symbol?: string | null;
   game_date?: string;
   stadium_name?: string;
   captain_id?: string;

@@ -119,7 +119,8 @@ function ShowcaseFrame({ label, sublabel, children, className = "" }: { label: s
         </div>
         <div className="absolute bottom-3 left-8 right-8 h-2 rounded-full bg-black/10 blur-sm" />
       </div>
-      {sublabel && <div className="text-xs text-muted mt-2 text-center">{sublabel}</div>}
+      {/* Sublabel vždy rezervuje výšku aby panely byly stejně vysoké napříč kolonami */}
+      <div className="text-xs text-muted mt-2 text-center min-h-[18px]">{sublabel || " "}</div>
     </div>
   );
 }
