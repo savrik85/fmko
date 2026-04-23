@@ -228,6 +228,14 @@ const ABSURD_EXCUSES: Array<{ text: string; emoji: string; timing: AbsenceTiming
   { text: "Rohlík doručuje ledničku, musel jsem být doma celé ráno", emoji: "\u{1F4E6}", timing: "match_day", env: "urban" },
   { text: "Blokují nám domovní kanál, stojí tam fekálňák", emoji: "\u{1F6BB}", timing: "match_day", env: "urban" },
   { text: "Vernisáž mé bývalky, slíbil jsem že nepřijdu, ale musím vidět kdo přijde", emoji: "\u{1F3A8}", timing: "day_before", env: "urban" },
+  // Prachaticko — lokální hity
+  { text: "V Penny ve Vimperku byla fronta", emoji: "\u{1F6D2}", timing: "match_day" },
+  { text: "Ve Zlešicích zase měřili, mám to za 5000", emoji: "\u{1F694}", timing: "match_day" },
+  { text: "Seknul jsem se v boudě ve Spůli", emoji: "\u{1FA93}", timing: "match_day", env: "rural" },
+  { text: "Usnul jsem ve Votáčce ve Čkyni", emoji: "\u{1F37A}", timing: "match_day", env: "rural" },
+  { text: "Čistil jsem ve Spůli rybník", emoji: "\u{1F3A3}", timing: "day_before", env: "rural" },
+  { text: "Zmlátili mě ve Vimperku cikáni", emoji: "\u{1F915}", timing: "match_day" },
+  { text: "Čekal jsem na Cmunďáka, ale nepřijel", emoji: "\u{1F6AD}", timing: "match_day" },
 ];
 
 // ═══════════════════════════════════════════════
