@@ -33,13 +33,15 @@ export function PageHeader({ name, detail, color, badge, children }: PageHeaderP
   const boxBgHover = isLight ? "hover:bg-black/10" : "hover:bg-white/20";
   const boxLabel = isLight ? "text-gray-400" : "text-white/50";
 
-  const initials = (name || ctx.teamName || "").split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+  const autoInitials = (name || ctx.teamName || "").split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+  const effectiveInitials = ctx.badgeInitials || autoInitials;
   const defaultBadge = (color || ctx.primaryColor) ? (
     <BadgePreview
-      primary={color || ctx.primaryColor || "#2D5F2D"}
-      secondary={ctx.secondaryColor || "#FFFFFF"}
+      primary={ctx.badgePrimary || color || ctx.primaryColor || "#2D5F2D"}
+      secondary={ctx.badgeSecondary || ctx.secondaryColor || "#FFFFFF"}
       pattern={(ctx.badgePattern as BadgePattern) || "shield"}
-      initials={initials}
+      initials={effectiveInitials}
+      symbol={ctx.badgeSymbol}
       size={44}
     />
   ) : null;

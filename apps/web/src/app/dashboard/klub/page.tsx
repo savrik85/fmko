@@ -39,7 +39,7 @@ interface ClubData {
     awayPattern: string | null;
     sponsor: string | null;
   };
-  badge: { pattern: BadgePattern | null; primary: string; secondary: string };
+  badge: { pattern: BadgePattern | null; primary: string; secondary: string; customInitials: string | null; symbol: string | null };
   anthem: { url: string | null; lyrics: string | null; attemptsUsed: number; attemptsMax: number };
   mascot: { name: string | null; imageUrl: string | null; story: string | null };
 }
@@ -103,7 +103,8 @@ export default function KlubPage() {
     return <div className="page-container">Klub nenalezen.</div>;
   }
 
-  const initials = club.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+  const autoInitials = club.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+  const initials = club.badge.customInitials || autoInitials;
   const badgePattern = (club.badge.pattern as BadgePattern) ?? "shield";
 
   return (
@@ -114,10 +115,11 @@ export default function KlubPage() {
         color={club.primaryColor}
         badge={
           <BadgePreview
-            primary={club.primaryColor}
-            secondary={club.secondaryColor || "#FFFFFF"}
+            primary={club.badge.primary}
+            secondary={club.badge.secondary || "#FFFFFF"}
             pattern={badgePattern}
             initials={initials}
+            symbol={club.badge.symbol}
             size={56}
           />
         }
@@ -158,6 +160,7 @@ export default function KlubPage() {
                 secondary={club.badge.secondary || "#FFFFFF"}
                 pattern={badgePattern}
                 initials={initials}
+                symbol={club.badge.symbol}
                 size={72}
               />
               <div className="flex flex-col items-center gap-1">

@@ -105,7 +105,7 @@ function invertHex(hex: string): string {
 
 function ShowcaseFrame({ label, sublabel, children, className = "" }: { label: string; sublabel?: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className={`flex flex-col items-center ${className}`}>
+    <div className={`flex flex-col items-center h-full ${className}`}>
       <div className="text-[11px] font-heading font-bold text-muted uppercase tracking-[0.18em] mb-3">{label}</div>
       <div
         className="relative w-full rounded-2xl p-6 sm:p-8 flex items-center justify-center shadow-inner flex-1"

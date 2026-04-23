@@ -195,7 +195,9 @@ authRouter.get("/me", async (c) => {
 
   // Refresh team info
   const team = await c.env.DB.prepare(
-    `SELECT t.id, t.name, t.primary_color, t.secondary_color, t.badge_pattern, t.game_date, v.name as village_name, v.district, t.budget, t.league_id,
+    `SELECT t.id, t.name, t.primary_color, t.secondary_color, t.badge_pattern,
+     t.badge_primary_color, t.badge_secondary_color, t.badge_initials, t.badge_symbol,
+     t.game_date, v.name as village_name, v.district, t.budget, t.league_id,
      (SELECT s.number FROM seasons s WHERE s.status='active' LIMIT 1) as season,
      (SELECT MIN(sc.scheduled_at) FROM season_calendar sc WHERE sc.league_id = t.league_id) as season_start,
      (SELECT MAX(sc.scheduled_at) FROM season_calendar sc WHERE sc.league_id = t.league_id) as season_end
@@ -221,6 +223,10 @@ authRouter.get("/me", async (c) => {
     primaryColor: (team?.primary_color as string) ?? null,
     secondaryColor: (team?.secondary_color as string) ?? null,
     badgePattern: (team?.badge_pattern as string) ?? null,
+    badgePrimary: (team?.badge_primary_color as string) ?? null,
+    badgeSecondary: (team?.badge_secondary_color as string) ?? null,
+    badgeInitials: (team?.badge_initials as string) ?? null,
+    badgeSymbol: (team?.badge_symbol as string) ?? null,
     villageName: (team?.village_name as string) ?? null,
     district: (team?.district as string) ?? null,
     budget: (team?.budget as number) ?? null,
