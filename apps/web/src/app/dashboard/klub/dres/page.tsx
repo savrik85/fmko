@@ -135,7 +135,7 @@ function ShowcaseFrame({ label, sublabel, children, className = "" }: { label: s
   );
 }
 
-function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsColor, socksColor }: {
+function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsColor, socksColor, badge }: {
   primary: string;
   secondary: string;
   pattern: JerseyPattern;
@@ -143,6 +143,7 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
   number?: number;
   shortsColor: string;
   socksColor: string;
+  badge: { primary: string; secondary: string; pattern: BadgePattern; initials: string; symbol: string | null };
 }) {
   // Sponsor box = plné bílé pozadí s tmavým textem — univerzálně čitelné
   // na jakékoliv barvě/vzoru dresu (stejně jako skutečné reklamy na dresech).
@@ -159,6 +160,11 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
       <div className="flex flex-col items-center">
         <div className="relative">
           <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={JERSEY_SIZE} />
+          {/* Znak klubu na levé hrudi */}
+          <div className="absolute" style={{ top: "26%", left: "22%" }}>
+            <BadgePreview primary={badge.primary} secondary={badge.secondary} pattern={badge.pattern}
+              initials={badge.initials} symbol={badge.symbol} size={28} />
+          </div>
           {sponsor && (
             <div
               className="absolute left-1/2 -translate-x-1/2 font-heading font-bold uppercase whitespace-nowrap"
@@ -191,7 +197,14 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
       </div>
       {/* Zadní */}
       <div className="flex flex-col items-center">
-        <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={JERSEY_SIZE} number={number ?? 10} />
+        <div className="relative">
+          <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={JERSEY_SIZE} number={number ?? 10} />
+          {/* Znak i na zadní, menší (krček) */}
+          <div className="absolute left-1/2 -translate-x-1/2" style={{ top: "8%" }}>
+            <BadgePreview primary={badge.primary} secondary={badge.secondary} pattern={badge.pattern}
+              initials={badge.initials} symbol={badge.symbol} size={20} />
+          </div>
+        </div>
         <div style={{ marginTop: -8 }}>
           <ShortsPreview color={shortsColor} trim={secondary} size={SHORTS_SIZE} />
         </div>
@@ -355,10 +368,18 @@ export default function DresPage() {
     return <div className="page-container">Klub nenalezen.</div>;
   }
 
+  const badgeForJersey = {
+    primary: badgePrimary,
+    secondary: badgeSecondary,
+    pattern: badgePattern,
+    initials: effectiveInitials,
+    symbol: badgeSymbol || null,
+  };
   const homeShowcase = (
     <ShowcaseFrame label="Domácí dres">
       <JerseyFrontBack primary={homePrimary} secondary={homeSecondary} pattern={homePattern}
-        sponsor={club.jersey.sponsor} shortsColor={homeShortsColor} socksColor={homeSocksColor} />
+        sponsor={club.jersey.sponsor} shortsColor={homeShortsColor} socksColor={homeSocksColor}
+        badge={badgeForJersey} />
     </ShowcaseFrame>
   );
   const homeEditor = (
@@ -384,7 +405,8 @@ export default function DresPage() {
   const awayShowcase = (
     <ShowcaseFrame label="Hostující dres">
       <JerseyFrontBack primary={awayPrimary} secondary={awaySecondary} pattern={awayPattern}
-        sponsor={club.jersey.sponsor} shortsColor={awayShortsColor} socksColor={awaySocksColor} />
+        sponsor={club.jersey.sponsor} shortsColor={awayShortsColor} socksColor={awaySocksColor}
+        badge={badgeForJersey} />
     </ShowcaseFrame>
   );
   const awayEditor = (
