@@ -770,8 +770,39 @@ export async function buildMatchPlayers(
 
       logger.info({ module: "match-runner" }, `Lineup: ${pickedIds.length} picked, ${starters.length} found, ${pickedIds.length - starters.length} missing`);
 
-      const rest = allAvailable.filter((r) => !pickedIds.includes(r.id as string));
-      ordered = [...starters, ...rest].slice(0, 16);
+      // Spočítat KTERÉ pozice chybí (absent/injured/suspended hráči ze starting 11)
+      const missingByPos: Record<string, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+      for (const pick of userPicks.slice(0, 11)) {
+        if (!allAvailable.find(r => (r.id as string) === pick.playerId)) {
+          const pos = pick.matchPosition ?? "MID";
+          missingByPos[pos] = (missingByPos[pos] ?? 0) + 1;
+        }
+      }
+
+      const restRaw = allAvailable.filter((r) => !pickedIds.includes(r.id as string));
+      // Pro každou chybějící pozici najdi nejlepšího náhradníka s odpovídající natural pozicí.
+      // FWD nesmí stát v bráně. GK nesmí útočit. Když není přesný typ, vezme se nejbližší.
+      const positionPriority: Record<string, string[]> = {
+        GK: ["GK", "DEF", "MID", "FWD"],
+        DEF: ["DEF", "MID", "FWD", "GK"],
+        MID: ["MID", "DEF", "FWD", "GK"],
+        FWD: ["FWD", "MID", "DEF", "GK"],
+      };
+      const replacements: typeof allAvailable = [];
+      const usedRestIds = new Set<string>();
+      for (const pos of ["GK", "DEF", "MID", "FWD"]) {
+        const need = missingByPos[pos] ?? 0;
+        for (let i = 0; i < need; i++) {
+          let pick: typeof restRaw[0] | undefined;
+          for (const tryPos of positionPriority[pos]) {
+            pick = restRaw.find((r) => !usedRestIds.has(r.id as string) && (r.position as string) === tryPos);
+            if (pick) break;
+          }
+          if (pick) { replacements.push(pick); usedRestIds.add(pick.id as string); }
+        }
+      }
+      const benchRest = restRaw.filter((r) => !usedRestIds.has(r.id as string));
+      ordered = [...starters, ...replacements, ...benchRest].slice(0, 16);
 
       // Log saved vs actual
       const savedNames = pickedIds.map(id => { const p = rows.results.find(r => r.id === id); return p ? `${p.first_name} ${p.last_name}` : `?${id.slice(0,8)}`; });
@@ -872,14 +903,21 @@ export async function buildMatchPlayers(
     // Capture for debug
     const _debugMissing = [...missingPositions];
 
-    // 3. Assign missing positions to starters without matchPosition
-    for (const p of starters) {
-      if (p.matchPosition) continue;
-      if (missingPositions.length > 0) {
-        p.matchPosition = missingPositions.shift()! as "GK" | "DEF" | "MID" | "FWD";
-      } else {
-        p.matchPosition = p.position;
+    // 3. Assign missing positions to starters without matchPosition.
+    // Preferuj match podle natural position (FWD-replacement dostane FWD slot, ne GK).
+    // Bez toho útočník dostal label "GK" jen protože brankář chyběl → simulace měla útočníka v bráně.
+    const unassigned = starters.filter((p) => !p.matchPosition);
+    for (const pos of ["GK", "DEF", "MID", "FWD"]) {
+      const needCount = missingPositions.filter((mp) => mp === pos).length;
+      for (let i = 0; i < needCount; i++) {
+        const naturalMatch = unassigned.find((p) => !p.matchPosition && p.position === pos);
+        const target = naturalMatch ?? unassigned.find((p) => !p.matchPosition);
+        if (target) target.matchPosition = pos as "GK" | "DEF" | "MID" | "FWD";
       }
+    }
+    // Fallback: kdyby zbyli unassigned (formace neúplná), dej jim natural position.
+    for (const p of unassigned) {
+      if (!p.matchPosition) p.matchPosition = p.position;
     }
   } else {
     // No user lineup — auto-assign: 1 GK + rest by natural position
@@ -988,8 +1026,14 @@ export async function createAutoLineup(
     usedIds.add(remaining.id as string);
   }
 
+  // Zachovat poslední user-uložený tactic — nejen formation. Bez toho fallback vždy resetuje
+  // na "balanced" i když user dlouhodobě hrál třeba "possession".
+  const savedTactic = await db.prepare("SELECT tactic FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1")
+    .bind(teamId).first<{ tactic: string }>().catch((e) => { logger.warn({ module: "match-runner" }, "load saved tactic", e); return null; });
+  const tactic = savedTactic?.tactic ?? "balanced";
+
   const lineupId = crypto.randomUUID();
   await db.prepare(
-    "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto) VALUES (?, ?, ?, '4-4-2', 'balanced', ?, 1)"
-  ).bind(lineupId, teamId, calendarId, JSON.stringify(picked)).run();
+    "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto) VALUES (?, ?, ?, ?, ?, ?, 1)"
+  ).bind(lineupId, teamId, calendarId, formation, tactic, JSON.stringify(picked)).run();
 }
