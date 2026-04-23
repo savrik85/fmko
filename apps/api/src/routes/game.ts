@@ -2582,6 +2582,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 
   const { absenceSeedForMatch } = await import("../lib/seed");
   const { generateAbsences } = await import("../events/absence");
+  const { fetchTeamDistrict } = await import("../events/match-absences");
   const matchKey = isFriendly ? (match.id as string) : calendarId!;
 
   // Healthy squad — shoda s match-runner/SMS filtrem. Zraněné a suspendované vynecháme,
@@ -2614,8 +2615,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       celebrityTier: pers.celebrityTier,
     };
   });
-  const absenceDistrictRow = await c.env.DB.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
-    .bind(teamId).first<{ district: string }>().catch((e) => { logger.warn({ module: "game" }, "district query failed", e); return null; });
+  const district = await fetchTeamDistrict(c.env.DB, teamId);
   // Preview spouští obě fáze se stejnými seedy jako SMS + simulace, pak deduplikuje dle playerIndex.
   // Absence zobrazujeme jen day-before nebo match-day (ne 2+ dny předem). Přátelák = vyšší šance.
   const friendlyMultiplier = isFriendly ? 1.8 : undefined;
@@ -2623,8 +2623,8 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   if (daysUntilMatch <= 1) {
     const dayBeforeRng = createRng(absenceSeedForMatch({ matchKey, teamId, phase: "day_before" }));
     const matchDayRng = createRng(absenceSeedForMatch({ matchKey, teamId, phase: "match_day" }));
-    const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, "day_before", absenceDistrictRow?.district, friendlyMultiplier);
-    const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, "match_day", absenceDistrictRow?.district, friendlyMultiplier);
+    const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, "day_before", district, friendlyMultiplier);
+    const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, "match_day", district, friendlyMultiplier);
     const seen = new Set<number>();
     absences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
       if (seen.has(a.playerIndex)) return false;
@@ -5192,6 +5192,7 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
   const { absenceSeedForMatch } = await import("../lib/seed");
   const { generateAbsences } = await import("../events/absence");
   const { generateAttendanceMessage } = await import("../messaging/message-generator");
+  const { fetchTeamDistrict: fetchDistrictForTrigger } = await import("../events/match-absences");
 
   const teams = await c.env.DB.prepare(
     "SELECT id, user_id, game_date FROM teams WHERE league_id = ? AND user_id != 'ai'"
@@ -5246,7 +5247,8 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
         isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
     });
 
-    const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, "day_before");
+    const triggerDistrict = await fetchDistrictForTrigger(c.env.DB, teamId);
+    const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, "day_before", triggerDistrict);
     const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
     const matchConvId = crypto.randomUUID();
 

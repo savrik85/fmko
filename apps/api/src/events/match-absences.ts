@@ -55,6 +55,22 @@ export interface AbsencePlayerInfo {
 }
 
 /**
+ * Načte district týmu (rural/urban/undefined). Sdílené — každé volání `generateAbsences`
+ * MUSÍ předat district, jinak envFilter v absence generátoru vybere jiný pool výmluv
+ * pro stejný seed → divergence mezi SMS a simulací pro stejný (match, team, phase).
+ */
+export async function fetchTeamDistrict(
+  db: D1Database,
+  teamId: string,
+): Promise<string | undefined> {
+  const row = await db.prepare(
+    "SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?",
+  ).bind(teamId).first<{ district: string }>()
+    .catch((e) => { logger.warn({ module: "match-absences" }, "district query", e); return null; });
+  return row?.district ?? undefined;
+}
+
+/**
  * Vrátí Map<playerId, info> pro hráče absentní z generátoru (ne injury/suspension).
  * Prázdná mapa pokud je zápas vzdálenější než den a není přátelák.
  */
@@ -70,7 +86,7 @@ export async function getAbsentPlayersMap(
     : Math.max(0, Math.round((matchDate.getTime() - gameDate.getTime()) / 86400000));
   if (daysUntilMatch > 1) return new Map();
 
-  const [playersRes, injRes, districtRow] = await Promise.all([
+  const [playersRes, injRes, district] = await Promise.all([
     db.prepare(
       "SELECT p.id, p.first_name, p.last_name, p.age, p.life_context, p.personality, p.physical, p.commute_km, p.suspended_matches, p.is_celebrity, p.overall_rating FROM players p WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') ORDER BY p.overall_rating DESC",
     ).bind(teamId).all<Record<string, unknown>>()
@@ -79,9 +95,7 @@ export async function getAbsentPlayersMap(
       "SELECT player_id FROM injuries WHERE days_remaining > 0 AND player_id IN (SELECT id FROM players WHERE team_id = ?)",
     ).bind(teamId).all<{ player_id: string }>()
       .catch((e) => { logger.warn({ module: "match-absences" }, "injuries query", e); return { results: [] as { player_id: string }[] }; }),
-    db.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
-      .bind(teamId).first<{ district: string }>()
-      .catch((e) => { logger.warn({ module: "match-absences" }, "district query", e); return null; }),
+    fetchTeamDistrict(db, teamId),
   ]);
 
   const injuredIds = new Set(injRes.results.map((r) => r.player_id));
@@ -112,9 +126,9 @@ export async function getAbsentPlayersMap(
   const dayBeforeRng = createRng(absenceSeedForMatch({ matchKey: ctx.matchKey, teamId, phase: "day_before" }));
   const matchDayRng = createRng(absenceSeedForMatch({ matchKey: ctx.matchKey, teamId, phase: "match_day" }));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, "day_before", districtRow?.district, friendlyMultiplier);
+  const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, "day_before", district, friendlyMultiplier);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, "match_day", districtRow?.district, friendlyMultiplier);
+  const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, "match_day", district, friendlyMultiplier);
   const seen = new Set<number>();
   const absences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
     if (seen.has(a.playerIndex)) return false;

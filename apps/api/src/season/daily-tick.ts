@@ -461,7 +461,8 @@ export async function executeDailyTick(
                     morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0,
                     isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
                 });
-                const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, "day_before");
+                const teamDistrict = (team.village_district as string | null) ?? undefined;
+                const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, "day_before", teamDistrict);
                 const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
                 const matchConvId = crypto.randomUUID();
                 await env.DB.prepare(
@@ -659,7 +660,8 @@ export async function executeDailyTick(
                 ).bind(matchConvId).all().catch(() => ({ results: [] }));
                 const alreadyIds = new Set(alreadyMessaged.results.map((r) => r.sender_id as string));
 
-                const matchDayAbsences = generateAbsences(mdRng as any, absSquad, "match_day")
+                const teamDistrictMd = (team.village_district as string | null) ?? undefined;
+                const matchDayAbsences = generateAbsences(mdRng as any, absSquad, "match_day", teamDistrictMd)
                   .filter((a) => {
                     const pid = squadRows.results[a.playerIndex]?.id as string;
                     return pid && !alreadyIds.has(pid);

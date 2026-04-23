@@ -686,6 +686,7 @@ export async function buildMatchPlayers(
     try {
       const { generateAbsences } = await import("../events/absence");
       const { absenceSeedForMatch } = await import("../lib/seed");
+      const { fetchTeamDistrict } = await import("../events/match-absences");
       const squadForAbsence = healthyRows.map((row) => {
         const personality = JSON.parse(row.personality as string);
         const lifeContext = JSON.parse(row.life_context as string);
@@ -701,15 +702,14 @@ export async function buildMatchPlayers(
           isCelebrity: !!(row.is_celebrity as number), celebrityType: personality.celebrityType, celebrityTier: personality.celebrityTier,
         };
       });
-      const districtRow = await db.prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
-        .bind(teamId).first<{ district: string }>().catch((e) => { logger.warn({ module: "match-runner" }, "query failed", e); return null; });
+      const district = await fetchTeamDistrict(db, teamId);
 
       // Dvě fáze s odlišnými seedy — shoda s day_before SMS i match_day SMS.
       // Deduplikace dle playerIndex: hráč co dostane omluvenku den předem ji nedostane i v den zápasu.
       const dayBeforeRng = createRng(absenceSeedForMatch({ matchKey: options.matchKey, teamId, phase: "day_before" }));
       const matchDayRng = createRng(absenceSeedForMatch({ matchKey: options.matchKey, teamId, phase: "match_day" }));
-      const dayBeforeAbs = generateAbsences(dayBeforeRng, squadForAbsence, "day_before", districtRow?.district, options.friendlyMultiplier);
-      const matchDayAbs = generateAbsences(matchDayRng, squadForAbsence, "match_day", districtRow?.district, options.friendlyMultiplier);
+      const dayBeforeAbs = generateAbsences(dayBeforeRng, squadForAbsence, "day_before", district, options.friendlyMultiplier);
+      const matchDayAbs = generateAbsences(matchDayRng, squadForAbsence, "match_day", district, options.friendlyMultiplier);
       const seen = new Set<number>();
       const allAbsences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
         if (seen.has(a.playerIndex)) return false;
