@@ -1133,6 +1133,71 @@ teamsRouter.get("/:id/stats", async (c) => {
   });
 });
 
+// GET /api/teams/:id/club — klubová identita (skeleton — postupně se rozšíří)
+teamsRouter.get("/:id/club", async (c) => {
+  const teamId = c.req.param("id");
+  const team = await c.env.DB.prepare(
+    `SELECT t.id, t.name, t.primary_color, t.secondary_color, t.badge_pattern, t.jersey_pattern, t.stadium_name,
+            v.name as village_name, v.district, v.region, v.population
+     FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`
+  ).bind(teamId).first();
+  if (!team) return c.json({ error: "Team not found" }, 404);
+
+  const stadium = await c.env.DB.prepare(
+    "SELECT capacity, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1"
+  ).bind(teamId).first<{ capacity: number; pitch_condition: number; pitch_type: string }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "fetch stadium for /club", e); return null; });
+
+  return c.json({
+    id: team.id,
+    name: team.name,
+    primaryColor: team.primary_color,
+    secondaryColor: team.secondary_color,
+    badgePattern: team.badge_pattern,
+    jerseyPattern: team.jersey_pattern,
+    village: { name: team.village_name, district: team.district, region: team.region, population: team.population },
+    identity: {
+      nickname: null,
+      motto: null,
+      foundingYear: null,
+      foundingStory: null,
+      colorsMeaning: null,
+    },
+    stadium: {
+      name: team.stadium_name,
+      capacity: stadium?.capacity ?? null,
+      pitchCondition: stadium?.pitch_condition ?? null,
+      pitchType: stadium?.pitch_type ?? null,
+      nickname: null,
+      builtYear: null,
+    },
+    jersey: {
+      pattern: team.jersey_pattern,
+      homePrimary: team.primary_color,
+      homeSecondary: team.secondary_color,
+      awayPrimary: null,
+      awaySecondary: null,
+      sponsor: null,
+    },
+    badge: {
+      pattern: team.badge_pattern,
+      primary: team.primary_color,
+      secondary: team.secondary_color,
+    },
+    anthem: {
+      url: null,
+      lyrics: null,
+      attemptsUsed: 0,
+      attemptsMax: 3,
+    },
+    mascot: {
+      name: null,
+      imageUrl: null,
+      story: null,
+    },
+  });
+});
+
 // GET /api/teams/:id/players/:playerId/career-stats — kariérní statistiky hráče
 teamsRouter.get("/:id/players/:playerId/career-stats", async (c) => {
   const playerId = c.req.param("playerId");
