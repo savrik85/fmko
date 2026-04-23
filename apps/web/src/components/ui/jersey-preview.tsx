@@ -34,18 +34,11 @@ export function JerseyPreview({ primary, secondary, pattern = "solid", size = 48
       <path d={neckCut} fill={secondary} />
       <path d={outline} fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="4" strokeLinejoin="round" />
       <path d={outline} fill="none" stroke="rgba(0,0,0,0.2)" strokeWidth="2" strokeLinejoin="round" />
-      {number != null && (() => {
-        const c = primary.replace("#", "");
-        const r = parseInt(c.substring(0, 2), 16);
-        const g = parseInt(c.substring(2, 4), 16);
-        const b = parseInt(c.substring(4, 6), 16);
-        const isLight = (r * 299 + g * 587 + b * 114) / 1000 > 160;
-        return (
-          <text x="100" y="155" textAnchor="middle" fontSize={numSize} fontWeight="bold"
-            fill="white" stroke={isLight ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.3)"} strokeWidth={isLight ? "3" : "1.5"} paintOrder="stroke"
-            fontFamily="var(--font-heading)">{number}</text>
-        );
-      })()}
+      {number != null && (
+        <text x="100" y="155" textAnchor="middle" fontSize={numSize} fontWeight="bold"
+          fill="white" stroke="rgba(0,0,0,0.9)" strokeWidth="5" strokeLinejoin="round" paintOrder="stroke"
+          fontFamily="var(--font-heading)">{number}</text>
+      )}
     </svg>
   );
 }
