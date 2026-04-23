@@ -1139,6 +1139,7 @@ teamsRouter.get("/:id/club", async (c) => {
   const team = await c.env.DB.prepare(
     `SELECT t.id, t.name, t.primary_color, t.secondary_color, t.badge_pattern, t.jersey_pattern, t.stadium_name,
             t.away_primary_color, t.away_secondary_color, t.away_jersey_pattern, t.jersey_sponsor,
+            t.home_shorts_color, t.home_socks_color, t.away_shorts_color, t.away_socks_color,
             v.name as village_name, v.district, v.region, v.population
      FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`
   ).bind(teamId).first();
@@ -1186,6 +1187,10 @@ teamsRouter.get("/:id/club", async (c) => {
       awaySecondary: team.away_secondary_color,
       awayPattern: team.away_jersey_pattern,
       sponsor: mainSponsor?.sponsor_name ?? null,
+      homeShortsColor: team.home_shorts_color,
+      homeSocksColor: team.home_socks_color,
+      awayShortsColor: team.away_shorts_color,
+      awaySocksColor: team.away_socks_color,
     },
     badge: {
       pattern: team.badge_pattern,
@@ -1267,6 +1272,15 @@ teamsRouter.patch("/:id/club", async (c) => {
 
     const badgePattern = validateEnum("badgePattern", body.badgePattern, VALID_BADGE_PATTERNS);
     if (badgePattern !== undefined) updates.push({ col: "badge_pattern", val: badgePattern });
+
+    const homeShorts = validateHex("homeShortsColor", body.homeShortsColor, true);
+    if (homeShorts !== undefined) updates.push({ col: "home_shorts_color", val: homeShorts });
+    const homeSocks = validateHex("homeSocksColor", body.homeSocksColor, true);
+    if (homeSocks !== undefined) updates.push({ col: "home_socks_color", val: homeSocks });
+    const awayShorts = validateHex("awayShortsColor", body.awayShortsColor, true);
+    if (awayShorts !== undefined) updates.push({ col: "away_shorts_color", val: awayShorts });
+    const awaySocks = validateHex("awaySocksColor", body.awaySocksColor, true);
+    if (awaySocks !== undefined) updates.push({ col: "away_socks_color", val: awaySocks });
 
     // sponsor field v body se ignoruje — hlavní sponzor se spravuje přes /dashboard/sponsors
   } catch (e) {

@@ -12,5 +12,7 @@ export { EntityLink } from "./entity-link";
 export { BadgePreview } from "./badge-preview";
 export type { BadgePattern } from "./badge-preview";
 export { JerseyPreview } from "./jersey-preview";
+export { ShortsPreview } from "./shorts-preview";
+export { SocksPreview } from "./socks-preview";
 export { ConfirmDialog, useConfirm } from "./confirm-dialog";
 export { PageHeader, HeaderStat } from "../dashboard/page-header";

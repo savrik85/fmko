@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, JerseyPreview, BadgePreview, SectionLabel } from "@/components/ui";
+import { Spinner, Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 type JerseyPattern = "solid" | "stripes" | "hoops" | "halves" | "sash" | "sleeves" | "chest_band" | "pinstripes" | "quarters" | "gradient";
@@ -48,6 +48,10 @@ interface ClubData {
     awaySecondary: string | null;
     awayPattern: JerseyPattern | null;
     sponsor: string | null;
+    homeShortsColor: string | null;
+    homeSocksColor: string | null;
+    awayShortsColor: string | null;
+    awaySocksColor: string | null;
   };
   badge: { pattern: BadgePattern | null; primary: string; secondary: string };
 }
@@ -82,12 +86,14 @@ function ShowcaseFrame({ label, sublabel, children }: { label: string; sublabel?
   );
 }
 
-function JerseyFrontBack({ primary, secondary, pattern, sponsor, number }: {
+function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsColor, socksColor }: {
   primary: string;
   secondary: string;
   pattern: JerseyPattern;
   sponsor: string | null;
   number?: number;
+  shortsColor: string;
+  socksColor: string;
 }) {
   // Sponsor box = plné bílé pozadí s tmavým textem — univerzálně čitelné
   // na jakékoliv barvě/vzoru dresu (stejně jako skutečné reklamy na dresech).
@@ -95,11 +101,11 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number }: {
   const sponsorFontSize = Math.min(10, 95 / maxChars);
 
   return (
-    <div className="flex items-end gap-4 sm:gap-6">
-      {/* Čelní */}
-      <div className="flex flex-col items-center gap-2">
+    <div className="flex items-start gap-4 sm:gap-6">
+      {/* Čelní — dres + trenýrky + štulpny */}
+      <div className="flex flex-col items-center gap-1">
         <div className="relative">
-          <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={150} />
+          <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={130} />
           {sponsor && (
             <div
               className="absolute left-1/2 -translate-x-1/2 font-heading font-bold uppercase whitespace-nowrap"
@@ -111,7 +117,7 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number }: {
                 padding: "2px 6px",
                 borderRadius: 3,
                 letterSpacing: "0.04em",
-                maxWidth: 100,
+                maxWidth: 90,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 boxShadow: "0 1px 2px rgba(0,0,0,0.3)",
@@ -122,12 +128,16 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number }: {
             </div>
           )}
         </div>
-        <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider">Čelní</div>
+        <ShortsPreview color={shortsColor} trim={secondary} size={70} />
+        <SocksPreview color={socksColor} trim={secondary} size={60} />
+        <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mt-1">Čelní</div>
       </div>
       {/* Zadní */}
-      <div className="flex flex-col items-center gap-2">
-        <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={150} number={number ?? 10} />
-        <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider">Zadní</div>
+      <div className="flex flex-col items-center gap-1">
+        <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={130} number={number ?? 10} />
+        <ShortsPreview color={shortsColor} trim={secondary} size={70} />
+        <SocksPreview color={socksColor} trim={secondary} size={60} />
+        <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mt-1">Zadní</div>
       </div>
     </div>
   );
@@ -202,6 +212,10 @@ export default function DresPage() {
   const [awaySecondary, setAwaySecondary] = useState("#2D5F2D");
   const [awayPattern, setAwayPattern] = useState<JerseyPattern>("solid");
   const [badgePattern, setBadgePattern] = useState<BadgePattern>("shield");
+  const [homeShortsColor, setHomeShortsColor] = useState("#2D5F2D");
+  const [homeSocksColor, setHomeSocksColor] = useState("#2D5F2D");
+  const [awayShortsColor, setAwayShortsColor] = useState("#FFFFFF");
+  const [awaySocksColor, setAwaySocksColor] = useState("#FFFFFF");
 
   useEffect(() => {
     if (!teamId) return;
@@ -215,6 +229,10 @@ export default function DresPage() {
         setAwaySecondary(data.jersey.awaySecondary || data.primaryColor || "#2D5F2D");
         setAwayPattern((data.jersey.awayPattern as JerseyPattern) || "solid");
         setBadgePattern((data.badge.pattern as BadgePattern) || "shield");
+        setHomeShortsColor(data.jersey.homeShortsColor || data.primaryColor || "#2D5F2D");
+        setHomeSocksColor(data.jersey.homeSocksColor || data.primaryColor || "#2D5F2D");
+        setAwayShortsColor(data.jersey.awayShortsColor || data.jersey.awayPrimary || invertHex(data.primaryColor || "#2D5F2D"));
+        setAwaySocksColor(data.jersey.awaySocksColor || data.jersey.awayPrimary || invertHex(data.primaryColor || "#2D5F2D"));
         setLoading(false);
       })
       .catch((e) => { console.error("load club:", e); setLoading(false); });
@@ -240,6 +258,10 @@ export default function DresPage() {
           awaySecondary,
           awayPattern,
           badgePattern,
+          homeShortsColor,
+          homeSocksColor,
+          awayShortsColor,
+          awaySocksColor,
         }),
       });
       setSavedAt(Date.now());
@@ -272,7 +294,8 @@ export default function DresPage() {
         {/* Domácí */}
         <div className="flex flex-col gap-4">
           <ShowcaseFrame label="Domácí dres">
-            <JerseyFrontBack primary={homePrimary} secondary={homeSecondary} pattern={homePattern} sponsor={club.jersey.sponsor} />
+            <JerseyFrontBack primary={homePrimary} secondary={homeSecondary} pattern={homePattern}
+              sponsor={club.jersey.sponsor} shortsColor={homeShortsColor} socksColor={homeSocksColor} />
           </ShowcaseFrame>
           <Card>
             <CardHeader>
@@ -281,13 +304,15 @@ export default function DresPage() {
               </h2>
             </CardHeader>
             <CardBody className="flex flex-col gap-4">
-              <ColorPicker label="Primární" value={homePrimary} onChange={setHomePrimary} />
-              <ColorPicker label="Sekundární" value={homeSecondary} onChange={setHomeSecondary} />
+              <ColorPicker label="Dres primární" value={homePrimary} onChange={setHomePrimary} />
+              <ColorPicker label="Dres sekundární" value={homeSecondary} onChange={setHomeSecondary} />
               <div>
-                <SectionLabel>Vzor</SectionLabel>
+                <SectionLabel>Vzor dresu</SectionLabel>
                 <PatternPicker value={homePattern} onChange={(v) => setHomePattern(v as JerseyPattern)}
                   options={JERSEY_PATTERNS} primary={homePrimary} secondary={homeSecondary} kind="jersey" />
               </div>
+              <ColorPicker label="Trenýrky" value={homeShortsColor} onChange={setHomeShortsColor} />
+              <ColorPicker label="Štulpny" value={homeSocksColor} onChange={setHomeSocksColor} />
             </CardBody>
           </Card>
         </div>
@@ -295,7 +320,8 @@ export default function DresPage() {
         {/* Hostující */}
         <div className="flex flex-col gap-4">
           <ShowcaseFrame label="Hostující dres">
-            <JerseyFrontBack primary={awayPrimary} secondary={awaySecondary} pattern={awayPattern} sponsor={club.jersey.sponsor} />
+            <JerseyFrontBack primary={awayPrimary} secondary={awaySecondary} pattern={awayPattern}
+              sponsor={club.jersey.sponsor} shortsColor={awayShortsColor} socksColor={awaySocksColor} />
           </ShowcaseFrame>
           <Card>
             <CardHeader>
@@ -304,13 +330,15 @@ export default function DresPage() {
               </h2>
             </CardHeader>
             <CardBody className="flex flex-col gap-4">
-              <ColorPicker label="Primární" value={awayPrimary} onChange={setAwayPrimary} />
-              <ColorPicker label="Sekundární" value={awaySecondary} onChange={setAwaySecondary} />
+              <ColorPicker label="Dres primární" value={awayPrimary} onChange={setAwayPrimary} />
+              <ColorPicker label="Dres sekundární" value={awaySecondary} onChange={setAwaySecondary} />
               <div>
-                <SectionLabel>Vzor</SectionLabel>
+                <SectionLabel>Vzor dresu</SectionLabel>
                 <PatternPicker value={awayPattern} onChange={(v) => setAwayPattern(v as JerseyPattern)}
                   options={JERSEY_PATTERNS} primary={awayPrimary} secondary={awaySecondary} kind="jersey" />
               </div>
+              <ColorPicker label="Trenýrky" value={awayShortsColor} onChange={setAwayShortsColor} />
+              <ColorPicker label="Štulpny" value={awaySocksColor} onChange={setAwaySocksColor} />
             </CardBody>
           </Card>
         </div>
