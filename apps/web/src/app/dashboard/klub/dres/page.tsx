@@ -160,10 +160,10 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
       <div className="flex flex-col items-center">
         <div className="relative">
           <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={JERSEY_SIZE} />
-          {/* Znak klubu na levé hrudi */}
-          <div className="absolute" style={{ top: "26%", left: "22%" }}>
+          {/* Znak klubu na levé hrudi nositele (pravá strana obrázku) — menší */}
+          <div className="absolute" style={{ top: "28%", right: "22%" }}>
             <BadgePreview primary={badge.primary} secondary={badge.secondary} pattern={badge.pattern}
-              initials={badge.initials} symbol={badge.symbol} size={28} />
+              initials={badge.initials} symbol={badge.symbol} size={14} />
           </div>
           {sponsor && (
             <div
@@ -200,9 +200,9 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
         <div className="relative">
           <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={JERSEY_SIZE} number={number ?? 10} />
           {/* Znak i na zadní, menší (krček) */}
-          <div className="absolute left-1/2 -translate-x-1/2" style={{ top: "8%" }}>
+          <div className="absolute left-1/2 -translate-x-1/2" style={{ top: "10%" }}>
             <BadgePreview primary={badge.primary} secondary={badge.secondary} pattern={badge.pattern}
-              initials={badge.initials} symbol={badge.symbol} size={20} />
+              initials={badge.initials} symbol={badge.symbol} size={10} />
           </div>
         </div>
         <div style={{ marginTop: -8 }}>
