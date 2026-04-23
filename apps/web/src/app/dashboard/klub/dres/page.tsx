@@ -27,11 +27,19 @@ const BADGE_PATTERNS: Array<{ key: BadgePattern; label: string }> = [
   { key: "shield", label: "Štít" },
   { key: "rounded_shield", label: "Oblý štít" },
   { key: "crest", label: "Erb" },
+  { key: "double_shield", label: "Dvojštít" },
   { key: "circle", label: "Kruh" },
-  { key: "diamond", label: "Kosočtverec" },
-  { key: "hexagon", label: "Šestiúhel." },
-  { key: "pennant", label: "Praporek" },
+  { key: "oval", label: "Ovál" },
   { key: "square", label: "Čtverec" },
+  { key: "diamond", label: "Kosočtv." },
+  { key: "hexagon", label: "Šestiúhel." },
+  { key: "octagon", label: "Osmiúhel." },
+  { key: "triangle", label: "Trojúhel." },
+  { key: "star", label: "Hvězda" },
+  { key: "pennant", label: "Praporek" },
+  { key: "banner", label: "Korouhev" },
+  { key: "chevron", label: "Diamant" },
+  { key: "arch", label: "Oblouk" },
 ];
 
 interface ClubData {
@@ -64,21 +72,20 @@ function invertHex(hex: string): string {
   return "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
 }
 
-function ShowcaseFrame({ label, sublabel, children }: { label: string; sublabel?: string; children: React.ReactNode }) {
+function ShowcaseFrame({ label, sublabel, children, className = "" }: { label: string; sublabel?: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className="flex flex-col items-center">
+    <div className={`flex flex-col items-center ${className}`}>
       <div className="text-[11px] font-heading font-bold text-muted uppercase tracking-[0.18em] mb-3">{label}</div>
       <div
-        className="relative w-full rounded-2xl p-6 sm:p-8 flex items-center justify-center shadow-inner"
+        className="relative w-full rounded-2xl p-6 sm:p-8 flex items-center justify-center shadow-inner flex-1"
         style={{
           background: "linear-gradient(180deg, #f7f5f0 0%, #e8e3d8 100%)",
-          minHeight: 260,
+          minHeight: 420,
         }}
       >
         <div style={{ filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.2))" }}>
           {children}
         </div>
-        {/* Podstavec — jemný stín na zem */}
         <div className="absolute bottom-3 left-8 right-8 h-2 rounded-full bg-black/10 blur-sm" />
       </div>
       {sublabel && <div className="text-xs text-muted mt-2 text-center">{sublabel}</div>}
@@ -304,8 +311,8 @@ export default function DresPage() {
       {/* ═══ 3 kolony — v každé náhled nad editorem (mobile stack, desktop 3 cols) ═══ */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Domácí */}
-        <div className="flex flex-col gap-4">
-          <ShowcaseFrame label="Domácí dres">
+        <div className="flex flex-col gap-4 md:h-full">
+          <ShowcaseFrame label="Domácí dres" className="md:flex-1">
             <JerseyFrontBack primary={homePrimary} secondary={homeSecondary} pattern={homePattern}
               sponsor={club.jersey.sponsor} shortsColor={homeShortsColor} socksColor={homeSocksColor} />
           </ShowcaseFrame>
@@ -330,8 +337,8 @@ export default function DresPage() {
         </div>
 
         {/* Hostující */}
-        <div className="flex flex-col gap-4">
-          <ShowcaseFrame label="Hostující dres">
+        <div className="flex flex-col gap-4 md:h-full">
+          <ShowcaseFrame label="Hostující dres" className="md:flex-1">
             <JerseyFrontBack primary={awayPrimary} secondary={awaySecondary} pattern={awayPattern}
               sponsor={club.jersey.sponsor} shortsColor={awayShortsColor} socksColor={awaySocksColor} />
           </ShowcaseFrame>
@@ -356,8 +363,8 @@ export default function DresPage() {
         </div>
 
         {/* Znak */}
-        <div className="flex flex-col gap-4">
-          <ShowcaseFrame label="Znak klubu" sublabel={club.name}>
+        <div className="flex flex-col gap-4 md:h-full">
+          <ShowcaseFrame label="Znak klubu" sublabel={club.name} className="md:flex-1">
             <BadgePreview primary={homePrimary} secondary={homeSecondary} pattern={badgePattern} initials={initials} size={200} />
           </ShowcaseFrame>
           <Card>

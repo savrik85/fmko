@@ -1214,7 +1214,12 @@ teamsRouter.get("/:id/club", async (c) => {
 // PATCH /api/teams/:id/club — update klubové identity (zatím dres + znak)
 const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
 const VALID_JERSEY_PATTERNS = new Set(["solid", "stripes", "hoops", "halves", "sash", "sleeves", "chest_band", "pinstripes", "quarters", "gradient"]);
-const VALID_BADGE_PATTERNS = new Set(["shield", "circle", "diamond", "hexagon", "crest", "rounded_shield", "pennant", "square"]);
+const VALID_BADGE_PATTERNS = new Set([
+  "shield", "rounded_shield", "crest", "double_shield",
+  "circle", "oval", "square", "diamond",
+  "hexagon", "octagon", "triangle", "star",
+  "pennant", "banner", "chevron", "arch",
+]);
 
 teamsRouter.patch("/:id/club", async (c) => {
   const teamId = c.req.param("id");
