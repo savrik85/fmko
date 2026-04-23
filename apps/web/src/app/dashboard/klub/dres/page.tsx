@@ -100,12 +100,16 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
   const maxChars = Math.max(sponsor?.length ?? 6, 6);
   const sponsorFontSize = Math.min(10, 95 / maxChars);
 
+  const JERSEY_SIZE = 130;
+  const SHORTS_SIZE = 110;
+  const SOCKS_SIZE = 150;
+
   return (
     <div className="flex items-start gap-4 sm:gap-6">
-      {/* Čelní — dres + trenýrky + štulpny */}
-      <div className="flex flex-col items-center gap-1">
+      {/* Čelní — kit: dres / trenýrky / štulpny */}
+      <div className="flex flex-col items-center">
         <div className="relative">
-          <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={130} />
+          <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={JERSEY_SIZE} />
           {sponsor && (
             <div
               className="absolute left-1/2 -translate-x-1/2 font-heading font-bold uppercase whitespace-nowrap"
@@ -128,16 +132,24 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
             </div>
           )}
         </div>
-        <ShortsPreview color={shortsColor} trim={secondary} size={70} />
-        <SocksPreview color={socksColor} trim={secondary} size={60} />
-        <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mt-1">Čelní</div>
+        <div style={{ marginTop: -8 }}>
+          <ShortsPreview color={shortsColor} trim={secondary} size={SHORTS_SIZE} />
+        </div>
+        <div style={{ marginTop: -6 }}>
+          <SocksPreview color={socksColor} trim={secondary} size={SOCKS_SIZE} />
+        </div>
+        <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mt-2">Čelní</div>
       </div>
       {/* Zadní */}
-      <div className="flex flex-col items-center gap-1">
-        <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={130} number={number ?? 10} />
-        <ShortsPreview color={shortsColor} trim={secondary} size={70} />
-        <SocksPreview color={socksColor} trim={secondary} size={60} />
-        <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mt-1">Zadní</div>
+      <div className="flex flex-col items-center">
+        <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={JERSEY_SIZE} number={number ?? 10} />
+        <div style={{ marginTop: -8 }}>
+          <ShortsPreview color={shortsColor} trim={secondary} size={SHORTS_SIZE} />
+        </div>
+        <div style={{ marginTop: -6 }}>
+          <SocksPreview color={socksColor} trim={secondary} size={SOCKS_SIZE} />
+        </div>
+        <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mt-2">Zadní</div>
       </div>
     </div>
   );
