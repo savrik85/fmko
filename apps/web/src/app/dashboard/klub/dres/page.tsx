@@ -89,17 +89,10 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number }: {
   sponsor: string | null;
   number?: number;
 }) {
-  // Čelní strana: dres s overlay sponsor boxem (pokud sponsor existuje)
-  // Zadní strana: dres s číslem hráče (default 10)
-
-  // Detekce světlosti primary pro sponsor text color
-  const c = primary.replace("#", "");
-  const r = parseInt(c.substring(0, 2), 16);
-  const g = parseInt(c.substring(2, 4), 16);
-  const b = parseInt(c.substring(4, 6), 16);
-  const isLight = (r * 299 + g * 587 + b * 114) / 1000 > 160;
-  const sponsorTextColor = isLight ? "#1a1a1a" : "#ffffff";
-  const sponsorBg = isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.18)";
+  // Sponsor box = plné bílé pozadí s tmavým textem — univerzálně čitelné
+  // na jakékoliv barvě/vzoru dresu (stejně jako skutečné reklamy na dresech).
+  const maxChars = Math.max(sponsor?.length ?? 6, 6);
+  const sponsorFontSize = Math.min(10, 95 / maxChars);
 
   return (
     <div className="flex items-end gap-4 sm:gap-6">
@@ -109,16 +102,20 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number }: {
           <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={150} />
           {sponsor && (
             <div
-              className="absolute left-1/2 -translate-x-1/2 px-2 py-0.5 rounded font-heading font-bold uppercase whitespace-nowrap"
+              className="absolute left-1/2 -translate-x-1/2 font-heading font-bold uppercase whitespace-nowrap"
               style={{
-                top: "45%",
-                fontSize: Math.min(11, 120 / Math.max(sponsor.length, 6)),
-                color: sponsorTextColor,
-                background: sponsorBg,
+                top: "46%",
+                fontSize: sponsorFontSize,
+                color: "#1a1a1a",
+                background: "#ffffff",
+                padding: "2px 6px",
+                borderRadius: 3,
                 letterSpacing: "0.04em",
-                maxWidth: 110,
+                maxWidth: 100,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.3)",
+                border: "0.5px solid rgba(0,0,0,0.1)",
               }}
             >
               {sponsor}
