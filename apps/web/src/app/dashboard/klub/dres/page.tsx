@@ -197,14 +197,7 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
       </div>
       {/* Zadní */}
       <div className="flex flex-col items-center">
-        <div className="relative">
-          <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={JERSEY_SIZE} number={number ?? 10} />
-          {/* Znak i na zadní, menší (krček) */}
-          <div className="absolute left-1/2 -translate-x-1/2" style={{ top: "10%" }}>
-            <BadgePreview primary={badge.primary} secondary={badge.secondary} pattern={badge.pattern}
-              initials={badge.initials} symbol={badge.symbol} size={10} />
-          </div>
-        </div>
+        <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={JERSEY_SIZE} number={number ?? 10} />
         <div style={{ marginTop: -8 }}>
           <ShortsPreview color={shortsColor} trim={secondary} size={SHORTS_SIZE} />
         </div>
