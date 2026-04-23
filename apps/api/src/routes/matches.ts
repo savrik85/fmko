@@ -689,6 +689,34 @@ matchesRouter.post("/admin/backfill-match-stats", async (c) => {
   return c.json(result);
 });
 
+// DOČASNÉ: POST /api/admin/test-simulate/:matchId — vyvolá simulaci konkrétního zápasu
+// (ověření fixu lineup-replacement). Vrátí home/away_lineup_data pro inspekci.
+// TODO: smazat po ověření.
+matchesRouter.post("/admin/test-simulate/:matchId", async (c) => {
+  const matchId = c.req.param("matchId");
+  const match = await c.env.DB.prepare(
+    "SELECT id, calendar_id, status, home_team_id, away_team_id FROM matches WHERE id = ?"
+  ).bind(matchId).first<{ id: string; calendar_id: string; status: string; home_team_id: string; away_team_id: string }>();
+  if (!match) return c.json({ error: "match not found" }, 404);
+  if (match.status === "simulated") return c.json({ error: "already simulated", match }, 400);
+
+  // Force lineups_open
+  await c.env.DB.prepare("UPDATE matches SET status = 'lineups_open' WHERE id = ?").bind(matchId).run();
+
+  const { runScheduledMatches } = await import("../multiplayer/match-runner");
+  const results = await runScheduledMatches(c.env.DB, match.calendar_id);
+
+  // Načti výsledné lineup data
+  const after = await c.env.DB.prepare(
+    "SELECT id, status, home_score, away_score, home_lineup_data, away_lineup_data, absences FROM matches WHERE id = ?"
+  ).bind(matchId).first<{
+    id: string; status: string; home_score: number; away_score: number;
+    home_lineup_data: string | null; away_lineup_data: string | null; absences: string | null;
+  }>();
+
+  return c.json({ ok: true, runResults: results.length, match: after });
+});
+
 // ── Friendly match challenges (PvP only) ──
 
 async function sendSMS(db: D1Database, teamId: string, senderName: string, roleTitle: string, body: string) {
