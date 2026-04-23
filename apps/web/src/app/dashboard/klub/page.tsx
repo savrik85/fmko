@@ -122,13 +122,13 @@ export default function KlubPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <SectionCard title="Identita" icon="\u{1F3F7}️" hint="Motto, přezdívka, založení, příběh">
+          <SectionCard title="Identita" icon={"\u{1F3F7}️"} hint="Motto, přezdívka, založení, příběh">
             <EmptyState action="Vyplnit identitu">
               Klubové motto, přezdívky fanoušků, rok založení a příběh jak klub vznikl.
             </EmptyState>
           </SectionCard>
 
-          <SectionCard title="Stadion" icon="\u{1F3DF}️" hint="Kapacita, přezdívka, tribuny">
+          <SectionCard title="Stadion" icon={"\u{1F3DF}️"} hint="Kapacita, přezdívka, tribuny">
             <div className="text-sm text-ink/80 mb-3">
               <div className="font-bold">{club.stadium.name || "Bez názvu"}</div>
               {club.stadium.capacity != null && (
@@ -140,7 +140,7 @@ export default function KlubPage() {
             </EmptyState>
           </SectionCard>
 
-          <SectionCard title="Dres a znak" icon="\u{1F455}" hint="Domácí, hostující, vzor a barvy">
+          <SectionCard title="Dres a znak" icon={"\u{1F455}"} hint="Domácí, hostující, vzor a barvy">
             <div className="flex items-center gap-4 mb-3">
               <BadgePreview
                 primary={club.badge.primary}
@@ -161,7 +161,7 @@ export default function KlubPage() {
             </EmptyState>
           </SectionCard>
 
-          <SectionCard title="Hymna a maskot" icon="\u{1F3B5}" hint="AI hymna a maskot klubu">
+          <SectionCard title="Hymna a maskot" icon={"\u{1F3B5}"} hint="AI hymna a maskot klubu">
             <div className="text-sm text-muted mb-3">
               Hymna: <span className="text-ink/70">žádná ({club.anthem.attemptsUsed}/{club.anthem.attemptsMax} pokusů)</span>
               <br />
