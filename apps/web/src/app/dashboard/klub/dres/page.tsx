@@ -100,9 +100,9 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
   const maxChars = Math.max(sponsor?.length ?? 6, 6);
   const sponsorFontSize = Math.min(10, 95 / maxChars);
 
-  const JERSEY_SIZE = 130;
-  const SHORTS_SIZE = 110;
-  const SOCKS_SIZE = 150;
+  const JERSEY_SIZE = 140;
+  const SHORTS_SIZE = 90;
+  const SOCKS_SIZE = 110;
 
   return (
     <div className="flex items-start gap-4 sm:gap-6">
