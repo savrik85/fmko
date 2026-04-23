@@ -2282,6 +2282,12 @@ gameRouter.post("/game/run-matches", async (c) => {
     if (matchCal) {
       if (processedLeague && !targetLeagueId) break;
 
+      // Atomický lock: zabrání souběžnému cronu / endpointu zpracovat stejné kolo.
+      const lockResult = await c.env.DB.prepare(
+        "UPDATE season_calendar SET status = 'processing' WHERE id = ? AND status = 'scheduled'"
+      ).bind(matchCal.id).run();
+      if (lockResult.meta.changes === 0) continue;
+
       const { calculateStandings } = await import("../stats/standings");
       const standingsBefore = await calculateStandings(c.env.DB, leagueId);
 

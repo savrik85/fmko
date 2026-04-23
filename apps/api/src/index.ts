@@ -113,6 +113,16 @@ export default {
           ).bind(leagueId, dayEnd.toISOString()).first<{ id: string }>();
 
           if (matchCal) {
+            // Atomický lock: zabrání souběžnému cronu / endpointu zpracovat stejné kolo
+            // a tím zdvojit finance (concession, vstupné, prémie) — viz incident 2026-04.
+            const lockResult = await env.DB.prepare(
+              "UPDATE season_calendar SET status = 'processing' WHERE id = ? AND status = 'scheduled'"
+            ).bind(matchCal.id).run();
+            if (lockResult.meta.changes === 0) {
+              log("info", `skip ${matchCal.id}: jiný trigger už drží lock`);
+              continue;
+            }
+
             // Snapshot tabulky PŘED kolem (pro AI reportera)
             const { calculateStandings } = await import("./stats/standings");
             const standingsBefore = await calculateStandings(env.DB, leagueId);
