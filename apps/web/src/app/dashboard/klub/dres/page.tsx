@@ -267,73 +267,75 @@ export default function DresPage() {
         <p className="text-sm text-muted mt-0.5">Vlastní vzhled klubu — barvy, vzor dresu a znak.</p>
       </div>
 
-      {/* ═══ Tři náhledy — Home / Away / Znak ═══ */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <ShowcaseFrame label="Domácí dres">
-          <JerseyFrontBack primary={homePrimary} secondary={homeSecondary} pattern={homePattern} sponsor={club.jersey.sponsor} />
-        </ShowcaseFrame>
-        <ShowcaseFrame label="Hostující dres">
-          <JerseyFrontBack primary={awayPrimary} secondary={awaySecondary} pattern={awayPattern} sponsor={club.jersey.sponsor} />
-        </ShowcaseFrame>
-        <ShowcaseFrame label="Znak klubu" sublabel={club.name}>
-          <BadgePreview primary={homePrimary} secondary={homeSecondary} pattern={badgePattern} initials={initials} size={200} />
-        </ShowcaseFrame>
-      </div>
-
-      {/* ═══ Editor — tři sloupce pod každým náhledem ═══ */}
+      {/* ═══ 3 kolony — v každé náhled nad editorem (mobile stack, desktop 3 cols) ═══ */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Home */}
-        <Card>
-          <CardHeader>
-            <h2 className="font-heading font-bold text-base text-ink flex items-center gap-2">
-              <span>{"\u{1F3E0}"}</span> Domácí dres
-            </h2>
-          </CardHeader>
-          <CardBody className="flex flex-col gap-4">
-            <ColorPicker label="Primární" value={homePrimary} onChange={setHomePrimary} />
-            <ColorPicker label="Sekundární" value={homeSecondary} onChange={setHomeSecondary} />
-            <div>
-              <SectionLabel>Vzor</SectionLabel>
-              <PatternPicker value={homePattern} onChange={(v) => setHomePattern(v as JerseyPattern)}
-                options={JERSEY_PATTERNS} primary={homePrimary} secondary={homeSecondary} kind="jersey" />
-            </div>
-          </CardBody>
-        </Card>
+        {/* Domácí */}
+        <div className="flex flex-col gap-4">
+          <ShowcaseFrame label="Domácí dres">
+            <JerseyFrontBack primary={homePrimary} secondary={homeSecondary} pattern={homePattern} sponsor={club.jersey.sponsor} />
+          </ShowcaseFrame>
+          <Card>
+            <CardHeader>
+              <h2 className="font-heading font-bold text-base text-ink flex items-center gap-2">
+                <span>{"\u{1F3E0}"}</span> Nastavení
+              </h2>
+            </CardHeader>
+            <CardBody className="flex flex-col gap-4">
+              <ColorPicker label="Primární" value={homePrimary} onChange={setHomePrimary} />
+              <ColorPicker label="Sekundární" value={homeSecondary} onChange={setHomeSecondary} />
+              <div>
+                <SectionLabel>Vzor</SectionLabel>
+                <PatternPicker value={homePattern} onChange={(v) => setHomePattern(v as JerseyPattern)}
+                  options={JERSEY_PATTERNS} primary={homePrimary} secondary={homeSecondary} kind="jersey" />
+              </div>
+            </CardBody>
+          </Card>
+        </div>
 
-        {/* Away */}
-        <Card>
-          <CardHeader>
-            <h2 className="font-heading font-bold text-base text-ink flex items-center gap-2">
-              <span>{"\u{2708}️"}</span> Hostující dres
-            </h2>
-          </CardHeader>
-          <CardBody className="flex flex-col gap-4">
-            <ColorPicker label="Primární" value={awayPrimary} onChange={setAwayPrimary} />
-            <ColorPicker label="Sekundární" value={awaySecondary} onChange={setAwaySecondary} />
-            <div>
-              <SectionLabel>Vzor</SectionLabel>
-              <PatternPicker value={awayPattern} onChange={(v) => setAwayPattern(v as JerseyPattern)}
-                options={JERSEY_PATTERNS} primary={awayPrimary} secondary={awaySecondary} kind="jersey" />
-            </div>
-          </CardBody>
-        </Card>
+        {/* Hostující */}
+        <div className="flex flex-col gap-4">
+          <ShowcaseFrame label="Hostující dres">
+            <JerseyFrontBack primary={awayPrimary} secondary={awaySecondary} pattern={awayPattern} sponsor={club.jersey.sponsor} />
+          </ShowcaseFrame>
+          <Card>
+            <CardHeader>
+              <h2 className="font-heading font-bold text-base text-ink flex items-center gap-2">
+                <span>{"\u{2708}️"}</span> Nastavení
+              </h2>
+            </CardHeader>
+            <CardBody className="flex flex-col gap-4">
+              <ColorPicker label="Primární" value={awayPrimary} onChange={setAwayPrimary} />
+              <ColorPicker label="Sekundární" value={awaySecondary} onChange={setAwaySecondary} />
+              <div>
+                <SectionLabel>Vzor</SectionLabel>
+                <PatternPicker value={awayPattern} onChange={(v) => setAwayPattern(v as JerseyPattern)}
+                  options={JERSEY_PATTERNS} primary={awayPrimary} secondary={awaySecondary} kind="jersey" />
+              </div>
+            </CardBody>
+          </Card>
+        </div>
 
-        {/* Badge */}
-        <Card>
-          <CardHeader>
-            <h2 className="font-heading font-bold text-base text-ink flex items-center gap-2">
-              <span>{"\u{1F6E1}️"}</span> Znak klubu
-            </h2>
-          </CardHeader>
-          <CardBody className="flex flex-col gap-3">
-            <div>
-              <SectionLabel>Tvar</SectionLabel>
-              <PatternPicker value={badgePattern} onChange={(v) => setBadgePattern(v as BadgePattern)}
-                options={BADGE_PATTERNS} primary={homePrimary} secondary={homeSecondary} kind="badge" />
-            </div>
-            <div className="text-xs text-muted">Barvy znaku se přebírají z domácího dresu.</div>
-          </CardBody>
-        </Card>
+        {/* Znak */}
+        <div className="flex flex-col gap-4">
+          <ShowcaseFrame label="Znak klubu" sublabel={club.name}>
+            <BadgePreview primary={homePrimary} secondary={homeSecondary} pattern={badgePattern} initials={initials} size={200} />
+          </ShowcaseFrame>
+          <Card>
+            <CardHeader>
+              <h2 className="font-heading font-bold text-base text-ink flex items-center gap-2">
+                <span>{"\u{1F6E1}️"}</span> Nastavení
+              </h2>
+            </CardHeader>
+            <CardBody className="flex flex-col gap-3">
+              <div>
+                <SectionLabel>Tvar</SectionLabel>
+                <PatternPicker value={badgePattern} onChange={(v) => setBadgePattern(v as BadgePattern)}
+                  options={BADGE_PATTERNS} primary={homePrimary} secondary={homeSecondary} kind="badge" />
+              </div>
+              <div className="text-xs text-muted">Barvy znaku se přebírají z domácího dresu.</div>
+            </CardBody>
+          </Card>
+        </div>
       </div>
 
       {/* ═══ Sponsor info — malý řádek pod editorem ═══ */}
