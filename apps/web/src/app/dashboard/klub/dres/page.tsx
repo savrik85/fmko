@@ -75,6 +75,12 @@ interface ClubData {
 const BADGE_SYMBOLS: ReadonlyArray<{ value: string; label: string }> = [
   { value: "", label: "Žádný" },
   { value: "⚽", label: "Míč" },
+  { value: "🍺", label: "Pivo" },
+  { value: "🍻", label: "Přípitek" },
+  { value: "🥃", label: "Panák" },
+  { value: "🍷", label: "Víno" },
+  { value: "🥂", label: "Šampus" },
+  { value: "🍸", label: "Koktejl" },
   { value: "🦁", label: "Lev" },
   { value: "🦅", label: "Orel" },
   { value: "🐺", label: "Vlk" },
@@ -82,7 +88,9 @@ const BADGE_SYMBOLS: ReadonlyArray<{ value: string; label: string }> = [
   { value: "🐗", label: "Kanec" },
   { value: "🦌", label: "Jelen" },
   { value: "🐴", label: "Kůň" },
+  { value: "🐓", label: "Kohout" },
   { value: "🌲", label: "Strom" },
+  { value: "🌾", label: "Obilí" },
   { value: "⚓", label: "Kotva" },
   { value: "⚔️", label: "Meče" },
   { value: "👑", label: "Koruna" },
@@ -93,6 +101,8 @@ const BADGE_SYMBOLS: ReadonlyArray<{ value: string; label: string }> = [
   { value: "🏰", label: "Hrad" },
   { value: "🌟", label: "Hvězda" },
   { value: "☀️", label: "Slunce" },
+  { value: "🚜", label: "Traktor" },
+  { value: "🪓", label: "Sekera" },
 ];
 
 function invertHex(hex: string): string {
