@@ -263,12 +263,16 @@ export default function DashboardPage() {
             const oppBadge = (nextMatch.isHome ? nextMatch.awayBadge : nextMatch.homeBadge) as BadgePattern || "shield";
             // Domácí tým zápasu = my (pokud isHome) / soupeř (pokud venku, čili preview.home)
             // Hostující = my (pokud venku) / soupeř (pokud doma, čili preview.away)
-            const homeTeam = nextMatch.isHome
-              ? { id: teamId!, name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my }
-              : { id: preview?.home?.id ?? "", name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp };
-            const awayTeam = nextMatch.isHome
-              ? { id: preview?.away?.id ?? "", name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge, pos: opp }
-              : { id: teamId!, name: team.name, color, secondary: team.secondary_color || "#FFF", badge: (team.badge_pattern as BadgePattern) || "shield", pos: my };
+            const myTeamData = { id: teamId!, name: team.name,
+              color: team.badge_primary_color || color,
+              secondary: team.badge_secondary_color || team.secondary_color || "#FFF",
+              badge: (team.badge_pattern as BadgePattern) || "shield",
+              customInitials: team.badge_initials, symbol: team.badge_symbol, pos: my };
+            const oppTeamData = { id: (nextMatch.isHome ? preview?.away?.id : preview?.home?.id) ?? "",
+              name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge,
+              customInitials: null, symbol: null, pos: opp };
+            const homeTeam = nextMatch.isHome ? myTeamData : oppTeamData;
+            const awayTeam = nextMatch.isHome ? oppTeamData : myTeamData;
             const homeForm = preview ? (nextMatch.isHome ? my : opp) : null;
             const awayForm = preview ? (nextMatch.isHome ? opp : my) : null;
             const ini = (n: string) => n.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
@@ -295,7 +299,7 @@ export default function DashboardPage() {
                     {/* Domácí */}
                     <Link href={`/dashboard/team/${homeTeam.id}`} className="flex-1 text-center hover:opacity-80 transition-opacity">
                       <div className="flex justify-center mb-2">
-                        <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary} pattern={homeTeam.badge} initials={ini(homeTeam.name)} size={48} />
+                        <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary} pattern={homeTeam.badge} initials={homeTeam.customInitials || ini(homeTeam.name)} symbol={homeTeam.symbol} size={48} />
                       </div>
                       <div className="font-heading font-bold text-sm leading-tight">{homeTeam.name}</div>
                     </Link>
@@ -308,7 +312,7 @@ export default function DashboardPage() {
                     {/* Hosté */}
                     <Link href={`/dashboard/team/${awayTeam.id}`} className="flex-1 text-center hover:opacity-80 transition-opacity">
                       <div className="flex justify-center mb-2">
-                        <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary} pattern={awayTeam.badge} initials={ini(awayTeam.name)} size={48} />
+                        <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary} pattern={awayTeam.badge} initials={awayTeam.customInitials || ini(awayTeam.name)} symbol={awayTeam.symbol} size={48} />
                       </div>
                       <div className="font-heading font-bold text-sm leading-tight">{awayTeam.name}</div>
                     </Link>

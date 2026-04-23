@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, BadgePreview, JerseyPreview, PageHeader } from "@/components/ui";
+import { Spinner, Card, CardHeader, CardBody, BadgePreview, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface ClubData {
@@ -109,23 +109,6 @@ export default function KlubPage() {
 
   return (
     <>
-      <PageHeader
-        name={club.name}
-        detail={`${club.village.name} · ${club.village.district}`}
-        color={club.primaryColor}
-        badge={
-          <BadgePreview
-            primary={club.badge.primary}
-            secondary={club.badge.secondary || "#FFFFFF"}
-            pattern={badgePattern}
-            initials={initials}
-            symbol={club.badge.symbol}
-            size={56}
-          />
-        }
-        children={null}
-      />
-
       <div className="page-container">
         <div className="mb-4">
           <h1 className="font-heading font-extrabold text-2xl text-ink">Klubová identita</h1>
