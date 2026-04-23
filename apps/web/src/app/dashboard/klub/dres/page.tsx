@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel } from "@/components/ui";
+import { Spinner, Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel, Modal } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 type JerseyPattern = "solid" | "stripes" | "hoops" | "halves" | "sash" | "sleeves" | "chest_band" | "pinstripes" | "quarters" | "gradient";
@@ -113,7 +113,7 @@ function invertHex(hex: string): string {
   return "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
 }
 
-function ShowcaseFrame({ label, sublabel, children, className = "" }: { label: string; sublabel?: string; children: React.ReactNode; className?: string }) {
+function ShowcaseFrame({ label, sublabel, children, className = "", onZoom }: { label: string; sublabel?: string; children: React.ReactNode; className?: string; onZoom?: () => void }) {
   return (
     <div className={`flex flex-col items-center h-full ${className}`}>
       <div className="text-[11px] font-heading font-bold text-muted uppercase tracking-[0.18em] mb-3">{label}</div>
@@ -128,9 +128,20 @@ function ShowcaseFrame({ label, sublabel, children, className = "" }: { label: s
           {children}
         </div>
         <div className="absolute bottom-3 left-8 right-8 h-2 rounded-full bg-black/10 blur-sm" />
+        {onZoom && (
+          <button
+            type="button"
+            onClick={onZoom}
+            aria-label="Zvětšit"
+            title="Prohlédnout v plné velikosti"
+            className="absolute top-3 right-3 w-9 h-9 rounded-lg bg-white/80 hover:bg-white text-gray-700 flex items-center justify-center text-base shadow transition-colors"
+          >
+            {"\u{1F50D}"}
+          </button>
+        )}
       </div>
       {/* Sublabel vždy rezervuje výšku aby panely byly stejně vysoké napříč kolonami */}
-      <div className="text-xs text-muted mt-2 text-center min-h-[18px]">{sublabel || " "}</div>
+      <div className="text-xs text-muted mt-2 text-center min-h-[18px]">{sublabel || " "}</div>
     </div>
   );
 }
@@ -287,6 +298,7 @@ export default function DresPage() {
   const [badgeSecondary, setBadgeSecondary] = useState("#FFFFFF");
   const [badgeInitials, setBadgeInitials] = useState("");
   const [badgeSymbol, setBadgeSymbol] = useState("");
+  const [zoomedKit, setZoomedKit] = useState<"home" | "away" | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -369,7 +381,7 @@ export default function DresPage() {
     symbol: badgeSymbol || null,
   };
   const homeShowcase = (
-    <ShowcaseFrame label="Domácí dres">
+    <ShowcaseFrame label="Domácí dres" onZoom={() => setZoomedKit("home")}>
       <JerseyFrontBack primary={homePrimary} secondary={homeSecondary} pattern={homePattern}
         sponsor={club.jersey.sponsor} shortsColor={homeShortsColor} socksColor={homeSocksColor}
         badge={badgeForJersey} />
@@ -396,7 +408,7 @@ export default function DresPage() {
     </Card>
   );
   const awayShowcase = (
-    <ShowcaseFrame label="Hostující dres">
+    <ShowcaseFrame label="Hostující dres" onZoom={() => setZoomedKit("away")}>
       <JerseyFrontBack primary={awayPrimary} secondary={awaySecondary} pattern={awayPattern}
         sponsor={club.jersey.sponsor} shortsColor={awayShortsColor} socksColor={awaySocksColor}
         badge={badgeForJersey} />
@@ -545,6 +557,32 @@ export default function DresPage() {
           {saving ? "Ukládám..." : "Uložit"}
         </button>
       </div>
+
+      {/* ═══ Zoom modal — velký náhled dresu ═══ */}
+      <Modal isOpen={zoomedKit !== null} onClose={() => setZoomedKit(null)} maxWidth="760px">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-heading font-extrabold text-xl text-ink">
+              {zoomedKit === "home" ? "Domácí dres" : "Hostující dres"}
+            </h2>
+            <button type="button" onClick={() => setZoomedKit(null)} className="w-8 h-8 rounded-lg text-gray-400 hover:text-ink hover:bg-gray-100 text-xl">×</button>
+          </div>
+          <div className="flex items-center justify-center rounded-2xl p-8"
+            style={{ background: "linear-gradient(180deg, #f7f5f0 0%, #e8e3d8 100%)" }}>
+            <div style={{ transform: "scale(1.7)", transformOrigin: "center", filter: "drop-shadow(0 10px 20px rgba(0,0,0,0.2))", margin: "80px 40px" }}>
+              {zoomedKit === "home" ? (
+                <JerseyFrontBack primary={homePrimary} secondary={homeSecondary} pattern={homePattern}
+                  sponsor={club.jersey.sponsor} shortsColor={homeShortsColor} socksColor={homeSocksColor}
+                  badge={badgeForJersey} />
+              ) : zoomedKit === "away" ? (
+                <JerseyFrontBack primary={awayPrimary} secondary={awaySecondary} pattern={awayPattern}
+                  sponsor={club.jersey.sponsor} shortsColor={awayShortsColor} socksColor={awaySocksColor}
+                  badge={badgeForJersey} />
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
