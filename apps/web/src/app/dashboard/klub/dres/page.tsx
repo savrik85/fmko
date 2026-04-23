@@ -8,7 +8,6 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, Card, CardHeader, CardBody, JerseyPreview, BadgePreview, SectionLabel } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
-import { FAKE_SPONSORS, randomSponsor } from "@/lib/fake-sponsors";
 import type { JerseyPattern } from "@/lib/jersey-pattern-canvas";
 
 const JerseyShowcase3D = dynamic(
@@ -143,7 +142,6 @@ export default function DresPage() {
   const [awaySecondary, setAwaySecondary] = useState("#2D5F2D");
   const [awayPattern, setAwayPattern] = useState<JerseyPattern>("solid");
   const [badgePattern, setBadgePattern] = useState<BadgePattern>("shield");
-  const [sponsor, setSponsor] = useState("");
 
   useEffect(() => {
     if (!teamId) return;
@@ -157,7 +155,6 @@ export default function DresPage() {
         setAwaySecondary(data.jersey.awaySecondary || data.primaryColor || "#2D5F2D");
         setAwayPattern((data.jersey.awayPattern as JerseyPattern) || "solid");
         setBadgePattern((data.badge.pattern as BadgePattern) || "shield");
-        setSponsor(data.jersey.sponsor || "");
         setLoading(false);
       })
       .catch((e) => { console.error("load club:", e); setLoading(false); });
@@ -183,7 +180,6 @@ export default function DresPage() {
           awaySecondary,
           awayPattern,
           badgePattern,
-          sponsor: sponsor.trim() || null,
         }),
       });
       setSavedAt(Date.now());
@@ -269,26 +265,18 @@ export default function DresPage() {
                 <span>{"\u{1F4B0}"}</span> Sponzor na dresu
               </h2>
             </CardHeader>
-            <CardBody className="flex flex-col gap-3">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={sponsor}
-                  onChange={(e) => setSponsor(e.target.value.slice(0, 30))}
-                  placeholder="Bez sponzora"
-                  maxLength={30}
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-pitch-500 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => setSponsor(randomSponsor())}
-                  title="Vygeneruj náhodný vesnický sponzor"
-                  className="px-3 py-2 bg-pitch-500 text-white rounded-lg text-sm font-bold hover:bg-pitch-600 transition-colors"
-                >
-                  {"\u{1F3B2}"}
-                </button>
+            <CardBody>
+              {club.jersey.sponsor ? (
+                <div className="text-sm text-ink">
+                  Na dresu: <span className="font-bold">{club.jersey.sponsor}</span>
+                </div>
+              ) : (
+                <div className="text-sm text-muted">Zatím žádný hlavní sponzor.</div>
+              )}
+              <div className="text-xs text-muted mt-2">
+                Hlavní sponzor se spravuje v sekci{" "}
+                <Link href="/dashboard/sponsors" className="text-pitch-600 underline hover:text-pitch-700">Sponzoři</Link>.
               </div>
-              <div className="text-xs text-muted">{sponsor.length}/30 znaků · {FAKE_SPONSORS.length} připravených návrhů</div>
             </CardBody>
           </Card>
         </div>
@@ -307,7 +295,7 @@ export default function DresPage() {
                   awayPattern={awayPattern}
                   badgePattern={badgePattern}
                   initials={initials}
-                  sponsor={sponsor.trim() || null}
+                  sponsor={club.jersey.sponsor}
                 />
                 <div className="absolute bottom-3 left-3 text-white/50 text-xs font-heading bg-black/40 px-2 py-1 rounded backdrop-blur-sm">
                   Táhni myší pro rotaci · Scroll pro zoom

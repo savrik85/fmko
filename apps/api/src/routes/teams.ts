@@ -1149,6 +1149,12 @@ teamsRouter.get("/:id/club", async (c) => {
   ).bind(teamId).first<{ capacity: number; pitch_condition: number; pitch_type: string }>()
     .catch((e) => { logger.warn({ module: "teams" }, "fetch stadium for /club", e); return null; });
 
+  // Hlavní sponzor — spravuje se přes /dashboard/sponsors, ne v /klub/dres
+  const mainSponsor = await c.env.DB.prepare(
+    "SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND (category = 'main' OR category IS NULL) LIMIT 1"
+  ).bind(teamId).first<{ sponsor_name: string }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "fetch main sponsor for /club", e); return null; });
+
   return c.json({
     id: team.id,
     name: team.name,
@@ -1179,7 +1185,7 @@ teamsRouter.get("/:id/club", async (c) => {
       awayPrimary: team.away_primary_color,
       awaySecondary: team.away_secondary_color,
       awayPattern: team.away_jersey_pattern,
-      sponsor: team.jersey_sponsor,
+      sponsor: mainSponsor?.sponsor_name ?? null,
     },
     badge: {
       pattern: team.badge_pattern,
@@ -1262,15 +1268,7 @@ teamsRouter.patch("/:id/club", async (c) => {
     const badgePattern = validateEnum("badgePattern", body.badgePattern, VALID_BADGE_PATTERNS);
     if (badgePattern !== undefined) updates.push({ col: "badge_pattern", val: badgePattern });
 
-    if (body.sponsor !== undefined) {
-      if (body.sponsor === null || body.sponsor === "") {
-        updates.push({ col: "jersey_sponsor", val: null });
-      } else if (typeof body.sponsor !== "string" || body.sponsor.length > 30) {
-        throw new Error("Sponsor: max 30 znaků");
-      } else {
-        updates.push({ col: "jersey_sponsor", val: body.sponsor.trim() });
-      }
-    }
+    // sponsor field v body se ignoruje — hlavní sponzor se spravuje přes /dashboard/sponsors
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }
