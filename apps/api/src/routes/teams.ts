@@ -1140,6 +1140,7 @@ teamsRouter.get("/:id/club", async (c) => {
     `SELECT t.id, t.name, t.primary_color, t.secondary_color, t.badge_pattern, t.jersey_pattern, t.stadium_name,
             t.away_primary_color, t.away_secondary_color, t.away_jersey_pattern, t.jersey_sponsor,
             t.home_shorts_color, t.home_socks_color, t.away_shorts_color, t.away_socks_color,
+            t.badge_primary_color, t.badge_secondary_color, t.badge_initials, t.badge_symbol,
             v.name as village_name, v.district, v.region, v.population
      FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`
   ).bind(teamId).first();
@@ -1194,8 +1195,12 @@ teamsRouter.get("/:id/club", async (c) => {
     },
     badge: {
       pattern: team.badge_pattern,
-      primary: team.primary_color,
-      secondary: team.secondary_color,
+      primary: team.badge_primary_color ?? team.primary_color,
+      secondary: team.badge_secondary_color ?? team.secondary_color,
+      customPrimary: team.badge_primary_color,
+      customSecondary: team.badge_secondary_color,
+      customInitials: team.badge_initials,
+      symbol: team.badge_symbol,
     },
     anthem: {
       url: null,
@@ -1286,6 +1291,30 @@ teamsRouter.patch("/:id/club", async (c) => {
     if (awayShorts !== undefined) updates.push({ col: "away_shorts_color", val: awayShorts });
     const awaySocks = validateHex("awaySocksColor", body.awaySocksColor, true);
     if (awaySocks !== undefined) updates.push({ col: "away_socks_color", val: awaySocks });
+
+    const badgePrimary = validateHex("badgePrimary", body.badgePrimary, true);
+    if (badgePrimary !== undefined) updates.push({ col: "badge_primary_color", val: badgePrimary });
+    const badgeSecondary = validateHex("badgeSecondary", body.badgeSecondary, true);
+    if (badgeSecondary !== undefined) updates.push({ col: "badge_secondary_color", val: badgeSecondary });
+
+    if (body.badgeInitials !== undefined) {
+      if (body.badgeInitials === null || body.badgeInitials === "") {
+        updates.push({ col: "badge_initials", val: null });
+      } else if (typeof body.badgeInitials !== "string" || body.badgeInitials.length > 5) {
+        throw new Error("Iniciály: max 5 znaků");
+      } else {
+        updates.push({ col: "badge_initials", val: body.badgeInitials.trim().toUpperCase() });
+      }
+    }
+    if (body.badgeSymbol !== undefined) {
+      if (body.badgeSymbol === null || body.badgeSymbol === "") {
+        updates.push({ col: "badge_symbol", val: null });
+      } else if (typeof body.badgeSymbol !== "string" || body.badgeSymbol.length > 4) {
+        throw new Error("Symbol: max 4 znaky (emoji)");
+      } else {
+        updates.push({ col: "badge_symbol", val: body.badgeSymbol });
+      }
+    }
 
     // sponsor field v body se ignoruje — hlavní sponzor se spravuje přes /dashboard/sponsors
   } catch (e) {

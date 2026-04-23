@@ -24,10 +24,15 @@ function starPath(cx: number, cy: number, R: number, r: number, points = 5): str
   return p + "Z";
 }
 
-export function BadgePreview({ primary, secondary, pattern, initials, size = 64 }: { primary: string; secondary: string; pattern: BadgePattern; initials: string; size?: number }) {
+export function BadgePreview({ primary, secondary, pattern, initials, size = 64, symbol }: { primary: string; secondary: string; pattern: BadgePattern; initials: string; size?: number; symbol?: string | null }) {
   const s = size;
   const half = s / 2;
-  const fontSize = s * 0.28;
+  // Pokud je symbol → iniciály nahoru + symbol dole, menší font
+  const hasSymbol = !!symbol;
+  const fontSize = hasSymbol ? s * 0.2 : s * 0.28;
+  const initialsY = hasSymbol ? s * 0.42 : half + fontSize * 0.35;
+  const symbolY = s * 0.68;
+  const symbolSize = s * 0.32;
 
   const lum = (hex: string) => {
     const c = hex.replace("#", "");
@@ -67,9 +72,15 @@ export function BadgePreview({ primary, secondary, pattern, initials, size = 64 
       ) : (
         <path d={shapes[pattern as Exclude<BadgePattern, SpecialPattern>]} fill={primary} stroke={stroke} strokeWidth={s * 0.04} strokeLinejoin="round" />
       )}
-      <text x={half} y={half + fontSize * 0.35} textAnchor="middle" fontSize={fontSize * 0.85} fontWeight="800"
+      <text x={half} y={initialsY} textAnchor="middle" fontSize={fontSize * 0.85} fontWeight="800"
         fill={textFill} stroke={primaryLight ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.4)"} strokeWidth={s * 0.02} paintOrder="stroke"
         fontFamily="var(--font-heading)" letterSpacing="0.05em">{initials}</text>
+      {symbol && (
+        <text x={half} y={symbolY} textAnchor="middle" fontSize={symbolSize}
+          dominantBaseline="middle" style={{ fontFamily: "system-ui, -apple-system, 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif" }}>
+          {symbol}
+        </text>
+      )}
     </svg>
   );
 }
