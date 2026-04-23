@@ -1138,6 +1138,7 @@ teamsRouter.get("/:id/club", async (c) => {
   const teamId = c.req.param("id");
   const team = await c.env.DB.prepare(
     `SELECT t.id, t.name, t.primary_color, t.secondary_color, t.badge_pattern, t.jersey_pattern, t.stadium_name,
+            t.away_primary_color, t.away_secondary_color, t.away_jersey_pattern, t.jersey_sponsor,
             v.name as village_name, v.district, v.region, v.population
      FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`
   ).bind(teamId).first();
@@ -1175,9 +1176,10 @@ teamsRouter.get("/:id/club", async (c) => {
       pattern: team.jersey_pattern,
       homePrimary: team.primary_color,
       homeSecondary: team.secondary_color,
-      awayPrimary: null,
-      awaySecondary: null,
-      sponsor: null,
+      awayPrimary: team.away_primary_color,
+      awaySecondary: team.away_secondary_color,
+      awayPattern: team.away_jersey_pattern,
+      sponsor: team.jersey_sponsor,
     },
     badge: {
       pattern: team.badge_pattern,
@@ -1196,6 +1198,90 @@ teamsRouter.get("/:id/club", async (c) => {
       story: null,
     },
   });
+});
+
+// PATCH /api/teams/:id/club — update klubové identity (zatím dres + znak)
+const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
+const VALID_JERSEY_PATTERNS = new Set(["solid", "stripes", "hoops", "halves", "sash", "sleeves", "chest_band", "pinstripes", "quarters", "gradient"]);
+const VALID_BADGE_PATTERNS = new Set(["shield", "circle", "diamond", "hexagon", "crest", "rounded_shield", "pennant", "square"]);
+
+teamsRouter.patch("/:id/club", async (c) => {
+  const teamId = c.req.param("id");
+
+  // Auth + ownership check
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return c.json({ error: "Nepřihlášen" }, 401);
+  const token = authHeader.slice(7);
+  const { getSession } = await import("../auth/session");
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return c.json({ error: "Neplatná session" }, 401);
+
+  const team = await c.env.DB.prepare("SELECT user_id FROM teams WHERE id = ?")
+    .bind(teamId).first<{ user_id: string }>();
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+  if (team.user_id !== session.userId) return c.json({ error: "Přístup odepřen" }, 403);
+
+  const body = await c.req.json().catch((e) => { logger.warn({ module: "teams" }, "PATCH /club: invalid JSON body", e); return null; }) as Record<string, unknown> | null;
+  if (!body || typeof body !== "object") return c.json({ error: "Neplatná data" }, 400);
+
+  // Validace per field
+  const updates: Array<{ col: string; val: string | null }> = [];
+
+  function validateHex(field: string, val: unknown, allowNull = false): string | null | undefined {
+    if (val === undefined) return undefined;
+    if (val === null) return allowNull ? null : undefined;
+    if (typeof val !== "string" || !HEX_RE.test(val)) {
+      throw new Error(`Pole ${field} musí být hex barva (např. #2D5F2D)`);
+    }
+    return val;
+  }
+  function validateEnum(field: string, val: unknown, allowed: Set<string>, allowNull = false): string | null | undefined {
+    if (val === undefined) return undefined;
+    if (val === null) return allowNull ? null : undefined;
+    if (typeof val !== "string" || !allowed.has(val)) {
+      throw new Error(`Pole ${field} má neplatnou hodnotu`);
+    }
+    return val;
+  }
+
+  try {
+    const homeP = validateHex("homePrimary", body.homePrimary);
+    if (homeP !== undefined) updates.push({ col: "primary_color", val: homeP });
+    const homeS = validateHex("homeSecondary", body.homeSecondary);
+    if (homeS !== undefined) updates.push({ col: "secondary_color", val: homeS });
+    const homePattern = validateEnum("homePattern", body.homePattern, VALID_JERSEY_PATTERNS);
+    if (homePattern !== undefined) updates.push({ col: "jersey_pattern", val: homePattern });
+
+    const awayP = validateHex("awayPrimary", body.awayPrimary, true);
+    if (awayP !== undefined) updates.push({ col: "away_primary_color", val: awayP });
+    const awayS = validateHex("awaySecondary", body.awaySecondary, true);
+    if (awayS !== undefined) updates.push({ col: "away_secondary_color", val: awayS });
+    const awayPattern = validateEnum("awayPattern", body.awayPattern, VALID_JERSEY_PATTERNS, true);
+    if (awayPattern !== undefined) updates.push({ col: "away_jersey_pattern", val: awayPattern });
+
+    const badgePattern = validateEnum("badgePattern", body.badgePattern, VALID_BADGE_PATTERNS);
+    if (badgePattern !== undefined) updates.push({ col: "badge_pattern", val: badgePattern });
+
+    if (body.sponsor !== undefined) {
+      if (body.sponsor === null || body.sponsor === "") {
+        updates.push({ col: "jersey_sponsor", val: null });
+      } else if (typeof body.sponsor !== "string" || body.sponsor.length > 30) {
+        throw new Error("Sponsor: max 30 znaků");
+      } else {
+        updates.push({ col: "jersey_sponsor", val: body.sponsor.trim() });
+      }
+    }
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+
+  if (updates.length === 0) return c.json({ error: "Žádné platné změny" }, 400);
+
+  const setClause = updates.map((u) => `${u.col} = ?`).join(", ");
+  const values = updates.map((u) => u.val);
+  await c.env.DB.prepare(`UPDATE teams SET ${setClause} WHERE id = ?`).bind(...values, teamId).run();
+
+  return c.json({ ok: true, updated: updates.map((u) => u.col) });
 });
 
 // GET /api/teams/:id/players/:playerId/career-stats — kariérní statistiky hráče

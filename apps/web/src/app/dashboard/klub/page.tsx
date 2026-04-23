@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, Card, CardHeader, CardBody, BadgePreview, JerseyPreview, PageHeader } from "@/components/ui";
@@ -35,6 +36,7 @@ interface ClubData {
     homeSecondary: string;
     awayPrimary: string | null;
     awaySecondary: string | null;
+    awayPattern: string | null;
     sponsor: string | null;
   };
   badge: { pattern: BadgePattern | null; primary: string; secondary: string };
@@ -57,18 +59,27 @@ function SectionCard({ title, icon, hint, children }: { title: string; icon: str
   );
 }
 
-function EmptyState({ children, action }: { children: React.ReactNode; action: string }) {
+function EmptyState({ children, action, href }: { children: React.ReactNode; action: string; href?: string }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
       <div className="text-sm text-muted mb-3 max-w-[260px]">{children}</div>
-      <button
-        type="button"
-        disabled
-        title="Brzy — připravujeme v dalších krocích"
-        className="px-4 py-2 rounded-lg text-sm font-heading font-bold text-gray-400 bg-gray-100 cursor-not-allowed"
-      >
-        {action}
-      </button>
+      {href ? (
+        <Link
+          href={href}
+          className="px-4 py-2 rounded-lg text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 transition-colors"
+        >
+          {action}
+        </Link>
+      ) : (
+        <button
+          type="button"
+          disabled
+          title="Brzy — připravujeme v dalších krocích"
+          className="px-4 py-2 rounded-lg text-sm font-heading font-bold text-gray-400 bg-gray-100 cursor-not-allowed"
+        >
+          {action}
+        </button>
+      )}
     </div>
   );
 }
@@ -141,22 +152,39 @@ export default function KlubPage() {
           </SectionCard>
 
           <SectionCard title="Dres a znak" icon={"\u{1F455}"} hint="Domácí, hostující, vzor a barvy">
-            <div className="flex items-center gap-4 mb-3">
+            <div className="flex items-center justify-center gap-5 mb-3">
               <BadgePreview
                 primary={club.badge.primary}
                 secondary={club.badge.secondary || "#FFFFFF"}
                 pattern={badgePattern}
                 initials={initials}
-                size={64}
+                size={72}
               />
-              <JerseyPreview
-                primary={club.jersey.homePrimary}
-                secondary={club.jersey.homeSecondary || "#FFFFFF"}
-                pattern={club.jersey.pattern || "solid"}
-                size={64}
-              />
+              <div className="flex flex-col items-center gap-1">
+                <JerseyPreview
+                  primary={club.jersey.homePrimary}
+                  secondary={club.jersey.homeSecondary || "#FFFFFF"}
+                  pattern={club.jersey.pattern || "solid"}
+                  size={64}
+                />
+                <span className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider">Domácí</span>
+              </div>
+              {club.jersey.awayPrimary && (
+                <div className="flex flex-col items-center gap-1">
+                  <JerseyPreview
+                    primary={club.jersey.awayPrimary}
+                    secondary={club.jersey.awaySecondary || "#FFFFFF"}
+                    pattern={club.jersey.awayPattern || "solid"}
+                    size={64}
+                  />
+                  <span className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider">Hostující</span>
+                </div>
+              )}
             </div>
-            <EmptyState action="Upravit dres">
+            {club.jersey.sponsor && (
+              <div className="text-center text-xs text-muted mb-2">Sponzor: <span className="font-bold text-ink">{club.jersey.sponsor}</span></div>
+            )}
+            <EmptyState action="Upravit dres" href="/dashboard/klub/dres">
               Vlastní vzor dresu (pruhy, šachovnice, gradient), hostující barvy a fake sponzor.
             </EmptyState>
           </SectionCard>
