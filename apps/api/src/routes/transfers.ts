@@ -715,20 +715,29 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   const offer = await c.env.DB.prepare(
     "SELECT from_team_id, to_team_id, player_id FROM transfer_offers WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered') AND last_action_by != ?"
   ).bind(offerId, teamId, teamId, teamId).first<{ from_team_id: string; to_team_id: string; player_id: string }>();
+  if (!offer) return c.json({ error: "Nabídka nenalezena nebo nelze upravit" }, 404);
+
+  // Pokud counter posílá kupující (from_team_id), ověř že má na to peníze
+  if (offer.from_team_id === teamId) {
+    const buyer = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?")
+      .bind(teamId).first<{ budget: number }>();
+    if (!buyer || buyer.budget < body.amount) {
+      return c.json({ error: `Nedostatek peněz. Máte ${(buyer?.budget ?? 0).toLocaleString("cs")} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
+    }
+  }
+
   // Counter může ten kdo je na tahu; nastaví last_action_by na sebe
   await c.env.DB.prepare(
     "UPDATE transfer_offers SET status = 'countered', counter_amount = ?, last_action_by = ? WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered') AND last_action_by != ?"
   ).bind(body.amount, teamId, offerId, teamId, teamId, teamId).run();
-  if (offer) {
-    try {
-      const { createNotification } = await import("../community/notifications");
-      const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
-      const otherTeamId = offer.from_team_id === teamId ? offer.to_team_id : offer.from_team_id;
-      const player = await c.env.DB.prepare("SELECT first_name, last_name FROM players WHERE id = ?").bind(offer.player_id).first<{ first_name: string; last_name: string }>();
-      const pName = player ? `${player.first_name} ${player.last_name}` : "hráče";
-      await createNotification(c.env.DB, otherTeamId, "transfer", `🔄 Protinabídka za ${pName}`, `Druhá strana poslala protinabídku.`, "/dashboard/transfers", pushEnv);
-    } catch (e) { logger.warn({ module: "transfers" }, "counter offer notification", e); }
-  }
+  try {
+    const { createNotification } = await import("../community/notifications");
+    const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+    const otherTeamId = offer.from_team_id === teamId ? offer.to_team_id : offer.from_team_id;
+    const player = await c.env.DB.prepare("SELECT first_name, last_name FROM players WHERE id = ?").bind(offer.player_id).first<{ first_name: string; last_name: string }>();
+    const pName = player ? `${player.first_name} ${player.last_name}` : "hráče";
+    await createNotification(c.env.DB, otherTeamId, "transfer", `🔄 Protinabídka za ${pName}`, `Druhá strana poslala protinabídku.`, "/dashboard/transfers", pushEnv);
+  } catch (e) { logger.warn({ module: "transfers" }, "counter offer notification", e); }
   return c.json({ ok: true });
 });
 

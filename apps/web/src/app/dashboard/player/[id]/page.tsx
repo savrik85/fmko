@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiFetch, type Player, type Team, type CareerStats, type PlayerMatchEntry, type PlayerContract } from "@/lib/api";
+import { apiFetch, apiAction, type Player, type Team, type CareerStats, type PlayerMatchEntry, type PlayerContract } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
@@ -241,25 +241,22 @@ export default function PlayerDetailPage() {
     const amount = parseInt(offerAmount.replace(/\s/g, "") || "0", 10);
     if (offerType === "transfer" && (!amount || amount <= 0)) return;
     setOfferSending(true);
-    try {
-      await apiFetch(`/api/teams/${teamId}/offers`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          playerId: player.id,
-          amount,
-          message: offerMessage.trim() || undefined,
-          offerType,
-          ...(offerType === "loan" ? { loanDuration: parseInt(loanDuration, 10) } : {}),
-        }),
-      });
+    const ok = await apiAction(apiFetch(`/api/teams/${teamId}/offers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId: player.id,
+        amount,
+        message: offerMessage.trim() || undefined,
+        offerType,
+        ...(offerType === "loan" ? { loanDuration: parseInt(loanDuration, 10) } : {}),
+      }),
+    }), "Odeslání nabídky se nezdařilo");
+    if (ok) {
       setOfferSent(true);
       setOfferOpen(false);
-    } catch (e) {
-      console.error("send transfer offer:", e);
-    } finally {
-      setOfferSending(false);
     }
+    setOfferSending(false);
   }
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>;
