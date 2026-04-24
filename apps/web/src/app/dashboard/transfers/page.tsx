@@ -1835,10 +1835,12 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
                             description: `${p.position}, ${p.age} let, rating ${p.overall_rating}`,
                             defaultPrice: Math.round((p.overall_rating ?? 50) * 50),
                             onConfirm: async (price: number) => {
-                              if (await apiAction(apiFetch(`/api/teams/${teamId}/players/${p.id}/list`, {
+                              const ok = await apiAction(apiFetch(`/api/teams/${teamId}/players/${p.id}/list`, {
                                 method: "POST", headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ askingPrice: price }),
-                              }), "Vystavení na trh se nezdařilo")) await refresh();
+                              }), "Vystavení na trh se nezdařilo");
+                              setPriceDialog(null);
+                              if (ok) await refresh();
                             },
                           });
                         }} className="py-1 px-2.5 rounded text-xs font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
