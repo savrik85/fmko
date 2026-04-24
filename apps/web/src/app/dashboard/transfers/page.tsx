@@ -81,6 +81,10 @@ interface TransferOffer {
   offer_type?: "transfer" | "loan"; loan_duration?: number | null;
   avatar?: Record<string, unknown>;
   on_turn?: boolean; // true = já jsem na tahu (druhá strana čeká)
+  offered_player_id?: string | null;
+  offered_first_name?: string | null;
+  offered_last_name?: string | null;
+  offered_position?: string | null;
 }
 
 type FASortKey = "rating" | "wage" | "age" | "distance";
@@ -1481,6 +1485,14 @@ export default function TransfersPage() {
                             <span className="font-heading font-bold text-pitch-500">{formatCZK(o.counter_amount ?? o.offer_amount)}</span>
                           )}
                         </div>
+                        {o.offered_player_id && (
+                          <div className="mt-1 inline-flex items-center gap-1.5 bg-gold-50 border border-gold-300/60 rounded-full px-2.5 py-0.5 text-xs">
+                            <span>⇄</span>
+                            <span className="font-heading font-bold text-ink">{o.offered_first_name} {o.offered_last_name}</span>
+                            {o.offered_position && <span className="text-muted">({o.offered_position})</span>}
+                            <span className="text-muted">na výměnu</span>
+                          </div>
+                        )}
                         {o.message && <div className="text-xs text-muted mt-1 italic">&ldquo;{o.message}&rdquo;</div>}
                         {o.status === "countered" && <div className="text-xs text-gold-600 mt-1">Protinabídka: {formatCZK(o.counter_amount!)}</div>}
                         {o.on_turn === false && <div className="text-xs text-muted mt-1 italic">Čeká se na odpověď soupeře</div>}
@@ -1578,6 +1590,14 @@ export default function TransfersPage() {
                             return <span className="text-xs text-card-red ml-2">+ poplatek {formatCZK(fee)}</span>;
                           })()}
                         </div>
+                        {o.offered_player_id && (
+                          <div className="mt-1 inline-flex items-center gap-1.5 bg-gold-50 border border-gold-300/60 rounded-full px-2.5 py-0.5 text-xs">
+                            <span>⇄</span>
+                            <span className="font-heading font-bold text-ink">{o.offered_first_name} {o.offered_last_name}</span>
+                            {o.offered_position && <span className="text-muted">({o.offered_position})</span>}
+                            <span className="text-muted">na výměnu</span>
+                          </div>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-2 shrink-0 justify-end">
                         <Link href={`/dashboard/transfers/offer/${o.id}`} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
