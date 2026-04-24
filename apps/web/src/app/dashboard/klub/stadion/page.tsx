@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, showError } from "@/lib/api";
 import { Spinner, Card, CardHeader, CardBody, SectionLabel } from "@/components/ui";
 
 const Stadium3D = dynamic(
@@ -126,7 +126,7 @@ export default function StadionPage() {
       setTimeout(() => setSavedAt(null), 3000);
     } catch (e) {
       console.error("save stadion:", e);
-      alert((e as Error).message || "Uložení selhalo");
+      showError("Uložení selhalo", (e as Error).message || "Zkus to prosím znovu.");
     } finally {
       setSaving(false);
     }

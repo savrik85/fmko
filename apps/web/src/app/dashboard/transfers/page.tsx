@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { apiFetch, apiAction, type Player } from "@/lib/api";
+import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
 import { Spinner, SectionLabel, PositionBadge, useConfirm } from "@/components/ui";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -1349,7 +1349,7 @@ export default function TransfersPage() {
                                 await refresh();
                               } catch (e) {
                                 console.error("player offer accept:", e);
-                                alert((e as Error)?.message || "Přijetí nabídky se nezdařilo");
+                                showError("Přijetí nabídky se nezdařilo", (e as Error)?.message || "Zkus to prosím znovu.");
                               } finally { setPlayerOfferLoading(null); }
                             }}
                             className="py-2 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors disabled:opacity-50">

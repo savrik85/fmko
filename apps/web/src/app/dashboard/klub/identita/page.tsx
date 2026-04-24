@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, showError } from "@/lib/api";
 import { Spinner, Card, CardHeader, CardBody, SectionLabel } from "@/components/ui";
 
 interface ClubIdentity {
@@ -71,7 +71,7 @@ export default function IdentitaPage() {
       else if (kind === "colors") setColorsMeaning(res.text.slice(0, 500));
     } catch (e) {
       console.error("generate identity:", e);
-      alert((e as Error).message || "Generace selhala");
+      showError("Generace selhala", (e as Error).message || "Zkus to prosím znovu.");
     } finally {
       setGenLoading(null);
     }
@@ -97,7 +97,7 @@ export default function IdentitaPage() {
       setTimeout(() => setSavedAt(null), 3000);
     } catch (e) {
       console.error("save identity:", e);
-      alert((e as Error).message || "Uložení selhalo");
+      showError("Uložení selhalo", (e as Error).message || "Zkus to prosím znovu.");
     } finally {
       setSaving(false);
     }

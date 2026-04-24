@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiFetch, type ManagerProfile, type Team } from "@/lib/api";
+import { apiFetch, showError, type ManagerProfile, type Team } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { SectionLabel, Spinner, BadgePreview } from "@/components/ui";
@@ -110,7 +110,7 @@ export default function ManagerDetailPage() {
                 if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
               } catch (e) {
                 console.error("conversation-with:", e);
-                alert((e as Error)?.message || "Nepodařilo se otevřít konverzaci");
+                showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
               }
             }}
               className="bg-white/10 hover:bg-white/20 rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0">

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, showError } from "@/lib/api";
 import { Spinner, Card, CardHeader, CardBody, SectionLabel } from "@/components/ui";
 
 interface Mascot {
@@ -103,7 +103,7 @@ export default function MaskotPage() {
       await loadMascots();
     } catch (e) {
       console.error("select mascot:", e);
-      alert((e as Error).message || "Výběr selhal");
+      showError("Výběr selhal", (e as Error).message || "Zkus to prosím znovu.");
     }
   }
 
@@ -115,7 +115,7 @@ export default function MaskotPage() {
       await loadMascots();
     } catch (e) {
       console.error("delete mascot:", e);
-      alert((e as Error).message || "Smazání selhalo");
+      showError("Smazání selhalo", (e as Error).message || "Zkus to prosím znovu.");
     }
   }
 
@@ -127,7 +127,7 @@ export default function MaskotPage() {
       await loadMascots();
     } catch (e) {
       console.error("generate story:", e);
-      alert((e as Error).message || "Generace příběhu selhala");
+      showError("Generace příběhu selhala", (e as Error).message || "Zkus to prosím znovu.");
     } finally {
       setStoryLoading(null);
     }

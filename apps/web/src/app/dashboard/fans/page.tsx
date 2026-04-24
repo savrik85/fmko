@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
-import { apiFetch, type Team } from "@/lib/api";
+import { apiFetch, showError, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm } from "@/components/ui";
 
 interface FansData {
@@ -236,7 +236,7 @@ export default function FansPage() {
       return { error: "Chyba při změně módu" };
     });
     if (res?.error) {
-      alert(res.error);
+      showError("Chyba", res.error ?? "Zkus to prosím znovu.");
     }
     await refresh();
     setActing(null);
@@ -289,7 +289,7 @@ export default function FansPage() {
     const tier = product.tiers[product.qualityLevel];
     const total = tier.wholesalePrice * qty;
     if (team.budget < total) {
-      alert("Nedostatek peněz");
+      showError("Nedostatek peněz", "Potřebuješ víc peněz na rozpočtu.");
       return;
     }
     const ok = await confirm({

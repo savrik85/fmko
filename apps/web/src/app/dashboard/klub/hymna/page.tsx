@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, showError } from "@/lib/api";
 import { Spinner, Card, CardHeader, CardBody, SectionLabel } from "@/components/ui";
 
 interface Anthem {
@@ -103,7 +103,7 @@ export default function HymnaPage() {
       setLyrics(res.lyrics);
     } catch (e) {
       console.error("generate lyrics:", e);
-      alert((e as Error).message || "Generace textu selhala");
+      showError("Generace textu selhala", (e as Error).message || "Zkus to prosím znovu.");
     } finally {
       setGeneratingLyrics(false);
     }
@@ -136,7 +136,7 @@ export default function HymnaPage() {
       await loadAnthems();
     } catch (e) {
       console.error("select anthem:", e);
-      alert((e as Error).message || "Výběr selhal");
+      showError("Výběr selhal", (e as Error).message || "Zkus to prosím znovu.");
     }
   }
 
@@ -148,7 +148,7 @@ export default function HymnaPage() {
       await loadAnthems();
     } catch (e) {
       console.error("delete anthem:", e);
-      alert((e as Error).message || "Smazání selhalo");
+      showError("Smazání selhalo", (e as Error).message || "Zkus to prosím znovu.");
     }
   }
 

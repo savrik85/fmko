@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, showError } from "@/lib/api";
 import { Spinner, SectionLabel, BadgePreview, PageHeader, useConfirm } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
@@ -129,7 +129,7 @@ export default function SchedulePage() {
     ).catch((e) => { console.error("promote match:", e); return { error: "Chyba při propagaci" }; });
     setActing(false);
     if (res?.error) {
-      alert(res.error);
+      showError("Chyba", res.error ?? "Zkus to prosím znovu.");
       return;
     }
     await loadSchedule();

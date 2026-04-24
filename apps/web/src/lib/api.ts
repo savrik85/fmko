@@ -32,7 +32,15 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return res.json() as Promise<T>;
 }
 
-// Wrapper pro user-iniciované akce: při chybě zobrazí alert s API zprávou.
+/** Zobrazí chybový dialog (náš ErrorDialogProvider); fallback na alert pokud dialog není mountnutý. */
+export function showError(title: string, message: string): void {
+  if (typeof window === "undefined") return;
+  const fn = (window as unknown as { __showError?: (t: string, m: string) => void }).__showError;
+  if (fn) fn(title, message);
+  else alert(`${title}\n\n${message}`);
+}
+
+// Wrapper pro user-iniciované akce: při chybě zobrazí dialog s API zprávou.
 // Vrací true při úspěchu, false při chybě (caller se rozhodne, jestli refreshovat).
 export async function apiAction<T>(promise: Promise<T>, fallbackMessage = "Akce se nezdařila"): Promise<boolean> {
   try {
@@ -40,10 +48,8 @@ export async function apiAction<T>(promise: Promise<T>, fallbackMessage = "Akce 
     return true;
   } catch (e) {
     console.error(fallbackMessage + ":", e);
-    if (typeof window !== "undefined") {
-      const msg = (e as Error)?.message;
-      alert(msg && msg !== "API error" ? msg : fallbackMessage);
-    }
+    const msg = (e as Error)?.message;
+    showError(fallbackMessage, msg && msg !== "API error" ? msg : "Zkus to prosím znovu.");
     return false;
   }
 }

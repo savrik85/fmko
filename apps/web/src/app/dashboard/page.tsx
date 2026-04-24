@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
-import { apiFetch, type Team, type Player, type ManagerProfile, type TeamMatchResults } from "@/lib/api";
+import { apiFetch, showError, type Team, type Player, type ManagerProfile, type TeamMatchResults } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { Spinner, SectionLabel, PositionBadge, BadgePreview, useConfirm } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
@@ -187,7 +187,7 @@ export default function DashboardPage() {
       { method: "POST" },
     ).catch((e) => { console.error("promote:", e); return { error: "Chyba při propagaci" }; });
     setPromoting(false);
-    if (res?.error) { alert(res.error); return; }
+    if (res?.error) { showError("Chyba", res.error ?? "Zkus to prosím znovu."); return; }
     const refreshed = await apiFetch<{ matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`)
       .catch((e) => { console.error("refresh schedule:", e); return null; });
     if (refreshed) setMatches(refreshed.matches);

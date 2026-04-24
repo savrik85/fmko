@@ -15,4 +15,5 @@ export { JerseyPreview } from "./jersey-preview";
 export { ShortsPreview } from "./shorts-preview";
 export { SocksPreview } from "./socks-preview";
 export { ConfirmDialog, useConfirm } from "./confirm-dialog";
+export { ErrorDialogProvider } from "./error-dialog";
 export { PageHeader, HeaderStat } from "../dashboard/page-header";

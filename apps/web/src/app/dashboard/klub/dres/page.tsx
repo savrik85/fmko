@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, showError } from "@/lib/api";
 import { Spinner, Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel, Modal } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
@@ -359,7 +359,7 @@ export default function DresPage() {
       setTimeout(() => setSavedAt(null), 3000);
     } catch (e) {
       console.error("save club:", e);
-      alert((e as Error).message || "Uložení selhalo");
+      showError("Uložení selhalo", (e as Error).message || "Zkus to prosím znovu.");
     } finally {
       setSaving(false);
     }

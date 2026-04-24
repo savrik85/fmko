@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Outfit, Barlow_Condensed, JetBrains_Mono } from "next/font/google";
 import { TeamProvider } from "@/context/team-context";
 import { PushNotificationManager } from "@/components/PushNotificationManager";
+import { ErrorDialogProvider } from "@/components/ui";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -52,6 +53,7 @@ export default function RootLayout({
       <body className="min-h-screen">
         <TeamProvider>{children}</TeamProvider>
         <PushNotificationManager />
+        <ErrorDialogProvider />
       </body>
     </html>
   );

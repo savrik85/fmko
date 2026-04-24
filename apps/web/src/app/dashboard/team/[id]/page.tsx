@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { apiFetch, type Team, type Player, type TeamMatchResults, type ManagerProfile } from "@/lib/api";
+import { apiFetch, showError, type Team, type Player, type TeamMatchResults, type ManagerProfile } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { Spinner, SectionLabel, EntityLink, BadgePreview, PositionBadge, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
@@ -212,7 +212,7 @@ export default function TeamPage() {
                     if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
                   } catch (e) {
                     console.error("create conversation:", e);
-                    alert((e as Error)?.message || "Nepodařilo se otevřít konverzaci");
+                    showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
                   }
                 }}
                   className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer`}>
@@ -294,7 +294,7 @@ export default function TeamPage() {
                       if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
                     } catch (e) {
                       console.error("create conversation (mobile):", e);
-                      alert((e as Error)?.message || "Nepodařilo se otevřít konverzaci");
+                      showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
                     }
                   }}
                     className={`${boxBg} ${boxBgHover} rounded-lg px-3 py-1.5 text-center transition-colors cursor-pointer`}>
