@@ -1561,9 +1561,19 @@ teamsRouter.get("/:id/club/anthem/status", async (c) => {
     await c.env.DB.prepare(
       "UPDATE teams SET anthem_task_id = NULL, anthem_attempts_used = MAX(0, COALESCE(anthem_attempts_used, 1) - 1) WHERE id = ?"
     ).bind(teamId).run();
-    const errMsg = statusJson.data?.errorMessage || `Generace selhala: ${sunoStatus}`;
-    logger.warn({ module: "teams" }, `Suno anthem error for team ${teamId}: ${sunoStatus} — ${errMsg}`);
-    return c.json({ status: "error", error: errMsg, sunoStatus, attemptsUsed: Math.max(0, (team.anthem_attempts_used ?? 1) - 1) });
+    const rawErr = statusJson.data?.errorMessage || sunoStatus;
+    let czechMsg = rawErr;
+    if (sunoStatus === "SENSITIVE_WORD_ERROR") {
+      czechMsg = "Styl hudby obsahuje zakázané slovo (jméno interpreta nebo chráněný výraz). Uprav popis stylu — vyhni se jménům zpěváků/kapel a slovům jako \"rytmus\", \"drake\" apod.";
+    } else if (sunoStatus === "CREDIT_INSUFFICIENT") {
+      czechMsg = "Nedostatek kreditů u Suno AI. Kontaktuj administrátora.";
+    } else if (sunoStatus === "GENERATE_FAILED") {
+      czechMsg = "Suno nedokázala hudbu vygenerovat. Zkus jiný styl nebo text.";
+    } else if (sunoStatus === "PARAM_ERROR") {
+      czechMsg = "Chybný formát textu nebo stylu. Zkrať text hymny nebo zjednoduš styl.";
+    }
+    logger.warn({ module: "teams" }, `Suno anthem error for team ${teamId}: ${sunoStatus} — ${rawErr}`);
+    return c.json({ status: "error", error: czechMsg, sunoStatus, attemptsUsed: Math.max(0, (team.anthem_attempts_used ?? 1) - 1) });
   }
 
   return c.json({ status: sunoStatus === "PENDING" ? "pending" : "processing", attemptsUsed: team.anthem_attempts_used ?? 0 });

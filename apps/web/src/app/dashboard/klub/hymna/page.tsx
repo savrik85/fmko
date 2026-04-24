@@ -287,13 +287,18 @@ export default function HymnaPage() {
               })}
             </div>
           ) : (
-            <textarea
-              value={customStyle}
-              onChange={(e) => setCustomStyle(e.target.value.slice(0, 300))}
-              placeholder="Popiš vlastními slovy, např. 'české country s banjem'"
-              rows={2}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-pitch-500 focus:outline-none resize-none"
-            />
+            <>
+              <textarea
+                value={customStyle}
+                onChange={(e) => setCustomStyle(e.target.value.slice(0, 300))}
+                placeholder="Popiš vlastními slovy, např. 'czech country with banjo, male vocals'"
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-pitch-500 focus:outline-none resize-none"
+              />
+              <div className="text-xs text-muted">
+                Tip: raději anglicky. Nepoužívej jména zpěváků/kapel ani slova jako <code>rytmus</code>, <code>drake</code> (Suno je odmítá jako jména interpretů).
+              </div>
+            </>
           )}
           <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
             <input type="checkbox" checked={useCustomStyle} onChange={(e) => setUseCustomStyle(e.target.checked)} />
