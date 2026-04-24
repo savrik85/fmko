@@ -269,6 +269,16 @@ export default function TeamPage() {
                 </a>
               ) : <span />}
               <div className="flex items-center gap-2">
+                <a
+                  href={`/klub/${teamId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Veřejný profil klubu"
+                  className={`${boxBg} ${boxBgHover} rounded-lg px-3 py-1.5 text-center transition-colors cursor-pointer`}
+                >
+                  <div className="text-base leading-none">{"\u{1F4C4}"}</div>
+                  <div className={`${boxLabel} text-[8px] font-heading font-bold uppercase mt-0.5`}>Profil</div>
+                </a>
                 {!isOwnTeam && (team as any).user_id !== "ai" && (
                   <button onClick={async () => {
                     if (!myTeamId) return;
