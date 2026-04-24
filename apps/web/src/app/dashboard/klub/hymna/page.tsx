@@ -41,8 +41,6 @@ export default function HymnaPage() {
 
   // Music generation
   const [style, setStyle] = useState(STYLE_PRESETS[0].value);
-  const [customStyle, setCustomStyle] = useState("");
-  const [useCustomStyle, setUseCustomStyle] = useState(false);
   const [generatingMusic, setGeneratingMusic] = useState(false);
   const [pollingStatus, setPollingStatus] = useState<string | null>(null);
   const [musicError, setMusicError] = useState<string | null>(null);
@@ -55,10 +53,10 @@ export default function HymnaPage() {
       setClub(data);
       if (data.anthem.title) setTitle(data.anthem.title);
       if (data.anthem.lyrics) setLyrics(data.anthem.lyrics);
+      // Pokud je uložený style preset, vybereme ho. Jinak default (první preset).
       if (data.anthem.style) {
         const preset = STYLE_PRESETS.find((p) => p.value === data.anthem.style);
-        if (preset) { setStyle(preset.value); setUseCustomStyle(false); }
-        else { setCustomStyle(data.anthem.style); setUseCustomStyle(true); }
+        if (preset) setStyle(preset.value);
       }
       setLoading(false);
     } catch (e) {
@@ -123,11 +121,10 @@ export default function HymnaPage() {
     setMusicError(null);
     setGeneratingMusic(true);
     try {
-      const styleToUse = useCustomStyle ? customStyle.trim() : style;
       await apiFetch(`/api/teams/${teamId}/club/anthem/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), lyrics: lyrics.trim(), style: styleToUse }),
+        body: JSON.stringify({ title: title.trim(), lyrics: lyrics.trim(), style }),
       });
       await loadClub();
     } catch (e) {
@@ -267,43 +264,25 @@ export default function HymnaPage() {
         <CardHeader>
           <h2 className="font-heading font-bold text-base text-ink">2. Styl hudby</h2>
         </CardHeader>
-        <CardBody className="flex flex-col gap-4">
-          {!useCustomStyle ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {STYLE_PRESETS.map((preset) => {
-                const active = style === preset.value;
-                return (
-                  <button
-                    type="button"
-                    key={preset.value}
-                    onClick={() => setStyle(preset.value)}
-                    className={`px-3 py-2.5 rounded-lg text-sm text-left border-2 transition-all ${
-                      active ? "border-pitch-500 bg-pitch-50 text-pitch-700 font-bold" : "border-gray-200 hover:border-gray-300 bg-white text-ink"
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <>
-              <textarea
-                value={customStyle}
-                onChange={(e) => setCustomStyle(e.target.value.slice(0, 300))}
-                placeholder="Popiš vlastními slovy, např. 'czech country with banjo, male vocals'"
-                rows={2}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-pitch-500 focus:outline-none resize-none"
-              />
-              <div className="text-xs text-muted">
-                Tip: raději anglicky. Nepoužívej jména zpěváků/kapel ani slova jako <code>rytmus</code>, <code>drake</code> (Suno je odmítá jako jména interpretů).
-              </div>
-            </>
-          )}
-          <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
-            <input type="checkbox" checked={useCustomStyle} onChange={(e) => setUseCustomStyle(e.target.checked)} />
-            Vlastní popis stylu
-          </label>
+        <CardBody className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {STYLE_PRESETS.map((preset) => {
+              const active = style === preset.value;
+              return (
+                <button
+                  type="button"
+                  key={preset.value}
+                  onClick={() => setStyle(preset.value)}
+                  className={`px-3 py-2.5 rounded-lg text-sm text-left border-2 transition-all ${
+                    active ? "border-pitch-500 bg-pitch-50 text-pitch-700 font-bold" : "border-gray-200 hover:border-gray-300 bg-white text-ink"
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="text-xs text-muted">Styl posíláme na Suno v angličtině (čeština dělá problémy s citlivými slovy).</div>
         </CardBody>
       </Card>
 

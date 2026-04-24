@@ -1231,6 +1231,15 @@ const VALID_BADGE_PATTERNS = new Set([
   "pennant", "banner", "chevron", "arch",
 ]);
 const ANTHEM_MAX_ATTEMPTS = 3;
+// Whitelist anglických stylových presetů — Suno API je sensitive na české názvy umělců
+const ANTHEM_STYLE_PRESETS = new Set([
+  "czech football anthem, marching tempo, strong male choir, energetic",
+  "czech folk song, accordion, mixed choir, cheerful tempo",
+  "czech rock anthem, electric guitar, drums, stadium feeling",
+  "czech folk ballad, acoustic guitar, male voice, simple accompaniment",
+  "czech punk rock, fast tempo, raw vocals, punk energy",
+]);
+const ANTHEM_DEFAULT_STYLE = "czech football anthem, marching tempo, strong male choir, energetic";
 
 teamsRouter.patch("/:id/club", async (c) => {
   const teamId = c.req.param("id");
@@ -1466,7 +1475,9 @@ teamsRouter.post("/:id/club/anthem/generate", async (c) => {
     .catch((e) => { logger.warn({ module: "teams" }, "anthem/generate invalid body", e); return { title: "", lyrics: "", style: "" }; });
   const title = (body.title ?? "").trim();
   const lyrics = (body.lyrics ?? "").trim();
-  const style = (body.style ?? "český fotbalový chorál, pochodový rytmus, sborový zpěv").trim();
+  const rawStyle = (body.style ?? "").trim();
+  // Whitelist kontrola — pouze jeden z předdefinovaných anglických presetů (Suno je sensitive na CZ slova)
+  const style = ANTHEM_STYLE_PRESETS.has(rawStyle) ? rawStyle : ANTHEM_DEFAULT_STYLE;
   if (!title || !lyrics) return c.json({ error: "Chybí název nebo text hymny" }, 400);
   if (lyrics.length > 3000) return c.json({ error: "Text je příliš dlouhý (max 3000 znaků)" }, 400);
 
