@@ -193,8 +193,8 @@ export default function TransfersPage() {
   // Offers
   const [incoming, setIncoming] = useState<TransferOffer[]>([]);
   const [outgoing, setOutgoing] = useState<TransferOffer[]>([]);
-  const [incomingBids, setIncomingBids] = useState<Array<{ id: string; listing_id: string; amount: number; asking_price: number; first_name: string; last_name: string; position: string; age: number; overall_rating: number; buyer_team_name: string; player_id: string; player_avatar?: Record<string, unknown> | string | null }>>([]);
-  const [outgoingBids, setOutgoingBids] = useState<Array<{ id: string; listing_id: string; amount: number; asking_price: number; first_name: string; last_name: string; position: string; age: number; overall_rating: number; seller_team_name: string; player_id: string; player_avatar?: Record<string, unknown> | string | null }>>([]);
+  const [incomingBids, setIncomingBids] = useState<Array<{ id: string; listing_id: string; amount: number; counter_amount: number | null; status: string; on_turn: boolean; asking_price: number; first_name: string; last_name: string; position: string; age: number; overall_rating: number; buyer_team_name: string; player_id: string; player_avatar?: Record<string, unknown> | string | null }>>([]);
+  const [outgoingBids, setOutgoingBids] = useState<Array<{ id: string; listing_id: string; amount: number; counter_amount: number | null; status: string; on_turn: boolean; asking_price: number; first_name: string; last_name: string; position: string; age: number; overall_rating: number; seller_team_name: string; player_id: string; player_avatar?: Record<string, unknown> | string | null }>>([]);
   const [history, setHistory] = useState<Array<TransferOffer & { my_role: "buyer" | "seller"; resolved_at: string | null }>>([]);
   const [offersView, setOffersView] = useState<"active" | "history">("active");
   const [myLeagueId, setMyLeagueId] = useState<string | null>(null);
@@ -1666,6 +1666,7 @@ export default function TransfersPage() {
               <div className="space-y-3">
                 {incomingBids.map((b) => {
                   const ba = (() => { try { const raw = b.player_avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
+                  const currentAmount = b.counter_amount ?? b.amount;
                   return (
                     <div key={b.id} className="card p-4">
                       <div className="flex items-start gap-3">
@@ -1683,25 +1684,47 @@ export default function TransfersPage() {
                           <div className="text-sm">
                             <span className="font-heading font-bold">{b.buyer_team_name}</span>
                             <span className="text-muted"> nabízí </span>
-                            <span className="font-heading font-bold text-pitch-500">{formatCZK(b.amount)}</span>
+                            <span className="font-heading font-bold text-pitch-500">{formatCZK(currentAmount)}</span>
                             <span className="text-xs text-muted ml-2">(požadovaná cena {formatCZK(b.asking_price)})</span>
                           </div>
+                          {b.status === "countered" && <div className="text-xs text-gold-600 mt-1">Tvá protinabídka: {formatCZK(b.counter_amount!)}</div>}
+                          {!b.on_turn && <div className="text-xs text-muted mt-1 italic">Čeká se na odpověď druhé strany</div>}
                         </div>
                         <div className="flex flex-wrap gap-2 shrink-0 justify-end">
-                          <button onClick={async () => {
-                            if (!teamId) return;
-                            const ok = await confirm({ title: `Přijmout ${formatCZK(b.amount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
-                            if (!ok) return;
-                            if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
-                          }} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
-                            Přijmout
-                          </button>
-                          <button onClick={async () => {
-                            if (!teamId) return;
-                            if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }), "Odmítnutí se nezdařilo")) await refresh();
-                          }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
-                            Odmítnout
-                          </button>
+                          {b.on_turn && (<>
+                            <button onClick={async () => {
+                              if (!teamId) return;
+                              const ok = await confirm({ title: `Přijmout ${formatCZK(currentAmount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
+                              if (!ok) return;
+                              if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
+                            }} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                              Přijmout
+                            </button>
+                            <button onClick={() => {
+                              setPriceDialog({
+                                title: `Protinabídka za ${b.first_name} ${b.last_name}`,
+                                description: `${b.buyer_team_name} nabízí ${formatCZK(currentAmount)}. Zadej částku.`,
+                                defaultPrice: Math.round(currentAmount * 1.25),
+                                onConfirm: async (price) => {
+                                  if (!teamId) return;
+                                  const ok = await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/counter`, {
+                                    method: "POST", headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ amount: price }),
+                                  }), "Protinabídka se nezdařila");
+                                  setPriceDialog(null);
+                                  if (ok) await refresh();
+                                },
+                              });
+                            }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
+                              Protinabídka
+                            </button>
+                            <button onClick={async () => {
+                              if (!teamId) return;
+                              if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }), "Odmítnutí se nezdařilo")) await refresh();
+                            }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                              Odmítnout
+                            </button>
+                          </>)}
                         </div>
                       </div>
                     </div>
@@ -1718,12 +1741,13 @@ export default function TransfersPage() {
               <div className="space-y-3">
                 {outgoingBids.map((b) => {
                   const ba = (() => { try { const raw = b.player_avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
+                  const currentAmount = b.counter_amount ?? b.amount;
                   return (
                     <div key={b.id} className="card p-4">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-start gap-3">
                         {ba && Object.keys(ba).length > 0
-                          ? <FaceAvatar faceConfig={ba} size={40} className="rounded-full shrink-0" />
-                          : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
+                          ? <FaceAvatar faceConfig={ba} size={40} className="rounded-full shrink-0 mt-0.5" />
+                          : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0 mt-0.5" />}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
                             <span className="font-heading font-bold">{b.first_name} {b.last_name}</span>
@@ -1735,8 +1759,47 @@ export default function TransfersPage() {
                             Nabídnuto: <span className="font-heading font-bold text-ink">{formatCZK(b.amount)}</span>
                             <span className="ml-2 text-xs">(cena {formatCZK(b.asking_price)})</span>
                           </div>
+                          {b.status === "countered" && <div className="text-sm text-gold-600 mt-1">Protinabídka prodávajícího: <span className="font-heading font-bold">{formatCZK(b.counter_amount!)}</span></div>}
+                          {!b.on_turn && b.status !== "countered" && <div className="text-xs text-muted mt-1 italic">Čeká se na prodávajícího</div>}
                         </div>
-                        <div className="text-xs text-muted italic self-center">Čeká se na prodávajícího</div>
+                        <div className="flex flex-wrap gap-2 shrink-0 justify-end">
+                          {b.on_turn && b.status === "countered" && (<>
+                            <button onClick={async () => {
+                              if (!teamId) return;
+                              const ok = await confirm({ title: `Přijmout protinabídku ${formatCZK(currentAmount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
+                              if (!ok) return;
+                              if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
+                            }} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                              Přijmout
+                            </button>
+                            <button onClick={() => {
+                              setPriceDialog({
+                                title: `Protinabídka za ${b.first_name} ${b.last_name}`,
+                                description: `${b.seller_team_name} chce ${formatCZK(currentAmount)}. Zadej novou částku.`,
+                                defaultPrice: Math.round(currentAmount * 0.9),
+                                onConfirm: async (price) => {
+                                  if (!teamId) return;
+                                  const ok = await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/counter`, {
+                                    method: "POST", headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ amount: price }),
+                                  }), "Protinabídka se nezdařila");
+                                  setPriceDialog(null);
+                                  if (ok) await refresh();
+                                },
+                              });
+                            }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
+                              Protinabídka
+                            </button>
+                          </>)}
+                          <button onClick={async () => {
+                            if (!teamId) return;
+                            const ok = await confirm({ title: "Stáhnout nabídku?", description: "Tvá nabídka bude zrušena.", confirmLabel: "Stáhnout", variant: "danger" });
+                            if (!ok) return;
+                            if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}`, { method: "DELETE" }), "Stažení se nezdařilo")) await refresh();
+                          }} className="py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                            Stáhnout
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );

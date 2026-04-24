@@ -3827,8 +3827,8 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
 
   // Normal (human) listing — place bid + notify seller
   const id = crypto.randomUUID();
-  await c.env.DB.prepare("INSERT INTO transfer_bids (id, listing_id, team_id, amount) VALUES (?, ?, ?, ?)")
-    .bind(id, listingId, teamId, body.amount).run();
+  await c.env.DB.prepare("INSERT INTO transfer_bids (id, listing_id, team_id, amount, last_action_by) VALUES (?, ?, ?, ?, ?)")
+    .bind(id, listingId, teamId, body.amount, teamId).run();
 
   // Notifikace a SMS prodavajicimu
   const listingInfo = await c.env.DB.prepare(
@@ -3860,26 +3860,36 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
   return c.json({ ok: true, bidId: id });
 });
 
-// Accept/reject bid
+// Accept bid — seller prijima initial bid, nebo buyer prijima counter
 gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
   const teamId = c.req.param("teamId");
   const bidId = c.req.param("bidId");
 
-  // JOIN na players + p.team_id = tl.team_id zaručuje, že hráč stále patří prodávajícímu —
-  // jinak by bid mohl být přijat poté, co byl hráč mezitím prodán přes přímou nabídku (duplicitní transfer).
+  // Bid musi byt pending nebo countered, hrac stale u sellera, a teamId musi byt na tahu
   const bid = await c.env.DB.prepare(
-    "SELECT tb.*, tl.player_id, tl.team_id as seller_team_id FROM transfer_bids tb JOIN transfer_listings tl ON tb.listing_id = tl.id JOIN players p ON tl.player_id = p.id WHERE tb.id = ? AND tl.team_id = ? AND tb.status = 'pending' AND p.team_id = tl.team_id"
-  ).bind(bidId, teamId).first<Record<string, unknown>>();
-  if (!bid) return c.json({ error: "Nabídka nenalezena nebo hráč už není váš" }, 404);
+    `SELECT tb.*, tl.player_id, tl.team_id as seller_team_id
+     FROM transfer_bids tb
+     JOIN transfer_listings tl ON tb.listing_id = tl.id
+     JOIN players p ON tl.player_id = p.id
+     WHERE tb.id = ? AND tb.status IN ('pending','countered') AND p.team_id = tl.team_id
+       AND (tb.team_id = ? OR tl.team_id = ?)
+       AND (tb.last_action_by IS NULL OR tb.last_action_by != ?)`
+  ).bind(bidId, teamId, teamId, teamId).first<Record<string, unknown>>();
+  if (!bid) return c.json({ error: "Nabídka nenalezena, hráč už není v inzerci, nebo nejsi na tahu" }, 404);
 
   const buyerTeamId = bid.team_id as string;
+  const sellerTeamId = bid.seller_team_id as string;
+  if (sellerTeamId !== teamId && buyerTeamId !== teamId) {
+    return c.json({ error: "Nemáš přístup k této nabídce" }, 403);
+  }
   const playerId = bid.player_id as string;
-  const amount = bid.amount as number;
+  // Counter_amount ma prednost (jako u offers)
+  const amount = (bid.counter_amount != null ? (bid.counter_amount as number) : (bid.amount as number));
 
   const buyer = await c.env.DB.prepare("SELECT budget, name, game_date FROM teams WHERE id = ?").bind(buyerTeamId).first<{ budget: number; name: string; game_date: string }>();
   if (!buyer) return c.json({ error: "Kupující nenalezen" }, 400);
 
-  const seller = await c.env.DB.prepare("SELECT name, league_id, budget FROM teams WHERE id = ?").bind(teamId).first<{ name: string; league_id: string; budget: number }>();
+  const seller = await c.env.DB.prepare("SELECT name, league_id, budget FROM teams WHERE id = ?").bind(sellerTeamId).first<{ name: string; league_id: string; budget: number }>();
   const player = await c.env.DB.prepare("SELECT first_name, last_name, age, position FROM players WHERE id = ?").bind(playerId).first<Record<string, unknown>>();
   const gameDate = buyer.game_date ?? new Date().toISOString();
   const playerName = `${player?.first_name} ${player?.last_name}`;
@@ -3897,13 +3907,13 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
     .first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for transfer contract", e); return null; });
 
   await c.env.DB.batch([
-    c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, teamId),
-    c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ?").bind(buyerTeamId, playerId),
+    c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, sellerTeamId),
+    c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ? AND team_id = ?").bind(buyerTeamId, playerId, sellerTeamId),
     c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE id = ?").bind(bid.listing_id),
     c.env.DB.prepare("UPDATE transfer_bids SET status = 'accepted' WHERE id = ?").bind(bidId),
   ]);
 
-  await c.env.DB.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE listing_id = ? AND id != ? AND status = 'pending'")
+  await c.env.DB.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE listing_id = ? AND id != ? AND status IN ('pending','countered')")
     .bind(bid.listing_id, bidId).run().catch((e) => logger.warn({ module: "game" }, "reject other bids on accept", e));
 
   // Transaction log (budget již upraven výše)
@@ -3911,13 +3921,13 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
     c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_fee', ?, ?, ?, ?)")
       .bind(crypto.randomUUID(), buyerTeamId, -amount, buyer.budget - amount, `Přestup: ${playerName}`, gameDate),
     c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_income', ?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), teamId, amount, (seller?.budget ?? 0) + amount, `Prodej: ${playerName}`, gameDate),
+      .bind(crypto.randomUUID(), sellerTeamId, amount, (seller?.budget ?? 0) + amount, `Prodej: ${playerName}`, gameDate),
   ]).catch((e) => logger.warn({ module: "game" }, "log bid-accept transactions", e));
 
   await onPlayerTransferred(c.env.DB, playerId, buyerTeamId);
 
   await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
-    .bind(playerId, teamId).run().catch((e) => logger.warn({ module: "game" }, "deactivate contract on transfer", e));
+    .bind(playerId, sellerTeamId).run().catch((e) => logger.warn({ module: "game" }, "deactivate contract on transfer", e));
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
     .bind(crypto.randomUUID(), playerId, buyerTeamId, season?.id ?? "unknown", amount).run().catch((e) => logger.warn({ module: "game" }, "insert transfer contract", e));
 
@@ -3933,7 +3943,7 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
   await sendPhoneSMS(c.env.DB, buyerTeamId, smsRole, smsRole,
     `🤝 Přestup potvrzen! ${playerName} přichází z ${seller?.name ?? "neznámého klubu"} za ${amount.toLocaleString("cs")} Kč.`
   ).catch((e) => logger.warn({ module: "game" }, "bid accept SMS buyer", e));
-  await sendPhoneSMS(c.env.DB, teamId, smsRole, smsRole,
+  await sendPhoneSMS(c.env.DB, sellerTeamId, smsRole, smsRole,
     `📤 Prodej potvrzen. ${playerName} odchází do ${buyer.name} za ${amount.toLocaleString("cs")} Kč.`
   ).catch((e) => logger.warn({ module: "game" }, "bid accept SMS seller", e));
   try {
@@ -3943,7 +3953,7 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
       `✅ Přestup ${playerName} dokončen`,
       `Koupili jste od ${seller?.name ?? "prodávajícího"} za ${amount.toLocaleString("cs-CZ")} Kč.`,
       "/dashboard/transfers", pushEnv);
-    await createNotification(c.env.DB, teamId, "transfer",
+    await createNotification(c.env.DB, sellerTeamId, "transfer",
       `✅ Prodej ${playerName} dokončen`,
       `${buyer.name} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.`,
       "/dashboard/transfers", pushEnv);
@@ -3952,33 +3962,135 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
   return c.json({ ok: true });
 });
 
+// Reject bid — seller odmita initial bid, nebo buyer odmita counter
 gameRouter.post("/teams/:teamId/bids/:bidId/reject", async (c) => {
   const teamId = c.req.param("teamId");
   const bidId = c.req.param("bidId");
   const bidInfo = await c.env.DB.prepare(
-    `SELECT tb.team_id as buyer_team_id, tb.amount, tl.player_id, p.first_name, p.last_name, ts.name as seller_name
+    `SELECT tb.team_id as buyer_team_id, tb.amount, tb.counter_amount, tb.last_action_by, tb.status,
+            tl.player_id, tl.team_id as seller_team_id,
+            p.first_name, p.last_name,
+            ts.name as seller_name, tbuyer.name as buyer_name
      FROM transfer_bids tb JOIN transfer_listings tl ON tb.listing_id = tl.id
      LEFT JOIN players p ON tl.player_id = p.id
      LEFT JOIN teams ts ON tl.team_id = ts.id
-     WHERE tb.id = ? AND tl.team_id = ?`
-  ).bind(bidId, teamId).first<{ buyer_team_id: string; amount: number; first_name: string; last_name: string; seller_name: string }>()
+     LEFT JOIN teams tbuyer ON tb.team_id = tbuyer.id
+     WHERE tb.id = ? AND (tb.team_id = ? OR tl.team_id = ?) AND tb.status IN ('pending','countered')`
+  ).bind(bidId, teamId, teamId).first<{ buyer_team_id: string; amount: number; counter_amount: number | null; last_action_by: string | null; status: string; seller_team_id: string; first_name: string; last_name: string; seller_name: string; buyer_name: string; player_id: string }>()
     .catch((e) => { logger.warn({ module: "game" }, "fetch bid for reject notif", e); return null; });
+  if (!bidInfo) return c.json({ error: "Nabídka nenalezena" }, 404);
+  // Reject smí ten kdo je na tahu
+  const canReject = bidInfo.last_action_by != null
+    ? bidInfo.last_action_by !== teamId
+    : bidInfo.seller_team_id === teamId;
+  if (!canReject) return c.json({ error: "Nejsi na tahu" }, 409);
 
-  await c.env.DB.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE id = ? AND listing_id IN (SELECT id FROM transfer_listings WHERE team_id = ?)").bind(bidId, teamId).run();
+  await c.env.DB.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE id = ?").bind(bidId).run();
 
+  // Notifikace druhe strane
+  const pName = bidInfo.first_name ? `${bidInfo.first_name} ${bidInfo.last_name}` : "hráče";
+  const isSellerRejecting = teamId === bidInfo.seller_team_id;
+  const otherTeamId = isSellerRejecting ? bidInfo.buyer_team_id : bidInfo.seller_team_id;
+  const rejecterName = isSellerRejecting ? bidInfo.seller_name : bidInfo.buyer_name;
+  await sendPhoneSMS(c.env.DB, otherTeamId, "Sportovní ředitel", "Sportovní ředitel",
+    `❌ ${rejecterName ?? "Klub"} odmítl ${isSellerRejecting ? "nabídku" : "protinabídku"} za ${pName}.`
+  ).catch((e) => logger.warn({ module: "game" }, "bid reject SMS", e));
+  try {
+    const { createNotification } = await import("../community/notifications");
+    const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+    await createNotification(c.env.DB, otherTeamId, "transfer",
+      `❌ Nabídka za ${pName} zamítnuta`,
+      `${rejecterName ?? "Klub"} odmítl jednání.`,
+      "/dashboard/transfers", pushEnv);
+  } catch (e) { logger.warn({ module: "game" }, "bid reject notification", e); }
+
+  return c.json({ ok: true });
+});
+
+// Counter bid — seller posle protinabidku, buyer ji muze prijmout/odmitnout/counter
+gameRouter.post("/teams/:teamId/bids/:bidId/counter", async (c) => {
+  const teamId = c.req.param("teamId");
+  const bidId = c.req.param("bidId");
+  const body = await c.req.json<{ amount: number }>();
+  if (!body.amount || body.amount <= 0 || !Number.isInteger(body.amount)) {
+    return c.json({ error: "Protinabídka musí být kladné celé číslo" }, 400);
+  }
+
+  const bid = await c.env.DB.prepare(
+    `SELECT tb.*, tl.team_id as seller_team_id, tl.player_id, p.first_name, p.last_name,
+            tbuyer.name as buyer_name, ts.name as seller_name
+     FROM transfer_bids tb JOIN transfer_listings tl ON tb.listing_id = tl.id
+     LEFT JOIN players p ON tl.player_id = p.id
+     LEFT JOIN teams tbuyer ON tb.team_id = tbuyer.id
+     LEFT JOIN teams ts ON tl.team_id = ts.id
+     WHERE tb.id = ? AND (tb.team_id = ? OR tl.team_id = ?) AND tb.status IN ('pending','countered')`
+  ).bind(bidId, teamId, teamId).first<{ team_id: string; seller_team_id: string; last_action_by: string | null; status: string; player_id: string; first_name: string; last_name: string; buyer_name: string; seller_name: string }>();
+  if (!bid) return c.json({ error: "Nabídka nenalezena" }, 404);
+
+  const canCounter = bid.last_action_by != null
+    ? bid.last_action_by !== teamId
+    : bid.seller_team_id === teamId;
+  if (!canCounter) return c.json({ error: "Nejsi na tahu" }, 409);
+
+  // Pokud counter posila kupujici, over budget
+  if (bid.team_id === teamId) {
+    const buyer = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
+    if (!buyer || buyer.budget < body.amount) {
+      return c.json({ error: `Nedostatek peněz. Máte ${(buyer?.budget ?? 0).toLocaleString("cs")} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
+    }
+  }
+
+  await c.env.DB.prepare(
+    "UPDATE transfer_bids SET status = 'countered', counter_amount = ?, last_action_by = ? WHERE id = ?"
+  ).bind(body.amount, teamId, bidId).run();
+
+  const otherTeamId = teamId === bid.seller_team_id ? bid.team_id : bid.seller_team_id;
+  const counterTeamName = teamId === bid.seller_team_id ? bid.seller_name : bid.buyer_name;
+  const pName = `${bid.first_name} ${bid.last_name}`;
+  await sendPhoneSMS(c.env.DB, otherTeamId, "Sportovní ředitel", "Sportovní ředitel",
+    `🔄 ${counterTeamName ?? "Klub"} poslal protinabídku ${body.amount.toLocaleString("cs")} Kč za ${pName}.`
+  ).catch((e) => logger.warn({ module: "game" }, "bid counter SMS", e));
+  try {
+    const { createNotification } = await import("../community/notifications");
+    const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+    await createNotification(c.env.DB, otherTeamId, "transfer",
+      `🔄 Protinabídka za ${pName}`,
+      `${counterTeamName ?? "Klub"} poslal protinabídku ${body.amount.toLocaleString("cs-CZ")} Kč.`,
+      "/dashboard/transfers", pushEnv);
+  } catch (e) { logger.warn({ module: "game" }, "bid counter notification", e); }
+
+  return c.json({ ok: true });
+});
+
+// Withdraw bid — buyer stahne svou nabidku
+gameRouter.delete("/teams/:teamId/bids/:bidId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const bidId = c.req.param("bidId");
+  const result = await c.env.DB.prepare(
+    "UPDATE transfer_bids SET status = 'withdrawn' WHERE id = ? AND team_id = ? AND status IN ('pending','countered')"
+  ).bind(bidId, teamId).run();
+  if (result.meta.changes === 0) {
+    return c.json({ error: "Nabídku nelze stáhnout (není tvoje nebo už je vyřešená)" }, 409);
+  }
+
+  const bidInfo = await c.env.DB.prepare(
+    `SELECT tl.team_id as seller_team_id, tl.player_id, p.first_name, p.last_name, tbuyer.name as buyer_name
+     FROM transfer_bids tb JOIN transfer_listings tl ON tb.listing_id = tl.id
+     LEFT JOIN players p ON tl.player_id = p.id
+     LEFT JOIN teams tbuyer ON tb.team_id = tbuyer.id
+     WHERE tb.id = ?`
+  ).bind(bidId).first<{ seller_team_id: string; first_name: string; last_name: string; buyer_name: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "fetch bid for withdraw notif", e); return null; });
   if (bidInfo) {
     const pName = bidInfo.first_name ? `${bidInfo.first_name} ${bidInfo.last_name}` : "hráče";
-    await sendPhoneSMS(c.env.DB, bidInfo.buyer_team_id, "Sportovní ředitel", "Sportovní ředitel",
-      `❌ ${bidInfo.seller_name ?? "Klub"} odmítl tvou nabídku ${bidInfo.amount.toLocaleString("cs")} Kč za ${pName}.`
-    ).catch((e) => logger.warn({ module: "game" }, "bid reject SMS", e));
     try {
       const { createNotification } = await import("../community/notifications");
       const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
-      await createNotification(c.env.DB, bidInfo.buyer_team_id, "transfer",
-        `❌ Nabídka za ${pName} zamítnuta`,
-        `${bidInfo.seller_name ?? "Klub"} odmítl ${bidInfo.amount.toLocaleString("cs-CZ")} Kč.`,
+      await createNotification(c.env.DB, bidInfo.seller_team_id, "transfer",
+        `↩️ Nabídka za ${pName} stažena`,
+        `${bidInfo.buyer_name ?? "Klub"} stáhl svou nabídku.`,
         "/dashboard/transfers", pushEnv);
-    } catch (e) { logger.warn({ module: "game" }, "bid reject notification", e); }
+    } catch (e) { logger.warn({ module: "game" }, "bid withdraw notification", e); }
   }
 
   return c.json({ ok: true });
@@ -4148,7 +4260,7 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
 
   // Aktivni bidy z trhu — prichozi (na moje listingy) a odchozi (moje bidy na cizi listingy)
   const incomingBids = await c.env.DB.prepare(
-    `SELECT tb.id, tb.listing_id, tb.amount, tb.created_at,
+    `SELECT tb.id, tb.listing_id, tb.amount, tb.counter_amount, tb.last_action_by, tb.status, tb.created_at,
             tl.player_id, tl.asking_price,
             p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
             t.name as buyer_team_name
@@ -4156,28 +4268,36 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
      JOIN transfer_listings tl ON tb.listing_id = tl.id
      JOIN players p ON tl.player_id = p.id
      JOIN teams t ON tb.team_id = t.id
-     WHERE tl.team_id = ? AND tb.status = 'pending' AND tl.status = 'active'
+     WHERE tl.team_id = ? AND tb.status IN ('pending','countered') AND tl.status = 'active'
      ORDER BY tb.created_at DESC`
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch incoming bids", e); return { results: [] }; });
 
   const outgoingBids = await c.env.DB.prepare(
-    `SELECT tb.id, tb.listing_id, tb.amount, tb.created_at,
-            tl.player_id, tl.asking_price,
+    `SELECT tb.id, tb.listing_id, tb.amount, tb.counter_amount, tb.last_action_by, tb.status, tb.created_at,
+            tl.player_id, tl.asking_price, tl.team_id as seller_team_id,
             p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
             t.name as seller_team_name
      FROM transfer_bids tb
      JOIN transfer_listings tl ON tb.listing_id = tl.id
      JOIN players p ON tl.player_id = p.id
      JOIN teams t ON tl.team_id = t.id
-     WHERE tb.team_id = ? AND tb.status = 'pending' AND tl.status = 'active'
+     WHERE tb.team_id = ? AND tb.status IN ('pending','countered') AND tl.status = 'active'
      ORDER BY tb.created_at DESC`
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch outgoing bids", e); return { results: [] }; });
+
+  const addBidOnTurn = (rows: Record<string, unknown>[], myRole: "buyer" | "seller") =>
+    rows.map((r) => {
+      const onTurn = r.last_action_by != null
+        ? r.last_action_by !== teamId
+        : myRole === "seller"; // legacy: seller je na tahu pro pending bid
+      return { ...r, on_turn: onTurn };
+    });
 
   return c.json({
     incoming: addOnTurn(incoming.results as Record<string, unknown>[]),
     outgoing: addOnTurn(outgoing.results as Record<string, unknown>[]),
-    incomingBids: incomingBids.results,
-    outgoingBids: outgoingBids.results,
+    incomingBids: addBidOnTurn(incomingBids.results as Record<string, unknown>[], "seller"),
+    outgoingBids: addBidOnTurn(outgoingBids.results as Record<string, unknown>[], "buyer"),
     history: historyWithRole,
     loanedOut: loanedOut.results,
     loanedIn: loanedIn.results,
