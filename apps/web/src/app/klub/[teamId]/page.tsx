@@ -5,7 +5,6 @@ import type { BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { ShareButton } from "./ShareButton";
 
-export const runtime = "edge";
 export const revalidate = 60; // 1 min ISR-like cache
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
