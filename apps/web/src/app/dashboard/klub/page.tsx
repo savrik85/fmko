@@ -29,6 +29,9 @@ interface ClubData {
     pitchType: string | null;
     nickname: string | null;
     builtYear: number | null;
+    specialita: string | null;
+    tribunaNorth: string | null;
+    tribunaSouth: string | null;
   };
   jersey: {
     pattern: string | null;
@@ -125,13 +128,25 @@ export default function KlubPage() {
           </SectionCard>
 
           <SectionCard title="Stadion" icon={"\u{1F3DF}️"} hint="Kapacita, přezdívka, tribuny">
-            <div className="text-sm text-ink/80 mb-3">
-              <div className="font-bold">{club.stadium.name || "Bez názvu"}</div>
-              {club.stadium.capacity != null && (
-                <div className="text-muted text-xs mt-0.5">Kapacita: <span className="tabular-nums">{club.stadium.capacity.toLocaleString("cs")}</span></div>
+            <div className="text-sm text-ink/80 mb-3 space-y-1">
+              <div className="font-bold">
+                {club.stadium.name || "Bez názvu"}
+                {club.stadium.nickname && <span className="text-muted font-normal"> — &ldquo;{club.stadium.nickname}&rdquo;</span>}
+              </div>
+              <div className="text-muted text-xs flex flex-wrap gap-x-3">
+                {club.stadium.capacity != null && <span>Kapacita: <span className="tabular-nums text-ink/70">{club.stadium.capacity.toLocaleString("cs")}</span></span>}
+                {club.stadium.builtYear != null && <span>Postaveno: <span className="text-ink/70">{club.stadium.builtYear}</span></span>}
+              </div>
+              {(club.stadium.tribunaNorth || club.stadium.tribunaSouth) && (
+                <div className="text-muted text-xs">
+                  Tribuny: <span className="text-ink/70">{[club.stadium.tribunaNorth, club.stadium.tribunaSouth].filter(Boolean).join(" · ")}</span>
+                </div>
+              )}
+              {club.stadium.specialita && (
+                <div className="text-muted text-xs">U nás: <span className="text-ink/70">{club.stadium.specialita}</span></div>
               )}
             </div>
-            <EmptyState action="Doplnit stadion">
+            <EmptyState action={club.stadium.name ? "Upravit stadion" : "Doplnit stadion"} href="/dashboard/klub/stadion">
               Přezdívka stadionu, rok výstavby, názvy tribun a vesnická specialita.
             </EmptyState>
           </SectionCard>

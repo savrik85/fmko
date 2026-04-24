@@ -1143,6 +1143,7 @@ teamsRouter.get("/:id/club", async (c) => {
             t.home_shorts_color, t.home_socks_color, t.away_shorts_color, t.away_socks_color,
             t.badge_primary_color, t.badge_secondary_color, t.badge_initials, t.badge_symbol,
             t.anthem_url, t.anthem_lyrics, t.anthem_title, t.anthem_style, t.anthem_attempts_used, t.anthem_task_id,
+            t.stadium_nickname, t.stadium_built_year, t.stadium_specialita, t.stadium_tribuna_north, t.stadium_tribuna_south,
             v.name as village_name, v.district, v.region, v.population
      FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`
   ).bind(teamId).first();
@@ -1179,8 +1180,11 @@ teamsRouter.get("/:id/club", async (c) => {
       capacity: stadium?.capacity ?? null,
       pitchCondition: stadium?.pitch_condition ?? null,
       pitchType: stadium?.pitch_type ?? null,
-      nickname: null,
-      builtYear: null,
+      nickname: team.stadium_nickname,
+      builtYear: team.stadium_built_year,
+      specialita: team.stadium_specialita,
+      tribunaNorth: team.stadium_tribuna_north,
+      tribunaSouth: team.stadium_tribuna_south,
     },
     jersey: {
       pattern: team.jersey_pattern,
@@ -1685,6 +1689,63 @@ teamsRouter.get("/:id/club/anthem/:anthemId/stream", async (c) => {
   return new Response(obj.body, {
     headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=3600" },
   });
+});
+
+// PATCH /api/teams/:id/club/stadium — update stadion metadata (jméno, přezdívka, rok, specialita, tribuny)
+teamsRouter.patch("/:id/club/stadium", async (c) => {
+  const teamId = c.req.param("id");
+  const auth = await requireTeamOwner(c, teamId);
+  if (auth.error) return auth.error;
+
+  const body = await c.req.json<{
+    stadiumName?: string | null;
+    nickname?: string | null;
+    builtYear?: number | null;
+    specialita?: string | null;
+    tribunaNorth?: string | null;
+    tribunaSouth?: string | null;
+  }>().catch((e) => { logger.warn({ module: "teams" }, "club/stadium invalid body", e); return {}; });
+
+  const updates: Array<{ col: string; val: string | number | null }> = [];
+
+  function strOrNull(field: string, val: unknown, maxLen: number): string | null | undefined {
+    if (val === undefined) return undefined;
+    if (val === null || val === "") return null;
+    if (typeof val !== "string") throw new Error(`Pole ${field} musí být text`);
+    const trimmed = val.trim();
+    if (trimmed.length > maxLen) throw new Error(`Pole ${field}: max ${maxLen} znaků`);
+    return trimmed;
+  }
+
+  try {
+    const name = strOrNull("stadiumName", body.stadiumName, 60);
+    if (name !== undefined) updates.push({ col: "stadium_name", val: name });
+    const nick = strOrNull("nickname", body.nickname, 40);
+    if (nick !== undefined) updates.push({ col: "stadium_nickname", val: nick });
+    const specialita = strOrNull("specialita", body.specialita, 80);
+    if (specialita !== undefined) updates.push({ col: "stadium_specialita", val: specialita });
+    const tn = strOrNull("tribunaNorth", body.tribunaNorth, 40);
+    if (tn !== undefined) updates.push({ col: "stadium_tribuna_north", val: tn });
+    const ts = strOrNull("tribunaSouth", body.tribunaSouth, 40);
+    if (ts !== undefined) updates.push({ col: "stadium_tribuna_south", val: ts });
+    if (body.builtYear !== undefined) {
+      if (body.builtYear === null) updates.push({ col: "stadium_built_year", val: null });
+      else {
+        const y = Number(body.builtYear);
+        if (!Number.isInteger(y) || y < 1800 || y > 2100) throw new Error("Rok výstavby musí být 1800-2100");
+        updates.push({ col: "stadium_built_year", val: y });
+      }
+    }
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+
+  if (updates.length === 0) return c.json({ error: "Žádné změny" }, 400);
+  const setClause = updates.map((u) => `${u.col} = ?`).join(", ");
+  await c.env.DB.prepare(`UPDATE teams SET ${setClause} WHERE id = ?`)
+    .bind(...updates.map((u) => u.val), teamId).run();
+
+  return c.json({ ok: true, updated: updates.map((u) => u.col) });
 });
 
 // ═══════════════════════════════════════════════════════════════════
