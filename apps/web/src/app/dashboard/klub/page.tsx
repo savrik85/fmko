@@ -234,10 +234,6 @@ export default function KlubPage() {
             </div>
           </SectionCard>
         </div>
-
-        <div className="mt-6 text-xs text-muted text-center">
-          Stránka se rozšíří v dalších iteracích — dresy, znak, AI texty, hymna, maskot, kronika.
-        </div>
       </div>
     </>
   );
