@@ -1144,6 +1144,7 @@ teamsRouter.get("/:id/club", async (c) => {
             t.badge_primary_color, t.badge_secondary_color, t.badge_initials, t.badge_symbol,
             t.anthem_url, t.anthem_lyrics, t.anthem_title, t.anthem_style, t.anthem_attempts_used, t.anthem_task_id,
             t.stadium_nickname, t.stadium_built_year, t.stadium_specialita, t.stadium_tribuna_north, t.stadium_tribuna_south,
+            t.team_nickname, t.club_motto, t.founding_year, t.founding_story, t.colors_meaning,
             v.name as village_name, v.district, v.region, v.population
      FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`
   ).bind(teamId).first();
@@ -1175,11 +1176,11 @@ teamsRouter.get("/:id/club", async (c) => {
     jerseyPattern: team.jersey_pattern,
     village: { name: team.village_name, district: team.district, region: team.region, population: team.population },
     identity: {
-      nickname: null,
-      motto: null,
-      foundingYear: null,
-      foundingStory: null,
-      colorsMeaning: null,
+      nickname: team.team_nickname,
+      motto: team.club_motto,
+      foundingYear: team.founding_year,
+      foundingStory: team.founding_story,
+      colorsMeaning: team.colors_meaning,
     },
     stadium: {
       name: team.stadium_name,
@@ -1696,6 +1697,163 @@ teamsRouter.get("/:id/club/anthem/:anthemId/stream", async (c) => {
   return new Response(obj.body, {
     headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=3600" },
   });
+});
+
+// PATCH /api/teams/:id/club/identity — manuální update identity fields
+teamsRouter.patch("/:id/club/identity", async (c) => {
+  const teamId = c.req.param("id");
+  const auth = await requireTeamOwner(c, teamId);
+  if (auth.error) return auth.error;
+
+  type IdentityBody = {
+    nickname?: string | null;
+    motto?: string | null;
+    foundingYear?: number | null;
+    foundingStory?: string | null;
+    colorsMeaning?: string | null;
+  };
+  const body: IdentityBody = await c.req.json<IdentityBody>()
+    .catch((e) => { logger.warn({ module: "teams" }, "club/identity invalid body", e); return {} as IdentityBody; });
+
+  const updates: Array<{ col: string; val: string | number | null }> = [];
+
+  function strOrNull(field: string, val: unknown, maxLen: number): string | null | undefined {
+    if (val === undefined) return undefined;
+    if (val === null || val === "") return null;
+    if (typeof val !== "string") throw new Error(`Pole ${field} musí být text`);
+    const trimmed = val.trim();
+    if (trimmed.length > maxLen) throw new Error(`Pole ${field}: max ${maxLen} znaků`);
+    return trimmed;
+  }
+
+  try {
+    const nickname = strOrNull("nickname", body.nickname, 40);
+    if (nickname !== undefined) updates.push({ col: "team_nickname", val: nickname });
+    const motto = strOrNull("motto", body.motto, 120);
+    if (motto !== undefined) updates.push({ col: "club_motto", val: motto });
+    const story = strOrNull("foundingStory", body.foundingStory, 2000);
+    if (story !== undefined) updates.push({ col: "founding_story", val: story });
+    const colors = strOrNull("colorsMeaning", body.colorsMeaning, 500);
+    if (colors !== undefined) updates.push({ col: "colors_meaning", val: colors });
+    if (body.foundingYear !== undefined) {
+      if (body.foundingYear === null) updates.push({ col: "founding_year", val: null });
+      else {
+        const y = Number(body.foundingYear);
+        if (!Number.isInteger(y) || y < 1800 || y > 2100) throw new Error("Rok založení musí být 1800-2100");
+        updates.push({ col: "founding_year", val: y });
+      }
+    }
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+
+  if (updates.length === 0) return c.json({ error: "Žádné změny" }, 400);
+  const setClause = updates.map((u) => `${u.col} = ?`).join(", ");
+  await c.env.DB.prepare(`UPDATE teams SET ${setClause} WHERE id = ?`)
+    .bind(...updates.map((u) => u.val), teamId).run();
+
+  return c.json({ ok: true, updated: updates.map((u) => u.col) });
+});
+
+// POST /api/teams/:id/club/identity/generate — AI generace textu (motto/story/colorsMeaning)
+teamsRouter.post("/:id/club/identity/generate", async (c) => {
+  const teamId = c.req.param("id");
+  const auth = await requireTeamOwner(c, teamId);
+  if (auth.error) return auth.error;
+
+  const body = await c.req.json<{ kind?: "motto" | "story" | "colors" }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "club/identity/generate invalid body", e); return { kind: undefined }; });
+  const kind = body.kind;
+  if (!kind || !["motto", "story", "colors"].includes(kind)) {
+    return c.json({ error: "Neplatný typ generace" }, 400);
+  }
+
+  const team = await c.env.DB.prepare(
+    `SELECT t.name, t.primary_color, t.secondary_color, t.team_nickname, t.badge_symbol, t.stadium_name, t.founding_year,
+            v.name as village_name, v.district, v.region
+     FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`
+  ).bind(teamId).first<{
+    name: string; primary_color: string; secondary_color: string;
+    team_nickname: string | null; badge_symbol: string | null;
+    stadium_name: string | null; founding_year: number | null;
+    village_name: string; district: string; region: string;
+  }>();
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+
+  const geminiKey = c.env.GEMINI_API_KEY;
+  if (!geminiKey) return c.json({ error: "Gemini není nastaveno" }, 500);
+
+  const clubInfo = [
+    `Klub: ${team.name}`,
+    `Vesnice: ${team.village_name}, okres ${team.district}, region ${team.region}`,
+    team.team_nickname ? `Přezdívka: ${team.team_nickname}` : "",
+    team.badge_symbol ? `Symbol klubu: ${team.badge_symbol}` : "",
+    team.stadium_name ? `Stadion: ${team.stadium_name}` : "",
+    team.founding_year ? `Rok založení: ${team.founding_year}` : "",
+    `Barvy: primární ${team.primary_color}, sekundární ${team.secondary_color}`,
+  ].filter(Boolean).join("\n");
+
+  let prompt = "";
+  let maxTokens = 400;
+  if (kind === "motto") {
+    prompt = `Vymysli klubové motto pro amatérský vesnický fotbalový klub.
+
+${clubInfo}
+
+Požadavky:
+- Česky, gramaticky správně
+- Krátké (max 60 znaků, ideálně 3-6 slov)
+- Vesnický humor, fotbalový duch, hrdost
+- Lze použít slovní hříčku, rým nebo ironii
+- Vrať POUZE motto, žádné uvozovky, žádné komentáře`;
+    maxTokens = 100;
+  } else if (kind === "story") {
+    prompt = `Napiš krátký humorný příběh o založení amatérského vesnického fotbalového klubu.
+
+${clubInfo}
+
+Požadavky:
+- Česky, gramaticky správně
+- 3-5 vět
+- Vesnický humor, nadsázka (např. založili v hospodě, na poli, po pohřbu)
+- Zmínit vesnici, rok (pokud je zadán), charakteristické osoby
+- Vrať POUZE text, žádné komentáře ani uvozovky`;
+    maxTokens = 500;
+  } else if (kind === "colors") {
+    prompt = `Vymysli význam klubových barev pro vesnický fotbalový klub.
+
+${clubInfo}
+
+Požadavky:
+- Česky, gramaticky správně
+- 1-2 věty (max 200 znaků)
+- Co barvy symbolizují — mohou být vtipné (např. "zelená jako traktor starosty", "bílá jako pěna z piva U Medvěda")
+- Vrať POUZE text, žádné komentáře ani uvozovky`;
+    maxTokens = 200;
+  }
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.9, thinkingConfig: { thinkingBudget: 0 } },
+      }),
+    },
+  );
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    logger.warn({ module: "teams" }, `Gemini identity error: ${res.status} — ${errBody.slice(0, 200)}`);
+    return c.json({ error: "Generace selhala" }, 502);
+  }
+  const json = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }> };
+  const parts = json.candidates?.[0]?.content?.parts ?? [];
+  const text = parts.filter((p) => !p.thought).map((p) => p.text ?? "").join("").trim();
+  if (!text) return c.json({ error: "Prázdná odpověď" }, 502);
+
+  return c.json({ text });
 });
 
 // PATCH /api/teams/:id/club/stadium — update stadion metadata (jméno, přezdívka, rok, specialita, tribuny)

@@ -122,7 +122,20 @@ export default function KlubPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <SectionCard title="Identita" icon={"\u{1F3F7}️"} hint="Motto, přezdívka, založení, příběh">
-            <EmptyState action="Vyplnit identitu">
+            <div className="text-sm text-ink/80 mb-3 space-y-1">
+              {club.identity.nickname && <div className="font-bold">{"\u{1F4E3}"} {club.identity.nickname}</div>}
+              {club.identity.motto && <div className="italic text-muted">&ldquo;{club.identity.motto}&rdquo;</div>}
+              {club.identity.foundingYear && (
+                <div className="text-xs text-muted">Založeno {club.identity.foundingYear}</div>
+              )}
+              {club.identity.foundingStory && (
+                <div className="text-xs text-ink/70 mt-2 line-clamp-3">{club.identity.foundingStory}</div>
+              )}
+              {club.identity.colorsMeaning && (
+                <div className="text-xs text-ink/70 mt-1">{"\u{1F3A8}"} {club.identity.colorsMeaning}</div>
+              )}
+            </div>
+            <EmptyState action={club.identity.nickname || club.identity.motto ? "Upravit identitu" : "Vyplnit identitu"} href="/dashboard/klub/identita">
               Klubové motto, přezdívky fanoušků, rok založení a příběh jak klub vznikl.
             </EmptyState>
           </SectionCard>
