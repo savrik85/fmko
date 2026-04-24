@@ -1209,9 +1209,9 @@ teamsRouter.get("/:id/club", async (c) => {
       lyrics: team.anthem_lyrics,
       title: team.anthem_title,
       style: team.anthem_style,
-      attemptsUsed: team.anthem_attempts_used ?? 0,
+      attemptsUsed: (await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM team_anthems WHERE team_id = ?").bind(teamId).first<{ cnt: number }>())?.cnt ?? 0,
       attemptsMax: ANTHEM_MAX_ATTEMPTS,
-      generating: !!team.anthem_task_id && !team.anthem_url,
+      generating: !!(await c.env.DB.prepare("SELECT id FROM team_anthems WHERE team_id = ? AND url IS NULL AND suno_task_id IS NOT NULL LIMIT 1").bind(teamId).first()),
     },
     mascot: {
       name: null,
@@ -1451,24 +1451,33 @@ Požadavky:
   return c.json({ title, lyrics: lyricsBody, fullText: text });
 });
 
-// POST /api/teams/:id/club/anthem/generate — vygeneruje audio přes Suno (async)
-// body: { title, lyrics, style }
-teamsRouter.post("/:id/club/anthem/generate", async (c) => {
-  const teamId = c.req.param("id");
-
+// Helper — auth + ownership check
+async function requireTeamOwner(c: import("hono").Context<{ Bindings: Bindings }>, teamId: string) {
   const authHeader = c.req.header("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return c.json({ error: "Nepřihlášen" }, 401);
+  if (!authHeader?.startsWith("Bearer ")) return { error: c.json({ error: "Nepřihlášen" }, 401) };
   const token = authHeader.slice(7);
   const { getSession } = await import("../auth/session");
   const session = await getSession(c.env.SESSION_KV, token);
-  if (!session) return c.json({ error: "Neplatná session" }, 401);
+  if (!session) return { error: c.json({ error: "Neplatná session" }, 401) };
+  const team = await c.env.DB.prepare("SELECT user_id FROM teams WHERE id = ?")
+    .bind(teamId).first<{ user_id: string }>();
+  if (!team) return { error: c.json({ error: "Tým nenalezen" }, 404) };
+  if (team.user_id !== session.userId) return { error: c.json({ error: "Přístup odepřen" }, 403) };
+  return { session };
+}
 
-  const team = await c.env.DB.prepare("SELECT user_id, anthem_attempts_used FROM teams WHERE id = ?")
-    .bind(teamId).first<{ user_id: string; anthem_attempts_used: number }>();
-  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
-  if (team.user_id !== session.userId) return c.json({ error: "Přístup odepřen" }, 403);
-  if ((team.anthem_attempts_used ?? 0) >= ANTHEM_MAX_ATTEMPTS) {
-    return c.json({ error: `Vyčerpal jsi všechny ${ANTHEM_MAX_ATTEMPTS} pokusy` }, 403);
+// POST /api/teams/:id/club/anthem/generate — vygeneruje audio přes Suno (async), ukládá do historie
+// body: { title, lyrics, style }
+teamsRouter.post("/:id/club/anthem/generate", async (c) => {
+  const teamId = c.req.param("id");
+  const auth = await requireTeamOwner(c, teamId);
+  if (auth.error) return auth.error;
+
+  const countRes = await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM team_anthems WHERE team_id = ?")
+    .bind(teamId).first<{ cnt: number }>();
+  const currentCount = countRes?.cnt ?? 0;
+  if (currentCount >= ANTHEM_MAX_ATTEMPTS) {
+    return c.json({ error: `Máš max ${ANTHEM_MAX_ATTEMPTS} hymen. Smaž některou starou před generováním nové.` }, 403);
   }
 
   const body = await c.req.json<{ title?: string; lyrics?: string; style?: string }>()
@@ -1476,28 +1485,21 @@ teamsRouter.post("/:id/club/anthem/generate", async (c) => {
   const title = (body.title ?? "").trim();
   const lyrics = (body.lyrics ?? "").trim();
   const rawStyle = (body.style ?? "").trim();
-  // Whitelist kontrola — pouze jeden z předdefinovaných anglických presetů (Suno je sensitive na CZ slova)
   const style = ANTHEM_STYLE_PRESETS.has(rawStyle) ? rawStyle : ANTHEM_DEFAULT_STYLE;
   if (!title || !lyrics) return c.json({ error: "Chybí název nebo text hymny" }, 400);
   if (lyrics.length > 3000) return c.json({ error: "Text je příliš dlouhý (max 3000 znaků)" }, 400);
 
   const sunoApiKey = c.env.SUNO_API_KEY;
   if (!sunoApiKey) {
-    // Stub mode — Suno klíč zatím není
-    return c.json({ error: "Hudební generace není aktivovaná. Administrátor ještě nepřidal API klíč pro Suno. Prozatím můžeš pracovat jen s textem." }, 503);
+    return c.json({ error: "Hudební generace není aktivovaná (chybí API klíč)" }, 503);
   }
 
-  // Volání sunoapi.org
   const sunoRes = await fetch("https://api.sunoapi.org/api/v1/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${sunoApiKey}` },
     body: JSON.stringify({
-      prompt: lyrics,
-      style,
-      title,
-      customMode: true,
-      instrumental: false,
-      model: "V4",
+      prompt: lyrics, style, title,
+      customMode: true, instrumental: false, model: "V4",
       callBackUrl: `${c.env.API_BASE_URL ?? "https://api-test.prales.fun"}/api/teams/${teamId}/club/anthem/callback`,
     }),
   });
@@ -1512,96 +1514,171 @@ teamsRouter.post("/:id/club/anthem/generate", async (c) => {
   const taskId = sunoJson.data?.taskId;
   if (!taskId) return c.json({ error: "Suno nevrátilo task ID" }, 502);
 
+  const anthemId = crypto.randomUUID();
   await c.env.DB.prepare(
-    "UPDATE teams SET anthem_task_id = ?, anthem_title = ?, anthem_lyrics = ?, anthem_style = ?, anthem_attempts_used = COALESCE(anthem_attempts_used, 0) + 1 WHERE id = ?"
-  ).bind(taskId, title, lyrics, style, teamId).run();
+    "INSERT INTO team_anthems (id, team_id, title, lyrics, style, suno_task_id, is_selected) VALUES (?, ?, ?, ?, ?, ?, 0)"
+  ).bind(anthemId, teamId, title, lyrics, style, taskId).run();
 
-  return c.json({ taskId, attemptsUsed: (team.anthem_attempts_used ?? 0) + 1, maxAttempts: ANTHEM_MAX_ATTEMPTS });
+  return c.json({ anthemId, taskId, total: currentCount + 1, maxAttempts: ANTHEM_MAX_ATTEMPTS });
 });
 
-// GET /api/teams/:id/club/anthem/status — zjistí stav generace hymny (polling)
+// GET /api/teams/:id/club/anthem/status — polling stavu všech pending hymen
 teamsRouter.get("/:id/club/anthem/status", async (c) => {
   const teamId = c.req.param("id");
-  const team = await c.env.DB.prepare("SELECT anthem_task_id, anthem_url, anthem_attempts_used FROM teams WHERE id = ?")
-    .bind(teamId).first<{ anthem_task_id: string | null; anthem_url: string | null; anthem_attempts_used: number }>();
-  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
-  // Pokud už máme URL, je hotovo
-  if (team.anthem_url) return c.json({ status: "completed", url: team.anthem_url, attemptsUsed: team.anthem_attempts_used });
-  if (!team.anthem_task_id) return c.json({ status: "idle", attemptsUsed: team.anthem_attempts_used ?? 0 });
+  // Pending hymny (url IS NULL, suno_task_id IS NOT NULL)
+  const pending = await c.env.DB.prepare(
+    "SELECT id, suno_task_id FROM team_anthems WHERE team_id = ? AND url IS NULL AND suno_task_id IS NOT NULL"
+  ).bind(teamId).all<{ id: string; suno_task_id: string }>();
+
+  if ((pending.results ?? []).length === 0) {
+    return c.json({ status: "idle" });
+  }
 
   const sunoApiKey = c.env.SUNO_API_KEY;
-  if (!sunoApiKey) return c.json({ status: "pending", attemptsUsed: team.anthem_attempts_used ?? 0 });
+  if (!sunoApiKey) return c.json({ status: "pending", pendingCount: pending.results.length });
 
-  // Dotaz na Suno API
-  const sunoRes = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${team.anthem_task_id}`, {
-    headers: { Authorization: `Bearer ${sunoApiKey}` },
-  });
-  if (!sunoRes.ok) return c.json({ status: "pending", attemptsUsed: team.anthem_attempts_used ?? 0 });
-
-  const statusJson = await sunoRes.json() as {
-    data?: {
-      status?: string;
-      errorMessage?: string;
-      errorCode?: number;
-      response?: { sunoData?: Array<{ audioUrl?: string }> };
-    };
-  };
-  const sunoStatus = statusJson.data?.status;
-  const audioUrl = statusJson.data?.response?.sunoData?.[0]?.audioUrl;
-
-  if (sunoStatus === "SUCCESS" && audioUrl) {
-    try {
-      const audioRes = await fetch(audioUrl);
-      if (!audioRes.ok) throw new Error(`audio fetch ${audioRes.status}`);
-      const audioBuffer = await audioRes.arrayBuffer();
-      const r2Key = `anthem/${teamId}.mp3`;
-      await c.env.SEED_DATA.put(r2Key, audioBuffer, { httpMetadata: { contentType: "audio/mpeg" } });
-      // Plná URL (API_BASE_URL + path) aby audio element na FE doménech mohl stream načíst
-      const apiBase = c.env.API_BASE_URL || `${new URL(c.req.url).origin}`;
-      const streamUrl = `${apiBase}/api/teams/${teamId}/club/anthem/stream`;
-      await c.env.DB.prepare("UPDATE teams SET anthem_url = ?, anthem_task_id = NULL WHERE id = ?").bind(streamUrl, teamId).run();
-      return c.json({ status: "completed", url: streamUrl, attemptsUsed: team.anthem_attempts_used });
-    } catch (e) {
-      logger.warn({ module: "teams" }, "anthem R2 upload failed", e);
-      return c.json({ status: "error", error: "Nepovedlo se uložit audio" }, 500);
-    }
-  }
-
-  // Detekce chybových stavů ze Suno — vrátíme attempt zpět a clear task_id
+  const apiBase = c.env.API_BASE_URL || new URL(c.req.url).origin;
   const errorStatuses = ["SENSITIVE_WORD_ERROR", "CREDIT_INSUFFICIENT", "GENERATE_FAILED", "PARAM_ERROR", "CALLBACK_EXCEPTION"];
-  if (sunoStatus && errorStatuses.includes(sunoStatus)) {
-    await c.env.DB.prepare(
-      "UPDATE teams SET anthem_task_id = NULL, anthem_attempts_used = MAX(0, COALESCE(anthem_attempts_used, 1) - 1) WHERE id = ?"
-    ).bind(teamId).run();
-    const rawErr = statusJson.data?.errorMessage || sunoStatus;
-    let czechMsg = rawErr;
-    if (sunoStatus === "SENSITIVE_WORD_ERROR") {
-      czechMsg = "Styl hudby obsahuje zakázané slovo (jméno interpreta nebo chráněný výraz). Uprav popis stylu — vyhni se jménům zpěváků/kapel a slovům jako \"rytmus\", \"drake\" apod.";
-    } else if (sunoStatus === "CREDIT_INSUFFICIENT") {
-      czechMsg = "Nedostatek kreditů u Suno AI. Kontaktuj administrátora.";
-    } else if (sunoStatus === "GENERATE_FAILED") {
-      czechMsg = "Suno nedokázala hudbu vygenerovat. Zkus jiný styl nebo text.";
-    } else if (sunoStatus === "PARAM_ERROR") {
-      czechMsg = "Chybný formát textu nebo stylu. Zkrať text hymny nebo zjednoduš styl.";
+  const messages: string[] = [];
+
+  for (const row of pending.results) {
+    const sunoRes = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${row.suno_task_id}`, {
+      headers: { Authorization: `Bearer ${sunoApiKey}` },
+    });
+    if (!sunoRes.ok) continue;
+
+    const statusJson = await sunoRes.json() as {
+      data?: { status?: string; errorMessage?: string; response?: { sunoData?: Array<{ audioUrl?: string }> } };
+    };
+    const sunoStatus = statusJson.data?.status;
+    const audioUrl = statusJson.data?.response?.sunoData?.[0]?.audioUrl;
+
+    if (sunoStatus === "SUCCESS" && audioUrl) {
+      try {
+        const audioRes = await fetch(audioUrl);
+        if (!audioRes.ok) throw new Error(`audio fetch ${audioRes.status}`);
+        const audioBuffer = await audioRes.arrayBuffer();
+        await c.env.SEED_DATA.put(`anthem/${row.id}.mp3`, audioBuffer, { httpMetadata: { contentType: "audio/mpeg" } });
+        const streamUrl = `${apiBase}/api/teams/${teamId}/club/anthem/${row.id}/stream`;
+        await c.env.DB.prepare("UPDATE team_anthems SET url = ?, suno_task_id = NULL WHERE id = ?").bind(streamUrl, row.id).run();
+
+        // Pokud nemá žádnou selected hymnu, auto-select tuhle
+        const hasSelected = await c.env.DB.prepare("SELECT id FROM team_anthems WHERE team_id = ? AND is_selected = 1 LIMIT 1")
+          .bind(teamId).first();
+        if (!hasSelected) {
+          await c.env.DB.prepare("UPDATE team_anthems SET is_selected = 1 WHERE id = ?").bind(row.id).run();
+          await c.env.DB.prepare(
+            "UPDATE teams SET anthem_url = ?, anthem_title = (SELECT title FROM team_anthems WHERE id = ?), anthem_lyrics = (SELECT lyrics FROM team_anthems WHERE id = ?), anthem_style = (SELECT style FROM team_anthems WHERE id = ?) WHERE id = ?"
+          ).bind(streamUrl, row.id, row.id, row.id, teamId).run();
+        }
+        messages.push(`SUCCESS:${row.id}`);
+      } catch (e) {
+        logger.warn({ module: "teams" }, "anthem R2 upload failed", e);
+      }
+    } else if (sunoStatus && errorStatuses.includes(sunoStatus)) {
+      // Při chybě smažeme row (user neztratí pokus, protože smazáním uvolní místo v historii)
+      await c.env.DB.prepare("DELETE FROM team_anthems WHERE id = ?").bind(row.id).run();
+      const rawErr = statusJson.data?.errorMessage || sunoStatus;
+      let czechMsg = rawErr;
+      if (sunoStatus === "SENSITIVE_WORD_ERROR") czechMsg = "Styl obsahuje zakázané slovo (jméno interpreta).";
+      else if (sunoStatus === "CREDIT_INSUFFICIENT") czechMsg = "Nedostatek kreditů u Suno AI.";
+      else if (sunoStatus === "GENERATE_FAILED") czechMsg = "Suno nedokázala hudbu vygenerovat. Zkus jiný styl.";
+      else if (sunoStatus === "PARAM_ERROR") czechMsg = "Chybný formát textu nebo stylu.";
+      messages.push(`ERROR:${row.id}:${czechMsg}`);
+      logger.warn({ module: "teams" }, `Suno anthem error: ${sunoStatus} — ${rawErr}`);
     }
-    logger.warn({ module: "teams" }, `Suno anthem error for team ${teamId}: ${sunoStatus} — ${rawErr}`);
-    return c.json({ status: "error", error: czechMsg, sunoStatus, attemptsUsed: Math.max(0, (team.anthem_attempts_used ?? 1) - 1) });
   }
 
-  return c.json({ status: sunoStatus === "PENDING" ? "pending" : "processing", attemptsUsed: team.anthem_attempts_used ?? 0 });
+  return c.json({ status: "polled", messages });
 });
 
-// GET /api/teams/:id/club/anthem/stream — streamuje mp3 z R2
-teamsRouter.get("/:id/club/anthem/stream", async (c) => {
+// GET /api/teams/:id/club/anthem/list — všechny hymny týmu
+teamsRouter.get("/:id/club/anthem/list", async (c) => {
   const teamId = c.req.param("id");
-  const obj = await c.env.SEED_DATA.get(`anthem/${teamId}.mp3`);
+  const rows = await c.env.DB.prepare(
+    "SELECT id, title, lyrics, style, url, is_selected, created_at, suno_task_id FROM team_anthems WHERE team_id = ? ORDER BY created_at DESC"
+  ).bind(teamId).all<{ id: string; title: string; lyrics: string; style: string; url: string | null; is_selected: number; created_at: string; suno_task_id: string | null }>();
+
+  return c.json({
+    anthems: (rows.results ?? []).map((r) => ({
+      id: r.id,
+      title: r.title,
+      lyrics: r.lyrics,
+      style: r.style,
+      url: r.url,
+      isSelected: r.is_selected === 1,
+      createdAt: r.created_at,
+      generating: !r.url && !!r.suno_task_id,
+    })),
+    maxAttempts: ANTHEM_MAX_ATTEMPTS,
+  });
+});
+
+// POST /api/teams/:id/club/anthem/:anthemId/select — nastaví hymnu jako aktuální
+teamsRouter.post("/:id/club/anthem/:anthemId/select", async (c) => {
+  const teamId = c.req.param("id");
+  const anthemId = c.req.param("anthemId");
+  const auth = await requireTeamOwner(c, teamId);
+  if (auth.error) return auth.error;
+
+  const row = await c.env.DB.prepare("SELECT id, team_id, title, lyrics, style, url FROM team_anthems WHERE id = ? AND team_id = ?")
+    .bind(anthemId, teamId).first<{ id: string; team_id: string; title: string; lyrics: string; style: string; url: string | null }>();
+  if (!row) return c.json({ error: "Hymna nenalezena" }, 404);
+  if (!row.url) return c.json({ error: "Hymna ještě není hotová" }, 400);
+
+  await c.env.DB.prepare("UPDATE team_anthems SET is_selected = 0 WHERE team_id = ?").bind(teamId).run();
+  await c.env.DB.prepare("UPDATE team_anthems SET is_selected = 1 WHERE id = ?").bind(anthemId).run();
+  await c.env.DB.prepare(
+    "UPDATE teams SET anthem_url = ?, anthem_title = ?, anthem_lyrics = ?, anthem_style = ? WHERE id = ?"
+  ).bind(row.url, row.title, row.lyrics, row.style, teamId).run();
+
+  return c.json({ ok: true });
+});
+
+// DELETE /api/teams/:id/club/anthem/:anthemId — smaže hymnu z historie + R2
+teamsRouter.delete("/:id/club/anthem/:anthemId", async (c) => {
+  const teamId = c.req.param("id");
+  const anthemId = c.req.param("anthemId");
+  const auth = await requireTeamOwner(c, teamId);
+  if (auth.error) return auth.error;
+
+  const row = await c.env.DB.prepare("SELECT is_selected FROM team_anthems WHERE id = ? AND team_id = ?")
+    .bind(anthemId, teamId).first<{ is_selected: number }>();
+  if (!row) return c.json({ error: "Hymna nenalezena" }, 404);
+
+  await c.env.SEED_DATA.delete(`anthem/${anthemId}.mp3`).catch((e) => {
+    logger.warn({ module: "teams" }, "anthem R2 delete failed", e);
+  });
+  await c.env.DB.prepare("DELETE FROM team_anthems WHERE id = ?").bind(anthemId).run();
+
+  if (row.is_selected === 1) {
+    // Pokud byla selected, vyber jinou nejnovější (pokud existuje) nebo clear teams
+    const next = await c.env.DB.prepare(
+      "SELECT id, title, lyrics, style, url FROM team_anthems WHERE team_id = ? AND url IS NOT NULL ORDER BY created_at DESC LIMIT 1"
+    ).bind(teamId).first<{ id: string; title: string; lyrics: string; style: string; url: string }>();
+    if (next) {
+      await c.env.DB.prepare("UPDATE team_anthems SET is_selected = 1 WHERE id = ?").bind(next.id).run();
+      await c.env.DB.prepare(
+        "UPDATE teams SET anthem_url = ?, anthem_title = ?, anthem_lyrics = ?, anthem_style = ? WHERE id = ?"
+      ).bind(next.url, next.title, next.lyrics, next.style, teamId).run();
+    } else {
+      await c.env.DB.prepare(
+        "UPDATE teams SET anthem_url = NULL, anthem_title = NULL, anthem_lyrics = NULL, anthem_style = NULL WHERE id = ?"
+      ).bind(teamId).run();
+    }
+  }
+
+  return c.json({ ok: true });
+});
+
+// GET /api/teams/:id/club/anthem/:anthemId/stream — mp3 z R2
+teamsRouter.get("/:id/club/anthem/:anthemId/stream", async (c) => {
+  const anthemId = c.req.param("anthemId");
+  const obj = await c.env.SEED_DATA.get(`anthem/${anthemId}.mp3`);
   if (!obj) return c.json({ error: "Hymna není k dispozici" }, 404);
   return new Response(obj.body, {
-    headers: {
-      "Content-Type": "audio/mpeg",
-      "Cache-Control": "public, max-age=3600",
-    },
+    headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=3600" },
   });
 });
 
