@@ -4084,15 +4084,17 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
     if (op) offeredPlayer = buildPlayerView(op, teamId);
   }
 
-  const teamFields = "id, name, primary_color, secondary_color, badge_pattern, badge_symbol, initials, budget, reputation, league_id";
+  const teamFields = "id, name, primary_color, secondary_color, badge_pattern, badge_symbol, badge_initials, badge_primary_color, badge_secondary_color, budget, reputation, league_id";
   const fromTeamRow = await c.env.DB.prepare(`SELECT ${teamFields} FROM teams WHERE id = ?`).bind(offer.from_team_id).first<Record<string, unknown>>();
   const toTeamRow = await c.env.DB.prepare(`SELECT ${teamFields} FROM teams WHERE id = ?`).bind(offer.to_team_id).first<Record<string, unknown>>();
 
   const teamPublic = (row: Record<string, unknown>, isMine: boolean) => ({
     id: row.id, name: row.name,
-    primary_color: row.primary_color, secondary_color: row.secondary_color,
-    badge_pattern: row.badge_pattern, badge_symbol: row.badge_symbol,
-    initials: row.initials,
+    primary_color: (row.badge_primary_color as string | null) ?? (row.primary_color as string),
+    secondary_color: (row.badge_secondary_color as string | null) ?? (row.secondary_color as string),
+    badge_pattern: row.badge_pattern,
+    badge_symbol: row.badge_symbol,
+    initials: row.badge_initials,
     budget: isMine ? row.budget : null,
     reputation: row.reputation ?? null,
     league_id: row.league_id,

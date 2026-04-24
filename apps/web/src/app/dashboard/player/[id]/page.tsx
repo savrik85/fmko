@@ -78,6 +78,7 @@ export default function PlayerDetailPage() {
   const [team, setTeam] = useState<Team | null>(null);
   const [playerTeam, setPlayerTeam] = useState<Team | null>(null);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const [mySquad, setMySquad] = useState<Player[]>([]);
   const [careerStats, setCareerStats] = useState<CareerStats | null>(null);
   const [matchHistory, setMatchHistory] = useState<PlayerMatchEntry[]>([]);
   const [contracts, setContracts] = useState<PlayerContract[]>([]);
@@ -128,8 +129,12 @@ export default function PlayerDetailPage() {
         setContracts(careerHistory.contracts);
 
         if (isForeign) {
-          const pt = await apiFetch<Team>(`/api/teams/${playerOwnerTeamId}`).catch((e) => { console.error("player team fetch:", e); return null; });
+          const [pt, mine] = await Promise.all([
+            apiFetch<Team>(`/api/teams/${playerOwnerTeamId}`).catch((e) => { console.error("player team fetch:", e); return null; }),
+            apiFetch<Player[]>(`/api/teams/${teamId}/players`).catch((e) => { console.error("my squad fetch:", e); return []; }),
+          ]);
           setPlayerTeam(pt);
+          setMySquad(mine);
         } else {
           // Own player — check if already listed on market
           const market = await apiFetch<{ myListings: Array<{ id: string; playerId: string; askingPrice: number }> }>(`/api/teams/${teamId}/market`).catch((e) => { console.error("market fetch:", e); return null; });
@@ -570,8 +575,8 @@ export default function PlayerDetailPage() {
                 </button>
               </div>
 
-              {/* Hráč na výměnu — jen u trvalého přestupu */}
-              {offerType === "transfer" && !isLoanedToUs && allPlayers.length > 0 && (
+              {/* Hráč na výměnu — jen u trvalého přestupu; nabízím SVÉ hráče */}
+              {offerType === "transfer" && !isLoanedToUs && mySquad.length > 0 && (
                 <div>
                   <label className={`${light ? "text-gray-500" : "text-white/60"} text-xs font-heading uppercase mb-1 block`}>
                     Hráč na výměnu (volitelné)
@@ -583,7 +588,7 @@ export default function PlayerDetailPage() {
                       className={`flex-1 rounded-lg px-3 py-2 text-sm font-heading focus:outline-none ${light ? "bg-black/5 text-gray-900 border border-black/20 focus:border-black/40" : "bg-white/10 text-white border border-white/20 focus:border-white/50"}`}
                     >
                       <option value="" className="bg-gray-800 text-white">— bez výměny —</option>
-                      {allPlayers
+                      {mySquad
                         .filter((p) => !p.loan_from_team_id)
                         .map((p) => (
                           <option key={p.id} value={p.id} className="bg-gray-800 text-white">
