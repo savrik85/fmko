@@ -1700,7 +1700,48 @@ const VALID_MASCOT_STYLES = new Set([
   "cartoon", "sports_mascot", "retro_80s", "watercolor", "minimalist",
 ]);
 
-function mascotPromptFor(animal: string, style: string, name: string, teamColors: { primary: string; secondary: string }): string {
+function hexToColorName(hex: string): string {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const chroma = max - min;
+  const lum = (r + g + b) / 3;
+  if (chroma < 25) {
+    if (lum > 220) return "pure white";
+    if (lum > 170) return "light gray";
+    if (lum > 80) return "gray";
+    if (lum > 40) return "dark gray";
+    return "black";
+  }
+  const lightBucket = lum > 180 ? "light " : lum < 70 ? "dark " : "";
+  if (r > 200 && g > 200 && b < 100) return "bright yellow";
+  if (r > 200 && g > 150 && g < 200 && b < 100) return "orange";
+  if (r > g && r > b) return `${lightBucket}red`;
+  if (g > r && g > b) return `${lightBucket}green`;
+  if (b > r && b > g) return `${lightBucket}blue`;
+  if (r === g && r > b) return `${lightBucket}yellow`;
+  if (r === b && r > g) return `${lightBucket}purple`;
+  if (g === b && g > r) return `${lightBucket}cyan`;
+  return `${lightBucket}colored`;
+}
+
+const JERSEY_PATTERN_DESC: Record<string, string> = {
+  solid: "solid color",
+  stripes: "vertical striped",
+  hoops: "horizontal striped",
+  halves: "two-colored half-split",
+  sash: "sash design",
+  sleeves: "contrast sleeves",
+  chest_band: "chest band",
+  pinstripes: "thin pinstriped",
+  quarters: "quartered color-blocked",
+  gradient: "gradient",
+};
+
+function mascotPromptFor(animal: string, style: string, _name: string, jersey: { primary: string; secondary: string; pattern: string }): string {
   const animalDesc: Record<string, string> = {
     bear: "friendly brown bear",
     lion: "majestic lion",
@@ -1722,15 +1763,18 @@ function mascotPromptFor(animal: string, style: string, name: string, teamColors
     tree: "anthropomorphic oak tree with face",
   };
   const styleDesc: Record<string, string> = {
-    cartoon: "Disney Pixar 3D cartoon style, cute round proportions, big expressive eyes, soft lighting, clean white background",
-    sports_mascot: "NBA style sports mascot, bold confident pose holding football, vibrant team colors, dynamic action, white background",
-    retro_80s: "vintage 1980s sports logo style, simple bold lines, limited palette, nostalgic feel, flat design, white background",
-    watercolor: "soft watercolor painting, loose brush strokes, artistic, pastel colors, white paper background",
-    minimalist: "minimalist flat vector illustration, simple geometric shapes, thick outlines, 2-3 colors, clean white background",
+    cartoon: "Disney Pixar 3D cartoon style, cute round proportions, big expressive eyes, soft lighting",
+    sports_mascot: "NBA style sports mascot, bold confident pose, vibrant colors, dynamic action",
+    retro_80s: "vintage 1980s sports logo style, simple bold lines, limited palette, flat design",
+    watercolor: "soft watercolor painting, loose brush strokes, artistic, pastel colors",
+    minimalist: "minimalist flat vector illustration, simple geometric shapes, thick outlines, 2-3 colors",
   };
   const base = animalDesc[animal] ?? animal;
   const styleStr = styleDesc[style] ?? style;
-  return `${base} as football team mascot, wearing football jersey in colors ${teamColors.primary} and ${teamColors.secondary}, holding a soccer ball, ${styleStr}, centered composition, full body shot`;
+  const primaryName = hexToColorName(jersey.primary);
+  const secondaryName = hexToColorName(jersey.secondary);
+  const patternDesc = JERSEY_PATTERN_DESC[jersey.pattern] ?? "solid color";
+  return `${base} as football team mascot, wearing a ${patternDesc} football jersey in ${primaryName} and ${secondaryName} colors with matching shorts, no text or numbers on the jersey, holding a soccer ball, ${styleStr}, centered composition, full body shot, clean white background`;
 }
 
 // POST /api/teams/:id/club/mascot/generate
@@ -1758,13 +1802,15 @@ teamsRouter.post("/:id/club/mascot/generate", async (c) => {
   const token = c.env.REPLICATE_API_TOKEN;
   if (!token) return c.json({ error: "Image generace není aktivovaná (chybí API token)" }, 503);
 
-  // Získat team colors pro prompt
-  const team = await c.env.DB.prepare("SELECT primary_color, secondary_color FROM teams WHERE id = ?")
-    .bind(teamId).first<{ primary_color: string; secondary_color: string }>();
+  // Získat team colors + jersey pattern pro prompt
+  const team = await c.env.DB.prepare("SELECT primary_color, secondary_color, jersey_pattern FROM teams WHERE id = ?")
+    .bind(teamId).first<{ primary_color: string; secondary_color: string; jersey_pattern: string | null }>();
   const prompt = mascotPromptFor(animal, style, name, {
     primary: team?.primary_color ?? "#2D5F2D",
     secondary: team?.secondary_color ?? "#FFFFFF",
+    pattern: team?.jersey_pattern ?? "solid",
   });
+  logger.warn({ module: "teams" }, `Mascot prompt: ${prompt}`);
 
   // Volání Replicate (Flux Schnell - rychlý)
   const replicateRes = await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions", {
