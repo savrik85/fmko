@@ -3825,8 +3825,12 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     return c.json({ ok: true, autoAccepted: true, playerId, player: playerData });
   }
 
-  // Normal (human) listing — vytvor transfer_offer (sjednoceny flow s primymi nabidkami).
-  // Tim probehne jednani pres /dashboard/transfers/offer/[id] s face-off, timeline a bublinami.
+  // Normal (human) listing — place bid + notify seller
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare("INSERT INTO transfer_bids (id, listing_id, team_id, amount, last_action_by) VALUES (?, ?, ?, ?, ?)")
+    .bind(id, listingId, teamId, body.amount, teamId).run();
+
+  // Notifikace a SMS prodavajicimu
   const listingInfo = await c.env.DB.prepare(
     `SELECT tl.team_id as seller_team_id, tl.player_id, p.first_name, p.last_name,
             ts.name as seller_name, tb.name as buyer_name
@@ -3835,51 +3839,25 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
      LEFT JOIN teams ts ON tl.team_id = ts.id
      LEFT JOIN teams tb ON tb.id = ?
      WHERE tl.id = ?`
-  ).bind(teamId, listingId).first<{ seller_team_id: string; player_id: string; first_name: string; last_name: string; seller_name: string; buyer_name: string }>()
-    .catch((e) => { logger.warn({ module: "game" }, "fetch listing for offer", e); return null; });
+  ).bind(teamId, listingId).first<{ seller_team_id: string; first_name: string; last_name: string; seller_name: string; buyer_name: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "fetch listing for bid notif", e); return null; });
 
-  if (!listingInfo || !listingInfo.player_id) {
-    return c.json({ error: "Inzerát nenalezen nebo nemá hráče" }, 404);
+  if (listingInfo && listingInfo.seller_team_id !== teamId) {
+    const pName = listingInfo.first_name ? `${listingInfo.first_name} ${listingInfo.last_name}` : "hráče";
+    await sendPhoneSMS(c.env.DB, listingInfo.seller_team_id, "Sportovní ředitel", "Sportovní ředitel",
+      `💰 ${listingInfo.buyer_name ?? "Klub"} nabízí ${body.amount.toLocaleString("cs")} Kč za ${pName} z tvé inzerce.`
+    ).catch((e) => logger.warn({ module: "game" }, "bid SMS", e));
+    try {
+      const { createNotification } = await import("../community/notifications");
+      const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+      await createNotification(c.env.DB, listingInfo.seller_team_id, "transfer",
+        `💰 Nabídka za ${pName}`,
+        `${listingInfo.buyer_name ?? "Klub"} nabízí ${body.amount.toLocaleString("cs-CZ")} Kč.`,
+        "/dashboard/transfers", pushEnv);
+    } catch (e) { logger.warn({ module: "game" }, "bid notification", e); }
   }
-  if (listingInfo.seller_team_id === teamId) {
-    return c.json({ error: "Nemůžeš nabízet na vlastního hráče" }, 400);
-  }
 
-  // Idempotence — pokud uz existuje aktivni offer od tohoto tymu na tohoto hrace, vratit ho
-  const existing = await c.env.DB.prepare(
-    "SELECT id FROM transfer_offers WHERE player_id = ? AND from_team_id = ? AND status IN ('pending','countered') LIMIT 1"
-  ).bind(listingInfo.player_id, teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "check duplicate offer from market", e); return null; });
-  if (existing) {
-    return c.json({ ok: true, offerId: existing.id, alreadyExists: true });
-  }
-
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
-  const offerId = crypto.randomUUID();
-  await c.env.DB.prepare(
-    "INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, expires_at, offer_type, last_action_by) VALUES (?, ?, ?, ?, ?, ?, 'transfer', ?)"
-  ).bind(offerId, listingInfo.player_id, teamId, listingInfo.seller_team_id, body.amount, expiresAt.toISOString(), teamId).run();
-
-  await c.env.DB.prepare(
-    "INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount) VALUES (?, ?, ?, 'offer', ?)"
-  ).bind(crypto.randomUUID(), offerId, teamId, body.amount).run()
-    .catch((e) => logger.warn({ module: "game" }, "insert market->offer event", e));
-
-  // Notifikace + SMS prodavajicimu
-  const pName = listingInfo.first_name ? `${listingInfo.first_name} ${listingInfo.last_name}` : "hráče";
-  await sendPhoneSMS(c.env.DB, listingInfo.seller_team_id, "Sportovní ředitel", "Sportovní ředitel",
-    `💰 ${listingInfo.buyer_name ?? "Klub"} nabízí ${body.amount.toLocaleString("cs")} Kč za ${pName} z tvé inzerce.`
-  ).catch((e) => logger.warn({ module: "game" }, "market->offer SMS", e));
-  try {
-    const { createNotification } = await import("../community/notifications");
-    const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
-    await createNotification(c.env.DB, listingInfo.seller_team_id, "transfer",
-      `💰 Nová nabídka za ${pName}`,
-      `${listingInfo.buyer_name ?? "Klub"} nabízí ${body.amount.toLocaleString("cs-CZ")} Kč.`,
-      `/dashboard/transfers/offer/${offerId}`, pushEnv);
-  } catch (e) { logger.warn({ module: "game" }, "market->offer notification", e); }
-
-  return c.json({ ok: true, offerId });
+  return c.json({ ok: true, bidId: id });
 });
 
 // Accept bid — seller prijima initial bid, nebo buyer prijima counter

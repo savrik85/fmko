@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
 import { Spinner, SectionLabel, PositionBadge, useConfirm } from "@/components/ui";
@@ -176,7 +175,6 @@ const SORT_OPTIONS: Array<{ value: FASortKey; label: string }> = [
 
 export default function TransfersPage() {
   const { teamId, primaryColor } = useTeam();
-  const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
   const [overview, setOverview] = useState<TransfersOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
@@ -1188,7 +1186,7 @@ export default function TransfersPage() {
                               defaultPrice: l.askingPrice,
                               onConfirm: async (price) => {
                                 if (!teamId) return;
-                                let res: { ok: boolean; autoAccepted?: boolean; rejected?: boolean; explanation?: string; player?: Player; error?: string; offerId?: string; alreadyExists?: boolean } | null = null;
+                                let res: { ok: boolean; autoAccepted?: boolean; rejected?: boolean; explanation?: string; player?: Player; error?: string } | null = null;
                                 let errorMsg: string | null = null;
                                 try {
                                   res = await apiFetch(`/api/teams/${teamId}/market/${l.id}/bid`, {
@@ -1205,10 +1203,6 @@ export default function TransfersPage() {
                                   await confirm({ title: "Odmítl přestup", description: res.explanation ?? "Hráč nemá zájem." });
                                 } else if (res?.autoAccepted && res?.player) {
                                   setRevealPlayer(res.player);
-                                } else if (res?.offerId) {
-                                  // Lidsky listing -> vytvorena nabidka, otevri jednani
-                                  router.push(`/dashboard/transfers/offer/${res.offerId}`);
-                                  return;
                                 }
                                 await refresh();
                               },
@@ -1304,7 +1298,7 @@ export default function TransfersPage() {
               onClick={() => setOffersView("active")}
               className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offersView === "active" ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}
             >
-              Aktivní ({incoming.length + outgoing.length + playerOffers.length})
+              Aktivní ({incoming.length + outgoing.length + incomingBids.length + outgoingBids.length + playerOffers.length})
             </button>
             <button
               onClick={() => setOffersView("history")}
@@ -1665,8 +1659,8 @@ export default function TransfersPage() {
             </div>
           )}
 
-          {/* Legacy bidy (před sjednocením s offers) — postupně zmizí */}
-          {false && incomingBids.length > 0 && (
+          {/* Příchozí bidy na moje inzerce */}
+          {incomingBids.length > 0 && (
             <div>
               <SectionLabel>Nabídky z trhu ({incomingBids.length})</SectionLabel>
               <div className="space-y-3">
@@ -1740,8 +1734,8 @@ export default function TransfersPage() {
             </div>
           )}
 
-          {/* Legacy odchozí bidy (před sjednocením) — postupně zmizí */}
-          {false && outgoingBids.length > 0 && (
+          {/* Odchozí bidy — moje nabídky na tržních inzerátech */}
+          {outgoingBids.length > 0 && (
             <div>
               <SectionLabel>Moje bidy na trhu ({outgoingBids.length})</SectionLabel>
               <div className="space-y-3">
@@ -1870,7 +1864,7 @@ export default function TransfersPage() {
             </div>
           )}
 
-          {playerOffers.length === 0 && incoming.length === 0 && outgoing.length === 0 && loanedOut.length === 0 && loanedIn.length === 0 && (
+          {playerOffers.length === 0 && incoming.length === 0 && outgoing.length === 0 && incomingBids.length === 0 && outgoingBids.length === 0 && loanedOut.length === 0 && loanedIn.length === 0 && (
             <div className="card p-6 text-center text-muted">Žádné aktivní nabídky ani hostování.</div>
           )}
 
