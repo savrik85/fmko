@@ -1557,9 +1557,11 @@ teamsRouter.get("/:id/club/anthem/status", async (c) => {
       const audioBuffer = await audioRes.arrayBuffer();
       const r2Key = `anthem/${teamId}.mp3`;
       await c.env.SEED_DATA.put(r2Key, audioBuffer, { httpMetadata: { contentType: "audio/mpeg" } });
-      const r2Url = `/api/teams/${teamId}/club/anthem/stream`;
-      await c.env.DB.prepare("UPDATE teams SET anthem_url = ?, anthem_task_id = NULL WHERE id = ?").bind(r2Url, teamId).run();
-      return c.json({ status: "completed", url: r2Url, attemptsUsed: team.anthem_attempts_used });
+      // Plná URL (API_BASE_URL + path) aby audio element na FE doménech mohl stream načíst
+      const apiBase = c.env.API_BASE_URL || `${new URL(c.req.url).origin}`;
+      const streamUrl = `${apiBase}/api/teams/${teamId}/club/anthem/stream`;
+      await c.env.DB.prepare("UPDATE teams SET anthem_url = ?, anthem_task_id = NULL WHERE id = ?").bind(streamUrl, teamId).run();
+      return c.json({ status: "completed", url: streamUrl, attemptsUsed: team.anthem_attempts_used });
     } catch (e) {
       logger.warn({ module: "teams" }, "anthem R2 upload failed", e);
       return c.json({ status: "error", error: "Nepovedlo se uložit audio" }, 500);
