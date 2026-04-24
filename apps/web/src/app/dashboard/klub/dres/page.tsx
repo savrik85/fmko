@@ -163,7 +163,7 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
 
   const JERSEY_SIZE = 140;
   const SHORTS_SIZE = 90;
-  const SOCKS_SIZE = 110;
+  const SOCKS_SIZE = 85;
 
   return (
     <div className="flex items-start gap-4 sm:gap-6">
@@ -190,8 +190,7 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
                 maxWidth: 90,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
-                boxShadow: "0 1px 2px rgba(0,0,0,0.3)",
-                border: "0.5px solid rgba(0,0,0,0.1)",
+                border: "0.5px solid rgba(0,0,0,0.15)",
               }}
             >
               {sponsor}
