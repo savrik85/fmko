@@ -1783,6 +1783,8 @@ teamsRouter.post("/:id/club/identity/generate", async (c) => {
   const geminiKey = c.env.GEMINI_API_KEY;
   if (!geminiKey) return c.json({ error: "Gemini není nastaveno" }, 500);
 
+  const primaryName = hexToCzechColorName(team.primary_color);
+  const secondaryName = hexToCzechColorName(team.secondary_color);
   const clubInfo = [
     `Klub: ${team.name}`,
     `Vesnice: ${team.village_name}, okres ${team.district}, region ${team.region}`,
@@ -1790,7 +1792,7 @@ teamsRouter.post("/:id/club/identity/generate", async (c) => {
     team.badge_symbol ? `Symbol klubu: ${team.badge_symbol}` : "",
     team.stadium_name ? `Stadion: ${team.stadium_name}` : "",
     team.founding_year ? `Rok založení: ${team.founding_year}` : "",
-    `Barvy: primární ${team.primary_color}, sekundární ${team.secondary_color}`,
+    `Barvy: ${primaryName} a ${secondaryName}`,
   ].filter(Boolean).join("\n");
 
   let prompt = "";
@@ -1828,6 +1830,7 @@ Požadavky:
 - Česky, gramaticky správně
 - 1-2 věty (max 200 znaků)
 - Co barvy symbolizují — mohou být vtipné (např. "zelená jako traktor starosty", "bílá jako pěna z piva U Medvěda")
+- NIKDY neuváděj hex kódy barev (jako #2D5F2D), používej jen jejich české názvy
 - Vrať POUZE text, žádné komentáře ani uvozovky`;
     maxTokens = 200;
   }
@@ -1935,6 +1938,34 @@ const VALID_ANIMALS = new Set([
 const VALID_MASCOT_STYLES = new Set([
   "cartoon", "sports_mascot", "retro_80s", "watercolor", "minimalist",
 ]);
+
+function hexToCzechColorName(hex: string): string {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const chroma = max - min;
+  const lum = (r + g + b) / 3;
+  if (chroma < 25) {
+    if (lum > 220) return "bílá";
+    if (lum > 170) return "světle šedá";
+    if (lum > 80) return "šedá";
+    if (lum > 40) return "tmavě šedá";
+    return "černá";
+  }
+  const shade = lum > 180 ? "světle " : lum < 70 ? "tmavě " : "";
+  if (r > 200 && g > 200 && b < 100) return "žlutá";
+  if (r > 200 && g > 150 && g < 200 && b < 100) return "oranžová";
+  if (r > g && r > b) return `${shade}červená`;
+  if (g > r && g > b) return `${shade}zelená`;
+  if (b > r && b > g) return `${shade}modrá`;
+  if (r === g && r > b) return `${shade}žlutá`;
+  if (r === b && r > g) return `${shade}fialová`;
+  if (g === b && g > r) return `${shade}tyrkysová`;
+  return `${shade}barva`;
+}
 
 function hexToColorName(hex: string): string {
   const c = hex.replace("#", "");
