@@ -3974,8 +3974,8 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
     .bind(id, body.playerId, teamId, targetOwnerId, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration, teamId, offeredPlayerId).run();
 
   // Log initial offer event
-  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount) VALUES (?, ?, ?, 'offer', ?)")
-    .bind(crypto.randomUUID(), id, teamId, body.amount).run()
+  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'offer', ?, ?)")
+    .bind(crypto.randomUUID(), id, teamId, body.amount, body.message ?? null).run()
     .catch((e) => logger.warn({ module: "game" }, "insert offer event", e));
 
   // SMS to the owner team about the incoming offer
@@ -4023,6 +4023,21 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.to_team_id = t.id
      WHERE to2.from_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
   ).bind(teamId).all();
+
+  // Historie — uzavrene offery (accepted, rejected, withdrawn, expired). Kam tym patril, ta role zustava.
+  const history = await c.env.DB.prepare(
+    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
+     tf.name as from_team_name, tt.name as to_team_name,
+     tf.league_id as from_league_id, tt.league_id as to_league_id
+     FROM transfer_offers to2
+     JOIN players p ON to2.player_id = p.id
+     JOIN teams tf ON to2.from_team_id = tf.id
+     JOIN teams tt ON to2.to_team_id = tt.id
+     WHERE (to2.from_team_id = ? OR to2.to_team_id = ?)
+       AND to2.status IN ('accepted','rejected','withdrawn','expired')
+     ORDER BY COALESCE(to2.resolved_at, to2.created_at) DESC
+     LIMIT 50`
+  ).bind(teamId, teamId).all();
   // Include loaned-out players
   const loanedOut = await c.env.DB.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.position, p.age, p.overall_rating, p.loan_until, t.name as loan_team_name
@@ -4047,9 +4062,16 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
       return { ...r, on_turn: onTurn };
     });
 
+  // Historie — doplnit "role" (buyer/seller) pro kazdy zaznam
+  const historyWithRole = (history.results as Record<string, unknown>[]).map((r) => ({
+    ...r,
+    my_role: r.from_team_id === teamId ? "buyer" : "seller",
+  }));
+
   return c.json({
     incoming: addOnTurn(incoming.results as Record<string, unknown>[]),
     outgoing: addOnTurn(outgoing.results as Record<string, unknown>[]),
+    history: historyWithRole,
     loanedOut: loanedOut.results,
     loanedIn: loanedIn.results,
     myLeagueId: myTeam?.league_id ?? null,
@@ -4122,7 +4144,7 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
   ]);
 
   const events = await c.env.DB.prepare(
-    `SELECT e.id, e.event_type, e.team_id, e.amount, e.created_at, t.name as team_name
+    `SELECT e.id, e.event_type, e.team_id, e.amount, e.message, e.created_at, t.name as team_name
      FROM transfer_offer_events e JOIN teams t ON e.team_id = t.id
      WHERE e.offer_id = ? ORDER BY e.created_at ASC, e.id ASC`
   ).bind(offerId).all<Record<string, unknown>>().catch((e) => { logger.warn({ module: "game" }, "fetch offer events", e); return { results: [] }; });
@@ -4168,6 +4190,8 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
 gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
+  const body = await c.req.json<{ message?: string }>().catch(() => ({}));
+  const acceptMessage = (body as { message?: string }).message ?? null;
   // Accept smí ten, kdo JE na tahu — tj. neudělal poslední akci. Buyer i seller mohou přijmout protinabídku.
   // Fallback pro nabídky bez last_action_by: pending → seller, countered → buyer.
   const offer = await c.env.DB.prepare(
@@ -4335,8 +4359,8 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   }
 
   // Event log
-  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount) VALUES (?, ?, ?, 'accept', ?)")
-    .bind(crypto.randomUUID(), offerId, teamId, amount).run()
+  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'accept', ?, ?)")
+    .bind(crypto.randomUUID(), offerId, teamId, amount, acceptMessage).run()
     .catch((e) => logger.warn({ module: "game" }, "insert accept event", e));
 
   // Update commute + reset squad number
@@ -4361,8 +4385,9 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     const { createNotification } = await import("../community/notifications");
     const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
     const label = offerType === "loan" ? "Hostování" : "Přestup";
-    await createNotification(c.env.DB, buyerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `Koupili jste od ${seller?.name ?? "prodávajícího"} za ${amount.toLocaleString("cs-CZ")} Kč.`, "/dashboard/transfers", pushEnv);
-    await createNotification(c.env.DB, sellerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `${buyer.name} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.`, "/dashboard/transfers", pushEnv);
+    const acceptNote = acceptMessage ? ` „${acceptMessage}"` : "";
+    await createNotification(c.env.DB, buyerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `Koupili jste od ${seller?.name ?? "prodávajícího"} za ${amount.toLocaleString("cs-CZ")} Kč.${acceptNote}`, `/dashboard/transfers/offer/${offerId}`, pushEnv);
+    await createNotification(c.env.DB, sellerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `${buyer.name} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.${acceptNote}`, `/dashboard/transfers/offer/${offerId}`, pushEnv);
   } catch (e) { logger.warn({ module: "game" }, "offer accept notifications", e); }
 
   return c.json({ ok: true });
@@ -4389,8 +4414,8 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
     "UPDATE transfer_offers SET status = 'rejected', reject_message = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
   ).bind((body as { message?: string }).message ?? null, offerId).run();
 
-  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount) VALUES (?, ?, ?, 'reject', NULL)")
-    .bind(crypto.randomUUID(), offerId, teamId).run()
+  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'reject', NULL, ?)")
+    .bind(crypto.randomUUID(), offerId, teamId, (body as { message?: string }).message ?? null).run()
     .catch((e) => logger.warn({ module: "game" }, "insert reject event", e));
 
   const otherTeamId = offer.from_team_id === teamId ? offer.to_team_id : offer.from_team_id;
@@ -4409,7 +4434,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
     const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
     await createNotification(c.env.DB, otherTeamId, "transfer",
       `❌ Nabídka za ${playerName} zamítnuta`,
-      `${rejecterTeam?.name ?? "Klub"} odmítl nabídku.`,
+      `${rejecterTeam?.name ?? "Klub"} odmítl nabídku${rejectMsg ? `: „${rejectMsg}"` : "."}`,
       `/dashboard/transfers/offer/${offerId}`, pushEnv);
   } catch (e) { logger.warn({ module: "game" }, "reject offer notification", e); }
 
@@ -4419,7 +4444,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
 gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
-  const body = await c.req.json<{ amount: number }>();
+  const body = await c.req.json<{ amount: number; message?: string }>();
   if (!body.amount || body.amount <= 0 || !Number.isInteger(body.amount)) {
     return c.json({ error: "Protinabídka musí být kladné celé číslo" }, 400);
   }
@@ -4449,8 +4474,8 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
     "UPDATE transfer_offers SET status = 'countered', counter_amount = ?, last_action_by = ? WHERE id = ?"
   ).bind(body.amount, teamId, offerId).run();
 
-  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount) VALUES (?, ?, ?, 'counter', ?)")
-    .bind(crypto.randomUUID(), offerId, teamId, body.amount).run()
+  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'counter', ?, ?)")
+    .bind(crypto.randomUUID(), offerId, teamId, body.amount, body.message ?? null).run()
     .catch((e) => logger.warn({ module: "game" }, "insert counter event", e));
 
   const otherTeamId = offer.from_team_id === teamId ? offer.to_team_id : offer.from_team_id;
@@ -4468,7 +4493,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
     const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
     await createNotification(c.env.DB, otherTeamId, "transfer",
       `🔄 Protinabídka za ${pName}`,
-      `${counterTeam?.name ?? "Klub"} poslal protinabídku ${body.amount.toLocaleString("cs-CZ")} Kč.`,
+      `${counterTeam?.name ?? "Klub"} poslal protinabídku ${body.amount.toLocaleString("cs-CZ")} Kč${body.message ? `: „${body.message}"` : "."}`,
       `/dashboard/transfers/offer/${offerId}`, pushEnv);
   } catch (e) { logger.warn({ module: "game" }, "counter offer notification", e); }
 
@@ -4529,6 +4554,8 @@ gameRouter.post("/teams/:teamId/loans/:playerId/terminate", async (c) => {
 gameRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
+  const body = await c.req.json<{ message?: string }>().catch(() => ({}));
+  const withdrawMessage = (body as { message?: string }).message ?? null;
   // Stáhnout smí jen kupec (from_team_id) a jen když je nabídka aktivní.
   const result = await c.env.DB.prepare(
     "UPDATE transfer_offers SET status = 'withdrawn', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND from_team_id = ? AND status IN ('pending','countered')"
@@ -4536,9 +4563,30 @@ gameRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
   if (result.meta.changes === 0) {
     return c.json({ error: "Nabídku nelze stáhnout (není tvoje nebo už je vyřešená)" }, 409);
   }
-  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount) VALUES (?, ?, ?, 'withdraw', NULL)")
-    .bind(crypto.randomUUID(), offerId, teamId).run()
+  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'withdraw', NULL, ?)")
+    .bind(crypto.randomUUID(), offerId, teamId, withdrawMessage).run()
     .catch((e) => logger.warn({ module: "game" }, "insert withdraw event", e));
+
+  // Notifikace druhé strane + SMS
+  const offer = await c.env.DB.prepare("SELECT player_id, to_team_id FROM transfer_offers WHERE id = ?")
+    .bind(offerId).first<{ player_id: string; to_team_id: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "fetch offer for withdraw notif", e); return null; });
+  if (offer) {
+    const player = await c.env.DB.prepare("SELECT first_name, last_name FROM players WHERE id = ?").bind(offer.player_id).first<{ first_name: string; last_name: string }>()
+      .catch((e) => { logger.warn({ module: "game" }, "player for withdraw", e); return null; });
+    const buyerTeam = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>()
+      .catch((e) => { logger.warn({ module: "game" }, "buyer team for withdraw", e); return null; });
+    const pName = player ? `${player.first_name} ${player.last_name}` : "hráče";
+    try {
+      const { createNotification } = await import("../community/notifications");
+      const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+      await createNotification(c.env.DB, offer.to_team_id, "transfer",
+        `↩️ Nabídka za ${pName} stažena`,
+        `${buyerTeam?.name ?? "Klub"} stáhl nabídku${withdrawMessage ? `: „${withdrawMessage}"` : "."}`,
+        `/dashboard/transfers/offer/${offerId}`, pushEnv);
+    } catch (e) { logger.warn({ module: "game" }, "withdraw notification", e); }
+  }
+
   return c.json({ ok: true });
 });
 

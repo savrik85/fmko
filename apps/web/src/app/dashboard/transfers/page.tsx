@@ -189,6 +189,8 @@ export default function TransfersPage() {
   // Offers
   const [incoming, setIncoming] = useState<TransferOffer[]>([]);
   const [outgoing, setOutgoing] = useState<TransferOffer[]>([]);
+  const [history, setHistory] = useState<Array<TransferOffer & { my_role: "buyer" | "seller"; resolved_at: string | null }>>([]);
+  const [offersView, setOffersView] = useState<"active" | "history">("active");
   const [myLeagueId, setMyLeagueId] = useState<string | null>(null);
   // Loans
   const [loanedOut, setLoanedOut] = useState<Array<{ id: string; first_name: string; last_name: string; position: string; age: number; overall_rating: number; loan_until: string; loan_team_name: string }>>([]);
@@ -250,7 +252,7 @@ export default function TransfersPage() {
     const [fa, market, offers, squad, poRaw] = await Promise.all([
       apiFetch<{ freeAgents: FreeAgent[] }>(`/api/teams/${teamId}/free-agents`).catch((e) => { console.error("Failed to load free agents:", e); return { freeAgents: [] }; }),
       apiFetch<{ listings: MarketListing[]; myListings: MyListing[] }>(`/api/teams/${teamId}/market`).catch((e) => { console.error("Failed to load market:", e); return { listings: [], myListings: [] }; }),
-      apiFetch<{ incoming: TransferOffer[]; outgoing: TransferOffer[]; loanedOut: typeof loanedOut; loanedIn: typeof loanedIn; myLeagueId?: string | null }>(`/api/teams/${teamId}/offers`).catch((e) => { console.error("Failed to load offers:", e); return { incoming: [], outgoing: [], loanedOut: [], loanedIn: [] }; }),
+      apiFetch<{ incoming: TransferOffer[]; outgoing: TransferOffer[]; history: Array<TransferOffer & { my_role: "buyer" | "seller"; resolved_at: string | null }>; loanedOut: typeof loanedOut; loanedIn: typeof loanedIn; myLeagueId?: string | null }>(`/api/teams/${teamId}/offers`).catch((e) => { console.error("Failed to load offers:", e); return { incoming: [], outgoing: [], history: [], loanedOut: [], loanedIn: [] }; }),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`).catch((e) => { console.error("Failed to load players:", e); return []; }),
       apiFetch<PlayerOffer[]>(`/api/teams/${teamId}/player-offers`).catch((e) => { console.error("Failed to load player offers:", e); return []; }),
     ]);
@@ -259,6 +261,7 @@ export default function TransfersPage() {
     setMyListings(market.myListings);
     setIncoming(offers.incoming);
     setOutgoing(offers.outgoing);
+    setHistory(offers.history ?? []);
     if ((offers as any).myLeagueId) setMyLeagueId((offers as any).myLeagueId);
     setLoanedOut(offers.loanedOut ?? []);
     setLoanedIn(offers.loanedIn ?? []);
@@ -1281,6 +1284,72 @@ export default function TransfersPage() {
       {tab === "offers" && (
         <div className="space-y-5">
 
+          {/* ── Toggle Aktivní / Historie ── */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setOffersView("active")}
+              className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offersView === "active" ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}
+            >
+              Aktivní ({incoming.length + outgoing.length + playerOffers.length})
+            </button>
+            <button
+              onClick={() => setOffersView("history")}
+              className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offersView === "history" ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}
+            >
+              Historie ({history.length})
+            </button>
+          </div>
+
+          {offersView === "history" && (
+            <div>
+              <SectionLabel>Historie přestupů</SectionLabel>
+              {history.length === 0 ? (
+                <div className="card p-6 text-center text-muted">Zatím žádná uzavřená jednání.</div>
+              ) : (
+                <div className="space-y-2">
+                  {history.map((o) => {
+                    const statusMap: Record<string, { label: string; color: string }> = {
+                      accepted: { label: "Přijato", color: "text-pitch-500" },
+                      rejected: { label: "Zamítnuto", color: "text-red-600" },
+                      withdrawn: { label: "Staženo", color: "text-muted" },
+                      expired: { label: "Vypršelo", color: "text-muted" },
+                    };
+                    const s = statusMap[o.status] ?? { label: o.status, color: "text-muted" };
+                    const amount = o.counter_amount ?? o.offer_amount;
+                    const isLoan = o.offer_type === "loan";
+                    const otherName = o.my_role === "buyer" ? o.to_team_name : o.from_team_name;
+                    const when = o.resolved_at ? new Date(o.resolved_at).toLocaleDateString("cs-CZ") : "";
+                    const hAvatar = (() => { try { const raw = (o as any).player_avatar ?? o.avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
+                    return (
+                      <Link key={o.id} href={`/dashboard/transfers/offer/${o.id}`} className="card p-3 flex items-center gap-3 hover:bg-pitch-50 transition-colors">
+                        {hAvatar && Object.keys(hAvatar).length > 0
+                          ? <FaceAvatar faceConfig={hAvatar} size={36} className="rounded-full shrink-0" />
+                          : <div className="w-9 h-9 rounded-full bg-gray-100 shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-heading font-bold text-sm truncate">{o.first_name} {o.last_name}</span>
+                            <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
+                            <span className={`text-xs font-heading font-bold uppercase tracking-wider ${s.color}`}>{s.label}</span>
+                          </div>
+                          <div className="text-xs text-muted truncate">
+                            {o.my_role === "buyer" ? "→" : "←"} {otherName}
+                            {" · "}
+                            {isLoan ? "Hostování" : "Přestup"}
+                            {amount > 0 && ` · ${amount.toLocaleString("cs")} Kč`}
+                            {when && ` · ${when}`}
+                          </div>
+                        </div>
+                        <span className="text-xs text-muted shrink-0">›</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {offersView === "active" && <>
+
           {/* ── Organické nabídky hráčů (skauting) ── */}
           {playerOffers.length > 0 && (
             <div>
@@ -1625,6 +1694,8 @@ export default function TransfersPage() {
           {playerOffers.length === 0 && incoming.length === 0 && outgoing.length === 0 && loanedOut.length === 0 && loanedIn.length === 0 && (
             <div className="card p-6 text-center text-muted">Žádné aktivní nabídky ani hostování.</div>
           )}
+
+          </>}
         </div>
       )}
 

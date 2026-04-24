@@ -6,6 +6,7 @@ export interface OfferEvent {
   team_id: string;
   team_name: string;
   amount: number | null;
+  message: string | null;
   created_at: string;
 }
 
@@ -63,6 +64,9 @@ export function OfferTimeline({ events, myTeamId }: { events: OfferEvent[]; myTe
                 <div className="font-heading font-bold tabular-nums text-base mt-0.5">
                   {e.amount > 0 ? `${e.amount.toLocaleString("cs")} Kč` : "zdarma"}
                 </div>
+              )}
+              {e.message && (
+                <div className="text-xs italic text-ink mt-1 whitespace-pre-wrap break-words">&ldquo;{e.message}&rdquo;</div>
               )}
               <div className="text-xs text-muted mt-0.5">{formatRelative(e.created_at)}</div>
             </div>

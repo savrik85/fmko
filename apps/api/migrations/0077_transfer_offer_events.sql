@@ -14,17 +14,20 @@ CREATE INDEX IF NOT EXISTS idx_offer_events_offer ON transfer_offer_events(offer
 -- Player swap (volitelny hrac na vymenu v initial offer)
 ALTER TABLE transfer_offers ADD COLUMN offered_player_id TEXT REFERENCES players(id);
 
--- Backfill existujicich offeru: initial event z offer_amount + created_at + from_team_id
+-- Backfill initial offer eventu — jen pro offery s existujicim from_team_id
+-- (v test DB jsou orphan offery kde by FK kontrola selhala)
 INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, created_at)
-SELECT lower(hex(randomblob(16))), id, from_team_id, 'offer', offer_amount, created_at
-FROM transfer_offers
-WHERE NOT EXISTS (SELECT 1 FROM transfer_offer_events e WHERE e.offer_id = transfer_offers.id);
+SELECT lower(hex(randomblob(16))), o.id, o.from_team_id, 'offer', o.offer_amount, o.created_at
+FROM transfer_offers o
+WHERE EXISTS (SELECT 1 FROM teams t WHERE t.id = o.from_team_id)
+  AND NOT EXISTS (SELECT 1 FROM transfer_offer_events e WHERE e.offer_id = o.id);
 
--- Backfill counter events: pokud counter_amount + status='countered' + last_action_by
+-- Backfill counter eventu — pouze existujici teamy a countered status
 INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, created_at)
-SELECT lower(hex(randomblob(16))), id, last_action_by, 'counter', counter_amount,
-       COALESCE(resolved_at, strftime('%Y-%m-%dT%H:%M:%SZ', created_at, '+1 hour'))
-FROM transfer_offers
-WHERE counter_amount IS NOT NULL
-  AND status = 'countered'
-  AND last_action_by IS NOT NULL;
+SELECT lower(hex(randomblob(16))), o.id, o.last_action_by, 'counter', o.counter_amount,
+       COALESCE(o.resolved_at, strftime('%Y-%m-%dT%H:%M:%SZ', o.created_at, '+1 hour'))
+FROM transfer_offers o
+WHERE o.counter_amount IS NOT NULL
+  AND o.status = 'countered'
+  AND o.last_action_by IS NOT NULL
+  AND EXISTS (SELECT 1 FROM teams t WHERE t.id = o.last_action_by);

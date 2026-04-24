@@ -5,11 +5,12 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Spinner, useConfirm } from "@/components/ui";
+import { Spinner } from "@/components/ui";
 import { TeamSide, type TeamSummary, type ManagerSummary } from "./components/TeamSide";
 import { PlayerHero, type PlayerSummary } from "./components/PlayerHero";
 import { OfferTimeline, type OfferEvent } from "./components/OfferTimeline";
 import { ActionBar } from "./components/ActionBar";
+import { MessageDialog } from "./components/MessageDialog";
 
 interface OfferDetail {
   offer: {
@@ -56,10 +57,10 @@ const statusLabel: Record<OfferDetail["offer"]["status"], string> = {
 export default function OfferDetailPage() {
   const params = useParams<{ id: string }>();
   const { teamId } = useTeam();
-  const { confirm, dialog } = useConfirm();
   const [data, setData] = useState<OfferDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [withdrawDialog, setWithdrawDialog] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!teamId || !params.id) return;
@@ -110,56 +111,42 @@ export default function OfferDetailPage() {
 
   const playerName = player ? `${player.first_name} ${player.last_name}` : "hráče";
 
-  const accept = async () => {
-    const ok = await confirm({
-      title: `Přijmout ${currentAmount > 0 ? `${currentAmount.toLocaleString("cs")} Kč` : "zdarma"}?`,
-      description: crossLeague && adminFee > 0
-        ? `Za ${playerName}\n\nMeziligový přestup — kupující zaplatí navíc administrační poplatek ${adminFee.toLocaleString("cs")} Kč (20 %)`
-        : `Za ${playerName}`,
-      confirmLabel: "Přijmout",
-    });
-    if (!ok) return;
-    if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) {
+  const accept = async (message: string) => {
+    if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}/accept`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: message || undefined }),
+    }), "Přijetí nabídky se nezdařilo")) {
       await refresh();
     }
   };
 
-  const counter = async (amount: number) => {
+  const counter = async (amount: number, message: string) => {
     if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}/counter`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount }),
+      body: JSON.stringify({ amount, message: message || undefined }),
     }), "Protinabídka se nezdařila")) {
       await refresh();
     }
   };
 
-  const reject = async () => {
-    const ok = await confirm({
-      title: "Odmítnout nabídku?",
-      description: `Opravdu chceš odmítnout nabídku za ${playerName}? Tato akce je nevratná.`,
-      confirmLabel: "Odmítnout",
-      variant: "danger",
-    });
-    if (!ok) return;
+  const reject = async (message: string) => {
     if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}/reject`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ message: message || undefined }),
     }), "Odmítnutí se nezdařilo")) {
       await refresh();
     }
   };
 
-  const withdraw = async () => {
-    const ok = await confirm({
-      title: "Stáhnout nabídku?",
-      description: "Nabídka bude zrušena a druhá strana už nebude moct reagovat.",
-      confirmLabel: "Stáhnout",
-      variant: "danger",
-    });
-    if (!ok) return;
-    if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}`, { method: "DELETE" }), "Stažení se nezdařilo")) {
+  const withdraw = async (message: string) => {
+    if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: message || undefined }),
+    }), "Stažení se nezdařilo")) {
       await refresh();
     }
   };
@@ -182,7 +169,44 @@ export default function OfferDetailPage() {
           </span>
         </div>
 
-        <div className="flex items-start justify-between gap-3 sm:gap-6 flex-wrap sm:flex-nowrap">
+        {/* Mobile: hráč nahoře přes celou šířku, trenéři pod ním v gridu 2 sloupce */}
+        <div className="sm:hidden space-y-4">
+          {player && (
+            <div className="flex justify-center">
+              <PlayerHero
+                player={player}
+                offeredPlayer={offeredPlayer}
+                currentAmount={currentAmount}
+                offerType={offer.offer_type}
+                loanDuration={offer.loan_duration}
+                crossLeague={crossLeague}
+                adminFee={adminFee}
+                message={offer.message}
+              />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3 border-t border-gray-100 pt-4">
+            {fromTeam && (
+              <TeamSide
+                team={fromTeam}
+                manager={fromManager}
+                label={role === "buyer" ? "Já (kupec)" : "Soupeř (kupec)"}
+                alignment="left"
+              />
+            )}
+            {toTeam && (
+              <TeamSide
+                team={toTeam}
+                manager={toManager}
+                label={role === "seller" ? "Já (prodávající)" : "Soupeř (prodávající)"}
+                alignment="right"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Desktop: face-off horizontální */}
+        <div className="hidden sm:flex sm:items-start sm:justify-between sm:gap-6">
           {fromTeam && (
             <TeamSide
               team={fromTeam}
@@ -191,7 +215,6 @@ export default function OfferDetailPage() {
               alignment="left"
             />
           )}
-
           {player && (
             <PlayerHero
               player={player}
@@ -204,7 +227,6 @@ export default function OfferDetailPage() {
               message={offer.message}
             />
           )}
-
           {toTeam && (
             <TeamSide
               team={toTeam}
@@ -253,14 +275,23 @@ export default function OfferDetailPage() {
         )}
         {isActive && role === "buyer" && (
           <div className="mt-4 text-center">
-            <button onClick={withdraw} className="text-xs text-muted hover:text-red-600 underline transition-colors">
+            <button onClick={() => setWithdrawDialog(true)} className="text-xs text-muted hover:text-red-600 underline transition-colors">
               Stáhnout svou nabídku
             </button>
           </div>
         )}
       </div>
 
-      {dialog}
+      {withdrawDialog && (
+        <MessageDialog
+          title="Stáhnout nabídku?"
+          description="Nabídka bude zrušena. Krátká zpráva protistraně (volitelné)."
+          confirmLabel="Stáhnout"
+          confirmColor="red"
+          onCancel={() => setWithdrawDialog(false)}
+          onConfirm={async (msg) => { await withdraw(msg); setWithdrawDialog(false); }}
+        />
+      )}
     </div>
   );
 }
