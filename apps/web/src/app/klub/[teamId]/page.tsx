@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BadgePreview, JerseyPreview, ShortsPreview, SocksPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
-import { FaceAvatar } from "@/components/players/face-avatar";
 import { ShareButton } from "./ShareButton";
+import { ManagerFace } from "./ManagerFace";
 
+export const runtime = "edge";
 export const revalidate = 60; // 1 min ISR-like cache
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
@@ -378,7 +379,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
               <div className="flex items-start gap-4">
                 {manager.avatar && (
                   <div className="shrink-0">
-                    <FaceAvatar faceConfig={manager.avatar} size={96} />
+                    <ManagerFace faceConfig={manager.avatar} size={96} />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
