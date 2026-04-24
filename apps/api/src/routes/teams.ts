@@ -1697,14 +1697,16 @@ teamsRouter.patch("/:id/club/stadium", async (c) => {
   const auth = await requireTeamOwner(c, teamId);
   if (auth.error) return auth.error;
 
-  const body = await c.req.json<{
+  type StadiumBody = {
     stadiumName?: string | null;
     nickname?: string | null;
     builtYear?: number | null;
     specialita?: string | null;
     tribunaNorth?: string | null;
     tribunaSouth?: string | null;
-  }>().catch((e) => { logger.warn({ module: "teams" }, "club/stadium invalid body", e); return {}; });
+  };
+  const body: StadiumBody = await c.req.json<StadiumBody>()
+    .catch((e) => { logger.warn({ module: "teams" }, "club/stadium invalid body", e); return {} as StadiumBody; });
 
   const updates: Array<{ col: string; val: string | number | null }> = [];
 
