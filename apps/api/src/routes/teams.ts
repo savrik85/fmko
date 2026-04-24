@@ -1789,7 +1789,16 @@ teamsRouter.post("/:id/club/mascot/generate", async (c) => {
   if (!replicateRes.ok) {
     const errBody = await replicateRes.text().catch(() => "");
     logger.warn({ module: "teams" }, `Replicate error: ${replicateRes.status} — ${errBody.slice(0, 300)}`);
-    return c.json({ error: "Generace obrázku selhala (Replicate chyba)" }, 502);
+    if (replicateRes.status === 402 || errBody.toLowerCase().includes("insufficient credit")) {
+      return c.json({ error: "Replicate účet nemá kredity. Kontaktuj administrátora aby dokoupil kredity na https://replicate.com/account/billing." }, 402);
+    }
+    if (replicateRes.status === 401) {
+      return c.json({ error: "Replicate API token je neplatný. Kontaktuj administrátora." }, 502);
+    }
+    if (replicateRes.status === 429) {
+      return c.json({ error: "Replicate rate limit — zkus za chvíli znovu." }, 429);
+    }
+    return c.json({ error: `Generace obrázku selhala (Replicate ${replicateRes.status})` }, 502);
   }
 
   const predictionJson = await replicateRes.json() as { output?: string | string[]; status?: string; error?: string };
