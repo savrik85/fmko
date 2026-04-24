@@ -3825,10 +3825,38 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     return c.json({ ok: true, autoAccepted: true, playerId, player: playerData });
   }
 
-  // Normal (human) listing — just place bid
+  // Normal (human) listing — place bid + notify seller
   const id = crypto.randomUUID();
   await c.env.DB.prepare("INSERT INTO transfer_bids (id, listing_id, team_id, amount) VALUES (?, ?, ?, ?)")
     .bind(id, listingId, teamId, body.amount).run();
+
+  // Notifikace a SMS prodavajicimu
+  const listingInfo = await c.env.DB.prepare(
+    `SELECT tl.team_id as seller_team_id, tl.player_id, p.first_name, p.last_name,
+            ts.name as seller_name, tb.name as buyer_name
+     FROM transfer_listings tl
+     LEFT JOIN players p ON tl.player_id = p.id
+     LEFT JOIN teams ts ON tl.team_id = ts.id
+     LEFT JOIN teams tb ON tb.id = ?
+     WHERE tl.id = ?`
+  ).bind(teamId, listingId).first<{ seller_team_id: string; first_name: string; last_name: string; seller_name: string; buyer_name: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "fetch listing for bid notif", e); return null; });
+
+  if (listingInfo && listingInfo.seller_team_id !== teamId) {
+    const pName = listingInfo.first_name ? `${listingInfo.first_name} ${listingInfo.last_name}` : "hráče";
+    await sendPhoneSMS(c.env.DB, listingInfo.seller_team_id, "Sportovní ředitel", "Sportovní ředitel",
+      `💰 ${listingInfo.buyer_name ?? "Klub"} nabízí ${body.amount.toLocaleString("cs")} Kč za ${pName} z tvé inzerce.`
+    ).catch((e) => logger.warn({ module: "game" }, "bid SMS", e));
+    try {
+      const { createNotification } = await import("../community/notifications");
+      const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+      await createNotification(c.env.DB, listingInfo.seller_team_id, "transfer",
+        `💰 Nabídka za ${pName}`,
+        `${listingInfo.buyer_name ?? "Klub"} nabízí ${body.amount.toLocaleString("cs-CZ")} Kč.`,
+        "/dashboard/transfers", pushEnv);
+    } catch (e) { logger.warn({ module: "game" }, "bid notification", e); }
+  }
+
   return c.json({ ok: true, bidId: id });
 });
 
@@ -3900,13 +3928,59 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
     fromTeamName: seller?.name, toTeamName: buyer.name, fee: amount,
   }).catch((e) => logger.warn({ module: "game" }, "create transfer completed news", e));
 
+  // Notifikace + SMS obema stranam
+  const smsRole = "Sportovní ředitel";
+  await sendPhoneSMS(c.env.DB, buyerTeamId, smsRole, smsRole,
+    `🤝 Přestup potvrzen! ${playerName} přichází z ${seller?.name ?? "neznámého klubu"} za ${amount.toLocaleString("cs")} Kč.`
+  ).catch((e) => logger.warn({ module: "game" }, "bid accept SMS buyer", e));
+  await sendPhoneSMS(c.env.DB, teamId, smsRole, smsRole,
+    `📤 Prodej potvrzen. ${playerName} odchází do ${buyer.name} za ${amount.toLocaleString("cs")} Kč.`
+  ).catch((e) => logger.warn({ module: "game" }, "bid accept SMS seller", e));
+  try {
+    const { createNotification } = await import("../community/notifications");
+    const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+    await createNotification(c.env.DB, buyerTeamId, "transfer",
+      `✅ Přestup ${playerName} dokončen`,
+      `Koupili jste od ${seller?.name ?? "prodávajícího"} za ${amount.toLocaleString("cs-CZ")} Kč.`,
+      "/dashboard/transfers", pushEnv);
+    await createNotification(c.env.DB, teamId, "transfer",
+      `✅ Prodej ${playerName} dokončen`,
+      `${buyer.name} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.`,
+      "/dashboard/transfers", pushEnv);
+  } catch (e) { logger.warn({ module: "game" }, "bid accept notifications", e); }
+
   return c.json({ ok: true });
 });
 
 gameRouter.post("/teams/:teamId/bids/:bidId/reject", async (c) => {
   const teamId = c.req.param("teamId");
   const bidId = c.req.param("bidId");
+  const bidInfo = await c.env.DB.prepare(
+    `SELECT tb.team_id as buyer_team_id, tb.amount, tl.player_id, p.first_name, p.last_name, ts.name as seller_name
+     FROM transfer_bids tb JOIN transfer_listings tl ON tb.listing_id = tl.id
+     LEFT JOIN players p ON tl.player_id = p.id
+     LEFT JOIN teams ts ON tl.team_id = ts.id
+     WHERE tb.id = ? AND tl.team_id = ?`
+  ).bind(bidId, teamId).first<{ buyer_team_id: string; amount: number; first_name: string; last_name: string; seller_name: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "fetch bid for reject notif", e); return null; });
+
   await c.env.DB.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE id = ? AND listing_id IN (SELECT id FROM transfer_listings WHERE team_id = ?)").bind(bidId, teamId).run();
+
+  if (bidInfo) {
+    const pName = bidInfo.first_name ? `${bidInfo.first_name} ${bidInfo.last_name}` : "hráče";
+    await sendPhoneSMS(c.env.DB, bidInfo.buyer_team_id, "Sportovní ředitel", "Sportovní ředitel",
+      `❌ ${bidInfo.seller_name ?? "Klub"} odmítl tvou nabídku ${bidInfo.amount.toLocaleString("cs")} Kč za ${pName}.`
+    ).catch((e) => logger.warn({ module: "game" }, "bid reject SMS", e));
+    try {
+      const { createNotification } = await import("../community/notifications");
+      const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+      await createNotification(c.env.DB, bidInfo.buyer_team_id, "transfer",
+        `❌ Nabídka za ${pName} zamítnuta`,
+        `${bidInfo.seller_name ?? "Klub"} odmítl ${bidInfo.amount.toLocaleString("cs-CZ")} Kč.`,
+        "/dashboard/transfers", pushEnv);
+    } catch (e) { logger.warn({ module: "game" }, "bid reject notification", e); }
+  }
+
   return c.json({ ok: true });
 });
 
