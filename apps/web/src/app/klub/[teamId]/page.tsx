@@ -189,37 +189,29 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
             </div>
           </div>
 
-          {/* Stat chips */}
-          <div className="mt-10 sm:mt-16 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {myPos && standings?.leagueName && (
-              <div className={`${chipBg} border ${chipBorder} backdrop-blur-sm rounded-2xl px-5 py-4`}>
-                <div className={`text-[10px] font-heading font-bold uppercase tracking-widest ${heroSoft} mb-1`}>Pozice</div>
-                <div className={`${heroText} font-heading font-[900] text-2xl tabular-nums`}>{myPos}.</div>
-                <div className={`${heroMuted} text-xs truncate`}>{standings.leagueName}</div>
+          {/* Stat chips — pokud lichý počet, poslední col-span-2 na mobilu */}
+          {(() => {
+            const chips: Array<{ label: string; value: string; sub: string }> = [];
+            if (myPos && standings?.leagueName) chips.push({ label: "Pozice", value: `${myPos}.`, sub: standings.leagueName });
+            if (club.identity.foundingYear) chips.push({ label: "Založeno", value: String(club.identity.foundingYear), sub: `${new Date().getFullYear() - club.identity.foundingYear} let existence` });
+            if (club.stadium.capacity) chips.push({ label: "Kapacita", value: club.stadium.capacity.toLocaleString("cs"), sub: club.stadium.name || "Stadion" });
+            if (club.village.population) chips.push({ label: "Vesnice", value: club.village.population.toLocaleString("cs"), sub: "obyvatel" });
+            if (chips.length === 0) return null;
+            return (
+              <div className="mt-10 sm:mt-16 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {chips.map((c, i) => {
+                  const isLastOdd = chips.length % 2 === 1 && i === chips.length - 1;
+                  return (
+                    <div key={c.label} className={`${chipBg} border ${chipBorder} backdrop-blur-sm rounded-2xl px-5 py-4 ${isLastOdd ? "col-span-2 sm:col-span-1" : ""}`}>
+                      <div className={`text-[10px] font-heading font-bold uppercase tracking-widest ${heroSoft} mb-1`}>{c.label}</div>
+                      <div className={`${heroText} font-heading font-[900] text-2xl tabular-nums`}>{c.value}</div>
+                      <div className={`${heroMuted} text-xs truncate`}>{c.sub}</div>
+                    </div>
+                  );
+                })}
               </div>
-            )}
-            {club.identity.foundingYear && (
-              <div className={`${chipBg} border ${chipBorder} backdrop-blur-sm rounded-2xl px-5 py-4`}>
-                <div className={`text-[10px] font-heading font-bold uppercase tracking-widest ${heroSoft} mb-1`}>Založeno</div>
-                <div className={`${heroText} font-heading font-[900] text-2xl tabular-nums`}>{club.identity.foundingYear}</div>
-                <div className={`${heroMuted} text-xs`}>{new Date().getFullYear() - club.identity.foundingYear} let existence</div>
-              </div>
-            )}
-            {club.stadium.capacity && (
-              <div className={`${chipBg} border ${chipBorder} backdrop-blur-sm rounded-2xl px-5 py-4`}>
-                <div className={`text-[10px] font-heading font-bold uppercase tracking-widest ${heroSoft} mb-1`}>Kapacita</div>
-                <div className={`${heroText} font-heading font-[900] text-2xl tabular-nums`}>{club.stadium.capacity.toLocaleString("cs")}</div>
-                <div className={`${heroMuted} text-xs truncate`}>{club.stadium.name || "Stadion"}</div>
-              </div>
-            )}
-            {club.village.population && (
-              <div className={`${chipBg} border ${chipBorder} backdrop-blur-sm rounded-2xl px-5 py-4`}>
-                <div className={`text-[10px] font-heading font-bold uppercase tracking-widest ${heroSoft} mb-1`}>Vesnice</div>
-                <div className={`${heroText} font-heading font-[900] text-2xl tabular-nums`}>{club.village.population.toLocaleString("cs")}</div>
-                <div className={`${heroMuted} text-xs`}>obyvatel</div>
-              </div>
-            )}
-          </div>
+            );
+          })()}
         </div>
       </section>
 
@@ -307,30 +299,22 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
             </div>
 
             <div className="lg:col-span-3 grid grid-cols-2 gap-3 sm:gap-4">
-              {club.stadium.capacity != null && (
-                <div className="p-5 sm:p-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-transparent">
-                  <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40 mb-2">Kapacita</div>
-                  <div className="text-3xl sm:text-4xl font-heading font-[900] tabular-nums">{club.stadium.capacity.toLocaleString("cs")}</div>
-                </div>
-              )}
-              {club.stadium.builtYear != null && (
-                <div className="p-5 sm:p-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-transparent">
-                  <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40 mb-2">Postaveno</div>
-                  <div className="text-3xl sm:text-4xl font-heading font-[900] tabular-nums">{club.stadium.builtYear}</div>
-                </div>
-              )}
-              {club.stadium.tribunaNorth && (
-                <div className="p-5 sm:p-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-transparent">
-                  <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40 mb-2">Severní tribuna</div>
-                  <div className="text-lg sm:text-xl font-heading font-bold">{club.stadium.tribunaNorth}</div>
-                </div>
-              )}
-              {club.stadium.tribunaSouth && (
-                <div className="p-5 sm:p-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-transparent">
-                  <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40 mb-2">Jižní tribuna</div>
-                  <div className="text-lg sm:text-xl font-heading font-bold">{club.stadium.tribunaSouth}</div>
-                </div>
-              )}
+              {(() => {
+                const cards: Array<{ label: string; value: string; big?: boolean }> = [];
+                if (club.stadium.capacity != null) cards.push({ label: "Kapacita", value: club.stadium.capacity.toLocaleString("cs"), big: true });
+                if (club.stadium.builtYear != null) cards.push({ label: "Postaveno", value: String(club.stadium.builtYear), big: true });
+                if (club.stadium.tribunaNorth) cards.push({ label: "Severní tribuna", value: club.stadium.tribunaNorth });
+                if (club.stadium.tribunaSouth) cards.push({ label: "Jižní tribuna", value: club.stadium.tribunaSouth });
+                return cards.map((c, i) => {
+                  const isLastOdd = cards.length % 2 === 1 && i === cards.length - 1;
+                  return (
+                    <div key={c.label} className={`p-5 sm:p-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-transparent ${isLastOdd ? "col-span-2" : ""}`}>
+                      <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40 mb-2">{c.label}</div>
+                      <div className={`${c.big ? "text-3xl sm:text-4xl font-[900] tabular-nums" : "text-lg sm:text-xl font-bold"} font-heading`}>{c.value}</div>
+                    </div>
+                  );
+                });
+              })()}
               {club.stadium.namingSponsor && (
                 <div className="col-span-2 p-5 rounded-2xl border border-yellow-500/30 bg-yellow-500/5">
                   <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-yellow-500/80 mb-1">Naming rights</div>
@@ -424,17 +408,20 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
 
                   {presentAttrs.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-8 max-w-2xl">
-                      {presentAttrs.map(({ key, value }) => (
-                        <div key={key} className="bg-white/5 rounded-xl px-4 py-3 border border-white/5">
-                          <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40">{ATTR_LABELS[key]}</div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full" style={{ width: `${Math.min(100, (value as number))}%`, background: `linear-gradient(90deg, ${primary}, ${secondary})` }} />
+                      {presentAttrs.map(({ key, value }, i) => {
+                        const isLastOdd = presentAttrs.length % 2 === 1 && i === presentAttrs.length - 1;
+                        return (
+                          <div key={key} className={`bg-white/5 rounded-xl px-4 py-3 border border-white/5 ${isLastOdd ? "col-span-2 sm:col-span-1" : ""}`}>
+                            <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40">{ATTR_LABELS[key]}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width: `${Math.min(100, (value as number))}%`, background: `linear-gradient(90deg, ${primary}, ${secondary})` }} />
+                              </div>
+                              <span className="text-lg font-heading font-[800] tabular-nums">{value}</span>
                             </div>
-                            <span className="text-lg font-heading font-[800] tabular-nums">{value}</span>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
