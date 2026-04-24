@@ -11,106 +11,32 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 interface TeamBasic {
-  id: string;
-  name: string;
-  village_name: string;
-  district: string;
-  region: string;
-  primary_color: string;
-  secondary_color: string;
-  league_id?: string;
+  id: string; name: string; village_name: string; district: string; region: string;
+  primary_color: string; secondary_color: string; league_id?: string;
 }
-
 interface ManagerData {
-  id?: string;
-  name: string;
-  backstory?: string;
-  age: number;
-  bio?: string;
-  birthplace?: string;
-  coaching?: number;
-  motivation?: number;
-  tactics?: number;
-  youth_development?: number;
-  discipline?: number;
-  reputation?: number;
-  avatar?: Record<string, unknown> | null;
+  id?: string; name: string; backstory?: string; age: number; bio?: string; birthplace?: string;
+  coaching?: number; motivation?: number; tactics?: number; youth_development?: number;
+  discipline?: number; reputation?: number; avatar?: Record<string, unknown> | null;
 }
-
 interface ClubData {
-  id: string;
-  name: string;
-  primaryColor: string;
-  secondaryColor: string;
+  id: string; name: string; primaryColor: string; secondaryColor: string;
   village: { name: string; district: string; region: string; population: number };
-  identity: {
-    nickname: string | null;
-    motto: string | null;
-    foundingYear: number | null;
-    foundingStory: string | null;
-    colorsMeaning: string | null;
-  };
-  stadium: {
-    name: string | null;
-    capacity: number | null;
-    pitchCondition: number | null;
-    pitchType: string | null;
-    nickname: string | null;
-    builtYear: number | null;
-    specialita: string | null;
-    tribunaNorth: string | null;
-    tribunaSouth: string | null;
-    namingSponsor: string | null;
-  };
-  jersey: {
-    pattern: string | null;
-    homePrimary: string;
-    homeSecondary: string;
-    awayPrimary: string | null;
-    awaySecondary: string | null;
-    awayPattern: string | null;
-    sponsor: string | null;
-    homeShortsColor: string | null;
-    homeSocksColor: string | null;
-    awayShortsColor: string | null;
-    awaySocksColor: string | null;
-  };
-  badge: {
-    pattern: BadgePattern | null;
-    primary: string;
-    secondary: string;
-    customPrimary: string | null;
-    customSecondary: string | null;
-    customInitials: string | null;
-    symbol: string | null;
-  };
-  anthem: {
-    url: string | null;
-    lyrics: string | null;
-    title: string | null;
-    style: string | null;
-  };
-  mascot: {
-    name: string | null;
-    imageUrl: string | null;
-    story: string | null;
-  };
+  identity: { nickname: string | null; motto: string | null; foundingYear: number | null; foundingStory: string | null; colorsMeaning: string | null };
+  stadium: { name: string | null; capacity: number | null; pitchCondition: number | null; pitchType: string | null; nickname: string | null; builtYear: number | null; specialita: string | null; tribunaNorth: string | null; tribunaSouth: string | null; namingSponsor: string | null };
+  jersey: { pattern: string | null; homePrimary: string; homeSecondary: string; awayPrimary: string | null; awaySecondary: string | null; awayPattern: string | null; sponsor: string | null; homeShortsColor: string | null; homeSocksColor: string | null; awayShortsColor: string | null; awaySocksColor: string | null };
+  badge: { pattern: BadgePattern | null; primary: string; secondary: string; customPrimary: string | null; customSecondary: string | null; customInitials: string | null; symbol: string | null };
+  anthem: { url: string | null; lyrics: string | null; title: string | null; style: string | null };
+  mascot: { name: string | null; imageUrl: string | null; story: string | null };
 }
-
-interface StandingsData {
-  leagueName: string;
-  standings: Array<{ teamId: string | null; pos: number }>;
-}
+interface StandingsData { leagueName: string; standings: Array<{ teamId: string | null; pos: number }> }
 
 async function fetchSafe<T>(path: string): Promise<T | null> {
   try {
     const r = await fetch(`${API}${path}`, { cache: "no-store" });
     if (!r.ok) return null;
     return r.json();
-  } catch (e) {
-    console.error("fetchSafe", path, e);
-    return null;
-  }
+  } catch (e) { console.error("fetchSafe", path, e); return null; }
 }
 
 function isLight(hex: string): boolean {
@@ -136,16 +62,19 @@ export async function generateMetadata({ params }: { params: Promise<{ teamId: s
   return {
     title: `${baseName} | Prales FM`,
     description: desc,
-    openGraph: {
-      title: baseName,
-      description: desc,
-      type: "website",
-      siteName: "Prales FM",
-      locale: "cs_CZ",
-    },
+    openGraph: { title: baseName, description: desc, type: "website", siteName: "Prales FM", locale: "cs_CZ" },
     twitter: { card: "summary_large_image", title: baseName, description: desc },
   };
 }
+
+const ATTR_LABELS: Record<string, string> = {
+  coaching: "Koučink",
+  motivation: "Motivace",
+  tactics: "Taktika",
+  youth_development: "Mládež",
+  discipline: "Disciplína",
+  reputation: "Reputace",
+};
 
 export default async function KlubPublicPage({ params }: { params: Promise<{ teamId: string }> }) {
   const { teamId } = await params;
@@ -158,11 +87,12 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
 
   if (!club || !team) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[#0f170f] text-white">
-        <div className="text-center">
-          <h1 className="text-2xl font-heading font-bold mb-2">Klub nenalezen</h1>
-          <p className="text-white/50 mb-6">Tento odkaz je neplatný nebo klub byl smazán.</p>
-          <Link href="/" className="inline-block px-6 py-3 bg-pitch-500 text-white rounded-lg font-heading font-bold">Na hlavní stránku</Link>
+      <main className="min-h-screen flex items-center justify-center bg-[#0a0f0a] text-white">
+        <div className="text-center max-w-md px-8">
+          <div className="text-6xl mb-4">{"\u{1F937}"}</div>
+          <h1 className="text-3xl font-heading font-[900] mb-2">Klub nenalezen</h1>
+          <p className="text-white/50 mb-8">Tento odkaz je neplatný nebo klub byl smazán.</p>
+          <Link href="/" className="inline-block px-8 py-3 bg-white text-black rounded-full font-heading font-bold hover:scale-105 transition-transform">Zpět na úvod</Link>
         </div>
       </main>
     );
@@ -171,276 +101,387 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
   const primary = club.primaryColor || "#2D5F2D";
   const secondary = club.secondaryColor || "#FFFFFF";
   const light = isLight(primary);
-  const txt = light ? "text-gray-900" : "text-white";
-  const txtMuted = light ? "text-gray-600" : "text-white/70";
-  const chipBg = light ? "bg-black/10 text-gray-900" : "bg-white/15 text-white";
-
   const autoIni = initials(club.name);
   const badgeIni = club.badge.customInitials || autoIni;
   const badgePattern = (club.badge.pattern as BadgePattern) || "shield";
-
   const myPos = standings?.standings?.find((s) => s.teamId === teamId)?.pos;
 
   const shareUrl = `${SITE_URL}/klub/${teamId}`;
 
+  // Hero palette
+  const heroText = light ? "text-gray-900" : "text-white";
+  const heroMuted = light ? "text-gray-800/70" : "text-white/80";
+  const heroSoft = light ? "text-gray-800/50" : "text-white/50";
+  const chipBg = light ? "bg-black/10" : "bg-white/10";
+  const chipBorder = light ? "border-black/5" : "border-white/10";
+
+  const presentAttrs = manager
+    ? (["coaching", "motivation", "tactics", "youth_development", "discipline", "reputation"] as const)
+        .map((k) => ({ key: k, value: (manager as unknown as Record<string, number | undefined>)[k] }))
+        .filter((a) => a.value != null)
+    : [];
+
   return (
-    <main className="min-h-screen bg-canvas">
-      {/* ═══ HERO ═══ */}
-      <div
-        className="relative overflow-hidden"
-        style={{
-          background: `linear-gradient(135deg, ${primary} 0%, ${primary} 50%, ${secondary}33 100%)`,
-        }}
-      >
-        <div className="max-w-[1100px] mx-auto px-5 sm:px-8 py-10 sm:py-16">
-          <div className="flex flex-col sm:flex-row items-center sm:items-end gap-6 sm:gap-8">
-            <div className="shrink-0" style={{ filter: "drop-shadow(0 10px 30px rgba(0,0,0,0.4))" }}>
-              <BadgePreview
-                primary={club.badge.primary}
-                secondary={club.badge.secondary}
-                pattern={badgePattern}
-                initials={badgeIni}
-                symbol={club.badge.symbol}
-                size={140}
-              />
+    <main className="min-h-screen bg-[#0a0f0a] text-white">
+      {/* ═══ HERO — full bleed, dramatic ═══ */}
+      <section className="relative overflow-hidden">
+        {/* Layered gradients */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `
+              radial-gradient(ellipse 80% 60% at 20% 30%, ${secondary}22, transparent 60%),
+              radial-gradient(ellipse 100% 80% at 80% 70%, ${primary}dd, ${primary} 70%),
+              linear-gradient(180deg, ${primary} 0%, ${primary}ee 100%)
+            `,
+          }}
+        />
+        <div className="absolute inset-0 opacity-30" style={{
+          backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.08) 1px, transparent 0)",
+          backgroundSize: "28px 28px",
+        }} />
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-[#0a0f0a]" />
+
+        <div className="relative max-w-[1200px] mx-auto px-5 sm:px-10 pt-16 sm:pt-24 pb-24 sm:pb-32">
+          <div className="flex items-center justify-between mb-10 sm:mb-16">
+            <div className={`text-[11px] sm:text-xs font-heading font-bold uppercase tracking-[0.3em] ${heroSoft}`}>
+              Profil klubu · Prales FM
             </div>
+            <ShareButton url={shareUrl} title={club.name} textClass={heroText} bgClass={`${chipBg} border ${chipBorder}`} />
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center sm:items-end gap-8 sm:gap-12">
+            <div className="shrink-0 relative">
+              <div
+                className="absolute inset-0 rounded-full blur-3xl opacity-40"
+                style={{ background: secondary, transform: "scale(1.5)" }}
+              />
+              <div className="relative" style={{ filter: "drop-shadow(0 25px 50px rgba(0,0,0,0.5))" }}>
+                <BadgePreview
+                  primary={club.badge.primary}
+                  secondary={club.badge.secondary}
+                  pattern={badgePattern}
+                  initials={badgeIni}
+                  symbol={club.badge.symbol}
+                  size={180}
+                />
+              </div>
+            </div>
+
             <div className="flex-1 min-w-0 text-center sm:text-left">
-              <h1 className={`font-heading font-[900] ${txt} text-3xl sm:text-5xl leading-tight tracking-tight`}>
-                {club.name}
-              </h1>
               {club.identity.nickname && (
-                <div className={`font-heading font-bold ${txt} text-lg sm:text-2xl mt-1 opacity-80`}>
+                <div className={`text-xs sm:text-sm font-heading font-bold uppercase tracking-[0.25em] ${heroSoft} mb-2`}>
                   {club.identity.nickname}
                 </div>
               )}
-              <div className={`${txtMuted} text-sm sm:text-base mt-2`}>
-                {club.village.name} · {club.village.district}
+              <h1 className={`font-heading font-[900] ${heroText} text-4xl sm:text-6xl lg:text-7xl leading-[0.95] tracking-tight`}>
+                {club.name}
+              </h1>
+              <div className={`${heroMuted} text-base sm:text-lg mt-4 flex items-center justify-center sm:justify-start gap-2 flex-wrap`}>
+                <span>{"\u{1F4CD}"}</span>
+                <span>{club.village.name} · {club.village.district}</span>
               </div>
               {club.identity.motto && (
-                <div className={`${txt} italic text-lg sm:text-2xl mt-4 opacity-90`}>
+                <div className={`${heroText} italic text-xl sm:text-3xl mt-6 opacity-95 font-heading`}>
                   &ldquo;{club.identity.motto}&rdquo;
                 </div>
               )}
-              <div className="flex items-center gap-2 mt-5 flex-wrap justify-center sm:justify-start">
-                {myPos && standings?.leagueName && (
-                  <div className={`${chipBg} px-3 py-1.5 rounded-full text-xs font-heading font-bold`}>
-                    {"\u{2B50}"} {myPos}. v {standings.leagueName}
-                  </div>
-                )}
-                {club.identity.foundingYear && (
-                  <div className={`${chipBg} px-3 py-1.5 rounded-full text-xs font-heading font-bold`}>
-                    Založeno {club.identity.foundingYear}
-                  </div>
-                )}
-                <ShareButton url={shareUrl} title={club.name} textClass={txt} bgClass={chipBg} />
-              </div>
             </div>
           </div>
+
+          {/* Stat chips */}
+          <div className="mt-10 sm:mt-16 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {myPos && standings?.leagueName && (
+              <div className={`${chipBg} border ${chipBorder} backdrop-blur-sm rounded-2xl px-5 py-4`}>
+                <div className={`text-[10px] font-heading font-bold uppercase tracking-widest ${heroSoft} mb-1`}>Pozice</div>
+                <div className={`${heroText} font-heading font-[900] text-2xl tabular-nums`}>{myPos}.</div>
+                <div className={`${heroMuted} text-xs truncate`}>{standings.leagueName}</div>
+              </div>
+            )}
+            {club.identity.foundingYear && (
+              <div className={`${chipBg} border ${chipBorder} backdrop-blur-sm rounded-2xl px-5 py-4`}>
+                <div className={`text-[10px] font-heading font-bold uppercase tracking-widest ${heroSoft} mb-1`}>Založeno</div>
+                <div className={`${heroText} font-heading font-[900] text-2xl tabular-nums`}>{club.identity.foundingYear}</div>
+                <div className={`${heroMuted} text-xs`}>{new Date().getFullYear() - club.identity.foundingYear} let existence</div>
+              </div>
+            )}
+            {club.stadium.capacity && (
+              <div className={`${chipBg} border ${chipBorder} backdrop-blur-sm rounded-2xl px-5 py-4`}>
+                <div className={`text-[10px] font-heading font-bold uppercase tracking-widest ${heroSoft} mb-1`}>Kapacita</div>
+                <div className={`${heroText} font-heading font-[900] text-2xl tabular-nums`}>{club.stadium.capacity.toLocaleString("cs")}</div>
+                <div className={`${heroMuted} text-xs truncate`}>{club.stadium.name || "Stadion"}</div>
+              </div>
+            )}
+            {club.village.population && (
+              <div className={`${chipBg} border ${chipBorder} backdrop-blur-sm rounded-2xl px-5 py-4`}>
+                <div className={`text-[10px] font-heading font-bold uppercase tracking-widest ${heroSoft} mb-1`}>Vesnice</div>
+                <div className={`${heroText} font-heading font-[900] text-2xl tabular-nums`}>{club.village.population.toLocaleString("cs")}</div>
+                <div className={`${heroMuted} text-xs`}>obyvatel</div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div className="max-w-[1100px] mx-auto px-5 sm:px-8 py-8 sm:py-12 space-y-6 sm:space-y-8">
+      {/* ═══ KIT — centerpiece ═══ */}
+      <section className="relative py-16 sm:py-24 overflow-hidden">
+        <div className="max-w-[1200px] mx-auto px-5 sm:px-10">
+          <div className="text-center mb-12">
+            <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3">Klubové barvy</div>
+            <h2 className="font-heading font-[900] text-3xl sm:text-5xl">Dres & znak</h2>
+          </div>
 
-        {/* ═══ KIT + STADION ═══ */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* KIT showcase */}
-          <div className="rounded-3xl shadow-lg overflow-hidden" style={{ background: "linear-gradient(180deg, #f7f5f0 0%, #e8e3d8 100%)" }}>
-            <div className="p-6 sm:p-8">
-              <h2 className="text-[11px] font-heading font-bold text-muted uppercase tracking-[0.2em] mb-5 text-center">Klubové barvy</h2>
-              <div className="flex items-end justify-center gap-4 sm:gap-8" style={{ filter: "drop-shadow(0 8px 16px rgba(0,0,0,0.15))" }}>
-                {/* Home */}
-                <div className="flex flex-col items-center">
-                  <JerseyPreview
-                    primary={club.jersey.homePrimary}
-                    secondary={club.jersey.homeSecondary}
-                    pattern={club.jersey.pattern || "solid"}
-                    size={110}
-                  />
-                  <div style={{ marginTop: -6 }}>
-                    <ShortsPreview color={club.jersey.homeShortsColor || club.jersey.homePrimary} trim={club.jersey.homeSecondary} size={72} />
-                  </div>
-                  <div style={{ marginTop: -4 }}>
-                    <SocksPreview color={club.jersey.homeSocksColor || club.jersey.homePrimary} trim={club.jersey.homeSecondary} size={70} />
-                  </div>
-                  <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mt-2">Domácí</div>
+          <div className="relative rounded-[2.5rem] p-8 sm:p-16 overflow-hidden"
+            style={{ background: `linear-gradient(135deg, ${primary}15, transparent 50%, ${secondary}10), #13191c` }}>
+            <div
+              className="absolute inset-0 opacity-20"
+              style={{
+                backgroundImage: `radial-gradient(circle at 20% 30%, ${primary}, transparent 40%), radial-gradient(circle at 80% 70%, ${secondary}, transparent 40%)`,
+              }}
+            />
+
+            <div className="relative flex items-end justify-center gap-6 sm:gap-20 flex-wrap" style={{ filter: "drop-shadow(0 25px 40px rgba(0,0,0,0.5))" }}>
+              {/* Home */}
+              <div className="flex flex-col items-center">
+                <div className="text-[10px] font-heading font-bold uppercase tracking-[0.25em] text-white/40 mb-4">Domácí</div>
+                <JerseyPreview primary={club.jersey.homePrimary} secondary={club.jersey.homeSecondary} pattern={club.jersey.pattern || "solid"} size={160} />
+                <div style={{ marginTop: -10 }}>
+                  <ShortsPreview color={club.jersey.homeShortsColor || club.jersey.homePrimary} trim={club.jersey.homeSecondary} size={110} />
                 </div>
-                {/* Away */}
-                {(club.jersey.awayPrimary || club.jersey.awaySecondary) && (
-                  <div className="flex flex-col items-center">
-                    <JerseyPreview
-                      primary={club.jersey.awayPrimary || club.jersey.homePrimary}
-                      secondary={club.jersey.awaySecondary || club.jersey.homeSecondary}
-                      pattern={club.jersey.awayPattern || "solid"}
-                      size={110}
-                    />
-                    <div style={{ marginTop: -6 }}>
-                      <ShortsPreview color={club.jersey.awayShortsColor || club.jersey.awayPrimary || club.jersey.homePrimary} trim={club.jersey.awaySecondary || club.jersey.homeSecondary} size={72} />
-                    </div>
-                    <div style={{ marginTop: -4 }}>
-                      <SocksPreview color={club.jersey.awaySocksColor || club.jersey.awayPrimary || club.jersey.homePrimary} trim={club.jersey.awaySecondary || club.jersey.homeSecondary} size={70} />
-                    </div>
-                    <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mt-2">Hostující</div>
+                <div style={{ marginTop: -6 }}>
+                  <SocksPreview color={club.jersey.homeSocksColor || club.jersey.homePrimary} trim={club.jersey.homeSecondary} size={100} />
+                </div>
+              </div>
+
+              {/* Badge spotlight */}
+              <div className="flex flex-col items-center self-center order-first sm:order-none">
+                <div className="relative">
+                  <div className="absolute inset-0 blur-2xl opacity-40" style={{ background: primary, transform: "scale(1.6)" }} />
+                  <div className="relative" style={{ filter: "drop-shadow(0 15px 30px rgba(0,0,0,0.5))" }}>
+                    <BadgePreview primary={club.badge.primary} secondary={club.badge.secondary} pattern={badgePattern} initials={badgeIni} symbol={club.badge.symbol} size={180} />
+                  </div>
+                </div>
+                {club.jersey.sponsor && (
+                  <div className="mt-6 bg-white text-black font-heading font-bold uppercase tracking-wider text-xs px-4 py-2 rounded shadow-lg">
+                    {club.jersey.sponsor}
                   </div>
                 )}
               </div>
-              {club.jersey.sponsor && (
-                <div className="text-center text-xs text-muted mt-4">Sponzor: <span className="font-bold text-ink">{club.jersey.sponsor}</span></div>
+
+              {/* Away */}
+              {(club.jersey.awayPrimary || club.jersey.awaySecondary) && (
+                <div className="flex flex-col items-center">
+                  <div className="text-[10px] font-heading font-bold uppercase tracking-[0.25em] text-white/40 mb-4">Hostující</div>
+                  <JerseyPreview primary={club.jersey.awayPrimary || club.jersey.homePrimary} secondary={club.jersey.awaySecondary || club.jersey.homeSecondary} pattern={club.jersey.awayPattern || "solid"} size={160} />
+                  <div style={{ marginTop: -10 }}>
+                    <ShortsPreview color={club.jersey.awayShortsColor || club.jersey.awayPrimary || club.jersey.homePrimary} trim={club.jersey.awaySecondary || club.jersey.homeSecondary} size={110} />
+                  </div>
+                  <div style={{ marginTop: -6 }}>
+                    <SocksPreview color={club.jersey.awaySocksColor || club.jersey.awayPrimary || club.jersey.homePrimary} trim={club.jersey.awaySecondary || club.jersey.homeSecondary} size={100} />
+                  </div>
+                </div>
               )}
             </div>
           </div>
+        </div>
+      </section>
 
-          {/* Stadion */}
-          <div className="card p-6 sm:p-8">
-            <h2 className="text-[11px] font-heading font-bold text-muted uppercase tracking-[0.2em] mb-4">Stadion</h2>
-            <div className="text-2xl sm:text-3xl font-heading font-[800] text-ink leading-tight">
-              {club.stadium.name || "Bez názvu"}
+      {/* ═══ STADION ═══ */}
+      <section className="py-16 sm:py-24">
+        <div className="max-w-[1200px] mx-auto px-5 sm:px-10">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-10 items-start">
+            <div className="lg:col-span-2">
+              <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3">Domov klubu</div>
+              <h2 className="font-heading font-[900] text-3xl sm:text-5xl leading-[1.05]">
+                {club.stadium.name || "Bez názvu"}
+              </h2>
+              {club.stadium.nickname && (
+                <div className="italic text-xl sm:text-2xl mt-3 text-white/60">&ldquo;{club.stadium.nickname}&rdquo;</div>
+              )}
+              {club.stadium.specialita && (
+                <div className="mt-6 p-5 rounded-2xl border border-white/10 bg-white/5">
+                  <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40 mb-2">{"\u{1F37A}"} U nás ochutnáš</div>
+                  <div className="text-white/90 text-lg">{club.stadium.specialita}</div>
+                </div>
+              )}
             </div>
-            {club.stadium.nickname && (
-              <div className="italic text-muted text-base mt-1">&ldquo;{club.stadium.nickname}&rdquo;</div>
-            )}
-            <div className="grid grid-cols-2 gap-3 mt-5 text-sm">
+
+            <div className="lg:col-span-3 grid grid-cols-2 gap-3 sm:gap-4">
               {club.stadium.capacity != null && (
-                <div>
-                  <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider">Kapacita</div>
-                  <div className="font-heading font-bold text-ink tabular-nums">{club.stadium.capacity.toLocaleString("cs")}</div>
+                <div className="p-5 sm:p-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-transparent">
+                  <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40 mb-2">Kapacita</div>
+                  <div className="text-3xl sm:text-4xl font-heading font-[900] tabular-nums">{club.stadium.capacity.toLocaleString("cs")}</div>
                 </div>
               )}
               {club.stadium.builtYear != null && (
-                <div>
-                  <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider">Postaveno</div>
-                  <div className="font-heading font-bold text-ink">{club.stadium.builtYear}</div>
+                <div className="p-5 sm:p-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-transparent">
+                  <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40 mb-2">Postaveno</div>
+                  <div className="text-3xl sm:text-4xl font-heading font-[900] tabular-nums">{club.stadium.builtYear}</div>
                 </div>
               )}
-              {(club.stadium.tribunaNorth || club.stadium.tribunaSouth) && (
-                <div className="col-span-2">
-                  <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider">Tribuny</div>
-                  <div className="text-ink/80">{[club.stadium.tribunaNorth, club.stadium.tribunaSouth].filter(Boolean).join(" · ")}</div>
+              {club.stadium.tribunaNorth && (
+                <div className="p-5 sm:p-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-transparent">
+                  <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40 mb-2">Severní tribuna</div>
+                  <div className="text-lg sm:text-xl font-heading font-bold">{club.stadium.tribunaNorth}</div>
                 </div>
               )}
-              {club.stadium.specialita && (
-                <div className="col-span-2">
-                  <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider">U nás ochutnáš</div>
-                  <div className="text-ink/80">{club.stadium.specialita}</div>
+              {club.stadium.tribunaSouth && (
+                <div className="p-5 sm:p-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-transparent">
+                  <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40 mb-2">Jižní tribuna</div>
+                  <div className="text-lg sm:text-xl font-heading font-bold">{club.stadium.tribunaSouth}</div>
+                </div>
+              )}
+              {club.stadium.namingSponsor && (
+                <div className="col-span-2 p-5 rounded-2xl border border-yellow-500/30 bg-yellow-500/5">
+                  <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-yellow-500/80 mb-1">Naming rights</div>
+                  <div className="text-yellow-100 font-heading font-bold">{club.stadium.namingSponsor}</div>
                 </div>
               )}
             </div>
           </div>
         </div>
+      </section>
 
-        {/* ═══ HYMNA ═══ */}
-        {club.anthem.url && (
-          <div className="card p-6 sm:p-8">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="text-3xl">{"\u{1F3B5}"}</span>
-              <div>
-                <h2 className="text-[11px] font-heading font-bold text-muted uppercase tracking-[0.2em]">Klubová hymna</h2>
-                {club.anthem.title && <div className="font-heading font-bold text-ink text-lg">{club.anthem.title}</div>}
-              </div>
+      {/* ═══ HYMNA ═══ */}
+      {club.anthem.url && (
+        <section className="py-16 sm:py-24 relative overflow-hidden">
+          <div className="absolute inset-0 opacity-30" style={{
+            background: `radial-gradient(ellipse at center, ${primary}40, transparent 70%)`,
+          }} />
+          <div className="relative max-w-[1000px] mx-auto px-5 sm:px-10">
+            <div className="text-center mb-8">
+              <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3">Klubová hymna</div>
+              <h2 className="font-heading font-[900] text-3xl sm:text-5xl">{club.anthem.title || "Hymna"}</h2>
             </div>
-            <audio controls src={club.anthem.url} className="w-full">
-              Váš prohlížeč nepodporuje audio.
-            </audio>
-            {club.anthem.lyrics && (
-              <details className="mt-4">
-                <summary className="text-sm text-muted cursor-pointer hover:text-ink">Text hymny</summary>
-                <pre className="whitespace-pre-wrap text-sm text-ink font-mono bg-gray-50 rounded-lg p-4 mt-2 max-h-[400px] overflow-auto">{club.anthem.lyrics}</pre>
-              </details>
-            )}
+            <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/5 to-transparent backdrop-blur p-6 sm:p-10">
+              <audio controls src={club.anthem.url} className="w-full">
+                Váš prohlížeč nepodporuje audio.
+              </audio>
+              {club.anthem.lyrics && (
+                <details className="mt-6 group">
+                  <summary className="cursor-pointer text-sm text-white/60 hover:text-white flex items-center gap-2 font-heading font-bold uppercase tracking-wider">
+                    <span className="group-open:rotate-90 transition-transform">{"\u{25B6}"}</span>
+                    Text hymny
+                  </summary>
+                  <pre className="whitespace-pre-wrap text-base text-white/80 font-heading leading-relaxed bg-black/30 rounded-2xl p-6 mt-4 max-h-[500px] overflow-auto">{club.anthem.lyrics}</pre>
+                </details>
+              )}
+            </div>
           </div>
-        )}
+        </section>
+      )}
 
-        {/* ═══ MASKOT + TRENÉR ═══ */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Maskot */}
-          {club.mascot.imageUrl ? (
-            <div className="card overflow-hidden">
-              <div className="bg-gray-50 aspect-square">
-                <img src={club.mascot.imageUrl} alt={club.mascot.name || "Maskot"} className="w-full h-full object-contain" />
-              </div>
-              <div className="p-6">
-                <h2 className="text-[11px] font-heading font-bold text-muted uppercase tracking-[0.2em] mb-1">Maskot</h2>
-                <div className="font-heading font-[800] text-ink text-2xl">{club.mascot.name || "Maskot klubu"}</div>
+      {/* ═══ MASKOT ═══ */}
+      {club.mascot.imageUrl && (
+        <section className="py-16 sm:py-24">
+          <div className="max-w-[1200px] mx-auto px-5 sm:px-10">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center">
+              <div className="order-2 lg:order-1">
+                <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3">Maskot</div>
+                <h2 className="font-heading font-[900] text-4xl sm:text-6xl leading-[1.05]">
+                  {club.mascot.name || "Náš maskot"}
+                </h2>
                 {club.mascot.story && (
-                  <p className="text-sm text-ink/80 mt-3 italic">&ldquo;{club.mascot.story}&rdquo;</p>
+                  <p className="text-lg sm:text-xl text-white/80 mt-6 italic leading-relaxed">&ldquo;{club.mascot.story}&rdquo;</p>
                 )}
               </div>
+              <div className="order-1 lg:order-2 relative">
+                <div className="absolute inset-0 blur-3xl opacity-30" style={{ background: primary, transform: "scale(1.2)" }} />
+                <div className="relative rounded-3xl overflow-hidden aspect-square bg-gradient-to-br from-white/5 to-white/0 border border-white/10">
+                  <img src={club.mascot.imageUrl} alt={club.mascot.name || "Maskot"} className="w-full h-full object-contain" />
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className="card p-6 sm:p-8 flex items-center justify-center text-muted italic">
-              Maskot zatím není
-            </div>
-          )}
+          </div>
+        </section>
+      )}
 
-          {/* Trenér */}
-          {manager ? (
-            <div className="card p-6 sm:p-8">
-              <h2 className="text-[11px] font-heading font-bold text-muted uppercase tracking-[0.2em] mb-4">Trenér</h2>
-              <div className="flex items-start gap-4">
-                {manager.avatar && (
-                  <div className="shrink-0">
-                    <ManagerFace faceConfig={manager.avatar} size={96} />
+      {/* ═══ TRENÉR ═══ */}
+      {manager && (
+        <section className="py-16 sm:py-24">
+          <div className="max-w-[1200px] mx-auto px-5 sm:px-10">
+            <div className="rounded-[2.5rem] border border-white/10 bg-gradient-to-br from-white/5 to-transparent p-8 sm:p-12">
+              <div className="flex flex-col sm:flex-row gap-8 sm:gap-12 items-center sm:items-start">
+                <div className="shrink-0 relative">
+                  <div className="absolute inset-0 blur-2xl opacity-30" style={{ background: primary, transform: "scale(1.3)" }} />
+                  <div className="relative rounded-3xl overflow-hidden border-2 border-white/20 bg-white/5" style={{ width: 160, height: 192 }}>
+                    {manager.avatar ? (
+                      <ManagerFace faceConfig={manager.avatar} size={160} />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-6xl text-white/30">{"\u{1F464}"}</div>
+                    )}
                   </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="font-heading font-[800] text-ink text-xl sm:text-2xl">{manager.name}</div>
-                  <div className="text-muted text-sm">
+                </div>
+                <div className="flex-1 min-w-0 text-center sm:text-left">
+                  <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-2">Trenér</div>
+                  <h2 className="font-heading font-[900] text-3xl sm:text-5xl">{manager.name}</h2>
+                  <div className="text-white/60 text-base sm:text-lg mt-2">
                     {manager.age} let{manager.birthplace ? ` · ${manager.birthplace}` : ""}
                   </div>
+                  {manager.bio && (
+                    <p className="text-white/80 text-base sm:text-lg mt-5 italic leading-relaxed max-w-2xl">&ldquo;{manager.bio}&rdquo;</p>
+                  )}
+
+                  {presentAttrs.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-8 max-w-2xl">
+                      {presentAttrs.map(({ key, value }) => (
+                        <div key={key} className="bg-white/5 rounded-xl px-4 py-3 border border-white/5">
+                          <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40">{ATTR_LABELS[key]}</div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${Math.min(100, (value as number))}%`, background: `linear-gradient(90deg, ${primary}, ${secondary})` }} />
+                            </div>
+                            <span className="text-lg font-heading font-[800] tabular-nums">{value}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-4 text-xs">
-                {[
-                  { k: "coaching", l: "Koučink" },
-                  { k: "motivation", l: "Motivace" },
-                  { k: "tactics", l: "Taktika" },
-                  { k: "youth_development", l: "Mládež" },
-                  { k: "discipline", l: "Disciplína" },
-                  { k: "reputation", l: "Reputace" },
-                ].map(({ k, l }) => {
-                  const v = (manager as unknown as Record<string, number | undefined>)[k];
-                  if (v == null) return null;
-                  return (
-                    <div key={k} className="flex items-center justify-between px-3 py-1.5 bg-gray-50 rounded-lg">
-                      <span className="text-muted">{l}</span>
-                      <span className="font-heading font-bold text-ink tabular-nums">{v}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              {manager.bio && (
-                <p className="text-sm text-ink/80 mt-4 italic">&ldquo;{manager.bio}&rdquo;</p>
-              )}
             </div>
-          ) : (
-            <div className="card p-6 flex items-center justify-center text-muted italic">Žádný trenér</div>
-          )}
-        </div>
+          </div>
+        </section>
+      )}
 
-        {/* ═══ PŘÍBĚH ═══ */}
-        {(club.identity.foundingStory || club.identity.colorsMeaning) && (
-          <div className="card p-6 sm:p-10">
-            <h2 className="text-[11px] font-heading font-bold text-muted uppercase tracking-[0.2em] mb-5">Příběh klubu</h2>
+      {/* ═══ PŘÍBĚH KLUBU ═══ */}
+      {(club.identity.foundingStory || club.identity.colorsMeaning) && (
+        <section className="py-16 sm:py-24">
+          <div className="max-w-[900px] mx-auto px-5 sm:px-10">
+            <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3 text-center">Příběh klubu</div>
+            <h2 className="font-heading font-[900] text-3xl sm:text-5xl mb-10 text-center">Jak to začalo</h2>
             {club.identity.foundingStory && (
-              <p className="text-ink text-base sm:text-lg leading-relaxed whitespace-pre-line mb-5">
+              <p className="text-lg sm:text-xl leading-relaxed whitespace-pre-line text-white/85">
                 {club.identity.foundingStory}
               </p>
             )}
             {club.identity.colorsMeaning && (
-              <div className="pt-5 border-t border-gray-100">
-                <div className="text-[11px] font-heading font-bold text-muted uppercase tracking-[0.2em] mb-2">Význam barev</div>
-                <p className="text-ink/80 text-base italic">{club.identity.colorsMeaning}</p>
+              <div className="mt-10 pt-10 border-t border-white/10">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="flex gap-1">
+                    <div className="w-8 h-8 rounded-full shadow-lg" style={{ background: primary }} />
+                    <div className="w-8 h-8 rounded-full shadow-lg" style={{ background: secondary }} />
+                  </div>
+                  <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40">Význam barev</div>
+                </div>
+                <p className="text-white/85 text-lg italic leading-relaxed">{club.identity.colorsMeaning}</p>
               </div>
             )}
           </div>
-        )}
+        </section>
+      )}
 
-        {/* Footer */}
-        <div className="text-center text-xs text-muted py-8">
-          Hráno v <Link href="/" className="font-heading font-bold text-pitch-600 hover:text-pitch-700">Prales FM</Link>
-          {" · "}
-          <Link href={`/dashboard/team/${teamId}`} className="text-muted hover:text-ink">Otevřít v aplikaci</Link>
+      {/* Footer */}
+      <footer className="py-12 border-t border-white/5">
+        <div className="max-w-[1200px] mx-auto px-5 sm:px-10 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-white/40">
+          <div>
+            Hráno v <Link href="/" className="font-heading font-bold text-white hover:text-white/80">Prales FM</Link>
+          </div>
+          <Link href={`/dashboard/team/${teamId}`} className="hover:text-white/80">
+            Otevřít v aplikaci {"\u{2192}"}
+          </Link>
         </div>
-      </div>
+      </footer>
     </main>
   );
 }
