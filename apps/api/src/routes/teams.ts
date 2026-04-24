@@ -1213,11 +1213,16 @@ teamsRouter.get("/:id/club", async (c) => {
       attemptsMax: ANTHEM_MAX_ATTEMPTS,
       generating: !!(await c.env.DB.prepare("SELECT id FROM team_anthems WHERE team_id = ? AND url IS NULL AND suno_task_id IS NOT NULL LIMIT 1").bind(teamId).first()),
     },
-    mascot: {
-      name: null,
-      imageUrl: null,
-      story: null,
-    },
+    mascot: await (async () => {
+      const m = await c.env.DB.prepare(
+        "SELECT name, image_url, story FROM team_mascots WHERE team_id = ? AND is_selected = 1 LIMIT 1"
+      ).bind(teamId).first<{ name: string; image_url: string | null; story: string | null }>();
+      return {
+        name: m?.name ?? null,
+        imageUrl: m?.image_url ?? null,
+        story: m?.story ?? null,
+      };
+    })(),
   });
 });
 
@@ -1679,6 +1684,263 @@ teamsRouter.get("/:id/club/anthem/:anthemId/stream", async (c) => {
   if (!obj) return c.json({ error: "Hymna není k dispozici" }, 404);
   return new Response(obj.body, {
     headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=3600" },
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// MASKOT — historie (max 3), Replicate Flux pro image gen
+// ═══════════════════════════════════════════════════════════════════
+const MASCOT_MAX_ATTEMPTS = 3;
+const VALID_ANIMALS = new Set([
+  "bear", "lion", "eagle", "wolf", "boar", "deer", "horse",
+  "rooster", "dog", "cow", "bull", "fox", "dragon", "pirate",
+  "jester", "human", "pepper", "tree",
+]);
+const VALID_MASCOT_STYLES = new Set([
+  "cartoon", "sports_mascot", "retro_80s", "watercolor", "minimalist",
+]);
+
+function mascotPromptFor(animal: string, style: string, name: string, teamColors: { primary: string; secondary: string }): string {
+  const animalDesc: Record<string, string> = {
+    bear: "friendly brown bear",
+    lion: "majestic lion",
+    eagle: "fierce eagle",
+    wolf: "cool gray wolf",
+    boar: "strong wild boar",
+    deer: "noble deer with antlers",
+    horse: "galloping horse",
+    rooster: "proud rooster",
+    dog: "loyal dog",
+    cow: "happy cartoon cow",
+    bull: "strong bull",
+    fox: "clever red fox",
+    dragon: "friendly green dragon",
+    pirate: "pirate character with eyepatch",
+    jester: "colorful jester character",
+    human: "cheerful human mascot character",
+    pepper: "anthropomorphic red chili pepper with face",
+    tree: "anthropomorphic oak tree with face",
+  };
+  const styleDesc: Record<string, string> = {
+    cartoon: "Disney Pixar 3D cartoon style, cute round proportions, big expressive eyes, soft lighting, clean white background",
+    sports_mascot: "NBA style sports mascot, bold confident pose holding football, vibrant team colors, dynamic action, white background",
+    retro_80s: "vintage 1980s sports logo style, simple bold lines, limited palette, nostalgic feel, flat design, white background",
+    watercolor: "soft watercolor painting, loose brush strokes, artistic, pastel colors, white paper background",
+    minimalist: "minimalist flat vector illustration, simple geometric shapes, thick outlines, 2-3 colors, clean white background",
+  };
+  const base = animalDesc[animal] ?? animal;
+  const styleStr = styleDesc[style] ?? style;
+  return `${base} as football team mascot, wearing football jersey in colors ${teamColors.primary} and ${teamColors.secondary}, holding a soccer ball, ${styleStr}, centered composition, full body shot`;
+}
+
+// POST /api/teams/:id/club/mascot/generate
+teamsRouter.post("/:id/club/mascot/generate", async (c) => {
+  const teamId = c.req.param("id");
+  const auth = await requireTeamOwner(c, teamId);
+  if (auth.error) return auth.error;
+
+  const countRes = await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM team_mascots WHERE team_id = ?")
+    .bind(teamId).first<{ cnt: number }>();
+  const currentCount = countRes?.cnt ?? 0;
+  if (currentCount >= MASCOT_MAX_ATTEMPTS) {
+    return c.json({ error: `Máš max ${MASCOT_MAX_ATTEMPTS} maskotů. Smaž některého před generováním nového.` }, 403);
+  }
+
+  const body = await c.req.json<{ name?: string; animal?: string; style?: string }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "mascot/generate invalid body", e); return { name: "", animal: "", style: "" }; });
+  const name = (body.name ?? "").trim().slice(0, 50);
+  const animal = (body.animal ?? "").trim();
+  const style = (body.style ?? "").trim();
+  if (!name) return c.json({ error: "Chybí jméno maskota" }, 400);
+  if (!VALID_ANIMALS.has(animal)) return c.json({ error: "Neplatný typ bytosti" }, 400);
+  if (!VALID_MASCOT_STYLES.has(style)) return c.json({ error: "Neplatný styl" }, 400);
+
+  const token = c.env.REPLICATE_API_TOKEN;
+  if (!token) return c.json({ error: "Image generace není aktivovaná (chybí API token)" }, 503);
+
+  // Získat team colors pro prompt
+  const team = await c.env.DB.prepare("SELECT primary_color, secondary_color FROM teams WHERE id = ?")
+    .bind(teamId).first<{ primary_color: string; secondary_color: string }>();
+  const prompt = mascotPromptFor(animal, style, name, {
+    primary: team?.primary_color ?? "#2D5F2D",
+    secondary: team?.secondary_color ?? "#FFFFFF",
+  });
+
+  // Volání Replicate (Flux Schnell - rychlý)
+  const replicateRes = await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      Prefer: "wait",
+    },
+    body: JSON.stringify({
+      input: {
+        prompt,
+        num_outputs: 1,
+        aspect_ratio: "1:1",
+        output_format: "png",
+        output_quality: 90,
+        num_inference_steps: 4,
+      },
+    }),
+  });
+
+  if (!replicateRes.ok) {
+    const errBody = await replicateRes.text().catch(() => "");
+    logger.warn({ module: "teams" }, `Replicate error: ${replicateRes.status} — ${errBody.slice(0, 300)}`);
+    return c.json({ error: "Generace obrázku selhala (Replicate chyba)" }, 502);
+  }
+
+  const predictionJson = await replicateRes.json() as { output?: string | string[]; status?: string; error?: string };
+  if (predictionJson.status === "failed" || predictionJson.error) {
+    logger.warn({ module: "teams" }, `Replicate prediction failed: ${predictionJson.error}`);
+    return c.json({ error: "Generace obrázku selhala" }, 502);
+  }
+  const imageUrl = Array.isArray(predictionJson.output) ? predictionJson.output[0] : predictionJson.output;
+  if (!imageUrl) return c.json({ error: "Replicate nevrátilo obrázek" }, 502);
+
+  // Stáhnout a uložit do R2
+  const imgRes = await fetch(imageUrl);
+  if (!imgRes.ok) return c.json({ error: "Nepodařilo se stáhnout obrázek" }, 502);
+  const imgBuffer = await imgRes.arrayBuffer();
+  const mascotId = crypto.randomUUID();
+  await c.env.SEED_DATA.put(`mascot/${mascotId}.png`, imgBuffer, { httpMetadata: { contentType: "image/png" } });
+  const apiBase = c.env.API_BASE_URL || new URL(c.req.url).origin;
+  const publicUrl = `${apiBase}/api/teams/${teamId}/club/mascot/${mascotId}/image`;
+
+  await c.env.DB.prepare(
+    "INSERT INTO team_mascots (id, team_id, name, animal, style, image_url, is_selected) VALUES (?, ?, ?, ?, ?, ?, 0)"
+  ).bind(mascotId, teamId, name, animal, style, publicUrl).run();
+
+  // Auto-select pokud je to první
+  const hasSelected = await c.env.DB.prepare("SELECT id FROM team_mascots WHERE team_id = ? AND is_selected = 1 LIMIT 1")
+    .bind(teamId).first();
+  if (!hasSelected) {
+    await c.env.DB.prepare("UPDATE team_mascots SET is_selected = 1 WHERE id = ?").bind(mascotId).run();
+  }
+
+  return c.json({ mascotId, url: publicUrl, total: currentCount + 1, maxAttempts: MASCOT_MAX_ATTEMPTS });
+});
+
+// POST /api/teams/:id/club/mascot/:mascotId/story — AI příběh maskota
+teamsRouter.post("/:id/club/mascot/:mascotId/story", async (c) => {
+  const teamId = c.req.param("id");
+  const mascotId = c.req.param("mascotId");
+  const auth = await requireTeamOwner(c, teamId);
+  if (auth.error) return auth.error;
+
+  const row = await c.env.DB.prepare("SELECT id, name, animal, style FROM team_mascots WHERE id = ? AND team_id = ?")
+    .bind(mascotId, teamId).first<{ id: string; name: string; animal: string; style: string }>();
+  if (!row) return c.json({ error: "Maskot nenalezen" }, 404);
+
+  const team = await c.env.DB.prepare(
+    `SELECT t.name, v.name as village_name, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`
+  ).bind(teamId).first<{ name: string; village_name: string; district: string }>();
+
+  const geminiKey = c.env.GEMINI_API_KEY;
+  if (!geminiKey) return c.json({ error: "Gemini není nastaveno" }, 500);
+
+  const prompt = `Napiš krátký humorný příběh (2-3 věty, česky) o maskotu fotbalového klubu ${team?.name}.
+
+Maskot se jmenuje "${row.name}" a je to ${row.animal}.
+Klub je z vesnice ${team?.village_name} (okres ${team?.district}).
+
+Požadavky:
+- Česky, přirozeně
+- 2-3 věty max
+- Vesnický humor, nadsázka
+- Zmínit vesnici nebo okres
+- Vrať POUZE text, žádné další komentáře`;
+
+  const geminiRes = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 400, temperature: 0.9, thinkingConfig: { thinkingBudget: 0 } },
+      }),
+    },
+  );
+  if (!geminiRes.ok) return c.json({ error: "Příběh se nepovedlo vygenerovat" }, 502);
+  const json = await geminiRes.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }> };
+  const parts = json.candidates?.[0]?.content?.parts ?? [];
+  const story = parts.filter((p) => !p.thought).map((p) => p.text ?? "").join("").trim();
+  if (!story) return c.json({ error: "Prázdná odpověď" }, 502);
+
+  await c.env.DB.prepare("UPDATE team_mascots SET story = ? WHERE id = ?").bind(story, mascotId).run();
+  return c.json({ story });
+});
+
+// GET /api/teams/:id/club/mascot/list
+teamsRouter.get("/:id/club/mascot/list", async (c) => {
+  const teamId = c.req.param("id");
+  const rows = await c.env.DB.prepare(
+    "SELECT id, name, animal, style, story, image_url, is_selected, created_at FROM team_mascots WHERE team_id = ? ORDER BY created_at DESC"
+  ).bind(teamId).all<{ id: string; name: string; animal: string; style: string; story: string | null; image_url: string | null; is_selected: number; created_at: string }>();
+
+  return c.json({
+    mascots: (rows.results ?? []).map((r) => ({
+      id: r.id, name: r.name, animal: r.animal, style: r.style,
+      story: r.story, imageUrl: r.image_url, isSelected: r.is_selected === 1,
+      createdAt: r.created_at,
+    })),
+    maxAttempts: MASCOT_MAX_ATTEMPTS,
+  });
+});
+
+// POST /api/teams/:id/club/mascot/:mascotId/select
+teamsRouter.post("/:id/club/mascot/:mascotId/select", async (c) => {
+  const teamId = c.req.param("id");
+  const mascotId = c.req.param("mascotId");
+  const auth = await requireTeamOwner(c, teamId);
+  if (auth.error) return auth.error;
+
+  const row = await c.env.DB.prepare("SELECT id FROM team_mascots WHERE id = ? AND team_id = ?")
+    .bind(mascotId, teamId).first();
+  if (!row) return c.json({ error: "Maskot nenalezen" }, 404);
+
+  await c.env.DB.prepare("UPDATE team_mascots SET is_selected = 0 WHERE team_id = ?").bind(teamId).run();
+  await c.env.DB.prepare("UPDATE team_mascots SET is_selected = 1 WHERE id = ?").bind(mascotId).run();
+  return c.json({ ok: true });
+});
+
+// DELETE /api/teams/:id/club/mascot/:mascotId
+teamsRouter.delete("/:id/club/mascot/:mascotId", async (c) => {
+  const teamId = c.req.param("id");
+  const mascotId = c.req.param("mascotId");
+  const auth = await requireTeamOwner(c, teamId);
+  if (auth.error) return auth.error;
+
+  const row = await c.env.DB.prepare("SELECT is_selected FROM team_mascots WHERE id = ? AND team_id = ?")
+    .bind(mascotId, teamId).first<{ is_selected: number }>();
+  if (!row) return c.json({ error: "Maskot nenalezen" }, 404);
+
+  await c.env.SEED_DATA.delete(`mascot/${mascotId}.png`).catch((e) => {
+    logger.warn({ module: "teams" }, "mascot R2 delete failed", e);
+  });
+  await c.env.DB.prepare("DELETE FROM team_mascots WHERE id = ?").bind(mascotId).run();
+
+  if (row.is_selected === 1) {
+    const next = await c.env.DB.prepare(
+      "SELECT id FROM team_mascots WHERE team_id = ? ORDER BY created_at DESC LIMIT 1"
+    ).bind(teamId).first<{ id: string }>();
+    if (next) {
+      await c.env.DB.prepare("UPDATE team_mascots SET is_selected = 1 WHERE id = ?").bind(next.id).run();
+    }
+  }
+  return c.json({ ok: true });
+});
+
+// GET /api/teams/:id/club/mascot/:mascotId/image — obrázek z R2
+teamsRouter.get("/:id/club/mascot/:mascotId/image", async (c) => {
+  const mascotId = c.req.param("mascotId");
+  const obj = await c.env.SEED_DATA.get(`mascot/${mascotId}.png`);
+  if (!obj) return c.json({ error: "Obrázek není k dispozici" }, 404);
+  return new Response(obj.body, {
+    headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" },
   });
 });
 

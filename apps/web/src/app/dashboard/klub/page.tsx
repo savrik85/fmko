@@ -177,20 +177,33 @@ export default function KlubPage() {
 
           <SectionCard title="Hymna a maskot" icon={"\u{1F3B5}"} hint="AI hymna a maskot klubu">
             <div className="text-sm text-muted mb-3">
-              Hymna: {club.anthem.url ? (
-                <span className="text-ink font-bold">{club.anthem.title || "Hotová"}</span>
-              ) : (
-                <span className="text-ink/70">žádná ({club.anthem.attemptsUsed}/{club.anthem.attemptsMax} pokusů)</span>
-              )}
+              <div className="flex items-center gap-3 mb-2">
+                {club.mascot.imageUrl && (
+                  <img src={club.mascot.imageUrl} alt={club.mascot.name || "Maskot"} className="w-16 h-16 rounded-lg object-cover border border-gray-200" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div>Maskot: {club.mascot.name ? (
+                    <span className="text-ink font-bold">{club.mascot.name}</span>
+                  ) : <span className="text-ink/70">neurčený</span>}
+                  </div>
+                  <div>Hymna: {club.anthem.url ? (
+                    <span className="text-ink font-bold">{club.anthem.title || "Hotová"}</span>
+                  ) : <span className="text-ink/70">žádná</span>}
+                  </div>
+                </div>
+              </div>
               {club.anthem.url && (
                 <audio controls src={club.anthem.url} className="w-full mt-2" />
               )}
-              <br />
-              Maskot: <span className="text-ink/70">{club.mascot.name || "neurčený"}</span>
             </div>
-            <EmptyState action={club.anthem.url ? "Otevřít hymnu" : "Vygenerovat hymnu"} href="/dashboard/klub/hymna">
-              Klubová hymna (AI audio) — text vygeneruje Gemini, hudbu Suno AI. Maskot přijde v dalším kroku.
-            </EmptyState>
+            <div className="flex gap-2">
+              <Link href="/dashboard/klub/hymna" className="flex-1 px-3 py-2 rounded-lg text-xs font-heading font-bold text-center text-white bg-pitch-500 hover:bg-pitch-600 transition-colors">
+                {"\u{1F3B5}"} Hymna
+              </Link>
+              <Link href="/dashboard/klub/maskot" className="flex-1 px-3 py-2 rounded-lg text-xs font-heading font-bold text-center text-white bg-pitch-500 hover:bg-pitch-600 transition-colors">
+                {"\u{1F9F8}"} Maskot
+              </Link>
+            </div>
           </SectionCard>
         </div>
 

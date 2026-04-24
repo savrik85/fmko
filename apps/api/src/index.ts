@@ -24,6 +24,7 @@ export type Bindings = {
   VAPID_PRIVATE_KEY: string;
   VAPID_SUBJECT: string;
   SUNO_API_KEY?: string;
+  REPLICATE_API_TOKEN?: string;
   API_BASE_URL?: string;
 };
 
