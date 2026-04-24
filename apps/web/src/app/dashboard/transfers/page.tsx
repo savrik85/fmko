@@ -1417,6 +1417,9 @@ export default function TransfersPage() {
                         {o.on_turn === false && <div className="text-xs text-muted mt-1 italic">Čeká se na odpověď soupeře</div>}
                       </div>
                       <div className="flex flex-wrap gap-2 shrink-0 justify-end">
+                        <Link href={`/dashboard/transfers/offer/${o.id}`} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
+                          Jednání →
+                        </Link>
                         {o.on_turn !== false && (<>
                         <button onClick={async () => {
                           const amount = o.counter_amount ?? o.offer_amount;
@@ -1508,6 +1511,9 @@ export default function TransfersPage() {
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2 shrink-0 justify-end">
+                        <Link href={`/dashboard/transfers/offer/${o.id}`} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
+                          Jednání →
+                        </Link>
                         {o.on_turn && (<>
                           <button onClick={async () => {
                             const amount = o.counter_amount ?? o.offer_amount;
