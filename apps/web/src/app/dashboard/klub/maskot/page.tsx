@@ -142,9 +142,11 @@ export default function MaskotPage() {
       <div className="mb-5">
         <Link href="/dashboard/klub" className="text-sm text-muted hover:text-ink">← Zpět na Klub</Link>
         <h1 className="font-heading font-extrabold text-2xl text-ink mt-1">Klubový maskot</h1>
-        <p className="text-sm text-muted mt-0.5">
-          Máš <span className="font-bold">{attemptsUsed}/{maxAttempts}</span> pokusů generace. Smazáním maskota z historie pokus nevracíš zpět.
-        </p>
+      </div>
+
+      <div className="mb-5 p-3 rounded-lg bg-gray-50 border border-gray-200 text-sm text-ink">
+        Na generování maskota máš {maxAttempts} pokusy. Rozmysli si jméno, typ bytosti i styl — pokusy se neobnovují a mazání z historie je nevrací zpět.
+        Zbývá <span className="font-bold tabular-nums">{maxAttempts - attemptsUsed}/{maxAttempts}</span>.
       </div>
 
       {/* Galerie */}
