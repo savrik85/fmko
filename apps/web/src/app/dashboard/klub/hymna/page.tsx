@@ -20,11 +20,11 @@ interface ClubAnthemData {
 }
 
 const STYLE_PRESETS: Array<{ value: string; label: string }> = [
-  { value: "český fotbalový chorál, pochodový rytmus, silné mužské sborové vokály, energický", label: "Klasická fotbalová hymna" },
-  { value: "česká lidovka, harmonika, smíšený sbor, veselé tempo", label: "Vesnická lidovka" },
-  { value: "český rock anthem, elektrická kytara, bicí, stadionový feeling", label: "Stadium rock" },
-  { value: "český folk, akustická kytara, mužský hlas, jednoduchý doprovod", label: "Folk / písnička" },
-  { value: "český punk rock, rychlé tempo, hrubé vokály, bigbít", label: "Punk / bigbít" },
+  { value: "czech football anthem, marching tempo, strong male choir, energetic", label: "Klasická fotbalová hymna" },
+  { value: "czech folk song, accordion, mixed choir, cheerful tempo", label: "Vesnická lidovka" },
+  { value: "czech rock anthem, electric guitar, drums, stadium feeling", label: "Stadium rock" },
+  { value: "czech folk ballad, acoustic guitar, male voice, simple accompaniment", label: "Folk / písnička" },
+  { value: "czech punk rock, fast tempo, raw vocals, punk energy", label: "Punk / bigbít" },
 ];
 
 export default function HymnaPage() {

@@ -1528,12 +1528,18 @@ teamsRouter.get("/:id/club/anthem/status", async (c) => {
   });
   if (!sunoRes.ok) return c.json({ status: "pending", attemptsUsed: team.anthem_attempts_used ?? 0 });
 
-  const statusJson = await sunoRes.json() as { data?: { status?: string; response?: { sunoData?: Array<{ audioUrl?: string }> } } };
+  const statusJson = await sunoRes.json() as {
+    data?: {
+      status?: string;
+      errorMessage?: string;
+      errorCode?: number;
+      response?: { sunoData?: Array<{ audioUrl?: string }> };
+    };
+  };
   const sunoStatus = statusJson.data?.status;
   const audioUrl = statusJson.data?.response?.sunoData?.[0]?.audioUrl;
 
   if (sunoStatus === "SUCCESS" && audioUrl) {
-    // Stáhnout a uložit do R2
     try {
       const audioRes = await fetch(audioUrl);
       if (!audioRes.ok) throw new Error(`audio fetch ${audioRes.status}`);
@@ -1547,6 +1553,17 @@ teamsRouter.get("/:id/club/anthem/status", async (c) => {
       logger.warn({ module: "teams" }, "anthem R2 upload failed", e);
       return c.json({ status: "error", error: "Nepovedlo se uložit audio" }, 500);
     }
+  }
+
+  // Detekce chybových stavů ze Suno — vrátíme attempt zpět a clear task_id
+  const errorStatuses = ["SENSITIVE_WORD_ERROR", "CREDIT_INSUFFICIENT", "GENERATE_FAILED", "PARAM_ERROR", "CALLBACK_EXCEPTION"];
+  if (sunoStatus && errorStatuses.includes(sunoStatus)) {
+    await c.env.DB.prepare(
+      "UPDATE teams SET anthem_task_id = NULL, anthem_attempts_used = MAX(0, COALESCE(anthem_attempts_used, 1) - 1) WHERE id = ?"
+    ).bind(teamId).run();
+    const errMsg = statusJson.data?.errorMessage || `Generace selhala: ${sunoStatus}`;
+    logger.warn({ module: "teams" }, `Suno anthem error for team ${teamId}: ${sunoStatus} — ${errMsg}`);
+    return c.json({ status: "error", error: errMsg, sunoStatus, attemptsUsed: Math.max(0, (team.anthem_attempts_used ?? 1) - 1) });
   }
 
   return c.json({ status: sunoStatus === "PENDING" ? "pending" : "processing", attemptsUsed: team.anthem_attempts_used ?? 0 });
