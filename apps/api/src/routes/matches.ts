@@ -795,12 +795,11 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
   const teamId = c.req.param("teamId");
   const challengeId = c.req.param("challengeId");
 
-  // Atomický claim — pouze první request projde, duplicitní vrátí 404
-  const claimed = await c.env.DB.prepare(
-    "UPDATE challenges SET status = 'accepted' WHERE id = ? AND challenged_team_id = ? AND status = 'pending' RETURNING *"
+  // Načíst pending challenge (bez změny status — aby validace mohly selhat bez side-effect)
+  const challenge = await c.env.DB.prepare(
+    "SELECT * FROM challenges WHERE id = ? AND challenged_team_id = ? AND status = 'pending'"
   ).bind(challengeId, teamId).first<Record<string, unknown>>();
-  if (!claimed) return c.json({ error: "Výzva nenalezena nebo už zpracována" }, 404);
-  const challenge = claimed;
+  if (!challenge) return c.json({ error: "Výzva nenalezena nebo už zpracována" }, 404);
 
   // Check budget
   const team = await c.env.DB.prepare("SELECT name, budget, game_date FROM teams WHERE id = ?")
@@ -808,8 +807,9 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
   if (!team || team.budget < 1000) return c.json({ error: "Nedostatek peněz (min 1 000 Kč)" }, 400);
 
   const challengerTeamId = challenge.challenger_team_id as string;
-  const challenger = await c.env.DB.prepare("SELECT name, game_date FROM teams WHERE id = ?")
-    .bind(challengerTeamId).first<{ name: string; game_date: string }>();
+  const challenger = await c.env.DB.prepare("SELECT name, game_date, budget FROM teams WHERE id = ?")
+    .bind(challengerTeamId).first<{ name: string; game_date: string; budget: number }>();
+  if (!challenger || challenger.budget < 1000) return c.json({ error: "Soupeř nemá dostatek peněz (min 1 000 Kč)" }, 400);
 
   // Check neither team has a league match or friendly today
   const gameDateDay = team.game_date ? team.game_date.split("T")[0] : null;
@@ -830,20 +830,28 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
     if (friendlyRes.results.length > 0) return c.json({ error: "Jeden z týmů už dnes hrál nebo má naplánovaný přátelák" }, 400);
   }
 
-  // Charge both teams 1000 Kč
-  const { recordTransaction } = await import("../season/finance-processor");
-  await recordTransaction(c.env.DB, teamId, "event", -1000, `Přátelák: cestovné a rozhodčí`, team.game_date);
-  await recordTransaction(c.env.DB, challengerTeamId, "event", -1000, `Přátelák: cestovné a rozhodčí`, team.game_date);
-
-  // Create match
+  // Create match PŘED status claim — aby accepted challenge nikdy nebyl bez match
   const matchId = uuid();
   await c.env.DB.prepare(
     "INSERT INTO matches (id, home_team_id, away_team_id, status, created_at) VALUES (?, ?, ?, 'lineups_open', ?)"
   ).bind(matchId, challengerTeamId, teamId, team.game_date).run();
 
-  // Update match_id on challenge (status already set atomically above)
-  await c.env.DB.prepare("UPDATE challenges SET match_id = ? WHERE id = ?")
-    .bind(matchId, challengeId).run();
+  // Atomický claim — status=accepted + match_id jedním UPDATE. Pokud mezitím někdo jiný přijal
+  // (race condition) nebo challenge expirovala, smažeme match a vrátíme 409.
+  const claimed = await c.env.DB.prepare(
+    "UPDATE challenges SET status = 'accepted', match_id = ? WHERE id = ? AND challenged_team_id = ? AND status = 'pending' RETURNING id"
+  ).bind(matchId, challengeId, teamId).first<{ id: string }>();
+  if (!claimed) {
+    await c.env.DB.prepare("DELETE FROM matches WHERE id = ?").bind(matchId).run()
+      .catch((e) => logger.warn({ module: "matches" }, "rollback orphan match", e));
+    return c.json({ error: "Výzva nenalezena nebo už zpracována" }, 409);
+  }
+
+  // Charge both teams 1000 Kč — až po úspěšném claim. Pokud tady selže, match existuje
+  // a challenge je accepted — pouze peníze nejsou strženy (menší zlo než sirotčí challenge).
+  const { recordTransaction } = await import("../season/finance-processor");
+  await recordTransaction(c.env.DB, teamId, "event", -1000, `Přátelák: cestovné a rozhodčí`, team.game_date);
+  await recordTransaction(c.env.DB, challengerTeamId, "event", -1000, `Přátelák: cestovné a rozhodčí`, team.game_date);
 
   // SMS both teams
   await sendSMS(c.env.DB, challengerTeamId, "Sportovní ředitel", "Sportovní ředitel",

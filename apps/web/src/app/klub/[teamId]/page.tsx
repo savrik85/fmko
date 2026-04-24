@@ -236,7 +236,12 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
               {/* Home */}
               <div className="flex flex-col items-center">
                 <div className="text-[10px] font-heading font-bold uppercase tracking-[0.25em] text-white/40 mb-4">Domácí</div>
-                <JerseyPreview primary={club.jersey.homePrimary} secondary={club.jersey.homeSecondary} pattern={club.jersey.pattern || "solid"} size={160} />
+                <div className="relative">
+                  <JerseyPreview primary={club.jersey.homePrimary} secondary={club.jersey.homeSecondary} pattern={club.jersey.pattern || "solid"} size={160} />
+                  <div className="absolute" style={{ top: "28%", right: "30%" }}>
+                    <BadgePreview primary={club.badge.primary} secondary={club.badge.secondary} pattern={badgePattern} initials={badgeIni} symbol={club.badge.symbol} size={18} />
+                  </div>
+                </div>
                 <div style={{ marginTop: -10 }}>
                   <ShortsPreview color={club.jersey.homeShortsColor || club.jersey.homePrimary} trim={club.jersey.homeSecondary} size={110} />
                 </div>
@@ -264,7 +269,12 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
               {(club.jersey.awayPrimary || club.jersey.awaySecondary) && (
                 <div className="flex flex-col items-center">
                   <div className="text-[10px] font-heading font-bold uppercase tracking-[0.25em] text-white/40 mb-4">Hostující</div>
-                  <JerseyPreview primary={club.jersey.awayPrimary || club.jersey.homePrimary} secondary={club.jersey.awaySecondary || club.jersey.homeSecondary} pattern={club.jersey.awayPattern || "solid"} size={160} />
+                  <div className="relative">
+                    <JerseyPreview primary={club.jersey.awayPrimary || club.jersey.homePrimary} secondary={club.jersey.awaySecondary || club.jersey.homeSecondary} pattern={club.jersey.awayPattern || "solid"} size={160} />
+                    <div className="absolute" style={{ top: "28%", right: "30%" }}>
+                      <BadgePreview primary={club.badge.primary} secondary={club.badge.secondary} pattern={badgePattern} initials={badgeIni} symbol={club.badge.symbol} size={18} />
+                    </div>
+                  </div>
                   <div style={{ marginTop: -10 }}>
                     <ShortsPreview color={club.jersey.awayShortsColor || club.jersey.awayPrimary || club.jersey.homePrimary} trim={club.jersey.awaySecondary || club.jersey.homeSecondary} size={110} />
                   </div>
