@@ -23,6 +23,8 @@ export type Bindings = {
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
   VAPID_SUBJECT: string;
+  SUNO_API_KEY?: string;
+  API_BASE_URL?: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();

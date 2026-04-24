@@ -1142,6 +1142,7 @@ teamsRouter.get("/:id/club", async (c) => {
             t.away_primary_color, t.away_secondary_color, t.away_jersey_pattern, t.jersey_sponsor,
             t.home_shorts_color, t.home_socks_color, t.away_shorts_color, t.away_socks_color,
             t.badge_primary_color, t.badge_secondary_color, t.badge_initials, t.badge_symbol,
+            t.anthem_url, t.anthem_lyrics, t.anthem_title, t.anthem_style, t.anthem_attempts_used, t.anthem_task_id,
             v.name as village_name, v.district, v.region, v.population
      FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`
   ).bind(teamId).first();
@@ -1204,10 +1205,13 @@ teamsRouter.get("/:id/club", async (c) => {
       symbol: team.badge_symbol,
     },
     anthem: {
-      url: null,
-      lyrics: null,
-      attemptsUsed: 0,
-      attemptsMax: 3,
+      url: team.anthem_url,
+      lyrics: team.anthem_lyrics,
+      title: team.anthem_title,
+      style: team.anthem_style,
+      attemptsUsed: team.anthem_attempts_used ?? 0,
+      attemptsMax: ANTHEM_MAX_ATTEMPTS,
+      generating: !!team.anthem_task_id && !team.anthem_url,
     },
     mascot: {
       name: null,
@@ -1226,6 +1230,7 @@ const VALID_BADGE_PATTERNS = new Set([
   "hexagon", "octagon", "triangle", "star",
   "pennant", "banner", "chevron", "arch",
 ]);
+const ANTHEM_MAX_ATTEMPTS = 3;
 
 teamsRouter.patch("/:id/club", async (c) => {
   const teamId = c.req.param("id");
@@ -1329,6 +1334,235 @@ teamsRouter.patch("/:id/club", async (c) => {
   await c.env.DB.prepare(`UPDATE teams SET ${setClause} WHERE id = ?`).bind(...values, teamId).run();
 
   return c.json({ ok: true, updated: updates.map((u) => u.col) });
+});
+
+// POST /api/teams/:id/club/anthem/lyrics — vygeneruje text hymny přes Gemini
+// body: { mode: "auto" | "custom", hints?: string }  (hints = user's klíčová slova/fráze)
+teamsRouter.post("/:id/club/anthem/lyrics", async (c) => {
+  const teamId = c.req.param("id");
+
+  // Auth + ownership check
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return c.json({ error: "Nepřihlášen" }, 401);
+  const token = authHeader.slice(7);
+  const { getSession } = await import("../auth/session");
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return c.json({ error: "Neplatná session" }, 401);
+
+  const team = await c.env.DB.prepare(
+    `SELECT t.user_id, t.name, t.primary_color, t.secondary_color, t.badge_initials, t.badge_symbol,
+            t.stadium_name, v.name as village_name, v.district
+     FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`
+  ).bind(teamId).first<{
+    user_id: string; name: string; primary_color: string; secondary_color: string;
+    badge_initials: string | null; badge_symbol: string | null;
+    stadium_name: string | null; village_name: string; district: string;
+  }>();
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+  if (team.user_id !== session.userId) return c.json({ error: "Přístup odepřen" }, 403);
+
+  const body = await c.req.json<{ mode?: "auto" | "custom"; hints?: string }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "anthem/lyrics invalid body", e); return { mode: "auto" as const, hints: "" }; });
+  const mode = body.mode ?? "auto";
+  const hints = (body.hints ?? "").trim().slice(0, 500);
+
+  const geminiApiKey = c.env.GEMINI_API_KEY;
+  if (!geminiApiKey) return c.json({ error: "Gemini API klíč nenastaven" }, 500);
+
+  const clubInfo = [
+    `Klub: ${team.name}`,
+    `Vesnice: ${team.village_name}, okres ${team.district}`,
+    team.stadium_name ? `Stadion: ${team.stadium_name}` : "",
+    team.badge_initials ? `Iniciály/přezdívka: ${team.badge_initials}` : "",
+    team.badge_symbol ? `Symbol klubu: ${team.badge_symbol}` : "",
+    `Barvy: ${team.primary_color} / ${team.secondary_color}`,
+  ].filter(Boolean).join("\n");
+
+  const prompt = mode === "custom" && hints
+    ? `Napiš český text klubové hymny pro amatérský vesnický fotbalový klub.
+
+INFORMACE O KLUBU:
+${clubInfo}
+
+POVINNÁ SLOVA/FRÁZE/TÉMATA OD MANAŽERA (musí být v textu zahrnuta):
+${hints}
+
+Požadavky:
+- Česky, gramaticky správně
+- 2 sloky + refrén (celkem 10-16 řádků)
+- Rýmuje se (AABB nebo ABAB)
+- Tón: hrdý, vesnický, fotbalový, s nadsázkou
+- První řádek = název hymny (bez "Titulek:" prefixu, bez uvozovek)
+- Označ "[Sloka 1]", "[Refrén]", "[Sloka 2]", "[Refrén]"
+- Vrať POUZE text hymny, žádné další komentáře`
+    : `Napiš český text klubové hymny pro amatérský vesnický fotbalový klub.
+
+INFORMACE O KLUBU:
+${clubInfo}
+
+Požadavky:
+- Česky, gramaticky správně
+- 2 sloky + refrén (celkem 10-16 řádků)
+- Rýmuje se (AABB nebo ABAB)
+- Tón: hrdý, vesnický, fotbalový, s humorem a nadsázkou
+- Zmiň vesnici/město, barvy nebo přezdívku klubu
+- První řádek = název hymny (bez "Titulek:" prefixu, bez uvozovek)
+- Označ "[Sloka 1]", "[Refrén]", "[Sloka 2]", "[Refrén]"
+- Vrať POUZE text hymny, žádné další komentáře`;
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 1500, temperature: 0.85, thinkingConfig: { thinkingBudget: 0 } },
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    logger.warn({ module: "teams" }, `Gemini API error for anthem: ${res.status} — ${errBody.slice(0, 200)}`);
+    return c.json({ error: "Generace hymny selhala" }, 502);
+  }
+
+  const json = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }> };
+  const parts = json.candidates?.[0]?.content?.parts ?? [];
+  const text = parts.filter((p) => !p.thought).map((p) => p.text ?? "").join("").trim();
+  if (!text) return c.json({ error: "Prázdná odpověď z Gemini" }, 502);
+
+  // První neprázdný řádek = titulek, zbytek = lyrics
+  const lines = text.split("\n");
+  const titleLine = lines.find((l) => l.trim().length > 0) ?? team.name;
+  const title = titleLine.replace(/^#+\s*/, "").replace(/^\*+|\*+$/g, "").trim();
+  const lyricsBody = text.slice(text.indexOf(titleLine) + titleLine.length).trim();
+
+  return c.json({ title, lyrics: lyricsBody, fullText: text });
+});
+
+// POST /api/teams/:id/club/anthem/generate — vygeneruje audio přes Suno (async)
+// body: { title, lyrics, style }
+teamsRouter.post("/:id/club/anthem/generate", async (c) => {
+  const teamId = c.req.param("id");
+
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return c.json({ error: "Nepřihlášen" }, 401);
+  const token = authHeader.slice(7);
+  const { getSession } = await import("../auth/session");
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return c.json({ error: "Neplatná session" }, 401);
+
+  const team = await c.env.DB.prepare("SELECT user_id, anthem_attempts_used FROM teams WHERE id = ?")
+    .bind(teamId).first<{ user_id: string; anthem_attempts_used: number }>();
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+  if (team.user_id !== session.userId) return c.json({ error: "Přístup odepřen" }, 403);
+  if ((team.anthem_attempts_used ?? 0) >= ANTHEM_MAX_ATTEMPTS) {
+    return c.json({ error: `Vyčerpal jsi všechny ${ANTHEM_MAX_ATTEMPTS} pokusy` }, 403);
+  }
+
+  const body = await c.req.json<{ title?: string; lyrics?: string; style?: string }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "anthem/generate invalid body", e); return {}; });
+  const title = (body.title ?? "").trim();
+  const lyrics = (body.lyrics ?? "").trim();
+  const style = (body.style ?? "český fotbalový chorál, pochodový rytmus, sborový zpěv").trim();
+  if (!title || !lyrics) return c.json({ error: "Chybí název nebo text hymny" }, 400);
+  if (lyrics.length > 3000) return c.json({ error: "Text je příliš dlouhý (max 3000 znaků)" }, 400);
+
+  const sunoApiKey = c.env.SUNO_API_KEY;
+  if (!sunoApiKey) {
+    // Stub mode — Suno klíč zatím není
+    return c.json({ error: "Hudební generace není aktivovaná. Administrátor ještě nepřidal API klíč pro Suno. Prozatím můžeš pracovat jen s textem." }, 503);
+  }
+
+  // Volání sunoapi.org
+  const sunoRes = await fetch("https://api.sunoapi.org/api/v1/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${sunoApiKey}` },
+    body: JSON.stringify({
+      prompt: lyrics,
+      style,
+      title,
+      customMode: true,
+      instrumental: false,
+      model: "V4",
+      callBackUrl: `${c.env.API_BASE_URL ?? "https://api-test.prales.fun"}/api/teams/${teamId}/club/anthem/callback`,
+    }),
+  });
+
+  if (!sunoRes.ok) {
+    const errBody = await sunoRes.text().catch(() => "");
+    logger.warn({ module: "teams" }, `Suno API error: ${sunoRes.status} — ${errBody.slice(0, 200)}`);
+    return c.json({ error: "Hudební generace selhala (Suno API chyba)" }, 502);
+  }
+
+  const sunoJson = await sunoRes.json() as { code?: number; data?: { taskId?: string } };
+  const taskId = sunoJson.data?.taskId;
+  if (!taskId) return c.json({ error: "Suno nevrátilo task ID" }, 502);
+
+  await c.env.DB.prepare(
+    "UPDATE teams SET anthem_task_id = ?, anthem_title = ?, anthem_lyrics = ?, anthem_style = ?, anthem_attempts_used = COALESCE(anthem_attempts_used, 0) + 1 WHERE id = ?"
+  ).bind(taskId, title, lyrics, style, teamId).run();
+
+  return c.json({ taskId, attemptsUsed: (team.anthem_attempts_used ?? 0) + 1, maxAttempts: ANTHEM_MAX_ATTEMPTS });
+});
+
+// GET /api/teams/:id/club/anthem/status — zjistí stav generace hymny (polling)
+teamsRouter.get("/:id/club/anthem/status", async (c) => {
+  const teamId = c.req.param("id");
+  const team = await c.env.DB.prepare("SELECT anthem_task_id, anthem_url, anthem_attempts_used FROM teams WHERE id = ?")
+    .bind(teamId).first<{ anthem_task_id: string | null; anthem_url: string | null; anthem_attempts_used: number }>();
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+
+  // Pokud už máme URL, je hotovo
+  if (team.anthem_url) return c.json({ status: "completed", url: team.anthem_url, attemptsUsed: team.anthem_attempts_used });
+  if (!team.anthem_task_id) return c.json({ status: "idle", attemptsUsed: team.anthem_attempts_used ?? 0 });
+
+  const sunoApiKey = c.env.SUNO_API_KEY;
+  if (!sunoApiKey) return c.json({ status: "pending", attemptsUsed: team.anthem_attempts_used ?? 0 });
+
+  // Dotaz na Suno API
+  const sunoRes = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${team.anthem_task_id}`, {
+    headers: { Authorization: `Bearer ${sunoApiKey}` },
+  });
+  if (!sunoRes.ok) return c.json({ status: "pending", attemptsUsed: team.anthem_attempts_used ?? 0 });
+
+  const statusJson = await sunoRes.json() as { data?: { status?: string; response?: { sunoData?: Array<{ audioUrl?: string }> } } };
+  const sunoStatus = statusJson.data?.status;
+  const audioUrl = statusJson.data?.response?.sunoData?.[0]?.audioUrl;
+
+  if (sunoStatus === "SUCCESS" && audioUrl) {
+    // Stáhnout a uložit do R2
+    try {
+      const audioRes = await fetch(audioUrl);
+      if (!audioRes.ok) throw new Error(`audio fetch ${audioRes.status}`);
+      const audioBuffer = await audioRes.arrayBuffer();
+      const r2Key = `anthem/${teamId}.mp3`;
+      await c.env.SEED_DATA.put(r2Key, audioBuffer, { httpMetadata: { contentType: "audio/mpeg" } });
+      const r2Url = `/api/teams/${teamId}/club/anthem/stream`;
+      await c.env.DB.prepare("UPDATE teams SET anthem_url = ?, anthem_task_id = NULL WHERE id = ?").bind(r2Url, teamId).run();
+      return c.json({ status: "completed", url: r2Url, attemptsUsed: team.anthem_attempts_used });
+    } catch (e) {
+      logger.warn({ module: "teams" }, "anthem R2 upload failed", e);
+      return c.json({ status: "error", error: "Nepovedlo se uložit audio" }, 500);
+    }
+  }
+
+  return c.json({ status: sunoStatus === "PENDING" ? "pending" : "processing", attemptsUsed: team.anthem_attempts_used ?? 0 });
+});
+
+// GET /api/teams/:id/club/anthem/stream — streamuje mp3 z R2
+teamsRouter.get("/:id/club/anthem/stream", async (c) => {
+  const teamId = c.req.param("id");
+  const obj = await c.env.SEED_DATA.get(`anthem/${teamId}.mp3`);
+  if (!obj) return c.json({ error: "Hymna není k dispozici" }, 404);
+  return new Response(obj.body, {
+    headers: {
+      "Content-Type": "audio/mpeg",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
 });
 
 // GET /api/teams/:id/players/:playerId/career-stats — kariérní statistiky hráče

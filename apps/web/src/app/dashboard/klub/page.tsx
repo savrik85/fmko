@@ -40,7 +40,7 @@ interface ClubData {
     sponsor: string | null;
   };
   badge: { pattern: BadgePattern | null; primary: string; secondary: string; customInitials: string | null; symbol: string | null };
-  anthem: { url: string | null; lyrics: string | null; attemptsUsed: number; attemptsMax: number };
+  anthem: { url: string | null; lyrics: string | null; title: string | null; style: string | null; attemptsUsed: number; attemptsMax: number; generating: boolean };
   mascot: { name: string | null; imageUrl: string | null; story: string | null };
 }
 
@@ -177,12 +177,19 @@ export default function KlubPage() {
 
           <SectionCard title="Hymna a maskot" icon={"\u{1F3B5}"} hint="AI hymna a maskot klubu">
             <div className="text-sm text-muted mb-3">
-              Hymna: <span className="text-ink/70">žádná ({club.anthem.attemptsUsed}/{club.anthem.attemptsMax} pokusů)</span>
+              Hymna: {club.anthem.url ? (
+                <span className="text-ink font-bold">{club.anthem.title || "Hotová"}</span>
+              ) : (
+                <span className="text-ink/70">žádná ({club.anthem.attemptsUsed}/{club.anthem.attemptsMax} pokusů)</span>
+              )}
+              {club.anthem.url && (
+                <audio controls src={club.anthem.url} className="w-full mt-2" />
+              )}
               <br />
               Maskot: <span className="text-ink/70">{club.mascot.name || "neurčený"}</span>
             </div>
-            <EmptyState action="Vygenerovat">
-              Klubová hymna (AI audio) a maskot s příběhem. Přijde v jednom z dalších kroků.
+            <EmptyState action={club.anthem.url ? "Otevřít hymnu" : "Vygenerovat hymnu"} href="/dashboard/klub/hymna">
+              Klubová hymna (AI audio) — text vygeneruje Gemini, hudbu Suno AI. Maskot přijde v dalším kroku.
             </EmptyState>
           </SectionCard>
         </div>
