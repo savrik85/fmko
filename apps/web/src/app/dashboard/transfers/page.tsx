@@ -193,6 +193,8 @@ export default function TransfersPage() {
   // Offers
   const [incoming, setIncoming] = useState<TransferOffer[]>([]);
   const [outgoing, setOutgoing] = useState<TransferOffer[]>([]);
+  const [incomingBids, setIncomingBids] = useState<Array<{ id: string; listing_id: string; amount: number; asking_price: number; first_name: string; last_name: string; position: string; age: number; overall_rating: number; buyer_team_name: string; player_id: string; player_avatar?: Record<string, unknown> | string | null }>>([]);
+  const [outgoingBids, setOutgoingBids] = useState<Array<{ id: string; listing_id: string; amount: number; asking_price: number; first_name: string; last_name: string; position: string; age: number; overall_rating: number; seller_team_name: string; player_id: string; player_avatar?: Record<string, unknown> | string | null }>>([]);
   const [history, setHistory] = useState<Array<TransferOffer & { my_role: "buyer" | "seller"; resolved_at: string | null }>>([]);
   const [offersView, setOffersView] = useState<"active" | "history">("active");
   const [myLeagueId, setMyLeagueId] = useState<string | null>(null);
@@ -256,7 +258,7 @@ export default function TransfersPage() {
     const [fa, market, offers, squad, poRaw] = await Promise.all([
       apiFetch<{ freeAgents: FreeAgent[] }>(`/api/teams/${teamId}/free-agents`).catch((e) => { console.error("Failed to load free agents:", e); return { freeAgents: [] }; }),
       apiFetch<{ listings: MarketListing[]; myListings: MyListing[] }>(`/api/teams/${teamId}/market`).catch((e) => { console.error("Failed to load market:", e); return { listings: [], myListings: [] }; }),
-      apiFetch<{ incoming: TransferOffer[]; outgoing: TransferOffer[]; history: Array<TransferOffer & { my_role: "buyer" | "seller"; resolved_at: string | null }>; loanedOut: typeof loanedOut; loanedIn: typeof loanedIn; myLeagueId?: string | null }>(`/api/teams/${teamId}/offers`).catch((e) => { console.error("Failed to load offers:", e); return { incoming: [], outgoing: [], history: [], loanedOut: [], loanedIn: [] }; }),
+      apiFetch<{ incoming: TransferOffer[]; outgoing: TransferOffer[]; incomingBids?: typeof incomingBids; outgoingBids?: typeof outgoingBids; history: Array<TransferOffer & { my_role: "buyer" | "seller"; resolved_at: string | null }>; loanedOut: typeof loanedOut; loanedIn: typeof loanedIn; myLeagueId?: string | null }>(`/api/teams/${teamId}/offers`).catch((e) => { console.error("Failed to load offers:", e); return { incoming: [], outgoing: [], incomingBids: [], outgoingBids: [], history: [], loanedOut: [], loanedIn: [] }; }),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`).catch((e) => { console.error("Failed to load players:", e); return []; }),
       apiFetch<PlayerOffer[]>(`/api/teams/${teamId}/player-offers`).catch((e) => { console.error("Failed to load player offers:", e); return []; }),
     ]);
@@ -265,6 +267,8 @@ export default function TransfersPage() {
     setMyListings(market.myListings);
     setIncoming(offers.incoming);
     setOutgoing(offers.outgoing);
+    setIncomingBids(offers.incomingBids ?? []);
+    setOutgoingBids(offers.outgoingBids ?? []);
     setHistory(offers.history ?? []);
     if ((offers as any).myLeagueId) setMyLeagueId((offers as any).myLeagueId);
     setLoanedOut(offers.loanedOut ?? []);
@@ -1294,7 +1298,7 @@ export default function TransfersPage() {
               onClick={() => setOffersView("active")}
               className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offersView === "active" ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}
             >
-              Aktivní ({incoming.length + outgoing.length + playerOffers.length})
+              Aktivní ({incoming.length + outgoing.length + incomingBids.length + outgoingBids.length + playerOffers.length})
             </button>
             <button
               onClick={() => setOffersView("history")}
@@ -1655,6 +1659,92 @@ export default function TransfersPage() {
             </div>
           )}
 
+          {/* Příchozí bidy na moje inzerce */}
+          {incomingBids.length > 0 && (
+            <div>
+              <SectionLabel>Nabídky z trhu ({incomingBids.length})</SectionLabel>
+              <div className="space-y-3">
+                {incomingBids.map((b) => {
+                  const ba = (() => { try { const raw = b.player_avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
+                  return (
+                    <div key={b.id} className="card p-4">
+                      <div className="flex items-start gap-3">
+                        {ba && Object.keys(ba).length > 0
+                          ? <FaceAvatar faceConfig={ba} size={40} className="rounded-full shrink-0 mt-0.5" />
+                          : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0 mt-0.5" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <Link href={`/dashboard/player/${b.player_id}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                              {b.first_name} {b.last_name}
+                            </Link>
+                            <PositionBadge position={b.position as "GK" | "DEF" | "MID" | "FWD"} />
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-gold-50 text-gold-700 font-heading font-bold">Z trhu</span>
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-heading font-bold">{b.buyer_team_name}</span>
+                            <span className="text-muted"> nabízí </span>
+                            <span className="font-heading font-bold text-pitch-500">{formatCZK(b.amount)}</span>
+                            <span className="text-xs text-muted ml-2">(požadovaná cena {formatCZK(b.asking_price)})</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 shrink-0 justify-end">
+                          <button onClick={async () => {
+                            if (!teamId) return;
+                            const ok = await confirm({ title: `Přijmout ${formatCZK(b.amount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
+                            if (!ok) return;
+                            if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
+                          }} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                            Přijmout
+                          </button>
+                          <button onClick={async () => {
+                            if (!teamId) return;
+                            if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }), "Odmítnutí se nezdařilo")) await refresh();
+                          }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                            Odmítnout
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Odchozí bidy — moje nabídky na tržních inzerátech */}
+          {outgoingBids.length > 0 && (
+            <div>
+              <SectionLabel>Moje bidy na trhu ({outgoingBids.length})</SectionLabel>
+              <div className="space-y-3">
+                {outgoingBids.map((b) => {
+                  const ba = (() => { try { const raw = b.player_avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
+                  return (
+                    <div key={b.id} className="card p-4">
+                      <div className="flex items-center gap-3">
+                        {ba && Object.keys(ba).length > 0
+                          ? <FaceAvatar faceConfig={ba} size={40} className="rounded-full shrink-0" />
+                          : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="font-heading font-bold">{b.first_name} {b.last_name}</span>
+                            <PositionBadge position={b.position as "GK" | "DEF" | "MID" | "FWD"} />
+                            <span className="text-sm text-muted">→ {b.seller_team_name}</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-gold-50 text-gold-700 font-heading font-bold">Z trhu</span>
+                          </div>
+                          <div className="text-sm text-muted">
+                            Nabídnuto: <span className="font-heading font-bold text-ink">{formatCZK(b.amount)}</span>
+                            <span className="ml-2 text-xs">(cena {formatCZK(b.asking_price)})</span>
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted italic self-center">Čeká se na prodávajícího</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Loaned out players */}
           {loanedOut.length > 0 && (
             <div>
@@ -1711,7 +1801,7 @@ export default function TransfersPage() {
             </div>
           )}
 
-          {playerOffers.length === 0 && incoming.length === 0 && outgoing.length === 0 && loanedOut.length === 0 && loanedIn.length === 0 && (
+          {playerOffers.length === 0 && incoming.length === 0 && outgoing.length === 0 && incomingBids.length === 0 && outgoingBids.length === 0 && loanedOut.length === 0 && loanedIn.length === 0 && (
             <div className="card p-6 text-center text-muted">Žádné aktivní nabídky ani hostování.</div>
           )}
 

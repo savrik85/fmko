@@ -4146,9 +4146,38 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
     my_role: r.from_team_id === teamId ? "buyer" : "seller",
   }));
 
+  // Aktivni bidy z trhu — prichozi (na moje listingy) a odchozi (moje bidy na cizi listingy)
+  const incomingBids = await c.env.DB.prepare(
+    `SELECT tb.id, tb.listing_id, tb.amount, tb.created_at,
+            tl.player_id, tl.asking_price,
+            p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
+            t.name as buyer_team_name
+     FROM transfer_bids tb
+     JOIN transfer_listings tl ON tb.listing_id = tl.id
+     JOIN players p ON tl.player_id = p.id
+     JOIN teams t ON tb.team_id = t.id
+     WHERE tl.team_id = ? AND tb.status = 'pending' AND tl.status = 'active'
+     ORDER BY tb.created_at DESC`
+  ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch incoming bids", e); return { results: [] }; });
+
+  const outgoingBids = await c.env.DB.prepare(
+    `SELECT tb.id, tb.listing_id, tb.amount, tb.created_at,
+            tl.player_id, tl.asking_price,
+            p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
+            t.name as seller_team_name
+     FROM transfer_bids tb
+     JOIN transfer_listings tl ON tb.listing_id = tl.id
+     JOIN players p ON tl.player_id = p.id
+     JOIN teams t ON tl.team_id = t.id
+     WHERE tb.team_id = ? AND tb.status = 'pending' AND tl.status = 'active'
+     ORDER BY tb.created_at DESC`
+  ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch outgoing bids", e); return { results: [] }; });
+
   return c.json({
     incoming: addOnTurn(incoming.results as Record<string, unknown>[]),
     outgoing: addOnTurn(outgoing.results as Record<string, unknown>[]),
+    incomingBids: incomingBids.results,
+    outgoingBids: outgoingBids.results,
     history: historyWithRole,
     loanedOut: loanedOut.results,
     loanedIn: loanedIn.results,
