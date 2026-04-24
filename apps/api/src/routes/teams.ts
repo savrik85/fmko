@@ -1209,7 +1209,7 @@ teamsRouter.get("/:id/club", async (c) => {
       lyrics: team.anthem_lyrics,
       title: team.anthem_title,
       style: team.anthem_style,
-      attemptsUsed: (await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM team_anthems WHERE team_id = ?").bind(teamId).first<{ cnt: number }>())?.cnt ?? 0,
+      attemptsUsed: (team.anthem_attempts_used as number) ?? 0,
       attemptsMax: ANTHEM_MAX_ATTEMPTS,
       generating: !!(await c.env.DB.prepare("SELECT id FROM team_anthems WHERE team_id = ? AND url IS NULL AND suno_task_id IS NOT NULL LIMIT 1").bind(teamId).first()),
     },
@@ -1478,11 +1478,11 @@ teamsRouter.post("/:id/club/anthem/generate", async (c) => {
   const auth = await requireTeamOwner(c, teamId);
   if (auth.error) return auth.error;
 
-  const countRes = await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM team_anthems WHERE team_id = ?")
-    .bind(teamId).first<{ cnt: number }>();
-  const currentCount = countRes?.cnt ?? 0;
-  if (currentCount >= ANTHEM_MAX_ATTEMPTS) {
-    return c.json({ error: `Máš max ${ANTHEM_MAX_ATTEMPTS} hymen. Smaž některou starou před generováním nové.` }, 403);
+  const attemptsRes = await c.env.DB.prepare("SELECT COALESCE(anthem_attempts_used, 0) as used FROM teams WHERE id = ?")
+    .bind(teamId).first<{ used: number }>();
+  const used = attemptsRes?.used ?? 0;
+  if (used >= ANTHEM_MAX_ATTEMPTS) {
+    return c.json({ error: `Vyčerpal jsi všechny ${ANTHEM_MAX_ATTEMPTS} pokusy generace hymny.` }, 403);
   }
 
   const body = await c.req.json<{ title?: string; lyrics?: string; style?: string }>()
@@ -1523,8 +1523,10 @@ teamsRouter.post("/:id/club/anthem/generate", async (c) => {
   await c.env.DB.prepare(
     "INSERT INTO team_anthems (id, team_id, title, lyrics, style, suno_task_id, is_selected) VALUES (?, ?, ?, ?, ?, ?, 0)"
   ).bind(anthemId, teamId, title, lyrics, style, taskId).run();
+  await c.env.DB.prepare("UPDATE teams SET anthem_attempts_used = COALESCE(anthem_attempts_used, 0) + 1 WHERE id = ?")
+    .bind(teamId).run();
 
-  return c.json({ anthemId, taskId, total: currentCount + 1, maxAttempts: ANTHEM_MAX_ATTEMPTS });
+  return c.json({ anthemId, taskId, attemptsUsed: used + 1, maxAttempts: ANTHEM_MAX_ATTEMPTS });
 });
 
 // GET /api/teams/:id/club/anthem/status — polling stavu všech pending hymen
@@ -1582,7 +1584,7 @@ teamsRouter.get("/:id/club/anthem/status", async (c) => {
         logger.warn({ module: "teams" }, "anthem R2 upload failed", e);
       }
     } else if (sunoStatus && errorStatuses.includes(sunoStatus)) {
-      // Při chybě smažeme row (user neztratí pokus, protože smazáním uvolní místo v historii)
+      // Při chybě smažeme pouze row (přísná politika — pokus se NEvrací)
       await c.env.DB.prepare("DELETE FROM team_anthems WHERE id = ?").bind(row.id).run();
       const rawErr = statusJson.data?.errorMessage || sunoStatus;
       let czechMsg = rawErr;
@@ -1604,18 +1606,16 @@ teamsRouter.get("/:id/club/anthem/list", async (c) => {
   const rows = await c.env.DB.prepare(
     "SELECT id, title, lyrics, style, url, is_selected, created_at, suno_task_id FROM team_anthems WHERE team_id = ? ORDER BY created_at DESC"
   ).bind(teamId).all<{ id: string; title: string; lyrics: string; style: string; url: string | null; is_selected: number; created_at: string; suno_task_id: string | null }>();
+  const attempts = await c.env.DB.prepare("SELECT COALESCE(anthem_attempts_used, 0) as used FROM teams WHERE id = ?")
+    .bind(teamId).first<{ used: number }>();
 
   return c.json({
     anthems: (rows.results ?? []).map((r) => ({
-      id: r.id,
-      title: r.title,
-      lyrics: r.lyrics,
-      style: r.style,
-      url: r.url,
-      isSelected: r.is_selected === 1,
-      createdAt: r.created_at,
+      id: r.id, title: r.title, lyrics: r.lyrics, style: r.style, url: r.url,
+      isSelected: r.is_selected === 1, createdAt: r.created_at,
       generating: !r.url && !!r.suno_task_id,
     })),
+    attemptsUsed: attempts?.used ?? 0,
     maxAttempts: ANTHEM_MAX_ATTEMPTS,
   });
 });
@@ -1783,11 +1783,11 @@ teamsRouter.post("/:id/club/mascot/generate", async (c) => {
   const auth = await requireTeamOwner(c, teamId);
   if (auth.error) return auth.error;
 
-  const countRes = await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM team_mascots WHERE team_id = ?")
-    .bind(teamId).first<{ cnt: number }>();
-  const currentCount = countRes?.cnt ?? 0;
-  if (currentCount >= MASCOT_MAX_ATTEMPTS) {
-    return c.json({ error: `Máš max ${MASCOT_MAX_ATTEMPTS} maskotů. Smaž některého před generováním nového.` }, 403);
+  const attemptsRes = await c.env.DB.prepare("SELECT COALESCE(mascot_attempts_used, 0) as used FROM teams WHERE id = ?")
+    .bind(teamId).first<{ used: number }>();
+  const used = attemptsRes?.used ?? 0;
+  if (used >= MASCOT_MAX_ATTEMPTS) {
+    return c.json({ error: `Vyčerpal jsi všechny ${MASCOT_MAX_ATTEMPTS} pokusy generace maskota.` }, 403);
   }
 
   const body = await c.req.json<{ name?: string; animal?: string; style?: string }>()
@@ -1867,6 +1867,8 @@ teamsRouter.post("/:id/club/mascot/generate", async (c) => {
   await c.env.DB.prepare(
     "INSERT INTO team_mascots (id, team_id, name, animal, style, image_url, is_selected) VALUES (?, ?, ?, ?, ?, ?, 0)"
   ).bind(mascotId, teamId, name, animal, style, publicUrl).run();
+  await c.env.DB.prepare("UPDATE teams SET mascot_attempts_used = COALESCE(mascot_attempts_used, 0) + 1 WHERE id = ?")
+    .bind(teamId).run();
 
   // Auto-select pokud je to první
   const hasSelected = await c.env.DB.prepare("SELECT id FROM team_mascots WHERE team_id = ? AND is_selected = 1 LIMIT 1")
@@ -1875,7 +1877,7 @@ teamsRouter.post("/:id/club/mascot/generate", async (c) => {
     await c.env.DB.prepare("UPDATE team_mascots SET is_selected = 1 WHERE id = ?").bind(mascotId).run();
   }
 
-  return c.json({ mascotId, url: publicUrl, total: currentCount + 1, maxAttempts: MASCOT_MAX_ATTEMPTS });
+  return c.json({ mascotId, url: publicUrl, attemptsUsed: used + 1, maxAttempts: MASCOT_MAX_ATTEMPTS });
 });
 
 // POST /api/teams/:id/club/mascot/:mascotId/story — AI příběh maskota
@@ -1936,12 +1938,16 @@ teamsRouter.get("/:id/club/mascot/list", async (c) => {
     "SELECT id, name, animal, style, story, image_url, is_selected, created_at FROM team_mascots WHERE team_id = ? ORDER BY created_at DESC"
   ).bind(teamId).all<{ id: string; name: string; animal: string; style: string; story: string | null; image_url: string | null; is_selected: number; created_at: string }>();
 
+  const attempts = await c.env.DB.prepare("SELECT COALESCE(mascot_attempts_used, 0) as used FROM teams WHERE id = ?")
+    .bind(teamId).first<{ used: number }>();
+
   return c.json({
     mascots: (rows.results ?? []).map((r) => ({
       id: r.id, name: r.name, animal: r.animal, style: r.style,
       story: r.story, imageUrl: r.image_url, isSelected: r.is_selected === 1,
       createdAt: r.created_at,
     })),
+    attemptsUsed: attempts?.used ?? 0,
     maxAttempts: MASCOT_MAX_ATTEMPTS,
   });
 });

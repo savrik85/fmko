@@ -51,6 +51,7 @@ export default function MaskotPage() {
   const [loading, setLoading] = useState(true);
   const [mascots, setMascots] = useState<Mascot[]>([]);
   const [maxAttempts, setMaxAttempts] = useState(3);
+  const [attemptsUsed, setAttemptsUsed] = useState(0);
 
   const [name, setName] = useState("");
   const [animal, setAnimal] = useState("bear");
@@ -62,9 +63,10 @@ export default function MaskotPage() {
   const loadMascots = async () => {
     if (!teamId) return;
     try {
-      const res = await apiFetch<{ mascots: Mascot[]; maxAttempts: number }>(`/api/teams/${teamId}/club/mascot/list`);
+      const res = await apiFetch<{ mascots: Mascot[]; maxAttempts: number; attemptsUsed: number }>(`/api/teams/${teamId}/club/mascot/list`);
       setMascots(res.mascots);
       setMaxAttempts(res.maxAttempts);
+      setAttemptsUsed(res.attemptsUsed);
       setLoading(false);
     } catch (e) {
       console.error("load mascots:", e);
@@ -133,7 +135,7 @@ export default function MaskotPage() {
 
   if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
 
-  const canGenerate = mascots.length < maxAttempts;
+  const canGenerate = attemptsUsed < maxAttempts;
 
   return (
     <div className="page-container">
@@ -141,7 +143,7 @@ export default function MaskotPage() {
         <Link href="/dashboard/klub" className="text-sm text-muted hover:text-ink">← Zpět na Klub</Link>
         <h1 className="font-heading font-extrabold text-2xl text-ink mt-1">Klubový maskot</h1>
         <p className="text-sm text-muted mt-0.5">
-          AI vygeneruje obrázek maskota ({mascots.length}/{maxAttempts} v historii). Vyber jednoho jako aktuálního.
+          Máš <span className="font-bold">{attemptsUsed}/{maxAttempts}</span> pokusů generace. Smazáním maskota z historie pokus nevracíš zpět.
         </p>
       </div>
 
@@ -150,7 +152,7 @@ export default function MaskotPage() {
         <Card className="mb-5">
           <CardHeader>
             <h2 className="font-heading font-bold text-base text-ink flex items-center gap-2">
-              <span>{"\u{1F9F8}"}</span> Tví maskoti ({mascots.length}/{maxAttempts})
+              <span>{"\u{1F9F8}"}</span> Tví maskoti ({mascots.length})
             </h2>
           </CardHeader>
           <CardBody>
@@ -203,7 +205,7 @@ export default function MaskotPage() {
 
       {!canGenerate && (
         <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
-          Máš {maxAttempts}/{maxAttempts} maskotů. Pro novou generaci smaž některého.
+          Vyčerpal jsi všechny {maxAttempts} pokusy generace. Maskoty v historii můžeš vybírat / mazat.
         </div>
       )}
 

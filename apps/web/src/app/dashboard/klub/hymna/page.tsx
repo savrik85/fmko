@@ -30,6 +30,7 @@ export default function HymnaPage() {
   const [loading, setLoading] = useState(true);
   const [anthems, setAnthems] = useState<Anthem[]>([]);
   const [maxAttempts, setMaxAttempts] = useState(3);
+  const [attemptsUsed, setAttemptsUsed] = useState(0);
 
   // Lyrics editor
   const [lyricsMode, setLyricsMode] = useState<"auto" | "custom">("auto");
@@ -48,9 +49,10 @@ export default function HymnaPage() {
   const loadAnthems = async () => {
     if (!teamId) return;
     try {
-      const res = await apiFetch<{ anthems: Anthem[]; maxAttempts: number }>(`/api/teams/${teamId}/club/anthem/list`);
+      const res = await apiFetch<{ anthems: Anthem[]; maxAttempts: number; attemptsUsed: number }>(`/api/teams/${teamId}/club/anthem/list`);
       setAnthems(res.anthems);
       setMaxAttempts(res.maxAttempts);
+      setAttemptsUsed(res.attemptsUsed);
       setLoading(false);
     } catch (e) {
       console.error("load anthems:", e);
@@ -152,7 +154,7 @@ export default function HymnaPage() {
 
   if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
 
-  const canGenerate = anthems.length < maxAttempts;
+  const canGenerate = attemptsUsed < maxAttempts;
 
   return (
     <div className="page-container">
@@ -160,7 +162,7 @@ export default function HymnaPage() {
         <Link href="/dashboard/klub" className="text-sm text-muted hover:text-ink">← Zpět na Klub</Link>
         <h1 className="font-heading font-extrabold text-2xl text-ink mt-1">Klubová hymna</h1>
         <p className="text-sm text-muted mt-0.5">
-          Můžeš mít max {maxAttempts} hymen v historii. Vyber jednu jako aktuální, ostatní můžeš smazat a uvolnit místo pro nové.
+          Máš <span className="font-bold">{attemptsUsed}/{maxAttempts}</span> pokusů generace. Smazáním hymny z historie pokus nevracíš zpět.
         </p>
       </div>
 
@@ -169,7 +171,7 @@ export default function HymnaPage() {
         <Card className="mb-5">
           <CardHeader>
             <h2 className="font-heading font-bold text-base text-ink flex items-center gap-2">
-              <span>{"\u{1F3B5}"}</span> Tvé hymny ({anthems.length}/{maxAttempts})
+              <span>{"\u{1F3B5}"}</span> Tvé hymny ({anthems.length})
             </h2>
           </CardHeader>
           <CardBody className="flex flex-col gap-4">
@@ -221,7 +223,7 @@ export default function HymnaPage() {
 
       {!canGenerate && (
         <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
-          Máš {maxAttempts}/{maxAttempts} hymen v historii. Pro novou generaci smaž některou starou.
+          Vyčerpal jsi všechny {maxAttempts} pokusy generace. Hymny v historii si můžeš nadále vybírat / mazat.
         </div>
       )}
 
@@ -309,7 +311,7 @@ export default function HymnaPage() {
 
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="text-xs text-muted">
-              V historii máš <span className="font-bold">{anthems.length}/{maxAttempts}</span> hymen.
+              Pokusy: <span className="font-bold">{attemptsUsed}/{maxAttempts}</span>. Zbývá {maxAttempts - attemptsUsed}.
             </div>
             <button type="button" onClick={handleGenerateMusic}
               disabled={generatingMusic || !title.trim() || !lyrics.trim()}
