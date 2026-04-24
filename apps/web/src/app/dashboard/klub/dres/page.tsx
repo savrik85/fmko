@@ -172,7 +172,7 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
         <div className="relative">
           <JerseyPreview primary={primary} secondary={secondary} pattern={pattern} size={JERSEY_SIZE} />
           {/* Znak klubu na levé hrudi nositele (pravá strana obrázku) — menší */}
-          <div className="absolute" style={{ top: "28%", right: "22%" }}>
+          <div className="absolute" style={{ top: "28%", right: "30%" }}>
             <BadgePreview primary={badge.primary} secondary={badge.secondary} pattern={badge.pattern}
               initials={badge.initials} symbol={badge.symbol} size={14} />
           </div>
@@ -567,9 +567,12 @@ export default function DresPage() {
             </h2>
             <button type="button" onClick={() => setZoomedKit(null)} className="w-8 h-8 rounded-lg text-gray-400 hover:text-ink hover:bg-gray-100 text-xl">×</button>
           </div>
-          <div className="flex items-center justify-center rounded-2xl p-8"
+          <div className="flex items-center justify-center rounded-2xl p-4 sm:p-8 overflow-hidden"
             style={{ background: "linear-gradient(180deg, #f7f5f0 0%, #e8e3d8 100%)" }}>
-            <div style={{ transform: "scale(1.7)", transformOrigin: "center", filter: "drop-shadow(0 10px 20px rgba(0,0,0,0.2))", margin: "80px 40px" }}>
+            <div
+              className="scale-95 sm:scale-[1.4] lg:scale-[1.7]"
+              style={{ transformOrigin: "center", filter: "drop-shadow(0 10px 20px rgba(0,0,0,0.2))", padding: "40px 20px" }}
+            >
               {zoomedKit === "home" ? (
                 <JerseyFrontBack primary={homePrimary} secondary={homeSecondary} pattern={homePattern}
                   sponsor={club.jersey.sponsor} shortsColor={homeShortsColor} socksColor={homeSocksColor}
