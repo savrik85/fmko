@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiAction } from "@/lib/api";
 import { Card, CardBody, Spinner, SectionLabel, useConfirm } from "@/components/ui";
 
 interface EventEffect {
@@ -124,27 +124,22 @@ export default function EventsPage() {
     const answers = interviewAnswers[interview.id] ?? [];
     if (answers.filter((a) => a?.trim()).length < interview.questions.length) return;
     setInterviewSubmitting(interview.id);
-    try {
-      await apiFetch(`/api/teams/${teamId}/coach-interviews/${interview.id}/answer`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers }),
-      });
+    const ok = await apiAction(apiFetch(`/api/teams/${teamId}/coach-interviews/${interview.id}/answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answers }),
+    }), "Odeslání odpovědí se nezdařilo");
+    if (ok) {
       setInterviews((prev) => prev.filter((iv) => iv.id !== interview.id));
       setInterviewDone(interview.id);
-    } catch (e) {
-      console.error("submit interview answers:", e);
     }
     setInterviewSubmitting(null);
   };
 
   const handleInterviewDecline = async (interviewId: string) => {
     if (!teamId) return;
-    try {
-      await apiFetch(`/api/teams/${teamId}/coach-interviews/${interviewId}/decline`, { method: "POST" });
+    if (await apiAction(apiFetch(`/api/teams/${teamId}/coach-interviews/${interviewId}/decline`, { method: "POST" }), "Odmítnutí rozhovoru se nezdařilo")) {
       setInterviews((prev) => prev.filter((iv) => iv.id !== interviewId));
-    } catch (e) {
-      console.error("decline interview:", e);
     }
   };
 

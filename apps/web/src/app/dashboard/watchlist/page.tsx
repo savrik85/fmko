@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiAction } from "@/lib/api";
 import { Spinner, BadgePreview, PositionBadge } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -84,11 +84,8 @@ export default function WatchlistPage() {
 
   const removeFromWatchlist = async (playerId: string) => {
     if (!teamId) return;
-    try {
-      await apiFetch(`/api/teams/${teamId}/watchlist/${playerId}`, { method: "DELETE" });
+    if (await apiAction(apiFetch(`/api/teams/${teamId}/watchlist/${playerId}`, { method: "DELETE" }), "Odebrání ze sledování se nezdařilo")) {
       setPlayers((prev) => prev.filter((p) => p.id !== playerId));
-    } catch (e) {
-      console.error("remove from watchlist:", e);
     }
   };
 

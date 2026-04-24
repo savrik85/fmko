@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
-import { apiFetch, type Player } from "@/lib/api";
+import { apiFetch, apiAction, type Player } from "@/lib/api";
 import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
@@ -320,11 +320,11 @@ function MatchPage() {
 
   const deletePreset = async (slot: "A" | "B" | "C") => {
     if (!teamId) return;
-    try {
-      await apiFetch(`/api/teams/${teamId}/lineup-presets/${slot}`, { method: "DELETE" });
+    const ok = await apiAction(apiFetch(`/api/teams/${teamId}/lineup-presets/${slot}`, { method: "DELETE" }), "Smazání presetu se nezdařilo");
+    if (ok) {
       setPresets({ ...presets, [slot]: null });
       if (activePreset === slot) setActivePreset(null);
-    } catch (e) { console.error("delete preset:", e); }
+    }
   };
 
   // Klik na slot: pokud filled a ne aktivní → loadne. Pokud aktivní → odepne.

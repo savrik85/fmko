@@ -156,18 +156,15 @@ export default function PlayerDetailPage() {
   const listOnMarket = async (price: number) => {
     if (!teamId || !player || actionLoading) return;
     setActionLoading(true);
-    try {
-      await apiFetch(`/api/teams/${teamId}/players/${playerId}/list`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ askingPrice: price }),
-      });
+    const ok = await apiAction(apiFetch(`/api/teams/${teamId}/players/${playerId}/list`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ askingPrice: price }),
+    }), "Vystavení na trh se nezdařilo");
+    if (ok) {
       setPriceDialogOpen(false);
       await refreshListing();
-    } catch (e) {
-      console.error("list on market failed:", e);
-    } finally {
-      setActionLoading(false);
     }
+    setActionLoading(false);
   };
 
   const withdrawFromMarket = async () => {
@@ -179,14 +176,9 @@ export default function PlayerDetailPage() {
     });
     if (!ok) return;
     setActionLoading(true);
-    try {
-      await apiFetch(`/api/teams/${teamId}/listings/${myListing.listingId}`, { method: "DELETE" });
-      await refreshListing();
-    } catch (e) {
-      console.error("withdraw listing failed:", e);
-    } finally {
-      setActionLoading(false);
-    }
+    const success = await apiAction(apiFetch(`/api/teams/${teamId}/listings/${myListing.listingId}`, { method: "DELETE" }), "Stažení z trhu se nezdařilo");
+    if (success) await refreshListing();
+    setActionLoading(false);
   };
 
   const toggleWatch = async () => {
@@ -195,18 +187,14 @@ export default function PlayerDetailPage() {
     const wasWatched = isWatched;
     // Optimistic update
     setIsWatched(!wasWatched);
-    try {
-      if (wasWatched) {
-        await apiFetch(`/api/teams/${teamId}/watchlist/${playerId}`, { method: "DELETE" });
-      } else {
-        await apiFetch(`/api/teams/${teamId}/watchlist/${playerId}`, { method: "POST" });
-      }
-    } catch (e) {
-      console.error("toggle watchlist failed:", e);
-      setIsWatched(wasWatched); // Revert on error
-    } finally {
-      setWatchLoading(false);
-    }
+    const ok = await apiAction(
+      wasWatched
+        ? apiFetch(`/api/teams/${teamId}/watchlist/${playerId}`, { method: "DELETE" })
+        : apiFetch(`/api/teams/${teamId}/watchlist/${playerId}`, { method: "POST" }),
+      wasWatched ? "Odebrání ze sledování se nezdařilo" : "Přidání do sledování se nezdařilo",
+    );
+    if (!ok) setIsWatched(wasWatched); // Revert on error
+    setWatchLoading(false);
   };
 
   const releasePlayer = async () => {
@@ -218,13 +206,9 @@ export default function PlayerDetailPage() {
     });
     if (!ok) return;
     setActionLoading(true);
-    try {
-      await apiFetch(`/api/teams/${teamId}/players/${playerId}/release`, { method: "POST" });
-      router.push("/dashboard/squad");
-    } catch (e) {
-      console.error("release player failed:", e);
-      setActionLoading(false);
-    }
+    const success = await apiAction(apiFetch(`/api/teams/${teamId}/players/${playerId}/release`, { method: "POST" }), "Propuštění hráče se nezdařilo");
+    if (success) router.push("/dashboard/squad");
+    else setActionLoading(false);
   };
 
   const currentIndex = allPlayers.findIndex((p) => p.id === playerId);
@@ -458,11 +442,8 @@ export default function PlayerDetailPage() {
                       confirmLabel: "Ukončit",
                     });
                     if (!ok) return;
-                    try {
-                      await apiFetch(`/api/teams/${teamId}/loans/${player.id}/terminate`, { method: "POST" });
+                    if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${player.id}/terminate`, { method: "POST" }), "Ukončení hostování se nezdařilo")) {
                       router.push("/dashboard/transfers");
-                    } catch (e) {
-                      console.error("terminate loan:", e);
                     }
                   }}
                     className={`${btnBase} min-w-[140px] ${btnDanger}`}>

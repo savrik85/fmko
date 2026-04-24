@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { apiFetch, type Team } from "@/lib/api";
+import { apiFetch, apiAction, type Team } from "@/lib/api";
 import { Spinner } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
@@ -222,8 +222,9 @@ export default function NewsPage() {
 
   const deleteAd = async (id: string) => {
     if (!teamId) return;
-    await apiFetch(`/api/teams/${teamId}/classifieds/${id}`, { method: "DELETE" }).catch((e) => console.error("delete classified:", e));
-    loadClassifieds();
+    if (await apiAction(apiFetch(`/api/teams/${teamId}/classifieds/${id}`, { method: "DELETE" }), "Smazání inzerátu se nezdařilo")) {
+      loadClassifieds();
+    }
   };
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;

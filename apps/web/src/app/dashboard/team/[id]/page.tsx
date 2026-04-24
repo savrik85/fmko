@@ -205,10 +205,15 @@ export default function TeamPage() {
               {!isOwnTeam && (team as any).user_id !== "ai" && (
                 <button onClick={async () => {
                   if (!myTeamId) return;
-                  const res = await apiFetch<{ conversationId: string }>(`/api/teams/${myTeamId}/conversation-with/${teamId}`, {
-                    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-                  }).catch((e) => { console.error("create conversation:", e); return null; });
-                  if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
+                  try {
+                    const res = await apiFetch<{ conversationId: string }>(`/api/teams/${myTeamId}/conversation-with/${teamId}`, {
+                      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+                    });
+                    if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
+                  } catch (e) {
+                    console.error("create conversation:", e);
+                    alert((e as Error)?.message || "Nepodařilo se otevřít konverzaci");
+                  }
                 }}
                   className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer`}>
                   <div className="text-xl leading-none">💬</div>
@@ -282,10 +287,15 @@ export default function TeamPage() {
                 {!isOwnTeam && (team as any).user_id !== "ai" && (
                   <button onClick={async () => {
                     if (!myTeamId) return;
-                    const res = await apiFetch<{ conversationId: string }>(`/api/teams/${myTeamId}/conversation-with/${teamId}`, {
-                      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-                    }).catch((e) => { console.error("create conversation (mobile):", e); return null; });
-                    if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
+                    try {
+                      const res = await apiFetch<{ conversationId: string }>(`/api/teams/${myTeamId}/conversation-with/${teamId}`, {
+                        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+                      });
+                      if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
+                    } catch (e) {
+                      console.error("create conversation (mobile):", e);
+                      alert((e as Error)?.message || "Nepodařilo se otevřít konverzaci");
+                    }
                   }}
                     className={`${boxBg} ${boxBgHover} rounded-lg px-3 py-1.5 text-center transition-colors cursor-pointer`}>
                     <div className="text-base leading-none">💬</div>

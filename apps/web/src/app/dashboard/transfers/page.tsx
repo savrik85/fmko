@@ -1347,8 +1347,10 @@ export default function TransfersPage() {
                                 const result = await apiFetch<{ ok: boolean; player: Player }>(`/api/teams/${teamId}/player-offers/${o.id}/accept`, { method: "POST" });
                                 if (result.player) setRevealPlayer(result.player);
                                 await refresh();
-                              } catch (e) { console.error("player offer accept:", e); }
-                              finally { setPlayerOfferLoading(null); }
+                              } catch (e) {
+                                console.error("player offer accept:", e);
+                                alert((e as Error)?.message || "Přijetí nabídky se nezdařilo");
+                              } finally { setPlayerOfferLoading(null); }
                             }}
                             className="py-2 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors disabled:opacity-50">
                             {playerOfferLoading === o.id ? "..." : "Přijmout"}
@@ -1358,11 +1360,9 @@ export default function TransfersPage() {
                             onClick={async () => {
                               if (!teamId) return;
                               setPlayerOfferLoading(o.id);
-                              try {
-                                await apiFetch(`/api/teams/${teamId}/player-offers/${o.id}/reject`, { method: "POST" });
-                                await refresh();
-                              } catch (e) { console.error("player offer reject:", e); }
-                              finally { setPlayerOfferLoading(null); }
+                              const ok = await apiAction(apiFetch(`/api/teams/${teamId}/player-offers/${o.id}/reject`, { method: "POST" }), "Odmítnutí nabídky se nezdařilo");
+                              if (ok) await refresh();
+                              setPlayerOfferLoading(null);
                             }}
                             className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors disabled:opacity-50">
                             Odmítnout

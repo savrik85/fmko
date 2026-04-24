@@ -103,10 +103,15 @@ export default function ManagerDetailPage() {
           {managerId !== teamId && teamId && (team as any).user_id !== "ai" && (
             <button onClick={async () => {
               if (!teamId) return;
-              const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/conversation-with/${managerId}`, {
-                method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-              }).catch((e) => { console.error("conversation-with:", e); return null; });
-              if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
+              try {
+                const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/conversation-with/${managerId}`, {
+                  method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+                });
+                if (res?.conversationId) router.push(`/dashboard/phone/${res.conversationId}`);
+              } catch (e) {
+                console.error("conversation-with:", e);
+                alert((e as Error)?.message || "Nepodařilo se otevřít konverzaci");
+              }
             }}
               className="bg-white/10 hover:bg-white/20 rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0">
               <div className="text-xl leading-none">{"\u{1F4AC}"}</div>
