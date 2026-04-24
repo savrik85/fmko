@@ -1160,6 +1160,12 @@ teamsRouter.get("/:id/club", async (c) => {
   ).bind(teamId).first<{ sponsor_name: string }>()
     .catch((e) => { logger.warn({ module: "teams" }, "fetch main sponsor for /club", e); return null; });
 
+  // Stadion sponsor s naming rights — blokuje editaci názvu stadionu
+  const stadiumNamingSponsor = await c.env.DB.prepare(
+    "SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND category = 'stadium' AND is_naming_rights = 1 LIMIT 1"
+  ).bind(teamId).first<{ sponsor_name: string }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "fetch stadium naming sponsor", e); return null; });
+
   return c.json({
     id: team.id,
     name: team.name,
@@ -1185,6 +1191,7 @@ teamsRouter.get("/:id/club", async (c) => {
       specialita: team.stadium_specialita,
       tribunaNorth: team.stadium_tribuna_north,
       tribunaSouth: team.stadium_tribuna_south,
+      namingSponsor: stadiumNamingSponsor?.sponsor_name ?? null,
     },
     jersey: {
       pattern: team.jersey_pattern,
@@ -1721,7 +1728,15 @@ teamsRouter.patch("/:id/club/stadium", async (c) => {
 
   try {
     const name = strOrNull("stadiumName", body.stadiumName, 60);
-    if (name !== undefined) updates.push({ col: "stadium_name", val: name });
+    if (name !== undefined) {
+      const namingSponsor = await c.env.DB.prepare(
+        "SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND category = 'stadium' AND is_naming_rights = 1 LIMIT 1"
+      ).bind(teamId).first<{ sponsor_name: string }>();
+      if (namingSponsor) {
+        return c.json({ error: `Název stadionu nemůžeš měnit — určuje ho sponzor "${namingSponsor.sponsor_name}" (naming rights).` }, 403);
+      }
+      updates.push({ col: "stadium_name", val: name });
+    }
     const nick = strOrNull("nickname", body.nickname, 40);
     if (nick !== undefined) updates.push({ col: "stadium_nickname", val: nick });
     const specialita = strOrNull("specialita", body.specialita, 80);
