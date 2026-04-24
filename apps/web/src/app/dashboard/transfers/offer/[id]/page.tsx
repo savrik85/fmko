@@ -240,7 +240,14 @@ export default function OfferDetailPage() {
 
       <div className="card p-4 sm:p-6">
         <h2 className="font-heading font-bold text-sm uppercase tracking-wider text-muted mb-3">Historie vyjednávání</h2>
-        <OfferTimeline events={events} myTeamId={teamId ?? ""} />
+        <OfferTimeline
+          events={events}
+          myTeamId={teamId ?? ""}
+          fromTeamId={offer.from_team_id}
+          toTeamId={offer.to_team_id}
+          fromManager={fromManager ? { avatar: fromManager.avatar, name: fromManager.name } : null}
+          toManager={toManager ? { avatar: toManager.avatar, name: toManager.name } : null}
+        />
       </div>
 
       <div className="card p-4 sm:p-6">
