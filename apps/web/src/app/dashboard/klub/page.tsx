@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, BadgePreview, JerseyPreview, StadiumPreview } from "@/components/ui";
+import { Spinner, Card, CardHeader, CardBody, BadgePreview, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface ClubData {
@@ -128,16 +128,6 @@ export default function KlubPage() {
           </SectionCard>
 
           <SectionCard title="Stadion" icon={"\u{1F3DF}️"} hint="Kapacita, přezdívka, tribuny">
-            <div className="mb-3 rounded-lg overflow-hidden border border-gray-100">
-              <StadiumPreview
-                primary={club.primaryColor}
-                secondary={club.secondaryColor || "#FFFFFF"}
-                standsLevel={(club.stadium.capacity ?? 0) > 500 ? 3 : (club.stadium.capacity ?? 0) > 200 ? 2 : 1}
-                pitchType={club.stadium.pitchType ?? "natural"}
-                width={320}
-                height={160}
-              />
-            </div>
             <div className="text-sm text-ink/80 mb-3 space-y-1">
               <div className="font-bold">
                 {club.stadium.name || "Bez názvu"}
