@@ -6,7 +6,6 @@ import { ShareButton } from "./ShareButton";
 import { ManagerFace } from "./ManagerFace";
 
 export const runtime = "edge";
-export const revalidate = 60; // 1 min ISR-like cache
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -105,7 +104,7 @@ interface StandingsData {
 
 async function fetchSafe<T>(path: string): Promise<T | null> {
   try {
-    const r = await fetch(`${API}${path}`, { next: { revalidate: 60 } });
+    const r = await fetch(`${API}${path}`, { cache: "no-store" });
     if (!r.ok) return null;
     return r.json();
   } catch (e) {
