@@ -1463,7 +1463,7 @@ teamsRouter.post("/:id/club/anthem/generate", async (c) => {
   }
 
   const body = await c.req.json<{ title?: string; lyrics?: string; style?: string }>()
-    .catch((e) => { logger.warn({ module: "teams" }, "anthem/generate invalid body", e); return {}; });
+    .catch((e) => { logger.warn({ module: "teams" }, "anthem/generate invalid body", e); return { title: "", lyrics: "", style: "" }; });
   const title = (body.title ?? "").trim();
   const lyrics = (body.lyrics ?? "").trim();
   const style = (body.style ?? "český fotbalový chorál, pochodový rytmus, sborový zpěv").trim();
