@@ -8,16 +8,6 @@ import { apiFetch } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
-import { BadgePreview, type BadgePattern } from "@/components/ui/badge-preview";
-
-type SenderBadge = {
-  primary: string;
-  secondary: string;
-  pattern: string;
-  initials: string;
-  symbol: string | null;
-};
-
 interface Message {
   id: string;
   body: string;
@@ -31,7 +21,8 @@ interface Message {
   // group chats:
   senderTeamId?: string;
   senderTeamName?: string | null;
-  senderBadge?: SenderBadge;
+  senderManagerName?: string | null;
+  senderManagerAvatar?: Record<string, unknown> | null;
 }
 
 interface ConvInfo {
@@ -229,19 +220,21 @@ export default function ConversationPage() {
                 {group.messages.map((msg) => {
                   if (isGroup) {
                     const isOwn = msg.senderTeamId === teamId;
-                    const badge = msg.senderBadge;
+                    const avatar = msg.senderManagerAvatar;
+                    const hasFaceAvatar = avatar && Object.keys(avatar).length > 2;
+                    const initialsFallback = (msg.senderManagerName ?? msg.senderTeamName ?? "?")
+                      .split(" ").map((w) => w[0]).slice(0, 2).join("");
                     return (
                       <div key={msg.id} className={`flex gap-1.5 ${isOwn ? "justify-end" : "justify-start"}`}>
-                        {!isOwn && badge && (
+                        {!isOwn && (
                           <div className="shrink-0 self-end mb-0.5">
-                            <BadgePreview
-                              primary={badge.primary}
-                              secondary={badge.secondary}
-                              pattern={(badge.pattern || "shield") as BadgePattern}
-                              initials={badge.initials || ""}
-                              symbol={badge.symbol}
-                              size={28}
-                            />
+                            {hasFaceAvatar ? (
+                              <FaceAvatar faceConfig={avatar} size={32} className="rounded-full" />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-heading font-bold text-[10px]">
+                                {initialsFallback}
+                              </div>
+                            )}
                           </div>
                         )}
                         <div className="max-w-[75%]">
@@ -250,7 +243,9 @@ export default function ConversationPage() {
                               href={`/dashboard/team/${msg.senderTeamId}`}
                               className="text-xs text-pitch-600 font-medium mb-0.5 ml-1 block hover:underline"
                             >
-                              {msg.senderTeamName ?? "Tým"}
+                              {msg.senderManagerName
+                                ? `${msg.senderManagerName} · ${msg.senderTeamName ?? ""}`
+                                : (msg.senderTeamName ?? "Tým")}
                             </Link>
                           )}
                           <div className={`px-3 py-2 rounded-2xl text-[13px] leading-snug ${

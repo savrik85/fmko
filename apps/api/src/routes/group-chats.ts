@@ -157,11 +157,11 @@ groupChatsRouter.get("/teams/:teamId/group-chats/:groupId/messages", async (c) =
 
   let query = `
     SELECT gm.id, gm.body, gm.sent_at, gm.sender_team_id, gm.sender_name,
-           t.primary_color, t.secondary_color, t.badge_pattern,
-           t.badge_primary_color, t.badge_secondary_color, t.badge_initials, t.badge_symbol,
-           t.name AS team_name
+           t.name AS team_name,
+           m.name AS manager_name, m.avatar AS manager_avatar
     FROM group_messages gm
     LEFT JOIN teams t ON t.id = gm.sender_team_id
+    LEFT JOIN managers m ON m.team_id = gm.sender_team_id
     WHERE gm.group_chat_id = ?
   `;
   const binds: unknown[] = [groupId];
@@ -175,21 +175,23 @@ groupChatsRouter.get("/teams/:teamId/group-chats/:groupId/messages", async (c) =
   const result = await c.env.DB.prepare(query).bind(...binds).all()
     .catch((e) => { logger.warn({ module: "group-chats" }, "fetch group messages", e); return { results: [] }; });
 
-  const messages = result.results.map((row) => ({
-    id: row.id as string,
-    body: row.body as string,
-    sentAt: row.sent_at as string,
-    senderTeamId: row.sender_team_id as string,
-    senderName: row.sender_name as string,
-    senderTeamName: row.team_name as string | null,
-    senderBadge: {
-      primary: (row.badge_primary_color as string | null) ?? (row.primary_color as string | null) ?? "#2D5F2D",
-      secondary: (row.badge_secondary_color as string | null) ?? (row.secondary_color as string | null) ?? "#FFFFFF",
-      pattern: (row.badge_pattern as string | null) ?? "shield",
-      initials: (row.badge_initials as string | null) ?? "",
-      symbol: (row.badge_symbol as string | null) ?? null,
-    },
-  })).reverse();
+  const messages = result.results.map((row) => {
+    let managerAvatar: Record<string, unknown> | null = null;
+    if (row.manager_avatar) {
+      try { managerAvatar = JSON.parse(row.manager_avatar as string); }
+      catch (e) { logger.warn({ module: "group-chats" }, "parse manager avatar", e); }
+    }
+    return {
+      id: row.id as string,
+      body: row.body as string,
+      sentAt: row.sent_at as string,
+      senderTeamId: row.sender_team_id as string,
+      senderName: row.sender_name as string,
+      senderTeamName: row.team_name as string | null,
+      senderManagerName: (row.manager_name as string | null) ?? null,
+      senderManagerAvatar: managerAvatar,
+    };
+  }).reverse();
 
   await c.env.DB.prepare(
     `INSERT INTO group_chat_reads (group_chat_id, team_id, last_read_at) VALUES (?, ?, ?)
