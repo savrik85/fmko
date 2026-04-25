@@ -209,6 +209,12 @@ export async function generateInterviewQuestions(
     .map((p) => `${p.name} (${p.position}${p.goals ? `, ${p.goals} gólů` : ""})`)
     .join(", ");
 
+  // Whitelist povolených jmen hráčů — Gemini nesmí použít žádné jiné
+  const allowedPlayerNames = ctx.topPlayers.map((p) => p.name);
+  const allowedPlayerNamesStr = allowedPlayerNames.length
+    ? allowedPlayerNames.map((n) => `"${n}"`).join(", ")
+    : "(žádná jména hráčů nejsou povolena)";
+
   const opponentCtxLines = [
     ctx.opponentManagerName ? `- Trenér soupeře: ${ctx.opponentManagerName}` : null,
     ctx.opponentLeaguePos
@@ -219,23 +225,34 @@ export async function generateInterviewQuestions(
   ].filter(Boolean).join("\n");
 
   const soupereOtazka = ctx.opponentManagerName
-    ? `Použij KONKRÉTNÍ data o soupeři výše — jeho jméno, pozici, formu nebo poslední výsledek. Např. "Trenér ${ctx.opponentManagerName} po poslední prohře 1:3 mluvil o smůle — věříte mu, nebo v tom vidíte spíš výmluvy?" Ať otázka vyvolává rivalitu, klidně provokativně, ale stále vykání.`
-    : `Ať otázka zmíní něco konkrétního o soupeři ${ctx.opponentName} — jeho pozici, formu, nebo drb.`;
+    ? `Můžeš použít POUZE jméno trenéra soupeře "${ctx.opponentManagerName}" (přesně tak jak je napsáno) a fakta z kontextu výše (forma, poslední výsledek, pozice). Např. "Trenér ${ctx.opponentManagerName} naposledy ${ctx.opponentLastResult ?? "(žádné info)"} — co od něj čekáte?" Ať otázka vyvolává rivalitu, ale stále vykání.`
+    : `Otázka může zmínit jen název soupeře "${ctx.opponentName}" a fakta z kontextu (pozice v tabulce, forma). NEPOUŽÍVEJ žádné jméno trenéra soupeře — žádné nemáme. NEVYMÝŠLEJ si žádná jména.`;
 
   const prompt = `Jsi bulvárnější redaktor Okresního zpravodaje v Čechách. Napiš přesně 3 otázky pro trenéra
 fotbalového týmu ${ctx.teamName} před zápasem ${ctx.isHome ? "doma" : "venku"} s ${ctx.opponentName} (kolo ${ctx.gameWeek}).
 
+🚨 ABSOLUTNÍ ZÁKAZ HALUCINACÍ — DŮLEŽITĚJŠÍ NEŽ COKOLI JINÉHO:
+- NIKDY si nevymýšlej jména hráčů. Jediná povolená jména hráčů: ${allowedPlayerNamesStr}.
+  Nesmíš použít žádné "Honza Novák", "Petr Kříž", "Milan Řezník" ani jakékoli jiné jméno, které není v tomto seznamu.
+  Pokud seznam povolených hráčů je prázdný, otázka NESMÍ obsahovat jméno žádného hráče.
+- NIKDY si nevymýšlej výsledky zápasů. Jediný povolený poslední výsledek vlastního týmu: "${ctx.lastMatchResult ?? "(žádný — první zápas sezóny)"}".
+  Jediný povolený poslední výsledek soupeře: "${ctx.opponentLastResult ?? "(žádný)"}".
+  Pokud žádný výsledek nemáš, NEUVÁDĚJ žádné skóre ("3:1", "0:4" atd.) ani jméno předchozího soupeře.
+- NIKDY si nevymýšlej jména trenérů. ${ctx.opponentManagerName ? `Jediný povolený trenér soupeře: "${ctx.opponentManagerName}".` : "Jméno trenéra soupeře NEMÁŠ — nesmíš žádné použít."}
+- NIKDY si nevymýšlej zranění, citáty, ani události, které nejsou v kontextu níže.
+- Pokud pro nějakou otázku nemáš dost konkrétních dat z kontextu, napiš obecnější otázku BEZ vymyšlených faktů — to je VŽDY lepší než si něco vycucat z prstu.
+
 INSTRUKCE:
-- KAŽDÁ otázka musí být konkrétní — zmiň jméno hráče, přesný výsledek, nebo konkrétního soupeře / trenéra soupeře
-- Nepokládej obecné otázky jako "jak hodnotíte formu" nebo "co od zápasu čekáte" — to je nuda
+- KAŽDÁ otázka musí být konkrétní — používej JEN fakta z kontextu níže (jména hráčů ze seznamu, skutečný poslední výsledek, formu)
+- Nepokládej obecné otázky jako "jak hodnotíte formu" nebo "co od zápasu čekáte" — to je nuda. Ale když nemáš konkrétní data, raději obecná otázka než vymyšlená fakta.
 - Otázky piš jednu per řádek, bez číslování, bez odrážek, bez markdown
 - Jazyk: hovorová čeština, bulvárnější novinářský tón, vykání trenéru
 - Délka každé otázky: 1–2 věty max
 - PŘESNĚ 3 otázky, v tomto pořadí:
 
-OTÁZKA 1 — o vlastním týmu / nadcházejícím zápase: konkrétní fakt z formy, posledního výsledku nebo vlastního hráče
-OTÁZKA 2 — taktika, sestava, zranění nebo klíčový hráč: konkrétní jméno z kontextu
-OTÁZKA 3 — BULVÁRNÍ, MÍŘENÁ PŘÍMO NA TRENÉRA SOUPEŘE nebo jeho tým. ${soupereOtazka}
+OTÁZKA 1 — o vlastním týmu / nadcházejícím zápase: použij JEN fakt z "Forma" nebo "Poslední výsledek" nebo jméno hráče ze seznamu povolených
+OTÁZKA 2 — taktika, sestava, zranění nebo klíčový hráč: použij JEN jméno ze seznamu povolených hráčů (nebo ze "Zranění", pokud jsou). Pokud žádné jméno nemáš, ptej se na taktiku obecně bez jmen.
+OTÁZKA 3 — BULVÁRNÍ, MÍŘENÁ NA SOUPEŘE. ${soupereOtazka}
 
 KONTEXT (tým trenéra):
 - Tým: ${ctx.teamName} (${ctx.villageFlavor}), ${ctx.isHome ? "hraje doma" : "hraje venku"}
@@ -243,11 +260,11 @@ KONTEXT (tým trenéra):
 - Pozice v tabulce: ${ctx.leaguePos ? `${ctx.leaguePos}. místo, ${ctx.leaguePoints} bodů` : "start sezóny"}
 - Forma posledních 5 zápasů: ${ctx.formStr} (V=výhra, R=remíza, P=prohra)
 - Poslední výsledek: ${ctx.lastMatchResult ?? "první zápas sezóny"}
-- Klíčoví hráči: ${topStr || "info nedostupné"}
+- Klíčoví hráči (JEDINÁ POVOLENÁ JMÉNA): ${topStr || "info nedostupné — NEPOUŽÍVEJ žádná jména hráčů"}
 ${ctx.injuredStr ? `- Zranění: ${ctx.injuredStr}` : ""}
 
 KONTEXT (soupeř ${ctx.opponentName}):
-${opponentCtxLines || "- info nedostupné"}
+${opponentCtxLines || "- info nedostupné — neuváděj žádná konkrétní fakta o soupeři kromě jeho názvu"}
 
 Napiš pouze 3 otázky, každou na samostatném řádku.`;
 
