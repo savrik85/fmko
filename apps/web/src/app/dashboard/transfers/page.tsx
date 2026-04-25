@@ -1517,7 +1517,7 @@ export default function TransfersPage() {
                         {o.status === "countered" && <div className="text-xs text-gold-600 mt-1">Protinabídka: {formatCZK(o.counter_amount!)}</div>}
                         {o.on_turn === false && <div className="text-xs text-muted mt-1 italic">Čeká se na odpověď soupeře</div>}
                       </div>
-                      <div className="flex flex-wrap gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
+                      <div className="flex flex-wrap items-center gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
                         <Link href={`/dashboard/transfers/offer/${o.id}`} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
                           Jednání →
                         </Link>
@@ -1619,7 +1619,7 @@ export default function TransfersPage() {
                           </div>
                         )}
                       </div>
-                      <div className="flex flex-wrap gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
+                      <div className="flex flex-wrap items-center gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
                         <Link href={`/dashboard/transfers/offer/${o.id}`} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
                           Jednání →
                         </Link>
