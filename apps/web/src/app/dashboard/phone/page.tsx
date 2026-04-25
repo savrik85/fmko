@@ -10,7 +10,7 @@ import { PhoneFrame } from "@/components/phone/phone-frame";
 
 interface Conversation {
   id: string;
-  type: "squad_group" | "player" | "manager" | "system";
+  type: "squad_group" | "player" | "manager" | "system" | "global_group" | "league_group";
   title: string;
   participantId: string | null;
   participantAvatar: Record<string, unknown> | null;
@@ -19,6 +19,12 @@ interface Conversation {
   unreadCount: number;
   pinned: boolean;
 }
+
+const GROUP_AVATAR_EMOJI: Record<string, string> = {
+  squad_group: "\u{1F3BD}",
+  global_group: "\u{1F310}",
+  league_group: "\u{1F3C6}",
+};
 
 function timeAgo(iso: string | null): string {
   if (!iso) return "";
@@ -68,14 +74,14 @@ export default function PhonePage() {
             {conversations.map((conv) => (
               <Link
                 key={conv.id}
-                href={`/dashboard/phone/${conv.id}`}
+                href={`/dashboard/phone/${encodeURIComponent(conv.id)}`}
                 className={`flex items-center gap-3 px-4 py-3 transition-colors hover:bg-white ${conv.unreadCount > 0 ? "bg-white" : ""}`}
               >
                 {/* Avatar */}
                 <div className="shrink-0">
-                  {conv.type === "squad_group" ? (
+                  {GROUP_AVATAR_EMOJI[conv.type] ? (
                     <div className="w-10 h-10 rounded-full bg-pitch-500 flex items-center justify-center text-white text-base">
-                      {"\u{1F3BD}"}
+                      {GROUP_AVATAR_EMOJI[conv.type]}
                     </div>
                   ) : conv.participantAvatar && Object.keys(conv.participantAvatar).length > 2 ? (
                     <FaceAvatar faceConfig={conv.participantAvatar} size={40} className="rounded-full" />

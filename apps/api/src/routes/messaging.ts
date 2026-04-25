@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
+import { listGroupChatsForTeam } from "./group-chats";
 
 const messagingRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -52,18 +53,31 @@ messagingRouter.get("/teams/:teamId/conversations", async (c) => {
   const convs = result.results
     .filter((row) => row.last_message_text && (row.last_message_text as string).length > 0)
     .map((row) => ({
-      id: row.id,
-      type: row.type,
-      title: row.title,
-      participantId: row.participant_id,
+      id: row.id as string,
+      type: row.type as string,
+      title: row.title as string,
+      participantId: row.participant_id as string | null,
       participantAvatar: row.participant_avatar ? JSON.parse(row.participant_avatar as string) : null,
-      lastMessageText: row.last_message_text,
-      lastMessageAt: row.last_message_at,
-      unreadCount: row.unread_count,
+      lastMessageText: row.last_message_text as string | null,
+      lastMessageAt: row.last_message_at as string | null,
+      unreadCount: row.unread_count as number,
       pinned: row.pinned === 1,
     }));
 
-  return c.json(convs);
+  // Merge group chats (globální + ligový). Vždy zobrazit, i prázdné.
+  const groupChats = await listGroupChatsForTeam(c.env.DB, teamId)
+    .catch((e) => { logger.warn({ module: "messaging" }, "list group chats for merge", e); return []; });
+
+  const merged = [...convs, ...groupChats];
+  // Pinned v existujících konverzacích zachovat nahoře, ostatní podle last_message_at DESC.
+  merged.sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    const at = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+    const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+    return bt - at;
+  });
+
+  return c.json(merged);
 });
 
 // GET /api/teams/:teamId/conversations/:convId — zprávy v konverzaci

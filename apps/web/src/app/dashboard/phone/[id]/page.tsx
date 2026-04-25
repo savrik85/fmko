@@ -2,21 +2,36 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
+import { BadgePreview, type BadgePattern } from "@/components/ui/badge-preview";
+
+type SenderBadge = {
+  primary: string;
+  secondary: string;
+  pattern: string;
+  initials: string;
+  symbol: string | null;
+};
 
 interface Message {
   id: string;
-  senderType: "player" | "manager" | "system" | "user";
-  senderId: string | null;
-  senderName: string;
   body: string;
-  metadata: Record<string, unknown> | null;
   sentAt: string;
-  read: boolean;
+  // 1:1 conversations:
+  senderType?: "player" | "manager" | "system" | "user";
+  senderId?: string | null;
+  senderName?: string;
+  metadata?: Record<string, unknown> | null;
+  read?: boolean;
+  // group chats:
+  senderTeamId?: string;
+  senderTeamName?: string | null;
+  senderBadge?: SenderBadge;
 }
 
 interface ConvInfo {
@@ -62,11 +77,16 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString("cs", { day: "numeric", month: "long" });
 }
 
+function isGroupChatId(id: string): boolean {
+  return id === "global" || id.startsWith("league:");
+}
+
 export default function ConversationPage() {
   const params = useParams();
   const router = useRouter();
   const { teamId } = useTeam();
-  const convId = params.id as string;
+  const convId = decodeURIComponent(params.id as string);
+  const isGroup = isGroupChatId(convId);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [conv, setConv] = useState<ConvInfo | null>(null);
@@ -75,20 +95,28 @@ export default function ConversationPage() {
   const [sending, setSending] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
+  const messagesUrl = isGroup
+    ? `/api/teams/${teamId}/group-chats/${encodeURIComponent(convId)}/messages`
+    : `/api/teams/${teamId}/conversations/${convId}`;
+
   useEffect(() => {
     if (!teamId) return;
     let stopped = false;
+
+    const convListUrl = isGroup
+      ? `/api/teams/${teamId}/conversations` // group chats are merged in
+      : `/api/teams/${teamId}/conversations`;
+
     Promise.all([
-      apiFetch<Message[]>(`/api/teams/${teamId}/conversations/${convId}`),
-      apiFetch<ConvInfo[]>(`/api/teams/${teamId}/conversations`).then((all) => all.find((c) => c.id === convId) ?? null),
+      apiFetch<Message[]>(messagesUrl),
+      apiFetch<ConvInfo[]>(convListUrl).then((all) => all.find((c) => c.id === convId) ?? null),
     ]).then(([msgs, c]) => {
       setMessages(msgs);
       setConv(c);
       setLoading(false);
     }).catch((e) => {
-      // 404 = konverzace neexistuje nebo nepatří uživateli → redirect
       const msg = e?.message ?? "";
-      if (msg.includes("nenalezena") || msg.includes("404")) {
+      if (msg.includes("nenalezena") || msg.includes("nenalezen") || msg.includes("404")) {
         stopped = true;
         router.replace("/dashboard");
         return;
@@ -97,10 +125,9 @@ export default function ConversationPage() {
       setLoading(false);
     });
 
-    // Poll for new messages every 3s — zastavit po 404
     const interval = setInterval(() => {
       if (stopped) return;
-      apiFetch<Message[]>(`/api/teams/${teamId}/conversations/${convId}`)
+      apiFetch<Message[]>(messagesUrl)
         .then((msgs) => {
           setMessages((prev) => {
             if (msgs.length !== prev.length) return msgs;
@@ -110,8 +137,7 @@ export default function ConversationPage() {
         })
         .catch((e) => {
           const msg = e?.message ?? "";
-          if (msg.includes("nenalezena") || msg.includes("404")) {
-            // Konverzace zmizela — zastavit poll, tiše
+          if (msg.includes("nenalezena") || msg.includes("nenalezen") || msg.includes("404")) {
             stopped = true;
             clearInterval(interval);
             return;
@@ -120,7 +146,7 @@ export default function ConversationPage() {
         });
     }, 3000);
     return () => { stopped = true; clearInterval(interval); };
-  }, [teamId, convId, router]);
+  }, [teamId, convId, router, isGroup, messagesUrl]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -130,21 +156,27 @@ export default function ConversationPage() {
     if (!newMsg.trim() || sending || !teamId) return;
     setSending(true);
     try {
-      const res = await apiFetch<{ id: string; sentAt: string }>(`/api/teams/${teamId}/conversations/${convId}`, {
+      const res = await apiFetch<{ id: string; sentAt: string }>(messagesUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: newMsg.trim() }),
       });
-      setMessages((prev) => [...prev, {
-        id: res.id, senderType: "user", senderId: teamId, senderName: "Ty",
-        body: newMsg.trim(), metadata: null, sentAt: res.sentAt, read: true,
-      }]);
+      if (isGroup) {
+        setMessages((prev) => [...prev, {
+          id: res.id, body: newMsg.trim(), sentAt: res.sentAt,
+          senderTeamId: teamId, senderTeamName: "Ty",
+        }]);
+      } else {
+        setMessages((prev) => [...prev, {
+          id: res.id, senderType: "user", senderId: teamId, senderName: "Ty",
+          body: newMsg.trim(), metadata: null, sentAt: res.sentAt, read: true,
+        }]);
+      }
       setNewMsg("");
     } catch (e) { console.error("send message:", e); }
     setSending(false);
   };
 
-  // Group messages by date
   const grouped: Array<{ date: string; messages: Message[] }> = [];
   for (const msg of messages) {
     const date = formatDate(msg.sentAt);
@@ -153,6 +185,11 @@ export default function ConversationPage() {
     else grouped.push({ date, messages: [msg] });
   }
 
+  const headerEmoji = conv?.type === "squad_group" ? "\u{1F3BD}"
+    : conv?.type === "global_group" ? "\u{1F310}"
+    : conv?.type === "league_group" ? "\u{1F3C6}"
+    : null;
+
   return (
     <PhoneFrame>
       {/* Header */}
@@ -160,11 +197,15 @@ export default function ConversationPage() {
         <button onClick={() => router.push("/dashboard/phone")} className="text-white/70 hover:text-white text-sm">
           &#8592;
         </button>
-        {conv?.participantAvatar && Object.keys(conv.participantAvatar).length > 2 ? (
+        {headerEmoji ? (
+          <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-sm shrink-0">
+            {headerEmoji}
+          </div>
+        ) : conv?.participantAvatar && Object.keys(conv.participantAvatar).length > 2 ? (
           <FaceAvatar faceConfig={conv.participantAvatar} size={28} className="rounded-full shrink-0" />
         ) : (
           <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-xs font-bold shrink-0">
-            {conv?.type === "squad_group" ? "\u{1F3BD}" : (conv?.title?.[0] ?? "?")}
+            {conv?.title?.[0] ?? "?"}
           </div>
         )}
         <span className="font-heading font-bold text-sm truncate">{conv?.title ?? "..."}</span>
@@ -174,18 +215,62 @@ export default function ConversationPage() {
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3 bg-gray-50">
         {loading ? (
           <div className="flex items-center justify-center h-40"><Spinner /></div>
+        ) : messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-40 text-center text-muted px-4">
+            <p className="text-sm">{isGroup ? "Zatím žádné zprávy. Buď první!" : "Žádné zprávy."}</p>
+          </div>
         ) : (
           grouped.map((group) => (
             <div key={group.date}>
               <div className="text-center mb-2">
                 <span className="text-xs text-muted bg-gray-200/60 px-2.5 py-0.5 rounded-full">{group.date}</span>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-2">
                 {group.messages.map((msg) => {
+                  if (isGroup) {
+                    const isOwn = msg.senderTeamId === teamId;
+                    const badge = msg.senderBadge;
+                    return (
+                      <div key={msg.id} className={`flex gap-1.5 ${isOwn ? "justify-end" : "justify-start"}`}>
+                        {!isOwn && badge && (
+                          <div className="shrink-0 self-end mb-0.5">
+                            <BadgePreview
+                              primary={badge.primary}
+                              secondary={badge.secondary}
+                              pattern={(badge.pattern || "shield") as BadgePattern}
+                              initials={badge.initials || ""}
+                              symbol={badge.symbol}
+                              size={28}
+                            />
+                          </div>
+                        )}
+                        <div className="max-w-[75%]">
+                          {!isOwn && msg.senderTeamId && (
+                            <Link
+                              href={`/dashboard/team/${msg.senderTeamId}`}
+                              className="text-xs text-pitch-600 font-medium mb-0.5 ml-1 block hover:underline"
+                            >
+                              {msg.senderTeamName ?? "Tým"}
+                            </Link>
+                          )}
+                          <div className={`px-3 py-2 rounded-2xl text-[13px] leading-snug ${
+                            isOwn
+                              ? "bg-pitch-500 text-white rounded-br-sm"
+                              : "bg-white shadow-sm rounded-bl-sm"
+                          }`}>
+                            <p className="whitespace-pre-wrap">{emoticonize(msg.body)}</p>
+                            <div className={`text-[9px] mt-0.5 ${isOwn ? "text-white/50" : "text-muted"} text-right`}>
+                              {formatTime(msg.sentAt)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const isUser = msg.senderType === "user";
                   const isSystem = msg.senderType === "system";
 
-                  // System announcements in group chats → centered label
                   if (isSystem && conv?.type === "squad_group") {
                     return (
                       <div key={msg.id} className="text-center py-1">
@@ -194,7 +279,6 @@ export default function ConversationPage() {
                     );
                   }
 
-                  // Everything else → SMS bubble (left=incoming, right=user sent)
                   return (
                     <div key={msg.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
                       <div className="max-w-[75%]">
