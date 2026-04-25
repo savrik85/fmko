@@ -3648,15 +3648,34 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
     bids = bidsResult.results;
   }
 
-  // Check if user has pending bids on any listing
+  // Check if user has pending bids on any listing (legacy, jen pro AI listingy)
   const listingIds = listings.results.map((l) => l.id as string);
   let myBids: Record<string, number> = {};
   if (listingIds.length > 0) {
     const myBidsResult = await c.env.DB.prepare(
       `SELECT listing_id, amount FROM transfer_bids WHERE team_id = ? AND status = 'pending' AND listing_id IN (${listingIds.map(() => "?").join(",")})`
-    ).bind(teamId, ...listingIds).all().catch(() => ({ results: [] }));
+    ).bind(teamId, ...listingIds).all().catch((e) => { logger.warn({ module: "game" }, "fetch my bids", e); return { results: [] }; });
     for (const b of myBidsResult.results) {
       myBids[b.listing_id as string] = b.amount as number;
+    }
+  }
+
+  // Po sjednoceni: nabidka z marketu vznika jako transfer_offer.
+  // Najdi aktivni offers na hrace v listingu, abychom v UI mohli misto "Nabidnout" zobrazit link na jednani.
+  const playerIds = listings.results.map((l) => l.player_id as string).filter(Boolean);
+  const myOffersByPlayer: Record<string, { offerId: string; amount: number; counterAmount: number | null; status: string }> = {};
+  if (playerIds.length > 0) {
+    const myOffersResult = await c.env.DB.prepare(
+      `SELECT id, player_id, offer_amount, counter_amount, status FROM transfer_offers
+       WHERE from_team_id = ? AND status IN ('pending','countered') AND player_id IN (${playerIds.map(() => "?").join(",")})`
+    ).bind(teamId, ...playerIds).all().catch((e) => { logger.warn({ module: "game" }, "fetch my offers for market", e); return { results: [] }; });
+    for (const o of myOffersResult.results) {
+      myOffersByPlayer[o.player_id as string] = {
+        offerId: o.id as string,
+        amount: o.offer_amount as number,
+        counterAmount: (o.counter_amount as number | null) ?? null,
+        status: o.status as string,
+      };
     }
   }
 
@@ -3675,6 +3694,7 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
           myBidAmount: myBids[l.id as string] ?? null,
         };
       }
+      const activeOffer = myOffersByPlayer[l.player_id as string] ?? null;
       return {
         id: l.id, playerId: l.player_id, askingPrice: l.asking_price, isAiListing: false,
         playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,
@@ -3683,6 +3703,9 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
         avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "game" }, `parse market avatar: ${e}`); return {}; } })(),
         skills: (() => { try { const s = JSON.parse(l.skills as string); const blur = (v: number) => Math.round(v / 5) * 5; return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === "number" ? blur(v) : v])); } catch { return {}; } })(),
         myBidAmount: myBids[l.id as string] ?? null,
+        myActiveOfferId: activeOffer?.offerId ?? null,
+        myActiveOfferAmount: activeOffer ? (activeOffer.counterAmount ?? activeOffer.amount) : null,
+        myActiveOfferStatus: activeOffer?.status ?? null,
       };
     }),
     myListings: myListings.results.map((l) => ({

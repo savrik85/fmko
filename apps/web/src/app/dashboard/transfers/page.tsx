@@ -53,6 +53,9 @@ interface MarketListing {
   playerAge: number; position: string; overallRating: number; teamName: string;
   expiresAt: string; avatar: Record<string, unknown>;
   myBidAmount?: number | null;
+  myActiveOfferId?: string | null;
+  myActiveOfferAmount?: number | null;
+  myActiveOfferStatus?: string | null;
 }
 
 interface MyListing {
@@ -1175,7 +1178,14 @@ export default function TransfersPage() {
                           );
                         })()}
                       </div>
-                      {l.myBidAmount ? (
+                      {l.myActiveOfferId ? (
+                        <Link
+                          href={`/dashboard/transfers/offer/${l.myActiveOfferId}`}
+                          className="shrink-0 py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors"
+                        >
+                          Probíhá jednání{l.myActiveOfferAmount ? ` (${formatCZK(l.myActiveOfferAmount)})` : ""} →
+                        </Link>
+                      ) : l.myBidAmount ? (
                         <span className="shrink-0 py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-50 text-pitch-600">
                           Nabídnuto {formatCZK(l.myBidAmount)}
                         </span>

@@ -20,8 +20,7 @@ function skillColor(v: number): string {
   if (v >= 80) return "text-pitch-500";
   if (v >= 65) return "text-pitch-600";
   if (v >= 50) return "text-ink";
-  if (v >= 35) return "text-muted";
-  return "text-red-600";
+  return "text-muted";
 }
 
 function positionSkills(pos: string, skills: Record<string, number>): Array<[string, number]> {
