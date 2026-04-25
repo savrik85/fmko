@@ -97,6 +97,7 @@ export default function EquipmentPage() {
   const fx = data.effects;
   const activeEffects = [
     fx.trainingMultiplier > 1.01 && { label: "Trénink", value: `+${Math.round((fx.trainingMultiplier - 1) * 100)}%`, icon: "🏋" },
+    fx.tacticsTrainingBonus > 0.01 && { label: "Taktický trénink", value: `+${Math.round(fx.tacticsTrainingBonus * 100)}%`, icon: "📋" },
     fx.matchTechniqueMod > 0 && { label: "Technika", value: `+${fx.matchTechniqueMod}`, icon: "⚡" },
     fx.moraleMod > 0 && { label: "Morálka", value: `+${fx.moraleMod}`, icon: "💪" },
     fx.injurySeverityMod > 0.01 && { label: "Ochrana", value: `-${Math.round(fx.injurySeverityMod * 100)}%`, icon: "🛡" },

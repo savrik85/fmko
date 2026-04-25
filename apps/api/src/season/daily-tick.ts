@@ -114,7 +114,12 @@ export async function executeDailyTick(
             if (k.endsWith("_condition")) conditions[k] = v as number;
             else if (typeof v === "number" && k !== "id") levels[k] = v;
           }
-          equipMul = calculateEffects(levels, conditions).trainingMultiplier;
+          const eff = calculateEffects(levels, conditions);
+          equipMul = eff.trainingMultiplier;
+          // Tactics training dostává navíc bonus z bibs + tactics_board (jinak by se nikde neaplikoval)
+          if ((team.training_type as string) === "tactics") {
+            equipMul *= 1.0 + eff.tacticsTrainingBonus;
+          }
         }
 
         // Load manager attributes for training bonuses
