@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { FMSidebar } from "@/components/dashboard/fm-sidebar";
 import { FMTopBar } from "@/components/dashboard/fm-topbar";
 import { BottomNav } from "@/components/dashboard/bottom-nav";
+import { NotificationTitle } from "@/components/dashboard/notification-title";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Napoveda } from "@/components/ui/napoveda";
 import { useTeam } from "@/context/team-context";
@@ -45,6 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <BottomNav />
       <Napoveda />
+      <NotificationTitle />
     </div>
   );
 }
