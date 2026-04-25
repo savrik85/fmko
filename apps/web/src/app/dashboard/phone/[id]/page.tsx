@@ -244,7 +244,7 @@ export default function ConversationPage() {
                               className="text-xs text-pitch-600 font-medium mb-0.5 ml-1 block hover:underline"
                             >
                               {msg.senderManagerName
-                                ? `${msg.senderManagerName} · ${msg.senderTeamName ?? ""}`
+                                ? `${msg.senderManagerName}${msg.senderTeamName ? ` (${msg.senderTeamName})` : ""}`
                                 : (msg.senderTeamName ?? "Tým")}
                             </Link>
                           )}
