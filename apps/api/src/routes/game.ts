@@ -4967,6 +4967,64 @@ gameRouter.post("/admin/generate-player-offer/:teamId", async (c) => {
 
 // ── Coach interviews (Rozhovor kola) ──
 
+// POST /api/admin/regenerate-pending-interviews — smaže všechny pending rozhovory
+// a vygeneruje nové se stejnou (league_id, calendar_id, game_week) trojicí.
+// Použití: po opravě promptu, kdy stávající pending mají vymyšlená data.
+gameRouter.post("/admin/regenerate-pending-interviews", async (c) => {
+  const groups = await c.env.DB.prepare(
+    `SELECT league_id, match_calendar_id, game_week, COUNT(*) as cnt
+     FROM coach_interviews WHERE status = 'pending'
+     GROUP BY league_id, match_calendar_id, game_week`
+  ).all<{ league_id: string; match_calendar_id: string; game_week: number; cnt: number }>().catch((e) => {
+    logger.warn({ module: "game.ts" }, "regen interviews — group lookup", e);
+    return { results: [] };
+  });
+
+  const summary: Array<{ leagueId: string; calendarId: string; gameWeek: number; deleted: number; regenerated: number }> = [];
+
+  for (const g of groups.results ?? []) {
+    const del = await c.env.DB.prepare(
+      "DELETE FROM coach_interviews WHERE status = 'pending' AND league_id = ? AND match_calendar_id = ? AND game_week = ?"
+    ).bind(g.league_id, g.match_calendar_id, g.game_week).run().catch((e) => {
+      logger.warn({ module: "game.ts" }, "regen interviews — delete", e);
+      return { meta: { changes: 0 } } as any;
+    });
+
+    const { tryCreateInterviewRequest } = await import("../news/interview-generator");
+    let regenerated = 0;
+    for (let i = 0; i < g.cnt; i++) {
+      try {
+        const before = await c.env.DB.prepare(
+          "SELECT COUNT(*) as cnt FROM coach_interviews WHERE league_id = ? AND match_calendar_id = ?"
+        ).bind(g.league_id, g.match_calendar_id).first<{ cnt: number }>();
+        await tryCreateInterviewRequest(c.env.DB, (c.env as any).GEMINI_API_KEY, {
+          leagueId: g.league_id,
+          calendarId: g.match_calendar_id,
+          gameWeek: g.game_week,
+        });
+        const after = await c.env.DB.prepare(
+          "SELECT COUNT(*) as cnt FROM coach_interviews WHERE league_id = ? AND match_calendar_id = ?"
+        ).bind(g.league_id, g.match_calendar_id).first<{ cnt: number }>();
+        if ((after?.cnt ?? 0) > (before?.cnt ?? 0)) regenerated++;
+        else break; // round-robin už nemá komu přiřadit
+      } catch (e) {
+        logger.warn({ module: "game.ts" }, "regen interviews — create", e);
+        break;
+      }
+    }
+
+    summary.push({
+      leagueId: g.league_id,
+      calendarId: g.match_calendar_id,
+      gameWeek: g.game_week,
+      deleted: del.meta?.changes ?? 0,
+      regenerated,
+    });
+  }
+
+  return c.json({ ok: true, summary });
+});
+
 // GET /api/teams/:teamId/coach-interviews — pending interviews
 gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
   const teamId = c.req.param("teamId");
