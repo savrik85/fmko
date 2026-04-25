@@ -1477,7 +1477,7 @@ export default function TransfersPage() {
                   const oAvatar = (() => { try { const raw = (o as any).player_avatar ?? o.avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
                   return (
                   <div key={o.id} className="card p-4">
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-3 flex-wrap sm:flex-nowrap">
                       {oAvatar && Object.keys(oAvatar).length > 0
                         ? <FaceAvatar faceConfig={oAvatar} size={40} className="rounded-full shrink-0 mt-0.5" />
                         : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0 mt-0.5" />}
@@ -1517,7 +1517,7 @@ export default function TransfersPage() {
                         {o.status === "countered" && <div className="text-xs text-gold-600 mt-1">Protinabídka: {formatCZK(o.counter_amount!)}</div>}
                         {o.on_turn === false && <div className="text-xs text-muted mt-1 italic">Čeká se na odpověď soupeře</div>}
                       </div>
-                      <div className="flex flex-wrap gap-2 shrink-0 justify-end">
+                      <div className="flex flex-wrap gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
                         <Link href={`/dashboard/transfers/offer/${o.id}`} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
                           Jednání →
                         </Link>
@@ -1578,7 +1578,7 @@ export default function TransfersPage() {
                   const oAvatar = (() => { try { const raw = (o as any).player_avatar ?? o.avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
                   return (
                   <div key={o.id} className="card p-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-start sm:items-center gap-3 flex-wrap sm:flex-nowrap">
                       {oAvatar && Object.keys(oAvatar).length > 0
                         ? <FaceAvatar faceConfig={oAvatar} size={40} className="rounded-full shrink-0" />
                         : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
@@ -1619,7 +1619,7 @@ export default function TransfersPage() {
                           </div>
                         )}
                       </div>
-                      <div className="flex flex-wrap gap-2 shrink-0 justify-end">
+                      <div className="flex flex-wrap gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
                         <Link href={`/dashboard/transfers/offer/${o.id}`} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
                           Jednání →
                         </Link>
