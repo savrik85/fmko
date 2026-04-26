@@ -1220,26 +1220,30 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-xs text-muted uppercase">
-                  <th className="text-left py-2 font-heading">Datum</th>
-                  <th className="text-left py-2 font-heading">Atribut</th>
-                  <th className="text-center py-2 font-heading">Změna</th>
-                  <th className="text-left py-2 font-heading">Trénink</th>
+                  <th className="text-left py-2 pr-3 font-heading">Datum</th>
+                  <th className="text-left py-2 pr-3 font-heading">Atribut</th>
+                  <th className="text-left py-2 pr-3 font-heading hidden md:table-cell">Trénink</th>
+                  <th className="text-right py-2 font-heading">Změna</th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((entry, i) => {
                   const date = entry.game_date ? new Date(entry.game_date).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "—";
+                  const trainingLabel = TRAIN_TYPE_LABELS[entry.training_type] ?? entry.training_type;
                   return (
-                    <tr key={i} className="border-b border-gray-50 last:border-b-0">
-                      <td className="py-1.5 tabular-nums text-muted">{date}</td>
-                      <td className="py-1.5 font-medium">{TRAIN_ATTR_LABELS[entry.attribute] ?? entry.attribute}</td>
-                      <td className="py-1.5 text-center">
+                    <tr key={i} className="border-b border-gray-50 last:border-b-0 align-top">
+                      <td className="py-1.5 pr-3 tabular-nums text-muted whitespace-nowrap">{date}</td>
+                      <td className="py-1.5 pr-3">
+                        <div className="font-medium">{TRAIN_ATTR_LABELS[entry.attribute] ?? entry.attribute}</div>
+                        <div className="md:hidden text-[11px] text-muted leading-tight">{trainingLabel}</div>
+                      </td>
+                      <td className="py-1.5 pr-3 text-muted hidden md:table-cell">{trainingLabel}</td>
+                      <td className="py-1.5 text-right whitespace-nowrap">
                         <span className={`font-heading font-bold ${entry.change > 0 ? "text-pitch-500" : "text-card-red"}`}>
                           {entry.change > 0 ? `+${entry.change}` : entry.change}
                         </span>
                         <span className="text-muted text-xs ml-1">({entry.old_value}→{entry.new_value})</span>
                       </td>
-                      <td className="py-1.5 text-muted">{TRAIN_TYPE_LABELS[entry.training_type] ?? entry.training_type}</td>
                     </tr>
                   );
                 })}
@@ -1327,10 +1331,10 @@ function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-xs text-muted uppercase">
-                  <th className="text-left py-2 font-heading">Kdy</th>
-                  <th className="text-left py-2 font-heading">Zdroj</th>
-                  <th className="text-left py-2 font-heading">Detail</th>
-                  <th className="text-center py-2 font-heading">Změna</th>
+                  <th className="text-left py-2 pr-3 font-heading">Kdy</th>
+                  <th className="text-left py-2 pr-3 font-heading">Zdroj</th>
+                  <th className="text-left py-2 pr-3 font-heading hidden md:table-cell">Detail</th>
+                  <th className="text-right py-2 font-heading">Změna</th>
                 </tr>
               </thead>
               <tbody>
@@ -1339,14 +1343,17 @@ function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }
                   const dateSrc = entry.gameDate ?? entry.createdAt;
                   const date = new Date(dateSrc).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
                   return (
-                    <tr key={entry.id} className="border-b border-gray-50 last:border-b-0">
-                      <td className="py-1.5 tabular-nums text-muted whitespace-nowrap">{date}</td>
-                      <td className="py-1.5 whitespace-nowrap">
-                        <span className="mr-1">{meta.icon}</span>
-                        <span className="font-medium">{meta.label}</span>
+                    <tr key={entry.id} className="border-b border-gray-50 last:border-b-0 align-top">
+                      <td className="py-1.5 pr-3 tabular-nums text-muted whitespace-nowrap">{date}</td>
+                      <td className="py-1.5 pr-3">
+                        <div className="whitespace-nowrap">
+                          <span className="mr-1">{meta.icon}</span>
+                          <span className="font-medium">{meta.label}</span>
+                        </div>
+                        <div className="md:hidden text-[11px] text-muted leading-tight">{entry.description ?? ""}</div>
                       </td>
-                      <td className="py-1.5 text-muted">{entry.description ?? "—"}</td>
-                      <td className="py-1.5 text-center whitespace-nowrap">
+                      <td className="py-1.5 pr-3 text-muted hidden md:table-cell">{entry.description ?? "—"}</td>
+                      <td className="py-1.5 text-right whitespace-nowrap">
                         <span className={`font-heading font-bold ${entry.delta > 0 ? "text-pitch-500" : entry.delta < 0 ? "text-card-red" : "text-muted"}`}>
                           {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
                         </span>
