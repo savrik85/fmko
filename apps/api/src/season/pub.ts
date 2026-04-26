@@ -188,7 +188,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
   // Top opilec dostane "vypil rekord" flavour text (zachová lore)
   const topDrinker = hangoverVictims.sort((a, b) => b.alcohol - a.alcohol)[0];
   if (topDrinker) {
-    const beers = 5 + Math.floor(Math.random() * 5);
+    const beers = 10 + Math.floor(Math.random() * 12); // 10-21 piv
     incidents.push({
       type: "drink_record",
       playerIds: [topDrinker.playerId],

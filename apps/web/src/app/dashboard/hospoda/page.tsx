@@ -116,12 +116,32 @@ export default function HospodaPage() {
 
   return (
     <div className="page-container space-y-5">
-      {/* Klubová šála na celou šířku */}
-      <div className="relative rounded-xl overflow-hidden shadow-sm">
+      {/* Klubová šála na celou šířku — 7 pruhů + třásně na koncích */}
+      <div className="relative mx-3 sm:mx-4">
+        {/* Třásně vlevo */}
+        <div className="absolute -left-3 top-2 bottom-2 flex flex-col gap-[2px] pointer-events-none">
+          {[scarfPrimary, scarfSecondary, scarfPrimary, scarfSecondary, scarfPrimary].map((c, i) => (
+            <div key={`l${i}`} className="w-3 flex-1 rounded-l-sm shadow-sm" style={{ background: c }} />
+          ))}
+        </div>
+        {/* Třásně vpravo */}
+        <div className="absolute -right-3 top-2 bottom-2 flex flex-col gap-[2px] pointer-events-none">
+          {[scarfSecondary, scarfPrimary, scarfSecondary, scarfPrimary, scarfSecondary].map((c, i) => (
+            <div key={`r${i}`} className="w-3 flex-1 rounded-r-sm shadow-sm" style={{ background: c }} />
+          ))}
+        </div>
+        {/* Tělo šály */}
         <div
-          className="flex items-center gap-5 px-6 py-5"
+          className="relative flex items-center gap-5 px-6 py-5 rounded-md shadow-md overflow-hidden"
           style={{
-            background: `linear-gradient(180deg, ${scarfPrimary} 0%, ${scarfPrimary} 33%, ${scarfSecondary} 33%, ${scarfSecondary} 67%, ${scarfPrimary} 67%, ${scarfPrimary} 100%)`,
+            background: `linear-gradient(180deg,
+              ${scarfPrimary} 0%, ${scarfPrimary} 14%,
+              ${scarfSecondary} 14%, ${scarfSecondary} 22%,
+              ${scarfPrimary} 22%, ${scarfPrimary} 36%,
+              ${scarfSecondary} 36%, ${scarfSecondary} 64%,
+              ${scarfPrimary} 64%, ${scarfPrimary} 78%,
+              ${scarfSecondary} 78%, ${scarfSecondary} 86%,
+              ${scarfPrimary} 86%, ${scarfPrimary} 100%)`,
             color: textColor,
           }}
         >
@@ -134,10 +154,10 @@ export default function HospodaPage() {
             size={64}
           />
           <div className="flex-1 min-w-0">
-            <h1 className="font-heading font-[800] text-2xl sm:text-3xl leading-none drop-shadow-sm">U nás v hospodě</h1>
-            <p className="text-sm opacity-80 mt-1 drop-shadow-sm">Kdo tam byl, co se dělo, co to stálo.</p>
+            <h1 className="font-heading font-[800] text-2xl sm:text-3xl leading-none drop-shadow-md">U nás v hospodě</h1>
+            <p className="text-sm opacity-90 mt-1 drop-shadow-md">Kdo tam byl, co se dělo, co to stálo.</p>
           </div>
-          <Link href="/dashboard" className="text-sm font-heading font-bold opacity-90 hover:opacity-100 whitespace-nowrap drop-shadow-sm">← Dashboard</Link>
+          <Link href="/dashboard" className="text-sm font-heading font-bold opacity-95 hover:opacity-100 whitespace-nowrap drop-shadow-md">← Dashboard</Link>
         </div>
       </div>
 
@@ -152,9 +172,9 @@ export default function HospodaPage() {
               const avatar = avatarsById[d.id];
               return (
                 <Link key={d.id} href={`/dashboard/player/${d.id}`} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-pitch-50/50 transition-colors group">
-                  <div className={`relative shrink-0 rounded-full ring-2 ${ringColor} overflow-hidden bg-white`} style={{ width: 56, height: 56 }}>
-                    {avatar ? <FaceAvatar faceConfig={avatar} size={56} /> : <div className="w-full h-full flex items-center justify-center text-xs text-muted">?</div>}
-                    <span className="absolute -bottom-0.5 -right-0.5 text-lg">{medal}</span>
+                  <div className={`relative shrink-0 rounded-2xl ring-2 ${ringColor} overflow-hidden bg-white`} style={{ width: 72, height: 72 }}>
+                    {avatar ? <FaceAvatar faceConfig={avatar} size={88} /> : <div className="w-full h-full flex items-center justify-center text-base font-heading font-bold text-muted">{d.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("")}</div>}
+                    <span className="absolute -bottom-1 -right-1 text-xl drop-shadow-sm">{medal}</span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-heading font-bold text-sm group-hover:text-pitch-500 truncate">{d.name}</div>
@@ -195,14 +215,15 @@ export default function HospodaPage() {
                     <div className="flex flex-wrap gap-2">
                       {s.attendees.map((a) => {
                         const avatar = avatarsById[a.playerId];
+                        const initials = `${a.firstName[0] ?? ""}${a.lastName[0] ?? ""}`.toUpperCase();
                         return (
                           <Link
                             key={a.playerId}
-                            href={a.isVisitor ? "#" : `/dashboard/player/${a.playerId}`}
-                            className={`flex items-center gap-2 px-2 py-1 rounded-full text-xs ${a.isVisitor ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200" : "bg-gray-50 hover:bg-pitch-50 text-ink"}`}
+                            href={`/dashboard/player/${a.playerId}`}
+                            className={`flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-xs ${a.isVisitor ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200 hover:bg-amber-100" : "bg-gray-50 hover:bg-pitch-50 text-ink"}`}
                           >
-                            <div className="shrink-0 rounded-full overflow-hidden bg-white" style={{ width: 24, height: 24 }}>
-                              {avatar ? <FaceAvatar faceConfig={avatar} size={24} /> : null}
+                            <div className="shrink-0 rounded-full overflow-hidden bg-white ring-1 ring-black/5 flex items-center justify-center" style={{ width: 28, height: 28 }}>
+                              {avatar ? <FaceAvatar faceConfig={avatar} size={36} /> : <span className="text-[10px] font-heading font-bold text-muted">{initials}</span>}
                             </div>
                             <span className="font-heading font-bold whitespace-nowrap">
                               {a.firstName} {a.lastName}

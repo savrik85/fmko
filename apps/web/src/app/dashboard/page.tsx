@@ -266,35 +266,54 @@ export default function DashboardPage() {
         })();
         const txtColor = isLight ? "#222" : "#FFF";
         return (
-        <div className="rounded-xl overflow-hidden shadow-sm">
-          {/* Šála header */}
-          <div
-            className="flex items-center gap-4 px-5 py-3"
-            style={{
-              background: `linear-gradient(180deg, ${scarfPrimary} 0%, ${scarfPrimary} 33%, ${scarfSecondary} 33%, ${scarfSecondary} 67%, ${scarfPrimary} 67%, ${scarfPrimary} 100%)`,
-              color: txtColor,
-            }}
-          >
-            <BadgePreview
-              primary={scarfPrimary}
-              secondary={scarfSecondary}
-              pattern={(team.badge_pattern as BadgePattern) || "shield"}
-              initials={badgeInit}
-              symbol={team.badge_symbol}
-              size={48}
-            />
-            <div className="flex-1 min-w-0">
-              <h2 className="font-heading font-[800] text-xl leading-none drop-shadow-sm">U nás v hospodě</h2>
-              <div className="text-[11px] uppercase opacity-80 mt-1 drop-shadow-sm">
-                {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
-              </div>
+        <div className="rounded-xl overflow-visible">
+          {/* Šála — 7 pruhů + třásně */}
+          <div className="relative mx-3">
+            <div className="absolute -left-2.5 top-1.5 bottom-1.5 flex flex-col gap-[2px] pointer-events-none">
+              {[scarfPrimary, scarfSecondary, scarfPrimary, scarfSecondary, scarfPrimary].map((c, i) => (
+                <div key={`l${i}`} className="w-2.5 flex-1 rounded-l-sm shadow-sm" style={{ background: c }} />
+              ))}
             </div>
-            <Link href="/dashboard/hospoda" className="text-xs font-heading font-bold opacity-90 hover:opacity-100 whitespace-nowrap drop-shadow-sm">
-              Historie →
-            </Link>
+            <div className="absolute -right-2.5 top-1.5 bottom-1.5 flex flex-col gap-[2px] pointer-events-none">
+              {[scarfSecondary, scarfPrimary, scarfSecondary, scarfPrimary, scarfSecondary].map((c, i) => (
+                <div key={`r${i}`} className="w-2.5 flex-1 rounded-r-sm shadow-sm" style={{ background: c }} />
+              ))}
+            </div>
+            <div
+              className="relative flex items-center gap-4 px-5 py-3 rounded-md shadow-md overflow-hidden"
+              style={{
+                background: `linear-gradient(180deg,
+                  ${scarfPrimary} 0%, ${scarfPrimary} 14%,
+                  ${scarfSecondary} 14%, ${scarfSecondary} 22%,
+                  ${scarfPrimary} 22%, ${scarfPrimary} 36%,
+                  ${scarfSecondary} 36%, ${scarfSecondary} 64%,
+                  ${scarfPrimary} 64%, ${scarfPrimary} 78%,
+                  ${scarfSecondary} 78%, ${scarfSecondary} 86%,
+                  ${scarfPrimary} 86%, ${scarfPrimary} 100%)`,
+                color: txtColor,
+              }}
+            >
+              <BadgePreview
+                primary={scarfPrimary}
+                secondary={scarfSecondary}
+                pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                initials={badgeInit}
+                symbol={team.badge_symbol}
+                size={48}
+              />
+              <div className="flex-1 min-w-0">
+                <h2 className="font-heading font-[800] text-xl leading-none drop-shadow-md">U nás v hospodě</h2>
+                <div className="text-[11px] uppercase opacity-90 mt-1 drop-shadow-md">
+                  {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
+                </div>
+              </div>
+              <Link href="/dashboard/hospoda" className="text-xs font-heading font-bold opacity-95 hover:opacity-100 whitespace-nowrap drop-shadow-md">
+                Historie →
+              </Link>
+            </div>
           </div>
           {/* Tělo */}
-          <div className="bg-white p-4 sm:p-5">
+          <div className="card mt-3 p-4 sm:p-5">
 
           {pubSession.attendees.length > 0 && (
             <div className="text-sm mb-3">
