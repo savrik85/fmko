@@ -78,8 +78,11 @@ export async function executeDailyTick(
 
     if (isTrainingDay && team.training_type) {
       try {
+        // Vyloučit zraněné — zraněný hráč netrenuje (předtím byl pre-existing bug, šel do simulátoru).
         const playersResult = await env.DB.prepare(
-          "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
+          `SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')
+             AND id NOT IN (SELECT player_id FROM injuries WHERE days_remaining > 0)
+           ORDER BY overall_rating DESC`,
         ).bind(teamId).all();
 
         const squad = playersResult.results.map((row) => {
