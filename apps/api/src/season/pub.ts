@@ -99,12 +99,12 @@ const STORY_TEMPLATES = [
 
 const SOLO_TEMPLATES = [
   "{name} seděl sám u baru, ostatní chlapci dnes nikam nešli.",
-  "Jen {name} u Pralesa — pivař musí vždycky být.",
+  "Jen {name} v hospodě — pivař musí vždycky být.",
   "{name} dorazil sám, hospodský mu nalil bez ptaní.",
 ];
 
 const NOBODY_TEMPLATES = [
-  "Včera v Pralesu nikdo nebyl, hospodský zavřel už v devět.",
+  "Včera v hospodě nikdo nebyl, hospodský zavřel už v devět.",
   "Suchá noc — kluci asi sledovali ligu doma.",
   "Tichá středa, jen hospodský s kočkou.",
 ];
@@ -347,7 +347,7 @@ export async function createCoachLedSession(
     incidents.push({
       type: "coach_led_visit",
       playerIds: attendees.map((a) => a.playerId),
-      text: `Trenér vyhlásil "Pojedeme na jedno!" Celý tým u Pralesa.`,
+      text: `Trenér vyhlásil "Pojedeme na jedno!" Celý tým v hospodě.`,
       effects: attendees.flatMap((a) => [
         { playerId: a.playerId, type: "morale" as const, delta: 8, label: "+8 morálka" },
         { playerId: a.playerId, type: "condition" as const, delta: -15, label: "−15 kondice" },

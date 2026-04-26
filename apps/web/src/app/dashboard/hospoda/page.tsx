@@ -85,12 +85,6 @@ export default function HospodaPage() {
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[40vh]"><Spinner /></div>;
 
-  // Aggregate stats
-  const totalIncidents = sessions.reduce((s, x) => s + x.incidents.length, 0);
-  const fights = sessions.flatMap((s) => s.incidents).filter((i) => i.type === "cross_team_fight").length;
-  const visits = sessions.flatMap((s) => s.attendees).filter((a) => a.isVisitor).length;
-  const drinkRecords = sessions.flatMap((s) => s.incidents).filter((i) => i.type === "drink_record").length;
-
   // Top pijani — kolikrát byl v hospodě
   const drinkerCounts = new Map<string, { name: string; count: number }>();
   for (const s of sessions) {
@@ -111,65 +105,39 @@ export default function HospodaPage() {
   const scarfSecondary = team?.badge_secondary_color || team?.secondary_color || "#FFF";
   const badgeInit = team?.badge_initials || (team?.name ?? "").split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
 
+  // Helper: kontrast textu na šále podle světlosti primary barvy
+  const isLight = (() => {
+    const c = (scarfPrimary || "").replace("#", "");
+    if (c.length < 6) return false;
+    const r = parseInt(c.slice(0, 2), 16); const g = parseInt(c.slice(2, 4), 16); const b = parseInt(c.slice(4, 6), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 > 160;
+  })();
+  const textColor = isLight ? "#222" : "#FFF";
+
   return (
     <div className="page-container space-y-5">
-      <div className="card p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-4">
-            {/* Klubová šála */}
-            <div className="relative w-32 h-14 shrink-0">
-              <div className="absolute inset-0 rounded-full overflow-hidden ring-1 ring-black/10 shadow-sm flex flex-col">
-                <div className="flex-1" style={{ background: scarfPrimary }} />
-                <div className="flex-1" style={{ background: scarfSecondary }} />
-                <div className="flex-1" style={{ background: scarfPrimary }} />
-              </div>
-              <div className="absolute -left-1.5 top-1.5 bottom-1.5 flex flex-col gap-[1px]">
-                {[scarfPrimary, scarfSecondary, scarfPrimary].map((c, i) => (
-                  <div key={i} className="w-1.5 flex-1 rounded-l" style={{ background: c }} />
-                ))}
-              </div>
-              <div className="absolute -right-1.5 top-1.5 bottom-1.5 flex flex-col gap-[1px]">
-                {[scarfSecondary, scarfPrimary, scarfSecondary].map((c, i) => (
-                  <div key={i} className="w-1.5 flex-1 rounded-r" style={{ background: c }} />
-                ))}
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <BadgePreview
-                  primary={scarfPrimary}
-                  secondary={scarfSecondary}
-                  pattern={(team?.badge_pattern as BadgePattern) || "shield"}
-                  initials={badgeInit}
-                  symbol={team?.badge_symbol}
-                  size={44}
-                />
-              </div>
-            </div>
-            <div>
-              <h1 className="font-heading font-[800] text-2xl leading-none">U nás v hospodě</h1>
-              <p className="text-sm text-muted mt-1">Kdo tam byl, co se dělo, co to stálo.</p>
-            </div>
+      {/* Klubová šála na celou šířku */}
+      <div className="relative rounded-xl overflow-hidden shadow-sm">
+        <div
+          className="flex items-center gap-5 px-6 py-5"
+          style={{
+            background: `linear-gradient(180deg, ${scarfPrimary} 0%, ${scarfPrimary} 33%, ${scarfSecondary} 33%, ${scarfSecondary} 67%, ${scarfPrimary} 67%, ${scarfPrimary} 100%)`,
+            color: textColor,
+          }}
+        >
+          <BadgePreview
+            primary={scarfPrimary}
+            secondary={scarfSecondary}
+            pattern={(team?.badge_pattern as BadgePattern) || "shield"}
+            initials={badgeInit}
+            symbol={team?.badge_symbol}
+            size={64}
+          />
+          <div className="flex-1 min-w-0">
+            <h1 className="font-heading font-[800] text-2xl sm:text-3xl leading-none drop-shadow-sm">U nás v hospodě</h1>
+            <p className="text-sm opacity-80 mt-1 drop-shadow-sm">Kdo tam byl, co se dělo, co to stálo.</p>
           </div>
-          <Link href="/dashboard" className="text-sm text-pitch-500 hover:underline font-heading font-bold">← Dashboard</Link>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="card p-4 text-center">
-          <div className="font-heading font-[800] text-3xl tabular-nums text-ink">{sessions.length}</div>
-          <div className="text-xs text-muted uppercase">Večerů</div>
-        </div>
-        <div className="card p-4 text-center">
-          <div className="font-heading font-[800] text-3xl tabular-nums text-ink">{totalIncidents}</div>
-          <div className="text-xs text-muted uppercase">Příhod</div>
-        </div>
-        <div className="card p-4 text-center">
-          <div className="font-heading font-[800] text-3xl tabular-nums text-card-red">{fights}</div>
-          <div className="text-xs text-muted uppercase">Rvaček</div>
-        </div>
-        <div className="card p-4 text-center">
-          <div className="font-heading font-[800] text-3xl tabular-nums text-amber-600">{visits}</div>
-          <div className="text-xs text-muted uppercase">Hostů</div>
+          <Link href="/dashboard" className="text-sm font-heading font-bold opacity-90 hover:opacity-100 whitespace-nowrap drop-shadow-sm">← Dashboard</Link>
         </div>
       </div>
 
@@ -190,7 +158,7 @@ export default function HospodaPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-heading font-bold text-sm group-hover:text-pitch-500 truncate">{d.name}</div>
-                    <div className="text-xs text-muted">{d.count}× {d.count === 1 ? "večer" : d.count < 5 ? "večery" : "večerů"} u Pralesa</div>
+                    <div className="text-xs text-muted">{d.count}× {d.count === 1 ? "večer" : d.count < 5 ? "večery" : "večerů"} v hospodě</div>
                   </div>
                 </Link>
               );

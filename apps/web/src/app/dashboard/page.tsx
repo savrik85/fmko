@@ -258,51 +258,43 @@ export default function DashboardPage() {
         const scarfPrimary = team.badge_primary_color || color;
         const scarfSecondary = team.badge_secondary_color || team.secondary_color || "#FFF";
         const badgeInit = team.badge_initials || team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+        const isLight = (() => {
+          const c = (scarfPrimary || "").replace("#", "");
+          if (c.length < 6) return false;
+          const r = parseInt(c.slice(0, 2), 16); const g = parseInt(c.slice(2, 4), 16); const b = parseInt(c.slice(4, 6), 16);
+          return (r * 299 + g * 587 + b * 114) / 1000 > 160;
+        })();
+        const txtColor = isLight ? "#222" : "#FFF";
         return (
-        <div className="card p-4 sm:p-5">
-          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-            <div className="flex items-center gap-3">
-              {/* Klubová šála */}
-              <div className="relative w-24 h-10 shrink-0">
-                <div className="absolute inset-0 rounded-full overflow-hidden ring-1 ring-black/10 shadow-sm flex flex-col">
-                  <div className="flex-1" style={{ background: scarfPrimary }} />
-                  <div className="flex-1" style={{ background: scarfSecondary }} />
-                  <div className="flex-1" style={{ background: scarfPrimary }} />
-                </div>
-                {/* Třásně */}
-                <div className="absolute -left-1 top-1 bottom-1 flex flex-col gap-[1px]">
-                  {[scarfPrimary, scarfSecondary, scarfPrimary].map((c, i) => (
-                    <div key={i} className="w-1 flex-1 rounded-l" style={{ background: c }} />
-                  ))}
-                </div>
-                <div className="absolute -right-1 top-1 bottom-1 flex flex-col gap-[1px]">
-                  {[scarfSecondary, scarfPrimary, scarfSecondary].map((c, i) => (
-                    <div key={i} className="w-1 flex-1 rounded-r" style={{ background: c }} />
-                  ))}
-                </div>
-                {/* Klubový znak uprostřed */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <BadgePreview
-                    primary={scarfPrimary}
-                    secondary={scarfSecondary}
-                    pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                    initials={badgeInit}
-                    symbol={team.badge_symbol}
-                    size={32}
-                  />
-                </div>
-              </div>
-              <div>
-                <h2 className="font-heading font-[800] text-lg leading-none">U nás v hospodě</h2>
-                <div className="text-[11px] uppercase text-muted font-heading mt-1">
-                  {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
-                </div>
+        <div className="rounded-xl overflow-hidden shadow-sm">
+          {/* Šála header */}
+          <div
+            className="flex items-center gap-4 px-5 py-3"
+            style={{
+              background: `linear-gradient(180deg, ${scarfPrimary} 0%, ${scarfPrimary} 33%, ${scarfSecondary} 33%, ${scarfSecondary} 67%, ${scarfPrimary} 67%, ${scarfPrimary} 100%)`,
+              color: txtColor,
+            }}
+          >
+            <BadgePreview
+              primary={scarfPrimary}
+              secondary={scarfSecondary}
+              pattern={(team.badge_pattern as BadgePattern) || "shield"}
+              initials={badgeInit}
+              symbol={team.badge_symbol}
+              size={48}
+            />
+            <div className="flex-1 min-w-0">
+              <h2 className="font-heading font-[800] text-xl leading-none drop-shadow-sm">U nás v hospodě</h2>
+              <div className="text-[11px] uppercase opacity-80 mt-1 drop-shadow-sm">
+                {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
               </div>
             </div>
-            <Link href="/dashboard/hospoda" className="text-[11px] uppercase text-pitch-500 font-heading font-bold hover:underline whitespace-nowrap">
+            <Link href="/dashboard/hospoda" className="text-xs font-heading font-bold opacity-90 hover:opacity-100 whitespace-nowrap drop-shadow-sm">
               Historie →
             </Link>
           </div>
+          {/* Tělo */}
+          <div className="bg-white p-4 sm:p-5">
 
           {pubSession.attendees.length > 0 && (
             <div className="text-sm mb-3">
@@ -362,6 +354,7 @@ export default function DashboardPage() {
               })}
             </ul>
           )}
+          </div>
         </div>
         );
       })()}
