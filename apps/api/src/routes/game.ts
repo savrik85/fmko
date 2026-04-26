@@ -2675,6 +2675,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       passing: skills.passing ?? 50, heading: skills.heading ?? 50, defense: skills.defense ?? 50,
       goalkeeping: skills.goalkeeping ?? 50, stamina: skills.stamina ?? 50,
       avgRating: p.avg_rating ?? null,
+      hangover: !!lc.hangover,
       absent,
       injured,
       suspended,
@@ -4969,16 +4970,34 @@ gameRouter.post("/admin/generate-player-offer/:teamId", async (c) => {
 
 // POST /api/admin/regenerate-pending-interviews — smaže všechny pending rozhovory
 // a vygeneruje nové se stejnou (league_id, calendar_id, game_week) trojicí.
-// Použití: po opravě promptu, kdy stávající pending mají vymyšlená data.
+// Optional body: { groups: [{leagueId, calendarId, gameWeek, count}, ...] } — pokud zadané,
+// použije se místo lookupu z DB (užitečné když pending už byly smazány).
 gameRouter.post("/admin/regenerate-pending-interviews", async (c) => {
-  const groups = await c.env.DB.prepare(
-    `SELECT league_id, match_calendar_id, game_week, COUNT(*) as cnt
-     FROM coach_interviews WHERE status = 'pending'
-     GROUP BY league_id, match_calendar_id, game_week`
-  ).all<{ league_id: string; match_calendar_id: string; game_week: number; cnt: number }>().catch((e) => {
-    logger.warn({ module: "game.ts" }, "regen interviews — group lookup", e);
-    return { results: [] };
+  const body = await c.req.json<{ groups?: Array<{ leagueId: string; calendarId: string; gameWeek: number; count: number }> }>().catch((e) => {
+    logger.warn({ module: "game.ts" }, "regen interviews — parse body (může být prázdné)", e);
+    return null;
   });
+
+  let groups: { results: Array<{ league_id: string; match_calendar_id: string; game_week: number; cnt: number }> };
+  if (body?.groups?.length) {
+    groups = {
+      results: body.groups.map((g) => ({
+        league_id: g.leagueId,
+        match_calendar_id: g.calendarId,
+        game_week: g.gameWeek,
+        cnt: g.count,
+      })),
+    };
+  } else {
+    groups = await c.env.DB.prepare(
+      `SELECT league_id, match_calendar_id, game_week, COUNT(*) as cnt
+       FROM coach_interviews WHERE status = 'pending'
+       GROUP BY league_id, match_calendar_id, game_week`
+    ).all<{ league_id: string; match_calendar_id: string; game_week: number; cnt: number }>().catch((e) => {
+      logger.warn({ module: "game.ts" }, "regen interviews — group lookup", e);
+      return { results: [] };
+    });
+  }
 
   const summary: Array<{ leagueId: string; calendarId: string; gameWeek: number; deleted: number; regenerated: number }> = [];
 

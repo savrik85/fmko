@@ -742,6 +742,7 @@ function MatchPage() {
                                 <div className="flex items-center gap-1">
                                   <span className="font-heading font-bold text-sm">{isOOP && <span className="text-gold-500 mr-1">⚠️</span>}{p.lastName}</span>
                                   <PositionBadge position={p.position as Pos} />
+                                  {(p as any).hangover && <span title="Ranní kocovina po výhře (−15 kondice)">🍺</span>}
                                 </div>
                                 <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
                               </div>
@@ -877,6 +878,7 @@ function MatchPage() {
                                 <div className="flex items-center gap-1">
                                   <span className="font-heading font-bold text-sm leading-tight">{p.lastName}</span>
                                   <PositionBadge position={p.position as Pos} />
+                                  {(p as any).hangover && <span title="Ranní kocovina po výhře (−15 kondice)">🍺</span>}
                                 </div>
                                 <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
                               </div>

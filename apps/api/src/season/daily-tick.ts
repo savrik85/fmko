@@ -58,6 +58,11 @@ export async function executeDailyTick(
     "UPDATE players SET life_context = json_remove(life_context, '$.absence') WHERE json_extract(life_context, '$.absence') IS NOT NULL"
   ).run().catch((e) => logger.warn({ module: "daily-tick" }, "clear yesterday absences", e));
 
+  // Včerejší kocovina vyprchá — flag se nastavuje v match-runner po výhře, trvá 1 herní den.
+  await env.DB.prepare(
+    "UPDATE players SET life_context = json_remove(life_context, '$.hangover') WHERE json_extract(life_context, '$.hangover') IS NOT NULL"
+  ).run().catch((e) => logger.warn({ module: "daily-tick" }, "clear yesterday hangovers", e));
+
   // ── Training (Mon-Fri, if plan is set) ──
   const teams = await env.DB.prepare(
     "SELECT id, training_type, training_approach, training_sessions FROM teams WHERE user_id != 'ai'"

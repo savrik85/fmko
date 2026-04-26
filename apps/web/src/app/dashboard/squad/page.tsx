@@ -221,6 +221,9 @@ export default function SquadPage() {
                         <span className="ml-1.5 text-[10px] bg-amber-100 text-amber-700 font-heading font-bold px-1.5 py-0.5 rounded-full cursor-help" title={tip} aria-label={tip}>🚫</span>
                       );
                     })()}
+                    {(lc as unknown as { hangover?: number | boolean } | undefined)?.hangover ? (
+                      <span className="ml-1.5 cursor-help" title="Ranní kocovina po včerejší výhře (−15 kondice)" aria-label="Kocovina">🍺</span>
+                    ) : null}
                   </td>
                   {/* Position */}
                   <td className="py-2 px-1.5 text-center"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></td>
