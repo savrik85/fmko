@@ -116,34 +116,12 @@ export default function HospodaPage() {
 
   return (
     <div className="page-container space-y-5">
-      {/* Klubová šála na celou šířku — 7 pruhů + třásně na koncích */}
-      <div className="relative mx-3 sm:mx-4">
-        {/* Třásně vlevo */}
-        <div className="absolute -left-3 top-2 bottom-2 flex flex-col gap-[2px] pointer-events-none">
-          {[scarfPrimary, scarfSecondary, scarfPrimary, scarfSecondary, scarfPrimary].map((c, i) => (
-            <div key={`l${i}`} className="w-3 flex-1 rounded-l-sm shadow-sm" style={{ background: c }} />
-          ))}
-        </div>
-        {/* Třásně vpravo */}
-        <div className="absolute -right-3 top-2 bottom-2 flex flex-col gap-[2px] pointer-events-none">
-          {[scarfSecondary, scarfPrimary, scarfSecondary, scarfPrimary, scarfSecondary].map((c, i) => (
-            <div key={`r${i}`} className="w-3 flex-1 rounded-r-sm shadow-sm" style={{ background: c }} />
-          ))}
-        </div>
-        {/* Tělo šály */}
+      {/* Header — solid primary banner s úzkou secondary linkou nahoře a dole */}
+      <div className="rounded-xl overflow-hidden shadow-md">
+        <div className="h-1.5" style={{ background: scarfSecondary }} />
         <div
-          className="relative flex items-center gap-5 px-6 py-5 rounded-md shadow-md overflow-hidden"
-          style={{
-            background: `linear-gradient(180deg,
-              ${scarfPrimary} 0%, ${scarfPrimary} 14%,
-              ${scarfSecondary} 14%, ${scarfSecondary} 22%,
-              ${scarfPrimary} 22%, ${scarfPrimary} 36%,
-              ${scarfSecondary} 36%, ${scarfSecondary} 64%,
-              ${scarfPrimary} 64%, ${scarfPrimary} 78%,
-              ${scarfSecondary} 78%, ${scarfSecondary} 86%,
-              ${scarfPrimary} 86%, ${scarfPrimary} 100%)`,
-            color: textColor,
-          }}
+          className="flex items-center gap-5 px-6 py-5"
+          style={{ background: scarfPrimary, color: textColor }}
         >
           <BadgePreview
             primary={scarfPrimary}
@@ -154,11 +132,12 @@ export default function HospodaPage() {
             size={64}
           />
           <div className="flex-1 min-w-0">
-            <h1 className="font-heading font-[800] text-2xl sm:text-3xl leading-none drop-shadow-md">U nás v hospodě</h1>
-            <p className="text-sm opacity-90 mt-1 drop-shadow-md">Kdo tam byl, co se dělo, co to stálo.</p>
+            <h1 className="font-heading font-[800] text-2xl sm:text-3xl leading-none">U nás v hospodě</h1>
+            <p className="text-sm opacity-80 mt-1">Kdo tam byl, co se dělo, co to stálo.</p>
           </div>
-          <Link href="/dashboard" className="text-sm font-heading font-bold opacity-95 hover:opacity-100 whitespace-nowrap drop-shadow-md">← Dashboard</Link>
+          <Link href="/dashboard" className="text-sm font-heading font-bold opacity-90 hover:opacity-100 whitespace-nowrap">← Dashboard</Link>
         </div>
+        <div className="h-1.5" style={{ background: scarfSecondary }} />
       </div>
 
       {/* Síň slávy štamgastů */}
@@ -172,8 +151,10 @@ export default function HospodaPage() {
               const avatar = avatarsById[d.id];
               return (
                 <Link key={d.id} href={`/dashboard/player/${d.id}`} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-pitch-50/50 transition-colors group">
-                  <div className={`relative shrink-0 rounded-2xl ring-2 ${ringColor} overflow-hidden bg-white`} style={{ width: 72, height: 72 }}>
-                    {avatar ? <FaceAvatar faceConfig={avatar} size={88} /> : <div className="w-full h-full flex items-center justify-center text-base font-heading font-bold text-muted">{d.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("")}</div>}
+                  <div className="relative shrink-0">
+                    {avatar
+                      ? <FaceAvatar faceConfig={avatar} size={64} className={`rounded-full ring-2 ${ringColor} bg-white`} />
+                      : <div className={`rounded-full ring-2 ${ringColor} bg-gray-100 flex items-center justify-center font-heading font-bold text-base text-muted`} style={{ width: 64, height: 64 }}>{d.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("")}</div>}
                     <span className="absolute -bottom-1 -right-1 text-xl drop-shadow-sm">{medal}</span>
                   </div>
                   <div className="min-w-0 flex-1">
@@ -222,9 +203,9 @@ export default function HospodaPage() {
                             href={`/dashboard/player/${a.playerId}`}
                             className={`flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-xs ${a.isVisitor ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200 hover:bg-amber-100" : "bg-gray-50 hover:bg-pitch-50 text-ink"}`}
                           >
-                            <div className="shrink-0 rounded-full overflow-hidden bg-white ring-1 ring-black/5 flex items-center justify-center" style={{ width: 28, height: 28 }}>
-                              {avatar ? <FaceAvatar faceConfig={avatar} size={36} /> : <span className="text-[10px] font-heading font-bold text-muted">{initials}</span>}
-                            </div>
+                            {avatar
+                              ? <FaceAvatar faceConfig={avatar} size={28} className="rounded-full bg-white ring-1 ring-black/5" />
+                              : <span className="rounded-full bg-gray-200 ring-1 ring-black/5 flex items-center justify-center text-[10px] font-heading font-bold text-muted shrink-0" style={{ width: 28, height: 28 }}>{initials}</span>}
                             <span className="font-heading font-bold whitespace-nowrap">
                               {a.firstName} {a.lastName}
                             </span>
