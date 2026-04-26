@@ -96,6 +96,7 @@ export default function DashboardPage() {
   const [news, setNews] = useState<Array<{ id: string; type: string; headline: string; icon: string; date: string }>>([]);
   const [achievements, setAchievements] = useState<Array<{ key: string; icon: string; title: string; tier: string; earnedAt: string | null }>>([]);
   const [hofRank, setHofRank] = useState<{ myRank: number | null; myTotal: number; myGold: number; mySilver: number; myBronze: number; top3: Array<{ rank: number; teamName: string; total: number }>; totalEntries: number } | null>(null);
+  const [pubSession, setPubSession] = useState<{ gameDate: string; attendees: Array<{ playerId: string; firstName: string; lastName: string; alcohol: number; teamId: string; isVisitor: boolean; fromTeamName?: string }>; incidents: Array<{ type: string; playerIds: string[]; text: string }> } | null>(null);
   const [promoting, setPromoting] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -137,6 +138,10 @@ export default function DashboardPage() {
             .slice(0, 3)
         ))
         .catch((e) => console.error("achievements fetch:", e));
+      // Fetch poslední pub session
+      apiFetch<{ session: { gameDate: string; attendees: Array<{ playerId: string; firstName: string; lastName: string; alcohol: number; teamId: string; isVisitor: boolean; fromTeamName?: string }>; incidents: Array<{ type: string; playerIds: string[]; text: string }> } | null }>(`/api/teams/${teamId}/pub-session`)
+        .then((d) => setPubSession(d.session))
+        .catch((e) => console.error("pub-session fetch:", e));
       // Fetch Hall of Fame — compute my rank (humans only)
       apiFetch<{ entries: Array<{ rank: number; teamId: string; teamName: string; isHuman: boolean; total: number; gold: number; silver: number; bronze: number }> }>(`/api/hall-of-fame`)
         .then((d) => {
@@ -247,6 +252,55 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* ═══ Hospoda U Pralesa — co se včera dělo ═══ */}
+      {pubSession && (pubSession.attendees.length > 0 || pubSession.incidents.length > 0) && (
+        <div className="card p-4 sm:p-5">
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <SectionLabel>Hospoda U Pralesa</SectionLabel>
+            <span className="text-[10px] uppercase text-muted font-heading whitespace-nowrap">
+              {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
+            </span>
+          </div>
+
+          {pubSession.attendees.length > 0 && (
+            <div className="text-sm mb-3">
+              <span className="text-muted">🪑 V hospodě seděli: </span>
+              {pubSession.attendees.map((a, i) => (
+                <span key={a.playerId}>
+                  {i > 0 && ", "}
+                  <Link href={a.isVisitor ? "#" : `/dashboard/player/${a.playerId}`} className={`font-heading font-bold ${a.isVisitor ? "text-amber-600" : "hover:text-pitch-500 underline decoration-pitch-500/20"}`}>
+                    {a.firstName} {a.lastName}
+                  </Link>
+                  {a.isVisitor && <span className="text-[10px] text-amber-600 ml-1">({a.fromTeamName})</span>}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {pubSession.incidents.length > 0 && (
+            <ul className="space-y-1.5">
+              {pubSession.incidents.map((inc, i) => {
+                const icon = inc.type === "cross_team_fight" ? "🥊"
+                  : inc.type === "cross_team_brotherhood" ? "🍻"
+                  : inc.type === "cross_team_provocation" ? "👊"
+                  : inc.type === "drink_record" ? "🍺"
+                  : inc.type === "automat_win" ? "💰"
+                  : inc.type === "story" ? "📰"
+                  : inc.type === "lone_drinker" ? "🪑"
+                  : inc.type === "nobody" ? "🌙"
+                  : "•";
+                return (
+                  <li key={i} className="text-sm flex gap-2 items-start">
+                    <span className="shrink-0">{icon}</span>
+                    <span className="text-ink leading-snug">{inc.text}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* ═══ Row 1: Next match | Tabulka | Stav kádru ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-[auto_auto] gap-5">

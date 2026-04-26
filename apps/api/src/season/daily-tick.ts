@@ -406,6 +406,15 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "random life events", e);
   }
 
+  // ── Hospoda U Pralesa ── generuj večerní session pro lidské týmy (idempotentní per game_date)
+  try {
+    const { generatePubSessionsForAllTeams } = await import("./pub");
+    const r = await generatePubSessionsForAllTeams(env.DB, todayKey);
+    if (r.sessionsCreated > 0) events.push({ type: "recovery", description: `Hospoda: ${r.sessionsCreated} session` });
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "pub sessions", e);
+  }
+
   // Morale drift toward 50
   await env.DB.prepare(
     `UPDATE players SET life_context = json_set(life_context, '$.morale',

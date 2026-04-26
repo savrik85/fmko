@@ -2319,6 +2319,34 @@ teamsRouter.get("/:id/players/:playerId/career-stats", async (c) => {
   return c.json({ seasons, totals });
 });
 
+// GET /api/teams/:id/pub-session — poslední hospodská session
+teamsRouter.get("/:id/pub-session", async (c) => {
+  const teamId = c.req.param("id");
+
+  const session = await c.env.DB.prepare(
+    `SELECT id, game_date, attendees, incidents, created_at FROM pub_sessions
+     WHERE team_id = ? ORDER BY game_date DESC, created_at DESC LIMIT 1`,
+  ).bind(teamId).first<{ id: number; game_date: string; attendees: string; incidents: string; created_at: string }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "load pub session", e); return null; });
+
+  if (!session) return c.json({ session: null });
+
+  let attendees: unknown[] = [];
+  let incidents: unknown[] = [];
+  try { attendees = JSON.parse(session.attendees); } catch (e) { logger.warn({ module: "teams" }, "parse pub attendees", e); }
+  try { incidents = JSON.parse(session.incidents); } catch (e) { logger.warn({ module: "teams" }, "parse pub incidents", e); }
+
+  return c.json({
+    session: {
+      id: session.id,
+      gameDate: session.game_date,
+      attendees,
+      incidents,
+      createdAt: session.created_at,
+    },
+  });
+});
+
 // GET /api/teams/:id/players/:playerId/condition-log — vývoj kondice (timeline)
 // Query: ?days=14 (default), ?limit=200 (max). Vrací entries za posledních N dní (dle created_at).
 teamsRouter.get("/:id/players/:playerId/condition-log", async (c) => {
