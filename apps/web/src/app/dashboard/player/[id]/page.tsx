@@ -732,12 +732,12 @@ export default function PlayerDetailPage() {
       {/* ═══ Tréninkový vývoj (jen pro vlastníka) ═══ */}
       {player.team_id === teamId && <TrainingDevelopment teamId={teamId} playerId={playerId} />}
 
-      {/* ═══ Vývoj kondice (jen pro vlastníka) ═══ */}
-      {player.team_id === teamId && <ConditionLog teamId={teamId} playerId={playerId} />}
-
-      {/* ═══ Vztahy v kádru (jen vlastní hráči) ═══ */}
-      {isOwnPlayer && profileExtras && profileExtras.relationships.length > 0 && (
-        <div className="card p-4 sm:p-5 max-w-lg">
+      {/* ═══ Vývoj kondice + Vztahy v kádru (2-col grid na desktopu) ═══ */}
+      {(player.team_id === teamId || (isOwnPlayer && profileExtras && profileExtras.relationships.length > 0)) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+          {player.team_id === teamId && <ConditionLog teamId={teamId} playerId={playerId} />}
+          {isOwnPlayer && profileExtras && profileExtras.relationships.length > 0 && (
+        <div className="card p-4 sm:p-5">
           <SectionLabel>Vztahy v kádru</SectionLabel>
           <div className="space-y-1.5">
             {(showAllRelationships ? profileExtras.relationships : profileExtras.relationships.slice(0, 3)).map((rel) => {
@@ -765,6 +765,8 @@ export default function PlayerDetailPage() {
               </button>
             )}
           </div>
+        </div>
+          )}
         </div>
       )}
 
