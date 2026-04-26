@@ -375,11 +375,13 @@ export function generateAbsences(
     // Celková šance na absenci — cíl: průměrně 1-2 absence na tým (18 hráčů)
     // discipline 100 → ~3%, discipline 0 → ~15%
     // Průměrný hráč (disc=50, pat=50, morale=50) → ~7% → 1.3 absence na tým
+    // Multiplier 0.95 kompenzuje navýšení absencí z hospody (zranění z bitek ~3-5 / sezónu) —
+    // celkový počet zůstává přibližně stejný.
     const disciplineFactor = (100 - p.discipline) / 100;
     const patriotismFactor = (100 - p.patriotism) / 200;
     const moraleFactor = (100 - p.morale) / 300;
     const commuteFactor = Math.min(0.04, (p.commuteKm ?? 0) * 0.002);
-    let baseChance = 0.02 + disciplineFactor * 0.10 + patriotismFactor * 0.03 + moraleFactor * 0.02 + commuteFactor;
+    let baseChance = (0.02 + disciplineFactor * 0.10 + patriotismFactor * 0.03 + moraleFactor * 0.02 + commuteFactor) * 0.95;
 
     // ── Celebrity override — much higher absence rates ──
     if (p.isCelebrity) {
