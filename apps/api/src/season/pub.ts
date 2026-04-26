@@ -18,10 +18,19 @@ interface PubAttendee {
   fromTeamName?: string;
 }
 
+interface PubEffect {
+  playerId: string;
+  type: "condition" | "injury" | "morale";
+  delta?: number; // pro condition/morale
+  injuryDays?: number; // pro injury
+  label: string; // pro UI: "−12 kondice", "Lehké zranění (2 d)", "+3 morálka"
+}
+
 interface PubIncident {
   type: string; // "drink_record" | "story" | "automat_win" | "cross_team_fight" | "cross_team_brotherhood" | "cross_team_provocation" | "lone_drinker"
   playerIds: string[];
   text: string;
+  effects: PubEffect[];
 }
 
 interface DbPlayer {
@@ -104,16 +113,16 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<string>>, buddiesMap: Map<string, Set<string>>): PubIncident[] {
+function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<string>>, _buddiesMap: Map<string, Set<string>>): PubIncident[] {
   const incidents: PubIncident[] = [];
 
   if (attendees.length === 0) {
-    return [{ type: "nobody", playerIds: [], text: pickRandom(NOBODY_TEMPLATES) }];
+    return [{ type: "nobody", playerIds: [], text: pickRandom(NOBODY_TEMPLATES), effects: [] }];
   }
 
   if (attendees.length === 1) {
     const p = attendees[0];
-    return [{ type: "lone_drinker", playerIds: [p.playerId], text: pickRandom(SOLO_TEMPLATES).replace("{name}", `${p.firstName} ${p.lastName}`) }];
+    return [{ type: "lone_drinker", playerIds: [p.playerId], text: pickRandom(SOLO_TEMPLATES).replace("{name}", `${p.firstName} ${p.lastName}`), effects: [] }];
   }
 
   const visitors = attendees.filter((a) => a.isVisitor);
@@ -122,41 +131,51 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
   // ── Cross-team interactions (přednost) ──
   if (visitors.length > 0 && locals.length > 0) {
     for (const v of visitors) {
-      // Najdi případného local rivala
       const localRival = locals.find((l) => rivalsMap.get(l.playerId)?.has(v.playerId) || rivalsMap.get(v.playerId)?.has(l.playerId));
-      // Vyšší temper kombinace → bitka
       const partner = localRival ?? pickRandom(locals);
-
-      // 30% bitka pokud je rival, 12% jinak
       const fightProb = localRival ? 0.30 : 0.12;
-      // 20% bratření (přátelské)
-      // jinak provokace nebo nic
-
       const roll = Math.random();
+
       if (roll < fightProb) {
+        // Pro každého fightera: 50/50 zranění 1-3 dny | -12 condition
+        const fightEffects: PubEffect[] = [];
+        for (const fighter of [partner, v]) {
+          if (Math.random() < 0.5) {
+            const days = 1 + Math.floor(Math.random() * 3);
+            fightEffects.push({ playerId: fighter.playerId, type: "injury", injuryDays: days, label: `Lehké zranění (${days} ${days === 1 ? "den" : days < 5 ? "dny" : "dní"})` });
+          } else {
+            fightEffects.push({ playerId: fighter.playerId, type: "condition", delta: -12, label: "−12 kondice (modřiny)" });
+          }
+        }
         incidents.push({
           type: "cross_team_fight",
           playerIds: [partner.playerId, v.playerId],
           text: `${partner.firstName} ${partner.lastName} a ${v.firstName} ${v.lastName} (${v.fromTeamName}) se chytli nad pivem. Hospodský je rozdělil koštětem.`,
+          effects: fightEffects,
         });
       } else if (roll < fightProb + 0.20) {
         incidents.push({
           type: "cross_team_brotherhood",
           playerIds: [partner.playerId, v.playerId],
           text: `${partner.firstName} koupil ${v.firstName}ovi (${v.fromTeamName}) pivo a prokecali do dvou ráno. Žádné nepřátelství.`,
+          effects: [
+            { playerId: partner.playerId, type: "morale", delta: 2, label: "+2 morálka" },
+          ],
         });
       } else if (roll < fightProb + 0.20 + 0.25) {
         incidents.push({
           type: "cross_team_provocation",
           playerIds: [partner.playerId, v.playerId],
           text: `${v.firstName} (${v.fromTeamName}) provokoval domácí, že vesnice neumí kopnout. Naši se nadzvedli.`,
+          effects: [
+            { playerId: partner.playerId, type: "morale", delta: 3, label: "+3 morálka (motivace)" },
+          ],
         });
       }
     }
   }
 
   // ── Local incidents ──
-  // Drink record (top alcohol)
   const topDrinker = [...locals].sort((a, b) => b.alcohol - a.alcohol)[0];
   if (topDrinker && topDrinker.alcohol >= 60 && Math.random() < 0.4) {
     const beers = 5 + Math.floor(Math.random() * 5);
@@ -164,10 +183,10 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
       type: "drink_record",
       playerIds: [topDrinker.playerId],
       text: `${topDrinker.firstName} ${topDrinker.lastName} vypil ${beers} piv — rekord večera.`,
+      effects: [{ playerId: topDrinker.playerId, type: "condition", delta: -5, label: "−5 kondice" }],
     });
   }
 
-  // Automat win (low chance)
   if (Math.random() < 0.15) {
     const lucky = pickRandom(locals);
     const win = [200, 300, 500, 700, 1000][Math.floor(Math.random() * 5)];
@@ -175,16 +194,17 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
       type: "automat_win",
       playerIds: [lucky.playerId],
       text: `${lucky.firstName} ${lucky.lastName} vyhrál na automatu ${win} Kč.`,
+      effects: [{ playerId: lucky.playerId, type: "morale", delta: 2, label: "+2 morálka" }],
     });
   }
 
-  // Story (atmospheric)
   if (Math.random() < 0.5) {
     const teller = pickRandom(locals);
     incidents.push({
       type: "story",
       playerIds: [teller.playerId],
       text: pickRandom(STORY_TEMPLATES).replace("{name}", `${teller.firstName} ${teller.lastName}`),
+      effects: [],
     });
   }
 
@@ -192,70 +212,61 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
 }
 
 /**
- * Aplikuje effects of pub incidents (kondice, absence, condition_log).
- * Volá se v daily-ticku po vygenerování session.
+ * Aplikuje effects pub incidentů (kondice, morale, zranění, condition_log).
+ * Single source of truth: incident.effects[]. Generator je vyrobil, applier jen aplikuje.
  */
 async function applyIncidentEffects(
   db: D1Database,
-  sessionTeamId: string,
   incidents: PubIncident[],
-  attendees: PubAttendee[],
 ): Promise<D1PreparedStatement[]> {
   const stmts: D1PreparedStatement[] = [];
-  const attMap = new Map(attendees.map((a) => [a.playerId, a]));
 
-  // Načti aktuální podmínky pro hráče co dostanou penalty
+  // Sběr unique player IDs napříč všemi effects pro 1 read condition+team
   const affectedIds = new Set<string>();
-  for (const inc of incidents) {
-    if (inc.type === "cross_team_fight" || inc.type === "drink_record") {
-      for (const pid of inc.playerIds) affectedIds.add(pid);
-    }
-  }
+  for (const inc of incidents) for (const ef of inc.effects) affectedIds.add(ef.playerId);
   if (affectedIds.size === 0) return stmts;
 
   const placeholders = [...affectedIds].map(() => "?").join(",");
-  const condRows = await db.prepare(
-    `SELECT id, team_id, json_extract(life_context, '$.condition') as cond FROM players WHERE id IN (${placeholders})`,
-  ).bind(...[...affectedIds]).all<{ id: string; team_id: string; cond: number }>().catch((e) => { logger.warn({ module: "pub" }, "load cond for incidents", e); return { results: [] }; });
-  const condMap = new Map(condRows.results.map((r) => [r.id, { teamId: r.team_id, cond: r.cond ?? 100 }]));
+  const rows = await db.prepare(
+    `SELECT id, team_id,
+       json_extract(life_context, '$.condition') as cond,
+       json_extract(life_context, '$.morale') as morale
+     FROM players WHERE id IN (${placeholders})`,
+  ).bind(...[...affectedIds]).all<{ id: string; team_id: string; cond: number; morale: number }>()
+    .catch((e) => { logger.warn({ module: "pub" }, "load player state for incidents", e); return { results: [] }; });
+  const stateMap = new Map(rows.results.map((r) => [r.id, { teamId: r.team_id, cond: r.cond ?? 100, morale: r.morale ?? 50 }]));
 
   for (const inc of incidents) {
-    if (inc.type === "cross_team_fight") {
-      // Lehké zranění 1-3 dny NEBO -10 condition (50/50)
-      for (const pid of inc.playerIds) {
-        const cur = condMap.get(pid);
-        if (!cur) continue;
-        if (Math.random() < 0.5) {
-          // Lehké zranění
-          const days = 1 + Math.floor(Math.random() * 3);
-          stmts.push(db.prepare(
-            `INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total) VALUES (?, ?, ?, 'obecne', 'Zranění z hospodské bitky', 'lehke', ?, ?)`,
-          ).bind(crypto.randomUUID(), pid, cur.teamId, days, days));
-          stmts.push(logConditionStmt(db, pid, cur.teamId, cur.cond, Math.max(20, cur.cond - 8), "pub", `Bitka v hospodě (zranění ${days} d)`));
-          stmts.push(db.prepare(
-            `UPDATE players SET life_context = json_set(life_context, '$.condition', ?) WHERE id = ?`,
-          ).bind(Math.max(20, cur.cond - 8), pid));
-        } else {
-          // Jen condition penalty
-          const newCond = Math.max(20, cur.cond - 12);
-          stmts.push(db.prepare(
-            `UPDATE players SET life_context = json_set(life_context, '$.condition', ?) WHERE id = ?`,
-          ).bind(newCond, pid));
-          stmts.push(logConditionStmt(db, pid, cur.teamId, cur.cond, newCond, "pub", "Bitka v hospodě (modřiny)"));
-        }
-      }
-    }
+    for (const ef of inc.effects) {
+      const cur = stateMap.get(ef.playerId);
+      if (!cur) continue;
 
-    if (inc.type === "drink_record") {
-      // Mírná condition penalty (na ranní hangover už máme #2)
-      for (const pid of inc.playerIds) {
-        const cur = condMap.get(pid);
-        if (!cur) continue;
-        const newCond = Math.max(15, cur.cond - 5);
+      if (ef.type === "condition" && ef.delta != null) {
+        const newCond = Math.max(15, Math.min(100, cur.cond + ef.delta));
+        if (newCond === cur.cond) continue;
         stmts.push(db.prepare(
           `UPDATE players SET life_context = json_set(life_context, '$.condition', ?) WHERE id = ?`,
-        ).bind(newCond, pid));
-        stmts.push(logConditionStmt(db, pid, cur.teamId, cur.cond, newCond, "pub", "Vypil rekord — ráno bude težko"));
+        ).bind(newCond, ef.playerId));
+        stmts.push(logConditionStmt(db, ef.playerId, cur.teamId, cur.cond, newCond, "pub", inc.text.slice(0, 100)));
+        cur.cond = newCond;
+      } else if (ef.type === "morale" && ef.delta != null) {
+        const newMorale = Math.max(0, Math.min(100, cur.morale + ef.delta));
+        if (newMorale === cur.morale) continue;
+        stmts.push(db.prepare(
+          `UPDATE players SET life_context = json_set(life_context, '$.morale', ?) WHERE id = ?`,
+        ).bind(newMorale, ef.playerId));
+        cur.morale = newMorale;
+      } else if (ef.type === "injury" && ef.injuryDays != null) {
+        stmts.push(db.prepare(
+          `INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total) VALUES (?, ?, ?, 'obecne', 'Zranění z hospodské bitky', 'lehke', ?, ?)`,
+        ).bind(crypto.randomUUID(), ef.playerId, cur.teamId, ef.injuryDays, ef.injuryDays));
+        // Plus mírný condition drop
+        const newCond = Math.max(20, cur.cond - 8);
+        stmts.push(db.prepare(
+          `UPDATE players SET life_context = json_set(life_context, '$.condition', ?) WHERE id = ?`,
+        ).bind(newCond, ef.playerId));
+        stmts.push(logConditionStmt(db, ef.playerId, cur.teamId, cur.cond, newCond, "pub", `Hospodská bitka (zranění ${ef.injuryDays} d)`));
+        cur.cond = newCond;
       }
     }
   }
@@ -398,7 +409,7 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
     ).bind(team.id, gameDate, JSON.stringify(attendees), JSON.stringify(incidents)).run().catch((e) => logger.warn({ module: "pub" }, "insert pub_session", e));
 
     // Apply effects
-    const effectStmts = await applyIncidentEffects(db, team.id, incidents, attendees);
+    const effectStmts = await applyIncidentEffects(db, incidents);
     if (effectStmts.length > 0) await db.batch(effectStmts).catch((e) => logger.warn({ module: "pub" }, "batch incident effects", e));
 
     created++;

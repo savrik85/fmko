@@ -96,7 +96,7 @@ export default function DashboardPage() {
   const [news, setNews] = useState<Array<{ id: string; type: string; headline: string; icon: string; date: string }>>([]);
   const [achievements, setAchievements] = useState<Array<{ key: string; icon: string; title: string; tier: string; earnedAt: string | null }>>([]);
   const [hofRank, setHofRank] = useState<{ myRank: number | null; myTotal: number; myGold: number; mySilver: number; myBronze: number; top3: Array<{ rank: number; teamName: string; total: number }>; totalEntries: number } | null>(null);
-  const [pubSession, setPubSession] = useState<{ gameDate: string; attendees: Array<{ playerId: string; firstName: string; lastName: string; alcohol: number; teamId: string; isVisitor: boolean; fromTeamName?: string }>; incidents: Array<{ type: string; playerIds: string[]; text: string }> } | null>(null);
+  const [pubSession, setPubSession] = useState<{ gameDate: string; attendees: Array<{ playerId: string; firstName: string; lastName: string; alcohol: number; teamId: string; isVisitor: boolean; fromTeamName?: string }>; incidents: Array<{ type: string; playerIds: string[]; text: string; effects?: Array<{ playerId: string; type: string; delta?: number; injuryDays?: number; label: string }> }> } | null>(null);
   const [promoting, setPromoting] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -139,7 +139,7 @@ export default function DashboardPage() {
         ))
         .catch((e) => console.error("achievements fetch:", e));
       // Fetch poslední pub session
-      apiFetch<{ session: { gameDate: string; attendees: Array<{ playerId: string; firstName: string; lastName: string; alcohol: number; teamId: string; isVisitor: boolean; fromTeamName?: string }>; incidents: Array<{ type: string; playerIds: string[]; text: string }> } | null }>(`/api/teams/${teamId}/pub-session`)
+      apiFetch<{ session: { gameDate: string; attendees: Array<{ playerId: string; firstName: string; lastName: string; alcohol: number; teamId: string; isVisitor: boolean; fromTeamName?: string }>; incidents: Array<{ type: string; playerIds: string[]; text: string; effects?: Array<{ playerId: string; type: string; delta?: number; injuryDays?: number; label: string }> }> } | null }>(`/api/teams/${teamId}/pub-session`)
         .then((d) => setPubSession(d.session))
         .catch((e) => console.error("pub-session fetch:", e));
       // Fetch Hall of Fame — compute my rank (humans only)
@@ -256,11 +256,16 @@ export default function DashboardPage() {
       {/* ═══ Hospoda U Pralesa — co se včera dělo ═══ */}
       {pubSession && (pubSession.attendees.length > 0 || pubSession.incidents.length > 0) && (
         <div className="card p-4 sm:p-5">
-          <div className="flex items-center justify-between mb-2 gap-2">
+          <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
             <SectionLabel>Hospoda U Pralesa</SectionLabel>
-            <span className="text-[10px] uppercase text-muted font-heading whitespace-nowrap">
-              {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase text-muted font-heading whitespace-nowrap">
+                {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
+              </span>
+              <Link href="/dashboard/hospoda" className="text-[10px] uppercase text-pitch-500 font-heading font-bold hover:underline whitespace-nowrap">
+                Historie →
+              </Link>
+            </div>
           </div>
 
           {pubSession.attendees.length > 0 && (
@@ -279,7 +284,7 @@ export default function DashboardPage() {
           )}
 
           {pubSession.incidents.length > 0 && (
-            <ul className="space-y-1.5">
+            <ul className="space-y-2">
               {pubSession.incidents.map((inc, i) => {
                 const icon = inc.type === "cross_team_fight" ? "🥊"
                   : inc.type === "cross_team_brotherhood" ? "🍻"
@@ -290,10 +295,31 @@ export default function DashboardPage() {
                   : inc.type === "lone_drinker" ? "🪑"
                   : inc.type === "nobody" ? "🌙"
                   : "•";
+                const playerNameById = (id: string) => {
+                  const a = pubSession.attendees.find((x) => x.playerId === id);
+                  return a ? `${a.firstName} ${a.lastName}` : "?";
+                };
                 return (
-                  <li key={i} className="text-sm flex gap-2 items-start">
-                    <span className="shrink-0">{icon}</span>
-                    <span className="text-ink leading-snug">{inc.text}</span>
+                  <li key={i} className="text-sm">
+                    <div className="flex gap-2 items-start">
+                      <span className="shrink-0">{icon}</span>
+                      <span className="text-ink leading-snug">{inc.text}</span>
+                    </div>
+                    {inc.effects && inc.effects.length > 0 && (
+                      <div className="ml-7 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                        {inc.effects.map((ef, ei) => {
+                          const efIcon = ef.type === "injury" ? "🩹" : ef.type === "condition" ? "💪" : ef.type === "morale" ? "😊" : "•";
+                          const efColor = ef.type === "injury" || (ef.delta != null && ef.delta < 0) ? "text-card-red"
+                            : ef.delta != null && ef.delta > 0 ? "text-pitch-500"
+                            : "text-muted";
+                          return (
+                            <span key={ei} className={`text-[11px] font-heading font-bold ${efColor}`}>
+                              {efIcon} {playerNameById(ef.playerId)}: {ef.label}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </li>
                 );
               })}

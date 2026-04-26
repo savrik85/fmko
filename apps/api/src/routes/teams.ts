@@ -2319,6 +2319,28 @@ teamsRouter.get("/:id/players/:playerId/career-stats", async (c) => {
   return c.json({ seasons, totals });
 });
 
+// GET /api/teams/:id/pub-sessions — historie hospodských session
+teamsRouter.get("/:id/pub-sessions", async (c) => {
+  const teamId = c.req.param("id");
+  const limit = Math.min(Number(c.req.query("limit") ?? 20), 60);
+
+  const rows = await c.env.DB.prepare(
+    `SELECT id, game_date, attendees, incidents, created_at FROM pub_sessions
+     WHERE team_id = ? ORDER BY game_date DESC, created_at DESC LIMIT ?`,
+  ).bind(teamId, limit).all<{ id: number; game_date: string; attendees: string; incidents: string; created_at: string }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "load pub sessions history", e); return { results: [] }; });
+
+  const sessions = rows.results.map((s) => {
+    let attendees: unknown[] = [];
+    let incidents: unknown[] = [];
+    try { attendees = JSON.parse(s.attendees); } catch (e) { logger.warn({ module: "teams" }, "parse pub attendees", e); }
+    try { incidents = JSON.parse(s.incidents); } catch (e) { logger.warn({ module: "teams" }, "parse pub incidents", e); }
+    return { id: s.id, gameDate: s.game_date, attendees, incidents, createdAt: s.created_at };
+  });
+
+  return c.json({ sessions });
+});
+
 // GET /api/teams/:id/pub-session — poslední hospodská session
 teamsRouter.get("/:id/pub-session", async (c) => {
   const teamId = c.req.param("id");
