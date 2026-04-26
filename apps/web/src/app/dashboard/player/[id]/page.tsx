@@ -1232,7 +1232,7 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
                   const trainingLabel = TRAIN_TYPE_LABELS[entry.training_type] ?? entry.training_type;
                   return (
                     <tr key={i} className="border-b border-gray-50 last:border-b-0 align-top">
-                      <td className="py-1.5 pr-3 tabular-nums text-muted whitespace-nowrap">{date}</td>
+                      <td className="py-1.5 pr-3 tabular-nums text-muted text-[11px] whitespace-nowrap">{date}</td>
                       <td className="py-1.5 pr-3">
                         <div className="font-medium">{TRAIN_ATTR_LABELS[entry.attribute] ?? entry.attribute}</div>
                         <div className="md:hidden text-[11px] text-muted leading-tight">{trainingLabel}</div>
@@ -1344,7 +1344,7 @@ function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }
                   const date = new Date(dateSrc).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
                   return (
                     <tr key={entry.id} className="border-b border-gray-50 last:border-b-0 align-top">
-                      <td className="py-1.5 pr-3 tabular-nums text-muted whitespace-nowrap">{date}</td>
+                      <td className="py-1.5 pr-3 tabular-nums text-muted text-[11px] whitespace-nowrap">{date}</td>
                       <td className="py-1.5 pr-3">
                         <div className="whitespace-nowrap">
                           <span className="mr-1">{meta.icon}</span>
