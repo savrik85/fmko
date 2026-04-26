@@ -729,49 +729,95 @@ export default function PlayerDetailPage() {
         </div>
       </div>
 
-      {/* ═══ Tréninkový vývoj + Vývoj kondice (2-col grid na desktopu) ═══ */}
+      {/* ═══ Tréninkový vývoj + Vývoj kondice (2-col grid na desktopu, equal height) ═══ */}
       {player.team_id === teamId && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <TrainingDevelopment teamId={teamId} playerId={playerId} />
           <ConditionLog teamId={teamId} playerId={playerId} />
         </div>
       )}
 
-      {/* ═══ Vztahy v kádru (jen vlastní hráči) ═══ */}
-      {isOwnPlayer && profileExtras && profileExtras.relationships.length > 0 && (
-        <div className="card p-4 sm:p-5 max-w-lg">
-          <SectionLabel>Vztahy v kádru</SectionLabel>
-          <div className="space-y-1.5">
-            {(showAllRelationships ? profileExtras.relationships : profileExtras.relationships.slice(0, 3)).map((rel) => {
-              const EMOJI: Record<string, string> = {
-                brothers: "👨‍👦", father_son: "👴", in_laws: "🤝", classmates: "🎓",
-                coworkers: "💼", neighbors: "🏠", drinking_buddies: "🍻", rivals: "⚔️", mentor_pupil: "📚",
-              };
-              return (
-                <div key={rel.relatedPlayerId} className="py-1.5 border-b border-gray-50 last:border-b-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm shrink-0">{EMOJI[rel.type] ?? "👥"}</span>
-                    <Link href={`/dashboard/player/${rel.relatedPlayerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20">
-                      {rel.relatedPlayerName}
-                    </Link>
-                    <PositionBadge position={rel.relatedPlayerPosition as "GK" | "DEF" | "MID" | "FWD"} />
-                    <span className="text-[10px] text-muted font-heading">· {rel.typeLabel}</span>
+      {/* ═══ Vztahy v kádru + Historie klubů (2-col grid) ═══ */}
+      {(((isOwnPlayer && profileExtras && profileExtras.relationships.length > 0)) || contracts.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {isOwnPlayer && profileExtras && profileExtras.relationships.length > 0 ? (
+            <div className="card p-4 sm:p-5">
+              <SectionLabel>Vztahy v kádru</SectionLabel>
+              <div className="space-y-1.5">
+                {(showAllRelationships ? profileExtras.relationships : profileExtras.relationships.slice(0, 3)).map((rel) => {
+                  const EMOJI: Record<string, string> = {
+                    brothers: "👨‍👦", father_son: "👴", in_laws: "🤝", classmates: "🎓",
+                    coworkers: "💼", neighbors: "🏠", drinking_buddies: "🍻", rivals: "⚔️", mentor_pupil: "📚",
+                  };
+                  return (
+                    <div key={rel.relatedPlayerId} className="py-1.5 border-b border-gray-50 last:border-b-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm shrink-0">{EMOJI[rel.type] ?? "👥"}</span>
+                        <Link href={`/dashboard/player/${rel.relatedPlayerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20">
+                          {rel.relatedPlayerName}
+                        </Link>
+                        <PositionBadge position={rel.relatedPlayerPosition as "GK" | "DEF" | "MID" | "FWD"} />
+                        <span className="text-[10px] text-muted font-heading">· {rel.typeLabel}</span>
+                      </div>
+                      {rel.effect && <div className="text-[11px] text-muted italic ml-6 mt-0.5">{rel.effect}</div>}
+                    </div>
+                  );
+                })}
+                {!showAllRelationships && profileExtras.relationships.length > 3 && (
+                  <button onClick={() => setShowAllRelationships(true)} className="text-xs text-pitch-500 font-heading font-bold hover:underline pt-1">
+                    Zobrazit všechny ({profileExtras.relationships.length}) →
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : <div />}
+
+          {contracts.length > 0 && (
+            <div className="card p-4 sm:p-5">
+              <SectionLabel>Historie klubů</SectionLabel>
+              <div className="space-y-0">
+                {contracts.map((c) => (
+                  <div key={c.id} className="py-3 border-b border-gray-50 last:border-b-0">
+                    <a href={`/dashboard/team/${c.teamId}`} className="flex items-center gap-2.5 group">
+                      <BadgePreview primary={c.teamColor} secondary={c.teamSecondary}
+                        pattern={(c.teamBadge as BadgePattern) || "shield"}
+                        initials={(c.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={32} />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-heading font-bold text-sm group-hover:underline truncate">{c.teamName}</div>
+                        <div className="text-[11px] text-muted">
+                          {c.isActive ? (
+                            <span>Od sezóny {c.seasonNumber} &middot; <span className="text-pitch-500 font-bold">Aktivní</span></span>
+                          ) : (
+                            <span>Sezóna {c.seasonNumber}{c.leftAt ? ` — ${c.leftAt}` : ""}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="shrink-0">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-heading font-bold ${
+                          c.joinType === "generated" ? "bg-gray-100 text-muted"
+                          : c.joinType === "transfer" ? "bg-blue-50 text-blue-600"
+                          : c.joinType === "free_agent" ? "bg-green-50 text-green-600"
+                          : c.joinType === "youth" ? "bg-purple-50 text-purple-600"
+                          : c.joinType === "swap" ? "bg-gold-50 text-gold-600"
+                          : c.joinType === "loan" ? "bg-yellow-50 text-yellow-700"
+                          : c.joinType === "pub" || c.joinType === "friend" || c.joinType === "recommendation" ? "bg-amber-50 text-amber-700"
+                          : "bg-gray-100 text-muted"
+                        }`}>{c.joinLabel}</span>
+                      </div>
+                    </a>
+                    {c.fee > 0 && (
+                      <div className="text-[10px] text-muted mt-1 ml-[42px]">Přestupní částka: {c.fee.toLocaleString("cs")} Kč</div>
+                    )}
                   </div>
-                  {rel.effect && <div className="text-[11px] text-muted italic ml-6 mt-0.5">{rel.effect}</div>}
-                </div>
-              );
-            })}
-            {!showAllRelationships && profileExtras.relationships.length > 3 && (
-              <button onClick={() => setShowAllRelationships(true)} className="text-xs text-pitch-500 font-heading font-bold hover:underline pt-1">
-                Zobrazit všechny ({profileExtras.relationships.length}) →
-              </button>
-            )}
-          </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* ═══ Row 2: Kariéra — FM style ═══ */}
-      <div className={`grid grid-cols-1 ${careerStats && careerStats.totals.appearances > 0 ? "lg:grid-cols-[1fr_320px]" : ""} gap-5`}>
+      <div className="grid grid-cols-1 gap-5">
 
         {/* Career stats per season with team info */}
         {careerStats && careerStats.totals.appearances > 0 ? (
@@ -841,50 +887,6 @@ export default function PlayerDetailPage() {
           </div>
         )}
 
-        {/* Club history sidebar */}
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Historie klubů</SectionLabel>
-          {contracts.length > 0 ? (
-            <div className="space-y-0">
-              {contracts.map((c) => (
-                <div key={c.id} className="py-3 border-b border-gray-50 last:border-b-0">
-                  <a href={`/dashboard/team/${c.teamId}`} className="flex items-center gap-2.5 group">
-                    <BadgePreview primary={c.teamColor} secondary={c.teamSecondary}
-                      pattern={(c.teamBadge as BadgePattern) || "shield"}
-                      initials={(c.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={32} />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-heading font-bold text-sm group-hover:underline truncate">{c.teamName}</div>
-                      <div className="text-[11px] text-muted">
-                        {c.isActive ? (
-                          <span>Od sezóny {c.seasonNumber} &middot; <span className="text-pitch-500 font-bold">Aktivní</span></span>
-                        ) : (
-                          <span>Sezóna {c.seasonNumber}{c.leftAt ? ` — ${c.leftAt}` : ""}</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="shrink-0">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-heading font-bold ${
-                        c.joinType === "generated" ? "bg-gray-100 text-muted"
-                        : c.joinType === "transfer" ? "bg-blue-50 text-blue-600"
-                        : c.joinType === "free_agent" ? "bg-green-50 text-green-600"
-                        : c.joinType === "youth" ? "bg-purple-50 text-purple-600"
-                        : c.joinType === "swap" ? "bg-gold-50 text-gold-600"
-                        : c.joinType === "loan" ? "bg-yellow-50 text-yellow-700"
-                        : c.joinType === "pub" || c.joinType === "friend" || c.joinType === "recommendation" ? "bg-amber-50 text-amber-700"
-                        : "bg-gray-100 text-muted"
-                      }`}>{c.joinLabel}</span>
-                    </div>
-                  </a>
-                  {c.fee > 0 && (
-                    <div className="text-[10px] text-muted mt-1 ml-[42px]">Přestupní částka: {c.fee.toLocaleString("cs")} Kč</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-sm text-muted">Žádná historie</div>
-          )}
-        </div>
       </div>
 
       {/* ═══ Row 3: Match history + Watchers ═══ */}
@@ -1334,7 +1336,8 @@ function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }
               <tbody>
                 {visible.map((entry) => {
                   const meta = CONDITION_SOURCE_META[entry.source] ?? { icon: "•", label: entry.source };
-                  const date = new Date(entry.createdAt).toLocaleString("cs", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+                  const dateSrc = entry.gameDate ?? entry.createdAt;
+                  const date = new Date(dateSrc).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
                   return (
                     <tr key={entry.id} className="border-b border-gray-50 last:border-b-0">
                       <td className="py-1.5 tabular-nums text-muted whitespace-nowrap">{date}</td>
