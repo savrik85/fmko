@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, type Team, type Player } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { SectionLabel, Spinner } from "@/components/ui";
+import { SectionLabel, Spinner, BadgePreview, type BadgePattern } from "@/components/ui";
+import { FaceAvatar } from "@/components/players/face-avatar";
 
 interface PubAttendee {
   playerId: string;
@@ -62,14 +63,24 @@ function effectColor(ef: PubEffect): string {
 export default function HospodaPage() {
   const { teamId } = useTeam();
   const [sessions, setSessions] = useState<PubSession[]>([]);
+  const [team, setTeam] = useState<Team | null>(null);
+  const [avatarsById, setAvatarsById] = useState<Record<string, Record<string, unknown>>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!teamId) return;
-    apiFetch<{ sessions: PubSession[] }>(`/api/teams/${teamId}/pub-sessions?limit=30`)
-      .then((d) => setSessions(d.sessions))
-      .catch((e) => console.error("pub-sessions fetch:", e))
-      .finally(() => setLoading(false));
+    Promise.all([
+      apiFetch<{ sessions: PubSession[] }>(`/api/teams/${teamId}/pub-sessions?limit=30`).catch((e) => { console.error("pub-sessions fetch:", e); return { sessions: [] as PubSession[] }; }),
+      apiFetch<Team>(`/api/teams/${teamId}`).catch((e) => { console.error("team fetch:", e); return null; }),
+      apiFetch<Player[]>(`/api/teams/${teamId}/players`).catch((e) => { console.error("players fetch:", e); return [] as Player[]; }),
+    ]).then(([s, t, players]) => {
+      setSessions(s.sessions);
+      setTeam(t);
+      const map: Record<string, Record<string, unknown>> = {};
+      for (const p of players) map[p.id] = p.avatar as Record<string, unknown>;
+      setAvatarsById(map);
+      setLoading(false);
+    });
   }, [teamId]);
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[40vh]"><Spinner /></div>;
@@ -94,15 +105,49 @@ export default function HospodaPage() {
   const topDrinkers = [...drinkerCounts.entries()]
     .map(([id, v]) => ({ id, ...v }))
     .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
+    .slice(0, 3);
+
+  const scarfPrimary = team?.badge_primary_color || team?.primary_color || "#2D5F2D";
+  const scarfSecondary = team?.badge_secondary_color || team?.secondary_color || "#FFF";
+  const badgeInit = team?.badge_initials || (team?.name ?? "").split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
 
   return (
     <div className="page-container space-y-5">
       <div className="card p-4 sm:p-5">
-        <div className="flex items-baseline justify-between gap-3 flex-wrap">
-          <div>
-            <h1 className="font-heading font-[800] text-2xl">🍺 Hospoda U Pralesa</h1>
-            <p className="text-sm text-muted mt-1">Kdo tam byl, co se dělo, co to stálo.</p>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-4">
+            {/* Klubová šála */}
+            <div className="relative w-32 h-14 shrink-0">
+              <div className="absolute inset-0 rounded-full overflow-hidden ring-1 ring-black/10 shadow-sm flex flex-col">
+                <div className="flex-1" style={{ background: scarfPrimary }} />
+                <div className="flex-1" style={{ background: scarfSecondary }} />
+                <div className="flex-1" style={{ background: scarfPrimary }} />
+              </div>
+              <div className="absolute -left-1.5 top-1.5 bottom-1.5 flex flex-col gap-[1px]">
+                {[scarfPrimary, scarfSecondary, scarfPrimary].map((c, i) => (
+                  <div key={i} className="w-1.5 flex-1 rounded-l" style={{ background: c }} />
+                ))}
+              </div>
+              <div className="absolute -right-1.5 top-1.5 bottom-1.5 flex flex-col gap-[1px]">
+                {[scarfSecondary, scarfPrimary, scarfSecondary].map((c, i) => (
+                  <div key={i} className="w-1.5 flex-1 rounded-r" style={{ background: c }} />
+                ))}
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <BadgePreview
+                  primary={scarfPrimary}
+                  secondary={scarfSecondary}
+                  pattern={(team?.badge_pattern as BadgePattern) || "shield"}
+                  initials={badgeInit}
+                  symbol={team?.badge_symbol}
+                  size={44}
+                />
+              </div>
+            </div>
+            <div>
+              <h1 className="font-heading font-[800] text-2xl leading-none">U nás v hospodě</h1>
+              <p className="text-sm text-muted mt-1">Kdo tam byl, co se dělo, co to stálo.</p>
+            </div>
           </div>
           <Link href="/dashboard" className="text-sm text-pitch-500 hover:underline font-heading font-bold">← Dashboard</Link>
         </div>
@@ -128,20 +173,28 @@ export default function HospodaPage() {
         </div>
       </div>
 
-      {/* Top pijani */}
+      {/* Síň slávy štamgastů */}
       {topDrinkers.length > 0 && (
         <div className="card p-4 sm:p-5">
-          <SectionLabel>Štamgasti</SectionLabel>
-          <div className="space-y-1.5">
-            {topDrinkers.map((d, i) => (
-              <div key={d.id} className="flex items-center gap-3">
-                <span className="font-heading font-bold tabular-nums text-muted w-6 text-center">{i + 1}.</span>
-                <Link href={`/dashboard/player/${d.id}`} className="font-heading font-bold text-sm hover:text-pitch-500 underline decoration-pitch-500/20 flex-1">
-                  {d.name}
+          <SectionLabel>Síň slávy štamgastů</SectionLabel>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+            {topDrinkers.map((d, i) => {
+              const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉";
+              const ringColor = i === 0 ? "ring-amber-400" : i === 1 ? "ring-gray-300" : "ring-orange-400";
+              const avatar = avatarsById[d.id];
+              return (
+                <Link key={d.id} href={`/dashboard/player/${d.id}`} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-pitch-50/50 transition-colors group">
+                  <div className={`relative shrink-0 rounded-full ring-2 ${ringColor} overflow-hidden bg-white`} style={{ width: 56, height: 56 }}>
+                    {avatar ? <FaceAvatar faceConfig={avatar} size={56} /> : <div className="w-full h-full flex items-center justify-center text-xs text-muted">?</div>}
+                    <span className="absolute -bottom-0.5 -right-0.5 text-lg">{medal}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-heading font-bold text-sm group-hover:text-pitch-500 truncate">{d.name}</div>
+                    <div className="text-xs text-muted">{d.count}× {d.count === 1 ? "večer" : d.count < 5 ? "večery" : "večerů"} u Pralesa</div>
+                  </div>
                 </Link>
-                <span className="text-sm text-muted">{d.count}× {d.count === 1 ? "večer" : d.count < 5 ? "večery" : "večerů"}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -169,17 +222,28 @@ export default function HospodaPage() {
                 </div>
 
                 {s.attendees.length > 0 && (
-                  <div className="text-sm mb-2">
-                    <span className="text-muted">V hospodě: </span>
-                    {s.attendees.map((a, i) => (
-                      <span key={a.playerId}>
-                        {i > 0 && ", "}
-                        <Link href={a.isVisitor ? "#" : `/dashboard/player/${a.playerId}`} className={`${a.isVisitor ? "text-amber-600 font-heading font-bold" : "font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20"}`}>
-                          {a.firstName} {a.lastName}
-                        </Link>
-                        {a.isVisitor && <span className="text-[10px] text-amber-600 ml-1">({a.fromTeamName})</span>}
-                      </span>
-                    ))}
+                  <div className="mb-3">
+                    <div className="text-[11px] uppercase text-muted font-heading mb-1.5">V hospodě</div>
+                    <div className="flex flex-wrap gap-2">
+                      {s.attendees.map((a) => {
+                        const avatar = avatarsById[a.playerId];
+                        return (
+                          <Link
+                            key={a.playerId}
+                            href={a.isVisitor ? "#" : `/dashboard/player/${a.playerId}`}
+                            className={`flex items-center gap-2 px-2 py-1 rounded-full text-xs ${a.isVisitor ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200" : "bg-gray-50 hover:bg-pitch-50 text-ink"}`}
+                          >
+                            <div className="shrink-0 rounded-full overflow-hidden bg-white" style={{ width: 24, height: 24 }}>
+                              {avatar ? <FaceAvatar faceConfig={avatar} size={24} /> : null}
+                            </div>
+                            <span className="font-heading font-bold whitespace-nowrap">
+                              {a.firstName} {a.lastName}
+                            </span>
+                            {a.isVisitor && <span className="text-[9px] text-amber-700">({a.fromTeamName})</span>}
+                          </Link>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 

@@ -253,19 +253,55 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══ Hospoda U Pralesa — co se včera dělo ═══ */}
-      {pubSession && (pubSession.attendees.length > 0 || pubSession.incidents.length > 0) && (
+      {/* ═══ U nás v hospodě — co se včera dělo ═══ */}
+      {pubSession && (pubSession.attendees.length > 0 || pubSession.incidents.length > 0) && (() => {
+        const scarfPrimary = team.badge_primary_color || color;
+        const scarfSecondary = team.badge_secondary_color || team.secondary_color || "#FFF";
+        const badgeInit = team.badge_initials || team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+        return (
         <div className="card p-4 sm:p-5">
-          <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-            <SectionLabel>Hospoda U Pralesa</SectionLabel>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase text-muted font-heading whitespace-nowrap">
-                {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
-              </span>
-              <Link href="/dashboard/hospoda" className="text-[10px] uppercase text-pitch-500 font-heading font-bold hover:underline whitespace-nowrap">
-                Historie →
-              </Link>
+          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              {/* Klubová šála */}
+              <div className="relative w-24 h-10 shrink-0">
+                <div className="absolute inset-0 rounded-full overflow-hidden ring-1 ring-black/10 shadow-sm flex flex-col">
+                  <div className="flex-1" style={{ background: scarfPrimary }} />
+                  <div className="flex-1" style={{ background: scarfSecondary }} />
+                  <div className="flex-1" style={{ background: scarfPrimary }} />
+                </div>
+                {/* Třásně */}
+                <div className="absolute -left-1 top-1 bottom-1 flex flex-col gap-[1px]">
+                  {[scarfPrimary, scarfSecondary, scarfPrimary].map((c, i) => (
+                    <div key={i} className="w-1 flex-1 rounded-l" style={{ background: c }} />
+                  ))}
+                </div>
+                <div className="absolute -right-1 top-1 bottom-1 flex flex-col gap-[1px]">
+                  {[scarfSecondary, scarfPrimary, scarfSecondary].map((c, i) => (
+                    <div key={i} className="w-1 flex-1 rounded-r" style={{ background: c }} />
+                  ))}
+                </div>
+                {/* Klubový znak uprostřed */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <BadgePreview
+                    primary={scarfPrimary}
+                    secondary={scarfSecondary}
+                    pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                    initials={badgeInit}
+                    symbol={team.badge_symbol}
+                    size={32}
+                  />
+                </div>
+              </div>
+              <div>
+                <h2 className="font-heading font-[800] text-lg leading-none">U nás v hospodě</h2>
+                <div className="text-[11px] uppercase text-muted font-heading mt-1">
+                  {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
+                </div>
+              </div>
             </div>
+            <Link href="/dashboard/hospoda" className="text-[11px] uppercase text-pitch-500 font-heading font-bold hover:underline whitespace-nowrap">
+              Historie →
+            </Link>
           </div>
 
           {pubSession.attendees.length > 0 && (
@@ -327,7 +363,8 @@ export default function DashboardPage() {
             </ul>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* ═══ Row 1: Next match | Tabulka | Stav kádru ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-[auto_auto] gap-5">
