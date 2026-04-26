@@ -7,6 +7,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, showError, type Team, type Player, type ManagerProfile, type TeamMatchResults } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { Spinner, SectionLabel, PositionBadge, BadgePreview, useConfirm } from "@/components/ui";
+import { ClubScarf } from "@/components/team/club-scarf";
 import type { BadgePattern } from "@/components/ui";
 
 interface Standing {
@@ -258,39 +259,30 @@ export default function DashboardPage() {
         const scarfPrimary = team.badge_primary_color || color;
         const scarfSecondary = team.badge_secondary_color || team.secondary_color || "#FFF";
         const badgeInit = team.badge_initials || team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
-        const isLight = (() => {
-          const c = (scarfPrimary || "").replace("#", "");
-          if (c.length < 6) return false;
-          const r = parseInt(c.slice(0, 2), 16); const g = parseInt(c.slice(2, 4), 16); const b = parseInt(c.slice(4, 6), 16);
-          return (r * 299 + g * 587 + b * 114) / 1000 > 160;
-        })();
-        const txtColor = isLight ? "#222" : "#FFF";
         return (
-        <div className="rounded-xl overflow-hidden shadow-md">
-          <div className="h-1.5" style={{ background: scarfSecondary }} />
-          <div
-            className="flex items-center gap-4 px-5 py-3"
-            style={{ background: scarfPrimary, color: txtColor }}
-          >
-            <BadgePreview
+        <div className="rounded-xl overflow-hidden shadow-sm" style={{ background: "#F5EDDF" }}>
+          <div className="h-1" style={{ background: scarfPrimary }} />
+          <div className="flex items-center gap-4 px-5 py-3">
+            <ClubScarf
               primary={scarfPrimary}
               secondary={scarfSecondary}
               pattern={(team.badge_pattern as BadgePattern) || "shield"}
               initials={badgeInit}
               symbol={team.badge_symbol}
-              size={48}
+              width={150}
+              height={64}
             />
             <div className="flex-1 min-w-0">
-              <h2 className="font-heading font-[800] text-xl leading-none">U nás v hospodě</h2>
-              <div className="text-[11px] uppercase opacity-80 mt-1">
+              <h2 className="font-heading font-[800] text-xl leading-none text-ink">U nás v hospodě</h2>
+              <div className="text-[11px] uppercase text-muted mt-1">
                 {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
               </div>
             </div>
-            <Link href="/dashboard/hospoda" className="text-xs font-heading font-bold opacity-90 hover:opacity-100 whitespace-nowrap">
+            <Link href="/dashboard/hospoda" className="text-xs font-heading font-bold text-pitch-500 hover:text-pitch-600 whitespace-nowrap">
               Historie →
             </Link>
           </div>
-          <div className="h-1.5" style={{ background: scarfSecondary }} />
+          <div className="h-1" style={{ background: scarfSecondary }} />
           <div className="bg-white p-4 sm:p-5">
 
           {pubSession.attendees.length > 0 && (

@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { SectionLabel, Spinner, BadgePreview, type BadgePattern } from "@/components/ui";
+import { SectionLabel, Spinner, type BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { ClubScarf } from "@/components/team/club-scarf";
 
 interface PubAttendee {
   playerId: string;
@@ -116,28 +117,18 @@ export default function HospodaPage() {
 
   return (
     <div className="page-container space-y-5">
-      {/* Header — solid primary banner s úzkou secondary linkou nahoře a dole */}
-      <div className="rounded-xl overflow-hidden shadow-md">
-        <div className="h-1.5" style={{ background: scarfSecondary }} />
-        <div
-          className="flex items-center gap-5 px-6 py-5"
-          style={{ background: scarfPrimary, color: textColor }}
-        >
-          <BadgePreview
-            primary={scarfPrimary}
-            secondary={scarfSecondary}
-            pattern={(team?.badge_pattern as BadgePattern) || "shield"}
-            initials={badgeInit}
-            symbol={team?.badge_symbol}
-            size={64}
-          />
+      {/* Header — klubová šála vlevo + nadpis + bar atmosféra (béžová) */}
+      <div className="rounded-xl overflow-hidden shadow-sm" style={{ background: "#F5EDDF" }}>
+        <div className="h-1" style={{ background: scarfPrimary }} />
+        <div className="flex items-center gap-5 sm:gap-7 px-5 sm:px-6 py-5">
+          <ClubScarf primary={scarfPrimary} secondary={scarfSecondary} pattern={(team?.badge_pattern as BadgePattern) || "shield"} initials={badgeInit} symbol={team?.badge_symbol} width={200} height={88} />
           <div className="flex-1 min-w-0">
-            <h1 className="font-heading font-[800] text-2xl sm:text-3xl leading-none">U nás v hospodě</h1>
-            <p className="text-sm opacity-80 mt-1">Kdo tam byl, co se dělo, co to stálo.</p>
+            <h1 className="font-heading font-[800] text-2xl sm:text-3xl leading-none text-ink">U nás v hospodě</h1>
+            <p className="text-sm text-muted mt-1">Kdo tam byl, co se dělo, co to stálo.</p>
           </div>
-          <Link href="/dashboard" className="text-sm font-heading font-bold opacity-90 hover:opacity-100 whitespace-nowrap">← Dashboard</Link>
+          <Link href="/dashboard" className="text-sm font-heading font-bold text-pitch-500 hover:text-pitch-600 whitespace-nowrap">← Dashboard</Link>
         </div>
-        <div className="h-1.5" style={{ background: scarfSecondary }} />
+        <div className="h-1" style={{ background: scarfSecondary }} />
       </div>
 
       {/* Síň slávy štamgastů */}
@@ -252,3 +243,4 @@ export default function HospodaPage() {
     </div>
   );
 }
+
