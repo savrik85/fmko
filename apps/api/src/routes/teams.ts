@@ -2320,22 +2320,26 @@ teamsRouter.get("/:id/players/:playerId/career-stats", async (c) => {
 });
 
 // GET /api/teams/:id/players/:playerId/condition-log — vývoj kondice (timeline)
+// Query: ?days=14 (default), ?limit=200 (max). Vrací entries za posledních N dní (dle created_at).
 teamsRouter.get("/:id/players/:playerId/condition-log", async (c) => {
   const playerId = c.req.param("playerId");
-  const limit = Math.min(Number(c.req.query("limit") ?? 30), 200);
+  const days = Math.max(1, Math.min(Number(c.req.query("days") ?? 14), 365));
+  const limit = Math.min(Number(c.req.query("limit") ?? 200), 500);
 
   const rows = await c.env.DB.prepare(
     `SELECT id, old_value, new_value, delta, source, description, game_date, created_at
      FROM condition_log
      WHERE player_id = ?
+       AND created_at >= datetime('now', ?)
      ORDER BY created_at DESC, id DESC
      LIMIT ?`,
-  ).bind(playerId, limit).all<{
+  ).bind(playerId, `-${days} days`, limit).all<{
     id: number; old_value: number; new_value: number; delta: number;
     source: string; description: string | null; game_date: string | null; created_at: string;
   }>().catch((e) => { logger.warn({ module: "teams" }, "load condition log", e); return { results: [] }; });
 
   return c.json({
+    days,
     entries: rows.results.map((r) => ({
       id: r.id,
       oldValue: r.old_value,

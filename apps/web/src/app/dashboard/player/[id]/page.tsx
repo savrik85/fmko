@@ -729,15 +729,17 @@ export default function PlayerDetailPage() {
         </div>
       </div>
 
-      {/* ═══ Tréninkový vývoj (jen pro vlastníka) ═══ */}
-      {player.team_id === teamId && <TrainingDevelopment teamId={teamId} playerId={playerId} />}
-
-      {/* ═══ Vývoj kondice + Vztahy v kádru (2-col grid na desktopu) ═══ */}
-      {(player.team_id === teamId || (isOwnPlayer && profileExtras && profileExtras.relationships.length > 0)) && (
+      {/* ═══ Tréninkový vývoj + Vývoj kondice (2-col grid na desktopu) ═══ */}
+      {player.team_id === teamId && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-          {player.team_id === teamId && <ConditionLog teamId={teamId} playerId={playerId} />}
-          {isOwnPlayer && profileExtras && profileExtras.relationships.length > 0 && (
-        <div className="card p-4 sm:p-5">
+          <TrainingDevelopment teamId={teamId} playerId={playerId} />
+          <ConditionLog teamId={teamId} playerId={playerId} />
+        </div>
+      )}
+
+      {/* ═══ Vztahy v kádru (jen vlastní hráči) ═══ */}
+      {isOwnPlayer && profileExtras && profileExtras.relationships.length > 0 && (
+        <div className="card p-4 sm:p-5 max-w-lg">
           <SectionLabel>Vztahy v kádru</SectionLabel>
           <div className="space-y-1.5">
             {(showAllRelationships ? profileExtras.relationships : profileExtras.relationships.slice(0, 3)).map((rel) => {
@@ -765,8 +767,6 @@ export default function PlayerDetailPage() {
               </button>
             )}
           </div>
-        </div>
-          )}
         </div>
       )}
 
@@ -1170,9 +1170,12 @@ interface TrainingLogEntry {
   created_at: string;
 }
 
+const PREVIEW_ROWS = 8;
+
 function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: string }) {
   const [log, setLog] = useState<TrainingLogEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     apiFetch<{ log: TrainingLogEntry[] }>(`/api/teams/${teamId}/players/${playerId}/training-log`)
@@ -1184,6 +1187,7 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
 
   const gains = log.filter((l) => l.change > 0).length;
   const losses = log.filter((l) => l.change < 0).length;
+  const visible = showAll ? log : log.slice(0, PREVIEW_ROWS);
 
   return (
     <div className="card p-4 sm:p-5">
@@ -1193,7 +1197,6 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
         <p className="text-sm text-muted">Zatím žádné tréninkové záznamy.</p>
       ) : (
         <>
-          {/* Summary strip */}
           <div className="flex gap-3 flex-wrap mb-4">
             <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
               <div className="font-heading font-[800] text-2xl tabular-nums text-ink">{log.length}</div>
@@ -1211,7 +1214,6 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
             )}
           </div>
 
-          {/* Changes table */}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -1223,7 +1225,7 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
                 </tr>
               </thead>
               <tbody>
-                {log.slice(0, 20).map((entry, i) => {
+                {visible.map((entry, i) => {
                   const date = entry.game_date ? new Date(entry.game_date).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "—";
                   return (
                     <tr key={i} className="border-b border-gray-50 last:border-b-0">
@@ -1242,6 +1244,11 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
               </tbody>
             </table>
           </div>
+          {log.length > PREVIEW_ROWS && (
+            <button onClick={() => setShowAll((v) => !v)} className="text-xs text-pitch-500 font-heading font-bold hover:underline pt-2">
+              {showAll ? "Sbalit" : `Zobrazit všechny (${log.length}) →`}
+            </button>
+          )}
         </>
       )}
     </div>
@@ -1272,10 +1279,12 @@ interface ConditionLogEntry {
 
 function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }) {
   const [entries, setEntries] = useState<ConditionLogEntry[]>([]);
+  const [showAll, setShowAll] = useState(false);
   const [loading, setLoading] = useState(true);
+  const days = 7;
 
   useEffect(() => {
-    apiFetch<{ entries: ConditionLogEntry[] }>(`/api/teams/${teamId}/players/${playerId}/condition-log?limit=30`)
+    apiFetch<{ entries: ConditionLogEntry[]; days: number }>(`/api/teams/${teamId}/players/${playerId}/condition-log?days=${days}`)
       .then((d) => setEntries(d.entries))
       .catch((e) => { console.error("condition-log fetch:", e); setEntries([]); })
       .finally(() => setLoading(false));
@@ -1285,13 +1294,14 @@ function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }
 
   const gains = entries.filter((e) => e.delta > 0).length;
   const losses = entries.filter((e) => e.delta < 0).length;
+  const visible = showAll ? entries : entries.slice(0, PREVIEW_ROWS);
 
   return (
     <div className="card p-4 sm:p-5">
       <SectionLabel>Vývoj kondice</SectionLabel>
 
       {entries.length === 0 ? (
-        <p className="text-sm text-muted">Zatím žádné záznamy o změnách kondice.</p>
+        <p className="text-sm text-muted">Za posledních {days} dní žádné změny kondice.</p>
       ) : (
         <>
           <div className="flex gap-3 flex-wrap mb-4">
@@ -1322,7 +1332,7 @@ function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }
                 </tr>
               </thead>
               <tbody>
-                {entries.map((entry) => {
+                {visible.map((entry) => {
                   const meta = CONDITION_SOURCE_META[entry.source] ?? { icon: "•", label: entry.source };
                   const date = new Date(entry.createdAt).toLocaleString("cs", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
                   return (
@@ -1345,6 +1355,11 @@ function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }
               </tbody>
             </table>
           </div>
+          {entries.length > PREVIEW_ROWS && (
+            <button onClick={() => setShowAll((v) => !v)} className="text-xs text-pitch-500 font-heading font-bold hover:underline pt-2">
+              {showAll ? "Sbalit" : `Zobrazit všechny (${entries.length}) →`}
+            </button>
+          )}
         </>
       )}
     </div>

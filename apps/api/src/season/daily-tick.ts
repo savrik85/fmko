@@ -63,6 +63,11 @@ export async function executeDailyTick(
     "UPDATE players SET life_context = json_remove(life_context, '$.hangover') WHERE json_extract(life_context, '$.hangover') IS NOT NULL"
   ).run().catch((e) => logger.warn({ module: "daily-tick" }, "clear yesterday hangovers", e));
 
+  // Retention condition_log — udržujeme posledních 60 dní per hráč, jinak by tabulka rostla bez limitu.
+  await env.DB.prepare(
+    "DELETE FROM condition_log WHERE created_at < datetime('now', '-60 days')",
+  ).run().catch((e) => logger.warn({ module: "daily-tick" }, "condition_log retention", e));
+
   // ── Training (Mon-Fri, if plan is set) ──
   const teams = await env.DB.prepare(
     "SELECT id, training_type, training_approach, training_sessions FROM teams WHERE user_id != 'ai'"
