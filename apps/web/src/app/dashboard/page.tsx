@@ -270,7 +270,7 @@ export default function DashboardPage() {
 
           {pubSession.attendees.length > 0 && (
             <div className="text-sm mb-3">
-              <span className="text-muted">🪑 V hospodě seděli: </span>
+              <span className="text-muted">V hospodě seděli: </span>
               {pubSession.attendees.map((a, i) => (
                 <span key={a.playerId}>
                   {i > 0 && ", "}
@@ -306,15 +306,14 @@ export default function DashboardPage() {
                       <span className="text-ink leading-snug">{inc.text}</span>
                     </div>
                     {inc.effects && inc.effects.length > 0 && (
-                      <div className="ml-7 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                      <div className="ml-7 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
                         {inc.effects.map((ef, ei) => {
-                          const efIcon = ef.type === "injury" ? "🩹" : ef.type === "condition" ? "💪" : ef.type === "morale" ? "😊" : "•";
                           const efColor = ef.type === "injury" || (ef.delta != null && ef.delta < 0) ? "text-card-red"
                             : ef.delta != null && ef.delta > 0 ? "text-pitch-500"
                             : "text-muted";
                           return (
-                            <span key={ei} className={`text-[11px] font-heading font-bold ${efColor}`}>
-                              {efIcon} {playerNameById(ef.playerId)}: {ef.label}
+                            <span key={ei} className={efColor}>
+                              <span className="text-muted">{playerNameById(ef.playerId)}:</span> <span className="font-heading font-bold">{ef.label}</span>
                             </span>
                           );
                         })}

@@ -50,13 +50,6 @@ const INCIDENT_ICON: Record<string, string> = {
   nobody: "🌙",
 };
 
-function effectIcon(type: string, delta?: number): string {
-  if (type === "injury") return "🩹";
-  if (type === "condition") return "💪";
-  if (type === "morale") return "😊";
-  return delta != null && delta < 0 ? "↓" : "↑";
-}
-
 function effectColor(ef: PubEffect): string {
   if (ef.type === "injury") return "text-card-red";
   if (ef.delta != null && ef.delta < 0) return "text-card-red";
@@ -175,7 +168,7 @@ export default function HospodaPage() {
 
                 {s.attendees.length > 0 && (
                   <div className="text-sm mb-2">
-                    <span className="text-muted">🪑 </span>
+                    <span className="text-muted">V hospodě: </span>
                     {s.attendees.map((a, i) => (
                       <span key={a.playerId}>
                         {i > 0 && ", "}
@@ -202,10 +195,10 @@ export default function HospodaPage() {
                             <span className="text-ink leading-snug">{inc.text}</span>
                           </div>
                           {inc.effects && inc.effects.length > 0 && (
-                            <div className="ml-7 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                            <div className="ml-7 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
                               {inc.effects.map((ef, ei) => (
-                                <span key={ei} className={`text-[11px] font-heading font-bold ${effectColor(ef)}`}>
-                                  {effectIcon(ef.type, ef.delta)} {playerNameById(ef.playerId)}: {ef.label}
+                                <span key={ei} className={effectColor(ef)}>
+                                  <span className="text-muted">{playerNameById(ef.playerId)}:</span> <span className="font-heading font-bold">{ef.label}</span>
                                 </span>
                               ))}
                             </div>
