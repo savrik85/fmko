@@ -572,39 +572,9 @@ export async function runScheduledMatches(
         logger.error({ module: "match-runner" }, "Condition persist failed", e);
       }
 
-      // Ranní kocovina po výhře — hráči vítězného týmu s vysokým alcohol mají šanci přijít s -15 kondice.
-      // Why: aktivuje dosud nepoužívaný atribut `personality.alcohol` v post-match flow (in-match penalty
-      // už řeší simulation.ts, tohle je carry-over do dalšího dne, vyčistí se v daily-tick).
-      try {
-        if (result.homeScore !== result.awayScore) {
-          const homeWon = result.homeScore > result.awayScore;
-          const winnerLineup = homeWon ? result.homeLineup : result.awayLineup;
-          const winnerTeamId = homeWon ? homeTeamId : awayTeamId;
-          const { logConditionStmt } = await import("../lib/condition-log");
-          const hangoverStmts: D1PreparedStatement[] = [];
-          const hangoverNames: string[] = [];
-          for (const p of winnerLineup) {
-            const dbId = fullIdMap.get(p.id);
-            if (!dbId || p.alcohol < 50) continue;
-            // alcohol 50 → 10 %, 75 → 20 %, 100 → 30 %
-            const prob = 0.10 + ((p.alcohol - 50) / 50) * 0.20;
-            if (Math.random() >= prob) continue;
-            hangoverStmts.push(db.prepare(
-              `UPDATE players SET life_context = json_set(life_context, '$.condition', MAX(5, json_extract(life_context, '$.condition') - 15), '$.hangover', 1) WHERE id = ?`,
-            ).bind(dbId));
-            const oldCond = Math.round(p.condition);
-            const newCond = Math.max(5, oldCond - 15);
-            hangoverStmts.push(logConditionStmt(db, dbId, winnerTeamId, oldCond, newCond, "hangover", "Ranní kocovina po výhře"));
-            hangoverNames.push(`${p.firstName} ${p.lastName}`);
-          }
-          if (hangoverStmts.length > 0) {
-            await db.batch(hangoverStmts);
-            logger.info({ module: "match-runner" }, `Hangover applied to ${hangoverNames.length} players in team ${winnerTeamId}: ${hangoverNames.join(", ")}`);
-          }
-        }
-      } catch (e) {
-        logger.error({ module: "match-runner" }, "Hangover trigger failed", e);
-      }
+      // Pozn.: Ranní kocovina se nyní generuje v rámci hospodské session (apps/api/src/season/pub.ts)
+      // jako effect typu 'hangover' — daily-tick po výhře zvedá pub attendance, a kdo s vysokým alcohol
+      // přijde, dostane RNG hangover. Tím je flow konzistentní (kocovina = pil v hospodě).
 
       // Match experience: small chance to improve skills from playing
       // More minutes = more chance. Young players benefit more.

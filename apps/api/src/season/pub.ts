@@ -20,10 +20,10 @@ interface PubAttendee {
 
 interface PubEffect {
   playerId: string;
-  type: "condition" | "injury" | "morale";
+  type: "condition" | "injury" | "morale" | "hangover";
   delta?: number; // pro condition/morale
   injuryDays?: number; // pro injury
-  label: string; // pro UI: "−12 kondice", "Lehké zranění (2 d)", "+3 morálka"
+  label: string; // pro UI: "−12 kondice", "Lehké zranění (2 d)", "+3 morálka", "Ranní kocovina"
 }
 
 interface PubIncident {
@@ -79,8 +79,8 @@ function attendanceProb(p: DbPlayer, ctx: {
   prob *= DAY_WEEKDAY_MOD[ctx.dayOfWeek] ?? 1.0;
   if (ctx.buddiesAlreadyIn > 0) prob *= 1.5;
   if (ctx.rivalsAlreadyIn > 0) prob *= 0.7;
-  if (ctx.lastMatchResult === "win") prob *= 1.4;
-  if (ctx.lastMatchResult === "loss") prob *= 1.2;
+  if (ctx.lastMatchResult === "win") prob *= 1.8;  // velká oslava
+  if (ctx.lastMatchResult === "loss") prob *= 1.4; // smutný flám
   if (ctx.daysToNextMatch !== null && ctx.daysToNextMatch <= 1) prob *= 0.5;
   if (p.condition < 30) prob *= 0.3;
   if (p.recent_pub_days >= 2) prob *= 0.4; // cooldown — manželka
@@ -176,14 +176,36 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
   }
 
   // ── Local incidents ──
-  const topDrinker = [...locals].sort((a, b) => b.alcohol - a.alcohol)[0];
-  if (topDrinker && topDrinker.alcohol >= 60 && Math.random() < 0.4) {
+  // Ranní kocovina — per attendee s alcohol≥50, prob 10–30% dle alcohol škály.
+  // Sjednocuje "drink record" mechaniku: kdo pije moc → ráno bude těžko.
+  const hangoverVictims: PubAttendee[] = [];
+  for (const a of locals) {
+    if (a.alcohol < 50) continue;
+    const prob = 0.10 + ((a.alcohol - 50) / 50) * 0.20; // alcohol 50→10%, 75→20%, 100→30%
+    if (Math.random() < prob) hangoverVictims.push(a);
+  }
+
+  // Top opilec dostane "vypil rekord" flavour text (zachová lore)
+  const topDrinker = hangoverVictims.sort((a, b) => b.alcohol - a.alcohol)[0];
+  if (topDrinker) {
     const beers = 5 + Math.floor(Math.random() * 5);
     incidents.push({
       type: "drink_record",
       playerIds: [topDrinker.playerId],
       text: `${topDrinker.firstName} ${topDrinker.lastName} vypil ${beers} piv — rekord večera.`,
-      effects: [{ playerId: topDrinker.playerId, type: "condition", delta: -5, label: "−5 kondice" }],
+      effects: [{ playerId: topDrinker.playerId, type: "hangover", label: "Ranní kocovina (−15 kondice)" }],
+    });
+  }
+
+  // Ostatní opilci — souhrnný incident (méně textu)
+  const others = hangoverVictims.slice(1);
+  if (others.length > 0) {
+    const names = others.map((o) => o.lastName).join(", ");
+    incidents.push({
+      type: "drink_record",
+      playerIds: others.map((o) => o.playerId),
+      text: `Pivař za pivařem — ${names} ${others.length === 1 ? "také pořádně přebral" : "taky pořádně přebrali"}.`,
+      effects: others.map((o) => ({ playerId: o.playerId, type: "hangover" as const, label: "Ranní kocovina (−15 kondice)" })),
     });
   }
 
@@ -256,6 +278,15 @@ async function applyIncidentEffects(
           `UPDATE players SET life_context = json_set(life_context, '$.morale', ?) WHERE id = ?`,
         ).bind(newMorale, ef.playerId));
         cur.morale = newMorale;
+      } else if (ef.type === "hangover") {
+        // Ranní kocovina: -15 condition + life_context.hangover=1 (vyčistí daily-tick).
+        // V condition_logu se zaloguje jako source='hangover' (separátní od jiných pub effects).
+        const newCond = Math.max(15, cur.cond - 15);
+        stmts.push(db.prepare(
+          `UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.hangover', 1) WHERE id = ?`,
+        ).bind(newCond, ef.playerId));
+        stmts.push(logConditionStmt(db, ef.playerId, cur.teamId, cur.cond, newCond, "hangover", "Ranní kocovina po hospodě"));
+        cur.cond = newCond;
       } else if (ef.type === "injury" && ef.injuryDays != null) {
         stmts.push(db.prepare(
           `INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total) VALUES (?, ?, ?, 'obecne', 'Zranění z hospodské bitky', 'lehke', ?, ?)`,

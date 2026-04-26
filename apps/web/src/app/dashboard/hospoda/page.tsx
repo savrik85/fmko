@@ -51,7 +51,7 @@ const INCIDENT_ICON: Record<string, string> = {
 };
 
 function effectColor(ef: PubEffect): string {
-  if (ef.type === "injury") return "text-card-red";
+  if (ef.type === "injury" || ef.type === "hangover") return "text-card-red";
   if (ef.delta != null && ef.delta < 0) return "text-card-red";
   if (ef.delta != null && ef.delta > 0) return "text-pitch-500";
   return "text-muted";

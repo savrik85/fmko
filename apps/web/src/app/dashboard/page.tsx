@@ -308,7 +308,7 @@ export default function DashboardPage() {
                     {inc.effects && inc.effects.length > 0 && (
                       <div className="ml-7 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
                         {inc.effects.map((ef, ei) => {
-                          const efColor = ef.type === "injury" || (ef.delta != null && ef.delta < 0) ? "text-card-red"
+                          const efColor = ef.type === "injury" || ef.type === "hangover" || (ef.delta != null && ef.delta < 0) ? "text-card-red"
                             : ef.delta != null && ef.delta > 0 ? "text-pitch-500"
                             : "text-muted";
                           return (
