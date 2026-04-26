@@ -48,6 +48,8 @@ const INCIDENT_ICON: Record<string, string> = {
   story: "📰",
   lone_drinker: "🪑",
   nobody: "🌙",
+  coach_led_visit: "🧑‍🏫",
+  coach_led_one: "🧑‍🏫",
 };
 
 function effectColor(ef: PubEffect): string {

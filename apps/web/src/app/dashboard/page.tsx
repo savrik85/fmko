@@ -294,6 +294,8 @@ export default function DashboardPage() {
                   : inc.type === "story" ? "📰"
                   : inc.type === "lone_drinker" ? "🪑"
                   : inc.type === "nobody" ? "🌙"
+                  : inc.type === "coach_led_visit" ? "🧑‍🏫"
+                  : inc.type === "coach_led_one" ? "🧑‍🏫"
                   : "•";
                 const playerNameById = (id: string) => {
                   const a = pubSession.attendees.find((x) => x.playerId === id);

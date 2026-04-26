@@ -305,6 +305,101 @@ async function applyIncidentEffects(
   return stmts;
 }
 
+/**
+ * Coach-led pub session — trenér aktivně rozhodne "Pojedeme na jedno".
+ * Volá se z `POST /api/teams/:id/pub-visit`.
+ * Vytvoří pub_session pro dnešek (idempotentně přepíše emergent), aplikuje effects.
+ *
+ * Pro choice="all": všichni active+healthy, +8 morale + −15 cond, vyšší prob hangoveru
+ * Pro choice="one": hráč s nejnižší morale, +3 morale, −5 cond, žádné drama
+ */
+export async function createCoachLedSession(
+  db: D1Database,
+  teamId: string,
+  gameDate: string,
+  choice: "all" | "one",
+): Promise<{ ok: true; attendeesCount: number; incidentsCount: number } | { ok: false; reason: string }> {
+  // Načti aktivní non-injured non-suspended hráče
+  const players = await db.prepare(
+    `SELECT p.id, p.first_name, p.last_name,
+       json_extract(p.personality, '$.alcohol') as alcohol,
+       json_extract(p.life_context, '$.morale') as morale
+     FROM players p
+     WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
+       AND p.id NOT IN (SELECT player_id FROM injuries WHERE days_remaining > 0)
+       AND COALESCE(p.suspended_matches, 0) = 0`,
+  ).bind(teamId).all<{ id: string; first_name: string; last_name: string; alcohol: number; morale: number }>()
+    .catch((e) => { logger.warn({ module: "pub" }, "load players for coach-led", e); return { results: [] }; });
+
+  if (players.results.length === 0) return { ok: false, reason: "Žádní dostupní hráči" };
+
+  const attendees: PubAttendee[] = [];
+  const incidents: PubIncident[] = [];
+
+  if (choice === "all") {
+    for (const p of players.results) {
+      attendees.push({
+        playerId: p.id, firstName: p.first_name, lastName: p.last_name,
+        alcohol: p.alcohol ?? 30, teamId, isVisitor: false,
+      });
+    }
+    // Marker incident: trenér vzal celý tým
+    incidents.push({
+      type: "coach_led_visit",
+      playerIds: attendees.map((a) => a.playerId),
+      text: `Trenér vyhlásil "Pojedeme na jedno!" Celý tým u Pralesa.`,
+      effects: attendees.flatMap((a) => [
+        { playerId: a.playerId, type: "morale" as const, delta: 8, label: "+8 morálka" },
+        { playerId: a.playerId, type: "condition" as const, delta: -15, label: "−15 kondice" },
+      ]),
+    });
+    // Vyšší prob hangoveru — týmový binge
+    for (const a of attendees) {
+      if (a.alcohol < 50) continue;
+      const prob = 0.25 + ((a.alcohol - 50) / 50) * 0.30; // 50→25%, 100→55%
+      if (Math.random() >= prob) continue;
+      incidents.push({
+        type: "drink_record",
+        playerIds: [a.playerId],
+        text: `${a.firstName} ${a.lastName} si dal pořádně víc než ostatní.`,
+        effects: [{ playerId: a.playerId, type: "hangover", label: "Ranní kocovina (−15 kondice)" }],
+      });
+    }
+  } else {
+    // choice === "one" — vyber hráče s nejnižší morale (cílená motivace)
+    const target = [...players.results].sort((a, b) => (a.morale ?? 50) - (b.morale ?? 50))[0];
+    attendees.push({
+      playerId: target.id, firstName: target.first_name, lastName: target.last_name,
+      alcohol: target.alcohol ?? 30, teamId, isVisitor: false,
+    });
+    incidents.push({
+      type: "coach_led_one",
+      playerIds: [target.id],
+      text: `Trenér si pozval ${target.first_name} ${target.last_name} na pivo, probrali sezónu.`,
+      effects: [
+        { playerId: target.id, type: "morale", delta: 3, label: "+3 morálka" },
+        { playerId: target.id, type: "condition", delta: -5, label: "−5 kondice" },
+      ],
+    });
+  }
+
+  // Idempotentně: pokud už dnes existuje (emergent), přepiš ji coach-led variantou.
+  await db.prepare(
+    `DELETE FROM pub_sessions WHERE team_id = ? AND game_date = ?`,
+  ).bind(teamId, gameDate).run().catch((e) => logger.warn({ module: "pub" }, "delete existing emergent session", e));
+
+  await db.prepare(
+    `INSERT INTO pub_sessions (team_id, game_date, attendees, incidents) VALUES (?, ?, ?, ?)`,
+  ).bind(teamId, gameDate, JSON.stringify(attendees), JSON.stringify(incidents)).run()
+    .catch((e) => logger.warn({ module: "pub" }, "insert coach-led session", e));
+
+  // Apply effects
+  const effectStmts = await applyIncidentEffects(db, incidents);
+  if (effectStmts.length > 0) await db.batch(effectStmts).catch((e) => logger.warn({ module: "pub" }, "apply coach-led effects", e));
+
+  return { ok: true, attendeesCount: attendees.length, incidentsCount: incidents.length };
+}
+
 export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: string): Promise<{ sessionsCreated: number }> {
   // Načti všechny lidské týmy + AI týmy (visitors můžou být i AI)
   const allTeams = await db.prepare(

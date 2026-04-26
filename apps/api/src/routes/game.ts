@@ -753,62 +753,34 @@ gameRouter.post("/teams/:teamId/pub-visit", async (c) => {
     }
   }
 
-  const effects: Array<{ type: string; value: number; description: string }> = [];
+  const gameDate = team.game_date.slice(0, 10); // YYYY-MM-DD
 
-  if (body.choice === "all") {
-    effects.push(
-      { type: "morale", value: 8, description: "+8 morálka" },
-      { type: "condition", value: -15, description: "-15 kondice všem" },
-      { type: "budget", value: -1500, description: "-1 500 Kč" },
-    );
-  } else if (body.choice === "one") {
-    effects.push(
-      { type: "morale", value: 3, description: "+3 morálka" },
-      { type: "condition", value: -5, description: "-5 kondice" },
-      { type: "budget", value: -500, description: "-500 Kč" },
-    );
+  if (body.choice === "no") {
+    // Trenér zakázal hospodu — žádná pub_session, jen morale penalty.
+    await c.env.DB.prepare(
+      "UPDATE players SET life_context = json_set(life_context, '$.morale', MIN(100, MAX(0, json_extract(life_context, '$.morale') - 3))) WHERE team_id = ?",
+    ).bind(teamId).run().catch((e) => logger.warn({ module: "game" }, "apply no-pub morale penalty", e));
   } else {
-    effects.push({ type: "morale", value: -3, description: "-3 morálka" });
+    // "all" / "one" — vytvoř coach-led pub_session (effects přes incident.effects, condition_log, hangover...)
+    const { createCoachLedSession } = await import("../season/pub");
+    const result = await createCoachLedSession(c.env.DB, teamId, gameDate, body.choice);
+    if (!result.ok) return c.json({ error: result.reason }, 400);
+
+    // Cost (mimo session — peněženka týmu)
+    const cost = body.choice === "all" ? -1500 : -500;
+    await recordTransaction(c.env.DB, teamId, "event", cost, "Hospoda", team.game_date)
+      .catch((e) => logger.warn({ module: "game" }, "record pub cost", e));
   }
 
-  // Apply effects
-  for (const effect of effects) {
-    if (effect.type === "budget") {
-      await recordTransaction(c.env.DB, teamId, "event", effect.value, "Hospoda", team.game_date).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
-    }
-    if (effect.type === "morale") {
-      await c.env.DB.prepare(
-        "UPDATE players SET life_context = json_set(life_context, '$.morale', MIN(100, MAX(0, json_extract(life_context, '$.morale') + ?))) WHERE team_id = ?"
-      ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
-    }
-    if (effect.type === "condition") {
-      const pubDesc = body.choice === "all" ? "Hospoda — vzal jsem všechny" : "Hospoda — vzal jsem jednoho";
-      await c.env.DB.prepare(
-        `INSERT INTO condition_log (player_id, team_id, old_value, new_value, delta, source, description)
-         SELECT id, team_id,
-           json_extract(life_context, '$.condition'),
-           MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?)),
-           MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?)) - json_extract(life_context, '$.condition'),
-           'pub', ?
-         FROM players
-         WHERE team_id = ? AND json_extract(life_context, '$.condition') IS NOT NULL
-           AND MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?)) != json_extract(life_context, '$.condition')`,
-      ).bind(effect.value, effect.value, pubDesc, teamId, effect.value).run().catch((e) => logger.warn({ module: "game" }, "log pub", e));
-      await c.env.DB.prepare(
-        "UPDATE players SET life_context = json_set(life_context, '$.condition', MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?))) WHERE team_id = ?",
-      ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
-    }
-  }
-
-  // Record as event for cooldown tracking
+  // Cooldown event
   await c.env.DB.prepare(
-    "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, season, game_week, status, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'hospoda_action', 'Posezení v hospodě', ?, ?, '1', 0, 'resolved', ?)"
+    "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, season, game_week, status, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'hospoda_action', 'Posezení v hospodě', ?, '[]', '1', 0, 'resolved', ?)",
   ).bind(crypto.randomUUID(), teamId,
     body.choice === "all" ? "Celý tým šel do hospody" : body.choice === "one" ? "Jen jedno pivo" : "Trenér zakázal hospodu",
-    JSON.stringify(effects), team.game_date
-  ).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
+    team.game_date,
+  ).run().catch((e) => logger.warn({ module: "game" }, "record pub cooldown event", e));
 
-  return c.json({ ok: true, effects });
+  return c.json({ ok: true, choice: body.choice });
 });
 
 // GET /api/teams/:id/pub-status — cooldown check
