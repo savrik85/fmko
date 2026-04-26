@@ -732,6 +732,9 @@ export default function PlayerDetailPage() {
       {/* ═══ Tréninkový vývoj (jen pro vlastníka) ═══ */}
       {player.team_id === teamId && <TrainingDevelopment teamId={teamId} playerId={playerId} />}
 
+      {/* ═══ Vývoj kondice (jen pro vlastníka) ═══ */}
+      {player.team_id === teamId && <ConditionLog teamId={teamId} playerId={playerId} />}
+
       {/* ═══ Vztahy v kádru (jen vlastní hráči) ═══ */}
       {isOwnPlayer && profileExtras && profileExtras.relationships.length > 0 && (
         <div className="card p-4 sm:p-5 max-w-lg">
@@ -1231,6 +1234,109 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
                         <span className="text-muted text-xs ml-1">({entry.old_value}→{entry.new_value})</span>
                       </td>
                       <td className="py-1.5 text-muted">{TRAIN_TYPE_LABELS[entry.training_type] ?? entry.training_type}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const CONDITION_SOURCE_META: Record<string, { icon: string; label: string }> = {
+  training: { icon: "🏃", label: "Trénink" },
+  recovery: { icon: "💤", label: "Regenerace" },
+  facility: { icon: "🚿", label: "Sprchy" },
+  match: { icon: "⚽", label: "Zápas" },
+  friendly: { icon: "🤝", label: "Přátelák" },
+  hangover: { icon: "🍺", label: "Kocovina" },
+  pub: { icon: "🍻", label: "Hospoda" },
+  event: { icon: "🎉", label: "Událost" },
+};
+
+interface ConditionLogEntry {
+  id: number;
+  oldValue: number;
+  newValue: number;
+  delta: number;
+  source: string;
+  description: string | null;
+  gameDate: string | null;
+  createdAt: string;
+}
+
+function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }) {
+  const [entries, setEntries] = useState<ConditionLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiFetch<{ entries: ConditionLogEntry[] }>(`/api/teams/${teamId}/players/${playerId}/condition-log?limit=30`)
+      .then((d) => setEntries(d.entries))
+      .catch((e) => { console.error("condition-log fetch:", e); setEntries([]); })
+      .finally(() => setLoading(false));
+  }, [teamId, playerId]);
+
+  if (loading) return null;
+
+  const gains = entries.filter((e) => e.delta > 0).length;
+  const losses = entries.filter((e) => e.delta < 0).length;
+
+  return (
+    <div className="card p-4 sm:p-5">
+      <SectionLabel>Vývoj kondice</SectionLabel>
+
+      {entries.length === 0 ? (
+        <p className="text-sm text-muted">Zatím žádné záznamy o změnách kondice.</p>
+      ) : (
+        <>
+          <div className="flex gap-3 flex-wrap mb-4">
+            <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
+              <div className="font-heading font-[800] text-2xl tabular-nums text-ink">{entries.length}</div>
+              <div className="text-xs text-muted uppercase">Změn</div>
+            </div>
+            <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
+              <div className="font-heading font-[800] text-2xl tabular-nums text-pitch-500">{gains}</div>
+              <div className="text-xs text-muted uppercase">Nárůst</div>
+            </div>
+            {losses > 0 && (
+              <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
+                <div className="font-heading font-[800] text-2xl tabular-nums text-card-red">{losses}</div>
+                <div className="text-xs text-muted uppercase">Pokles</div>
+              </div>
+            )}
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-xs text-muted uppercase">
+                  <th className="text-left py-2 font-heading">Kdy</th>
+                  <th className="text-left py-2 font-heading">Zdroj</th>
+                  <th className="text-left py-2 font-heading">Detail</th>
+                  <th className="text-center py-2 font-heading">Změna</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => {
+                  const meta = CONDITION_SOURCE_META[entry.source] ?? { icon: "•", label: entry.source };
+                  const date = new Date(entry.createdAt).toLocaleString("cs", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+                  return (
+                    <tr key={entry.id} className="border-b border-gray-50 last:border-b-0">
+                      <td className="py-1.5 tabular-nums text-muted whitespace-nowrap">{date}</td>
+                      <td className="py-1.5 whitespace-nowrap">
+                        <span className="mr-1">{meta.icon}</span>
+                        <span className="font-medium">{meta.label}</span>
+                      </td>
+                      <td className="py-1.5 text-muted">{entry.description ?? "—"}</td>
+                      <td className="py-1.5 text-center whitespace-nowrap">
+                        <span className={`font-heading font-bold ${entry.delta > 0 ? "text-pitch-500" : entry.delta < 0 ? "text-card-red" : "text-muted"}`}>
+                          {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
+                        </span>
+                        <span className="text-muted text-xs ml-1">({entry.oldValue}→{entry.newValue})</span>
+                      </td>
                     </tr>
                   );
                 })}

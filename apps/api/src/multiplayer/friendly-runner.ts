@@ -208,17 +208,29 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
 
       // Persist condition + morale changes for players who actually played
       try {
+        const { logConditionStmt } = await import("../lib/condition-log");
         const allPlayers = [...result.homeLineup, ...result.awayLineup];
         const fullIdMap = new Map<number, string>();
         for (const [engineId, dbId] of homeBuild.idMap) fullIdMap.set(engineId, dbId);
         for (const [engineId, dbId] of awayBuild.idMap) fullIdMap.set(engineId, dbId);
+        const preSimCondById = new Map<number, number>();
+        for (const p of [...homeLineupPreSim, ...awayLineupPreSim]) preSimCondById.set(p.id, p.condition);
 
-        const condStmts = allPlayers
-          .filter(p => fullIdMap.has(p.id))
-          .map(p => db.prepare(
-            "UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?"
-          ).bind(Math.round(p.condition), Math.round(p.morale), fullIdMap.get(p.id)!));
-        if (condStmts.length > 0) await db.batch(condStmts);
+        const stmts: D1PreparedStatement[] = [];
+        for (const p of allPlayers) {
+          const dbId = fullIdMap.get(p.id);
+          if (!dbId) continue;
+          stmts.push(db.prepare(
+            "UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?",
+          ).bind(Math.round(p.condition), Math.round(p.morale), dbId));
+
+          const oldCond = preSimCondById.get(p.id);
+          if (oldCond != null && Math.round(oldCond) !== Math.round(p.condition)) {
+            const teamIdForPlayer = result.homeLineup.includes(p) ? homeTeamId : awayTeamId;
+            stmts.push(logConditionStmt(db, dbId, teamIdForPlayer, oldCond, p.condition, "friendly", `Přátelák (${result.homeScore}:${result.awayScore})`));
+          }
+        }
+        if (stmts.length > 0) await db.batch(stmts);
       } catch (e) {
         logger.error({ module: "friendly-runner" }, "Condition persist failed", e);
       }

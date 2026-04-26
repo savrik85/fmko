@@ -2319,6 +2319,36 @@ teamsRouter.get("/:id/players/:playerId/career-stats", async (c) => {
   return c.json({ seasons, totals });
 });
 
+// GET /api/teams/:id/players/:playerId/condition-log — vývoj kondice (timeline)
+teamsRouter.get("/:id/players/:playerId/condition-log", async (c) => {
+  const playerId = c.req.param("playerId");
+  const limit = Math.min(Number(c.req.query("limit") ?? 30), 200);
+
+  const rows = await c.env.DB.prepare(
+    `SELECT id, old_value, new_value, delta, source, description, game_date, created_at
+     FROM condition_log
+     WHERE player_id = ?
+     ORDER BY created_at DESC, id DESC
+     LIMIT ?`,
+  ).bind(playerId, limit).all<{
+    id: number; old_value: number; new_value: number; delta: number;
+    source: string; description: string | null; game_date: string | null; created_at: string;
+  }>().catch((e) => { logger.warn({ module: "teams" }, "load condition log", e); return { results: [] }; });
+
+  return c.json({
+    entries: rows.results.map((r) => ({
+      id: r.id,
+      oldValue: r.old_value,
+      newValue: r.new_value,
+      delta: r.delta,
+      source: r.source,
+      description: r.description,
+      gameDate: r.game_date,
+      createdAt: r.created_at,
+    })),
+  });
+});
+
 // GET /api/teams/:id/players/:playerId/career-history — historie klubů hráče
 teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
   const playerId = c.req.param("playerId");

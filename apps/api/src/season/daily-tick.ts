@@ -227,12 +227,24 @@ export async function executeDailyTick(
           tactical: 3,
         };
         const condDrain = drainMap[(team.training_type as string)] ?? 4;
+        const { logConditionStmt } = await import("../lib/condition-log");
         for (const a of result.attendance) {
-          const playerId = playersResult.results[a.playerIndex].id as string;
+          const playerRow = playersResult.results[a.playerIndex];
+          const playerId = playerRow.id as string;
           if (a.attended) {
-            await env.DB.prepare(
-              `UPDATE players SET life_context = json_set(life_context, '$.condition', MAX(5, json_extract(life_context, '$.condition') - ?)) WHERE id = ?`
-            ).bind(condDrain, playerId).run().catch((e) => logger.warn({ module: "daily-tick" }, "drain condition after training", e));
+            // Pre-fetch starou condition pro log entry — single round-trip stačí, condDrain je deterministický.
+            const oldCondLc = (() => { try { return JSON.parse(playerRow.life_context as string); } catch { return null; } })();
+            const oldCond = oldCondLc?.condition ?? 100;
+            const newCond = Math.max(5, oldCond - condDrain);
+            const stmts: D1PreparedStatement[] = [
+              env.DB.prepare(
+                `UPDATE players SET life_context = json_set(life_context, '$.condition', MAX(5, json_extract(life_context, '$.condition') - ?)) WHERE id = ?`,
+              ).bind(condDrain, playerId),
+            ];
+            if (newCond !== oldCond) {
+              stmts.push(logConditionStmt(env.DB, playerId, teamId, oldCond, newCond, "training", `Trénink: ${team.training_type}`));
+            }
+            await env.DB.batch(stmts).catch((e) => logger.warn({ module: "daily-tick" }, "drain condition after training", e));
           } else if (a.reason) {
             // Neúčast → uložit absence na life_context (vyčistí se následující den)
             const absencePayload = JSON.stringify({ reason: a.reason, category: "training", date: now.toISOString().slice(0, 10) });
@@ -310,24 +322,36 @@ export async function executeDailyTick(
 
   // Condition recovery: stamina-based + age modifier
   // Young players recover faster, older players slower
+  // newCondSql musí být IDENTICKÝ se SQL v UPDATE — log se počítá ze stejného výrazu.
+  const recoveryNewCondSql = `MIN(100, json_extract(life_context, '$.condition') +
+    (CASE
+      WHEN COALESCE(json_extract(physical, '$.stamina'), json_extract(skills, '$.stamina'), 40) >= 75 THEN 20
+      WHEN COALESCE(json_extract(physical, '$.stamina'), json_extract(skills, '$.stamina'), 40) >= 50 THEN 16
+      WHEN COALESCE(json_extract(physical, '$.stamina'), json_extract(skills, '$.stamina'), 40) >= 25 THEN 13
+      ELSE 10
+    END)
+    +
+    (CASE
+      WHEN age <= 21 THEN 3
+      WHEN age <= 25 THEN 1
+      WHEN age <= 30 THEN 0
+      WHEN age <= 35 THEN -1
+      ELSE -3
+    END))`;
+  // Log před UPDATE (žádné race v rámci jednoho ticku — daily-tick je idempotentní)
   await env.DB.prepare(
-    `UPDATE players SET life_context = json_set(life_context, '$.condition',
-      MIN(100, json_extract(life_context, '$.condition') +
-        (CASE
-          WHEN COALESCE(json_extract(physical, '$.stamina'), json_extract(skills, '$.stamina'), 40) >= 75 THEN 20
-          WHEN COALESCE(json_extract(physical, '$.stamina'), json_extract(skills, '$.stamina'), 40) >= 50 THEN 16
-          WHEN COALESCE(json_extract(physical, '$.stamina'), json_extract(skills, '$.stamina'), 40) >= 25 THEN 13
-          ELSE 10
-        END)
-        +
-        (CASE
-          WHEN age <= 21 THEN 3
-          WHEN age <= 25 THEN 1
-          WHEN age <= 30 THEN 0
-          WHEN age <= 35 THEN -1
-          ELSE -3
-        END)
-      ))`
+    `INSERT INTO condition_log (player_id, team_id, old_value, new_value, delta, source, description)
+     SELECT id, team_id,
+       json_extract(life_context, '$.condition'),
+       ${recoveryNewCondSql},
+       ${recoveryNewCondSql} - json_extract(life_context, '$.condition'),
+       'recovery', 'Denní regenerace'
+     FROM players
+     WHERE json_extract(life_context, '$.condition') IS NOT NULL
+       AND ${recoveryNewCondSql} != json_extract(life_context, '$.condition')`,
+  ).run().catch((e) => logger.warn({ module: "daily-tick" }, "log recovery", e));
+  await env.DB.prepare(
+    `UPDATE players SET life_context = json_set(life_context, '$.condition', ${recoveryNewCondSql})`,
   ).run();
   events.push({ type: "recovery", description: "Regenerace kondice (dle staminy a věku)" });
 
@@ -345,9 +369,22 @@ export async function executeDailyTick(
       const fx = calculateFacilityEffects(facilities);
       if (fx.conditionRegenBonus > 0) {
         await env.DB.prepare(
+          `INSERT INTO condition_log (player_id, team_id, old_value, new_value, delta, source, description)
+           SELECT id, team_id,
+             json_extract(life_context, '$.condition'),
+             MIN(100, json_extract(life_context, '$.condition') + ?),
+             MIN(100, json_extract(life_context, '$.condition') + ?) - json_extract(life_context, '$.condition'),
+             'facility', 'Bonus z vybavení (sprchy)'
+           FROM players
+           WHERE team_id = ?
+             AND json_extract(life_context, '$.condition') IS NOT NULL
+             AND MIN(100, json_extract(life_context, '$.condition') + ?) != json_extract(life_context, '$.condition')`,
+        ).bind(fx.conditionRegenBonus, fx.conditionRegenBonus, row.team_id, fx.conditionRegenBonus)
+          .run().catch((e) => logger.warn({ module: "daily-tick" }, "log facility regen", e));
+        await env.DB.prepare(
           `UPDATE players SET life_context = json_set(life_context, '$.condition',
             MIN(100, json_extract(life_context, '$.condition') + ?))
-          WHERE team_id = ?`
+          WHERE team_id = ?`,
         ).bind(fx.conditionRegenBonus, row.team_id).run();
       }
     }

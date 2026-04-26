@@ -547,13 +547,27 @@ export async function runScheduledMatches(
       }
 
       // Persist condition + morale changes back to DB (batched)
+      // Pre-sim condition je v homeLineupPreSim/awayLineupPreSim — z toho spočítáme delta pro condition_log.
       try {
-        const condStmts = [...result.homeLineup, ...result.awayLineup]
-          .filter(p => fullIdMap.has(p.id))
-          .map(p => db.prepare(
-            `UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?`
-          ).bind(Math.round(p.condition), Math.round(p.morale), fullIdMap.get(p.id)!));
-        if (condStmts.length > 0) await db.batch(condStmts);
+        const { logConditionStmt } = await import("../lib/condition-log");
+        const preSimCondById = new Map<number, number>();
+        for (const p of [...homeLineupPreSim, ...awayLineupPreSim]) preSimCondById.set(p.id, p.condition);
+
+        const stmts: D1PreparedStatement[] = [];
+        for (const p of [...result.homeLineup, ...result.awayLineup]) {
+          const dbId = fullIdMap.get(p.id);
+          if (!dbId) continue;
+          stmts.push(db.prepare(
+            `UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?`,
+          ).bind(Math.round(p.condition), Math.round(p.morale), dbId));
+
+          const oldCond = preSimCondById.get(p.id);
+          if (oldCond != null && Math.round(oldCond) !== Math.round(p.condition)) {
+            const teamIdForPlayer = result.homeLineup.includes(p) ? homeTeamId : awayTeamId;
+            stmts.push(logConditionStmt(db, dbId, teamIdForPlayer, oldCond, p.condition, "match", `Zápas (${result.homeScore}:${result.awayScore})`));
+          }
+        }
+        if (stmts.length > 0) await db.batch(stmts);
       } catch (e) {
         logger.error({ module: "match-runner" }, "Condition persist failed", e);
       }
@@ -566,6 +580,7 @@ export async function runScheduledMatches(
           const homeWon = result.homeScore > result.awayScore;
           const winnerLineup = homeWon ? result.homeLineup : result.awayLineup;
           const winnerTeamId = homeWon ? homeTeamId : awayTeamId;
+          const { logConditionStmt } = await import("../lib/condition-log");
           const hangoverStmts: D1PreparedStatement[] = [];
           const hangoverNames: string[] = [];
           for (const p of winnerLineup) {
@@ -575,8 +590,11 @@ export async function runScheduledMatches(
             const prob = 0.10 + ((p.alcohol - 50) / 50) * 0.20;
             if (Math.random() >= prob) continue;
             hangoverStmts.push(db.prepare(
-              `UPDATE players SET life_context = json_set(life_context, '$.condition', MAX(5, json_extract(life_context, '$.condition') - 15), '$.hangover', 1) WHERE id = ?`
+              `UPDATE players SET life_context = json_set(life_context, '$.condition', MAX(5, json_extract(life_context, '$.condition') - 15), '$.hangover', 1) WHERE id = ?`,
             ).bind(dbId));
+            const oldCond = Math.round(p.condition);
+            const newCond = Math.max(5, oldCond - 15);
+            hangoverStmts.push(logConditionStmt(db, dbId, winnerTeamId, oldCond, newCond, "hangover", "Ranní kocovina po výhře"));
             hangoverNames.push(`${p.firstName} ${p.lastName}`);
           }
           if (hangoverStmts.length > 0) {

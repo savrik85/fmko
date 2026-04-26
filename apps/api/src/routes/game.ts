@@ -687,15 +687,37 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
     if (effect.type === "alcohol_event") {
       // Increase alcohol-prone players' next absence chance by reducing condition
       await c.env.DB.prepare(
+        `INSERT INTO condition_log (player_id, team_id, old_value, new_value, delta, source, description)
+         SELECT id, team_id,
+           json_extract(life_context, '$.condition'),
+           MAX(10, json_extract(life_context, '$.condition') - 20),
+           MAX(10, json_extract(life_context, '$.condition') - 20) - json_extract(life_context, '$.condition'),
+           'event', 'Alkoholová událost (pijani)'
+         FROM players
+         WHERE team_id = ? AND json_extract(personality, '$.alcohol') > 50
+           AND json_extract(life_context, '$.condition') IS NOT NULL`,
+      ).bind(teamId).run().catch((e) => logger.warn({ module: "game" }, "log alcohol event", e));
+      await c.env.DB.prepare(
         `UPDATE players SET life_context = json_set(life_context, '$.condition', MAX(10, json_extract(life_context, '$.condition') - 20))
-        WHERE team_id = ? AND json_extract(personality, '$.alcohol') > 50`
+        WHERE team_id = ? AND json_extract(personality, '$.alcohol') > 50`,
       ).bind(teamId).run().catch((e) => logger.warn({ module: "game" }, "apply alcohol event", e));
     }
     if (effect.type === "condition") {
+      const desc = `Událost: ${(choice as Record<string, unknown>).text ?? "kondice"}`;
+      await c.env.DB.prepare(
+        `INSERT INTO condition_log (player_id, team_id, old_value, new_value, delta, source, description)
+         SELECT id, team_id,
+           json_extract(life_context, '$.condition'),
+           MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?)),
+           MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?)) - json_extract(life_context, '$.condition'),
+           'event', ?
+         FROM players
+         WHERE team_id = ? AND json_extract(life_context, '$.condition') IS NOT NULL`,
+      ).bind(effect.value, effect.value, desc, teamId).run().catch((e) => logger.warn({ module: "game" }, "log condition event", e));
       await c.env.DB.prepare(
         `UPDATE players SET life_context = json_set(life_context, '$.condition',
           MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?)))
-        WHERE team_id = ?`
+        WHERE team_id = ?`,
       ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "update condition from event", e));
     }
     if (effect.type === "pitch_condition") {
@@ -760,8 +782,20 @@ gameRouter.post("/teams/:teamId/pub-visit", async (c) => {
       ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
     }
     if (effect.type === "condition") {
+      const pubDesc = body.choice === "all" ? "Hospoda — vzal jsem všechny" : "Hospoda — vzal jsem jednoho";
       await c.env.DB.prepare(
-        "UPDATE players SET life_context = json_set(life_context, '$.condition', MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?))) WHERE team_id = ?"
+        `INSERT INTO condition_log (player_id, team_id, old_value, new_value, delta, source, description)
+         SELECT id, team_id,
+           json_extract(life_context, '$.condition'),
+           MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?)),
+           MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?)) - json_extract(life_context, '$.condition'),
+           'pub', ?
+         FROM players
+         WHERE team_id = ? AND json_extract(life_context, '$.condition') IS NOT NULL
+           AND MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?)) != json_extract(life_context, '$.condition')`,
+      ).bind(effect.value, effect.value, pubDesc, teamId, effect.value).run().catch((e) => logger.warn({ module: "game" }, "log pub", e));
+      await c.env.DB.prepare(
+        "UPDATE players SET life_context = json_set(life_context, '$.condition', MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?))) WHERE team_id = ?",
       ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
     }
   }
