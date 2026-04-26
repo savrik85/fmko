@@ -397,6 +397,15 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "shower bonus failed", e);
   }
 
+  // ── Random life events ── (vesnické +/-, cooldown 5 dní per hráč, ~2% per hráč/den)
+  try {
+    const { applyRandomLifeEvents } = await import("./random-events");
+    const r = await applyRandomLifeEvents(env.DB);
+    if (r.applied > 0) events.push({ type: "recovery", description: `Životní události: ${r.applied} hráčů` });
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "random life events", e);
+  }
+
   // Morale drift toward 50
   await env.DB.prepare(
     `UPDATE players SET life_context = json_set(life_context, '$.morale',
