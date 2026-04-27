@@ -600,6 +600,12 @@ teamsRouter.post("/", async (c) => {
       await maintainFreeAgentPool(c.env.DB, createRng(cryptoSeed()), new Date());
     } catch (e) { logger.warn({ module: "teams" }, "free agent pool generation (join)", e); }
 
+    // Pub backfill — vygeneruj včerejší hospodu, ať není prázdná hned po setupu
+    try {
+      const { backfillYesterdayPubSession } = await import("../season/pub");
+      await backfillYesterdayPubSession(c.env.DB, teamId, new Date().toISOString().slice(0, 10));
+    } catch (e) { logger.warn({ module: "teams" }, "pub backfill (join)", e); }
+
     // Update KV session so teamId is no longer null (fixes post-onboarding auth)
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.slice(7);
@@ -837,6 +843,12 @@ teamsRouter.post("/", async (c) => {
     const faRng = createRng(cryptoSeed());
     await maintainFreeAgentPool(c.env.DB, faRng, new Date());
   } catch (e) { logger.warn({ module: "teams" }, "initial free agent pool generation", e); }
+
+  // Pub backfill — vygeneruj včerejší hospodu, ať není prázdná hned po setupu
+  try {
+    const { backfillYesterdayPubSession } = await import("../season/pub");
+    await backfillYesterdayPubSession(c.env.DB, teamId, new Date().toISOString().slice(0, 10));
+  } catch (e) { logger.warn({ module: "teams" }, "pub backfill (create)", e); }
 
   // Update KV session so teamId is no longer null (fixes post-onboarding auth)
   if (authHeader?.startsWith("Bearer ")) {

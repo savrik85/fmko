@@ -493,6 +493,28 @@ export async function createCoachLedSession(
   return { ok: true, attendeesCount: attendees.length, incidentsCount: incidents.length };
 }
 
+/**
+ * Backfill — vygeneruje jednu pub_session pro daný tým pro **včerejšek** (game_date - 1 day).
+ * Slouží k tomu, aby noví uživatelé / čerstvý deploy neměli prázdnou hospodu.
+ * Idempotentní: skipuje pokud session pro daný den už existuje.
+ *
+ * Volá se z onboarding flow po vytvoření týmu, plus jako one-shot pro existing teams.
+ */
+export async function backfillYesterdayPubSession(
+  db: D1Database,
+  teamId: string,
+  todayGameDate: string,
+): Promise<{ created: boolean }> {
+  // Včerejší game date
+  const yesterday = new Date(todayGameDate);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
+  // Zaplň jen tento jeden den. Reuse plné generator logiky:
+  const all = await generatePubSessionsForAllTeams(db, yesterdayStr);
+  return { created: all.sessionsCreated > 0 };
+}
+
 export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: string): Promise<{ sessionsCreated: number }> {
   // Načti všechny lidské týmy + AI týmy (visitors můžou být i AI)
   const allTeams = await db.prepare(
