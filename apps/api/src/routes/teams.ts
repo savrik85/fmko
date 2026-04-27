@@ -2357,11 +2357,24 @@ teamsRouter.get("/:id/pub-sessions", async (c) => {
 teamsRouter.get("/:id/pub-session", async (c) => {
   const teamId = c.req.param("id");
 
-  const session = await c.env.DB.prepare(
+  let session = await c.env.DB.prepare(
     `SELECT id, game_date, attendees, incidents, daily_special, created_at FROM pub_sessions
      WHERE team_id = ? ORDER BY game_date DESC, created_at DESC LIMIT 1`,
   ).bind(teamId).first<{ id: number; game_date: string; attendees: string; incidents: string; daily_special: string | null; created_at: string }>()
     .catch((e) => { logger.warn({ module: "teams" }, "load pub session", e); return null; });
+
+  // Lazy backfill — pokud tým nemá žádnou session, vygeneruj včerejší (1× per tým, idempotent).
+  if (!session) {
+    try {
+      const { backfillYesterdayPubSession } = await import("../season/pub");
+      await backfillYesterdayPubSession(c.env.DB, teamId, new Date().toISOString().slice(0, 10));
+      session = await c.env.DB.prepare(
+        `SELECT id, game_date, attendees, incidents, daily_special, created_at FROM pub_sessions
+         WHERE team_id = ? ORDER BY game_date DESC, created_at DESC LIMIT 1`,
+      ).bind(teamId).first<{ id: number; game_date: string; attendees: string; incidents: string; daily_special: string | null; created_at: string }>()
+        .catch((e) => { logger.warn({ module: "teams" }, "load pub session after backfill", e); return null; });
+    } catch (e) { logger.warn({ module: "teams" }, "lazy pub backfill", e); }
+  }
 
   if (!session) return c.json({ session: null });
 
