@@ -737,9 +737,9 @@ export default function PlayerDetailPage() {
         </div>
       )}
 
-      {/* ═══ Vztahy v kádru + Historie klubů (2-col grid) ═══ */}
+      {/* ═══ Vztahy v kádru + Historie klubů (2-col grid pro vlastní, 1-col pro cizí) ═══ */}
       {(((isOwnPlayer && profileExtras && profileExtras.relationships.length > 0)) || contracts.length > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className={`grid grid-cols-1 gap-5 ${isOwnPlayer ? "lg:grid-cols-2" : ""}`}>
           {isOwnPlayer && profileExtras && profileExtras.relationships.length > 0 ? (
             <div className="card p-4 sm:p-5">
               <SectionLabel>Vztahy v kádru</SectionLabel>
@@ -770,7 +770,7 @@ export default function PlayerDetailPage() {
                 )}
               </div>
             </div>
-          ) : <div />}
+          ) : isOwnPlayer ? <div /> : null}
 
           {contracts.length > 0 && (
             <div className="card p-4 sm:p-5">
