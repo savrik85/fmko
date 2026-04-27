@@ -342,7 +342,7 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
       </div>
       <div className="shrink-0 text-right">
         <div className="font-heading font-bold text-sm text-pitch-500 tabular-nums whitespace-nowrap">
-          {t.joinType === "free_agent" ? <span className="text-amber-700">★&nbsp;FREE</span> : t.fee > 0 ? `${t.fee.toLocaleString("cs")}` : "—"}
+          {t.joinType === "free_agent" ? <span className="text-amber-700">★&nbsp;ZDARMA</span> : t.fee > 0 ? `${t.fee.toLocaleString("cs")}` : "—"}
         </div>
         {t.joinType !== "free_agent" && t.fee > 0 && <div className="text-[9px] text-muted leading-none">Kč</div>}
       </div>
