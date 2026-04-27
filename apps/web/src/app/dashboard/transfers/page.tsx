@@ -20,7 +20,7 @@ interface TransfersOverview {
     crossLeagueCount: number;
     crossLeagueAdminTotal: number;
   };
-  biggest: Array<{ playerId: string; playerName: string; fromTeamId: string | null; fromTeam: string | null; toTeamId: string; toTeam: string; fee: number; date: string; isCrossLeague: boolean }>;
+  biggest: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; fromTeamId: string | null; fromTeam: string | null; fromTeamColor?: string | null; fromTeamSecondary?: string | null; toTeamId: string; toTeam: string; toTeamColor?: string | null; toTeamSecondary?: string | null; fee: number; date: string; isCrossLeague: boolean }>;
   topSellers: Array<{ teamId: string; teamName: string; earned: number; count: number }>;
   topBuyers: Array<{ teamId: string; teamName: string; spent: number; count: number }>;
   mostActive: Array<{ teamId: string; teamName: string; in: number; out: number; total: number }>;
@@ -28,6 +28,155 @@ interface TransfersOverview {
 }
 
 function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
+
+function isLightColor(hex: string): boolean {
+  const c = hex.replace("#", "");
+  if (c.length < 6) return false;
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 160;
+}
+
+function TeamChip({ teamId, name, color, secondary, href }: {
+  teamId: string | null;
+  name: string;
+  color: string | null | undefined;
+  secondary?: string | null;
+  href?: string | null;
+}) {
+  const bg = color || "#6b7280";
+  const accent = secondary || "#ffffff";
+  const light = isLightColor(bg);
+  const textCls = light ? "text-gray-900" : "text-white";
+  const borderCls = light ? "border-gray-300" : "border-transparent";
+  const initials = name
+    .replace(/^FK\s+/i, "")
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0] ?? "")
+    .join("")
+    .toUpperCase()
+    .slice(0, 2) || "?";
+  const inner = (
+    <span
+      className={`inline-flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full border ${textCls} ${borderCls} max-w-full`}
+      style={{ backgroundColor: bg }}
+    >
+      <span
+        className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-heading font-bold border"
+        style={{ backgroundColor: accent, color: isLightColor(accent) ? "#111" : "#fff", borderColor: light ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.4)" }}
+      >
+        {initials}
+      </span>
+      <span className="text-[11px] sm:text-xs font-heading font-bold truncate">{name}</span>
+    </span>
+  );
+  if (href && teamId) {
+    return (
+      <Link href={href} className="min-w-0 max-w-full hover:opacity-90 transition-opacity">
+        {inner}
+      </Link>
+    );
+  }
+  return <div className="min-w-0 max-w-full">{inner}</div>;
+}
+
+function FreeAgentChip() {
+  return (
+    <span className="inline-flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full border border-amber-400 bg-amber-50 text-amber-900 max-w-full">
+      <span className="shrink-0 w-5 h-5 rounded-full bg-amber-400 text-white flex items-center justify-center text-[11px]" aria-hidden>★</span>
+      <span className="text-[11px] sm:text-xs font-heading font-bold truncate">Volný hráč</span>
+    </span>
+  );
+}
+
+function TransferArrow() {
+  return (
+    <svg
+      className="shrink-0 text-pitch-500"
+      width="22"
+      height="14"
+      viewBox="0 0 22 14"
+      fill="none"
+      aria-hidden
+    >
+      <path
+        d="M1 7 H16 M14 2 L20 7 L14 12"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
+  );
+}
+
+function BiggestTransferCard({ rank, transfer }: {
+  rank: number;
+  transfer: TransfersOverview["biggest"][number];
+}) {
+  const rankColor = rank === 1 ? "bg-yellow-400 text-yellow-900 border-yellow-500"
+    : rank === 2 ? "bg-gray-300 text-gray-800 border-gray-400"
+    : rank === 3 ? "bg-amber-600 text-white border-amber-700"
+    : "bg-gray-100 text-gray-600 border-gray-200";
+  const accentBorder = rank <= 3 ? "border-l-4 border-l-pitch-500" : "border-l border-l-gray-100";
+  const hasAvatar = transfer.playerAvatar && Object.keys(transfer.playerAvatar).length > 0;
+  return (
+    <div className={`relative flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg bg-white ${accentBorder} hover:shadow-sm transition-shadow`}>
+      <div className="relative shrink-0">
+        {hasAvatar ? (
+          <div className="rounded-full overflow-hidden bg-gradient-to-br from-pitch-50 to-gray-100 ring-2 ring-white shadow-sm">
+            <FaceAvatar faceConfig={transfer.playerAvatar as Record<string, unknown>} size={56} />
+          </div>
+        ) : (
+          <div className="w-14 h-[67px] rounded-full bg-gray-100 flex items-center justify-center text-2xl text-gray-400">👤</div>
+        )}
+        <span className={`absolute -top-1 -left-1 w-6 h-6 rounded-full border-2 flex items-center justify-center text-[11px] font-heading font-bold tabular-nums ${rankColor}`}>
+          {rank}
+        </span>
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Link href={`/dashboard/player/${transfer.playerId}`} className="text-sm sm:text-base font-heading font-bold hover:text-pitch-500 truncate">
+            {transfer.playerName}
+          </Link>
+          {transfer.isCrossLeague && <span className="text-[11px] shrink-0" title="Cross-league přestup">🔄</span>}
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+          {transfer.fromTeam ? (
+            <TeamChip
+              teamId={transfer.fromTeamId}
+              name={transfer.fromTeam}
+              color={transfer.fromTeamColor}
+              secondary={transfer.fromTeamSecondary}
+              href={transfer.fromTeamId ? `/dashboard/team/${transfer.fromTeamId}` : null}
+            />
+          ) : (
+            <FreeAgentChip />
+          )}
+          <TransferArrow />
+          <TeamChip
+            teamId={transfer.toTeamId}
+            name={transfer.toTeam}
+            color={transfer.toTeamColor}
+            secondary={transfer.toTeamSecondary}
+            href={`/dashboard/team/${transfer.toTeamId}`}
+          />
+        </div>
+      </div>
+
+      <div className="shrink-0 flex flex-col items-end justify-center pl-1">
+        <span className="font-heading font-[800] text-base sm:text-lg text-pitch-500 tabular-nums leading-tight whitespace-nowrap">
+          {transfer.fee.toLocaleString("cs")}
+        </span>
+        <span className="text-[10px] sm:text-xs text-muted uppercase tracking-wide">Kč</span>
+      </div>
+    </div>
+  );
+}
 
 function skillColor(v: number): string {
   if (v >= 70) return "text-pitch-500 font-bold";
@@ -487,29 +636,9 @@ export default function TransfersPage() {
               {overview.biggest.length > 0 && (
                 <div className="card p-4 sm:p-5">
                   <SectionLabel>Nejdražší přestupy</SectionLabel>
-                  <div className="space-y-2">
+                  <div className="space-y-2 sm:space-y-3">
                     {overview.biggest.slice(0, 5).map((t, i) => (
-                      <div key={`${t.playerId}-${t.date}`} className="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-                        <span className="text-xs text-muted w-4 tabular-nums shrink-0 pt-0.5">{i + 1}.</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline gap-2">
-                            <Link href={`/dashboard/player/${t.playerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 truncate">
-                              {t.playerName}
-                            </Link>
-                            {t.isCrossLeague && <span className="text-[10px] shrink-0">🔄</span>}
-                          </div>
-                          <div className="text-xs text-muted mt-0.5 truncate">
-                            {t.fromTeam ? (
-                              <Link href={`/dashboard/team/${t.fromTeamId}`} className="hover:text-ink">{t.fromTeam}</Link>
-                            ) : <span>—</span>}
-                            <span> → </span>
-                            <Link href={`/dashboard/team/${t.toTeamId}`} className="hover:text-ink">{t.toTeam}</Link>
-                          </div>
-                        </div>
-                        <span className="font-heading font-bold text-sm text-pitch-500 tabular-nums shrink-0">
-                          {t.fee.toLocaleString("cs")} Kč
-                        </span>
-                      </div>
+                      <BiggestTransferCard key={`${t.playerId}-${t.date}`} rank={i + 1} transfer={t} />
                     ))}
                   </div>
                 </div>

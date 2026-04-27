@@ -295,8 +295,9 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   const transfersRes = await c.env.DB.prepare(
     `SELECT
        pc.player_id, pc.team_id as to_team_id, pc.fee, pc.joined_at,
-       p.first_name, p.last_name,
+       p.first_name, p.last_name, p.avatar as player_avatar,
        t_to.name as to_team_name, t_to.league_id as to_league_id,
+       t_to.primary_color as to_primary_color, t_to.secondary_color as to_secondary_color,
        (SELECT pc2.team_id FROM player_contracts pc2
         WHERE pc2.player_id = pc.player_id
         AND pc2.is_active = 0
@@ -314,14 +315,14 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   const fromTeamIds = Array.from(new Set(
     (transfersRes.results as any[]).map((r) => r.from_team_id).filter(Boolean)
   ));
-  let fromTeamsMap: Record<string, { name: string; leagueId: string | null }> = {};
+  let fromTeamsMap: Record<string, { name: string; leagueId: string | null; primaryColor: string | null; secondaryColor: string | null }> = {};
   if (fromTeamIds.length > 0) {
     const placeholders = fromTeamIds.map(() => "?").join(",");
     const fromTeamsRows = await c.env.DB.prepare(
-      `SELECT id, name, league_id FROM teams WHERE id IN (${placeholders})`
+      `SELECT id, name, league_id, primary_color, secondary_color FROM teams WHERE id IN (${placeholders})`
     ).bind(...fromTeamIds).all().catch(() => ({ results: [] }));
     for (const r of fromTeamsRows.results as any[]) {
-      fromTeamsMap[r.id] = { name: r.name, leagueId: r.league_id };
+      fromTeamsMap[r.id] = { name: r.name, leagueId: r.league_id, primaryColor: r.primary_color, secondaryColor: r.secondary_color };
     }
   }
 
@@ -335,13 +336,19 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
     .map((r) => {
       const fromTeam = r.from_team_id ? fromTeamsMap[r.from_team_id] : null;
       const isCrossLeague = fromTeam && fromTeam.leagueId !== r.to_league_id;
+      const avatar = (() => { try { return JSON.parse(r.player_avatar as string); } catch (e) { logger.warn({ module: "league" }, `parse player avatar: ${e}`); return {}; } })();
       return {
         playerId: r.player_id as string,
         playerName: `${r.first_name} ${r.last_name}`,
+        playerAvatar: avatar,
         fromTeamId: r.from_team_id as string | null,
         fromTeam: fromTeam?.name ?? null,
+        fromTeamColor: fromTeam?.primaryColor ?? null,
+        fromTeamSecondary: fromTeam?.secondaryColor ?? null,
         toTeamId: r.to_team_id as string,
         toTeam: r.to_team_name as string,
+        toTeamColor: (r.to_primary_color as string | null) ?? null,
+        toTeamSecondary: (r.to_secondary_color as string | null) ?? null,
         fee: (r.fee as number) ?? 0,
         date: r.joined_at as string,
         isCrossLeague: !!isCrossLeague,
