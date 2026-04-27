@@ -541,7 +541,6 @@ matchesRouter.post("/matches/:id/mark-seen", async (c) => {
 
 // GET /api/teams/:teamId/players/:playerId/match-history — FM-style match history per player
 matchesRouter.get("/teams/:teamId/players/:playerId/match-history", async (c) => {
-  const teamId = c.req.param("teamId");
   const playerId = c.req.param("playerId");
 
   const result = await c.env.DB.prepare(
@@ -558,7 +557,8 @@ matchesRouter.get("/teams/:teamId/players/:playerId/match-history", async (c) =>
   ).bind(playerId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch player match history", e); return { results: [] }; });
 
   const matches = result.results.map((row) => {
-    const isHome = row.home_team_id === teamId;
+    // isHome z perspektivy KLUBU HRAČE v daném zápase (mps.team_id), ne toho kdo se dívá
+    const isHome = row.home_team_id === row.team_id;
     const opponentName = isHome ? row.away_name : row.home_name;
     const opponentColor = isHome ? row.away_color : row.home_color;
     const opponentSecondary = isHome ? row.away_secondary : row.home_secondary;
