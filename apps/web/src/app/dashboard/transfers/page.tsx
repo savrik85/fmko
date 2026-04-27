@@ -24,7 +24,7 @@ interface TransfersOverview {
   topSellers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; earned: number; count: number }>;
   topBuyers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; spent: number; count: number }>;
   mostActive: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; in: number; out: number; total: number }>;
-  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean }>;
+  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean; joinType?: string }>;
   speculations?: Array<{
     playerId: string;
     playerName: string;
@@ -329,10 +329,10 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
           {t.isCrossLeague && <span className="text-[10px] shrink-0">🔄</span>}
         </div>
         <div className="flex items-center gap-1 text-xs text-muted mt-0.5 min-w-0">
-          {t.fromTeam ? (
-            <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/dashboard/team/${t.fromTeamId}` : null} bold={false} />
-          ) : (
+          {t.joinType === "free_agent" || !t.fromTeam ? (
             <FreeAgentLabel />
+          ) : (
+            <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/dashboard/team/${t.fromTeamId}` : null} bold={false} />
           )}
           <FancyArrow size="xs" />
           <ClubLink teamId={t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={`/dashboard/team/${t.toTeamId}`} bold={false} />
@@ -340,9 +340,9 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
       </div>
       <div className="shrink-0 text-right">
         <div className="font-heading font-bold text-sm text-pitch-500 tabular-nums whitespace-nowrap">
-          {t.fee > 0 ? `${t.fee.toLocaleString("cs")}` : "—"}
+          {t.joinType === "free_agent" ? <span className="text-amber-700">★&nbsp;FREE</span> : t.fee > 0 ? `${t.fee.toLocaleString("cs")}` : "—"}
         </div>
-        {t.fee > 0 && <div className="text-[9px] text-muted leading-none">Kč</div>}
+        {t.joinType !== "free_agent" && t.fee > 0 && <div className="text-[9px] text-muted leading-none">Kč</div>}
       </div>
     </div>
   );

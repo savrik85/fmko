@@ -303,7 +303,7 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   // Get new contracts (join_type='transfer') and resolve the "from team" from previous contract
   const transfersRes = await c.env.DB.prepare(
     `SELECT
-       pc.player_id, pc.team_id as to_team_id, pc.fee, pc.joined_at,
+       pc.player_id, pc.team_id as to_team_id, pc.fee, pc.joined_at, pc.join_type,
        p.first_name, p.last_name, p.avatar as player_avatar, p.age, p.position,
        t_to.name as to_team_name, t_to.league_id as to_league_id,
        t_to.badge_primary_color as to_badge_primary, t_to.badge_secondary_color as to_badge_secondary,
@@ -312,13 +312,13 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
        (SELECT pc2.team_id FROM player_contracts pc2
         WHERE pc2.player_id = pc.player_id
         AND pc2.is_active = 0
-        AND pc2.leave_type = 'transfer'
+        AND pc2.leave_type IN ('transfer', 'released')
         AND pc2.left_at <= pc.joined_at
         ORDER BY pc2.left_at DESC LIMIT 1) as from_team_id
      FROM player_contracts pc
      JOIN players p ON pc.player_id = p.id
      JOIN teams t_to ON pc.team_id = t_to.id
-     WHERE pc.join_type = 'transfer'
+     WHERE pc.join_type IN ('transfer', 'free_agent')
      ORDER BY pc.joined_at DESC`
   ).all().catch((e) => { logger.error({ module: "league" }, "fetch transfers", e); return { results: [] }; });
 
@@ -384,13 +384,17 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
         fee: (r.fee as number) ?? 0,
         date: r.joined_at as string,
         isCrossLeague: !!isCrossLeague,
+        joinType: (r.join_type as string) ?? "transfer",
       };
     });
 
-  const totalTransfers = leagueTransfers.length;
-  const totalValue = leagueTransfers.reduce((s, t) => s + t.fee, 0);
+  // Placené přestupy (bez free agentů) — pro stats, biggest, sellers, buyers
+  const paidTransfers = leagueTransfers.filter((t) => t.joinType === "transfer");
+
+  const totalTransfers = paidTransfers.length;
+  const totalValue = paidTransfers.reduce((s, t) => s + t.fee, 0);
   const avgFee = totalTransfers > 0 ? Math.round(totalValue / totalTransfers) : 0;
-  const crossLeagueCount = leagueTransfers.filter((t) => t.isCrossLeague).length;
+  const crossLeagueCount = paidTransfers.filter((t) => t.isCrossLeague).length;
 
   // Free agent signings in this league
   const faRes = await c.env.DB.prepare(
@@ -406,13 +410,13 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
      WHERE tx.type = 'transfer_admin_fee' AND t.league_id = ?`
   ).bind(leagueId).first<{ total: number }>().catch(() => ({ total: 0 }));
 
-  // Top 10 biggest transfers
-  const biggest = [...leagueTransfers].sort((a, b) => b.fee - a.fee).slice(0, 10);
+  // Top 10 biggest transfers (jen placené)
+  const biggest = [...paidTransfers].sort((a, b) => b.fee - a.fee).slice(0, 10);
 
-  // Top sellers (most earned) — aggregate by fromTeamId
+  // Top sellers (most earned) — aggregate by fromTeamId, jen placené
   type TeamBadge = { primary: string; secondary: string; pattern: string; initials: string; symbol: string | null };
   const sellersMap = new Map<string, { teamId: string; teamName: string; badge: TeamBadge | null; earned: number; count: number }>();
-  for (const t of leagueTransfers) {
+  for (const t of paidTransfers) {
     if (!t.fromTeamId || !t.fromTeam) continue;
     const existing = sellersMap.get(t.fromTeamId);
     if (existing) { existing.earned += t.fee; existing.count++; }
@@ -420,9 +424,9 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   }
   const topSellers = [...sellersMap.values()].sort((a, b) => b.earned - a.earned).slice(0, 5);
 
-  // Top buyers (most spent) — aggregate by toTeamId
+  // Top buyers (most spent) — aggregate by toTeamId, jen placené
   const buyersMap = new Map<string, { teamId: string; teamName: string; badge: TeamBadge | null; spent: number; count: number }>();
-  for (const t of leagueTransfers) {
+  for (const t of paidTransfers) {
     const existing = buyersMap.get(t.toTeamId);
     if (existing) { existing.spent += t.fee; existing.count++; }
     else buyersMap.set(t.toTeamId, { teamId: t.toTeamId, teamName: t.toTeam, badge: t.toTeamBadge, spent: t.fee, count: 1 });
