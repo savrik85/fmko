@@ -2343,12 +2343,33 @@ teamsRouter.get("/:id/pub-sessions", async (c) => {
     .catch((e) => { logger.warn({ module: "teams" }, "load pub sessions history", e); return { results: [] }; });
 
   const sessions = rows.results.map((s) => {
-    let attendees: unknown[] = [];
+    let attendees: Array<Record<string, unknown>> = [];
     let incidents: unknown[] = [];
     try { attendees = JSON.parse(s.attendees); } catch (e) { logger.warn({ module: "teams" }, "parse pub attendees", e); }
     try { incidents = JSON.parse(s.incidents); } catch (e) { logger.warn({ module: "teams" }, "parse pub incidents", e); }
     return { id: s.id, gameDate: s.game_date, attendees, incidents, dailySpecial: s.daily_special, createdAt: s.created_at };
   });
+
+  // Enrich visitor attendees with their avatars (from cizích týmů — nemáme je v lokálním players fetch)
+  const visitorIds = new Set<string>();
+  for (const s of sessions) {
+    for (const a of s.attendees) if (a.isVisitor) visitorIds.add(a.playerId as string);
+  }
+  if (visitorIds.size > 0) {
+    const ids = [...visitorIds];
+    const ph = ids.map(() => "?").join(",");
+    const rows = await c.env.DB.prepare(
+      `SELECT id, avatar FROM players WHERE id IN (${ph})`,
+    ).bind(...ids).all<{ id: string; avatar: string }>()
+      .catch((e) => { logger.warn({ module: "teams" }, "load visitor avatars", e); return { results: [] }; });
+    const avatarMap = new Map<string, unknown>();
+    for (const r of rows.results) {
+      try { avatarMap.set(r.id, JSON.parse(r.avatar)); } catch (e) { logger.warn({ module: "teams" }, "parse visitor avatar", e); }
+    }
+    for (const s of sessions) {
+      s.attendees = s.attendees.map((a) => a.isVisitor ? { ...a, avatar: avatarMap.get(a.playerId as string) ?? null } : a);
+    }
+  }
 
   return c.json({ sessions });
 });
@@ -2365,10 +2386,25 @@ teamsRouter.get("/:id/pub-session", async (c) => {
 
   if (!session) return c.json({ session: null });
 
-  let attendees: unknown[] = [];
+  let attendees: Array<Record<string, unknown>> = [];
   let incidents: unknown[] = [];
   try { attendees = JSON.parse(session.attendees); } catch (e) { logger.warn({ module: "teams" }, "parse pub attendees", e); }
   try { incidents = JSON.parse(session.incidents); } catch (e) { logger.warn({ module: "teams" }, "parse pub incidents", e); }
+
+  // Enrich visitor attendees with avatars
+  const visitorIds = attendees.filter((a) => a.isVisitor).map((a) => a.playerId as string);
+  if (visitorIds.length > 0) {
+    const ph = visitorIds.map(() => "?").join(",");
+    const rows = await c.env.DB.prepare(
+      `SELECT id, avatar FROM players WHERE id IN (${ph})`,
+    ).bind(...visitorIds).all<{ id: string; avatar: string }>()
+      .catch((e) => { logger.warn({ module: "teams" }, "load visitor avatars", e); return { results: [] }; });
+    const avatarMap = new Map<string, unknown>();
+    for (const r of rows.results) {
+      try { avatarMap.set(r.id, JSON.parse(r.avatar)); } catch (e) { logger.warn({ module: "teams" }, "parse visitor avatar", e); }
+    }
+    attendees = attendees.map((a) => a.isVisitor ? { ...a, avatar: avatarMap.get(a.playerId as string) ?? null } : a);
+  }
 
   return c.json({
     session: {

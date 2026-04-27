@@ -16,6 +16,7 @@ interface PubAttendee {
   teamId: string;
   isVisitor: boolean;
   fromTeamName?: string;
+  avatar?: Record<string, unknown> | null;
 }
 
 interface PubEffect {
@@ -221,7 +222,7 @@ export default function HospodaPage() {
                     <div className="text-[11px] uppercase text-muted font-heading mb-1.5">V hospodě</div>
                     <div className="flex flex-wrap gap-2">
                       {s.attendees.map((a) => {
-                        const avatar = avatarsById[a.playerId];
+                        const avatar = avatarsById[a.playerId] ?? a.avatar;
                         const initials = `${a.firstName[0] ?? ""}${a.lastName[0] ?? ""}`.toUpperCase();
                         return (
                           <Link
