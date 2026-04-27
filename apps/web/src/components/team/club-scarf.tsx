@@ -2,20 +2,23 @@
 
 import { BadgePreview, type BadgePattern } from "@/components/ui";
 
-interface ClubFlagProps {
+interface ClubScarfProps {
   primary: string;
   secondary: string;
   pattern: BadgePattern;
   initials: string;
   symbol?: string | null;
+  /** Fixed dimensions (px). Pokud nejsou zadané, šála zaplní rodičovský box. */
   width?: number;
   height?: number;
+  className?: string;
 }
 
 /**
- * Klubová vlajka — solid primary obdélník s tenkým secondary lemem,
- * dvěma vodorovnými pruhy a klubovým znakem uprostřed.
- * Žerď není; je to "banner" / "prapor".
+ * Klubová šála — autentický fan-šál vzor.
+ * 5 horizontálních pruhů (P/S/P/S/P), inset shadow tkaniny,
+ * třásně na obou koncích (nitky alternujících barev),
+ * klubový znak uprostřed.
  */
 export function ClubScarf({
   primary,
@@ -23,41 +26,101 @@ export function ClubScarf({
   pattern,
   initials,
   symbol,
-  width = 150,
-  height = 100,
-}: ClubFlagProps) {
-  const badgeSize = Math.min(height - 20, width - 20, 64);
+  width,
+  height,
+  className,
+}: ClubScarfProps) {
+  const fringeW = 8;
+  const fringeCount = 14; // počet nitek na každé straně
+  const fixed = width != null && height != null;
+  const containerStyle: React.CSSProperties = fixed ? { width, height } : {};
 
   return (
     <div
-      className="relative shrink-0 rounded-md overflow-hidden shadow-md"
-      style={{
-        width,
-        height,
-        background: primary,
-        boxShadow: `0 2px 6px rgba(0,0,0,0.15), inset 0 0 0 3px ${secondary}`,
-      }}
+      className={`relative shrink-0 ${className ?? ""}`}
+      style={containerStyle}
     >
-      {/* Horní pruh */}
+      {/* TĚLO šály — pruhy přes celou plochu mezi třásněmi */}
       <div
-        className="absolute inset-x-0"
-        style={{ top: height * 0.18, height: 3, background: secondary }}
+        className="absolute rounded-sm shadow-md"
+        style={{
+          left: fringeW,
+          right: fringeW,
+          top: 0,
+          bottom: 0,
+          background: `linear-gradient(180deg,
+            ${primary} 0%, ${primary} 22%,
+            ${secondary} 22%, ${secondary} 40%,
+            ${primary} 40%, ${primary} 60%,
+            ${secondary} 60%, ${secondary} 78%,
+            ${primary} 78%, ${primary} 100%)`,
+          boxShadow:
+            "inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.18), 0 2px 4px rgba(0,0,0,0.18)",
+        }}
       />
-      {/* Dolní pruh */}
+
+      {/* TŘÁSNĚ vlevo */}
       <div
-        className="absolute inset-x-0"
-        style={{ bottom: height * 0.18, height: 3, background: secondary }}
-      />
-      {/* Klubový znak uprostřed */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <BadgePreview
-          primary={primary}
-          secondary={secondary}
-          pattern={pattern}
-          initials={initials}
-          symbol={symbol}
-          size={badgeSize}
-        />
+        className="absolute left-0 top-1 bottom-1 flex flex-col gap-[1px] pointer-events-none"
+        style={{ width: fringeW }}
+      >
+        {Array.from({ length: fringeCount }).map((_, i) => {
+          const isPrim = i % 2 === 0;
+          const offset = (i % 3) * 1.5; // různé dlšky vláken
+          return (
+            <div
+              key={`l${i}`}
+              className="flex-1 rounded-l-full"
+              style={{
+                background: isPrim ? primary : secondary,
+                width: fringeW,
+                marginLeft: -offset,
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {/* TŘÁSNĚ vpravo */}
+      <div
+        className="absolute right-0 top-1 bottom-1 flex flex-col gap-[1px] pointer-events-none"
+        style={{ width: fringeW }}
+      >
+        {Array.from({ length: fringeCount }).map((_, i) => {
+          const isPrim = i % 2 === 1;
+          const offset = (i % 3) * 1.5;
+          return (
+            <div
+              key={`r${i}`}
+              className="flex-1 rounded-r-full"
+              style={{
+                background: isPrim ? primary : secondary,
+                width: fringeW,
+                marginRight: -offset,
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {/* Klubový znak — menší, aby šála byla čitelná */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div
+          className="rounded-full"
+          style={{
+            background: "rgba(255,255,255,0.95)",
+            padding: 2,
+          }}
+        >
+          <BadgePreview
+            primary={primary}
+            secondary={secondary}
+            pattern={pattern}
+            initials={initials}
+            symbol={symbol}
+            size={fixed ? Math.min((height as number) - 18, 38) : 36}
+          />
+        </div>
       </div>
     </div>
   );

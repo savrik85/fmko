@@ -262,25 +262,39 @@ export default function DashboardPage() {
         return (
         <div className="rounded-xl overflow-hidden shadow-sm" style={{ background: "#F5EDDF" }}>
           <div className="h-1" style={{ background: scarfPrimary }} />
-          <div className="flex items-center gap-4 px-5 py-3">
-            <ClubScarf
-              primary={scarfPrimary}
-              secondary={scarfSecondary}
-              pattern={(team.badge_pattern as BadgePattern) || "shield"}
-              initials={badgeInit}
-              symbol={team.badge_symbol}
-              width={88}
-              height={64}
-            />
-            <div className="flex-1 min-w-0">
-              <h2 className="font-heading font-[800] text-xl leading-none text-ink">U nás v hospodě</h2>
-              <div className="text-[11px] uppercase text-muted mt-1">
-                {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
-              </div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3">
+            {/* Šála: mobile full width 50px, desktop fixed 160×56 */}
+            <div className="w-full sm:w-auto">
+              <ClubScarf
+                primary={scarfPrimary}
+                secondary={scarfSecondary}
+                pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                initials={badgeInit}
+                symbol={team.badge_symbol}
+                className="block sm:hidden h-12 w-full"
+              />
+              <ClubScarf
+                primary={scarfPrimary}
+                secondary={scarfSecondary}
+                pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                initials={badgeInit}
+                symbol={team.badge_symbol}
+                width={160}
+                height={56}
+                className="hidden sm:block"
+              />
             </div>
-            <Link href="/dashboard/hospoda" className="text-xs font-heading font-bold text-pitch-500 hover:text-pitch-600 whitespace-nowrap">
-              Historie →
-            </Link>
+            <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="font-heading font-[800] text-xl leading-none text-ink">U nás v hospodě</h2>
+                <div className="text-[11px] uppercase text-muted mt-1">
+                  {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
+                </div>
+              </div>
+              <Link href="/dashboard/hospoda" className="text-xs font-heading font-bold text-pitch-500 hover:text-pitch-600 whitespace-nowrap shrink-0">
+                Historie →
+              </Link>
+            </div>
           </div>
           <div className="h-1" style={{ background: scarfSecondary }} />
           <div className="bg-white p-4 sm:p-5">

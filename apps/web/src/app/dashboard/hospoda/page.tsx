@@ -117,16 +117,40 @@ export default function HospodaPage() {
 
   return (
     <div className="page-container space-y-5">
-      {/* Header — klubová šála vlevo + nadpis + bar atmosféra (béžová) */}
+      {/* Header — klubová šála + nadpis + bar atmosféra (béžová) */}
       <div className="rounded-xl overflow-hidden shadow-sm" style={{ background: "#F5EDDF" }}>
         <div className="h-1" style={{ background: scarfPrimary }} />
-        <div className="flex items-center gap-5 sm:gap-7 px-5 sm:px-6 py-5">
-          <ClubScarf primary={scarfPrimary} secondary={scarfSecondary} pattern={(team?.badge_pattern as BadgePattern) || "shield"} initials={badgeInit} symbol={team?.badge_symbol} width={120} height={88} />
-          <div className="flex-1 min-w-0">
-            <h1 className="font-heading font-[800] text-2xl sm:text-3xl leading-none text-ink">U nás v hospodě</h1>
-            <p className="text-sm text-muted mt-1">Kdo tam byl, co se dělo, co to stálo.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-7 px-3 sm:px-6 py-4 sm:py-5">
+          {/* Šála: na mobilu full-width 200×60, na desktopu fixed 220×80 */}
+          <div className="w-full sm:w-auto">
+            <ClubScarf
+              primary={scarfPrimary}
+              secondary={scarfSecondary}
+              pattern={(team?.badge_pattern as BadgePattern) || "shield"}
+              initials={badgeInit}
+              symbol={team?.badge_symbol}
+              className="block sm:hidden h-16 w-full"
+            />
+            <ClubScarf
+              primary={scarfPrimary}
+              secondary={scarfSecondary}
+              pattern={(team?.badge_pattern as BadgePattern) || "shield"}
+              initials={badgeInit}
+              symbol={team?.badge_symbol}
+              width={220}
+              height={80}
+              className="hidden sm:block"
+            />
           </div>
-          <Link href="/dashboard" className="text-sm font-heading font-bold text-pitch-500 hover:text-pitch-600 whitespace-nowrap">← Dashboard</Link>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h1 className="font-heading font-[800] text-2xl sm:text-3xl leading-none text-ink">U nás v hospodě</h1>
+                <p className="text-sm text-muted mt-1">Kdo tam byl, co se dělo, co to stálo.</p>
+              </div>
+              <Link href="/dashboard" className="text-sm font-heading font-bold text-pitch-500 hover:text-pitch-600 whitespace-nowrap shrink-0">← Dashboard</Link>
+            </div>
+          </div>
         </div>
         <div className="h-1" style={{ background: scarfSecondary }} />
       </div>
