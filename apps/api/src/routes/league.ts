@@ -304,7 +304,7 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   const transfersRes = await c.env.DB.prepare(
     `SELECT
        pc.player_id, pc.team_id as to_team_id, pc.fee, pc.joined_at,
-       p.first_name, p.last_name, p.avatar as player_avatar,
+       p.first_name, p.last_name, p.avatar as player_avatar, p.age, p.position,
        t_to.name as to_team_name, t_to.league_id as to_league_id,
        t_to.badge_primary_color as to_badge_primary, t_to.badge_secondary_color as to_badge_secondary,
        t_to.badge_pattern as to_badge_pattern, t_to.badge_initials as to_badge_initials, t_to.badge_symbol as to_badge_symbol,
@@ -373,6 +373,8 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
         playerId: r.player_id as string,
         playerName: `${r.first_name} ${r.last_name}`,
         playerAvatar: avatar,
+        age: (r.age as number) ?? 0,
+        position: (r.position as string) ?? "",
         fromTeamId: r.from_team_id as string | null,
         fromTeam: fromTeam?.name ?? null,
         fromTeamBadge: fromBadge,

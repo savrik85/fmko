@@ -20,11 +20,11 @@ interface TransfersOverview {
     crossLeagueCount: number;
     crossLeagueAdminTotal: number;
   };
-  biggest: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean }>;
+  biggest: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean }>;
   topSellers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; earned: number; count: number }>;
   topBuyers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; spent: number; count: number }>;
   mostActive: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; in: number; out: number; total: number }>;
-  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean }>;
+  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean }>;
   speculations?: Array<{
     playerId: string;
     playerName: string;
@@ -191,6 +191,12 @@ function HeroTransfer({ t }: { t: TransfersOverview["biggest"][number] }) {
                 {t.isCrossLeague && <span className="ml-2 text-base align-middle" title="Cross-league">🔄</span>}
               </h3>
             </Link>
+            {(t.position || t.age) && (
+              <div className="flex items-center gap-2 mt-1.5">
+                {t.position && <PositionBadge position={t.position} />}
+                {t.age ? <span className="text-sm text-muted tabular-nums">{t.age}&nbsp;let</span> : null}
+              </div>
+            )}
           </div>
 
           {/* Trasa přestupu */}
@@ -233,10 +239,14 @@ function MidTransferCard({ rank, t }: { rank: number; t: TransfersOverview["bigg
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-1">
-            <Link href={`/dashboard/player/${t.playerId}`} className="font-heading font-bold text-sm sm:text-base text-ink hover:text-pitch-500 truncate flex-1 min-w-0">
-              {t.playerName}
-              {t.isCrossLeague && <span className="ml-1 text-[10px]">🔄</span>}
-            </Link>
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <Link href={`/dashboard/player/${t.playerId}`} className="font-heading font-bold text-sm sm:text-base text-ink hover:text-pitch-500 truncate">
+                {t.playerName}
+              </Link>
+              {t.position && <PositionBadge position={t.position} />}
+              {t.age ? <span className="text-[11px] text-muted tabular-nums shrink-0">{t.age}&nbsp;l.</span> : null}
+              {t.isCrossLeague && <span className="text-[10px] shrink-0">🔄</span>}
+            </div>
             <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-heading font-bold bg-gradient-to-br ${medal}`}>#{rank}</span>
           </div>
           <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted mb-2 min-w-0">
@@ -314,6 +324,8 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
           <Link href={`/dashboard/player/${t.playerId}`} className="font-heading font-bold text-sm text-ink hover:text-pitch-500 truncate">
             {t.playerName}
           </Link>
+          {t.position && <PositionBadge position={t.position} />}
+          {t.age ? <span className="text-[11px] text-muted tabular-nums shrink-0">{t.age}&nbsp;l.</span> : null}
           {t.isCrossLeague && <span className="text-[10px] shrink-0">🔄</span>}
         </div>
         <div className="flex items-center gap-1 text-xs text-muted mt-0.5 min-w-0">
