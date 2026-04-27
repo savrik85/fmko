@@ -74,6 +74,7 @@ interface ClubData {
 
 const BADGE_SYMBOLS: ReadonlyArray<{ value: string; label: string }> = [
   { value: "", label: "Žádný" },
+  { value: "svg:crescent", label: "Půlměsíc (bílý)" },
   { value: "⚽", label: "Míč" },
   { value: "🍺", label: "Pivo" },
   { value: "🍻", label: "Přípitek" },
@@ -481,7 +482,13 @@ export default function DresPage() {
                     active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
                   }`}
                 >
-                  {opt.value || <span className="text-xs text-muted">—</span>}
+                  {opt.value === "svg:crescent" ? (
+                    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden>
+                      <circle cx="11" cy="11" r="8" fill="#1f2937" />
+                      <circle cx="11" cy="11" r="6" fill="white" />
+                      <circle cx="13.5" cy="11" r="5.5" fill="#1f2937" />
+                    </svg>
+                  ) : opt.value || <span className="text-xs text-muted">—</span>}
                 </button>
               );
             })}

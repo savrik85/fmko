@@ -75,12 +75,26 @@ export function BadgePreview({ primary, secondary, pattern, initials, size = 64,
       <text x={half} y={initialsY} textAnchor="middle" fontSize={fontSize * 0.85} fontWeight="800"
         fill={textFill} stroke={primaryLight ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.4)"} strokeWidth={s * 0.02} paintOrder="stroke"
         fontFamily="var(--font-heading)" letterSpacing="0.05em">{initials}</text>
-      {symbol && (
+      {symbol === "svg:crescent" ? (
+        // Turecký půlměsíc (bílý) — kruh + ofsetovaný "ořezávací" kruh barvy primary, simulující subtract
+        (() => {
+          const cR = symbolSize * 0.55;
+          const cx = half;
+          const cy = symbolY;
+          const off = cR * 0.42;
+          return (
+            <g>
+              <circle cx={cx} cy={cy} r={cR} fill="white" />
+              <circle cx={cx + off} cy={cy} r={cR * 0.92} fill={primary} />
+            </g>
+          );
+        })()
+      ) : symbol ? (
         <text x={half} y={symbolY} textAnchor="middle" fontSize={symbolSize}
           dominantBaseline="middle" style={{ fontFamily: "system-ui, -apple-system, 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif" }}>
           {symbol}
         </text>
-      )}
+      ) : null}
     </svg>
   );
 }
