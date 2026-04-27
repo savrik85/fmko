@@ -297,7 +297,8 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
        pc.player_id, pc.team_id as to_team_id, pc.fee, pc.joined_at,
        p.first_name, p.last_name, p.avatar as player_avatar,
        t_to.name as to_team_name, t_to.league_id as to_league_id,
-       t_to.primary_color as to_primary_color, t_to.secondary_color as to_secondary_color,
+       t_to.badge_primary_color as to_badge_primary, t_to.badge_secondary_color as to_badge_secondary,
+       t_to.badge_pattern as to_badge_pattern, t_to.badge_initials as to_badge_initials, t_to.badge_symbol as to_badge_symbol,
        (SELECT pc2.team_id FROM player_contracts pc2
         WHERE pc2.player_id = pc.player_id
         AND pc2.is_active = 0
@@ -315,14 +316,14 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   const fromTeamIds = Array.from(new Set(
     (transfersRes.results as any[]).map((r) => r.from_team_id).filter(Boolean)
   ));
-  let fromTeamsMap: Record<string, { name: string; leagueId: string | null; primaryColor: string | null; secondaryColor: string | null }> = {};
+  let fromTeamsMap: Record<string, { name: string; leagueId: string | null; badgePrimary: string | null; badgeSecondary: string | null; badgePattern: string | null; badgeInitials: string | null; badgeSymbol: string | null }> = {};
   if (fromTeamIds.length > 0) {
     const placeholders = fromTeamIds.map(() => "?").join(",");
     const fromTeamsRows = await c.env.DB.prepare(
-      `SELECT id, name, league_id, primary_color, secondary_color FROM teams WHERE id IN (${placeholders})`
+      `SELECT id, name, league_id, badge_primary_color, badge_secondary_color, badge_pattern, badge_initials, badge_symbol FROM teams WHERE id IN (${placeholders})`
     ).bind(...fromTeamIds).all().catch(() => ({ results: [] }));
     for (const r of fromTeamsRows.results as any[]) {
-      fromTeamsMap[r.id] = { name: r.name, leagueId: r.league_id, primaryColor: r.primary_color, secondaryColor: r.secondary_color };
+      fromTeamsMap[r.id] = { name: r.name, leagueId: r.league_id, badgePrimary: r.badge_primary_color, badgeSecondary: r.badge_secondary_color, badgePattern: r.badge_pattern, badgeInitials: r.badge_initials, badgeSymbol: r.badge_symbol };
     }
   }
 
@@ -337,18 +338,30 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
       const fromTeam = r.from_team_id ? fromTeamsMap[r.from_team_id] : null;
       const isCrossLeague = fromTeam && fromTeam.leagueId !== r.to_league_id;
       const avatar = (() => { try { return JSON.parse(r.player_avatar as string); } catch (e) { logger.warn({ module: "league" }, `parse player avatar: ${e}`); return {}; } })();
+      const fromBadge = fromTeam ? {
+        primary: fromTeam.badgePrimary ?? "#374151",
+        secondary: fromTeam.badgeSecondary ?? "#9ca3af",
+        pattern: fromTeam.badgePattern ?? "shield",
+        initials: fromTeam.badgeInitials ?? "?",
+        symbol: fromTeam.badgeSymbol ?? null,
+      } : null;
+      const toBadge = {
+        primary: (r.to_badge_primary as string | null) ?? "#374151",
+        secondary: (r.to_badge_secondary as string | null) ?? "#9ca3af",
+        pattern: (r.to_badge_pattern as string | null) ?? "shield",
+        initials: (r.to_badge_initials as string | null) ?? "?",
+        symbol: (r.to_badge_symbol as string | null) ?? null,
+      };
       return {
         playerId: r.player_id as string,
         playerName: `${r.first_name} ${r.last_name}`,
         playerAvatar: avatar,
         fromTeamId: r.from_team_id as string | null,
         fromTeam: fromTeam?.name ?? null,
-        fromTeamColor: fromTeam?.primaryColor ?? null,
-        fromTeamSecondary: fromTeam?.secondaryColor ?? null,
+        fromTeamBadge: fromBadge,
         toTeamId: r.to_team_id as string,
         toTeam: r.to_team_name as string,
-        toTeamColor: (r.to_primary_color as string | null) ?? null,
-        toTeamSecondary: (r.to_secondary_color as string | null) ?? null,
+        toTeamBadge: toBadge,
         fee: (r.fee as number) ?? 0,
         date: r.joined_at as string,
         isCrossLeague: !!isCrossLeague,
@@ -378,32 +391,33 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   const biggest = [...leagueTransfers].sort((a, b) => b.fee - a.fee).slice(0, 10);
 
   // Top sellers (most earned) — aggregate by fromTeamId
-  const sellersMap = new Map<string, { teamId: string; teamName: string; primaryColor: string | null; secondaryColor: string | null; earned: number; count: number }>();
+  type TeamBadge = { primary: string; secondary: string; pattern: string; initials: string; symbol: string | null };
+  const sellersMap = new Map<string, { teamId: string; teamName: string; badge: TeamBadge | null; earned: number; count: number }>();
   for (const t of leagueTransfers) {
     if (!t.fromTeamId || !t.fromTeam) continue;
     const existing = sellersMap.get(t.fromTeamId);
     if (existing) { existing.earned += t.fee; existing.count++; }
-    else sellersMap.set(t.fromTeamId, { teamId: t.fromTeamId, teamName: t.fromTeam, primaryColor: t.fromTeamColor, secondaryColor: t.fromTeamSecondary, earned: t.fee, count: 1 });
+    else sellersMap.set(t.fromTeamId, { teamId: t.fromTeamId, teamName: t.fromTeam, badge: t.fromTeamBadge, earned: t.fee, count: 1 });
   }
   const topSellers = [...sellersMap.values()].sort((a, b) => b.earned - a.earned).slice(0, 5);
 
   // Top buyers (most spent) — aggregate by toTeamId
-  const buyersMap = new Map<string, { teamId: string; teamName: string; primaryColor: string | null; secondaryColor: string | null; spent: number; count: number }>();
+  const buyersMap = new Map<string, { teamId: string; teamName: string; badge: TeamBadge | null; spent: number; count: number }>();
   for (const t of leagueTransfers) {
     const existing = buyersMap.get(t.toTeamId);
     if (existing) { existing.spent += t.fee; existing.count++; }
-    else buyersMap.set(t.toTeamId, { teamId: t.toTeamId, teamName: t.toTeam, primaryColor: t.toTeamColor, secondaryColor: t.toTeamSecondary, spent: t.fee, count: 1 });
+    else buyersMap.set(t.toTeamId, { teamId: t.toTeamId, teamName: t.toTeam, badge: t.toTeamBadge, spent: t.fee, count: 1 });
   }
   const topBuyers = [...buyersMap.values()].sort((a, b) => b.spent - a.spent).slice(0, 5);
 
   // Most active (in + out combined)
-  const activeMap = new Map<string, { teamId: string; teamName: string; primaryColor: string | null; secondaryColor: string | null; in: number; out: number; total: number }>();
+  const activeMap = new Map<string, { teamId: string; teamName: string; badge: TeamBadge | null; in: number; out: number; total: number }>();
   for (const t of leagueTransfers) {
-    const buyer = activeMap.get(t.toTeamId) ?? { teamId: t.toTeamId, teamName: t.toTeam, primaryColor: t.toTeamColor, secondaryColor: t.toTeamSecondary, in: 0, out: 0, total: 0 };
+    const buyer = activeMap.get(t.toTeamId) ?? { teamId: t.toTeamId, teamName: t.toTeam, badge: t.toTeamBadge, in: 0, out: 0, total: 0 };
     buyer.in++; buyer.total++;
     activeMap.set(t.toTeamId, buyer);
     if (t.fromTeamId && t.fromTeam) {
-      const seller = activeMap.get(t.fromTeamId) ?? { teamId: t.fromTeamId, teamName: t.fromTeam, primaryColor: t.fromTeamColor, secondaryColor: t.fromTeamSecondary, in: 0, out: 0, total: 0 };
+      const seller = activeMap.get(t.fromTeamId) ?? { teamId: t.fromTeamId, teamName: t.fromTeam, badge: t.fromTeamBadge, in: 0, out: 0, total: 0 };
       seller.out++; seller.total++;
       activeMap.set(t.fromTeamId, seller);
     }
@@ -420,8 +434,8 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
        p.first_name, p.last_name, p.avatar as player_avatar, p.position, p.overall_rating,
        pc.team_id as current_team_id,
        t.name as current_team_name,
-       t.primary_color as current_primary_color,
-       t.secondary_color as current_secondary_color,
+       t.badge_primary_color as cur_badge_primary, t.badge_secondary_color as cur_badge_secondary,
+       t.badge_pattern as cur_badge_pattern, t.badge_initials as cur_badge_initials, t.badge_symbol as cur_badge_symbol,
        COUNT(DISTINCT pw.team_id) as watcher_count,
        MAX(pw.created_at) as latest_watched_at
      FROM player_watchlist pw
@@ -443,8 +457,13 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
     overallRating: (r.overall_rating as number) ?? 0,
     currentTeamId: r.current_team_id as string,
     currentTeamName: r.current_team_name as string,
-    currentTeamColor: (r.current_primary_color as string | null) ?? null,
-    currentTeamSecondary: (r.current_secondary_color as string | null) ?? null,
+    currentTeamBadge: {
+      primary: (r.cur_badge_primary as string | null) ?? "#374151",
+      secondary: (r.cur_badge_secondary as string | null) ?? "#9ca3af",
+      pattern: (r.cur_badge_pattern as string | null) ?? "shield",
+      initials: (r.cur_badge_initials as string | null) ?? "?",
+      symbol: (r.cur_badge_symbol as string | null) ?? null,
+    },
     watcherCount: (r.watcher_count as number) ?? 0,
     latestWatchedAt: r.latest_watched_at as string,
   }));

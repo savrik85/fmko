@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
-import { Spinner, SectionLabel, PositionBadge, useConfirm } from "@/components/ui";
+import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern } from "@/components/ui";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
@@ -20,11 +20,11 @@ interface TransfersOverview {
     crossLeagueCount: number;
     crossLeagueAdminTotal: number;
   };
-  biggest: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; fromTeamId: string | null; fromTeam: string | null; fromTeamColor?: string | null; fromTeamSecondary?: string | null; toTeamId: string; toTeam: string; toTeamColor?: string | null; toTeamSecondary?: string | null; fee: number; date: string; isCrossLeague: boolean }>;
-  topSellers: Array<{ teamId: string; teamName: string; primaryColor?: string | null; secondaryColor?: string | null; earned: number; count: number }>;
-  topBuyers: Array<{ teamId: string; teamName: string; primaryColor?: string | null; secondaryColor?: string | null; spent: number; count: number }>;
-  mostActive: Array<{ teamId: string; teamName: string; primaryColor?: string | null; secondaryColor?: string | null; in: number; out: number; total: number }>;
-  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; fromTeamId: string | null; fromTeam: string | null; fromTeamColor?: string | null; fromTeamSecondary?: string | null; toTeamId: string; toTeam: string; toTeamColor?: string | null; toTeamSecondary?: string | null; fee: number; date: string; isCrossLeague: boolean }>;
+  biggest: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean }>;
+  topSellers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; earned: number; count: number }>;
+  topBuyers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; spent: number; count: number }>;
+  mostActive: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; in: number; out: number; total: number }>;
+  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean }>;
   speculations?: Array<{
     playerId: string;
     playerName: string;
@@ -33,11 +33,18 @@ interface TransfersOverview {
     overallRating: number;
     currentTeamId: string;
     currentTeamName: string;
-    currentTeamColor: string | null;
-    currentTeamSecondary: string | null;
+    currentTeamBadge?: TeamBadge;
     watcherCount: number;
     latestWatchedAt: string;
   }>;
+}
+
+interface TeamBadge {
+  primary: string;
+  secondary: string;
+  pattern: string;
+  initials: string;
+  symbol: string | null;
 }
 
 function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
@@ -68,49 +75,74 @@ function relativeTimeCs(iso: string): string {
   return `${mo} měs`;
 }
 
-// Klubová "vlajka" — diagonální 2-barevný obdélník
-function ClubFlag({ primary, secondary, size = "sm" }: {
-  primary: string | null | undefined;
-  secondary?: string | null;
-  size?: "sm" | "md" | "lg";
+// Klubový znak — opravdové kruhové logo
+function ClubBadge({ badge, size = 28 }: {
+  badge: TeamBadge | null | undefined;
+  size?: number;
 }) {
-  const p = primary || "#6b7280";
-  const s = secondary || p;
-  const dim = size === "lg" ? { w: 36, h: 26 } : size === "md" ? { w: 28, h: 20 } : { w: 22, h: 16 };
+  if (!badge) {
+    return <span className="inline-block rounded-full bg-gray-200 shrink-0" style={{ width: size, height: size }} aria-hidden />;
+  }
   return (
-    <span
-      className="inline-block rounded-sm shadow-sm border border-black/10 shrink-0"
-      style={{
-        width: dim.w,
-        height: dim.h,
-        background: `linear-gradient(135deg, ${p} 0%, ${p} 50%, ${s} 50%, ${s} 100%)`,
-      }}
-      aria-hidden
-    />
+    <span className="inline-block shrink-0" style={{ width: size, height: size }} aria-hidden>
+      <BadgePreview
+        primary={badge.primary}
+        secondary={badge.secondary}
+        pattern={badge.pattern as BadgePattern}
+        initials={badge.initials}
+        symbol={badge.symbol}
+        size={size}
+      />
+    </span>
   );
 }
 
-function ClubLink({ teamId, name, color, secondary, href, withFlag = true, bold = true, size = "sm" }: {
+function ClubLink({ teamId, name, badge, href, withBadge = true, bold = true, badgeSize = 24, textSize = "sm" }: {
   teamId: string | null;
   name: string;
-  color?: string | null;
-  secondary?: string | null;
+  badge?: TeamBadge | null;
   href?: string | null;
-  withFlag?: boolean;
+  withBadge?: boolean;
   bold?: boolean;
-  size?: "sm" | "md" | "lg";
+  badgeSize?: number;
+  textSize?: "sm" | "md" | "lg";
 }) {
-  const textCls = `${bold ? "font-heading font-bold" : "font-heading"} text-ink hover:text-pitch-500 transition-colors truncate`;
+  const txt = textSize === "lg" ? "text-base sm:text-lg" : textSize === "md" ? "text-sm sm:text-base" : "text-xs sm:text-sm";
+  const w = bold ? "font-heading font-bold" : "font-heading";
   const inner = (
     <span className="inline-flex items-center gap-1.5 min-w-0 max-w-full">
-      {withFlag && <ClubFlag primary={color} secondary={secondary} size={size} />}
-      <span className={`${textCls} ${size === "lg" ? "text-base" : size === "md" ? "text-sm" : "text-xs sm:text-sm"}`}>{name}</span>
+      {withBadge && <ClubBadge badge={badge} size={badgeSize} />}
+      <span className={`${w} text-ink hover:text-pitch-500 transition-colors truncate ${txt}`}>{name}</span>
     </span>
   );
   if (href && teamId) {
     return <Link href={href} className="min-w-0 max-w-full">{inner}</Link>;
   }
   return <span className="min-w-0 max-w-full">{inner}</span>;
+}
+
+function FancyArrow({ size = "sm" }: { size?: "xs" | "sm" | "md" | "lg" }) {
+  const dim = size === "lg" ? { w: 56, h: 18 } : size === "md" ? { w: 42, h: 14 } : size === "xs" ? { w: 22, h: 10 } : { w: 32, h: 12 };
+  const id = `arrow-grad-${size}`;
+  return (
+    <svg className="shrink-0" width={dim.w} height={dim.h} viewBox={`0 0 ${dim.w} ${dim.h}`} aria-hidden>
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#86efac" />
+          <stop offset="60%" stopColor="#22c55e" />
+          <stop offset="100%" stopColor="#15803d" />
+        </linearGradient>
+      </defs>
+      {/* tělo šípu — zužující se trojúhelníkový tvar */}
+      <path
+        d={`M 0 ${dim.h * 0.4} L ${dim.w * 0.65} ${dim.h * 0.4} L ${dim.w * 0.65} ${dim.h * 0.15} L ${dim.w} ${dim.h / 2} L ${dim.w * 0.65} ${dim.h * 0.85} L ${dim.w * 0.65} ${dim.h * 0.6} L 0 ${dim.h * 0.6} Z`}
+        fill={`url(#${id})`}
+        stroke="#15803d"
+        strokeWidth="0.6"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 function FreeAgentLabel({ size = "sm" }: { size?: "sm" | "md" | "lg" }) {
@@ -159,14 +191,12 @@ function HeroTransfer({ t }: { t: TransfersOverview["biggest"][number] }) {
           {/* Trasa přestupu */}
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {t.fromTeam ? (
-              <ClubLink teamId={t.fromTeamId} name={t.fromTeam} color={t.fromTeamColor} secondary={t.fromTeamSecondary} href={t.fromTeamId ? `/dashboard/team/${t.fromTeamId}` : null} size="md" />
+              <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/dashboard/team/${t.fromTeamId}` : null} textSize="md" badgeSize={32} />
             ) : (
               <FreeAgentLabel size="md" />
             )}
-            <svg className="text-pitch-500 shrink-0" width="36" height="14" viewBox="0 0 36 14" aria-hidden>
-              <path d="M0 7 H28 M24 2 L32 7 L24 12" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <ClubLink teamId={t.toTeamId} name={t.toTeam} color={t.toTeamColor} secondary={t.toTeamSecondary} href={`/dashboard/team/${t.toTeamId}`} size="md" />
+            <FancyArrow size="lg" />
+            <ClubLink teamId={t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={`/dashboard/team/${t.toTeamId}`} textSize="md" badgeSize={32} />
           </div>
 
           {/* Cena */}
@@ -206,12 +236,12 @@ function MidTransferCard({ rank, t }: { rank: number; t: TransfersOverview["bigg
           </div>
           <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted mb-2 min-w-0">
             {t.fromTeam ? (
-              <ClubLink teamId={t.fromTeamId} name={t.fromTeam} color={t.fromTeamColor} secondary={t.fromTeamSecondary} href={t.fromTeamId ? `/dashboard/team/${t.fromTeamId}` : null} bold={false} />
+              <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/dashboard/team/${t.fromTeamId}` : null} bold={false} />
             ) : (
               <FreeAgentLabel />
             )}
-            <span className="text-pitch-500 shrink-0" aria-hidden>→</span>
-            <ClubLink teamId={t.toTeamId} name={t.toTeam} color={t.toTeamColor} secondary={t.toTeamSecondary} href={`/dashboard/team/${t.toTeamId}`} bold={false} />
+            <FancyArrow size="sm" />
+            <ClubLink teamId={t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={`/dashboard/team/${t.toTeamId}`} bold={false} />
           </div>
           <div className="font-heading font-[800] text-base sm:text-lg text-pitch-500 tabular-nums">
             {t.fee.toLocaleString("cs")} <span className="text-xs text-pitch-700">Kč</span>
@@ -247,7 +277,7 @@ function SpeculationCard({ s }: { s: NonNullable<TransfersOverview["speculations
             <span className="shrink-0 text-[10px] text-muted tabular-nums">{s.position}·{s.overallRating}</span>
           </div>
           <div className="text-xs sm:text-sm text-muted mb-1.5 min-w-0">
-            <ClubLink teamId={s.currentTeamId} name={s.currentTeamName} color={s.currentTeamColor} secondary={s.currentTeamSecondary} href={`/dashboard/team/${s.currentTeamId}`} bold={false} />
+            <ClubLink teamId={s.currentTeamId} name={s.currentTeamName} badge={s.currentTeamBadge} href={`/dashboard/team/${s.currentTeamId}`} bold={false} badgeSize={20} />
           </div>
           <div className="flex items-center justify-between gap-2">
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-heading font-bold">
@@ -283,12 +313,12 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
         </div>
         <div className="flex items-center gap-1 text-xs text-muted mt-0.5 min-w-0">
           {t.fromTeam ? (
-            <ClubLink teamId={t.fromTeamId} name={t.fromTeam} color={t.fromTeamColor} secondary={t.fromTeamSecondary} href={t.fromTeamId ? `/dashboard/team/${t.fromTeamId}` : null} bold={false} />
+            <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/dashboard/team/${t.fromTeamId}` : null} bold={false} />
           ) : (
             <FreeAgentLabel />
           )}
-          <span className="text-pitch-500 shrink-0" aria-hidden>→</span>
-          <ClubLink teamId={t.toTeamId} name={t.toTeam} color={t.toTeamColor} secondary={t.toTeamSecondary} href={`/dashboard/team/${t.toTeamId}`} bold={false} />
+          <FancyArrow size="xs" />
+          <ClubLink teamId={t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={`/dashboard/team/${t.toTeamId}`} bold={false} />
         </div>
       </div>
       <div className="shrink-0 text-right">
@@ -801,7 +831,7 @@ export default function TransfersPage() {
                         return (
                           <div key={s.teamId} className="flex items-center gap-2.5">
                             <span className="font-heading font-bold text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                            <ClubFlag primary={s.primaryColor} secondary={s.secondaryColor} size="md" />
+                            <ClubBadge badge={s.badge} size={28} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-2 mb-1">
                                 <Link href={`/dashboard/team/${s.teamId}`} className="text-sm font-heading font-bold text-ink hover:text-pitch-500 truncate">
@@ -832,7 +862,7 @@ export default function TransfersPage() {
                         return (
                           <div key={b.teamId} className="flex items-center gap-2.5">
                             <span className="font-heading font-bold text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                            <ClubFlag primary={b.primaryColor} secondary={b.secondaryColor} size="md" />
+                            <ClubBadge badge={b.badge} size={28} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-2 mb-1">
                                 <Link href={`/dashboard/team/${b.teamId}`} className="text-sm font-heading font-bold text-ink hover:text-pitch-500 truncate">
@@ -863,7 +893,7 @@ export default function TransfersPage() {
                     {overview.mostActive.map((a, i) => (
                       <div key={a.teamId} className="flex items-center gap-2.5 py-1">
                         <span className="font-heading font-bold text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                        <ClubFlag primary={a.primaryColor} secondary={a.secondaryColor} size="md" />
+                        <ClubBadge badge={a.badge} size={28} />
                         <Link href={`/dashboard/team/${a.teamId}`} className="text-sm font-heading font-bold text-ink hover:text-pitch-500 truncate flex-1 min-w-0">
                           {a.teamName}
                         </Link>
