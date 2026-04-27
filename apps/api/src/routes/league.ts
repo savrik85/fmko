@@ -473,6 +473,34 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
      LIMIT 5`
   ).bind(leagueId).all().catch((e) => { logger.warn({ module: "league" }, "fetch speculations", e); return { results: [] }; });
 
+  // Pro spekulace: dotáhnout watchery (klubové znaky bez jmen — uchování mystery)
+  const specPlayerIds = (speculationsRes.results as any[]).map((r) => r.player_id as string);
+  const watcherBadgesMap: Record<string, TeamBadge[]> = {};
+  if (specPlayerIds.length > 0) {
+    const placeholders = specPlayerIds.map(() => "?").join(",");
+    const watcherRes = await c.env.DB.prepare(
+      `SELECT DISTINCT pw.player_id,
+         t.id as team_id,
+         t.badge_primary_color as bp, t.badge_secondary_color as bs, t.badge_pattern as pat,
+         t.badge_initials as ini, t.badge_symbol as sym, t.primary_color as pc, t.secondary_color as sc, t.name as tname
+       FROM player_watchlist pw
+       JOIN teams t ON pw.team_id = t.id
+       WHERE pw.player_id IN (${placeholders})`
+    ).bind(...specPlayerIds).all().catch((e) => { logger.warn({ module: "league" }, "fetch watchers", e); return { results: [] }; });
+    for (const w of watcherRes.results as any[]) {
+      const badge: TeamBadge = {
+        primary: (w.bp as string | null) ?? (w.pc as string | null) ?? "#374151",
+        secondary: (w.bs as string | null) ?? (w.sc as string | null) ?? "#9ca3af",
+        pattern: (w.pat as string | null) ?? "shield",
+        initials: (w.ini as string | null) ?? deriveInitials(w.tname as string),
+        symbol: (w.sym as string | null) ?? null,
+      };
+      const pid = w.player_id as string;
+      if (!watcherBadgesMap[pid]) watcherBadgesMap[pid] = [];
+      watcherBadgesMap[pid].push(badge);
+    }
+  }
+
   const speculations = (speculationsRes.results as any[]).map((r) => ({
     playerId: r.player_id as string,
     playerName: `${r.first_name} ${r.last_name}`,
@@ -489,6 +517,7 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
       symbol: (r.cur_badge_symbol as string | null) ?? null,
     },
     watcherCount: (r.watcher_count as number) ?? 0,
+    watcherBadges: watcherBadgesMap[r.player_id as string] ?? [],
     latestWatchedAt: r.latest_watched_at as string,
   }));
 

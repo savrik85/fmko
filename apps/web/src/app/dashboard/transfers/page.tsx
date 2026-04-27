@@ -35,6 +35,7 @@ interface TransfersOverview {
     currentTeamName: string;
     currentTeamBadge?: TeamBadge;
     watcherCount: number;
+    watcherBadges?: TeamBadge[];
     latestWatchedAt: string;
   }>;
 }
@@ -297,11 +298,22 @@ function SpeculationCard({ s }: { s: NonNullable<TransfersOverview["speculations
             <ClubLink teamId={s.currentTeamId} name={s.currentTeamName} badge={s.currentTeamBadge} href={`/dashboard/team/${s.currentTeamId}`} bold={false} badgeSize={20} />
           </div>
           <div className="flex items-center justify-between gap-2">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-heading font-bold">
-              <span aria-hidden>👁️</span>
-              {s.watcherCount} {s.watcherCount === 1 ? "tým" : s.watcherCount < 5 ? "týmy" : "týmů"}
-            </span>
-            <span className="text-[10px] text-muted">{relativeTimeCs(s.latestWatchedAt)}</span>
+            <div className="flex items-center gap-1 min-w-0">
+              <span aria-hidden className="text-[11px]">👁️</span>
+              {(s.watcherBadges && s.watcherBadges.length > 0 ? s.watcherBadges : []).slice(0, 5).map((b, i) => (
+                <span key={i} className="relative inline-block" title="Zájem skrytého klubu">
+                  <ClubBadge badge={b} size={20} />
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[9px] font-heading font-bold flex items-center justify-center ring-1 ring-white">?</span>
+                </span>
+              ))}
+              {s.watcherBadges && s.watcherBadges.length > 5 && (
+                <span className="text-[10px] text-muted font-heading font-bold ml-1">+{s.watcherBadges.length - 5}</span>
+              )}
+              {(!s.watcherBadges || s.watcherBadges.length === 0) && (
+                <span className="text-[11px] text-amber-800 font-heading font-bold">{s.watcherCount} {s.watcherCount === 1 ? "tým" : s.watcherCount < 5 ? "týmy" : "týmů"}</span>
+              )}
+            </div>
+            <span className="text-[10px] text-muted shrink-0">{relativeTimeCs(s.latestWatchedAt)}</span>
           </div>
         </div>
       </div>
