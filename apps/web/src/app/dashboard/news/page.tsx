@@ -252,8 +252,10 @@ export default function NewsPage() {
     (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview"].includes(a.type),
   );
 
-  // Lead story = nejnovější preview (před kolem) nebo AI report (po kole)
-  const leadStory = roundSummaryArticles[0] || previewArticles[0] || aiReportArticles[0] || matchArticles[0] || standingArticles[0] || articles[0];
+  // Lead story = nejnovější kandidát napříč typy (preview kolem zápasu vyhraje nad starým round_summary)
+  const leadStory = [previewArticles[0], roundSummaryArticles[0], aiReportArticles[0], matchArticles[0], standingArticles[0]]
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] || articles[0];
   // Druhý hlavní článek — ai_report pokud není lead (typicky vedle round_summary nebo matchday_preview)
   const secondaryStory = leadStory?.id !== aiReportArticles[0]?.id ? aiReportArticles[0] : null;
   // Všechny match stories sjednocené (bez lead story pokud je match)
