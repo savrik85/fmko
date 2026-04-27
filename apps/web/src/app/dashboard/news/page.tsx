@@ -258,8 +258,12 @@ export default function NewsPage() {
     .filter(Boolean)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
     || standingArticles[0] || articles[0];
-  // Druhý hlavní článek — ai_report pokud není lead (typicky vedle round_summary nebo matchday_preview)
-  const secondaryStory = leadStory?.id !== aiReportArticles[0]?.id ? aiReportArticles[0] : null;
+  // Druhý hlavní článek — round_summary nebo ai_report, podle toho co není lead.
+  // Když je lead ai_report → secondary je round_summary (Hráč kola). A naopak.
+  // Když lead je něco jiného (preview/match) → preferuj round_summary, fallback ai_report.
+  const secondaryStory =
+    (roundSummaryArticles[0] && roundSummaryArticles[0].id !== leadStory?.id ? roundSummaryArticles[0] : null)
+    ?? (aiReportArticles[0] && aiReportArticles[0].id !== leadStory?.id ? aiReportArticles[0] : null);
   // Všechny match stories sjednocené (bez lead story pokud je match)
   const matchStories = matchArticles.slice(leadStory?.type === "match" ? 1 : 0);
   // Ostatní drobnosti (classified ads apod.) — bez duplicit s promocemi / přestupy
@@ -402,7 +406,11 @@ export default function NewsPage() {
             <div id={`news-${secondaryStory.id}`} className="border-b border-gray-200 pb-5">
               <ArticleWrapper article={secondaryStory}>
                 <div>
-                  <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">Komentář kola</div>
+                  <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">
+                    {secondaryStory.type === "round_summary" ? "🏆 Hráč a trenér kola"
+                      : secondaryStory.type === "matchday_preview" ? "Předzápasové preview"
+                      : "Komentář kola"}
+                  </div>
                   <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
                     {secondaryStory.headline}
                   </h2>
