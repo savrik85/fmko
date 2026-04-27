@@ -18,6 +18,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
     { href: "/dashboard/stadium", icon: "\u{1F3DF}️", label: "Stadion", color: "#5C7A3D" },
     { href: "/dashboard/fans", icon: "\u{1F4E3}", label: "Fanoušci", color: "#8B4513" },
     { href: "/dashboard/events", icon: "\u{1F389}", label: "Události", color: "#8B6914" },
+    { href: "/dashboard/hospoda", icon: "\u{1F37A}", label: "Hospoda", color: "#8B5A2B", newBadge: true },
   ]},
   { title: "Soutěž", items: [
     { href: "/dashboard/liga", icon: "\u{1F3C6}", label: "Liga", color: "#B8860B" },

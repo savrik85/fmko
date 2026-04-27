@@ -17,6 +17,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/dashboard/equipment": "Vybavení",
   "/dashboard/stadium": "Stadion",
   "/dashboard/events": "Události",
+  "/dashboard/hospoda": "Hospoda",
   "/dashboard/hall-of-fame": "Síň slávy",
   "/dashboard/news": "Zpravodaj",
   "/dashboard/phone": "Zprávy",
