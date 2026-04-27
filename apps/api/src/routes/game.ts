@@ -3033,6 +3033,22 @@ gameRouter.post("/admin/backfill-chemistry", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+// POST /api/admin/backfill-pub?date=YYYY-MM-DD — vygenerovat pub session pro daný den pro všechny lidské týmy.
+// Pokud date neuvedeno, použije se včerejšek.
+gameRouter.post("/admin/backfill-pub", async (c) => {
+  const today = new Date();
+  const dateParam = c.req.query("date");
+  let target = dateParam;
+  if (!target) {
+    const y = new Date(today);
+    y.setUTCDate(y.getUTCDate() - 1);
+    target = y.toISOString().slice(0, 10);
+  }
+  const { generatePubSessionsForAllTeams } = await import("../season/pub");
+  const result = await generatePubSessionsForAllTeams(c.env.DB, target);
+  return c.json({ ok: true, gameDate: target, ...result });
+});
+
 // POST /api/admin/backfill-achievements — přepočítat achievementy ze stavu DB pro všechny týmy (nebo jeden).
 gameRouter.post("/admin/backfill-achievements", async (c) => {
   const targetTeamId = c.req.query("teamId");
