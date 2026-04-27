@@ -603,7 +603,9 @@ teamsRouter.post("/", async (c) => {
     // Pub backfill — vygeneruj včerejší hospodu, ať není prázdná hned po setupu
     try {
       const { backfillYesterdayPubSession } = await import("../season/pub");
-      await backfillYesterdayPubSession(c.env.DB, teamId, new Date().toISOString().slice(0, 10));
+      const gd = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>().catch((e) => { logger.warn({ module: "teams" }, "load team game_date for pub backfill", e); return null; });
+      const gameDateStr = (gd?.game_date ?? new Date().toISOString()).slice(0, 10);
+      await backfillYesterdayPubSession(c.env.DB, teamId, gameDateStr);
     } catch (e) { logger.warn({ module: "teams" }, "pub backfill (join)", e); }
 
     // Update KV session so teamId is no longer null (fixes post-onboarding auth)

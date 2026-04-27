@@ -663,7 +663,7 @@ export default function DashboardPage() {
               <div>
                 <h2 className="font-heading font-[800] text-xl leading-none text-ink">U nás v hospodě</h2>
                 <div className="text-[11px] uppercase text-muted mt-1">
-                  {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
+                  {new Date(pubSession.gameDate).toLocaleDateString("cs", { weekday: "long" })} večer
                 </div>
               </div>
               <Link href="/dashboard/hospoda" className="text-xs font-heading font-bold text-pitch-500 hover:text-pitch-600 whitespace-nowrap">

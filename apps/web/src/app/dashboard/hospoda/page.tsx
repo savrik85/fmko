@@ -202,8 +202,8 @@ export default function HospodaPage() {
             return (
               <div key={s.id} className="card p-4 sm:p-5">
                 <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-                  <div className="font-heading font-bold text-sm">
-                    {new Date(s.gameDate).toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" })} večer
+                  <div className="font-heading font-bold text-sm capitalize">
+                    {new Date(s.gameDate).toLocaleDateString("cs", { weekday: "long" })} večer
                   </div>
                   <div className="text-[11px] text-muted uppercase font-heading">
                     {localCount} {localCount === 1 ? "místní" : localCount < 5 ? "místní" : "místních"}
