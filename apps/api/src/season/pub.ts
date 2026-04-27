@@ -109,20 +109,24 @@ const NOBODY_TEMPLATES = [
   "Tichá středa, jen hospodský s kočkou.",
 ];
 
+// Cena piva je v hospodě stálá — nedává smysl ji každý den měnit. Specials se proto
+// točí kolem jídla / atmosféry, ne kolem ceny.
 const DAILY_SPECIALS = [
-  "Specialita dne: Vepřo-knedlo-zelo · Pivo 30 Kč",
-  "Specialita dne: Smažený sýr s tatarkou · Pivo 30 Kč",
-  "Specialita dne: Klobásy na pivu · Točí Březňák 30 Kč",
-  "Dnes: Utopenci · Polévka 25 Kč · Pivo 30 Kč",
-  "Specialita dne: Svíčková (jak od babičky) · Plzeň 32 Kč",
+  "Specialita dne: Vepřo-knedlo-zelo",
+  "Specialita dne: Smažený sýr s tatarkou",
+  "Specialita dne: Klobásy na pivu",
+  "Dnes: Utopenci · Polévka 25 Kč",
+  "Specialita dne: Svíčková (jak od babičky)",
   "Kuchyň zavřená — hospodský dělá sám: jen utopenci a klobásy.",
   "Hospodský pustil polku z gramofonu — nikdo neprotestoval.",
   "Nová pohovka v rohu — zatím se na ni nikdo neodvažuje.",
-  "Akce: 5+1 pivo zdarma · Specialita: Žebra na Plzni",
-  "Dnes pivovarský den — Krušovice za 28 Kč.",
+  "Akce: páté pivo zdarma · Specialita: Žebra na Plzni",
+  "Dnes čepujeme Krušovice — z dovozu od strejdy.",
   "Pan starosta sliboval, že platí pivo všem — slib nesplnil.",
   "Hospodský má nový televizor — Sport 1 v HD.",
   "Vichřice strhla cedulku, zatím vchází zadem.",
+  "Specialita dne: Guláš s knedlíkem",
+  "Dnes: Polévka zdarma ke každému druhému pivu",
 ];
 
 const CAT_INCIDENT_TEMPLATES = [
