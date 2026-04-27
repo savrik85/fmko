@@ -1355,7 +1355,9 @@ teamsRouter.patch("/:id/club", async (c) => {
     if (body.badgeSymbol !== undefined) {
       if (body.badgeSymbol === null || body.badgeSymbol === "") {
         updates.push({ col: "badge_symbol", val: null });
-      } else if (typeof body.badgeSymbol !== "string" || body.badgeSymbol.length > 4) {
+      } else if (typeof body.badgeSymbol !== "string") {
+        throw new Error("Symbol: max 4 znaky (emoji)");
+      } else if (!body.badgeSymbol.startsWith("svg:") && body.badgeSymbol.length > 4) {
         throw new Error("Symbol: max 4 znaky (emoji)");
       } else {
         updates.push({ col: "badge_symbol", val: body.badgeSymbol });
