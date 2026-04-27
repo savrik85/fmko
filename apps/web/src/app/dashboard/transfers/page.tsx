@@ -110,15 +110,16 @@ function ClubLink({ teamId, name, badge, href, withBadge = true, bold = true, ba
   const txt = textSize === "lg" ? "text-base sm:text-lg" : textSize === "md" ? "text-sm sm:text-base" : "text-xs sm:text-sm";
   const w = bold ? "font-heading font-bold" : "font-heading";
   const inner = (
-    <span className="inline-flex items-center gap-1.5 min-w-0 max-w-full">
+    <>
       {withBadge && <ClubBadge badge={badge} size={badgeSize} />}
       <span className={`${w} text-ink hover:text-pitch-500 transition-colors truncate ${txt}`}>{name}</span>
-    </span>
+    </>
   );
+  const cls = "inline-flex items-center gap-1.5 min-w-0 max-w-full";
   if (href && teamId) {
-    return <Link href={href} className="min-w-0 max-w-full">{inner}</Link>;
+    return <Link href={href} className={cls}>{inner}</Link>;
   }
-  return <span className="min-w-0 max-w-full">{inner}</span>;
+  return <span className={cls}>{inner}</span>;
 }
 
 function FancyArrow({ size = "sm" }: { size?: "xs" | "sm" | "md" | "lg" }) {
