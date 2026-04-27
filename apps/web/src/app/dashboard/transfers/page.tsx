@@ -805,6 +805,21 @@ export default function TransfersPage() {
                 </div>
               )}
 
+              {/* Poslední přestupy */}
+              {overview.recent.length > 0 && (
+                <div className="card p-4 sm:p-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-base" aria-hidden>📋</span>
+                    <SectionLabel>Poslední přestupy</SectionLabel>
+                  </div>
+                  <div>
+                    {overview.recent.map((t) => (
+                      <RecentTransferRow key={`${t.playerId}-${t.date}`} t={t} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Spekulace */}
               {overview.speculations && overview.speculations.length > 0 && (
                 <div>
@@ -916,20 +931,6 @@ export default function TransfersPage() {
                 </div>
               )}
 
-              {/* Poslední přestupy */}
-              {overview.recent.length > 0 && (
-                <div className="card p-4 sm:p-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-base" aria-hidden>📋</span>
-                    <SectionLabel>Poslední přestupy</SectionLabel>
-                  </div>
-                  <div>
-                    {overview.recent.map((t) => (
-                      <RecentTransferRow key={`${t.playerId}-${t.date}`} t={t} />
-                    ))}
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>
