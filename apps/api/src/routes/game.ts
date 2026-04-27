@@ -2291,7 +2291,7 @@ gameRouter.post("/game/run-matches", async (c) => {
 
       // Atomický lock: zabrání souběžnému cronu / endpointu zpracovat stejné kolo.
       const lockResult = await c.env.DB.prepare(
-        "UPDATE season_calendar SET status = 'processing' WHERE id = ? AND status = 'scheduled'"
+        "UPDATE season_calendar SET status = 'lineup_locked' WHERE id = ? AND status = 'scheduled'"
       ).bind(matchCal.id).run();
       if (lockResult.meta.changes === 0) continue;
 
