@@ -239,16 +239,18 @@ function MidTransferCard({ rank, t }: { rank: number; t: TransfersOverview["bigg
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-1">
-            <div className="flex items-center gap-1.5 min-w-0 flex-1">
-              <Link href={`/dashboard/player/${t.playerId}`} className="font-heading font-bold text-sm sm:text-base text-ink hover:text-pitch-500 truncate">
-                {t.playerName}
-              </Link>
-              {t.position && <PositionBadge position={t.position} />}
-              {t.age ? <span className="text-[11px] text-muted tabular-nums shrink-0">{t.age}&nbsp;l.</span> : null}
-              {t.isCrossLeague && <span className="text-[10px] shrink-0">🔄</span>}
-            </div>
+            <Link href={`/dashboard/player/${t.playerId}`} className="font-heading font-bold text-sm sm:text-base text-ink hover:text-pitch-500 truncate flex-1 min-w-0">
+              {t.playerName}
+              {t.isCrossLeague && <span className="ml-1 text-[10px]">🔄</span>}
+            </Link>
             <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-heading font-bold bg-gradient-to-br ${medal}`}>#{rank}</span>
           </div>
+          {(t.position || t.age) && (
+            <div className="flex items-center gap-1.5 mb-1.5">
+              {t.position && <PositionBadge position={t.position} />}
+              {t.age ? <span className="text-[11px] text-muted tabular-nums">{t.age}&nbsp;let</span> : null}
+            </div>
+          )}
           <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted mb-2 min-w-0">
             {t.fromTeam ? (
               <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/dashboard/team/${t.fromTeamId}` : null} bold={false} />
