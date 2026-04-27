@@ -121,7 +121,7 @@ export default function HospodaPage() {
       <div className="rounded-xl overflow-hidden shadow-sm" style={{ background: "#F5EDDF" }}>
         <div className="h-1" style={{ background: scarfPrimary }} />
         <div className="flex items-center gap-5 sm:gap-7 px-5 sm:px-6 py-5">
-          <ClubScarf primary={scarfPrimary} secondary={scarfSecondary} pattern={(team?.badge_pattern as BadgePattern) || "shield"} initials={badgeInit} symbol={team?.badge_symbol} width={200} height={88} />
+          <ClubScarf primary={scarfPrimary} secondary={scarfSecondary} pattern={(team?.badge_pattern as BadgePattern) || "shield"} initials={badgeInit} symbol={team?.badge_symbol} width={120} height={88} />
           <div className="flex-1 min-w-0">
             <h1 className="font-heading font-[800] text-2xl sm:text-3xl leading-none text-ink">U nás v hospodě</h1>
             <p className="text-sm text-muted mt-1">Kdo tam byl, co se dělo, co to stálo.</p>

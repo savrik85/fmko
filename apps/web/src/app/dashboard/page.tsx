@@ -269,7 +269,7 @@ export default function DashboardPage() {
               pattern={(team.badge_pattern as BadgePattern) || "shield"}
               initials={badgeInit}
               symbol={team.badge_symbol}
-              width={150}
+              width={88}
               height={64}
             />
             <div className="flex-1 min-w-0">
