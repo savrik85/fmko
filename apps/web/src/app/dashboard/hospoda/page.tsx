@@ -36,6 +36,7 @@ interface PubIncident {
 interface PubSession {
   id: number;
   gameDate: string;
+  dailySpecial?: string | null;
   attendees: PubAttendee[];
   incidents: PubIncident[];
   createdAt: string;
@@ -52,6 +53,10 @@ const INCIDENT_ICON: Record<string, string> = {
   nobody: "🌙",
   coach_led_visit: "🧑‍🏫",
   coach_led_one: "🧑‍🏫",
+  cat: "🐈",
+  priest: "⛪",
+  scout: "🕵️",
+  wife_call: "📞",
 };
 
 function effectColor(ef: PubEffect): string {
@@ -204,6 +209,12 @@ export default function HospodaPage() {
                     {visitorCount > 0 && <span className="text-amber-600">, {visitorCount} {visitorCount === 1 ? "host" : "hosté"}</span>}
                   </div>
                 </div>
+
+                {s.dailySpecial && (
+                  <div className="mb-3 -mx-4 sm:-mx-5 px-4 sm:px-5 py-2 text-[11px] uppercase font-heading tracking-wider text-amber-800 bg-amber-50 border-y border-amber-100">
+                    📋 {s.dailySpecial}
+                  </div>
+                )}
 
                 {s.attendees.length > 0 && (
                   <div className="mb-3">

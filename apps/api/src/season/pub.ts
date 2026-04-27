@@ -109,6 +109,48 @@ const NOBODY_TEMPLATES = [
   "Tichá středa, jen hospodský s kočkou.",
 ];
 
+const DAILY_SPECIALS = [
+  "Specialita dne: Vepřo-knedlo-zelo · Pivo 30 Kč",
+  "Specialita dne: Smažený sýr s tatarkou · Pivo 30 Kč",
+  "Specialita dne: Klobásy na pivu · Točí Březňák 30 Kč",
+  "Dnes: Utopenci · Polévka 25 Kč · Pivo 30 Kč",
+  "Specialita dne: Svíčková (jak od babičky) · Plzeň 32 Kč",
+  "Kuchyň zavřená — hospodský dělá sám: jen utopenci a klobásy.",
+  "Hospodský pustil polku z gramofonu — nikdo neprotestoval.",
+  "Nová pohovka v rohu — zatím se na ni nikdo neodvažuje.",
+  "Akce: 5+1 pivo zdarma · Specialita: Žebra na Plzni",
+  "Dnes pivovarský den — Krušovice za 28 Kč.",
+  "Pan starosta sliboval, že platí pivo všem — slib nesplnil.",
+  "Hospodský má nový televizor — Sport 1 v HD.",
+  "Vichřice strhla cedulku, zatím vchází zadem.",
+];
+
+const CAT_INCIDENT_TEMPLATES = [
+  "Hospodská kočka se otřela o {name}ovu nohu — Marcela mu doma vyčte chlupy.",
+  "{name} dal kočce kus klobásy. Kočka rozhodla u koho si dnes lehne.",
+  "Kočka se ztratila — půl vesnice ji hledá. Našla se nakonec v sudu.",
+  "Kotě skočilo {name}ovi do klína a usnulo. Půl hodiny se nehnul.",
+  "Kočka rozbila skleničku panáka. Hospodský prdí jak žába.",
+];
+
+const PRIEST_INCIDENT_TEMPLATES = [
+  "Pan farář Antonín zaskočil na malé. Pokáral {name}a za fauly v sobotu.",
+  "Pan farář se zastavil, dal si jeden a varoval kluky před hříchem alkoholu (sám si dal druhý).",
+  "Pan farář s nadšením vyprávěl o derby z roku 78. Tehdy ještě hrál sám.",
+];
+
+const SCOUT_INCIDENT_TEMPLATES = [
+  "Cizinec u baru pozoroval celý večer {name}a. Hospodský říká, že byl od pana skauta z Olomouce.",
+  "Někdo v koutě si dělal poznámky pokaždé, když {name} otevřel pusu. Skaut z vyšší ligy?",
+  "K {name}ovi přisedl muž v dobrém kabátě. Po půl hodině zase zmizel — vizitku nechal pod žbánkem.",
+];
+
+const WIFE_CALL_INCIDENT_TEMPLATES = [
+  "Manželka volala {name}ovi. ‚Domů. Hned.‘ Sebral si bundu a šel.",
+  "{name}ova žena vtrhla do hospody a odvedla ho domů za ucho. Hospodský se smál ještě hodinu.",
+  "{name}ovi přišla SMS od manželky. Z výrazu bylo jasné, co tam stálo. Šel.",
+];
+
 function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -227,6 +269,53 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
       playerIds: [teller.playerId],
       text: pickRandom(STORY_TEMPLATES).replace("{name}", `${teller.firstName} ${teller.lastName}`),
       effects: [],
+    });
+  }
+
+  // ── Hospodská kočka — 5% prob ──
+  if (Math.random() < 0.05) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "cat",
+      playerIds: [target.playerId],
+      text: pickRandom(CAT_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      effects: [],
+    });
+  }
+
+  // ── Pan farář Antonín — 5% prob, +1 morale všem attendees ──
+  if (Math.random() < 0.05) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "priest",
+      playerIds: [target.playerId],
+      text: pickRandom(PRIEST_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      effects: locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 1, label: "+1 morálka" })),
+    });
+  }
+
+  // ── Skaut z vyšší ligy — 3% prob, jen pokud je v hospodě hráč s vysokou kvalitou ──
+  // (atributy nejsou přímo v PubAttendee — jako proxy bere alcohol≥60 = "kluci o kterých se ví")
+  // Bez direct effect pro teď, jen warning text. Departure trigger lze navázat později.
+  const scoutTarget = locals.find((a) => a.alcohol >= 60);
+  if (scoutTarget && Math.random() < 0.03) {
+    incidents.push({
+      type: "scout",
+      playerIds: [scoutTarget.playerId],
+      text: pickRandom(SCOUT_INCIDENT_TEMPLATES).replace("{name}", scoutTarget.firstName),
+      effects: [],
+    });
+  }
+
+  // ── Manželka volá — 8% prob na hráče s alcohol≥50 (proxy pro "ten, koho doma řeší") ──
+  const wifeTargets = locals.filter((a) => a.alcohol >= 50);
+  if (wifeTargets.length > 0 && Math.random() < 0.08) {
+    const target = pickRandom(wifeTargets);
+    incidents.push({
+      type: "wife_call",
+      playerIds: [target.playerId],
+      text: pickRandom(WIFE_CALL_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      effects: [{ playerId: target.playerId, type: "morale", delta: -2, label: "−2 morálka" }],
     });
   }
 
@@ -389,8 +478,8 @@ export async function createCoachLedSession(
   ).bind(teamId, gameDate).run().catch((e) => logger.warn({ module: "pub" }, "delete existing emergent session", e));
 
   await db.prepare(
-    `INSERT INTO pub_sessions (team_id, game_date, attendees, incidents) VALUES (?, ?, ?, ?)`,
-  ).bind(teamId, gameDate, JSON.stringify(attendees), JSON.stringify(incidents)).run()
+    `INSERT INTO pub_sessions (team_id, game_date, attendees, incidents, daily_special) VALUES (?, ?, ?, ?, ?)`,
+  ).bind(teamId, gameDate, JSON.stringify(attendees), JSON.stringify(incidents), pickRandom(DAILY_SPECIALS)).run()
     .catch((e) => logger.warn({ module: "pub" }, "insert coach-led session", e));
 
   // Apply effects
@@ -531,8 +620,8 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
 
     // Persist session
     await db.prepare(
-      `INSERT INTO pub_sessions (team_id, game_date, attendees, incidents) VALUES (?, ?, ?, ?)`,
-    ).bind(team.id, gameDate, JSON.stringify(attendees), JSON.stringify(incidents)).run().catch((e) => logger.warn({ module: "pub" }, "insert pub_session", e));
+      `INSERT INTO pub_sessions (team_id, game_date, attendees, incidents, daily_special) VALUES (?, ?, ?, ?, ?)`,
+    ).bind(team.id, gameDate, JSON.stringify(attendees), JSON.stringify(incidents), pickRandom(DAILY_SPECIALS)).run().catch((e) => logger.warn({ module: "pub" }, "insert pub_session", e));
 
     // Apply effects
     const effectStmts = await applyIncidentEffects(db, incidents);

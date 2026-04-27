@@ -2325,9 +2325,9 @@ teamsRouter.get("/:id/pub-sessions", async (c) => {
   const limit = Math.min(Number(c.req.query("limit") ?? 20), 60);
 
   const rows = await c.env.DB.prepare(
-    `SELECT id, game_date, attendees, incidents, created_at FROM pub_sessions
+    `SELECT id, game_date, attendees, incidents, daily_special, created_at FROM pub_sessions
      WHERE team_id = ? ORDER BY game_date DESC, created_at DESC LIMIT ?`,
-  ).bind(teamId, limit).all<{ id: number; game_date: string; attendees: string; incidents: string; created_at: string }>()
+  ).bind(teamId, limit).all<{ id: number; game_date: string; attendees: string; incidents: string; daily_special: string | null; created_at: string }>()
     .catch((e) => { logger.warn({ module: "teams" }, "load pub sessions history", e); return { results: [] }; });
 
   const sessions = rows.results.map((s) => {
@@ -2335,7 +2335,7 @@ teamsRouter.get("/:id/pub-sessions", async (c) => {
     let incidents: unknown[] = [];
     try { attendees = JSON.parse(s.attendees); } catch (e) { logger.warn({ module: "teams" }, "parse pub attendees", e); }
     try { incidents = JSON.parse(s.incidents); } catch (e) { logger.warn({ module: "teams" }, "parse pub incidents", e); }
-    return { id: s.id, gameDate: s.game_date, attendees, incidents, createdAt: s.created_at };
+    return { id: s.id, gameDate: s.game_date, attendees, incidents, dailySpecial: s.daily_special, createdAt: s.created_at };
   });
 
   return c.json({ sessions });
@@ -2346,9 +2346,9 @@ teamsRouter.get("/:id/pub-session", async (c) => {
   const teamId = c.req.param("id");
 
   const session = await c.env.DB.prepare(
-    `SELECT id, game_date, attendees, incidents, created_at FROM pub_sessions
+    `SELECT id, game_date, attendees, incidents, daily_special, created_at FROM pub_sessions
      WHERE team_id = ? ORDER BY game_date DESC, created_at DESC LIMIT 1`,
-  ).bind(teamId).first<{ id: number; game_date: string; attendees: string; incidents: string; created_at: string }>()
+  ).bind(teamId).first<{ id: number; game_date: string; attendees: string; incidents: string; daily_special: string | null; created_at: string }>()
     .catch((e) => { logger.warn({ module: "teams" }, "load pub session", e); return null; });
 
   if (!session) return c.json({ session: null });
@@ -2364,6 +2364,7 @@ teamsRouter.get("/:id/pub-session", async (c) => {
       gameDate: session.game_date,
       attendees,
       incidents,
+      dailySpecial: session.daily_special,
       createdAt: session.created_at,
     },
   });

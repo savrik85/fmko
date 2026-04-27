@@ -97,7 +97,7 @@ export default function DashboardPage() {
   const [news, setNews] = useState<Array<{ id: string; type: string; headline: string; icon: string; date: string }>>([]);
   const [achievements, setAchievements] = useState<Array<{ key: string; icon: string; title: string; tier: string; earnedAt: string | null }>>([]);
   const [hofRank, setHofRank] = useState<{ myRank: number | null; myTotal: number; myGold: number; mySilver: number; myBronze: number; top3: Array<{ rank: number; teamName: string; total: number }>; totalEntries: number } | null>(null);
-  const [pubSession, setPubSession] = useState<{ gameDate: string; attendees: Array<{ playerId: string; firstName: string; lastName: string; alcohol: number; teamId: string; isVisitor: boolean; fromTeamName?: string }>; incidents: Array<{ type: string; playerIds: string[]; text: string; effects?: Array<{ playerId: string; type: string; delta?: number; injuryDays?: number; label: string }> }> } | null>(null);
+  const [pubSession, setPubSession] = useState<{ gameDate: string; dailySpecial?: string | null; attendees: Array<{ playerId: string; firstName: string; lastName: string; alcohol: number; teamId: string; isVisitor: boolean; fromTeamName?: string }>; incidents: Array<{ type: string; playerIds: string[]; text: string; effects?: Array<{ playerId: string; type: string; delta?: number; injuryDays?: number; label: string }> }> } | null>(null);
   const [promoting, setPromoting] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -140,7 +140,7 @@ export default function DashboardPage() {
         ))
         .catch((e) => console.error("achievements fetch:", e));
       // Fetch poslední pub session
-      apiFetch<{ session: { gameDate: string; attendees: Array<{ playerId: string; firstName: string; lastName: string; alcohol: number; teamId: string; isVisitor: boolean; fromTeamName?: string }>; incidents: Array<{ type: string; playerIds: string[]; text: string; effects?: Array<{ playerId: string; type: string; delta?: number; injuryDays?: number; label: string }> }> } | null }>(`/api/teams/${teamId}/pub-session`)
+      apiFetch<{ session: { gameDate: string; dailySpecial?: string | null; attendees: Array<{ playerId: string; firstName: string; lastName: string; alcohol: number; teamId: string; isVisitor: boolean; fromTeamName?: string }>; incidents: Array<{ type: string; playerIds: string[]; text: string; effects?: Array<{ playerId: string; type: string; delta?: number; injuryDays?: number; label: string }> }> } | null }>(`/api/teams/${teamId}/pub-session`)
         .then((d) => setPubSession(d.session))
         .catch((e) => console.error("pub-session fetch:", e));
       // Fetch Hall of Fame — compute my rank (humans only)
@@ -299,6 +299,12 @@ export default function DashboardPage() {
           <div className="h-1" style={{ background: scarfSecondary }} />
           <div className="bg-white p-4 sm:p-5">
 
+          {pubSession.dailySpecial && (
+            <div className="mb-3 -mx-4 -mt-4 sm:-mx-5 sm:-mt-5 px-4 sm:px-5 py-2 text-[11px] uppercase font-heading tracking-wider text-amber-800 bg-amber-50 border-b border-amber-100">
+              📋 {pubSession.dailySpecial}
+            </div>
+          )}
+
           {pubSession.attendees.length > 0 && (
             <div className="text-sm mb-3">
               <span className="text-muted">V hospodě seděli: </span>
@@ -327,6 +333,10 @@ export default function DashboardPage() {
                   : inc.type === "nobody" ? "🌙"
                   : inc.type === "coach_led_visit" ? "🧑‍🏫"
                   : inc.type === "coach_led_one" ? "🧑‍🏫"
+                  : inc.type === "cat" ? "🐈"
+                  : inc.type === "priest" ? "⛪"
+                  : inc.type === "scout" ? "🕵️"
+                  : inc.type === "wife_call" ? "📞"
                   : "•";
                 const playerNameById = (id: string) => {
                   const a = pubSession.attendees.find((x) => x.playerId === id);
