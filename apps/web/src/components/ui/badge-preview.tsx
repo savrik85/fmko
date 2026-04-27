@@ -78,7 +78,7 @@ export function BadgePreview({ primary, secondary, pattern, initials, size = 64,
       {symbol === "svg:crescent" ? (
         // Turecký půlměsíc (bílý) — kruh + ofsetovaný "ořezávací" kruh barvy primary, simulující subtract
         (() => {
-          const cR = symbolSize * 0.55;
+          const cR = symbolSize * 0.42;
           const cx = half;
           const cy = symbolY;
           const off = cR * 0.42;
