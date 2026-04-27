@@ -279,8 +279,8 @@ export default function DashboardPage() {
                 pattern={(team.badge_pattern as BadgePattern) || "shield"}
                 initials={badgeInit}
                 symbol={team.badge_symbol}
-                width={160}
-                height={56}
+                width={320}
+                height={72}
                 className="hidden sm:block"
               />
             </div>

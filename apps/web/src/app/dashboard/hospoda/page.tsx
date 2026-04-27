@@ -137,8 +137,8 @@ export default function HospodaPage() {
               pattern={(team?.badge_pattern as BadgePattern) || "shield"}
               initials={badgeInit}
               symbol={team?.badge_symbol}
-              width={220}
-              height={80}
+              width={460}
+              height={110}
               className="hidden sm:block"
             />
           </div>
