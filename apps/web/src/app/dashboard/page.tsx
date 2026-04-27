@@ -315,7 +315,7 @@ export default function DashboardPage() {
           )}
 
           {pubSession.incidents.length > 0 && (
-            <ul className="space-y-2">
+            <ul className="divide-y divide-gray-100">
               {pubSession.incidents.map((inc, i) => {
                 const icon = inc.type === "cross_team_fight" ? "🥊"
                   : inc.type === "cross_team_brotherhood" ? "🍻"
@@ -333,7 +333,7 @@ export default function DashboardPage() {
                   return a ? `${a.firstName} ${a.lastName}` : "?";
                 };
                 return (
-                  <li key={i} className="text-sm">
+                  <li key={i} className="text-sm py-2 first:pt-0 last:pb-0">
                     <div className="flex gap-2 items-start">
                       <span className="shrink-0">{icon}</span>
                       <span className="text-ink leading-snug">{inc.text}</span>

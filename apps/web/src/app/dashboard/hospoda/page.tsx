@@ -233,14 +233,14 @@ export default function HospodaPage() {
                 )}
 
                 {s.incidents.length > 0 && (
-                  <ul className="space-y-2 mt-2">
+                  <ul className="divide-y divide-gray-100 mt-2">
                     {s.incidents.map((inc, i) => {
                       const playerNameById = (id: string) => {
                         const a = s.attendees.find((x) => x.playerId === id);
                         return a ? `${a.firstName} ${a.lastName}` : "?";
                       };
                       return (
-                        <li key={i} className="text-sm">
+                        <li key={i} className="text-sm py-2 first:pt-0 last:pb-0">
                           <div className="flex gap-2 items-start">
                             <span className="shrink-0">{INCIDENT_ICON[inc.type] ?? "•"}</span>
                             <span className="text-ink leading-snug">{inc.text}</span>
