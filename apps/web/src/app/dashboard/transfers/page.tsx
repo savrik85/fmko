@@ -25,6 +25,19 @@ interface TransfersOverview {
   topBuyers: Array<{ teamId: string; teamName: string; spent: number; count: number }>;
   mostActive: Array<{ teamId: string; teamName: string; in: number; out: number; total: number }>;
   recent: Array<{ playerId: string; playerName: string; fromTeamId: string | null; fromTeam: string | null; toTeamId: string; toTeam: string; fee: number; date: string; isCrossLeague: boolean }>;
+  speculations?: Array<{
+    playerId: string;
+    playerName: string;
+    playerAvatar?: Record<string, unknown>;
+    position: string;
+    overallRating: number;
+    currentTeamId: string;
+    currentTeamName: string;
+    currentTeamColor: string | null;
+    currentTeamSecondary: string | null;
+    watcherCount: number;
+    latestWatchedAt: string;
+  }>;
 }
 
 function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
@@ -173,6 +186,72 @@ function BiggestTransferCard({ rank, transfer }: {
           {transfer.fee.toLocaleString("cs")}
         </span>
         <span className="text-[10px] sm:text-xs text-muted uppercase tracking-wide">Kč</span>
+      </div>
+    </div>
+  );
+}
+
+function relativeTimeCs(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "";
+  const diffMs = Date.now() - t;
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return "právě teď";
+  if (min < 60) return `před ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `před ${h} h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `před ${d} dny`;
+  const w = Math.floor(d / 7);
+  if (w < 5) return `před ${w} týdny`;
+  const mo = Math.floor(d / 30);
+  return `před ${mo} měs`;
+}
+
+function SpeculationCard({ s }: { s: NonNullable<TransfersOverview["speculations"]>[number] }) {
+  const hasAvatar = s.playerAvatar && Object.keys(s.playerAvatar).length > 0;
+  const hot = s.watcherCount >= 3;
+  return (
+    <div className="relative flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg bg-white border-l-4 border-l-amber-400 hover:shadow-sm transition-shadow">
+      <div className="relative shrink-0">
+        {hasAvatar ? (
+          <div className="rounded-full overflow-hidden bg-gradient-to-br from-amber-50 to-gray-100 ring-2 ring-white shadow-sm">
+            <FaceAvatar faceConfig={s.playerAvatar as Record<string, unknown>} size={56} />
+          </div>
+        ) : (
+          <div className="w-14 h-[67px] rounded-full bg-gray-100 flex items-center justify-center text-2xl text-gray-400">👤</div>
+        )}
+        {hot && (
+          <span className="absolute -top-1 -right-1 text-base" title="Hot — sledovaný 3+ týmy">🔥</span>
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-1">
+          <Link href={`/dashboard/player/${s.playerId}`} className="text-sm sm:text-base font-heading font-bold hover:text-pitch-500 truncate">
+            {s.playerName}
+          </Link>
+          <span className="text-[10px] text-muted shrink-0">·</span>
+          <span className="text-[11px] sm:text-xs text-muted shrink-0 tabular-nums">{s.position} · {s.overallRating}</span>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <TeamChip
+            teamId={s.currentTeamId}
+            name={s.currentTeamName}
+            color={s.currentTeamColor}
+            secondary={s.currentTeamSecondary}
+            href={`/dashboard/team/${s.currentTeamId}`}
+          />
+          <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs text-muted whitespace-nowrap">
+            <span aria-hidden>👁️</span>
+            <span className="font-heading font-bold text-amber-700 tabular-nums">{s.watcherCount}</span>
+            <span>{s.watcherCount === 1 ? "tým" : s.watcherCount < 5 ? "týmy" : "týmů"}</span>
+          </span>
+        </div>
+      </div>
+
+      <div className="shrink-0 text-right">
+        <div className="text-[10px] sm:text-xs text-muted whitespace-nowrap">{relativeTimeCs(s.latestWatchedAt)}</div>
       </div>
     </div>
   );
@@ -639,6 +718,21 @@ export default function TransfersPage() {
                   <div className="space-y-2 sm:space-y-3">
                     {overview.biggest.slice(0, 5).map((t, i) => (
                       <BiggestTransferCard key={`${t.playerId}-${t.date}`} rank={i + 1} transfer={t} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Spekulace — sledovaní hráči */}
+              {overview.speculations && overview.speculations.length > 0 && (
+                <div className="card p-4 sm:p-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <SectionLabel>Spekulace</SectionLabel>
+                    <span className="text-[10px] sm:text-xs text-muted">Hráči ve hledáčku jiných týmů</span>
+                  </div>
+                  <div className="space-y-2 sm:space-y-3">
+                    {overview.speculations.slice(0, 5).map((s) => (
+                      <SpeculationCard key={s.playerId} s={s} />
                     ))}
                   </div>
                 </div>

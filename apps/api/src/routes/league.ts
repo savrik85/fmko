@@ -413,6 +413,42 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   // Recent 20
   const recent = leagueTransfers.slice(0, 20);
 
+  // Spekulace — 5 nejnověji watched hráčů z týmů v této lize (sledování od jiných týmů)
+  const speculationsRes = await c.env.DB.prepare(
+    `SELECT
+       pw.player_id,
+       p.first_name, p.last_name, p.avatar as player_avatar, p.position, p.overall_rating,
+       pc.team_id as current_team_id,
+       t.name as current_team_name,
+       t.primary_color as current_primary_color,
+       t.secondary_color as current_secondary_color,
+       COUNT(DISTINCT pw.team_id) as watcher_count,
+       MAX(pw.created_at) as latest_watched_at
+     FROM player_watchlist pw
+     JOIN players p ON pw.player_id = p.id
+     JOIN player_contracts pc ON pc.player_id = p.id AND pc.is_active = 1
+     JOIN teams t ON pc.team_id = t.id
+     WHERE t.league_id = ?
+       AND pw.team_id != pc.team_id
+     GROUP BY pw.player_id
+     ORDER BY latest_watched_at DESC
+     LIMIT 5`
+  ).bind(leagueId).all().catch((e) => { logger.warn({ module: "league" }, "fetch speculations", e); return { results: [] }; });
+
+  const speculations = (speculationsRes.results as any[]).map((r) => ({
+    playerId: r.player_id as string,
+    playerName: `${r.first_name} ${r.last_name}`,
+    playerAvatar: (() => { try { return JSON.parse(r.player_avatar as string); } catch (e) { logger.warn({ module: "league" }, `parse spec avatar: ${e}`); return {}; } })(),
+    position: r.position as string,
+    overallRating: (r.overall_rating as number) ?? 0,
+    currentTeamId: r.current_team_id as string,
+    currentTeamName: r.current_team_name as string,
+    currentTeamColor: (r.current_primary_color as string | null) ?? null,
+    currentTeamSecondary: (r.current_secondary_color as string | null) ?? null,
+    watcherCount: (r.watcher_count as number) ?? 0,
+    latestWatchedAt: r.latest_watched_at as string,
+  }));
+
   return c.json({
     stats: {
       totalTransfers,
@@ -427,6 +463,7 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
     topBuyers,
     mostActive,
     recent,
+    speculations,
   });
 });
 
