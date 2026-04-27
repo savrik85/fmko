@@ -254,124 +254,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══ U nás v hospodě — co se včera dělo ═══ */}
-      {pubSession && (pubSession.attendees.length > 0 || pubSession.incidents.length > 0) && (() => {
-        const scarfPrimary = team.badge_primary_color || color;
-        const scarfSecondary = team.badge_secondary_color || team.secondary_color || "#FFF";
-        const badgeInit = team.badge_initials || team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
-        return (
-        <div className="rounded-xl overflow-hidden shadow-sm" style={{ background: "#F5EDDF" }}>
-          <div className="h-1" style={{ background: scarfPrimary }} />
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3">
-            {/* Šála: mobile full width 50px, desktop fixed 160×56 */}
-            <div className="w-full sm:w-auto">
-              <ClubScarf
-                primary={scarfPrimary}
-                secondary={scarfSecondary}
-                pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                initials={badgeInit}
-                symbol={team.badge_symbol}
-                className="block sm:hidden h-12 w-full"
-              />
-              <ClubScarf
-                primary={scarfPrimary}
-                secondary={scarfSecondary}
-                pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                initials={badgeInit}
-                symbol={team.badge_symbol}
-                width={320}
-                height={72}
-                className="hidden sm:block"
-              />
-            </div>
-            <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="font-heading font-[800] text-xl leading-none text-ink">U nás v hospodě</h2>
-                <div className="text-[11px] uppercase text-muted mt-1">
-                  {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
-                </div>
-              </div>
-              <Link href="/dashboard/hospoda" className="text-xs font-heading font-bold text-pitch-500 hover:text-pitch-600 whitespace-nowrap shrink-0">
-                Historie →
-              </Link>
-            </div>
-          </div>
-          <div className="h-1" style={{ background: scarfSecondary }} />
-          <div className="bg-white p-4 sm:p-5">
-
-          {pubSession.dailySpecial && (
-            <div className="mb-3 -mx-4 -mt-4 sm:-mx-5 sm:-mt-5 px-4 sm:px-5 py-2 text-[11px] uppercase font-heading tracking-wider text-amber-800 bg-amber-50 border-b border-amber-100">
-              📋 {pubSession.dailySpecial}
-            </div>
-          )}
-
-          {pubSession.attendees.length > 0 && (
-            <div className="text-sm mb-3">
-              <span className="text-muted">V hospodě seděli: </span>
-              {pubSession.attendees.map((a, i) => (
-                <span key={a.playerId}>
-                  {i > 0 && ", "}
-                  <Link href={a.isVisitor ? "#" : `/dashboard/player/${a.playerId}`} className={`font-heading font-bold ${a.isVisitor ? "text-amber-600" : "hover:text-pitch-500 underline decoration-pitch-500/20"}`}>
-                    {a.firstName} {a.lastName}
-                  </Link>
-                  {a.isVisitor && <span className="text-[10px] text-amber-600 ml-1">({a.fromTeamName})</span>}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {pubSession.incidents.length > 0 && (
-            <ul className="divide-y divide-gray-100">
-              {pubSession.incidents.map((inc, i) => {
-                const icon = inc.type === "cross_team_fight" ? "🥊"
-                  : inc.type === "cross_team_brotherhood" ? "🍻"
-                  : inc.type === "cross_team_provocation" ? "👊"
-                  : inc.type === "drink_record" ? "🍺"
-                  : inc.type === "automat_win" ? "💰"
-                  : inc.type === "story" ? "📰"
-                  : inc.type === "lone_drinker" ? "🪑"
-                  : inc.type === "nobody" ? "🌙"
-                  : inc.type === "coach_led_visit" ? "🧑‍🏫"
-                  : inc.type === "coach_led_one" ? "🧑‍🏫"
-                  : inc.type === "cat" ? "🐈"
-                  : inc.type === "priest" ? "⛪"
-                  : inc.type === "scout" ? "🕵️"
-                  : inc.type === "wife_call" ? "📞"
-                  : "•";
-                const playerNameById = (id: string) => {
-                  const a = pubSession.attendees.find((x) => x.playerId === id);
-                  return a ? `${a.firstName} ${a.lastName}` : "?";
-                };
-                return (
-                  <li key={i} className="text-sm py-2 first:pt-0 last:pb-0">
-                    <div className="flex gap-2 items-start">
-                      <span className="shrink-0">{icon}</span>
-                      <span className="text-ink leading-snug">{inc.text}</span>
-                    </div>
-                    {inc.effects && inc.effects.length > 0 && (
-                      <div className="ml-7 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
-                        {inc.effects.map((ef, ei) => {
-                          const efColor = ef.type === "injury" || ef.type === "hangover" || (ef.delta != null && ef.delta < 0) ? "text-card-red"
-                            : ef.delta != null && ef.delta > 0 ? "text-pitch-500"
-                            : "text-muted";
-                          return (
-                            <span key={ei} className={efColor}>
-                              <span className="text-muted">{playerNameById(ef.playerId)}:</span> <span className="font-heading font-bold">{ef.label}</span>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          </div>
-        </div>
-        );
-      })()}
-
       {/* ═══ Row 1: Next match | Tabulka | Stav kádru ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-[auto_auto] gap-5">
 
@@ -748,6 +630,123 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* ═══ U nás v hospodě — co se včera dělo (1/3 vlevo: šála+nadpis | 2/3 vpravo: eventy) ═══ */}
+      {pubSession && (pubSession.attendees.length > 0 || pubSession.incidents.length > 0) && (() => {
+        const scarfPrimary = team.badge_primary_color || color;
+        const scarfSecondary = team.badge_secondary_color || team.secondary_color || "#FFF";
+        const badgeInit = team.badge_initials || team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+        return (
+        <div className="rounded-xl overflow-hidden shadow-sm" style={{ background: "#F5EDDF" }}>
+          <div className="h-1" style={{ background: scarfPrimary }} />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 lg:divide-x lg:divide-amber-200/50">
+            {/* LEVÁ KOLONA 1/3 — šála + nadpis + datum + Historie link */}
+            <div className="flex flex-col items-center text-center gap-3 px-5 py-5 lg:py-6">
+              <ClubScarf
+                primary={scarfPrimary}
+                secondary={scarfSecondary}
+                pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                initials={badgeInit}
+                symbol={team.badge_symbol}
+                className="h-14 w-full sm:hidden"
+              />
+              <ClubScarf
+                primary={scarfPrimary}
+                secondary={scarfSecondary}
+                pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                initials={badgeInit}
+                symbol={team.badge_symbol}
+                width={260}
+                height={80}
+                className="hidden sm:block"
+              />
+              <div>
+                <h2 className="font-heading font-[800] text-xl leading-none text-ink">U nás v hospodě</h2>
+                <div className="text-[11px] uppercase text-muted mt-1">
+                  {new Date(pubSession.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })} večer
+                </div>
+              </div>
+              <Link href="/dashboard/hospoda" className="text-xs font-heading font-bold text-pitch-500 hover:text-pitch-600 whitespace-nowrap">
+                Historie →
+              </Link>
+            </div>
+
+            {/* PRAVÁ KOLONA 2/3 — daily special + attendees + incidenty */}
+            <div className="lg:col-span-2 bg-white p-4 sm:p-5">
+              {pubSession.dailySpecial && (
+                <div className="mb-3 -mx-4 -mt-4 sm:-mx-5 sm:-mt-5 px-4 sm:px-5 py-2 text-[11px] uppercase font-heading tracking-wider text-amber-800 bg-amber-50 border-b border-amber-100">
+                  📋 {pubSession.dailySpecial}
+                </div>
+              )}
+
+              {pubSession.attendees.length > 0 && (
+                <div className="text-sm mb-3">
+                  <span className="text-muted">V hospodě seděli: </span>
+                  {pubSession.attendees.map((a, i) => (
+                    <span key={a.playerId}>
+                      {i > 0 && ", "}
+                      <Link href={a.isVisitor ? "#" : `/dashboard/player/${a.playerId}`} className={`font-heading font-bold ${a.isVisitor ? "text-amber-600" : "hover:text-pitch-500 underline decoration-pitch-500/20"}`}>
+                        {a.firstName} {a.lastName}
+                      </Link>
+                      {a.isVisitor && <span className="text-[10px] text-amber-600 ml-1">({a.fromTeamName})</span>}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {pubSession.incidents.length > 0 && (
+                <ul className="divide-y divide-gray-100">
+                  {pubSession.incidents.map((inc, i) => {
+                    const icon = inc.type === "cross_team_fight" ? "🥊"
+                      : inc.type === "cross_team_brotherhood" ? "🍻"
+                      : inc.type === "cross_team_provocation" ? "👊"
+                      : inc.type === "drink_record" ? "🍺"
+                      : inc.type === "automat_win" ? "💰"
+                      : inc.type === "story" ? "📰"
+                      : inc.type === "lone_drinker" ? "🪑"
+                      : inc.type === "nobody" ? "🌙"
+                      : inc.type === "coach_led_visit" ? "🧑‍🏫"
+                      : inc.type === "coach_led_one" ? "🧑‍🏫"
+                      : inc.type === "cat" ? "🐈"
+                      : inc.type === "priest" ? "⛪"
+                      : inc.type === "scout" ? "🕵️"
+                      : inc.type === "wife_call" ? "📞"
+                      : "•";
+                    const playerNameById = (id: string) => {
+                      const a = pubSession.attendees.find((x) => x.playerId === id);
+                      return a ? `${a.firstName} ${a.lastName}` : "?";
+                    };
+                    return (
+                      <li key={i} className="text-sm py-2 first:pt-0 last:pb-0">
+                        <div className="flex gap-2 items-start">
+                          <span className="shrink-0">{icon}</span>
+                          <span className="text-ink leading-snug">{inc.text}</span>
+                        </div>
+                        {inc.effects && inc.effects.length > 0 && (
+                          <div className="ml-7 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+                            {inc.effects.map((ef, ei) => {
+                              const efColor = ef.type === "injury" || ef.type === "hangover" || (ef.delta != null && ef.delta < 0) ? "text-card-red"
+                                : ef.delta != null && ef.delta > 0 ? "text-pitch-500"
+                                : "text-muted";
+                              return (
+                                <span key={ei} className={efColor}>
+                                  <span className="text-muted">{playerNameById(ef.playerId)}:</span> <span className="font-heading font-bold">{ef.label}</span>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+          <div className="h-1" style={{ background: scarfSecondary }} />
+        </div>
+        );
+      })()}
 
       {/* ═══ Row 2: Rozpis + Bilance + Zpravodaj ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
