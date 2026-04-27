@@ -106,7 +106,7 @@ export function ClubScarf({
       {/* Klubový znak — menší, aby šála byla čitelná */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div
-          className="rounded-full"
+          className="rounded-full ring-2 ring-black/85"
           style={{
             background: "rgba(255,255,255,0.95)",
             padding: 2,
