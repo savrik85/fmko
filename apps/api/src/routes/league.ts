@@ -8,6 +8,15 @@ import { logger } from "../lib/logger";
 
 const leagueRouter = new Hono<{ Bindings: Bindings }>();
 
+function deriveInitials(name: string | null | undefined): string {
+  if (!name) return "?";
+  const cleaned = String(name).replace(/^FK\s+/i, "").replace(/^SK\s+/i, "").replace(/^TJ\s+/i, "").trim();
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
+  return words.slice(0, 3).map((w) => w[0] ?? "").join("").toUpperCase();
+}
+
 // GET /api/teams/:teamId/standings — real standings from DB
 leagueRouter.get("/teams/:teamId/standings", async (c) => {
   const teamId = c.req.param("teamId");
@@ -299,6 +308,7 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
        t_to.name as to_team_name, t_to.league_id as to_league_id,
        t_to.badge_primary_color as to_badge_primary, t_to.badge_secondary_color as to_badge_secondary,
        t_to.badge_pattern as to_badge_pattern, t_to.badge_initials as to_badge_initials, t_to.badge_symbol as to_badge_symbol,
+       t_to.primary_color as to_primary_color, t_to.secondary_color as to_secondary_color,
        (SELECT pc2.team_id FROM player_contracts pc2
         WHERE pc2.player_id = pc.player_id
         AND pc2.is_active = 0
@@ -320,10 +330,17 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   if (fromTeamIds.length > 0) {
     const placeholders = fromTeamIds.map(() => "?").join(",");
     const fromTeamsRows = await c.env.DB.prepare(
-      `SELECT id, name, league_id, badge_primary_color, badge_secondary_color, badge_pattern, badge_initials, badge_symbol FROM teams WHERE id IN (${placeholders})`
+      `SELECT id, name, league_id, badge_primary_color, badge_secondary_color, badge_pattern, badge_initials, badge_symbol, primary_color, secondary_color FROM teams WHERE id IN (${placeholders})`
     ).bind(...fromTeamIds).all().catch(() => ({ results: [] }));
     for (const r of fromTeamsRows.results as any[]) {
-      fromTeamsMap[r.id] = { name: r.name, leagueId: r.league_id, badgePrimary: r.badge_primary_color, badgeSecondary: r.badge_secondary_color, badgePattern: r.badge_pattern, badgeInitials: r.badge_initials, badgeSymbol: r.badge_symbol };
+      fromTeamsMap[r.id] = {
+        name: r.name, leagueId: r.league_id,
+        badgePrimary: r.badge_primary_color ?? r.primary_color,
+        badgeSecondary: r.badge_secondary_color ?? r.secondary_color,
+        badgePattern: r.badge_pattern,
+        badgeInitials: r.badge_initials ?? deriveInitials(r.name),
+        badgeSymbol: r.badge_symbol,
+      };
     }
   }
 
@@ -346,10 +363,10 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
         symbol: fromTeam.badgeSymbol ?? null,
       } : null;
       const toBadge = {
-        primary: (r.to_badge_primary as string | null) ?? "#374151",
-        secondary: (r.to_badge_secondary as string | null) ?? "#9ca3af",
+        primary: (r.to_badge_primary as string | null) ?? (r.to_primary_color as string | null) ?? "#374151",
+        secondary: (r.to_badge_secondary as string | null) ?? (r.to_secondary_color as string | null) ?? "#9ca3af",
         pattern: (r.to_badge_pattern as string | null) ?? "shield",
-        initials: (r.to_badge_initials as string | null) ?? "?",
+        initials: (r.to_badge_initials as string | null) ?? deriveInitials(r.to_team_name as string),
         symbol: (r.to_badge_symbol as string | null) ?? null,
       };
       return {
@@ -436,6 +453,7 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
        t.name as current_team_name,
        t.badge_primary_color as cur_badge_primary, t.badge_secondary_color as cur_badge_secondary,
        t.badge_pattern as cur_badge_pattern, t.badge_initials as cur_badge_initials, t.badge_symbol as cur_badge_symbol,
+       t.primary_color as cur_primary_color, t.secondary_color as cur_secondary_color,
        COUNT(DISTINCT pw.team_id) as watcher_count,
        MAX(pw.created_at) as latest_watched_at
      FROM player_watchlist pw
@@ -458,10 +476,10 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
     currentTeamId: r.current_team_id as string,
     currentTeamName: r.current_team_name as string,
     currentTeamBadge: {
-      primary: (r.cur_badge_primary as string | null) ?? "#374151",
-      secondary: (r.cur_badge_secondary as string | null) ?? "#9ca3af",
+      primary: (r.cur_badge_primary as string | null) ?? (r.cur_primary_color as string | null) ?? "#374151",
+      secondary: (r.cur_badge_secondary as string | null) ?? (r.cur_secondary_color as string | null) ?? "#9ca3af",
       pattern: (r.cur_badge_pattern as string | null) ?? "shield",
-      initials: (r.cur_badge_initials as string | null) ?? "?",
+      initials: (r.cur_badge_initials as string | null) ?? deriveInitials(r.current_team_name as string),
       symbol: (r.cur_badge_symbol as string | null) ?? null,
     },
     watcherCount: (r.watcher_count as number) ?? 0,

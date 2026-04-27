@@ -122,23 +122,27 @@ function ClubLink({ teamId, name, badge, href, withBadge = true, bold = true, ba
 }
 
 function FancyArrow({ size = "sm" }: { size?: "xs" | "sm" | "md" | "lg" }) {
-  const dim = size === "lg" ? { w: 56, h: 18 } : size === "md" ? { w: 42, h: 14 } : size === "xs" ? { w: 22, h: 10 } : { w: 32, h: 12 };
-  const id = `arrow-grad-${size}`;
+  const dim = size === "lg" ? { w: 96, h: 32 } : size === "md" ? { w: 64, h: 22 } : size === "xs" ? { w: 28, h: 14 } : { w: 40, h: 18 };
+  const id = `arrow-grad-${size}-${Math.random().toString(36).slice(2, 7)}`;
+  // tělo šípu: trojúhelníková špička + obdélníkové dříko
+  const stem = dim.h * 0.32;          // tloušťka dříku
+  const stemY1 = (dim.h - stem) / 2;
+  const stemY2 = stemY1 + stem;
+  const headStart = dim.w * 0.6;
   return (
-    <svg className="shrink-0" width={dim.w} height={dim.h} viewBox={`0 0 ${dim.w} ${dim.h}`} aria-hidden>
+    <svg className="shrink-0 drop-shadow-sm" width={dim.w} height={dim.h} viewBox={`0 0 ${dim.w} ${dim.h}`} aria-hidden>
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor="#86efac" />
-          <stop offset="60%" stopColor="#22c55e" />
+          <stop offset="55%" stopColor="#22c55e" />
           <stop offset="100%" stopColor="#15803d" />
         </linearGradient>
       </defs>
-      {/* tělo šípu — zužující se trojúhelníkový tvar */}
       <path
-        d={`M 0 ${dim.h * 0.4} L ${dim.w * 0.65} ${dim.h * 0.4} L ${dim.w * 0.65} ${dim.h * 0.15} L ${dim.w} ${dim.h / 2} L ${dim.w * 0.65} ${dim.h * 0.85} L ${dim.w * 0.65} ${dim.h * 0.6} L 0 ${dim.h * 0.6} Z`}
+        d={`M 0 ${stemY1} L ${headStart} ${stemY1} L ${headStart} 2 L ${dim.w - 1} ${dim.h / 2} L ${headStart} ${dim.h - 2} L ${headStart} ${stemY2} L 0 ${stemY2} Z`}
         fill={`url(#${id})`}
-        stroke="#15803d"
-        strokeWidth="0.6"
+        stroke="#14532d"
+        strokeWidth="1"
         strokeLinejoin="round"
       />
     </svg>
