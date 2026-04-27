@@ -378,32 +378,32 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   const biggest = [...leagueTransfers].sort((a, b) => b.fee - a.fee).slice(0, 10);
 
   // Top sellers (most earned) — aggregate by fromTeamId
-  const sellersMap = new Map<string, { teamId: string; teamName: string; earned: number; count: number }>();
+  const sellersMap = new Map<string, { teamId: string; teamName: string; primaryColor: string | null; secondaryColor: string | null; earned: number; count: number }>();
   for (const t of leagueTransfers) {
     if (!t.fromTeamId || !t.fromTeam) continue;
     const existing = sellersMap.get(t.fromTeamId);
     if (existing) { existing.earned += t.fee; existing.count++; }
-    else sellersMap.set(t.fromTeamId, { teamId: t.fromTeamId, teamName: t.fromTeam, earned: t.fee, count: 1 });
+    else sellersMap.set(t.fromTeamId, { teamId: t.fromTeamId, teamName: t.fromTeam, primaryColor: t.fromTeamColor, secondaryColor: t.fromTeamSecondary, earned: t.fee, count: 1 });
   }
   const topSellers = [...sellersMap.values()].sort((a, b) => b.earned - a.earned).slice(0, 5);
 
   // Top buyers (most spent) — aggregate by toTeamId
-  const buyersMap = new Map<string, { teamId: string; teamName: string; spent: number; count: number }>();
+  const buyersMap = new Map<string, { teamId: string; teamName: string; primaryColor: string | null; secondaryColor: string | null; spent: number; count: number }>();
   for (const t of leagueTransfers) {
     const existing = buyersMap.get(t.toTeamId);
     if (existing) { existing.spent += t.fee; existing.count++; }
-    else buyersMap.set(t.toTeamId, { teamId: t.toTeamId, teamName: t.toTeam, spent: t.fee, count: 1 });
+    else buyersMap.set(t.toTeamId, { teamId: t.toTeamId, teamName: t.toTeam, primaryColor: t.toTeamColor, secondaryColor: t.toTeamSecondary, spent: t.fee, count: 1 });
   }
   const topBuyers = [...buyersMap.values()].sort((a, b) => b.spent - a.spent).slice(0, 5);
 
   // Most active (in + out combined)
-  const activeMap = new Map<string, { teamId: string; teamName: string; in: number; out: number; total: number }>();
+  const activeMap = new Map<string, { teamId: string; teamName: string; primaryColor: string | null; secondaryColor: string | null; in: number; out: number; total: number }>();
   for (const t of leagueTransfers) {
-    const buyer = activeMap.get(t.toTeamId) ?? { teamId: t.toTeamId, teamName: t.toTeam, in: 0, out: 0, total: 0 };
+    const buyer = activeMap.get(t.toTeamId) ?? { teamId: t.toTeamId, teamName: t.toTeam, primaryColor: t.toTeamColor, secondaryColor: t.toTeamSecondary, in: 0, out: 0, total: 0 };
     buyer.in++; buyer.total++;
     activeMap.set(t.toTeamId, buyer);
     if (t.fromTeamId && t.fromTeam) {
-      const seller = activeMap.get(t.fromTeamId) ?? { teamId: t.fromTeamId, teamName: t.fromTeam, in: 0, out: 0, total: 0 };
+      const seller = activeMap.get(t.fromTeamId) ?? { teamId: t.fromTeamId, teamName: t.fromTeam, primaryColor: t.fromTeamColor, secondaryColor: t.fromTeamSecondary, in: 0, out: 0, total: 0 };
       seller.out++; seller.total++;
       activeMap.set(t.fromTeamId, seller);
     }
