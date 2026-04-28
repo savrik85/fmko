@@ -123,6 +123,37 @@ export default function SquadPage() {
     ]).then(([t, p, s]) => { setTeam(t); setPlayers(p); setSeasonStats(s.stats); setLoading(false); });
   }, [teamId]);
 
+  // TOP tab — výpočty leaderů (musí být před early returnem kvůli rules of hooks)
+  const topData = useMemo(() => {
+    const sortBy = (key: keyof PlayerSeasonStats, min = 0) =>
+      seasonStats
+        .filter((s) => (s[key] as number) > min)
+        .sort((a, b) => (b[key] as number) - (a[key] as number))
+        .slice(0, 5);
+    const minutesMin = 1;
+    return {
+      scorers: sortBy("goals", 0),
+      assists: sortBy("assists", 0),
+      mom: sortBy("manOfMatch", 0),
+      cards: [...seasonStats]
+        .map((s) => ({ ...s, _disc: (s.yellowCards ?? 0) + (s.redCards ?? 0) * 3 }))
+        .filter((s) => s._disc > 0)
+        .sort((a, b) => b._disc - a._disc)
+        .slice(0, 5),
+      cleanSheets: seasonStats
+        .filter((s) => s.position === "GK" && (s.cleanSheets ?? 0) > 0)
+        .sort((a, b) => (b.cleanSheets ?? 0) - (a.cleanSheets ?? 0))
+        .slice(0, 5),
+      ratings: seasonStats
+        .filter((s) => (s.minutesPlayed ?? 0) >= minutesMin && (s.avgRating ?? 0) > 0)
+        .sort((a, b) => (b.avgRating ?? 0) - (a.avgRating ?? 0))
+        .slice(0, 5),
+      minutes: [...seasonStats]
+        .sort((a, b) => (b.minutesPlayed ?? 0) - (a.minutesPlayed ?? 0))
+        .slice(0, 5),
+    };
+  }, [seasonStats]);
+
   if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
   if (!team) return <div className="p-6">Tým nenalezen.</div>;
 
@@ -168,37 +199,6 @@ export default function SquadPage() {
     if (statsSortKey === k) setStatsSortDir(statsSortDir === "asc" ? "desc" : "asc");
     else { setStatsSortKey(k); setStatsSortDir(k === "name" ? "asc" : "desc"); }
   };
-
-  // Top tab — výpočty leaderů
-  const topData = useMemo(() => {
-    const sortBy = (key: keyof PlayerSeasonStats, min = 0) =>
-      seasonStats
-        .filter((s) => (s[key] as number) > min)
-        .sort((a, b) => (b[key] as number) - (a[key] as number))
-        .slice(0, 5);
-    const minutesMin = 1;
-    return {
-      scorers: sortBy("goals", 0),
-      assists: sortBy("assists", 0),
-      mom: sortBy("manOfMatch", 0),
-      cards: [...seasonStats]
-        .map((s) => ({ ...s, _disc: (s.yellowCards ?? 0) + (s.redCards ?? 0) * 3 }))
-        .filter((s) => s._disc > 0)
-        .sort((a, b) => b._disc - a._disc)
-        .slice(0, 5),
-      cleanSheets: seasonStats
-        .filter((s) => s.position === "GK" && (s.cleanSheets ?? 0) > 0)
-        .sort((a, b) => (b.cleanSheets ?? 0) - (a.cleanSheets ?? 0))
-        .slice(0, 5),
-      ratings: seasonStats
-        .filter((s) => (s.minutesPlayed ?? 0) >= minutesMin && (s.avgRating ?? 0) > 0)
-        .sort((a, b) => (b.avgRating ?? 0) - (a.avgRating ?? 0))
-        .slice(0, 5),
-      minutes: [...seasonStats]
-        .sort((a, b) => (b.minutesPlayed ?? 0) - (a.minutesPlayed ?? 0))
-        .slice(0, 5),
-    };
-  }, [seasonStats]);
 
   const totalGoals = seasonStats.reduce((s, p) => s + (p.goals ?? 0), 0);
   const totalAssists = seasonStats.reduce((s, p) => s + (p.assists ?? 0), 0);
