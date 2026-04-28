@@ -238,7 +238,8 @@ export default function SquadPage() {
   const totalGoals = seasonStats.reduce((s, p) => s + (p.goals ?? 0), 0);
   const totalAssists = seasonStats.reduce((s, p) => s + (p.assists ?? 0), 0);
   const totalApps = seasonStats.reduce((s, p) => s + (p.appearances ?? 0), 0);
-  const totalCards = seasonStats.reduce((s, p) => s + (p.yellowCards ?? 0) + (p.redCards ?? 0), 0);
+  const totalYellow = seasonStats.reduce((s, p) => s + (p.yellowCards ?? 0), 0);
+  const totalRed = seasonStats.reduce((s, p) => s + (p.redCards ?? 0), 0);
 
   // Summary stats
   const avgRating = players.length ? Math.round(players.reduce((s, p) => s + (p.overall_rating ?? 0), 0) / players.length) : 0;
@@ -421,12 +422,12 @@ export default function SquadPage() {
               <div className="text-[10px] text-muted uppercase tracking-wide">Asistence</div>
             </div>
             <div className="card p-3 text-center">
-              <div className="font-heading font-[800] text-2xl tabular-nums">{totalApps}</div>
-              <div className="text-[10px] text-muted uppercase tracking-wide">Starty</div>
+              <div className="font-heading font-[800] text-2xl tabular-nums text-amber-500">{totalYellow}</div>
+              <div className="text-[10px] text-muted uppercase tracking-wide">Žluté</div>
             </div>
             <div className="card p-3 text-center">
-              <div className="font-heading font-[800] text-2xl tabular-nums text-card-red">{totalCards}</div>
-              <div className="text-[10px] text-muted uppercase tracking-wide">Karty</div>
+              <div className="font-heading font-[800] text-2xl tabular-nums text-card-red">{totalRed}</div>
+              <div className="text-[10px] text-muted uppercase tracking-wide">Červené</div>
             </div>
           </div>
 
@@ -518,14 +519,14 @@ export default function SquadPage() {
             <>
               <div className="text-[11px] font-heading font-bold text-muted uppercase tracking-wider mt-4">{"\u{26BD}"} Sezónní výkonnost</div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <TopList title="\u{26BD} Nejlepší střelci" items={topMatchData.scorers} valueOf={(s) => s.goals ?? 0} suffix="g" />
-                <TopList title="\u{1F3AF} Nejlepší asistenti" items={topMatchData.assists} valueOf={(s) => s.assists ?? 0} suffix="a" />
-                <TopList title="\u{2B50} Avg rating zápasů" items={topMatchData.ratings} valueOf={(s) => (s.avgRating ?? 0).toFixed(1)} />
-                <TopList title="\u{1F451} Hráč zápasu" items={topMatchData.mom} valueOf={(s) => s.manOfMatch ?? 0} suffix="×" />
-                <TopList title="\u{23F1}\u{FE0F} Nejvíce minut" items={topMatchData.minutes} valueOf={(s) => `${s.minutesPlayed ?? 0} '`} />
-                <TopList title="\u{1F9E4} Čistá konta" items={topMatchData.cleanSheets} valueOf={(s) => s.cleanSheets ?? 0} />
+                <TopList title={"\u{26BD} Nejlepší střelci"} items={topMatchData.scorers} valueOf={(s) => s.goals ?? 0} suffix="g" />
+                <TopList title={"\u{1F3AF} Nejlepší asistenti"} items={topMatchData.assists} valueOf={(s) => s.assists ?? 0} suffix="a" />
+                <TopList title={"\u{2B50} Avg rating zápasů"} items={topMatchData.ratings} valueOf={(s) => (s.avgRating ?? 0).toFixed(1)} />
+                <TopList title={"\u{1F451} Hráč zápasu"} items={topMatchData.mom} valueOf={(s) => s.manOfMatch ?? 0} suffix="×" />
+                <TopList title={"\u{23F1}\u{FE0F} Nejvíce minut"} items={topMatchData.minutes} valueOf={(s) => `${s.minutesPlayed ?? 0} '`} />
+                <TopList title={"\u{1F9E4} Čistá konta"} items={topMatchData.cleanSheets} valueOf={(s) => s.cleanSheets ?? 0} />
                 {topMatchData.cards.length > 0 && (
-                  <TopList title="\u{1F7E5} Disciplinární přestupky" items={topMatchData.cards as PlayerSeasonStats[]}
+                  <TopList title={"\u{1F7E5} Disciplinární přestupky"} items={topMatchData.cards as PlayerSeasonStats[]}
                     valueOf={(s) => `${s.yellowCards ?? 0}ŽK / ${s.redCards ?? 0}ČK`} />
                 )}
               </div>
@@ -534,28 +535,6 @@ export default function SquadPage() {
         </>
       )}
 
-      {/* OLD-TOP-START — keep wrapped in false so Edit can match */}
-      {false && false && false && (
-        false ? (
-          <div className="card p-6 text-center text-sm text-muted">
-            {"\u{2139}\u{FE0F}"} Žebříčky se naplní po prvním odehraném zápase.{" "}
-            <Link href="/dashboard/schedule" className="text-pitch-600 underline">Rozpis zápasů</Link>
-          </div>
-        ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <TopList title="\u{26BD} Nejlepší střelci" items={topMatchData.scorers} valueOf={(s) => s.goals ?? 0} suffix="g" />
-          <TopList title="\u{1F3AF} Nejlepší asistenti" items={topMatchData.assists} valueOf={(s) => s.assists ?? 0} suffix="a" />
-          <TopList title="\u{2B50} Nejlepší rating" items={topMatchData.ratings} valueOf={(s) => (s.avgRating ?? 0).toFixed(1)} />
-          <TopList title="\u{1F451} Hráč zápasu" items={topMatchData.mom} valueOf={(s) => s.manOfMatch ?? 0} suffix="×" />
-          <TopList title="\u{23F1}\u{FE0F} Nejvíce minut" items={topMatchData.minutes} valueOf={(s) => `${s.minutesPlayed ?? 0} '`} />
-          <TopList title="\u{1F9E4} Čistá konta" items={topMatchData.cleanSheets} valueOf={(s) => s.cleanSheets ?? 0} suffix="" />
-          {topMatchData.cards.length > 0 && (
-            <TopList title="\u{1F7E5} Disciplinární přestupky" items={topMatchData.cards as PlayerSeasonStats[]}
-              valueOf={(s) => `${s.yellowCards ?? 0}ŽK / ${s.redCards ?? 0}ČK`} />
-          )}
-        </div>
-        )
-      )}
     </div>
   );
 }
