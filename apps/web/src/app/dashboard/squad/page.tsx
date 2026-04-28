@@ -1,14 +1,39 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { Spinner, PositionBadge } from "@/components/ui";
 
+type Tab = "atributy" | "sezona" | "top";
 type PosFilter = "all" | "GK" | "DEF" | "MID" | "FWD";
 type SortKey = "name" | "pos" | "age" | "rat" | "spd" | "tec" | "sho" | "pas" | "hea" | "def" | "gk" | "sta" | "str" | "cond" | "mor" | "wage";
+type StatsKey = "name" | "pos" | "apps" | "min" | "g" | "a" | "ga" | "y" | "r" | "cs" | "mom" | "avg";
 type SortDir = "asc" | "desc";
+
+interface PlayerSeasonStats {
+  playerId: string;
+  firstName: string;
+  lastName: string;
+  nickname: string | null;
+  position: "GK" | "DEF" | "MID" | "FWD";
+  appearances: number;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCards: number;
+  minutesPlayed: number;
+  avgRating: number | null;
+  cleanSheets: number;
+  manOfMatch: number;
+}
+
+interface TeamStatsResponse {
+  stats: PlayerSeasonStats[];
+  topScorers: PlayerSeasonStats[];
+  topAssists: PlayerSeasonStats[];
+}
 
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
 
@@ -80,9 +105,13 @@ export default function SquadPage() {
   const { teamId } = useTeam();
   const [team, setTeam] = useState<Team | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [seasonStats, setSeasonStats] = useState<PlayerSeasonStats[]>([]);
+  const [tab, setTab] = useState<Tab>("atributy");
   const [filter, setFilter] = useState<PosFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("rat");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [statsSortKey, setStatsSortKey] = useState<StatsKey>("g");
+  const [statsSortDir, setStatsSortDir] = useState<SortDir>("desc");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -90,7 +119,8 @@ export default function SquadPage() {
     Promise.all([
       apiFetch<Team>(`/api/teams/${teamId}`),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
-    ]).then(([t, p]) => { setTeam(t); setPlayers(p); setLoading(false); });
+      apiFetch<TeamStatsResponse>(`/api/teams/${teamId}/stats`).catch((e) => { console.error("team stats:", e); return { stats: [], topScorers: [], topAssists: [] } as TeamStatsResponse; }),
+    ]).then(([t, p, s]) => { setTeam(t); setPlayers(p); setSeasonStats(s.stats); setLoading(false); });
   }, [teamId]);
 
   if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
@@ -109,6 +139,71 @@ export default function SquadPage() {
     if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir(key === "name" ? "asc" : "desc"); }
   };
+
+  // Stats tab — filter + sort
+  const statsFiltered = filter === "all" ? seasonStats : seasonStats.filter((s) => s.position === filter);
+  const getStatsVal = (s: PlayerSeasonStats, k: StatsKey): string | number => {
+    switch (k) {
+      case "name": return `${s.lastName} ${s.firstName}`;
+      case "pos": return POS_ORDER[s.position] ?? 9;
+      case "apps": return s.appearances ?? 0;
+      case "min": return s.minutesPlayed ?? 0;
+      case "g": return s.goals ?? 0;
+      case "a": return s.assists ?? 0;
+      case "ga": return (s.goals ?? 0) + (s.assists ?? 0);
+      case "y": return s.yellowCards ?? 0;
+      case "r": return s.redCards ?? 0;
+      case "cs": return s.cleanSheets ?? 0;
+      case "mom": return s.manOfMatch ?? 0;
+      case "avg": return s.avgRating ?? 0;
+    }
+  };
+  const statsSorted = [...statsFiltered].sort((a, b) => {
+    const va = getStatsVal(a, statsSortKey);
+    const vb = getStatsVal(b, statsSortKey);
+    const cmp = typeof va === "string" ? va.localeCompare(vb as string, "cs") : (va as number) - (vb as number);
+    return statsSortDir === "asc" ? cmp : -cmp;
+  });
+  const toggleStatsSort = (k: StatsKey) => {
+    if (statsSortKey === k) setStatsSortDir(statsSortDir === "asc" ? "desc" : "asc");
+    else { setStatsSortKey(k); setStatsSortDir(k === "name" ? "asc" : "desc"); }
+  };
+
+  // Top tab — výpočty leaderů
+  const topData = useMemo(() => {
+    const sortBy = (key: keyof PlayerSeasonStats, min = 0) =>
+      seasonStats
+        .filter((s) => (s[key] as number) > min)
+        .sort((a, b) => (b[key] as number) - (a[key] as number))
+        .slice(0, 5);
+    const minutesMin = 1;
+    return {
+      scorers: sortBy("goals", 0),
+      assists: sortBy("assists", 0),
+      mom: sortBy("manOfMatch", 0),
+      cards: [...seasonStats]
+        .map((s) => ({ ...s, _disc: (s.yellowCards ?? 0) + (s.redCards ?? 0) * 3 }))
+        .filter((s) => s._disc > 0)
+        .sort((a, b) => b._disc - a._disc)
+        .slice(0, 5),
+      cleanSheets: seasonStats
+        .filter((s) => s.position === "GK" && (s.cleanSheets ?? 0) > 0)
+        .sort((a, b) => (b.cleanSheets ?? 0) - (a.cleanSheets ?? 0))
+        .slice(0, 5),
+      ratings: seasonStats
+        .filter((s) => (s.minutesPlayed ?? 0) >= minutesMin && (s.avgRating ?? 0) > 0)
+        .sort((a, b) => (b.avgRating ?? 0) - (a.avgRating ?? 0))
+        .slice(0, 5),
+      minutes: [...seasonStats]
+        .sort((a, b) => (b.minutesPlayed ?? 0) - (a.minutesPlayed ?? 0))
+        .slice(0, 5),
+    };
+  }, [seasonStats]);
+
+  const totalGoals = seasonStats.reduce((s, p) => s + (p.goals ?? 0), 0);
+  const totalAssists = seasonStats.reduce((s, p) => s + (p.assists ?? 0), 0);
+  const totalApps = seasonStats.reduce((s, p) => s + (p.appearances ?? 0), 0);
+  const totalCards = seasonStats.reduce((s, p) => s + (p.yellowCards ?? 0) + (p.redCards ?? 0), 0);
 
   // Summary stats
   const avgRating = players.length ? Math.round(players.reduce((s, p) => s + (p.overall_rating ?? 0), 0) / players.length) : 0;
@@ -140,6 +235,27 @@ export default function SquadPage() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="card p-1.5">
+        <div className="flex rounded-lg bg-gray-50 p-0.5 gap-0.5">
+          {([
+            ["atributy", "Atributy", "\u{1F4CB}"],
+            ["sezona", "Sezóna", "\u{1F4CA}"],
+            ["top", "TOP hráči", "\u{1F3C6}"],
+          ] as Array<[Tab, string, string]>).map(([k, label, icon]) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={`flex-1 py-2 px-2 rounded-md text-center transition-all font-heading font-bold text-sm ${
+                tab === k ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"
+              }`}
+            >
+              <span className="mr-1.5">{icon}</span>{label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Position filter — segmented control */}
       <div className="card p-3">
         <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-2">Filtr pozice</div>
@@ -167,7 +283,8 @@ export default function SquadPage() {
         </div>
       </div>
 
-      {/* FM-style table */}
+      {/* FM-style table — Atributy tab */}
+      {tab === "atributy" && (
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
@@ -252,6 +369,155 @@ export default function SquadPage() {
             })}
           </tbody>
         </table>
+      </div>
+      )}
+
+      {/* Sezóna — match stats tab */}
+      {tab === "sezona" && (
+        <>
+          {/* Souhrn sezony — 4 boxes */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="card p-3 text-center">
+              <div className="font-heading font-[800] text-2xl tabular-nums text-pitch-500">{totalGoals}</div>
+              <div className="text-[10px] text-muted uppercase tracking-wide">Góly</div>
+            </div>
+            <div className="card p-3 text-center">
+              <div className="font-heading font-[800] text-2xl tabular-nums text-blue-500">{totalAssists}</div>
+              <div className="text-[10px] text-muted uppercase tracking-wide">Asistence</div>
+            </div>
+            <div className="card p-3 text-center">
+              <div className="font-heading font-[800] text-2xl tabular-nums">{totalApps}</div>
+              <div className="text-[10px] text-muted uppercase tracking-wide">Starty</div>
+            </div>
+            <div className="card p-3 text-center">
+              <div className="font-heading font-[800] text-2xl tabular-nums text-card-red">{totalCards}</div>
+              <div className="text-[10px] text-muted uppercase tracking-wide">Karty</div>
+            </div>
+          </div>
+
+          {seasonStats.length === 0 ? (
+            <div className="card p-6 text-center text-sm text-muted">
+              Zatím žádná data o sezoně. Statistiky se načtou po prvním odehraném zápase.
+            </div>
+          ) : (
+          <div className="card overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b-2 border-gray-200">
+                  {([
+                    ["name", "Jméno", "Jméno hráče"],
+                    ["pos", "Poz", "Pozice"],
+                    ["apps", "Záp", "Zápasy"],
+                    ["min", "Min", "Odehrané minuty"],
+                    ["g", "G", "Góly"],
+                    ["a", "A", "Asistence"],
+                    ["ga", "G+A", "Góly + asistence"],
+                    ["y", "ŽK", "Žluté karty"],
+                    ["r", "ČK", "Červené karty"],
+                    ["cs", "CS", "Čistá konta (brankáři)"],
+                    ["mom", "MoM", "Hráč zápasu"],
+                    ["avg", "Ø", "Průměrný rating"],
+                  ] as Array<[StatsKey, string, string]>).map(([k, label, tip]) => (
+                    <th key={k}
+                      onClick={() => toggleStatsSort(k)}
+                      title={tip}
+                      className={`py-2.5 px-1.5 font-heading uppercase cursor-pointer select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
+                        statsSortKey === k ? "text-pitch-600 bg-pitch-50" : "text-muted"
+                      } ${k === "name" ? "text-left pl-3 sticky left-0 bg-white z-10" : "text-center"}`}
+                    >
+                      {label}{statsSortKey === k ? (statsSortDir === "asc" ? " ↑" : " ↓") : ""}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {statsSorted.map((s) => (
+                  <tr key={s.playerId} className="border-b border-gray-50 hover:bg-pitch-50/30 transition-colors">
+                    <td className="py-2 px-1.5 pl-3 sticky left-0 bg-white z-10">
+                      <Link href={`/dashboard/player/${s.playerId}`}
+                        className="font-heading font-bold text-sm hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors whitespace-nowrap">
+                        {s.firstName} {s.lastName}
+                      </Link>
+                    </td>
+                    <td className="py-2 px-1.5 text-center"><PositionBadge position={s.position} /></td>
+                    <td className="py-2 px-1.5 text-center tabular-nums">{s.appearances ?? 0}</td>
+                    <td className="py-2 px-1.5 text-center tabular-nums text-muted">{s.minutesPlayed ?? 0}</td>
+                    <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold text-pitch-600">{s.goals ?? 0}</td>
+                    <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold text-blue-600">{s.assists ?? 0}</td>
+                    <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold">{(s.goals ?? 0) + (s.assists ?? 0)}</td>
+                    <td className="py-2 px-1.5 text-center tabular-nums text-amber-600">{s.yellowCards ?? 0}</td>
+                    <td className="py-2 px-1.5 text-center tabular-nums text-card-red">{s.redCards ?? 0}</td>
+                    <td className="py-2 px-1.5 text-center tabular-nums">{s.position === "GK" ? (s.cleanSheets ?? 0) : "—"}</td>
+                    <td className="py-2 px-1.5 text-center tabular-nums text-gold-600">{s.manOfMatch ?? 0}</td>
+                    <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold">{s.avgRating != null && s.avgRating > 0 ? s.avgRating.toFixed(1) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          )}
+        </>
+      )}
+
+      {/* TOP hráči */}
+      {tab === "top" && (
+        seasonStats.length === 0 ? (
+          <div className="card p-6 text-center text-sm text-muted">
+            Zatím žádná data o sezoně.
+          </div>
+        ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <TopList title="\u{26BD} Nejlepší střelci" items={topData.scorers} valueOf={(s) => s.goals ?? 0} suffix="g" />
+          <TopList title="\u{1F3AF} Nejlepší asistenti" items={topData.assists} valueOf={(s) => s.assists ?? 0} suffix="a" />
+          <TopList title="\u{2B50} Nejlepší rating" items={topData.ratings} valueOf={(s) => (s.avgRating ?? 0).toFixed(1)} />
+          <TopList title="\u{1F451} Hráč zápasu" items={topData.mom} valueOf={(s) => s.manOfMatch ?? 0} suffix="×" />
+          <TopList title="\u{23F1}\u{FE0F} Nejvíce minut" items={topData.minutes} valueOf={(s) => `${s.minutesPlayed ?? 0} '`} />
+          <TopList title="\u{1F9E4} Čistá konta" items={topData.cleanSheets} valueOf={(s) => s.cleanSheets ?? 0} suffix="" />
+          {topData.cards.length > 0 && (
+            <TopList title="\u{1F7E5} Disciplinární přestupky" items={topData.cards as PlayerSeasonStats[]}
+              valueOf={(s) => `${s.yellowCards ?? 0}ŽK / ${s.redCards ?? 0}ČK`} />
+          )}
+        </div>
+        )
+      )}
+    </div>
+  );
+}
+
+function TopList({ title, items, valueOf, suffix = "" }: {
+  title: string;
+  items: PlayerSeasonStats[];
+  valueOf: (s: PlayerSeasonStats) => string | number;
+  suffix?: string;
+}) {
+  if (items.length === 0) {
+    return (
+      <div className="card p-4">
+        <div className="font-heading font-bold text-sm text-ink mb-2">{title}</div>
+        <div className="text-xs text-muted">Žádná data.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="card p-4">
+      <div className="font-heading font-bold text-sm text-ink mb-3">{title}</div>
+      <div className="space-y-1.5">
+        {items.map((s, i) => {
+          const medal = i === 0 ? "\u{1F947}" : i === 1 ? "\u{1F948}" : i === 2 ? "\u{1F949}" : `${i + 1}.`;
+          return (
+            <Link key={s.playerId} href={`/dashboard/player/${s.playerId}`}
+              className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded hover:bg-pitch-50/50 transition-colors group">
+              <span className="w-6 text-center text-sm shrink-0">{medal}</span>
+              <PositionBadge position={s.position} />
+              <span className="flex-1 min-w-0 truncate font-heading font-bold text-sm group-hover:text-pitch-500 transition-colors">
+                {s.firstName} {s.lastName}
+              </span>
+              <span className="font-heading font-[800] tabular-nums text-pitch-600 text-sm shrink-0">
+                {valueOf(s)}{suffix && <span className="text-muted font-normal text-xs ml-0.5">{suffix}</span>}
+              </span>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
