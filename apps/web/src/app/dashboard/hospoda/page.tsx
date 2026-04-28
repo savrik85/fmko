@@ -6,7 +6,7 @@ import { apiFetch, type Team, type Player } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { SectionLabel, Spinner, type BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { ClubScarf } from "@/components/team/club-scarf";
+import { ClubScarf, type ScarfPattern } from "@/components/team/club-scarf";
 
 interface PubAttendee {
   playerId: string;
@@ -133,6 +133,7 @@ export default function HospodaPage() {
               primary={scarfPrimary}
               secondary={scarfSecondary}
               pattern={(team?.badge_pattern as BadgePattern) || "shield"}
+              scarfPattern={(team?.scarf_pattern as ScarfPattern) || "classic"}
               initials={badgeInit}
               symbol={team?.badge_symbol}
               className="block sm:hidden h-16 w-full"
@@ -141,6 +142,7 @@ export default function HospodaPage() {
               primary={scarfPrimary}
               secondary={scarfSecondary}
               pattern={(team?.badge_pattern as BadgePattern) || "shield"}
+              scarfPattern={(team?.scarf_pattern as ScarfPattern) || "classic"}
               initials={badgeInit}
               symbol={team?.badge_symbol}
               width={460}

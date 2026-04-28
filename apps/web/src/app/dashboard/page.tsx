@@ -7,7 +7,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, showError, type Team, type Player, type ManagerProfile, type TeamMatchResults } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { Spinner, SectionLabel, PositionBadge, BadgePreview, useConfirm } from "@/components/ui";
-import { ClubScarf } from "@/components/team/club-scarf";
+import { ClubScarf, type ScarfPattern } from "@/components/team/club-scarf";
 import type { BadgePattern } from "@/components/ui";
 
 interface Standing {
@@ -646,6 +646,7 @@ export default function DashboardPage() {
                 primary={scarfPrimary}
                 secondary={scarfSecondary}
                 pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                scarfPattern={(team.scarf_pattern as ScarfPattern) || "classic"}
                 initials={badgeInit}
                 symbol={team.badge_symbol}
                 className="h-14 w-full sm:hidden"
@@ -654,6 +655,7 @@ export default function DashboardPage() {
                 primary={scarfPrimary}
                 secondary={scarfSecondary}
                 pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                scarfPattern={(team.scarf_pattern as ScarfPattern) || "classic"}
                 initials={badgeInit}
                 symbol={team.badge_symbol}
                 width={260}

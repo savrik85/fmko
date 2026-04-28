@@ -7,6 +7,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
 import { Spinner, Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel, Modal } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
+import { ClubScarf, SCARF_PATTERNS, type ScarfPattern } from "@/components/team/club-scarf";
 
 type JerseyPattern = "solid" | "stripes" | "hoops" | "halves" | "sash" | "sleeves" | "chest_band" | "pinstripes" | "quarters" | "gradient";
 
@@ -48,6 +49,7 @@ interface ClubData {
   primaryColor: string;
   secondaryColor: string;
   badgePattern: BadgePattern | null;
+  scarfPattern: ScarfPattern | null;
   jersey: {
     pattern: JerseyPattern | null;
     homePrimary: string;
@@ -298,6 +300,7 @@ export default function DresPage() {
   const [badgeSecondary, setBadgeSecondary] = useState("#FFFFFF");
   const [badgeInitials, setBadgeInitials] = useState("");
   const [badgeSymbol, setBadgeSymbol] = useState("");
+  const [scarfPattern, setScarfPattern] = useState<ScarfPattern>("classic");
   const [zoomedKit, setZoomedKit] = useState<"home" | "away" | null>(null);
 
   useEffect(() => {
@@ -320,6 +323,7 @@ export default function DresPage() {
         setBadgeSecondary(data.badge.customSecondary || data.secondaryColor || "#FFFFFF");
         setBadgeInitials(data.badge.customInitials || "");
         setBadgeSymbol(data.badge.symbol || "");
+        setScarfPattern((data.scarfPattern as ScarfPattern) || "classic");
         setLoading(false);
       })
       .catch((e) => { console.error("load club:", e); setLoading(false); });
@@ -354,6 +358,7 @@ export default function DresPage() {
           badgeSecondary,
           badgeInitials: badgeInitials.trim() || null,
           badgeSymbol: badgeSymbol || null,
+          scarfPattern,
         }),
       });
       setSavedAt(Date.now());
@@ -498,12 +503,71 @@ export default function DresPage() {
     </Card>
   );
 
+  const scarfShowcase = (
+    <ShowcaseFrame label="Klubová šála" sublabel={SCARF_PATTERNS.find((p) => p.key === scarfPattern)?.label}>
+      <ClubScarf
+        primary={badgePrimary}
+        secondary={badgeSecondary}
+        pattern={badgePattern}
+        scarfPattern={scarfPattern}
+        initials={effectiveInitials}
+        symbol={badgeSymbol || null}
+        width={320}
+        height={86}
+      />
+    </ShowcaseFrame>
+  );
+  const scarfEditor = (
+    <Card>
+      <CardHeader>
+        <h2 className="font-heading font-bold text-base text-ink flex items-center gap-2">
+          <span>{"\u{1F9E3}"}</span> Klubová šála
+        </h2>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-4">
+        <div>
+          <SectionLabel>Vzor šály</SectionLabel>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {SCARF_PATTERNS.map((opt) => {
+              const active = scarfPattern === opt.key;
+              return (
+                <button
+                  type="button"
+                  key={opt.key}
+                  onClick={() => setScarfPattern(opt.key)}
+                  className={`flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 transition-all ${
+                    active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
+                  }`}
+                >
+                  <ClubScarf
+                    primary={badgePrimary}
+                    secondary={badgeSecondary}
+                    pattern={badgePattern}
+                    scarfPattern={opt.key}
+                    initials={effectiveInitials}
+                    symbol={badgeSymbol || null}
+                    width={120}
+                    height={36}
+                  />
+                  <span className={`text-[11px] font-medium leading-tight text-center ${active ? "text-pitch-700" : "text-muted"}`}>
+                    {opt.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="text-xs text-muted mt-2">Šála používá barvy znaku klubu.</div>
+        </div>
+      </CardBody>
+    </Card>
+  );
+
   return (
     <div className="page-container">
       <div className="mb-5">
         <Link href="/dashboard/klub" className="text-sm text-muted hover:text-ink">← Zpět na Klub</Link>
         <h1 className="font-heading font-extrabold text-2xl text-ink mt-1">Dres a znak</h1>
-        <p className="text-sm text-muted mt-0.5">Vlastní vzhled klubu — barvy, vzor dresu a znak.</p>
+        <p className="text-sm text-muted mt-0.5">Vlastní vzhled klubu — barvy, vzor dresu, znak a šála.</p>
       </div>
 
       {/* ═══ Desktop: 2 řádky (náhledy nahoře stejně vysoké, editory dole) ═══ */}
@@ -513,10 +577,14 @@ export default function DresPage() {
           {awayShowcase}
           {badgeShowcase}
         </div>
-        <div className="grid grid-cols-3 gap-4 items-start">
+        <div className="grid grid-cols-3 gap-4 items-start mb-4">
           {homeEditor}
           {awayEditor}
           {badgeEditor}
+        </div>
+        <div className="grid grid-cols-3 gap-4 items-start">
+          <div className="col-span-1">{scarfShowcase}</div>
+          <div className="col-span-2">{scarfEditor}</div>
         </div>
       </div>
 
@@ -528,6 +596,8 @@ export default function DresPage() {
         {awayEditor}
         {badgeShowcase}
         {badgeEditor}
+        {scarfShowcase}
+        {scarfEditor}
       </div>
 
       {/* ═══ Sponsor info — malý řádek pod editorem ═══ */}

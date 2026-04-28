@@ -1156,6 +1156,7 @@ teamsRouter.get("/:id/club", async (c) => {
             t.away_primary_color, t.away_secondary_color, t.away_jersey_pattern, t.jersey_sponsor,
             t.home_shorts_color, t.home_socks_color, t.away_shorts_color, t.away_socks_color,
             t.badge_primary_color, t.badge_secondary_color, t.badge_initials, t.badge_symbol,
+            t.scarf_pattern,
             t.anthem_url, t.anthem_lyrics, t.anthem_title, t.anthem_style, t.anthem_attempts_used, t.anthem_task_id,
             t.stadium_nickname, t.stadium_built_year, t.stadium_specialita, t.stadium_tribuna_north, t.stadium_tribuna_south,
             t.team_nickname, t.club_motto, t.founding_year, t.founding_story, t.colors_meaning,
@@ -1230,6 +1231,7 @@ teamsRouter.get("/:id/club", async (c) => {
       customInitials: team.badge_initials,
       symbol: team.badge_symbol,
     },
+    scarfPattern: team.scarf_pattern ?? null,
     anthem: {
       url: team.anthem_url,
       lyrics: team.anthem_lyrics,
@@ -1261,6 +1263,7 @@ const VALID_BADGE_PATTERNS = new Set([
   "hexagon", "octagon", "triangle", "star",
   "pennant", "banner", "chevron", "arch",
 ]);
+const VALID_SCARF_PATTERNS = new Set(["classic", "bar", "block", "hooped", "halves", "vertical"]);
 const ANTHEM_MAX_ATTEMPTS = 3;
 // Whitelist anglických stylových presetů — Suno API je sensitive na české názvy umělců
 const ANTHEM_STYLE_PRESETS = new Set([
@@ -1328,6 +1331,9 @@ teamsRouter.patch("/:id/club", async (c) => {
 
     const badgePattern = validateEnum("badgePattern", body.badgePattern, VALID_BADGE_PATTERNS);
     if (badgePattern !== undefined) updates.push({ col: "badge_pattern", val: badgePattern });
+
+    const scarfPattern = validateEnum("scarfPattern", body.scarfPattern, VALID_SCARF_PATTERNS, true);
+    if (scarfPattern !== undefined) updates.push({ col: "scarf_pattern", val: scarfPattern });
 
     const homeShorts = validateHex("homeShortsColor", body.homeShortsColor, true);
     if (homeShorts !== undefined) updates.push({ col: "home_shorts_color", val: homeShorts });

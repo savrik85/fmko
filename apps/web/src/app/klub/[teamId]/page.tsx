@@ -4,7 +4,7 @@ import { BadgePreview, JerseyPreview, ShortsPreview, SocksPreview } from "@/comp
 import type { BadgePattern } from "@/components/ui";
 import { ShareButton } from "./ShareButton";
 import { ManagerFace } from "./ManagerFace";
-import { ClubScarf } from "@/components/team/club-scarf";
+import { ClubScarf, type ScarfPattern } from "@/components/team/club-scarf";
 
 export const runtime = "edge";
 
@@ -27,6 +27,7 @@ interface ClubData {
   stadium: { name: string | null; capacity: number | null; pitchCondition: number | null; pitchType: string | null; nickname: string | null; builtYear: number | null; specialita: string | null; tribunaNorth: string | null; tribunaSouth: string | null; namingSponsor: string | null };
   jersey: { pattern: string | null; homePrimary: string; homeSecondary: string; awayPrimary: string | null; awaySecondary: string | null; awayPattern: string | null; sponsor: string | null; homeShortsColor: string | null; homeSocksColor: string | null; awayShortsColor: string | null; awaySocksColor: string | null };
   badge: { pattern: BadgePattern | null; primary: string; secondary: string; customPrimary: string | null; customSecondary: string | null; customInitials: string | null; symbol: string | null };
+  scarfPattern: ScarfPattern | null;
   anthem: { url: string | null; lyrics: string | null; title: string | null; style: string | null };
   mascot: { name: string | null; imageUrl: string | null; story: string | null };
 }
@@ -224,6 +225,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
               primary={club.badge.primary}
               secondary={club.badge.secondary}
               pattern={badgePattern}
+              scarfPattern={(club.scarfPattern as ScarfPattern) || "classic"}
               initials={badgeIni}
               symbol={club.badge.symbol}
               className="h-24 sm:h-36 w-full"

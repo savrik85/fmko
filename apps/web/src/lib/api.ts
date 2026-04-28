@@ -85,6 +85,7 @@ export interface Team {
   badge_secondary_color?: string | null;
   badge_initials?: string | null;
   badge_symbol?: string | null;
+  scarf_pattern?: string | null;
   game_date?: string;
   stadium_name?: string;
   captain_id?: string;
