@@ -1263,7 +1263,7 @@ const VALID_BADGE_PATTERNS = new Set([
   "hexagon", "octagon", "triangle", "star",
   "pennant", "banner", "chevron", "arch",
 ]);
-const VALID_SCARF_PATTERNS = new Set(["classic", "bar", "block", "hooped", "halves", "vertical"]);
+const VALID_SCARF_PATTERNS = new Set(["classic", "bar", "block", "hooped", "halves", "vertical", "solid"]);
 const ANTHEM_MAX_ATTEMPTS = 3;
 // Whitelist anglických stylových presetů — Suno API je sensitive na české názvy umělců
 const ANTHEM_STYLE_PRESETS = new Set([

@@ -503,63 +503,62 @@ export default function DresPage() {
     </Card>
   );
 
-  const scarfShowcase = (
-    <ShowcaseFrame label="Klubová šála" sublabel={SCARF_PATTERNS.find((p) => p.key === scarfPattern)?.label}>
-      <ClubScarf
-        primary={badgePrimary}
-        secondary={badgeSecondary}
-        pattern={badgePattern}
-        scarfPattern={scarfPattern}
-        initials={effectiveInitials}
-        symbol={badgeSymbol || null}
-        width={320}
-        height={86}
-      />
-    </ShowcaseFrame>
+  const scarfPickerButtons = (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {SCARF_PATTERNS.map((opt) => {
+        const active = scarfPattern === opt.key;
+        return (
+          <button
+            type="button"
+            key={opt.key}
+            onClick={() => setScarfPattern(opt.key)}
+            className={`flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 transition-all ${
+              active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
+            }`}
+          >
+            <ClubScarf
+              primary={badgePrimary}
+              secondary={badgeSecondary}
+              pattern={badgePattern}
+              scarfPattern={opt.key}
+              initials={effectiveInitials}
+              symbol={badgeSymbol || null}
+              width={120}
+              height={36}
+            />
+            <span className={`text-[11px] font-medium leading-tight text-center ${active ? "text-pitch-700" : "text-muted"}`}>
+              {opt.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
-  const scarfEditor = (
-    <Card>
-      <CardHeader>
-        <h2 className="font-heading font-bold text-base text-ink flex items-center gap-2">
-          <span>{"\u{1F9E3}"}</span> Klubová šála
-        </h2>
-      </CardHeader>
-      <CardBody className="flex flex-col gap-4">
-        <div>
-          <SectionLabel>Vzor šály</SectionLabel>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {SCARF_PATTERNS.map((opt) => {
-              const active = scarfPattern === opt.key;
-              return (
-                <button
-                  type="button"
-                  key={opt.key}
-                  onClick={() => setScarfPattern(opt.key)}
-                  className={`flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 transition-all ${
-                    active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
-                  }`}
-                >
-                  <ClubScarf
-                    primary={badgePrimary}
-                    secondary={badgeSecondary}
-                    pattern={badgePattern}
-                    scarfPattern={opt.key}
-                    initials={effectiveInitials}
-                    symbol={badgeSymbol || null}
-                    width={120}
-                    height={36}
-                  />
-                  <span className={`text-[11px] font-medium leading-tight text-center ${active ? "text-pitch-700" : "text-muted"}`}>
-                    {opt.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="text-xs text-muted mt-2">Šála používá barvy znaku klubu.</div>
+  const scarfBlock = (
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-xl">{"\u{1F9E3}"}</span>
+        <h2 className="font-heading font-bold text-base text-ink">Klubová šála</h2>
+        <span className="text-xs text-muted ml-auto">Barvy podle znaku klubu</span>
+      </div>
+      <div className="rounded-xl p-5 sm:p-6 mb-4 flex items-center justify-center"
+        style={{ background: "linear-gradient(180deg, #f7f5f0 0%, #e8e3d8 100%)" }}>
+        <div style={{ filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.2))" }}>
+          <ClubScarf
+            primary={badgePrimary}
+            secondary={badgeSecondary}
+            pattern={badgePattern}
+            scarfPattern={scarfPattern}
+            initials={effectiveInitials}
+            symbol={badgeSymbol || null}
+            width={420}
+            height={100}
+          />
         </div>
-      </CardBody>
-    </Card>
+      </div>
+      <SectionLabel>Vzor šály</SectionLabel>
+      {scarfPickerButtons}
+    </div>
   );
 
   return (
@@ -570,7 +569,7 @@ export default function DresPage() {
         <p className="text-sm text-muted mt-0.5">Vlastní vzhled klubu — barvy, vzor dresu, znak a šála.</p>
       </div>
 
-      {/* ═══ Desktop: 2 řádky (náhledy nahoře stejně vysoké, editory dole) ═══ */}
+      {/* ═══ Desktop: náhledy nahoře, editory dole, šála na celou šířku ═══ */}
       <div className="hidden md:block">
         <div className="grid grid-cols-3 gap-4 mb-4">
           {homeShowcase}
@@ -582,10 +581,7 @@ export default function DresPage() {
           {awayEditor}
           {badgeEditor}
         </div>
-        <div className="grid grid-cols-3 gap-4 items-start">
-          <div className="col-span-1">{scarfShowcase}</div>
-          <div className="col-span-2">{scarfEditor}</div>
-        </div>
+        {scarfBlock}
       </div>
 
       {/* ═══ Mobile: náhled + editor v páru ═══ */}
@@ -596,8 +592,7 @@ export default function DresPage() {
         {awayEditor}
         {badgeShowcase}
         {badgeEditor}
-        {scarfShowcase}
-        {scarfEditor}
+        {scarfBlock}
       </div>
 
       {/* ═══ Sponsor info — malý řádek pod editorem ═══ */}

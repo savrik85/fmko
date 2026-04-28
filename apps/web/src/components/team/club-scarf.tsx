@@ -2,15 +2,16 @@
 
 import { BadgePreview, type BadgePattern } from "@/components/ui";
 
-export type ScarfPattern = "classic" | "bar" | "block" | "hooped" | "halves" | "vertical";
+export type ScarfPattern = "classic" | "bar" | "block" | "hooped" | "halves" | "vertical" | "solid";
 
 export const SCARF_PATTERNS: ReadonlyArray<{ key: ScarfPattern; label: string }> = [
   { key: "classic", label: "Klasická" },
-  { key: "bar", label: "Bar (jednoduchá)" },
+  { key: "bar", label: "Bar" },
   { key: "block", label: "Tři pruhy" },
   { key: "hooped", label: "Tenké pruhy" },
   { key: "halves", label: "Půlka/půlka" },
   { key: "vertical", label: "Svislé" },
+  { key: "solid", label: "Jednobarevná" },
 ];
 
 interface ClubScarfProps {
@@ -30,6 +31,8 @@ interface ClubScarfProps {
 
 function bodyBackground(scarfPattern: ScarfPattern, primary: string, secondary: string): string {
   switch (scarfPattern) {
+    case "solid":
+      return primary;
     case "bar":
       // Klasický bar scarf — úzký okraj S nahoře/dole, primary v mezeře
       return `linear-gradient(180deg,
