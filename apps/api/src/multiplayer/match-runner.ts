@@ -360,11 +360,11 @@ export async function runScheduledMatches(
         ...(awayBuild.absentNames ?? []).map((a) => ({ ...a, teamId: awayTeamId })),
       ];
 
-      // Save results with events + commentary + match context + lineups + absences
+      // Save results with events + commentary + match context + lineups + absences + possession
       await db.prepare(
         `UPDATE matches SET status = 'simulated', home_score = ?, away_score = ?,
          events = ?, commentary = ?, attendance = ?, stadium_name = ?, pitch_condition = ?, weather = ?,
-         home_lineup_data = ?, away_lineup_data = ?, absences = ?,
+         home_lineup_data = ?, away_lineup_data = ?, absences = ?, possession_home = ?,
          simulated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?`
       ).bind(
         result.homeScore, result.awayScore,
@@ -373,6 +373,7 @@ export async function runScheduledMatches(
         JSON.stringify(buildLineupData(homeLineupPreSim, homeSubsPreSim, homeBuild.idMap, homeFormation, homeTactic, homeCaptainEngineId)),
         JSON.stringify(buildLineupData(awayLineupPreSim, awaySubsPreSim, awayBuild.idMap, awayFormation, awayTactic, awayCaptainEngineId)),
         matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null,
+        result.possessionHome,
         matchId,
       ).run();
 

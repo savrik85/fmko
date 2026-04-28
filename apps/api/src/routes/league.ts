@@ -190,6 +190,56 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
   });
 });
 
+// GET /api/teams/:teamId/players/:playerId/league-rank — pozice hráče v žebříčcích ligy
+leagueRouter.get("/teams/:teamId/players/:playerId/league-rank", async (c) => {
+  const teamId = c.req.param("teamId");
+  const playerId = c.req.param("playerId");
+
+  const team = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?")
+    .bind(teamId).first<{ league_id: string | null }>();
+  if (!team?.league_id) return c.json({ ranks: null });
+
+  const season = await c.env.DB.prepare(
+    "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+  ).first<{ id: string }>().catch((e) => { logger.warn({ module: "league" }, "fetch active season for rank", e); return null; });
+  if (!season) return c.json({ ranks: null });
+
+  // Načteme všechny hráče v lize s jejich season-stats
+  const stats = await c.env.DB.prepare(
+    `SELECT ps.player_id, ps.goals, ps.assists, ps.avg_rating, ps.appearances
+     FROM player_stats ps
+     JOIN players p ON ps.player_id = p.id
+     JOIN teams t ON ps.team_id = t.id
+     WHERE ps.season_id = ? AND t.league_id = ?`
+  ).bind(season.id, team.league_id).all<{ player_id: string; goals: number; assists: number; avg_rating: number; appearances: number }>()
+    .catch((e) => { logger.warn({ module: "league" }, "fetch league rank stats", e); return { results: [] }; });
+
+  const rows = stats.results;
+  if (rows.length === 0) return c.json({ ranks: null });
+
+  const me = rows.find((r) => r.player_id === playerId);
+  if (!me) return c.json({ ranks: null });
+
+  // Rank = 1 + count of players strictly better
+  const goalsBetter = rows.filter((r) => r.goals > me.goals).length;
+  const assistsBetter = rows.filter((r) => r.assists > me.assists).length;
+  // Rating: min 3 appearances pro ranking
+  const ratingPool = rows.filter((r) => r.appearances >= 3);
+  const ratingBetter = ratingPool.filter((r) => r.avg_rating > me.avg_rating).length;
+  const ratingTotal = ratingPool.length;
+  const ratingEligible = me.appearances >= 3;
+
+  return c.json({
+    ranks: {
+      goals: { rank: goalsBetter + 1, total: rows.length, value: me.goals },
+      assists: { rank: assistsBetter + 1, total: rows.length, value: me.assists },
+      rating: ratingEligible
+        ? { rank: ratingBetter + 1, total: ratingTotal, value: Number(me.avg_rating?.toFixed(2) ?? 0) }
+        : null,
+    },
+  });
+});
+
 // GET /api/leagues — seznam všech aktivních lig (pro league picker v UI)
 leagueRouter.get("/leagues", async (c) => {
   const leagues = await c.env.DB.prepare(

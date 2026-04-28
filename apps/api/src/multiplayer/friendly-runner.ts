@@ -160,7 +160,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       await db.prepare(
         `UPDATE matches SET status = 'simulated', home_score = ?, away_score = ?,
          events = ?, commentary = ?, attendance = ?, stadium_name = ?, pitch_condition = ?, weather = ?,
-         home_lineup_data = ?, away_lineup_data = ?, absences = ?,
+         home_lineup_data = ?, away_lineup_data = ?, absences = ?, possession_home = ?,
          simulated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?`
       ).bind(
         result.homeScore, result.awayScore,
@@ -169,6 +169,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         stadiumNameRow?.stadium_name ?? null, stadiumRow?.pitch_condition ?? 50, weather,
         JSON.stringify(homeLineupData), JSON.stringify(awayLineupData),
         matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null,
+        result.possessionHome,
         matchId,
       ).run();
 

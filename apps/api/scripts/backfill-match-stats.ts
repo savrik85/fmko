@@ -6,6 +6,7 @@
  */
 
 import type { MatchEvent } from "@okresni-masina/shared";
+import { logger } from "../src/lib/logger";
 
 interface BackfillEntry {
   matchId: string;
@@ -110,10 +111,11 @@ export async function backfillMatchStats(db: D1Database): Promise<{ processed: n
     for (const [engineId, info] of homeIdMap) {
       if (engineId > 11) continue; // Only starters
 
-      let goals = 0, yellows = 0, reds = 0, minutes = 90;
+      let goals = 0, assists = 0, yellows = 0, reds = 0, minutes = 90;
       for (const e of events) {
         if (e.playerId === engineId && e.teamId === 1) {
           if (e.type === "goal") goals++;
+          else if (e.type === "assist") assists++;
           else if (e.type === "card") {
             if (e.detail === "red") reds++;
             else yellows++;
@@ -128,7 +130,7 @@ export async function backfillMatchStats(db: D1Database): Promise<{ processed: n
       entries.push({
         matchId, playerId: info.dbId, teamId: homeTeamId,
         position: info.position, started: true,
-        minutesPlayed: minutes, goals, assists: 0,
+        minutesPlayed: minutes, goals, assists,
         yellowCards: yellows, redCards: reds, rating,
       });
     }
@@ -137,10 +139,11 @@ export async function backfillMatchStats(db: D1Database): Promise<{ processed: n
     for (const [engineId, info] of awayIdMap) {
       if (engineId > 11) continue;
 
-      let goals = 0, yellows = 0, reds = 0, minutes = 90;
+      let goals = 0, assists = 0, yellows = 0, reds = 0, minutes = 90;
       for (const e of events) {
         if (e.playerId === engineId && e.teamId === 2) {
           if (e.type === "goal") goals++;
+          else if (e.type === "assist") assists++;
           else if (e.type === "card") {
             if (e.detail === "red") reds++;
             else yellows++;
@@ -155,7 +158,7 @@ export async function backfillMatchStats(db: D1Database): Promise<{ processed: n
       entries.push({
         matchId, playerId: info.dbId, teamId: awayTeamId,
         position: info.position, started: true,
-        minutesPlayed: minutes, goals, assists: 0,
+        minutesPlayed: minutes, goals, assists,
         yellowCards: yellows, redCards: reds, rating,
       });
     }
@@ -170,7 +173,7 @@ export async function backfillMatchStats(db: D1Database): Promise<{ processed: n
         crypto.randomUUID(), e.matchId, e.playerId, e.teamId,
         e.started ? 1 : 0, e.position, e.minutesPlayed,
         e.goals, e.assists, e.yellowCards, e.redCards, e.rating,
-      ).run().catch(() => {});
+      ).run().catch((err) => logger.warn({ module: "backfill-match-stats" }, "insert match_player_stats failed", err));
     }
 
     totalEntries += entries.length;

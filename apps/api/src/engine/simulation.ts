@@ -337,6 +337,9 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   const homeForm = 0.75 + rng.random() * 0.50;
   const awayForm = 0.75 + rng.random() * 0.50;
 
+  // Accumulate per-minute possession to compute final 0-100 figure
+  let homePossSum = 0;
+
   function addEvent(
     minute: number,
     type: EventType,
@@ -371,6 +374,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   for (let minute = 1; minute <= 90; minute++) {
     // Determine possession
     const homePoss = calcPossession(home, away, isHomeAdvantage);
+    homePossSum += homePoss;
     const isHomePossession = rng.random() < homePoss;
     const attacking = isHomePossession ? home : away;
     const defending = isHomePossession ? away : home;
@@ -756,6 +760,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   // Sort events by minute
   events.sort((a, b) => a.minute - b.minute);
 
+  const possessionHome = Math.max(30, Math.min(70, Math.round((homePossSum / 90) * 100)));
+
   return {
     homeScore,
     awayScore,
@@ -763,5 +769,6 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     homeLineup: home.lineup,
     awayLineup: away.lineup,
     playerMinutes,
+    possessionHome,
   };
 }

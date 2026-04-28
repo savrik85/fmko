@@ -97,6 +97,7 @@ export interface MatchResult {
   homeLineup: MatchPlayer[];
   awayLineup: MatchPlayer[];
   playerMinutes: Record<number, PlayerMinuteTrack>; // engineId → minuty
+  possessionHome: number; // 0-100, average možnost domácích za zápas
 }
 
 export { MatchEvent, EventType };

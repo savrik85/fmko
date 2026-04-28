@@ -102,6 +102,29 @@ export default function PlayerDetailPage() {
     relationships: Array<{ relatedPlayerId: string; relatedPlayerName: string; relatedPlayerPosition: string; type: string; typeLabel: string; strength: number; effect: string }>;
   } | null>(null);
   const [showAllRelationships, setShowAllRelationships] = useState(false);
+  type LeagueRank = { rank: number; total: number; value: number } | null;
+  const [leagueRanks, setLeagueRanks] = useState<{ goals: LeagueRank; assists: LeagueRank; rating: LeagueRank } | null>(null);
+  const [historyFilter, setHistoryFilter] = useState<"all" | "W" | "D" | "L">("all");
+  type ProfileTab = "prehled" | "statistiky" | "historie" | "vztahy";
+  const [activeTab, setActiveTab] = useState<ProfileTab>("prehled");
+
+  // URL hash sync — umožňuje linkovat přímo na tab přes #statistiky atd.
+  useEffect(() => {
+    const valid: ProfileTab[] = ["prehled", "statistiky", "historie", "vztahy"];
+    const fromHash = (typeof window !== "undefined" ? window.location.hash.replace("#", "") : "") as ProfileTab;
+    if (valid.includes(fromHash)) setActiveTab(fromHash);
+    const onHash = () => {
+      const h = window.location.hash.replace("#", "") as ProfileTab;
+      if (valid.includes(h)) setActiveTab(h);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const switchTab = (t: ProfileTab) => {
+    setActiveTab(t);
+    if (typeof window !== "undefined") window.history.replaceState(null, "", `#${t}`);
+  };
 
   useEffect(() => {
     if (!teamId) return;
@@ -113,13 +136,14 @@ export default function PlayerDetailPage() {
         const playerOwnerTeamId = p.team_id || teamId;
         const isForeign = playerOwnerTeamId !== teamId;
 
-        const [t, all, stats, history, careerHistory] = await Promise.all([
+        const [t, all, stats, history, careerHistory, rankRes] = await Promise.all([
           apiFetch<Team>(`/api/teams/${teamId}`),
           // Fetch players from the PLAYER's team for navigation arrows
           apiFetch<Player[]>(`/api/teams/${playerOwnerTeamId}/players`),
           apiFetch<CareerStats>(`/api/teams/${teamId}/players/${playerId}/career-stats`).catch((e) => { console.error("career-stats fetch:", e); return null; }),
           apiFetch<{ matches: PlayerMatchEntry[] }>(`/api/teams/${teamId}/players/${playerId}/match-history`).catch((e) => { console.error("match-history fetch:", e); return { matches: [] }; }),
           apiFetch<{ contracts: PlayerContract[] }>(`/api/teams/${teamId}/players/${playerId}/career-history`).catch((e) => { console.error("career-history fetch:", e); return { contracts: [] }; }),
+          apiFetch<{ ranks: { goals: LeagueRank; assists: LeagueRank; rating: LeagueRank } | null }>(`/api/teams/${playerOwnerTeamId}/players/${playerId}/league-rank`).catch((e) => { console.error("league-rank fetch:", e); return { ranks: null }; }),
         ]);
 
         setTeam(t);
@@ -127,6 +151,7 @@ export default function PlayerDetailPage() {
         setCareerStats(stats);
         setMatchHistory(history.matches);
         setContracts(careerHistory.contracts);
+        setLeagueRanks(rankRes.ranks);
 
         if (isForeign) {
           const [pt, mine] = await Promise.all([
@@ -615,6 +640,31 @@ export default function PlayerDetailPage() {
 
     <div className="page-container space-y-5">
 
+      {/* ═══ Tab navigation ═══ */}
+      <div className="flex gap-1 border-b border-gray-200 -mt-1 overflow-x-auto">
+        {([
+          { id: "prehled", label: "Přehled" },
+          { id: "statistiky", label: "Statistiky" },
+          { id: "historie", label: "Historie" },
+          { id: "vztahy", label: "Vztahy" },
+        ] as Array<{ id: ProfileTab; label: string }>).map((t) => (
+          <button
+            key={t.id}
+            onClick={() => switchTab(t.id)}
+            className={`px-4 py-2.5 text-sm font-heading font-bold transition-colors border-b-2 -mb-px shrink-0 ${
+              activeTab === t.id
+                ? "text-pitch-600 border-pitch-500"
+                : "text-muted border-transparent hover:text-ink hover:border-gray-300"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ═══ TAB: PŘEHLED ═══ */}
+      {activeTab === "prehled" && <>
+
       {/* ═══ Characteristics (tags) ═══ */}
       {player && allPlayers.length > 0 && (() => {
         const playerInput = {
@@ -729,6 +779,12 @@ export default function PlayerDetailPage() {
         </div>
       </div>
 
+      </>}
+      {/* ═══ /TAB PŘEHLED ═══ */}
+
+      {/* ═══ TAB: HISTORIE — Trénink + Kondice + Historie klubů + Match history ═══ */}
+      {activeTab === "historie" && <>
+
       {/* ═══ Tréninkový vývoj + Vývoj kondice (2-col grid na desktopu, equal height) ═══ */}
       {player.team_id === teamId && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -737,9 +793,58 @@ export default function PlayerDetailPage() {
         </div>
       )}
 
-      {/* ═══ Vztahy v kádru + Historie klubů (2-col grid pro vlastní, 1-col pro cizí) ═══ */}
-      {(((isOwnPlayer && profileExtras && profileExtras.relationships.length > 0)) || contracts.length > 0) && (
-        <div className={`grid grid-cols-1 gap-5 ${isOwnPlayer ? "lg:grid-cols-2" : ""}`}>
+      {/* ═══ Historie klubů ═══ */}
+      {contracts.length > 0 && (
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Historie klubů</SectionLabel>
+          <div className="space-y-0">
+            {contracts.map((c) => (
+              <div key={c.id} className="py-3 border-b border-gray-50 last:border-b-0">
+                <a href={`/dashboard/team/${c.teamId}`} className="flex items-center gap-2.5 group">
+                  <BadgePreview primary={c.teamColor} secondary={c.teamSecondary}
+                    pattern={(c.teamBadge as BadgePattern) || "shield"}
+                    initials={(c.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={32} />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-heading font-bold text-sm group-hover:underline truncate">{c.teamName}</div>
+                    <div className="text-[11px] text-muted">
+                      {c.isActive ? (
+                        <span>Od sezóny {c.seasonNumber} &middot; <span className="text-pitch-500 font-bold">Aktivní</span></span>
+                      ) : (
+                        <span>Sezóna {c.seasonNumber}{c.leftAt ? ` — ${c.leftAt}` : ""}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-heading font-bold ${
+                      c.joinType === "generated" ? "bg-gray-100 text-muted"
+                      : c.joinType === "transfer" ? "bg-blue-50 text-blue-600"
+                      : c.joinType === "free_agent" ? "bg-green-50 text-green-600"
+                      : c.joinType === "youth" ? "bg-purple-50 text-purple-600"
+                      : c.joinType === "swap" ? "bg-gold-50 text-gold-600"
+                      : c.joinType === "loan" ? "bg-yellow-50 text-yellow-700"
+                      : c.joinType === "pub" || c.joinType === "friend" || c.joinType === "recommendation" ? "bg-amber-50 text-amber-700"
+                      : "bg-gray-100 text-muted"
+                    }`}>{c.joinLabel}</span>
+                  </div>
+                </a>
+                {c.fee > 0 && (
+                  <div className="text-[10px] text-muted mt-1 ml-[42px]">Přestupní částka: {c.fee.toLocaleString("cs")} Kč</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      </>}
+      {/* ═══ /TAB HISTORIE — pokračování níže (match history) ═══ */}
+
+      {/* ═══ TAB: VZTAHY — Vztahy v kádru + Watchers ═══ */}
+      {activeTab === "vztahy" && <>
+
+      {/* ═══ Vztahy v kádru ═══ */}
+      {(((isOwnPlayer && profileExtras && profileExtras.relationships.length > 0))) && (
+        <div className="grid grid-cols-1 gap-5">
           {isOwnPlayer && profileExtras && profileExtras.relationships.length > 0 ? (
             <div className="card p-4 sm:p-5">
               <SectionLabel>Vztahy v kádru</SectionLabel>
@@ -770,51 +875,262 @@ export default function PlayerDetailPage() {
                 )}
               </div>
             </div>
-          ) : isOwnPlayer ? <div /> : null}
-
-          {contracts.length > 0 && (
-            <div className="card p-4 sm:p-5">
-              <SectionLabel>Historie klubů</SectionLabel>
-              <div className="space-y-0">
-                {contracts.map((c) => (
-                  <div key={c.id} className="py-3 border-b border-gray-50 last:border-b-0">
-                    <a href={`/dashboard/team/${c.teamId}`} className="flex items-center gap-2.5 group">
-                      <BadgePreview primary={c.teamColor} secondary={c.teamSecondary}
-                        pattern={(c.teamBadge as BadgePattern) || "shield"}
-                        initials={(c.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={32} />
-                      <div className="min-w-0 flex-1">
-                        <div className="font-heading font-bold text-sm group-hover:underline truncate">{c.teamName}</div>
-                        <div className="text-[11px] text-muted">
-                          {c.isActive ? (
-                            <span>Od sezóny {c.seasonNumber} &middot; <span className="text-pitch-500 font-bold">Aktivní</span></span>
-                          ) : (
-                            <span>Sezóna {c.seasonNumber}{c.leftAt ? ` — ${c.leftAt}` : ""}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="shrink-0">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-heading font-bold ${
-                          c.joinType === "generated" ? "bg-gray-100 text-muted"
-                          : c.joinType === "transfer" ? "bg-blue-50 text-blue-600"
-                          : c.joinType === "free_agent" ? "bg-green-50 text-green-600"
-                          : c.joinType === "youth" ? "bg-purple-50 text-purple-600"
-                          : c.joinType === "swap" ? "bg-gold-50 text-gold-600"
-                          : c.joinType === "loan" ? "bg-yellow-50 text-yellow-700"
-                          : c.joinType === "pub" || c.joinType === "friend" || c.joinType === "recommendation" ? "bg-amber-50 text-amber-700"
-                          : "bg-gray-100 text-muted"
-                        }`}>{c.joinLabel}</span>
-                      </div>
-                    </a>
-                    {c.fee > 0 && (
-                      <div className="text-[10px] text-muted mt-1 ml-[42px]">Přestupní částka: {c.fee.toLocaleString("cs")} Kč</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          ) : null}
         </div>
       )}
+
+      </>}
+      {/* ═══ /TAB VZTAHY — pokračování níže (watchers) ═══ */}
+
+      {/* ═══ TAB: STATISTIKY ═══ */}
+      {activeTab === "statistiky" && <>
+
+      {/* ═══ Forma — posledních 5 zápasů ═══ */}
+      {matchHistory.length > 0 && (() => {
+        const recent = matchHistory.slice(0, 5).reverse(); // DESC → ASC pro vizuální časovou osu
+        const recentAvg = recent.reduce((s, m) => s + m.rating, 0) / recent.length;
+        const olderSlice = matchHistory.slice(5, 10);
+        const olderAvg = olderSlice.length > 0 ? olderSlice.reduce((s, m) => s + m.rating, 0) / olderSlice.length : null;
+        const trend = olderAvg != null ? recentAvg - olderAvg : 0;
+        return (
+          <div className="card p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <SectionLabel>Forma · posledních {recent.length}</SectionLabel>
+              {olderAvg != null && (
+                <div className="text-xs font-heading text-muted flex items-center gap-1">
+                  <span>Trend:</span>
+                  <span className={trend > 0.2 ? "text-pitch-500 font-bold" : trend < -0.2 ? "text-card-red font-bold" : "text-ink"}>
+                    {trend > 0.2 ? "↗" : trend < -0.2 ? "↘" : "→"} {trend > 0 ? "+" : ""}{trend.toFixed(1)}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {recent.map((m) => {
+                const ratingBg = m.rating >= 7.5 ? "bg-pitch-500 text-white"
+                  : m.rating >= 6.5 ? "bg-pitch-100 text-pitch-700"
+                  : m.rating >= 5.5 ? "bg-amber-100 text-amber-700"
+                  : "bg-red-100 text-red-700";
+                const resultLabel = m.result === "W" ? "V" : m.result === "L" ? "P" : "R";
+                const resultColor = m.result === "W" ? "text-pitch-600"
+                  : m.result === "L" ? "text-card-red"
+                  : "text-muted";
+                return (
+                  <Link
+                    key={m.matchId}
+                    href={`/dashboard/match/${m.matchId}/replay`}
+                    className="flex flex-col items-center gap-1 px-2 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors min-w-[64px]"
+                  >
+                    <span className={`px-2 py-1 rounded-md text-base font-heading font-bold tabular-nums ${ratingBg}`}>
+                      {m.rating.toFixed(1)}
+                    </span>
+                    <span className="flex items-center gap-0.5 text-xs">
+                      <span className="text-muted truncate max-w-[60px]">{m.opponent ?? "—"}</span>
+                    </span>
+                    <span className={`text-[11px] font-heading font-bold ${resultColor}`}>{resultLabel}</span>
+                    {(m.goals > 0 || m.assists > 0) && (
+                      <span className="text-[10px] text-muted">
+                        {m.goals > 0 && <>⚽{m.goals > 1 ? m.goals : ""}</>}
+                        {m.assists > 0 && <> 👟{m.assists > 1 ? m.assists : ""}</>}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+            <div className="text-xs text-muted mt-3">
+              Průměrný rating posledních {recent.length} zápasů: <span className="font-heading font-bold text-ink">{recentAvg.toFixed(1)}</span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ═══ Trend ratingu přes celou sezónu ═══ */}
+      {matchHistory.length >= 3 && (() => {
+        const series = [...matchHistory].reverse(); // od nejstaršího k nejnovějšímu
+        const avg = series.reduce((s, m) => s + m.rating, 0) / series.length;
+        const w = 720;
+        const h = 140;
+        const padX = 12;
+        const padY = 16;
+        const minR = 4;
+        const maxR = 9.5;
+        const xStep = series.length > 1 ? (w - padX * 2) / (series.length - 1) : 0;
+        const y = (r: number) => h - padY - ((Math.max(minR, Math.min(maxR, r)) - minR) / (maxR - minR)) * (h - padY * 2);
+        const pts = series.map((m, i) => `${padX + i * xStep},${y(m.rating)}`).join(" ");
+        const yAvg = y(avg);
+        const yScale = [4, 5, 6, 7, 8, 9];
+        return (
+          <div className="card p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <SectionLabel>Trend ratingu · {series.length} zápasů</SectionLabel>
+              <div className="text-xs font-heading text-muted">
+                Průměr: <span className="font-bold text-ink">{avg.toFixed(2)}</span>
+              </div>
+            </div>
+            <div className="overflow-x-auto -mx-4 sm:-mx-5 px-4 sm:px-5">
+              <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-w-[600px] h-[140px]" preserveAspectRatio="none">
+                {/* Y-axis gridlines */}
+                {yScale.map((r) => (
+                  <g key={r}>
+                    <line x1={padX} x2={w - padX} y1={y(r)} y2={y(r)} stroke="#f3f4f6" strokeWidth={1} />
+                    <text x={padX - 4} y={y(r) + 3} fontSize={9} fill="#9ca3af" textAnchor="end" fontFamily="ui-monospace">{r}</text>
+                  </g>
+                ))}
+                {/* Average line */}
+                <line x1={padX} x2={w - padX} y1={yAvg} y2={yAvg} stroke="#10b981" strokeWidth={1} strokeDasharray="4 4" opacity={0.6} />
+                <text x={w - padX - 4} y={yAvg - 3} fontSize={9} fill="#10b981" textAnchor="end" fontFamily="ui-monospace">průměr {avg.toFixed(1)}</text>
+                {/* Polyline */}
+                <polyline points={pts} fill="none" stroke="#2563eb" strokeWidth={1.5} strokeLinejoin="round" />
+                {/* Dots — barva dle ratingu */}
+                {series.map((m, i) => {
+                  const cx = padX + i * xStep;
+                  const cy = y(m.rating);
+                  const fill = m.rating >= 7.5 ? "#10b981"
+                    : m.rating >= 6.5 ? "#f59e0b"
+                    : "#ef4444";
+                  return <circle key={m.matchId} cx={cx} cy={cy} r={3} fill={fill} stroke="white" strokeWidth={1.5} />;
+                })}
+              </svg>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ═══ Srovnání s ligou ═══ */}
+      {leagueRanks && (() => {
+        const items = [
+          { label: "Góly", icon: "⚽", rank: leagueRanks.goals },
+          { label: "Asistence", icon: "👟", rank: leagueRanks.assists },
+          { label: "Průměr ratingu", icon: "⭐", rank: leagueRanks.rating, isRating: true },
+        ].filter((i) => i.rank != null && i.rank.value > 0);
+        if (items.length === 0) return null;
+        return (
+          <div className="card p-4 sm:p-5">
+            <SectionLabel>Srovnání s ligou</SectionLabel>
+            <div className="space-y-3">
+              {items.map((item) => {
+                const r = item.rank!;
+                const pct = r.total > 0 ? Math.max(0, ((r.total - r.rank) / r.total) * 100) : 0;
+                const topPct = Math.min(100, Math.round(((r.rank - 1) / Math.max(1, r.total)) * 100) + 1);
+                const barColor = pct >= 80 ? "bg-pitch-500"
+                  : pct >= 50 ? "bg-pitch-400"
+                  : pct >= 25 ? "bg-amber-400"
+                  : "bg-gray-300";
+                return (
+                  <div key={item.label} className="flex items-center gap-3">
+                    <span className="shrink-0 text-base">{item.icon}</span>
+                    <span className="shrink-0 w-32 sm:w-40 text-sm font-heading">{item.label}</span>
+                    <span className="shrink-0 w-14 text-base font-heading font-bold tabular-nums text-right">
+                      {item.isRating ? r.value.toFixed(2) : r.value}
+                    </span>
+                    <span className="shrink-0 w-20 text-xs text-muted">
+                      {r.rank}. z {r.total}
+                    </span>
+                    <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                      <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="shrink-0 w-16 text-[11px] text-muted text-right font-heading">
+                      Top {topPct}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ═══ Position-specific highlight stats ═══ */}
+      {matchHistory.length > 0 && (() => {
+        const totalGames = matchHistory.length;
+        const startedGames = matchHistory.filter((m) => m.started).length;
+        const totalMinutes = matchHistory.reduce((s, m) => s + (m.minutesPlayed ?? 0), 0);
+        const totalGoals = matchHistory.reduce((s, m) => s + m.goals, 0);
+        const totalAssists = matchHistory.reduce((s, m) => s + m.assists, 0);
+        const totalYellow = matchHistory.reduce((s, m) => s + m.yellowCards, 0);
+        const totalRed = matchHistory.reduce((s, m) => s + m.redCards, 0);
+        const cleanSheets = matchHistory.filter((m) => {
+          const oppScore = m.isHome ? m.awayScore : m.homeScore;
+          return oppScore === 0;
+        }).length;
+        const goalsConceded = matchHistory.reduce((s, m) => s + (m.isHome ? m.awayScore : m.homeScore), 0);
+        const wins = matchHistory.filter((m) => m.result === "W").length;
+        const winRate = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
+        const goalsPerGame = totalGames > 0 ? totalGoals / totalGames : 0;
+        const assistsPerGame = totalGames > 0 ? totalAssists / totalGames : 0;
+        const minutesPerGame = totalGames > 0 ? Math.round(totalMinutes / totalGames) : 0;
+
+        const pos = player.position;
+        const stats: Array<{ label: string; value: string | number; sub?: string; highlight?: boolean }> = [];
+
+        if (pos === "GK") {
+          stats.push(
+            { label: "Čistá konta", value: cleanSheets, sub: `z ${totalGames}`, highlight: true },
+            { label: "Inkasované góly", value: goalsConceded, sub: `${(goalsConceded / Math.max(1, totalGames)).toFixed(1)} / zápas` },
+            { label: "Min. na hřišti", value: totalMinutes },
+            { label: "Sezónní % výher", value: `${winRate}%` },
+          );
+        } else if (pos === "DEF") {
+          stats.push(
+            { label: "Čistá konta", value: cleanSheets, sub: `z ${totalGames}`, highlight: true },
+            { label: "Asistence", value: totalAssists },
+            { label: "Žluté karty", value: totalYellow },
+            { label: "Červené karty", value: totalRed },
+          );
+        } else if (pos === "MID") {
+          stats.push(
+            { label: "Asistence", value: totalAssists, sub: `${assistsPerGame.toFixed(2)} / zápas`, highlight: true },
+            { label: "Góly", value: totalGoals, sub: `${goalsPerGame.toFixed(2)} / zápas` },
+            { label: "G+A", value: totalGoals + totalAssists },
+            { label: "Žluté karty", value: totalYellow },
+          );
+        } else { // FWD
+          const goalContribution = totalGoals + totalAssists;
+          stats.push(
+            { label: "Góly", value: totalGoals, sub: `${goalsPerGame.toFixed(2)} / zápas`, highlight: true },
+            { label: "Asistence", value: totalAssists },
+            { label: "G+A", value: goalContribution },
+            { label: "Min / gól", value: totalGoals > 0 ? Math.round(totalMinutes / totalGoals) : "—" },
+          );
+        }
+
+        // Always-relevant secondary
+        const secondary: Array<{ label: string; value: string | number }> = [
+          { label: "Zápasů", value: totalGames },
+          { label: "V základu", value: `${startedGames}/${totalGames}` },
+          { label: "Min / zápas", value: minutesPerGame },
+        ];
+
+        const posTitle: Record<string, string> = {
+          GK: "Brankářský přehled",
+          DEF: "Obranný přehled",
+          MID: "Záložnický přehled",
+          FWD: "Útočný přehled",
+        };
+
+        return (
+          <div className="card p-4 sm:p-5">
+            <SectionLabel>{posTitle[pos] ?? "Sezónní přehled"}</SectionLabel>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {stats.map((s) => (
+                <div key={s.label} className={`p-3 rounded-lg ${s.highlight ? "bg-pitch-50 border border-pitch-100" : "bg-gray-50"}`}>
+                  <div className={`font-heading font-[800] text-2xl tabular-nums ${s.highlight ? "text-pitch-700" : "text-ink"}`}>{s.value}</div>
+                  <div className="text-xs font-heading uppercase text-muted mt-0.5">{s.label}</div>
+                  {s.sub && <div className="text-[11px] text-muted mt-0.5">{s.sub}</div>}
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-4 mt-4 pt-3 border-t border-gray-100 flex-wrap text-sm text-muted">
+              {secondary.map((sx) => (
+                <div key={sx.label}>
+                  {sx.label}: <span className="font-heading font-bold text-ink">{sx.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ═══ Row 2: Kariéra — FM style ═══ */}
       <div className="grid grid-cols-1 gap-5">
@@ -889,19 +1205,49 @@ export default function PlayerDetailPage() {
 
       </div>
 
-      {/* ═══ Row 3: Match history + Watchers ═══ */}
-      {matchHistory.length > 0 && (
-      <div className={`grid grid-cols-1 ${(player as any).watchers && (player as any).watchers.length > 0 ? "lg:grid-cols-[1fr_320px]" : ""} gap-5`}>
+      </>}
+      {/* ═══ /TAB STATISTIKY ═══ */}
+
+      {/* ═══ TAB: HISTORIE — pokračování (Match history) ═══ */}
+      {activeTab === "historie" && matchHistory.length > 0 && (() => {
+        const filtered = historyFilter === "all"
+          ? matchHistory
+          : matchHistory.filter((m) => m.result === historyFilter);
+        // Highlight best/worst rating zápasy
+        const bestRating = matchHistory.reduce((max, m) => Math.max(max, m.rating), -Infinity);
+        const worstRating = matchHistory.reduce((min, m) => Math.min(min, m.rating), Infinity);
+        const winsCount = matchHistory.filter((m) => m.result === "W").length;
+        const drawsCount = matchHistory.filter((m) => m.result === "D").length;
+        const lossesCount = matchHistory.filter((m) => m.result === "L").length;
+        const Filter = ({ id, label, count, color }: { id: typeof historyFilter; label: string; count: number; color: string }) => (
+          <button
+            onClick={() => setHistoryFilter(id)}
+            className={`px-2.5 py-1 rounded-md text-xs font-heading font-bold transition-colors ${
+              historyFilter === id ? `${color} text-white` : "bg-gray-100 text-ink hover:bg-gray-200"
+            }`}
+          >
+            {label} <span className="opacity-75">{count}</span>
+          </button>
+        );
+        return (
         <div className="card p-4 sm:p-5">
-          <SectionLabel>Historie zápasů ({matchHistory.length})</SectionLabel>
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <SectionLabel>Historie zápasů ({filtered.length}/{matchHistory.length})</SectionLabel>
+            <div className="flex items-center gap-1">
+              <Filter id="all" label="Všechny" count={matchHistory.length} color="bg-pitch-500" />
+              <Filter id="W" label="Výhry" count={winsCount} color="bg-pitch-500" />
+              <Filter id="D" label="Remízy" count={drawsCount} color="bg-gray-500" />
+              <Filter id="L" label="Prohry" count={lossesCount} color="bg-red-500" />
+            </div>
+          </div>
           <div className="overflow-x-auto -mx-4 sm:-mx-5">
-            <table className="w-full text-sm min-w-[700px]">
+            <table className="w-full text-sm min-w-[760px]">
               <thead>
                 <tr className="text-left text-label border-b border-gray-200 text-[11px] uppercase tracking-wide">
                   <th className="pb-2 pl-4 sm:pl-5 pr-2 w-12">Kolo</th>
                   <th className="pb-2 pr-2">Soupeř</th>
                   <th className="pb-2 pr-2 text-center w-20">Výsledek</th>
-                  <th className="pb-2 pr-2 text-center w-14" title="Hodnocení">Hod.</th>
+                  <th className="pb-2 pr-2 text-center w-24" title="Hodnocení">Hodnocení</th>
                   <th className="pb-2 pr-2 text-center w-12" title="Minuty">Min</th>
                   <th className="pb-2 pr-2 text-center w-8" title="Góly">G</th>
                   <th className="pb-2 pr-2 text-center w-8" title="Asistence">A</th>
@@ -909,7 +1255,7 @@ export default function PlayerDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {matchHistory.map((m) => {
+                {filtered.map((m) => {
                   const resultBg = m.result === "W" ? "bg-pitch-50" : m.result === "L" ? "bg-red-50" : "bg-gray-50";
                   const resultText = m.result === "W" ? "text-pitch-600" : m.result === "L" ? "text-card-red" : "text-muted";
                   const ratingColor = m.rating >= 7.5 ? "text-pitch-500 font-bold"
@@ -917,9 +1263,16 @@ export default function PlayerDetailPage() {
                     : m.rating >= 5.5 ? "text-ink"
                     : m.rating >= 4.5 ? "text-gold-600"
                     : "text-card-red font-bold";
+                  const barPct = Math.max(0, Math.min(100, ((m.rating - 1) / 9) * 100));
+                  const barColor = m.rating >= 7.5 ? "#10b981"
+                    : m.rating >= 6.5 ? "#f59e0b"
+                    : "#ef4444";
+                  const isBest = matchHistory.length >= 3 && m.rating === bestRating;
+                  const isWorst = matchHistory.length >= 3 && m.rating === worstRating;
+                  const rowBg = isBest ? "bg-pitch-50/30" : isWorst ? "bg-red-50/30" : "";
 
                   return (
-                    <tr key={m.matchId} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                    <tr key={m.matchId} className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${rowBg}`}>
                       <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "—"}</td>
                       <td className="py-2 pr-2">
                         <a href={`/dashboard/match/${m.matchId}/replay`} className="flex items-center gap-2 hover:underline">
@@ -928,6 +1281,8 @@ export default function PlayerDetailPage() {
                             initials={(m.opponent ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={20} />
                           <span className="font-heading font-bold text-ink truncate max-w-[180px]">{m.opponent ?? "Soupeř"}</span>
                           <span className="text-[10px] text-muted uppercase">{m.isHome ? "D" : "V"}</span>
+                          {isBest && <span title="Nejlepší rating sezóny" className="text-xs">🌟</span>}
+                          {isWorst && <span title="Nejhorší rating sezóny" className="text-xs">😞</span>}
                         </a>
                       </td>
                       <td className="py-2 pr-2 text-center">
@@ -935,8 +1290,15 @@ export default function PlayerDetailPage() {
                           {m.homeScore}:{m.awayScore}
                         </span>
                       </td>
-                      <td className={`py-2 pr-2 text-center tabular-nums font-heading font-bold ${ratingColor}`}>
-                        {m.rating.toFixed(1)}
+                      <td className="py-2 pr-2">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-8 h-1.5 rounded-full bg-gray-100 overflow-hidden hidden sm:block" title={`Rating ${m.rating.toFixed(1)}/10`}>
+                            <div className="h-full rounded-full" style={{ width: `${barPct}%`, backgroundColor: barColor }} />
+                          </div>
+                          <span className={`tabular-nums font-heading font-bold ${ratingColor}`}>
+                            {m.rating.toFixed(1)}
+                          </span>
+                        </div>
                       </td>
                       <td className="py-2 pr-2 text-center tabular-nums text-muted">{m.minutesPlayed}&apos;</td>
                       <td className="py-2 pr-2 text-center tabular-nums font-heading font-bold">{m.goals > 0 ? m.goals : ""}</td>
@@ -948,21 +1310,24 @@ export default function PlayerDetailPage() {
                     </tr>
                   );
                 })}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={8} className="py-4 text-center text-sm text-muted italic">Žádný zápas neodpovídá filtru.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
 
-          {/* Summary */}
+          {/* Summary — vždy z celé sezóny, ne z filtru */}
           <div className="flex gap-4 mt-4 pt-3 border-t border-gray-100 flex-wrap">
             <div className="text-sm text-muted">
               <span className="font-heading font-bold text-ink">{matchHistory.length}</span> zápasů
             </div>
             <div className="text-sm text-muted">
-              <span className="font-heading font-bold text-pitch-500">{matchHistory.filter((m) => m.result === "W").length}V</span>
+              <span className="font-heading font-bold text-pitch-500">{winsCount}V</span>
               {" "}
-              <span className="font-heading font-bold text-ink">{matchHistory.filter((m) => m.result === "D").length}R</span>
+              <span className="font-heading font-bold text-ink">{drawsCount}R</span>
               {" "}
-              <span className="font-heading font-bold text-card-red">{matchHistory.filter((m) => m.result === "L").length}P</span>
+              <span className="font-heading font-bold text-card-red">{lossesCount}P</span>
             </div>
             <div className="text-sm text-muted">
               <span className="font-heading font-bold text-ink">{matchHistory.reduce((s, m) => s + m.goals, 0)}</span> gólů
@@ -972,34 +1337,12 @@ export default function PlayerDetailPage() {
             </div>
           </div>
         </div>
+        );
+      })()}
 
-        {/* ═══ Sledují hráče ═══ */}
-        {(player as any).watchers && (player as any).watchers.length > 0 && (
-          <div className="card p-4 sm:p-5 h-fit">
-            <SectionLabel>Sledují hráče ({(player as any).watchers.length})</SectionLabel>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {((player as any).watchers as Array<{ id: string; name: string; primary_color: string; secondary_color: string; badge_pattern: string }>).map((w) => (
-                <Link key={w.id} href={`/dashboard/team/${w.id}`}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gray-50 hover:bg-pitch-500/10 border border-gray-100 transition-colors">
-                  <BadgePreview
-                    primary={w.primary_color || "#2D5F2D"}
-                    secondary={w.secondary_color || "#FFF"}
-                    pattern={(w.badge_pattern as BadgePattern) || "shield"}
-                    initials={(w.name || "").split(" ").map((x) => x[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
-                    size={18}
-                  />
-                  <span className="text-xs font-heading font-bold text-ink">{w.name}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-      )}
-
-      {/* Sledují hráče — samostatně, pokud není match history */}
-      {matchHistory.length === 0 && (player as any).watchers && (player as any).watchers.length > 0 && (
-        <div className="card p-4 sm:p-5 max-w-lg">
+      {/* ═══ TAB: VZTAHY — Watchers ═══ */}
+      {activeTab === "vztahy" && (player as any).watchers && (player as any).watchers.length > 0 && (
+        <div className="card p-4 sm:p-5">
           <SectionLabel>Sledují hráče ({(player as any).watchers.length})</SectionLabel>
           <div className="flex flex-wrap gap-2 mt-2">
             {((player as any).watchers as Array<{ id: string; name: string; primary_color: string; secondary_color: string; badge_pattern: string }>).map((w) => (

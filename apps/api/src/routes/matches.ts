@@ -689,6 +689,13 @@ matchesRouter.post("/admin/backfill-match-stats", async (c) => {
   return c.json(result);
 });
 
+// POST /api/admin/backfill-assists — dopočítá assists v existujících match_player_stats
+matchesRouter.post("/admin/backfill-assists", async (c) => {
+  const { backfillAssists } = await import("../../scripts/backfill-assists");
+  const result = await backfillAssists(c.env.DB);
+  return c.json(result);
+});
+
 
 // ── Friendly match challenges (PvP only) ──
 
