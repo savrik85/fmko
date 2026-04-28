@@ -1106,6 +1106,7 @@ teamsRouter.get("/:id/relationships", async (c) => {
 });
 
 // GET /api/teams/:id/stats — statistiky kádru pro aktuální sezónu
+// LEFT JOIN players → player_stats: vrací VŠECHNY aktivní hráče i s nulovými staty
 teamsRouter.get("/:id/stats", async (c) => {
   const teamId = c.req.param("id");
 
@@ -1113,15 +1114,25 @@ teamsRouter.get("/:id/stats", async (c) => {
     "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
   ).first<{ id: string }>().catch((e) => { logger.warn({ module: "teams" }, "fetch active season for stats", e); return null; });
 
-  if (!season) return c.json({ stats: [], topScorers: [], topAssists: [] });
+  const seasonId = season?.id ?? null;
 
   const result = await c.env.DB.prepare(
-    `SELECT ps.*, p.first_name, p.last_name, p.nickname, p.position, p.avatar
-     FROM player_stats ps
-     JOIN players p ON ps.player_id = p.id
-     WHERE ps.team_id = ? AND ps.season_id = ?
-     ORDER BY ps.goals DESC, ps.assists DESC`
-  ).bind(teamId, season.id).all().catch((e) => { logger.warn({ module: "teams" }, "fetch player stats", e); return { results: [] }; });
+    `SELECT p.id as player_id, p.first_name, p.last_name, p.nickname, p.position, p.avatar,
+            COALESCE(ps.appearances, 0) as appearances,
+            COALESCE(ps.goals, 0) as goals,
+            COALESCE(ps.assists, 0) as assists,
+            COALESCE(ps.yellow_cards, 0) as yellow_cards,
+            COALESCE(ps.red_cards, 0) as red_cards,
+            COALESCE(ps.minutes_played, 0) as minutes_played,
+            ps.avg_rating,
+            COALESCE(ps.clean_sheets, 0) as clean_sheets,
+            COALESCE(ps.man_of_match, 0) as man_of_match
+     FROM players p
+     LEFT JOIN player_stats ps
+       ON ps.player_id = p.id AND ps.team_id = p.team_id AND ps.season_id = ?
+     WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
+     ORDER BY COALESCE(ps.goals, 0) DESC, COALESCE(ps.assists, 0) DESC, p.overall_rating DESC`
+  ).bind(seasonId, teamId).all().catch((e) => { logger.warn({ module: "teams" }, "fetch player stats", e); return { results: [] }; });
 
   const stats = result.results.map((row) => ({
     playerId: row.player_id,

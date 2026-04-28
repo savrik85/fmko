@@ -395,11 +395,11 @@ export default function SquadPage() {
             </div>
           </div>
 
-          {seasonStats.length === 0 ? (
-            <div className="card p-6 text-center text-sm text-muted">
-              Zatím žádná data o sezoně. Statistiky se načtou po prvním odehraném zápase.
+          {totalApps === 0 && (
+            <div className="card p-3 text-center text-xs text-muted">
+              {"\u{2139}\u{FE0F}"} Tým zatím neodehrál žádný zápas. Statistiky se naplní postupně po každém kole. <Link href="/dashboard/schedule" className="text-pitch-600 underline ml-1">Rozpis zápasů</Link>
             </div>
-          ) : (
+          )}
           <div className="card overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -455,15 +455,15 @@ export default function SquadPage() {
               </tbody>
             </table>
           </div>
-          )}
         </>
       )}
 
       {/* TOP hráči */}
       {tab === "top" && (
-        seasonStats.length === 0 ? (
+        totalApps === 0 ? (
           <div className="card p-6 text-center text-sm text-muted">
-            Zatím žádná data o sezoně.
+            {"\u{2139}\u{FE0F}"} Žebříčky se naplní po prvním odehraném zápase.{" "}
+            <Link href="/dashboard/schedule" className="text-pitch-600 underline">Rozpis zápasů</Link>
           </div>
         ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
