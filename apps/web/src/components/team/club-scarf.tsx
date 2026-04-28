@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { BadgePreview, type BadgePattern } from "@/components/ui";
 
 export type ScarfPattern = "classic" | "bar" | "block" | "hooped" | "halves" | "vertical" | "solid";
@@ -101,8 +102,27 @@ export function ClubScarf({
   const fixed = width != null && height != null;
   const containerStyle: React.CSSProperties = fixed ? { width, height } : {};
 
+  // Měříme výšku v non-fixed režimu, aby se znak škáloval s reálnou výškou šály.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [measuredHeight, setMeasuredHeight] = useState(0);
+  useEffect(() => {
+    if (fixed) return;
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => {
+      if (entry) setMeasuredHeight(entry.contentRect.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fixed]);
+
+  const effectiveHeight = fixed ? (height as number) : measuredHeight;
+  // Znak vyplní ~65% výšky šály (jako reálné fan-šály), max 110 px.
+  const badgeSize = effectiveHeight > 0 ? Math.max(20, Math.min(110, Math.round(effectiveHeight * 0.65))) : 36;
+
   return (
     <div
+      ref={containerRef}
       className={`relative shrink-0 ${className ?? ""}`}
       style={containerStyle}
     >
@@ -175,7 +195,7 @@ export function ClubScarf({
             pattern={pattern}
             initials={initials}
             symbol={symbol}
-            size={fixed ? Math.min((height as number) - 18, 38) : 36}
+            size={badgeSize}
           />
         </div>
       </div>
