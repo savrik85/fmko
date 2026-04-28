@@ -7,7 +7,7 @@ import { simulateMatch } from "../engine/simulation";
 import { generateMatchCommentary, loadCommentaryFromDB } from "../engine/commentary";
 import { createRng } from "../generators/rng";
 import type { MatchPlayer, TeamSetup, Weather } from "../engine/types";
-import { calculatePlayerRatings, extractStatsFromEvents, updatePlayerStats, saveMatchPlayerStats, type MatchPlayerStatsEntry } from "../stats/update-stats";
+import { calculatePlayerRatings, extractStatsFromEvents, updatePlayerStats, saveMatchPlayerStats, determineManOfMatch, saveMatchMom, type MatchPlayerStatsEntry } from "../stats/update-stats";
 import { logger } from "../lib/logger";
 
 export interface MatchRunResult {
@@ -398,20 +398,22 @@ export async function runScheduledMatches(
           playerPositions.set(p.id, p.matchPosition ?? p.position);
         }
 
-        // Calculate per-player ratings
+        // Calculate per-player ratings + určit MVP (Hráč zápasu)
         const ratings = calculatePlayerRatings(result.events, fullIdMap, 1, result.homeScore, result.awayScore, playerPositions);
+        const momPlayerId = determineManOfMatch(ratings);
+        await saveMatchMom(db, matchId, momPlayerId);
 
         // Home team stats — starter IDs musí pocházet z PRE-SIM lineupu (homeLineupPreSim),
         // ne z idMap.values() která má insertion order. Při substituci by jinak střídající
         // dostali started=true a starters started=false.
         const homeStarterIds = homeLineupPreSim.map((p) => homeBuild.idMap.get(p.id) ?? "").filter(Boolean);
         const homeUpdates = extractStatsFromEvents(result.events, homeBuild.idMap, homeStarterIds, ratings, result.playerMinutes);
-        await updatePlayerStats(db, season.id, homeTeamId, homeUpdates, result.awayScore === 0).catch((e) => logger.warn({ module: "match-runner" }, "Failed to update home player stats", e));
+        await updatePlayerStats(db, season.id, homeTeamId, homeUpdates, result.awayScore === 0, momPlayerId).catch((e) => logger.warn({ module: "match-runner" }, "Failed to update home player stats", e));
 
         // Away team stats
         const awayStarterIds = awayLineupPreSim.map((p) => awayBuild.idMap.get(p.id) ?? "").filter(Boolean);
         const awayUpdates = extractStatsFromEvents(result.events, awayBuild.idMap, awayStarterIds, ratings, result.playerMinutes);
-        await updatePlayerStats(db, season.id, awayTeamId, awayUpdates, result.homeScore === 0).catch((e) => logger.warn({ module: "match-runner" }, "Failed to update away player stats", e));
+        await updatePlayerStats(db, season.id, awayTeamId, awayUpdates, result.homeScore === 0, momPlayerId).catch((e) => logger.warn({ module: "match-runner" }, "Failed to update away player stats", e));
 
         // Save per-match player stats for both teams
         const allEntries: MatchPlayerStatsEntry[] = [

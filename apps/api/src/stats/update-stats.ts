@@ -222,6 +222,33 @@ export function extractStatsFromEvents(
 }
 
 /**
+ * Určí hráče zápasu (MVP) — hráč s nejvyšším ratingem napříč oběma týmy.
+ * Vrací null pokud žádný hráč nemá rating ≥ MOM_MIN_RATING (zápas bez výrazného výkonu).
+ */
+const MOM_MIN_RATING = 7.0;
+export function determineManOfMatch(playerRatings: Record<string, number>): string | null {
+  let bestId: string | null = null;
+  let bestRating = MOM_MIN_RATING - 0.0001;
+  for (const [pid, rating] of Object.entries(playerRatings)) {
+    if (rating > bestRating) {
+      bestRating = rating;
+      bestId = pid;
+    }
+  }
+  return bestId;
+}
+
+/**
+ * Uloží mom_player_id do matches.
+ */
+export async function saveMatchMom(db: D1Database, matchId: string, momPlayerId: string | null): Promise<void> {
+  if (!momPlayerId) return;
+  await db.prepare("UPDATE matches SET mom_player_id = ? WHERE id = ?")
+    .bind(momPlayerId, matchId).run()
+    .catch((e) => logger.warn({ module: "stats" }, "save match MoM", e));
+}
+
+/**
  * Upsert player stats do DB.
  */
 export async function updatePlayerStats(
@@ -230,12 +257,14 @@ export async function updatePlayerStats(
   teamId: string,
   updates: StatsUpdate[],
   isCleanSheet: boolean,
+  momPlayerId?: string | null,
 ): Promise<void> {
   if (updates.length === 0) return;
-  const stmts = updates.map((u) =>
-    db.prepare(
-      `INSERT INTO player_stats (id, player_id, team_id, season_id, appearances, goals, assists, yellow_cards, red_cards, minutes_played, avg_rating, clean_sheets)
-       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+  const stmts = updates.map((u) => {
+    const isMom = momPlayerId != null && u.playerId === momPlayerId;
+    return db.prepare(
+      `INSERT INTO player_stats (id, player_id, team_id, season_id, appearances, goals, assists, yellow_cards, red_cards, minutes_played, avg_rating, clean_sheets, man_of_match)
+       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(player_id, team_id, season_id) DO UPDATE SET
          appearances = appearances + 1,
          goals = goals + ?,
@@ -244,12 +273,13 @@ export async function updatePlayerStats(
          red_cards = red_cards + ?,
          minutes_played = minutes_played + ?,
          avg_rating = (avg_rating * appearances + ?) / (appearances + 1),
-         clean_sheets = clean_sheets + ?`
+         clean_sheets = clean_sheets + ?,
+         man_of_match = man_of_match + ?`
     ).bind(
       crypto.randomUUID(), u.playerId, teamId, seasonId,
-      u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0,
-      u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0,
-    )
-  );
+      u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0, isMom ? 1 : 0,
+      u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0, isMom ? 1 : 0,
+    );
+  });
   await db.batch(stmts).catch((e) => logger.warn({ module: "stats" }, "batch upsert stats", e));
 }

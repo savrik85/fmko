@@ -31,6 +31,7 @@ interface MatchDetail {
   attendance: number | null; stadium_name: string | null;
   pitch_condition: number | null; weather: string | null;
   possession_home?: number | null;
+  mom_player_id?: string | null;
   home_lineup_data: LineupData | null; away_lineup_data: LineupData | null;
   player_ratings?: Record<string, number>;
   absences?: MatchAbsence[];
@@ -186,7 +187,10 @@ export default function MatchDetailPage() {
     .filter((e) => e.player != null)
     .sort((a, b) => b.rating - a.rating);
 
-  const mvp = ratedWithTeam[0] ?? null;
+  // MVP — preferuj uložený mom_player_id z DB (konstantní napříč zobrazením),
+  // jinak fallback na hráče s nejvyšším ratingem (pro starší zápasy bez DB záznamu)
+  const mvpFromDb = match.mom_player_id ? ratedWithTeam.find((e) => e.id === match.mom_player_id) : null;
+  const mvp = mvpFromDb ?? ratedWithTeam[0] ?? null;
 
   const topHome = ratedWithTeam
     .filter((e) => e.player!.teamId === 1 && e.id !== mvp?.id)
