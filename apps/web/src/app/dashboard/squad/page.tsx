@@ -124,7 +124,7 @@ export default function SquadPage() {
   }, [teamId]);
 
   // TOP tab — výpočty leaderů (musí být před early returnem kvůli rules of hooks)
-  const topData = useMemo(() => {
+  const topMatchData = useMemo(() => {
     const sortBy = (key: keyof PlayerSeasonStats, min = 0) =>
       seasonStats
         .filter((s) => (s[key] as number) > min)
@@ -153,6 +153,41 @@ export default function SquadPage() {
         .slice(0, 5),
     };
   }, [seasonStats]);
+
+  // TOP atributy — z player roster, fungují i bez odehraných zápasů
+  const topPlayerData = useMemo(() => {
+    const active = players.filter((p) => (p as any).status !== "quit");
+    const sortBySkill = (skill: string) => [...active]
+      .map((p) => ({ p, v: (p.skills as Record<string, number> | undefined)?.[skill] ?? 0 }))
+      .filter((x) => x.v > 0)
+      .sort((a, b) => b.v - a.v)
+      .slice(0, 5);
+    const sortByPhys = (key: string) => [...active]
+      .map((p) => ({ p, v: ((p.physical as unknown) as Record<string, number> | undefined)?.[key] ?? 0 }))
+      .filter((x) => x.v > 0)
+      .sort((a, b) => b.v - a.v)
+      .slice(0, 5);
+    const sortByLC = (key: string) => [...active]
+      .map((p) => ({ p, v: ((p.lifeContext as unknown as Record<string, number> | undefined))?.[key] ?? 0 }))
+      .sort((a, b) => b.v - a.v)
+      .slice(0, 5);
+    return {
+      ratings: [...active].sort((a, b) => (b.overall_rating ?? 0) - (a.overall_rating ?? 0)).slice(0, 5),
+      speed: sortBySkill("speed"),
+      shooting: sortBySkill("shooting"),
+      technique: sortBySkill("technique"),
+      passing: sortBySkill("passing"),
+      heading: sortBySkill("heading"),
+      defense: sortBySkill("defense"),
+      stamina: sortByPhys("stamina"),
+      strength: sortByPhys("strength"),
+      condition: sortByLC("condition"),
+      morale: sortByLC("morale"),
+      youngest: [...active].sort((a, b) => a.age - b.age).slice(0, 5),
+      oldest: [...active].sort((a, b) => b.age - a.age).slice(0, 5),
+      wages: [...active].sort((a, b) => (b.weekly_wage ?? 0) - (a.weekly_wage ?? 0)).slice(0, 5),
+    };
+  }, [players]);
 
   if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
   if (!team) return <div className="p-6">Tým nenalezen.</div>;
@@ -458,28 +493,108 @@ export default function SquadPage() {
         </>
       )}
 
-      {/* TOP hráči */}
+      {/* TOP hráči — atributy + matchové */}
       {tab === "top" && (
-        totalApps === 0 ? (
+        <>
+          <div className="text-[11px] font-heading font-bold text-muted uppercase tracking-wider mt-1">{"\u{1F3C5}"} Žebříčky kádru</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <PlayerTopList title={"\u{2B50} Nejvyšší rating"} items={topPlayerData.ratings} valueOf={(p) => p.overall_rating ?? 0} />
+            <PlayerTopList title={"\u{1F525} Top kondice"} items={topPlayerData.condition.map((x) => x.p)} valueOf={(p) => `${(p.lifeContext as unknown as Record<string, number>)?.condition ?? 0}%`} />
+            <PlayerTopList title={"\u{1F60A} Top morálka"} items={topPlayerData.morale.map((x) => x.p)} valueOf={(p) => `${(p.lifeContext as unknown as Record<string, number>)?.morale ?? 0}%`} />
+            <PlayerTopList title={"\u{1F4A8} Nejrychlejší"} items={topPlayerData.speed.map((x) => x.p)} valueOf={(p) => p.skills?.speed ?? 0} />
+            <PlayerTopList title={"\u{1F3AF} Nejlepší střelba"} items={topPlayerData.shooting.map((x) => x.p)} valueOf={(p) => p.skills?.shooting ?? 0} />
+            <PlayerTopList title={"\u{1F3A8} Top technika"} items={topPlayerData.technique.map((x) => x.p)} valueOf={(p) => p.skills?.technique ?? 0} />
+            <PlayerTopList title={"\u{1F4E4} Top přihrávky"} items={topPlayerData.passing.map((x) => x.p)} valueOf={(p) => p.skills?.passing ?? 0} />
+            <PlayerTopList title={"\u{1F9E0} Top hlavičky"} items={topPlayerData.heading.map((x) => x.p)} valueOf={(p) => p.skills?.heading ?? 0} />
+            <PlayerTopList title={"\u{1F6E1}\u{FE0F} Top obrana"} items={topPlayerData.defense.map((x) => x.p)} valueOf={(p) => p.skills?.defense ?? 0} />
+            <PlayerTopList title={"\u{1F3C3} Top výdrž"} items={topPlayerData.stamina.map((x) => x.p)} valueOf={(p) => (p.physical as unknown as Record<string, number>)?.stamina ?? 0} />
+            <PlayerTopList title={"\u{1F4AA} Top síla"} items={topPlayerData.strength.map((x) => x.p)} valueOf={(p) => (p.physical as unknown as Record<string, number>)?.strength ?? 0} />
+            <PlayerTopList title={"\u{1F476} Nejmladší"} items={topPlayerData.youngest} valueOf={(p) => `${p.age} l.`} />
+            <PlayerTopList title={"\u{1F474} Nejstarší"} items={topPlayerData.oldest} valueOf={(p) => `${p.age} l.`} />
+            <PlayerTopList title={"\u{1F4B0} Nejvyšší mzdy"} items={topPlayerData.wages} valueOf={(p) => (p.weekly_wage ?? 0).toLocaleString("cs")} suffix="Kč" />
+          </div>
+
+          {totalApps > 0 && (
+            <>
+              <div className="text-[11px] font-heading font-bold text-muted uppercase tracking-wider mt-4">{"\u{26BD}"} Sezónní výkonnost</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <TopList title="\u{26BD} Nejlepší střelci" items={topMatchData.scorers} valueOf={(s) => s.goals ?? 0} suffix="g" />
+                <TopList title="\u{1F3AF} Nejlepší asistenti" items={topMatchData.assists} valueOf={(s) => s.assists ?? 0} suffix="a" />
+                <TopList title="\u{2B50} Avg rating zápasů" items={topMatchData.ratings} valueOf={(s) => (s.avgRating ?? 0).toFixed(1)} />
+                <TopList title="\u{1F451} Hráč zápasu" items={topMatchData.mom} valueOf={(s) => s.manOfMatch ?? 0} suffix="×" />
+                <TopList title="\u{23F1}\u{FE0F} Nejvíce minut" items={topMatchData.minutes} valueOf={(s) => `${s.minutesPlayed ?? 0} '`} />
+                <TopList title="\u{1F9E4} Čistá konta" items={topMatchData.cleanSheets} valueOf={(s) => s.cleanSheets ?? 0} />
+                {topMatchData.cards.length > 0 && (
+                  <TopList title="\u{1F7E5} Disciplinární přestupky" items={topMatchData.cards as PlayerSeasonStats[]}
+                    valueOf={(s) => `${s.yellowCards ?? 0}ŽK / ${s.redCards ?? 0}ČK`} />
+                )}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* OLD-TOP-START — keep wrapped in false so Edit can match */}
+      {false && false && false && (
+        false ? (
           <div className="card p-6 text-center text-sm text-muted">
             {"\u{2139}\u{FE0F}"} Žebříčky se naplní po prvním odehraném zápase.{" "}
             <Link href="/dashboard/schedule" className="text-pitch-600 underline">Rozpis zápasů</Link>
           </div>
         ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <TopList title="\u{26BD} Nejlepší střelci" items={topData.scorers} valueOf={(s) => s.goals ?? 0} suffix="g" />
-          <TopList title="\u{1F3AF} Nejlepší asistenti" items={topData.assists} valueOf={(s) => s.assists ?? 0} suffix="a" />
-          <TopList title="\u{2B50} Nejlepší rating" items={topData.ratings} valueOf={(s) => (s.avgRating ?? 0).toFixed(1)} />
-          <TopList title="\u{1F451} Hráč zápasu" items={topData.mom} valueOf={(s) => s.manOfMatch ?? 0} suffix="×" />
-          <TopList title="\u{23F1}\u{FE0F} Nejvíce minut" items={topData.minutes} valueOf={(s) => `${s.minutesPlayed ?? 0} '`} />
-          <TopList title="\u{1F9E4} Čistá konta" items={topData.cleanSheets} valueOf={(s) => s.cleanSheets ?? 0} suffix="" />
-          {topData.cards.length > 0 && (
-            <TopList title="\u{1F7E5} Disciplinární přestupky" items={topData.cards as PlayerSeasonStats[]}
+          <TopList title="\u{26BD} Nejlepší střelci" items={topMatchData.scorers} valueOf={(s) => s.goals ?? 0} suffix="g" />
+          <TopList title="\u{1F3AF} Nejlepší asistenti" items={topMatchData.assists} valueOf={(s) => s.assists ?? 0} suffix="a" />
+          <TopList title="\u{2B50} Nejlepší rating" items={topMatchData.ratings} valueOf={(s) => (s.avgRating ?? 0).toFixed(1)} />
+          <TopList title="\u{1F451} Hráč zápasu" items={topMatchData.mom} valueOf={(s) => s.manOfMatch ?? 0} suffix="×" />
+          <TopList title="\u{23F1}\u{FE0F} Nejvíce minut" items={topMatchData.minutes} valueOf={(s) => `${s.minutesPlayed ?? 0} '`} />
+          <TopList title="\u{1F9E4} Čistá konta" items={topMatchData.cleanSheets} valueOf={(s) => s.cleanSheets ?? 0} suffix="" />
+          {topMatchData.cards.length > 0 && (
+            <TopList title="\u{1F7E5} Disciplinární přestupky" items={topMatchData.cards as PlayerSeasonStats[]}
               valueOf={(s) => `${s.yellowCards ?? 0}ŽK / ${s.redCards ?? 0}ČK`} />
           )}
         </div>
         )
       )}
+    </div>
+  );
+}
+
+function PlayerTopList({ title, items, valueOf, suffix = "" }: {
+  title: string;
+  items: Player[];
+  valueOf: (p: Player) => string | number;
+  suffix?: string;
+}) {
+  if (items.length === 0) {
+    return (
+      <div className="card p-4">
+        <div className="font-heading font-bold text-sm text-ink mb-2">{title}</div>
+        <div className="text-xs text-muted">Žádná data.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="card p-4">
+      <div className="font-heading font-bold text-sm text-ink mb-3">{title}</div>
+      <div className="space-y-1.5">
+        {items.map((p, i) => {
+          const medal = i === 0 ? "\u{1F947}" : i === 1 ? "\u{1F948}" : i === 2 ? "\u{1F949}" : `${i + 1}.`;
+          return (
+            <Link key={p.id} href={`/dashboard/player/${p.id}`}
+              className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded hover:bg-pitch-50/50 transition-colors group">
+              <span className="w-6 text-center text-sm shrink-0">{medal}</span>
+              <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
+              <span className="flex-1 min-w-0 truncate font-heading font-bold text-sm group-hover:text-pitch-500 transition-colors">
+                {p.first_name} {p.last_name}
+              </span>
+              <span className="font-heading font-[800] tabular-nums text-pitch-600 text-sm shrink-0">
+                {valueOf(p)}{suffix && <span className="text-muted font-normal text-xs ml-0.5">{suffix}</span>}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
