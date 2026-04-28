@@ -4,6 +4,7 @@ import { BadgePreview, JerseyPreview, ShortsPreview, SocksPreview } from "@/comp
 import type { BadgePattern } from "@/components/ui";
 import { ShareButton } from "./ShareButton";
 import { ManagerFace } from "./ManagerFace";
+import { ClubScarf } from "@/components/team/club-scarf";
 
 export const runtime = "edge";
 
@@ -212,6 +213,22 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
               </div>
             );
           })()}
+        </div>
+      </section>
+
+      {/* ═══ Klubová vlajka (šála) ═══ */}
+      <section className="relative py-10 sm:py-14">
+        <div className="max-w-[1200px] mx-auto px-5 sm:px-10">
+          <div className="w-full sm:w-4/5 mx-auto">
+            <ClubScarf
+              primary={club.badge.primary}
+              secondary={club.badge.secondary}
+              pattern={badgePattern}
+              initials={badgeIni}
+              symbol={club.badge.symbol}
+              className="h-24 sm:h-36 w-full"
+            />
+          </div>
         </div>
       </section>
 

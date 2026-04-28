@@ -7,7 +7,6 @@ import { useTeam } from "@/context/team-context";
 import { Spinner, SectionLabel, EntityLink, BadgePreview, PositionBadge, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { ClubScarf } from "@/components/team/club-scarf";
 
 function isLightColor(hex: string): boolean {
   const c = hex.replace("#", "");
@@ -325,18 +324,6 @@ export default function TeamPage() {
       </div>
 
     <div className="page-container space-y-5">
-
-      {/* ═══ Klubová vlajka (šála) ═══ */}
-      <div className="w-full sm:w-4/5 mx-auto">
-        <ClubScarf
-          primary={team.badge_primary_color || color}
-          secondary={team.badge_secondary_color || team.secondary_color || "#FFF"}
-          pattern={(team.badge_pattern as BadgePattern) || "shield"}
-          initials={team.badge_initials || team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
-          symbol={team.badge_symbol}
-          className="h-20 sm:h-28 w-full"
-        />
-      </div>
 
       {/* ═══ Top row: Info + Manager + Form ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
