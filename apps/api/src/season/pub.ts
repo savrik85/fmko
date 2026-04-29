@@ -24,6 +24,10 @@ interface PubEffect {
   delta?: number; // pro condition/morale
   injuryDays?: number; // pro injury
   label: string; // pro UI: "−12 kondice", "Lehké zranění (2 d)", "+3 morálka", "Ranní kocovina"
+  /** Volitelný description pro injuries — defaultně "Zranění z hospodské bitky". */
+  injuryDescription?: string;
+  /** Volitelný subtype injury (např. "zazivaci_potize") — defaultně "obecne". */
+  injuryType?: string;
 }
 
 interface PubIncident {
@@ -153,6 +157,52 @@ const WIFE_CALL_INCIDENT_TEMPLATES = [
   "Manželka volala {name}ovi. ‚Domů. Hned.‘ Sebral si bundu a šel.",
   "{name}ova žena vtrhla do hospody a odvedla ho domů za ucho. Hospodský se smál ještě hodinu.",
   "{name}ovi přišla SMS od manželky. Z výrazu bylo jasné, co tam stálo. Šel.",
+];
+
+// Žaludek si neporadí — 1 den mimo (slabé zranění typu "zazivaci_potize")
+const BAD_FOOD_INCIDENT_TEMPLATES = [
+  "{name} si dal guláš ze středy. Byla sobota. Ráno na klozetu složil přísahu, že už nikdy.",
+  "{name} snědl utopence co stáli za barem. Hospodský o nich neví, kdy je dělal. Jeho žaludek to ví.",
+  "Hospodský {name}ovi naservíroval klobásy „extra zlevněný“. Ráno se {name} omluvil — celý den válí na gauči.",
+  "{name} riskl smažený sýr v deset večer. Riskl moc. Trénink ho mine.",
+  "{name} sám snědl polévku, co kuchař mlel pondělím. Žaludek mu to nepustil.",
+  "{name} dal sázku, že do sebe hodí 6 utopenců. Vyhrál. Žaludek prohrál.",
+  "{name} si dal naložený hermelín neznámého stáří. Doma prý lezl po stěnách.",
+  "Tatarák s pěti hlavami česneku — {name} ho dal celej. Tělo se mstí.",
+  "Hospodský objevil v lednici buchty z minulé pouti a {name} si je nechtěl nechat ujít. Teď je nechce už ničemu ujít.",
+];
+
+// Drobné nehody v hospodě — kluzká podlaha, šipky, schody, záchod — 1-2 dny slabé zranění
+const PUB_ACCIDENT_INCIDENT_TEMPLATES = [
+  "{name} sklouzl po rozlitém pivu. Spadl ne moc, ale ne moc málo. Záda dělají potíže.",
+  "{name} uklouzl na záchodě, hlavou do umyvadla. Bouli má jako vajíčko.",
+  "{name} chtěl skočit ze schodů do sklepa pro pivo. Posledních pět schodů sjel po zadku.",
+  "{name} se chytil klubu při šipkách — šipka skončila v dlani. Nic vážného, ale nepříjemné.",
+  "{name} si při fotbálku na automatu lupl loktem o pípu. Druhý den ji ještě cítí.",
+  "{name} chtěl předvést salto na pípu. Salto neudělal. Modřinu ano.",
+  "{name} se ohnul pro mince co spadly pod hrací automat — vyrazil si záda.",
+  "{name} si srazil zub o sklenici, když mu kdosi zezadu zatleskal.",
+  "{name} narazil čelem do nízkého trámu jak vstával ze záchodu. Polovina hospody už si toho trámu jakž takž zvykla. {name} ne.",
+  "{name} se před hospodou zhoupl na zábradlí. Zábradlí povolilo. Záda taky.",
+  "{name} chtěl ukázat kotrmelec na pivním tácu. Nešlo. Lokty teď bolí.",
+  "{name} zakopl o nohu židle a sletěl rovnou do nealko regálu. Skla ho jen poškrábala.",
+];
+
+// Hospodská rvačka — opilí spoluhráči se nepohodli (intra-team, jiný od cross_team_fight)
+const DRUNK_FIGHT_INCIDENT_TEMPLATES = [
+  "{name1} a {name2} se po desátém pivu pohádali kdo je lepší obránce. Hospodský řešil rozbitou skleničku.",
+  "{name1} řekl {name2}ovi něco o jeho přítelkyni. Ulítla rána. Pak druhá. Hospodský oba vyhodil.",
+  "{name1} sebral {name2}ovi posledního panáka. {name2} mu dal pár facek na pamětnou.",
+  "{name1} a {name2} si dali na dvoře pěstní zápas o respekt. Oba vyhráli pár modřin.",
+  "{name1} osočil {name2}a z fauly v sobotním zápase. Hospodská bitka byla intenzivnější než ten faul.",
+  "{name1} a {name2} se servali u kulečníku. Tágo mělo víc poškození než hráči — ale ne moc.",
+];
+
+// Dluh na účtu — bez injury, jen narativa
+const TAB_INCIDENT_TEMPLATES = [
+  "Hospodský dnes vystavil dluhový kámen. {name} na něm má největší podíl.",
+  "{name} dostal upozornění — pokud do pátku nezaplatí, čepuje mu hospodský jen čaj.",
+  "{name} chtěl zaplatit kartou. Hospodský se zasmál a zapsal mu to.",
 ];
 
 function pickRandom<T>(arr: T[]): T {
@@ -323,6 +373,77 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     });
   }
 
+  // ── Zkažený guláš / kuchyňské hrůzy — 4% prob, 1 den mimo (zažívací potíže) ──
+  if (locals.length > 0 && Math.random() < 0.04) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "bad_food",
+      playerIds: [target.playerId],
+      text: pickRandom(BAD_FOOD_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      effects: [{
+        playerId: target.playerId,
+        type: "injury",
+        injuryDays: 1,
+        injuryType: "zazivaci_potize",
+        injuryDescription: "Zažívací potíže z hospody",
+        label: "Zažívací potíže (1 den mimo)",
+      }],
+    });
+  }
+
+  // ── Drobné hospodské nehody (uklouznutí, šipky, schody) — 4% prob, 1 den mimo ──
+  if (locals.length > 0 && Math.random() < 0.04) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "pub_accident",
+      playerIds: [target.playerId],
+      text: pickRandom(PUB_ACCIDENT_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      effects: [{
+        playerId: target.playerId,
+        type: "injury",
+        injuryDays: 1,
+        injuryType: "drobne",
+        injuryDescription: "Úraz v hospodě",
+        label: "Drobný úraz (1 den mimo)",
+      }],
+    });
+  }
+
+  // ── Vnitřní rvačka mezi opilými spoluhráči — 5% prob pokud sou aspoň 2 lokálové
+  //    s temper-proxy (alcohol≥45) — oba dostanou 1 den injury + morálka -2 ──
+  const fightCandidates = locals.filter((a) => a.alcohol >= 45);
+  if (fightCandidates.length >= 2 && Math.random() < 0.05) {
+    const f1 = pickRandom(fightCandidates);
+    const f2 = pickRandom(fightCandidates.filter((a) => a.playerId !== f1.playerId));
+    if (f2) {
+      const tpl = pickRandom(DRUNK_FIGHT_INCIDENT_TEMPLATES)
+        .replace("{name1}", f1.firstName)
+        .replace("{name2}", f2.firstName);
+      incidents.push({
+        type: "drunk_fight",
+        playerIds: [f1.playerId, f2.playerId],
+        text: tpl,
+        effects: [
+          { playerId: f1.playerId, type: "injury", injuryDays: 1, injuryType: "drobne", injuryDescription: "Modřiny po hospodské rvačce", label: "Modřiny (1 den mimo)" },
+          { playerId: f2.playerId, type: "injury", injuryDays: 1, injuryType: "drobne", injuryDescription: "Modřiny po hospodské rvačce", label: "Modřiny (1 den mimo)" },
+          { playerId: f1.playerId, type: "morale", delta: -2, label: "−2 morálka" },
+          { playerId: f2.playerId, type: "morale", delta: -2, label: "−2 morálka" },
+        ],
+      });
+    }
+  }
+
+  // ── Dluh na účtu — 3% narativní incident (bez efektu) ──
+  if (locals.length > 0 && Math.random() < 0.03) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "tab",
+      playerIds: [target.playerId],
+      text: pickRandom(TAB_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      effects: [],
+    });
+  }
+
   return incidents;
 }
 
@@ -381,15 +502,17 @@ async function applyIncidentEffects(
         stmts.push(logConditionStmt(db, ef.playerId, cur.teamId, cur.cond, newCond, "hangover", "Ranní kocovina po hospodě"));
         cur.cond = newCond;
       } else if (ef.type === "injury" && ef.injuryDays != null) {
+        const injType = ef.injuryType ?? "obecne";
+        const injDesc = ef.injuryDescription ?? "Zranění z hospodské bitky";
         stmts.push(db.prepare(
-          `INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total) VALUES (?, ?, ?, 'obecne', 'Zranění z hospodské bitky', 'lehke', ?, ?)`,
-        ).bind(crypto.randomUUID(), ef.playerId, cur.teamId, ef.injuryDays, ef.injuryDays));
+          `INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total) VALUES (?, ?, ?, ?, ?, 'lehke', ?, ?)`,
+        ).bind(crypto.randomUUID(), ef.playerId, cur.teamId, injType, injDesc, ef.injuryDays, ef.injuryDays));
         // Plus mírný condition drop
         const newCond = Math.max(20, cur.cond - 8);
         stmts.push(db.prepare(
           `UPDATE players SET life_context = json_set(life_context, '$.condition', ?) WHERE id = ?`,
         ).bind(newCond, ef.playerId));
-        stmts.push(logConditionStmt(db, ef.playerId, cur.teamId, cur.cond, newCond, "pub", `Hospodská bitka (zranění ${ef.injuryDays} d)`));
+        stmts.push(logConditionStmt(db, ef.playerId, cur.teamId, cur.cond, newCond, "pub", `${injDesc} (${ef.injuryDays} d)`));
         cur.cond = newCond;
       }
     }

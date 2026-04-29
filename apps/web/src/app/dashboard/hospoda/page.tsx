@@ -58,6 +58,10 @@ const INCIDENT_ICON: Record<string, string> = {
   priest: "⛪",
   scout: "🕵️",
   wife_call: "📞",
+  bad_food: "🍲",
+  pub_accident: "🩹",
+  drunk_fight: "🤜",
+  tab: "📒",
 };
 
 function effectColor(ef: PubEffect): string {
