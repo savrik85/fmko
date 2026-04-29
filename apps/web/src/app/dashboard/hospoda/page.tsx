@@ -62,6 +62,17 @@ const INCIDENT_ICON: Record<string, string> = {
   pub_accident: "🩹",
   drunk_fight: "🤜",
   tab: "📒",
+  jackpot: "🎰",
+  free_round: "🍻",
+  bar_champion: "🎯",
+  village_hero: "🏆",
+  friendly_reunion: "🤗",
+  coach_tactics: "📋",
+  coach_joins: "🍻",
+  coach_praise: "👏",
+  coach_scold: "😡",
+  coach_lost_bet: "🎲",
+  coach_naps: "😴",
 };
 
 function effectColor(ef: PubEffect): string {

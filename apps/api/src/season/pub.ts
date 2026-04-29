@@ -205,11 +205,119 @@ const TAB_INCIDENT_TEMPLATES = [
   "{name} chtěl zaplatit kartou. Hospodský se zasmál a zapsal mu to.",
 ];
 
+// ═══════════════════════════════════════════════
+// POZITIVNÍ INCIDENTY — at to neni jen plac
+// ═══════════════════════════════════════════════
+
+// Jackpot na automatu / Sportce — větší výhra (+5 morálka jednotlivci)
+const JACKPOT_INCIDENT_TEMPLATES = [
+  "{name} z legrace zmáčkl Sportku — strefil 4 čísla. Tisícovka jde na pivo pro klub.",
+  "{name} zatřásl automatem do roztrhání těla — a ono to zacinkalo jak Vánoce. Z hospody odcházel jako král.",
+  "{name} vyhrál v tombole vepřové půlky. Půlku rozdal mužstvu, půlku domů. Hrdina večera.",
+  "{name}ovi spadla mince do automatu špatně a vrátil mu trojnásobek. Zázrak. Hospoda burácela.",
+  "{name} poslal poslední vsazenku „pro štěstí“ — vyhrál víc než celá výplata. Kluci ho pak nepustili domů.",
+];
+
+// Někdo platí kolo (starosta, sponzor, strejda) — všichni lokálové +1 morálka
+const FREE_ROUND_INCIDENT_TEMPLATES = [
+  "Starosta vlétl do hospody, vyhlásil že platí kolo. Před volbami je hodný i na fotbalisty.",
+  "Sponzor zaskočil na inspekci — a za jásotu zaplatil všem druhou rundu.",
+  "Strejda Mlejnek se vrátil z Rakouska a hodil na pult padesátku. „Pijte, kluci, je dobře.“",
+  "Hospodský má narozeniny — třetí pivo je dnes zdarma pro každého stálého zákazníka.",
+  "Cizinec ze sousední vesnice prohrál sázku a musí platit kolo — vesnické zákony.",
+  "Důchodce u stolu otevřel obálku s důchodem a hodil rundu — „za syna co je v Praze a nepíše“.",
+];
+
+// Vítěz pípy — šipky, kvíz, fotbálek, karaoke (+3 morálka jednotlivci)
+const BAR_CHAMPION_INCIDENT_TEMPLATES = [
+  "{name} hodil v šipkách 180. Hospoda zaburácela jak po gólu v derby.",
+  "{name} vyhrál pivní kvíz — věděl, kolik gólů dal Bican za Slavii. Trofej: konvice piva.",
+  "{name} vyhrál fotbálkový turnaj „o korunu hospody“. Pohár prý nese domů, ale spíš ho nedonese.",
+  "{name} zazpíval v karaoke Michala Davida tak procítěně, že mu hospoda tleskala dvě minuty.",
+  "{name} vyhrál šachy s dědou Karlem — poprvé za 5 let. Pivo si nemůže koupit do konce týdne, dostává ho zdarma.",
+  "{name} si vsadil že vypije tupelák bez nadechnutí. Vsadil dobře. Hospoda dlouho komentovat nepřestane.",
+];
+
+// Vesnický hrdina — hospodský / starší ho vyhlásil hráčem týdne (+3 morálka)
+const VILLAGE_HERO_INCIDENT_TEMPLATES = [
+  "Hospodský v rohu vyvěsil dres s {name}ovým jménem. „Náš nejlepší — pivo dnes zdarma.“",
+  "Děda Karel vstal od stolu, dopil pivo a oznámil, že {name} je „budoucnost klubu“. Slza ukápla.",
+  "Starosta {name}ovi přiťukl: „Tohohle si nesmíme nechat ujít, kdyby ho chtěl Sparta, půjčíme mu vlak.“",
+  "Hospodský dal {name}ovi nálepku „Stálice měsíce“ za pípou. Důstojnost, jakou si dlouho nepamatuje.",
+  "Stálí hosté dali {name}ovi přezdívku po legendárním Bicanovi vesnice. Nese ji statečně.",
+];
+
+// Šťastné setkání — bývalý spoluhráč / otec / kamarád z dětství (+2 morálka)
+const FRIENDLY_REUNION_INCIDENT_TEMPLATES = [
+  "Do hospody přijel bývalý kapitán z 90. let. {name} s ním seděl do třetí — vzpomínky léčí morálku.",
+  "{name}ův táta zaskočil na pivo — povídali si o starém klubu. {name} odcházel s úsměvem.",
+  "{name} potkal kamaráda z dětství, kterého neviděl 15 let. Slzy v očích, pivo v ruce.",
+  "{name} se setkal se svým bývalým trenérem od žáků. Dostal pochvalu — stále kope.",
+  "Do hospody přišel novinář z deníku — {name}a se ptal na rozhovor. Druhý den bude v novinách.",
+];
+
+// ═══════════════════════════════════════════════
+// TRENÉR INCIDENTY — for fun, generic "Trenér"
+// ═══════════════════════════════════════════════
+
+// Trenér ukáže taktiku na ubrousku — narativní, bez efektu
+const COACH_TACTICS_INCIDENT_TEMPLATES = [
+  "Trenér nakreslil na ubrousek 4-3-3, vysvětloval to půl hodiny. Kluci to pak nechali na stole hospodskému — ten z toho udělal jídelníček.",
+  "Trenér chytil pivní tácek a začal kreslit obranou pětku. {name} mu skočil do řeči: „Ty to neumíš ani na papíře.“ Trenér se urazil.",
+  "Trenér přinesl do hospody video minulého zápasu na telefonu. Kluci se dvacet minut tvářili, že to sledují.",
+  "Trenér mlátil pěstí do stolu a vysvětloval pressing. Hospodský se přišel zeptat, jestli je všechno v pořádku.",
+  "Trenér žádal o ticho a prezentoval „filozofii klubu na další sezónu“. Pivo dotekl až po půl hodině.",
+];
+
+// Trenér si dá s týmem — narativní + +1 morálka pro lokály
+const COACH_JOINS_INCIDENT_TEMPLATES = [
+  "Trenér zaskočil na jedno — dvě — tři. Po čtvrtém už zpíval s klukama. Kapitánské znaky padly.",
+  "Trenér vlétl do hospody v teplákách, prý jen na kole jezdil okolo. Po hodině měl tři piva a vyprávěl o roce 96.",
+  "Trenér si dal s mužstvem rundu „za dobrý trénink“. Přiznal že kluci byli dobří. Vzácný okamžik.",
+  "Trenér přišel s manželkou — manželka odjela po pivu, on zůstal. Manželka se zpoždí domů víc než on.",
+  "Trenér přijal výzvu kluků na panáky. Třetí už nezvládl. Druhý den jel nemocensky.",
+];
+
+// Trenér pochválí hráče — +3 morálka jednomu
+const COACH_PRAISE_INCIDENT_TEMPLATES = [
+  "Trenér zvedl pivo na {name}a: „Tohohle si pamatujte, kluci. Tohle je hráč.“ {name} se rozzářil.",
+  "Trenér před celou hospodou prohlásil, že {name} je nejlepší investice klubu za dekádu. {name} platil další kolo z hrdosti.",
+  "Trenér se zastavil u stolu, poklepal {name}ovi na rameno: „Jen tak dál, synku.“ Slza ukápla i hospodskému.",
+  "Trenér vyprávěl historku jak {name} v dorostu trefil břevno z půlky. Celá hospoda se smála — i ti co u toho nebyli.",
+  "Trenér přiznal, že {name} hraje líp než on kdy hrál. {name} si poprvé v životě připadal jako Bican.",
+];
+
+// Trenér vynadá hráči — −2 morálka
+const COACH_SCOLD_INCIDENT_TEMPLATES = [
+  "Trenér se postavil k {name}ovi: „Ty piješ víc, než běháš. Zítra dva tréninky.“ Hospoda ztichla.",
+  "Trenér přistihl {name}a u sedmého piva. Zítra ho čeká individuální plán — sprinty na svahu.",
+  "Trenér řekl {name}ovi nahlas, že takhle se nedostane do základu. Hospoda předstírala, že nic neslyšela.",
+  "Trenér se otočil na {name}a: „Dnes bys měl spát, ne pít. Zítra ti to spočítám.“",
+  "Trenér před týmem rozcuchal {name}ovi vlasy: „Tohle není hipster konference, je to mužstvo.“",
+];
+
+// Trenér prohrál sázku — narativní + +2 morálka VŠEM lokálům
+const COACH_LOST_BET_INCIDENT_TEMPLATES = [
+  "Trenér se vsadil s kapitánem, že vyhraje šipky. Prohrál. Platí dnes všem.",
+  "Trenér se nechal vyzvat k pití piva na ex. Selhal. Penalta: kolo pro celý tým.",
+  "Trenér tvrdil že vykope penaltu hospodskému přes hlavu. Trefil hodiny. Kolo pro hospodu.",
+  "Trenér si vsadil že si vzpomene na všechny góly z minulé sezóny. Pamatoval si tři. Druhý den jeho výplaty bude o pár tisíc tenčí.",
+  "Trenér prohrál v kameni-papíru-nůžkách s gólmanem. Hodil rundu — i s panáky.",
+];
+
+// Trenér chrápe v hospodě — narativní, jen pro pobavení
+const COACH_NAPS_INCIDENT_TEMPLATES = [
+  "Trenér se opřel na okamžik o pípu — usnul. Hospodský mu na čelo nakreslil tygří pruhy.",
+  "Trenér tvrdil že jen na chvíli zavřel oči — byly tři ráno a hospoda zavírala.",
+  "Trenér přemístil hlavu do salátu. Nikdo ho nebudil. Salát byl lehký.",
+  "Trenér chrápal hlasitěji než parní lokomotiva. Hospodský musel zesílit hudbu.",
+];
+
 function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<string>>, _buddiesMap: Map<string, Set<string>>): PubIncident[] {
+function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<string>>, _buddiesMap: Map<string, Set<string>>, coachName: string = "Trenér"): PubIncident[] {
   const incidents: PubIncident[] = [];
 
   if (attendees.length === 0) {
@@ -444,6 +552,132 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     });
   }
 
+  // ── POZITIVNÍ ──
+
+  // ── Jackpot — 2% prob, +5 morálka jednomu hráči ──
+  if (locals.length > 0 && Math.random() < 0.02) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "jackpot",
+      playerIds: [target.playerId],
+      text: pickRandom(JACKPOT_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      effects: [{ playerId: target.playerId, type: "morale", delta: 5, label: "+5 morálka" }],
+    });
+  }
+
+  // ── Někdo platí rundu — 4% prob, +1 morálka pro VŠECHNY lokály ──
+  if (locals.length > 0 && Math.random() < 0.04) {
+    incidents.push({
+      type: "free_round",
+      playerIds: locals.map((a) => a.playerId),
+      text: pickRandom(FREE_ROUND_INCIDENT_TEMPLATES),
+      effects: locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 1, label: "+1 morálka" })),
+    });
+  }
+
+  // ── Vítěz baru (šipky / kvíz / fotbálek / karaoke) — 4% prob, +3 morálka ──
+  if (locals.length > 0 && Math.random() < 0.04) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "bar_champion",
+      playerIds: [target.playerId],
+      text: pickRandom(BAR_CHAMPION_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      effects: [{ playerId: target.playerId, type: "morale", delta: 3, label: "+3 morálka" }],
+    });
+  }
+
+  // ── Vesnický hrdina — 3% prob, +3 morálka jednomu hráči ──
+  if (locals.length > 0 && Math.random() < 0.03) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "village_hero",
+      playerIds: [target.playerId],
+      text: pickRandom(VILLAGE_HERO_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      effects: [{ playerId: target.playerId, type: "morale", delta: 3, label: "+3 morálka" }],
+    });
+  }
+
+  // ── Šťastné setkání — 4% prob, +2 morálka jednomu hráči ──
+  if (locals.length > 0 && Math.random() < 0.04) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "friendly_reunion",
+      playerIds: [target.playerId],
+      text: pickRandom(FRIENDLY_REUNION_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      effects: [{ playerId: target.playerId, type: "morale", delta: 2, label: "+2 morálka" }],
+    });
+  }
+
+  // ── TRENÉR ZASKOČIL DO HOSPODY — 20% nocí, max 1 coach event za noc ──
+  if (locals.length > 0 && Math.random() < 0.20) {
+    // Pick which kind of coach event happens (vážené pravděpodobnosti)
+    const roll = Math.random();
+    if (roll < 0.18) {
+      // Trenér se přidá k týmu — +1 morálka VŠEM
+      incidents.push({
+        type: "coach_joins",
+        playerIds: locals.map((a) => a.playerId),
+        text: pickRandom(COACH_JOINS_INCIDENT_TEMPLATES).replace(/Trenér/g, coachName),
+        effects: locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 1, label: "+1 morálka" })),
+      });
+    } else if (roll < 0.36) {
+      // Trenér pochválí hráče — +3 morálka tomu hráči
+      const target = pickRandom(locals);
+      incidents.push({
+        type: "coach_praise",
+        playerIds: [target.playerId],
+        text: pickRandom(COACH_PRAISE_INCIDENT_TEMPLATES).replace("{name}", target.firstName).replace(/Trenér/g, coachName),
+        effects: [{ playerId: target.playerId, type: "morale", delta: 3, label: "+3 morálka" }],
+      });
+    } else if (roll < 0.54) {
+      // Trenér vynadá hráči s alcohol≥50 (pokud takový je) — −2 morálka
+      const scoldTargets = locals.filter((a) => a.alcohol >= 50);
+      if (scoldTargets.length > 0) {
+        const target = pickRandom(scoldTargets);
+        incidents.push({
+          type: "coach_scold",
+          playerIds: [target.playerId],
+          text: pickRandom(COACH_SCOLD_INCIDENT_TEMPLATES).replace("{name}", target.firstName).replace(/Trenér/g, coachName),
+          effects: [{ playerId: target.playerId, type: "morale", delta: -2, label: "−2 morálka" }],
+        });
+      } else {
+        // Fallback: tactics narativ
+        const target = pickRandom(locals);
+        incidents.push({
+          type: "coach_tactics",
+          playerIds: [target.playerId],
+          text: pickRandom(COACH_TACTICS_INCIDENT_TEMPLATES).replace("{name}", target.firstName).replace(/Trenér/g, coachName),
+          effects: [],
+        });
+      }
+    } else if (roll < 0.70) {
+      // Trenér nakreslí taktiku — narativ, bez efektu
+      const target = pickRandom(locals);
+      incidents.push({
+        type: "coach_tactics",
+        playerIds: [target.playerId],
+        text: pickRandom(COACH_TACTICS_INCIDENT_TEMPLATES).replace("{name}", target.firstName).replace(/Trenér/g, coachName),
+        effects: [],
+      });
+    } else if (roll < 0.85) {
+      // Trenér prohrál sázku — +2 morálka VŠEM
+      incidents.push({
+        type: "coach_lost_bet",
+        playerIds: locals.map((a) => a.playerId),
+        text: pickRandom(COACH_LOST_BET_INCIDENT_TEMPLATES).replace(/Trenér/g, coachName),
+        effects: locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 2, label: "+2 morálka" })),
+      });
+    } else {
+      // Trenér chrápe — narativ
+      incidents.push({
+        type: "coach_naps",
+        playerIds: [],
+        text: pickRandom(COACH_NAPS_INCIDENT_TEMPLATES).replace(/Trenér/g, coachName),
+        effects: [],
+      });
+    }
+  }
+
   return incidents;
 }
 
@@ -676,6 +910,12 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
 
     if (players.results.length === 0) continue;
 
+    // Načti jméno trenéra (pro coach incidenty); fallback "Trenér" pokud chybí
+    const managerRow = await db.prepare("SELECT name FROM managers WHERE team_id = ? LIMIT 1")
+      .bind(team.id).first<{ name: string }>()
+      .catch((e) => { logger.warn({ module: "pub" }, "load manager for pub", e); return null; });
+    const coachName = managerRow?.name ?? "Trenér";
+
     // Last match result
     const lastMatch = await db.prepare(
       `SELECT home_team_id, away_team_id, home_score, away_score FROM matches
@@ -765,7 +1005,7 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
     }
 
     // Generate incidents
-    const incidents = generateIncidents(attendees, rivalsMap, buddiesMap);
+    const incidents = generateIncidents(attendees, rivalsMap, buddiesMap, coachName);
 
     // Persist session
     await db.prepare(
