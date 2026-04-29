@@ -225,8 +225,8 @@ export default function MatchDetailPage() {
           </button>
           {match.status === "simulated" && (
             <button onClick={() => router.push(`/dashboard/match/${matchId}/replay`)}
-              className="ml-auto text-sm font-heading font-bold text-pitch-400 hover:text-pitch-300 transition-colors">
-              ▶ Přehrát zápas
+              className="ml-auto px-3 py-1.5 rounded-lg text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-400 transition-colors shadow-md flex items-center gap-1.5">
+              <span className="text-base">▶</span> Přehrát zápas
             </button>
           )}
         </div>
