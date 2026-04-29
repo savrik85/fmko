@@ -9,11 +9,26 @@ export type TrainingType = "conditioning" | "technique" | "tactics" | "match_pra
 export type TrainingApproach = "strict" | "balanced" | "relaxed";
 
 const CELEB_TRAINING_EXCUSES = [
-  "Dnes má rehabilitaci u svého fyzioterapeuta", "Běhá si sám v parku, má vlastní program",
-  "Řekl že tohle cvičení je pod jeho úroveň", "Volal že je na golfu",
-  "Prý má natáčení pro ČT Sport", "Zaspání — včerejší charitativní akce se protáhla",
-  "Jel na soustředění veteránů", "Má trénink s osobním koučem",
-  "Doktor mu doporučil odpočinek", "Řekl: já tohle nepotřebuju, já to umím",
+  "Dnes má rehabilitaci u svého fyzioterapeuta",
+  "Běhá si sám v parku, má vlastní program",
+  "Řekl že tohle cvičení je pod jeho úroveň",
+  "Volal že je na golfu",
+  "Prý má natáčení pro ČT Sport",
+  "Zaspání — včerejší charitativní akce se protáhla",
+  "Jel na soustředění veteránů",
+  "Má trénink s osobním koučem",
+  "Doktor mu doporučil odpočinek",
+  "Řekl: já tohle nepotřebuju, já to umím",
+  "Letěl na podpis dresu pro fanoušky",
+  "Manažer ho odvolal na press konferenci",
+  "Vystoupení v podcastu, nemohl zrušit",
+  "Točí reklamu na pivo, nemůže přijít zpotit",
+  "Sponzoring — focení pro novou kolekci",
+  "Pozvali ho do StarDance, zkouší tango",
+  "Jel autogramiádu do nákupního centra",
+  "Diskuze v Show Jana Krause",
+  "Otevírá hospodu kamarádovi v Brně",
+  "Soustředění reprezentace veteránů na Maledivách",
 ];
 
 export interface TrainingPlan {
@@ -36,30 +51,74 @@ export interface TrainingResult {
 }
 
 const ABSENCE_REASONS = [
+  // Práce
   "Měl směnu v práci",
+  "Šéf ho nepustil dřív, prý urgentní zakázka",
+  "Byl na nočce, spal celý den",
+  "Schůzka v práci se protáhla — nešla zrušit",
+  "Vzal si přesčas, peníze nad fotbal",
+  "Kolega se nedostavil, musí ho zaskočit",
+  "Pohotovost v práci — nemůže odejít",
+  "Služební cesta, vrátil se až večer",
+
+  // Rodina
   "Nedostal se z domu — děti",
-  "Páteční hospoda se protáhla",
-  "Prší, nechce se mu",
-  "Grilování u sousedů",
-  "Říkal, že zapomněl",
-  "Auto nejelo",
-  "Dovolená",
+  "Hlídá ségřiny děti",
+  "Slíbil ženě, že dneska zůstane doma",
+  "Tchýně přijela na návštěvu, nemůže utéct",
+  "Manželka má noční, sám s malýma",
+  "Dcera má vystoupení ve školce",
+  "Syn se mu pere ve škole, řeší to",
+  "Pohřeb vzdáleného strejdy",
+  "Tchán něco potřebuje opravit",
+  "Žena mu řekla, že má volno on, ne ona",
+  "Veze rodiče k doktorovi",
+  "Stěhuje se, nemá čas",
+
+  // Zdraví
   "Říkal, že ho bolí koleno",
   "Natáhl si sval v práci",
   "Prý má rýmu a nechce nakazit ostatní",
-  "Opravuje si auto, nemá jak dojet",
-  "Stěhuje se, nemá čas",
-  "Slíbil ženě, že dneska zůstane doma",
-  "Byl na nočce, spal celý den",
-  "Řekl, že přijde, ale nepřišel. Nezdá telefon",
+  "Bolí ho záda od soboty",
+  "Bouchla mu hlava, vzal si paralen",
   "Schůzka u doktora, nemohl přeobjednat",
-  "Hlídá ségřiny děti",
+  "Po včerejším tréninku má zatuhlé lýtko",
+  "Oteklý kotník, raději ho šetří",
+
+  // Hospoda / parta
+  "Páteční hospoda se protáhla",
+  "Včera byla zabijačka, dneska se sotva hýbe",
+  "Strejda měl narozeniny, dali si jen jedno…",
+  "Oslava povýšení v práci, dohnalo ho to ráno",
+  "Hodili kluci po práci pivo, jedno vedlo k druhým",
+  "Včera viděl Slavii, neudržel emoce",
+
+  // Vesnický humor
+  "Grilování u sousedů",
   "Jede na rybářské závody",
-  "Musí na pohřeb, prý vzdálená příbuzná",
-  "Montér mu přijde dělat kotel",
+  "Vyklízí stodolu, slíbil dědovi",
+  "Sekal trávu, dotáhl to až do noci",
+  "Kombajn na poli — celá rodina pomáhá",
+  "Soused mu pomáhá s drůbeží, nemůže ho nechat",
+  "Hasičský trénink — povinná účast",
+  "Vyhrál v tombole prase, řeší co s ním",
+  "Schůze družstva, starosta to nazval povinnou",
+  "Pomáhá tátovi na zahradě s jablkama",
+
+  // Logistika / drobnosti
+  "Auto nejelo",
+  "Opravuje si auto, nemá jak dojet",
   "Zaspěl, prý měl budík na pět",
-  "Oslavuje narozeniny — své, ne cizí",
+  "Říkal, že zapomněl",
   "Říkal, že myslel že je zítra",
+  "Říkal, že přišel pozdě a styděl se",
+  "Říkal, že přijde, ale nepřišel. Nezdá telefon",
+  "Montér mu přijde dělat kotel",
+  "Doručuje mu Rohlík, čeká doma",
+  "Vybitý telefon, nikoho nezavolal",
+  "Oslavuje narozeniny — své, ne cizí",
+  "Dovolená",
+  "Tréninkové boty zapomněl v práci",
 ];
 
 const COMMUTE_ABSENCE_REASONS = [
@@ -73,6 +132,16 @@ const COMMUTE_ABSENCE_REASONS = [
   "Spolujezdec zrušil, sám nechce jet",
   "Říkal, že v tom blátě tam jeho auto nedojede",
   "Potkalo ho stádo krav na silnici, prý čekal půl hodiny",
+  "Nehoda na hlavní, stál hodinu v koloně",
+  "Píchlá pneumatika, nemá rezervu",
+  "Vlak měl výluku, NAD nedoběhl",
+  "Bus měl zpoždění, otočil to domů",
+  "Spolujízda zrušila, sám se mu nechtělo",
+  "Auto v servisu, čeká na díly",
+  "Sníh — silnice je neprojezdná",
+  "Mlha — radši zůstal doma",
+  "Cesta uzavřená kvůli stromu po větru",
+  "Diesel mu zamrzl, neumí ho rozjet",
 ];
 
 const TRAINING_EFFECTS: Record<TrainingType, string[]> = {
