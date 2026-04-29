@@ -6,11 +6,26 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { Spinner, PositionBadge } from "@/components/ui";
 
-type Tab = "atributy" | "sezona" | "top";
+type Tab = "atributy" | "sezona" | "top" | "dochazka";
 type PosFilter = "all" | "GK" | "DEF" | "MID" | "FWD";
 type SortKey = "name" | "pos" | "age" | "rat" | "spd" | "tec" | "sho" | "pas" | "hea" | "def" | "gk" | "sta" | "str" | "cond" | "mor" | "wage";
 type StatsKey = "name" | "pos" | "apps" | "min" | "g" | "a" | "ga" | "y" | "r" | "cs" | "mom" | "avg";
+type AttKey = "name" | "pos" | "trainPct" | "trainAtt" | "matches" | "missed" | "injury" | "suspension" | "excuse";
 type SortDir = "asc" | "desc";
+
+interface AttendanceRow {
+  playerId: string;
+  firstName: string;
+  lastName: string;
+  position: "GK" | "DEF" | "MID" | "FWD";
+  trainingAttended: number;
+  trainingTotal: number;
+  trainingPct: number;
+  matchesAvailable: number;
+  matchesPlayed: number;
+  matchesMissed: number;
+  breakdown: { injury: number; suspension: number; excuse: number; notInSquad: number };
+}
 
 interface PlayerSeasonStats {
   playerId: string;
@@ -112,6 +127,10 @@ export default function SquadPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [statsSortKey, setStatsSortKey] = useState<StatsKey>("g");
   const [statsSortDir, setStatsSortDir] = useState<SortDir>("desc");
+  const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
+  const [attendanceLoaded, setAttendanceLoaded] = useState(false);
+  const [attSortKey, setAttSortKey] = useState<AttKey>("trainPct");
+  const [attSortDir, setAttSortDir] = useState<SortDir>("desc");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -122,6 +141,14 @@ export default function SquadPage() {
       apiFetch<TeamStatsResponse>(`/api/teams/${teamId}/stats`).catch((e) => { console.error("team stats:", e); return { stats: [], topScorers: [], topAssists: [] } as TeamStatsResponse; }),
     ]).then(([t, p, s]) => { setTeam(t); setPlayers(p); setSeasonStats(s.stats); setLoading(false); });
   }, [teamId]);
+
+  // Lazy fetch attendance při kliknutí na tab Docházka
+  useEffect(() => {
+    if (tab !== "dochazka" || !teamId || attendanceLoaded) return;
+    apiFetch<{ players: AttendanceRow[]; matchesAvailable: number }>(`/api/teams/${teamId}/attendance`)
+      .then((d) => { setAttendance(d.players); setAttendanceLoaded(true); })
+      .catch((e) => { console.error("attendance fetch:", e); setAttendanceLoaded(true); });
+  }, [tab, teamId, attendanceLoaded]);
 
   // TOP tab — výpočty leaderů (musí být před early returnem kvůli rules of hooks)
   const topMatchData = useMemo(() => {
@@ -277,7 +304,8 @@ export default function SquadPage() {
           {([
             ["atributy", "Atributy", "\u{1F4CB}"],
             ["sezona", "Sezóna", "\u{1F4CA}"],
-            ["top", "TOP hráči", "\u{1F3C6}"],
+            ["top", "TOP", "\u{1F3C6}"],
+            ["dochazka", "Docházka", "\u{1F4C5}"],
           ] as Array<[Tab, string, string]>).map(([k, label, icon]) => (
             <button
               key={k}
@@ -535,7 +563,122 @@ export default function SquadPage() {
         </>
       )}
 
+      {/* Docházka — týmový přehled */}
+      {tab === "dochazka" && (
+        !attendanceLoaded ? (
+          <div className="card p-6 flex items-center justify-center min-h-[120px]"><Spinner /></div>
+        ) : (
+          <DochazkaTab
+            rows={attendance.filter((r) => filter === "all" || r.position === filter)}
+            sortKey={attSortKey}
+            sortDir={attSortDir}
+            onSort={(k) => {
+              if (attSortKey === k) setAttSortDir(attSortDir === "asc" ? "desc" : "asc");
+              else { setAttSortKey(k); setAttSortDir(k === "name" ? "asc" : "desc"); }
+            }}
+          />
+        )
+      )}
+
     </div>
+  );
+}
+
+function DochazkaTab({ rows, sortKey, sortDir, onSort }: {
+  rows: AttendanceRow[];
+  sortKey: AttKey;
+  sortDir: SortDir;
+  onSort: (k: AttKey) => void;
+}) {
+  const getVal = (r: AttendanceRow, k: AttKey): string | number => {
+    switch (k) {
+      case "name": return `${r.lastName} ${r.firstName}`;
+      case "pos": return POS_ORDER[r.position] ?? 9;
+      case "trainPct": return r.trainingPct;
+      case "trainAtt": return r.trainingAttended;
+      case "matches": return r.matchesPlayed;
+      case "missed": return r.matchesMissed;
+      case "injury": return r.breakdown.injury;
+      case "suspension": return r.breakdown.suspension;
+      case "excuse": return r.breakdown.excuse;
+    }
+  };
+  const sorted = [...rows].sort((a, b) => {
+    const va = getVal(a, sortKey);
+    const vb = getVal(b, sortKey);
+    const cmp = typeof va === "string" ? va.localeCompare(vb as string, "cs") : (va as number) - (vb as number);
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+  const totalMatches = rows[0]?.matchesAvailable ?? 0;
+  if (rows.length === 0) {
+    return <div className="card p-4 text-sm text-muted text-center">Žádní hráči neodpovídají filtru.</div>;
+  }
+  return (
+    <>
+      {totalMatches === 0 && (
+        <div className="card p-3 text-center text-xs text-muted">
+          {"\u{2139}\u{FE0F}"} Tým zatím neodehrál žádný zápas. Tabulka zobrazí jen tréninkovou docházku.
+        </div>
+      )}
+      <div className="card overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b-2 border-gray-200">
+              {([
+                ["name", "Jméno", "Jméno hráče", "left"],
+                ["pos", "Poz", "Pozice", "center"],
+                ["trainPct", "Tréninky %", "Procento docházky na trénink", "center"],
+                ["trainAtt", "Tréninky", "Účast / celkem", "center"],
+                ["matches", "Zápasy", "Odehrané zápasy / dostupné", "center"],
+                ["missed", "Zameškáno", "Celkem zameškaných zápasů", "center"],
+                ["injury", "Zranění", "Zameškáno kvůli zranění", "center"],
+                ["suspension", "Stopka", "Zameškáno kvůli stopce za karty", "center"],
+                ["excuse", "Výmluvy", "Zameškáno kvůli omluvě (osobní, zdraví…)", "center"],
+              ] as Array<[AttKey, string, string, "left" | "center"]>).map(([k, label, tip, align]) => (
+                <th key={k}
+                  onClick={() => onSort(k)}
+                  title={tip}
+                  className={`py-2.5 px-1.5 font-heading uppercase cursor-pointer select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
+                    sortKey === k ? "text-pitch-600 bg-pitch-50" : "text-muted"
+                  } ${align === "left" ? "text-left pl-3 sticky left-0 bg-white z-10" : "text-center"}`}
+                >
+                  {label}{sortKey === k ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((r) => {
+              const pctColor = r.trainingPct >= 80 ? "text-pitch-600" : r.trainingPct >= 60 ? "text-amber-600" : "text-card-red";
+              return (
+                <tr key={r.playerId} className="border-b border-gray-50 hover:bg-pitch-50/30 transition-colors">
+                  <td className="py-2 px-1.5 pl-3 sticky left-0 bg-white z-10">
+                    <Link href={`/dashboard/player/${r.playerId}#ucast`}
+                      className="font-heading font-bold text-sm hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors whitespace-nowrap">
+                      {r.firstName} {r.lastName}
+                    </Link>
+                  </td>
+                  <td className="py-2 px-1.5 text-center"><PositionBadge position={r.position} /></td>
+                  <td className={`py-2 px-1.5 text-center tabular-nums font-heading font-bold ${pctColor}`}>
+                    {r.trainingTotal > 0 ? `${r.trainingPct}%` : "—"}
+                  </td>
+                  <td className="py-2 px-1.5 text-center tabular-nums text-muted">
+                    {r.trainingTotal > 0 ? `${r.trainingAttended}/${r.trainingTotal}` : "—"}
+                  </td>
+                  <td className="py-2 px-1.5 text-center tabular-nums">
+                    {r.matchesPlayed}/{r.matchesAvailable}
+                  </td>
+                  <td className="py-2 px-1.5 text-center tabular-nums">{r.matchesMissed}</td>
+                  <td className="py-2 px-1.5 text-center tabular-nums text-card-red">{r.breakdown.injury || "—"}</td>
+                  <td className="py-2 px-1.5 text-center tabular-nums text-amber-600">{r.breakdown.suspension || "—"}</td>
+                  <td className="py-2 px-1.5 text-center tabular-nums text-blue-600">{r.breakdown.excuse || "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

@@ -2352,6 +2352,237 @@ teamsRouter.get("/:id/players/:playerId/career-stats", async (c) => {
   return c.json({ seasons, totals });
 });
 
+// GET /api/teams/:id/players/:playerId/attendance — docházka hráče
+//   - tréninky: kumulativní X/Y + procento (nemáme per-day historii)
+//   - zápasy: seznam zameškaných v aktuální sezóně s důvodem + SMS
+teamsRouter.get("/:id/players/:playerId/attendance", async (c) => {
+  const teamId = c.req.param("id");
+  const playerId = c.req.param("playerId");
+
+  // Získat jméno hráče (pro fuzzy match v matches.absences[].name)
+  const player = await c.env.DB.prepare(
+    "SELECT first_name, last_name FROM players WHERE id = ? AND team_id = ?"
+  ).bind(playerId, teamId).first<{ first_name: string; last_name: string }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "fetch player for attendance", e); return null; });
+  if (!player) return c.json({ error: "Player not found in this team" }, 404);
+  const fullName = `${player.first_name} ${player.last_name}`;
+
+  // Aktivní sezóna
+  const season = await c.env.DB.prepare(
+    "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+  ).first<{ id: string }>().catch((e) => { logger.warn({ module: "teams" }, "fetch active season for player attendance", e); return null; });
+
+  // Training attendance z teams.training_attendance
+  const teamRow = await c.env.DB.prepare("SELECT training_attendance FROM teams WHERE id = ?")
+    .bind(teamId).first<{ training_attendance: string | null }>().catch((e) => { logger.warn({ module: "teams" }, "fetch team training_attendance for player", e); return null; });
+  let trainingAttended = 0;
+  let trainingTotal = 0;
+  try {
+    const att = JSON.parse(teamRow?.training_attendance ?? "{}") as Record<string, { attended: number; total: number }>;
+    if (att[playerId]) {
+      trainingAttended = att[playerId].attended ?? 0;
+      trainingTotal = att[playerId].total ?? 0;
+    }
+  } catch (e) { logger.warn({ module: "teams" }, "parse training_attendance for player", e); }
+  const trainingPct = trainingTotal > 0 ? Math.round((trainingAttended / trainingTotal) * 100) : 0;
+
+  // Zápasy aktuální sezóny pro tým
+  let matches: Array<{
+    matchId: string; date: string | null; round: number | null;
+    opponent: string; opponentId: string; isHome: boolean;
+    homeScore: number | null; awayScore: number | null;
+    status: "played" | "missed";
+    reason: string | null; smsText: string | null;
+  }> = [];
+  if (season) {
+    const matchRows = await c.env.DB.prepare(
+      `SELECT m.id, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
+              m.simulated_at, m.round, m.absences,
+              ht.name as home_name, at.name as away_name
+       FROM matches m
+       JOIN leagues l ON m.league_id = l.id
+       LEFT JOIN teams ht ON m.home_team_id = ht.id
+       LEFT JOIN teams at ON m.away_team_id = at.id
+       WHERE (m.home_team_id = ? OR m.away_team_id = ?)
+         AND m.status = 'simulated'
+         AND l.season_id = ?
+       ORDER BY m.simulated_at DESC`
+    ).bind(teamId, teamId, season.id).all<Record<string, unknown>>()
+      .catch((e) => { logger.warn({ module: "teams" }, "fetch matches for attendance", e); return { results: [] }; });
+
+    // Které zápasy hráč skutečně hrál (z match_player_stats)
+    const playedRes = await c.env.DB.prepare(
+      `SELECT mps.match_id FROM match_player_stats mps
+       JOIN matches m ON mps.match_id = m.id
+       JOIN leagues l ON m.league_id = l.id
+       WHERE mps.player_id = ? AND mps.team_id = ? AND l.season_id = ?`
+    ).bind(playerId, teamId, season.id).all<{ match_id: string }>()
+      .catch((e) => { logger.warn({ module: "teams" }, "fetch played matches", e); return { results: [] }; });
+    const playedSet = new Set(playedRes.results.map((r) => r.match_id));
+
+    matches = matchRows.results.map((row) => {
+      const isHome = row.home_team_id === teamId;
+      const opponentId = isHome ? (row.away_team_id as string) : (row.home_team_id as string);
+      const opponent = isHome ? (row.away_name as string) : (row.home_name as string);
+      const matchId = row.id as string;
+      const played = playedSet.has(matchId);
+      let reason: string | null = null;
+      let smsText: string | null = null;
+      if (!played) {
+        try {
+          const absences = JSON.parse((row.absences as string) ?? "[]") as Array<{ name: string; reason: string; smsText?: string; teamId?: string }>;
+          const ours = absences.filter((a) => !a.teamId || a.teamId === teamId);
+          const found = ours.find((a) => a.name === fullName);
+          if (found) {
+            reason = found.reason;
+            smsText = found.smsText ?? null;
+          } else {
+            reason = "Mimo nominaci";
+          }
+        } catch (e) { logger.warn({ module: "teams" }, "parse absences", e); reason = "Neznámý"; }
+      }
+      return {
+        matchId,
+        date: (row.simulated_at as string) ?? null,
+        round: (row.round as number) ?? null,
+        opponent,
+        opponentId,
+        isHome,
+        homeScore: (row.home_score as number) ?? null,
+        awayScore: (row.away_score as number) ?? null,
+        status: played ? "played" as const : "missed" as const,
+        reason,
+        smsText,
+      };
+    });
+  }
+
+  const matchesPlayed = matches.filter((m) => m.status === "played").length;
+  const matchesAvailable = matches.length;
+  const matchesMissed = matches.filter((m) => m.status === "missed");
+
+  return c.json({
+    training: { attended: trainingAttended, total: trainingTotal, pct: trainingPct },
+    matches: {
+      available: matchesAvailable,
+      played: matchesPlayed,
+      missedCount: matchesMissed.length,
+      missed: matchesMissed.map((m) => ({
+        matchId: m.matchId, date: m.date, round: m.round,
+        opponent: m.opponent, opponentId: m.opponentId, isHome: m.isHome,
+        homeScore: m.homeScore, awayScore: m.awayScore,
+        reason: m.reason, smsText: m.smsText,
+      })),
+      all: matches.map((m) => ({
+        matchId: m.matchId, date: m.date, round: m.round,
+        opponent: m.opponent, opponentId: m.opponentId,
+        status: m.status, reason: m.reason,
+      })),
+    },
+  });
+});
+
+// GET /api/teams/:id/attendance — týmový přehled docházky všech aktivních hráčů
+teamsRouter.get("/:id/attendance", async (c) => {
+  const teamId = c.req.param("id");
+
+  const season = await c.env.DB.prepare(
+    "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+  ).first<{ id: string }>().catch((e) => { logger.warn({ module: "teams" }, "fetch active season for team attendance", e); return null; });
+
+  // Aktivní hráči
+  const playersRes = await c.env.DB.prepare(
+    "SELECT id, first_name, last_name, position FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')"
+  ).bind(teamId).all<{ id: string; first_name: string; last_name: string; position: string }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "fetch players for attendance", e); return { results: [] }; });
+
+  // Training attendance
+  const teamRow = await c.env.DB.prepare("SELECT training_attendance FROM teams WHERE id = ?")
+    .bind(teamId).first<{ training_attendance: string | null }>().catch((e) => { logger.warn({ module: "teams" }, "fetch team training_attendance", e); return null; });
+  let attMap: Record<string, { attended: number; total: number }> = {};
+  try { attMap = JSON.parse(teamRow?.training_attendance ?? "{}"); } catch (e) { logger.warn({ module: "teams" }, "parse team training_attendance", e); }
+
+  // Zápasy a absences pro celou sezónu
+  let matchPlayedCounts: Record<string, number> = {};
+  let matchAbsenceBreakdown: Record<string, { injury: number; suspension: number; excuse: number; notInSquad: number }> = {};
+  let matchesAvailable = 0;
+  if (season) {
+    const matchRows = await c.env.DB.prepare(
+      `SELECT m.id, m.absences FROM matches m
+       JOIN leagues l ON m.league_id = l.id
+       WHERE (m.home_team_id = ? OR m.away_team_id = ?)
+         AND m.status = 'simulated' AND l.season_id = ?`
+    ).bind(teamId, teamId, season.id).all<{ id: string; absences: string | null }>()
+      .catch((e) => { logger.warn({ module: "teams" }, "fetch matches for team attendance", e); return { results: [] }; });
+    matchesAvailable = matchRows.results.length;
+
+    const matchIds = matchRows.results.map((r) => r.id);
+    if (matchIds.length > 0) {
+      const placeholders = matchIds.map(() => "?").join(",");
+      const playedRes = await c.env.DB.prepare(
+        `SELECT player_id, match_id FROM match_player_stats
+         WHERE team_id = ? AND match_id IN (${placeholders})`
+      ).bind(teamId, ...matchIds).all<{ player_id: string; match_id: string }>()
+        .catch((e) => { logger.warn({ module: "teams" }, "fetch played matches for team attendance", e); return { results: [] }; });
+      for (const r of playedRes.results) {
+        matchPlayedCounts[r.player_id] = (matchPlayedCounts[r.player_id] ?? 0) + 1;
+      }
+    }
+
+    // Absences breakdown — pro každý match parsujeme absences a pro každého aktivního hráče
+    // přiřadíme typ podle reason (Zranění → injury, Stopka za karty → suspension, jinak excuse).
+    // notInSquad = matchesAvailable - played - injury - suspension - excuse
+    const nameToId: Record<string, string> = {};
+    for (const p of playersRes.results) nameToId[`${p.first_name} ${p.last_name}`] = p.id;
+    for (const p of playersRes.results) matchAbsenceBreakdown[p.id] = { injury: 0, suspension: 0, excuse: 0, notInSquad: 0 };
+
+    for (const m of matchRows.results) {
+      try {
+        const absences = JSON.parse(m.absences ?? "[]") as Array<{ name: string; reason: string; teamId?: string }>;
+        const ours = absences.filter((a) => !a.teamId || a.teamId === teamId);
+        for (const a of ours) {
+          const pid = nameToId[a.name];
+          if (!pid) continue;
+          const r = a.reason;
+          if (r === "Zranění") matchAbsenceBreakdown[pid].injury++;
+          else if (r === "Stopka za karty") matchAbsenceBreakdown[pid].suspension++;
+          else matchAbsenceBreakdown[pid].excuse++;
+        }
+      } catch (e) { logger.warn({ module: "teams" }, "parse absences in team-wide attendance", e); }
+    }
+
+    // notInSquad = available - played - tracked absences
+    for (const p of playersRes.results) {
+      const played = matchPlayedCounts[p.id] ?? 0;
+      const br = matchAbsenceBreakdown[p.id];
+      const known = played + br.injury + br.suspension + br.excuse;
+      br.notInSquad = Math.max(0, matchesAvailable - known);
+    }
+  }
+
+  const players = playersRes.results.map((p) => {
+    const att = attMap[p.id] ?? { attended: 0, total: 0 };
+    const trainingPct = att.total > 0 ? Math.round((att.attended / att.total) * 100) : 0;
+    const matchesPlayed = matchPlayedCounts[p.id] ?? 0;
+    const breakdown = matchAbsenceBreakdown[p.id] ?? { injury: 0, suspension: 0, excuse: 0, notInSquad: 0 };
+    return {
+      playerId: p.id,
+      firstName: p.first_name,
+      lastName: p.last_name,
+      position: p.position,
+      trainingAttended: att.attended,
+      trainingTotal: att.total,
+      trainingPct,
+      matchesAvailable,
+      matchesPlayed,
+      matchesMissed: matchesAvailable - matchesPlayed,
+      breakdown,
+    };
+  });
+
+  return c.json({ players, matchesAvailable });
+});
+
 // GET /api/teams/:id/pub-sessions — historie hospodských session
 teamsRouter.get("/:id/pub-sessions", async (c) => {
   const teamId = c.req.param("id");

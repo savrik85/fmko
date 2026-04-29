@@ -105,12 +105,23 @@ export default function PlayerDetailPage() {
   type LeagueRank = { rank: number; total: number; value: number } | null;
   const [leagueRanks, setLeagueRanks] = useState<{ goals: LeagueRank; assists: LeagueRank; rating: LeagueRank } | null>(null);
   const [historyFilter, setHistoryFilter] = useState<"all" | "W" | "D" | "L">("all");
-  type ProfileTab = "prehled" | "statistiky" | "historie" | "vztahy";
+  type ProfileTab = "prehled" | "statistiky" | "historie" | "ucast" | "vztahy";
   const [activeTab, setActiveTab] = useState<ProfileTab>("prehled");
+  type AttendanceData = {
+    training: { attended: number; total: number; pct: number };
+    matches: {
+      available: number;
+      played: number;
+      missedCount: number;
+      missed: Array<{ matchId: string; date: string | null; round: number | null; opponent: string; opponentId: string; isHome: boolean; homeScore: number | null; awayScore: number | null; reason: string | null; smsText: string | null }>;
+    };
+  };
+  const [attendance, setAttendance] = useState<AttendanceData | null>(null);
+  const [attendanceLoaded, setAttendanceLoaded] = useState(false);
 
   // URL hash sync — umožňuje linkovat přímo na tab přes #statistiky atd.
   useEffect(() => {
-    const valid: ProfileTab[] = ["prehled", "statistiky", "historie", "vztahy"];
+    const valid: ProfileTab[] = ["prehled", "statistiky", "historie", "ucast", "vztahy"];
     const fromHash = (typeof window !== "undefined" ? window.location.hash.replace("#", "") : "") as ProfileTab;
     if (valid.includes(fromHash)) setActiveTab(fromHash);
     const onHash = () => {
@@ -125,6 +136,14 @@ export default function PlayerDetailPage() {
     setActiveTab(t);
     if (typeof window !== "undefined") window.history.replaceState(null, "", `#${t}`);
   };
+
+  // Lazy fetch attendance jen pro vlastní hráče když user klikne na "Účast"
+  useEffect(() => {
+    if (activeTab !== "ucast" || !teamId || !player || player.team_id !== teamId || attendanceLoaded) return;
+    apiFetch<AttendanceData>(`/api/teams/${teamId}/players/${playerId}/attendance`)
+      .then((d) => { setAttendance(d); setAttendanceLoaded(true); })
+      .catch((e) => { console.error("attendance fetch:", e); setAttendanceLoaded(true); });
+  }, [activeTab, teamId, player, playerId, attendanceLoaded]);
 
   useEffect(() => {
     if (!teamId) return;
@@ -646,6 +665,7 @@ export default function PlayerDetailPage() {
           { id: "prehled", label: "Přehled" },
           { id: "statistiky", label: "Statistiky" },
           { id: "historie", label: "Historie" },
+          ...(isOwnPlayer ? [{ id: "ucast" as ProfileTab, label: "Účast" }] : []),
           { id: "vztahy", label: "Vztahy" },
         ] as Array<{ id: ProfileTab; label: string }>).map((t) => (
           <button
@@ -1341,6 +1361,89 @@ export default function PlayerDetailPage() {
       })()}
 
       {/* ═══ TAB: VZTAHY — Watchers ═══ */}
+      {/* ═══ TAB: ÚČAST (Attendance) — jen vlastní hráči ═══ */}
+      {activeTab === "ucast" && isOwnPlayer && (
+        <>
+          {!attendanceLoaded ? (
+            <div className="card p-6 flex items-center justify-center min-h-[120px]"><Spinner /></div>
+          ) : !attendance ? (
+            <div className="card p-4 text-sm text-muted">Data o docházce se nepodařilo načíst.</div>
+          ) : (
+            <>
+              {/* Souhrnné karty: Tréninky + Zápasy */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="card p-4 sm:p-5">
+                  <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mb-2">{"\u{1F3CB}\u{FE0F}"} Tréninky</div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-heading font-[800] text-3xl tabular-nums text-pitch-500">{attendance.training.pct}%</span>
+                    <span className="text-sm text-muted">({attendance.training.attended}/{attendance.training.total})</span>
+                  </div>
+                  <div className="text-xs text-muted mt-1">
+                    {attendance.training.total === 0
+                      ? "Zatím žádný trénink."
+                      : attendance.training.pct >= 80 ? "Vzorný docházka."
+                      : attendance.training.pct >= 60 ? "Občas chybí."
+                      : "Loudá se."}
+                  </div>
+                </div>
+                <div className="card p-4 sm:p-5">
+                  <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mb-2">{"\u{26BD}"} Zápasy</div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-heading font-[800] text-3xl tabular-nums text-pitch-500">{attendance.matches.played}</span>
+                    <span className="text-sm text-muted">/ {attendance.matches.available}</span>
+                  </div>
+                  <div className="text-xs text-muted mt-1">
+                    {attendance.matches.missedCount === 0
+                      ? "Hrál všechny dostupné zápasy."
+                      : `Zameškal ${attendance.matches.missedCount} ${attendance.matches.missedCount === 1 ? "zápas" : attendance.matches.missedCount < 5 ? "zápasy" : "zápasů"}.`}
+                  </div>
+                </div>
+              </div>
+
+              {/* Zameškané zápasy */}
+              {attendance.matches.missed.length > 0 && (
+                <div className="card p-4 sm:p-5">
+                  <SectionLabel>Zameškané zápasy</SectionLabel>
+                  <div className="space-y-2 mt-2">
+                    {attendance.matches.missed.map((m) => {
+                      const score = m.homeScore != null && m.awayScore != null
+                        ? (m.isHome ? `${m.homeScore}:${m.awayScore}` : `${m.awayScore}:${m.homeScore}`)
+                        : null;
+                      const reasonColor =
+                        m.reason === "Zranění" ? "bg-red-50 text-red-700 border-red-200"
+                        : m.reason === "Stopka za karty" ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : m.reason === "Mimo nominaci" ? "bg-gray-50 text-gray-600 border-gray-200"
+                        : "bg-blue-50 text-blue-700 border-blue-200";
+                      return (
+                        <div key={m.matchId} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg bg-gray-50/60 hover:bg-gray-50 transition-colors">
+                          <div className="flex items-center gap-2 sm:w-[180px] shrink-0">
+                            <span className="text-[10px] font-heading font-bold text-muted uppercase tabular-nums shrink-0">
+                              {m.round != null ? `${m.round}. kolo` : "—"}
+                            </span>
+                            <Link href={`/dashboard/match/${m.matchId}`} className="font-heading font-bold text-sm text-ink hover:text-pitch-500 truncate">
+                              {m.isHome ? "vs" : "@"} {m.opponent}
+                            </Link>
+                          </div>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-heading font-bold border ${reasonColor} shrink-0`}>
+                            {m.reason ?? "—"}
+                          </span>
+                          {m.smsText && (
+                            <span className="text-xs text-muted italic flex-1 min-w-0">
+                              {"\u{1F4AC}"} &ldquo;{m.smsText}&rdquo;
+                            </span>
+                          )}
+                          {score && <span className="text-xs text-muted tabular-nums shrink-0 ml-auto">{score}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+
       {activeTab === "vztahy" && (player as any).watchers && (player as any).watchers.length > 0 && (
         <div className="card p-4 sm:p-5">
           <SectionLabel>Sledují hráče ({(player as any).watchers.length})</SectionLabel>
