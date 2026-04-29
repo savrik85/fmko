@@ -10,7 +10,7 @@ type Tab = "atributy" | "sezona" | "top" | "dochazka";
 type PosFilter = "all" | "GK" | "DEF" | "MID" | "FWD";
 type SortKey = "name" | "pos" | "age" | "rat" | "spd" | "tec" | "sho" | "pas" | "hea" | "def" | "gk" | "sta" | "str" | "cond" | "mor" | "wage";
 type StatsKey = "name" | "pos" | "apps" | "min" | "g" | "a" | "ga" | "y" | "r" | "cs" | "mom" | "avg";
-type AttKey = "name" | "pos" | "trainPct" | "trainAtt" | "matches" | "missed" | "injury" | "suspension" | "excuse";
+type AttKey = "name" | "pos" | "trainPct" | "trainAtt" | "matches" | "injury" | "suspension" | "excuse" | "bench" | "notNominated";
 type SortDir = "asc" | "desc";
 
 interface AttendanceRow {
@@ -24,7 +24,7 @@ interface AttendanceRow {
   matchesAvailable: number;
   matchesPlayed: number;
   matchesMissed: number;
-  breakdown: { injury: number; suspension: number; excuse: number; notInSquad: number };
+  breakdown: { injury: number; suspension: number; excuse: number; bench: number; notNominated: number };
 }
 
 interface PlayerSeasonStats {
@@ -597,10 +597,11 @@ function DochazkaTab({ rows, sortKey, sortDir, onSort }: {
       case "trainPct": return r.trainingPct;
       case "trainAtt": return r.trainingAttended;
       case "matches": return r.matchesPlayed;
-      case "missed": return r.matchesMissed;
       case "injury": return r.breakdown.injury;
       case "suspension": return r.breakdown.suspension;
       case "excuse": return r.breakdown.excuse;
+      case "bench": return r.breakdown.bench;
+      case "notNominated": return r.breakdown.notNominated;
     }
   };
   const sorted = [...rows].sort((a, b) => {
@@ -630,10 +631,11 @@ function DochazkaTab({ rows, sortKey, sortDir, onSort }: {
                 ["trainPct", "Tréninky %", "Procento docházky na trénink", "center"],
                 ["trainAtt", "Tréninky", "Účast / celkem", "center"],
                 ["matches", "Zápasy", "Odehrané zápasy / dostupné", "center"],
-                ["missed", "Zameškáno", "Celkem zameškaných zápasů", "center"],
                 ["injury", "Zranění", "Zameškáno kvůli zranění", "center"],
                 ["suspension", "Stopka", "Zameškáno kvůli stopce za karty", "center"],
-                ["excuse", "Výmluvy", "Zameškáno kvůli omluvě (osobní, zdraví…)", "center"],
+                ["excuse", "Výmluvy", "Zameškáno kvůli omluvě (osobní, zdraví, kocovina…)", "center"],
+                ["bench", "Lavička", "Byl v nominaci jako náhradník, ale nedostal šanci", "center"],
+                ["notNominated", "Nenominován", "Trenér ho do zápasu vůbec nenominoval", "center"],
               ] as Array<[AttKey, string, string, "left" | "center"]>).map(([k, label, tip, align]) => (
                 <th key={k}
                   onClick={() => onSort(k)}
@@ -668,10 +670,11 @@ function DochazkaTab({ rows, sortKey, sortDir, onSort }: {
                   <td className="py-2 px-1.5 text-center tabular-nums">
                     {r.matchesPlayed}/{r.matchesAvailable}
                   </td>
-                  <td className="py-2 px-1.5 text-center tabular-nums">{r.matchesMissed}</td>
                   <td className="py-2 px-1.5 text-center tabular-nums text-card-red">{r.breakdown.injury || "—"}</td>
                   <td className="py-2 px-1.5 text-center tabular-nums text-amber-600">{r.breakdown.suspension || "—"}</td>
                   <td className="py-2 px-1.5 text-center tabular-nums text-blue-600">{r.breakdown.excuse || "—"}</td>
+                  <td className="py-2 px-1.5 text-center tabular-nums text-muted">{r.breakdown.bench || "—"}</td>
+                  <td className="py-2 px-1.5 text-center tabular-nums text-muted">{r.breakdown.notNominated || "—"}</td>
                 </tr>
               );
             })}

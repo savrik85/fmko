@@ -2398,6 +2398,7 @@ teamsRouter.get("/:id/players/:playerId/attendance", async (c) => {
     const matchRows = await c.env.DB.prepare(
       `SELECT m.id, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
               m.simulated_at, m.round, m.absences,
+              m.home_lineup_data, m.away_lineup_data,
               ht.name as home_name, at.name as away_name
        FROM matches m
        JOIN leagues l ON m.league_id = l.id
@@ -2429,17 +2430,30 @@ teamsRouter.get("/:id/players/:playerId/attendance", async (c) => {
       let reason: string | null = null;
       let smsText: string | null = null;
       if (!played) {
+        // 1) Najít v matches.absences (omluva s důvodem + SMS)
+        let absenceFound: { name: string; reason: string; smsText?: string; teamId?: string } | undefined;
         try {
           const absences = JSON.parse((row.absences as string) ?? "[]") as Array<{ name: string; reason: string; smsText?: string; teamId?: string }>;
           const ours = absences.filter((a) => !a.teamId || a.teamId === teamId);
-          const found = ours.find((a) => a.name === fullName);
-          if (found) {
-            reason = found.reason;
-            smsText = found.smsText ?? null;
-          } else {
-            reason = "Mimo nominaci";
-          }
-        } catch (e) { logger.warn({ module: "teams" }, "parse absences", e); reason = "Neznámý"; }
+          absenceFound = ours.find((a) => a.name === fullName);
+        } catch (e) { logger.warn({ module: "teams" }, "parse absences", e); }
+
+        if (absenceFound) {
+          reason = absenceFound.reason;
+          smsText = absenceFound.smsText ?? null;
+        } else {
+          // 2) Zkontrolovat lineup_data — byl v nominaci, ale nezasáhl?
+          const lineupRaw = (isHome ? row.home_lineup_data : row.away_lineup_data) as string | null;
+          let inLineup = false;
+          try {
+            const lineup = JSON.parse(lineupRaw ?? "null") as { starters?: Array<{ id: string }>; subs?: Array<{ id: string }> } | null;
+            if (lineup) {
+              const ids = [...(lineup.starters ?? []), ...(lineup.subs ?? [])].map((p) => p.id);
+              inLineup = ids.includes(playerId);
+            }
+          } catch (e) { logger.warn({ module: "teams" }, "parse lineup_data for attendance", e); }
+          reason = inLineup ? "Na lavičce" : "Nenominován";
+        }
       }
       return {
         matchId,
@@ -2504,19 +2518,22 @@ teamsRouter.get("/:id/attendance", async (c) => {
 
   // Zápasy a absences pro celou sezónu
   let matchPlayedCounts: Record<string, number> = {};
-  let matchAbsenceBreakdown: Record<string, { injury: number; suspension: number; excuse: number; notInSquad: number }> = {};
+  let matchAbsenceBreakdown: Record<string, { injury: number; suspension: number; excuse: number; bench: number; notNominated: number }> = {};
   let matchesAvailable = 0;
   if (season) {
     const matchRows = await c.env.DB.prepare(
-      `SELECT m.id, m.absences FROM matches m
+      `SELECT m.id, m.home_team_id, m.away_team_id, m.absences,
+              m.home_lineup_data, m.away_lineup_data
+       FROM matches m
        JOIN leagues l ON m.league_id = l.id
        WHERE (m.home_team_id = ? OR m.away_team_id = ?)
          AND m.status = 'simulated' AND l.season_id = ?`
-    ).bind(teamId, teamId, season.id).all<{ id: string; absences: string | null }>()
+    ).bind(teamId, teamId, season.id).all<{ id: string; home_team_id: string; away_team_id: string; absences: string | null; home_lineup_data: string | null; away_lineup_data: string | null }>()
       .catch((e) => { logger.warn({ module: "teams" }, "fetch matches for team attendance", e); return { results: [] }; });
     matchesAvailable = matchRows.results.length;
 
     const matchIds = matchRows.results.map((r) => r.id);
+    const playedByMatch: Record<string, Set<string>> = {};
     if (matchIds.length > 0) {
       const placeholders = matchIds.map(() => "?").join(",");
       const playedRes = await c.env.DB.prepare(
@@ -2526,37 +2543,51 @@ teamsRouter.get("/:id/attendance", async (c) => {
         .catch((e) => { logger.warn({ module: "teams" }, "fetch played matches for team attendance", e); return { results: [] }; });
       for (const r of playedRes.results) {
         matchPlayedCounts[r.player_id] = (matchPlayedCounts[r.player_id] ?? 0) + 1;
+        if (!playedByMatch[r.match_id]) playedByMatch[r.match_id] = new Set();
+        playedByMatch[r.match_id].add(r.player_id);
       }
     }
 
-    // Absences breakdown — pro každý match parsujeme absences a pro každého aktivního hráče
-    // přiřadíme typ podle reason (Zranění → injury, Stopka za karty → suspension, jinak excuse).
-    // notInSquad = matchesAvailable - played - injury - suspension - excuse
     const nameToId: Record<string, string> = {};
     for (const p of playersRes.results) nameToId[`${p.first_name} ${p.last_name}`] = p.id;
-    for (const p of playersRes.results) matchAbsenceBreakdown[p.id] = { injury: 0, suspension: 0, excuse: 0, notInSquad: 0 };
+    for (const p of playersRes.results) matchAbsenceBreakdown[p.id] = { injury: 0, suspension: 0, excuse: 0, bench: 0, notNominated: 0 };
 
     for (const m of matchRows.results) {
+      const isHome = m.home_team_id === teamId;
+      const lineupRaw = isHome ? m.home_lineup_data : m.away_lineup_data;
+      let lineupIds: Set<string> = new Set();
+      try {
+        const lineup = JSON.parse(lineupRaw ?? "null") as { starters?: Array<{ id: string }>; subs?: Array<{ id: string }> } | null;
+        if (lineup) {
+          for (const p of [...(lineup.starters ?? []), ...(lineup.subs ?? [])]) lineupIds.add(p.id);
+        }
+      } catch (e) { logger.warn({ module: "teams" }, "parse lineup in team attendance", e); }
+
+      // Absences (omluvy)
+      const absentIds = new Set<string>();
       try {
         const absences = JSON.parse(m.absences ?? "[]") as Array<{ name: string; reason: string; teamId?: string }>;
         const ours = absences.filter((a) => !a.teamId || a.teamId === teamId);
         for (const a of ours) {
           const pid = nameToId[a.name];
           if (!pid) continue;
-          const r = a.reason;
-          if (r === "Zranění") matchAbsenceBreakdown[pid].injury++;
-          else if (r === "Stopka za karty") matchAbsenceBreakdown[pid].suspension++;
+          absentIds.add(pid);
+          if (a.reason === "Zranění") matchAbsenceBreakdown[pid].injury++;
+          else if (a.reason === "Stopka za karty") matchAbsenceBreakdown[pid].suspension++;
           else matchAbsenceBreakdown[pid].excuse++;
         }
-      } catch (e) { logger.warn({ module: "teams" }, "parse absences in team-wide attendance", e); }
-    }
+      } catch (e) { logger.warn({ module: "teams" }, "parse absences in team attendance", e); }
 
-    // notInSquad = available - played - tracked absences
-    for (const p of playersRes.results) {
-      const played = matchPlayedCounts[p.id] ?? 0;
-      const br = matchAbsenceBreakdown[p.id];
-      const known = played + br.injury + br.suspension + br.excuse;
-      br.notInSquad = Math.max(0, matchesAvailable - known);
+      // Pro každého hráče který nehrál tento zápas a není v absences:
+      //   - byl v lineup → bench (nedostal šanci)
+      //   - nebyl v lineup → notNominated (trenér ho nepostavil)
+      const playedThisMatch = playedByMatch[m.id] ?? new Set();
+      for (const p of playersRes.results) {
+        if (playedThisMatch.has(p.id)) continue;
+        if (absentIds.has(p.id)) continue;
+        if (lineupIds.has(p.id)) matchAbsenceBreakdown[p.id].bench++;
+        else matchAbsenceBreakdown[p.id].notNominated++;
+      }
     }
   }
 
@@ -2564,7 +2595,7 @@ teamsRouter.get("/:id/attendance", async (c) => {
     const att = attMap[p.id] ?? { attended: 0, total: 0 };
     const trainingPct = att.total > 0 ? Math.round((att.attended / att.total) * 100) : 0;
     const matchesPlayed = matchPlayedCounts[p.id] ?? 0;
-    const breakdown = matchAbsenceBreakdown[p.id] ?? { injury: 0, suspension: 0, excuse: 0, notInSquad: 0 };
+    const breakdown = matchAbsenceBreakdown[p.id] ?? { injury: 0, suspension: 0, excuse: 0, bench: 0, notNominated: 0 };
     return {
       playerId: p.id,
       firstName: p.first_name,

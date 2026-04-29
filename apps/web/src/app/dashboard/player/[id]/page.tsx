@@ -1393,52 +1393,74 @@ export default function PlayerDetailPage() {
                     <span className="text-sm text-muted">/ {attendance.matches.available}</span>
                   </div>
                   <div className="text-xs text-muted mt-1">
-                    {attendance.matches.missedCount === 0
-                      ? "Hrál všechny dostupné zápasy."
-                      : `Zameškal ${attendance.matches.missedCount} ${attendance.matches.missedCount === 1 ? "zápas" : attendance.matches.missedCount < 5 ? "zápasy" : "zápasů"}.`}
+                    {(() => {
+                      const real = attendance.matches.missed.filter((m) => m.reason !== "Na lavičce" && m.reason !== "Nenominován").length;
+                      const benched = attendance.matches.missed.filter((m) => m.reason === "Na lavičce" || m.reason === "Nenominován").length;
+                      if (attendance.matches.missedCount === 0) return "Hrál všechny dostupné zápasy.";
+                      if (real === 0) return `${benched}× nehrál (lavička / nenominován).`;
+                      const pl = real === 1 ? "absence" : real < 5 ? "absence" : "absencí";
+                      return `${real} ${pl}, ${benched}× nehrál.`;
+                    })()}
                   </div>
                 </div>
               </div>
 
-              {/* Zameškané zápasy */}
-              {attendance.matches.missed.length > 0 && (
-                <div className="card p-4 sm:p-5">
-                  <SectionLabel>Zameškané zápasy</SectionLabel>
-                  <div className="space-y-2 mt-2">
-                    {attendance.matches.missed.map((m) => {
-                      const score = m.homeScore != null && m.awayScore != null
-                        ? (m.isHome ? `${m.homeScore}:${m.awayScore}` : `${m.awayScore}:${m.homeScore}`)
-                        : null;
-                      const reasonColor =
-                        m.reason === "Zranění" ? "bg-red-50 text-red-700 border-red-200"
-                        : m.reason === "Stopka za karty" ? "bg-amber-50 text-amber-700 border-amber-200"
-                        : m.reason === "Mimo nominaci" ? "bg-gray-50 text-gray-600 border-gray-200"
-                        : "bg-blue-50 text-blue-700 border-blue-200";
-                      return (
-                        <div key={m.matchId} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg bg-gray-50/60 hover:bg-gray-50 transition-colors">
-                          <div className="flex items-center gap-2 sm:w-[180px] shrink-0">
-                            <span className="text-[10px] font-heading font-bold text-muted uppercase tabular-nums shrink-0">
-                              {m.round != null ? `${m.round}. kolo` : "—"}
-                            </span>
-                            <Link href={`/dashboard/match/${m.matchId}`} className="font-heading font-bold text-sm text-ink hover:text-pitch-500 truncate">
-                              {m.isHome ? "vs" : "@"} {m.opponent}
-                            </Link>
-                          </div>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-heading font-bold border ${reasonColor} shrink-0`}>
-                            {m.reason ?? "—"}
-                          </span>
-                          {m.smsText && (
-                            <span className="text-xs text-muted italic flex-1 min-w-0">
-                              {"\u{1F4AC}"} &ldquo;{m.smsText}&rdquo;
-                            </span>
-                          )}
-                          {score && <span className="text-xs text-muted tabular-nums shrink-0 ml-auto">{score}</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              {/* Zameškané zápasy — rozděleno na skutečné absence vs nehrál (lavička/nenominován) */}
+              {attendance.matches.missed.length > 0 && (() => {
+                const realAbsences = attendance.matches.missed.filter((m) => m.reason !== "Na lavičce" && m.reason !== "Nenominován");
+                const benchOrNot = attendance.matches.missed.filter((m) => m.reason === "Na lavičce" || m.reason === "Nenominován");
+                const RowItem = (m: typeof attendance.matches.missed[number]) => {
+                  const score = m.homeScore != null && m.awayScore != null
+                    ? (m.isHome ? `${m.homeScore}:${m.awayScore}` : `${m.awayScore}:${m.homeScore}`)
+                    : null;
+                  const reasonColor =
+                    m.reason === "Zranění" ? "bg-red-50 text-red-700 border-red-200"
+                    : m.reason === "Stopka za karty" ? "bg-amber-50 text-amber-700 border-amber-200"
+                    : m.reason === "Na lavičce" ? "bg-gray-50 text-gray-600 border-gray-200"
+                    : m.reason === "Nenominován" ? "bg-gray-50 text-gray-500 border-gray-200"
+                    : "bg-blue-50 text-blue-700 border-blue-200";
+                  return (
+                    <div key={m.matchId} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg bg-gray-50/60 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center gap-2 sm:w-[180px] shrink-0">
+                        <span className="text-[10px] font-heading font-bold text-muted uppercase tabular-nums shrink-0">
+                          {m.round != null ? `${m.round}. kolo` : "—"}
+                        </span>
+                        <Link href={`/dashboard/match/${m.matchId}`} className="font-heading font-bold text-sm text-ink hover:text-pitch-500 truncate">
+                          {m.isHome ? "vs" : "@"} {m.opponent}
+                        </Link>
+                      </div>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-heading font-bold border ${reasonColor} shrink-0`}>
+                        {m.reason ?? "—"}
+                      </span>
+                      {m.smsText && (
+                        <span className="text-xs text-muted italic flex-1 min-w-0">
+                          {"\u{1F4AC}"} &ldquo;{m.smsText}&rdquo;
+                        </span>
+                      )}
+                      {score && <span className="text-xs text-muted tabular-nums shrink-0 ml-auto">{score}</span>}
+                    </div>
+                  );
+                };
+                return (
+                  <>
+                    {realAbsences.length > 0 && (
+                      <div className="card p-4 sm:p-5">
+                        <SectionLabel>Zameškal (zranění / stopka / výmluva)</SectionLabel>
+                        <div className="space-y-2 mt-2">{realAbsences.map(RowItem)}</div>
+                      </div>
+                    )}
+                    {benchOrNot.length > 0 && (
+                      <details className="card p-4 sm:p-5">
+                        <summary className="cursor-pointer flex items-center justify-between">
+                          <SectionLabel>Nehrál ({benchOrNot.length}× lavička / nenominován)</SectionLabel>
+                          <span className="text-xs text-muted">rozbalit</span>
+                        </summary>
+                        <div className="space-y-2 mt-3">{benchOrNot.map(RowItem)}</div>
+                      </details>
+                    )}
+                  </>
+                );
+              })()}
             </>
           )}
         </>
