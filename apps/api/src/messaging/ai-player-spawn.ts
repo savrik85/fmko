@@ -191,7 +191,7 @@ async function spawnForTeam(
   env: { GEMINI_API_KEY?: string },
   teamId: string,
 ): Promise<boolean> {
-  // 1. Načti aktivní hráče s recent stats (last 5 matches)
+  // 1. Načti aktivní hráče s recent stats (last 30 dní)
   const playersRow = await db.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.age, p.position,
             p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
@@ -199,16 +199,11 @@ async function spawnForTeam(
             COALESCE(stats.recent_rating_avg, 6.5) as recent_rating_avg
      FROM players p
      LEFT JOIN (
-       SELECT player_id, SUM(minutes_played) as recent_minutes, AVG(rating) as recent_rating_avg
-       FROM (
-         SELECT mps.player_id, mps.minutes_played, mps.rating
-         FROM match_player_stats mps
-         JOIN matches m ON mps.match_id = m.id
-         WHERE mps.team_id = ? AND m.status = 'simulated'
-         ORDER BY m.played_at DESC
-         LIMIT 100
-       ) recent
-       GROUP BY player_id
+       SELECT mps.player_id, SUM(mps.minutes_played) as recent_minutes, AVG(mps.rating) as recent_rating_avg
+       FROM match_player_stats mps
+       JOIN matches m ON mps.match_id = m.id
+       WHERE mps.team_id = ? AND m.status = 'simulated' AND m.simulated_at >= datetime('now', '-30 days')
+       GROUP BY mps.player_id
      ) stats ON stats.player_id = p.id
      WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')`,
   ).bind(teamId, teamId).all<Record<string, unknown>>()
@@ -346,26 +341,10 @@ export async function handleAiPlayerReply(
     return;
   }
 
-  // Načti hráče (musí pořád patřit do tohoto týmu)
+  // Načti hráče (recent stats nejsou pro reply potřeba)
   const playerRow = await db.prepare(
-    `SELECT p.id, p.first_name, p.last_name, p.age, p.position, p.team_id,
-            p.personality, p.life_context, p.coach_relationship, p.is_celebrity, p.injured_until,
-            COALESCE(stats.recent_minutes, 0) as recent_minutes,
-            COALESCE(stats.recent_rating_avg, 6.5) as recent_rating_avg
-     FROM players p
-     LEFT JOIN (
-       SELECT player_id, SUM(minutes_played) as recent_minutes, AVG(rating) as recent_rating_avg
-       FROM (
-         SELECT mps.player_id, mps.minutes_played, mps.rating
-         FROM match_player_stats mps
-         JOIN matches m ON mps.match_id = m.id
-         WHERE mps.player_id = ? AND m.status = 'simulated'
-         ORDER BY m.played_at DESC LIMIT 20
-       ) recent
-       GROUP BY player_id
-     ) stats ON stats.player_id = p.id
-     WHERE p.id = ?`,
-  ).bind(state.player_id, state.player_id).first<Record<string, unknown>>()
+    "SELECT id, first_name, last_name, age, position, team_id, personality, life_context, coach_relationship, is_celebrity FROM players WHERE id = ?",
+  ).bind(state.player_id).first<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load player for reply", e); return null; });
 
   if (!playerRow || playerRow.team_id !== conv.team_id) {
