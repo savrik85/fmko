@@ -48,6 +48,9 @@ export const players = sqliteTable("players", {
   morale: integer("morale").notNull().default(50),
   injuredUntil: text("injured_until"),
 
+  // Vztah hráče k trenérovi (0-100), buduje se přes AI chaty + výsledky/minuty
+  coachRelationship: integer("coach_relationship").notNull().default(50),
+
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),

@@ -115,6 +115,7 @@ export interface Player {
   squad_number?: number | null;
   weekly_wage?: number | null;
   is_celebrity?: number;
+  coach_relationship?: number;
 }
 
 export interface CareerStats {

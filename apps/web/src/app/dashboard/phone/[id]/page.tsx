@@ -32,6 +32,22 @@ interface ConvInfo {
   participantAvatar: Record<string, unknown> | null;
 }
 
+interface AiThreadState {
+  awaiting: "coach" | "player" | "done";
+  scenarioId?: string;
+  resolution?: {
+    summary?: string;
+    tone?: "positive" | "negative" | "neutral";
+    offended?: boolean;
+  } | null;
+}
+
+interface ConvDetailResponse {
+  messages: Message[];
+  aiThreadActive: boolean;
+  aiThreadState: AiThreadState | null;
+}
+
 const EMOTICONS: [RegExp, string][] = [
   [/(?<!\w):-?\)/g, "\u{1F642}"],
   [/(?<!\w):-?\(/g, "\u{1F641}"],
@@ -81,6 +97,8 @@ export default function ConversationPage() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [conv, setConv] = useState<ConvInfo | null>(null);
+  const [aiThreadState, setAiThreadState] = useState<AiThreadState | null>(null);
+  const [aiThreadActive, setAiThreadActive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newMsg, setNewMsg] = useState("");
   const [sending, setSending] = useState(false);
@@ -98,11 +116,23 @@ export default function ConversationPage() {
       ? `/api/teams/${teamId}/conversations` // group chats are merged in
       : `/api/teams/${teamId}/conversations`;
 
+    const fetchMessages = (): Promise<{ msgs: Message[]; ai: { active: boolean; state: AiThreadState | null } }> => {
+      if (isGroup) {
+        return apiFetch<Message[]>(messagesUrl).then((msgs) => ({ msgs, ai: { active: false, state: null } }));
+      }
+      return apiFetch<ConvDetailResponse>(messagesUrl).then((res) => ({
+        msgs: res.messages,
+        ai: { active: res.aiThreadActive, state: res.aiThreadState },
+      }));
+    };
+
     Promise.all([
-      apiFetch<Message[]>(messagesUrl),
+      fetchMessages(),
       apiFetch<ConvInfo[]>(convListUrl).then((all) => all.find((c) => c.id === convId) ?? null),
-    ]).then(([msgs, c]) => {
+    ]).then(([{ msgs, ai }, c]) => {
       setMessages(msgs);
+      setAiThreadActive(ai.active);
+      setAiThreadState(ai.state);
       setConv(c);
       setLoading(false);
     }).catch((e) => {
@@ -118,8 +148,10 @@ export default function ConversationPage() {
 
     const interval = setInterval(() => {
       if (stopped) return;
-      apiFetch<Message[]>(messagesUrl)
-        .then((msgs) => {
+      fetchMessages()
+        .then(({ msgs, ai }) => {
+          setAiThreadActive(ai.active);
+          setAiThreadState(ai.state);
           setMessages((prev) => {
             if (msgs.length !== prev.length) return msgs;
             if (msgs.length > 0 && prev.length > 0 && msgs[msgs.length - 1].id !== prev[prev.length - 1].id) return msgs;
@@ -298,8 +330,34 @@ export default function ConversationPage() {
             </div>
           ))
         )}
+        {aiThreadActive && aiThreadState?.awaiting === "player" && (
+          <div className="flex justify-start">
+            <div className="bg-white shadow-sm rounded-2xl rounded-bl-sm px-3 py-2 text-[12px] text-muted italic flex items-center gap-1.5">
+              <span className="inline-flex gap-0.5">
+                <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+              </span>
+              Hráč přemýšlí…
+            </div>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
+
+      {/* AI thread done banner */}
+      {aiThreadState?.awaiting === "done" && (
+        <div className={`px-3 py-2 text-xs text-center border-t shrink-0 ${
+          aiThreadState.resolution?.tone === "positive" ? "bg-pitch-50 text-pitch-700 border-pitch-200"
+          : aiThreadState.resolution?.tone === "negative" ? "bg-red-50 text-red-700 border-red-200"
+          : "bg-gray-50 text-gray-600 border-gray-200"
+        }`}>
+          <div className="font-medium">💬 Konverzace ukončena</div>
+          {aiThreadState.resolution?.summary && (
+            <div className="mt-0.5 text-[11px] opacity-80">{aiThreadState.resolution.summary}</div>
+          )}
+        </div>
+      )}
 
       {/* Input */}
       <div className="bg-white border-t border-gray-100 px-3 py-2 flex gap-2 shrink-0">
@@ -308,12 +366,13 @@ export default function ConversationPage() {
           value={newMsg}
           onChange={(e) => setNewMsg(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-          placeholder="Napiš zprávu..."
-          className="flex-1 bg-gray-100 rounded-full px-3 py-2 text-base outline-none focus:ring-2 focus:ring-pitch-500/30"
+          placeholder={aiThreadState?.awaiting === "done" ? "Konverzace ukončena" : "Napiš zprávu..."}
+          disabled={aiThreadState?.awaiting === "done"}
+          className="flex-1 bg-gray-100 rounded-full px-3 py-2 text-base outline-none focus:ring-2 focus:ring-pitch-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
         />
         <button
           onClick={handleSend}
-          disabled={!newMsg.trim() || sending}
+          disabled={!newMsg.trim() || sending || aiThreadState?.awaiting === "done"}
           className="shrink-0 w-8 h-8 rounded-full bg-pitch-500 text-white flex items-center justify-center disabled:opacity-40 text-xs"
         >
           &#9654;

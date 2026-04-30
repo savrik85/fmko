@@ -18,6 +18,8 @@ interface Conversation {
   lastMessageAt: string | null;
   unreadCount: number;
   pinned: boolean;
+  aiThreadActive?: boolean;
+  aiThreadState?: { awaiting: "coach" | "player" | "done" } | null;
 }
 
 const GROUP_AVATAR_EMOJI: Record<string, string> = {
@@ -97,6 +99,16 @@ export default function PhonePage() {
                   <div className="flex items-center justify-between">
                     <span className={`text-[13px] truncate ${conv.unreadCount > 0 ? "font-bold text-ink" : "font-medium text-ink"}`}>
                       {conv.title}
+                      {conv.aiThreadActive && conv.aiThreadState?.awaiting === "coach" && (
+                        <span className="ml-1.5 inline-block bg-pitch-100 text-pitch-700 text-[9px] font-medium px-1.5 py-0.5 rounded-full align-middle">
+                          čeká na odpověď
+                        </span>
+                      )}
+                      {conv.aiThreadActive && conv.aiThreadState?.awaiting === "player" && (
+                        <span className="ml-1.5 inline-block bg-amber-100 text-amber-700 text-[9px] font-medium px-1.5 py-0.5 rounded-full align-middle">
+                          píše…
+                        </span>
+                      )}
                     </span>
                     <span className="text-xs text-muted shrink-0 ml-2">
                       {timeAgo(conv.lastMessageAt)}

@@ -862,6 +862,29 @@ export default function PlayerDetailPage() {
       {/* ═══ TAB: VZTAHY — Vztahy v kádru + Watchers ═══ */}
       {activeTab === "vztahy" && <>
 
+      {/* ═══ Vztah s trenérem ═══ */}
+      {isOwnPlayer && (() => {
+        const rel = player.coach_relationship ?? 50;
+        const label = rel >= 81 ? "Idol" : rel >= 61 ? "Loajální" : rel >= 41 ? "Neutrální" : rel >= 21 ? "Skeptický" : "Nepřátelský";
+        const tone = rel >= 61 ? "bg-pitch-500" : rel >= 41 ? "bg-amber-400" : "bg-red-500";
+        const labelColor = rel >= 61 ? "text-pitch-700" : rel >= 41 ? "text-amber-700" : "text-red-700";
+        return (
+          <div className="card p-4 sm:p-5 mb-5">
+            <SectionLabel>Vztah s trenérem</SectionLabel>
+            <div className="flex items-end justify-between mt-2 mb-1.5">
+              <span className={`text-base font-heading font-bold ${labelColor}`}>{label}</span>
+              <span className="text-sm font-heading font-bold text-ink tabular-nums">{rel}/100</span>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div className={`h-full ${tone} transition-all`} style={{ width: `${rel}%` }} />
+            </div>
+            <p className="text-xs text-muted mt-2 leading-snug">
+              Vztah se buduje skrze rozhovory a herní rozhodnutí. Když hráč napíše a ty odpovíš empaticky, vztah roste; ignorace ho srazí.
+            </p>
+          </div>
+        );
+      })()}
+
       {/* ═══ Vztahy v kádru ═══ */}
       {(((isOwnPlayer && profileExtras && profileExtras.relationships.length > 0))) && (
         <div className="grid grid-cols-1 gap-5">

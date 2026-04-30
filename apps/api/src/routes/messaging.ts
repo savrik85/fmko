@@ -20,6 +20,21 @@ function uuid(): string {
   return crypto.randomUUID();
 }
 
+function parseAiThreadState(raw: unknown): { awaiting: "coach" | "player" | "done"; scenarioId?: string; resolution?: { summary?: string; tone?: string; offended?: boolean } | null } | null {
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      awaiting: parsed.awaiting,
+      scenarioId: parsed.scenario_id,
+      resolution: parsed.resolution ?? null,
+    };
+  } catch (e) {
+    logger.warn({ module: "messaging" }, "parseAiThreadState", e);
+    return null;
+  }
+}
+
 // GET /api/teams/:teamId/conversations — seznam konverzací
 messagingRouter.get("/teams/:teamId/conversations", async (c) => {
   const teamId = c.req.param("teamId");
@@ -62,6 +77,8 @@ messagingRouter.get("/teams/:teamId/conversations", async (c) => {
       lastMessageAt: row.last_message_at as string | null,
       unreadCount: row.unread_count as number,
       pinned: row.pinned === 1,
+      aiThreadActive: (row.ai_thread_active as number) === 1,
+      aiThreadState: parseAiThreadState(row.ai_thread_state),
     }));
 
   // Merge group chats (globální + ligový). Vždy zobrazit, i prázdné.
@@ -87,9 +104,11 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
   const limit = Number(c.req.query("limit") || "50");
   const before = c.req.query("before"); // cursor pagination
 
-  // Ověřit že konverzace patří tomuto týmu
-  const convOwner = await c.env.DB.prepare("SELECT team_id FROM conversations WHERE id = ?")
-    .bind(convId).first<{ team_id: string }>().catch((e) => { logger.warn({ module: "messaging" }, "conv ownership check", e); return null; });
+  // Ověřit že konverzace patří tomuto týmu + načíst AI thread state
+  const convOwner = await c.env.DB.prepare(
+    "SELECT team_id, ai_thread_active, ai_thread_state FROM conversations WHERE id = ?",
+  ).bind(convId).first<{ team_id: string; ai_thread_active: number; ai_thread_state: string | null }>()
+    .catch((e) => { logger.warn({ module: "messaging" }, "conv ownership check", e); return null; });
   if (!convOwner || convOwner.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
 
   let query = "SELECT * FROM messages WHERE conversation_id = ?";
@@ -124,7 +143,11 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
     "UPDATE conversations SET unread_count = 0 WHERE id = ?"
   ).bind(convId).run().catch((e) => logger.warn({ module: "messaging" }, "reset unread count", e));
 
-  return c.json(messages);
+  return c.json({
+    messages,
+    aiThreadActive: convOwner.ai_thread_active === 1,
+    aiThreadState: parseAiThreadState(convOwner.ai_thread_state),
+  });
 });
 
 // POST /api/teams/:teamId/conversations/:convId — odeslat zprávu
@@ -160,8 +183,28 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
 
   // If manager conversation, deliver to the other side
   const conv = await c.env.DB.prepare(
-    "SELECT type, participant_id FROM conversations WHERE id = ?"
-  ).bind(convId).first<{ type: string; participant_id: string | null }>().catch((e) => { logger.warn({ module: "messaging" }, "fetch conversation type", e); return null; });
+    "SELECT type, participant_id, ai_thread_active FROM conversations WHERE id = ?"
+  ).bind(convId).first<{ type: string; participant_id: string | null; ai_thread_active: number }>().catch((e) => { logger.warn({ module: "messaging" }, "fetch conversation type", e); return null; });
+
+  // AI player chat hook: pokud je thread aktivní a čeká na trenéra,
+  // atomic UPDATE awaiting='player' (race guard) a spustíme generování reply v pozadí.
+  if (conv?.type === "player" && conv.ai_thread_active === 1) {
+    const updateRes = await c.env.DB.prepare(
+      `UPDATE conversations
+       SET ai_thread_state = json_set(ai_thread_state, '$.awaiting', 'player')
+       WHERE id = ?
+         AND ai_thread_active = 1
+         AND json_extract(ai_thread_state, '$.awaiting') = 'coach'`,
+    ).bind(convId).run().catch((e) => { logger.warn({ module: "messaging" }, "atomic awaiting update", e); return null; });
+
+    if (updateRes && (updateRes.meta?.changes ?? 0) > 0) {
+      const { handleAiPlayerReply } = await import("../messaging/ai-player-spawn");
+      c.executionCtx.waitUntil(
+        handleAiPlayerReply(c.env.DB, c.env, convId)
+          .catch((e) => logger.error({ module: "messaging" }, "handleAiPlayerReply failed", e)),
+      );
+    }
+  }
 
   if (conv?.type === "manager" && conv.participant_id) {
     const otherTeamId = conv.participant_id;
