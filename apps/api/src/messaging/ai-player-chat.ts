@@ -78,6 +78,7 @@ function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext): string {
     occupation,
     "Píšeš trenérovi SMS na mobil. Mluv neformálně česky, jako vesničan z malého klubu — používej hovorové výrazy, klidně i nadávku nebo povzdech.",
     "PRAVIDLA STYLU:",
+    "- Oslovuj trenéra slovem 'trenére' (případně jeho jménem). NIKDY nepoužívej slovo 'šéfe' — to neříkáme.",
     "- Krátce: 1-2 věty, do 200 znaků.",
     "- UKAZUJ EMOCE: když tě něco štve, dej to najevo (sarkasmus, frustrace, povzdech). Když jsi rád, projev to. Nebuď monotónní.",
     "- NIKDY se neopakuj — nepoužívej stejné fráze nebo slova jako v předchozí své zprávě.",
