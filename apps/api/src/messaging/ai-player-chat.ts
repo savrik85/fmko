@@ -180,13 +180,6 @@ export async function generateReply(
 
   const closingHint = isFinalTurn
     ? "TOTO JE TVOJE POSLEDNÍ ZPRÁVA — uzavři ji (poděkuj / smiř se / rozluč se / nebo prásknout dveřmi pokud tě trenér naštval). Žádné nové otázky. Pole `conversation_complete` MUSÍ být true."
-    : "Můžeš v rozhovoru pokračovat (argumentovat, eskalovat, ptát se), NEBO ho přirozeně uzavřít, pokud trenér už odpověděl ucelené (poděkoval, dal radu, zavřel téma). Pole `conversation_complete` nastav podle toho, jestli je ještě o čem mluvit.";
-
-  // Pokud trenér odpověděl velmi krátce nebo odmítavě, hráč by měl reagovat emocionálně podle temperamentu
-  const lastCoachMsg = [...history].reverse().find((m) => m.sender === "coach")?.body ?? "";
-  const coachShortOrDismissive = lastCoachMsg.length < 25;
-  const reactionHint = coachShortOrDismissive
-    ? `Trenér ti odpověděl velmi krátce ("${lastCoachMsg}"). Pokud ti to přijde odmítavé/hrubé a tvůj temperament je ${player.temper}/100, projev to (frustrace, sarkasmus, povzdech). Pokud to byla jasná uzavírací odpověď ("ok", "díky", "v pořádku"), můžeš téma uzavřít.`
     : "";
 
   const prompt = [
@@ -197,12 +190,20 @@ export async function generateReply(
     "HISTORIE KONVERZACE:",
     histText,
     "",
+    "JAK ROZHODNOUT O conversation_complete:",
+    "- TRUE (uzavři) když trenér VYŘEŠIL tvou žádost: souhlasil ('jasně, jdi domů', 'bud doma', 'odpočiň si'), zamítl ('hraj', 'tým je důležitější'), nebo dal jasnou radu/závěr. Krátká empatická odpověď ('držím palce', 'rozumím', 'chápu') je TAKY uzavření — poděkuj a skonči.",
+    "- FALSE (pokračuj) jen když máš ještě KONKRÉTNÍ věc co vyřešit (trenér něco neřekl, je nejasno, máš dodatečnou otázku k tématu). Nepokračuj jen kvůli tomu abys řekl ještě jednu zprávu.",
+    "",
+    "JAK INTERPRETOVAT TÓN TRENÉRA:",
+    "- Krátká odpověď NENÍ automaticky odbytí. 'Držím palce', 'Souhlas', 'Jasně' jsou pozitivní krátké odpovědi.",
+    "- Sarkasmus/frustraci použij JEN když trenér byl skutečně odmítavý/hrubý ('Nesral bys', 'To je tvůj problém', 'Není čas') NEBO ti zamítl žádost po které jsi velmi toužil.",
+    "- Když trenér souhlasil/podpořil → poděkuj upřímně, žádná ironie.",
+    "",
     closingHint,
-    reactionHint,
-    `Drž svou povahu (temperament ${player.temper}, vztah ${player.coachRelationship}/100). NEOPAKUJ stejné fráze co jsi už použil. NEPIŠ podpis.`,
+    `Drž svou povahu (temperament ${player.temper}, vztah ${player.coachRelationship}/100). NEOPAKUJ slova ani fráze co jsi nebo trenér už použil v této konverzaci. NEPIŠ podpis.`,
     "",
     "Vrať POUZE JSON v tomto tvaru (žádný markdown, žádný komentář):",
-    `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true pokud je téma probrané a další výměna nedává smysl, jinak false>}`,
+    `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true pokud je téma vyřešené, jinak false>}`,
   ].filter(Boolean).join("\n");
 
   const raw = await callGemini(env, prompt, { json: true, maxTokens: 256, temperature: 1.0 });
