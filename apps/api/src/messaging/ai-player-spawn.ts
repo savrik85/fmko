@@ -511,11 +511,12 @@ async function applyResolutionAndClose(
     ).bind(JSON.stringify(newState), systemMsg.slice(0, 100), now, convId),
   ];
 
-  // Pokud trenér hráči schválil volno → vložíme do injuries (využíváme stávající absence systém)
+  // Pokud trenér hráči schválil volno → vložíme do injuries (využíváme stávající absence systém,
+  // type='obecne' je jediný povolený "neanatomický" typ v CHECK constraint)
   if (absenceDays > 0) {
     stmts.push(
       db.prepare(
-        "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, created_at) VALUES (?, ?, ?, 'personal', ?, 'minor', ?, ?, ?)",
+        "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, created_at) VALUES (?, ?, ?, 'obecne', ?, 'minor', ?, ?, ?)",
       ).bind(uuid(), playerId, teamId, resolution.absence_reason || "Schválené osobní volno", absenceDays, absenceDays, now),
     );
   }
