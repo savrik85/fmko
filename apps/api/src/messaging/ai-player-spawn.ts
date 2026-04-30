@@ -375,15 +375,15 @@ export async function handleAiPlayerReply(
     .map((m) => ({ sender: m.sender_type === "player" ? "player" : "coach", body: m.body }));
 
   const newRepliesCount = state.current_replies + 1;
-  const isFinalTurn = newRepliesCount >= state.max_replies;
+  // max_replies funguje jako tvrdý strop. AI ale může konverzaci uzavřít kdykoli dřív přes conversation_complete.
+  const isHardCap = newRepliesCount >= state.max_replies;
 
-  let replyBody: string;
+  let reply: { body: string; conversationComplete: boolean };
   try {
-    replyBody = await generateReply(env, player, history, scenario, teamCtx, isFinalTurn);
+    reply = await generateReply(env, player, history, scenario, teamCtx, isHardCap);
   } catch (e) {
     if (e instanceof GeminiUnavailableError) {
       logger.warn({ module: "ai-player-spawn" }, `Gemini reply failed for conv ${convId}: ${e.message}`);
-      // Vrátíme awaiting='coach' aby trenér mohl zkusit znovu odpovědět (stale check to případně chytí)
       await db.prepare(
         "UPDATE conversations SET ai_thread_state = ? WHERE id = ?",
       ).bind(JSON.stringify({ ...state, awaiting: "coach" }), convId).run()
@@ -395,8 +395,9 @@ export async function handleAiPlayerReply(
 
   const now = new Date().toISOString();
   const senderName = `${player.firstName} ${player.lastName}`;
+  const shouldClose = reply.conversationComplete || isHardCap;
 
-  if (!isFinalTurn) {
+  if (!shouldClose) {
     // Branch A: pokračuje v rozhovoru
     const newState: AiThreadStateData = {
       ...state,
@@ -406,18 +407,18 @@ export async function handleAiPlayerReply(
     await db.batch([
       db.prepare(
         "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 0)",
-      ).bind(uuid(), convId, player.id, senderName, replyBody, JSON.stringify({ ai_generated: true, scenario_id: scenario.id, turn: newRepliesCount }), now),
+      ).bind(uuid(), convId, player.id, senderName, reply.body, JSON.stringify({ ai_generated: true, scenario_id: scenario.id, turn: newRepliesCount }), now),
       db.prepare(
         "UPDATE conversations SET ai_thread_state = ?, last_message_text = ?, last_message_at = ?, unread_count = unread_count + 1 WHERE id = ?",
-      ).bind(JSON.stringify(newState), replyBody.slice(0, 100), now, convId),
+      ).bind(JSON.stringify(newState), reply.body.slice(0, 100), now, convId),
     ]);
     return;
   }
 
-  // Branch B: poslední tah → vyhodnocení + uzavření
+  // Branch B: AI usoudila že je hotovo (nebo dosažen strop) → vyhodnocení + uzavření
   let resolution: AiThreadStateData["resolution"];
   try {
-    const fullHistory: ThreadMessage[] = [...history, { sender: "player", body: replyBody }];
+    const fullHistory: ThreadMessage[] = [...history, { sender: "player", body: reply.body }];
     const evald = await evaluateResolution(env, player, fullHistory, scenario);
     resolution = { ...evald };
   } catch (e) {
@@ -431,7 +432,7 @@ export async function handleAiPlayerReply(
     };
   }
 
-  await applyResolutionAndClose(db, convId, conv.team_id, player.id, replyBody, senderName, scenario.id, state, resolution);
+  await applyResolutionAndClose(db, convId, conv.team_id, player.id, reply.body, senderName, scenario.id, state, resolution);
 }
 
 async function applyResolutionAndClose(

@@ -155,6 +155,12 @@ export async function generateInitialMessage(
   return trimSms(raw);
 }
 
+export interface ReplyResult {
+  body: string;
+  /** Pokud true, AI usoudila že téma je probrané a další výměna nedává smysl — handler spustí resolution. */
+  conversationComplete: boolean;
+}
+
 export async function generateReply(
   env: { GEMINI_API_KEY?: string },
   player: PlayerSnapshot,
@@ -162,21 +168,21 @@ export async function generateReply(
   scenario: AiScenario,
   team: TeamContext,
   isFinalTurn: boolean,
-): Promise<string> {
+): Promise<ReplyResult> {
   const system = buildSystemPrompt(player, team);
   const histText = history
     .map((m) => `${m.sender === "player" ? player.firstName : "TRENÉR"}: ${m.body}`)
     .join("\n");
 
   const closingHint = isFinalTurn
-    ? "TOTO JE TVOJE POSLEDNÍ ZPRÁVA — uzavři ji (poděkuj / smiř se / rozluč se / nebo naopak prásknout dveřmi pokud tě trenér naštval). Žádné nové otázky."
-    : "Pokračuj v rozhovoru — argumentuj, eskaluj, nebo se zeptej. Nepřijímej pasivně, máš svoji vůli.";
+    ? "TOTO JE TVOJE POSLEDNÍ ZPRÁVA — uzavři ji (poděkuj / smiř se / rozluč se / nebo prásknout dveřmi pokud tě trenér naštval). Žádné nové otázky. Pole `conversation_complete` MUSÍ být true."
+    : "Můžeš v rozhovoru pokračovat (argumentovat, eskalovat, ptát se), NEBO ho přirozeně uzavřít, pokud trenér už odpověděl ucelené (poděkoval, dal radu, zavřel téma). Pole `conversation_complete` nastav podle toho, jestli je ještě o čem mluvit.";
 
   // Pokud trenér odpověděl velmi krátce nebo odmítavě, hráč by měl reagovat emocionálně podle temperamentu
   const lastCoachMsg = [...history].reverse().find((m) => m.sender === "coach")?.body ?? "";
   const coachShortOrDismissive = lastCoachMsg.length < 25;
   const reactionHint = coachShortOrDismissive
-    ? `Trenér ti odpověděl velmi krátce ("${lastCoachMsg}"). Pokud ti to přijde odmítavé/hrubé a tvůj temperament je ${player.temper}/100, projev to (frustrace, sarkasmus, povzdech, kontra-otázka). Nepřijímej slepě.`
+    ? `Trenér ti odpověděl velmi krátce ("${lastCoachMsg}"). Pokud ti to přijde odmítavé/hrubé a tvůj temperament je ${player.temper}/100, projev to (frustrace, sarkasmus, povzdech). Pokud to byla jasná uzavírací odpověď ("ok", "díky", "v pořádku"), můžeš téma uzavřít.`
     : "";
 
   const prompt = [
@@ -189,11 +195,29 @@ export async function generateReply(
     "",
     closingHint,
     reactionHint,
-    `Drž svou povahu (temperament ${player.temper}, vztah ${player.coachRelationship}/100). NEOPAKUJ stejné fráze co jsi už použil. NEPIŠ podpis. Vrať POUZE text SMS.`,
+    `Drž svou povahu (temperament ${player.temper}, vztah ${player.coachRelationship}/100). NEOPAKUJ stejné fráze co jsi už použil. NEPIŠ podpis.`,
+    "",
+    "Vrať POUZE JSON v tomto tvaru (žádný markdown, žádný komentář):",
+    `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true pokud je téma probrané a další výměna nedává smysl, jinak false>}`,
   ].filter(Boolean).join("\n");
 
-  const raw = await callGemini(env, prompt, { maxTokens: 200, temperature: 1.0 });
-  return trimSms(raw);
+  const raw = await callGemini(env, prompt, { json: true, maxTokens: 256, temperature: 1.0 });
+
+  let parsed: { body?: unknown; conversation_complete?: unknown };
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    logger.warn({ module: "ai-player-chat" }, `reply JSON parse failed: ${raw.slice(0, 200)}`, e);
+    throw new GeminiUnavailableError("Reply JSON parse failed");
+  }
+
+  const body = typeof parsed.body === "string" ? trimSms(parsed.body) : "";
+  if (!body) throw new GeminiUnavailableError("Reply JSON missing body");
+
+  return {
+    body,
+    conversationComplete: parsed.conversation_complete === true || isFinalTurn,
+  };
 }
 
 export async function evaluateResolution(
