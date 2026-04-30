@@ -72,8 +72,14 @@ function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext): string {
     `Tvoje povaha: ${buildPersonalityHints(player)}.`,
     `Aktuální nálada: ${player.morale}/100, kondice: ${player.condition}/100, vztah s trenérem: ${player.coachRelationship}/100.`,
     occupation,
-    "Píšeš trenérovi SMS na mobil. Mluv neformálně česky, jako vesničan. Krátce, autenticky, max 2 věty (do 200 znaků). Občas jeden emoji, ne víc. NIKDY nepiš jako AI nebo formálně.",
-  ].filter(Boolean).join(" ");
+    "Píšeš trenérovi SMS na mobil. Mluv neformálně česky, jako vesničan z malého klubu — používej hovorové výrazy, klidně i nadávku nebo povzdech.",
+    "PRAVIDLA STYLU:",
+    "- Krátce: 1-2 věty, do 200 znaků.",
+    "- UKAZUJ EMOCE: když tě něco štve, dej to najevo (sarkasmus, frustrace, povzdech). Když jsi rád, projev to. Nebuď monotónní.",
+    "- NIKDY se neopakuj — nepoužívej stejné fráze nebo slova jako v předchozí své zprávě.",
+    "- Zřídka emoji (max 1 a jen když opravdu sedí — ŽÁDNÝ ⚽ nebo 🥅, jsi hráč, ne fanoušek).",
+    "- NIKDY nepiš jako AI nebo formálně.",
+  ].filter(Boolean).join("\n");
 }
 
 async function callGemini(env: { GEMINI_API_KEY?: string }, prompt: string, opts: { json?: boolean; maxTokens?: number; temperature?: number } = {}): Promise<string> {
@@ -163,8 +169,15 @@ export async function generateReply(
     .join("\n");
 
   const closingHint = isFinalTurn
-    ? " Toto je tvoje POSLEDNÍ zpráva v této konverzaci — uzavři ji (poděkuj / smiř se / rozluč se). Žádné nové otázky."
-    : " Pokračuj v rozhovoru — můžeš souhlasit, eskalovat, nebo se zeptat dál.";
+    ? "TOTO JE TVOJE POSLEDNÍ ZPRÁVA — uzavři ji (poděkuj / smiř se / rozluč se / nebo naopak prásknout dveřmi pokud tě trenér naštval). Žádné nové otázky."
+    : "Pokračuj v rozhovoru — argumentuj, eskaluj, nebo se zeptej. Nepřijímej pasivně, máš svoji vůli.";
+
+  // Pokud trenér odpověděl velmi krátce nebo odmítavě, hráč by měl reagovat emocionálně podle temperamentu
+  const lastCoachMsg = [...history].reverse().find((m) => m.sender === "coach")?.body ?? "";
+  const coachShortOrDismissive = lastCoachMsg.length < 25;
+  const reactionHint = coachShortOrDismissive
+    ? `Trenér ti odpověděl velmi krátce ("${lastCoachMsg}"). Pokud ti to přijde odmítavé/hrubé a tvůj temperament je ${player.temper}/100, projev to (frustrace, sarkasmus, povzdech, kontra-otázka). Nepřijímej slepě.`
+    : "";
 
   const prompt = [
     system,
@@ -174,10 +187,12 @@ export async function generateReply(
     "HISTORIE KONVERZACE:",
     histText,
     "",
-    `Zareaguj na poslední zprávu trenéra.${closingHint} Drž svou povahu (temperament ${player.temper}, vztah ${player.coachRelationship}/100). NEPIŠ podpis. Vrať POUZE text SMS.`,
-  ].join("\n");
+    closingHint,
+    reactionHint,
+    `Drž svou povahu (temperament ${player.temper}, vztah ${player.coachRelationship}/100). NEOPAKUJ stejné fráze co jsi už použil. NEPIŠ podpis. Vrať POUZE text SMS.`,
+  ].filter(Boolean).join("\n");
 
-  const raw = await callGemini(env, prompt, { maxTokens: 200, temperature: 0.9 });
+  const raw = await callGemini(env, prompt, { maxTokens: 200, temperature: 1.0 });
   return trimSms(raw);
 }
 
