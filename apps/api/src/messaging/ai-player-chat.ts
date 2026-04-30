@@ -29,6 +29,10 @@ export interface ResolutionResult {
   morale_delta: number;        // -15..+15
   condition_delta: number;     // -5..+5
   relationship_delta: number;  // -15..+15
+  /** Počet herních dní, po které hráč nebude k dispozici (osobní volno schválené trenérem). 0 = bez absence. Max 5. */
+  absence_days: number;
+  /** Krátký důvod absence (zapíše se do injuries.description). Použije se jen pokud absence_days > 0. */
+  absence_reason: string;
   summary: string;             // krátké česky shrnutí (~1 věta)
   tone: "positive" | "negative" | "neutral";
 }
@@ -240,7 +244,7 @@ export async function evaluateResolution(
     histText,
     "",
     "Vrať POUZE JSON v tomto tvaru (žádný markdown, žádný komentář):",
-    `{"morale_delta": <-15..+15>, "condition_delta": <-5..+5>, "relationship_delta": <-15..+15>, "summary": "<1 věta česky o tom jak hráč odchází>", "tone": "positive"|"negative"|"neutral"}`,
+    `{"morale_delta": <-15..+15>, "condition_delta": <-5..+5>, "relationship_delta": <-15..+15>, "absence_days": <0..5>, "absence_reason": "<krátký česky důvod, jen pokud absence_days > 0>", "summary": "<1 věta česky o tom jak hráč odchází>", "tone": "positive"|"negative"|"neutral"}`,
     "",
     "Pravidla:",
     "- Pokud trenér reagoval empaticky/správně → kladné delty (zvlášť relationship +5..+12, morale +3..+10).",
@@ -248,6 +252,11 @@ export async function evaluateResolution(
     "- Pokud trenér byl neutrální → malé delty kolem nuly (-3..+3).",
     "- condition_delta je vzácný, jen když scénář souvisí s kondicí (alkohol, zranění, vyčerpání).",
     "- Buď přísný — žádné +15 zadarmo, jen za skutečně skvělé chování.",
+    "- absence_days > 0 NASTAV POUZE pokud:",
+    "  a) Hráč žádal o volno (rodinné důvody, zdravotní, osobní milník) A trenér mu volno SCHVÁLIL → absence_days 1-3 podle scénáře (rodinný problém 1-2, svatba 1, narození dítěte 2-3).",
+    "  b) Hráč si stěžoval na bolest A trenér řekl ať si odpočine → absence_days 1-2.",
+    "  Jinak absence_days = 0.",
+    "- Pokud trenér řekl 'hraj' i když hráč žádal volno → absence_days = 0 ale relationship_delta záporné.",
   ].join("\n");
 
   const raw = await callGemini(env, prompt, { json: true, maxTokens: 256, temperature: 0.4 });
@@ -269,6 +278,8 @@ export async function evaluateResolution(
     morale_delta: clamp(parsed.morale_delta, -15, 15),
     condition_delta: clamp(parsed.condition_delta, -5, 5),
     relationship_delta: clamp(parsed.relationship_delta, -15, 15),
+    absence_days: clamp(parsed.absence_days, 0, 5),
+    absence_reason: typeof parsed.absence_reason === "string" ? parsed.absence_reason.slice(0, 100) : "",
     summary: typeof parsed.summary === "string" && parsed.summary.length > 0
       ? parsed.summary.slice(0, 200)
       : "Konverzace skončila bez výrazného závěru.",

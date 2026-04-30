@@ -53,6 +53,8 @@ interface AiThreadStateData {
     morale_delta: number;
     condition_delta: number;
     relationship_delta: number;
+    absence_days?: number;
+    absence_reason?: string;
     summary: string;
     tone: "positive" | "negative" | "neutral";
     offended?: boolean;
@@ -427,6 +429,8 @@ export async function handleAiPlayerReply(
       morale_delta: 0,
       condition_delta: 0,
       relationship_delta: 0,
+      absence_days: 0,
+      absence_reason: "",
       summary: "Konverzace skončila bez výrazného závěru.",
       tone: "neutral",
     };
@@ -454,9 +458,11 @@ async function applyResolutionAndClose(
     resolution,
   };
 
-  const systemMsg = `💬 Konverzace ukončena — ${resolution.summary}`;
+  const absenceDays = resolution.absence_days ?? 0;
+  const absenceLine = absenceDays > 0 ? ` Hráč nebude k dispozici ${absenceDays} ${absenceDays === 1 ? "den" : absenceDays < 5 ? "dny" : "dní"}.` : "";
+  const systemMsg = `💬 Konverzace ukončena — ${resolution.summary}${absenceLine}`;
 
-  await db.batch([
+  const stmts: D1PreparedStatement[] = [
     // Závěrečná zpráva hráče
     db.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 0)",
@@ -483,7 +489,18 @@ async function applyResolutionAndClose(
     db.prepare(
       "UPDATE conversations SET ai_thread_state = ?, ai_thread_active = 0, last_message_text = ?, last_message_at = ?, unread_count = unread_count + 2 WHERE id = ?",
     ).bind(JSON.stringify(newState), systemMsg.slice(0, 100), now, convId),
-  ]);
+  ];
+
+  // Pokud trenér hráči schválil volno → vložíme do injuries (využíváme stávající absence systém)
+  if (absenceDays > 0) {
+    stmts.push(
+      db.prepare(
+        "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, created_at) VALUES (?, ?, ?, 'personal', ?, 'minor', ?, ?, ?)",
+      ).bind(uuid(), playerId, teamId, resolution.absence_reason || "Schválené osobní volno", absenceDays, absenceDays, now),
+    );
+  }
+
+  await db.batch(stmts);
 
   const fmt = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
   logger.info({ module: "ai-player-spawn", teamId }, `closed AI thread ${convId}: morale ${fmt(resolution.morale_delta)}, relationship ${fmt(resolution.relationship_delta)}, tone=${resolution.tone}`);
