@@ -453,13 +453,6 @@ async function applyResolutionAndClose(
     resolution,
   };
 
-  // Aktuální season/round pro events log
-  const seasonRow = await db.prepare(
-    "SELECT season FROM teams WHERE id = ?",
-  ).bind(teamId).first<{ season: number | null }>()
-    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load season for resolution", e); return null; });
-  const season = (seasonRow?.season as number | null) ?? 1;
-
   const systemMsg = `💬 Konverzace ukončena — ${resolution.summary}`;
 
   await db.batch([
@@ -484,17 +477,6 @@ async function applyResolutionAndClose(
          coach_relationship = MAX(0, MIN(100, coach_relationship + ?))
        WHERE id = ?`,
     ).bind(resolution.morale_delta, resolution.condition_delta, resolution.relationship_delta, playerId),
-
-    // Event log
-    db.prepare(
-      "INSERT INTO events (id, team_id, player_id, type, description, impact, season, created_at) VALUES (?, ?, ?, 'morale_change', ?, ?, ?, ?)",
-    ).bind(
-      uuid(), teamId, playerId,
-      `[AI chat: ${scenarioId}] ${resolution.summary}`,
-      JSON.stringify({ morale: resolution.morale_delta, condition: resolution.condition_delta, relationship: resolution.relationship_delta, tone: resolution.tone }),
-      season,
-      now,
-    ),
 
     // Uzavření konverzace
     db.prepare(
@@ -582,8 +564,6 @@ async function offendPlayer(
   const relationshipDelta = -10;
 
   const now = new Date().toISOString();
-  const seasonRow = await db.prepare("SELECT season FROM teams WHERE id = ?").bind(conv.team_id).first<{ season: number | null }>().catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load season for offend", e); return null; });
-  const season = (seasonRow?.season as number | null) ?? 1;
 
   const systemMsg = "📵 Hráč se po několika dnech mlčení urazil. Vztah s trenérem se zhoršil.";
 
@@ -598,16 +578,6 @@ async function offendPlayer(
          coach_relationship = MAX(0, MIN(100, coach_relationship + ?))
        WHERE id = ?`,
     ).bind(moraleDelta, relationshipDelta, playerRow.id),
-
-    db.prepare(
-      "INSERT INTO events (id, team_id, player_id, type, description, impact, season, created_at) VALUES (?, ?, ?, 'morale_change', ?, ?, ?, ?)",
-    ).bind(
-      crypto.randomUUID(), conv.team_id, playerRow.id,
-      `Trenér nereagoval na zprávu od hráče (${state.scenario_id})`,
-      JSON.stringify({ morale: moraleDelta, relationship: relationshipDelta, offended: true }),
-      season,
-      now,
-    ),
 
     db.prepare(
       "UPDATE conversations SET ai_thread_state = ?, ai_thread_active = 0, last_message_text = ?, last_message_at = ?, unread_count = unread_count + 1 WHERE id = ?",
