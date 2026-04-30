@@ -127,6 +127,24 @@ async function callGemini(env: { GEMINI_API_KEY?: string }, prompt: string, opts
   return text;
 }
 
+/** Robustní parse JSON i když Gemini obalí do markdown bloku ```json...``` nebo přidá text okolo. */
+function tryParseJson<T>(raw: string): T | null {
+  const trimmed = raw.trim();
+  // Try direct parse first
+  try { return JSON.parse(trimmed) as T; } catch { /* try fallbacks */ }
+
+  // Strip markdown fence
+  const fenced = trimmed.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  try { return JSON.parse(fenced) as T; } catch { /* try fallbacks */ }
+
+  // Extract first {...} block
+  const match = trimmed.match(/\{[\s\S]*\}/);
+  if (match) {
+    try { return JSON.parse(match[0]) as T; } catch { /* fall through */ }
+  }
+  return null;
+}
+
 function trimSms(body: string): string {
   // Gemini občas vrátí uvozovky, podpis nebo "Hráč:" prefix — očistíme.
   let cleaned = body.trim()
@@ -209,16 +227,17 @@ export async function generateReply(
 
   const raw = await callGemini(env, prompt, { json: true, maxTokens: 256, temperature: 1.0 });
 
-  let parsed: { body?: unknown; conversation_complete?: unknown };
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    logger.warn({ module: "ai-player-chat" }, `reply JSON parse failed: ${raw.slice(0, 200)}`, e);
+  const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown }>(raw);
+  if (!parsed) {
+    logger.warn({ module: "ai-player-chat" }, `reply JSON parse failed: ${raw.slice(0, 300)}`);
     throw new GeminiUnavailableError("Reply JSON parse failed");
   }
 
   const body = typeof parsed.body === "string" ? trimSms(parsed.body) : "";
-  if (!body) throw new GeminiUnavailableError("Reply JSON missing body");
+  if (!body) {
+    logger.warn({ module: "ai-player-chat" }, `reply JSON missing body, raw: ${raw.slice(0, 300)}`);
+    throw new GeminiUnavailableError("Reply JSON missing body");
+  }
 
   return {
     body,
@@ -263,11 +282,9 @@ export async function evaluateResolution(
 
   const raw = await callGemini(env, prompt, { json: true, maxTokens: 256, temperature: 0.4 });
 
-  let parsed: ResolutionResult;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    logger.warn({ module: "ai-player-chat" }, `resolution JSON parse failed: ${raw.slice(0, 200)}`, e);
+  const parsed = tryParseJson<ResolutionResult>(raw);
+  if (!parsed) {
+    logger.warn({ module: "ai-player-chat" }, `resolution JSON parse failed: ${raw.slice(0, 300)}`);
     throw new GeminiUnavailableError("Resolution JSON parse failed");
   }
 

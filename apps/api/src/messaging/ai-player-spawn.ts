@@ -320,6 +320,24 @@ export async function handleAiPlayerReply(
   env: { GEMINI_API_KEY?: string },
   convId: string,
 ): Promise<void> {
+  try {
+    await handleAiPlayerReplyInner(db, env, convId);
+  } catch (e) {
+    logger.error({ module: "ai-player-spawn" }, `handleAiPlayerReply CRASHED for conv ${convId}`, e);
+    // Reset awaiting na coach aby trenér mohl zkusit znovu odpovědět
+    await db.prepare(
+      `UPDATE conversations SET ai_thread_state = json_set(ai_thread_state, '$.awaiting', 'coach') WHERE id = ?`,
+    ).bind(convId).run()
+      .catch((err) => logger.warn({ module: "ai-player-spawn" }, "rollback awaiting after crash", err));
+  }
+}
+
+async function handleAiPlayerReplyInner(
+  db: D1Database,
+  env: { GEMINI_API_KEY?: string },
+  convId: string,
+): Promise<void> {
+  logger.info({ module: "ai-player-spawn" }, `handleAiPlayerReply START for conv ${convId}`);
   const conv = await db.prepare(
     "SELECT id, team_id, type, participant_id, ai_thread_state, ai_thread_active FROM conversations WHERE id = ?",
   ).bind(convId).first<ConvRow>()
@@ -380,9 +398,11 @@ export async function handleAiPlayerReply(
   // max_replies funguje jako tvrdý strop. AI ale může konverzaci uzavřít kdykoli dřív přes conversation_complete.
   const isHardCap = newRepliesCount >= state.max_replies;
 
+  logger.info({ module: "ai-player-spawn" }, `calling generateReply for conv ${convId} (turn ${newRepliesCount}/${state.max_replies}, isHardCap=${isHardCap})`);
   let reply: { body: string; conversationComplete: boolean };
   try {
     reply = await generateReply(env, player, history, scenario, teamCtx, isHardCap);
+    logger.info({ module: "ai-player-spawn" }, `generateReply OK: complete=${reply.conversationComplete}, body=${reply.body.slice(0, 60)}`);
   } catch (e) {
     if (e instanceof GeminiUnavailableError) {
       logger.warn({ module: "ai-player-spawn" }, `Gemini reply failed for conv ${convId}: ${e.message}`);
