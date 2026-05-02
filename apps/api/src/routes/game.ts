@@ -4917,6 +4917,13 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/accept", async (c) => {
     .bind(offerId, teamId).first<Record<string, unknown>>();
   if (!offer) return c.json({ error: "Nabídka nenalezena" }, 404);
 
+  // Atomicky claimni offer — pokud někdo souběžně už přijal, claim selže a nevytvoříme duplicitního hráče.
+  const claim = await c.env.DB.prepare("UPDATE player_offers SET status = 'accepted' WHERE id = ? AND team_id = ? AND status = 'pending'")
+    .bind(offerId, teamId).run();
+  if (claim.meta.changes === 0) {
+    return c.json({ error: "Nabídka už byla zpracována" }, 409);
+  }
+
   const playerId = crypto.randomUUID();
   await c.env.DB.prepare(
     `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status)
@@ -4943,9 +4950,6 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/accept", async (c) => {
   // Registration fee
   const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
   await recordTransaction(c.env.DB, teamId, "signing_fee", -500, `Registrace: ${offer.first_name} ${offer.last_name}`, team?.game_date ?? new Date().toISOString());
-
-  // Mark offer as accepted
-  await c.env.DB.prepare("UPDATE player_offers SET status = 'accepted' WHERE id = ?").bind(offerId).run();
 
   // Return full player data for reveal card
   const newPlayer = await c.env.DB.prepare("SELECT * FROM players WHERE id = ?").bind(playerId).first<Record<string, unknown>>();
