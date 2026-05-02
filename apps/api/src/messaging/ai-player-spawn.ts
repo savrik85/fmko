@@ -26,8 +26,8 @@ import {
   type PlayerSnapshot,
 } from "./ai-player-scenarios";
 
-const SPAWN_PROBABILITY = 0.12;       // ~1× za 8 dní per tým
-const COOLDOWN_DAYS = 7;              // throttle na 7 dní (po posledním AI threadu)
+const SPAWN_PROBABILITY = 0.30;       // ~2× týdně per tým
+const COOLDOWN_DAYS = 3;              // min 3 dny mezi thready aby se neobjevily 2 v řadě
 const STALE_DAYS_FOR_OFFEND = 3;      // 3 herní dny bez odpovědi trenéra
 const SAFETY_NET_DAYS = 14;           // safety net pro úplně zaseknuté thready
 
