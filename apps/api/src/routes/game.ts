@@ -4851,33 +4851,36 @@ gameRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
   const offerId = c.req.param("offerId");
   const body = await c.req.json<{ message?: string }>().catch(() => ({}));
   const withdrawMessage = (body as { message?: string }).message ?? null;
-  // Stáhnout smí jen kupec (from_team_id) a jen když je nabídka aktivní.
+  // Stáhnout/ukončit smí kupec i prodávající, pokud je jednání aktivní.
   const result = await c.env.DB.prepare(
-    "UPDATE transfer_offers SET status = 'withdrawn', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND from_team_id = ? AND status IN ('pending','countered')"
-  ).bind(offerId, teamId).run();
+    "UPDATE transfer_offers SET status = 'withdrawn', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered')"
+  ).bind(offerId, teamId, teamId).run();
   if (result.meta.changes === 0) {
-    return c.json({ error: "Nabídku nelze stáhnout (není tvoje nebo už je vyřešená)" }, 409);
+    return c.json({ error: "Jednání nelze ukončit (nejsi součástí nebo už je vyřešené)" }, 409);
   }
   await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'withdraw', NULL, ?)")
     .bind(crypto.randomUUID(), offerId, teamId, withdrawMessage).run()
     .catch((e) => logger.warn({ module: "game" }, "insert withdraw event", e));
 
   // Notifikace druhé strane + SMS
-  const offer = await c.env.DB.prepare("SELECT player_id, to_team_id FROM transfer_offers WHERE id = ?")
-    .bind(offerId).first<{ player_id: string; to_team_id: string }>()
+  const offer = await c.env.DB.prepare("SELECT player_id, from_team_id, to_team_id FROM transfer_offers WHERE id = ?")
+    .bind(offerId).first<{ player_id: string; from_team_id: string; to_team_id: string }>()
     .catch((e) => { logger.warn({ module: "game" }, "fetch offer for withdraw notif", e); return null; });
   if (offer) {
+    const otherTeamId = teamId === offer.from_team_id ? offer.to_team_id : offer.from_team_id;
+    const initiatorIsBuyer = teamId === offer.from_team_id;
     const player = await c.env.DB.prepare("SELECT first_name, last_name FROM players WHERE id = ?").bind(offer.player_id).first<{ first_name: string; last_name: string }>()
       .catch((e) => { logger.warn({ module: "game" }, "player for withdraw", e); return null; });
-    const buyerTeam = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>()
-      .catch((e) => { logger.warn({ module: "game" }, "buyer team for withdraw", e); return null; });
+    const initiatorTeam = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>()
+      .catch((e) => { logger.warn({ module: "game" }, "initiator team for withdraw", e); return null; });
     const pName = player ? `${player.first_name} ${player.last_name}` : "hráče";
+    const verb = initiatorIsBuyer ? "stáhl nabídku" : "ukončil jednání";
     try {
       const { createNotification } = await import("../community/notifications");
       const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
-      await createNotification(c.env.DB, offer.to_team_id, "transfer",
-        `↩️ Nabídka za ${pName} stažena`,
-        `${buyerTeam?.name ?? "Klub"} stáhl nabídku${withdrawMessage ? `: „${withdrawMessage}"` : "."}`,
+      await createNotification(c.env.DB, otherTeamId, "transfer",
+        `↩️ Jednání o ${pName} ukončeno`,
+        `${initiatorTeam?.name ?? "Klub"} ${verb}${withdrawMessage ? `: „${withdrawMessage}"` : "."}`,
         `/dashboard/transfers/offer/${offerId}`, pushEnv);
     } catch (e) { logger.warn({ module: "game" }, "withdraw notification", e); }
   }
