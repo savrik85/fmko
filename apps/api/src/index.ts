@@ -154,6 +154,23 @@ export default {
               .bind(matchCal.id).run();
             totalMatches += results.length;
 
+            // Po zápase: smaž všechny zbývající pending pre-match interview žádosti
+            // (po zápase už nemají smysl — articles se píšou jen z odpovězených).
+            try {
+              const expired = await env.DB.prepare(
+                "SELECT id FROM coach_interviews WHERE match_calendar_id = ? AND status = 'pending'"
+              ).bind(matchCal.id).all<{ id: string }>();
+              for (const ci of expired.results) {
+                await env.DB.prepare("DELETE FROM messages WHERE metadata LIKE ?")
+                  .bind(`%"interviewId":"${ci.id}"%`).run()
+                  .catch((e) => log("warn", `cleanup interview msg ${ci.id}`, e));
+              }
+              await env.DB.prepare(
+                "UPDATE coach_interviews SET status = 'expired' WHERE match_calendar_id = ? AND status = 'pending'"
+              ).bind(matchCal.id).run();
+              if (expired.results.length > 0) log("info", `expired ${expired.results.length} unanswered interviews after match`);
+            } catch (e) { log("warn", "post-match interview cleanup", e); }
+
             // Between-round events + news (zpravodaj)
             if (results.length > 0) {
               const calRow = await env.DB.prepare("SELECT game_week FROM season_calendar WHERE id = ?")
