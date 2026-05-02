@@ -1906,6 +1906,14 @@ export default function TransfersPage() {
                           Odmítnout
                         </button>
                         </>)}
+                        <button onClick={async () => {
+                          if (!teamId) return;
+                          const ok = await confirm({ title: "Ukončit jednání?", description: `Jednání o ${o.first_name} ${o.last_name} bude zrušeno.`, confirmLabel: "Ukončit" });
+                          if (!ok) return;
+                          if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}`, { method: "DELETE" }), "Ukončení jednání se nezdařilo")) await refresh();
+                        }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                          Ukončit
+                        </button>
                       </div>
                     </div>
                   </div>

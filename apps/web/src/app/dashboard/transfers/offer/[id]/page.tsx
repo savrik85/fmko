@@ -280,10 +280,10 @@ export default function OfferDetailPage() {
             onReject={reject}
           />
         )}
-        {isActive && role === "buyer" && (
+        {isActive && (
           <div className="mt-4 text-center">
             <button onClick={() => setWithdrawDialog(true)} className="text-xs text-muted hover:text-red-600 underline transition-colors">
-              Stáhnout svou nabídku
+              {role === "buyer" ? "Stáhnout svou nabídku" : "Ukončit jednání"}
             </button>
           </div>
         )}
@@ -291,9 +291,11 @@ export default function OfferDetailPage() {
 
       {withdrawDialog && (
         <MessageDialog
-          title="Stáhnout nabídku?"
-          description="Nabídka bude zrušena. Krátká zpráva protistraně (volitelné)."
-          confirmLabel="Stáhnout"
+          title={role === "buyer" ? "Stáhnout nabídku?" : "Ukončit jednání?"}
+          description={role === "buyer"
+            ? "Nabídka bude zrušena. Krátká zpráva protistraně (volitelné)."
+            : "Jednání bude ukončeno. Krátká zpráva protistraně (volitelné)."}
+          confirmLabel={role === "buyer" ? "Stáhnout" : "Ukončit"}
           confirmColor="red"
           onCancel={() => setWithdrawDialog(false)}
           onConfirm={async (msg) => { await withdraw(msg); setWithdrawDialog(false); }}

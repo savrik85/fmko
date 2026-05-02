@@ -11,7 +11,6 @@ interface NavItem {
   label: string;
   icon: string;
   group: "main" | "club" | "league";
-  newBadge?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -19,8 +18,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/phone", label: "Zprávy", icon: "\u{1F4F1}", group: "main" },
   { href: "/dashboard/news", label: "Zpravodaj", icon: "\u{1F4F0}", group: "main" },
   { href: "/dashboard/invite", label: "Pozvi kamar\u00E1da", icon: "\u2709\uFE0F", group: "main" },
-  { href: "/dashboard/klub", label: "Klub", icon: "\u{1F3DB}\uFE0F", group: "club", newBadge: true },
+  { href: "/dashboard/klub", label: "Klub", icon: "\u{1F3DB}\uFE0F", group: "club" },
   { href: "/dashboard/squad", label: "Kádr", icon: "\u{1F465}", group: "club" },
+  { href: "/dashboard/statistiky", label: "Statistiky", icon: "\u{1F4CA}", group: "club" },
   { href: "/dashboard/training", label: "Tréninky", icon: "\u{1F3CB}", group: "club" },
   { href: "/dashboard/transfers", label: "Přestupy", icon: "\u{1F91D}", group: "club" },
   { href: "/dashboard/watchlist", label: "Sledovaní", icon: "\u{2B50}", group: "club" },
@@ -30,7 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/stadium", label: "Stadion", icon: "\u{1F3DF}", group: "club" },
   { href: "/dashboard/fans", label: "Fanoušci", icon: "\u{1F4E3}", group: "club" },
   { href: "/dashboard/events", label: "Události", icon: "\u{1F389}", group: "club" },
-  { href: "/dashboard/hospoda", label: "Hospoda", icon: "\u{1F37A}", group: "club", newBadge: true },
+  { href: "/dashboard/hospoda", label: "Hospoda", icon: "\u{1F37A}", group: "club" },
   { href: "/dashboard/match", label: "Sestava", icon: "\u{1F4CB}", group: "league" },
   { href: "/dashboard/schedule", label: "Rozpis", icon: "\u{1F4C5}", group: "league" },
   { href: "/dashboard/friendly", label: "Přáteláky", icon: "\u{1F91C}", group: "league" },
@@ -156,9 +156,6 @@ export function FMSidebar() {
                           )}
                           {item.href === "/dashboard/hlasovani" && unvotedCount > 0 && (
                             <span className="ml-1.5 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unvotedCount}</span>
-                          )}
-                          {item.newBadge && (
-                            <span className="ml-1.5 bg-gradient-to-r from-pitch-500 to-pitch-600 text-white text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full">Nové</span>
                           )}
                         </span>
                       )}
