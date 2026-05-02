@@ -5073,11 +5073,14 @@ gameRouter.post("/admin/regenerate-pending-interviews", async (c) => {
   return c.json({ ok: true, summary });
 });
 
-// GET /api/teams/:teamId/coach-interviews — pending interviews
+// GET /api/teams/:teamId/coach-interviews — pending interviews (jen ty kde zápas ještě nebyl)
 gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
   const teamId = c.req.param("teamId");
   const rows = await c.env.DB.prepare(
-    "SELECT * FROM coach_interviews WHERE team_id = ? AND status = 'pending' ORDER BY created_at DESC"
+    `SELECT ci.* FROM coach_interviews ci
+     JOIN season_calendar sc ON ci.match_calendar_id = sc.id
+     WHERE ci.team_id = ? AND ci.status = 'pending' AND sc.status NOT IN ('simulated','cancelled')
+     ORDER BY ci.created_at DESC`
   ).bind(teamId).all<Record<string, unknown>>().catch((e) => {
     logger.warn({ module: "game.ts" }, "get coach_interviews", e);
     return { results: [] };
