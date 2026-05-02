@@ -409,16 +409,7 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "random life events", e);
   }
 
-  // ── AI player chats ── (random hráč napíše trenérovi, throttled per tým)
-  try {
-    const { applyAiPlayerThreads, expireStaleAiThreads } = await import("../messaging/ai-player-spawn");
-    const spawnRes = await applyAiPlayerThreads(env.DB, env);
-    if (spawnRes.spawned > 0) events.push({ type: "day", description: `Hráčské zprávy: ${spawnRes.spawned} nových konverzací` });
-    const expireRes = await expireStaleAiThreads(env.DB);
-    if (expireRes.offended > 0) events.push({ type: "morale", description: `${expireRes.offended} hráčů se urazilo (trenér nereagoval)` });
-  } catch (e) {
-    logger.error({ module: "daily-tick" }, "ai player chats", e);
-  }
+  // (AI player chats mají vlastní cron 0 14 * * * v index.ts — nespouštět tady)
 
   // ── Hospoda U Pralesa ── generuj večerní session pro lidské týmy (idempotentní per game_date)
   try {

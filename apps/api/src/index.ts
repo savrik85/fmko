@@ -93,6 +93,19 @@ export default {
       }
     }
 
+    // ── AI PLAYER CHATS: 16:00 CEST (14:00 UTC) — random thready od hráčů + expirace stale ──
+    if (cron === "0 14 * * *") {
+      try {
+        log("info", "ai player chats tick starting");
+        const { applyAiPlayerThreads, expireStaleAiThreads } = await import("./messaging/ai-player-spawn");
+        const spawnRes = await applyAiPlayerThreads(env.DB, env);
+        const expireRes = await expireStaleAiThreads(env.DB);
+        log("info", `ai player chats: ${spawnRes.spawned} spawned, ${spawnRes.skipped} skipped, ${expireRes.offended} offended, ${expireRes.safetyClosed} safety closed`);
+      } catch (e: any) {
+        log("error", "ai player chats tick failed", e);
+      }
+    }
+
     // ── MATCH TICK: 18:00 CEST — simuluje zápasy, všechny ligy najednou ──
     const isMatchTick = cron?.startsWith("0 16") || cron?.startsWith("5 16") || cron?.startsWith("10 16") || cron?.startsWith("15 16") || !cron;
     if (isMatchTick) {
