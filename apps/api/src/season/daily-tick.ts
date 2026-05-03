@@ -75,6 +75,7 @@ export async function executeDailyTick(
       expirePetitions, generateMonthlyPetitions,
       expireInvestments, generateMonthlyInvestments,
       expirePubEncounters, generatePubEncounters,
+      processElections, processCrisisEvents,
     } = await import("./village-processor");
     const expired = await expireOldBrigades(env.DB, effectiveDate.toISOString());
     if (expired > 0) {
@@ -106,6 +107,16 @@ export async function executeDailyTick(
       const pubRes = await generatePubEncounters(env.DB, effectiveDate.toISOString());
       if (pubRes.generated > 0) {
         logger.info({ module: "daily-tick" }, `pub encounters: ${pubRes.generated} nových`);
+      }
+      // Volby: každý zastupitel s prošlým mandátem → šance na výměnu
+      const elRes = await processElections(env.DB, effectiveDate.toISOString());
+      if (elRes.replaced + elRes.renewed > 0) {
+        logger.info({ module: "daily-tick" }, `volby: ${elRes.replaced} vyměněno, ${elRes.renewed} obhájilo`);
+      }
+      // Krize: pokud favor < 20, generuj hostile event (1× měsíc)
+      const crRes = await processCrisisEvents(env.DB, effectiveDate.toISOString());
+      if (crRes.generated > 0) {
+        logger.info({ module: "daily-tick" }, `krize: ${crRes.generated} hostile events`);
       }
     }
   } catch (e) {

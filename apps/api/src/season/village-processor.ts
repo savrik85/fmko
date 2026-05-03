@@ -186,6 +186,92 @@ export async function applyLocalSensations(
 }
 
 /**
+ * Volby: pro každé NPC, jehož term_end_at uplynul, šance na výměnu závisí
+ * na sumě favor napříč všemi týmy obce — vysoká přízeň = NPC zůstane.
+ * replacement_chance = 1 - (avg_favor / 100)^2
+ */
+export async function processElections(
+  db: D1Database,
+  gameDate: string,
+): Promise<{ replaced: number; renewed: number }> {
+  const now = new Date();
+  const expired = await db.prepare(
+    `SELECT id, village_id, role, first_name, last_name FROM village_officials
+     WHERE term_end_at < ?`
+  ).bind(now.toISOString()).all<{
+    id: string; village_id: string; role: string; first_name: string; last_name: string;
+  }>();
+
+  let replaced = 0;
+  let renewed = 0;
+  const newTermEnd = new Date(now);
+  newTermEnd.setFullYear(newTermEnd.getFullYear() + 4);
+
+  // Import generator deferred (avoid circular)
+  const { generateOfficial } = await import("../villages/officials-generator");
+
+  for (const o of expired.results ?? []) {
+    // Avg favor napříč všemi týmy obce
+    const favRow = await db.prepare(
+      `SELECT AVG(COALESCE(favor, 50)) as avg_fav, COUNT(*) as cnt
+       FROM village_team_favor WHERE official_id = ?`
+    ).bind(o.id).first<{ avg_fav: number; cnt: number }>();
+    const avgFav = favRow?.cnt ? favRow.avg_fav : 50;
+    const replaceChance = 1 - Math.pow(avgFav / 100, 2);
+    const seed = hashSeed(`${o.id}|election|${gameDate.slice(0, 10)}`);
+    const rng = createRng(seed);
+
+    if (rng.random() < replaceChance) {
+      // Vyměnit: nová persona, archive favor (smazat row), insert nové NPC
+      const newPersona = generateOfficial(o.village_id, o.role as "starosta" | "mistostarosta" | "zastupitel_1" | "zastupitel_2", now.getFullYear() * 2 + (now.getMonth() < 6 ? 0 : 1));
+      // Smaž starou pozici
+      await db.prepare(`DELETE FROM village_team_favor WHERE official_id = ?`).bind(o.id).run();
+      await db.prepare(`DELETE FROM village_officials WHERE id = ?`).bind(o.id).run();
+
+      const newId = crypto.randomUUID();
+      await db.prepare(
+        `INSERT INTO village_officials
+          (id, village_id, role, first_name, last_name, age, occupation,
+           face_config, personality, portfolio, preferences, term_start_at, term_end_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        newId, o.village_id, newPersona.role, newPersona.firstName, newPersona.lastName,
+        newPersona.age, newPersona.occupation, JSON.stringify(newPersona.faceConfig),
+        newPersona.personality, JSON.stringify(newPersona.portfolio),
+        JSON.stringify(newPersona.preferences), now.toISOString(), newTermEnd.toISOString(),
+      ).run();
+
+      await db.prepare(
+        `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
+         VALUES (?, ?, NULL, ?, 'election_held', ?, ?, ?, ?)`
+      ).bind(
+        crypto.randomUUID(), o.village_id, newId,
+        `Volby: ${newPersona.firstName} ${newPersona.lastName} nahradil ${o.first_name} ${o.last_name} (${o.role}).`,
+        JSON.stringify({ avgFavor: Math.round(avgFav), replaceChance: Math.round(replaceChance * 100) / 100 }),
+        gameDate, now.toISOString(),
+      ).run().catch((e) => logger.warn({ module: "village-processor" }, "election history", e));
+      replaced++;
+    } else {
+      // Renewed — prodloužit term o 4 roky
+      await db.prepare(
+        `UPDATE village_officials SET term_start_at = ?, term_end_at = ? WHERE id = ?`
+      ).bind(now.toISOString(), newTermEnd.toISOString(), o.id).run();
+      await db.prepare(
+        `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
+         VALUES (?, ?, NULL, ?, 'election_renewed', ?, ?, ?, ?)`
+      ).bind(
+        crypto.randomUUID(), o.village_id, o.id,
+        `Volby: ${o.first_name} ${o.last_name} obhájil mandát.`,
+        JSON.stringify({ avgFavor: Math.round(avgFav) }),
+        gameDate, now.toISOString(),
+      ).run().catch((e) => logger.warn({ module: "village-processor" }, "election renewed history", e));
+      renewed++;
+    }
+  }
+  return { replaced, renewed };
+}
+
+/**
  * Pokud byl prodaný hráč rodákem z obce týmu, sníží se globální favor
  * a sportovec persona zatratí prodej (-10 favor), zatímco podnikatel
  * vidí finance (+5).
@@ -637,6 +723,90 @@ export async function generatePubEncounters(
     } catch (e) {
       logger.warn({ module: "village-processor" }, `insert pub encounter for team ${t.team_id}`, e);
     }
+  }
+  return { generated };
+}
+
+interface CrisisEvent {
+  type: string;
+  description: string;
+  budgetImpact: number;
+  moraleImpact: number;
+}
+
+const CRISIS_EVENTS: CrisisEvent[] = [
+  {
+    type: "vandalism", description: "Vandalismus na stadionu — kdosi rozbil tribunu.",
+    budgetImpact: -5000, moraleImpact: -3,
+  },
+  {
+    type: "sponsor_exit", description: "Místní sponzor odstoupil — občané nechtějí být s klubem spojováni.",
+    budgetImpact: -3000, moraleImpact: -2,
+  },
+  {
+    type: "fan_protest", description: "Skupina rozčilených občanů protestovala před vstupem na zápas.",
+    budgetImpact: -1500, moraleImpact: -5,
+  },
+  {
+    type: "supplier_refuses", description: "Místní obchod přestal dodávat občerstvení — musíš dovážet z dálky.",
+    budgetImpact: -2500, moraleImpact: -1,
+  },
+  {
+    type: "tax_audit", description: "Obecní úřad spustil důkladnou kontrolu — administrativní zátěž.",
+    budgetImpact: -2000, moraleImpact: -2,
+  },
+];
+
+/**
+ * Krize: pokud má tým globální favor < 20, generuj hostile event 1× měsíčně.
+ * Aplikuje budget hit + morale hit na náhodného hráče.
+ */
+export async function processCrisisEvents(
+  db: D1Database,
+  gameDate: string,
+): Promise<{ generated: number }> {
+  const teamsInCrisis = await db.prepare(
+    `SELECT t.id as team_id, vtf.village_id, vtf.favor FROM village_team_favor vtf
+     JOIN teams t ON t.id = vtf.team_id
+     WHERE vtf.official_id IS NULL AND vtf.favor < 20 AND t.user_id != 'ai'
+       AND NOT EXISTS (
+         SELECT 1 FROM village_history vh
+         WHERE vh.team_id = vtf.team_id AND vh.event_type = 'crisis_event'
+           AND vh.created_at > datetime(?, '-25 days')
+       )`
+  ).bind(gameDate).all<{ team_id: string; village_id: string; favor: number }>();
+
+  let generated = 0;
+  const now = new Date().toISOString();
+  const { recordTransaction: rec } = await import("./finance-processor");
+
+  for (const t of teamsInCrisis.results ?? []) {
+    const seed = hashSeed(`${t.team_id}|crisis|${gameDate.slice(0, 7)}`);
+    const rng = createRng(seed);
+    const ev = CRISIS_EVENTS[rng.int(0, CRISIS_EVENTS.length - 1)];
+
+    await rec(db, t.team_id, "event", ev.budgetImpact, `Krize: ${ev.description}`, gameDate);
+
+    if (ev.moraleImpact !== 0) {
+      await db.prepare(
+        `UPDATE players
+         SET life_context = json_set(life_context, '$.morale',
+           MAX(0, COALESCE(json_extract(life_context, '$.morale'), 50) + ?))
+         WHERE team_id = ? AND (status IS NULL OR status != 'released')`
+      ).bind(ev.moraleImpact, t.team_id).run().catch((e) => {
+        logger.warn({ module: "village-processor" }, "crisis morale", e);
+      });
+    }
+
+    await db.prepare(
+      `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
+       VALUES (?, ?, ?, NULL, 'crisis_event', ?, ?, ?, ?)`
+    ).bind(
+      crypto.randomUUID(), t.village_id, t.team_id, ev.description,
+      JSON.stringify({ favor: t.favor, budget: ev.budgetImpact, morale: ev.moraleImpact }),
+      gameDate, now,
+    ).run().catch((e) => logger.warn({ module: "village-processor" }, "crisis history", e));
+    generated++;
   }
   return { generated };
 }
