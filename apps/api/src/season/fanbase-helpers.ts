@@ -33,6 +33,23 @@ function rngBetween(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
+/**
+ * Effective populace pro backfill a walk-up — diminishing returns pro velká města.
+ * Vesnický fotbal v 8 000-obyv. čtvrti nepřitahuje 1000 diváků jako lineární scaling sliboval —
+ * lokální zápas zajímá pevnou skupinu lidí, ne procento celé populace.
+ *
+ * - ≤ 300 obyv. (vesnice): 100 % (lineární)
+ * - 300–1500 (obec/městys): 70 % nad 300 nad rámec base
+ * - 1500–5000 (malé město): 35 % nad 1500
+ * - > 5000 (velké město): 15 % nad 5000
+ */
+export function effectivePopulation(pop: number): number {
+  if (pop <= 300) return pop;
+  if (pop <= 1500) return 300 + (pop - 300) * 0.7;
+  if (pop <= 5000) return 300 + 1200 * 0.7 + (pop - 1500) * 0.35;
+  return 300 + 1200 * 0.7 + 3500 * 0.35 + (pop - 5000) * 0.15;
+}
+
 export async function loadOrInitFanbase(
   db: DB,
   teamId: string,
@@ -47,24 +64,22 @@ export async function loadOrInitFanbase(
     });
   if (row) return row;
 
-  // Backfill pro tým, který chybí v migrace (nový team založený po migraci)
-  // Realistické pro vesnický fotbal — ~12 % populace jsou stálí fanoušci
-  const init = await db
+  // Backfill pro tým, který chybí v migrace (nový team založený po migraci).
+  // Effective populace s diminishing returns — velká města nemají proporcionálně víc fans.
+  const popRow = await db
     .prepare(
-      `SELECT CAST(v.population * 0.010 AS INTEGER) AS hc,
-              CAST(v.population * 0.040 AS INTEGER) AS reg,
-              CAST(v.population * 0.070 AS INTEGER) AS cas
-       FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`,
+      `SELECT v.population FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`,
     )
     .bind(teamId)
-    .first<{ hc: number; reg: number; cas: number }>()
+    .first<{ population: number }>()
     .catch((e) => {
-      logger.warn({ module: "fanbase-helpers" }, "init fanbase backfill", e);
+      logger.warn({ module: "fanbase-helpers" }, "load population for backfill", e);
       return null;
     });
-  const hardcore = init?.hc ?? 0;
-  const regular = init?.reg ?? 0;
-  const casual = init?.cas ?? 0;
+  const effPop = effectivePopulation(popRow?.population ?? 0);
+  const hardcore = Math.floor(effPop * 0.010);
+  const regular = Math.floor(effPop * 0.040);
+  const casual = Math.floor(effPop * 0.070);
   await db
     .prepare(
       `INSERT INTO team_fanbase (team_id, hardcore_count, regular_count, casual_count)
@@ -228,17 +243,18 @@ export function expectedAttendance(
         FANBASE_CONFIG.ATTENDANCE_RATE.casual.max,
       ),
   );
-  // Walk-up "z vesnice" — neutříděná část domácí populace co přijde
+  // Walk-up "z vesnice" — diminishing returns, vesnický fotbal v 8000-čtvrti
+  // nepřitahuje 1100 lidí. Effective populace cap.
   const walkUpHome = Math.round(
-    homePopulation *
+    effectivePopulation(homePopulation) *
       rngBetween(
         FANBASE_CONFIG.WALK_UP_HOME.min,
         FANBASE_CONFIG.WALK_UP_HOME.max,
       ),
   );
-  // Walk-up "z okolí" — lidé z okolních obcí co náhodně přijdou na zápas
+  // Walk-up "z okolí" — taky cap, jinak velká pražská čtvrť hraje proti všem 50k+ obyvatelům
   const walkUpRegional = Math.round(
-    regionalPopulation *
+    effectivePopulation(regionalPopulation) *
       rngBetween(
         FANBASE_CONFIG.WALK_UP_REGIONAL.min,
         FANBASE_CONFIG.WALK_UP_REGIONAL.max,
