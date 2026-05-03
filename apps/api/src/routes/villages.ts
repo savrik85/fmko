@@ -159,4 +159,96 @@ villagesRouter.get("/:id/sponsors", async (c) => {
   return c.json({ offers });
 });
 
+// ── Feature "Obec" — officials, favor, history ─────────────────────────────
+
+import { ensureVillageOfficials, ensureGlobalFavor } from "../villages/officials-store";
+
+// GET /api/villages/:id/officials — 4 představitelé (lazy seed)
+villagesRouter.get("/:id/officials", async (c) => {
+  const villageId = c.req.param("id");
+  const village = await c.env.DB.prepare("SELECT id FROM villages WHERE id = ?")
+    .bind(villageId).first();
+  if (!village) return c.json({ error: "Village not found" }, 404);
+
+  const officials = await ensureVillageOfficials(c.env.DB, villageId);
+  return c.json(officials.map((o) => ({
+    id: o.id,
+    villageId: o.village_id,
+    role: o.role,
+    firstName: o.first_name,
+    lastName: o.last_name,
+    age: o.age,
+    occupation: o.occupation,
+    faceConfig: JSON.parse(o.face_config),
+    personality: o.personality,
+    portfolio: JSON.parse(o.portfolio),
+    preferences: JSON.parse(o.preferences),
+    termStartAt: o.term_start_at,
+    termEndAt: o.term_end_at,
+  })));
+});
+
+// GET /api/villages/:id/favor?teamId=... — favor tohoto týmu (global + per-official)
+villagesRouter.get("/:id/favor", async (c) => {
+  const villageId = c.req.param("id");
+  const teamId = c.req.query("teamId");
+  if (!teamId) return c.json({ error: "teamId required" }, 400);
+
+  const global = await ensureGlobalFavor(c.env.DB, villageId, teamId);
+  const perOfficial = await c.env.DB.prepare(
+    `SELECT vtf.official_id, vtf.favor, vtf.trust, vtf.last_interaction_at
+     FROM village_team_favor vtf
+     JOIN village_officials vo ON vo.id = vtf.official_id
+     WHERE vtf.team_id = ? AND vo.village_id = ?`
+  ).bind(teamId, villageId).all<{
+    official_id: string; favor: number; trust: number; last_interaction_at: string | null;
+  }>();
+
+  return c.json({
+    global,
+    perOfficial: (perOfficial.results ?? []).map((r) => ({
+      officialId: r.official_id,
+      favor: r.favor,
+      trust: r.trust,
+      lastInteractionAt: r.last_interaction_at,
+    })),
+  });
+});
+
+// GET /api/villages/:id/teams — týmy v obci (multi-team transparency)
+villagesRouter.get("/:id/teams", async (c) => {
+  const villageId = c.req.param("id");
+  const teams = await c.env.DB.prepare(
+    `SELECT t.id, t.name, t.user_id, t.primary_color, t.secondary_color, t.reputation,
+            COALESCE(vtf.favor, 50) as global_favor
+     FROM teams t
+     LEFT JOIN village_team_favor vtf ON vtf.team_id = t.id AND vtf.official_id IS NULL
+     WHERE t.village_id = ?
+     ORDER BY t.name`
+  ).bind(villageId).all();
+  return c.json(teams.results ?? []);
+});
+
+// GET /api/villages/:id/feed?limit=20 — historie napříč všemi týmy (transparency)
+villagesRouter.get("/:id/feed", async (c) => {
+  const villageId = c.req.param("id");
+  const limit = Math.min(50, parseInt(c.req.query("limit") ?? "20", 10) || 20);
+
+  const rows = await c.env.DB.prepare(
+    `SELECT vh.id, vh.team_id, vh.official_id, vh.event_type, vh.description,
+            vh.impact, vh.game_date, vh.created_at,
+            t.name as team_name,
+            (vo.first_name || ' ' || vo.last_name) as official_name,
+            vo.role as official_role
+     FROM village_history vh
+     LEFT JOIN teams t ON t.id = vh.team_id
+     LEFT JOIN village_officials vo ON vo.id = vh.official_id
+     WHERE vh.village_id = ?
+     ORDER BY vh.created_at DESC
+     LIMIT ?`
+  ).bind(villageId, limit).all();
+
+  return c.json(rows.results ?? []);
+});
+
 export { villagesRouter };

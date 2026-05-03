@@ -185,13 +185,27 @@ export async function processWeeklyFinances(
       `Podpora místních podnikatelů`, gameDate);
   }
 
-  // 6. Municipal subsidy (dotace od obce)
+  // 6. Municipal subsidy (dotace od obce) — modulovaná globálním favor s obcí.
+  //    favor 0 = 0.5×, 50 = 1.0× (baseline kompatibilní), 100 = 1.5×.
   const monthlySubsidy: Record<string, number> = {
     vesnice: 6000, obec: 10000, mestys: 15000, mesto: 25000,
   };
-  const weeklySubsidy = Math.round((monthlySubsidy[category] ?? 8000) / 4.3);
-  await recordTransaction(db, teamId, "other", weeklySubsidy,
-    `Dotace od obce`, gameDate);
+  const baseMonthly = monthlySubsidy[category] ?? 8000;
+
+  const favorRow = await db.prepare(
+    "SELECT favor FROM village_team_favor WHERE team_id = ? AND official_id IS NULL"
+  ).bind(teamId).first<{ favor: number }>().catch((e) => {
+    logger.warn({ module: "finance" }, "load village favor", e);
+    return null;
+  });
+  const favor = favorRow?.favor ?? 50;
+  const favorMultiplier = 0.5 + favor / 100;
+
+  const weeklySubsidy = Math.round((baseMonthly * favorMultiplier) / 4.3);
+  const subsidyDesc = favor === 50
+    ? `Dotace od obce`
+    : `Dotace od obce (přízeň ${favor}/100, ×${favorMultiplier.toFixed(2)})`;
+  await recordTransaction(db, teamId, "other", weeklySubsidy, subsidyDesc, gameDate);
 
   // 7. Player contributions (členské příspěvky — 100 Kč/hráč/měsíc)
   const playerCount = wageResult?.cnt ?? 0;
