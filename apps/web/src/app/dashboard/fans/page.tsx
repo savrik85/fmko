@@ -415,49 +415,62 @@ export default function FansPage() {
       <div className="card p-4 sm:p-5">
         <SectionLabel>Fanouškovská základna</SectionLabel>
 
-        <div className="space-y-2 mb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-xs text-muted shrink-0">🟥 Tvrdé jádro</div>
-            <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden relative">
-              <div
-                className="h-full bg-card-red transition-all"
-                style={{ width: `${Math.min(100, (fanbase.tiers.hardcore / Math.max(fanbase.totalLoyal, 1)) * 100)}%` }}
-              />
-              <div className="absolute inset-0 flex items-center px-2 text-xs font-heading font-bold">
-                {fanbase.tiers.hardcore} <span className="ml-1.5 text-muted text-[10px]">chodí vždy</span>
+        <div className="space-y-3 mb-4">
+          {[
+            {
+              key: "hardcore",
+              icon: "🟥",
+              label: "Tvrdé jádro",
+              count: fanbase.tiers.hardcore,
+              hint: "chodí vždy",
+              barColor: "bg-card-red",
+            },
+            {
+              key: "regular",
+              icon: "🟧",
+              label: "Pravidelní",
+              count: fanbase.tiers.regular,
+              hint: "~80 % zápasů",
+              barColor: "bg-gold-500",
+            },
+            {
+              key: "casual",
+              icon: "🟨",
+              label: "Občasní",
+              count: fanbase.tiers.casual,
+              hint: "~30–50 %",
+              barColor: "bg-gold-400",
+            },
+          ].map((row) => {
+            const pct = Math.min(
+              100,
+              (row.count / Math.max(fanbase.totalLoyal, 1)) * 100,
+            );
+            return (
+              <div key={row.key} className="grid grid-cols-[8rem_4rem_1fr_5rem] items-center gap-3">
+                <div className="text-sm font-heading font-bold text-ink">
+                  <span className="mr-1">{row.icon}</span>
+                  {row.label}
+                </div>
+                <div className="text-2xl font-heading font-bold tabular-nums text-ink text-right">
+                  {row.count}
+                </div>
+                <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${row.barColor} transition-all`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className="text-xs text-muted text-right">{row.hint}</div>
               </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-xs text-muted shrink-0">🟧 Pravidelní</div>
-            <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden relative">
-              <div
-                className="h-full bg-gold-500 transition-all"
-                style={{ width: `${Math.min(100, (fanbase.tiers.regular / Math.max(fanbase.totalLoyal, 1)) * 100)}%` }}
-              />
-              <div className="absolute inset-0 flex items-center px-2 text-xs font-heading font-bold">
-                {fanbase.tiers.regular} <span className="ml-1.5 text-muted text-[10px]">~80 % zápasů</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-xs text-muted shrink-0">🟨 Občasní</div>
-            <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden relative">
-              <div
-                className="h-full bg-gold-300 transition-all"
-                style={{ width: `${Math.min(100, (fanbase.tiers.casual / Math.max(fanbase.totalLoyal, 1)) * 100)}%` }}
-              />
-              <div className="absolute inset-0 flex items-center px-2 text-xs font-heading font-bold">
-                {fanbase.tiers.casual} <span className="ml-1.5 text-muted text-[10px]">~30-50 %</span>
-              </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
 
         <div className="grid grid-cols-3 gap-3 text-center pt-3 border-t border-gray-200">
           <div>
             <div className="font-heading font-bold text-2xl tabular-nums text-pitch-600">{fanbase.totalLoyal}</div>
-            <div className="text-xs text-muted">Stálých fans</div>
+            <div className="text-xs text-muted">Stálých fanoušků</div>
           </div>
           <div>
             <div className="font-heading font-bold text-2xl tabular-nums text-ink">{fanbase.expectedNextHomeAttendance}</div>
@@ -467,7 +480,7 @@ export default function FansPage() {
             <div className="font-heading font-bold text-2xl tabular-nums text-gold-600">
               {fanbase.homeAdvantageModifier >= 0 ? "+" : ""}{fanbase.homeAdvantageModifier}
             </div>
-            <div className="text-xs text-muted">Home advantage</div>
+            <div className="text-xs text-muted">Domácí výhoda</div>
           </div>
         </div>
 
