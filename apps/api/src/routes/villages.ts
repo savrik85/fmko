@@ -645,7 +645,9 @@ villagesRouter.post("/invitations", requireAuth, async (c) => {
   if (!match) return c.json({ error: "Zápas nenalezen" }, 404);
   if (match.status === "simulated") return c.json({ error: "Zápas už proběhl" }, 410);
   if (match.home_team_id !== session.teamId && match.away_team_id !== session.teamId) {
-    return c.json({ error: "Nehraješ v tom zápase" }, 403);
+    return c.json({
+      error: `Nehraješ v tom zápase (session=${session.teamId}, home=${match.home_team_id})`,
+    }, 403);
   }
   if (!match.scheduled_at) return c.json({ error: "Zápas nemá termín" }, 400);
 
