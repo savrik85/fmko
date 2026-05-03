@@ -5,9 +5,9 @@ import { useEffect, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 
-const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string; label: string; color: string; newBadge?: boolean }> }> = [
+const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string; label: string; color: string }> }> = [
   { title: "Klub", items: [
-    { href: "/dashboard/klub", icon: "\u{1F3DB}️", label: "Klub", color: "#153615", newBadge: true },
+    { href: "/dashboard/klub", icon: "\u{1F3DB}️", label: "Klub", color: "#153615" },
     { href: "/dashboard/squad", icon: "\u{1F465}", label: "Kádr", color: "#2D5F2D" },
     { href: "/dashboard/training", icon: "\u{1F3CB}️", label: "Tréninky", color: "#3D7A3D" },
     { href: "/dashboard/transfers", icon: "\u{1F91D}", label: "Přestupy", color: "#4A8A4A" },
@@ -18,7 +18,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
     { href: "/dashboard/stadium", icon: "\u{1F3DF}️", label: "Stadion", color: "#5C7A3D" },
     { href: "/dashboard/fans", icon: "\u{1F4E3}", label: "Fanoušci", color: "#8B4513" },
     { href: "/dashboard/events", icon: "\u{1F389}", label: "Události", color: "#8B6914" },
-    { href: "/dashboard/hospoda", icon: "\u{1F37A}", label: "Hospoda", color: "#8B5A2B", newBadge: true },
+    { href: "/dashboard/hospoda", icon: "\u{1F37A}", label: "Hospoda", color: "#8B5A2B" },
   ]},
   { title: "Soutěž", items: [
     { href: "/dashboard/liga", icon: "\u{1F3C6}", label: "Liga", color: "#B8860B" },
@@ -72,9 +72,6 @@ export default function MorePage() {
                     <span className="absolute top-1 right-1 bg-amber-500 text-white text-[9px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">
                       {badge}
                     </span>
-                  )}
-                  {item.newBadge && (
-                    <span className="absolute top-1 right-1 bg-pitch-500 text-white text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full">Nové</span>
                   )}
                 </Link>
               );
