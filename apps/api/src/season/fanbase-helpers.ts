@@ -35,19 +35,19 @@ function rngBetween(min: number, max: number): number {
 
 /**
  * Effective populace pro backfill a walk-up — diminishing returns pro velká města.
- * Vesnický fotbal v 8 000-obyv. čtvrti nepřitahuje 1000 diváků jako lineární scaling sliboval —
- * lokální zápas zajímá pevnou skupinu lidí, ne procento celé populace.
+ * Realistický český okresní klub má 100-400 diváků bez ohledu na to, zda hraje v 5 000 nebo
+ * 50 000 obyv. čtvrti — lokální zápas zajímá pevnou skupinu lidí, ne procento celé populace.
  *
  * - ≤ 300 obyv. (vesnice): 100 % (lineární)
- * - 300–1500 (obec/městys): 70 % nad 300 nad rámec base
- * - 1500–5000 (malé město): 35 % nad 1500
- * - > 5000 (velké město): 15 % nad 5000
+ * - 300–1000 (obec): 60 % nad 300
+ * - 1000–3000 (městys): 25 % nad 1000
+ * - > 3000 (město/čtvrť): 5 % nad 3000 (silný cap)
  */
 export function effectivePopulation(pop: number): number {
   if (pop <= 300) return pop;
-  if (pop <= 1500) return 300 + (pop - 300) * 0.7;
-  if (pop <= 5000) return 300 + 1200 * 0.7 + (pop - 1500) * 0.35;
-  return 300 + 1200 * 0.7 + 3500 * 0.35 + (pop - 5000) * 0.15;
+  if (pop <= 1000) return 300 + (pop - 300) * 0.6;
+  if (pop <= 3000) return 300 + 700 * 0.6 + (pop - 1000) * 0.25;
+  return 300 + 700 * 0.6 + 2000 * 0.25 + (pop - 3000) * 0.05;
 }
 
 export async function loadOrInitFanbase(
