@@ -218,6 +218,7 @@ export default function ObecPage() {
   const [brigades, setBrigades] = useState<Brigade[]>([]);
   const [petitions, setPetitions] = useState<Petition[]>([]);
   const [respondingPetitionId, setRespondingPetitionId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [upcoming, setUpcoming] = useState<UpcomingMatch | null>(null);
   const [invitingOfficialId, setInvitingOfficialId] = useState<string | null>(null);
   const [villageId, setVillageId] = useState<string | null>(null);
@@ -253,7 +254,8 @@ export default function ObecPage() {
       if (villageId) await refresh(villageId);
     } catch (e: unknown) {
       const m = e instanceof Error ? e.message : "Chyba";
-      alert(`Petice: ${m}`);
+      setToast(`Petice: ${m}`);
+      setTimeout(() => setToast(null), 4000);
     } finally {
       setRespondingPetitionId(null);
     }
@@ -272,13 +274,15 @@ export default function ObecPage() {
         },
       );
       const msg = res.status === "accepted"
-        ? `${res.officialName} pozvánku přijal! (cena ${res.giftCost} Kč)`
-        : `${res.officialName} pozvánku odmítl. (cena ${res.giftCost} Kč přesto zaplacena)`;
-      alert(msg);
+        ? `${res.officialName} pozvání přijal (cena ${res.giftCost} Kč)`
+        : `${res.officialName} pozvání odmítl (cena ${res.giftCost} Kč zaplacena)`;
+      setToast(msg);
+      setTimeout(() => setToast(null), 4000);
       if (villageId) await refresh(villageId);
     } catch (e: unknown) {
       const m = e instanceof Error ? e.message : "Chyba";
-      alert(`Nepodařilo se: ${m}`);
+      setToast(`Pozvánka selhala: ${m}`);
+      setTimeout(() => setToast(null), 4000);
     } finally {
       setInvitingOfficialId(null);
     }
@@ -630,6 +634,12 @@ export default function ObecPage() {
       <div className="text-xs text-gray-500 px-1">
         Lokální hrdost: tracking aktivuje Sprint C (kolik místních hraje, kdo nastoupil v posledních zápasech).
       </div>
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
+          {toast}
+        </div>
+      )}
 
       {takeBrigade && villageId && (
         <BrigadeTakeDialog
