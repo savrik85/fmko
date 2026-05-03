@@ -149,6 +149,87 @@ villagesRouter.get("/petitions", async (c) => {
   return c.json(rows.results ?? []);
 });
 
+// GET /api/villages/local-pride?teamId=X — místní hrdost: rodáci v kádru a jejich příspěvek
+villagesRouter.get("/local-pride", async (c) => {
+  const teamId = c.req.query("teamId");
+  if (!teamId) return c.json({ error: "teamId required" }, 400);
+
+  const team = await c.env.DB.prepare(
+    `SELECT t.village_id, v.name as village_name FROM teams t
+     JOIN villages v ON v.id = t.village_id WHERE t.id = ?`
+  ).bind(teamId).first<{ village_id: string; village_name: string }>();
+  if (!team) return c.json({ error: "Team not found" }, 404);
+
+  // Místní hráči v aktivním kádru
+  const locals = await c.env.DB.prepare(
+    `SELECT id, first_name, last_name, position, overall_rating, residence, status
+     FROM players
+     WHERE team_id = ? AND residence = ? AND (status IS NULL OR status != 'released')
+     ORDER BY overall_rating DESC`
+  ).bind(teamId, team.village_name).all<{
+    id: string; first_name: string; last_name: string; position: string;
+    overall_rating: number; residence: string; status: string | null;
+  }>();
+
+  const localList = locals.results ?? [];
+
+  if (localList.length === 0) {
+    return c.json({
+      villageName: team.village_name,
+      locals: [],
+      totalLocalCount: 0,
+      avgRating: null,
+      recentStartersTotal: 0,
+    });
+  }
+
+  // Zápasové statistiky posledních 5 zápasů
+  const playerIds = localList.map((p) => p.id);
+  const placeholders = playerIds.map(() => "?").join(",");
+  const stats = await c.env.DB.prepare(
+    `SELECT mps.player_id, COUNT(*) as starts, SUM(mps.goals) as goals,
+            SUM(mps.assists) as assists, AVG(mps.rating) as avg_rating
+     FROM match_player_stats mps
+     JOIN matches m ON m.id = mps.match_id
+     WHERE mps.player_id IN (${placeholders}) AND mps.team_id = ?
+       AND mps.started = 1 AND m.status = 'simulated'
+       AND m.simulated_at > datetime('now', '-90 days')
+     GROUP BY mps.player_id`
+  ).bind(...playerIds, teamId).all<{
+    player_id: string; starts: number; goals: number; assists: number; avg_rating: number;
+  }>();
+
+  const statsByPlayer = new Map(stats.results?.map((s) => [s.player_id, s]) ?? []);
+
+  const enriched = localList.map((p) => {
+    const s = statsByPlayer.get(p.id);
+    return {
+      id: p.id,
+      firstName: p.first_name,
+      lastName: p.last_name,
+      position: p.position,
+      overallRating: p.overall_rating,
+      recentStarts: s?.starts ?? 0,
+      recentGoals: s?.goals ?? 0,
+      recentAssists: s?.assists ?? 0,
+      recentAvgRating: s?.avg_rating ? Math.round(s.avg_rating * 10) / 10 : null,
+    };
+  });
+
+  const avgRating = Math.round(
+    (localList.reduce((sum, p) => sum + p.overall_rating, 0) / localList.length) * 10,
+  ) / 10;
+  const recentStartersTotal = enriched.reduce((sum, p) => sum + (p.recentStarts > 0 ? 1 : 0), 0);
+
+  return c.json({
+    villageName: team.village_name,
+    locals: enriched,
+    totalLocalCount: localList.length,
+    avgRating,
+    recentStartersTotal,
+  });
+});
+
 // GET /api/villages/pub-encounters?teamId=X — aktivní hospodské střetnutí
 villagesRouter.get("/pub-encounters", async (c) => {
   const teamId = c.req.query("teamId");

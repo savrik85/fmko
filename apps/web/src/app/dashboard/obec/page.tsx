@@ -98,6 +98,24 @@ interface RosterPlayer {
   status: string | null;
 }
 
+interface LocalPride {
+  villageName: string;
+  totalLocalCount: number;
+  avgRating: number | null;
+  recentStartersTotal: number;
+  locals: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    position: string;
+    overallRating: number;
+    recentStarts: number;
+    recentGoals: number;
+    recentAssists: number;
+    recentAvgRating: number | null;
+  }>;
+}
+
 interface PubEncounter {
   id: string;
   official_id: string;
@@ -257,6 +275,7 @@ export default function ObecPage() {
   const [respondingInvId, setRespondingInvId] = useState<string | null>(null);
   const [pubEncounters, setPubEncounters] = useState<PubEncounter[]>([]);
   const [respondingPubId, setRespondingPubId] = useState<string | null>(null);
+  const [localPride, setLocalPride] = useState<LocalPride | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [upcoming, setUpcoming] = useState<UpcomingMatch | null>(null);
   const [invitingOfficialId, setInvitingOfficialId] = useState<string | null>(null);
@@ -267,7 +286,7 @@ export default function ObecPage() {
 
   const refresh = async (vid: string) => {
     if (!teamId) return;
-    const [v, o, f, ts, fd, bg, up, pe, inv, pub] = await Promise.all([
+    const [v, o, f, ts, fd, bg, up, pe, inv, pub, lp] = await Promise.all([
       apiFetch<VillageDetail>(`/api/villages/${vid}`),
       apiFetch<Official[]>(`/api/villages/${vid}/officials`),
       apiFetch<Favor>(`/api/villages/${vid}/favor?teamId=${teamId}`),
@@ -278,9 +297,11 @@ export default function ObecPage() {
       apiFetch<Petition[]>(`/api/villages/petitions?teamId=${teamId}`),
       apiFetch<Investment[]>(`/api/villages/investments?teamId=${teamId}`),
       apiFetch<PubEncounter[]>(`/api/villages/pub-encounters?teamId=${teamId}`),
+      apiFetch<LocalPride>(`/api/villages/local-pride?teamId=${teamId}`),
     ]);
     setVillage(v); setOfficials(o); setFavor(f); setTeams(ts); setFeed(fd); setBrigades(bg);
     setUpcoming(up); setPetitions(pe); setInvestments(inv); setPubEncounters(pub);
+    setLocalPride(lp);
   };
 
   const respondPub = async (id: string, action: "invite_beer" | "ignore") => {
@@ -829,9 +850,63 @@ export default function ObecPage() {
         </CardBody>
       </Card>
 
-      <div className="text-xs text-gray-500 px-1">
-        Lokální hrdost: tracking aktivuje Sprint C (kolik místních hraje, kdo nastoupil v posledních zápasech).
-      </div>
+      {/* Místní hrdost */}
+      {localPride && (
+        <Card>
+          <CardHeader>
+            <SectionLabel>Místní hrdost</SectionLabel>
+            <div className="text-xs text-gray-500 mt-1">
+              Rodáci z {localPride.villageName} v kádru. Pokud jich víc nastoupí do zápasu, obec to ocení (+favor po každém zápase).
+            </div>
+          </CardHeader>
+          <CardBody>
+            {localPride.totalLocalCount === 0 ? (
+              <div className="text-sm text-gray-500 italic">
+                Zatím žádný hráč z {localPride.villageName} v kádru. Zvaž nábor mládeže nebo přestup místního talentu.
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-3 gap-3 mb-3 text-center">
+                  <div className="bg-gray-50 rounded-lg p-2">
+                    <div className="text-2xl font-bold tabular-nums">{localPride.totalLocalCount}</div>
+                    <div className="text-xs text-gray-500">rodáků v kádru</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-2">
+                    <div className="text-2xl font-bold tabular-nums">{localPride.recentStartersTotal}</div>
+                    <div className="text-xs text-gray-500">nastoupilo (90 dní)</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-2">
+                    <div className="text-2xl font-bold tabular-nums">{localPride.avgRating ?? "—"}</div>
+                    <div className="text-xs text-gray-500">průměrný rating</div>
+                  </div>
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="text-left text-xs uppercase tracking-wider text-gray-500">
+                    <tr>
+                      <th className="py-1.5">Hráč</th>
+                      <th className="py-1.5 text-right">Pos / Rat</th>
+                      <th className="py-1.5 text-right">Zápasů</th>
+                      <th className="py-1.5 text-right">G+A</th>
+                      <th className="py-1.5 text-right">Známka</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {localPride.locals.map((p) => (
+                      <tr key={p.id} className="border-t border-gray-100">
+                        <td className="py-1.5">{p.firstName} {p.lastName}</td>
+                        <td className="py-1.5 text-right tabular-nums">{p.position} {p.overallRating}</td>
+                        <td className="py-1.5 text-right tabular-nums">{p.recentStarts}</td>
+                        <td className="py-1.5 text-right tabular-nums">{p.recentGoals}+{p.recentAssists}</td>
+                        <td className="py-1.5 text-right tabular-nums">{p.recentAvgRating ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </CardBody>
+        </Card>
+      )}
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
