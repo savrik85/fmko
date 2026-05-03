@@ -280,14 +280,24 @@ villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
   // Ověřit že všichni hráči patří týmu, nejsou zranění a mají condition >= 60
   const placeholders = playerIds.map(() => "?").join(",");
   const playerCheck = await c.env.DB.prepare(
-    `SELECT id, first_name, last_name, life_context, status
+    `SELECT id, first_name, last_name, life_context, status, team_id
      FROM players WHERE id IN (${placeholders}) AND team_id = ?`
   ).bind(...playerIds, session.teamId).all<{
-    id: string; first_name: string; last_name: string; life_context: string; status: string | null;
+    id: string; first_name: string; last_name: string; life_context: string; status: string | null; team_id: string;
   }>();
   const players = playerCheck.results ?? [];
   if (players.length !== playerIds.length) {
-    return c.json({ error: "Některý hráč nepatří tvému týmu nebo neexistuje" }, 400);
+    const foundIds = new Set(players.map((p) => p.id));
+    const missing = playerIds.filter((id) => !foundIds.has(id));
+    logger.warn(
+      { module: "villages", endpoint: "take" },
+      `take brigade ${brigadeId}: session.teamId=${session.teamId}, playerIds=${JSON.stringify(playerIds)}, missing=${JSON.stringify(missing)}, found=${players.length}`
+    );
+    return c.json({
+      error: "Některý hráč nepatří tvému týmu nebo neexistuje",
+      missing,
+      sessionTeamId: session.teamId,
+    }, 400);
   }
   for (const p of players) {
     if (p.status === "released") {
