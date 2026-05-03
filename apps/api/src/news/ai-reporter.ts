@@ -83,11 +83,12 @@ export async function generateAiRoundReport(
   gameWeek: number,
   standingsBefore: StandingEntry[],
 ): Promise<void> {
-  // 1. Zápasy kola s názvy týmů a obcí
+  // 1. Zápasy kola s názvy týmů, obcí a flavor facts
   const matchRows = await db.prepare(
     `SELECT m.id, m.home_score, m.away_score, m.events, m.attendance, m.stadium_name, m.weather, m.pitch_condition,
             t1.name as home_name, t2.name as away_name,
-            v1.name as home_village, v2.name as away_village
+            v1.name as home_village, v2.name as away_village,
+            v1.flavor_facts as home_facts, v2.flavor_facts as away_facts
      FROM matches m
      JOIN teams t1 ON m.home_team_id = t1.id
      JOIN teams t2 ON m.away_team_id = t2.id
@@ -178,6 +179,25 @@ export async function generateAiRoundReport(
     if (buses && buses.length > 0) {
       const busStr = buses.map((b) => `${b.village} (${b.attendees})`).join(", ");
       line += `; svezeno autobusem: ${busStr}`;
+    }
+    // Flavor facts o obcích — AI je smí občas zmínit pro místní kolorit
+    const parseFacts = (raw: unknown): string[] => {
+      if (!raw || typeof raw !== "string") return [];
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+      } catch (e) {
+        logger.warn({ module: "ai-reporter" }, "parse flavor_facts", e);
+        return [];
+      }
+    };
+    const homeFacts = parseFacts(m.home_facts);
+    const awayFacts = parseFacts(m.away_facts);
+    if (homeFacts.length > 0 && homeVillage) {
+      line += `\n  • zajímavosti ${homeVillage}: ${homeFacts.slice(0, 3).join(" / ")}`;
+    }
+    if (awayFacts.length > 0 && awayVillage) {
+      line += `\n  • zajímavosti ${awayVillage}: ${awayFacts.slice(0, 3).join(" / ")}`;
     }
 
     resultLines.push(line);
@@ -307,7 +327,8 @@ Styl:
 - Piš barvitě s humorem
 - ${localFlavor}
 - Nemusíš popsat každý zápas, vyber ty nejzajímavější
-- Pokud u zápasu vidíš "svezeno autobusem: X (Y)" znamená to, že domácí klub zaplatil dopravu fanouškům z obce X (Y lidí přijelo). Zmiňuj to JEN OBČAS jako vesnický kolorit ("Z Bohumilic dorazil plný autobus", "Strejda Pepa zase přivezl partu z Vimperka"), nikdy mechanicky u každého zápasu — jen když to do článku přirozeně zapadne.`;
+- Pokud u zápasu vidíš "svezeno autobusem: X (Y)" znamená to, že domácí klub zaplatil dopravu fanouškům z obce X (Y lidí přijelo). Zmiňuj to JEN OBČAS jako vesnický kolorit ("Z Bohumilic dorazil plný autobus", "Strejda Pepa zase přivezl partu z Vimperka"), nikdy mechanicky u každého zápasu — jen když to do článku přirozeně zapadne.
+- U některých zápasů vidíš "zajímavosti OBEC: ...". Jsou to reálné fakty (památky, slavní rodáci, místní tradice). Smíš je v článku **občas** zmínit pro místní kolorit, když do textu přirozeně zapadnou (např. "v obci Bohumilice, kde 1829 vyorali meteorit, dnes vyorali tři body" / "u břevnovského Hostince U Kaštanu, kde se v 19. století zakládala soc. dem., dnes domácí oslavovali výhru"). Nikdy nezmiňuj všechny fakty mechanicky a nevymýšlej souvislosti, které tam nejsou.`;
 
   // Volání Gemini
   const res = await fetch(
