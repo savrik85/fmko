@@ -2814,9 +2814,10 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
 
 import {
   haversineKm,
-  loadOrInitFanbase,
+  loadFanbaseAggregate,
   expectedAttendance,
   homeAdvantageFromFanbase,
+  distanceConversionMod,
 } from "../season/fanbase-helpers";
 import {
   BUS_CONFIG,
@@ -2829,7 +2830,7 @@ import { recordTransaction } from "../season/finance-processor";
 teamsRouter.get("/:id/fanbase", async (c) => {
   const teamId = c.req.param("id");
 
-  const fb = await loadOrInitFanbase(c.env.DB, teamId);
+  const { fb, agg } = await loadFanbaseAggregate(c.env.DB, teamId);
 
   const homeRow = await c.env.DB.prepare(
     `SELECT v.id as village_id, v.name as village_name, v.population, v.lat, v.lng,
@@ -2890,30 +2891,36 @@ teamsRouter.get("/:id/fanbase", async (c) => {
       return { results: [] as never[] };
     });
 
-  const satellites = satelliteRows.results.map((r) => ({
-    villageId: r.village_id,
-    villageName: r.name,
-    population: r.population,
-    distanceKm: Number(
-      haversineKm(homeRow.lat, homeRow.lng, r.lat, r.lng).toFixed(2),
-    ),
-    casualCount: r.casual_count,
-    regularCount: r.regular_count,
-    hardcoreCount: r.hardcore_count,
-    consecutiveBuses: r.consecutive_buses,
-  }));
+  const satellites = satelliteRows.results.map((r) => {
+    const dist = haversineKm(homeRow.lat, homeRow.lng, r.lat, r.lng);
+    return {
+      villageId: r.village_id,
+      villageName: r.name,
+      population: r.population,
+      distanceKm: Number(dist.toFixed(2)),
+      conversionMod: Number(distanceConversionMod(dist).toFixed(2)),
+      casualCount: r.casual_count,
+      regularCount: r.regular_count,
+      hardcoreCount: r.hardcore_count,
+      consecutiveBuses: r.consecutive_buses,
+    };
+  });
 
-  const expected = expectedAttendance(fb);
-  const ha = homeAdvantageFromFanbase(fb, expected.total, capacity);
-  const totalLoyal = fb.hardcore_count + fb.regular_count + fb.casual_count;
+  const expected = expectedAttendance(agg);
+  const ha = homeAdvantageFromFanbase(agg, expected.total, capacity);
 
   return c.json({
     tiers: {
-      hardcore: fb.hardcore_count,
-      regular: fb.regular_count,
-      casual: fb.casual_count,
+      hardcore: agg.hardcore,
+      regular: agg.regular,
+      casual: agg.casual,
     },
-    totalLoyal,
+    totalLoyal: agg.total,
+    sources: {
+      home: agg.fromHome,
+      promo: agg.fromPromo,
+      satellites: agg.fromSatellites,
+    },
     homeVillage: {
       id: homeRow.village_id,
       name: homeRow.village_name,
@@ -2925,6 +2932,7 @@ teamsRouter.get("/:id/fanbase", async (c) => {
     promo: {
       consecutive: fb.promo_consecutive_matches,
       unpromotedStreak: fb.promo_unpromoted_streak,
+      casualFromPromo: fb.promo_casual_count ?? 0,
       nextThreshold:
         fb.promo_consecutive_matches < 3
           ? 3

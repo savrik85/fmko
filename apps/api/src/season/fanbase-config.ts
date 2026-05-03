@@ -69,6 +69,14 @@ export const BUS_CONFIG = {
     THRESHOLD_3: { rate: 0.25, capPerVillage: 8 },
     THRESHOLD_5: { rate: 0.15, capPerVillage: 15 },
   },
+  // Distance modifier: bližší obec = vyšší konverze (lidi z 3 km přijdou pravidelně).
+  // 0 km = 1.5×, 3 km = 1.2×, 6 km = 0.9×, 10 km = 0.5× (clamp 0.5-1.5)
+  DISTANCE_MOD: {
+    base: 1.5,
+    perKm: 0.1,
+    minMod: 0.5,
+    maxMod: 1.5,
+  },
   STREAK_BREAK_AFTER: 3,
   STREAK_BREAK_DECAY: 0.5,
 } as const;
@@ -86,9 +94,12 @@ export type BusSize = keyof typeof BUS_CONFIG.SIZES;
 
 export interface TeamFanbaseRow {
   team_id: string;
+  // Counts JEN z vlastní vesnice (loyalty progression působí na ně)
   hardcore_count: number;
   regular_count: number;
   casual_count: number;
+  // Z propagačních článků (nevztahuje se na vesnici)
+  promo_casual_count: number;
   casual_to_regular_streak: number;
   regular_to_hardcore_streak: number;
   promo_consecutive_matches: number;

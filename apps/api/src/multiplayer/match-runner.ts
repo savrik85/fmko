@@ -211,12 +211,12 @@ export async function runScheduledMatches(
       ).bind(homeTeamId).first<{ population: number; size: string; reputation: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home village info", e); return null; });
       const rep = homeInfo?.reputation ?? 50;
 
-      // Tier-based base (hardcore + regular + casual + walk-up)
-      const { loadOrInitFanbase, expectedAttendance, homeAdvantageFromFanbase } =
+      // Tier-based base (hardcore + regular + casual + walk-up) — agregát ze 3 zdrojů
+      const { loadFanbaseAggregate, expectedAttendance, homeAdvantageFromFanbase } =
         await import("../season/fanbase-helpers");
       const { BUS_CONFIG } = await import("../season/fanbase-config");
-      const fanbase = await loadOrInitFanbase(db, homeTeamId);
-      const expected = expectedAttendance(fanbase);
+      const { agg: fanbaseAgg } = await loadFanbaseAggregate(db, homeTeamId);
+      const expected = expectedAttendance(fanbaseAgg);
       const popBase = expected.total;
 
       // Bus drop-in pro tento zápas (z objednaných busů)
@@ -287,7 +287,7 @@ export async function runScheduledMatches(
       }
 
       // Home advantage z fanbase: tvrdé jádro + atmosféra (vyprodáno / prázdný stadion)
-      const haInfo = homeAdvantageFromFanbase(fanbase, attendance, stadiumCapacity);
+      const haInfo = homeAdvantageFromFanbase(fanbaseAgg, attendance, stadiumCapacity);
       const haMoraleBoost = Math.max(-5, Math.min(10, Math.round(haInfo.total * 3)));
       if (haMoraleBoost !== 0) {
         for (const p of homeLineup) {

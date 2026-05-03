@@ -106,6 +106,7 @@ interface FanbaseSatellite {
   villageName: string;
   population: number;
   distanceKm: number;
+  conversionMod: number;
   casualCount: number;
   regularCount: number;
   hardcoreCount: number;
@@ -115,6 +116,11 @@ interface FanbaseSatellite {
 interface FanbaseData {
   tiers: FanbaseTier;
   totalLoyal: number;
+  sources: {
+    home: { hardcore: number; regular: number; casual: number };
+    promo: { casual: number };
+    satellites: { hardcore: number; regular: number; casual: number };
+  };
   homeVillage: { id: string; name: string; population: number };
   capacity: number;
   reputation: number;
@@ -122,6 +128,7 @@ interface FanbaseData {
   promo: {
     consecutive: number;
     unpromotedStreak: number;
+    casualFromPromo: number;
     nextThreshold: number | null;
   };
   progression: {
@@ -612,6 +619,61 @@ export default function FansPage() {
         </div>
       </div>
 
+      {/* ═══ Odkud máš fanoušky ═══ */}
+      <div className="card p-4 sm:p-5">
+        <SectionLabel>Odkud máš fanoušky</SectionLabel>
+        {(() => {
+          const homeTot =
+            fanbase.sources.home.hardcore +
+            fanbase.sources.home.regular +
+            fanbase.sources.home.casual;
+          const promoTot = fanbase.sources.promo.casual;
+          const satTot =
+            fanbase.sources.satellites.hardcore +
+            fanbase.sources.satellites.regular +
+            fanbase.sources.satellites.casual;
+          const tot = Math.max(homeTot + promoTot + satTot, 1);
+          return (
+            <>
+              <div className="flex h-4 rounded-full overflow-hidden bg-gray-100 mb-3">
+                <div
+                  className="bg-pitch-500"
+                  style={{ width: `${(homeTot / tot) * 100}%` }}
+                  title={`Vlastní vesnice: ${homeTot}`}
+                />
+                <div
+                  className="bg-gold-500"
+                  style={{ width: `${(promoTot / tot) * 100}%` }}
+                  title={`Z propagace: ${promoTot}`}
+                />
+                <div
+                  className="bg-card-red/80"
+                  style={{ width: `${(satTot / tot) * 100}%` }}
+                  title={`Spádové obce: ${satTot}`}
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-center text-sm">
+                <div>
+                  <div className="font-heading font-bold text-xl tabular-nums text-pitch-600">{homeTot}</div>
+                  <div className="text-[11px] text-muted">{fanbase.homeVillage.name}</div>
+                  <div className="text-[10px] text-muted">vlastní vesnice</div>
+                </div>
+                <div>
+                  <div className="font-heading font-bold text-xl tabular-nums text-gold-600">{promoTot}</div>
+                  <div className="text-[11px] text-muted">z propagace</div>
+                  <div className="text-[10px] text-muted">články ve zpravodaji</div>
+                </div>
+                <div>
+                  <div className="font-heading font-bold text-xl tabular-nums text-card-red">{satTot}</div>
+                  <div className="text-[11px] text-muted">spádové obce</div>
+                  <div className="text-[10px] text-muted">{fanbase.satellites.length} obcí</div>
+                </div>
+              </div>
+            </>
+          );
+        })()}
+      </div>
+
       {/* ═══ Spádové obce (autobusy) ═══ */}
       <div className="card p-4 sm:p-5">
         <SectionLabel>Spádové obce (autobusy)</SectionLabel>
@@ -621,22 +683,31 @@ export default function FansPage() {
           </div>
         ) : (
           <div className="space-y-1.5">
-            {fanbase.satellites.map((s) => (
-              <div key={s.villageId} className="flex items-center gap-2 text-sm py-1.5 border-b border-gray-100 last:border-b-0">
-                <div className="flex-1 min-w-0">
-                  <div className="font-heading font-bold truncate">{s.villageName}</div>
-                  <div className="text-[10px] text-muted">
-                    {s.distanceKm} km · {s.population.toLocaleString("cs")} obyv.
+            {fanbase.satellites.map((s) => {
+              const total = s.casualCount + s.regularCount + s.hardcoreCount;
+              return (
+                <div
+                  key={s.villageId}
+                  className="flex items-center gap-2 text-sm py-1.5 border-b border-gray-100 last:border-b-0"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="font-heading font-bold truncate">{s.villageName}</div>
+                    <div className="text-[10px] text-muted">
+                      {s.distanceKm} km · {s.population.toLocaleString("cs")} obyv. · konverze ×{s.conversionMod}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-heading font-bold text-pitch-600">★ {total}</div>
+                    <div className="text-[10px] text-muted">streak {s.consecutiveBuses}</div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="font-heading font-bold text-pitch-600">★ {s.casualCount + s.regularCount + s.hardcoreCount}</div>
-                  <div className="text-[10px] text-muted">streak {s.consecutiveBuses}</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
+        <div className="mt-2 text-[11px] text-muted">
+          Bližší obce mají vyšší konverzi (3 km = ×1.2, 10 km = ×0.5). Lidi z blízka snadněji udělají z busu pravidelný návyk.
+        </div>
       </div>
 
       {/* ═══ Propagační kampaň ═══ */}

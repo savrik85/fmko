@@ -921,7 +921,9 @@ export async function executeDailyTick(
   try {
     const fbTeams = await env.DB.prepare(
       `SELECT t.id as team_id, t.reputation, t.game_date,
-              tf.hardcore_count, tf.regular_count, tf.casual_count,
+              tf.hardcore_count + COALESCE((SELECT SUM(hardcore_count) FROM bus_satellite_fans WHERE team_id = t.id), 0) as hardcore_count,
+              tf.regular_count + COALESCE((SELECT SUM(regular_count) FROM bus_satellite_fans WHERE team_id = t.id), 0) as regular_count,
+              tf.casual_count + COALESCE(tf.promo_casual_count, 0) + COALESCE((SELECT SUM(casual_count) FROM bus_satellite_fans WHERE team_id = t.id), 0) as casual_count,
               f.satisfaction
        FROM teams t
        LEFT JOIN team_fanbase tf ON tf.team_id = t.id
@@ -1031,20 +1033,6 @@ export async function executeDailyTick(
               logger.warn(
                 { module: "daily-tick" },
                 "decay satellite casual",
-                e,
-              );
-            });
-          await env.DB.prepare(
-            `UPDATE team_fanbase
-             SET casual_count = MAX(0, casual_count - ?), updated_at = datetime('now')
-             WHERE team_id = ?`,
-          )
-            .bind(lost, s.team_id)
-            .run()
-            .catch((e) => {
-              logger.warn(
-                { module: "daily-tick" },
-                "decay team_fanbase from satellite break",
                 e,
               );
             });
