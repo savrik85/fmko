@@ -35,6 +35,7 @@ export type TransactionType =
   | "bus_subsidy"
   | "cash_loan_disbursement"
   | "cash_loan_repayment"
+  | "village_brigade"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */

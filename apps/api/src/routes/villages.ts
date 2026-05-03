@@ -229,6 +229,184 @@ villagesRouter.get("/:id/teams", async (c) => {
   return c.json(teams.results ?? []);
 });
 
+// GET /api/villages/:id/brigades — všechny otevřené i obsazené brigády obce
+villagesRouter.get("/:id/brigades", async (c) => {
+  const villageId = c.req.param("id");
+  const rows = await c.env.DB.prepare(
+    `SELECT vb.*, t.name as taken_team_name,
+            (vo.first_name || ' ' || vo.last_name) as offering_official_name,
+            vo.role as offering_official_role,
+            vo.personality as offering_official_personality
+     FROM village_brigades vb
+     LEFT JOIN teams t ON t.id = vb.taken_by_team_id
+     LEFT JOIN village_officials vo ON vo.id = vb.offered_by_official_id
+     WHERE vb.village_id = ? AND vb.status IN ('open','taken','completed')
+     ORDER BY vb.status ASC, vb.expires_at ASC`
+  ).bind(villageId).all();
+  return c.json(rows.results ?? []);
+});
+
+// POST /api/villages/brigades/:brigadeId/take — vzít brigádu (Sprint B)
+import { requireAuth } from "../auth/middleware";
+import { recordTransaction } from "../season/finance-processor";
+
+villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
+  const brigadeId = c.req.param("brigadeId");
+  const session = c.get("session" as never) as { userId: string; teamId: string | null };
+  if (!session.teamId) return c.json({ error: "Nemáš tým" }, 400);
+
+  const body = await c.req.json<{ playerIds: string[] }>().catch(() => ({ playerIds: [] }));
+  const playerIds = Array.isArray(body.playerIds) ? body.playerIds : [];
+
+  // Načíst brigádu + zámek na status='open'
+  const brigade = await c.env.DB.prepare(
+    "SELECT * FROM village_brigades WHERE id = ? AND status = 'open'"
+  ).bind(brigadeId).first<{
+    id: string; village_id: string; type: string; title: string;
+    required_player_count: number; reward_money: number; reward_favor: number;
+    condition_drain: number; morale_change: number; offered_by_official_id: string | null;
+    expires_at: string;
+  }>();
+  if (!brigade) return c.json({ error: "Brigáda už není dostupná" }, 409);
+
+  if (new Date(brigade.expires_at) < new Date()) {
+    return c.json({ error: "Brigáda již vypršela" }, 410);
+  }
+
+  if (playerIds.length !== brigade.required_player_count) {
+    return c.json({ error: `Vyber přesně ${brigade.required_player_count} hráčů` }, 400);
+  }
+
+  // Ověřit že všichni hráči patří týmu, nejsou zranění a mají condition >= 60
+  const placeholders = playerIds.map(() => "?").join(",");
+  const playerCheck = await c.env.DB.prepare(
+    `SELECT id, first_name, last_name, life_context, status
+     FROM players WHERE id IN (${placeholders}) AND team_id = ?`
+  ).bind(...playerIds, session.teamId).all<{
+    id: string; first_name: string; last_name: string; life_context: string; status: string | null;
+  }>();
+  const players = playerCheck.results ?? [];
+  if (players.length !== playerIds.length) {
+    return c.json({ error: "Některý hráč nepatří tvému týmu nebo neexistuje" }, 400);
+  }
+  for (const p of players) {
+    if (p.status === "released") {
+      return c.json({ error: `${p.first_name} ${p.last_name} byl uvolněn` }, 400);
+    }
+    let lc: { condition?: number; injury?: unknown } = {};
+    try { lc = JSON.parse(p.life_context); } catch { lc = {}; }
+    if (lc.injury) {
+      return c.json({ error: `${p.first_name} ${p.last_name} je zraněný` }, 400);
+    }
+    const cond = typeof lc.condition === "number" ? lc.condition : 100;
+    if (cond < 60) {
+      return c.json({ error: `${p.first_name} ${p.last_name} má kondici jen ${cond}/100 (potřeba ≥ 60)` }, 400);
+    }
+  }
+
+  // Cooldown: jeden tým max 1 brigáda za posledních 7 dní
+  const recent = await c.env.DB.prepare(
+    `SELECT COUNT(*) as cnt FROM village_brigades
+     WHERE taken_by_team_id = ? AND taken_at > datetime('now', '-7 days')`
+  ).bind(session.teamId).first<{ cnt: number }>();
+  if ((recent?.cnt ?? 0) >= 1) {
+    return c.json({ error: "Tvůj tým už tento týden brigádu vzal — musíš počkat." }, 429);
+  }
+
+  // Atomicky: označit brigádu jako taken+completed, pak side-effecty
+  const now = new Date().toISOString();
+  const updateRes = await c.env.DB.prepare(
+    `UPDATE village_brigades
+     SET status = 'completed',
+         taken_by_team_id = ?,
+         taken_player_ids = ?,
+         taken_at = ?,
+         completed_at = ?
+     WHERE id = ? AND status = 'open'`
+  ).bind(session.teamId, JSON.stringify(playerIds), now, now, brigadeId).run();
+
+  if ((updateRes.meta?.changes ?? 0) === 0) {
+    return c.json({ error: "Brigáda už byla mezitím obsazena" }, 409);
+  }
+
+  // Get team game_date pro recordTransaction
+  const teamRow = await c.env.DB.prepare(
+    "SELECT game_date FROM teams WHERE id = ?"
+  ).bind(session.teamId).first<{ game_date: string }>();
+  const gameDate = teamRow?.game_date ?? now;
+
+  // Per-hráč condition drain a morale change
+  for (const p of players) {
+    let lc: { condition?: number; morale?: number } = {};
+    try { lc = JSON.parse(p.life_context); } catch { lc = {}; }
+    const newCondition = Math.max(0, (lc.condition ?? 100) - brigade.condition_drain);
+    const newMorale = Math.max(0, Math.min(100, (lc.morale ?? 50) + brigade.morale_change));
+    await c.env.DB.prepare(
+      `UPDATE players
+       SET life_context = json_set(json_set(life_context, '$.condition', ?), '$.morale', ?)
+       WHERE id = ?`
+    ).bind(newCondition, newMorale, p.id).run().catch((e) => {
+      logger.warn({ module: "villages" }, `update life_context for ${p.id}`, e);
+    });
+  }
+
+  // Peníze
+  await recordTransaction(
+    c.env.DB, session.teamId, "village_brigade", brigade.reward_money,
+    `Brigáda: ${brigade.title}`, gameDate,
+  );
+
+  // Favor: globální + individuální (offering official, pokud existuje)
+  const { ensureGlobalFavor: ensureFavor } = await import("../villages/officials-store");
+  await ensureFavor(c.env.DB, brigade.village_id, session.teamId);
+  await c.env.DB.prepare(
+    `UPDATE village_team_favor
+     SET favor = MIN(100, favor + ?), last_interaction_at = ?, updated_at = ?
+     WHERE team_id = ? AND official_id IS NULL`
+  ).bind(brigade.reward_favor, now, now, session.teamId).run();
+
+  if (brigade.offered_by_official_id) {
+    // Lazy seed per-official favor row pokud chybí
+    const exists = await c.env.DB.prepare(
+      "SELECT id FROM village_team_favor WHERE team_id = ? AND official_id = ?"
+    ).bind(session.teamId, brigade.offered_by_official_id).first<{ id: string }>();
+    if (!exists) {
+      await c.env.DB.prepare(
+        `INSERT INTO village_team_favor (id, village_id, team_id, official_id, favor, trust, last_interaction_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 50, ?, ?)`
+      ).bind(crypto.randomUUID(), brigade.village_id, session.teamId, brigade.offered_by_official_id,
+             50 + Math.round(brigade.reward_favor * 1.5), now, now).run();
+    } else {
+      await c.env.DB.prepare(
+        `UPDATE village_team_favor
+         SET favor = MIN(100, favor + ?), last_interaction_at = ?, updated_at = ?
+         WHERE id = ?`
+      ).bind(Math.round(brigade.reward_favor * 1.5), now, now, exists.id).run();
+    }
+  }
+
+  // History audit
+  const teamName = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
+    .bind(session.teamId).first<{ name: string }>();
+  const desc = `${teamName?.name ?? "Tým"} odpracoval brigádu „${brigade.title}" (+${brigade.reward_money} Kč, +${brigade.reward_favor} přízeň).`;
+  await c.env.DB.prepare(
+    `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
+     VALUES (?, ?, ?, ?, 'brigade_completed', ?, ?, ?, ?)`
+  ).bind(
+    crypto.randomUUID(), brigade.village_id, session.teamId, brigade.offered_by_official_id,
+    desc, JSON.stringify({ rewardMoney: brigade.reward_money, rewardFavor: brigade.reward_favor }),
+    gameDate, now,
+  ).run().catch((e) => logger.warn({ module: "villages" }, "insert history", e));
+
+  return c.json({
+    ok: true,
+    rewardMoney: brigade.reward_money,
+    rewardFavor: brigade.reward_favor,
+    conditionDrain: brigade.condition_drain,
+    moraleChange: brigade.morale_change,
+  });
+});
+
 // GET /api/villages/:id/feed?limit=20 — historie napříč všemi týmy (transparency)
 villagesRouter.get("/:id/feed", async (c) => {
   const villageId = c.req.param("id");

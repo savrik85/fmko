@@ -68,6 +68,21 @@ export async function executeDailyTick(
     "DELETE FROM condition_log WHERE created_at < datetime('now', '-60 days')",
   ).run().catch((e) => logger.warn({ module: "daily-tick" }, "condition_log retention", e));
 
+  // ── Týdenní cyklus obce: vyprší staré brigády a v pondělí se generují nové ──
+  try {
+    const { expireOldBrigades, generateWeeklyBrigades } = await import("./village-processor");
+    const expired = await expireOldBrigades(env.DB, effectiveDate.toISOString());
+    if (expired > 0) {
+      logger.info({ module: "daily-tick" }, `${expired} brigád vypršelo`);
+    }
+    if (dayOfWeek === 1) {
+      const { generated, skipped } = await generateWeeklyBrigades(env.DB, effectiveDate.toISOString());
+      logger.info({ module: "daily-tick" }, `brigády: ${generated} nových, ${skipped} obcí přeskočeno`);
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "village brigade cycle failed", e);
+  }
+
   // ── Training (Mon-Fri, if plan is set) ──
   const teams = await env.DB.prepare(
     "SELECT id, training_type, training_approach, training_sessions FROM teams WHERE user_id != 'ai'"
