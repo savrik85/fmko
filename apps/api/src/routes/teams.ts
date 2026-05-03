@@ -2835,7 +2835,7 @@ teamsRouter.get("/:id/fanbase", async (c) => {
 
   const homeRow = await c.env.DB.prepare(
     `SELECT v.id as village_id, v.name as village_name, v.population, v.size, v.district, v.lat, v.lng,
-            t.reputation
+            t.reputation, t.game_date
      FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`,
   )
     .bind(teamId)
@@ -2848,6 +2848,7 @@ teamsRouter.get("/:id/fanbase", async (c) => {
       lat: number;
       lng: number;
       reputation: number;
+      game_date: string | null;
     }>()
     .catch((e) => {
       logger.warn({ module: "teams" }, "load home village", e);
@@ -2910,7 +2911,9 @@ teamsRouter.get("/:id/fanbase", async (c) => {
   });
 
   const { regionalPopulation } = await loadRegionalPopulation(c.env.DB, teamId);
-  const expected = expectedAttendance(agg, homeRow.population, regionalPopulation);
+  // Seed = teamId + gameDate → stabilní odhad pro daný den, refresh nezpůsobí změnu
+  const seedKey = `${teamId}:${homeRow.game_date ?? "noday"}`;
+  const expected = expectedAttendance(agg, homeRow.population, regionalPopulation, seedKey);
   const ha = homeAdvantageFromFanbase(agg, expected.total, capacity);
 
   return c.json({

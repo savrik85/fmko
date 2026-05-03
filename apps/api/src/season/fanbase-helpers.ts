@@ -29,8 +29,28 @@ export function haversineKm(
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-function rngBetween(min: number, max: number): number {
-  return min + Math.random() * (max - min);
+function rngBetween(min: number, max: number, rng: () => number = Math.random): number {
+  return min + rng() * (max - min);
+}
+
+// Deterministický seedovaný RNG (mulberry32) — stejný seed → stejný výsledek.
+function createSeededRng(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = Math.imul(t + Math.imul(t ^ (t >>> 7), 61 | t), 99) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hashStringToSeed(s: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
 }
 
 /**
@@ -213,6 +233,7 @@ export function expectedAttendance(
   agg: FanbaseAggregate,
   homePopulation: number = 0,
   regionalPopulation: number = 0,
+  seedKey: string | null = null,
 ): {
   hardcore: number;
   regular: number;
@@ -222,11 +243,15 @@ export function expectedAttendance(
   walkUpRegional: number;
   total: number;
 } {
+  // Pokud je dán seedKey (např. teamId + gameDate), použijeme deterministický RNG.
+  // Tj. UI zobrazuje stabilní odhad pro daný den; mění se až další gamedate.
+  const rng = seedKey ? createSeededRng(hashStringToSeed(seedKey)) : Math.random;
   const hardcoreAtt = Math.round(
     agg.hardcore *
       rngBetween(
         FANBASE_CONFIG.ATTENDANCE_RATE.hardcore.min,
         FANBASE_CONFIG.ATTENDANCE_RATE.hardcore.max,
+        rng,
       ),
   );
   const regularAtt = Math.round(
@@ -234,6 +259,7 @@ export function expectedAttendance(
       rngBetween(
         FANBASE_CONFIG.ATTENDANCE_RATE.regular.min,
         FANBASE_CONFIG.ATTENDANCE_RATE.regular.max,
+        rng,
       ),
   );
   const casualAtt = Math.round(
@@ -241,21 +267,20 @@ export function expectedAttendance(
       rngBetween(
         FANBASE_CONFIG.ATTENDANCE_RATE.casual.min,
         FANBASE_CONFIG.ATTENDANCE_RATE.casual.max,
+        rng,
       ),
   );
-  // Walk-up "z vesnice" — pro vesnice (≤300 obyv.) vyšší rate (víkendová zábava
-  // skoro pro každého), pro města nižší rate plus effective populace cap.
   const isVillage = homePopulation <= FANBASE_CONFIG.VILLAGE_POP_THRESHOLD;
   const homeRate = isVillage
-    ? rngBetween(FANBASE_CONFIG.WALK_UP_HOME_VILLAGE.min, FANBASE_CONFIG.WALK_UP_HOME_VILLAGE.max)
-    : rngBetween(FANBASE_CONFIG.WALK_UP_HOME_TOWN.min, FANBASE_CONFIG.WALK_UP_HOME_TOWN.max);
+    ? rngBetween(FANBASE_CONFIG.WALK_UP_HOME_VILLAGE.min, FANBASE_CONFIG.WALK_UP_HOME_VILLAGE.max, rng)
+    : rngBetween(FANBASE_CONFIG.WALK_UP_HOME_TOWN.min, FANBASE_CONFIG.WALK_UP_HOME_TOWN.max, rng);
   const walkUpHome = Math.round(effectivePopulation(homePopulation) * homeRate);
-  // Walk-up "z okolí" — taky cap, jinak velká pražská čtvrť hraje proti všem 50k+ obyvatelům
   const walkUpRegional = Math.round(
     effectivePopulation(regionalPopulation) *
       rngBetween(
         FANBASE_CONFIG.WALK_UP_REGIONAL.min,
         FANBASE_CONFIG.WALK_UP_REGIONAL.max,
+        rng,
       ),
   );
   const walkUp = walkUpHome + walkUpRegional;
