@@ -79,6 +79,93 @@ villagesRouter.get("/stats", async (c) => {
   return c.json({ villageCounts, districtCounts, regionCounts, fullDistricts });
 });
 
+// ── Routes co MUSÍ být PŘED /:id katchall (jinak je Hono matchne jako village id) ──
+
+// GET /api/villages/upcoming-match?teamId=X — nejbližší domácí zápas + slot stav officials
+villagesRouter.get("/upcoming-match", async (c) => {
+  const teamId = c.req.query("teamId");
+  if (!teamId) return c.json({ error: "teamId required" }, 400);
+
+  const team = await c.env.DB.prepare(
+    "SELECT village_id FROM teams WHERE id = ?"
+  ).bind(teamId).first<{ village_id: string }>();
+  if (!team) return c.json({ error: "Team not found" }, 404);
+
+  const match = await c.env.DB.prepare(
+    `SELECT m.id, m.home_team_id, m.away_team_id, m.calendar_id, m.status,
+            sc.scheduled_at, ah.name as home_name, aw.name as away_name
+     FROM matches m
+     LEFT JOIN season_calendar sc ON sc.id = m.calendar_id
+     LEFT JOIN teams ah ON ah.id = m.home_team_id
+     LEFT JOIN teams aw ON aw.id = m.away_team_id
+     WHERE m.home_team_id = ? AND m.status != 'simulated'
+       AND sc.scheduled_at >= date('now', '-1 day')
+     ORDER BY sc.scheduled_at ASC LIMIT 1`
+  ).bind(teamId).first<{
+    id: string; home_team_id: string; away_team_id: string;
+    calendar_id: string | null; status: string; scheduled_at: string | null;
+    home_name: string; away_name: string;
+  }>();
+
+  if (!match || !match.scheduled_at) {
+    return c.json({ match: null, officials: [], myInvitations: [] });
+  }
+  const matchDay = match.scheduled_at.slice(0, 10);
+  const officials = await c.env.DB.prepare(
+    `SELECT vo.id, vo.first_name, vo.last_name, vo.role, vo.personality,
+            COALESCE(vtf.favor, 50) as favor,
+            (SELECT vi.team_id FROM village_invitations vi
+             WHERE vi.official_id = vo.id AND vi.match_day = ?
+               AND vi.status IN ('accepted','attended') LIMIT 1) as slot_taken_by,
+            (SELECT t.name FROM village_invitations vi
+             JOIN teams t ON t.id = vi.team_id
+             WHERE vi.official_id = vo.id AND vi.match_day = ?
+               AND vi.status IN ('accepted','attended') LIMIT 1) as slot_taken_by_name
+     FROM village_officials vo
+     LEFT JOIN village_team_favor vtf ON vtf.official_id = vo.id AND vtf.team_id = ?
+     WHERE vo.village_id = ?
+     ORDER BY vo.role`
+  ).bind(matchDay, matchDay, teamId, team.village_id).all();
+  const myInvitations = await c.env.DB.prepare(
+    `SELECT id, official_id, status, gift_cost, attendance_effects, created_at
+     FROM village_invitations WHERE match_id = ? AND team_id = ?
+     ORDER BY created_at`
+  ).bind(match.id, teamId).all();
+  return c.json({
+    match: { id: match.id, scheduled_at: match.scheduled_at, home_name: match.home_name, away_name: match.away_name },
+    officials: officials.results ?? [],
+    myInvitations: myInvitations.results ?? [],
+  });
+});
+
+// GET /api/villages/petitions?teamId=X — aktivní petice pro tým
+villagesRouter.get("/petitions", async (c) => {
+  const teamId = c.req.query("teamId");
+  if (!teamId) return c.json({ error: "teamId required" }, 400);
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM village_petitions WHERE team_id = ? AND status = 'active'
+     ORDER BY expires_at ASC`
+  ).bind(teamId).all();
+  return c.json(rows.results ?? []);
+});
+
+// GET /api/villages/invitations?matchId=X — list pozvánek pro daný zápas
+villagesRouter.get("/invitations", async (c) => {
+  const matchId = c.req.query("matchId");
+  if (!matchId) return c.json({ error: "matchId required" }, 400);
+  const rows = await c.env.DB.prepare(
+    `SELECT vi.*, (vo.first_name || ' ' || vo.last_name) as official_name,
+            vo.role as official_role, t.name as inviting_team_name
+     FROM village_invitations vi
+     JOIN village_officials vo ON vo.id = vi.official_id
+     JOIN teams t ON t.id = vi.team_id
+     WHERE vi.match_id = ? ORDER BY vi.created_at`
+  ).bind(matchId).all();
+  return c.json(rows.results ?? []);
+});
+
+// ── /:id (musí být po static GET routes výše) ─────────────────────────────
+
 // GET /api/villages/:id — detail
 villagesRouter.get("/:id", async (c) => {
   const id = c.req.param("id");
@@ -435,18 +522,7 @@ villagesRouter.get("/:id/feed", async (c) => {
   return c.json(rows.results ?? []);
 });
 
-// ── Petice občanů (Sprint C+) ────────────────────────────────────────────
-
-// GET /api/villages/petitions?teamId=X — aktivní petice pro tým
-villagesRouter.get("/petitions", async (c) => {
-  const teamId = c.req.query("teamId");
-  if (!teamId) return c.json({ error: "teamId required" }, 400);
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM village_petitions WHERE team_id = ? AND status = 'active'
-     ORDER BY expires_at ASC`
-  ).bind(teamId).all();
-  return c.json(rows.results ?? []);
-});
+// ── Petice občanů (Sprint C+) — POST endpoint (GET je nahoře před /:id) ──
 
 // POST /api/villages/petitions/:id/respond — accept | ignore
 villagesRouter.post("/petitions/:petitionId/respond", requireAuth, async (c) => {
@@ -543,100 +619,6 @@ villagesRouter.post("/petitions/:petitionId/respond", requireAuth, async (c) => 
   return c.json({ ok: true, action: "ignore", penaltyFavor: petition.ignore_penalty });
 });
 
-// ── Pozvánky představitelů na zápas (Sprint C) ───────────────────────────
-
-// GET /api/villages/upcoming-match?teamId=X — nejbližší domácí zápas + slot stav officials
-villagesRouter.get("/upcoming-match", async (c) => {
-  const teamId = c.req.query("teamId");
-  if (!teamId) return c.json({ error: "teamId required" }, 400);
-
-  const team = await c.env.DB.prepare(
-    "SELECT village_id FROM teams WHERE id = ?"
-  ).bind(teamId).first<{ village_id: string }>();
-  if (!team) return c.json({ error: "Team not found" }, 404);
-
-  // Nejbližší nehraný domácí zápas (dnes nebo později)
-  const match = await c.env.DB.prepare(
-    `SELECT m.id, m.home_team_id, m.away_team_id, m.calendar_id, m.status,
-            sc.scheduled_at, ah.name as home_name, aw.name as away_name
-     FROM matches m
-     LEFT JOIN season_calendar sc ON sc.id = m.calendar_id
-     LEFT JOIN teams ah ON ah.id = m.home_team_id
-     LEFT JOIN teams aw ON aw.id = m.away_team_id
-     WHERE m.home_team_id = ? AND m.status != 'simulated'
-       AND sc.scheduled_at >= date('now', '-1 day')
-     ORDER BY sc.scheduled_at ASC LIMIT 1`
-  ).bind(teamId).first<{
-    id: string; home_team_id: string; away_team_id: string;
-    calendar_id: string | null; status: string; scheduled_at: string | null;
-    home_name: string; away_name: string;
-  }>();
-
-  if (!match || !match.scheduled_at) {
-    return c.json({ match: null, officials: [], myInvitations: [] });
-  }
-
-  const matchDay = match.scheduled_at.slice(0, 10);
-
-  // Officials + slot status pro tento matchday
-  const officials = await c.env.DB.prepare(
-    `SELECT vo.id, vo.first_name, vo.last_name, vo.role, vo.personality,
-            COALESCE(vtf.favor, 50) as favor,
-            (SELECT vi.team_id FROM village_invitations vi
-             WHERE vi.official_id = vo.id AND vi.match_day = ?
-               AND vi.status IN ('accepted','attended')
-             LIMIT 1) as slot_taken_by,
-            (SELECT t.name FROM village_invitations vi
-             JOIN teams t ON t.id = vi.team_id
-             WHERE vi.official_id = vo.id AND vi.match_day = ?
-               AND vi.status IN ('accepted','attended')
-             LIMIT 1) as slot_taken_by_name
-     FROM village_officials vo
-     LEFT JOIN village_team_favor vtf ON vtf.official_id = vo.id AND vtf.team_id = ?
-     WHERE vo.village_id = ?
-     ORDER BY vo.role`
-  ).bind(matchDay, matchDay, teamId, team.village_id).all();
-
-  // Moje pozvánky pro tento zápas (i declined)
-  const myInvitations = await c.env.DB.prepare(
-    `SELECT id, official_id, status, gift_cost, attendance_effects, created_at
-     FROM village_invitations
-     WHERE match_id = ? AND team_id = ?
-     ORDER BY created_at`
-  ).bind(match.id, teamId).all();
-
-  return c.json({
-    match: {
-      id: match.id,
-      scheduled_at: match.scheduled_at,
-      home_name: match.home_name,
-      away_name: match.away_name,
-    },
-    officials: officials.results ?? [],
-    myInvitations: myInvitations.results ?? [],
-  });
-});
-
-
-
-// GET /api/villages/invitations?matchId=X — list pozvánek pro daný zápas
-villagesRouter.get("/invitations", async (c) => {
-  const matchId = c.req.query("matchId");
-  if (!matchId) return c.json({ error: "matchId required" }, 400);
-
-  const rows = await c.env.DB.prepare(
-    `SELECT vi.*,
-            (vo.first_name || ' ' || vo.last_name) as official_name,
-            vo.role as official_role,
-            t.name as inviting_team_name
-     FROM village_invitations vi
-     JOIN village_officials vo ON vo.id = vi.official_id
-     JOIN teams t ON t.id = vi.team_id
-     WHERE vi.match_id = ?
-     ORDER BY vi.created_at`
-  ).bind(matchId).all();
-  return c.json(rows.results ?? []);
-});
 
 // POST /api/villages/invitations — pozvi NPC na zápas
 villagesRouter.post("/invitations", requireAuth, async (c) => {
