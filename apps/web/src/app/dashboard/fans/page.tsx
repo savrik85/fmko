@@ -598,6 +598,30 @@ export default function FansPage() {
           </div>
         </div>
 
+        {/* Breakdown očekávané návštěvy */}
+        {(() => {
+          const eb = fanbase.expectedBreakdown;
+          const tierAtt = eb.hardcore + eb.regular + eb.casual;
+          return (
+            <div className="mt-3 pt-3 border-t border-gray-100 text-[11px] text-muted">
+              <div className="font-heading font-bold text-[10px] uppercase tracking-wide text-muted/70 mb-1">
+                Z čeho se očekávaná návštěva skládá
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mb-2">
+                <span>Stálí fanoušci (z {fanbase.totalLoyal} přijde)</span>
+                <span className="text-right tabular-nums">{tierAtt}</span>
+                <span>Lidi z vesnice ({fanbase.homeVillage.name})</span>
+                <span className="text-right tabular-nums">{eb.walkUp - Math.max(0, eb.walkUp - Math.round(fanbase.homeVillage.population * 0.075))}</span>
+                <span>Lidi z okolí (do 5 km)</span>
+                <span className="text-right tabular-nums">{Math.max(0, eb.walkUp - Math.round(fanbase.homeVillage.population * 0.075))}</span>
+              </div>
+              <div className="italic">
+                Stálí jsou tví registrovaní — znáš je jménem, reagují na výsledky, rostou s tvými akcemi. Zbytek jsou anonymní vesničané a lidi z okolí, co prostě přijdou na zápas.
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="mt-2 text-[11px] text-muted text-center">
           {fanbase.homeVillage.name} ({fanbase.homeVillage.population.toLocaleString("cs")} obyv.) · kapacita {fanbase.capacity}
         </div>
