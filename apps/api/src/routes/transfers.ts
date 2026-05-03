@@ -444,6 +444,14 @@ transfersRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
       .bind(crypto.randomUUID(), teamId, amount, (seller?.budget ?? 0) + amount, `Prodej: ${playerName}`, gameDate),
   ]).catch((e) => logger.warn({ module: "transfers" }, "log bid-accept transactions", e));
 
+  // Náš odchovanec — pokud byl prodaný hráč rodákem, přízeň obce klesne.
+  try {
+    const { applyLocalSale } = await import("../season/village-processor");
+    await applyLocalSale(c.env.DB, teamId, playerId, gameDate);
+  } catch (e) {
+    logger.warn({ module: "transfers" }, "local sale hook (bid)", e);
+  }
+
   // Contracts (non-critical, po přesunu)
   await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
     .bind(playerId, teamId).run().catch((e) => logger.warn({ module: "transfers" }, "deactivate seller contract on bid accept", e));
@@ -628,6 +636,14 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_income', ?, ?, ?, ?)")
       .bind(crypto.randomUUID(), sellerTeamId, amount, (seller?.budget ?? 0) + amount, `Prodej: ${playerName}`, gameDate),
   ]).catch((e) => logger.warn({ module: "transfers" }, "log offer-accept transactions", e));
+
+  // Náš odchovanec — místní hráč prodán = přízeň obce klesne.
+  try {
+    const { applyLocalSale } = await import("../season/village-processor");
+    await applyLocalSale(c.env.DB, sellerTeamId, playerId, gameDate);
+  } catch (e) {
+    logger.warn({ module: "transfers" }, "local sale hook (offer)", e);
+  }
 
   // Contracts (non-critical)
   await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1")

@@ -185,6 +185,85 @@ export async function applyLocalSensations(
   });
 }
 
+/**
+ * Pokud byl prodaný hráč rodákem z obce týmu, sníží se globální favor
+ * a sportovec persona zatratí prodej (-10 favor), zatímco podnikatel
+ * vidí finance (+5).
+ */
+export async function applyLocalSale(
+  db: D1Database,
+  sellerTeamId: string,
+  playerId: string,
+  gameDate: string,
+): Promise<void> {
+  const team = await db.prepare(
+    `SELECT t.village_id, v.name as village_name FROM teams t
+     JOIN villages v ON v.id = t.village_id WHERE t.id = ?`
+  ).bind(sellerTeamId).first<{ village_id: string; village_name: string }>();
+  if (!team) return;
+
+  const player = await db.prepare(
+    `SELECT first_name, last_name, residence, overall_rating FROM players WHERE id = ?`
+  ).bind(playerId).first<{
+    first_name: string; last_name: string; residence: string | null; overall_rating: number;
+  }>();
+  if (!player || player.residence !== team.village_name) return;
+
+  const isStar = player.overall_rating >= 65;
+  const now = new Date().toISOString();
+
+  // Globální favor penalty
+  const globalDelta = isStar ? -10 : -3;
+  await db.prepare(
+    `UPDATE village_team_favor SET favor = MAX(0, favor + ?), updated_at = ?
+     WHERE team_id = ? AND official_id IS NULL`
+  ).bind(globalDelta, now, sellerTeamId).run().catch((e) => {
+    logger.warn({ module: "village-processor" }, "local sale global favor", e);
+  });
+
+  // Per-persona reakce
+  const officials = await db.prepare(
+    `SELECT vo.id, vo.personality FROM village_officials vo
+     LEFT JOIN village_team_favor vtf ON vtf.official_id = vo.id AND vtf.team_id = ?
+     WHERE vo.village_id = ?`
+  ).bind(sellerTeamId, team.village_id).all<{ id: string; personality: string }>();
+
+  for (const o of officials.results ?? []) {
+    let delta = 0;
+    if (o.personality === "sportovec") delta = isStar ? -10 : -4;
+    else if (o.personality === "podnikatel") delta = isStar ? 5 : 2;
+    else if (o.personality === "tradicionalista") delta = isStar ? -8 : -3;
+    else delta = isStar ? -3 : -1;
+
+    const fav = await db.prepare(
+      `SELECT id FROM village_team_favor WHERE team_id = ? AND official_id = ?`
+    ).bind(sellerTeamId, o.id).first<{ id: string }>();
+    if (fav) {
+      await db.prepare(
+        `UPDATE village_team_favor SET favor = MAX(0, MIN(100, favor + ?)),
+         updated_at = ? WHERE id = ?`
+      ).bind(delta, now, fav.id).run();
+    } else {
+      await db.prepare(
+        `INSERT INTO village_team_favor (id, village_id, team_id, official_id, favor, trust, updated_at)
+         VALUES (?, ?, ?, ?, ?, 50, ?)`
+      ).bind(crypto.randomUUID(), team.village_id, sellerTeamId, o.id, 50 + delta, now).run();
+    }
+  }
+
+  const desc = isStar
+    ? `Klub prodal místního ${player.first_name} ${player.last_name} (rating ${player.overall_rating}). Občané jsou v šoku.`
+    : `Klub prodal místního ${player.first_name} ${player.last_name}.`;
+  await db.prepare(
+    `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
+     VALUES (?, ?, ?, NULL, 'local_player_sold', ?, ?, ?, ?)`
+  ).bind(
+    crypto.randomUUID(), team.village_id, sellerTeamId, desc,
+    JSON.stringify({ playerId, rating: player.overall_rating, isStar }),
+    gameDate, now,
+  ).run().catch((e) => logger.warn({ module: "village-processor" }, "local sale history", e));
+}
+
 /** Mapuje village.size na počet brigád za týden. */
 function brigadesPerWeek(size: string): number {
   switch (size) {
