@@ -359,18 +359,41 @@ export async function runScheduledMatches(
       await applyManagerBonus(homeTeamId, homeLineup, homeSubs);
       await applyManagerBonus(awayTeamId, awayLineup, awaySubs);
 
+      // Pozvaní zastupitelé domácího týmu zvyšují homeAdvantage a attendance
+      const acceptedOfficials = await db.prepare(
+        `SELECT COUNT(*) as cnt FROM village_invitations
+         WHERE match_id = ? AND team_id = ? AND status IN ('accepted','attended')`
+      ).bind(matchId, homeTeamId).first<{ cnt: number }>().catch((e) => {
+        logger.warn({ module: "match-runner" }, "load accepted officials", e);
+        return null;
+      });
+      const officialCount = acceptedOfficials?.cnt ?? 0;
+      const homeAdvantage = Math.min(0.10, 0.05 + officialCount * 0.015);
+      const attendanceWithOfficials = (attendance ?? 0) + officialCount * 50;
+
       // Simulate
       const result = simulateMatch(rng, {
         home: homeSetup,
         away: awaySetup,
         weather,
         isHomeAdvantage: true,
+        homeAdvantage,
         pitchCondition,
         stadiumName: stadiumName ?? undefined,
-        attendance,
+        attendance: attendanceWithOfficials,
         homeEquipment,
         awayEquipment,
       });
+
+      // Označit pozvánky jako attended
+      if (officialCount > 0) {
+        await db.prepare(
+          `UPDATE village_invitations SET status = 'attended'
+           WHERE match_id = ? AND team_id = ? AND status = 'accepted'`
+        ).bind(matchId, homeTeamId).run().catch((e) => {
+          logger.warn({ module: "match-runner" }, "mark invitations attended", e);
+        });
+      }
 
       // Load commentary templates from DB + generate
       await loadCommentaryFromDB(db);

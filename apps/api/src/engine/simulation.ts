@@ -63,16 +63,15 @@ const WEATHER_MODS: Record<Weather, { techniqueMod: number; longBallBonus: numbe
 /**
  * Calculate possession probability for home team (0–1).
  */
-function calcPossession(home: TeamSetup, away: TeamSetup, isHomeAdvantage: boolean): number {
+function calcPossession(home: TeamSetup, away: TeamSetup, homeAdvantage: number): number {
   const homeMid = teamAvg(home.lineup.filter((p) => p.position === "MID"), "technique")
     + teamAvg(home.lineup.filter((p) => p.position === "MID"), "passing");
   const awayMid = teamAvg(away.lineup.filter((p) => p.position === "MID"), "technique")
     + teamAvg(away.lineup.filter((p) => p.position === "MID"), "passing");
 
-  const homeBonus = isHomeAdvantage ? 0.05 : 0;
   const total = homeMid + awayMid;
   if (total === 0) return 0.5;
-  return Math.min(0.7, Math.max(0.3, (homeMid / total) + homeBonus));
+  return Math.min(0.7, Math.max(0.3, (homeMid / total) + homeAdvantage));
 }
 
 /**
@@ -266,6 +265,7 @@ function getPositionPenalty(natural: Pos, playing: Pos): PosPenalty {
  */
 export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   const { home, away, weather, isHomeAdvantage } = config;
+  const homeAdvantage = config.homeAdvantage ?? (isHomeAdvantage ? 0.05 : 0);
   const events: MatchEvent[] = [];
   let homeScore = 0;
   let awayScore = 0;
@@ -373,7 +373,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   // Minute-by-minute simulation
   for (let minute = 1; minute <= 90; minute++) {
     // Determine possession
-    const homePoss = calcPossession(home, away, isHomeAdvantage);
+    const homePoss = calcPossession(home, away, homeAdvantage);
     homePossSum += homePoss;
     const isHomePossession = rng.random() < homePoss;
     const attacking = isHomePossession ? home : away;

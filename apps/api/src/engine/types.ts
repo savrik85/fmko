@@ -71,6 +71,9 @@ export interface MatchConfig {
   away: TeamSetup;
   weather: Weather;
   isHomeAdvantage: boolean;
+  /** Možnost přepsat sílu domácí výhody (0–0.10). Když není nastaveno,
+   *  použije se 0.05 pokud isHomeAdvantage, jinak 0. */
+  homeAdvantage?: number;
   pitchCondition?: number; // 0-100, affects injury probability
   stadiumName?: string;
   attendance?: number;

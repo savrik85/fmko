@@ -98,6 +98,32 @@ interface RosterPlayer {
   status: string | null;
 }
 
+interface UpcomingMatch {
+  match: {
+    id: string;
+    scheduled_at: string;
+    home_name: string;
+    away_name: string;
+  } | null;
+  officials: Array<{
+    id: string;
+    first_name: string;
+    last_name: string;
+    role: string;
+    personality: string;
+    favor: number;
+    slot_taken_by: string | null;
+    slot_taken_by_name: string | null;
+  }>;
+  myInvitations: Array<{
+    id: string;
+    official_id: string;
+    status: "sent" | "accepted" | "declined" | "attended";
+    gift_cost: number;
+    attendance_effects: string | null;
+  }>;
+}
+
 const ROLE_LABEL: Record<OfficialRole, string> = {
   starosta: "Starosta",
   mistostarosta: "Místostarosta",
@@ -177,6 +203,8 @@ export default function ObecPage() {
   const [teams, setTeams] = useState<VillageTeam[]>([]);
   const [feed, setFeed] = useState<FeedEvent[]>([]);
   const [brigades, setBrigades] = useState<Brigade[]>([]);
+  const [upcoming, setUpcoming] = useState<UpcomingMatch | null>(null);
+  const [invitingOfficialId, setInvitingOfficialId] = useState<string | null>(null);
   const [villageId, setVillageId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -184,15 +212,42 @@ export default function ObecPage() {
 
   const refresh = async (vid: string) => {
     if (!teamId) return;
-    const [v, o, f, ts, fd, bg] = await Promise.all([
+    const [v, o, f, ts, fd, bg, up] = await Promise.all([
       apiFetch<VillageDetail>(`/api/villages/${vid}`),
       apiFetch<Official[]>(`/api/villages/${vid}/officials`),
       apiFetch<Favor>(`/api/villages/${vid}/favor?teamId=${teamId}`),
       apiFetch<VillageTeam[]>(`/api/villages/${vid}/teams`),
       apiFetch<FeedEvent[]>(`/api/villages/${vid}/feed?limit=20`),
       apiFetch<Brigade[]>(`/api/villages/${vid}/brigades`),
+      apiFetch<UpcomingMatch>(`/api/villages/upcoming-match?teamId=${teamId}`),
     ]);
     setVillage(v); setOfficials(o); setFavor(f); setTeams(ts); setFeed(fd); setBrigades(bg);
+    setUpcoming(up);
+  };
+
+  const handleInvite = async (officialId: string) => {
+    if (!upcoming?.match || invitingOfficialId) return;
+    setInvitingOfficialId(officialId);
+    try {
+      const res = await apiFetch<{ status: string; giftCost: number; officialName: string; probability: number }>(
+        `/api/villages/invitations`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ matchId: upcoming.match.id, officialId }),
+        },
+      );
+      const msg = res.status === "accepted"
+        ? `${res.officialName} pozvánku přijal! (cena ${res.giftCost} Kč)`
+        : `${res.officialName} pozvánku odmítl. (cena ${res.giftCost} Kč přesto zaplacena)`;
+      alert(msg);
+      if (villageId) await refresh(villageId);
+    } catch (e: unknown) {
+      const m = e instanceof Error ? e.message : "Chyba";
+      alert(`Nepodařilo se: ${m}`);
+    } finally {
+      setInvitingOfficialId(null);
+    }
   };
 
   useEffect(() => {
@@ -293,6 +348,62 @@ export default function ObecPage() {
           })}
         </div>
       </div>
+
+      {/* Pozvánky na zápas */}
+      {upcoming?.match && (
+        <Card>
+          <CardHeader>
+            <SectionLabel>Pozvi zastupitele na zápas</SectionLabel>
+            <div className="text-xs text-gray-500 mt-1">
+              {upcoming.match.home_name} vs {upcoming.match.away_name} · {new Date(upcoming.match.scheduled_at).toLocaleString("cs", { weekday: "short", day: "numeric", month: "numeric" })}
+              {" — "}přijetí pozvánky není zaručené, závisí na vztahu, povaze a tvém týmu. Cena dárku se platí vždy.
+            </div>
+          </CardHeader>
+          <CardBody>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {upcoming.officials.map((o) => {
+                const myInv = upcoming.myInvitations.find((i) => i.official_id === o.id);
+                const slotTakenByOther = o.slot_taken_by && o.slot_taken_by !== teamId;
+                const slotTakenByMe = o.slot_taken_by === teamId;
+                const giftCost = Math.max(300, 500 + (50 - o.favor) * 10);
+                const isInviting = invitingOfficialId === o.id;
+
+                let statusEl: React.ReactNode = null;
+                if (slotTakenByMe) {
+                  statusEl = <Badge>Přijal pozvání ✓</Badge>;
+                } else if (slotTakenByOther) {
+                  statusEl = <span className="text-xs text-gray-500">Pozván {o.slot_taken_by_name}</span>;
+                } else if (myInv?.status === "declined") {
+                  statusEl = <span className="text-xs text-card-red">Odmítl pozvání</span>;
+                }
+
+                return (
+                  <div key={o.id} className="border border-gray-200 rounded-lg p-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs uppercase tracking-wider text-gray-500">{ROLE_LABEL[o.role as OfficialRole]}</div>
+                      <div className="text-sm font-semibold truncate">{o.first_name} {o.last_name}</div>
+                      <div className="text-xs text-gray-500">přízeň {o.favor}/100 · {PERSONALITY_LABEL[o.personality as Personality]}</div>
+                    </div>
+                    <div className="text-right shrink-0 space-y-1">
+                      {statusEl ?? (
+                        <>
+                          <Button
+                            size="sm"
+                            disabled={isInviting || !!myInv}
+                            onClick={() => handleInvite(o.id)}
+                          >
+                            {isInviting ? "..." : myInv ? "Pozváno" : `Pozvat (${giftCost} Kč)`}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Brigády */}
       <Card>
