@@ -1,0 +1,96 @@
+// Konfigurace tier-based fanouškovské základny: cofficienty pro home advantage,
+// příchodnost na zápasy, podmínky promote mezi tiery, konverze přes autobus
+// a propagaci.
+
+export const FANBASE_CONFIG = {
+  // Per-tier příchodnost na zápasy (jak velké procento z tieru reálně přijde)
+  ATTENDANCE_RATE: {
+    hardcore: { min: 0.95, max: 1.0 },
+    regular: { min: 0.7, max: 0.9 },
+    casual: { min: 0.2, max: 0.5 },
+  },
+  // Home advantage modifier per fan (sčítá se do totalHA v match-runner)
+  HOME_ADVANTAGE_PER_FAN: {
+    hardcore: 0.04,
+    regular: 0.015,
+    casual: 0.005,
+  },
+  // Atmosphere bonus dle fill ratio
+  ATMOSPHERE: {
+    sellOutThreshold: 0.9,
+    sellOutBonus: 1.0,
+    emptyThreshold: 0.15,
+    emptyDebuff: -0.5,
+  },
+  // Tier promotion (loyalty progression) — počítají se home zápasy v řadě jako fan
+  PROMOTION: {
+    casualToRegular: { matchesNeeded: 4, conversionRate: 0.25 },
+    regularToHardcore: { matchesNeeded: 8, conversionRate: 0.15 },
+  },
+  // Loss streak penalty (5 prohier v řadě)
+  LOSS_STREAK_PENALTY: {
+    matchesNeeded: 5,
+    casualDecayRate: 0.3,
+    regularDecayRate: 0.1,
+  },
+  // Walk-up (drop-in mimo bus/promo) — random procento z totalLoyal
+  WALK_UP_RATE: { min: 0, max: 0.3 },
+} as const;
+
+export const BUS_CONFIG = {
+  MAX_DISTANCE_KM: 10,
+  SIZES: {
+    traktor: {
+      cost: 1200,
+      attendeesMin: 8,
+      attendeesMax: 12,
+      label: "Vlek za traktorem",
+      description: "Strejda Pepa zapřáhne starý vlek za zetor. Jede to pomalu, smrdí to naftou, ale levně a babičky to milují.",
+      icon: "🚜",
+    },
+    karosa: {
+      cost: 2000,
+      attendeesMin: 18,
+      attendeesMax: 25,
+      label: "Stará Karosa",
+      description: "Vyřazená z OAD v devadesátých. Drnčí, na kopcích řve, ale doveze 25 lidí v kuse.",
+      icon: "🚌",
+    },
+    autokar: {
+      cost: 3500,
+      attendeesMin: 30,
+      attendeesMax: 45,
+      label: "Pohodlný autokar",
+      description: "Klimatizace, čalouněná sedadla, dokonce i WC. Lidi se těší už cestou tam.",
+      icon: "🚍",
+    },
+  },
+  CONVERSION: {
+    THRESHOLD_3: { rate: 0.25, capPerVillage: 8 },
+    THRESHOLD_5: { rate: 0.15, capPerVillage: 15 },
+  },
+  STREAK_BREAK_AFTER: 3,
+  STREAK_BREAK_DECAY: 0.5,
+} as const;
+
+export const PROMO_CONVERSION = {
+  THRESHOLD_3: { rate: 0.3, cap: 10 },
+  THRESHOLD_6: { rate: 0.25, cap: 20 },
+  STREAK_BREAK_AFTER: 2,
+  STREAK_BREAK_DECAY: 0.5,
+  // PROMO_BOOST z matches.ts — copy pro konsistenci výpočtu drop-in
+  PROMO_ATTENDANCE_BOOST: 0.25,
+} as const;
+
+export type BusSize = keyof typeof BUS_CONFIG.SIZES;
+
+export interface TeamFanbaseRow {
+  team_id: string;
+  hardcore_count: number;
+  regular_count: number;
+  casual_count: number;
+  casual_to_regular_streak: number;
+  regular_to_hardcore_streak: number;
+  promo_consecutive_matches: number;
+  promo_unpromoted_streak: number;
+}

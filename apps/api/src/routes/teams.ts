@@ -2810,4 +2810,443 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
   });
 });
 
+// ─── Tier-based fanbase + Bus subsidies ─────────────────────────────────────
+
+import {
+  haversineKm,
+  loadOrInitFanbase,
+  expectedAttendance,
+  homeAdvantageFromFanbase,
+} from "../season/fanbase-helpers";
+import {
+  BUS_CONFIG,
+  FANBASE_CONFIG,
+  type BusSize,
+} from "../season/fanbase-config";
+import { recordTransaction } from "../season/finance-processor";
+
+// GET /api/teams/:id/fanbase — aktuální tier breakdown + spádové obce + promo stav
+teamsRouter.get("/:id/fanbase", async (c) => {
+  const teamId = c.req.param("id");
+
+  const fb = await loadOrInitFanbase(c.env.DB, teamId);
+
+  const homeRow = await c.env.DB.prepare(
+    `SELECT v.id as village_id, v.name as village_name, v.population, v.lat, v.lng,
+            t.reputation
+     FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`,
+  )
+    .bind(teamId)
+    .first<{
+      village_id: string;
+      village_name: string;
+      population: number;
+      lat: number;
+      lng: number;
+      reputation: number;
+    }>()
+    .catch((e) => {
+      logger.warn({ module: "teams" }, "load home village", e);
+      return null;
+    });
+
+  if (!homeRow) {
+    return c.json({ error: "Tým nenalezen" }, 404);
+  }
+
+  const stadiumRow = await c.env.DB.prepare(
+    "SELECT capacity FROM stadium WHERE team_id = ?",
+  )
+    .bind(teamId)
+    .first<{ capacity: number }>()
+    .catch((e) => {
+      logger.warn({ module: "teams" }, "load stadium capacity", e);
+      return null;
+    });
+  const capacity = stadiumRow?.capacity ?? 200;
+
+  const satelliteRows = await c.env.DB.prepare(
+    `SELECT bsf.village_id, v.name, v.population, v.lat, v.lng,
+            bsf.casual_count, bsf.regular_count, bsf.hardcore_count,
+            bsf.consecutive_buses
+     FROM bus_satellite_fans bsf
+     JOIN villages v ON bsf.village_id = v.id
+     WHERE bsf.team_id = ?`,
+  )
+    .bind(teamId)
+    .all<{
+      village_id: string;
+      name: string;
+      population: number;
+      lat: number;
+      lng: number;
+      casual_count: number;
+      regular_count: number;
+      hardcore_count: number;
+      consecutive_buses: number;
+    }>()
+    .catch((e) => {
+      logger.warn({ module: "teams" }, "load satellites", e);
+      return { results: [] as never[] };
+    });
+
+  const satellites = satelliteRows.results.map((r) => ({
+    villageId: r.village_id,
+    villageName: r.name,
+    population: r.population,
+    distanceKm: Number(
+      haversineKm(homeRow.lat, homeRow.lng, r.lat, r.lng).toFixed(2),
+    ),
+    casualCount: r.casual_count,
+    regularCount: r.regular_count,
+    hardcoreCount: r.hardcore_count,
+    consecutiveBuses: r.consecutive_buses,
+  }));
+
+  const expected = expectedAttendance(fb);
+  const ha = homeAdvantageFromFanbase(fb, expected.total, capacity);
+  const totalLoyal = fb.hardcore_count + fb.regular_count + fb.casual_count;
+
+  return c.json({
+    tiers: {
+      hardcore: fb.hardcore_count,
+      regular: fb.regular_count,
+      casual: fb.casual_count,
+    },
+    totalLoyal,
+    homeVillage: {
+      id: homeRow.village_id,
+      name: homeRow.village_name,
+      population: homeRow.population,
+    },
+    capacity,
+    reputation: homeRow.reputation,
+    satellites,
+    promo: {
+      consecutive: fb.promo_consecutive_matches,
+      unpromotedStreak: fb.promo_unpromoted_streak,
+      nextThreshold:
+        fb.promo_consecutive_matches < 3
+          ? 3
+          : fb.promo_consecutive_matches < 6
+            ? 6
+            : null,
+    },
+    progression: {
+      casualToRegularStreak: fb.casual_to_regular_streak,
+      casualToRegularNeeded:
+        FANBASE_CONFIG.PROMOTION.casualToRegular.matchesNeeded,
+      regularToHardcoreStreak: fb.regular_to_hardcore_streak,
+      regularToHardcoreNeeded:
+        FANBASE_CONFIG.PROMOTION.regularToHardcore.matchesNeeded,
+    },
+    expectedNextHomeAttendance: expected.total,
+    expectedBreakdown: {
+      hardcore: expected.hardcore,
+      regular: expected.regular,
+      casual: expected.casual,
+      walkUp: expected.walkUp,
+    },
+    homeAdvantageModifier: Number(ha.total.toFixed(3)),
+    homeAdvantageBreakdown: {
+      fromFans: Number(ha.fromFans.toFixed(3)),
+      atmosphere: ha.atmosphere,
+    },
+  });
+});
+
+// GET /api/teams/:id/fanbase/history?days=60 — pro sparkline
+teamsRouter.get("/:id/fanbase/history", async (c) => {
+  const teamId = c.req.param("id");
+  const days = Math.min(180, Math.max(7, Number(c.req.query("days") ?? 60)));
+
+  const rows = await c.env.DB.prepare(
+    `SELECT gamedate, hardcore_total, regular_total, casual_total, total_loyal,
+            reputation_at_time, satisfaction_at_time
+     FROM fanbase_snapshots WHERE team_id = ?
+     ORDER BY gamedate DESC LIMIT ?`,
+  )
+    .bind(teamId, days)
+    .all<{
+      gamedate: string;
+      hardcore_total: number;
+      regular_total: number;
+      casual_total: number;
+      total_loyal: number;
+      reputation_at_time: number;
+      satisfaction_at_time: number | null;
+    }>()
+    .catch((e) => {
+      logger.warn({ module: "teams" }, "load fanbase history", e);
+      return { results: [] as never[] };
+    });
+
+  return c.json({
+    history: rows.results.reverse().map((r) => ({
+      gamedate: r.gamedate,
+      hardcore: r.hardcore_total,
+      regular: r.regular_total,
+      casual: r.casual_total,
+      totalLoyal: r.total_loyal,
+      reputation: r.reputation_at_time,
+      satisfaction: r.satisfaction_at_time,
+    })),
+  });
+});
+
+// GET /api/teams/:id/villages-nearby — obce do 10 km z domácí obce
+teamsRouter.get("/:id/villages-nearby", async (c) => {
+  const teamId = c.req.param("id");
+
+  const homeRow = await c.env.DB.prepare(
+    `SELECT v.id as village_id, v.lat, v.lng, t.league_id
+     FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`,
+  )
+    .bind(teamId)
+    .first<{
+      village_id: string;
+      lat: number;
+      lng: number;
+      league_id: string | null;
+    }>()
+    .catch((e) => {
+      logger.warn({ module: "teams" }, "load home village for nearby", e);
+      return null;
+    });
+
+  if (!homeRow || homeRow.lat == null || homeRow.lng == null) {
+    return c.json({ villages: [] });
+  }
+
+  const latMin = homeRow.lat - 0.12;
+  const latMax = homeRow.lat + 0.12;
+  const lngMin = homeRow.lng - 0.18;
+  const lngMax = homeRow.lng + 0.18;
+
+  const candidates = await c.env.DB.prepare(
+    `SELECT v.id, v.name, v.population, v.lat, v.lng
+     FROM villages v
+     WHERE v.lat BETWEEN ? AND ?
+       AND v.lng BETWEEN ? AND ?
+       AND v.id != ?`,
+  )
+    .bind(latMin, latMax, lngMin, lngMax, homeRow.village_id)
+    .all<{
+      id: string;
+      name: string;
+      population: number;
+      lat: number;
+      lng: number;
+    }>()
+    .catch((e) => {
+      logger.warn({ module: "teams" }, "load nearby candidates", e);
+      return { results: [] as never[] };
+    });
+
+  const result = candidates.results
+    .map((v) => ({
+      id: v.id,
+      name: v.name,
+      population: v.population,
+      distanceKm: Number(
+        haversineKm(homeRow.lat, homeRow.lng, v.lat, v.lng).toFixed(2),
+      ),
+    }))
+    .filter((v) => v.distanceKm <= BUS_CONFIG.MAX_DISTANCE_KM)
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+
+  return c.json({ villages: result });
+});
+
+// POST /api/teams/:id/match/:mid/bus — objednat autobus pro home zápas
+teamsRouter.post("/:id/match/:mid/bus", async (c) => {
+  const teamId = c.req.param("id");
+  const matchId = c.req.param("mid");
+  const body = (await c.req.json().catch(() => ({}))) as {
+    sourceVillageId?: string;
+    busSize?: BusSize;
+  };
+  const sourceVillageId = body.sourceVillageId;
+  const busSize = body.busSize;
+
+  if (
+    !sourceVillageId ||
+    (busSize !== "traktor" && busSize !== "karosa" && busSize !== "autokar")
+  ) {
+    return c.json(
+      {
+        error:
+          "sourceVillageId a busSize (traktor|karosa|autokar) jsou povinné",
+      },
+      400,
+    );
+  }
+
+  const match = await c.env.DB.prepare(
+    `SELECT m.id, m.home_team_id, m.status, t.game_date
+     FROM matches m JOIN teams t ON m.home_team_id = t.id
+     WHERE m.id = ?`,
+  )
+    .bind(matchId)
+    .first<{
+      id: string;
+      home_team_id: string;
+      status: string;
+      game_date: string;
+    }>()
+    .catch((e) => {
+      logger.warn({ module: "teams" }, "load match for bus order", e);
+      return null;
+    });
+
+  if (!match) {
+    return c.json({ error: "Zápas nenalezen" }, 404);
+  }
+  if (match.home_team_id !== teamId) {
+    return c.json({ error: "Nejsi domácí tým" }, 403);
+  }
+  if (match.status !== "scheduled" && match.status !== "lineups_open") {
+    return c.json({ error: "Bus lze objednat jen pro nadcházející zápas" }, 409);
+  }
+
+  const homeVillage = await c.env.DB.prepare(
+    "SELECT v.lat, v.lng FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?",
+  )
+    .bind(teamId)
+    .first<{ lat: number; lng: number }>()
+    .catch((e) => {
+      logger.warn({ module: "teams" }, "load home village for bus", e);
+      return null;
+    });
+  const sourceVillage = await c.env.DB.prepare(
+    "SELECT lat, lng, name FROM villages WHERE id = ?",
+  )
+    .bind(sourceVillageId)
+    .first<{ lat: number; lng: number; name: string }>()
+    .catch((e) => {
+      logger.warn({ module: "teams" }, "load source village for bus", e);
+      return null;
+    });
+
+  if (
+    !homeVillage ||
+    !sourceVillage ||
+    homeVillage.lat == null ||
+    sourceVillage.lat == null
+  ) {
+    return c.json({ error: "Souřadnice obcí nejsou k dispozici" }, 400);
+  }
+  const distance = haversineKm(
+    homeVillage.lat,
+    homeVillage.lng,
+    sourceVillage.lat,
+    sourceVillage.lng,
+  );
+  if (distance > BUS_CONFIG.MAX_DISTANCE_KM) {
+    return c.json(
+      {
+        error: `Obec je ${distance.toFixed(1)} km daleko (max ${BUS_CONFIG.MAX_DISTANCE_KM} km)`,
+      },
+      400,
+    );
+  }
+
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM bus_subsidies WHERE team_id = ? AND match_id = ? AND source_village_id = ?",
+  )
+    .bind(teamId, matchId, sourceVillageId)
+    .first<{ id: string }>()
+    .catch((e) => {
+      logger.warn({ module: "teams" }, "check existing bus order", e);
+      return null;
+    });
+  if (existing) {
+    return c.json({ error: "Bus pro tuto obec a zápas je už objednaný" }, 409);
+  }
+
+  const cost = BUS_CONFIG.SIZES[busSize].cost;
+  const teamRow = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?")
+    .bind(teamId)
+    .first<{ budget: number }>();
+  if (!teamRow || teamRow.budget < cost) {
+    return c.json({ error: `Nedostatek prostředků (${cost} Kč)` }, 400);
+  }
+
+  await recordTransaction(
+    c.env.DB,
+    teamId,
+    "bus_subsidy",
+    -cost,
+    `${BUS_CONFIG.SIZES[busSize].label} z ${sourceVillage.name}`,
+    match.game_date,
+    matchId,
+  );
+
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO bus_subsidies (id, team_id, match_id, source_village_id, bus_size, cost)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(id, teamId, matchId, sourceVillageId, busSize, cost)
+    .run();
+
+  const satellite = await c.env.DB.prepare(
+    "SELECT casual_count, consecutive_buses FROM bus_satellite_fans WHERE team_id = ? AND village_id = ?",
+  )
+    .bind(teamId, sourceVillageId)
+    .first<{ casual_count: number; consecutive_buses: number }>()
+    .catch((e) => {
+      logger.warn({ module: "teams" }, "load satellite for bus response", e);
+      return null;
+    });
+
+  return c.json({
+    success: true,
+    cost,
+    busSize,
+    sourceVillage: sourceVillage.name,
+    distanceKm: Number(distance.toFixed(2)),
+    streakAfter: (satellite?.consecutive_buses ?? 0) + 1,
+    expectedAttendees: BUS_CONFIG.SIZES[busSize].attendeesMin,
+  });
+});
+
+// GET /api/teams/:id/match/:mid/bus — info o objednaných busech pro zápas
+teamsRouter.get("/:id/match/:mid/bus", async (c) => {
+  const teamId = c.req.param("id");
+  const matchId = c.req.param("mid");
+
+  const rows = await c.env.DB.prepare(
+    `SELECT bs.id, bs.bus_size, bs.cost, bs.attendees_brought,
+            bs.source_village_id, v.name as village_name
+     FROM bus_subsidies bs
+     JOIN villages v ON bs.source_village_id = v.id
+     WHERE bs.team_id = ? AND bs.match_id = ?`,
+  )
+    .bind(teamId, matchId)
+    .all<{
+      id: string;
+      bus_size: BusSize;
+      cost: number;
+      attendees_brought: number | null;
+      source_village_id: string;
+      village_name: string;
+    }>()
+    .catch((e) => {
+      logger.warn({ module: "teams" }, "load buses for match", e);
+      return { results: [] as never[] };
+    });
+
+  return c.json({
+    buses: rows.results.map((r) => ({
+      id: r.id,
+      busSize: r.bus_size,
+      cost: r.cost,
+      sourceVillageId: r.source_village_id,
+      sourceVillageName: r.village_name,
+      attendeesBrought: r.attendees_brought,
+    })),
+  });
+});
+
 export { teamsRouter };

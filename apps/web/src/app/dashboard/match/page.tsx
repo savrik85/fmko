@@ -8,6 +8,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Player } from "@/lib/api";
 import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
+import { BusSelector } from "./BusSelector";
 
 type Pos = "GK" | "DEF" | "MID" | "FWD";
 
@@ -514,6 +515,11 @@ function MatchPage() {
           </>
         );
       })()}
+
+      {/* Bus z okolí — jen pro domácí zápasy (ne přátelák) */}
+      {nextMatch?.isHome && !nextMatch.isFriendly && teamId && (
+        <BusSelector teamId={teamId} matchId={nextMatch.matchId} />
+      )}
 
       {/* Absent players shown inline in bench table + selector, not as separate card */}
 

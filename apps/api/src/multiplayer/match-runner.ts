@@ -205,14 +205,33 @@ export async function runScheduledMatches(
       const facilityEffects = calculateFacilityEffects(facilities);
       const stadiumCapacity = ((stadiumRow?.capacity as number) ?? 200) + facilityEffects.capacityBonus;
 
-      // Attendance: population + reputation + form + facility bonuses
+      // Attendance: tier-based fanbase + reputation + form + bus drop-in + facility bonuses
       const homeInfo = await db.prepare(
         "SELECT v.population, v.size, t.reputation FROM villages v JOIN teams t ON t.village_id = v.id WHERE t.id = ?"
       ).bind(homeTeamId).first<{ population: number; size: string; reputation: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home village info", e); return null; });
-      const pop = homeInfo?.population ?? 500;
       const rep = homeInfo?.reputation ?? 50;
-      // Base from population — okresní fotbal: 2-4.5% obyvatel
-      const popBase = Math.round(pop * (0.02 + Math.random() * 0.025));
+
+      // Tier-based base (hardcore + regular + casual + walk-up)
+      const { loadOrInitFanbase, expectedAttendance, homeAdvantageFromFanbase } =
+        await import("../season/fanbase-helpers");
+      const { BUS_CONFIG } = await import("../season/fanbase-config");
+      const fanbase = await loadOrInitFanbase(db, homeTeamId);
+      const expected = expectedAttendance(fanbase);
+      const popBase = expected.total;
+
+      // Bus drop-in pro tento zápas (z objednaných busů)
+      const busRows = await db.prepare(
+        "SELECT bus_size FROM bus_subsidies WHERE team_id = ? AND match_id = ?"
+      ).bind(homeTeamId, matchId).all<{ bus_size: keyof typeof BUS_CONFIG.SIZES }>()
+        .catch((e) => { logger.warn({ module: "match-runner" }, "load bus subsidies for attendance", e); return { results: [] as Array<{ bus_size: keyof typeof BUS_CONFIG.SIZES }> }; });
+      let busDropIn = 0;
+      for (const b of busRows.results) {
+        const cfg = BUS_CONFIG.SIZES[b.bus_size];
+        if (cfg) {
+          busDropIn += Math.round(cfg.attendeesMin + Math.random() * (cfg.attendeesMax - cfg.attendeesMin));
+        }
+      }
+
       // Reputation bonus (higher rep = more fans)
       const repBonus = Math.round(popBase * (rep / 100) * 0.3);
       // Recent form — count wins in last 5 matches
@@ -223,7 +242,7 @@ export async function runScheduledMatches(
         ) WHERE win = 1`
       ).bind(homeTeamId, homeTeamId, homeTeamId, homeTeamId).first<{ w: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load recent wins", e); return { w: 0 }; });
       const formBonus = Math.round((recentWins?.w ?? 0) * popBase * 0.08);
-      const rawAttendance = Math.max(15, popBase + repBonus + formBonus + Math.round(Math.random() * 10 - 5));
+      const rawAttendance = Math.max(10, popBase + repBonus + formBonus + busDropIn + Math.round(Math.random() * 10 - 5));
       // Celebrity attendance bonus — check if any celebrity is in either lineup
       let celebAttendanceMultiplier = 1.0;
       const allLineupIds = [...homeLineup, ...awayLineup].map(lp => fullIdMap.get(lp.id)).filter(Boolean) as string[];
@@ -265,6 +284,22 @@ export async function runScheduledMatches(
         for (const p of homeSubs) {
           p.morale = Math.min(100, p.morale + facilityEffects.homeMoraleBonus);
         }
+      }
+
+      // Home advantage z fanbase: tvrdé jádro + atmosféra (vyprodáno / prázdný stadion)
+      const haInfo = homeAdvantageFromFanbase(fanbase, attendance, stadiumCapacity);
+      const haMoraleBoost = Math.max(-5, Math.min(10, Math.round(haInfo.total * 3)));
+      if (haMoraleBoost !== 0) {
+        for (const p of homeLineup) {
+          p.morale = Math.max(0, Math.min(100, p.morale + haMoraleBoost));
+        }
+        for (const p of homeSubs) {
+          p.morale = Math.max(0, Math.min(100, p.morale + haMoraleBoost));
+        }
+        logger.info(
+          { module: "match-runner", teamId: homeTeamId, matchId },
+          `fanbase HA: fans=${haInfo.fromFans.toFixed(2)} atm=${haInfo.atmosphere} → morale ${haMoraleBoost >= 0 ? "+" : ""}${haMoraleBoost}`,
+        );
       }
 
       // Load equipment effects for both teams
@@ -384,6 +419,40 @@ export async function runScheduledMatches(
         await applyMatchResult(db, awayTeamId, awayTactic, awayFormation);
       } catch (e) {
         logger.warn({ module: "match-runner" }, "apply chemistry post-match", e);
+      }
+
+      // ── Post-match: tier-based fanbase update ──────────────────────────────
+      // Bus konverze (per village), promo konverze, tier promotion (loyalty up)
+      // a loss streak penalty pro oba týmy.
+      try {
+        const {
+          applyBusConversion,
+          applyPromoConversion,
+          applyTierPromotion,
+          applyLossStreakPenalty,
+        } = await import("../season/fanbase-helpers");
+
+        // Domácí: bus + promo + tier promotion + loss penalty
+        const busResult = await applyBusConversion(db, homeTeamId, matchId);
+        const wasPromoted = (promoRow?.promotion_boost ?? 1.0) > 1.0;
+        const promoResult = await applyPromoConversion(
+          db,
+          homeTeamId,
+          wasPromoted,
+          rawAttendance,
+        );
+        const tierResult = await applyTierPromotion(db, homeTeamId);
+        const lossResult = await applyLossStreakPenalty(db, homeTeamId);
+
+        logger.info(
+          { module: "match-runner", teamId: homeTeamId, matchId },
+          `fanbase post-match: bus drop-in=${busResult.totalDropIn} converted=${busResult.totalConverted} promo+${promoResult.converted} -${promoResult.lost} tier c→r=${tierResult.casualToRegular} r→h=${tierResult.regularToHardcore} loss-penalty=${lossResult.triggered ? `c-${lossResult.casualLost}/r-${lossResult.regularLost}` : "no"}`,
+        );
+
+        // Hosté: jen loss streak penalty (jejich domácí akce nejsou)
+        await applyLossStreakPenalty(db, awayTeamId);
+      } catch (e) {
+        logger.warn({ module: "match-runner" }, "fanbase post-match update", e);
       }
 
       // Player stats update

@@ -915,6 +915,150 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "league game_date normalization failed", e);
   }
 
+  // ── Fanbase snapshots + bus streak break ─────────────────────────────────
+  // Per team UPSERT do fanbase_snapshots + decay casual_count u obcí, kde nebyl bus
+  // už 3+ home zápasy v řadě.
+  try {
+    const fbTeams = await env.DB.prepare(
+      `SELECT t.id as team_id, t.reputation, t.game_date,
+              tf.hardcore_count, tf.regular_count, tf.casual_count,
+              f.satisfaction
+       FROM teams t
+       LEFT JOIN team_fanbase tf ON tf.team_id = t.id
+       LEFT JOIN fans f ON f.team_id = t.id
+       WHERE t.user_id != 'ai' AND tf.team_id IS NOT NULL`,
+    )
+      .all<{
+        team_id: string;
+        reputation: number;
+        game_date: string | null;
+        hardcore_count: number;
+        regular_count: number;
+        casual_count: number;
+        satisfaction: number | null;
+      }>()
+      .catch((e) => {
+        logger.warn({ module: "daily-tick" }, "load fanbase teams for snapshot", e);
+        return { results: [] as never[] };
+      });
+
+    for (const t of fbTeams.results) {
+      const gamedate = t.game_date ?? now.toISOString();
+      const totalLoyal = t.hardcore_count + t.regular_count + t.casual_count;
+      await env.DB.prepare(
+        `INSERT INTO fanbase_snapshots
+           (id, team_id, gamedate, hardcore_total, regular_total, casual_total,
+            total_loyal, reputation_at_time, satisfaction_at_time)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(team_id, gamedate) DO UPDATE SET
+           hardcore_total = excluded.hardcore_total,
+           regular_total = excluded.regular_total,
+           casual_total = excluded.casual_total,
+           total_loyal = excluded.total_loyal,
+           reputation_at_time = excluded.reputation_at_time,
+           satisfaction_at_time = excluded.satisfaction_at_time`,
+      )
+        .bind(
+          crypto.randomUUID(),
+          t.team_id,
+          gamedate,
+          t.hardcore_count,
+          t.regular_count,
+          t.casual_count,
+          totalLoyal,
+          t.reputation,
+          t.satisfaction,
+        )
+        .run()
+        .catch((e) => {
+          logger.warn({ module: "daily-tick" }, "upsert fanbase snapshot", e);
+        });
+    }
+
+    // Bus streak break: pro obce kde 3+ home zápasy bez busu po dříve aktivní řadě
+    const { BUS_CONFIG } = await import("./fanbase-config");
+    const staleSatellites = await env.DB.prepare(
+      `SELECT bsf.id, bsf.team_id, bsf.village_id, bsf.casual_count, bsf.consecutive_buses, bsf.last_bus_match_id, v.name as village_name
+       FROM bus_satellite_fans bsf
+       JOIN villages v ON bsf.village_id = v.id
+       WHERE bsf.consecutive_buses >= 3`,
+    )
+      .all<{
+        id: string;
+        team_id: string;
+        village_id: string;
+        casual_count: number;
+        consecutive_buses: number;
+        last_bus_match_id: string | null;
+        village_name: string;
+      }>()
+      .catch((e) => {
+        logger.warn({ module: "daily-tick" }, "load stale satellites", e);
+        return { results: [] as never[] };
+      });
+
+    for (const s of staleSatellites.results) {
+      // Zjisti počet home zápasů (status='simulated') daného týmu PO last_bus_match_id
+      if (!s.last_bus_match_id) continue;
+      const simulatedAfter = await env.DB.prepare(
+        `SELECT COUNT(*) as cnt FROM matches m1
+         WHERE m1.home_team_id = ? AND m1.status = 'simulated'
+           AND m1.simulated_at > (SELECT simulated_at FROM matches WHERE id = ?)`,
+      )
+        .bind(s.team_id, s.last_bus_match_id)
+        .first<{ cnt: number }>()
+        .catch((e) => {
+          logger.warn(
+            { module: "daily-tick" },
+            "count home matches without bus",
+            e,
+          );
+          return null;
+        });
+      const matchesWithoutBus = simulatedAfter?.cnt ?? 0;
+      if (matchesWithoutBus >= BUS_CONFIG.STREAK_BREAK_AFTER && s.casual_count > 0) {
+        const lost = Math.floor(s.casual_count * BUS_CONFIG.STREAK_BREAK_DECAY);
+        if (lost > 0) {
+          await env.DB.prepare(
+            `UPDATE bus_satellite_fans
+             SET casual_count = MAX(0, casual_count - ?), consecutive_buses = 0,
+                 updated_at = datetime('now')
+             WHERE id = ?`,
+          )
+            .bind(lost, s.id)
+            .run()
+            .catch((e) => {
+              logger.warn(
+                { module: "daily-tick" },
+                "decay satellite casual",
+                e,
+              );
+            });
+          await env.DB.prepare(
+            `UPDATE team_fanbase
+             SET casual_count = MAX(0, casual_count - ?), updated_at = datetime('now')
+             WHERE team_id = ?`,
+          )
+            .bind(lost, s.team_id)
+            .run()
+            .catch((e) => {
+              logger.warn(
+                { module: "daily-tick" },
+                "decay team_fanbase from satellite break",
+                e,
+              );
+            });
+          logger.info(
+            { module: "daily-tick", teamId: s.team_id },
+            `bus streak break: ${s.village_name} ztratil ${lost} casual fans (${matchesWithoutBus} home zápasů bez busu)`,
+          );
+        }
+      }
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "fanbase snapshot + streak break failed", e);
+  }
+
   const duration = ((Date.now() - tickStart) / 1000).toFixed(1);
   logger.info({ module: "daily-tick" }, `DONE events=${events.length} duration=${duration}s`);
   return { date: now.toISOString(), dayOfWeek, isTrainingDay, events };

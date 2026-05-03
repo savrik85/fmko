@@ -32,6 +32,7 @@ export type TransactionType =
   | "concession_income_external"
   | "concession_income_self"
   | "promotional_campaign"
+  | "bus_subsidy"
   | "cash_loan_disbursement"
   | "cash_loan_repayment"
   | "other";
@@ -70,7 +71,7 @@ export function mapVillageSize(dbSize: string): string {
 const PURCHASE_TYPES = new Set<TransactionType>([
   "transfer_fee", "signing_fee", "classified_ad",
   "equipment_upgrade", "stadium_upgrade", "stadium_visual",
-  "pitch_repair", "pitch_upgrade", "promotional_campaign",
+  "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
 ]);
 

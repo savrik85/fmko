@@ -82,7 +82,58 @@ interface SalesMatch {
   totalProfit: number;
 }
 
-type TabKey = "satisfaction" | "concession" | "sales";
+type TabKey = "fanbase" | "satisfaction" | "concession" | "sales";
+
+interface FanbaseTier {
+  hardcore: number;
+  regular: number;
+  casual: number;
+}
+
+interface FanbaseSatellite {
+  villageId: string;
+  villageName: string;
+  population: number;
+  distanceKm: number;
+  casualCount: number;
+  regularCount: number;
+  hardcoreCount: number;
+  consecutiveBuses: number;
+}
+
+interface FanbaseData {
+  tiers: FanbaseTier;
+  totalLoyal: number;
+  homeVillage: { id: string; name: string; population: number };
+  capacity: number;
+  reputation: number;
+  satellites: FanbaseSatellite[];
+  promo: {
+    consecutive: number;
+    unpromotedStreak: number;
+    nextThreshold: number | null;
+  };
+  progression: {
+    casualToRegularStreak: number;
+    casualToRegularNeeded: number;
+    regularToHardcoreStreak: number;
+    regularToHardcoreNeeded: number;
+  };
+  expectedNextHomeAttendance: number;
+  expectedBreakdown: { hardcore: number; regular: number; casual: number; walkUp: number };
+  homeAdvantageModifier: number;
+  homeAdvantageBreakdown: { fromFans: number; atmosphere: number };
+}
+
+interface FanbaseHistoryPoint {
+  gamedate: string;
+  hardcore: number;
+  regular: number;
+  casual: number;
+  totalLoyal: number;
+  reputation: number;
+  satisfaction: number | null;
+}
 
 const PRODUCT_ICONS: Record<string, string> = {
   sausage: "🌭",
@@ -168,7 +219,9 @@ export default function FansPage() {
   const [history, setHistory] = useState<FansHistoryItem[]>([]);
   const [salesHistory, setSalesHistory] = useState<SalesMatch[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabKey>("satisfaction");
+  const [activeTab, setActiveTab] = useState<TabKey>("fanbase");
+  const [fanbase, setFanbase] = useState<FanbaseData | null>(null);
+  const [fanbaseHistory, setFanbaseHistory] = useState<FanbaseHistoryPoint[]>([]);
   const [ticketPriceDraft, setTicketPriceDraft] = useState<string>("");
   const [productDrafts, setProductDrafts] = useState<Record<string, { sellPrice: string }>>({});
   const [restockQty, setRestockQty] = useState<Record<string, string>>({});
@@ -177,18 +230,22 @@ export default function FansPage() {
 
   const refresh = async () => {
     if (!teamId) return;
-    const [f, co, t, h, s] = await Promise.all([
+    const [f, co, t, h, s, fb, fbh] = await Promise.all([
       apiFetch<FansData>(`/api/teams/${teamId}/fans`),
       apiFetch<ConcessionData>(`/api/teams/${teamId}/concession`),
       apiFetch<Team>(`/api/teams/${teamId}`),
       apiFetch<{ items: FansHistoryItem[] }>(`/api/teams/${teamId}/fans/history?limit=20`),
       apiFetch<{ matches: SalesMatch[] }>(`/api/teams/${teamId}/concession/sales?limit=60`),
+      apiFetch<FanbaseData>(`/api/teams/${teamId}/fanbase`),
+      apiFetch<{ history: FanbaseHistoryPoint[] }>(`/api/teams/${teamId}/fanbase/history?days=60`),
     ]);
     setFans(f);
     setConcession(co);
     setTeam(t);
     setHistory(h.items ?? []);
     setSalesHistory(s.matches ?? []);
+    setFanbase(fb);
+    setFanbaseHistory(fbh.history ?? []);
     // Předvyplnit cenu vstupenky: user override, jinak automatická podle obce
     const prefillPrice = f.baseTicketPrice > 0 ? f.baseTicketPrice : f.villageBaseTicketPrice;
     setTicketPriceDraft(String(prefillPrice));
@@ -322,12 +379,13 @@ export default function FansPage() {
   }
 
   const tabs: { key: TabKey; label: string; icon: string; visible: boolean }[] = [
+    { key: "fanbase", label: "Základna", icon: "\u{1F465}", visible: true },
     { key: "satisfaction", label: "Spokojenost", icon: "\u{1F4CA}", visible: true },
     { key: "concession", label: "Občerstvení", icon: "\u{1F37A}", visible: true },
     { key: "sales", label: "Prodeje", icon: "\u{1F4C8}", visible: concession.mode === "self" },
   ];
   const visibleTabs = tabs.filter((t) => t.visible);
-  const currentTab = visibleTabs.some((t) => t.key === activeTab) ? activeTab : "satisfaction";
+  const currentTab = visibleTabs.some((t) => t.key === activeTab) ? activeTab : "fanbase";
 
   return (
     <div className="page-container space-y-5">
@@ -351,6 +409,207 @@ export default function FansPage() {
           );
         })}
       </div>
+
+      {currentTab === "fanbase" && fanbase && (<>
+      {/* ═══ Fanbase tier pyramid ═══ */}
+      <div className="card p-4 sm:p-5">
+        <SectionLabel>Fanouškovská základna</SectionLabel>
+
+        <div className="space-y-2 mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-20 text-xs text-muted shrink-0">🟥 Tvrdé jádro</div>
+            <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden relative">
+              <div
+                className="h-full bg-card-red transition-all"
+                style={{ width: `${Math.min(100, (fanbase.tiers.hardcore / Math.max(fanbase.totalLoyal, 1)) * 100)}%` }}
+              />
+              <div className="absolute inset-0 flex items-center px-2 text-xs font-heading font-bold">
+                {fanbase.tiers.hardcore} <span className="ml-1.5 text-muted text-[10px]">chodí vždy</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-20 text-xs text-muted shrink-0">🟧 Pravidelní</div>
+            <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden relative">
+              <div
+                className="h-full bg-gold-500 transition-all"
+                style={{ width: `${Math.min(100, (fanbase.tiers.regular / Math.max(fanbase.totalLoyal, 1)) * 100)}%` }}
+              />
+              <div className="absolute inset-0 flex items-center px-2 text-xs font-heading font-bold">
+                {fanbase.tiers.regular} <span className="ml-1.5 text-muted text-[10px]">~80 % zápasů</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-20 text-xs text-muted shrink-0">🟨 Občasní</div>
+            <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden relative">
+              <div
+                className="h-full bg-gold-300 transition-all"
+                style={{ width: `${Math.min(100, (fanbase.tiers.casual / Math.max(fanbase.totalLoyal, 1)) * 100)}%` }}
+              />
+              <div className="absolute inset-0 flex items-center px-2 text-xs font-heading font-bold">
+                {fanbase.tiers.casual} <span className="ml-1.5 text-muted text-[10px]">~30-50 %</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 text-center pt-3 border-t border-gray-200">
+          <div>
+            <div className="font-heading font-bold text-2xl tabular-nums text-pitch-600">{fanbase.totalLoyal}</div>
+            <div className="text-xs text-muted">Stálých fans</div>
+          </div>
+          <div>
+            <div className="font-heading font-bold text-2xl tabular-nums text-ink">{fanbase.expectedNextHomeAttendance}</div>
+            <div className="text-xs text-muted">Očekávaná návštěva</div>
+          </div>
+          <div>
+            <div className="font-heading font-bold text-2xl tabular-nums text-gold-600">
+              {fanbase.homeAdvantageModifier >= 0 ? "+" : ""}{fanbase.homeAdvantageModifier}
+            </div>
+            <div className="text-xs text-muted">Home advantage</div>
+          </div>
+        </div>
+
+        <div className="mt-2 text-[11px] text-muted text-center">
+          {fanbase.homeVillage.name} ({fanbase.homeVillage.population.toLocaleString("cs")} obyv.) · kapacita {fanbase.capacity}
+        </div>
+      </div>
+
+      {/* ═══ Loyalty progression ═══ */}
+      <div className="card p-4 sm:p-5">
+        <SectionLabel>Růst loajality</SectionLabel>
+        <div className="space-y-3">
+          <div>
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-muted">Občasní → Pravidelní</span>
+              <span className="font-heading font-bold text-ink">
+                {fanbase.progression.casualToRegularStreak} / {fanbase.progression.casualToRegularNeeded}
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="h-2 bg-gold-500 rounded-full transition-all"
+                style={{ width: `${Math.min(100, (fanbase.progression.casualToRegularStreak / fanbase.progression.casualToRegularNeeded) * 100)}%` }}
+              />
+            </div>
+          </div>
+          <div>
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-muted">Pravidelní → Tvrdé jádro</span>
+              <span className="font-heading font-bold text-ink">
+                {fanbase.progression.regularToHardcoreStreak} / {fanbase.progression.regularToHardcoreNeeded}
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="h-2 bg-card-red rounded-full transition-all"
+                style={{ width: `${Math.min(100, (fanbase.progression.regularToHardcoreStreak / fanbase.progression.regularToHardcoreNeeded) * 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="mt-2 text-[11px] text-muted">
+          Po každém domácím zápase streak roste. Po dosažení prahu se část nižšího tieru promotne výš.
+        </div>
+      </div>
+
+      {/* ═══ Spádové obce (autobusy) ═══ */}
+      <div className="card p-4 sm:p-5">
+        <SectionLabel>Spádové obce (autobusy)</SectionLabel>
+        {fanbase.satellites.length === 0 ? (
+          <div className="text-sm text-muted">
+            Zatím žádné spádové obce. Před domácím zápasem objednej autobus z okolí (sekce u zápasu).
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {fanbase.satellites.map((s) => (
+              <div key={s.villageId} className="flex items-center gap-2 text-sm py-1.5 border-b border-gray-100 last:border-b-0">
+                <div className="flex-1 min-w-0">
+                  <div className="font-heading font-bold truncate">{s.villageName}</div>
+                  <div className="text-[10px] text-muted">
+                    {s.distanceKm} km · {s.population.toLocaleString("cs")} obyv.
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-heading font-bold text-pitch-600">★ {s.casualCount + s.regularCount + s.hardcoreCount}</div>
+                  <div className="text-[10px] text-muted">streak {s.consecutiveBuses}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ═══ Propagační kampaň ═══ */}
+      <div className="card p-4 sm:p-5">
+        <SectionLabel>Propagační kampaň</SectionLabel>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-xs text-muted">Streak v řadě</div>
+            <div className="font-heading font-bold text-2xl tabular-nums text-ink">
+              {fanbase.promo.consecutive}
+              {fanbase.promo.nextThreshold && (
+                <span className="text-sm text-muted font-normal"> / {fanbase.promo.nextThreshold}</span>
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-muted">Bez propagace</div>
+            <div className={`font-heading font-bold text-2xl tabular-nums ${fanbase.promo.unpromotedStreak >= 1 ? "text-card-red" : "text-ink"}`}>
+              {fanbase.promo.unpromotedStreak}
+            </div>
+          </div>
+        </div>
+        <div className="mt-2 text-[11px] text-muted">
+          {fanbase.promo.consecutive >= 3
+            ? "Propagací jsi získal stálé fans. Pokračuj!"
+            : fanbase.promo.consecutive > 0
+              ? `Po ${3 - fanbase.promo.consecutive} dalších propagovaných home zápasech získáš stálé fans.`
+              : "Propaguj 3 home zápasy v řadě → 30 % drop-in se stane stálými občasnými fanoušky."}
+          {fanbase.promo.unpromotedStreak >= 1 && fanbase.promo.consecutive === 0 && (
+            <> ⚠ Po 2 nepropagovaných v řadě se část stálých z propagace ztratí (-50 %).</>
+          )}
+        </div>
+      </div>
+
+      {/* ═══ Vývoj základny — sparkline ═══ */}
+      <div className="card p-4 sm:p-5">
+        <SectionLabel>Vývoj základny ({fanbaseHistory.length} dní)</SectionLabel>
+        {fanbaseHistory.length < 2 ? (
+          <div className="text-sm text-muted">Snapshoty se ještě nesbírají, vrať se za pár dní.</div>
+        ) : (
+          (() => {
+            const maxTotal = Math.max(...fanbaseHistory.map((p) => p.totalLoyal), 1);
+            const w = 100 / Math.max(fanbaseHistory.length - 1, 1);
+            const buildPath = (key: keyof Pick<FanbaseHistoryPoint, "hardcore" | "regular" | "casual" | "totalLoyal">) =>
+              fanbaseHistory
+                .map((p, i) => `${i === 0 ? "M" : "L"} ${(i * w).toFixed(2)} ${(100 - (p[key] / maxTotal) * 100).toFixed(2)}`)
+                .join(" ");
+            const first = fanbaseHistory[0];
+            const last = fanbaseHistory[fanbaseHistory.length - 1];
+            return (
+              <>
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-32 mb-2">
+                  <path d={buildPath("totalLoyal")} fill="none" stroke="#65a30d" strokeWidth="1.5" />
+                  <path d={buildPath("hardcore")} fill="none" stroke="#dc2626" strokeWidth="1" />
+                  <path d={buildPath("regular")} fill="none" stroke="#ca8a04" strokeWidth="1" />
+                  <path d={buildPath("casual")} fill="none" stroke="#fde047" strokeWidth="1" />
+                </svg>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="text-card-red">🟥 Jádro: {first.hardcore} → {last.hardcore}</div>
+                  <div className="text-gold-600">🟧 Pravid.: {first.regular} → {last.regular}</div>
+                  <div className="text-gold-500">🟨 Občas.: {first.casual} → {last.casual}</div>
+                </div>
+                <div className="mt-1 text-[11px] text-muted">
+                  Total: {first.totalLoyal} → {last.totalLoyal} ({last.totalLoyal - first.totalLoyal >= 0 ? "+" : ""}{last.totalLoyal - first.totalLoyal} stálých)
+                </div>
+              </>
+            );
+          })()
+        )}
+      </div>
+      </>)}
 
       {currentTab === "satisfaction" && (<>
       {/* ═══ Satisfaction ═══ */}
