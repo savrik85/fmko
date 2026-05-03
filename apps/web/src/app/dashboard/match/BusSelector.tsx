@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
-const BUS_TIERS = [
+const BUS_TIERS_VESNICE = [
   {
     key: "traktor" as const,
     label: "Vlek za traktorem",
@@ -30,7 +30,34 @@ const BUS_TIERS = [
   },
 ];
 
-type BusSize = (typeof BUS_TIERS)[number]["key"];
+const BUS_TIERS_MESTO = [
+  {
+    key: "traktor" as const,
+    label: "Lístky na MHD",
+    icon: "🚇",
+    cost: 1200,
+    range: "8-12 lidí",
+    desc: "Rozdáš pár jízdenek na metro a tramvaj. Důchodci a děti dorazí z přilehlé čtvrti.",
+  },
+  {
+    key: "karosa" as const,
+    label: "Mikrobus od sponzora",
+    icon: "🚐",
+    cost: 2000,
+    range: "18-25 lidí",
+    desc: "Místní firma půjčí dodávku s řidičem. Sváží partu kolegů a jejich známé.",
+  },
+  {
+    key: "autokar" as const,
+    label: "Pohodlný autokar",
+    icon: "🚍",
+    cost: 3500,
+    range: "30-45 lidí",
+    desc: "Klimatizace, čalouněná sedadla. Hodí se na delší dojezd ze sousední městské části.",
+  },
+];
+
+type BusSize = (typeof BUS_TIERS_VESNICE)[number]["key"];
 
 interface NearbyVillage {
   id: string;
@@ -57,6 +84,7 @@ interface SatelliteInfo {
 
 interface FanbaseResponse {
   satellites: SatelliteInfo[];
+  homeVillage?: { isCity?: boolean };
 }
 
 export function BusSelector({
@@ -69,6 +97,7 @@ export function BusSelector({
   const [villages, setVillages] = useState<NearbyVillage[]>([]);
   const [ordered, setOrdered] = useState<OrderedBus[]>([]);
   const [satellites, setSatellites] = useState<SatelliteInfo[]>([]);
+  const [isCityTeam, setIsCityTeam] = useState(false);
   const [selectedVillage, setSelectedVillage] = useState<string>("");
   const [busSize, setBusSize] = useState<BusSize>("karosa");
   const [submitting, setSubmitting] = useState(false);
@@ -90,6 +119,7 @@ export function BusSelector({
         setVillages(vs.villages);
         setOrdered(bs.buses);
         setSatellites(fb.satellites ?? []);
+        setIsCityTeam(!!fb.homeVillage?.isCity);
         if (!selectedVillage && vs.villages.length > 0) {
           setSelectedVillage(vs.villages[0].id);
         }
@@ -120,6 +150,7 @@ export function BusSelector({
     );
   }
 
+  const BUS_TIERS = isCityTeam ? BUS_TIERS_MESTO : BUS_TIERS_VESNICE;
   const selectedTier = BUS_TIERS.find((t) => t.key === busSize)!;
   const selectedSatellite = satellites.find(
     (s) => s.villageId === selectedVillage,

@@ -178,12 +178,14 @@ export function expectedAttendance(agg: FanbaseAggregate): {
         FANBASE_CONFIG.WALK_UP_RATE.max,
       ),
   );
+  // Match floor v match-runner.ts (Math.max(15, ...)) — promítáme i do expected
+  const total = Math.max(15, hardcoreAtt + regularAtt + casualAtt + walkUp);
   return {
     hardcore: hardcoreAtt,
     regular: regularAtt,
     casual: casualAtt,
     walkUp,
-    total: hardcoreAtt + regularAtt + casualAtt + walkUp,
+    total,
   };
 }
 

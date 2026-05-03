@@ -101,6 +101,21 @@ export async function generateAiRoundReport(
   // 2. Individuální statistiky
   const matchIds = matchRows.results.map((m) => m.id as string);
   const placeholders = matchIds.map(() => "?").join(",");
+
+  // 2b. Autobusy se sváženými fanoušky (volitelný flavor pro AI reportéra)
+  const busRows = await db.prepare(
+    `SELECT bs.match_id, bs.attendees_brought, v.name as village_name
+     FROM bus_subsidies bs
+     JOIN villages v ON bs.source_village_id = v.id
+     WHERE bs.match_id IN (${placeholders}) AND bs.attendees_brought IS NOT NULL`,
+  ).bind(...matchIds).all<{ match_id: string; attendees_brought: number; village_name: string }>()
+    .catch((e) => { logger.warn({ module: "ai-reporter" }, "load bus subsidies", e); return { results: [] as Array<{ match_id: string; attendees_brought: number; village_name: string }> }; });
+  const busesByMatch: Record<string, Array<{ village: string; attendees: number }>> = {};
+  for (const b of busRows.results) {
+    if (!busesByMatch[b.match_id]) busesByMatch[b.match_id] = [];
+    busesByMatch[b.match_id].push({ village: b.village_name, attendees: b.attendees_brought });
+  }
+
   const statsRows = await db.prepare(
     `SELECT mps.match_id, mps.goals, mps.assists, mps.yellow_cards, mps.red_cards, mps.rating,
             p.first_name, p.last_name, t.name as team_name
@@ -159,6 +174,11 @@ export async function generateAiRoundReport(
     if (attendance) line += `; diváků: ${attendance}`;
     if (stadium) line += `; stadion: ${stadium}`;
     if (weather) line += `; počasí: ${weather}`;
+    const buses = busesByMatch[m.id as string];
+    if (buses && buses.length > 0) {
+      const busStr = buses.map((b) => `${b.village} (${b.attendees})`).join(", ");
+      line += `; svezeno autobusem: ${busStr}`;
+    }
 
     resultLines.push(line);
   }
@@ -286,7 +306,8 @@ Styl:
 - Vypíchni překvapení, zajímavé výkony, vývoj tabulky
 - Piš barvitě s humorem
 - ${localFlavor}
-- Nemusíš popsat každý zápas, vyber ty nejzajímavější`;
+- Nemusíš popsat každý zápas, vyber ty nejzajímavější
+- Pokud u zápasu vidíš "svezeno autobusem: X (Y)" znamená to, že domácí klub zaplatil dopravu fanouškům z obce X (Y lidí přijelo). Zmiňuj to JEN OBČAS jako vesnický kolorit ("Z Bohumilic dorazil plný autobus", "Strejda Pepa zase přivezl partu z Vimperka"), nikdy mechanicky u každého zápasu — jen když to do článku přirozeně zapadne.`;
 
   // Volání Gemini
   const res = await fetch(

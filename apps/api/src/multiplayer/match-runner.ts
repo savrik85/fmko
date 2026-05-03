@@ -242,7 +242,9 @@ export async function runScheduledMatches(
         ) WHERE win = 1`
       ).bind(homeTeamId, homeTeamId, homeTeamId, homeTeamId).first<{ w: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load recent wins", e); return { w: 0 }; });
       const formBonus = Math.round((recentWins?.w ?? 0) * popBase * 0.08);
-      const rawAttendance = Math.max(10, popBase + repBonus + formBonus + busDropIn + Math.round(Math.random() * 10 - 5));
+      // Floor 15 zachován z původní logiky — bez akce má klub stejnou minimální návštěvu jako dřív.
+      // Bus + propagace + tier růst se přičítá nad rámec floor.
+      const rawAttendance = Math.max(15, popBase + repBonus + formBonus + busDropIn + Math.round(Math.random() * 10 - 5));
       // Celebrity attendance bonus — check if any celebrity is in either lineup
       let celebAttendanceMultiplier = 1.0;
       const allLineupIds = [...homeLineup, ...awayLineup].map(lp => fullIdMap.get(lp.id)).filter(Boolean) as string[];

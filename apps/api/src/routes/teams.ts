@@ -2833,7 +2833,7 @@ teamsRouter.get("/:id/fanbase", async (c) => {
   const { fb, agg } = await loadFanbaseAggregate(c.env.DB, teamId);
 
   const homeRow = await c.env.DB.prepare(
-    `SELECT v.id as village_id, v.name as village_name, v.population, v.lat, v.lng,
+    `SELECT v.id as village_id, v.name as village_name, v.population, v.size, v.district, v.lat, v.lng,
             t.reputation
      FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`,
   )
@@ -2842,6 +2842,8 @@ teamsRouter.get("/:id/fanbase", async (c) => {
       village_id: string;
       village_name: string;
       population: number;
+      size: string;
+      district: string;
       lat: number;
       lng: number;
       reputation: number;
@@ -2925,6 +2927,9 @@ teamsRouter.get("/:id/fanbase", async (c) => {
       id: homeRow.village_id,
       name: homeRow.village_name,
       population: homeRow.population,
+      size: homeRow.size,
+      // Městská varianta busů (MHD místo traktoru) jen pro Pražský přebor
+      isCity: homeRow.district === "Praha",
     },
     capacity,
     reputation: homeRow.reputation,

@@ -252,18 +252,43 @@ export default function FansPage() {
   const refresh = async () => {
     if (!teamId) return;
     const [f, co, t, h, s, fb, fbh, sched] = await Promise.all([
-      apiFetch<FansData>(`/api/teams/${teamId}/fans`),
-      apiFetch<ConcessionData>(`/api/teams/${teamId}/concession`),
-      apiFetch<Team>(`/api/teams/${teamId}`),
-      apiFetch<{ items: FansHistoryItem[] }>(`/api/teams/${teamId}/fans/history?limit=20`),
-      apiFetch<{ matches: SalesMatch[] }>(`/api/teams/${teamId}/concession/sales?limit=60`),
-      apiFetch<FanbaseData>(`/api/teams/${teamId}/fanbase`),
-      apiFetch<{ history: FanbaseHistoryPoint[] }>(`/api/teams/${teamId}/fanbase/history?days=60`),
+      apiFetch<FansData>(`/api/teams/${teamId}/fans`).catch((e) => {
+        console.error("load fans data:", e);
+        return null;
+      }),
+      apiFetch<ConcessionData>(`/api/teams/${teamId}/concession`).catch((e) => {
+        console.error("load concession:", e);
+        return null;
+      }),
+      apiFetch<Team>(`/api/teams/${teamId}`).catch((e) => {
+        console.error("load team:", e);
+        return null;
+      }),
+      apiFetch<{ items: FansHistoryItem[] }>(`/api/teams/${teamId}/fans/history?limit=20`).catch((e) => {
+        console.error("load fans history:", e);
+        return { items: [] };
+      }),
+      apiFetch<{ matches: SalesMatch[] }>(`/api/teams/${teamId}/concession/sales?limit=60`).catch((e) => {
+        console.error("load concession sales:", e);
+        return { matches: [] };
+      }),
+      apiFetch<FanbaseData>(`/api/teams/${teamId}/fanbase`).catch((e) => {
+        console.error("load fanbase:", e);
+        return null;
+      }),
+      apiFetch<{ history: FanbaseHistoryPoint[] }>(`/api/teams/${teamId}/fanbase/history?days=60`).catch((e) => {
+        console.error("load fanbase history:", e);
+        return { history: [] };
+      }),
       apiFetch<{ matches: ScheduleMatch[]; promotionPrice?: number }>(`/api/teams/${teamId}/schedule`).catch((e) => {
         console.error("load schedule for fans page:", e);
         return { matches: [] as ScheduleMatch[] };
       }),
     ]);
+    if (!f || !co || !t || !fb) {
+      console.error("fans page: chybí povinná data, neukazuju refresh");
+      return;
+    }
     setFans(f);
     setConcession(co);
     setTeam(t);
@@ -465,6 +490,41 @@ export default function FansPage() {
       </div>
 
       {currentTab === "fanbase" && fanbase && (<>
+      {/* ═══ Jak to funguje — jednoduchý úvod ═══ */}
+      <details className="card p-4 sm:p-5 group">
+        <summary className="cursor-pointer font-heading font-bold text-sm flex items-center justify-between">
+          <span>💡 Jak to s fanoušky funguje</span>
+          <span className="text-xs text-muted group-open:hidden">rozbalit</span>
+          <span className="text-xs text-muted hidden group-open:inline">sbalit</span>
+        </summary>
+        <div className="mt-3 space-y-3 text-sm leading-relaxed">
+          <p>Fanoušci se dělí na tři druhy podle toho, jak ti jsou věrní:</p>
+          <ul className="space-y-1.5 ml-4 list-disc">
+            <li><strong className="text-card-red">🟥 Tvrdé jádro</strong> — ti, co přijdou vždycky. I když prší, i když prohráváš. Když je jich hodně, mužstvo se cítí silně doma.</li>
+            <li><strong className="text-gold-600">🟧 Pravidelní</strong> — chodí skoro pořád. Po dlouhé sérii proher pár z nich začne chybět, ale většinou se vrátí.</li>
+            <li><strong className="text-gold-500">🟨 Občasní</strong> — přijdou když mají náladu. Tihle se snadno nadchnou, ale taky snadno přestanou chodit.</li>
+          </ul>
+
+          <p className="pt-2">Fanoušci ti přibývají třemi způsoby:</p>
+          <ol className="space-y-1.5 ml-4 list-decimal">
+            <li><strong>Z vlastní vesnice</strong> — automaticky podle počtu obyvatel. Když chodíš stabilně domů, občasní se časem stávají pravidelnými, pravidelní pak tvrdým jádrem.</li>
+            <li><strong>Z propagace</strong> (📢) — zaplatíš si článek ve zpravodaji a přitáhneš víc lidí. Když propaguješ <strong>3 zápasy po sobě</strong>, část z nich u tebe zůstane natrvalo.</li>
+            <li><strong>Z autobusů</strong> (🚌) — pošleš bus do sousední vesnice a doveze 8 až 45 lidí (podle velikosti). Když posíláš bus do stejné obce <strong>3 zápasy po sobě</strong>, ze čtvrtiny cestujících se stanou tví stálí fanoušci.</li>
+          </ol>
+
+          <p className="pt-2">Pár věcí, na které si dej pozor:</p>
+          <ul className="space-y-1.5 ml-4 list-disc">
+            <li><strong>Vzdálenost rozhoduje.</strong> Bližší obec = víc lidí u tebe zůstane natrvalo. Z 2 km zůstane víc než dvojnásobek toho, co z 10 km. Velký bus do daleké obce přiveze sice hodně diváků, ale do stálých se jich přepíše málo.</li>
+            <li><strong>Vyplatí se vydržet.</strong> Posílej bus pravidelně. Když ho přestaneš platit, lidi z té obce postupně přestanou chodit — po 3 nepokrytých zápasech ti polovina utíká.</li>
+            <li><strong>Líp 3 různé obce než 3× ta samá.</strong> Když pošleš každý zápas bus jinam, dostáváš trvalé fanoušky ze tří míst zároveň. Když lítáš jen do jedné obce, máš sice plnější tribunu hned, ale dlouhodobě tě to omezí.</li>
+          </ul>
+
+          <p className="pt-2 text-xs text-muted italic">
+            Pro malou vesnici (do 200 obyvatel) je rozumný cíl po první sezóně: 20-30 stálých fanoušků a kolem 80-90 lidí na zápase. Záleží na tom, kolik peněz máš na busy a propagaci.
+          </p>
+        </div>
+      </details>
+
       {/* ═══ Fanbase tier pyramid ═══ */}
       <div className="card p-4 sm:p-5">
         <SectionLabel>Fanouškovská základna</SectionLabel>
