@@ -20,3 +20,4 @@ export { villageBrigades } from "./village-brigades";
 export { villageInvitations } from "./village-invitations";
 export { villageInvestments } from "./village-investments";
 export { villageHistory } from "./village-history";
+export { villagePetitions } from "./village-petitions";

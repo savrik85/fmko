@@ -98,6 +98,19 @@ interface RosterPlayer {
   status: string | null;
 }
 
+interface Petition {
+  id: string;
+  village_id: string;
+  team_id: string;
+  topic: string;
+  title: string;
+  description: string;
+  cost_money: number;
+  reward_favor: number;
+  ignore_penalty: number;
+  expires_at: string;
+}
+
 interface UpcomingMatch {
   match: {
     id: string;
@@ -203,6 +216,8 @@ export default function ObecPage() {
   const [teams, setTeams] = useState<VillageTeam[]>([]);
   const [feed, setFeed] = useState<FeedEvent[]>([]);
   const [brigades, setBrigades] = useState<Brigade[]>([]);
+  const [petitions, setPetitions] = useState<Petition[]>([]);
+  const [respondingPetitionId, setRespondingPetitionId] = useState<string | null>(null);
   const [upcoming, setUpcoming] = useState<UpcomingMatch | null>(null);
   const [invitingOfficialId, setInvitingOfficialId] = useState<string | null>(null);
   const [villageId, setVillageId] = useState<string | null>(null);
@@ -212,7 +227,7 @@ export default function ObecPage() {
 
   const refresh = async (vid: string) => {
     if (!teamId) return;
-    const [v, o, f, ts, fd, bg, up] = await Promise.all([
+    const [v, o, f, ts, fd, bg, up, pe] = await Promise.all([
       apiFetch<VillageDetail>(`/api/villages/${vid}`),
       apiFetch<Official[]>(`/api/villages/${vid}/officials`),
       apiFetch<Favor>(`/api/villages/${vid}/favor?teamId=${teamId}`),
@@ -220,9 +235,28 @@ export default function ObecPage() {
       apiFetch<FeedEvent[]>(`/api/villages/${vid}/feed?limit=20`),
       apiFetch<Brigade[]>(`/api/villages/${vid}/brigades`),
       apiFetch<UpcomingMatch>(`/api/villages/upcoming-match?teamId=${teamId}`),
+      apiFetch<Petition[]>(`/api/villages/petitions?teamId=${teamId}`),
     ]);
     setVillage(v); setOfficials(o); setFavor(f); setTeams(ts); setFeed(fd); setBrigades(bg);
-    setUpcoming(up);
+    setUpcoming(up); setPetitions(pe);
+  };
+
+  const respondPetition = async (id: string, action: "accept" | "ignore") => {
+    if (respondingPetitionId) return;
+    setRespondingPetitionId(id);
+    try {
+      await apiFetch(`/api/villages/petitions/${id}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (villageId) await refresh(villageId);
+    } catch (e: unknown) {
+      const m = e instanceof Error ? e.message : "Chyba";
+      alert(`Petice: ${m}`);
+    } finally {
+      setRespondingPetitionId(null);
+    }
   };
 
   const handleInvite = async (officialId: string) => {
@@ -400,6 +434,57 @@ export default function ObecPage() {
                   </div>
                 );
               })}
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* Petice občanů */}
+      {petitions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <SectionLabel>Petice občanů</SectionLabel>
+            <div className="text-xs text-gray-500 mt-1">
+              Občané posílají žádosti — když vyhovíš, zaplatíš a získáš přízeň. Ignoruj a po expiraci ti přízeň klesne.
+            </div>
+          </CardHeader>
+          <CardBody>
+            <div className="space-y-3">
+              {petitions.map((p) => (
+                <div key={p.id} className="border border-amber-200 bg-amber-50/40 rounded-lg p-3">
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm">{p.title}</div>
+                      <div className="text-xs text-gray-700 mt-0.5">{p.description}</div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Vyprší {new Date(p.expires_at).toLocaleDateString("cs")}
+                      </div>
+                    </div>
+                    <div className="text-right text-xs space-y-0.5 shrink-0">
+                      <div className="text-card-red">-{p.cost_money.toLocaleString("cs")} Kč</div>
+                      <div className="text-pitch-700">+{p.reward_favor} přízeň</div>
+                      <div className="text-gray-500">při ignorování {p.ignore_penalty}</div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={respondingPetitionId === p.id}
+                      onClick={() => respondPetition(p.id, "ignore")}
+                    >
+                      Ignorovat
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={respondingPetitionId === p.id}
+                      onClick={() => respondPetition(p.id, "accept")}
+                    >
+                      Vyhovět
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardBody>
         </Card>

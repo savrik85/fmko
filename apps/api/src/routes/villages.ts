@@ -435,6 +435,114 @@ villagesRouter.get("/:id/feed", async (c) => {
   return c.json(rows.results ?? []);
 });
 
+// ── Petice občanů (Sprint C+) ────────────────────────────────────────────
+
+// GET /api/villages/petitions?teamId=X — aktivní petice pro tým
+villagesRouter.get("/petitions", async (c) => {
+  const teamId = c.req.query("teamId");
+  if (!teamId) return c.json({ error: "teamId required" }, 400);
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM village_petitions WHERE team_id = ? AND status = 'active'
+     ORDER BY expires_at ASC`
+  ).bind(teamId).all();
+  return c.json(rows.results ?? []);
+});
+
+// POST /api/villages/petitions/:id/respond — accept | ignore
+villagesRouter.post("/petitions/:petitionId/respond", requireAuth, async (c) => {
+  const petitionId = c.req.param("petitionId");
+  const session = c.get("session" as never) as { userId: string; teamId: string | null };
+  if (!session.teamId) return c.json({ error: "Nemáš tým" }, 400);
+
+  const body = await c.req.json<{ action: "accept" | "ignore" }>().catch((e) => {
+    logger.warn({ module: "villages" }, "parse petition body", e);
+    return null;
+  });
+  if (!body || (body.action !== "accept" && body.action !== "ignore")) {
+    return c.json({ error: "action musí být accept|ignore" }, 400);
+  }
+
+  const petition = await c.env.DB.prepare(
+    `SELECT * FROM village_petitions WHERE id = ? AND status = 'active'`
+  ).bind(petitionId).first<{
+    id: string; village_id: string; team_id: string; title: string;
+    cost_money: number; reward_favor: number; ignore_penalty: number;
+  }>();
+  if (!petition) return c.json({ error: "Petice už není aktivní" }, 410);
+  if (petition.team_id !== session.teamId) return c.json({ error: "Petice není pro tvůj tým" }, 403);
+
+  const now = new Date().toISOString();
+  const teamRow = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
+    .bind(session.teamId).first<{ game_date: string }>();
+  const gameDate = teamRow?.game_date ?? now;
+
+  if (body.action === "accept") {
+    if (petition.cost_money > 0) {
+      const { recordTransaction: rec } = await import("../season/finance-processor");
+      await rec(
+        c.env.DB, session.teamId, "event", -petition.cost_money,
+        `Petice: ${petition.title}`, gameDate,
+      );
+    }
+    // Bump favor
+    const fav = await c.env.DB.prepare(
+      `SELECT id FROM village_team_favor WHERE team_id = ? AND official_id IS NULL`
+    ).bind(session.teamId).first<{ id: string }>();
+    if (fav) {
+      await c.env.DB.prepare(
+        `UPDATE village_team_favor SET favor = MIN(100, favor + ?),
+         last_interaction_at = ?, updated_at = ? WHERE id = ?`
+      ).bind(petition.reward_favor, now, now, fav.id).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO village_team_favor (id, village_id, team_id, official_id, favor, trust, last_interaction_at, updated_at)
+         VALUES (?, ?, ?, NULL, ?, 50, ?, ?)`
+      ).bind(crypto.randomUUID(), petition.village_id, session.teamId,
+             50 + petition.reward_favor, now, now).run();
+    }
+    await c.env.DB.prepare(
+      `UPDATE village_petitions SET status = 'accepted', responded_at = ? WHERE id = ?`
+    ).bind(now, petition.id).run();
+
+    await c.env.DB.prepare(
+      `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
+       VALUES (?, ?, ?, NULL, 'petition_accepted', ?, ?, ?, ?)`
+    ).bind(
+      crypto.randomUUID(), petition.village_id, session.teamId,
+      `Klub vyhověl petici „${petition.title}"`,
+      JSON.stringify({ cost: petition.cost_money, favor: petition.reward_favor }),
+      gameDate, now,
+    ).run().catch((e) => logger.warn({ module: "villages" }, "petition accepted history", e));
+
+    return c.json({ ok: true, action: "accept", costMoney: petition.cost_money, rewardFavor: petition.reward_favor });
+  }
+
+  // ignore
+  await c.env.DB.prepare(
+    `UPDATE village_petitions SET status = 'ignored', responded_at = ? WHERE id = ?`
+  ).bind(now, petition.id).run();
+  const fav = await c.env.DB.prepare(
+    `SELECT id FROM village_team_favor WHERE team_id = ? AND official_id IS NULL`
+  ).bind(session.teamId).first<{ id: string }>();
+  if (fav) {
+    await c.env.DB.prepare(
+      `UPDATE village_team_favor SET favor = MAX(0, favor + ?),
+       last_interaction_at = ?, updated_at = ? WHERE id = ?`
+    ).bind(petition.ignore_penalty, now, now, fav.id).run();
+  }
+  await c.env.DB.prepare(
+    `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
+     VALUES (?, ?, ?, NULL, 'petition_ignored', ?, ?, ?, ?)`
+  ).bind(
+    crypto.randomUUID(), petition.village_id, session.teamId,
+    `Klub odmítl petici „${petition.title}"`,
+    JSON.stringify({ penalty: petition.ignore_penalty }),
+    gameDate, now,
+  ).run().catch((e) => logger.warn({ module: "villages" }, "petition ignored history", e));
+
+  return c.json({ ok: true, action: "ignore", penaltyFavor: petition.ignore_penalty });
+});
+
 // ── Pozvánky představitelů na zápas (Sprint C) ───────────────────────────
 
 // GET /api/villages/upcoming-match?teamId=X — nejbližší domácí zápas + slot stav officials

@@ -70,14 +70,26 @@ export async function executeDailyTick(
 
   // ── Týdenní cyklus obce: vyprší staré brigády a v pondělí se generují nové ──
   try {
-    const { expireOldBrigades, generateWeeklyBrigades } = await import("./village-processor");
+    const {
+      expireOldBrigades, generateWeeklyBrigades,
+      expirePetitions, generateMonthlyPetitions,
+    } = await import("./village-processor");
     const expired = await expireOldBrigades(env.DB, effectiveDate.toISOString());
     if (expired > 0) {
       logger.info({ module: "daily-tick" }, `${expired} brigád vypršelo`);
     }
+    const ignoredPetitions = await expirePetitions(env.DB, effectiveDate.toISOString());
+    if (ignoredPetitions > 0) {
+      logger.info({ module: "daily-tick" }, `${ignoredPetitions} petic ignorováno`);
+    }
     if (dayOfWeek === 1) {
       const { generated, skipped } = await generateWeeklyBrigades(env.DB, effectiveDate.toISOString());
       logger.info({ module: "daily-tick" }, `brigády: ${generated} nových, ${skipped} obcí přeskočeno`);
+      // Petice 1× za měsíc per tým — generator řeší cooldown 25 dní sám
+      const petitionRes = await generateMonthlyPetitions(env.DB, effectiveDate.toISOString());
+      if (petitionRes.generated > 0) {
+        logger.info({ module: "daily-tick" }, `petice: ${petitionRes.generated} nových`);
+      }
     }
   } catch (e) {
     logger.error({ module: "daily-tick" }, "village brigade cycle failed", e);

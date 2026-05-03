@@ -91,6 +91,100 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
   },
 ];
 
+/**
+ * Po skončení zápasu: pokud místní hráč (z obce týmu) zaznamenal MOTM nebo
+ * hat-trick, přihoď bonus do globálního favor a morálku celému domácímu kádru.
+ * Lokální senzace = transparentní událost (zapsaná v village_history).
+ */
+export async function applyLocalSensations(
+  db: D1Database,
+  matchId: string,
+  homeTeamId: string,
+  homeUpdates: Array<{ playerId: string; goals: number }>,
+  momPlayerId: string | null,
+  gameDate: string,
+): Promise<void> {
+  const team = await db.prepare(
+    `SELECT t.village_id, v.name as village_name FROM teams t
+     JOIN villages v ON v.id = t.village_id
+     WHERE t.id = ?`
+  ).bind(homeTeamId).first<{ village_id: string; village_name: string }>().catch((e) => {
+    logger.warn({ module: "village-processor" }, "load team village", e);
+    return null;
+  });
+  if (!team) return;
+
+  // Hráči s ≥3 góly nebo MOTM
+  const candidateIds = new Set<string>();
+  for (const u of homeUpdates) {
+    if (u.goals >= 3) candidateIds.add(u.playerId);
+  }
+  if (momPlayerId) candidateIds.add(momPlayerId);
+  if (candidateIds.size === 0) return;
+
+  // Místní mezi nimi (life_context.residence === village_name nebo player.villageName?)
+  // V DB vidím sloupec residence. Použijeme ten.
+  const placeholders = Array.from(candidateIds).map(() => "?").join(",");
+  const players = await db.prepare(
+    `SELECT id, first_name, last_name, residence FROM players
+     WHERE id IN (${placeholders}) AND residence = ?`
+  ).bind(...Array.from(candidateIds), team.village_name).all<{
+    id: string; first_name: string; last_name: string; residence: string;
+  }>();
+
+  const locals = players.results ?? [];
+  if (locals.length === 0) return;
+
+  // Bonus per local sensation: +3 favor, +5 morale celému kádru
+  const now = new Date().toISOString();
+  for (const p of locals) {
+    const isHatTrick = (homeUpdates.find((u) => u.playerId === p.id)?.goals ?? 0) >= 3;
+    const isMom = momPlayerId === p.id;
+    const reason = isHatTrick && isMom ? "hat-trick a hráčem zápasu"
+      : isHatTrick ? "hat-trickem"
+      : "hráčem zápasu";
+    const desc = `Místní rodák ${p.first_name} ${p.last_name} se stal ${reason}!`;
+    await db.prepare(
+      `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
+       VALUES (?, ?, ?, NULL, 'local_sensation', ?, ?, ?, ?)`
+    ).bind(
+      crypto.randomUUID(), team.village_id, homeTeamId, desc,
+      JSON.stringify({ playerId: p.id, hatTrick: isHatTrick, mom: isMom }),
+      gameDate, now,
+    ).run().catch((e) => logger.warn({ module: "village-processor" }, "insert local sensation history", e));
+  }
+
+  // Favor +3 globálnímu řádku (jeden bump per zápas, ne per hráč)
+  const favorRow = await db.prepare(
+    `SELECT id FROM village_team_favor WHERE team_id = ? AND official_id IS NULL`
+  ).bind(homeTeamId).first<{ id: string }>();
+  if (favorRow) {
+    await db.prepare(
+      `UPDATE village_team_favor SET favor = MIN(100, favor + 3),
+       last_interaction_at = ?, updated_at = ? WHERE id = ?`
+    ).bind(now, now, favorRow.id).run().catch((e) => {
+      logger.warn({ module: "village-processor" }, "bump global favor", e);
+    });
+  } else {
+    await db.prepare(
+      `INSERT INTO village_team_favor (id, village_id, team_id, official_id, favor, trust, last_interaction_at, updated_at)
+       VALUES (?, ?, ?, NULL, 53, 50, ?, ?)`
+    ).bind(crypto.randomUUID(), team.village_id, homeTeamId, now, now).run().catch((e) => {
+      logger.warn({ module: "village-processor" }, "seed favor with sensation", e);
+    });
+  }
+
+  // Morale boost +5 celému domácímu kádru (clamp 100)
+  await db.prepare(
+    `UPDATE players
+     SET life_context = json_set(life_context, '$.morale',
+       MIN(100, COALESCE(json_extract(life_context, '$.morale'), 50) + 5))
+     WHERE team_id = ? AND (status IS NULL OR status != 'released')`
+  ).bind(homeTeamId).run().catch((e) => {
+    logger.warn({ module: "village-processor" }, "boost team morale local sensation", e);
+  });
+}
+
 /** Mapuje village.size na počet brigád za týden. */
 function brigadesPerWeek(size: string): number {
   switch (size) {
@@ -181,6 +275,148 @@ export async function expireOldBrigades(db: D1Database, gameDate: string): Promi
      WHERE status = 'open' AND expires_at < ?`
   ).bind(gameDate).run();
   return result.meta?.changes ?? 0;
+}
+
+interface PetitionTemplate {
+  topic: string;
+  title: string;
+  description: string;
+  costMoney: number;
+  rewardFavor: number;
+  ignorePenalty: number;
+}
+
+const PETITION_TEMPLATES: PetitionTemplate[] = [
+  {
+    topic: "detsky_den",
+    title: "Petice za dětský den",
+    description: "Občané žádají, aby klub uspořádal pro místní děti odpoledne s autogramiádou a soutěžemi.",
+    costMoney: 1500, rewardFavor: 6, ignorePenalty: -3,
+  },
+  {
+    topic: "oprava_satnen",
+    title: "Stížnost na stav šaten",
+    description: "Občané si stěžují, že šatny v obecních prostorách potřebují drobnou opravu — dveře, sedátka, věšáky.",
+    costMoney: 3000, rewardFavor: 8, ignorePenalty: -4,
+  },
+  {
+    topic: "verejny_trenink",
+    title: "Petice za otevřený trénink",
+    description: "Místní by chtěli vidět tým v akci — žádají uspořádat veřejný trénink s občerstvením.",
+    costMoney: 800, rewardFavor: 5, ignorePenalty: -2,
+  },
+  {
+    topic: "darek_seniori",
+    title: "Dárek seniorům",
+    description: "Klub Senior obce prosí o symbolický příspěvek — dresy nebo balíčky pro účastníky setkání.",
+    costMoney: 1200, rewardFavor: 6, ignorePenalty: -3,
+  },
+  {
+    topic: "zahrebenec_kasna",
+    title: "Petice za záhonek u kašny",
+    description: "Občané chtějí, aby se klub podílel na úpravě veřejné zeleně. Stačí finanční příspěvek na sazenice.",
+    costMoney: 600, rewardFavor: 4, ignorePenalty: -2,
+  },
+  {
+    topic: "podpora_hasicu",
+    title: "Příspěvek hasičům",
+    description: "SDH potřebuje pomoct s nákupem nářadí pro nadcházející soutěž. Občané čekají, že klub přispěje.",
+    costMoney: 2000, rewardFavor: 7, ignorePenalty: -3,
+  },
+];
+
+/**
+ * Vygeneruje 1 petici pro každý lidský tým, který nemá aktivní petici a
+ * od minulé uplynulo > 25 dní. Idempotentní per (team_id, week).
+ */
+export async function generateMonthlyPetitions(
+  db: D1Database,
+  gameDate: string,
+): Promise<{ generated: number }> {
+  const eligibleTeams = await db.prepare(
+    `SELECT t.id as team_id, t.village_id FROM teams t
+     WHERE t.user_id != 'ai'
+       AND NOT EXISTS (
+         SELECT 1 FROM village_petitions vp
+         WHERE vp.team_id = t.id AND vp.status = 'active'
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM village_petitions vp
+         WHERE vp.team_id = t.id AND vp.created_at > datetime(?, '-25 days')
+       )`
+  ).bind(gameDate).all<{ team_id: string; village_id: string }>();
+
+  let generated = 0;
+  const now = new Date();
+  const expiresAt = new Date(now);
+  expiresAt.setDate(now.getDate() + 14); // 14 dní na odpověď
+
+  for (const t of eligibleTeams.results ?? []) {
+    const seed = hashSeed(`${t.team_id}|${gameDate.slice(0, 7)}`);
+    const rng = createRng(seed);
+    const template = PETITION_TEMPLATES[rng.int(0, PETITION_TEMPLATES.length - 1)];
+    const id = crypto.randomUUID();
+    try {
+      await db.prepare(
+        `INSERT INTO village_petitions
+          (id, village_id, team_id, topic, title, description, cost_money,
+           reward_favor, ignore_penalty, expires_at, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
+      ).bind(
+        id, t.village_id, t.team_id, template.topic, template.title, template.description,
+        template.costMoney, template.rewardFavor, template.ignorePenalty,
+        expiresAt.toISOString(), gameDate,
+      ).run();
+      generated++;
+    } catch (e) {
+      logger.warn({ module: "village-processor" }, `insert petition for team ${t.team_id}`, e);
+    }
+  }
+
+  return { generated };
+}
+
+/**
+ * Označí prošlé petice (active + expires_at < now) jako 'ignored' a aplikuje penalty.
+ */
+export async function expirePetitions(db: D1Database, gameDate: string): Promise<number> {
+  const expired = await db.prepare(
+    `SELECT id, village_id, team_id, ignore_penalty, title FROM village_petitions
+     WHERE status = 'active' AND expires_at < ?`
+  ).bind(gameDate).all<{
+    id: string; village_id: string; team_id: string; ignore_penalty: number; title: string;
+  }>();
+
+  const now = new Date().toISOString();
+  for (const p of expired.results ?? []) {
+    await db.prepare(
+      `UPDATE village_petitions SET status = 'ignored', responded_at = ? WHERE id = ?`
+    ).bind(now, p.id).run();
+
+    // Penalize globální favor
+    const favorRow = await db.prepare(
+      `SELECT id, favor FROM village_team_favor WHERE team_id = ? AND official_id IS NULL`
+    ).bind(p.team_id).first<{ id: string; favor: number }>();
+    if (favorRow) {
+      await db.prepare(
+        `UPDATE village_team_favor
+         SET favor = MAX(0, favor + ?), last_interaction_at = ?, updated_at = ?
+         WHERE id = ?`
+      ).bind(p.ignore_penalty, now, now, favorRow.id).run();
+    }
+
+    await db.prepare(
+      `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
+       VALUES (?, ?, ?, NULL, 'petition_ignored', ?, ?, ?, ?)`
+    ).bind(
+      crypto.randomUUID(), p.village_id, p.team_id,
+      `Petice „${p.title}" zůstala bez odezvy. Občané jsou zklamaní.`,
+      JSON.stringify({ penalty: p.ignore_penalty }),
+      gameDate, now,
+    ).run().catch((e) => logger.warn({ module: "village-processor" }, "petition ignored history", e));
+  }
+
+  return expired.results?.length ?? 0;
 }
 
 function pickTemplateWeighted(

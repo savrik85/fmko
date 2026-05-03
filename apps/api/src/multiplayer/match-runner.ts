@@ -498,6 +498,23 @@ export async function runScheduledMatches(
         const momPlayerId = determineManOfMatch(ratings);
         await saveMatchMom(db, matchId, momPlayerId);
 
+        // Lokální senzace — domácí místní rodák s hat-trickem nebo MOTM zvedne
+        // přízeň obce a morálku kádru. Pošleme do village-processor.
+        try {
+          const homeUpdatesPreview = extractStatsFromEvents(
+            result.events,
+            homeBuild.idMap,
+            homeLineupPreSim.map((p) => homeBuild.idMap.get(p.id) ?? "").filter(Boolean),
+            ratings,
+            result.playerMinutes,
+          );
+          const goalsByPlayer = homeUpdatesPreview.map((u) => ({ playerId: u.playerId, goals: u.goals }));
+          const { applyLocalSensations } = await import("../season/village-processor");
+          await applyLocalSensations(db, matchId, homeTeamId, goalsByPlayer, momPlayerId, new Date().toISOString());
+        } catch (e) {
+          logger.warn({ module: "match-runner" }, "local sensations hook", e);
+        }
+
         // Home team stats — starter IDs musí pocházet z PRE-SIM lineupu (homeLineupPreSim),
         // ne z idMap.values() která má insertion order. Při substituci by jinak střídající
         // dostali started=true a starters started=false.
