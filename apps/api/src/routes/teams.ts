@@ -2815,6 +2815,7 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
 import {
   haversineKm,
   loadFanbaseAggregate,
+  loadRegionalPopulation,
   expectedAttendance,
   homeAdvantageFromFanbase,
   distanceConversionMod,
@@ -2908,7 +2909,8 @@ teamsRouter.get("/:id/fanbase", async (c) => {
     };
   });
 
-  const expected = expectedAttendance(agg);
+  const { regionalPopulation } = await loadRegionalPopulation(c.env.DB, teamId);
+  const expected = expectedAttendance(agg, homeRow.population, regionalPopulation);
   const ha = homeAdvantageFromFanbase(agg, expected.total, capacity);
 
   return c.json({

@@ -48,11 +48,12 @@ export async function loadOrInitFanbase(
   if (row) return row;
 
   // Backfill pro tým, který chybí v migrace (nový team založený po migraci)
+  // Realistické pro vesnický fotbal — ~12 % populace jsou stálí fanoušci
   const init = await db
     .prepare(
-      `SELECT CAST(v.population * 0.005 AS INTEGER) AS hc,
-              CAST(v.population * 0.020 AS INTEGER) AS reg,
-              CAST(v.population * 0.030 AS INTEGER) AS cas
+      `SELECT CAST(v.population * 0.010 AS INTEGER) AS hc,
+              CAST(v.population * 0.040 AS INTEGER) AS reg,
+              CAST(v.population * 0.070 AS INTEGER) AS cas
        FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`,
     )
     .bind(teamId)
@@ -99,6 +100,56 @@ export interface FanbaseAggregate {
   fromSatellites: { hardcore: number; regular: number; casual: number };
 }
 
+// Načte populaci okolních obcí (do WALK_UP_REGIONAL_RADIUS_KM od domácí obce).
+// Používá se pro výpočet walk-up — vesnický fotbal přitahuje i okolí.
+export async function loadRegionalPopulation(
+  db: DB,
+  teamId: string,
+): Promise<{ homePopulation: number; regionalPopulation: number }> {
+  const home = await db
+    .prepare(
+      `SELECT v.lat, v.lng, v.population
+       FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?`,
+    )
+    .bind(teamId)
+    .first<{ lat: number; lng: number; population: number }>()
+    .catch((e) => {
+      logger.warn({ module: "fanbase-helpers" }, "load home for regional pop", e);
+      return null;
+    });
+
+  if (!home || home.lat == null) {
+    return { homePopulation: home?.population ?? 0, regionalPopulation: 0 };
+  }
+
+  const radius = FANBASE_CONFIG.WALK_UP_REGIONAL_RADIUS_KM;
+  const latDelta = radius / 111;
+  const lngDelta = radius / 73;
+
+  const rows = await db
+    .prepare(
+      `SELECT lat, lng, population FROM villages
+       WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?`,
+    )
+    .bind(home.lat - latDelta, home.lat + latDelta, home.lng - lngDelta, home.lng + lngDelta)
+    .all<{ lat: number; lng: number; population: number }>()
+    .catch((e) => {
+      logger.warn({ module: "fanbase-helpers" }, "load regional villages", e);
+      return { results: [] as Array<{ lat: number; lng: number; population: number }> };
+    });
+
+  let regional = 0;
+  for (const v of rows.results) {
+    if (v.lat == null) continue;
+    const d = haversineKm(home.lat, home.lng, v.lat, v.lng);
+    if (d > 0.01 && d <= radius) {
+      regional += v.population;
+    }
+  }
+
+  return { homePopulation: home.population, regionalPopulation: regional };
+}
+
 export async function loadFanbaseAggregate(
   db: DB,
   teamId: string,
@@ -143,11 +194,17 @@ export async function loadFanbaseAggregate(
   };
 }
 
-export function expectedAttendance(agg: FanbaseAggregate): {
+export function expectedAttendance(
+  agg: FanbaseAggregate,
+  homePopulation: number = 0,
+  regionalPopulation: number = 0,
+): {
   hardcore: number;
   regular: number;
   casual: number;
   walkUp: number;
+  walkUpHome: number;
+  walkUpRegional: number;
   total: number;
 } {
   const hardcoreAtt = Math.round(
@@ -171,21 +228,31 @@ export function expectedAttendance(agg: FanbaseAggregate): {
         FANBASE_CONFIG.ATTENDANCE_RATE.casual.max,
       ),
   );
-  const walkUp = Math.round(
-    agg.total *
+  // Walk-up "z vesnice" — neutříděná část domácí populace co přijde
+  const walkUpHome = Math.round(
+    homePopulation *
       rngBetween(
-        FANBASE_CONFIG.WALK_UP_RATE.min,
-        FANBASE_CONFIG.WALK_UP_RATE.max,
+        FANBASE_CONFIG.WALK_UP_HOME.min,
+        FANBASE_CONFIG.WALK_UP_HOME.max,
       ),
   );
-  // Match floor v match-runner.ts (Math.max(15, ...)) — promítáme i do expected
-  const total = Math.max(15, hardcoreAtt + regularAtt + casualAtt + walkUp);
+  // Walk-up "z okolí" — lidé z okolních obcí co náhodně přijdou na zápas
+  const walkUpRegional = Math.round(
+    regionalPopulation *
+      rngBetween(
+        FANBASE_CONFIG.WALK_UP_REGIONAL.min,
+        FANBASE_CONFIG.WALK_UP_REGIONAL.max,
+      ),
+  );
+  const walkUp = walkUpHome + walkUpRegional;
   return {
     hardcore: hardcoreAtt,
     regular: regularAtt,
     casual: casualAtt,
     walkUp,
-    total,
+    walkUpHome,
+    walkUpRegional,
+    total: hardcoreAtt + regularAtt + casualAtt + walkUp,
   };
 }
 

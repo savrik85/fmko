@@ -33,8 +33,14 @@ export const FANBASE_CONFIG = {
     casualDecayRate: 0.3,
     regularDecayRate: 0.1,
   },
-  // Walk-up (drop-in mimo bus/promo) — random procento z totalLoyal
-  WALK_UP_RATE: { min: 0, max: 0.3 },
+  // Walk-up = "lidi co přijdou na zápas náhodně, nejsou v žádném tieru"
+  // - z vlastní vesnice: 5-10 % populace
+  // - z okolních obcí (do 5 km): 0.5-1.5 % jejich populace (zájem regionu)
+  WALK_UP_HOME: { min: 0.05, max: 0.10 },
+  WALK_UP_REGIONAL: { min: 0.005, max: 0.015 },
+  WALK_UP_REGIONAL_RADIUS_KM: 5,
+  // Backfill koeficienty (% populace na startu) — realistické pro vesnický fotbal
+  BACKFILL_RATIO: { hardcore: 0.010, regular: 0.040, casual: 0.070 },
 } as const;
 
 export const BUS_CONFIG = {

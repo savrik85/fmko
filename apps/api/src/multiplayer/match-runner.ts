@@ -211,12 +211,13 @@ export async function runScheduledMatches(
       ).bind(homeTeamId).first<{ population: number; size: string; reputation: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load home village info", e); return null; });
       const rep = homeInfo?.reputation ?? 50;
 
-      // Tier-based base (hardcore + regular + casual + walk-up) — agregát ze 3 zdrojů
-      const { loadFanbaseAggregate, expectedAttendance, homeAdvantageFromFanbase } =
+      // Tier-based base (hardcore + regular + casual + walk-up z vesnice + walk-up z okolí)
+      const { loadFanbaseAggregate, loadRegionalPopulation, expectedAttendance, homeAdvantageFromFanbase } =
         await import("../season/fanbase-helpers");
       const { BUS_CONFIG } = await import("../season/fanbase-config");
       const { agg: fanbaseAgg } = await loadFanbaseAggregate(db, homeTeamId);
-      const expected = expectedAttendance(fanbaseAgg);
+      const { regionalPopulation } = await loadRegionalPopulation(db, homeTeamId);
+      const expected = expectedAttendance(fanbaseAgg, homeInfo?.population ?? 500, regionalPopulation);
       const popBase = expected.total;
 
       // Bus drop-in pro tento zápas (z objednaných busů)
@@ -242,9 +243,9 @@ export async function runScheduledMatches(
         ) WHERE win = 1`
       ).bind(homeTeamId, homeTeamId, homeTeamId, homeTeamId).first<{ w: number }>().catch((e) => { logger.warn({ module: "match-runner" }, "Failed to load recent wins", e); return { w: 0 }; });
       const formBonus = Math.round((recentWins?.w ?? 0) * popBase * 0.08);
-      // Floor 15 zachován z původní logiky — bez akce má klub stejnou minimální návštěvu jako dřív.
-      // Bus + propagace + tier růst se přičítá nad rámec floor.
-      const rawAttendance = Math.max(15, popBase + repBonus + formBonus + busDropIn + Math.round(Math.random() * 10 - 5));
+      // Walk-up z vlastní populace + okolních obcí už zajišťuje realistickou minimální návštěvu
+      // pro vesnické kluby (~15-20 lidí pro 100+obyv. vesnici). Floor 8 jen pro mikro-obce.
+      const rawAttendance = Math.max(8, popBase + repBonus + formBonus + busDropIn + Math.round(Math.random() * 10 - 5));
       // Celebrity attendance bonus — check if any celebrity is in either lineup
       let celebAttendanceMultiplier = 1.0;
       const allLineupIds = [...homeLineup, ...awayLineup].map(lp => fullIdMap.get(lp.id)).filter(Boolean) as string[];
