@@ -149,6 +149,20 @@ villagesRouter.get("/petitions", async (c) => {
   return c.json(rows.results ?? []);
 });
 
+// GET /api/villages/pub-encounters?teamId=X — aktivní hospodské střetnutí
+villagesRouter.get("/pub-encounters", async (c) => {
+  const teamId = c.req.query("teamId");
+  if (!teamId) return c.json({ error: "teamId required" }, 400);
+  const rows = await c.env.DB.prepare(
+    `SELECT vpe.*, vo.first_name, vo.last_name, vo.role, vo.personality, vo.face_config
+     FROM village_pub_encounters vpe
+     JOIN village_officials vo ON vo.id = vpe.official_id
+     WHERE vpe.team_id = ? AND vpe.status = 'active'
+     ORDER BY vpe.expires_at ASC`
+  ).bind(teamId).all();
+  return c.json(rows.results ?? []);
+});
+
 // GET /api/villages/investments?teamId=X — pending investiční nabídky pro tým
 villagesRouter.get("/investments", async (c) => {
   const teamId = c.req.query("teamId");
@@ -805,6 +819,126 @@ villagesRouter.post("/invitations", requireAuth, async (c) => {
     id, status, giftCost,
     probability: Math.round(p * 100) / 100,
     officialName: `${official.first_name} ${official.last_name}`,
+  });
+});
+
+// POST /api/villages/pub-encounters/:id/respond — invite_beer | ignore
+villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => {
+  const encId = c.req.param("encId");
+  const session = c.get("session" as never) as { userId: string; teamId: string | null };
+  const teamRowAuth = await c.env.DB.prepare(
+    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' LIMIT 1"
+  ).bind(session.userId).first<{ id: string }>();
+  if (!teamRowAuth) return c.json({ error: "Nemáš tým" }, 400);
+
+  const body = await c.req.json<{ action: "invite_beer" | "ignore" }>().catch((e) => {
+    logger.warn({ module: "villages" }, "parse pub body", e);
+    return null;
+  });
+  if (!body || (body.action !== "invite_beer" && body.action !== "ignore")) {
+    return c.json({ error: "action musí být invite_beer|ignore" }, 400);
+  }
+
+  const enc = await c.env.DB.prepare(
+    `SELECT vpe.*, vo.first_name, vo.last_name, vo.personality
+     FROM village_pub_encounters vpe
+     JOIN village_officials vo ON vo.id = vpe.official_id
+     WHERE vpe.id = ? AND vpe.status = 'active'`
+  ).bind(encId).first<{
+    id: string; village_id: string; team_id: string; official_id: string;
+    first_name: string; last_name: string; personality: string;
+  }>();
+  if (!enc) return c.json({ error: "Encounter už není aktivní" }, 410);
+  if (enc.team_id !== teamRowAuth.id) return c.json({ error: "Není pro tvůj tým" }, 403);
+
+  const now = new Date().toISOString();
+  const teamRow = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
+    .bind(teamRowAuth.id).first<{ game_date: string }>();
+  const gameDate = teamRow?.game_date ?? now;
+
+  if (body.action === "ignore") {
+    await c.env.DB.prepare(
+      `UPDATE village_pub_encounters SET status = 'ignored', responded_at = ?, outcome = 'ignored' WHERE id = ?`
+    ).bind(now, encId).run();
+    return c.json({ ok: true, action: "ignore" });
+  }
+
+  // invite_beer
+  const beerCost = enc.personality === "tradicionalista" ? 350 : enc.personality === "populista" ? 250 : 400;
+
+  const { recordTransaction: rec } = await import("../season/finance-processor");
+  await rec(
+    c.env.DB, teamRowAuth.id, "event", -beerCost,
+    `Pivo s ${enc.first_name} ${enc.last_name}`, gameDate,
+  );
+
+  // Šance skandálu (5% pro aktivistu, 2% pro ostatní)
+  const scandalProb = enc.personality === "aktivista" ? 0.05 : 0.02;
+  const isScandal = Math.random() < scandalProb;
+
+  let trustGain = 0;
+  let favorDelta = 0;
+  let outcome: "beer" | "scandal" = "beer";
+  let desc = "";
+
+  if (isScandal) {
+    outcome = "scandal";
+    favorDelta = -5;
+    desc = `${enc.first_name} ${enc.last_name} odešel z hospody znechucený. Skandál!`;
+    // Také snížit morálku náhodnému hráči o 10
+    await c.env.DB.prepare(
+      `UPDATE players
+       SET life_context = json_set(life_context, '$.morale',
+         MAX(0, COALESCE(json_extract(life_context, '$.morale'), 50) - 10))
+       WHERE team_id = ? AND (status IS NULL OR status != 'released')
+       ORDER BY RANDOM() LIMIT 1`
+    ).bind(teamRowAuth.id).run().catch((e) => logger.warn({ module: "villages" }, "scandal morale hit", e));
+  } else {
+    trustGain = enc.personality === "populista" ? 4
+      : enc.personality === "tradicionalista" ? 3 : 2;
+    favorDelta = 1;
+    desc = `Pohoda u piva s ${enc.first_name} ${enc.last_name}. Trust +${trustGain}.`;
+  }
+
+  // Update favor / trust per official
+  const fav = await c.env.DB.prepare(
+    `SELECT id FROM village_team_favor WHERE team_id = ? AND official_id = ?`
+  ).bind(teamRowAuth.id, enc.official_id).first<{ id: string }>();
+  if (fav) {
+    await c.env.DB.prepare(
+      `UPDATE village_team_favor
+       SET favor = MAX(0, MIN(100, favor + ?)),
+           trust = MAX(0, MIN(100, trust + ?)),
+           last_interaction_at = ?, updated_at = ?
+       WHERE id = ?`
+    ).bind(favorDelta, trustGain, now, now, fav.id).run();
+  } else {
+    await c.env.DB.prepare(
+      `INSERT INTO village_team_favor (id, village_id, team_id, official_id, favor, trust, last_interaction_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      crypto.randomUUID(), enc.village_id, teamRowAuth.id, enc.official_id,
+      50 + favorDelta, 50 + trustGain, now, now,
+    ).run();
+  }
+
+  await c.env.DB.prepare(
+    `UPDATE village_pub_encounters SET status = 'accepted', responded_at = ?, outcome = ? WHERE id = ?`
+  ).bind(now, outcome, encId).run();
+
+  await c.env.DB.prepare(
+    `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    crypto.randomUUID(), enc.village_id, teamRowAuth.id, enc.official_id,
+    isScandal ? "pub_scandal" : "pub_beer",
+    desc, JSON.stringify({ cost: beerCost, trustGain, favorDelta, outcome }),
+    gameDate, now,
+  ).run().catch((e) => logger.warn({ module: "villages" }, "pub encounter history", e));
+
+  return c.json({
+    ok: true, outcome, beerCost, trustGain, favorDelta,
+    officialName: `${enc.first_name} ${enc.last_name}`,
   });
 });
 

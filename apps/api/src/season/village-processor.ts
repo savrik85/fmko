@@ -579,6 +579,77 @@ export async function generateMonthlyInvestments(
   return { generated };
 }
 
+/**
+ * Vygeneruje pub encounters: 1× za 14-21 dní per (village, human team).
+ * Persona populista/tradicionalista chodí do hospody častěji než aktivista.
+ */
+export async function generatePubEncounters(
+  db: D1Database,
+  gameDate: string,
+): Promise<{ generated: number }> {
+  const teams = await db.prepare(
+    `SELECT t.id as team_id, t.village_id FROM teams t
+     WHERE t.user_id != 'ai'
+       AND NOT EXISTS (
+         SELECT 1 FROM village_pub_encounters vpe
+         WHERE vpe.team_id = t.id AND vpe.status = 'active'
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM village_pub_encounters vpe
+         WHERE vpe.team_id = t.id AND vpe.created_at > datetime(?, '-14 days')
+       )`
+  ).bind(gameDate).all<{ team_id: string; village_id: string }>();
+
+  let generated = 0;
+  const now = new Date();
+  const expiresAt = new Date(now);
+  expiresAt.setDate(now.getDate() + 5); // 5 dní na rozhodnutí
+
+  for (const t of teams.results ?? []) {
+    const officials = await db.prepare(
+      "SELECT id, personality FROM village_officials WHERE village_id = ?"
+    ).bind(t.village_id).all<{ id: string; personality: string }>();
+    if ((officials.results ?? []).length === 0) continue;
+
+    const seed = hashSeed(`${t.team_id}|pub|${gameDate.slice(0, 10)}`);
+    const rng = createRng(seed);
+
+    // Vážit dle persona — populista/tradicionalista chodí často
+    const weights: Record<string, number> = {};
+    for (const o of officials.results ?? []) {
+      weights[o.id] = o.personality === "populista" ? 4
+        : o.personality === "tradicionalista" ? 3
+        : o.personality === "sportovec" ? 2
+        : o.personality === "podnikatel" ? 1.5
+        : 0.5; // aktivista
+    }
+    const officialId = rng.weighted(weights);
+    if (!officialId) continue;
+
+    const id = crypto.randomUUID();
+    try {
+      await db.prepare(
+        `INSERT INTO village_pub_encounters
+          (id, village_id, team_id, official_id, status, expires_at, created_at)
+         VALUES (?, ?, ?, ?, 'active', ?, ?)`
+      ).bind(id, t.village_id, t.team_id, officialId, expiresAt.toISOString(), gameDate).run();
+      generated++;
+    } catch (e) {
+      logger.warn({ module: "village-processor" }, `insert pub encounter for team ${t.team_id}`, e);
+    }
+  }
+  return { generated };
+}
+
+/** Označí prošlé pub encounters jako 'expired' (žádná penalty — NPC prostě nečekal). */
+export async function expirePubEncounters(db: D1Database, gameDate: string): Promise<number> {
+  const result = await db.prepare(
+    `UPDATE village_pub_encounters SET status = 'expired'
+     WHERE status = 'active' AND expires_at < ?`
+  ).bind(gameDate).run();
+  return result.meta?.changes ?? 0;
+}
+
 /** Označí prošlé investice jako 'expired'. */
 export async function expireInvestments(db: D1Database, gameDate: string): Promise<number> {
   const result = await db.prepare(

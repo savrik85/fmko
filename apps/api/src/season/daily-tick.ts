@@ -74,6 +74,7 @@ export async function executeDailyTick(
       expireOldBrigades, generateWeeklyBrigades,
       expirePetitions, generateMonthlyPetitions,
       expireInvestments, generateMonthlyInvestments,
+      expirePubEncounters, generatePubEncounters,
     } = await import("./village-processor");
     const expired = await expireOldBrigades(env.DB, effectiveDate.toISOString());
     if (expired > 0) {
@@ -87,6 +88,10 @@ export async function executeDailyTick(
     if (expiredInv > 0) {
       logger.info({ module: "daily-tick" }, `${expiredInv} investic vypršelo`);
     }
+    const expiredPub = await expirePubEncounters(env.DB, effectiveDate.toISOString());
+    if (expiredPub > 0) {
+      logger.info({ module: "daily-tick" }, `${expiredPub} pub encounters vypršelo`);
+    }
     if (dayOfWeek === 1) {
       const { generated, skipped } = await generateWeeklyBrigades(env.DB, effectiveDate.toISOString());
       logger.info({ module: "daily-tick" }, `brigády: ${generated} nových, ${skipped} obcí přeskočeno`);
@@ -97,6 +102,10 @@ export async function executeDailyTick(
       const invRes = await generateMonthlyInvestments(env.DB, effectiveDate.toISOString());
       if (invRes.generated > 0) {
         logger.info({ module: "daily-tick" }, `investice: ${invRes.generated} nových`);
+      }
+      const pubRes = await generatePubEncounters(env.DB, effectiveDate.toISOString());
+      if (pubRes.generated > 0) {
+        logger.info({ module: "daily-tick" }, `pub encounters: ${pubRes.generated} nových`);
       }
     }
   } catch (e) {

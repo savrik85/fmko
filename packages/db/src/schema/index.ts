@@ -21,3 +21,4 @@ export { villageInvitations } from "./village-invitations";
 export { villageInvestments } from "./village-investments";
 export { villageHistory } from "./village-history";
 export { villagePetitions } from "./village-petitions";
+export { villagePubEncounters } from "./village-pub-encounters";

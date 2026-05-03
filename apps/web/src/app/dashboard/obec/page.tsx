@@ -98,6 +98,17 @@ interface RosterPlayer {
   status: string | null;
 }
 
+interface PubEncounter {
+  id: string;
+  official_id: string;
+  first_name: string;
+  last_name: string;
+  role: OfficialRole;
+  personality: Personality;
+  face_config: string;
+  expires_at: string;
+}
+
 interface Investment {
   id: string;
   village_id: string;
@@ -244,6 +255,8 @@ export default function ObecPage() {
   const [respondingPetitionId, setRespondingPetitionId] = useState<string | null>(null);
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [respondingInvId, setRespondingInvId] = useState<string | null>(null);
+  const [pubEncounters, setPubEncounters] = useState<PubEncounter[]>([]);
+  const [respondingPubId, setRespondingPubId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [upcoming, setUpcoming] = useState<UpcomingMatch | null>(null);
   const [invitingOfficialId, setInvitingOfficialId] = useState<string | null>(null);
@@ -254,7 +267,7 @@ export default function ObecPage() {
 
   const refresh = async (vid: string) => {
     if (!teamId) return;
-    const [v, o, f, ts, fd, bg, up, pe, inv] = await Promise.all([
+    const [v, o, f, ts, fd, bg, up, pe, inv, pub] = await Promise.all([
       apiFetch<VillageDetail>(`/api/villages/${vid}`),
       apiFetch<Official[]>(`/api/villages/${vid}/officials`),
       apiFetch<Favor>(`/api/villages/${vid}/favor?teamId=${teamId}`),
@@ -264,9 +277,38 @@ export default function ObecPage() {
       apiFetch<UpcomingMatch>(`/api/villages/upcoming-match?teamId=${teamId}`),
       apiFetch<Petition[]>(`/api/villages/petitions?teamId=${teamId}`),
       apiFetch<Investment[]>(`/api/villages/investments?teamId=${teamId}`),
+      apiFetch<PubEncounter[]>(`/api/villages/pub-encounters?teamId=${teamId}`),
     ]);
     setVillage(v); setOfficials(o); setFavor(f); setTeams(ts); setFeed(fd); setBrigades(bg);
-    setUpcoming(up); setPetitions(pe); setInvestments(inv);
+    setUpcoming(up); setPetitions(pe); setInvestments(inv); setPubEncounters(pub);
+  };
+
+  const respondPub = async (id: string, action: "invite_beer" | "ignore") => {
+    if (respondingPubId) return;
+    setRespondingPubId(id);
+    try {
+      const res = await apiFetch<{ outcome?: string; beerCost?: number; trustGain?: number; officialName?: string }>(
+        `/api/villages/pub-encounters/${id}/respond`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        },
+      );
+      let msg = "";
+      if (action === "ignore") msg = "Ignoroval(a) jsi NPC.";
+      else if (res.outcome === "scandal") msg = `Skandál! ${res.officialName} odešel znechucen.`;
+      else msg = `Pivo s ${res.officialName} — trust +${res.trustGain}, cena ${res.beerCost} Kč.`;
+      setToast(msg);
+      setTimeout(() => setToast(null), 5000);
+      if (villageId) await refresh(villageId);
+    } catch (e: unknown) {
+      const m = e instanceof Error ? e.message : "Chyba";
+      setToast(`Hospoda: ${m}`);
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setRespondingPubId(null);
+    }
   };
 
   const respondInvestment = async (id: string, action: "accept" | "decline") => {
@@ -441,6 +483,58 @@ export default function ObecPage() {
           })}
         </div>
       </div>
+
+      {/* NPC v hospodě */}
+      {pubEncounters.length > 0 && (
+        <Card>
+          <CardHeader>
+            <SectionLabel>Náhodné setkání v hospodě</SectionLabel>
+            <div className="text-xs text-gray-500 mt-1">
+              Zastupitel se objevil v hospodě. Můžeš ho pozvat na pivo (cena podle nálady) — buď to posílí vztah, nebo bude skandál.
+            </div>
+          </CardHeader>
+          <CardBody>
+            <div className="space-y-3">
+              {pubEncounters.map((p) => {
+                let face: Record<string, unknown> = {};
+                try { face = JSON.parse(p.face_config); } catch { face = {}; }
+                return (
+                  <div key={p.id} className="flex items-center gap-3 border border-amber-300 bg-amber-50/40 rounded-lg p-3">
+                    <FaceAvatar faceConfig={face} size={64} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs uppercase tracking-wider text-gray-500">{ROLE_LABEL[p.role]}</div>
+                      <div className="font-semibold text-sm">{p.first_name} {p.last_name}</div>
+                      <div className="text-xs text-gray-600 mt-0.5">
+                        Zaškoupil si pivo a podívá se, jestli ho přemluvíš na další.
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Vyprší {new Date(p.expires_at).toLocaleDateString("cs")} · {PERSONALITY_LABEL[p.personality]}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <Button
+                        size="sm"
+                        disabled={respondingPubId === p.id}
+                        onClick={() => respondPub(p.id, "invite_beer")}
+                      >
+                        Pozvat na pivo
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={respondingPubId === p.id}
+                        onClick={() => respondPub(p.id, "ignore")}
+                      >
+                        Ignorovat
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Pozvánky na zápas */}
       {upcoming?.match && (
@@ -630,8 +724,8 @@ export default function ObecPage() {
                         <div className="font-semibold text-pitch-700">+{b.reward_favor} přízeň</div>
                         <div className="text-card-red">-{b.condition_drain} kondice</div>
                         {b.morale_change !== 0 && (
-                          <div className="text-card-red">
-                            {b.morale_change} morálka
+                          <div className={b.morale_change > 0 ? "text-pitch-600" : "text-card-red"}>
+                            {b.morale_change > 0 ? "+" : ""}{b.morale_change} morálka
                           </div>
                         )}
                       </div>
@@ -834,8 +928,8 @@ function BrigadeTakeDialog({ brigade, teamId, onClose, onSuccess }: BrigadeTakeD
             <div className="text-xs text-gray-500">Cena pro hráče</div>
             <div className="font-semibold text-card-red">-{brigade.condition_drain} kondice</div>
             {brigade.morale_change !== 0 && (
-              <div className="text-xs text-card-red">
-                {brigade.morale_change} morálka
+              <div className={`text-xs ${brigade.morale_change > 0 ? "text-pitch-600" : "text-card-red"}`}>
+                {brigade.morale_change > 0 ? "+" : ""}{brigade.morale_change} morálka
               </div>
             )}
           </div>
