@@ -338,7 +338,13 @@ import { requireAuth } from "../auth/middleware";
 villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
   const brigadeId = c.req.param("brigadeId");
   const session = c.get("session" as never) as { userId: string; teamId: string | null };
-  if (!session.teamId) return c.json({ error: "Nemáš tým" }, 400);
+  // Session.teamId v KV může být zastaralé (po znovu-založení týmu).
+  // Single source of truth = teams.user_id.
+  const teamRowAuth = await c.env.DB.prepare(
+    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' LIMIT 1"
+  ).bind(session.userId).first<{ id: string }>();
+  if (!teamRowAuth) return c.json({ error: "Nemáš tým" }, 400);
+  session.teamId = teamRowAuth.id;
 
   const body = await c.req.json<{ playerIds: string[] }>().catch((e) => {
     logger.warn({ module: "villages" }, "parse take body", e);
@@ -528,7 +534,13 @@ villagesRouter.get("/:id/feed", async (c) => {
 villagesRouter.post("/petitions/:petitionId/respond", requireAuth, async (c) => {
   const petitionId = c.req.param("petitionId");
   const session = c.get("session" as never) as { userId: string; teamId: string | null };
-  if (!session.teamId) return c.json({ error: "Nemáš tým" }, 400);
+  // Session.teamId v KV může být zastaralé (po znovu-založení týmu).
+  // Single source of truth = teams.user_id.
+  const teamRowAuth = await c.env.DB.prepare(
+    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' LIMIT 1"
+  ).bind(session.userId).first<{ id: string }>();
+  if (!teamRowAuth) return c.json({ error: "Nemáš tým" }, 400);
+  session.teamId = teamRowAuth.id;
 
   const body = await c.req.json<{ action: "accept" | "ignore" }>().catch((e) => {
     logger.warn({ module: "villages" }, "parse petition body", e);
@@ -623,7 +635,13 @@ villagesRouter.post("/petitions/:petitionId/respond", requireAuth, async (c) => 
 // POST /api/villages/invitations — pozvi NPC na zápas
 villagesRouter.post("/invitations", requireAuth, async (c) => {
   const session = c.get("session" as never) as { userId: string; teamId: string | null };
-  if (!session.teamId) return c.json({ error: "Nemáš tým" }, 400);
+  // Session.teamId v KV může být zastaralé (po znovu-založení týmu).
+  // Single source of truth = teams.user_id.
+  const teamRowAuth = await c.env.DB.prepare(
+    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' LIMIT 1"
+  ).bind(session.userId).first<{ id: string }>();
+  if (!teamRowAuth) return c.json({ error: "Nemáš tým" }, 400);
+  session.teamId = teamRowAuth.id;
 
   const body = await c.req.json<{ matchId: string; officialId: string }>().catch((e) => {
     logger.warn({ module: "villages" }, "parse invitation body", e);
