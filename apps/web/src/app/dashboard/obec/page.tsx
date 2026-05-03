@@ -209,7 +209,18 @@ function termRemaining(termEndAt: string): string {
 }
 
 export default function ObecPage() {
-  const { teamId } = useTeam();
+  const { teamId: ctxTeamId } = useTeam();
+  // Authentický teamId získáme z /api/auth/me — chrání před nekonzistentním
+  // localStorage (om_team z jiného přihlášení než aktuální om_token).
+  const [teamId, setTeamId] = useState<string | null>(null);
+  useEffect(() => {
+    apiFetch<{ teamId: string | null }>(`/api/auth/me`)
+      .then((me) => setTeamId(me.teamId))
+      .catch((e) => {
+        console.error("auth/me load:", e);
+        setTeamId(ctxTeamId);
+      });
+  }, [ctxTeamId]);
   const [village, setVillage] = useState<VillageDetail | null>(null);
   const [officials, setOfficials] = useState<Official[]>([]);
   const [favor, setFavor] = useState<Favor | null>(null);
