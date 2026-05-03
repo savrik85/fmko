@@ -4,6 +4,17 @@ import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm } from "@/components/ui";
+import { BusSelector } from "../match/BusSelector";
+
+interface ScheduleMatch {
+  id: string;
+  status: string;
+  awayName: string;
+  scheduledAt: string | null;
+  isHome: boolean;
+  promoted?: boolean;
+  promotionCost?: number | null;
+}
 
 interface FansData {
   satisfaction: number;
@@ -222,6 +233,9 @@ export default function FansPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("fanbase");
   const [fanbase, setFanbase] = useState<FanbaseData | null>(null);
   const [fanbaseHistory, setFanbaseHistory] = useState<FanbaseHistoryPoint[]>([]);
+  const [nextHomeMatch, setNextHomeMatch] = useState<ScheduleMatch | null>(null);
+  const [promotionPrice, setPromotionPrice] = useState<number | null>(null);
+  const [promoting, setPromoting] = useState(false);
   const [ticketPriceDraft, setTicketPriceDraft] = useState<string>("");
   const [productDrafts, setProductDrafts] = useState<Record<string, { sellPrice: string }>>({});
   const [restockQty, setRestockQty] = useState<Record<string, string>>({});
@@ -230,7 +244,7 @@ export default function FansPage() {
 
   const refresh = async () => {
     if (!teamId) return;
-    const [f, co, t, h, s, fb, fbh] = await Promise.all([
+    const [f, co, t, h, s, fb, fbh, sched] = await Promise.all([
       apiFetch<FansData>(`/api/teams/${teamId}/fans`),
       apiFetch<ConcessionData>(`/api/teams/${teamId}/concession`),
       apiFetch<Team>(`/api/teams/${teamId}`),
@@ -238,6 +252,10 @@ export default function FansPage() {
       apiFetch<{ matches: SalesMatch[] }>(`/api/teams/${teamId}/concession/sales?limit=60`),
       apiFetch<FanbaseData>(`/api/teams/${teamId}/fanbase`),
       apiFetch<{ history: FanbaseHistoryPoint[] }>(`/api/teams/${teamId}/fanbase/history?days=60`),
+      apiFetch<{ matches: ScheduleMatch[]; promotionPrice?: number }>(`/api/teams/${teamId}/schedule`).catch((e) => {
+        console.error("load schedule for fans page:", e);
+        return { matches: [] as ScheduleMatch[] };
+      }),
     ]);
     setFans(f);
     setConcession(co);
@@ -246,6 +264,9 @@ export default function FansPage() {
     setSalesHistory(s.matches ?? []);
     setFanbase(fb);
     setFanbaseHistory(fbh.history ?? []);
+    const home = sched.matches.find((m) => m.status !== "simulated" && m.isHome) ?? null;
+    setNextHomeMatch(home);
+    setPromotionPrice((sched as { promotionPrice?: number }).promotionPrice ?? null);
     // Předvyplnit cenu vstupenky: user override, jinak automatická podle obce
     const prefillPrice = f.baseTicketPrice > 0 ? f.baseTicketPrice : f.villageBaseTicketPrice;
     setTicketPriceDraft(String(prefillPrice));
@@ -265,6 +286,32 @@ export default function FansPage() {
         setLoading(false);
       });
   }, [teamId]);
+
+  const promoteNext = async () => {
+    if (!teamId || !nextHomeMatch || promoting) return;
+    const priceStr = promotionPrice != null ? `${promotionPrice.toLocaleString("cs")} Kč` : "500–2 500 Kč";
+    const ok = await confirm({
+      title: `Propagovat zápas proti ${nextHomeMatch.awayName}?`,
+      description: `Doma · ${nextHomeMatch.scheduledAt ? new Date(nextHomeMatch.scheduledAt).toLocaleDateString("cs") : ""}. Vyjde článek ve Zpravodaji a přijde +25 % diváků.`,
+      details: [{ label: "Cena", value: `-${priceStr}`, color: "text-card-red" }],
+      confirmLabel: promotionPrice != null ? `Propagovat za ${priceStr}` : "Propagovat",
+    });
+    if (!ok) return;
+    setPromoting(true);
+    const res = await apiFetch<{ ok?: boolean; error?: string }>(
+      `/api/teams/${teamId}/matches/${nextHomeMatch.id}/promote`,
+      { method: "POST" },
+    ).catch((e) => {
+      console.error("promote from fans:", e);
+      return { error: "Chyba při propagaci" };
+    });
+    setPromoting(false);
+    if (res?.error) {
+      showError("Chyba", res.error ?? "Zkus to prosím znovu.");
+      return;
+    }
+    await refresh();
+  };
 
   const saveTicketPrice = async () => {
     if (!teamId) return;
@@ -488,6 +535,44 @@ export default function FansPage() {
           {fanbase.homeVillage.name} ({fanbase.homeVillage.population.toLocaleString("cs")} obyv.) · kapacita {fanbase.capacity}
         </div>
       </div>
+
+      {/* ═══ Před dalším domácím zápasem (propagace + bus) ═══ */}
+      {nextHomeMatch && teamId && (
+        <div className="card p-4 sm:p-5 space-y-3">
+          <div className="flex items-baseline justify-between">
+            <SectionLabel>Před dalším domácím zápasem</SectionLabel>
+            <div className="text-xs text-muted">
+              vs <span className="font-heading font-bold text-ink">{nextHomeMatch.awayName}</span>
+              {nextHomeMatch.scheduledAt && (
+                <> · {new Date(nextHomeMatch.scheduledAt).toLocaleDateString("cs")}</>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-stretch gap-2">
+            {nextHomeMatch.promoted ? (
+              <div className="flex-1 px-3 py-2 rounded bg-gold-500/10 text-gold-700 font-heading font-bold text-sm flex items-center gap-2">
+                📢 Propagováno · článek ve zpravodaji + 25 % diváků
+              </div>
+            ) : (
+              <button
+                onClick={promoteNext}
+                disabled={promoting}
+                className="flex-1 px-3 py-2 rounded bg-gold-500/10 text-gold-700 hover:bg-gold-500/20 font-heading font-bold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+              >
+                📢 {promoting ? "Propaguji…" : "Propagovat zápas"}
+                {promotionPrice != null && (
+                  <span className="text-xs text-muted font-normal">
+                    {promotionPrice.toLocaleString("cs")} Kč
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
+
+          <BusSelector teamId={teamId} matchId={nextHomeMatch.id} />
+        </div>
+      )}
 
       {/* ═══ Loyalty progression ═══ */}
       <div className="card p-4 sm:p-5">
