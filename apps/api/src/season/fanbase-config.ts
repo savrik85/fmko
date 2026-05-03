@@ -34,9 +34,9 @@ export const FANBASE_CONFIG = {
     regularDecayRate: 0.1,
   },
   // Walk-up = "lidi co přijdou na zápas náhodně, nejsou v žádném tieru"
-  // - z vlastní vesnice: 5-10 % populace
+  // - z vlastní vesnice: 10-18 % populace
   // - z okolních obcí (do 5 km): 0.2-0.5 % jejich populace (= ~10 lidí pro typické vesnické okolí)
-  WALK_UP_HOME: { min: 0.05, max: 0.10 },
+  WALK_UP_HOME: { min: 0.10, max: 0.18 },
   WALK_UP_REGIONAL: { min: 0.002, max: 0.005 },
   WALK_UP_REGIONAL_RADIUS_KM: 5,
   // Backfill koeficienty (% populace na startu) — realistické pro vesnický fotbal
