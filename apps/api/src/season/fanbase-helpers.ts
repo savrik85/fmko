@@ -243,15 +243,13 @@ export function expectedAttendance(
         FANBASE_CONFIG.ATTENDANCE_RATE.casual.max,
       ),
   );
-  // Walk-up "z vesnice" — diminishing returns, vesnický fotbal v 8000-čtvrti
-  // nepřitahuje 1100 lidí. Effective populace cap.
-  const walkUpHome = Math.round(
-    effectivePopulation(homePopulation) *
-      rngBetween(
-        FANBASE_CONFIG.WALK_UP_HOME.min,
-        FANBASE_CONFIG.WALK_UP_HOME.max,
-      ),
-  );
+  // Walk-up "z vesnice" — pro vesnice (≤300 obyv.) vyšší rate (víkendová zábava
+  // skoro pro každého), pro města nižší rate plus effective populace cap.
+  const isVillage = homePopulation <= FANBASE_CONFIG.VILLAGE_POP_THRESHOLD;
+  const homeRate = isVillage
+    ? rngBetween(FANBASE_CONFIG.WALK_UP_HOME_VILLAGE.min, FANBASE_CONFIG.WALK_UP_HOME_VILLAGE.max)
+    : rngBetween(FANBASE_CONFIG.WALK_UP_HOME_TOWN.min, FANBASE_CONFIG.WALK_UP_HOME_TOWN.max);
+  const walkUpHome = Math.round(effectivePopulation(homePopulation) * homeRate);
   // Walk-up "z okolí" — taky cap, jinak velká pražská čtvrť hraje proti všem 50k+ obyvatelům
   const walkUpRegional = Math.round(
     effectivePopulation(regionalPopulation) *
