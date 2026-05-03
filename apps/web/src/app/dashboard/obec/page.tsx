@@ -275,6 +275,7 @@ export default function ObecPage() {
   const handleInvite = async (officialId: string) => {
     if (!upcoming?.match || invitingOfficialId) return;
     setInvitingOfficialId(officialId);
+    console.log("[obec] invite", { matchId: upcoming.match.id, officialId, ctxTeamId, authTeamId: teamId });
     try {
       const res = await apiFetch<{ status: string; giftCost: number; officialName: string; probability: number }>(
         `/api/villages/invitations`,
