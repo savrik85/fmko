@@ -98,6 +98,19 @@ interface RosterPlayer {
   status: string | null;
 }
 
+interface Investment {
+  id: string;
+  village_id: string;
+  team_id: string;
+  type: string;
+  target_facility: string | null;
+  offered_amount: number;
+  required_contribution: number;
+  favor_threshold: number;
+  expires_at: string;
+  political_cost: number;
+}
+
 interface Petition {
   id: string;
   village_id: string;
@@ -229,6 +242,8 @@ export default function ObecPage() {
   const [brigades, setBrigades] = useState<Brigade[]>([]);
   const [petitions, setPetitions] = useState<Petition[]>([]);
   const [respondingPetitionId, setRespondingPetitionId] = useState<string | null>(null);
+  const [investments, setInvestments] = useState<Investment[]>([]);
+  const [respondingInvId, setRespondingInvId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [upcoming, setUpcoming] = useState<UpcomingMatch | null>(null);
   const [invitingOfficialId, setInvitingOfficialId] = useState<string | null>(null);
@@ -239,7 +254,7 @@ export default function ObecPage() {
 
   const refresh = async (vid: string) => {
     if (!teamId) return;
-    const [v, o, f, ts, fd, bg, up, pe] = await Promise.all([
+    const [v, o, f, ts, fd, bg, up, pe, inv] = await Promise.all([
       apiFetch<VillageDetail>(`/api/villages/${vid}`),
       apiFetch<Official[]>(`/api/villages/${vid}/officials`),
       apiFetch<Favor>(`/api/villages/${vid}/favor?teamId=${teamId}`),
@@ -248,9 +263,37 @@ export default function ObecPage() {
       apiFetch<Brigade[]>(`/api/villages/${vid}/brigades`),
       apiFetch<UpcomingMatch>(`/api/villages/upcoming-match?teamId=${teamId}`),
       apiFetch<Petition[]>(`/api/villages/petitions?teamId=${teamId}`),
+      apiFetch<Investment[]>(`/api/villages/investments?teamId=${teamId}`),
     ]);
     setVillage(v); setOfficials(o); setFavor(f); setTeams(ts); setFeed(fd); setBrigades(bg);
-    setUpcoming(up); setPetitions(pe);
+    setUpcoming(up); setPetitions(pe); setInvestments(inv);
+  };
+
+  const respondInvestment = async (id: string, action: "accept" | "decline") => {
+    if (respondingInvId) return;
+    setRespondingInvId(id);
+    try {
+      const res = await apiFetch<{ action: string; offeredAmount?: number; contribution?: number }>(
+        `/api/villages/investments/${id}/respond`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        },
+      );
+      const msg = res.action === "accept"
+        ? `Hotovo — obec přispěla ${res.offeredAmount?.toLocaleString("cs")} Kč.`
+        : "Nabídka odmítnuta.";
+      setToast(msg);
+      setTimeout(() => setToast(null), 4000);
+      if (villageId) await refresh(villageId);
+    } catch (e: unknown) {
+      const m = e instanceof Error ? e.message : "Chyba";
+      setToast(`Investice: ${m}`);
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setRespondingInvId(null);
+    }
   };
 
   const respondPetition = async (id: string, action: "accept" | "ignore") => {
@@ -450,6 +493,55 @@ export default function ObecPage() {
                   </div>
                 );
               })}
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* Investiční nabídky obce */}
+      {investments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <SectionLabel>Investiční nabídky obce</SectionLabel>
+            <div className="text-xs text-gray-500 mt-1">
+              Obec nabízí spolufinancování modernizace stadionu. Zaplatíš jen zbytek, dostaneš upgrade.
+            </div>
+          </CardHeader>
+          <CardBody>
+            <div className="space-y-3">
+              {investments.map((i) => (
+                <div key={i.id} className="border border-pitch-300 bg-pitch-50/30 rounded-lg p-3">
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm">{i.target_facility ?? i.type}</div>
+                      <div className="text-xs text-gray-700 mt-0.5">
+                        Obec uhradí {i.offered_amount.toLocaleString("cs")} Kč, ty doplatíš {i.required_contribution.toLocaleString("cs")} Kč.
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Vyprší {new Date(i.expires_at).toLocaleDateString("cs")}
+                        {i.political_cost > 0 && ` · politická cena: -${i.political_cost} u opozičních zastupitelů`}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={respondingInvId === i.id}
+                      onClick={() => respondInvestment(i.id, "decline")}
+                    >
+                      Odmítnout
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={respondingInvId === i.id}
+                      onClick={() => respondInvestment(i.id, "accept")}
+                    >
+                      Přijmout
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardBody>
         </Card>

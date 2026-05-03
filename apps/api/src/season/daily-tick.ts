@@ -73,6 +73,7 @@ export async function executeDailyTick(
     const {
       expireOldBrigades, generateWeeklyBrigades,
       expirePetitions, generateMonthlyPetitions,
+      expireInvestments, generateMonthlyInvestments,
     } = await import("./village-processor");
     const expired = await expireOldBrigades(env.DB, effectiveDate.toISOString());
     if (expired > 0) {
@@ -82,13 +83,20 @@ export async function executeDailyTick(
     if (ignoredPetitions > 0) {
       logger.info({ module: "daily-tick" }, `${ignoredPetitions} petic ignorováno`);
     }
+    const expiredInv = await expireInvestments(env.DB, effectiveDate.toISOString());
+    if (expiredInv > 0) {
+      logger.info({ module: "daily-tick" }, `${expiredInv} investic vypršelo`);
+    }
     if (dayOfWeek === 1) {
       const { generated, skipped } = await generateWeeklyBrigades(env.DB, effectiveDate.toISOString());
       logger.info({ module: "daily-tick" }, `brigády: ${generated} nových, ${skipped} obcí přeskočeno`);
-      // Petice 1× za měsíc per tým — generator řeší cooldown 25 dní sám
       const petitionRes = await generateMonthlyPetitions(env.DB, effectiveDate.toISOString());
       if (petitionRes.generated > 0) {
         logger.info({ module: "daily-tick" }, `petice: ${petitionRes.generated} nových`);
+      }
+      const invRes = await generateMonthlyInvestments(env.DB, effectiveDate.toISOString());
+      if (invRes.generated > 0) {
+        logger.info({ module: "daily-tick" }, `investice: ${invRes.generated} nových`);
       }
     }
   } catch (e) {

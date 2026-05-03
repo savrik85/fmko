@@ -376,6 +376,139 @@ export async function generateMonthlyPetitions(
   return { generated };
 }
 
+interface InvestmentTemplate {
+  type: "stadium_upgrade" | "pitch_renovation" | "youth_facility" | "bus_subsidy";
+  targetFacility: string;
+  title: string;
+  description: string;
+  totalCost: number;          // celková cena upgradu
+  subsidyRatio: number;       // 0.3-0.7 jakou část obec uhradí
+  favorThreshold: number;     // 60-90
+  politicalCost: number;      // -favor u opozice (favor < 40)
+}
+
+const INVESTMENT_TEMPLATES: InvestmentTemplate[] = [
+  {
+    type: "stadium_upgrade", targetFacility: "showers",
+    title: "Modernizace šaten — sprchy",
+    description: "Obec nabízí spolufinancování upgradu sprch. Lepší regenerace pro hráče.",
+    totalCost: 25000, subsidyRatio: 0.6, favorThreshold: 60, politicalCost: 2,
+  },
+  {
+    type: "pitch_renovation", targetFacility: "pitch",
+    title: "Renovace travnatého povrchu",
+    description: "Obec přispěje na nový drén a osivo hřiště před začátkem sezóny.",
+    totalCost: 15000, subsidyRatio: 0.7, favorThreshold: 55, politicalCost: 1,
+  },
+  {
+    type: "stadium_upgrade", targetFacility: "stands",
+    title: "Rozšíření tribuny",
+    description: "Obec zafinancuje +150 míst na tribuně. Více diváků = víc atmosféry.",
+    totalCost: 75000, subsidyRatio: 0.4, favorThreshold: 80, politicalCost: 4,
+  },
+  {
+    type: "stadium_upgrade", targetFacility: "parking",
+    title: "Parkoviště u stadionu",
+    description: "Vyasfaltování plochy pro auta diváků. Vyšší dostupnost = víc návštěv.",
+    totalCost: 40000, subsidyRatio: 0.5, favorThreshold: 70, politicalCost: 3,
+  },
+  {
+    type: "youth_facility", targetFacility: "youth",
+    title: "Mládežnické zázemí",
+    description: "Obec přispěje na vybavení pro mládežnický fotbal — pomůže náboru talentů.",
+    totalCost: 30000, subsidyRatio: 0.6, favorThreshold: 65, politicalCost: 2,
+  },
+];
+
+/** Generuje investiční nabídky pro top-favor tým v obci, jednou měsíčně. */
+export async function generateMonthlyInvestments(
+  db: D1Database,
+  gameDate: string,
+): Promise<{ generated: number }> {
+  // Pro každou obec najdi top-favor lidský tým a zkontroluj jestli má favor ≥ threshold
+  const villages = await db.prepare(
+    `SELECT DISTINCT v.id FROM villages v
+     JOIN teams t ON t.village_id = v.id
+     WHERE t.user_id != 'ai'`
+  ).all<{ id: string }>();
+
+  let generated = 0;
+  const now = new Date();
+  const expiresAt = new Date(now);
+  expiresAt.setDate(now.getDate() + 21); // 3 týdny na rozmyšlenou
+
+  for (const v of villages.results ?? []) {
+    // Top tým podle favor v této obci
+    const topTeam = await db.prepare(
+      `SELECT t.id as team_id, COALESCE(vtf.favor, 50) as favor
+       FROM teams t
+       LEFT JOIN village_team_favor vtf ON vtf.team_id = t.id AND vtf.official_id IS NULL
+       WHERE t.village_id = ? AND t.user_id != 'ai'
+       ORDER BY favor DESC LIMIT 1`
+    ).bind(v.id).first<{ team_id: string; favor: number }>();
+
+    if (!topTeam) continue;
+
+    // Cooldown: 30 dní od poslední nabídky pro tento tým
+    const recent = await db.prepare(
+      `SELECT id FROM village_investments
+       WHERE team_id = ? AND created_at > datetime(?, '-30 days') LIMIT 1`
+    ).bind(topTeam.team_id, gameDate).first();
+    if (recent) continue;
+
+    // Vyber template podle dosaženého favor
+    const eligible = INVESTMENT_TEMPLATES.filter((t) => topTeam.favor >= t.favorThreshold);
+    if (eligible.length === 0) continue;
+
+    const seed = hashSeed(`${v.id}|${topTeam.team_id}|${gameDate.slice(0, 7)}`);
+    const rng = createRng(seed);
+    const template = eligible[rng.int(0, eligible.length - 1)];
+
+    const offeredAmount = Math.round(template.totalCost * template.subsidyRatio);
+    const requiredContribution = template.totalCost - offeredAmount;
+    const id = crypto.randomUUID();
+    try {
+      await db.prepare(
+        `INSERT INTO village_investments
+          (id, village_id, team_id, type, target_facility, offered_amount,
+           required_contribution, favor_threshold, expires_at, status,
+           political_cost, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'offered', ?, ?)`
+      ).bind(
+        id, v.id, topTeam.team_id, template.type, template.targetFacility,
+        offeredAmount, requiredContribution, template.favorThreshold,
+        expiresAt.toISOString(), template.politicalCost, gameDate,
+      ).run();
+      generated++;
+
+      // Audit history
+      const teamName = await db.prepare("SELECT name FROM teams WHERE id = ?")
+        .bind(topTeam.team_id).first<{ name: string }>();
+      await db.prepare(
+        `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
+         VALUES (?, ?, ?, NULL, 'investment_offered', ?, ?, ?, ?)`
+      ).bind(
+        crypto.randomUUID(), v.id, topTeam.team_id,
+        `Obec nabídla ${teamName?.name ?? "týmu"} spolufinancování: „${template.title}" (${offeredAmount.toLocaleString("cs")} Kč).`,
+        JSON.stringify({ offeredAmount, requiredContribution, favor: topTeam.favor }),
+        gameDate, now.toISOString(),
+      ).run().catch((e) => logger.warn({ module: "village-processor" }, "investment audit", e));
+    } catch (e) {
+      logger.warn({ module: "village-processor" }, `insert investment for ${topTeam.team_id}`, e);
+    }
+  }
+  return { generated };
+}
+
+/** Označí prošlé investice jako 'expired'. */
+export async function expireInvestments(db: D1Database, gameDate: string): Promise<number> {
+  const result = await db.prepare(
+    `UPDATE village_investments SET status = 'expired'
+     WHERE status = 'offered' AND expires_at < ?`
+  ).bind(gameDate).run();
+  return result.meta?.changes ?? 0;
+}
+
 /**
  * Označí prošlé petice (active + expires_at < now) jako 'ignored' a aplikuje penalty.
  */

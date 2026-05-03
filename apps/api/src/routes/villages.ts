@@ -149,6 +149,18 @@ villagesRouter.get("/petitions", async (c) => {
   return c.json(rows.results ?? []);
 });
 
+// GET /api/villages/investments?teamId=X — pending investiční nabídky pro tým
+villagesRouter.get("/investments", async (c) => {
+  const teamId = c.req.query("teamId");
+  if (!teamId) return c.json({ error: "teamId required" }, 400);
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM village_investments
+     WHERE team_id = ? AND status = 'offered'
+     ORDER BY expires_at ASC`
+  ).bind(teamId).all();
+  return c.json(rows.results ?? []);
+});
+
 // GET /api/villages/invitations?matchId=X — list pozvánek pro daný zápas
 villagesRouter.get("/invitations", async (c) => {
   const matchId = c.req.query("matchId");
@@ -793,6 +805,117 @@ villagesRouter.post("/invitations", requireAuth, async (c) => {
     id, status, giftCost,
     probability: Math.round(p * 100) / 100,
     officialName: `${official.first_name} ${official.last_name}`,
+  });
+});
+
+// POST /api/villages/investments/:id/respond — accept | decline
+villagesRouter.post("/investments/:invId/respond", requireAuth, async (c) => {
+  const invId = c.req.param("invId");
+  const session = c.get("session" as never) as { userId: string; teamId: string | null };
+  const teamRowAuth = await c.env.DB.prepare(
+    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' LIMIT 1"
+  ).bind(session.userId).first<{ id: string }>();
+  if (!teamRowAuth) return c.json({ error: "Nemáš tým" }, 400);
+
+  const body = await c.req.json<{ action: "accept" | "decline" }>().catch((e) => {
+    logger.warn({ module: "villages" }, "parse investment body", e);
+    return null;
+  });
+  if (!body || (body.action !== "accept" && body.action !== "decline")) {
+    return c.json({ error: "action musí být accept|decline" }, 400);
+  }
+
+  const inv = await c.env.DB.prepare(
+    `SELECT * FROM village_investments WHERE id = ? AND status = 'offered'`
+  ).bind(invId).first<{
+    id: string; village_id: string; team_id: string; type: string;
+    target_facility: string | null; offered_amount: number;
+    required_contribution: number; political_cost: number;
+  }>();
+  if (!inv) return c.json({ error: "Nabídka už není aktivní" }, 410);
+  if (inv.team_id !== teamRowAuth.id) return c.json({ error: "Nabídka není pro tvůj tým" }, 403);
+
+  const now = new Date().toISOString();
+  const teamRow = await c.env.DB.prepare("SELECT game_date, budget FROM teams WHERE id = ?")
+    .bind(teamRowAuth.id).first<{ game_date: string; budget: number }>();
+  const gameDate = teamRow?.game_date ?? now;
+
+  if (body.action === "decline") {
+    await c.env.DB.prepare(
+      `UPDATE village_investments SET status = 'declined', responded_at = ? WHERE id = ?`
+    ).bind(now, invId).run();
+    await c.env.DB.prepare(
+      `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
+       VALUES (?, ?, ?, NULL, 'investment_declined', ?, ?, ?, ?)`
+    ).bind(
+      crypto.randomUUID(), inv.village_id, teamRowAuth.id,
+      `Klub odmítl spolufinancování (${inv.offered_amount.toLocaleString("cs")} Kč).`,
+      JSON.stringify({ offeredAmount: inv.offered_amount }),
+      gameDate, now,
+    ).run().catch((e) => logger.warn({ module: "villages" }, "investment declined history", e));
+    return c.json({ ok: true, action: "decline" });
+  }
+
+  // accept — tým musí doplatit required_contribution
+  if ((teamRow?.budget ?? 0) < inv.required_contribution) {
+    return c.json({ error: `Nemáš dost peněz na doplatek (${inv.required_contribution.toLocaleString("cs")} Kč)` }, 400);
+  }
+
+  // Aplikovat upgrade na stadion (pokud target_facility je stadium key)
+  const stadiumFacilities = ["showers", "stands", "parking", "changing_rooms", "refreshments", "fence"];
+  if (inv.target_facility && stadiumFacilities.includes(inv.target_facility)) {
+    await c.env.DB.prepare(
+      `UPDATE stadiums SET ${inv.target_facility} = MIN(3, COALESCE(${inv.target_facility}, 0) + 1)
+       WHERE team_id = ?`
+    ).bind(teamRowAuth.id).run().catch((e) => {
+      logger.warn({ module: "villages" }, `upgrade ${inv.target_facility}`, e);
+    });
+  } else if (inv.target_facility === "pitch") {
+    await c.env.DB.prepare(
+      `UPDATE stadiums SET pitch_condition = MIN(100, COALESCE(pitch_condition, 70) + 25)
+       WHERE team_id = ?`
+    ).bind(teamRowAuth.id).run().catch((e) => {
+      logger.warn({ module: "villages" }, "renovate pitch", e);
+    });
+  }
+
+  // Tým doplatí
+  const { recordTransaction: rec } = await import("../season/finance-processor");
+  await rec(
+    c.env.DB, teamRowAuth.id, "stadium_upgrade", -inv.required_contribution,
+    `Spolufinancování: ${inv.target_facility ?? inv.type}`, gameDate,
+  );
+
+  await c.env.DB.prepare(
+    `UPDATE village_investments SET status = 'completed', responded_at = ? WHERE id = ?`
+  ).bind(now, invId).run();
+
+  // Political cost: opoziční NPC (favor < 40) ztratí dalších body
+  if (inv.political_cost > 0) {
+    await c.env.DB.prepare(
+      `UPDATE village_team_favor
+       SET favor = MAX(0, favor - ?), updated_at = ?
+       WHERE team_id = ? AND official_id IS NOT NULL AND favor < 40`
+    ).bind(inv.political_cost, now, teamRowAuth.id).run().catch((e) => {
+      logger.warn({ module: "villages" }, "political cost", e);
+    });
+  }
+
+  await c.env.DB.prepare(
+    `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
+     VALUES (?, ?, ?, NULL, 'investment_accepted', ?, ?, ?, ?)`
+  ).bind(
+    crypto.randomUUID(), inv.village_id, teamRowAuth.id,
+    `Obec uhradila ${inv.offered_amount.toLocaleString("cs")} Kč na ${inv.target_facility ?? inv.type}.`,
+    JSON.stringify({ offeredAmount: inv.offered_amount, contribution: inv.required_contribution, politicalCost: inv.political_cost }),
+    gameDate, now,
+  ).run().catch((e) => logger.warn({ module: "villages" }, "investment accepted history", e));
+
+  return c.json({
+    ok: true, action: "accept",
+    offeredAmount: inv.offered_amount,
+    contribution: inv.required_contribution,
+    targetFacility: inv.target_facility,
   });
 });
 
