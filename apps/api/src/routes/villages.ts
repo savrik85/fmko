@@ -248,8 +248,6 @@ villagesRouter.get("/:id/brigades", async (c) => {
 
 // POST /api/villages/brigades/:brigadeId/take — vzít brigádu (Sprint B)
 import { requireAuth } from "../auth/middleware";
-import { recordTransaction } from "../season/finance-processor";
-
 villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
   const brigadeId = c.req.param("brigadeId");
   const session = c.get("session" as never) as { userId: string; teamId: string | null };
@@ -263,7 +261,7 @@ villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
     "SELECT * FROM village_brigades WHERE id = ? AND status = 'open'"
   ).bind(brigadeId).first<{
     id: string; village_id: string; type: string; title: string;
-    required_player_count: number; reward_money: number; reward_favor: number;
+    required_player_count: number; reward_favor: number;
     condition_drain: number; morale_change: number; offered_by_official_id: string | null;
     expires_at: string;
   }>();
@@ -339,7 +337,7 @@ villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
     return c.json({ error: "Brigáda už byla mezitím obsazena" }, 409);
   }
 
-  // Get team game_date pro recordTransaction
+  // Get team game_date pro audit logy
   const teamRow = await c.env.DB.prepare(
     "SELECT game_date FROM teams WHERE id = ?"
   ).bind(session.teamId).first<{ game_date: string }>();
@@ -360,11 +358,7 @@ villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
     });
   }
 
-  // Peníze
-  await recordTransaction(
-    c.env.DB, session.teamId, "village_brigade", brigade.reward_money,
-    `Brigáda: ${brigade.title}`, gameDate,
-  );
+  // Brigády NEDÁVAJÍ peníze — jen přízeň výměnou za kondici a morálku.
 
   // Favor: globální + individuální (offering official, pokud existuje)
   const { ensureGlobalFavor: ensureFavor } = await import("../villages/officials-store");
@@ -398,19 +392,18 @@ villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
   // History audit
   const teamName = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
     .bind(session.teamId).first<{ name: string }>();
-  const desc = `${teamName?.name ?? "Tým"} odpracoval brigádu „${brigade.title}" (+${brigade.reward_money} Kč, +${brigade.reward_favor} přízeň).`;
+  const desc = `${teamName?.name ?? "Tým"} odpracoval brigádu „${brigade.title}" (+${brigade.reward_favor} přízeň, ${brigade.morale_change} morálka, -${brigade.condition_drain} kondice).`;
   await c.env.DB.prepare(
     `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
      VALUES (?, ?, ?, ?, 'brigade_completed', ?, ?, ?, ?)`
   ).bind(
     crypto.randomUUID(), brigade.village_id, session.teamId, brigade.offered_by_official_id,
-    desc, JSON.stringify({ rewardMoney: brigade.reward_money, rewardFavor: brigade.reward_favor }),
+    desc, JSON.stringify({ rewardFavor: brigade.reward_favor }),
     gameDate, now,
   ).run().catch((e) => logger.warn({ module: "villages" }, "insert history", e));
 
   return c.json({
     ok: true,
-    rewardMoney: brigade.reward_money,
     rewardFavor: brigade.reward_favor,
     conditionDrain: brigade.condition_drain,
     moraleChange: brigade.morale_change,

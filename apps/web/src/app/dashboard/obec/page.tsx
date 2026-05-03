@@ -80,7 +80,6 @@ interface Brigade {
   status: "open" | "taken" | "expired" | "completed";
   required_player_count: number;
   duration_hours: number;
-  reward_money: number;
   reward_favor: number;
   condition_drain: number;
   morale_change: number;
@@ -300,7 +299,7 @@ export default function ObecPage() {
         <CardHeader>
           <SectionLabel>Brigády vyhlášené obcí</SectionLabel>
           <div className="text-xs text-gray-500 mt-1">
-            Když vezmeš brigádu, hráči ztratí kondici a (někdy) morálku, ale tým získá peníze a přízeň. Slot je sdílený s ostatními týmy v obci — kdo dřív přijde.
+            Hráči ztratí kondici a morálku, ale tým získá přízeň obce. Slot je sdílený s ostatními týmy v obci — kdo dřív přijde.
           </div>
         </CardHeader>
         <CardBody>
@@ -324,12 +323,11 @@ export default function ObecPage() {
                         )}
                       </div>
                       <div className="text-right text-xs space-y-0.5 shrink-0">
-                        <div className="font-semibold text-pitch-700">+{b.reward_money.toLocaleString("cs")} Kč</div>
-                        <div className="text-pitch-600">+{b.reward_favor} přízeň</div>
+                        <div className="font-semibold text-pitch-700">+{b.reward_favor} přízeň</div>
                         <div className="text-card-red">-{b.condition_drain} kondice</div>
                         {b.morale_change !== 0 && (
-                          <div className={b.morale_change > 0 ? "text-pitch-600" : "text-card-red"}>
-                            {b.morale_change > 0 ? "+" : ""}{b.morale_change} morálka
+                          <div className="text-card-red">
+                            {b.morale_change} morálka
                           </div>
                         )}
                       </div>
@@ -520,15 +518,14 @@ function BrigadeTakeDialog({ brigade, teamId, onClose, onSuccess }: BrigadeTakeD
         <div className="grid grid-cols-2 gap-3 text-sm bg-gray-50 rounded-lg p-3">
           <div>
             <div className="text-xs text-gray-500">Odměna</div>
-            <div className="font-semibold text-pitch-700">+{brigade.reward_money.toLocaleString("cs")} Kč</div>
-            <div className="text-pitch-600 text-xs">+{brigade.reward_favor} přízeň</div>
+            <div className="font-semibold text-pitch-700">+{brigade.reward_favor} přízeň obce</div>
           </div>
           <div>
             <div className="text-xs text-gray-500">Cena pro hráče</div>
             <div className="font-semibold text-card-red">-{brigade.condition_drain} kondice</div>
             {brigade.morale_change !== 0 && (
-              <div className={`text-xs ${brigade.morale_change > 0 ? "text-pitch-600" : "text-card-red"}`}>
-                {brigade.morale_change > 0 ? "+" : ""}{brigade.morale_change} morálka
+              <div className="text-xs text-card-red">
+                {brigade.morale_change} morálka
               </div>
             )}
           </div>

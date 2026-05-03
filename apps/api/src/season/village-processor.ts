@@ -18,7 +18,6 @@ export interface BrigadeTemplate {
   minPlayers: number;
   maxPlayers: number;
   durationHours: number;
-  baseRewardMoney: number;     // Kč pro 4 hráče
   rewardFavor: number;
   conditionDrain: number;
   moraleChange: number;
@@ -31,7 +30,7 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Úklid náměstí po hodech",
     description: "Po víkendových hodech zbývá uklidit pivní stánky a sebrat odpad. Obec hledá pomocné ruce.",
     minPlayers: 3, maxPlayers: 5, durationHours: 5,
-    baseRewardMoney: 1500, rewardFavor: 8, conditionDrain: 12, moraleChange: -1,
+    rewardFavor: 8, conditionDrain: 12, moraleChange: -3,
     preferredPersonality: ["populista", "tradicionalista"],
   },
   {
@@ -39,7 +38,7 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Sekání obecní zeleně",
     description: "Posekat travnaté plochy okolo obecního úřadu, hřbitova a zastávek. Práce v horku.",
     minPlayers: 4, maxPlayers: 6, durationHours: 7,
-    baseRewardMoney: 2200, rewardFavor: 10, conditionDrain: 22, moraleChange: -2,
+    rewardFavor: 10, conditionDrain: 22, moraleChange: -5,
     preferredPersonality: ["podnikatel"],
   },
   {
@@ -47,15 +46,15 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Oprava plotu kolem obecního hřiště",
     description: "Plot kolem dětského hřiště je v havarijním stavu. Nutno vyměnit prkna a natřít.",
     minPlayers: 4, maxPlayers: 6, durationHours: 8,
-    baseRewardMoney: 2800, rewardFavor: 14, conditionDrain: 25, moraleChange: 0,
+    rewardFavor: 14, conditionDrain: 25, moraleChange: -4,
     preferredPersonality: ["podnikatel", "tradicionalista"],
   },
   {
     type: "kulturak_setup",
     title: "Příprava sálu na ples",
-    description: "Postavit pódium, rozestavět stoly a židle, pomoci s ozvučením. Veselá atmosféra zaručena.",
+    description: "Postavit pódium, rozestavět stoly a židle, pomoci s ozvučením.",
     minPlayers: 3, maxPlayers: 5, durationHours: 4,
-    baseRewardMoney: 1200, rewardFavor: 12, conditionDrain: 8, moraleChange: 3,
+    rewardFavor: 12, conditionDrain: 8, moraleChange: -2,
     preferredPersonality: ["aktivista", "populista"],
   },
   {
@@ -63,7 +62,7 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Odhrnování chodníků po sněhové kalamitě",
     description: "Obec potřebuje rychle zprůjeznit hlavní chodníky a přístup k obchodu a škole.",
     minPlayers: 4, maxPlayers: 7, durationHours: 6,
-    baseRewardMoney: 2500, rewardFavor: 15, conditionDrain: 20, moraleChange: -1,
+    rewardFavor: 15, conditionDrain: 20, moraleChange: -5,
     preferredPersonality: ["tradicionalista", "populista"],
   },
   {
@@ -71,15 +70,15 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Sběr starého papíru pro školu",
     description: "Místní ZŠ pořádá sběr a obecní úřad prosí o pomoc s odvozem ke kontejneru.",
     minPlayers: 3, maxPlayers: 5, durationHours: 4,
-    baseRewardMoney: 900, rewardFavor: 10, conditionDrain: 10, moraleChange: 2,
+    rewardFavor: 10, conditionDrain: 10, moraleChange: -2,
     preferredPersonality: ["aktivista"],
   },
   {
     type: "uprava_hrobu",
     title: "Údržba pomníků padlých",
-    description: "Před státním svátkem upravit prostranství kolem památníku — práce s místní symbolikou.",
+    description: "Před státním svátkem upravit prostranství kolem památníku.",
     minPlayers: 3, maxPlayers: 4, durationHours: 4,
-    baseRewardMoney: 1100, rewardFavor: 12, conditionDrain: 9, moraleChange: 1,
+    rewardFavor: 12, conditionDrain: 9, moraleChange: -2,
     preferredPersonality: ["tradicionalista"],
   },
   {
@@ -87,7 +86,7 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Pomoc dobrovolným hasičům",
     description: "Obec vyhlásila brigádu na úklid hasičské zbrojnice a údržbu techniky.",
     minPlayers: 4, maxPlayers: 6, durationHours: 6,
-    baseRewardMoney: 2000, rewardFavor: 13, conditionDrain: 15, moraleChange: 1,
+    rewardFavor: 13, conditionDrain: 15, moraleChange: -3,
     preferredPersonality: ["tradicionalista", "sportovec"],
   },
 ];
@@ -150,8 +149,6 @@ export async function generateWeeklyBrigades(
 
       const id = crypto.randomUUID();
       const requiredCount = rng.int(template.minPlayers, template.maxPlayers);
-      // Reward škáluje s počtem hráčů (per-hráč proporčně)
-      const rewardMoney = Math.round(template.baseRewardMoney * (requiredCount / 4));
 
       try {
         await db.prepare(
@@ -159,12 +156,12 @@ export async function generateWeeklyBrigades(
             (id, village_id, type, title, description, offered_at, expires_at,
              status, required_player_count, duration_hours, offered_by_official_id,
              reward_money, reward_favor, condition_drain, morale_change)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, 0, ?, ?, ?)`
         ).bind(
           id, v.id, template.type, template.title, template.description,
           gameDate, expiresAt,
           requiredCount, template.durationHours, offeringOfficial,
-          rewardMoney, template.rewardFavor, template.conditionDrain, template.moraleChange,
+          template.rewardFavor, template.conditionDrain, template.moraleChange,
         ).run();
         generated++;
       } catch (e) {
