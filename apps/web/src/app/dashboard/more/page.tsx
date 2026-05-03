@@ -73,6 +73,11 @@ export default function MorePage() {
                       {badge}
                     </span>
                   )}
+                  {item.href === "/dashboard/fans" && (
+                    <span className="absolute top-1 right-1 bg-pitch-500 text-white text-[9px] font-bold px-1.5 h-4 rounded-full flex items-center justify-center">
+                      Nové
+                    </span>
+                  )}
                 </Link>
               );
             })}
