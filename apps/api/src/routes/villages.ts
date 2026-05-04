@@ -1209,4 +1209,31 @@ villagesRouter.post("/investments/:invId/respond", requireAuth, async (c) => {
   });
 });
 
+// DEV-ONLY: trigger village-processor manuálně (smazat po testování)
+villagesRouter.post("/dev-tick", async (c) => {
+  const gameDate = c.req.query("date") ?? new Date().toISOString();
+  const monday = c.req.query("monday") === "1";
+  const {
+    expireOldBrigades, generateWeeklyBrigades,
+    expirePetitions, generateMonthlyPetitions,
+    expireInvestments, generateMonthlyInvestments,
+    expirePubEncounters, generatePubEncounters,
+    processElections, processCrisisEvents,
+  } = await import("../season/village-processor");
+  const r: Record<string, unknown> = { gameDate, monday };
+  r.expiredBrigades = await expireOldBrigades(c.env.DB, gameDate);
+  r.expiredPetitions = await expirePetitions(c.env.DB, gameDate);
+  r.expiredInvestments = await expireInvestments(c.env.DB, gameDate);
+  r.expiredPub = await expirePubEncounters(c.env.DB, gameDate);
+  if (monday) {
+    r.brigades = await generateWeeklyBrigades(c.env.DB, gameDate);
+    r.petitions = await generateMonthlyPetitions(c.env.DB, gameDate);
+    r.investments = await generateMonthlyInvestments(c.env.DB, gameDate);
+    r.pub = await generatePubEncounters(c.env.DB, gameDate);
+    r.elections = await processElections(c.env.DB, gameDate);
+    r.crisis = await processCrisisEvents(c.env.DB, gameDate);
+  }
+  return c.json(r);
+});
+
 export { villagesRouter };
