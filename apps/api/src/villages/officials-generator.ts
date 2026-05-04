@@ -179,7 +179,7 @@ export function generateOfficial(
   role: OfficialRole,
   termStartSeason: number,
 ): GeneratedOfficial {
-  const seed = hashSeed(`${villageId}|${role}|${termStartSeason}`);
+  const seed = hashSeed(`${villageId}|${role}|${termStartSeason}|v2-elderly`);
   const rng = createRng(seed);
 
   const personalityPool = PERSONA_PER_ROLE[role];
