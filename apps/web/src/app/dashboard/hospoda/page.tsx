@@ -87,23 +87,51 @@ export default function HospodaPage() {
   const [sessions, setSessions] = useState<PubSession[]>([]);
   const [team, setTeam] = useState<Team | null>(null);
   const [avatarsById, setAvatarsById] = useState<Record<string, Record<string, unknown>>>({});
+  const [npcEncounters, setNpcEncounters] = useState<Array<{
+    id: string; first_name: string; last_name: string; role: string;
+    personality: string; face_config: string; expires_at: string;
+  }>>([]);
+  const [respondingNpc, setRespondingNpc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const refresh = async (tid: string) => {
+    const [s, t, players, npcs] = await Promise.all([
+      apiFetch<{ sessions: PubSession[] }>(`/api/teams/${tid}/pub-sessions?limit=30`).catch((e) => { console.error("pub-sessions fetch:", e); return { sessions: [] as PubSession[] }; }),
+      apiFetch<Team>(`/api/teams/${tid}`).catch((e) => { console.error("team fetch:", e); return null; }),
+      apiFetch<Player[]>(`/api/teams/${tid}/players`).catch((e) => { console.error("players fetch:", e); return [] as Player[]; }),
+      apiFetch<Array<{ id: string; first_name: string; last_name: string; role: string; personality: string; face_config: string; expires_at: string; }>>(
+        `/api/villages/pub-encounters?teamId=${tid}`,
+      ).catch((e) => { console.error("npc encounters fetch:", e); return []; }),
+    ]);
+    setSessions(s.sessions);
+    setTeam(t);
+    const map: Record<string, Record<string, unknown>> = {};
+    for (const p of players) map[p.id] = p.avatar as Record<string, unknown>;
+    setAvatarsById(map);
+    setNpcEncounters(npcs);
+  };
 
   useEffect(() => {
     if (!teamId) return;
-    Promise.all([
-      apiFetch<{ sessions: PubSession[] }>(`/api/teams/${teamId}/pub-sessions?limit=30`).catch((e) => { console.error("pub-sessions fetch:", e); return { sessions: [] as PubSession[] }; }),
-      apiFetch<Team>(`/api/teams/${teamId}`).catch((e) => { console.error("team fetch:", e); return null; }),
-      apiFetch<Player[]>(`/api/teams/${teamId}/players`).catch((e) => { console.error("players fetch:", e); return [] as Player[]; }),
-    ]).then(([s, t, players]) => {
-      setSessions(s.sessions);
-      setTeam(t);
-      const map: Record<string, Record<string, unknown>> = {};
-      for (const p of players) map[p.id] = p.avatar as Record<string, unknown>;
-      setAvatarsById(map);
-      setLoading(false);
-    });
+    refresh(teamId).finally(() => setLoading(false));
   }, [teamId]);
+
+  const respondNpc = async (id: string, action: "invite_beer" | "ignore") => {
+    if (respondingNpc) return;
+    setRespondingNpc(id);
+    try {
+      await apiFetch(`/api/villages/pub-encounters/${id}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (teamId) await refresh(teamId);
+    } catch (e: unknown) {
+      console.error("npc respond:", e);
+    } finally {
+      setRespondingNpc(null);
+    }
+  };
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[40vh]"><Spinner /></div>;
 
@@ -177,6 +205,54 @@ export default function HospodaPage() {
         </div>
         <div className="h-1" style={{ background: scarfSecondary }} />
       </div>
+
+      {/* NPC v hospodě — náhodné setkání se zastupitelem obce */}
+      {npcEncounters.length > 0 && (
+        <div className="card p-4 sm:p-5 border-l-4 border-amber-400">
+          <SectionLabel>Někdo z radnice je dnes tady</SectionLabel>
+          <div className="space-y-3 mt-2">
+            {npcEncounters.map((p) => {
+              let face: Record<string, unknown> = {};
+              try { face = JSON.parse(p.face_config); } catch { face = {}; }
+              const ROLE_LABEL: Record<string, string> = {
+                starosta: "Starosta", mistostarosta: "Místostarosta",
+                zastupitel_1: "Zastupitel", zastupitel_2: "Zastupitel",
+              };
+              return (
+                <div key={p.id} className="flex items-center gap-4 bg-amber-50/40 rounded-lg p-3">
+                  <FaceAvatar faceConfig={face} size={64} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs uppercase tracking-wider text-gray-500">{ROLE_LABEL[p.role] ?? "Zastupitel"}</div>
+                    <div className="font-semibold text-base">{p.first_name} {p.last_name}</div>
+                    <div className="text-sm text-gray-700 mt-0.5">
+                      Sedí u baru a popíjí sám. Řeší se, jestli si k němu sedneš.
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Vyprší {new Date(p.expires_at).toLocaleDateString("cs")}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5 shrink-0">
+                    <button
+                      className="btn btn-primary btn-sm"
+                      disabled={respondingNpc === p.id}
+                      onClick={() => respondNpc(p.id, "invite_beer")}
+                    >
+                      Pozvat na pivo
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      disabled={respondingNpc === p.id}
+                      onClick={() => respondNpc(p.id, "ignore")}
+                    >
+                      Ignorovat
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Síň slávy štamgastů */}
       {topDrinkers.length > 0 && (
