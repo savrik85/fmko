@@ -495,11 +495,29 @@ export default function ObecPage() {
                       <div className="mt-2">
                         <Badge>{PERSONALITY_LABEL[o.personality]}</Badge>
                       </div>
-                      <div className="mt-3">
-                        <FavorBar value={f} label="Vztah s námi" />
+                      <div className="mt-3 space-y-1.5">
+                        {teams.map((t) => {
+                          const tf = t.id === teamId ? f : (favorMatrix[t.id]?.[o.id] ?? 50);
+                          const isUs = t.id === teamId;
+                          return (
+                            <div key={t.id} className="flex items-center gap-2 text-xs">
+                              <span
+                                className="inline-block w-2 h-2 rounded-full border border-gray-200 shrink-0"
+                                style={{ backgroundColor: t.primary_color }}
+                              />
+                              <span className={`truncate flex-1 ${isUs ? "font-semibold" : "text-gray-600"}`}>
+                                {t.name}{isUs && " (my)"}
+                              </span>
+                              <span className="tabular-nums text-gray-500 w-10 text-right">{tf}/100</span>
+                              <div className="h-1.5 w-16 rounded-full bg-gray-100 overflow-hidden shrink-0">
+                                <div className={`h-full ${favorColor(tf)}`} style={{ width: `${Math.max(0, Math.min(100, tf))}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div className="text-xs text-gray-500 mt-1.5" title={PERSONALITY_DESC[o.personality]}>
-                        {termRemaining(o.termEndAt)}
+                      <div className="text-xs text-gray-500 mt-2" title={PERSONALITY_DESC[o.personality]}>
+                        {termRemaining(o.termEndAt)} · {PERSONALITY_DESC[o.personality]}
                       </div>
                     </div>
                   </div>
