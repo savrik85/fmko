@@ -40,6 +40,11 @@ interface VillageTeam {
   global_favor: number;
 }
 
+interface VillageTeamsResp {
+  teams: VillageTeam[];
+  favorMatrix: Record<string, Record<string, number>>;
+}
+
 interface VillageDetail {
   id: string;
   name: string;
@@ -267,6 +272,7 @@ export default function ObecPage() {
   const [officials, setOfficials] = useState<Official[]>([]);
   const [favor, setFavor] = useState<Favor | null>(null);
   const [teams, setTeams] = useState<VillageTeam[]>([]);
+  const [favorMatrix, setFavorMatrix] = useState<Record<string, Record<string, number>>>({});
   const [feed, setFeed] = useState<FeedEvent[]>([]);
   const [brigades, setBrigades] = useState<Brigade[]>([]);
   const [petitions, setPetitions] = useState<Petition[]>([]);
@@ -290,7 +296,7 @@ export default function ObecPage() {
       apiFetch<VillageDetail>(`/api/villages/${vid}`),
       apiFetch<Official[]>(`/api/villages/${vid}/officials`),
       apiFetch<Favor>(`/api/villages/${vid}/favor?teamId=${teamId}`),
-      apiFetch<VillageTeam[]>(`/api/villages/${vid}/teams`),
+      apiFetch<VillageTeamsResp>(`/api/villages/${vid}/teams`),
       apiFetch<FeedEvent[]>(`/api/villages/${vid}/feed?limit=20`),
       apiFetch<Brigade[]>(`/api/villages/${vid}/brigades`),
       apiFetch<UpcomingMatch>(`/api/villages/upcoming-match?teamId=${teamId}`),
@@ -299,7 +305,8 @@ export default function ObecPage() {
       apiFetch<PubEncounter[]>(`/api/villages/pub-encounters?teamId=${teamId}`),
       apiFetch<LocalPride>(`/api/villages/local-pride?teamId=${teamId}`),
     ]);
-    setVillage(v); setOfficials(o); setFavor(f); setTeams(ts); setFeed(fd); setBrigades(bg);
+    setVillage(v); setOfficials(o); setFavor(f); setFeed(fd); setBrigades(bg);
+    setTeams(ts.teams); setFavorMatrix(ts.favorMatrix);
     setUpcoming(up); setPetitions(pe); setInvestments(inv); setPubEncounters(pub);
     setLocalPride(lp);
   };
@@ -434,8 +441,6 @@ export default function ObecPage() {
     return <div className="p-8 text-card-red">{error ?? "Obec nenalezena"}</div>;
   }
 
-  const isMultiTeam = teams.length > 1;
-  const localPlayersBonus = 0; // Sprint C přidá tracking
 
   return (
     <div className="space-y-6 p-4 max-w-5xl mx-auto">
@@ -775,22 +780,32 @@ export default function ObecPage() {
         </CardBody>
       </Card>
 
-      {/* Konkurence (multi-team) */}
-      {isMultiTeam && (
-        <Card>
-          <CardHeader>
-            <SectionLabel>Konkurence v obci</SectionLabel>
-            <div className="text-xs text-gray-500 mt-1">
-              {teams.length} týmů soutěží o přízeň zastupitelstva
-            </div>
-          </CardHeader>
-          <CardBody>
+      {/* Týmy v obci — vždy viditelné (i pokud je jen jeden), s matricí favor per NPC */}
+      <Card>
+        <CardHeader>
+          <SectionLabel>Týmy v obci</SectionLabel>
+          <div className="text-xs text-gray-500 mt-1">
+            {teams.length === 1
+              ? "V obci je jen jeden tým — žádná konkurence."
+              : `${teams.length} týmů soutěží o přízeň zastupitelstva. Vidíš obliby všech týmů u každého zastupitele.`}
+          </div>
+        </CardHeader>
+        <CardBody>
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wider text-gray-500">
                 <tr>
-                  <th className="py-2">Tým</th>
-                  <th className="py-2 text-right">Přízeň obce</th>
-                  <th className="py-2 text-right">Reputace</th>
+                  <th className="py-2 pr-3 sticky left-0 bg-white">Tým</th>
+                  <th className="py-2 px-2 text-right">Globální</th>
+                  {officials.map((o) => (
+                    <th key={o.id} className="py-2 px-2 text-right whitespace-nowrap">
+                      {ROLE_LABEL[o.role]}<br/>
+                      <span className="text-[10px] font-normal normal-case text-gray-400">
+                        {o.firstName.charAt(0)}. {o.lastName}
+                      </span>
+                    </th>
+                  ))}
+                  <th className="py-2 pl-2 text-right">Rep</th>
                 </tr>
               </thead>
               <tbody>
@@ -798,24 +813,45 @@ export default function ObecPage() {
                   .slice()
                   .sort((a, b) => b.global_favor - a.global_favor)
                   .map((t) => (
-                    <tr key={t.id} className={t.id === teamId ? "font-semibold" : ""}>
-                      <td className="py-2 flex items-center gap-2">
-                        <span
-                          className="inline-block w-3 h-3 rounded-full border border-gray-200"
-                          style={{ backgroundColor: t.primary_color }}
-                        />
-                        {t.name}
-                        {t.id === teamId && <span className="text-xs text-gray-500">(náš tým)</span>}
+                    <tr key={t.id} className={t.id === teamId ? "font-semibold bg-pitch-50/30" : ""}>
+                      <td className="py-2 pr-3 sticky left-0 bg-inherit">
+                        <span className="inline-flex items-center gap-2">
+                          <span
+                            className="inline-block w-3 h-3 rounded-full border border-gray-200 shrink-0"
+                            style={{ backgroundColor: t.primary_color }}
+                          />
+                          <span className="truncate max-w-[140px]">{t.name}</span>
+                          {t.id === teamId && <span className="text-xs text-gray-500">(my)</span>}
+                          {t.user_id === "ai" && <span className="text-xs text-gray-400">(AI)</span>}
+                        </span>
                       </td>
-                      <td className="py-2 text-right tabular-nums">{t.global_favor}</td>
-                      <td className="py-2 text-right tabular-nums">{t.reputation}</td>
+                      <td className="py-2 px-2 text-right tabular-nums font-semibold">
+                        {t.global_favor}
+                      </td>
+                      {officials.map((o) => {
+                        const f = favorMatrix[t.id]?.[o.id] ?? 50;
+                        return (
+                          <td key={o.id} className="py-2 px-2 text-right tabular-nums">
+                            <span className={
+                              f >= 70 ? "text-pitch-700"
+                              : f >= 40 ? "text-gray-700"
+                              : "text-card-red"
+                            }>
+                              {f}
+                            </span>
+                          </td>
+                        );
+                      })}
+                      <td className="py-2 pl-2 text-right tabular-nums text-gray-500">
+                        {t.reputation}
+                      </td>
                     </tr>
                   ))}
               </tbody>
             </table>
-          </CardBody>
-        </Card>
-      )}
+          </div>
+        </CardBody>
+      </Card>
 
       {/* Historie obce */}
       <Card>

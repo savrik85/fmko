@@ -409,7 +409,7 @@ villagesRouter.get("/:id/favor", async (c) => {
   });
 });
 
-// GET /api/villages/:id/teams — týmy v obci (multi-team transparency)
+// GET /api/villages/:id/teams — týmy v obci včetně matice per-NPC favor
 villagesRouter.get("/:id/teams", async (c) => {
   const villageId = c.req.param("id");
   const teams = await c.env.DB.prepare(
@@ -419,8 +419,29 @@ villagesRouter.get("/:id/teams", async (c) => {
      LEFT JOIN village_team_favor vtf ON vtf.team_id = t.id AND vtf.official_id IS NULL
      WHERE t.village_id = ?
      ORDER BY t.name`
-  ).bind(villageId).all();
-  return c.json(teams.results ?? []);
+  ).bind(villageId).all<{
+    id: string; name: string; user_id: string; primary_color: string;
+    secondary_color: string; reputation: number; global_favor: number;
+  }>();
+
+  // Per-NPC favor pro všechny týmy v obci (matrix)
+  const perOfficial = await c.env.DB.prepare(
+    `SELECT vtf.team_id, vtf.official_id, vtf.favor
+     FROM village_team_favor vtf
+     JOIN village_officials vo ON vo.id = vtf.official_id
+     WHERE vo.village_id = ?`
+  ).bind(villageId).all<{ team_id: string; official_id: string; favor: number }>();
+
+  const matrix: Record<string, Record<string, number>> = {};
+  for (const r of perOfficial.results ?? []) {
+    if (!matrix[r.team_id]) matrix[r.team_id] = {};
+    matrix[r.team_id][r.official_id] = r.favor;
+  }
+
+  return c.json({
+    teams: teams.results ?? [],
+    favorMatrix: matrix,
+  });
 });
 
 // GET /api/villages/:id/brigades — všechny otevřené i obsazené brigády obce
