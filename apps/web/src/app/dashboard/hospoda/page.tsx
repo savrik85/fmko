@@ -73,6 +73,8 @@ const INCIDENT_ICON: Record<string, string> = {
   coach_scold: "😡",
   coach_lost_bet: "🎲",
   coach_naps: "😴",
+  official_visit: "🤵",
+  official_scandal: "🚨",
 };
 
 function effectColor(ef: PubEffect): string {

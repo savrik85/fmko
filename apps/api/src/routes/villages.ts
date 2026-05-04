@@ -1092,6 +1092,48 @@ villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => 
     gameDate, now,
   ).run().catch((e) => logger.warn({ module: "villages" }, "pub encounter history", e));
 
+  // Promítnout do dnešní pub_session: přidat incident "official_visit"
+  const todayKey = (teamRow?.game_date ?? now).slice(0, 10);
+  const incidentText = isScandal
+    ? `${enc.first_name} ${enc.last_name} (${enc.personality === "aktivista" ? "aktivista" : "zastupitel"}) odešel z hospody znechucený. Skandál!`
+    : `${enc.first_name} ${enc.last_name} si dal s týmem několik piv. Trust +${trustGain}.`;
+  const newIncident = {
+    type: isScandal ? "official_scandal" : "official_visit",
+    playerIds: [],
+    text: incidentText,
+  };
+  const officialAttendee = {
+    playerId: `npc-${enc.official_id}`,
+    firstName: enc.first_name,
+    lastName: enc.last_name,
+    alcohol: 50,
+    teamId: teamRowAuth.id,
+    isVisitor: false,
+    fromTeamName: undefined,
+  };
+  const existing = await c.env.DB.prepare(
+    `SELECT attendees, incidents FROM pub_sessions WHERE team_id = ? AND game_date = ?`
+  ).bind(teamRowAuth.id, todayKey).first<{ attendees: string; incidents: string }>();
+  if (existing) {
+    let atts: unknown[] = []; let incs: unknown[] = [];
+    try { atts = JSON.parse(existing.attendees); } catch { atts = []; }
+    try { incs = JSON.parse(existing.incidents); } catch { incs = []; }
+    atts.push(officialAttendee);
+    incs.push(newIncident);
+    await c.env.DB.prepare(
+      `UPDATE pub_sessions SET attendees = ?, incidents = ? WHERE team_id = ? AND game_date = ?`
+    ).bind(JSON.stringify(atts), JSON.stringify(incs), teamRowAuth.id, todayKey).run()
+      .catch((e) => logger.warn({ module: "villages" }, "update pub_session with NPC", e));
+  } else {
+    await c.env.DB.prepare(
+      `INSERT INTO pub_sessions (team_id, game_date, attendees, incidents) VALUES (?, ?, ?, ?)`
+    ).bind(
+      teamRowAuth.id, todayKey,
+      JSON.stringify([officialAttendee]),
+      JSON.stringify([newIncident]),
+    ).run().catch((e) => logger.warn({ module: "villages" }, "insert pub_session for NPC", e));
+  }
+
   return c.json({
     ok: true, outcome, beerCost, trustGain, favorDelta,
     officialName: `${enc.first_name} ${enc.last_name}`,
