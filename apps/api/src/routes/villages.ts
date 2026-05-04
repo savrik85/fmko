@@ -874,6 +874,11 @@ villagesRouter.post("/invitations", requireAuth, async (c) => {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
 
+  // Pokud odmítl, vyber realistický důvod podle persona + situace
+  const rejectReason = accepted ? null : pickInvitationRejectReason(
+    official.personality, official.favor, isHome,
+  );
+
   try {
     await c.env.DB.prepare(
       `INSERT INTO village_invitations
@@ -881,7 +886,11 @@ villagesRouter.post("/invitations", requireAuth, async (c) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       id, body.matchId, matchDay, body.officialId, session.teamId, status, giftCost,
-      JSON.stringify({ probability: Math.round(p * 100) / 100 }), now,
+      JSON.stringify({
+        probability: Math.round(p * 100) / 100,
+        rejectReason: rejectReason ?? undefined,
+      }),
+      now,
     ).run();
   } catch (e) {
     // Conflict (slot taken in race) — vrať standard error
@@ -906,14 +915,14 @@ villagesRouter.post("/invitations", requireAuth, async (c) => {
     .bind(session.teamId).first<{ name: string }>();
   const histDesc = accepted
     ? `${official.first_name} ${official.last_name} přijal pozvání ${teamName?.name ?? "týmu"} na zápas.`
-    : `${official.first_name} ${official.last_name} odmítl pozvání ${teamName?.name ?? "týmu"} na zápas.`;
+    : `${official.first_name} ${official.last_name} odmítl pozvání ${teamName?.name ?? "týmu"}: „${rejectReason}"`;
   await c.env.DB.prepare(
     `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     crypto.randomUUID(), official.village_id, session.teamId, official.id,
     accepted ? "invitation_accepted" : "invitation_declined",
-    histDesc, JSON.stringify({ giftCost, probability: Math.round(p * 100) / 100 }),
+    histDesc, JSON.stringify({ giftCost, probability: Math.round(p * 100) / 100, rejectReason }),
     now.slice(0, 10), now,
   ).run().catch((e) => logger.warn({ module: "villages" }, "insert invitation history", e));
 
@@ -921,8 +930,53 @@ villagesRouter.post("/invitations", requireAuth, async (c) => {
     id, status, giftCost,
     probability: Math.round(p * 100) / 100,
     officialName: `${official.first_name} ${official.last_name}`,
+    rejectReason,
   });
 });
+
+// Persona-aware důvody odmítnutí pozvánky na zápas.
+function pickInvitationRejectReason(persona: string, favor: number, isHome: boolean): string {
+  const lowFavor = favor < 40;
+  const COMMON: string[] = [
+    "Zrovna na ten den máme rodinnou návštěvu.",
+    "Vnoučata mají soutěž ve škole, musím s nimi.",
+    "Bohužel mám už jiný program — jindy rád.",
+  ];
+  const BY_PERSONA: Record<string, string[]> = {
+    sportovec: [
+      "Forma vašeho týmu poslední dobou není přesvědčivá. Počkám si na lepší zápas.",
+      "Když budete hrát líp, rád přijdu.",
+      "Sleduji vás — uvidíme až dáte výsledky.",
+      "Tahle sezóna je pro vás slabá. Příště.",
+    ],
+    aktivista: [
+      "Nelíbí se mi, jak komunikujete s občany. Zatím ne.",
+      "Slyšel jsem, jak jste zacházeli s tím mladým talentem. Pozvánka? Ne.",
+      "Mám své priority a fotbal mezi nimi teď není.",
+      ...(lowFavor ? ["Nevidím s vámi shodu. Možná až přehodnotíte přístup."] : []),
+    ],
+    podnikatel: [
+      "Nemám teď čas, jednám o jedné zakázce.",
+      "Mám obchodní jednání zrovna ten víkend.",
+      "Bohužel tipuji jiný projekt který si žádá pozornost.",
+      ...(lowFavor ? ["Když nemůžete dorazit ani na schůzi obce, nevidím důvod, proč na zápas."] : []),
+    ],
+    tradicionalista: [
+      "Mám hody u sousedů, to se neodmítá.",
+      "Zrovna se sloučí důchodci na výletě, vedu to.",
+      "Manželka by mě zabila, kdybych zase nešel s ní.",
+      ...(!isHome ? ["Cestování za vámi mě v tomhle věku unavuje."] : []),
+    ],
+    populista: [
+      "Mám už domluvený šachový turnaj v hospodě.",
+      "Něco mi do toho přišlo — uvidíme příště.",
+      "Možná jindy, dnes to nevyjde.",
+      ...(lowFavor ? ["Občané by mě viděli s vámi neradi."] : []),
+    ],
+  };
+  const pool = [...COMMON, ...(BY_PERSONA[persona] ?? [])];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 // POST /api/villages/pub-encounters/:id/respond — invite_beer | ignore
 villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => {

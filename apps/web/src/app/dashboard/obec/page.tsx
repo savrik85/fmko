@@ -184,6 +184,14 @@ interface UpcomingMatch {
   }>;
 }
 
+interface InviteResponse {
+  status: string;
+  giftCost: number;
+  officialName: string;
+  probability: number;
+  rejectReason?: string | null;
+}
+
 const ROLE_LABEL: Record<OfficialRole, string> = {
   starosta: "Starosta",
   mistostarosta: "Místostarosta",
@@ -390,7 +398,7 @@ export default function ObecPage() {
     setInvitingOfficialId(officialId);
     console.log("[obec] invite", { matchId: upcoming.match.id, officialId, ctxTeamId, authTeamId: teamId });
     try {
-      const res = await apiFetch<{ status: string; giftCost: number; officialName: string; probability: number }>(
+      const res = await apiFetch<InviteResponse>(
         `/api/villages/invitations`,
         {
           method: "POST",
@@ -400,9 +408,9 @@ export default function ObecPage() {
       );
       const msg = res.status === "accepted"
         ? `${res.officialName} pozvání přijal (cena ${res.giftCost} Kč)`
-        : `${res.officialName} pozvání odmítl (cena ${res.giftCost} Kč zaplacena)`;
+        : `${res.officialName}: „${res.rejectReason ?? "Bohužel ne."}" (cena ${res.giftCost} Kč zaplacena)`;
       setToast(msg);
-      setTimeout(() => setToast(null), 4000);
+      setTimeout(() => setToast(null), 7000);
       if (villageId) await refresh(villageId);
     } catch (e: unknown) {
       const m = e instanceof Error ? e.message : "Chyba";
@@ -605,7 +613,19 @@ export default function ObecPage() {
                 } else if (slotTakenByOther) {
                   statusEl = <span className="text-xs text-gray-500">Pozván {o.slot_taken_by_name}</span>;
                 } else if (myInv?.status === "declined") {
-                  statusEl = <span className="text-xs text-card-red">Odmítl pozvání</span>;
+                  let reason: string | null = null;
+                  if (myInv.attendance_effects) {
+                    try { reason = (JSON.parse(myInv.attendance_effects) as { rejectReason?: string }).rejectReason ?? null; }
+                    catch { reason = null; }
+                  }
+                  statusEl = (
+                    <div className="text-right max-w-[180px]">
+                      <span className="text-xs text-card-red">Odmítl pozvání</span>
+                      {reason && (
+                        <div className="text-[10px] text-gray-500 italic mt-0.5 leading-tight">„{reason}"</div>
+                      )}
+                    </div>
+                  );
                 }
 
                 return (
