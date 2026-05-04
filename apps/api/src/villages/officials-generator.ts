@@ -129,38 +129,47 @@ function generateOfficialFace(rng: Rng, isFemale: boolean): Record<string, unkno
 
   const skinColors = ["#f2d6cb", "#ddb7a0", "#e8c4a0", "#f5d5c0", "#d4a882"];
   // Starší pánové: převažují šedé/bílé tóny
-  const hairColors = ["#8e8e8e", "#a0a0a0", "#b0b0b0", "#c8c8c8", "#d8d8d0", "#5b3a1a", "#8b6e3e"];
-  const headIds = ["head1", "head3", "head6", "head8", "head9", "head10", "head11", "head13"];
-  const eyeIds = ["eye1", "eye3", "eye6", "eye9", "eye11", "eye13"];
-  const noseIds = ["nose1", "nose2", "nose6", "nose9", "nose13"];
-  const mouthIds = ["mouth", "mouth2", "mouth3", "smile3", "straight", "closed"];
-  const hairIdsM = ["short-fade", "crop-fade2", "spike4", "short-bald"];
-  const hairIdsF = ["long", "longHair", "messy1", "messy-short", "parted", "high"];
+  // Pouze šedo-bílá paleta — žádné mladé tmavé tóny
+  const hairColors = ["#9c9c9c", "#b0b0b0", "#c8c8c8", "#d8d8d0", "#e8e3d8", "#888080"];
+  const headIds = ["head3", "head6", "head8", "head9", "head10", "head11", "head13"];
+  const eyeIds = ["eye1", "eye3", "eye6", "eye9", "eye11"];
+  const noseIds = ["nose2", "nose6", "nose9", "nose13", "honker"]; // honker = větší nos pro stáří
+  // Bez úsměvů — vážné výrazy
+  const mouthIds = ["mouth2", "straight", "closed", "straight", "closed"];
+  // Krátké/řídnoucí účesy + víc plešek
+  const hairIds = ["short-fade", "crop-fade2", "short-bald", "short-bald", "short-bald"];
   const earIds = ["ear1", "ear2", "ear3"];
+  // Husté/zatažené obočí (víc šedivé)
   const eyebrowIds = ["eyebrow2", "eyebrow3", "eyebrow7", "eyebrow10", "eyebrow14"];
 
   const skinColor = pick(skinColors);
-  const bald = !isFemale && r01() < 0.55; // starší pánové = vyšší šance lysiny
-  const hairIds = isFemale ? hairIdsF : hairIdsM;
+  const bald = r01() < 0.7; // 70% lysina
 
   return {
-    fatness: 0.3 + r01() * 0.4,
+    fatness: 0.4 + r01() * 0.5, // víc baculatí
     teamColors: ["#555555", "#FFFFFF", "#333333"],
     hairBg: { id: "none" },
-    body: { id: pick(["body", "body2", "body3"]), color: skinColor, size: 0.95 + r01() * 0.1 },
+    body: { id: pick(["body", "body2", "body3"]), color: skinColor, size: 0.95 + r01() * 0.15 },
     jersey: { id: "suit" },
-    ear: { id: pick(earIds), size: 0.6 + r01() * 0.4 },
-    head: { id: pick(headIds), shave: "rgba(0,0,0,0)", fatness: 0.3 + r01() * 0.3 },
-    eyeLine: { id: pick(["line1", "line2", "line3"]) },
-    smileLine: { id: pick(["line1", "line2"]), size: 0.9 + r01() * 0.3 },
+    ear: { id: pick(earIds), size: 0.7 + r01() * 0.4 },
+    head: { id: pick(headIds), shave: "rgba(0,0,0,0)", fatness: 0.4 + r01() * 0.4 },
+    // Vrásky pod očima — vždy line2 nebo line3 (silnější)
+    eyeLine: { id: pick(["line2", "line3", "line2"]) },
+    // Vrásky úst — vždy line2 (větší)
+    smileLine: { id: "line2", size: 1.0 + r01() * 0.3 },
     miscLine: { id: "none" },
-    facialHair: { id: !isFemale && r01() < 0.45 ? pick(["goatee3", "goatee4", "fullgoatee2", "mustache"]) : "none" },
+    // 80% nějaký vous (knír / kozí brada / plnovous) — staří chlapi z vesnice
+    facialHair: {
+      id: r01() < 0.8
+        ? pick(["mustache", "goatee3", "goatee4", "fullgoatee2", "mustache", "fullgoatee2"])
+        : "none",
+    },
     eye: { id: pick(eyeIds), angle: -3 + r01() * 6 },
     eyebrow: { id: pick(eyebrowIds), angle: -3 + r01() * 6 },
     hair: { id: bald ? "short-bald" : pick(hairIds), color: pick(hairColors), flip: r01() < 0.5 },
     mouth: { id: pick(mouthIds), flip: r01() < 0.5 },
-    nose: { id: pick(noseIds), flip: r01() < 0.5, size: 0.7 + r01() * 0.5 },
-    glasses: { id: r01() < 0.35 ? "glasses1" : "none" },
+    nose: { id: pick(noseIds), flip: r01() < 0.5, size: 0.85 + r01() * 0.4 }, // větší nosy
+    glasses: { id: r01() < 0.55 ? "glasses1" : "none" }, // 55% brýle (dříve 35%)
     accessories: { id: "none" },
   };
 }
@@ -179,16 +188,14 @@ export function generateOfficial(
   role: OfficialRole,
   termStartSeason: number,
 ): GeneratedOfficial {
-  const seed = hashSeed(`${villageId}|${role}|${termStartSeason}|v2-elderly`);
+  const seed = hashSeed(`${villageId}|${role}|${termStartSeason}|v4-elderly-faces`);
   const rng = createRng(seed);
 
   const personalityPool = PERSONA_PER_ROLE[role];
   const personality = personalityPool[rng.int(0, personalityPool.length - 1)];
 
-  // Realisticky: ženy zřídka, hlavně aktivistka (~25%) a tradicionalistka (~15%).
-  const femaleProb = personality === "aktivista" ? 0.25
-    : personality === "tradicionalista" ? 0.15 : 0.05;
-  const isFemale = rng.int(0, 99) / 100 < femaleProb;
+  // Vesnické zastupitelstvo na malých obcích: jen chlapi.
+  const isFemale = false;
 
   const firstNames = isFemale ? FEMALE_FIRST_NAMES : MALE_FIRST_NAMES;
   const lastNames = isFemale ? LAST_NAMES_F : LAST_NAMES_M;
