@@ -269,7 +269,7 @@ export default function ObecPage() {
   // localStorage (om_team z jiného přihlášení než aktuální om_token).
   const [teamId, setTeamId] = useState<string | null>(null);
   useEffect(() => {
-    apiFetch<{ teamId: string | null }>(`/api/auth/me`)
+    apiFetch<{ teamId: string | null }>(`/auth/me`)
       .then((me) => setTeamId(me.teamId))
       .catch((e) => {
         console.error("auth/me load:", e);
