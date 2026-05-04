@@ -57,9 +57,9 @@ const OCCUPATIONS_BY_PERSONA: Record<Personality, string[]> = {
     "majitel stavební firmy", "stavební podnikatel", "ředitel místní firmy",
   ],
   aktivista: [
-    "učitelka ZŠ", "učitel ZŠ", "knihovnice", "vedoucí mateřského centra",
-    "ochránce přírody", "vedoucí turistického oddílu", "ředitel kulturního domu",
-    "kronikář",
+    "učitel ZŠ", "knihovník", "ochránce přírody",
+    "vedoucí turistického oddílu", "ředitel kulturního domu",
+    "kronikář", "ředitel knihovny",
   ],
   sportovec: [
     "bývalý fotbalista", "trenér mládeže", "vedoucí sportovní komise",
@@ -70,8 +70,8 @@ const OCCUPATIONS_BY_PERSONA: Record<Personality, string[]> = {
     "vedoucí dechovky", "předseda spolku zahrádkářů",
   ],
   populista: [
-    "hostinský", "majitel obchodu se smíšeným zbožím", "řezník", "kadeřník",
-    "taxikář", "majitel benzinky",
+    "hostinský", "majitel obchodu se smíšeným zbožím", "řezník",
+    "taxikář", "majitel benzinky", "holič",
   ],
 };
 

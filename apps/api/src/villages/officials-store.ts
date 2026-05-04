@@ -35,7 +35,13 @@ export async function ensureVillageOfficials(
   villageId: string,
 ): Promise<OfficialRow[]> {
   const existing = await db.prepare(
-    "SELECT * FROM village_officials WHERE village_id = ? ORDER BY role"
+    `SELECT * FROM village_officials WHERE village_id = ?
+     ORDER BY CASE role
+       WHEN 'starosta' THEN 0
+       WHEN 'mistostarosta' THEN 1
+       WHEN 'zastupitel_1' THEN 2
+       WHEN 'zastupitel_2' THEN 3
+       ELSE 4 END`
   ).bind(villageId).all<OfficialRow>();
 
   if (existing.results && existing.results.length === 4) {
@@ -81,7 +87,13 @@ export async function ensureVillageOfficials(
   }
 
   const final = await db.prepare(
-    "SELECT * FROM village_officials WHERE village_id = ? ORDER BY role"
+    `SELECT * FROM village_officials WHERE village_id = ?
+     ORDER BY CASE role
+       WHEN 'starosta' THEN 0
+       WHEN 'mistostarosta' THEN 1
+       WHEN 'zastupitel_1' THEN 2
+       WHEN 'zastupitel_2' THEN 3
+       ELSE 4 END`
   ).bind(villageId).all<OfficialRow>();
   return final.results ?? [];
 }
