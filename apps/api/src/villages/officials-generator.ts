@@ -76,11 +76,11 @@ const OCCUPATIONS_BY_PERSONA: Record<Personality, string[]> = {
 };
 
 const PERSONALITY_AGE_RANGE: Record<Personality, [number, number]> = {
-  podnikatel: [35, 60],
-  aktivista: [30, 55],
-  sportovec: [40, 65],
-  tradicionalista: [50, 70],
-  populista: [35, 60],
+  podnikatel: [50, 70],
+  aktivista: [45, 65],
+  sportovec: [55, 75],
+  tradicionalista: [60, 80],
+  populista: [50, 70],
 };
 
 const PERSONALITY_PORTFOLIO: Record<Personality, string[]> = {
@@ -128,7 +128,8 @@ function generateOfficialFace(rng: Rng, isFemale: boolean): Record<string, unkno
   const r01 = () => rng.int(0, 100) / 100;
 
   const skinColors = ["#f2d6cb", "#ddb7a0", "#e8c4a0", "#f5d5c0", "#d4a882"];
-  const hairColors = ["#3b2214", "#5b3a1a", "#8b6e3e", "#8e8e8e", "#b0b0b0", "#c8b5a0"];
+  // Starší pánové: převažují šedé/bílé tóny
+  const hairColors = ["#8e8e8e", "#a0a0a0", "#b0b0b0", "#c8c8c8", "#d8d8d0", "#5b3a1a", "#8b6e3e"];
   const headIds = ["head1", "head3", "head6", "head8", "head9", "head10", "head11", "head13"];
   const eyeIds = ["eye1", "eye3", "eye6", "eye9", "eye11", "eye13"];
   const noseIds = ["nose1", "nose2", "nose6", "nose9", "nose13"];
@@ -139,7 +140,7 @@ function generateOfficialFace(rng: Rng, isFemale: boolean): Record<string, unkno
   const eyebrowIds = ["eyebrow2", "eyebrow3", "eyebrow7", "eyebrow10", "eyebrow14"];
 
   const skinColor = pick(skinColors);
-  const bald = !isFemale && r01() < 0.4;
+  const bald = !isFemale && r01() < 0.55; // starší pánové = vyšší šance lysiny
   const hairIds = isFemale ? hairIdsF : hairIdsM;
 
   return {
@@ -184,8 +185,9 @@ export function generateOfficial(
   const personalityPool = PERSONA_PER_ROLE[role];
   const personality = personalityPool[rng.int(0, personalityPool.length - 1)];
 
-  // Tradicionalista a aktivista mohou být ženy (~40%); ostatní zřídka (~10%).
-  const femaleProb = personality === "tradicionalista" || personality === "aktivista" ? 0.4 : 0.1;
+  // Realisticky: ženy zřídka, hlavně aktivistka (~25%) a tradicionalistka (~15%).
+  const femaleProb = personality === "aktivista" ? 0.25
+    : personality === "tradicionalista" ? 0.15 : 0.05;
   const isFemale = rng.int(0, 99) / 100 < femaleProb;
 
   const firstNames = isFemale ? FEMALE_FIRST_NAMES : MALE_FIRST_NAMES;
