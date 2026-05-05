@@ -117,6 +117,30 @@ export async function generateAiRoundReport(
     busesByMatch[b.match_id].push({ village: b.village_name, attendees: b.attendees_brought });
   }
 
+  // 2c. VIP na tribuně — pozvaní představitelé obce, kteří dorazili
+  const vipRows = await db.prepare(
+    `SELECT vi.match_id, vi.team_id, vo.first_name, vo.last_name, vo.role, vo.personality,
+            t.name as team_name
+     FROM village_invitations vi
+     JOIN village_officials vo ON vo.id = vi.official_id
+     JOIN teams t ON t.id = vi.team_id
+     WHERE vi.match_id IN (${placeholders}) AND vi.status = 'attended'`,
+  ).bind(...matchIds).all<{
+    match_id: string; team_id: string; first_name: string; last_name: string;
+    role: string; personality: string; team_name: string;
+  }>().catch((e) => { logger.warn({ module: "ai-reporter" }, "load VIPs", e); return { results: [] as Array<{ match_id: string; team_id: string; first_name: string; last_name: string; role: string; personality: string; team_name: string }> }; });
+  const ROLE_LABEL: Record<string, string> = {
+    starosta: "starosta", mistostarosta: "místostarosta",
+    zastupitel_1: "zastupitel", zastupitel_2: "zastupitel",
+  };
+  const vipsByMatch: Record<string, string[]> = {};
+  for (const v of vipRows.results) {
+    if (!vipsByMatch[v.match_id]) vipsByMatch[v.match_id] = [];
+    vipsByMatch[v.match_id].push(
+      `${ROLE_LABEL[v.role] ?? "zastupitel"} ${v.first_name} ${v.last_name} (host ${v.team_name}, ${v.personality})`,
+    );
+  }
+
   const statsRows = await db.prepare(
     `SELECT mps.match_id, mps.goals, mps.assists, mps.yellow_cards, mps.red_cards, mps.rating,
             p.first_name, p.last_name, t.name as team_name
@@ -179,6 +203,10 @@ export async function generateAiRoundReport(
     if (buses && buses.length > 0) {
       const busStr = buses.map((b) => `${b.village} (${b.attendees})`).join(", ");
       line += `; svezeno autobusem: ${busStr}`;
+    }
+    const vips = vipsByMatch[m.id as string];
+    if (vips && vips.length > 0) {
+      line += `\n  • VIP na tribuně (zmiň alespoň jednou v reportu): ${vips.join("; ")}`;
     }
     // Flavor facts o obcích — AI je smí občas zmínit pro místní kolorit
     const parseFacts = (raw: unknown): string[] => {
@@ -328,6 +356,7 @@ Styl:
 - ${localFlavor}
 - Nemusíš popsat každý zápas, vyber ty nejzajímavější
 - Pokud u zápasu vidíš "svezeno autobusem: X (Y)" znamená to, že domácí klub zaplatil dopravu fanouškům z obce X (Y lidí přijelo). Zmiňuj to JEN OBČAS jako vesnický kolorit ("Z Bohumilic dorazil plný autobus", "Strejda Pepa zase přivezl partu z Vimperka"), nikdy mechanicky u každého zápasu — jen když to do článku přirozeně zapadne.
+- Pokud u zápasu vidíš "VIP na tribuně: ..." znamená to, že na zápasu byl spatřen představitel obce, kterého klub pozval. ZMIŇ ho v reportu konkrétním jménem a rolí (např. "Na tribuně byl spatřen starosta Křiž" / "Místostarosta Novák potleskem ocenil výhru domácích"). Jejich osobnostní typ (sportovec/podnikatel/aktivista/tradicionalista/populista) můžeš využít k zabarvení komentáře — sportovec se rozčiluje nad faulem, podnikatel počítá tržby z bufetu, tradicionalista vzpomíná na staré časy.
 - U některých zápasů vidíš "zajímavosti OBEC: ...". Jsou to reálné fakty (památky, slavní rodáci, místní tradice). Smíš je v článku **občas** zmínit pro místní kolorit, když do textu přirozeně zapadnou (např. "v obci Bohumilice, kde 1829 vyorali meteorit, dnes vyorali tři body" / "u břevnovského Hostince U Kaštanu, kde se v 19. století zakládala soc. dem., dnes domácí oslavovali výhru"). Nikdy nezmiňuj všechny fakty mechanicky a nevymýšlej souvislosti, které tam nejsou.`;
 
   // Volání Gemini
