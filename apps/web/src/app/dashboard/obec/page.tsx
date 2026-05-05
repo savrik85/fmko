@@ -452,6 +452,41 @@ export default function ObecPage() {
 
   return (
     <div className="space-y-6 p-4 max-w-5xl mx-auto">
+      {/* Jak to s obcí funguje — onboarding */}
+      <details className="card p-4 sm:p-5 group">
+        <summary className="cursor-pointer font-heading font-bold text-sm flex items-center justify-between">
+          <span>💡 Jak to s obcí funguje</span>
+          <span className="text-xs text-muted group-open:hidden">rozbalit</span>
+          <span className="text-xs text-muted hidden group-open:inline">sbalit</span>
+        </summary>
+        <div className="mt-3 space-y-3 text-sm leading-relaxed">
+          <p>
+            Klub funguje v rámci obce a její radnice. <strong>Globální přízeň obce</strong> (0–100) ovlivňuje, kolik dotace dostaneš každý měsíc — od poloviny (favor 0, ×0.50) až po jeden a půl násobek (favor 100, ×1.50). Dlouhodobě je to tisíce korun rozdíl.
+          </p>
+
+          <p>V <strong>zastupitelstvu</strong> jsou starosta + 3 zastupitelé. Každý má svou osobnost (sportovec, podnikatel, aktivista, tradicionalista, populista) a vztah s tebou (0–100). Když má obec víc týmů, zastupitelé se rozhodují podle vztahu s každým z nich — tvůj favor vidíš v matici „Týmy v obci".</p>
+
+          <p className="pt-1">Co s nimi můžeš dělat:</p>
+          <ul className="space-y-1.5 ml-4 list-disc">
+            <li><strong>Brigády</strong> 🛠️ — obec vyhlásí veřejnou výpomoc (úklid, oprava plotu, kulturák…). Vezmeš ji se 3-7 hráči, kteří ztratí kondici a morálku, ale klub získá přízeň. Žádné peníze, jen vztah.</li>
+            <li><strong>Pozvánky na zápas</strong> 🎟️ — dárek + pozvání na domácí zápas. Přijetí není zaručené, závisí na osobnosti a tvém vztahu. Když přijdou, atmosféra na stadionu roste. Cena se platí vždy, i když odmítnou.</li>
+            <li><strong>Hospoda</strong> 🍺 — někdy se zastupitel objeví v hospodě. Můžeš ho pozvat na pivo (+trust), ale aktivista by se mohl naštvat → skandál.</li>
+            <li><strong>Petice občanů</strong> 📜 — občas pošlou petici (dětský den, oprava šaten…). Vyhovíš → zaplatíš a získáš přízeň. Ignoruješ → po 14 dnech klesne přízeň.</li>
+            <li><strong>Investice obce</strong> 💰 — když máš dostatek přízně, obec ti spolufinancuje modernizaci stadionu (50–70 % částky). Aktivuje se automaticky.</li>
+          </ul>
+
+          <p className="pt-1"><strong>Místní hrdost</strong> 🏡 — kolik rodáků z obce máš v kádru a jak hrají. Když místní zaboduje (hat-trick / hráč zápasu), přízeň skočí nahoru a celý kádr dostane +5 morálku. Pokud místní hráče prodáš, sportovec a tradicionalista to neodpustí.</p>
+
+          <p><strong>Volby</strong> 🗳️ — každé 4 sezóny. Zastupitelé s vysokou přízní mandát obhájí, ostatní vystřídá nový. Pak začínáš znovu na 50.</p>
+
+          <p><strong>Krize</strong> ⚠️ — když přízeň klesne pod 20, obec se otočí proti klubu. Vandalismus, sponzor exit, kontrola. Cesta zpět je dlouhá — brigády, petice, charity.</p>
+
+          <p className="pt-2 text-xs text-muted italic">
+            Všechno, co dělají ostatní týmy v obci, vidíš transparentně — kdo vzal jakou brigádu, kdo pozval starostu, kdo dostal investiční nabídku. Není to o tajné konspiraci, je to vesnice.
+          </p>
+        </div>
+      </details>
+
       {/* Hero */}
       <Card>
         <CardBody>
