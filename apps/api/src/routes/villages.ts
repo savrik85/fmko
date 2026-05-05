@@ -1251,6 +1251,37 @@ villagesRouter.post("/investments/:invId/respond", requireAuth, async (c) => {
   });
 });
 
+// DEV-ONLY: regen round report (smazat po testování)
+villagesRouter.post("/dev-round-report", async (c) => {
+  const leagueId = c.req.query("leagueId");
+  const calendarId = c.req.query("calendarId");
+  const gameWeek = parseInt(c.req.query("gameWeek") ?? "1", 10);
+  if (!leagueId || !calendarId) return c.json({ error: "leagueId+calendarId" }, 400);
+
+  // Smaž existující news pro toto kolo aby se mohl vygenerovat nový
+  await c.env.DB.prepare(
+    "DELETE FROM news WHERE league_id = ? AND game_week = ? AND type = 'round_report'"
+  ).bind(leagueId, gameWeek).run().catch((e) => {
+    logger.warn({ module: "villages" }, "delete existing round report", e);
+    return null;
+  });
+
+  const { generateAiRoundReport } = await import("../news/ai-reporter");
+  const { calculateStandings } = await import("../stats/standings");
+  const standings = await calculateStandings(c.env.DB, leagueId);
+
+  const env = c.env as { DB: D1Database; GEMINI_API_KEY?: string };
+  if (!env.GEMINI_API_KEY) return c.json({ error: "GEMINI_API_KEY missing" }, 500);
+
+  await generateAiRoundReport(c.env.DB, env.GEMINI_API_KEY, leagueId, calendarId, gameWeek, standings);
+
+  // Vrátit body posledního article
+  const article = await c.env.DB.prepare(
+    "SELECT headline, body FROM news WHERE league_id = ? AND game_week = ? AND type = 'round_report' ORDER BY created_at DESC LIMIT 1"
+  ).bind(leagueId, gameWeek).first<{ headline: string; body: string }>();
+  return c.json({ ok: true, article });
+});
+
 // DEV-ONLY: trigger village-processor manuálně (smazat po testování)
 villagesRouter.post("/dev-tick", async (c) => {
   const gameDate = c.req.query("date") ?? new Date().toISOString();
