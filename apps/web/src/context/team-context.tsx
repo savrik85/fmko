@@ -115,6 +115,48 @@ export function TeamProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
+  // Background refresh: budget / dny do zápasu / sezónní den se mění průběžně
+  // (cron, transfery, finance), uživatel by neměl muset refreshovat. 60s polling
+  // jen když je tab visible (šetrné na mobil), plus okamžitý refetch při návratu
+  // na tab (visibilitychange + focus).
+  useEffect(() => {
+    if (!state.token || !state.teamId) return;
+
+    let cancelled = false;
+    async function refresh() {
+      const stored = localStorage.getItem(STORAGE_TOKEN);
+      if (!stored) return;
+      try {
+        const user = await apiFetch<AuthMeResponse>("/auth/me", {
+          headers: { Authorization: `Bearer ${stored}` },
+        });
+        if (cancelled) return;
+        const teamData = buildTeamData(user);
+        localStorage.setItem(STORAGE_TEAM, JSON.stringify(teamData));
+        setState((s) => ({ ...s, ...teamData, isAdmin: user.isAdmin ?? s.isAdmin }));
+      } catch (e) {
+        console.warn("background team refresh failed:", e);
+      }
+    }
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, 60000);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [state.token, state.teamId]);
+
   // Redirect logic
   useEffect(() => {
     if (state.isLoading) return;
