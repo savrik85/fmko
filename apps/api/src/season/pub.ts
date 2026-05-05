@@ -16,6 +16,8 @@ interface PubAttendee {
   teamId: string;
   isVisitor: boolean;
   fromTeamName?: string;
+  avatar?: Record<string, unknown>;
+  isCoach?: boolean;
 }
 
 interface PubEffect {
@@ -326,7 +328,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
 
   if (attendees.length === 1) {
     const p = attendees[0];
-    return [{ type: "lone_drinker", playerIds: [p.playerId], text: pickRandom(SOLO_TEMPLATES).replace("{name}", `${p.firstName} ${p.lastName}`), effects: [] }];
+    return [{ type: "lone_drinker", playerIds: [p.playerId], text: pickRandom(SOLO_TEMPLATES).replaceAll("{name}", `${p.firstName} ${p.lastName}`), effects: [] }];
   }
 
   const visitors = attendees.filter((a) => a.isVisitor);
@@ -429,7 +431,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "story",
       playerIds: [teller.playerId],
-      text: pickRandom(STORY_TEMPLATES).replace("{name}", `${teller.firstName} ${teller.lastName}`),
+      text: pickRandom(STORY_TEMPLATES).replaceAll("{name}", `${teller.firstName} ${teller.lastName}`),
       effects: [],
     });
   }
@@ -440,7 +442,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "cat",
       playerIds: [target.playerId],
-      text: pickRandom(CAT_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      text: pickRandom(CAT_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
       effects: [],
     });
   }
@@ -451,7 +453,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "priest",
       playerIds: [target.playerId],
-      text: pickRandom(PRIEST_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      text: pickRandom(PRIEST_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
       effects: locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 1, label: "+1 morálka" })),
     });
   }
@@ -464,7 +466,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "scout",
       playerIds: [scoutTarget.playerId],
-      text: pickRandom(SCOUT_INCIDENT_TEMPLATES).replace("{name}", scoutTarget.firstName),
+      text: pickRandom(SCOUT_INCIDENT_TEMPLATES).replaceAll("{name}", scoutTarget.firstName),
       effects: [],
     });
   }
@@ -476,7 +478,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "wife_call",
       playerIds: [target.playerId],
-      text: pickRandom(WIFE_CALL_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      text: pickRandom(WIFE_CALL_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
       effects: [{ playerId: target.playerId, type: "morale", delta: -2, label: "−2 morálka" }],
     });
   }
@@ -487,7 +489,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "bad_food",
       playerIds: [target.playerId],
-      text: pickRandom(BAD_FOOD_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      text: pickRandom(BAD_FOOD_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
       effects: [{
         playerId: target.playerId,
         type: "injury",
@@ -505,7 +507,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "pub_accident",
       playerIds: [target.playerId],
-      text: pickRandom(PUB_ACCIDENT_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      text: pickRandom(PUB_ACCIDENT_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
       effects: [{
         playerId: target.playerId,
         type: "injury",
@@ -547,7 +549,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "tab",
       playerIds: [target.playerId],
-      text: pickRandom(TAB_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      text: pickRandom(TAB_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
       effects: [],
     });
   }
@@ -560,7 +562,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "jackpot",
       playerIds: [target.playerId],
-      text: pickRandom(JACKPOT_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      text: pickRandom(JACKPOT_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
       effects: [{ playerId: target.playerId, type: "morale", delta: 5, label: "+5 morálka" }],
     });
   }
@@ -581,7 +583,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "bar_champion",
       playerIds: [target.playerId],
-      text: pickRandom(BAR_CHAMPION_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      text: pickRandom(BAR_CHAMPION_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
       effects: [{ playerId: target.playerId, type: "morale", delta: 3, label: "+3 morálka" }],
     });
   }
@@ -592,7 +594,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "village_hero",
       playerIds: [target.playerId],
-      text: pickRandom(VILLAGE_HERO_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      text: pickRandom(VILLAGE_HERO_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
       effects: [{ playerId: target.playerId, type: "morale", delta: 3, label: "+3 morálka" }],
     });
   }
@@ -603,7 +605,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "friendly_reunion",
       playerIds: [target.playerId],
-      text: pickRandom(FRIENDLY_REUNION_INCIDENT_TEMPLATES).replace("{name}", target.firstName),
+      text: pickRandom(FRIENDLY_REUNION_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
       effects: [{ playerId: target.playerId, type: "morale", delta: 2, label: "+2 morálka" }],
     });
   }
@@ -626,7 +628,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
       incidents.push({
         type: "coach_praise",
         playerIds: [target.playerId],
-        text: pickRandom(COACH_PRAISE_INCIDENT_TEMPLATES).replace("{name}", target.firstName).replace(/Trenér/g, coachName),
+        text: pickRandom(COACH_PRAISE_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName).replace(/Trenér/g, coachName),
         effects: [{ playerId: target.playerId, type: "morale", delta: 3, label: "+3 morálka" }],
       });
     } else if (roll < 0.54) {
@@ -637,7 +639,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
         incidents.push({
           type: "coach_scold",
           playerIds: [target.playerId],
-          text: pickRandom(COACH_SCOLD_INCIDENT_TEMPLATES).replace("{name}", target.firstName).replace(/Trenér/g, coachName),
+          text: pickRandom(COACH_SCOLD_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName).replace(/Trenér/g, coachName),
           effects: [{ playerId: target.playerId, type: "morale", delta: -2, label: "−2 morálka" }],
         });
       } else {
@@ -646,7 +648,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
         incidents.push({
           type: "coach_tactics",
           playerIds: [target.playerId],
-          text: pickRandom(COACH_TACTICS_INCIDENT_TEMPLATES).replace("{name}", target.firstName).replace(/Trenér/g, coachName),
+          text: pickRandom(COACH_TACTICS_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName).replace(/Trenér/g, coachName),
           effects: [],
         });
       }
@@ -656,7 +658,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
       incidents.push({
         type: "coach_tactics",
         playerIds: [target.playerId],
-        text: pickRandom(COACH_TACTICS_INCIDENT_TEMPLATES).replace("{name}", target.firstName).replace(/Trenér/g, coachName),
+        text: pickRandom(COACH_TACTICS_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName).replace(/Trenér/g, coachName),
         effects: [],
       });
     } else if (roll < 0.85) {
@@ -910,11 +912,17 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
 
     if (players.results.length === 0) continue;
 
-    // Načti jméno trenéra (pro coach incidenty); fallback "Trenér" pokud chybí
-    const managerRow = await db.prepare("SELECT name FROM managers WHERE team_id = ? LIMIT 1")
-      .bind(team.id).first<{ name: string }>()
+    // Načti trenéra (pro coach incidenty + případný attendee); fallback "Trenér"
+    const managerRow = await db.prepare("SELECT id, name, avatar FROM managers WHERE team_id = ? LIMIT 1")
+      .bind(team.id).first<{ id: string; name: string; avatar: string }>()
       .catch((e) => { logger.warn({ module: "pub" }, "load manager for pub", e); return null; });
     const coachName = managerRow?.name ?? "Trenér";
+    let coachAvatar: Record<string, unknown> | undefined;
+    if (managerRow?.avatar) {
+      try { coachAvatar = JSON.parse(managerRow.avatar); } catch (e) {
+        logger.warn({ module: "pub" }, `parse manager avatar for ${team.id}`, e);
+      }
+    }
 
     // Last match result
     const lastMatch = await db.prepare(
@@ -1006,6 +1014,23 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
 
     // Generate incidents
     const incidents = generateIncidents(attendees, rivalsMap, buddiesMap, coachName);
+
+    // Pokud incidents obsahují coach_*, přidej trenéra mezi attendees s avatarem
+    const hasCoach = incidents.some((inc) => inc.type.startsWith("coach_"));
+    if (hasCoach && managerRow) {
+      const coachFirstName = coachName.split(" ")[0] ?? coachName;
+      const coachLastName = coachName.split(" ").slice(1).join(" ") || "(trenér)";
+      attendees.push({
+        playerId: `coach-${managerRow.id}`,
+        firstName: coachFirstName,
+        lastName: coachLastName,
+        alcohol: 60,
+        teamId: team.id,
+        isVisitor: false,
+        avatar: coachAvatar,
+        isCoach: true,
+      });
+    }
 
     // Persist session
     await db.prepare(

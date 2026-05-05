@@ -17,6 +17,7 @@ interface PubAttendee {
   isVisitor: boolean;
   fromTeamName?: string;
   avatar?: Record<string, unknown> | null;
+  isCoach?: boolean;
 }
 
 interface PubEffect {
@@ -319,19 +320,37 @@ export default function HospodaPage() {
                       {s.attendees.map((a) => {
                         const avatar = avatarsById[a.playerId] ?? a.avatar;
                         const initials = `${a.firstName[0] ?? ""}${a.lastName[0] ?? ""}`.toUpperCase();
-                        return (
-                          <Link
-                            key={a.playerId}
-                            href={`/dashboard/player/${a.playerId}`}
-                            className={`flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-xs ${a.isVisitor ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200 hover:bg-amber-100" : "bg-gray-50 hover:bg-pitch-50 text-ink"}`}
-                          >
+                        const palette = a.isCoach
+                          ? "bg-pitch-50 text-pitch-800 ring-1 ring-pitch-200"
+                          : a.isVisitor
+                          ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200 hover:bg-amber-100"
+                          : "bg-gray-50 hover:bg-pitch-50 text-ink";
+                        const inner = (
+                          <>
                             {avatar
                               ? <FaceAvatar faceConfig={avatar} size={28} className="rounded-full bg-white ring-1 ring-black/5" />
                               : <span className="rounded-full bg-gray-200 ring-1 ring-black/5 flex items-center justify-center text-[10px] font-heading font-bold text-muted shrink-0" style={{ width: 28, height: 28 }}>{initials}</span>}
                             <span className="font-heading font-bold whitespace-nowrap">
                               {a.firstName} {a.lastName}
                             </span>
+                            {a.isCoach && <span className="text-[9px] text-pitch-700">(trenér)</span>}
                             {a.isVisitor && <span className="text-[9px] text-amber-700">({a.fromTeamName})</span>}
+                          </>
+                        );
+                        if (a.isCoach || a.playerId.startsWith("coach-") || a.playerId.startsWith("npc-")) {
+                          return (
+                            <span key={a.playerId} className={`flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-xs ${palette}`}>
+                              {inner}
+                            </span>
+                          );
+                        }
+                        return (
+                          <Link
+                            key={a.playerId}
+                            href={`/dashboard/player/${a.playerId}`}
+                            className={`flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-xs ${palette}`}
+                          >
+                            {inner}
                           </Link>
                         );
                       })}
