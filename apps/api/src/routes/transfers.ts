@@ -416,20 +416,37 @@ transfersRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
     .first<{ id: string }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch active season for bid accept", e); return null; });
   const playerName = `${player?.first_name} ${player?.last_name}`;
 
+  // Atomicky přesunout hráče s kontrolou aktuálního vlastnictví (race-condition guard).
+  const movePlayerResult = await c.env.DB.prepare(
+    "UPDATE players SET team_id = ?, weekly_wage = ROUND(10 + (overall_rating / 100.0) * 400) WHERE id = ? AND team_id = ?"
+  ).bind(buyerTeamId, playerId, teamId).run();
+  if (movePlayerResult.meta.changes === 0) {
+    // Hráč už neexistuje u prodávajícího — vrátit kupujícímu peníze a invalidovat bid.
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(totalCost, buyerTeamId),
+      c.env.DB.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE id = ?").bind(bidId),
+    ]).catch((e) => logger.warn({ module: "transfers" }, "rollback after stale bid accept", e));
+    return c.json({ error: "Hráč již patří jinému týmu — nabídka byla zamítnuta" }, 409);
+  }
+
   await c.env.DB.batch([
     // Přičíst prodávajícímu
     c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, teamId),
-    // Přesunout hráče
-    c.env.DB.prepare("UPDATE players SET team_id = ?, weekly_wage = ROUND(10 + (overall_rating / 100.0) * 400) WHERE id = ?")
-      .bind(buyerTeamId, playerId),
-    // Uzavřít inzerát + bidy
+    // Uzavřít inzerát + bid
     c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE id = ?").bind(bid.listing_id),
     c.env.DB.prepare("UPDATE transfer_bids SET status = 'accepted' WHERE id = ?").bind(bidId),
   ]);
 
-  // Odmítnout ostatní bidy (non-critical)
+  // Odmítnout ostatní bidy + uzavřít všechny ostatní listings/offery na téhož hráče (non-critical).
   await c.env.DB.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE listing_id = ? AND id != ? AND status = 'pending'")
     .bind(bid.listing_id, bidId).run().catch((e) => logger.warn({ module: "transfers" }, "reject other bids on accept", e));
+  await c.env.DB.prepare(
+    "UPDATE transfer_listings SET status = 'sold' WHERE player_id = ? AND id != ? AND status = 'active'"
+  ).bind(playerId, bid.listing_id).run().catch((e) => logger.warn({ module: "transfers" }, "close other listings on bid accept", e));
+  await c.env.DB.prepare(
+    "UPDATE transfer_offers SET status = 'withdrawn', reject_message = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND status IN ('pending','countered')"
+  ).bind("Hráč byl prodán jinému týmu", playerId).run()
+    .catch((e) => logger.warn({ module: "transfers" }, "withdraw offers on bid accept", e));
 
   // Zaznamenat transakce do transaction logu (budget již upraven výše)
   const buyerBalanceAfter = buyer.budget - totalCost;
@@ -613,16 +630,34 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1")
     .first<{ id: string }>().catch((e) => { logger.warn({ module: "transfers" }, "fetch active season for offer accept", e); return null; });
 
-  // Přičíst prodávajícímu + přesunout hráče + uzavřít nabídku atomicky.
+  // Atomicky přesunout hráče s kontrolou aktuálního vlastnictví (race-condition guard:
+  // mezi load offeru a tímto UPDATEM mohl jiný accept hráče přesunout jinam).
+  const movePlayerResult = await c.env.DB.prepare(
+    "UPDATE players SET team_id = ? WHERE id = ? AND team_id = ?"
+  ).bind(buyerTeamId, playerId, sellerTeamId).run();
+  if (movePlayerResult.meta.changes === 0) {
+    // Hráč už neexistuje u prodávajícího — vrátit kupujícímu peníze a invalidovat offer.
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(totalCost, buyerTeamId),
+      c.env.DB.prepare("UPDATE transfer_offers SET status = 'withdrawn', reject_message = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
+        .bind("Hráč již patří jinému týmu", offerId),
+    ]).catch((e) => logger.warn({ module: "transfers" }, "rollback after stale offer accept", e));
+    return c.json({ error: "Hráč již patří jinému týmu — nabídka byla stažena" }, 409);
+  }
+
+  // Přičíst prodávajícímu + uzavřít nabídku.
   await c.env.DB.batch([
     c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, sellerTeamId),
-    c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ?").bind(buyerTeamId, playerId),
     c.env.DB.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(offerId),
   ]);
 
-  // Listings uzavřít (non-critical)
+  // Uzavřít listings + ostatní pending/countered offery na téhož hráče (non-critical).
   await c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE player_id = ? AND status = 'active'")
     .bind(playerId).run().catch((e) => logger.warn({ module: "transfers" }, "mark listings sold on offer accept", e));
+  await c.env.DB.prepare(
+    "UPDATE transfer_offers SET status = 'withdrawn', reject_message = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND id != ? AND status IN ('pending','countered')"
+  ).bind("Hráč byl prodán jinému týmu", playerId, offerId).run()
+    .catch((e) => logger.warn({ module: "transfers" }, "withdraw other offers on offer accept", e));
 
   // Transaction log (budget již upraven výše)
   const offerBuyerBalanceAfter = buyer.budget - totalCost;
