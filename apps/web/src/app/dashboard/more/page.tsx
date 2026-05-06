@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/api";
 const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string; label: string; color: string }> }> = [
   { title: "Klub", items: [
     { href: "/dashboard/klub", icon: "\u{1F3DB}️", label: "Klub", color: "#153615" },
+    { href: "/dashboard/obec", icon: "\u{1F3D8}️", label: "Obec", color: "#3D6B5C" },
     { href: "/dashboard/squad", icon: "\u{1F465}", label: "Kádr", color: "#2D5F2D" },
     { href: "/dashboard/training", icon: "\u{1F3CB}️", label: "Tréninky", color: "#3D7A3D" },
     { href: "/dashboard/transfers", icon: "\u{1F91D}", label: "Přestupy", color: "#4A8A4A" },
@@ -76,6 +77,11 @@ export default function MorePage() {
                   {item.href === "/dashboard/fans" && (
                     <span className="absolute top-1 right-1 bg-pitch-500 text-white text-[9px] font-bold px-1.5 h-4 rounded-full flex items-center justify-center">
                       Nové
+                    </span>
+                  )}
+                  {item.href === "/dashboard/obec" && (
+                    <span className="absolute top-1 right-1 bg-pitch-500 text-white text-[9px] font-bold px-1.5 h-4 rounded-full flex items-center justify-center">
+                      Nová
                     </span>
                   )}
                 </Link>

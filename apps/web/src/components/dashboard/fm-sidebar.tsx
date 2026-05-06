@@ -160,6 +160,9 @@ export function FMSidebar() {
                           {item.href === "/dashboard/fans" && (
                             <span className="ml-1.5 bg-pitch-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Nové</span>
                           )}
+                          {item.href === "/dashboard/obec" && (
+                            <span className="ml-1.5 bg-pitch-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Nová</span>
+                          )}
                         </span>
                       )}
                     </Link>

@@ -6,6 +6,16 @@ const FIRST_NAMES = [
   "Pavel", "Jiří", "Zdeněk", "Jaroslav", "Ladislav", "Stanislav",
   "Milan", "Vladimír", "František", "Václav", "Oldřich", "Radek",
   "Aleš", "Luboš", "Roman", "David", "Marek", "Michal",
+  "Antonín", "Bohumil", "Lukáš", "Ondřej", "Bohuslav", "Rudolf",
+  "Robert", "Vlastimil", "Jindřich", "Filip", "Adam", "Jakub",
+  "Vojtěch", "Matěj", "Bedřich", "Daniel", "Richard", "Šimon", "Štěpán",
+  "Vít", "Rostislav", "Břetislav", "Alois", "Cyril", "Čeněk", "Dalibor",
+  "Dušan", "Emil", "Emanuel", "Erik", "Eduard", "Ferdinand", "Hynek",
+  "Ivan", "Ivo", "Jaromír", "Julius", "Konstantin", "Kryštof", "Leoš",
+  "Libor", "Lubomír", "Maxmilián", "Mikuláš", "Mojmír", "Otakar",
+  "Patrik", "Přemysl", "Prokop", "Radoslav", "Samuel", "Slavomír",
+  "Svatopluk", "Teodor", "Vincenc", "Viktor", "Vilém", "Zbyněk",
+  "Marian", "Norbert", "Alexandr", "Arnošt", "Otmar",
 ];
 
 const LAST_NAMES = [

@@ -23,16 +23,35 @@ export interface GeneratedOfficial {
 }
 
 const MALE_FIRST_NAMES = [
+  // Top česká jména (50+)
   "Jan", "Petr", "Martin", "Tomáš", "Josef", "Miroslav", "Karel", "Pavel",
   "Jiří", "Zdeněk", "Jaroslav", "Stanislav", "Milan", "Vladimír", "František",
   "Václav", "Oldřich", "Aleš", "Roman", "David", "Marek", "Michal", "Antonín",
-  "Bohumil", "Radek", "Lukáš", "Ondřej",
+  "Bohumil", "Radek", "Lukáš", "Ondřej", "Ladislav", "Bohuslav", "Rudolf",
+  "Luboš", "Robert", "Vlastimil", "Jindřich", "Filip", "Adam", "Jakub",
+  "Vojtěch", "Matěj", "Bedřich", "Daniel", "Richard", "Šimon", "Štěpán",
+  "Vít", "Vítek", "Rostislav", "Bořivoj", "Břetislav", "Alois", "Augustin",
+  "Bedřich", "Cyril", "Čeněk", "Dalibor", "Dušan", "Emil", "Emanuel", "Erik",
+  "Eduard", "Eliáš", "Ferdinand", "Filip", "Hugo", "Hynek", "Igor", "Ivan",
+  "Ivo", "Jakub", "Jaromír", "Jeronym", "Julius", "Jurij", "Konstantin",
+  "Kryštof", "Květoslav", "Leoš", "Libor", "Lubomír", "Lumír", "Matyáš",
+  "Maxmilián", "Mikuláš", "Mojmír", "Nikolaj", "Oldřich", "Oskar", "Otakar",
+  "Patrik", "Přemysl", "Prokop", "Radomír", "Radoslav", "Rostislav", "Samuel",
+  "Sebastián", "Slavomír", "Soběslav", "Svatopluk", "Teodor", "Tibor",
+  "Vendelín", "Vincenc", "Viktor", "Vilém", "Vlastislav", "Zbyněk", "Zbyšek",
+  "Žakub", "Bohouš", "Bonifác", "Damián", "Florián", "Jonáš", "Justýn",
+  "Marian", "Norbert", "Štefan", "Alexandr", "Arnošt", "Otmar", "Otta", "Sláva",
 ];
 
 const FEMALE_FIRST_NAMES = [
   "Marie", "Jana", "Eva", "Hana", "Anna", "Lenka", "Kateřina", "Lucie",
   "Jaroslava", "Věra", "Alena", "Helena", "Iva", "Daniela", "Petra",
-  "Martina", "Zdeňka", "Ludmila",
+  "Martina", "Zdeňka", "Ludmila", "Božena", "Bohumila", "Vlasta", "Marta",
+  "Růžena", "Františka", "Antonie", "Olga", "Drahomíra", "Libuše", "Jiřina",
+  "Stanislava", "Mirka", "Miluše", "Magdalena", "Markéta", "Veronika",
+  "Tereza", "Barbora", "Klára", "Alžběta", "Adéla", "Karolína", "Natálie",
+  "Šárka", "Štěpánka", "Sára", "Simona", "Zuzana", "Dagmar", "Dana",
+  "Květa", "Květoslava", "Vendula", "Vlasta", "Slavěna", "Soňa", "Ema",
 ];
 
 const LAST_NAMES_M = [
