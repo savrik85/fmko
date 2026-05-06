@@ -462,7 +462,7 @@ villagesRouter.get("/:id/brigades", async (c) => {
 });
 
 // POST /api/villages/brigades/:brigadeId/take — vzít brigádu (Sprint B)
-import { requireAuth } from "../auth/middleware";
+import { requireAuth, requireAdmin } from "../auth/middleware";
 villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
   const brigadeId = c.req.param("brigadeId");
   const session = c.get("session" as never) as { userId: string; teamId: string | null };
@@ -1251,62 +1251,22 @@ villagesRouter.post("/investments/:invId/respond", requireAuth, async (c) => {
   });
 });
 
-// DEV-ONLY: regen round report (smazat po testování)
-villagesRouter.post("/dev-round-report", async (c) => {
-  const leagueId = c.req.query("leagueId");
-  const calendarId = c.req.query("calendarId");
-  const gameWeek = parseInt(c.req.query("gameWeek") ?? "1", 10);
-  if (!leagueId || !calendarId) return c.json({ error: "leagueId+calendarId" }, 400);
-
-  // Smaž existující news pro toto kolo aby se mohl vygenerovat nový
-  await c.env.DB.prepare(
-    "DELETE FROM news WHERE league_id = ? AND game_week = ? AND type = 'round_report'"
-  ).bind(leagueId, gameWeek).run().catch((e) => {
-    logger.warn({ module: "villages" }, "delete existing round report", e);
-    return null;
-  });
-
-  const { generateAiRoundReport } = await import("../news/ai-reporter");
-  const { calculateStandings } = await import("../stats/standings");
-  const standings = await calculateStandings(c.env.DB, leagueId);
-
-  const env = c.env as { DB: D1Database; GEMINI_API_KEY?: string };
-  if (!env.GEMINI_API_KEY) return c.json({ error: "GEMINI_API_KEY missing" }, 500);
-
-  await generateAiRoundReport(c.env.DB, env.GEMINI_API_KEY, leagueId, calendarId, gameWeek, standings);
-
-  // Vrátit body posledního article
-  const article = await c.env.DB.prepare(
-    "SELECT headline, body FROM news WHERE league_id = ? AND game_week = ? AND type = 'round_report' ORDER BY created_at DESC LIMIT 1"
-  ).bind(leagueId, gameWeek).first<{ headline: string; body: string }>();
-  return c.json({ ok: true, article });
-});
-
-// DEV-ONLY: trigger village-processor manuálně (smazat po testování)
-villagesRouter.post("/dev-tick", async (c) => {
-  const gameDate = c.req.query("date") ?? new Date().toISOString();
-  const monday = c.req.query("monday") === "1";
-  const {
-    expireOldBrigades, generateWeeklyBrigades,
-    expirePetitions, generateMonthlyPetitions,
-    expireInvestments, generateMonthlyInvestments,
-    expirePubEncounters, generatePubEncounters,
-    processElections, processCrisisEvents,
-  } = await import("../season/village-processor");
-  const r: Record<string, unknown> = { gameDate, monday };
-  r.expiredBrigades = await expireOldBrigades(c.env.DB, gameDate);
-  r.expiredPetitions = await expirePetitions(c.env.DB, gameDate);
-  r.expiredInvestments = await expireInvestments(c.env.DB, gameDate);
-  r.expiredPub = await expirePubEncounters(c.env.DB, gameDate);
-  if (monday) {
-    r.brigades = await generateWeeklyBrigades(c.env.DB, gameDate);
-    r.petitions = await generateMonthlyPetitions(c.env.DB, gameDate);
-    r.investments = await generateMonthlyInvestments(c.env.DB, gameDate);
-    r.pub = await generatePubEncounters(c.env.DB, gameDate);
-    r.elections = await processElections(c.env.DB, gameDate);
-    r.crisis = await processCrisisEvents(c.env.DB, gameDate);
+// Admin: jednorázový seed officials pro všechny obce s aktivním human týmem.
+// Spustí se po prod deployi, aby brigády hned měly offered_by_official_id.
+// Idempotentní (lazy seed přeskočí už existující).
+villagesRouter.post("/admin/seed-all-officials", requireAdmin, async (c) => {
+  const villages = await c.env.DB.prepare(
+    `SELECT DISTINCT v.id FROM villages v
+     JOIN teams t ON t.village_id = v.id
+     WHERE t.user_id != 'ai'`
+  ).all<{ id: string }>();
+  const { ensureVillageOfficials: ensure } = await import("../villages/officials-store");
+  let seeded = 0;
+  for (const v of villages.results ?? []) {
+    const officials = await ensure(c.env.DB, v.id);
+    if (officials.length === 4) seeded++;
   }
-  return c.json(r);
+  return c.json({ ok: true, villagesProcessed: villages.results?.length ?? 0, seeded });
 });
 
 export { villagesRouter };
