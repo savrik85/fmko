@@ -269,20 +269,21 @@ function getPositionPenalty(natural: Pos, playing: Pos): PosPenalty {
 type Position = MatchPlayer["position"];
 
 function pickSubIndexForPosition(subs: MatchPlayer[], outPos: Position): number {
-  const isGK = outPos === "GK";
-  // Preferenční pořadí pozic od ideálního po nouzové
-  const preferences: Position[] = isGK
-    ? ["GK"] // brankář se ze stejné role nedá nahradit polem
-    : outPos === "DEF" ? ["DEF", "MID", "FWD"]
-    : outPos === "MID" ? ["MID", "DEF", "FWD"]
-    : /* FWD */         ["FWD", "MID", "DEF"];
+  // Preferenční pořadí pozic od ideálního po nouzové. GK je vždy poslední,
+  // takže DEF/MID/FWD se nikdy nenahradí brankářem (kromě situace, kdy
+  // na lavičce už nikdo jiný není a tým by jinak hrál o člověka méně).
+  const preferences: Position[] = outPos === "GK"
+    ? ["GK", "DEF", "MID", "FWD"] // při zranění GK vyber GK; nouzově pole
+    : outPos === "DEF" ? ["DEF", "MID", "FWD", "GK"]
+    : outPos === "MID" ? ["MID", "DEF", "FWD", "GK"]
+    : /* FWD */         ["FWD", "MID", "DEF", "GK"];
 
   for (const pref of preferences) {
-    const idx = subs.findIndex((s) => s.position === pref);
+    // Preferuj match position (jak hraje v sestavě), fallback na natural position
+    const idx = subs.findIndex((s) => (s.matchPosition ?? s.position) === pref);
     if (idx >= 0) return idx;
   }
-  // Žádný hráč v poli — pokud zraněný GK a na lavičce není GK, nedělej nic.
-  // Jinak (extrémní edge — třeba 5 GKs) vrať první sub.
+  // Lavička je úplně prázdná
   return -1;
 }
 
@@ -626,7 +627,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         const team = teamId === home.teamId ? home : away;
         const subsUsed = teamId === home.teamId ? homeSubsUsed : awaySubsUsed;
         if (team.subs.length > 0 && subsUsed < MAX_SUBS) {
-          const subIdx = pickSubIndexForPosition(team.subs, unlucky.position);
+          const subIdx = pickSubIndexForPosition(team.subs, unlucky.matchPosition ?? unlucky.position);
           if (subIdx >= 0) {
             const sub = team.subs.splice(subIdx, 1)[0];
             const idx = team.lineup.indexOf(unlucky);
@@ -656,7 +657,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           .sort((a, b) => a.condition - b.condition)[0];
 
         if (exhausted && rng.random() < 0.3) {
-          const subIdx = pickSubIndexForPosition(teamData.team.subs, exhausted.position);
+          const subIdx = pickSubIndexForPosition(teamData.team.subs, exhausted.matchPosition ?? exhausted.position);
           if (subIdx >= 0) {
             const sub = teamData.team.subs.splice(subIdx, 1)[0];
             const idx = teamData.team.lineup.indexOf(exhausted);
