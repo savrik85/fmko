@@ -124,7 +124,12 @@ villagesRouter.get("/upcoming-match", async (c) => {
      FROM village_officials vo
      LEFT JOIN village_team_favor vtf ON vtf.official_id = vo.id AND vtf.team_id = ?
      WHERE vo.village_id = ?
-     ORDER BY vo.role`
+     ORDER BY CASE vo.role
+       WHEN 'starosta' THEN 0
+       WHEN 'mistostarosta' THEN 1
+       WHEN 'zastupitel_1' THEN 2
+       WHEN 'zastupitel_2' THEN 3
+       ELSE 4 END`
   ).bind(matchDay, matchDay, teamId, team.village_id).all();
   const myInvitations = await c.env.DB.prepare(
     `SELECT id, official_id, status, gift_cost, attendance_effects, created_at
