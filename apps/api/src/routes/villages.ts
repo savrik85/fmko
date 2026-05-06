@@ -422,7 +422,7 @@ villagesRouter.get("/:id/teams", async (c) => {
             COALESCE(vtf.favor, 50) as global_favor
      FROM teams t
      LEFT JOIN village_team_favor vtf ON vtf.team_id = t.id AND vtf.official_id IS NULL
-     WHERE t.village_id = ?
+     WHERE t.village_id = ? AND t.name NOT LIKE 'DELETED%'
      ORDER BY t.name`
   ).bind(villageId).all<{
     id: string; name: string; user_id: string; primary_color: string;
