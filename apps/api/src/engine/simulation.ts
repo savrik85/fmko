@@ -261,6 +261,32 @@ function getPositionPenalty(natural: Pos, playing: Pos): PosPenalty {
 }
 
 /**
+ * Vybrat ze střídaček nejvhodnějšího hráče dle pozice zraněného/vyčerpaného.
+ * Preferuje stejnou pozici, pak sousední (DEF↔MID↔FWD). Brankář se NIKDY
+ * nepostaví do pole, pokud zraněný není sám brankář — to by byla katastrofa.
+ * Vrací index v subs poli, nebo −1 pokud žádný vhodný kandidát.
+ */
+type Position = MatchPlayer["position"];
+
+function pickSubIndexForPosition(subs: MatchPlayer[], outPos: Position): number {
+  const isGK = outPos === "GK";
+  // Preferenční pořadí pozic od ideálního po nouzové
+  const preferences: Position[] = isGK
+    ? ["GK"] // brankář se ze stejné role nedá nahradit polem
+    : outPos === "DEF" ? ["DEF", "MID", "FWD"]
+    : outPos === "MID" ? ["MID", "DEF", "FWD"]
+    : /* FWD */         ["FWD", "MID", "DEF"];
+
+  for (const pref of preferences) {
+    const idx = subs.findIndex((s) => s.position === pref);
+    if (idx >= 0) return idx;
+  }
+  // Žádný hráč v poli — pokud zraněný GK a na lavičce není GK, nedělej nic.
+  // Jinak (extrémní edge — třeba 5 GKs) vrať první sub.
+  return -1;
+}
+
+/**
  * Simulate a full 90-minute match.
  */
 export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
@@ -600,16 +626,19 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         const team = teamId === home.teamId ? home : away;
         const subsUsed = teamId === home.teamId ? homeSubsUsed : awaySubsUsed;
         if (team.subs.length > 0 && subsUsed < MAX_SUBS) {
-          const sub = team.subs.shift()!;
-          const idx = team.lineup.indexOf(unlucky);
-          if (idx >= 0) {
-            sub.matchPosition = unlucky.matchPosition;
-            team.lineup[idx] = sub;
-            playerMinutes[unlucky.id] = { ...playerMinutes[unlucky.id], left: minute };
-            playerMinutes[sub.id] = { entered: minute, left: null };
-            if (teamId === home.teamId) homeSubsUsed++; else awaySubsUsed++;
-            addEvent(minute, "substitution", sub, teamId,
-              `Střídání: ${playerName(sub)} za ${playerName(unlucky)}`);
+          const subIdx = pickSubIndexForPosition(team.subs, unlucky.position);
+          if (subIdx >= 0) {
+            const sub = team.subs.splice(subIdx, 1)[0];
+            const idx = team.lineup.indexOf(unlucky);
+            if (idx >= 0) {
+              sub.matchPosition = unlucky.matchPosition;
+              team.lineup[idx] = sub;
+              playerMinutes[unlucky.id] = { ...playerMinutes[unlucky.id], left: minute };
+              playerMinutes[sub.id] = { entered: minute, left: null };
+              if (teamId === home.teamId) homeSubsUsed++; else awaySubsUsed++;
+              addEvent(minute, "substitution", sub, teamId,
+                `Střídání: ${playerName(sub)} za ${playerName(unlucky)}`);
+            }
           }
         }
       }
@@ -627,17 +656,20 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           .sort((a, b) => a.condition - b.condition)[0];
 
         if (exhausted && rng.random() < 0.3) {
-          const sub = teamData.team.subs.shift()!;
-          const idx = teamData.team.lineup.indexOf(exhausted);
-          if (idx >= 0) {
-            sub.matchPosition = exhausted.matchPosition;
-            teamData.team.lineup[idx] = sub;
-            playerMinutes[exhausted.id] = { ...playerMinutes[exhausted.id], left: minute };
-            playerMinutes[sub.id] = { entered: minute, left: null };
-            if (teamData.isHome) homeSubsUsed++; else awaySubsUsed++;
-            addEvent(minute, "substitution", sub, teamData.teamId,
-              `Střídání: ${playerName(sub)} za ${playerName(exhausted)}`);
-            continue;
+          const subIdx = pickSubIndexForPosition(teamData.team.subs, exhausted.position);
+          if (subIdx >= 0) {
+            const sub = teamData.team.subs.splice(subIdx, 1)[0];
+            const idx = teamData.team.lineup.indexOf(exhausted);
+            if (idx >= 0) {
+              sub.matchPosition = exhausted.matchPosition;
+              teamData.team.lineup[idx] = sub;
+              playerMinutes[exhausted.id] = { ...playerMinutes[exhausted.id], left: minute };
+              playerMinutes[sub.id] = { entered: minute, left: null };
+              if (teamData.isHome) homeSubsUsed++; else awaySubsUsed++;
+              addEvent(minute, "substitution", sub, teamData.teamId,
+                `Střídání: ${playerName(sub)} za ${playerName(exhausted)}`);
+              continue;
+            }
           }
         }
 
