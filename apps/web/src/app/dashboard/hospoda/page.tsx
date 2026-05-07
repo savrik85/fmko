@@ -138,11 +138,14 @@ export default function HospodaPage() {
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[40vh]"><Spinner /></div>;
 
-  // Top pijani — kolikrát byl v hospodě
+  // Top pijani — kolikrát byl v hospodě. Hráče, kteří už v týmu nejsou
+  // (prodáni/uvolněni), do Síně slávy nepouštíme — odkaz na profil by byl 404.
   const drinkerCounts = new Map<string, { name: string; count: number }>();
   for (const s of sessions) {
     for (const a of s.attendees) {
       if (a.isVisitor) continue;
+      if (a.isCoach || a.playerId.startsWith("coach-") || a.playerId.startsWith("npc-")) continue;
+      if (!avatarsById[a.playerId]) continue;
       const key = a.playerId;
       const cur = drinkerCounts.get(key) ?? { name: `${a.firstName} ${a.lastName}`, count: 0 };
       cur.count++;
@@ -337,9 +340,14 @@ export default function HospodaPage() {
                             {a.isVisitor && <span className="text-[9px] text-amber-700">({a.fromTeamName})</span>}
                           </>
                         );
-                        if (a.isCoach || a.playerId.startsWith("coach-") || a.playerId.startsWith("npc-")) {
+                        // Bývalý vlastní hráč (prodán/uvolněn) → není v current squadu,
+                        // /dashboard/player/:id by skončil 404. Trenér i NPC jsou taky neklikatelní.
+                        const isFormer = !a.isVisitor && !a.isCoach
+                          && !a.playerId.startsWith("coach-") && !a.playerId.startsWith("npc-")
+                          && !avatarsById[a.playerId];
+                        if (a.isCoach || a.playerId.startsWith("coach-") || a.playerId.startsWith("npc-") || isFormer) {
                           return (
-                            <span key={a.playerId} className={`flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-xs ${palette}`}>
+                            <span key={a.playerId} className={`flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-xs ${palette}${isFormer ? " opacity-60" : ""}`} title={isFormer ? "Bývalý hráč" : undefined}>
                               {inner}
                             </span>
                           );
