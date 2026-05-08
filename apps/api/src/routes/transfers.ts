@@ -763,18 +763,30 @@ transfersRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
   const body = await c.req.json<{ amount: number }>();
+
+  // Sanity: kladné celé číslo a horní strop. Bez stropu mohl seller poslat
+  // 100 000 000 000 000 000 Kč jako protinabídku (incident 2026-05-08).
+  const MAX_COUNTER = 100_000_000;
+  if (!Number.isInteger(body.amount) || body.amount <= 0 || body.amount > MAX_COUNTER) {
+    return c.json({ error: `Neplatná částka. Zadej kladné celé číslo do ${MAX_COUNTER.toLocaleString("cs")} Kč.` }, 400);
+  }
+
   const offer = await c.env.DB.prepare(
     "SELECT from_team_id, to_team_id, player_id FROM transfer_offers WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered') AND last_action_by != ?"
   ).bind(offerId, teamId, teamId, teamId).first<{ from_team_id: string; to_team_id: string; player_id: string }>();
   if (!offer) return c.json({ error: "Nabídka nenalezena nebo nelze upravit" }, 404);
 
-  // Pokud counter posílá kupující (from_team_id), ověř že má na to peníze
-  if (offer.from_team_id === teamId) {
-    const buyer = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?")
-      .bind(teamId).first<{ budget: number }>();
-    if (!buyer || buyer.budget < body.amount) {
-      return c.json({ error: `Nedostatek peněz. Máte ${(buyer?.budget ?? 0).toLocaleString("cs")} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
-    }
+  // Counter musí být v reálném rozsahu kupujícího — i když posílá prodávající,
+  // nemá smysl chtít částku, kterou kupující nemá na účtu.
+  const buyerId = offer.from_team_id;
+  const buyer = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?")
+    .bind(buyerId).first<{ budget: number }>();
+  const buyerBudget = buyer?.budget ?? 0;
+  if (offer.from_team_id === teamId && buyerBudget < body.amount) {
+    return c.json({ error: `Nedostatek peněz. Máte ${buyerBudget.toLocaleString("cs")} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
+  }
+  if (offer.to_team_id === teamId && body.amount > buyerBudget) {
+    return c.json({ error: `Kupující má jen ${buyerBudget.toLocaleString("cs")} Kč — vyšší protinabídku stejně nemá z čeho zaplatit.` }, 400);
   }
 
   // Counter může ten kdo je na tahu; nastaví last_action_by na sebe

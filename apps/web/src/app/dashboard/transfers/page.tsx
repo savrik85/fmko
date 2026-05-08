@@ -1971,8 +1971,8 @@ export default function TransfersPage() {
                           </div>
                         )}
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
-                        <Link href={`/dashboard/transfers/offer/${o.id}`} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
+                      <div className="flex flex-wrap items-stretch gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
+                        <Link href={`/dashboard/transfers/offer/${o.id}`} className="inline-flex items-center justify-center py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
                           Jednání →
                         </Link>
                         {o.on_turn && (<>
@@ -1986,7 +1986,7 @@ export default function TransfersPage() {
                             const ok = await confirm({ title: `Přijmout protinabídku ${formatCZK(amount)}?`, description: desc, confirmLabel: "Přijmout" });
                             if (!ok || !teamId) return;
                             if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }), "Přijetí protinabídky se nezdařilo")) await refresh();
-                          }} className="py-1.5 px-4 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                          }} className="inline-flex items-center justify-center py-1.5 px-4 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                             Přijmout
                           </button>
                           <button onClick={() => {
@@ -2006,7 +2006,7 @@ export default function TransfersPage() {
                                 if (ok) await refresh();
                               },
                             });
-                          }} className="py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
+                          }} className="inline-flex items-center justify-center py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
                             Protinabídka
                           </button>
                         </>)}
@@ -2016,7 +2016,7 @@ export default function TransfersPage() {
                         <button onClick={async () => {
                           if (!teamId) return;
                           if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}`, { method: "DELETE" }), "Stažení nabídky se nezdařilo")) await refresh();
-                        }} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                        }} className="inline-flex items-center justify-center py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                           Stáhnout
                         </button>
                       </div>
@@ -2430,9 +2430,10 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose }: {
             <input
               type="number"
               value={price}
-              onChange={(e) => setPrice(Math.max(0, parseInt(e.target.value) || 0))}
+              onChange={(e) => setPrice(Math.min(100_000_000, Math.max(0, parseInt(e.target.value) || 0)))}
               className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
               min={0}
+              max={100_000_000}
               step={500}
               autoFocus
             />
