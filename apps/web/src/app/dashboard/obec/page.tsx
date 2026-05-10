@@ -520,6 +520,7 @@ export default function ObecPage() {
           {officials.map((o) => {
             const officialFavor = favor.perOfficial.find((p) => p.officialId === o.id);
             const f = officialFavor?.favor ?? 50;
+            const tr = officialFavor?.trust ?? 50;
             return (
               <Card key={o.id}>
                 <CardBody>
@@ -558,6 +559,13 @@ export default function ObecPage() {
                             </div>
                           );
                         })}
+                      </div>
+                      <div className="mt-2 flex items-center gap-2 text-xs">
+                        <span className="text-gray-500 shrink-0">Tvá důvěra</span>
+                        <span className="tabular-nums text-gray-700 font-semibold w-10 text-right">{tr}/100</span>
+                        <div className="h-1.5 flex-1 max-w-[120px] rounded-full bg-gray-100 overflow-hidden">
+                          <div className={`h-full ${favorColor(tr)}`} style={{ width: `${Math.max(0, Math.min(100, tr))}%` }} />
+                        </div>
                       </div>
                       <div className="text-xs text-gray-500 mt-2" title={PERSONALITY_DESC[o.personality]}>
                         {termRemaining(o.termEndAt)} · {PERSONALITY_DESC[o.personality]}
