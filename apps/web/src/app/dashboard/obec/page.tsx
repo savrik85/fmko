@@ -323,7 +323,7 @@ export default function ObecPage() {
     if (respondingPubId) return;
     setRespondingPubId(id);
     try {
-      const res = await apiFetch<{ outcome?: string; beerCost?: number; trustGain?: number; officialName?: string }>(
+      const res = await apiFetch<{ outcome?: string; beerCost?: number; favorDelta?: number; officialName?: string }>(
         `/api/villages/pub-encounters/${id}/respond`,
         {
           method: "POST",
@@ -334,7 +334,7 @@ export default function ObecPage() {
       let msg = "";
       if (action === "ignore") msg = "Ignoroval(a) jsi NPC.";
       else if (res.outcome === "scandal") msg = `Skandál! ${res.officialName} odešel znechucen.`;
-      else msg = `Pivo s ${res.officialName} — důvěra +${res.trustGain}, cena ${res.beerCost} Kč.`;
+      else msg = `Pivo s ${res.officialName} — přízeň +${res.favorDelta}, cena ${res.beerCost} Kč.`;
       setToast(msg);
       setTimeout(() => setToast(null), 5000);
       if (villageId) await refresh(villageId);
@@ -464,17 +464,13 @@ export default function ObecPage() {
             Klub funguje v rámci obce a její radnice. <strong>Globální přízeň obce</strong> (0–100) ovlivňuje, kolik dotace dostaneš každý měsíc — od poloviny (favor 0, ×0.50) až po jeden a půl násobek (favor 100, ×1.50). Dlouhodobě je to tisíce korun rozdíl.
           </p>
 
-          <p>V <strong>zastupitelstvu</strong> jsou starosta + 3 zastupitelé. Každý má svou osobnost (sportovec, podnikatel, aktivista, tradicionalista, populista) a dva vztahy s tebou (0–100):</p>
-          <ul className="ml-4 list-disc space-y-1">
-            <li><strong>Přízeň</strong> — oficiální/politický vztah. Ovlivňuje hlasování, brigády, dotace. Když má obec víc týmů, zastupitelé se rozhodují podle přízně k tobě vs. ostatním klubům — vidíš to v řádku „Týmy v obci".</li>
-            <li><strong>Tvá důvěra</strong> — osobní vztah s konkrétním zastupitelem. Roste hlavně z piva v hospodě (+2 až +4 podle osobnosti). Vyšší důvěra znamená přátelštější reakce a větší ochotu zavřít oči nad konfliktem.</li>
-          </ul>
+          <p>V <strong>zastupitelstvu</strong> jsou starosta + 3 zastupitelé. Každý má svou osobnost (sportovec, podnikatel, aktivista, tradicionalista, populista) a vztah s tebou (0–100). Když má obec víc týmů, zastupitelé se rozhodují podle přízně k tobě vs. ostatním klubům — vidíš to v řádku „Týmy v obci".</p>
 
           <p className="pt-1">Co s nimi můžeš dělat:</p>
           <ul className="space-y-1.5 ml-4 list-disc">
             <li><strong>Brigády</strong> 🛠️ — obec vyhlásí veřejnou výpomoc (úklid, oprava plotu, kulturák…). Vezmeš ji se 3-7 hráči, kteří ztratí kondici a morálku, ale klub získá přízeň. Žádné peníze, jen vztah.</li>
             <li><strong>Pozvánky na zápas</strong> 🎟️ — dárek + pozvání na domácí zápas. Přijetí není zaručené, závisí na osobnosti a tvém vztahu. Když přijdou, atmosféra na stadionu roste. Cena se platí vždy, i když odmítnou.</li>
-            <li><strong>Hospoda</strong> 🍺 — někdy se zastupitel objeví v hospodě. Můžeš ho pozvat na pivo (+důvěra, +1 přízeň), ale aktivista by se mohl naštvat → skandál.</li>
+            <li><strong>Hospoda</strong> 🍺 — někdy se zastupitel objeví v hospodě. Můžeš ho pozvat na pivo (+2 až +4 přízeň podle osobnosti), ale aktivista by se mohl naštvat → skandál.</li>
             <li><strong>Petice občanů</strong> 📜 — občas pošlou petici (dětský den, oprava šaten…). Vyhovíš → zaplatíš a získáš přízeň. Ignoruješ → po 14 dnech klesne přízeň.</li>
             <li><strong>Investice obce</strong> 💰 — když máš dostatek přízně, obec ti spolufinancuje modernizaci stadionu (50–70 % částky). Aktivuje se automaticky.</li>
           </ul>
@@ -524,7 +520,6 @@ export default function ObecPage() {
           {officials.map((o) => {
             const officialFavor = favor.perOfficial.find((p) => p.officialId === o.id);
             const f = officialFavor?.favor ?? 50;
-            const tr = officialFavor?.trust ?? 50;
             return (
               <Card key={o.id}>
                 <CardBody>
@@ -563,13 +558,6 @@ export default function ObecPage() {
                             </div>
                           );
                         })}
-                      </div>
-                      <div className="mt-2 flex items-center gap-2 text-xs">
-                        <span className="text-gray-500 shrink-0">Tvá důvěra</span>
-                        <span className="tabular-nums text-gray-700 font-semibold w-10 text-right">{tr}/100</span>
-                        <div className="h-1.5 flex-1 max-w-[120px] rounded-full bg-gray-100 overflow-hidden">
-                          <div className={`h-full ${favorColor(tr)}`} style={{ width: `${Math.max(0, Math.min(100, tr))}%` }} />
-                        </div>
                       </div>
                       <div className="text-xs text-gray-500 mt-2" title={PERSONALITY_DESC[o.personality]}>
                         {termRemaining(o.termEndAt)} · {PERSONALITY_DESC[o.personality]}

@@ -805,17 +805,17 @@ villagesRouter.post("/invitations", requireAuth, async (c) => {
   const matchDay = match.scheduled_at.slice(0, 10);
   const isHome = match.home_team_id === session.teamId;
 
-  // Načíst NPC + favor + trust
+  // Načíst NPC + favor
   const official = await c.env.DB.prepare(
     `SELECT vo.id, vo.village_id, vo.first_name, vo.last_name, vo.personality, vo.role,
-            COALESCE(vtf.favor, 50) as favor, COALESCE(vtf.trust, 50) as trust
+            COALESCE(vtf.favor, 50) as favor
      FROM village_officials vo
      LEFT JOIN village_team_favor vtf
        ON vtf.official_id = vo.id AND vtf.team_id = ?
      WHERE vo.id = ?`
   ).bind(session.teamId, body.officialId).first<{
     id: string; village_id: string; first_name: string; last_name: string;
-    personality: string; role: string; favor: number; trust: number;
+    personality: string; role: string; favor: number;
   }>();
   if (!official) return c.json({ error: "Zastupitel neexistuje" }, 404);
 
@@ -833,8 +833,7 @@ villagesRouter.post("/invitations", requireAuth, async (c) => {
 
   // Acceptance probability
   let p = 0.30;
-  p += 0.005 * (official.favor - 50);
-  p += 0.003 * (official.trust - 50);
+  p += 0.008 * (official.favor - 50);
   if (isHome) p += 0.10;
 
   // Persona modifiery (zjednodušené)
@@ -1037,7 +1036,6 @@ villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => 
   const scandalProb = enc.personality === "aktivista" ? 0.05 : 0.02;
   const isScandal = Math.random() < scandalProb;
 
-  let trustGain = 0;
   let favorDelta = 0;
   let outcome: "beer" | "scandal" = "beer";
   let desc = "";
@@ -1055,13 +1053,12 @@ villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => 
        ORDER BY RANDOM() LIMIT 1`
     ).bind(teamRowAuth.id).run().catch((e) => logger.warn({ module: "villages" }, "scandal morale hit", e));
   } else {
-    trustGain = enc.personality === "populista" ? 4
+    favorDelta = enc.personality === "populista" ? 4
       : enc.personality === "tradicionalista" ? 3 : 2;
-    favorDelta = 1;
-    desc = `Pohoda u piva s ${enc.first_name} ${enc.last_name}. Důvěra +${trustGain}.`;
+    desc = `Pohoda u piva s ${enc.first_name} ${enc.last_name}. Přízeň +${favorDelta}.`;
   }
 
-  // Update favor / trust per official
+  // Update favor per official
   const fav = await c.env.DB.prepare(
     `SELECT id FROM village_team_favor WHERE team_id = ? AND official_id = ?`
   ).bind(teamRowAuth.id, enc.official_id).first<{ id: string }>();
@@ -1069,17 +1066,16 @@ villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => 
     await c.env.DB.prepare(
       `UPDATE village_team_favor
        SET favor = MAX(0, MIN(100, favor + ?)),
-           trust = MAX(0, MIN(100, trust + ?)),
            last_interaction_at = ?, updated_at = ?
        WHERE id = ?`
-    ).bind(favorDelta, trustGain, now, now, fav.id).run();
+    ).bind(favorDelta, now, now, fav.id).run();
   } else {
     await c.env.DB.prepare(
       `INSERT INTO village_team_favor (id, village_id, team_id, official_id, favor, trust, last_interaction_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       crypto.randomUUID(), enc.village_id, teamRowAuth.id, enc.official_id,
-      50 + favorDelta, 50 + trustGain, now, now,
+      50 + favorDelta, 50, now, now,
     ).run();
   }
 
@@ -1093,7 +1089,7 @@ villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => 
   ).bind(
     crypto.randomUUID(), enc.village_id, teamRowAuth.id, enc.official_id,
     isScandal ? "pub_scandal" : "pub_beer",
-    desc, JSON.stringify({ cost: beerCost, trustGain, favorDelta, outcome }),
+    desc, JSON.stringify({ cost: beerCost, favorDelta, outcome }),
     gameDate, now,
   ).run().catch((e) => logger.warn({ module: "villages" }, "pub encounter history", e));
 
@@ -1101,7 +1097,7 @@ villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => 
   const todayKey = (teamRow?.game_date ?? now).slice(0, 10);
   const incidentText = isScandal
     ? `${enc.first_name} ${enc.last_name} (${enc.personality === "aktivista" ? "aktivista" : "zastupitel"}) odešel z hospody znechucený. Skandál!`
-    : `${enc.first_name} ${enc.last_name} si dal s týmem několik piv. Důvěra +${trustGain}.`;
+    : `${enc.first_name} ${enc.last_name} si dal s týmem několik piv. Přízeň +${favorDelta}.`;
   const newIncident = {
     type: isScandal ? "official_scandal" : "official_visit",
     playerIds: [],
@@ -1145,7 +1141,7 @@ villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => 
   }
 
   return c.json({
-    ok: true, outcome, beerCost, trustGain, favorDelta,
+    ok: true, outcome, beerCost, favorDelta,
     officialName: `${enc.first_name} ${enc.last_name}`,
   });
 });
