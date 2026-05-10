@@ -1001,13 +1001,13 @@ villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => 
   }
 
   const enc = await c.env.DB.prepare(
-    `SELECT vpe.*, vo.first_name, vo.last_name, vo.personality
+    `SELECT vpe.*, vo.first_name, vo.last_name, vo.personality, vo.face_config
      FROM village_pub_encounters vpe
      JOIN village_officials vo ON vo.id = vpe.official_id
      WHERE vpe.id = ? AND vpe.status = 'active'`
   ).bind(encId).first<{
     id: string; village_id: string; team_id: string; official_id: string;
-    first_name: string; last_name: string; personality: string;
+    first_name: string; last_name: string; personality: string; face_config: string;
   }>();
   if (!enc) return c.json({ error: "Encounter už není aktivní" }, 410);
   if (enc.team_id !== teamRowAuth.id) return c.json({ error: "Není pro tvůj tým" }, 403);
@@ -1058,7 +1058,7 @@ villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => 
     trustGain = enc.personality === "populista" ? 4
       : enc.personality === "tradicionalista" ? 3 : 2;
     favorDelta = 1;
-    desc = `Pohoda u piva s ${enc.first_name} ${enc.last_name}. Trust +${trustGain}.`;
+    desc = `Pohoda u piva s ${enc.first_name} ${enc.last_name}. Důvěra +${trustGain}.`;
   }
 
   // Update favor / trust per official
@@ -1101,12 +1101,16 @@ villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => 
   const todayKey = (teamRow?.game_date ?? now).slice(0, 10);
   const incidentText = isScandal
     ? `${enc.first_name} ${enc.last_name} (${enc.personality === "aktivista" ? "aktivista" : "zastupitel"}) odešel z hospody znechucený. Skandál!`
-    : `${enc.first_name} ${enc.last_name} si dal s týmem několik piv. Trust +${trustGain}.`;
+    : `${enc.first_name} ${enc.last_name} si dal s týmem několik piv. Důvěra +${trustGain}.`;
   const newIncident = {
     type: isScandal ? "official_scandal" : "official_visit",
     playerIds: [],
     text: incidentText,
   };
+  let officialAvatar: Record<string, unknown> | null = null;
+  try { officialAvatar = JSON.parse(enc.face_config); } catch (e) {
+    logger.warn({ module: "villages" }, "parse official face_config", e);
+  }
   const officialAttendee = {
     playerId: `npc-${enc.official_id}`,
     firstName: enc.first_name,
@@ -1115,6 +1119,7 @@ villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => 
     teamId: teamRowAuth.id,
     isVisitor: false,
     fromTeamName: undefined,
+    avatar: officialAvatar,
   };
   const existing = await c.env.DB.prepare(
     `SELECT attendees, incidents FROM pub_sessions WHERE team_id = ? AND game_date = ?`
