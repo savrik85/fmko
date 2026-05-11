@@ -65,8 +65,9 @@ export function generatePlayerFace(player: { age: number; bodyType: string }): R
   else if (player.bodyType === "thin") fatness = 0.05 + r() * 0.2;
   else if (player.bodyType === "athletic") fatness = 0.15 + r() * 0.2;
 
-  // Hair: older → bald/gray. Mladí hráči (<25) nemají plešky — vyfiltrujeme bald varianty z výchozí volby.
-  const youngHairIds = hairIds.filter((h) => h !== "short-bald");
+  // Hair: older → bald/gray. Mladí hráči (<25) mají plnější vlasy — krátké fade styly v malém
+  // avataru vypadají jako pleška, takže pro mladé vybíráme z bohatých stylů.
+  const youngHairIds = ["curly", "shaggy1", "emo", "fauxhawk-fade", "tall-fade", "spike4"];
   let hairId = player.age < 25 ? pick(youngHairIds) : pick(hairIds);
   let hairColor = pick(hairColors);
   if (player.age > 45 && r() < 0.6) hairId = "short-bald";
