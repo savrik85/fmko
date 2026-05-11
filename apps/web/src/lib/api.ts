@@ -29,6 +29,13 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     (error as Error & { status: number }).status = res.status;
     throw error;
   }
+  // Po úspěšné write operaci probudit team-context aby se aktualizoval
+  // rozpočet/sezona/atd. v topbaru (jinak by tam visely staré hodnoty
+  // až do dalšího 60s pollingu).
+  const method = (mergedInit.method ?? "GET").toUpperCase();
+  if (typeof window !== "undefined" && method !== "GET" && method !== "HEAD") {
+    window.dispatchEvent(new Event("team-budget-changed"));
+  }
   return res.json() as Promise<T>;
 }
 

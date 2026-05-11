@@ -69,6 +69,7 @@ interface TeamContextValue extends AuthState {
   login: (token: string, user: AuthMeResponse) => void;
   setTeam: (id: string, name: string) => void;
   logout: () => void;
+  refreshTeam: () => Promise<void>;
 }
 
 const TeamContext = createContext<TeamContextValue | null>(null);
@@ -119,6 +120,21 @@ export function TeamProvider({ children }: { children: ReactNode }) {
   // (cron, transfery, finance), uživatel by neměl muset refreshovat. 60s polling
   // jen když je tab visible (šetrné na mobil), plus okamžitý refetch při návratu
   // na tab (visibilitychange + focus).
+  async function refreshTeam() {
+    const stored = localStorage.getItem(STORAGE_TOKEN);
+    if (!stored) return;
+    try {
+      const user = await apiFetch<AuthMeResponse>("/auth/me", {
+        headers: { Authorization: `Bearer ${stored}` },
+      });
+      const teamData = buildTeamData(user);
+      localStorage.setItem(STORAGE_TEAM, JSON.stringify(teamData));
+      setState((s) => ({ ...s, ...teamData, isAdmin: user.isAdmin ?? s.isAdmin }));
+    } catch (e) {
+      console.warn("team refresh failed:", e);
+    }
+  }
+
   useEffect(() => {
     if (!state.token || !state.teamId) return;
 
@@ -148,12 +164,14 @@ export function TeamProvider({ children }: { children: ReactNode }) {
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
+    window.addEventListener("team-budget-changed", refresh);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
+      window.removeEventListener("team-budget-changed", refresh);
     };
   }, [state.token, state.teamId]);
 
@@ -202,7 +220,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <TeamContext.Provider value={{ ...state, login, setTeam, logout }}>
+    <TeamContext.Provider value={{ ...state, login, setTeam, logout, refreshTeam }}>
       {children}
     </TeamContext.Provider>
   );
