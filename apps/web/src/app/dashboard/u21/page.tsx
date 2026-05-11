@@ -67,11 +67,13 @@ interface LeagueRound {
   matches: Array<{
     id: string;
     status: string;
+    homeTeamId?: string;
     homeName: string;
     homeColor?: string;
     homeSecondary?: string;
     homeBadge?: string;
     homeScore: number | null;
+    awayTeamId?: string;
     awayName: string;
     awayColor?: string;
     awaySecondary?: string;
@@ -89,10 +91,6 @@ function formatDate(iso: string | null): string {
 
 function ini(name: string): string {
   return name.replace(/ U21$/, "").split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
-}
-
-function stripU21(name: string): string {
-  return name.replace(/ U21$/, "");
 }
 
 function SectionTitle() {
@@ -384,7 +382,13 @@ export default function U21Page() {
                         initials={ini(s.team)}
                         size={22}
                       />
-                      <span>{stripU21(s.team)}</span>
+                      {s.teamId ? (
+                        <Link href={`/dashboard/team/${s.teamId}`} className="hover:text-pitch-600 transition-colors">
+                          {s.team}
+                        </Link>
+                      ) : (
+                        <span>{s.team}</span>
+                      )}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-center tabular-nums">{s.played}</td>
@@ -424,7 +428,13 @@ export default function U21Page() {
                 {r.matches.map((m) => (
                   <li key={m.id} className="flex items-center justify-between text-sm py-1 border-t border-gray-100 first:border-0">
                     <span className="flex-1 flex items-center justify-end gap-2 min-w-0">
-                      <span className="truncate">{stripU21(m.homeName)}</span>
+                      {m.homeTeamId ? (
+                        <Link href={`/dashboard/team/${m.homeTeamId}`} className="truncate hover:text-pitch-600 transition-colors">
+                          {m.homeName}
+                        </Link>
+                      ) : (
+                        <span className="truncate">{m.homeName}</span>
+                      )}
                       <BadgePreview
                         primary={m.homeColor || "#2D5F2D"}
                         secondary={m.homeSecondary || "#FFFFFF"}
@@ -444,7 +454,13 @@ export default function U21Page() {
                         initials={ini(m.awayName)}
                         size={20}
                       />
-                      <span className="truncate">{stripU21(m.awayName)}</span>
+                      {m.awayTeamId ? (
+                        <Link href={`/dashboard/team/${m.awayTeamId}`} className="truncate hover:text-pitch-600 transition-colors">
+                          {m.awayName}
+                        </Link>
+                      ) : (
+                        <span className="truncate">{m.awayName}</span>
+                      )}
                     </span>
                   </li>
                 ))}
