@@ -65,8 +65,9 @@ export function generatePlayerFace(player: { age: number; bodyType: string }): R
   else if (player.bodyType === "thin") fatness = 0.05 + r() * 0.2;
   else if (player.bodyType === "athletic") fatness = 0.15 + r() * 0.2;
 
-  // Hair: older → bald/gray
-  let hairId = pick(hairIds);
+  // Hair: older → bald/gray. Mladí hráči (<25) nemají plešky — vyfiltrujeme bald varianty z výchozí volby.
+  const youngHairIds = hairIds.filter((h) => h !== "short-bald");
+  let hairId = player.age < 25 ? pick(youngHairIds) : pick(hairIds);
   let hairColor = pick(hairColors);
   if (player.age > 45 && r() < 0.6) hairId = "short-bald";
   else if (player.age > 38 && r() < 0.35) hairId = "short-bald";
