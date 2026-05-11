@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, PageHeader, PositionBadge, BadgePreview, useConfirm } from "@/components/ui";
+import { Spinner, PositionBadge, BadgePreview, useConfirm } from "@/components/ui";
+import { FaceAvatar } from "@/components/players/face-avatar";
 import type { BadgePattern } from "@/components/ui";
 
 interface U21Player {
@@ -21,6 +22,15 @@ interface U21Player {
   next_match_return: number;
 }
 
+interface PlayerStat {
+  playerId: string;
+  appearances: number;
+  goals: number;
+  assists: number;
+  avgRating: number | null;
+  manOfMatch: number;
+}
+
 interface SeniorPlayer {
   id: string;
   first_name: string;
@@ -31,6 +41,7 @@ interface SeniorPlayer {
   overall_rating: number;
   weekly_wage: number | null;
   loan_from_team_id: string | null;
+  avatar?: Record<string, unknown> | null;
 }
 
 interface Standing {
@@ -84,6 +95,17 @@ function stripU21(name: string): string {
   return name.replace(/ U21$/, "");
 }
 
+function SectionTitle() {
+  return (
+    <div className="flex items-end justify-between">
+      <div>
+        <h2 className="font-heading font-bold text-xl text-ink">U21</h2>
+        <p className="text-xs text-muted">Rezervní tým mladých hráčů (do 21 let)</p>
+      </div>
+    </div>
+  );
+}
+
 export default function U21Page() {
   const { teamId } = useTeam();
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -94,6 +116,8 @@ export default function U21Page() {
 
   const [seniorPlayers, setSeniorPlayers] = useState<SeniorPlayer[]>([]);
   const [u21Players, setU21Players] = useState<U21Player[]>([]);
+  const [statsMap, setStatsMap] = useState<Map<string, PlayerStat>>(new Map());
+  const [growthMap, setGrowthMap] = useState<Map<string, number>>(new Map());
   const [standings, setStandings] = useState<Standing[]>([]);
   const [rounds, setRounds] = useState<LeagueRound[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -102,10 +126,24 @@ export default function U21Page() {
   const loadKadr = useCallback(async () => {
     if (!teamId || !u21TeamId) return;
     try {
-      const senior = await apiFetch<SeniorPlayer[]>(`/api/teams/${teamId}/players`);
-      const u21 = await apiFetch<{ players: U21Player[] }>(`/api/teams/${teamId}/u21/players`);
+      const [senior, u21, seniorStats, u21Stats, seniorGrowth, u21Growth] = await Promise.all([
+        apiFetch<SeniorPlayer[]>(`/api/teams/${teamId}/players`),
+        apiFetch<{ players: U21Player[] }>(`/api/teams/${teamId}/u21/players`),
+        apiFetch<{ stats: PlayerStat[] }>(`/api/teams/${teamId}/stats`),
+        apiFetch<{ stats: PlayerStat[] }>(`/api/teams/${u21TeamId}/stats`),
+        apiFetch<{ growth: Array<{ playerId: string; totalChange: number }> }>(`/api/teams/${teamId}/growth`),
+        apiFetch<{ growth: Array<{ playerId: string; totalChange: number }> }>(`/api/teams/${teamId}/u21/growth`),
+      ]);
       setSeniorPlayers(Array.isArray(senior) ? senior : []);
       setU21Players(u21.players ?? []);
+      const m = new Map<string, PlayerStat>();
+      for (const s of seniorStats.stats ?? []) m.set(s.playerId, s);
+      for (const s of u21Stats.stats ?? []) m.set(s.playerId, s); // U21 přepíše A pokud hráč pendluje (zobrazujeme stats podle aktuálního týmu)
+      setStatsMap(m);
+      const g = new Map<string, number>();
+      for (const x of seniorGrowth.growth ?? []) g.set(x.playerId, x.totalChange);
+      for (const x of u21Growth.growth ?? []) g.set(x.playerId, x.totalChange);
+      setGrowthMap(g);
     } catch (e) {
       console.error("u21 kadr load:", e);
       setError("Nepodařilo se načíst kádry.");
@@ -192,8 +230,8 @@ export default function U21Page() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <PageHeader name="U21" detail="Rezervní tým mladých hráčů" />
+      <div className="p-4 md:p-6 space-y-4">
+        <SectionTitle />
         <div className="flex items-center justify-center py-12"><Spinner /></div>
       </div>
     );
@@ -201,8 +239,8 @@ export default function U21Page() {
 
   if (!u21TeamId) {
     return (
-      <div className="p-6">
-        <PageHeader name="U21" detail="Rezervní tým mladých hráčů" />
+      <div className="p-4 md:p-6 space-y-4">
+        <SectionTitle />
         <div className="card p-6 text-center text-gray-600">
           Tvůj klub zatím nemá U21 tým. Kontaktuj správce hry.
         </div>
@@ -214,7 +252,7 @@ export default function U21Page() {
 
   return (
     <div className="p-4 md:p-6 space-y-4">
-      <PageHeader name="U21" detail="Rezervní tým mladých hráčů (do 21 let)" />
+      <SectionTitle />
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200">
@@ -244,96 +282,72 @@ export default function U21Page() {
       )}
 
       {tab === "kadr" && (
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid lg:grid-cols-2 gap-4">
           {/* A-tým — mladí hráči k odeslání */}
-          <section className="card p-4">
+          <section className="card p-4 overflow-x-auto">
             <h2 className="font-heading font-bold text-base mb-3">
               A-tým: mladí hráči ({young.length})
             </h2>
             {young.length === 0 ? (
               <p className="text-sm text-gray-500">Žádný hráč do 21 let v A-týmu.</p>
             ) : (
-              <ul className="space-y-2">
-                {young.map((p) => (
-                  <li key={p.id} className="flex items-center gap-3 p-2 border border-gray-100 rounded">
-                    <PositionBadge position={p.position} />
-                    <Link
-                      href={`/dashboard/player/${p.id}`}
-                      className="flex-1 min-w-0 text-sm font-medium hover:text-pitch-600"
-                    >
-                      {p.last_name} {p.first_name}
-                      <span className="text-xs text-gray-500 ml-2">{p.age} let · {p.overall_rating}</span>
-                    </Link>
+              <PlayerTable
+                players={young.map((p) => ({
+                  id: p.id, firstName: p.first_name, lastName: p.last_name, position: p.position,
+                  age: p.age, overallRating: p.overall_rating, avatar: p.avatar ?? null,
+                  nextMatchReturn: false,
+                }))}
+                statsMap={statsMap}
+                growthMap={growthMap}
+                renderActions={(p) => (
+                  <div className="flex gap-1">
                     <button
                       disabled={busy === p.id}
                       onClick={() => sendToU21(p.id, "permanent")}
-                      className="px-2 py-1 text-xs bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50"
-                      title="Trvale do U21 dokud ho nepovýšíš zpět"
-                    >
-                      → U21
-                    </button>
+                      className="px-2 py-1 text-[11px] bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50"
+                      title="Trvale do U21 dokud ho nepovoláš zpět"
+                    >→ U21</button>
                     <button
                       disabled={busy === p.id}
                       onClick={() => sendToU21(p.id, "next_match")}
-                      className="px-2 py-1 text-xs bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50"
+                      className="px-2 py-1 text-[11px] bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50"
                       title="Jen na nejbližší U21 zápas, pak zpět"
-                    >
-                      → 1 zápas
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                    >→ 1 zápas</button>
+                  </div>
+                )}
+              />
             )}
           </section>
 
           {/* U21 kádr — povýšení */}
-          <section className="card p-4">
+          <section className="card p-4 overflow-x-auto">
             <h2 className="font-heading font-bold text-base mb-3">
               U21 kádr ({u21Players.length})
             </h2>
             {u21Players.length === 0 ? (
               <p className="text-sm text-gray-500">Kádr je prázdný.</p>
             ) : (
-              <ul className="space-y-2">
-                {u21Players.map((p) => {
-                  const overstayed = p.age >= 22;
-                  return (
-                    <li
-                      key={p.id}
-                      className={`flex items-center gap-3 p-2 border rounded ${
-                        overstayed ? "border-amber-300 bg-amber-50" : "border-gray-100"
-                      }`}
-                    >
-                      <PositionBadge position={p.position} />
-                      <Link
-                        href={`/dashboard/player/${p.id}`}
-                        className="flex-1 min-w-0 text-sm font-medium hover:text-pitch-600"
-                      >
-                        {p.last_name} {p.first_name}
-                        <span className="text-xs text-gray-500 ml-2">{p.age} let · {p.overall_rating}</span>
-                      </Link>
-                      {p.next_match_return === 1 && (
-                        <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">
-                          ↩ vrátí se
-                        </span>
-                      )}
-                      {overstayed && (
-                        <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">
-                          přestárlý
-                        </span>
-                      )}
-                      <button
-                        disabled={busy === p.id}
-                        onClick={() => promoteToA(p)}
-                        className="px-2 py-1 text-xs bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50"
-                        title="Povolat do A-týmu"
-                      >
-                        ↑ A-tým
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+              <PlayerTable
+                players={u21Players.map((p) => ({
+                  id: p.id, firstName: p.first_name, lastName: p.last_name, position: p.position,
+                  age: p.age, overallRating: p.overall_rating,
+                  avatar: (p as unknown as { avatar?: Record<string, unknown> }).avatar ?? null,
+                  nextMatchReturn: p.next_match_return === 1,
+                }))}
+                statsMap={statsMap}
+                growthMap={growthMap}
+                renderActions={(p) => (
+                  <button
+                    disabled={busy === p.id}
+                    onClick={() => {
+                      const u21Player = u21Players.find((x) => x.id === p.id);
+                      if (u21Player) promoteToA(u21Player);
+                    }}
+                    className="px-2 py-1 text-[11px] bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50"
+                    title="Povolat do A-týmu"
+                  >↑ A-tým</button>
+                )}
+              />
             )}
           </section>
         </div>
@@ -440,5 +454,99 @@ export default function U21Page() {
         </div>
       )}
     </div>
+  );
+}
+
+interface TableRow {
+  id: string;
+  firstName: string;
+  lastName: string;
+  position: "GK" | "DEF" | "MID" | "FWD";
+  age: number;
+  overallRating: number;
+  avatar: Record<string, unknown> | null;
+  nextMatchReturn: boolean;
+}
+
+function PlayerTable({
+  players,
+  statsMap,
+  growthMap,
+  renderActions,
+}: {
+  players: TableRow[];
+  statsMap: Map<string, PlayerStat>;
+  growthMap: Map<string, number>;
+  renderActions: (p: TableRow) => React.ReactNode;
+}) {
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
+          <th className="py-1.5 pr-2 w-12"></th>
+          <th className="py-1.5 pr-2">Hráč</th>
+          <th className="py-1.5 px-1 text-center" title="Pozice">P</th>
+          <th className="py-1.5 px-1 text-center" title="Věk">V</th>
+          <th className="py-1.5 px-1 text-center" title="Overall rating">OVR</th>
+          <th className="py-1.5 px-1 text-center" title="Odehrané zápasy">Z</th>
+          <th className="py-1.5 px-1 text-center" title="Góly">G</th>
+          <th className="py-1.5 px-1 text-center" title="Asistence">A</th>
+          <th className="py-1.5 px-1 text-center" title="Průměrné hodnocení">Rat</th>
+          <th className="py-1.5 px-1 text-center" title="Růst skill bodů za 30 dní">Růst</th>
+          <th className="py-1.5 pl-1 text-right">Akce</th>
+        </tr>
+      </thead>
+      <tbody>
+        {players.map((p) => {
+          const stat = statsMap.get(p.id);
+          const growth = growthMap.get(p.id) ?? 0;
+          const overstayed = p.age >= 22;
+          return (
+            <tr
+              key={p.id}
+              className={`border-b border-gray-100 ${overstayed ? "bg-amber-50" : ""}`}
+            >
+              <td className="py-1.5 pr-2">
+                {p.avatar ? (
+                  <FaceAvatar faceConfig={p.avatar} size={36} />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-gray-200" />
+                )}
+              </td>
+              <td className="py-1.5 pr-2 min-w-0">
+                <Link href={`/dashboard/player/${p.id}`} className="font-medium hover:text-pitch-600 text-sm">
+                  {p.lastName} {p.firstName}
+                </Link>
+                {(p.nextMatchReturn || overstayed) && (
+                  <div className="mt-0.5 flex gap-1 flex-wrap">
+                    {p.nextMatchReturn && (
+                      <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">↩ vrátí se</span>
+                    )}
+                    {overstayed && (
+                      <span className="text-[10px] bg-amber-300 text-amber-900 px-1.5 py-0.5 rounded">přestárlý</span>
+                    )}
+                  </div>
+                )}
+              </td>
+              <td className="py-1.5 px-1 text-center">
+                <PositionBadge position={p.position} />
+              </td>
+              <td className="py-1.5 px-1 text-center tabular-nums">{p.age}</td>
+              <td className="py-1.5 px-1 text-center tabular-nums font-semibold">{p.overallRating}</td>
+              <td className="py-1.5 px-1 text-center tabular-nums">{stat?.appearances ?? 0}</td>
+              <td className="py-1.5 px-1 text-center tabular-nums">{stat?.goals ?? 0}</td>
+              <td className="py-1.5 px-1 text-center tabular-nums">{stat?.assists ?? 0}</td>
+              <td className="py-1.5 px-1 text-center tabular-nums">
+                {stat?.avgRating != null ? stat.avgRating.toFixed(1) : "—"}
+              </td>
+              <td className="py-1.5 px-1 text-center tabular-nums">
+                {growth > 0 ? <span className="text-pitch-600 font-semibold">+{growth}</span> : "—"}
+              </td>
+              <td className="py-1.5 pl-1 text-right">{renderActions(p)}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }

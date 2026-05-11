@@ -124,4 +124,35 @@ u21Router.post("/teams/:teamId/u21/players/:playerId/promote", async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * Růst hráčů U21 týmu za posledních N dní (default 30):
+ *   - SUM(change) z training_log per player_id
+ *   - filtruje aktuální U21 squad
+ * Vrací jen totaly > 0.
+ */
+u21Router.get("/teams/:teamId/u21/growth", async (c) => {
+  const teamId = c.req.param("teamId");
+  const days = Math.max(1, Math.min(365, parseInt(c.req.query("days") ?? "30", 10) || 30));
+
+  const u21Team = await c.env.DB.prepare(
+    "SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'"
+  ).bind(teamId).first<{ id: string }>();
+  if (!u21Team) return c.json({ growth: [] });
+
+  const rows = await c.env.DB.prepare(
+    `SELECT tl.player_id, SUM(tl.change) as total
+       FROM training_log tl
+       JOIN players p ON p.id = tl.player_id
+      WHERE p.team_id = ?
+        AND tl.created_at > datetime('now', ?)
+      GROUP BY tl.player_id
+      HAVING total > 0`
+  ).bind(u21Team.id, `-${days} days`).all<{ player_id: string; total: number }>();
+
+  return c.json({
+    days,
+    growth: rows.results.map((r) => ({ playerId: r.player_id, totalChange: r.total })),
+  });
+});
+
 export default u21Router;

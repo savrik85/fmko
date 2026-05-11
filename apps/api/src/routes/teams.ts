@@ -1170,6 +1170,27 @@ teamsRouter.get("/:id/stats", async (c) => {
   });
 });
 
+// GET /api/teams/:id/growth — kolik skill bodů hráči získali tréninkem+zápasy za posl. N dní (default 30)
+teamsRouter.get("/:id/growth", async (c) => {
+  const teamId = c.req.param("id");
+  const days = Math.max(1, Math.min(365, parseInt(c.req.query("days") ?? "30", 10) || 30));
+
+  const rows = await c.env.DB.prepare(
+    `SELECT tl.player_id, SUM(tl.change) as total
+       FROM training_log tl
+       JOIN players p ON p.id = tl.player_id
+      WHERE p.team_id = ?
+        AND tl.created_at > datetime('now', ?)
+      GROUP BY tl.player_id
+      HAVING total > 0`
+  ).bind(teamId, `-${days} days`).all<{ player_id: string; total: number }>();
+
+  return c.json({
+    days,
+    growth: rows.results.map((r) => ({ playerId: r.player_id, totalChange: r.total })),
+  });
+});
+
 // GET /api/teams/:id/club — klubová identita (skeleton — postupně se rozšíří)
 teamsRouter.get("/:id/club", async (c) => {
   const teamId = c.req.param("id");
