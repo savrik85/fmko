@@ -266,7 +266,9 @@ export default function PlayerDetailPage() {
   const prevPlayer = allPlayers.length > 1 ? allPlayers[(currentIndex - 1 + allPlayers.length) % allPlayers.length] : null;
   const nextPlayer = allPlayers.length > 1 ? allPlayers[(currentIndex + 1) % allPlayers.length] : null;
 
-  const isOwnPlayer = player?.team_id === teamId;
+  // U21 hráč je „můj" pokud jeho tým má parent_team_id rovné mému A-tým ID.
+  const isMyU21Player = playerTeam?.team_type === "u21" && playerTeam?.parent_team_id === teamId;
+  const isOwnPlayer = player?.team_id === teamId || isMyU21Player;
   const isLoanedToUs = isOwnPlayer && !!player?.loan_from_team_id;
   const isForeignHumanPlayer = !isOwnPlayer && playerTeam && playerTeam.user_id !== "ai";
   const canSendOffer = isForeignHumanPlayer || isLoanedToUs;
