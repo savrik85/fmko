@@ -90,6 +90,7 @@ export default function PlayerDetailPage() {
   const [offerSent, setOfferSent] = useState(false);
   const [offerType, setOfferType] = useState<"transfer" | "loan">("transfer");
   const [loanDuration, setLoanDuration] = useState("30");
+  const [targetSquad, setTargetSquad] = useState<"senior" | "u21">("senior");
   const [offeredPlayerId, setOfferedPlayerId] = useState<string | null>(null);
   const [myListing, setMyListing] = useState<{ listingId: string; askingPrice: number } | null>(null);
   const [priceDialogOpen, setPriceDialogOpen] = useState(false);
@@ -285,6 +286,7 @@ export default function PlayerDetailPage() {
         offerType,
         ...(offerType === "loan" ? { loanDuration: parseInt(loanDuration, 10) } : {}),
         ...(offerType === "transfer" && offeredPlayerId ? { offeredPlayerId } : {}),
+        ...(offerType === "transfer" && targetSquad === "u21" ? { targetSquad: "u21" } : {}),
       }),
     }), "Odeslání nabídky se nezdařilo");
     if (ok) {
@@ -565,6 +567,25 @@ export default function PlayerDetailPage() {
                     className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "loan" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
                   >
                     Hostování
+                  </button>
+                </div>
+              )}
+
+              {/* Cíl: A-tým / U21 — jen pro trvalý přestup hráče do 21 let */}
+              {offerType === "transfer" && player.age <= 21 && (
+                <div className={`flex items-center gap-2 ${light ? "text-gray-700" : "text-white/80"} text-xs`}>
+                  <span className="font-heading uppercase tracking-wider opacity-70">Cíl:</span>
+                  <button
+                    onClick={() => setTargetSquad("senior")}
+                    className={`px-3 py-1 rounded-lg text-xs font-heading font-bold transition-colors ${targetSquad === "senior" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
+                  >
+                    A-tým
+                  </button>
+                  <button
+                    onClick={() => setTargetSquad("u21")}
+                    className={`px-3 py-1 rounded-lg text-xs font-heading font-bold transition-colors ${targetSquad === "u21" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
+                  >
+                    U21
                   </button>
                 </div>
               )}

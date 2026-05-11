@@ -802,6 +802,17 @@ teamsRouter.post("/", async (c) => {
       await c.env.DB.prepare("UPDATE teams SET game_date = ? WHERE league_id = ?")
         .bind(firstMatch.toISOString(), leagueId).run();
     }
+
+    // Vytvoř U21 ligu + týmy + mirror rozpis (idempotentní)
+    try {
+      const { backfillU21ForLeague } = await import("../league/u21-generator");
+      const result = await backfillU21ForLeague(c.env.DB, leagueId, rng);
+      if (!result.skipped) {
+        logger.info({ module: "teams" }, `U21 setup: liga ${result.u21LeagueId}, ${result.teamsCreated} týmů, ${result.playersCreated} hráčů, ${result.matches} zápasů`);
+      }
+    } catch (e) {
+      logger.error({ module: "teams" }, "U21 backfill při tvorbě ligy selhal", e);
+    }
   }
 
   // Init phone conversations

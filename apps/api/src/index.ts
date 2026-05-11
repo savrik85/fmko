@@ -11,6 +11,7 @@ import { groupChatsRouter } from "./routes/group-chats";
 import { pushRouter } from "./routes/push";
 import { votesRouter } from "./routes/votes";
 import { cashLoansRouter } from "./routes/cash-loans";
+import u21Router from "./routes/u21";
 // transfers endpoints are in gameRouter
 import { runScheduledMatches } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -68,6 +69,7 @@ app.route("/api", groupChatsRouter);
 app.route("/api", pushRouter);
 app.route("/api", votesRouter);
 app.route("/api", cashLoansRouter);
+app.route("/api", u21Router);
 
 export default {
   fetch: app.fetch,
@@ -153,6 +155,18 @@ export default {
             await env.DB.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
               .bind(matchCal.id).run();
             totalMatches += results.length;
+
+            // Po U21 kole: vrátit hráče s next_match_return zpět do A-týmu
+            try {
+              const isU21Round = await env.DB.prepare(
+                "SELECT 1 FROM leagues WHERE id = ? AND league_type = 'u21'"
+              ).bind(leagueId).first();
+              if (isU21Round) {
+                const { returnNextMatchPlayers } = await import("./season/u21-return");
+                const returned = await returnNextMatchPlayers(env.DB, matchCal.id as string);
+                if (returned > 0) log("info", `U21 návrat: ${returned} hráčů zpět do A-týmu`);
+              }
+            } catch (e) { log("warn", "u21 return hook", e); }
 
             // Po zápase: smaž všechny zbývající pending pre-match interview žádosti
             // (po zápase už nemají smysl — articles se píšou jen z odpovězených).
