@@ -185,6 +185,24 @@ export async function createU21TeamAndSquad(
     seniorTeam.id,
   ).run();
 
+  // Zkopíruj vizuální atributy z A-týmu (badge, dres) ať se U21 zobrazuje shodně s parentem
+  await db.prepare(
+    `UPDATE teams SET
+       badge_pattern = (SELECT badge_pattern FROM teams t2 WHERE t2.id = ?),
+       badge_primary_color = (SELECT badge_primary_color FROM teams t2 WHERE t2.id = ?),
+       badge_secondary_color = (SELECT badge_secondary_color FROM teams t2 WHERE t2.id = ?),
+       badge_initials = (SELECT badge_initials FROM teams t2 WHERE t2.id = ?),
+       badge_symbol = (SELECT badge_symbol FROM teams t2 WHERE t2.id = ?),
+       jersey_pattern = (SELECT jersey_pattern FROM teams t2 WHERE t2.id = ?),
+       away_primary_color = (SELECT away_primary_color FROM teams t2 WHERE t2.id = ?),
+       away_secondary_color = (SELECT away_secondary_color FROM teams t2 WHERE t2.id = ?)
+     WHERE id = ?`
+  ).bind(
+    seniorTeam.id, seniorTeam.id, seniorTeam.id, seniorTeam.id,
+    seniorTeam.id, seniorTeam.id, seniorTeam.id, seniorTeam.id,
+    u21TeamId,
+  ).run().catch((e) => logger.warn({ module: "u21-generator" }, `copy visuals to U21 ${u21TeamId}`, e));
+
   // Build position list
   const positions: Position[] = [];
   for (const [pos, count] of Object.entries(U21_POSITION_COUNTS) as Array<[Position, number]>) {

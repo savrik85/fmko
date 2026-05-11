@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, PageHeader, PositionBadge } from "@/components/ui";
+import { Spinner, PageHeader, PositionBadge, BadgePreview, useConfirm } from "@/components/ui";
+import type { BadgePattern } from "@/components/ui";
 
 interface U21Player {
   id: string;
@@ -44,6 +45,9 @@ interface Standing {
   ga: number;
   points: number;
   isPlayer?: boolean;
+  primaryColor?: string;
+  secondaryColor?: string;
+  badgePattern?: string;
 }
 
 interface LeagueRound {
@@ -53,8 +57,14 @@ interface LeagueRound {
     id: string;
     status: string;
     homeName: string;
+    homeColor?: string;
+    homeSecondary?: string;
+    homeBadge?: string;
     homeScore: number | null;
     awayName: string;
+    awayColor?: string;
+    awaySecondary?: string;
+    awayBadge?: string;
     awayScore: number | null;
   }>;
 }
@@ -66,8 +76,17 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
 }
 
+function ini(name: string): string {
+  return name.replace(/ U21$/, "").split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+}
+
+function stripU21(name: string): string {
+  return name.replace(/ U21$/, "");
+}
+
 export default function U21Page() {
   const { teamId } = useTeam();
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [tab, setTab] = useState<Tab>("kadr");
   const [u21TeamId, setU21TeamId] = useState<string | null>(null);
   const [u21LeagueId, setU21LeagueId] = useState<string | null>(null);
@@ -148,18 +167,24 @@ export default function U21Page() {
     }
   };
 
-  const promoteToA = async (playerId: string) => {
+  const promoteToA = async (player: U21Player) => {
     if (!teamId) return;
-    setBusy(playerId);
+    const ok = await confirm({
+      title: "Povolat do A-týmu?",
+      description: `${player.first_name} ${player.last_name} (${player.age} let, ${player.position}) přejde z U21 trvale do A-týmu.`,
+      confirmLabel: "Povolat",
+    });
+    if (!ok) return;
+    setBusy(player.id);
     setError(null);
     try {
-      await apiFetch(`/api/teams/${teamId}/u21/players/${playerId}/promote`, {
+      await apiFetch(`/api/teams/${teamId}/u21/players/${player.id}/promote`, {
         method: "POST",
       });
       await loadKadr();
     } catch (e) {
       console.error("promote:", e);
-      setError(e instanceof Error ? e.message : "Povýšení selhalo.");
+      setError(e instanceof Error ? e.message : "Povolání do A selhalo.");
     } finally {
       setBusy(null);
     }
@@ -299,10 +324,11 @@ export default function U21Page() {
                       )}
                       <button
                         disabled={busy === p.id}
-                        onClick={() => promoteToA(p.id)}
+                        onClick={() => promoteToA(p)}
                         className="px-2 py-1 text-xs bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50"
+                        title="Povolat do A-týmu"
                       >
-                        ↑ Povýšit
+                        ↑ A-tým
                       </button>
                     </li>
                   );
@@ -335,7 +361,18 @@ export default function U21Page() {
                   className={`border-b border-gray-100 ${s.isPlayer ? "bg-pitch-50 font-semibold" : ""}`}
                 >
                   <td className="px-3 py-2">{s.pos}</td>
-                  <td className="px-3 py-2">{s.team}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <BadgePreview
+                        primary={s.primaryColor || "#2D5F2D"}
+                        secondary={s.secondaryColor || "#FFFFFF"}
+                        pattern={(s.badgePattern as BadgePattern) || "shield"}
+                        initials={ini(s.team)}
+                        size={22}
+                      />
+                      <span>{stripU21(s.team)}</span>
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-center tabular-nums">{s.played}</td>
                   <td className="px-3 py-2 text-center tabular-nums">{s.wins}</td>
                   <td className="px-3 py-2 text-center tabular-nums">{s.draws}</td>
@@ -356,6 +393,8 @@ export default function U21Page() {
         </div>
       )}
 
+      {confirmDialog}
+
       {tab === "rozpis" && (
         <div className="space-y-3">
           {rounds.length === 0 && (
@@ -370,11 +409,29 @@ export default function U21Page() {
               <ul className="space-y-1">
                 {r.matches.map((m) => (
                   <li key={m.id} className="flex items-center justify-between text-sm py-1 border-t border-gray-100 first:border-0">
-                    <span className="flex-1 text-right">{m.homeName}</span>
+                    <span className="flex-1 flex items-center justify-end gap-2 min-w-0">
+                      <span className="truncate">{stripU21(m.homeName)}</span>
+                      <BadgePreview
+                        primary={m.homeColor || "#2D5F2D"}
+                        secondary={m.homeSecondary || "#FFFFFF"}
+                        pattern={(m.homeBadge as BadgePattern) || "shield"}
+                        initials={ini(m.homeName)}
+                        size={20}
+                      />
+                    </span>
                     <span className="px-3 tabular-nums font-semibold">
                       {m.status === "simulated" ? `${m.homeScore} : ${m.awayScore}` : "—"}
                     </span>
-                    <span className="flex-1 text-left">{m.awayName}</span>
+                    <span className="flex-1 flex items-center justify-start gap-2 min-w-0">
+                      <BadgePreview
+                        primary={m.awayColor || "#2D5F2D"}
+                        secondary={m.awaySecondary || "#FFFFFF"}
+                        pattern={(m.awayBadge as BadgePattern) || "shield"}
+                        initials={ini(m.awayName)}
+                        size={20}
+                      />
+                      <span className="truncate">{stripU21(m.awayName)}</span>
+                    </span>
                   </li>
                 ))}
               </ul>
