@@ -38,15 +38,25 @@ u21Router.get("/teams/:teamId/u21/players", async (c) => {
   ).bind(teamId).first<{ id: string }>();
   if (!u21Team) return c.json({ error: "U21 tým neexistuje" }, 404);
 
-  const players = await c.env.DB.prepare(
+  const rows = await c.env.DB.prepare(
     `SELECT id, first_name, last_name, nickname, age, position, overall_rating,
-            skills, physical, condition, weekly_wage, status, parent_club_id, next_match_return
+            skills, physical, personality, life_context, avatar, weekly_wage, status,
+            parent_club_id, next_match_return
        FROM players
       WHERE team_id = ?
       ORDER BY overall_rating DESC`
-  ).bind(u21Team.id).all();
+  ).bind(u21Team.id).all<Record<string, unknown>>();
 
-  return c.json({ players: players.results });
+  const players = rows.results.map((row) => ({
+    ...row,
+    skills: row.skills ? JSON.parse(row.skills as string) : null,
+    physical: row.physical ? JSON.parse(row.physical as string) : null,
+    personality: row.personality ? JSON.parse(row.personality as string) : null,
+    lifeContext: row.life_context ? JSON.parse(row.life_context as string) : null,
+    avatar: row.avatar ? JSON.parse(row.avatar as string) : null,
+  }));
+
+  return c.json({ players });
 });
 
 /**
