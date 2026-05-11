@@ -74,14 +74,14 @@ export async function backfillU21ForLeague(
     throw new Error(`senior liga ${seniorLeagueId} nenalezena`);
   }
 
-  // 1) U21 liga
+  // 1) U21 liga — district + " U21" obchází UNIQUE(season_id, district, level)
   const u21LeagueId = crypto.randomUUID();
   await db.prepare(
     "INSERT INTO leagues (id, season_id, district, name, level, status, league_type, parent_league_id) VALUES (?, ?, ?, ?, ?, ?, 'u21', ?)"
   ).bind(
     u21LeagueId,
     seniorLeague.season_id,
-    seniorLeague.district,
+    `${seniorLeague.district} U21`,
     `${seniorLeague.name} — U21`,
     seniorLeague.level,
     seniorLeague.status,
