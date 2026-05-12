@@ -367,65 +367,7 @@ export default function U21Page() {
         </div>
       )}
 
-      {tab === "tabulka" && (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
-                <th className="px-3 py-2">#</th>
-                <th className="px-3 py-2">Tým</th>
-                <th className="px-3 py-2 text-center">Z</th>
-                <th className="px-3 py-2 text-center">V</th>
-                <th className="px-3 py-2 text-center">R</th>
-                <th className="px-3 py-2 text-center">P</th>
-                <th className="px-3 py-2 text-center">Skóre</th>
-                <th className="px-3 py-2 text-center font-bold">B</th>
-              </tr>
-            </thead>
-            <tbody>
-              {standings.map((s) => (
-                <tr
-                  key={s.pos}
-                  className={`border-b border-gray-100 ${s.isPlayer ? "bg-pitch-50 font-semibold" : ""}`}
-                >
-                  <td className="px-3 py-2">{s.pos}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <BadgePreview
-                        primary={s.primaryColor || "#2D5F2D"}
-                        secondary={s.secondaryColor || "#FFFFFF"}
-                        pattern={(s.badgePattern as BadgePattern) || "shield"}
-                        initials={ini(s.team)}
-                        size={22}
-                      />
-                      {s.teamId ? (
-                        <Link href={`/dashboard/team/${s.teamId}`} className="hover:text-pitch-600 transition-colors">
-                          {s.team}
-                        </Link>
-                      ) : (
-                        <span>{s.team}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-center tabular-nums">{s.played}</td>
-                  <td className="px-3 py-2 text-center tabular-nums">{s.wins}</td>
-                  <td className="px-3 py-2 text-center tabular-nums">{s.draws}</td>
-                  <td className="px-3 py-2 text-center tabular-nums">{s.losses}</td>
-                  <td className="px-3 py-2 text-center tabular-nums">{s.gf}:{s.ga}</td>
-                  <td className="px-3 py-2 text-center tabular-nums font-bold">{s.points}</td>
-                </tr>
-              ))}
-              {standings.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="text-center text-gray-500 py-6">
-                    Žádné odehrané zápasy
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {tab === "tabulka" && <StandingsTable standings={standings} />}
 
       {confirmDialog}
 
@@ -542,6 +484,107 @@ function NextMatchBanner({ data }: { data: { round: LeagueRound; m: LeagueRound[
   );
 }
 
+type StandingSortKey = "pos" | "team" | "played" | "wins" | "draws" | "losses" | "gd" | "points";
+
+function StandingsTable({ standings }: { standings: Standing[] }) {
+  const [sortKey, setSortKey] = useState<StandingSortKey>("pos");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggle = (key: StandingSortKey) => {
+    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir(key === "pos" || key === "team" ? "asc" : "desc");
+    }
+  };
+
+  const sorted = [...standings].sort((a, b) => {
+    let cmp = 0;
+    switch (sortKey) {
+      case "pos": cmp = a.pos - b.pos; break;
+      case "team": cmp = a.team.localeCompare(b.team, "cs"); break;
+      case "played": cmp = a.played - b.played; break;
+      case "wins": cmp = a.wins - b.wins; break;
+      case "draws": cmp = a.draws - b.draws; break;
+      case "losses": cmp = a.losses - b.losses; break;
+      case "gd": cmp = (a.gf - a.ga) - (b.gf - b.ga); break;
+      case "points": cmp = a.points - b.points; break;
+    }
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
+  const arrow = (key: StandingSortKey) => sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "";
+
+  const Th = ({ k, label, align = "center", bold = false }: { k: StandingSortKey; label: string; align?: "left" | "center"; bold?: boolean }) => (
+    <th
+      onClick={() => toggle(k)}
+      className={`px-3 py-2 cursor-pointer hover:text-gray-700 select-none ${align === "left" ? "text-left" : "text-center"} ${bold ? "font-bold" : ""}`}
+    >
+      {label}{arrow(k)}
+    </th>
+  );
+
+  return (
+    <div className="card overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
+            <Th k="pos" label="#" />
+            <Th k="team" label="Tým" align="left" />
+            <Th k="played" label="Z" />
+            <Th k="wins" label="V" />
+            <Th k="draws" label="R" />
+            <Th k="losses" label="P" />
+            <Th k="gd" label="Skóre" />
+            <Th k="points" label="B" bold />
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((s) => (
+            <tr
+              key={s.pos}
+              className={`border-b border-gray-100 ${s.isPlayer ? "bg-pitch-50 font-semibold" : ""}`}
+            >
+              <td className="px-3 py-2 text-center">{s.pos}</td>
+              <td className="px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <BadgePreview
+                    primary={s.primaryColor || "#2D5F2D"}
+                    secondary={s.secondaryColor || "#FFFFFF"}
+                    pattern={(s.badgePattern as BadgePattern) || "shield"}
+                    initials={ini(s.team)}
+                    size={22}
+                  />
+                  {s.teamId ? (
+                    <Link href={`/dashboard/team/${s.teamId}`} className="hover:text-pitch-600 transition-colors">
+                      {s.team}
+                    </Link>
+                  ) : (
+                    <span>{s.team}</span>
+                  )}
+                </div>
+              </td>
+              <td className="px-3 py-2 text-center tabular-nums">{s.played}</td>
+              <td className="px-3 py-2 text-center tabular-nums">{s.wins}</td>
+              <td className="px-3 py-2 text-center tabular-nums">{s.draws}</td>
+              <td className="px-3 py-2 text-center tabular-nums">{s.losses}</td>
+              <td className="px-3 py-2 text-center tabular-nums">{s.gf}:{s.ga}</td>
+              <td className="px-3 py-2 text-center tabular-nums font-bold">{s.points}</td>
+            </tr>
+          ))}
+          {sorted.length === 0 && (
+            <tr>
+              <td colSpan={8} className="text-center text-gray-500 py-6">
+                Žádné odehrané zápasy
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 interface TableRow {
   id: string;
   firstName: string;
@@ -552,6 +595,10 @@ interface TableRow {
   avatar: Record<string, unknown> | null;
   nextMatchReturn: boolean;
 }
+
+type SortKey = "name" | "pos" | "age" | "ovr" | "apps" | "g" | "a" | "rat" | "growth";
+
+const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
 
 function PlayerTable({
   players,
@@ -564,25 +611,64 @@ function PlayerTable({
   growthMap: Map<string, number>;
   renderActions: (p: TableRow) => React.ReactNode;
 }) {
+  const [sortKey, setSortKey] = useState<SortKey>("ovr");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const toggle = (key: SortKey) => {
+    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir(key === "name" || key === "pos" ? "asc" : "desc");
+    }
+  };
+
+  const sorted = [...players].sort((a, b) => {
+    const sa = statsMap.get(a.id);
+    const sb = statsMap.get(b.id);
+    const ga = growthMap.get(a.id) ?? 0;
+    const gb = growthMap.get(b.id) ?? 0;
+    let cmp = 0;
+    switch (sortKey) {
+      case "name": cmp = `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, "cs"); break;
+      case "pos": cmp = (POS_ORDER[a.position] ?? 9) - (POS_ORDER[b.position] ?? 9); break;
+      case "age": cmp = a.age - b.age; break;
+      case "ovr": cmp = a.overallRating - b.overallRating; break;
+      case "apps": cmp = (sa?.appearances ?? 0) - (sb?.appearances ?? 0); break;
+      case "g": cmp = (sa?.goals ?? 0) - (sb?.goals ?? 0); break;
+      case "a": cmp = (sa?.assists ?? 0) - (sb?.assists ?? 0); break;
+      case "rat": cmp = (sa?.avgRating ?? 0) - (sb?.avgRating ?? 0); break;
+      case "growth": cmp = ga - gb; break;
+    }
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
+  const arrow = (key: SortKey) => sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "";
+
+  const SortableTH = ({ k, label, title, align = "center" }: { k: SortKey; label: string; title: string; align?: "left" | "center" }) => (
+    <th className={`py-1.5 px-1 cursor-pointer hover:text-gray-700 select-none ${align === "left" ? "pr-2 text-left" : "text-center"}`} title={title} onClick={() => toggle(k)}>
+      {label}{arrow(k)}
+    </th>
+  );
+
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
           <th className="py-1.5 pr-2 w-12"></th>
-          <th className="py-1.5 pr-2">Hráč</th>
-          <th className="py-1.5 px-1 text-center" title="Pozice">P</th>
-          <th className="py-1.5 px-1 text-center" title="Věk">V</th>
-          <th className="py-1.5 px-1 text-center" title="Overall rating">OVR</th>
-          <th className="py-1.5 px-1 text-center" title="Odehrané zápasy">Z</th>
-          <th className="py-1.5 px-1 text-center" title="Góly">G</th>
-          <th className="py-1.5 px-1 text-center" title="Asistence">A</th>
-          <th className="py-1.5 px-1 text-center" title="Průměrné hodnocení">Rat</th>
-          <th className="py-1.5 px-1 text-center" title="Růst skill bodů za 30 dní">Růst</th>
+          <SortableTH k="name" label="Hráč" title="Jméno" align="left" />
+          <SortableTH k="pos" label="P" title="Pozice" />
+          <SortableTH k="age" label="V" title="Věk" />
+          <SortableTH k="ovr" label="OVR" title="Overall rating" />
+          <SortableTH k="apps" label="Z" title="Odehrané zápasy" />
+          <SortableTH k="g" label="G" title="Góly" />
+          <SortableTH k="a" label="A" title="Asistence" />
+          <SortableTH k="rat" label="Rat" title="Průměrné hodnocení" />
+          <SortableTH k="growth" label="Růst" title="Růst skill bodů za 30 dní" />
           <th className="py-1.5 pl-1 text-right">Akce</th>
         </tr>
       </thead>
       <tbody>
-        {players.map((p) => {
+        {sorted.map((p) => {
           const stat = statsMap.get(p.id);
           const growth = growthMap.get(p.id) ?? 0;
           const overstayed = p.age >= 22;
