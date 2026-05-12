@@ -138,13 +138,18 @@ export default function PlayerDetailPage() {
     if (typeof window !== "undefined") window.history.replaceState(null, "", `#${t}`);
   };
 
-  // Lazy fetch attendance jen pro vlastní hráče když user klikne na "Účast"
+  // Lazy fetch attendance jen pro vlastní hráče (A i U21) když user klikne na "Účast"
   useEffect(() => {
-    if (activeTab !== "ucast" || !teamId || !player || player.team_id !== teamId || attendanceLoaded) return;
-    apiFetch<AttendanceData>(`/api/teams/${teamId}/players/${playerId}/attendance`)
+    if (activeTab !== "ucast" || !teamId || !player || attendanceLoaded) return;
+    const isMine =
+      player.team_id === teamId
+      || (playerTeam?.team_type === "u21" && playerTeam?.parent_team_id === teamId);
+    if (!isMine) return;
+    // Volat se skutečným teamId hráče (U21 hráč má team_id = U21 týmu)
+    apiFetch<AttendanceData>(`/api/teams/${player.team_id}/players/${playerId}/attendance`)
       .then((d) => { setAttendance(d); setAttendanceLoaded(true); })
       .catch((e) => { console.error("attendance fetch:", e); setAttendanceLoaded(true); });
-  }, [activeTab, teamId, player, playerId, attendanceLoaded]);
+  }, [activeTab, teamId, player, playerTeam, playerId, attendanceLoaded]);
 
   useEffect(() => {
     if (!teamId) return;
