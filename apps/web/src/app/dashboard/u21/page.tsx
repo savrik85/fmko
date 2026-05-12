@@ -176,13 +176,13 @@ export default function U21Page() {
       .catch((e) => console.error("fetch u21 standings:", e));
   }, [tab, u21LeagueId]);
 
-  // Load rozpis
+  // Load rozpis hned po zjištění U21 ligy — potřebujeme i pro „Nejbližší zápas" banner.
   useEffect(() => {
-    if (tab !== "rozpis" || !u21LeagueId || !teamId) return;
+    if (!u21LeagueId || !teamId) return;
     apiFetch<{ rounds: LeagueRound[] }>(`/api/teams/${teamId}/league-schedule?leagueId=${u21LeagueId}`)
       .then((r) => setRounds(r.rounds ?? []))
       .catch((e) => console.error("fetch u21 rounds:", e));
-  }, [tab, u21LeagueId, teamId]);
+  }, [u21LeagueId, teamId]);
 
   const sendToU21 = async (playerId: string, mode: "permanent" | "next_match") => {
     if (!teamId) return;
@@ -248,9 +248,25 @@ export default function U21Page() {
 
   const young = seniorPlayers.filter((p) => p.age <= 21 && !p.loan_from_team_id);
 
+  // Nejbližší U21 zápas: první nesimulovaný match v rounds kde figuruje náš U21 tým
+  const nextMatch: { round: LeagueRound; m: LeagueRound["matches"][number]; isHome: boolean } | null = (() => {
+    if (!u21TeamId) return null;
+    const sorted = [...rounds].sort((a, b) => a.round - b.round);
+    for (const r of sorted) {
+      const m = r.matches.find((mm) => mm.status !== "simulated" && (mm.homeTeamId === u21TeamId || mm.awayTeamId === u21TeamId));
+      if (m) return { round: r, m, isHome: m.homeTeamId === u21TeamId };
+    }
+    return null;
+  })();
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       <SectionTitle />
+
+      {/* Nejbližší zápas */}
+      {nextMatch && (
+        <NextMatchBanner data={nextMatch} />
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200">
@@ -469,6 +485,59 @@ export default function U21Page() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function NextMatchBanner({ data }: { data: { round: LeagueRound; m: LeagueRound["matches"][number]; isHome: boolean } }) {
+  const { round, m, isHome } = data;
+  const us = isHome ? { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId } : { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId };
+  const opp = isHome ? { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId } : { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId };
+  const date = round.scheduledAt ? new Date(round.scheduledAt) : null;
+  const dateLabel = date ? date.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" }) : "—";
+  const timeLabel = date ? date.toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "";
+
+  return (
+    <div className="card p-4 flex flex-col sm:flex-row items-center gap-4">
+      <div className="flex-shrink-0 text-center sm:text-left">
+        <div className="text-[10px] uppercase tracking-widest text-muted font-heading">Nejbližší zápas</div>
+        <div className="font-heading font-bold text-lg text-ink mt-0.5 capitalize">{dateLabel}</div>
+        <div className="text-xs text-gray-500">Kolo {round.round}{timeLabel ? ` · ${timeLabel}` : ""}</div>
+      </div>
+      <div className="flex-1 flex items-center justify-center gap-4 w-full">
+        <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
+          {us.id ? (
+            <Link href={`/dashboard/team/${us.id}`} className="truncate font-medium hover:text-pitch-600 transition-colors">{us.name}</Link>
+          ) : (
+            <span className="truncate font-medium">{us.name}</span>
+          )}
+          <BadgePreview
+            primary={us.color || "#2D5F2D"}
+            secondary={us.secondary || "#FFFFFF"}
+            pattern={(us.badge as BadgePattern) || "shield"}
+            initials={ini(us.name)}
+            size={32}
+          />
+        </div>
+        <div className="text-center">
+          <div className="text-xs font-heading uppercase text-muted">{isHome ? "doma" : "venku"}</div>
+          <div className="text-base font-bold text-gray-400">vs</div>
+        </div>
+        <div className="flex-1 flex items-center justify-start gap-2 min-w-0">
+          <BadgePreview
+            primary={opp.color || "#2D5F2D"}
+            secondary={opp.secondary || "#FFFFFF"}
+            pattern={(opp.badge as BadgePattern) || "shield"}
+            initials={ini(opp.name)}
+            size={32}
+          />
+          {opp.id ? (
+            <Link href={`/dashboard/team/${opp.id}`} className="truncate font-medium hover:text-pitch-600 transition-colors">{opp.name}</Link>
+          ) : (
+            <span className="truncate font-medium">{opp.name}</span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
