@@ -185,14 +185,22 @@ function MatchPage() {
         const playerMap = new Map(pool.map((p) => [p.id, p]));
         const slots = POSITIONS[data.lineup.formation] ?? POSITIONS["4-4-2"];
         const used = new Set<string>();
+        // Hráče původní sestavy si rezervujeme — nesmí být použiti jako náhrada
+        // za jiný slot (zpracují se na svém vlastním slotu níže). Bez toho
+        // by absent hráč na slotu i vytáhl X-tého hráče sestavy jako náhradu,
+        // a slot toho X-tého by pak fallbackem chytl libovolného hráče
+        // (typicky GK na FWD pozici) — bug s "neviditelným" hráčem v lavičce.
+        const originalIds = new Set(data.lineup.players.map((p) => p.playerId));
         const nextSelected = data.lineup.players.map((p, i) => {
           const stored = playerMap.get(p.playerId);
           if (stored && !stored.absent && !used.has(p.playerId)) { used.add(p.playerId); return p.playerId; }
-          // Find replacement: best available at this slot's position (or any)
+          // Find replacement: best available at this slot's position (or any).
+          // Vyloučit hráče z původní sestavy — ti se zpracují na vlastním slotu.
           const slotPos = slots[i].pos;
-          const repl = pool.filter((x) => !x.absent && !used.has(x.id) && x.position === slotPos)
+          const notOriginal = (x: { id: string }) => !originalIds.has(x.id);
+          const repl = pool.filter((x) => !x.absent && !used.has(x.id) && notOriginal(x) && x.position === slotPos)
             .sort((a, b) => b.overallRating - a.overallRating)[0]
-            ?? pool.filter((x) => !x.absent && !used.has(x.id))
+            ?? pool.filter((x) => !x.absent && !used.has(x.id) && notOriginal(x))
               .sort((a, b) => b.overallRating - a.overallRating)[0];
           if (repl) { used.add(repl.id); return repl.id; }
           return p.playerId; // keep stale if nothing available
