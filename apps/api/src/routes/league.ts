@@ -259,7 +259,7 @@ leagueRouter.get("/leagues/:leagueId/standings", async (c) => {
   if (!leagueInfo) return c.json({ error: "League not found" }, 404);
 
   const leagueTeams = await c.env.DB.prepare(
-    "SELECT t.id, t.name, t.user_id, t.primary_color, t.secondary_color, t.badge_pattern, t.team_type, t.parent_team_id, v.name as village_name FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.league_id = ? ORDER BY t.name"
+    "SELECT t.id, t.name, t.user_id, t.primary_color, t.secondary_color, t.badge_pattern, v.name as village_name FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.league_id = ? ORDER BY t.name"
   ).bind(leagueId).all();
 
   const teamIds = leagueTeams.results.map((t) => t.id as string);
@@ -297,8 +297,6 @@ leagueRouter.get("/leagues/:leagueId/standings", async (c) => {
       primaryColor: (t.primary_color as string) || "#2D5F2D",
       secondaryColor: (t.secondary_color as string) || "#FFFFFF",
       badgePattern: (t.badge_pattern as string) || "shield",
-      teamType: (t.team_type as string) ?? "senior",
-      parentTeamId: (t.parent_team_id as string) ?? null,
     };
   });
 

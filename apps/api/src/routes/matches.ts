@@ -387,8 +387,8 @@ matchesRouter.get("/teams/:teamId/league-schedule", async (c) => {
   const result = await c.env.DB.prepare(
     `SELECT m.id, m.round, m.status, m.home_score, m.away_score,
        m.home_team_id, m.away_team_id,
-       ht.name as home_name, ht.primary_color as home_color, ht.secondary_color as home_secondary, ht.badge_pattern as home_badge, ht.team_type as home_team_type, ht.parent_team_id as home_parent_team_id,
-       at.name as away_name, at.primary_color as away_color, at.secondary_color as away_secondary, at.badge_pattern as away_badge, at.team_type as away_team_type, at.parent_team_id as away_parent_team_id,
+       ht.name as home_name, ht.primary_color as home_color, ht.secondary_color as home_secondary, ht.badge_pattern as home_badge,
+       at.name as away_name, at.primary_color as away_color, at.secondary_color as away_secondary, at.badge_pattern as away_badge,
        sc.scheduled_at, sc.game_week
      FROM matches m
      JOIN teams ht ON m.home_team_id = ht.id
@@ -419,16 +419,12 @@ matchesRouter.get("/teams/:teamId/league-schedule", async (c) => {
         homeColor: row.home_color || "#2D5F2D",
         homeSecondary: row.home_secondary || "#FFFFFF",
         homeBadge: row.home_badge || "shield",
-        homeTeamType: row.home_team_type ?? "senior",
-        homeParentTeamId: row.home_parent_team_id ?? null,
         homeScore: row.home_score,
         awayTeamId: row.away_team_id,
         awayName: row.away_name,
         awayColor: row.away_color || "#2D5F2D",
         awaySecondary: row.away_secondary || "#FFFFFF",
         awayBadge: row.away_badge || "shield",
-        awayTeamType: row.away_team_type ?? "senior",
-        awayParentTeamId: row.away_parent_team_id ?? null,
         awayScore: row.away_score,
       })),
     }));
