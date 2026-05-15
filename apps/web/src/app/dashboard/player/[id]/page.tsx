@@ -138,6 +138,14 @@ export default function PlayerDetailPage() {
     if (typeof window !== "undefined") window.history.replaceState(null, "", `#${t}`);
   };
 
+  // Cizí U21 hráč → redirect na profil parent A-týmu (skrýváme cizí U21 squad před skautováním)
+  useEffect(() => {
+    if (!playerTeam || !teamId) return;
+    if (playerTeam.team_type === "u21" && playerTeam.parent_team_id && playerTeam.parent_team_id !== teamId) {
+      router.replace(`/dashboard/team/${playerTeam.parent_team_id}`);
+    }
+  }, [playerTeam, teamId, router]);
+
   // Lazy fetch attendance jen pro vlastní hráče (A i U21) když user klikne na "Účast"
   useEffect(() => {
     if (activeTab !== "ucast" || !teamId || !player || attendanceLoaded) return;

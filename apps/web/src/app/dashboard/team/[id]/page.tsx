@@ -97,6 +97,11 @@ export default function TeamPage() {
       apiFetch<TeamMatchResults>(`/api/teams/${teamId}/match-results`).catch((e) => { console.error("load match results:", e); return null; }),
       apiFetch<ManagerProfile>(`/api/teams/${teamId}/manager`).catch((e) => { console.error("load manager:", e); return null; }),
     ]).then(([t, p, lt, standings, results, mgr]) => {
+      // Cizí U21 tým → redirect na rodičovský A-tým (skrýváme cizí U21 squad před skautováním)
+      if (t?.team_type === "u21" && t?.parent_team_id && t.parent_team_id !== myTeamId) {
+        router.replace(`/dashboard/team/${t.parent_team_id}`);
+        return;
+      }
       setTeam(t);
       setPlayers(p);
       setLeagueTeams(lt);
@@ -109,7 +114,7 @@ export default function TeamPage() {
       }
       setLoading(false);
     });
-  }, [teamId]);
+  }, [teamId, myTeamId, router]);
 
   const teamIndex = leagueTeams.findIndex((t) => t.id === teamId);
   const prevTeam = leagueTeams.length > 1 ? leagueTeams[(teamIndex - 1 + leagueTeams.length) % leagueTeams.length] : null;
