@@ -56,11 +56,10 @@ interface Standing {
   ga: number;
   points: number;
   isPlayer?: boolean;
+  isAi?: boolean;
   primaryColor?: string;
   secondaryColor?: string;
   badgePattern?: string;
-  teamType?: "senior" | "u21";
-  parentTeamId?: string | null;
 }
 
 interface LeagueRound {
@@ -74,16 +73,14 @@ interface LeagueRound {
     homeColor?: string;
     homeSecondary?: string;
     homeBadge?: string;
-    homeTeamType?: "senior" | "u21";
-    homeParentTeamId?: string | null;
+    homeIsAi?: boolean;
     homeScore: number | null;
     awayTeamId?: string;
     awayName: string;
     awayColor?: string;
     awaySecondary?: string;
     awayBadge?: string;
-    awayTeamType?: "senior" | "u21";
-    awayParentTeamId?: string | null;
+    awayIsAi?: boolean;
     awayScore: number | null;
   }>;
 }
@@ -97,18 +94,6 @@ function formatDate(iso: string | null): string {
 
 function ini(name: string): string {
   return name.replace(/ U21$/, "").split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
-}
-
-/**
- * Cílový teamId pro odkaz na profil — pro cizí U21 týmy vede odkaz na profil
- * jejich rodičovského A-týmu (skrýváme cizí U21 squad/atributy před skautováním).
- */
-function teamLinkId(teamId: string | null | undefined, parentTeamId: string | null | undefined, teamType: string | undefined, myTeamId: string | null | undefined): string | null {
-  if (!teamId) return null;
-  if (teamType === "u21" && parentTeamId && parentTeamId !== myTeamId) {
-    return parentTeamId;
-  }
-  return teamId;
 }
 
 function SectionTitle() {
@@ -283,7 +268,7 @@ export default function U21Page() {
 
       {/* Nejbližší zápas */}
       {nextMatch && (
-        <NextMatchBanner data={nextMatch} gameDate={ctxGameDate} myTeamId={teamId} />
+        <NextMatchBanner data={nextMatch} gameDate={ctxGameDate} />
       )}
 
       {/* Tabs */}
@@ -385,7 +370,7 @@ export default function U21Page() {
         </div>
       )}
 
-      {tab === "tabulka" && <StandingsTable standings={standings} myTeamId={teamId} />}
+      {tab === "tabulka" && <StandingsTable standings={standings} />}
 
       {confirmDialog}
 
@@ -404,14 +389,13 @@ export default function U21Page() {
                 {r.matches.map((m) => (
                   <li key={m.id} className="flex items-center justify-between text-sm py-1 border-t border-gray-100 first:border-0">
                     <span className="flex-1 flex items-center justify-end gap-2 min-w-0">
-                      {(() => {
-                        const lid = teamLinkId(m.homeTeamId, m.homeParentTeamId, m.homeTeamType, teamId);
-                        return lid ? (
-                          <Link href={`/dashboard/team/${lid}`} className="truncate hover:text-pitch-600 transition-colors">{m.homeName}</Link>
-                        ) : (
-                          <span className="truncate">{m.homeName}</span>
-                        );
-                      })()}
+                      {m.homeTeamId && !m.homeIsAi ? (
+                        <Link href={`/dashboard/team/${m.homeTeamId}`} className="truncate hover:text-pitch-600 transition-colors">
+                          {m.homeName}
+                        </Link>
+                      ) : (
+                        <span className={`truncate ${m.homeIsAi ? "text-muted" : ""}`}>{m.homeName}</span>
+                      )}
                       <BadgePreview
                         primary={m.homeColor || "#2D5F2D"}
                         secondary={m.homeSecondary || "#FFFFFF"}
@@ -431,14 +415,13 @@ export default function U21Page() {
                         initials={ini(m.awayName)}
                         size={20}
                       />
-                      {(() => {
-                        const lid = teamLinkId(m.awayTeamId, m.awayParentTeamId, m.awayTeamType, teamId);
-                        return lid ? (
-                          <Link href={`/dashboard/team/${lid}`} className="truncate hover:text-pitch-600 transition-colors">{m.awayName}</Link>
-                        ) : (
-                          <span className="truncate">{m.awayName}</span>
-                        );
-                      })()}
+                      {m.awayTeamId && !m.awayIsAi ? (
+                        <Link href={`/dashboard/team/${m.awayTeamId}`} className="truncate hover:text-pitch-600 transition-colors">
+                          {m.awayName}
+                        </Link>
+                      ) : (
+                        <span className={`truncate ${m.awayIsAi ? "text-muted" : ""}`}>{m.awayName}</span>
+                      )}
                     </span>
                   </li>
                 ))}
@@ -451,13 +434,10 @@ export default function U21Page() {
   );
 }
 
-function NextMatchBanner({ data, gameDate, myTeamId }: { data: { round: LeagueRound; m: LeagueRound["matches"][number]; isHome: boolean }; gameDate: string | null; myTeamId: string | null }) {
+function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: LeagueRound["matches"][number]; isHome: boolean }; gameDate: string | null }) {
   const { round, m, isHome } = data;
-  // Pro „nás" link nahradíme za náš A-tým (parent), pro soupeře cizí U21 → cizí A-tým.
-  const usLinkId = teamLinkId(isHome ? m.homeTeamId : m.awayTeamId, isHome ? m.homeParentTeamId : m.awayParentTeamId, isHome ? m.homeTeamType : m.awayTeamType, myTeamId);
-  const oppLinkId = teamLinkId(isHome ? m.awayTeamId : m.homeTeamId, isHome ? m.awayParentTeamId : m.homeParentTeamId, isHome ? m.awayTeamType : m.homeTeamType, myTeamId);
-  const us = isHome ? { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: usLinkId } : { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: usLinkId };
-  const opp = isHome ? { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: oppLinkId } : { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: oppLinkId };
+  const us = isHome ? { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId, isAi: m.homeIsAi } : { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId, isAi: m.awayIsAi };
+  const opp = isHome ? { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId, isAi: m.awayIsAi } : { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId, isAi: m.homeIsAi };
   const date = round.scheduledAt ? new Date(round.scheduledAt) : null;
   const dateLabel = date ? date.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" }) : "—";
   const timeLabel = date ? date.toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "";
@@ -490,10 +470,10 @@ function NextMatchBanner({ data, gameDate, myTeamId }: { data: { round: LeagueRo
       </div>
       <div className="flex-1 flex items-center justify-center gap-4 w-full">
         <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
-          {us.id ? (
+          {us.id && !us.isAi ? (
             <Link href={`/dashboard/team/${us.id}`} className="truncate font-medium hover:text-pitch-600 transition-colors">{us.name}</Link>
           ) : (
-            <span className="truncate font-medium">{us.name}</span>
+            <span className={`truncate font-medium ${us.isAi ? "text-muted" : ""}`}>{us.name}</span>
           )}
           <BadgePreview
             primary={us.color || "#2D5F2D"}
@@ -515,10 +495,10 @@ function NextMatchBanner({ data, gameDate, myTeamId }: { data: { round: LeagueRo
             initials={ini(opp.name)}
             size={32}
           />
-          {opp.id ? (
+          {opp.id && !opp.isAi ? (
             <Link href={`/dashboard/team/${opp.id}`} className="truncate font-medium hover:text-pitch-600 transition-colors">{opp.name}</Link>
           ) : (
-            <span className="truncate font-medium">{opp.name}</span>
+            <span className={`truncate font-medium ${opp.isAi ? "text-muted" : ""}`}>{opp.name}</span>
           )}
         </div>
       </div>
@@ -528,7 +508,7 @@ function NextMatchBanner({ data, gameDate, myTeamId }: { data: { round: LeagueRo
 
 type StandingSortKey = "pos" | "team" | "played" | "wins" | "draws" | "losses" | "gd" | "points";
 
-function StandingsTable({ standings, myTeamId }: { standings: Standing[]; myTeamId: string | null }) {
+function StandingsTable({ standings }: { standings: Standing[] }) {
   const [sortKey, setSortKey] = useState<StandingSortKey>("pos");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -597,16 +577,13 @@ function StandingsTable({ standings, myTeamId }: { standings: Standing[]; myTeam
                     initials={ini(s.team)}
                     size={22}
                   />
-                  {(() => {
-                    const linkId = teamLinkId(s.teamId, s.parentTeamId, s.teamType, myTeamId);
-                    return linkId ? (
-                      <Link href={`/dashboard/team/${linkId}`} className="hover:text-pitch-600 transition-colors">
-                        {s.team}
-                      </Link>
-                    ) : (
-                      <span>{s.team}</span>
-                    );
-                  })()}
+                  {s.teamId && !s.isAi ? (
+                    <Link href={`/dashboard/team/${s.teamId}`} className="hover:text-pitch-600 transition-colors">
+                      {s.team}
+                    </Link>
+                  ) : (
+                    <span className={s.isAi ? "text-muted" : ""}>{s.team}</span>
+                  )}
                 </div>
               </td>
               <td className="px-3 py-2 text-center tabular-nums">{s.played}</td>
