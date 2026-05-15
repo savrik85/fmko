@@ -301,7 +301,7 @@ export default function U21Page() {
       {tab === "kadr" && (
         <div className="grid lg:grid-cols-2 gap-4">
           {/* A-tým — mladí hráči k odeslání */}
-          <section className="card p-4 overflow-x-auto">
+          <section className="card p-3 md:p-4">
             <h2 className="font-heading font-bold text-base mb-3">
               A-tým: mladí hráči ({young.length})
             </h2>
@@ -317,17 +317,17 @@ export default function U21Page() {
                 statsMap={statsMap}
                 growthMap={growthMap}
                 renderActions={(p) => (
-                  <div className="flex gap-1">
+                  <div className="flex flex-col md:flex-row gap-1 items-end">
                     <button
                       disabled={busy === p.id}
                       onClick={() => sendToU21(p.id, "permanent")}
-                      className="px-2 py-1 text-[11px] bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50"
+                      className="px-2 py-1 text-[11px] bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50 whitespace-nowrap"
                       title="Trvale do U21 dokud ho nepovoláš zpět"
                     >→ U21</button>
                     <button
                       disabled={busy === p.id}
                       onClick={() => sendToU21(p.id, "next_match")}
-                      className="px-2 py-1 text-[11px] bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50"
+                      className="px-2 py-1 text-[11px] bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50 whitespace-nowrap"
                       title="Jen na nejbližší U21 zápas, pak zpět"
                     >→ 1 zápas</button>
                   </div>
@@ -337,7 +337,7 @@ export default function U21Page() {
           </section>
 
           {/* U21 kádr — povýšení */}
-          <section className="card p-4 overflow-x-auto">
+          <section className="card p-3 md:p-4">
             <h2 className="font-heading font-bold text-base mb-3">
               U21 kádr ({u21Players.length})
             </h2>
@@ -666,8 +666,12 @@ function PlayerTable({
 
   const arrow = (key: SortKey) => sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "";
 
-  const SortableTH = ({ k, label, title, align = "center" }: { k: SortKey; label: string; title: string; align?: "left" | "center" }) => (
-    <th className={`py-1.5 px-1 cursor-pointer hover:text-gray-700 select-none ${align === "left" ? "pr-2 text-left" : "text-center"}`} title={title} onClick={() => toggle(k)}>
+  const SortableTH = ({ k, label, title, align = "center", hideOnMobile = false }: { k: SortKey; label: string; title: string; align?: "left" | "center"; hideOnMobile?: boolean }) => (
+    <th
+      className={`py-1.5 px-1 cursor-pointer hover:text-gray-700 select-none ${align === "left" ? "pr-2 text-left" : "text-center"} ${hideOnMobile ? "hidden md:table-cell" : ""}`}
+      title={title}
+      onClick={() => toggle(k)}
+    >
       {label}{arrow(k)}
     </th>
   );
@@ -681,10 +685,10 @@ function PlayerTable({
           <SortableTH k="pos" label="P" title="Pozice" />
           <SortableTH k="age" label="V" title="Věk" />
           <SortableTH k="ovr" label="OVR" title="Overall rating" />
-          <SortableTH k="apps" label="Z" title="Odehrané zápasy" />
-          <SortableTH k="g" label="G" title="Góly" />
-          <SortableTH k="a" label="A" title="Asistence" />
-          <SortableTH k="rat" label="Rat" title="Průměrné hodnocení" />
+          <SortableTH k="apps" label="Z" title="Odehrané zápasy" hideOnMobile />
+          <SortableTH k="g" label="G" title="Góly" hideOnMobile />
+          <SortableTH k="a" label="A" title="Asistence" hideOnMobile />
+          <SortableTH k="rat" label="Rat" title="Průměrné hodnocení" hideOnMobile />
           <SortableTH k="growth" label="Růst" title="Růst skill bodů za 30 dní" />
           <th className="py-1.5 pl-1 text-right">Akce</th>
         </tr>
@@ -726,10 +730,10 @@ function PlayerTable({
               </td>
               <td className="py-1.5 px-1 text-center tabular-nums">{p.age}</td>
               <td className="py-1.5 px-1 text-center tabular-nums font-semibold">{p.overallRating}</td>
-              <td className="py-1.5 px-1 text-center tabular-nums">{stat?.appearances ?? 0}</td>
-              <td className="py-1.5 px-1 text-center tabular-nums">{stat?.goals ?? 0}</td>
-              <td className="py-1.5 px-1 text-center tabular-nums">{stat?.assists ?? 0}</td>
-              <td className="py-1.5 px-1 text-center tabular-nums">
+              <td className="py-1.5 px-1 text-center tabular-nums hidden md:table-cell">{stat?.appearances ?? 0}</td>
+              <td className="py-1.5 px-1 text-center tabular-nums hidden md:table-cell">{stat?.goals ?? 0}</td>
+              <td className="py-1.5 px-1 text-center tabular-nums hidden md:table-cell">{stat?.assists ?? 0}</td>
+              <td className="py-1.5 px-1 text-center tabular-nums hidden md:table-cell">
                 {stat?.avgRating != null ? stat.avgRating.toFixed(1) : "—"}
               </td>
               <td className="py-1.5 px-1 text-center tabular-nums">
