@@ -56,6 +56,7 @@ interface Standing {
   ga: number;
   points: number;
   isPlayer?: boolean;
+  isAi?: boolean;
   primaryColor?: string;
   secondaryColor?: string;
   badgePattern?: string;
@@ -72,12 +73,14 @@ interface LeagueRound {
     homeColor?: string;
     homeSecondary?: string;
     homeBadge?: string;
+    homeIsAi?: boolean;
     homeScore: number | null;
     awayTeamId?: string;
     awayName: string;
     awayColor?: string;
     awaySecondary?: string;
     awayBadge?: string;
+    awayIsAi?: boolean;
     awayScore: number | null;
   }>;
 }
@@ -386,12 +389,12 @@ export default function U21Page() {
                 {r.matches.map((m) => (
                   <li key={m.id} className="flex items-center justify-between text-sm py-1 border-t border-gray-100 first:border-0">
                     <span className="flex-1 flex items-center justify-end gap-2 min-w-0">
-                      {m.homeTeamId ? (
+                      {m.homeTeamId && !m.homeIsAi ? (
                         <Link href={`/dashboard/team/${m.homeTeamId}`} className="truncate hover:text-pitch-600 transition-colors">
                           {m.homeName}
                         </Link>
                       ) : (
-                        <span className="truncate">{m.homeName}</span>
+                        <span className={`truncate ${m.homeIsAi ? "text-muted" : ""}`}>{m.homeName}</span>
                       )}
                       <BadgePreview
                         primary={m.homeColor || "#2D5F2D"}
@@ -412,12 +415,12 @@ export default function U21Page() {
                         initials={ini(m.awayName)}
                         size={20}
                       />
-                      {m.awayTeamId ? (
+                      {m.awayTeamId && !m.awayIsAi ? (
                         <Link href={`/dashboard/team/${m.awayTeamId}`} className="truncate hover:text-pitch-600 transition-colors">
                           {m.awayName}
                         </Link>
                       ) : (
-                        <span className="truncate">{m.awayName}</span>
+                        <span className={`truncate ${m.awayIsAi ? "text-muted" : ""}`}>{m.awayName}</span>
                       )}
                     </span>
                   </li>
@@ -433,8 +436,8 @@ export default function U21Page() {
 
 function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: LeagueRound["matches"][number]; isHome: boolean }; gameDate: string | null }) {
   const { round, m, isHome } = data;
-  const us = isHome ? { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId } : { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId };
-  const opp = isHome ? { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId } : { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId };
+  const us = isHome ? { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId, isAi: m.homeIsAi } : { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId, isAi: m.awayIsAi };
+  const opp = isHome ? { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId, isAi: m.awayIsAi } : { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId, isAi: m.homeIsAi };
   const date = round.scheduledAt ? new Date(round.scheduledAt) : null;
   const dateLabel = date ? date.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" }) : "—";
   const timeLabel = date ? date.toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "";
@@ -467,10 +470,10 @@ function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: Le
       </div>
       <div className="flex-1 flex items-center justify-center gap-4 w-full">
         <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
-          {us.id ? (
+          {us.id && !us.isAi ? (
             <Link href={`/dashboard/team/${us.id}`} className="truncate font-medium hover:text-pitch-600 transition-colors">{us.name}</Link>
           ) : (
-            <span className="truncate font-medium">{us.name}</span>
+            <span className={`truncate font-medium ${us.isAi ? "text-muted" : ""}`}>{us.name}</span>
           )}
           <BadgePreview
             primary={us.color || "#2D5F2D"}
@@ -492,10 +495,10 @@ function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: Le
             initials={ini(opp.name)}
             size={32}
           />
-          {opp.id ? (
+          {opp.id && !opp.isAi ? (
             <Link href={`/dashboard/team/${opp.id}`} className="truncate font-medium hover:text-pitch-600 transition-colors">{opp.name}</Link>
           ) : (
-            <span className="truncate font-medium">{opp.name}</span>
+            <span className={`truncate font-medium ${opp.isAi ? "text-muted" : ""}`}>{opp.name}</span>
           )}
         </div>
       </div>
@@ -574,12 +577,12 @@ function StandingsTable({ standings }: { standings: Standing[] }) {
                     initials={ini(s.team)}
                     size={22}
                   />
-                  {s.teamId ? (
+                  {s.teamId && !s.isAi ? (
                     <Link href={`/dashboard/team/${s.teamId}`} className="hover:text-pitch-600 transition-colors">
                       {s.team}
                     </Link>
                   ) : (
-                    <span>{s.team}</span>
+                    <span className={s.isAi ? "text-muted" : ""}>{s.team}</span>
                   )}
                 </div>
               </td>
