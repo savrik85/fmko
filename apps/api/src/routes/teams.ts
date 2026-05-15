@@ -381,6 +381,12 @@ teamsRouter.post("/", async (c) => {
 
   // Create manager profile (graceful — table may not exist before migration 0006)
   if (body.managerName && body.managerBackstory) {
+    // Před INSERTem smaž případného AI fallback managera (vytvořeného pro tým před onboardingem) —
+    // jinak by tu zůstaly dva záznamy a profil týmu by mohl zobrazit AI jméno.
+    await c.env.DB.prepare(
+      "DELETE FROM managers WHERE team_id = ? AND user_id = 'ai'"
+    ).bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "delete AI manager fallback", e));
+
     const mgrAttrs = generateManagerAttributes(body.managerBackstory, rng);
     await c.env.DB.prepare(
       "INSERT INTO managers (id, user_id, team_id, name, backstory, avatar, age, coaching, motivation, tactics, youth_development, discipline, reputation, bio, birthplace) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -1034,9 +1040,10 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
 teamsRouter.get("/:id/manager", async (c) => {
   const tId = c.req.param("id");
 
-  // Try DB first
+  // Try DB first — preferuj uživatelského manažera před AI fallbackem (multiple rows mohou
+  // existovat pokud AI manager byl vygenerován před přihlášením uživatele).
   const row = await c.env.DB.prepare(
-    "SELECT * FROM managers WHERE team_id = ? LIMIT 1"
+    "SELECT * FROM managers WHERE team_id = ? ORDER BY CASE WHEN user_id = 'ai' THEN 1 ELSE 0 END, created_at DESC LIMIT 1"
   ).bind(tId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "teams" }, "fetch manager from DB", e); return null; });
 
   if (row) {
