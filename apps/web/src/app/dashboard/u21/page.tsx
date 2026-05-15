@@ -317,17 +317,17 @@ export default function U21Page() {
                 statsMap={statsMap}
                 growthMap={growthMap}
                 renderActions={(p) => (
-                  <div className="flex flex-col md:flex-row gap-1 items-end">
+                  <div className="flex flex-col md:flex-row gap-1 items-stretch md:items-end w-24 md:w-auto ml-auto">
                     <button
                       disabled={busy === p.id}
                       onClick={() => sendToU21(p.id, "permanent")}
-                      className="px-2 py-1 text-[11px] bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50 whitespace-nowrap"
+                      className="px-2 py-1 text-[11px] bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
                       title="Trvale do U21 dokud ho nepovoláš zpět"
                     >→ U21</button>
                     <button
                       disabled={busy === p.id}
                       onClick={() => sendToU21(p.id, "next_match")}
-                      className="px-2 py-1 text-[11px] bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50 whitespace-nowrap"
+                      className="px-2 py-1 text-[11px] bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
                       title="Jen na nejbližší U21 zápas, pak zpět"
                     >→ 1 zápas</button>
                   </div>
