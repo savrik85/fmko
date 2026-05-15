@@ -21,7 +21,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/klub", label: "Klub", icon: "\u{1F3DB}\uFE0F", group: "club" },
   { href: "/dashboard/obec", label: "Obec", icon: "\u{1F3D8}\uFE0F", group: "club" },
   { href: "/dashboard/squad", label: "Kádr", icon: "\u{1F465}", group: "club" },
-  { href: "/dashboard/u21", label: "U21", icon: "\u{1F9D2}", group: "club" },
+  // U21 sekce funguje na /dashboard/u21 přes přímou URL — záměrně skryto z menu
+  // dokud nebudeme připraveni to ukázat ostatním uživatelům.
   { href: "/dashboard/training", label: "Tréninky", icon: "\u{1F3CB}", group: "club" },
   { href: "/dashboard/transfers", label: "Přestupy", icon: "\u{1F91D}", group: "club" },
   { href: "/dashboard/watchlist", label: "Sledovaní", icon: "\u{2B50}", group: "club" },
