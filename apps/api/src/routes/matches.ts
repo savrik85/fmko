@@ -366,17 +366,23 @@ matchesRouter.post("/teams/:teamId/matches/:matchId/promote", async (c) => {
 });
 
 // GET /api/teams/:teamId/league-schedule — full league schedule by rounds
+// Optional query param ?leagueId=... override (např. pro U21 ligu).
 matchesRouter.get("/teams/:teamId/league-schedule", async (c) => {
   const teamId = c.req.param("teamId");
+  const overrideLeagueId = c.req.query("leagueId");
 
-  const team = await c.env.DB.prepare(
-    "SELECT league_id FROM teams WHERE id = ?"
-  ).bind(teamId).first<{ league_id: string | null }>();
-  if (!team?.league_id) return c.json({ rounds: [], leagueName: "" });
+  let leagueId: string | null = overrideLeagueId ?? null;
+  if (!leagueId) {
+    const team = await c.env.DB.prepare(
+      "SELECT league_id FROM teams WHERE id = ?"
+    ).bind(teamId).first<{ league_id: string | null }>();
+    leagueId = team?.league_id ?? null;
+  }
+  if (!leagueId) return c.json({ rounds: [], leagueName: "" });
 
   const league = await c.env.DB.prepare(
     "SELECT l.name, s.number as season_number FROM leagues l JOIN seasons s ON l.season_id = s.id WHERE l.id = ?"
-  ).bind(team.league_id).first<{ name: string; season_number: number }>().catch((e) => { logger.warn({ module: "matches" }, "fetch league for league-schedule", e); return null; });
+  ).bind(leagueId).first<{ name: string; season_number: number }>().catch((e) => { logger.warn({ module: "matches" }, "fetch league for league-schedule", e); return null; });
 
   const result = await c.env.DB.prepare(
     `SELECT m.id, m.round, m.status, m.home_score, m.away_score,
@@ -390,7 +396,7 @@ matchesRouter.get("/teams/:teamId/league-schedule", async (c) => {
      LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
      WHERE m.league_id = ?
      ORDER BY COALESCE(m.round, sc.game_week, 999), ht.name`
-  ).bind(team.league_id).all().catch((e) => { logger.warn({ module: "matches" }, "fetch league schedule matches", e); return { results: [] }; });
+  ).bind(leagueId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch league schedule matches", e); return { results: [] }; });
 
   // Group by round
   const roundsMap = new Map<number, Array<Record<string, unknown>>>();

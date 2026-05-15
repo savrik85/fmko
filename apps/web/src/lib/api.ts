@@ -98,6 +98,8 @@ export interface Team {
   captain_id?: string;
   penalty_taker_id?: string;
   freekick_taker_id?: string;
+  team_type?: "senior" | "u21";
+  parent_team_id?: string | null;
 }
 
 export interface Player {

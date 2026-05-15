@@ -124,8 +124,16 @@ export async function executeDailyTick(
   }
 
   // ── Training (Mon-Fri, if plan is set) ──
+  // U21 týmy zdědí training_type/approach/sessions od parent A-týmu — manažer nastaví trénink
+  // pro klub jednou a aplikuje se na obě squady.
   const teams = await env.DB.prepare(
-    "SELECT id, training_type, training_approach, training_sessions FROM teams WHERE user_id != 'ai'"
+    `SELECT t.id,
+            COALESCE(t.training_type, parent.training_type) as training_type,
+            COALESCE(t.training_approach, parent.training_approach) as training_approach,
+            COALESCE(t.training_sessions, parent.training_sessions) as training_sessions
+       FROM teams t
+       LEFT JOIN teams parent ON parent.id = t.parent_team_id
+      WHERE t.user_id != 'ai'`
   ).all();
 
   for (const team of teams.results) {

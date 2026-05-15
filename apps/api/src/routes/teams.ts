@@ -65,8 +65,10 @@ export function generatePlayerFace(player: { age: number; bodyType: string }): R
   else if (player.bodyType === "thin") fatness = 0.05 + r() * 0.2;
   else if (player.bodyType === "athletic") fatness = 0.15 + r() * 0.2;
 
-  // Hair: older → bald/gray
-  let hairId = pick(hairIds);
+  // Hair: older → bald/gray. Mladí hráči (<25) mají plnější vlasy — krátké fade styly v malém
+  // avataru vypadají jako pleška, takže pro mladé vybíráme z bohatých stylů.
+  const youngHairIds = ["curly", "shaggy1", "emo", "fauxhawk-fade", "tall-fade", "spike4"];
+  let hairId = player.age < 25 ? pick(youngHairIds) : pick(hairIds);
   let hairColor = pick(hairColors);
   if (player.age > 45 && r() < 0.6) hairId = "short-bald";
   else if (player.age > 38 && r() < 0.35) hairId = "short-bald";
@@ -802,6 +804,17 @@ teamsRouter.post("/", async (c) => {
       await c.env.DB.prepare("UPDATE teams SET game_date = ? WHERE league_id = ?")
         .bind(firstMatch.toISOString(), leagueId).run();
     }
+
+    // Vytvoř U21 ligu + týmy + mirror rozpis (idempotentní)
+    try {
+      const { backfillU21ForLeague } = await import("../league/u21-generator");
+      const result = await backfillU21ForLeague(c.env.DB, leagueId, rng);
+      if (!result.skipped) {
+        logger.info({ module: "teams" }, `U21 setup: liga ${result.u21LeagueId}, ${result.teamsCreated} týmů, ${result.playersCreated} hráčů, ${result.matches} zápasů`);
+      }
+    } catch (e) {
+      logger.error({ module: "teams" }, "U21 backfill při tvorbě ligy selhal", e);
+    }
   }
 
   // Init phone conversations
@@ -1156,6 +1169,27 @@ teamsRouter.get("/:id/stats", async (c) => {
     stats,
     topScorers: [...stats].sort((a, b) => (b.goals as number) - (a.goals as number)).slice(0, 5),
     topAssists: [...stats].sort((a, b) => (b.assists as number) - (a.assists as number)).slice(0, 5),
+  });
+});
+
+// GET /api/teams/:id/growth — kolik skill bodů hráči získali tréninkem+zápasy za posl. N dní (default 30)
+teamsRouter.get("/:id/growth", async (c) => {
+  const teamId = c.req.param("id");
+  const days = Math.max(1, Math.min(365, parseInt(c.req.query("days") ?? "30", 10) || 30));
+
+  const rows = await c.env.DB.prepare(
+    `SELECT tl.player_id, SUM(tl.change) as total
+       FROM training_log tl
+       JOIN players p ON p.id = tl.player_id
+      WHERE p.team_id = ?
+        AND tl.created_at > datetime('now', ?)
+      GROUP BY tl.player_id
+      HAVING total > 0`
+  ).bind(teamId, `-${days} days`).all<{ player_id: string; total: number }>();
+
+  return c.json({
+    days,
+    growth: rows.results.map((r) => ({ playerId: r.player_id, totalChange: r.total })),
   });
 });
 

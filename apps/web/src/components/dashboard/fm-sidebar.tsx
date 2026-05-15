@@ -21,6 +21,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/klub", label: "Klub", icon: "\u{1F3DB}\uFE0F", group: "club" },
   { href: "/dashboard/obec", label: "Obec", icon: "\u{1F3D8}\uFE0F", group: "club" },
   { href: "/dashboard/squad", label: "Kádr", icon: "\u{1F465}", group: "club" },
+  // U21 sekce funguje na /dashboard/u21 přes přímou URL — záměrně skryto z menu
+  // dokud nebudeme připraveni to ukázat ostatním uživatelům.
   { href: "/dashboard/training", label: "Tréninky", icon: "\u{1F3CB}", group: "club" },
   { href: "/dashboard/transfers", label: "Přestupy", icon: "\u{1F91D}", group: "club" },
   { href: "/dashboard/watchlist", label: "Sledovaní", icon: "\u{2B50}", group: "club" },
@@ -156,12 +158,6 @@ export function FMSidebar() {
                           )}
                           {item.href === "/dashboard/hlasovani" && unvotedCount > 0 && (
                             <span className="ml-1.5 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unvotedCount}</span>
-                          )}
-                          {item.href === "/dashboard/fans" && (
-                            <span className="ml-1.5 bg-pitch-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Nové</span>
-                          )}
-                          {item.href === "/dashboard/obec" && (
-                            <span className="ml-1.5 bg-pitch-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Nová</span>
                           )}
                         </span>
                       )}

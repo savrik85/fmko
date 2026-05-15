@@ -3033,6 +3033,32 @@ gameRouter.post("/admin/backfill-chemistry", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+// POST /api/admin/backfill-u21 — vytvoří U21 ligu/týmy/rozpis pro všechny existující A-ligy.
+// Idempotentní: liga s parent_league_id se přeskočí.
+gameRouter.post("/admin/backfill-u21", async (c) => {
+  const seniorLeagueId = c.req.query("leagueId");
+  const { backfillU21ForLeague } = await import("../league/u21-generator");
+  const { createRng, cryptoSeed } = await import("../generators/rng");
+
+  const targets = seniorLeagueId
+    ? [{ id: seniorLeagueId }]
+    : (await c.env.DB.prepare(
+        "SELECT id FROM leagues WHERE league_type = 'senior' OR league_type IS NULL"
+      ).all<{ id: string }>()).results;
+
+  const results: Array<Record<string, unknown>> = [];
+  for (const lg of targets) {
+    try {
+      const rng = createRng(cryptoSeed());
+      const r = await backfillU21ForLeague(c.env.DB, lg.id, rng);
+      results.push({ seniorLeagueId: lg.id, ...r });
+    } catch (e) {
+      results.push({ seniorLeagueId: lg.id, error: String(e) });
+    }
+  }
+  return c.json({ ok: true, leagues: results.length, results });
+});
+
 // POST /api/admin/backfill-pub?date=YYYY-MM-DD — vygenerovat pub session pro daný den pro všechny lidské týmy.
 // Pokud date neuvedeno, použije se včerejšek.
 gameRouter.post("/admin/backfill-pub", async (c) => {
@@ -4167,7 +4193,8 @@ gameRouter.delete("/teams/:teamId/bids/:bidId", async (c) => {
 // Transfer offers between teams (transfer or loan)
 gameRouter.post("/teams/:teamId/offers", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ playerId: string; amount: number; message?: string; offerType?: "transfer" | "loan"; loanDuration?: number; offeredPlayerId?: string | null }>();
+  const body = await c.req.json<{ playerId: string; amount: number; message?: string; offerType?: "transfer" | "loan"; loanDuration?: number; offeredPlayerId?: string | null; targetSquad?: "senior" | "u21" }>();
+  const targetSquad: "senior" | "u21" = body.targetSquad === "u21" ? "u21" : "senior";
   const player = await c.env.DB.prepare("SELECT p.*, t.user_id FROM players p JOIN teams t ON p.team_id = t.id WHERE p.id = ?").bind(body.playerId).first<Record<string, unknown>>();
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
 
@@ -4185,6 +4212,16 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   // Owner user check — only human teams can receive offers
   const ownerTeam = await c.env.DB.prepare("SELECT user_id FROM teams WHERE id = ?").bind(targetOwnerId).first<{ user_id: string }>();
   if (!ownerTeam || ownerTeam.user_id === "ai") return c.json({ error: "Nabídky lze posílat jen lidským týmům" }, 400);
+
+  // U21 cíl: kupující musí mít U21 tým, hráč musí být do 21 let, nebýt na hostování ani čekat na návrat
+  if (targetSquad === "u21") {
+    if ((player.age as number) > 21) return c.json({ error: "Hráč starší 21 let nelze poslat do U21" }, 400);
+    if ((player.next_match_return as number) === 1) return c.json({ error: "Hráč právě čeká na návrat z U21, nelze nabízet" }, 400);
+    const buyerU21 = await c.env.DB.prepare(
+      "SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'"
+    ).bind(teamId).first<{ id: string }>();
+    if (!buyerU21) return c.json({ error: "Tvůj klub nemá U21 tým" }, 400);
+  }
 
   const offerType = body.offerType ?? "transfer";
   const loanDuration = offerType === "loan" ? (body.loanDuration ?? 30) : null;
@@ -4224,8 +4261,8 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
   const id = crypto.randomUUID();
-  await c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, offered_player_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, body.playerId, teamId, targetOwnerId, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration, teamId, offeredPlayerId).run();
+  await c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, offered_player_id, target_squad) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, body.playerId, teamId, targetOwnerId, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration, teamId, offeredPlayerId, targetSquad).run();
 
   // Log initial offer event
   await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'offer', ?, ?)")
@@ -4514,6 +4551,19 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const offerType = (offer.offer_type as string) ?? "transfer";
   const loanDuration = offer.loan_duration as number | null;
   const swapPlayerId = (offer.offered_player_id as string | null) ?? null;
+  const targetSquad = ((offer.target_squad as string) ?? "senior") === "u21" ? "u21" : "senior";
+
+  // Pokud má hráč jít do U21 kupujícího, dohledej cílový tým. Budget a notifikace stále řeší A-tým.
+  let buyerDestTeamId = offer.from_team_id as string;
+  if (targetSquad === "u21" && offerType !== "loan") {
+    const buyerU21 = await c.env.DB.prepare(
+      "SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'"
+    ).bind(offer.from_team_id).first<{ id: string }>();
+    if (!buyerU21) {
+      return c.json({ error: "Kupující nemá U21 tým — nelze přijmout" }, 400);
+    }
+    buyerDestTeamId = buyerU21.id;
+  }
 
   const buyer = await c.env.DB.prepare("SELECT budget, name, game_date, league_id FROM teams WHERE id = ?").bind(buyerTeamId).first<{ budget: number; name: string; game_date: string; league_id: string }>();
   if (!buyer) return c.json({ error: "Kupující nenalezen" }, 400);
@@ -4600,8 +4650,8 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     // Přičíst prodávajícímu + přesunout hráče + swap + uzavřít nabídku atomicky.
     // Guard `AND team_id = ?` chrání proti race condition (hráč mezitím prodán).
     const playerUpdateStmt = isBuyoutAccept
-      ? c.env.DB.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL WHERE id = ? AND team_id = ?").bind(buyerTeamId, playerId, buyerTeamId)
-      : c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ? AND team_id = ?").bind(buyerTeamId, playerId, sellerTeamId);
+      ? c.env.DB.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL WHERE id = ? AND team_id = ?").bind(buyerDestTeamId, playerId, buyerTeamId)
+      : c.env.DB.prepare("UPDATE players SET team_id = ? WHERE id = ? AND team_id = ?").bind(buyerDestTeamId, playerId, sellerTeamId);
 
     const batch = [
       c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, sellerTeamId),

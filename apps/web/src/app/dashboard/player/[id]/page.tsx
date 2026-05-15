@@ -90,6 +90,7 @@ export default function PlayerDetailPage() {
   const [offerSent, setOfferSent] = useState(false);
   const [offerType, setOfferType] = useState<"transfer" | "loan">("transfer");
   const [loanDuration, setLoanDuration] = useState("30");
+  const [targetSquad, setTargetSquad] = useState<"senior" | "u21">("senior");
   const [offeredPlayerId, setOfferedPlayerId] = useState<string | null>(null);
   const [myListing, setMyListing] = useState<{ listingId: string; askingPrice: number } | null>(null);
   const [priceDialogOpen, setPriceDialogOpen] = useState(false);
@@ -137,13 +138,18 @@ export default function PlayerDetailPage() {
     if (typeof window !== "undefined") window.history.replaceState(null, "", `#${t}`);
   };
 
-  // Lazy fetch attendance jen pro vlastní hráče když user klikne na "Účast"
+  // Lazy fetch attendance jen pro vlastní hráče (A i U21) když user klikne na "Účast"
   useEffect(() => {
-    if (activeTab !== "ucast" || !teamId || !player || player.team_id !== teamId || attendanceLoaded) return;
-    apiFetch<AttendanceData>(`/api/teams/${teamId}/players/${playerId}/attendance`)
+    if (activeTab !== "ucast" || !teamId || !player || attendanceLoaded) return;
+    const isMine =
+      player.team_id === teamId
+      || (playerTeam?.team_type === "u21" && playerTeam?.parent_team_id === teamId);
+    if (!isMine) return;
+    // Volat se skutečným teamId hráče (U21 hráč má team_id = U21 týmu)
+    apiFetch<AttendanceData>(`/api/teams/${player.team_id}/players/${playerId}/attendance`)
       .then((d) => { setAttendance(d); setAttendanceLoaded(true); })
       .catch((e) => { console.error("attendance fetch:", e); setAttendanceLoaded(true); });
-  }, [activeTab, teamId, player, playerId, attendanceLoaded]);
+  }, [activeTab, teamId, player, playerTeam, playerId, attendanceLoaded]);
 
   useEffect(() => {
     if (!teamId) return;
@@ -265,7 +271,9 @@ export default function PlayerDetailPage() {
   const prevPlayer = allPlayers.length > 1 ? allPlayers[(currentIndex - 1 + allPlayers.length) % allPlayers.length] : null;
   const nextPlayer = allPlayers.length > 1 ? allPlayers[(currentIndex + 1) % allPlayers.length] : null;
 
-  const isOwnPlayer = player?.team_id === teamId;
+  // U21 hráč je „můj" pokud jeho tým má parent_team_id rovné mému A-tým ID.
+  const isMyU21Player = playerTeam?.team_type === "u21" && playerTeam?.parent_team_id === teamId;
+  const isOwnPlayer = player?.team_id === teamId || isMyU21Player;
   const isLoanedToUs = isOwnPlayer && !!player?.loan_from_team_id;
   const isForeignHumanPlayer = !isOwnPlayer && playerTeam && playerTeam.user_id !== "ai";
   const canSendOffer = isForeignHumanPlayer || isLoanedToUs;
@@ -285,6 +293,7 @@ export default function PlayerDetailPage() {
         offerType,
         ...(offerType === "loan" ? { loanDuration: parseInt(loanDuration, 10) } : {}),
         ...(offerType === "transfer" && offeredPlayerId ? { offeredPlayerId } : {}),
+        ...(offerType === "transfer" && targetSquad === "u21" ? { targetSquad: "u21" } : {}),
       }),
     }), "Odeslání nabídky se nezdařilo");
     if (ok) {
@@ -565,6 +574,25 @@ export default function PlayerDetailPage() {
                     className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "loan" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
                   >
                     Hostování
+                  </button>
+                </div>
+              )}
+
+              {/* Cíl: A-tým / U21 — jen pro trvalý přestup hráče do 21 let */}
+              {offerType === "transfer" && player.age <= 21 && (
+                <div className={`flex items-center gap-2 ${light ? "text-gray-700" : "text-white/80"} text-xs`}>
+                  <span className="font-heading uppercase tracking-wider opacity-70">Cíl:</span>
+                  <button
+                    onClick={() => setTargetSquad("senior")}
+                    className={`px-3 py-1 rounded-lg text-xs font-heading font-bold transition-colors ${targetSquad === "senior" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
+                  >
+                    A-tým
+                  </button>
+                  <button
+                    onClick={() => setTargetSquad("u21")}
+                    className={`px-3 py-1 rounded-lg text-xs font-heading font-bold transition-colors ${targetSquad === "u21" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
+                  >
+                    U21
                   </button>
                 </div>
               )}
