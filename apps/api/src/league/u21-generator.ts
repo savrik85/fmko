@@ -296,6 +296,111 @@ export async function createU21TeamAndSquad(
 }
 
 /**
+ * Smaže existující U21 rozpis a vygeneruje fresh single round-robin (N-1 kol,
+ * každý U21 tým hraje 1× s každým — odpovídá „polovině sezóny").
+ * Schedule_at: první kolo začíná na zadaném startDate (nebo MAX(game_date) z teams),
+ * další kola každých 7 dní (game time).
+ */
+export async function regenerateU21Schedule(
+  db: D1Database,
+  u21LeagueId: string,
+  rng: Rng,
+  startDate?: Date,
+): Promise<{ deletedMatches: number; deletedCalendar: number; calendarEntries: number; matches: number }> {
+  const { generateSchedule } = await import("./schedule");
+
+  // Aktivní sezóna pro season_number
+  const league = await db.prepare(
+    "SELECT season_id FROM leagues WHERE id = ?"
+  ).bind(u21LeagueId).first<{ season_id: string }>();
+  const seasonNumber = await db.prepare(
+    "SELECT number FROM seasons WHERE id = ?"
+  ).bind(league?.season_id).first<{ number: number }>();
+
+  // Smaž existing rozpis
+  const delMatch = await db.prepare("DELETE FROM matches WHERE league_id = ?").bind(u21LeagueId).run();
+  const delCal = await db.prepare("DELETE FROM season_calendar WHERE league_id = ?").bind(u21LeagueId).run();
+
+  // Načti U21 týmy
+  const teamRows = await db.prepare(
+    "SELECT id FROM teams WHERE league_id = ? AND team_type = 'u21' ORDER BY name"
+  ).bind(u21LeagueId).all<{ id: string }>();
+  const teamIds = teamRows.results.map((r) => r.id);
+  if (teamIds.length < 2) return { deletedMatches: delMatch.meta.changes, deletedCalendar: delCal.meta.changes, calendarEntries: 0, matches: 0 };
+
+  // Single round-robin = první polovina double round-robin
+  const fullSchedule = generateSchedule(rng, teamIds.length);
+  const singleHalf = fullSchedule.filter((s) => s.round <= teamIds.length - 1); // prvních N-1 kol
+
+  // Startovní datum: argument NEBO max(game_date) přes všechny U21 týmy
+  let start = startDate;
+  if (!start) {
+    const gd = await db.prepare(
+      "SELECT MAX(game_date) as max FROM teams WHERE league_id = ?"
+    ).bind(u21LeagueId).first<{ max: string }>();
+    start = gd?.max ? new Date(gd.max) : new Date();
+  }
+  // První kolo den po startu, další kola každých 7 dní (sobota)
+  const firstMatchDay = new Date(start);
+  firstMatchDay.setUTCDate(firstMatchDay.getUTCDate() + 1);
+  firstMatchDay.setUTCHours(16, 0, 0, 0); // 16:00 UTC = 18:00 CEST
+
+  // Group matches by round + insert
+  const byRound = new Map<number, typeof singleHalf>();
+  for (const m of singleHalf) {
+    if (!byRound.has(m.round)) byRound.set(m.round, []);
+    byRound.get(m.round)!.push(m);
+  }
+
+  const calStmts: D1PreparedStatement[] = [];
+  const matchStmts: D1PreparedStatement[] = [];
+  const roundToCal = new Map<number, string>();
+
+  for (const [round, ms] of [...byRound.entries()].sort(([a], [b]) => a - b)) {
+    const calId = crypto.randomUUID();
+    roundToCal.set(round, calId);
+    const matchDate = new Date(firstMatchDay);
+    matchDate.setUTCDate(firstMatchDay.getUTCDate() + (round - 1) * 7);
+    const dayName = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][matchDate.getUTCDay()];
+    const matchDay = dayName === "wednesday" || dayName === "saturday" || dayName === "sunday" ? dayName : "saturday";
+
+    calStmts.push(
+      db.prepare(
+        "INSERT INTO season_calendar (id, league_id, season_number, game_week, match_day, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
+      ).bind(calId, u21LeagueId, seasonNumber?.number ?? 1, round, matchDay, matchDate.toISOString())
+    );
+
+    for (const m of ms) {
+      const homeId = teamIds[m.homeTeamIndex];
+      const awayId = teamIds[m.awayTeamIndex];
+      if (!homeId || !awayId) continue;
+      matchStmts.push(
+        db.prepare(
+          "INSERT INTO matches (id, league_id, calendar_id, round, home_team_id, away_team_id, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
+        ).bind(crypto.randomUUID(), u21LeagueId, calId, round, homeId, awayId)
+      );
+    }
+  }
+
+  const BATCH = 80;
+  for (let i = 0; i < calStmts.length; i += BATCH) {
+    try { await db.batch(calStmts.slice(i, i + BATCH)); }
+    catch (e) { logger.error({ module: "u21-generator" }, `regen batch cal ${i}`, e); }
+  }
+  for (let i = 0; i < matchStmts.length; i += BATCH) {
+    try { await db.batch(matchStmts.slice(i, i + BATCH)); }
+    catch (e) { logger.error({ module: "u21-generator" }, `regen batch match ${i}`, e); }
+  }
+
+  return {
+    deletedMatches: delMatch.meta.changes,
+    deletedCalendar: delCal.meta.changes,
+    calendarEntries: calStmts.length,
+    matches: matchStmts.length,
+  };
+}
+
+/**
  * Mirror season_calendar + matches z A-ligy do U21 s posunem +24h.
  * Páry týmů se přemapují přes teams.parent_team_id.
  */

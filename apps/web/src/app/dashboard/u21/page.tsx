@@ -105,7 +105,7 @@ function SectionTitle() {
 }
 
 export default function U21Page() {
-  const { teamId } = useTeam();
+  const { teamId, gameDate: ctxGameDate } = useTeam();
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [tab, setTab] = useState<Tab>("kadr");
   const [u21TeamId, setU21TeamId] = useState<string | null>(null);
@@ -265,7 +265,7 @@ export default function U21Page() {
 
       {/* Nejbližší zápas */}
       {nextMatch && (
-        <NextMatchBanner data={nextMatch} />
+        <NextMatchBanner data={nextMatch} gameDate={ctxGameDate} />
       )}
 
       {/* Tabs */}
@@ -431,7 +431,7 @@ export default function U21Page() {
   );
 }
 
-function NextMatchBanner({ data }: { data: { round: LeagueRound; m: LeagueRound["matches"][number]; isHome: boolean } }) {
+function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: LeagueRound["matches"][number]; isHome: boolean }; gameDate: string | null }) {
   const { round, m, isHome } = data;
   const us = isHome ? { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId } : { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId };
   const opp = isHome ? { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId } : { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId };
@@ -439,12 +439,31 @@ function NextMatchBanner({ data }: { data: { round: LeagueRound; m: LeagueRound[
   const dateLabel = date ? date.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" }) : "—";
   const timeLabel = date ? date.toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "";
 
+  // Game-time „za N dní" — porovnáme datum zápasu s game_date hráče (ne real datum).
+  const inDaysLabel: string | null = (() => {
+    if (!date || !gameDate) return null;
+    const today = new Date(gameDate);
+    today.setUTCHours(0, 0, 0, 0);
+    const matchDay = new Date(date);
+    matchDay.setUTCHours(0, 0, 0, 0);
+    const diffMs = matchDay.getTime() - today.getTime();
+    const days = Math.round(diffMs / (24 * 60 * 60 * 1000));
+    if (days < 0) return null;
+    if (days === 0) return "dnes";
+    if (days === 1) return "zítra";
+    if (days < 5) return `za ${days} dny`;
+    return `za ${days} dní`;
+  })();
+
   return (
     <div className="card p-4 flex flex-col sm:flex-row items-center gap-4">
       <div className="flex-shrink-0 text-center sm:text-left">
         <div className="text-[10px] uppercase tracking-widest text-muted font-heading">Nejbližší zápas</div>
         <div className="font-heading font-bold text-lg text-ink mt-0.5 capitalize">{dateLabel}</div>
-        <div className="text-xs text-gray-500">Kolo {round.round}{timeLabel ? ` · ${timeLabel}` : ""}</div>
+        <div className="text-xs text-gray-500">
+          Kolo {round.round}{timeLabel ? ` · ${timeLabel}` : ""}
+          {inDaysLabel && <span className="ml-2 text-pitch-600 font-semibold">{inDaysLabel}</span>}
+        </div>
       </div>
       <div className="flex-1 flex items-center justify-center gap-4 w-full">
         <div className="flex-1 flex items-center justify-end gap-2 min-w-0">

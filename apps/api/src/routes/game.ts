@@ -3033,6 +3033,32 @@ gameRouter.post("/admin/backfill-chemistry", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+// POST /api/admin/regenerate-u21-schedule — smaže existující U21 rozpis a vygeneruje
+// single round-robin (každý s každým 1×, „polovina sezóny"). Volitelně ?leagueId=...
+gameRouter.post("/admin/regenerate-u21-schedule", async (c) => {
+  const u21LeagueId = c.req.query("leagueId");
+  const { regenerateU21Schedule } = await import("../league/u21-generator");
+  const { createRng, cryptoSeed } = await import("../generators/rng");
+
+  const targets = u21LeagueId
+    ? [{ id: u21LeagueId }]
+    : (await c.env.DB.prepare(
+        "SELECT id FROM leagues WHERE league_type = 'u21'"
+      ).all<{ id: string }>()).results;
+
+  const results: Array<Record<string, unknown>> = [];
+  for (const lg of targets) {
+    try {
+      const rng = createRng(cryptoSeed());
+      const r = await regenerateU21Schedule(c.env.DB, lg.id, rng);
+      results.push({ u21LeagueId: lg.id, ...r });
+    } catch (e) {
+      results.push({ u21LeagueId: lg.id, error: String(e) });
+    }
+  }
+  return c.json({ ok: true, leagues: results.length, results });
+});
+
 // POST /api/admin/backfill-u21 — vytvoří U21 ligu/týmy/rozpis pro všechny existující A-ligy.
 // Idempotentní: liga s parent_league_id se přeskočí.
 gameRouter.post("/admin/backfill-u21", async (c) => {
