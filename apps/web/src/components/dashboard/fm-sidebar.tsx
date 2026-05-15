@@ -37,7 +37,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/friendly", label: "Přáteláky", icon: "\u{1F91C}", group: "league" },
   { href: "/dashboard/liga", label: "Liga", icon: "\u{1F3C6}", group: "league" },
   { href: "/dashboard/calendar", label: "Kalendář", icon: "\u{1F5D3}", group: "league" },
-  { href: "/dashboard/hlasovani", label: "Sněm", icon: "\u{1F5F3}\uFE0F", group: "league" },
+  // Sněm dočasně skryt z menu — dostupný přes přímou URL /dashboard/hlasovani.
 ];
 
 const GROUP_LABELS: Record<string, string> = {

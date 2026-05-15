@@ -28,7 +28,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
     { href: "/dashboard/friendly", icon: "\u{1F91C}", label: "Přáteláky", color: "#4A7A5C" },
     { href: "/dashboard/calendar", icon: "\u{1F5D3}️", label: "Kalendář", color: "#6B7B3D" },
     { href: "/dashboard/news", icon: "\u{1F4F0}", label: "Zpravodaj", color: "#556B2F" },
-    { href: "/dashboard/hlasovani", icon: "\u{1F5F3}️", label: "Sněm", color: "#B8860B" },
+    // Sněm dočasně skryt z menu — dostupný přes přímou URL /dashboard/hlasovani.
   ]},
   { title: "Ostatní", items: [
     { href: "/dashboard/app", icon: "\u{1F4F2}", label: "Nainstaluj", color: "#153615" },
