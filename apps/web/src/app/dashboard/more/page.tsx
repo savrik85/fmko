@@ -31,6 +31,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
     // Sněm dočasně skryt z menu — dostupný přes přímou URL /dashboard/hlasovani.
   ]},
   { title: "Ostatní", items: [
+    { href: "/dashboard/napoveda", icon: "\u{1F4D6}", label: "Nápověda", color: "#2D5F2D" },
     { href: "/dashboard/app", icon: "\u{1F4F2}", label: "Nainstaluj", color: "#153615" },
     { href: "/dashboard/invite", icon: "✉️", label: "Pozvi kamaráda", color: "#3D6B5C" },
     { href: "/dashboard/settings", icon: "⚙️", label: "Nastavení", color: "#6B6B6B" },
