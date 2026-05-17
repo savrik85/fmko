@@ -32,28 +32,30 @@ function teamAvg(lineup: MatchPlayer[], stat: keyof MatchPlayer): number {
 // ── Per-line strength: vážený průměr klíčových atributů pro pozici ──────────
 // Hodnoty atributů jsou 1–20, normalizujeme na 0–100 pro UI.
 
-// Atributy v MatchPlayer jsou na škále 1-100 (default 50).
-// Per-line strength: vážený průměr klíčových atributů, normalizováno na 0-100 přímo.
+// Realne pozorovane atributy ve hre se pohybuji ~5-30 (max ~40 u top hracu).
+// Pro UI 0-100 skalu nasobime ~4x (silny hrac → 80-95, prumer → 50-65, slaby → 20-40).
+// condition/morale jsou 0-100 → nasobeni neni potreba, pouzivame primo.
+const SKILL_TO_UI_FACTOR = 4;
 
 function gkStrength(gks: MatchPlayer[]): number {
   if (gks.length === 0) return 0;
   const gk = gks[0];
-  return clamp(gk.goalkeeping * 0.7 + gk.condition * 0.15 + gk.morale * 0.15, 0, 100);
+  return clamp(gk.goalkeeping * SKILL_TO_UI_FACTOR * 0.7 + gk.condition * 0.15 + gk.morale * 0.15, 0, 100);
 }
 
 function defStrength(defs: MatchPlayer[]): number {
   if (defs.length === 0) return 0;
-  return clamp(teamAvg(defs, "defense") * 0.5 + teamAvg(defs, "strength") * 0.25 + teamAvg(defs, "heading") * 0.15 + teamAvg(defs, "speed") * 0.1, 0, 100);
+  return clamp((teamAvg(defs, "defense") * 0.5 + teamAvg(defs, "strength") * 0.25 + teamAvg(defs, "heading") * 0.15 + teamAvg(defs, "speed") * 0.1) * SKILL_TO_UI_FACTOR, 0, 100);
 }
 
 function midStrength(mids: MatchPlayer[]): number {
   if (mids.length === 0) return 0;
-  return clamp(teamAvg(mids, "passing") * 0.35 + teamAvg(mids, "technique") * 0.25 + teamAvg(mids, "vision") * 0.15 + teamAvg(mids, "workRate") * 0.15 + teamAvg(mids, "stamina") * 0.10, 0, 100);
+  return clamp((teamAvg(mids, "passing") * 0.35 + teamAvg(mids, "technique") * 0.25 + teamAvg(mids, "vision") * 0.15 + teamAvg(mids, "workRate") * 0.15 + teamAvg(mids, "stamina") * 0.10) * SKILL_TO_UI_FACTOR, 0, 100);
 }
 
 function fwdStrength(fwds: MatchPlayer[]): number {
   if (fwds.length === 0) return 0;
-  return clamp(teamAvg(fwds, "shooting") * 0.4 + teamAvg(fwds, "speed") * 0.2 + teamAvg(fwds, "technique") * 0.2 + teamAvg(fwds, "heading") * 0.1 + teamAvg(fwds, "creativity") * 0.1, 0, 100);
+  return clamp((teamAvg(fwds, "shooting") * 0.4 + teamAvg(fwds, "speed") * 0.2 + teamAvg(fwds, "technique") * 0.2 + teamAvg(fwds, "heading") * 0.1 + teamAvg(fwds, "creativity") * 0.1) * SKILL_TO_UI_FACTOR, 0, 100);
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -158,9 +160,10 @@ export function calcLineupStrength(setup: TeamSetup): LineupStrength {
     fwd: Math.round(fwdStrength(fwds)),
   };
 
-  // rawAttackPower/Defense jsou na škále atributů (1-100); engine používá rozsah ~20-50.
-  const attack = Math.round(normalize(rawAttackPower(setup), 20, 60));
-  const defense = Math.round(normalize(rawDefensePower(setup), 18, 55));
+  // rawAttack/Defense vychazi ze skutecnych atributu (1-30 typicky).
+  // Pozorovany engine range: attack ~7-20, defense ~5-18.
+  const attack = Math.round(normalize(rawAttackPower(setup), 5, 22));
+  const defense = Math.round(normalize(rawDefensePower(setup), 4, 18));
   const overall = Math.round(
     perLine.gk * 0.15 + perLine.def * 0.30 + perLine.mid * 0.30 + perLine.fwd * 0.25
   );
