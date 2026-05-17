@@ -152,14 +152,16 @@ export function MatchBreakdown({ teamId, matchId }: Props) {
           </div>
         </div>
 
-        {/* Tactic info */}
-        <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-[11px]">
-          <span className="text-muted">
-            Taktika: <span className="font-heading font-bold text-ink">{summary.ownTactic}</span>
-            <span className="text-muted-light mx-1">vs</span>
-            <span className="font-heading font-bold text-ink">{summary.opponentTactic}</span>
-          </span>
-        </div>
+        {/* Tactic info — skryj pokud taktika neznáma (stare zapasy) */}
+        {summary.ownTactic && summary.opponentTactic && (
+          <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-[11px]">
+            <span className="text-muted">
+              Taktika: <span className="font-heading font-bold text-ink">{summary.ownTactic}</span>
+              <span className="text-muted-light mx-1">vs</span>
+              <span className="font-heading font-bold text-ink">{summary.opponentTactic}</span>
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

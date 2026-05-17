@@ -163,10 +163,10 @@ export function buildMatchSummary(input: BuildInput): MatchSummary | null {
     });
   }
 
-  // 2. Tactic matchup
-  const ownTactic = ownLineup.tactic;
-  const oppTactic = oppLineup.tactic;
-  if (ownTactic !== oppTactic) {
+  // 2. Tactic matchup — pro staré zápasy může být tactic null
+  const ownTactic = ownLineup.tactic ?? "balanced";
+  const oppTactic = oppLineup.tactic ?? "balanced";
+  if (ownLineup.tactic && oppLineup.tactic && ownTactic !== oppTactic) {
     const note = TACTIC_VS_TACTIC[ownTactic]?.[oppTactic];
     if (note) {
       // Heuristika: pokud výhra a taktika doporučená → positive, jinak negative
@@ -220,8 +220,10 @@ export function buildMatchSummary(input: BuildInput): MatchSummary | null {
     factors,
     ownStrength,
     opponentStrength,
-    ownTactic: TACTIC_LABEL[ownTactic] ?? ownTactic,
-    opponentTactic: TACTIC_LABEL[oppTactic] ?? oppTactic,
+    // Když původní tactic byla null/undefined (staré zápasy), vracíme prázdný string,
+    // aby UI mohlo schovat sekci místo zobrazení "Vyrovnaná" placeholder.
+    ownTactic: ownLineup.tactic ? (TACTIC_LABEL[ownTactic] ?? ownTactic) : "",
+    opponentTactic: oppLineup.tactic ? (TACTIC_LABEL[oppTactic] ?? oppTactic) : "",
     outcome,
     summaryText,
   };
@@ -247,7 +249,14 @@ function buildSummaryText(
   } else if (outcome === "LOSS") {
     return `Klíčový rozdíl: **${topFactor.label.toLowerCase()}**. ${topFactor.description}`;
   } else {
-    return `Vyrovnaný souboj. Tvoje silnější ${strongLines(own, opp).join(" a ")} stačila jen na remízu.`;
+    const strong = strongLines(own, opp);
+    if (strong.length === 0) {
+      return "Vyrovnaný souboj. Remíza odpovídá síle obou týmů.";
+    }
+    const list = strong.join(" a ");
+    // Plurál pokud více linií, jinak shoda rodu se singulárem
+    const verb = strong.length > 1 ? "stačily" : strong[0] === "obrana" || strong[0] === "záloha" ? "stačila" : "stačil";
+    return `Vyrovnaný souboj. Tvoje silnější ${list} ${verb} jen na remízu.`;
   }
 }
 
