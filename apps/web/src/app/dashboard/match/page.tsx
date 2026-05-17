@@ -10,6 +10,7 @@ import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview } from "@/c
 import type { BadgePattern } from "@/components/ui";
 import { BusSelector } from "./BusSelector";
 import { getTacticTooltip, getFormationTooltip, type TacticKey } from "@/lib/tactic-info";
+import { LineupPreview } from "@/components/LineupPreview";
 
 type Pos = "GK" | "DEF" | "MID" | "FWD";
 
@@ -962,6 +963,21 @@ function MatchPage() {
         </div>
       </div>
 
+
+      {/* ═══ Lineup strength preview — síla sestavy + comparison se soupeřem ═══ */}
+      {teamId && nextMatch && selected.filter(Boolean).length === 11 && (
+        <LineupPreview
+          teamId={teamId}
+          matchId={nextMatch.matchId}
+          formation={formation}
+          tactic={tactic}
+          captainId={captainId}
+          players={selected.reduce<Array<{ playerId: string; matchPosition: string }>>((acc, id, i) => {
+            if (id) acc.push({ playerId: id, matchPosition: slots[i].pos });
+            return acc;
+          }, [])}
+        />
+      )}
 
       {/* ═══ Save ═══ */}
       <div>
