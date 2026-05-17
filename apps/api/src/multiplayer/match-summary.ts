@@ -85,10 +85,16 @@ function avg(values: number[]): number {
 
 function avgRatingForPosition(starters: LineupPlayer[], ratings: Record<string, number>, pos: string): number {
   const players = starters.filter((p) => (p.position ?? p.naturalPosition) === pos);
-  const matchRatings = players.map((p) => ratings[p.id]).filter((r): r is number => typeof r === "number" && r > 0);
-  // Pokud máme match ratingy, použij je. Jinak fallback na pre-match rating ze skill.
-  if (matchRatings.length > 0) return avg(matchRatings);
-  return avg(players.map((p) => p.rating / 10)); // pre-match rating je 0-100, normalizuj na 0-10
+  if (players.length === 0) return 0;
+  // Per-player: match rating (0-10) když existuje, jinak pre-match rating (0-100 scale)
+  // přeškálovaný na 0-10 podle FM-style empirické křivky: rating 50 ≈ 6.5 match rating.
+  const values = players.map((p) => {
+    const matchR = ratings[p.id];
+    if (typeof matchR === "number" && matchR > 0) return matchR;
+    // pre-match rating je 1-100; map 30→5, 50→6.5, 70→8 (linear přes 0.075x + 3)
+    return Math.max(3, Math.min(9, p.rating * 0.075 + 3));
+  });
+  return avg(values);
 }
 
 function deltaToImpact(delta: number): Impact {
