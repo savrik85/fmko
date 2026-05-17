@@ -495,6 +495,48 @@ matchesRouter.get("/matches/:id", async (c) => {
 });
 
 
+// GET /api/teams/:teamId/match-summary/:matchId — "co rozhodlo" breakdown po zápase
+// JIT compute: vezme uložená data zápasu, vrátí top 3 faktory + per-line strength.
+matchesRouter.get("/teams/:teamId/match-summary/:matchId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const matchId = c.req.param("matchId");
+
+  const row = await c.env.DB.prepare(
+    "SELECT home_team_id, away_team_id, home_score, away_score, home_lineup_data, away_lineup_data, player_ratings, events, status FROM matches WHERE id = ?"
+  ).bind(matchId).first<{
+    home_team_id: string; away_team_id: string;
+    home_score: number; away_score: number;
+    home_lineup_data: string | null; away_lineup_data: string | null;
+    player_ratings: string | null; events: string | null;
+    status: string;
+  }>();
+  if (!row) return c.json({ error: "match_not_found" }, 404);
+  if (row.status !== "simulated") return c.json({ error: "match_not_simulated" }, 400);
+
+  const isOwnHome = row.home_team_id === teamId;
+  if (!isOwnHome && row.away_team_id !== teamId) {
+    return c.json({ error: "team_not_in_match" }, 403);
+  }
+
+  try {
+    const { buildMatchSummary } = await import("../multiplayer/match-summary");
+    const summary = buildMatchSummary({
+      homeLineupData: row.home_lineup_data ? JSON.parse(row.home_lineup_data) : null,
+      awayLineupData: row.away_lineup_data ? JSON.parse(row.away_lineup_data) : null,
+      playerRatings: row.player_ratings ? JSON.parse(row.player_ratings) : {},
+      events: row.events ? JSON.parse(row.events) : [],
+      homeScore: row.home_score,
+      awayScore: row.away_score,
+      isOwnHome,
+    });
+    if (!summary) return c.json({ error: "missing_lineup_data" }, 400);
+    return c.json(summary);
+  } catch (e) {
+    logger.warn({ module: "matches" }, "build match summary", e);
+    return c.json({ error: "summary_failed" }, 500);
+  }
+});
+
 // GET /api/teams/:teamId/unseen-match — najde nejstarší nepřečtený zápas
 matchesRouter.get("/teams/:teamId/unseen-match", async (c) => {
   const teamId = c.req.param("teamId");
