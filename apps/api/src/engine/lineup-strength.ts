@@ -32,25 +32,28 @@ function teamAvg(lineup: MatchPlayer[], stat: keyof MatchPlayer): number {
 // ── Per-line strength: vážený průměr klíčových atributů pro pozici ──────────
 // Hodnoty atributů jsou 1–20, normalizujeme na 0–100 pro UI.
 
+// Atributy v MatchPlayer jsou na škále 1-100 (default 50).
+// Per-line strength: vážený průměr klíčových atributů, normalizováno na 0-100 přímo.
+
 function gkStrength(gks: MatchPlayer[]): number {
   if (gks.length === 0) return 0;
   const gk = gks[0];
-  return clamp((gk.goalkeeping * 0.65 + gk.condition / 100 * 5 + gk.morale / 100 * 3) / 0.73 * 5, 0, 100);
+  return clamp(gk.goalkeeping * 0.7 + gk.condition * 0.15 + gk.morale * 0.15, 0, 100);
 }
 
 function defStrength(defs: MatchPlayer[]): number {
   if (defs.length === 0) return 0;
-  return clamp((teamAvg(defs, "defense") * 0.5 + teamAvg(defs, "strength") * 0.25 + teamAvg(defs, "heading") * 0.15 + teamAvg(defs, "speed") * 0.1) * 5, 0, 100);
+  return clamp(teamAvg(defs, "defense") * 0.5 + teamAvg(defs, "strength") * 0.25 + teamAvg(defs, "heading") * 0.15 + teamAvg(defs, "speed") * 0.1, 0, 100);
 }
 
 function midStrength(mids: MatchPlayer[]): number {
   if (mids.length === 0) return 0;
-  return clamp((teamAvg(mids, "passing") * 0.35 + teamAvg(mids, "technique") * 0.25 + teamAvg(mids, "vision") * 0.15 + teamAvg(mids, "workRate") * 0.15 + teamAvg(mids, "stamina") * 0.10) * 5, 0, 100);
+  return clamp(teamAvg(mids, "passing") * 0.35 + teamAvg(mids, "technique") * 0.25 + teamAvg(mids, "vision") * 0.15 + teamAvg(mids, "workRate") * 0.15 + teamAvg(mids, "stamina") * 0.10, 0, 100);
 }
 
 function fwdStrength(fwds: MatchPlayer[]): number {
   if (fwds.length === 0) return 0;
-  return clamp((teamAvg(fwds, "shooting") * 0.4 + teamAvg(fwds, "speed") * 0.2 + teamAvg(fwds, "technique") * 0.2 + teamAvg(fwds, "heading") * 0.1 + teamAvg(fwds, "creativity") * 0.1) * 5, 0, 100);
+  return clamp(teamAvg(fwds, "shooting") * 0.4 + teamAvg(fwds, "speed") * 0.2 + teamAvg(fwds, "technique") * 0.2 + teamAvg(fwds, "heading") * 0.1 + teamAvg(fwds, "creativity") * 0.1, 0, 100);
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -155,8 +158,9 @@ export function calcLineupStrength(setup: TeamSetup): LineupStrength {
     fwd: Math.round(fwdStrength(fwds)),
   };
 
-  const attack = Math.round(normalize(rawAttackPower(setup), 12, 32));
-  const defense = Math.round(normalize(rawDefensePower(setup), 12, 28));
+  // rawAttackPower/Defense jsou na škále atributů (1-100); engine používá rozsah ~20-50.
+  const attack = Math.round(normalize(rawAttackPower(setup), 20, 60));
+  const defense = Math.round(normalize(rawDefensePower(setup), 18, 55));
   const overall = Math.round(
     perLine.gk * 0.15 + perLine.def * 0.30 + perLine.mid * 0.30 + perLine.fwd * 0.25
   );
@@ -207,13 +211,13 @@ export function calcLineupPreview(ownSetup: TeamSetup, opponentSetup?: TeamSetup
     overallDelta: own.overall - opponent.overall,
   };
 
-  // Generuj doporučení na základě porovnání
+  // Generuj doporučení na základě porovnání (akuzativ — "Slabší obranu/útok")
   let recommendation: string | undefined;
   const weakLines: string[] = [];
   if (comparison.perLine.gk === "MUCH_WEAKER" || comparison.perLine.gk === "WEAKER") weakLines.push("brankáře");
-  if (comparison.perLine.def === "MUCH_WEAKER" || comparison.perLine.def === "WEAKER") weakLines.push("obrany");
-  if (comparison.perLine.mid === "MUCH_WEAKER" || comparison.perLine.mid === "WEAKER") weakLines.push("zálohy");
-  if (comparison.perLine.fwd === "MUCH_WEAKER" || comparison.perLine.fwd === "WEAKER") weakLines.push("útoku");
+  if (comparison.perLine.def === "MUCH_WEAKER" || comparison.perLine.def === "WEAKER") weakLines.push("obranu");
+  if (comparison.perLine.mid === "MUCH_WEAKER" || comparison.perLine.mid === "WEAKER") weakLines.push("zálohu");
+  if (comparison.perLine.fwd === "MUCH_WEAKER" || comparison.perLine.fwd === "WEAKER") weakLines.push("útok");
 
   if (weakLines.length === 0 && comparison.overall === "STRONGER") {
     recommendation = "Tvůj tým je silnější ve všech liniích — můžeš hrát útočněji.";
@@ -222,7 +226,7 @@ export function calcLineupPreview(ownSetup: TeamSetup, opponentSetup?: TeamSetup
   } else if (weakLines.length >= 2 && comparison.overall === "MUCH_WEAKER") {
     recommendation = `Velký rozdíl v síle (${weakLines.join(", ")}). Zvaž defenzivní taktiku a rychlé protiútoky.`;
   } else if (weakLines.length >= 1) {
-    recommendation = `Slabší ${weakLines.join(", ")} než soupeř — buď zpevni sestavu, nebo zvol Defenzivní taktiku.`;
+    recommendation = `Máš slabší ${weakLines.join(", ")} než soupeř — buď zpevni sestavu, nebo zvol Defenzivní taktiku.`;
   } else if (comparison.overall === "EVEN") {
     recommendation = "Vyrovnaný souboj. Klíč: kondice, morálka a sehranost.";
   }
