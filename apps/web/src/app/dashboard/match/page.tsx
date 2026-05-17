@@ -9,6 +9,7 @@ import { apiFetch, apiAction, type Player } from "@/lib/api";
 import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { BusSelector } from "./BusSelector";
+import { getTacticTooltip, getFormationTooltip, type TacticKey } from "@/lib/tactic-info";
 
 type Pos = "GK" | "DEF" | "MID" | "FWD";
 
@@ -573,7 +574,7 @@ function MatchPage() {
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline justify-between mb-1">
-              <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Formace</div>
+              <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Formace <span className="text-muted-light normal-case">— najetím zjistíš detail</span></div>
               <div className="text-[10px] font-heading">
                 Sehranost: <span className={`font-bold ${famColor(formationFam[formation] ?? 15)}`}>{Math.round(formationFam[formation] ?? 15)}</span>/100
               </div>
@@ -583,7 +584,8 @@ function MatchPage() {
                 const fam = formationFam[f] ?? 15;
                 return (
                   <button key={f} onClick={() => { setFormation(f); autoFill(players, f); }}
-                    className={`py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all ${formation === f ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                    title={getFormationTooltip(f)}
+                    className={`py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all cursor-help ${formation === f ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
                     {f}
                     <div className={`mt-0.5 h-1 rounded-full ${famBgColor(fam)}`} style={{ width: `${Math.max(8, fam)}%`, marginInline: "auto" }} />
                   </button>
@@ -596,11 +598,23 @@ function MatchPage() {
             <div className="grid grid-cols-3 sm:grid-cols-6 rounded-xl bg-gray-50 p-0.5 gap-0.5">
               {TACTICS.map((t) => (
                 <button key={t.key} onClick={() => { setTactic(t.key); setSaved(false); }}
-                  className={`py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all ${tactic === t.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                  title={getTacticTooltip(t.key as TacticKey)}
+                  className={`py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all cursor-help ${tactic === t.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
                   <span className="hidden sm:inline">{t.icon} </span>{t.label}
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+        {/* Hint popisující aktuálně vybranou formaci + taktiku — viditelné hlavně na mobilu (kde nefunguje hover) */}
+        <div className="mt-2 pt-2 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] leading-relaxed text-muted">
+          <div>
+            <span className="font-heading uppercase text-[10px] tracking-wide text-muted-light">Formace: </span>
+            {getFormationTooltip(formation).replace(/^[^—]+— /, "")}
+          </div>
+          <div>
+            <span className="font-heading uppercase text-[10px] tracking-wide text-muted-light">Taktika: </span>
+            {getTacticTooltip(tactic as TacticKey).replace(/^[^—]+— /, "")}
           </div>
         </div>
       </div>

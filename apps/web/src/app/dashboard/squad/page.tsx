@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { Spinner, PositionBadge } from "@/components/ui";
+import { ATTRIBUTE_INFO, getTooltip, type AttrKey, type Pos } from "@/lib/attribute-info";
 
 type Tab = "atributy" | "sezona" | "top" | "dochazka";
 type PosFilter = "all" | "GK" | "DEF" | "MID" | "FWD";
@@ -52,24 +53,32 @@ interface TeamStatsResponse {
 
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
 
-const COLUMNS: Array<{ key: SortKey; label: string; tip: string }> = [
+// attrKey: pokud sloupec odpovídá atributu hráče, zobrazí se detail tooltip + position dots
+const COLUMNS: Array<{ key: SortKey; label: string; tip: string; attrKey?: AttrKey }> = [
   { key: "name", label: "Jméno", tip: "Jméno hráče" },
   { key: "pos", label: "Poz", tip: "Pozice" },
-  { key: "age", label: "Věk", tip: "Věk" },
-  { key: "rat", label: "Rat", tip: "Celkový rating" },
-  { key: "spd", label: "Rch", tip: "Rychlost" },
-  { key: "tec", label: "Tch", tip: "Technika" },
-  { key: "sho", label: "Stř", tip: "Střelba" },
-  { key: "pas", label: "Přh", tip: "Přihrávky" },
-  { key: "hea", label: "Hlv", tip: "Hlavičky" },
-  { key: "def", label: "Obr", tip: "Obrana" },
-  { key: "gk", label: "Brk", tip: "Brankář" },
-  { key: "sta", label: "Výd", tip: "Výdrž" },
-  { key: "str", label: "Síl", tip: "Síla" },
-  { key: "cond", label: "Kon", tip: "Kondice" },
-  { key: "mor", label: "Mor", tip: "Morálka" },
-  { key: "wage", label: "Mzda", tip: "Týdenní mzda" },
+  { key: "age", label: "Věk", tip: getTooltip("age"), attrKey: "age" },
+  { key: "rat", label: "Rat", tip: getTooltip("rat"), attrKey: "rat" },
+  { key: "spd", label: "Rch", tip: getTooltip("spd"), attrKey: "spd" },
+  { key: "tec", label: "Tch", tip: getTooltip("tec"), attrKey: "tec" },
+  { key: "sho", label: "Stř", tip: getTooltip("sho"), attrKey: "sho" },
+  { key: "pas", label: "Přh", tip: getTooltip("pas"), attrKey: "pas" },
+  { key: "hea", label: "Hlv", tip: getTooltip("hea"), attrKey: "hea" },
+  { key: "def", label: "Obr", tip: getTooltip("def"), attrKey: "def" },
+  { key: "gk", label: "Brk", tip: getTooltip("gk"), attrKey: "gk" },
+  { key: "sta", label: "Výd", tip: getTooltip("sta"), attrKey: "sta" },
+  { key: "str", label: "Síl", tip: getTooltip("str"), attrKey: "str" },
+  { key: "cond", label: "Kon", tip: getTooltip("cond"), attrKey: "cond" },
+  { key: "mor", label: "Mor", tip: getTooltip("mor"), attrKey: "mor" },
+  { key: "wage", label: "Mzda", tip: getTooltip("wage"), attrKey: "wage" },
 ];
+
+const POS_DOT_COLOR: Record<Pos, string> = {
+  GK: "bg-gold-500",
+  DEF: "bg-blue-500",
+  MID: "bg-pitch-500",
+  FWD: "bg-card-red",
+};
 
 function getVal(p: Player, key: SortKey): string | number {
   const s = p.skills as Record<string, number> | undefined;
@@ -353,17 +362,30 @@ export default function SquadPage() {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b-2 border-gray-200">
-              {COLUMNS.map((col) => (
-                <th key={col.key}
-                  onClick={() => toggleSort(col.key)}
-                  title={col.tip}
-                  className={`py-2.5 px-1.5 font-heading uppercase cursor-pointer select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
-                    sortKey === col.key ? "text-pitch-600 bg-pitch-50" : "text-muted"
-                  } ${col.key === "name" ? "text-left pl-3 sticky left-0 bg-white z-10" : "text-center"}`}
-                >
-                  {col.label}{sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                </th>
-              ))}
+              {COLUMNS.map((col) => {
+                const relevantFor = col.attrKey ? ATTRIBUTE_INFO[col.attrKey].relevantFor : null;
+                const showDots = relevantFor && relevantFor.length > 0 && relevantFor.length < 4;
+                return (
+                  <th key={col.key}
+                    onClick={() => toggleSort(col.key)}
+                    title={col.tip}
+                    className={`py-2.5 px-1.5 font-heading uppercase cursor-help select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
+                      sortKey === col.key ? "text-pitch-600 bg-pitch-50" : "text-muted"
+                    } ${col.key === "name" ? "text-left pl-3 sticky left-0 bg-white z-10" : "text-center"}`}
+                  >
+                    <div className={`flex flex-col gap-0.5 ${col.key === "name" ? "items-start" : "items-center"}`}>
+                      <span>{col.label}{sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</span>
+                      {showDots && (
+                        <span className="flex gap-0.5" aria-hidden="true" title={`Klíčové pro: ${relevantFor.join(", ")}`}>
+                          {relevantFor.map((p) => (
+                            <span key={p} className={`w-1 h-1 rounded-full ${POS_DOT_COLOR[p]}`} />
+                          ))}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -434,6 +456,20 @@ export default function SquadPage() {
           </tbody>
         </table>
       </div>
+      )}
+
+      {/* Legenda — co znamenají barevné tečky u headerů */}
+      {tab === "atributy" && (
+        <div className="card p-2.5 text-[11px] text-muted">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="font-heading uppercase text-[10px] tracking-wide">Tečky u hlaviček:</span>
+            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-gold-500" /> Brankář</span>
+            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Obrana</span>
+            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-pitch-500" /> Záloha</span>
+            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-card-red" /> Útok</span>
+            <span className="ml-auto italic">Najetím na hlavičku zjistíš, co atribut dělá.</span>
+          </div>
+        </div>
       )}
 
       {/* Sezóna — match stats tab */}
