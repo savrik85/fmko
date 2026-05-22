@@ -754,9 +754,19 @@ export default function TransfersPage() {
                 }, 3000);
               }}
             />
+            <div className="mt-3 text-center text-white/80 text-sm">
+              Hráč je teď ve tvém kádru.
+            </div>
+            <Link
+              href="/dashboard/squad"
+              onClick={() => setRevealPlayer(null)}
+              className="block mt-3 w-full py-3 rounded-xl font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 transition-colors text-base text-center"
+            >
+              Otevřít Kádr →
+            </Link>
             <button onClick={() => setRevealPlayer(null)}
-              className="w-full mt-4 py-3 rounded-xl font-heading font-bold text-white bg-white/10 hover:bg-white/20 transition-colors text-base">
-              Pokračovat
+              className="w-full mt-2 py-2.5 rounded-xl font-heading text-white/70 hover:text-white hover:bg-white/10 transition-colors text-sm">
+              Zavřít
             </button>
           </div>
         </div>

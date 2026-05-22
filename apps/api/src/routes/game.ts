@@ -2776,6 +2776,83 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   });
 });
 
+// POST lineup-preview — vrátí sílu sestavy (per linie, attack/defense, overall)
+// + comparison se soupeřem (auto best 11). Pure read, žádné DB writes.
+// Když je předán matchId, backend si sám dohledá opponent.
+gameRouter.post("/teams/:teamId/lineup-preview", async (c) => {
+  const teamId = c.req.param("teamId");
+  let body: {
+    matchId?: string;
+    formation?: string;
+    tactic?: string;
+    captainId?: string | null;
+    players?: Array<{ playerId: string; matchPosition: string }>;
+  };
+  try {
+    body = await c.req.json();
+  } catch (e) {
+    logger.warn({ module: "game" }, "lineup-preview parse body", e);
+    return c.json({ error: "invalid_body" }, 400);
+  }
+
+  const players = body.players ?? [];
+  if (players.length === 0) return c.json({ error: "no_players" }, 400);
+
+  const { mapRowToMatchPlayer, autoSelectBest11 } = await import("../engine/lineup-loader");
+  const { calcLineupPreview } = await import("../engine/lineup-strength");
+
+  // Load own players
+  const placeholders = players.map(() => "?").join(",");
+  const rows = (await c.env.DB.prepare(
+    `SELECT id, first_name, last_name, nickname, position, skills, personality, life_context, physical FROM players WHERE id IN (${placeholders}) AND team_id = ?`
+  ).bind(...players.map((p) => p.playerId), teamId).all<{ id: string; first_name: string; last_name: string; nickname: string | null; position: string; skills: string; personality: string; life_context: string; physical: string | null }>()).results ?? [];
+
+  const posByPlayerId = new Map(players.map((p) => [p.playerId, p.matchPosition]));
+  const ownLineup = rows.map((r) => mapRowToMatchPlayer(r, posByPlayerId.get(r.id)));
+
+  if (ownLineup.length < 11) {
+    return c.json({ error: "incomplete_lineup", count: ownLineup.length }, 400);
+  }
+
+  const ownSetup = {
+    teamId: 1,
+    teamName: "own",
+    lineup: ownLineup,
+    subs: [],
+    tactic: (body.tactic ?? "balanced") as "offensive" | "balanced" | "defensive" | "long_ball" | "possession" | "pressing",
+    formation: body.formation ?? "4-4-2",
+  };
+
+  // Auto-dohledat opponentTeamId z matchId
+  let opponentTeamId: string | null = null;
+  if (body.matchId) {
+    const matchRow = await c.env.DB.prepare(
+      "SELECT home_team_id, away_team_id FROM matches WHERE id = ?"
+    ).bind(body.matchId).first<{ home_team_id: string; away_team_id: string }>();
+    if (matchRow) {
+      opponentTeamId = matchRow.home_team_id === teamId ? matchRow.away_team_id : matchRow.home_team_id;
+    }
+  }
+
+  let opponentSetup;
+  if (opponentTeamId) {
+    const opp = await autoSelectBest11(c.env.DB, opponentTeamId);
+    if (opp.players.length >= 11) {
+      opponentSetup = {
+        teamId: 2,
+        teamName: "opponent",
+        lineup: opp.players,
+        subs: [],
+        tactic: opp.tactic,
+        formation: opp.formation,
+      };
+    }
+  }
+
+  const preview = calcLineupPreview(ownSetup, opponentSetup);
+  return c.json(preview);
+});
+
 // GET lineup for specific calendar entry
 gameRouter.get("/teams/:teamId/lineup/:calendarId", async (c) => {
   const teamId = c.req.param("teamId");

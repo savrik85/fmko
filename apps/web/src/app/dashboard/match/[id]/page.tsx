@@ -6,6 +6,8 @@ import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, BadgePreview, PositionBadge } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
+import { useTeam } from "@/context/team-context";
+import { MatchBreakdown } from "@/components/MatchBreakdown";
 
 interface MatchEvent {
   minute: number; type: string; playerId: number; playerName: string;
@@ -77,6 +79,7 @@ export default function MatchDetailPage() {
   const params = useParams();
   const router = useRouter();
   const matchId = params.id as string;
+  const { teamId: ownTeamId } = useTeam();
   const [match, setMatch] = useState<MatchDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCommentary, setShowCommentary] = useState(false);
@@ -287,6 +290,11 @@ export default function MatchDetailPage() {
           <StatBar label="Zákroky" home={st.saves[0]} away={st.saves[1]} hc={hc} ac={ac} />
         </div>
       </div>
+
+      {/* ═══ CO ROZHODLO — breakdown faktorů ═══ */}
+      {ownTeamId && (ownTeamId === match.home_team_id || ownTeamId === match.away_team_id) && (
+        <MatchBreakdown teamId={ownTeamId} matchId={match.id} />
+      )}
 
       {/* ═══ HRÁČ ZÁPASU (MVP) ═══ */}
       {mvp && mvp.player && (() => {
