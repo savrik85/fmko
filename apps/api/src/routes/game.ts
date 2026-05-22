@@ -72,7 +72,7 @@ gameRouter.get("/teams/:teamId/training", async (c) => {
   const teamId = c.req.param("teamId");
 
   const team = await c.env.DB.prepare(
-    "SELECT training_type, training_approach, training_sessions, last_training_at, last_training_result FROM teams WHERE id = ?"
+    "SELECT training_type, training_approach, training_sessions, training_days, last_training_at, last_training_result FROM teams WHERE id = ?"
   ).bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "game" }, "fetch training plan", e); return null; });
 
   if (!team) return c.json({ error: "Team not found" }, 404);
@@ -81,10 +81,22 @@ gameRouter.get("/teams/:teamId/training", async (c) => {
     ? JSON.parse(team.last_training_result as string)
     : null;
 
+  // Parse custom training days (JSON array of 1-5). Fallback na default mapping.
+  let trainingDays: number[] | null = null;
+  if (team.training_days) {
+    try {
+      const parsed = JSON.parse(team.training_days as string);
+      if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 1 && d <= 5)) {
+        trainingDays = parsed;
+      }
+    } catch (e) { logger.warn({ module: "game", teamId }, "parse training_days", e); }
+  }
+
   return c.json({
     type: team.training_type ?? "conditioning",
     approach: team.training_approach ?? "balanced",
     sessionsPerWeek: team.training_sessions ?? 2,
+    trainingDays,
     lastTrainingAt: team.last_training_at,
     lastResult,
   });
@@ -93,11 +105,20 @@ gameRouter.get("/teams/:teamId/training", async (c) => {
 // POST /api/teams/:id/training — set training plan
 gameRouter.post("/teams/:teamId/training", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ type: string; approach: string; sessionsPerWeek: number }>();
+  const body = await c.req.json<{ type: string; approach: string; sessionsPerWeek: number; trainingDays?: number[] | null }>();
+
+  // Validace trainingDays: pole 1-5, unikatni, max 5 polozek. null/undefined → default mapping podle sessionsPerWeek.
+  let trainingDaysJson: string | null = null;
+  if (Array.isArray(body.trainingDays)) {
+    const validated = Array.from(new Set(body.trainingDays.filter((d): d is number => typeof d === "number" && d >= 1 && d <= 5))).sort();
+    if (validated.length > 0) {
+      trainingDaysJson = JSON.stringify(validated);
+    }
+  }
 
   await c.env.DB.prepare(
-    "UPDATE teams SET training_type = ?, training_approach = ?, training_sessions = ? WHERE id = ?"
-  ).bind(body.type, body.approach, body.sessionsPerWeek, teamId).run().catch((e) => logger.warn({ module: "game" }, "update training plan", e));
+    "UPDATE teams SET training_type = ?, training_approach = ?, training_sessions = ?, training_days = ? WHERE id = ?"
+  ).bind(body.type, body.approach, body.sessionsPerWeek, trainingDaysJson, teamId).run().catch((e) => logger.warn({ module: "game" }, "update training plan", e));
 
   return c.json({ ok: true });
 });
@@ -1930,8 +1951,8 @@ gameRouter.post("/leagues/:leagueId/generate-schedule", async (c) => {
 gameRouter.get("/teams/:teamId/season-info", async (c) => {
   const teamId = c.req.param("teamId");
 
-  const team = await c.env.DB.prepare("SELECT league_id, training_type, training_sessions, training_approach, season_start, season_end, game_date FROM teams WHERE id = ?")
-    .bind(teamId).first<{ league_id: string | null; training_type: string | null; training_sessions: number | null; training_approach: string | null; season_start: string | null; season_end: string | null; game_date: string | null }>();
+  const team = await c.env.DB.prepare("SELECT league_id, training_type, training_sessions, training_approach, training_days, season_start, season_end, game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ league_id: string | null; training_type: string | null; training_sessions: number | null; training_approach: string | null; training_days: string | null; season_start: string | null; season_end: string | null; game_date: string | null }>();
   if (!team?.league_id) return c.json({ season: 1, currentDay: 1, totalDays: 1, upcoming: [] });
 
   // Batch: league info + calendar entries
@@ -2009,11 +2030,28 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
     });
   }
 
-  // Training days — based on sessions per week setting
+  // Training days — custom training_days override default mapping podle sessions
   if (team.training_type) {
     const sessions = team.training_sessions ?? 2;
-    // Zápasy jsou St(3) + So(6) — tréninky nesmí kolidovat
-    const trainingDays: number[] = sessions >= 3 ? [1, 2, 4] : sessions >= 2 ? [2, 4] : [1];
+    const defaultDayMap: Record<number, number[]> = {
+      1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5],
+    };
+    let customDays: number[] | null = null;
+    if (team.training_days) {
+      try {
+        const parsed = JSON.parse(team.training_days);
+        if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 1 && d <= 5)) {
+          customDays = parsed;
+        }
+      } catch (e) { logger.warn({ module: "game", teamId }, "parse training_days for calendar", e); }
+    }
+    const trainingDays: number[] = (customDays && customDays.length > 0) ? customDays : (defaultDayMap[sessions] ?? defaultDayMap[2]);
+
+    // Match dates v okolí dne d — pro smart-skip indikaci v kalendáři
+    const matchDatesSet = new Set<string>(
+      upcoming.filter((e) => e.type === "match").map((e) => (e.date as string).slice(0, 10))
+    );
+
     const typeLabels: Record<string, string> = { conditioning: "Kondice", technique: "Technika", tactics: "Taktika", match_practice: "Zápasový" };
     const approachLabels: Record<string, string> = { strict: "přísný", balanced: "vyrovnaný", relaxed: "volný" };
     const label = typeLabels[team.training_type] ?? team.training_type;
@@ -2026,11 +2064,18 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
       day.setDate(today.getDate() + d);
       const dow = day.getDay();
       if (trainingDays.includes(dow)) {
+        // Smart-skip indikace: pokud má tým zápas dnes nebo zítra → trénink se přeskočí
+        const dayKey = day.toISOString().slice(0, 10);
+        const tomorrow = new Date(day); tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowKey = tomorrow.toISOString().slice(0, 10);
+        const skipped = matchDatesSet.has(dayKey) || matchDatesSet.has(tomorrowKey);
+
         upcoming.push({
           type: "training",
           date: day.toISOString(),
-          title: `Trénink — ${label}`,
+          title: skipped ? `Volno — zápas v dohledu` : `Trénink — ${label}`,
           subtitle: approach ? `${sessions}×/týden · ${approach}` : `${sessions}×/týden`,
+          ...(skipped ? { status: "Přeskočeno" } : {}),
         });
       }
     }

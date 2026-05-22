@@ -127,10 +127,11 @@ export async function executeDailyTick(
   // U21 týmy zdědí training_type/approach/sessions od parent A-týmu — manažer nastaví trénink
   // pro klub jednou a aplikuje se na obě squady.
   const teams = await env.DB.prepare(
-    `SELECT t.id,
+    `SELECT t.id, t.league_id,
             COALESCE(t.training_type, parent.training_type) as training_type,
             COALESCE(t.training_approach, parent.training_approach) as training_approach,
-            COALESCE(t.training_sessions, parent.training_sessions) as training_sessions
+            COALESCE(t.training_sessions, parent.training_sessions) as training_sessions,
+            COALESCE(t.training_days, parent.training_days) as training_days
        FROM teams t
        LEFT JOIN teams parent ON parent.id = t.parent_team_id
       WHERE t.user_id != 'ai'`
@@ -139,7 +140,39 @@ export async function executeDailyTick(
   for (const team of teams.results) {
     const teamId = team.id as string;
 
-    if (isTrainingDay && team.training_type) {
+    // Per-team training day check: custom training_days (JSON array) override default mapping.
+    // Smart skip: pokud má tým ligový zápas dnes nebo zítra, trénink se přeskočí ("trenér dal volno").
+    const trainingDayMap: Record<number, number[]> = {
+      1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5],
+    };
+    const sessionsForTeam = (team.training_sessions as number) ?? 2;
+    let customTrainingDays: number[] | null = null;
+    if (team.training_days) {
+      try {
+        const parsed = JSON.parse(team.training_days as string);
+        if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 1 && d <= 5)) {
+          customTrainingDays = parsed;
+        }
+      } catch (e) { logger.warn({ module: "daily-tick", teamId }, "parse training_days", e); }
+    }
+    const teamTrainingDays = (customTrainingDays && customTrainingDays.length > 0)
+      ? customTrainingDays
+      : (trainingDayMap[sessionsForTeam] ?? trainingDayMap[2]);
+    const isTeamTrainingDay = teamTrainingDays.includes(dayOfWeek);
+
+    let skipTrainingForMatch = false;
+    if (isTrainingDay && isTeamTrainingDay && team.league_id) {
+      const tomorrowEnd = new Date(now); tomorrowEnd.setUTCDate(tomorrowEnd.getUTCDate() + 1); tomorrowEnd.setUTCHours(23, 59, 59, 999);
+      const upcomingMatch = await env.DB.prepare(
+        "SELECT sc.id FROM season_calendar sc JOIN matches m ON m.calendar_id = sc.id WHERE sc.league_id = ? AND sc.scheduled_at >= ? AND sc.scheduled_at <= ? AND sc.status = 'scheduled' AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1"
+      ).bind(team.league_id, now.toISOString(), tomorrowEnd.toISOString(), teamId, teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "daily-tick", teamId }, "check tomorrow match", e); return null; });
+      if (upcomingMatch) {
+        skipTrainingForMatch = true;
+        logger.info({ module: "daily-tick", teamId }, `SKIP training (zápas <=24h) day=${dayOfWeek}`);
+      }
+    }
+
+    if (isTrainingDay && isTeamTrainingDay && !skipTrainingForMatch && team.training_type) {
       try {
         // Vyloučit zraněné — zraněný hráč netrenuje (předtím byl pre-existing bug, šel do simulátoru).
         const playersResult = await env.DB.prepare(
@@ -515,7 +548,7 @@ export async function executeDailyTick(
   logger.info({ module: "daily-tick" }, "reached game date advancement section");
   // ── Advance game date for ALL teams (including AI) ──
   const allTeams = await env.DB.prepare(
-    "SELECT t.id, t.user_id, t.league_id, t.game_date, t.training_type, t.training_sessions, v.size as village_size, v.district as village_district, v.population as village_population FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
+    "SELECT t.id, t.user_id, t.league_id, t.game_date, t.training_type, t.training_sessions, t.training_days, v.size as village_size, v.district as village_district, v.population as village_population FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
   ).all();
   for (const team of allTeams.results) {
     const teamId = team.id as string;
@@ -727,20 +760,43 @@ export async function executeDailyTick(
         }
       }
 
-      // ── Training cost (only on actual training days, not every weekday) ──
+      // ── Training cost (only on actual training days that ran — custom training_days
+      // override default mapping, smart-skip se kontroluje u top loop a tady musíme
+      // replikovat stejné podmínky, aby se náklad netáhl při skipnutém tréninku) ──
       if (team.training_type && newDayOfWeek >= 1 && newDayOfWeek <= 5) {
         const sessions = (team.training_sessions as number) ?? 2;
-        // Map sessions/week to specific days: 1→Tue, 2→Tue+Thu, 3→Mon+Wed+Fri, 4→Mon+Tue+Thu+Fri, 5→all
         const trainingDayMap: Record<number, number[]> = {
           1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5],
         };
-        const trainingDays = trainingDayMap[sessions] ?? trainingDayMap[2];
-        if (trainingDays.includes(newDayOfWeek)) {
+        let customDays: number[] | null = null;
+        if (team.training_days) {
           try {
-            const { processTrainingCost } = await import("./finance-processor");
-            await processTrainingCost(env.DB, teamId, newGameDate, (team.village_size as string) ?? "village");
-          } catch (e) {
-            logger.error({ module: "daily-tick" }, `training cost failed for team ${teamId}`, e);
+            const parsed = JSON.parse(team.training_days as string);
+            if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 1 && d <= 5)) {
+              customDays = parsed;
+            }
+          } catch (e) { logger.warn({ module: "daily-tick", teamId }, "parse training_days for cost", e); }
+        }
+        const trainingDays = (customDays && customDays.length > 0) ? customDays : (trainingDayMap[sessions] ?? trainingDayMap[2]);
+
+        if (trainingDays.includes(newDayOfWeek)) {
+          // Smart skip — match within next ~24h → no training, no cost
+          let skipForMatch = false;
+          if (team.league_id) {
+            const nowDate = new Date(newGameDate as string);
+            const tomorrowEnd = new Date(nowDate); tomorrowEnd.setUTCDate(tomorrowEnd.getUTCDate() + 1); tomorrowEnd.setUTCHours(23, 59, 59, 999);
+            const upcomingMatch = await env.DB.prepare(
+              "SELECT sc.id FROM season_calendar sc JOIN matches m ON m.calendar_id = sc.id WHERE sc.league_id = ? AND sc.scheduled_at >= ? AND sc.scheduled_at <= ? AND sc.status = 'scheduled' AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1"
+            ).bind(team.league_id, nowDate.toISOString(), tomorrowEnd.toISOString(), teamId, teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "daily-tick", teamId }, "training cost match check", e); return null; });
+            if (upcomingMatch) skipForMatch = true;
+          }
+          if (!skipForMatch) {
+            try {
+              const { processTrainingCost } = await import("./finance-processor");
+              await processTrainingCost(env.DB, teamId, newGameDate, (team.village_size as string) ?? "village");
+            } catch (e) {
+              logger.error({ module: "daily-tick" }, `training cost failed for team ${teamId}`, e);
+            }
           }
         }
       }
