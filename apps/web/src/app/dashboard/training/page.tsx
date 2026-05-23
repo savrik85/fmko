@@ -59,6 +59,8 @@ export default function TrainingPage() {
   const [type, setType] = useState<TrainingType>("conditioning");
   const [approach, setApproach] = useState<TrainingApproach>("balanced");
   const [sessions, setSessions] = useState(2);
+  // Custom training days (1=Po, 2=Út, 3=St, 4=Čt, 5=Pá). null = použít default podle sessions.
+  const [trainingDays, setTrainingDays] = useState<number[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<TrainingResult | null>(null);
@@ -70,7 +72,7 @@ export default function TrainingPage() {
   useEffect(() => {
     if (!teamId) return;
     Promise.all([
-      apiFetch<{ type: TrainingType; approach: TrainingApproach; sessionsPerWeek: number; lastResult: TrainingResult | null }>(
+      apiFetch<{ type: TrainingType; approach: TrainingApproach; sessionsPerWeek: number; trainingDays: number[] | null; lastResult: TrainingResult | null }>(
         `/api/teams/${teamId}/training`
       ),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
@@ -80,6 +82,7 @@ export default function TrainingPage() {
       setType(data.type);
       setApproach(data.approach);
       setSessions(data.sessionsPerWeek);
+      setTrainingDays(data.trainingDays ?? null);
       setResult(data.lastResult);
       setStats(statsData);
       setAbsences(absencesData.absences ?? []);
@@ -100,7 +103,7 @@ export default function TrainingPage() {
       await apiFetch(`/api/teams/${teamId}/training`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, approach, sessionsPerWeek: sessions }),
+        body: JSON.stringify({ type, approach, sessionsPerWeek: sessions, trainingDays }),
       });
       setDirty(false);
     } catch (e) {
@@ -189,7 +192,7 @@ export default function TrainingPage() {
               {[1, 2, 3].map((n) => (
                 <button
                   key={n}
-                  onClick={() => { setSessions(n); setDirty(true); }}
+                  onClick={() => { setSessions(n); setTrainingDays(null); setDirty(true); }}
                   className={`w-10 py-2 rounded-lg text-center font-heading font-bold text-sm transition-all ${
                     sessions === n
                       ? "bg-white shadow-sm text-pitch-600"
@@ -202,6 +205,68 @@ export default function TrainingPage() {
             </div>
           </div>
         </div>
+
+        {/* Training days picker — checkboxes Po-Pá */}
+        {(() => {
+          const DEFAULT_DAY_MAP: Record<number, number[]> = { 1: [2], 2: [2, 4], 3: [1, 3, 5] };
+          const effectiveDays = trainingDays && trainingDays.length > 0 ? trainingDays : (DEFAULT_DAY_MAP[sessions] ?? [2, 4]);
+          const DAY_LABELS = [
+            { num: 1, short: "Po", full: "Pondělí" },
+            { num: 2, short: "Út", full: "Úterý" },
+            { num: 3, short: "St", full: "Středa" },
+            { num: 4, short: "Čt", full: "Čtvrtek" },
+            { num: 5, short: "Pá", full: "Pátek" },
+          ];
+          const isCustom = trainingDays && trainingDays.length > 0;
+          const toggleDay = (n: number) => {
+            const current = effectiveDays;
+            const next = current.includes(n)
+              ? current.filter((d) => d !== n)
+              : [...current, n].sort((a, b) => a - b);
+            // null = reset to default; pole = custom (i prázdné se ukládá jako default)
+            setTrainingDays(next.length === 0 ? null : next);
+            setDirty(true);
+          };
+          return (
+            <div>
+              <div className="flex items-baseline justify-between mb-1.5">
+                <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Dny tréninku</div>
+                {isCustom ? (
+                  <button
+                    onClick={() => { setTrainingDays(null); setDirty(true); }}
+                    className="text-[10px] text-pitch-600 hover:underline font-heading"
+                  >Vrátit na výchozí</button>
+                ) : (
+                  <span className="text-[10px] text-muted-light font-heading uppercase">Výchozí</span>
+                )}
+              </div>
+              <div className="grid grid-cols-5 gap-1.5">
+                {DAY_LABELS.map((d) => {
+                  const active = effectiveDays.includes(d.num);
+                  return (
+                    <button
+                      key={d.num}
+                      onClick={() => toggleDay(d.num)}
+                      title={d.full}
+                      className={`py-2.5 rounded-lg text-center font-heading font-bold text-sm transition-all border-2 ${
+                        active
+                          ? "border-pitch-500 bg-pitch-50/60 text-pitch-700"
+                          : "border-transparent bg-gray-50 text-muted hover:text-ink"
+                      }`}
+                    >
+                      {d.short}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-2 text-[11px] text-muted leading-relaxed">
+                💡 Trénink den před zápasem oslabí hráče (kondice −3 až −5).{" "}
+                <strong className="text-pitch-700">Pokud máš zápas dnes nebo zítra, trénink se automaticky přeskočí.</strong>{" "}
+                Doporučení: trénovat brzy v týdnu (Po–St), pokud hraješ o víkendu.
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Save — right after settings, always visible */}
