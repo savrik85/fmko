@@ -1128,7 +1128,7 @@ teamsRouter.patch("/:id/manager", async (c) => {
   if (manager.user_id !== userId) return c.json({ error: "Not your manager" }, 403);
 
   // Parse body
-  let body: { name?: unknown; bio?: unknown; avatar?: unknown };
+  let body: { name?: unknown; bio?: unknown; avatar?: unknown; age?: unknown; birthplace?: unknown };
   try { body = await c.req.json(); } catch (e) {
     logger.warn({ module: "teams" }, "parse manager PATCH body", e);
     return c.json({ error: "Invalid JSON" }, 400);
@@ -1169,14 +1169,46 @@ teamsRouter.patch("/:id/manager", async (c) => {
     avatarToUpdate = JSON.stringify(body.avatar);
   }
 
-  // Update — COALESCE drz puvodni hodnoty kdyz field neni v body
+  // Validace age — 18-80 (kosmeticky, zadny gameplay impact)
+  let ageToUpdate: number | null = null;
+  if (body.age !== undefined) {
+    if (typeof body.age !== "number" || !Number.isInteger(body.age) || body.age < 18 || body.age > 80) {
+      return c.json({ error: "age must be integer 18–80" }, 400);
+    }
+    ageToUpdate = body.age;
+  }
+
+  // Validace birthplace — string 0-50 znaku, prazdny = null
+  let birthplaceToUpdate: string | null | undefined = undefined;
+  if (body.birthplace !== undefined) {
+    if (body.birthplace === null) {
+      birthplaceToUpdate = null;
+    } else {
+      if (typeof body.birthplace !== "string") return c.json({ error: "birthplace must be string or null" }, 400);
+      const trimmed = body.birthplace.trim();
+      if (trimmed.length > 50) return c.json({ error: "birthplace max 50 characters" }, 400);
+      birthplaceToUpdate = trimmed || null;
+    }
+  }
+
+  // Update — COALESCE drz puvodni hodnoty kdyz field neni v body.
+  // bio a birthplace pouzivaji CASE flag protoze chceme rozlisit "nezmenit" vs "nastavit na null".
   await c.env.DB.prepare(
-    "UPDATE managers SET name = COALESCE(?, name), bio = CASE WHEN ? = 1 THEN ? ELSE bio END, avatar = COALESCE(?, avatar) WHERE id = ? AND user_id != 'ai'"
+    `UPDATE managers SET
+       name = COALESCE(?, name),
+       bio = CASE WHEN ? = 1 THEN ? ELSE bio END,
+       avatar = COALESCE(?, avatar),
+       age = COALESCE(?, age),
+       birthplace = CASE WHEN ? = 1 THEN ? ELSE birthplace END
+     WHERE id = ? AND user_id != 'ai'`
   ).bind(
     nameToUpdate,
     bioToUpdate === undefined ? 0 : 1,
     bioToUpdate === undefined ? null : bioToUpdate,
     avatarToUpdate,
+    ageToUpdate,
+    birthplaceToUpdate === undefined ? 0 : 1,
+    birthplaceToUpdate === undefined ? null : birthplaceToUpdate,
     manager.id,
   ).run();
 

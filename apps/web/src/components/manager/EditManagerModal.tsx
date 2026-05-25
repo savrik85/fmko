@@ -24,6 +24,8 @@ const BIO_MAX = 300;
 export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
   const [name, setName] = useState(manager.name);
   const [bio, setBio] = useState(manager.bio ?? "");
+  const [age, setAge] = useState<string>(manager.age != null ? String(manager.age) : "");
+  const [birthplace, setBirthplace] = useState(manager.birthplace ?? "");
   const [avatar, setAvatar] = useState<Record<string, unknown>>(manager.avatar);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +33,10 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
   const trimmedName = name.trim();
   const nameValid = trimmedName.length >= 1 && trimmedName.length <= NAME_MAX;
   const bioValid = bio.trim().length <= BIO_MAX;
-  const canSave = nameValid && bioValid && !saving;
+  const ageNum = age === "" ? null : Number(age);
+  const ageValid = ageNum === null || (Number.isInteger(ageNum) && ageNum >= 18 && ageNum <= 80);
+  const birthplaceValid = birthplace.trim().length <= 50;
+  const canSave = nameValid && bioValid && ageValid && birthplaceValid && !saving;
 
   const randomize = () => setAvatar(generateManagerFace());
 
@@ -47,6 +52,8 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
           name: trimmedName,
           bio: bio.trim() || null,
           avatar,
+          ...(ageNum !== null ? { age: ageNum } : {}),
+          birthplace: birthplace.trim() || null,
         }),
       });
       onSaved(updated);
@@ -103,6 +110,44 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
               <span className={`tabular-nums ${name.length > NAME_MAX - 5 ? "text-amber-600" : "text-muted-light"}`}>
                 {name.length}/{NAME_MAX}
               </span>
+            </div>
+          </div>
+
+          {/* Age + Birthplace — side by side */}
+          <div className="flex gap-3">
+            <div className="w-24 shrink-0">
+              <label className="block text-[11px] text-muted font-heading uppercase tracking-wide mb-1">
+                Věk
+              </label>
+              <input
+                type="number"
+                value={age}
+                onChange={(e) => setAge(e.target.value)}
+                min={18}
+                max={80}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-pitch-500 tabular-nums"
+                placeholder="40"
+              />
+              <div className="mt-1 text-[10px] text-muted-light">
+                {ageValid ? "18–80" : <span className="text-card-red">18–80 let</span>}
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <label className="block text-[11px] text-muted font-heading uppercase tracking-wide mb-1">
+                Bydliště
+              </label>
+              <input
+                type="text"
+                value={birthplace}
+                onChange={(e) => setBirthplace(e.target.value)}
+                maxLength={50}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-pitch-500"
+                placeholder="Strakonice"
+              />
+              <div className="mt-1 flex items-baseline justify-between text-[10px]">
+                <span className="text-muted-light">max 50 znaků</span>
+                <span className="tabular-nums text-muted-light">{birthplace.length}/50</span>
+              </div>
             </div>
           </div>
 
