@@ -233,6 +233,7 @@ export interface TeamMatchResults {
 
 export interface ManagerProfile {
   id: string;
+  userId?: string;
   name: string;
   backstory: string;
   avatar: Record<string, unknown>;

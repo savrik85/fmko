@@ -1049,6 +1049,7 @@ teamsRouter.get("/:id/manager", async (c) => {
   if (row) {
     return c.json({
       id: row.id,
+      userId: row.user_id,
       name: row.name,
       backstory: row.backstory,
       avatar: JSON.parse(row.avatar as string),
@@ -1089,6 +1090,7 @@ teamsRouter.get("/:id/manager", async (c) => {
 
   return c.json({
     id: mgrId,
+    userId: "ai",
     name: mgr.name,
     backstory: mgr.backstory,
     avatar: mgr.avatar,
@@ -1101,6 +1103,104 @@ teamsRouter.get("/:id/manager", async (c) => {
     reputation: mgr.reputation,
     bio: mgr.bio,
     birthplace: mgr.birthplace,
+  });
+});
+
+// PATCH /api/teams/:id/manager — edit kosmeticke pole (name, bio, avatar)
+// Atributy a backstory jsou gameplay-locked, nedaji se editovat.
+teamsRouter.patch("/:id/manager", async (c) => {
+  const tId = c.req.param("id");
+
+  // Auth — load session, must be team owner
+  const { getTokenFromRequest, getSession } = await import("../auth/session");
+  const token = getTokenFromRequest(c);
+  if (!token) return c.json({ error: "Unauthorized" }, 401);
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return c.json({ error: "Invalid session" }, 401);
+  const userId = String(session.userId);
+
+  // Najit manazera (preferuj uzivatelskeho pred AI)
+  const manager = await c.env.DB.prepare(
+    "SELECT id, user_id FROM managers WHERE team_id = ? ORDER BY CASE WHEN user_id = 'ai' THEN 1 ELSE 0 END, created_at DESC LIMIT 1"
+  ).bind(tId).first<{ id: string; user_id: string }>();
+  if (!manager) return c.json({ error: "Manager not found" }, 404);
+  if (manager.user_id === "ai") return c.json({ error: "Cannot edit AI manager" }, 403);
+  if (manager.user_id !== userId) return c.json({ error: "Not your manager" }, 403);
+
+  // Parse body
+  let body: { name?: unknown; bio?: unknown; avatar?: unknown };
+  try { body = await c.req.json(); } catch (e) {
+    logger.warn({ module: "teams" }, "parse manager PATCH body", e);
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+
+  // Validace name
+  let nameToUpdate: string | null = null;
+  if (body.name !== undefined) {
+    if (typeof body.name !== "string") return c.json({ error: "name must be string" }, 400);
+    const trimmed = body.name.trim();
+    if (trimmed.length < 1 || trimmed.length > 30) {
+      return c.json({ error: "name must be 1–30 characters" }, 400);
+    }
+    nameToUpdate = trimmed;
+  }
+
+  // Validace bio (povolen i prazdny string = clear)
+  let bioToUpdate: string | null | undefined = undefined;
+  if (body.bio !== undefined) {
+    if (body.bio === null) {
+      bioToUpdate = null;
+    } else {
+      if (typeof body.bio !== "string") return c.json({ error: "bio must be string or null" }, 400);
+      const trimmed = body.bio.trim();
+      if (trimmed.length > 300) return c.json({ error: "bio max 300 characters" }, 400);
+      bioToUpdate = trimmed;
+    }
+  }
+
+  // Validace avatar — facesjs config, sanity check min 5 klicu
+  let avatarToUpdate: string | null = null;
+  if (body.avatar !== undefined) {
+    if (!body.avatar || typeof body.avatar !== "object" || Array.isArray(body.avatar)) {
+      return c.json({ error: "avatar must be an object" }, 400);
+    }
+    const keys = Object.keys(body.avatar as Record<string, unknown>);
+    if (keys.length < 5) return c.json({ error: "avatar config incomplete" }, 400);
+    avatarToUpdate = JSON.stringify(body.avatar);
+  }
+
+  // Update — COALESCE drz puvodni hodnoty kdyz field neni v body
+  await c.env.DB.prepare(
+    "UPDATE managers SET name = COALESCE(?, name), bio = CASE WHEN ? = 1 THEN ? ELSE bio END, avatar = COALESCE(?, avatar) WHERE id = ? AND user_id != 'ai'"
+  ).bind(
+    nameToUpdate,
+    bioToUpdate === undefined ? 0 : 1,
+    bioToUpdate === undefined ? null : bioToUpdate,
+    avatarToUpdate,
+    manager.id,
+  ).run();
+
+  // Re-fetch a vrat aktualizovany profil (stejny tvar jako GET)
+  const updated = await c.env.DB.prepare(
+    "SELECT * FROM managers WHERE id = ?"
+  ).bind(manager.id).first<Record<string, unknown>>();
+  if (!updated) return c.json({ error: "Update failed" }, 500);
+
+  return c.json({
+    id: updated.id,
+    userId: updated.user_id,
+    name: updated.name,
+    backstory: updated.backstory,
+    avatar: JSON.parse(updated.avatar as string),
+    age: updated.age,
+    coaching: updated.coaching ?? 40,
+    motivation: updated.motivation ?? 40,
+    tactics: updated.tactics ?? 40,
+    youthDevelopment: updated.youth_development ?? 40,
+    discipline: updated.discipline ?? 40,
+    reputation: updated.reputation ?? 30,
+    bio: updated.bio,
+    birthplace: updated.birthplace,
   });
 });
 

@@ -8,6 +8,7 @@ import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { SectionLabel, Spinner, BadgePreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
+import { EditManagerModal } from "@/components/manager/EditManagerModal";
 
 const BACKSTORY_LABELS: Record<string, string> = {
   byvaly_hrac: "Bývalý hráč",
@@ -36,6 +37,10 @@ export default function ManagerDetailPage() {
   const [achievements, setAchievements] = useState<AchievementsPayload | null>(null);
   const [hofRank, setHofRank] = useState<{ rank: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+
+  // Vlastnik muze editovat jen svuj profil (managerId == jeho teamId) a jen u non-AI manazeru
+  const canEdit = !!manager && manager.userId !== "ai" && teamId === managerId;
 
   useEffect(() => {
     if (!teamId) return;
@@ -99,6 +104,15 @@ export default function ManagerDetailPage() {
             </div>
           </div>
 
+          {/* Edit button for own profile */}
+          {canEdit && (
+            <button onClick={() => setEditing(true)}
+              className="bg-white/10 hover:bg-white/20 rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0">
+              <div className="text-xl leading-none">{"✏️"}</div>
+              <div className="text-white/70 text-[10px] font-heading font-bold uppercase mt-1">Upravit</div>
+            </button>
+          )}
+
           {/* Message button for rival managers */}
           {managerId !== teamId && teamId && (team as any).user_id !== "ai" && (
             <button onClick={async () => {
@@ -120,6 +134,16 @@ export default function ManagerDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Edit modal */}
+      {editing && manager && teamId && (
+        <EditManagerModal
+          manager={manager}
+          teamId={teamId}
+          onClose={() => setEditing(false)}
+          onSaved={(m) => setManager(m)}
+        />
+      )}
 
       <div className="page-container space-y-5">
 
