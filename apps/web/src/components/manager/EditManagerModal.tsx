@@ -67,17 +67,23 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-content" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
-        <div className="p-4 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-heading font-bold text-lg">Upravit profil trenéra</h2>
-            <button onClick={onClose} className="text-muted hover:text-ink text-xl leading-none">✕</button>
-          </div>
+      <div
+        className="modal-content flex flex-col"
+        style={{ maxWidth: 480, maxHeight: "92vh", overflow: "hidden" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Sticky header */}
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-gray-100 bg-paper">
+          <h2 className="font-heading font-bold text-base sm:text-lg">Upravit profil trenéra</h2>
+          <button onClick={onClose} className="text-muted hover:text-ink text-xl leading-none w-8 h-8 flex items-center justify-center -mr-2">✕</button>
+        </div>
 
-          {/* Avatar preview + randomize */}
-          <div className="flex flex-col items-center gap-2">
-            <div className="bg-gray-50 rounded-xl p-2">
-              <FaceAvatar faceConfig={avatar} size={160} />
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 sm:px-6 sm:py-4 space-y-3">
+          {/* Avatar preview + randomize — kompaktnejsi na mobile */}
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="bg-gray-50 rounded-xl p-1.5 sm:p-2">
+              <FaceAvatar faceConfig={avatar} size={120} />
             </div>
             <button
               onClick={randomize}
@@ -177,14 +183,17 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
               {error}
             </div>
           )}
+        </div>
 
-          {/* Actions */}
-          <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
-            <Button variant="ghost" onClick={onClose} disabled={saving}>Zrušit</Button>
-            <Button variant="primary" onClick={save} disabled={!canSave}>
-              {saving ? "Ukládám..." : "Uložit"}
-            </Button>
-          </div>
+        {/* Sticky footer s tlacitky — vzdy viditelny i kdyz user scrolluje */}
+        <div
+          className="flex gap-2 px-4 py-3 sm:px-6 sm:py-4 border-t border-gray-100 bg-paper"
+          style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))" }}
+        >
+          <Button variant="ghost" onClick={onClose} disabled={saving} className="flex-1 sm:flex-none">Zrušit</Button>
+          <Button variant="primary" onClick={save} disabled={!canSave} className="flex-1 sm:flex-none">
+            {saving ? "Ukládám..." : "Uložit"}
+          </Button>
         </div>
       </div>
     </div>
