@@ -39,6 +39,7 @@ interface ScheduleMatch {
   homeScore: number | null;
   awayScore: number | null;
   scheduledAt: string | null;
+  isFriendly?: boolean;
   isHome: boolean;
   promoted?: boolean;
   promotionCost?: number | null;
@@ -208,13 +209,17 @@ export default function DashboardPage() {
   const gameDate = team.game_date ? new Date(team.game_date) : null;
   const dayOfWeek = gameDate?.getUTCDay() ?? 0;
   const isTrainingDay = dayOfWeek >= 1 && dayOfWeek <= 5;
-  // Match day: next match is on the SAME calendar date as game_date
+  // Match day: next match is on the SAME calendar date as game_date.
+  // Pending přátelák jehož scheduledAt už uplynulo se taky bere jako match day — viseli
+  // by jinak rozporně s kartou ("DNES!"), dokud match-tick neproběhne.
   const isMatchDay = (() => {
     if (!nextMatch?.scheduledAt || !gameDate) return false;
     const matchDate = new Date(nextMatch.scheduledAt);
-    return matchDate.getUTCFullYear() === gameDate.getUTCFullYear()
+    const sameDay = matchDate.getUTCFullYear() === gameDate.getUTCFullYear()
       && matchDate.getUTCMonth() === gameDate.getUTCMonth()
       && matchDate.getUTCDate() === gameDate.getUTCDate();
+    const pendingPast = nextMatch.isFriendly && matchDate.getTime() <= gameDate.getTime();
+    return sameDay || pendingPast;
   })();
   const matchOpponent = nextMatch ? (nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName) : null;
   const dayName = gameDate ? gameDate.toLocaleDateString("cs", { weekday: "long" }) : "";

@@ -218,6 +218,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     awayScore: row.away_score,
     scheduledAt: row.scheduled_at || row.simulated_at || row.created_at,
     gameWeek: row.game_week,
+    isFriendly: row.calendar_id === null,
     isHome: row.home_team_id === teamId,
     simulatedAt: row.simulated_at,
     promoted: (row.promoted as number | null) === 1,
@@ -887,11 +888,18 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
     if (friendlyRes.results.length > 0) return c.json({ error: "Jeden z týmů už dnes hrál nebo má naplánovaný přátelák" }, 400);
   }
 
-  // Create match PŘED status claim — aby accepted challenge nikdy nebyl bez match
+  // Create match PŘED status claim — aby accepted challenge nikdy nebyl bez match.
+  // Pokud už proběhl dnešní match-tick (cron 0 16 UTC), naplánovat na zítřejší game_date —
+  // zítra ráno daily-tick game_date posune o den, zítra v 18:00 CEST match-tick zápas odsimuluje.
+  // Bez tohoto by FE den mezi acceptance a simulací ukazoval rozporně ("Tréninkový den" × "dnes!").
+  const matchDate = new Date(team.game_date);
+  if (new Date().getUTCHours() >= 17) {
+    matchDate.setUTCDate(matchDate.getUTCDate() + 1);
+  }
   const matchId = uuid();
   await c.env.DB.prepare(
     "INSERT INTO matches (id, home_team_id, away_team_id, status, created_at) VALUES (?, ?, ?, 'lineups_open', ?)"
-  ).bind(matchId, challengerTeamId, teamId, team.game_date).run();
+  ).bind(matchId, challengerTeamId, teamId, matchDate.toISOString()).run();
 
   // Atomický claim — status=accepted + match_id jedním UPDATE. Pokud mezitím někdo jiný přijal
   // (race condition) nebo challenge expirovala, smažeme match a vrátíme 409.
