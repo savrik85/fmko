@@ -236,6 +236,64 @@ const ABSURD_EXCUSES: Array<{ text: string; emoji: string; timing: AbsenceTiming
   { text: "Čistil jsem ve Spůli rybník", emoji: "\u{1F3A3}", timing: "day_before", env: "rural" },
   { text: "Zmlátili mě ve Vimperku cikáni", emoji: "\u{1F915}", timing: "match_day" },
   { text: "Čekal jsem na Cmunďáka, ale nepřijel", emoji: "\u{1F6AD}", timing: "match_day" },
+
+  // Prachaticko / Šumava — rozšíření
+  { text: "Na Churáňově konečně napadlo, beru běžky a mizím na Zadov", emoji: "\u{1F3BF}", timing: "match_day", env: "rural" },
+  { text: "Třešně ve Lhenicích přezrály, musím česat než to oklovou ptáci", emoji: "\u{1F352}", timing: "match_day", env: "rural" },
+  { text: "Jelen mi skočil pod auto u Zbytin, řeším to s pojišťovnou", emoji: "\u{1F98C}", timing: "match_day", env: "rural" },
+  { text: "Na Boubíně taková mlha, že nevidím na kapotu", emoji: "\u{1F32B}", timing: "match_day", env: "rural" },
+  { text: "Jedu přes Strážný do Pasova nakoupit, na hranici stojí kolona", emoji: "\u{1F6D2}", timing: "day_before", env: "rural" },
+  { text: "Vlak na Kubovu Huť zase nejel, čekám na náhradní autobus", emoji: "\u{1F686}", timing: "match_day", env: "rural" },
+  { text: "Dělám u stánku na Slavnostech Zlaté stezky v Prachaticích", emoji: "\u{1F3AA}", timing: "day_before" },
+  { text: "Rys mi prošel přes zahradu v Borových Ladech, volám správu parku", emoji: "\u{1F408}", timing: "match_day", env: "rural" },
+  { text: "V Husinci vypustili přehradu, jdu si pro candáty než je posbírá soused", emoji: "\u{1F3A3}", timing: "match_day", env: "rural" },
+  { text: "Na Kvildě bylo ráno minus dvacet, auto ani neškytlo", emoji: "\u{1F976}", timing: "match_day", env: "rural" },
+  { text: "Sraz hasičů ve Vacově, soutěž v požárním útoku, jsem v družstvu", emoji: "\u{1F692}", timing: "day_before", env: "rural" },
+  { text: "Jedu na pouť do Netolic, děda by mě zaškrtil kdybych nepřišel", emoji: "\u{1F3A1}", timing: "day_before", env: "rural" },
+  { text: "Ženská chce focení na Kratochvíli, rezervovali jsme to měsíc dopředu", emoji: "\u{1F3F0}", timing: "day_before", env: "rural" },
+  { text: "Spadl strom přes silnici za Zbytinama, nikdo tudy neprojede", emoji: "\u{1F332}", timing: "match_day", env: "rural" },
+  { text: "Ve Volarech je pietní akt k pochodu smrti, slíbil jsem věnec", emoji: "\u{1F56F}", timing: "day_before", env: "rural" },
+  { text: "Vyrazili jsme na borůvky k Boubínskýmu jezírku a ztratili se", emoji: "\u{1FAD0}", timing: "match_day", env: "rural" },
+  { text: "Soused ze Zdíkova mi veze dřevo, ale jen dneska má volnou Avii", emoji: "\u{1F69B}", timing: "match_day", env: "rural" },
+  { text: "Tetřev hnízdí, NP zavřel cestu přes Stožec a já tudy musím", emoji: "\u{1F426}", timing: "match_day", env: "rural" },
+  { text: "Na Stachách je traktoriáda, přihlásil jsem svýho Zetora", emoji: "\u{1F69C}", timing: "day_before", env: "rural" },
+  { text: "Šel jsem na houby pod Boubín a narazil na stádo divočáků", emoji: "\u{1F417}", timing: "match_day", env: "rural" },
+  { text: "Klíště z Boubína, radši zajedu k doktorovi do Prachatic", emoji: "\u{1FAB2}", timing: "match_day", env: "rural" },
+  { text: "Pasou se mi krávy až u Lažiště, naháním je celý ráno", emoji: "\u{1F404}", timing: "match_day", env: "rural" },
+  { text: "Husinecká přehrada zamrzla, jdu zkusit led než roztaje", emoji: "⛸", timing: "match_day", env: "rural" },
+  { text: "Na Libín vylezli turisti, u rozhledny se nedá zaparkovat", emoji: "\u{1F5FC}", timing: "match_day", env: "rural" },
+  { text: "Soused z Volar mě prosil pomoct s roubenkou, jen dneska má majstra", emoji: "\u{1F3DA}", timing: "day_before", env: "rural" },
+  { text: "Lenorská sklárna má den otevřených dveří, dcera tam chce na ukázku", emoji: "\u{1F3ED}", timing: "day_before", env: "rural" },
+  { text: "Sjížděli jsme Vltavu od Soumarskýho mostu a vítr nás otočil", emoji: "\u{1F6F6}", timing: "match_day", env: "rural" },
+  { text: "Na Chalupský slati u Kvildy se ztratil turista, jdu pomáhat hledat", emoji: "\u{1F97E}", timing: "match_day", env: "rural" },
+  { text: "Perlorodky v Blanici kontrolujou ekologové, hlídám brod u Strunkovic", emoji: "\u{1F9AA}", timing: "match_day", env: "rural" },
+  { text: "Schwarzenberským kanálem zase plavili dříví, vzal jsem děti se kouknout", emoji: "\u{1FAB5}", timing: "day_before", env: "rural" },
+  { text: "Munickej rybník v Netolicích vypouštějí, jdu na výlov", emoji: "\u{1F41F}", timing: "match_day", env: "rural" },
+  { text: "V Záblatí mají hon, jsem honec, slíbil jsem myslivcům", emoji: "\u{1F98A}", timing: "day_before", env: "rural" },
+  { text: "Husovy slavnosti v Husinci, dělám tam pořadatele", emoji: "\u{1F4DC}", timing: "day_before", env: "rural" },
+  { text: "V Bavorově je posvícení, tchýně peče a čeká celá rodina", emoji: "\u{1F967}", timing: "day_before", env: "rural" },
+  { text: "Ve Vlachově Březí rozkopali náměstí, autem se ven nedostanu", emoji: "\u{1F6A7}", timing: "match_day", env: "rural" },
+  { text: "Na Zadově je závod psích spřežení, pomáhám u trati", emoji: "\u{1F6F7}", timing: "day_before", env: "rural" },
+  { text: "Ze Stožecké kaple jde procesí, slíbil jsem nést korouhev", emoji: "\u{26EA}", timing: "day_before", env: "rural" },
+  { text: "Med ze šumavskejch včel se točí, nemůžu nechat medomet bez dozoru", emoji: "\u{1F36F}", timing: "match_day", env: "rural" },
+
+  // Vimperk
+  { text: "Na vimperským zámku natáčeli film, zavřeli celej kopec", emoji: "\u{1F3AC}", timing: "match_day", env: "rural" },
+  { text: "Ve Vimperku berou v tiskárně starej papír, vezu plnej vozík", emoji: "\u{1F4F0}", timing: "match_day", env: "rural" },
+  { text: "Ve Vimperku zavřeli most přes Volyňku, objížďka přes celý město", emoji: "\u{1F6A7}", timing: "match_day", env: "rural" },
+  { text: "Správa parku ve Vimperku mě volá značit cesty, jsem dobrovolník", emoji: "\u{1FAA7}", timing: "day_before", env: "rural" },
+  // Čkyně
+  { text: "Ve Čkyni je pouť, kolotoče stojí rovnou u hřiště", emoji: "\u{1F3A0}", timing: "day_before", env: "rural" },
+  { text: "Na čkyňským koupališti vypouštějí vodu, pomáhám s rybama", emoji: "\u{1F3CA}", timing: "match_day", env: "rural" },
+  { text: "V čkyňský synagoze je výstava, slíbil jsem dělat průvodce", emoji: "\u{1F54D}", timing: "day_before", env: "rural" },
+  // Spůle
+  { text: "Ve Spůli praskla hráz u rybníka, naháníme kapry po louce", emoji: "\u{1F30A}", timing: "match_day", env: "rural" },
+  { text: "Ve Spůli mi zapadl traktor do bahna u boudy, čekám na souseda", emoji: "\u{1F69C}", timing: "match_day", env: "rural" },
+  { text: "Sousedovi ze Spůle ujely ovce, honíme je přes celou ves", emoji: "\u{1F411}", timing: "match_day", env: "rural" },
+  // Hradčany
+  { text: "Na Mářskej vrch lezou turisti a parkujou mi na dvoře v Hradčanech", emoji: "\u{1F9ED}", timing: "match_day", env: "rural" },
+  { text: "V Hradčanech je hasičská soutěž, dělám časoměřiče", emoji: "\u{23F1}", timing: "day_before", env: "rural" },
+  { text: "Šel jsem z Mářského vrchu zkratkou a zabloudil v lese nad Hradčany", emoji: "\u{1F332}", timing: "match_day", env: "rural" },
 ];
 
 // ═══════════════════════════════════════════════
@@ -279,6 +337,23 @@ const HANGOVER_EXCUSES = [
   { text: "Myslel jsem že brčály jsou nealko. Nebyly", emoji: "\u{1F37A}" },
   { text: "Probudil jsem se v Plzni a vůbec nevím jak", emoji: "\u{1F646}" },
   { text: "Oslava povýšení se zvrhla, v práci zítra koukám jak sejra", emoji: "\u{1F389}" },
+
+  // Prachaticko / Šumava
+  { text: "Vimperská pouť mě složila, hlava jak škopek", emoji: "\u{1F3A1}" },
+  { text: "Lhenickej košt slivovice, přežiju to tak do středy", emoji: "\u{1F351}" },
+  { text: "Hasičskej bál ve Vacově, pil jsem za celej sbor", emoji: "\u{1F692}" },
+  { text: "Po zabijačce ve Zdíkově došla nálada dřív než slivovice", emoji: "\u{1F943}" },
+  { text: "Tancovačka ve Čkyni skončila ráno, dneska mě nikam nedostanete", emoji: "\u{1FA97}" },
+  { text: "Degustace ve vimperským pivovaru se protáhla do rána", emoji: "\u{1F37A}" },
+  { text: "Sklářská slavnost v Lenoře, pil jsem s mistrama do rána", emoji: "\u{1F377}" },
+  { text: "Výlov v Netolicích, k tomu rybí polívka a slivovice, ležím", emoji: "\u{1F372}" },
+  { text: "Masopust ve Vlachově Březí, průvod skončil v hospodě", emoji: "\u{1F3AD}" },
+  { text: "Myslivecká poslední leč v Záblatí, zvěřina a štamprlata", emoji: "\u{1F98C}" },
+  { text: "Posvícení v Bavorově, koláče zapíjený slivovicí, dneska ne", emoji: "\u{1F967}" },
+  { text: "Vimperskej pivovar stáčel várku, ochutnávali jsme každou sudou", emoji: "\u{1F37A}" },
+  { text: "Pouť ve Čkyni, na Votáčce zavírali až k ránu", emoji: "\u{1F3A0}" },
+  { text: "Hasičskej táborák v Hradčanech, dopadlo to jak vždycky", emoji: "\u{1F525}" },
+  { text: "Zabíjačka ve Spůli, do slivovice nám dali ještě domácí likér", emoji: "\u{1F943}" },
 ];
 
 // ═══════════════════════════════════════════════
@@ -330,6 +405,16 @@ const COMMUTE_EXCUSES: Array<{ text: string; emoji: string; env?: ExcuseEnv }> =
   { text: "Kolega co mě veze onemocněl, nemám jak se dostat", emoji: "\u{1F912}" },
   // Vesnické
   { text: "Musím jet přes dvě vesnice a silnice je rozkopaná", emoji: "\u{1F6A7}", env: "rural" },
+  // Prachaticko / Šumava
+  { text: "Za Husincem mi skočil pod kola srnec, čekám na odtahovku", emoji: "\u{1F98C}", env: "rural" },
+  { text: "Mlha na Šumavě, jedu krokem, takhle to nestihnu", emoji: "\u{1F32B}", env: "rural" },
+  { text: "Vlak na Kubovu Huť nejel, náhradka má hodinu zpoždění", emoji: "\u{1F686}", env: "rural" },
+  { text: "Silnice z Vimperku zavřená, objížďka přes Zdíkov a Stachy", emoji: "\u{1F6A7}", env: "rural" },
+  { text: "Na Strážném stojím v koloně z Německa, ani se nehne", emoji: "\u{1F697}", env: "rural" },
+  { text: "Na Kubově Huti zapadl autobus do závěje, čekáme na pluh", emoji: "\u{1F68C}", env: "rural" },
+  { text: "Na Zadově sníh, řetězy nemám a ten kopec prostě nevyjedu", emoji: "\u{26C4}", env: "rural" },
+  { text: "U Soumarskýho mostu zavřeli silnici kvůli závodům", emoji: "\u{1F6A7}", env: "rural" },
+  { text: "Stádo jelenů u Borových Lad přebíhá silnici, radši stojím", emoji: "\u{1F98C}", env: "rural" },
   // Pražské / městské
   { text: "Nejela tramvaj, výluka na Palackého náměstí", emoji: "\u{1F68B}", env: "urban" },
   { text: "Magistrála byla totálně ucpaná", emoji: "\u{1F697}", env: "urban" },
