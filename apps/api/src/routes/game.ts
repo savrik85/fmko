@@ -2308,8 +2308,15 @@ gameRouter.post("/game/advance-day", async (c) => {
 
 // POST /api/game/run-matches — simulace zápasů, max 1 liga za invokaci
 gameRouter.post("/game/run-matches", async (c) => {
-  const { runScheduledMatches } = await import("../multiplayer/match-runner");
+  const { runScheduledMatches, recoverStuckRounds } = await import("../multiplayer/match-runner");
   const targetLeagueId = c.req.query("leagueId");
+
+  // Recovery: dohraj kola uvízlá v 'lineup_locked' (simulace spadla v půlce). Bez tohoto
+  // by endpoint i cron locked kolo ignorovaly (hledají jen 'scheduled') a liga by stála.
+  let recoveredRounds: { calendarId: string; leagueId: string; matches: number }[] = [];
+  try {
+    recoveredRounds = await recoverStuckRounds(c.env.DB, c.env.GEMINI_API_KEY);
+  } catch (e) { logger.warn({ module: "game" }, "stuck round recovery failed", e); }
 
   const leagueRows = await c.env.DB.prepare(
     "SELECT DISTINCT t.league_id, MIN(t.game_date) as game_date FROM teams t WHERE t.league_id IS NOT NULL AND t.game_date IS NOT NULL GROUP BY t.league_id"
@@ -2410,7 +2417,7 @@ gameRouter.post("/game/run-matches", async (c) => {
 
   // Collect debug from global
   const debugLogs = (globalThis as any).__lineupDebug ?? [];
-  return c.json({ ok: true, type: "matches", totalMatches, processedLeague, debug: debugLogs });
+  return c.json({ ok: true, type: "matches", totalMatches, processedLeague, recoveredRounds, debug: debugLogs });
 });
 
 // ═══ Classifieds (Placená inzerce) ═══

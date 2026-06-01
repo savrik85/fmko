@@ -13,7 +13,7 @@ import { votesRouter } from "./routes/votes";
 import { cashLoansRouter } from "./routes/cash-loans";
 import u21Router from "./routes/u21";
 // transfers endpoints are in gameRouter
-import { runScheduledMatches } from "./multiplayer/match-runner";
+import { runScheduledMatches, recoverStuckRounds } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
 
 export type Bindings = {
@@ -113,6 +113,16 @@ export default {
     if (isMatchTick) {
       try {
         log("info", "match tick starting");
+
+        // Recovery PŘED běžným zpracováním: dohraj kola uvízlá v 'lineup_locked'
+        // (simulace spadla v půlce). Jinak match-tick locked kolo ignoruje a liga se zasekne.
+        try {
+          const recovered = await recoverStuckRounds(env.DB, env.GEMINI_API_KEY);
+          for (const r of recovered) {
+            log("info", `recovered stuck round ${r.calendarId} (liga ${r.leagueId}): ${r.matches} zápasů dohráno`);
+          }
+        } catch (e) { log("error", "stuck round recovery failed", e); }
+
         const leagues = await env.DB.prepare(
           "SELECT league_id, MAX(game_date) as max_game_date FROM teams WHERE league_id IS NOT NULL AND game_date IS NOT NULL GROUP BY league_id"
         ).all();

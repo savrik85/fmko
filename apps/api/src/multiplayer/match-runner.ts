@@ -26,6 +26,72 @@ export interface MatchRunResult {
     matchType: "pvp" | "pve_home" | "pve_away" | "ai_vs_ai";
 }
 
+export interface RecoveredRound {
+    calendarId: string;
+    leagueId: string;
+    matches: number;
+}
+
+/**
+ * Recovery pro kola uvízlá v 'lineup_locked' — simulace spadla mezi zamčením kola
+ * a přepnutím na 'simulated' (typicky worker CPU/subrequest limit u velkého kola).
+ *
+ * Bez tohoto match-tick i POST /game/run-matches locked kolo IGNORUJÍ (hledají výhradně
+ * status='scheduled') a zároveň ho nedohrají → celá liga se zasekne, protože další kolo
+ * má scheduled_at v budoucnu mimo game_date. Viz incident 2026-06-01 (Okresní přebor
+ * Prachatice, kolo 16: 2/7 zápasů odsimulováno, zbytek uvízl).
+ *
+ * runScheduledMatches je idempotentní (bere jen 'lineups_open'), takže již odsimulované
+ * zápasy zůstanou beze změny — žádné zdvojení skóre/financí. Zpracuje max `limit` kol
+ * za invokaci (ochrana před vyčerpáním času workeru).
+ */
+export async function recoverStuckRounds(
+    db: D1Database,
+    geminiApiKey?: string,
+    limit = 1,
+): Promise<RecoveredRound[]> {
+    const stuck = await db.prepare(
+        "SELECT id, league_id FROM season_calendar WHERE status = 'lineup_locked' ORDER BY scheduled_at ASC LIMIT ?"
+    ).bind(limit).all<{ id: string; league_id: string }>();
+
+    const recovered: RecoveredRound[] = [];
+    for (const round of stuck.results) {
+        // Dosud nezasimulované zápasy kola → lineups_open (idempotentní: simulated zůstanou)
+        await db.prepare(
+            "UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'"
+        ).bind(round.id).run();
+        const results = await runScheduledMatches(db, round.id, geminiApiKey);
+        await db.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
+            .bind(round.id).run();
+        recovered.push({ calendarId: round.id, leagueId: round.league_id, matches: results.length });
+
+        // Základní přehled výsledků (round_results) — bez AI reporteru, ten je sekundární
+        if (results.length > 0) {
+            try {
+                const calRow = await db.prepare("SELECT game_week FROM season_calendar WHERE id = ?")
+                    .bind(round.id).first<{ game_week: number }>();
+                const gameWeek = calRow?.game_week ?? 0;
+                const matchRows = await db.prepare(
+                    "SELECT m.home_score, m.away_score, t1.name as home_name, t2.name as away_name FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND m.status = 'simulated'"
+                ).bind(round.id).all();
+                const lines: string[] = [];
+                for (const r of matchRows.results) {
+                    const hs = r.home_score as number; const as_ = r.away_score as number;
+                    const hn = r.home_name as string; const an = r.away_name as string;
+                    if (hs > as_) lines.push(`${hn} porazil ${an} ${hs}:${as_}`);
+                    else if (hs < as_) lines.push(`${an} zvítězil nad ${hn} ${as_}:${hs}`);
+                    else lines.push(`${hn} remizoval s ${an} ${hs}:${as_}`);
+                }
+                await db.prepare("INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
+                    .bind(crypto.randomUUID(), round.league_id, `${gameWeek}. kolo: přehled výsledků`, lines.join(". ") + ".", gameWeek).run();
+            } catch (e) {
+                logger.warn({ module: "match-runner" }, "recovery round_results news failed", e);
+            }
+        }
+    }
+    return recovered;
+}
+
 export async function runScheduledMatches(
     db: D1Database,
     calendarId: string,
