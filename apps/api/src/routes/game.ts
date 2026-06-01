@@ -2420,6 +2420,59 @@ gameRouter.post("/game/run-matches", async (c) => {
   return c.json({ ok: true, type: "matches", totalMatches, processedLeague, recoveredRounds, debug: debugLogs });
 });
 
+// POST /api/game/fix-match-finances?matchId=X&teamId=Y
+// Doplní match-day finance pro tým, kterému chybí — half-processed zápas, kde simulace spadla
+// mezi financemi domácího a hostů (zápas zůstal 'simulated', takže recovery ho nesáhne).
+// Idempotentní: pokud tým už má transakce pro tento zápas, nedělá nic.
+gameRouter.post("/game/fix-match-finances", async (c) => {
+  const matchId = c.req.query("matchId");
+  const teamId = c.req.query("teamId");
+  if (!matchId || !teamId) return c.json({ error: "matchId a teamId jsou povinné" }, 400);
+
+  const match = await c.env.DB.prepare(
+    "SELECT home_team_id, away_team_id, home_score, away_score, attendance, status FROM matches WHERE id = ?"
+  ).bind(matchId).first<{ home_team_id: string; away_team_id: string; home_score: number; away_score: number; attendance: number; status: string }>();
+  if (!match) return c.json({ error: "zápas nenalezen" }, 404);
+  if (match.status !== "simulated") return c.json({ error: `zápas není simulated (${match.status})` }, 400);
+
+  const isHome = match.home_team_id === teamId;
+  const isAway = match.away_team_id === teamId;
+  if (!isHome && !isAway) return c.json({ error: "tým v tomto zápase nehrál" }, 400);
+
+  // Idempotence: tým už finance pro tento zápas má → nepřidávej znovu
+  const existing = await c.env.DB.prepare(
+    "SELECT COUNT(*) as c FROM transactions WHERE team_id = ? AND reference_id = ?"
+  ).bind(teamId, matchId).first<{ c: number }>();
+  if ((existing?.c ?? 0) > 0) {
+    return c.json({ ok: false, skipped: true, reason: `tým už má ${existing!.c} transakcí pro tento zápas` });
+  }
+
+  const { processMatchDayFinances, processCashLoanRepayment } = await import("../season/finance-processor");
+  const hs = match.home_score, as_ = match.away_score;
+  const result: "win" | "draw" | "loss" = isHome
+    ? (hs > as_ ? "win" : hs < as_ ? "loss" : "draw")
+    : (as_ > hs ? "win" : as_ < hs ? "loss" : "draw");
+  const opponentId = isHome ? match.away_team_id : match.home_team_id;
+  const oppRow = await c.env.DB.prepare("SELECT reputation FROM teams WHERE id = ?")
+    .bind(opponentId).first<{ reputation: number }>();
+  const opponentRep = oppRow?.reputation ?? 50;
+  const gameDate = new Date().toISOString();
+
+  const before = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
+  await processMatchDayFinances(c.env.DB, teamId, matchId, isHome, result, match.attendance ?? 0, gameDate, opponentRep);
+  await processCashLoanRepayment(c.env.DB, teamId, matchId, gameDate);
+  const after = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
+
+  const txs = await c.env.DB.prepare("SELECT type, amount FROM transactions WHERE team_id = ? AND reference_id = ?")
+    .bind(teamId, matchId).all<{ type: string; amount: number }>();
+  return c.json({
+    ok: true, matchId, teamId, isHome, result, attendance: match.attendance,
+    budgetBefore: before?.budget, budgetAfter: after?.budget,
+    delta: (after?.budget ?? 0) - (before?.budget ?? 0),
+    transactions: txs.results,
+  });
+});
+
 // ═══ Classifieds (Placená inzerce) ═══
 
 const CLASSIFIED_CATEGORIES: Record<string, { label: string; icon: string }> = {
