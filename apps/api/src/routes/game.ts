@@ -2420,6 +2420,39 @@ gameRouter.post("/game/run-matches", async (c) => {
   return c.json({ ok: true, type: "matches", totalMatches, processedLeague, recoveredRounds, debug: debugLogs });
 });
 
+// POST /api/game/generate-round-report?calendarId=X
+// Dogeneruje chybějící AI souhrn kola (news type 'ai_report'). Recovery uvízlého kola
+// vkládá jen základní round_results — tenhle dotvoří plný redakční článek.
+// Idempotentní: pokud ai_report pro kolo už existuje, nedělá nic.
+gameRouter.post("/game/generate-round-report", async (c) => {
+  const calendarId = c.req.query("calendarId");
+  if (!calendarId) return c.json({ error: "calendarId je povinný" }, 400);
+  if (!c.env.GEMINI_API_KEY) return c.json({ error: "GEMINI_API_KEY není nastaven" }, 500);
+
+  const cal = await c.env.DB.prepare(
+    "SELECT league_id, game_week, status FROM season_calendar WHERE id = ?"
+  ).bind(calendarId).first<{ league_id: string; game_week: number; status: string }>();
+  if (!cal) return c.json({ error: "kolo nenalezeno" }, 404);
+  if (cal.status !== "simulated") return c.json({ error: `kolo není simulated (${cal.status})` }, 400);
+
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM news WHERE league_id = ? AND game_week = ? AND type = 'ai_report'"
+  ).bind(cal.league_id, cal.game_week).first();
+  if (existing) return c.json({ ok: false, skipped: true, reason: "ai_report pro toto kolo už existuje" });
+
+  // standingsBefore: nejlepší dostupné přiblížení = aktuální tabulka (kolo je už odehrané).
+  // Pozice "před kolem" mohou být mírně posunuté, ale fakta o zápasech jsou přesná.
+  const { calculateStandings } = await import("../stats/standings");
+  const { generateAiRoundReport } = await import("../news/ai-reporter");
+  const standings = await calculateStandings(c.env.DB, cal.league_id);
+  await generateAiRoundReport(c.env.DB, c.env.GEMINI_API_KEY, cal.league_id, calendarId, cal.game_week, standings);
+
+  const report = await c.env.DB.prepare(
+    "SELECT headline, substr(body, 1, 240) as preview, length(body) as len FROM news WHERE league_id = ? AND game_week = ? AND type = 'ai_report'"
+  ).bind(cal.league_id, cal.game_week).first();
+  return c.json({ ok: true, calendarId, gameWeek: cal.game_week, generated: !!report, report });
+});
+
 // POST /api/game/fix-match-finances?matchId=X&teamId=Y
 // Doplní match-day finance pro tým, kterému chybí — half-processed zápas, kde simulace spadla
 // mezi financemi domácího a hostů (zápas zůstal 'simulated', takže recovery ho nesáhne).
