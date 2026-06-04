@@ -218,7 +218,10 @@ export default function DashboardPage() {
     const sameDay = matchDate.getUTCFullYear() === gameDate.getUTCFullYear()
       && matchDate.getUTCMonth() === gameDate.getUTCMonth()
       && matchDate.getUTCDate() === gameDate.getUTCDate();
-    const pendingPast = nextMatch.isFriendly && matchDate.getTime() <= gameDate.getTime();
+    // nextMatch je vždy nejbližší NEODEHRANÉ kolo. Pokud jeho datum už nastalo (game_date
+    // ho přejel, match-tick zaostává), je to pořád zápasový den — sjednoceno s kartou
+    // "Další zápas", která v tom případě ukazuje "DNES!". Platí pro ligu i přátelák.
+    const pendingPast = matchDate.getTime() <= gameDate.getTime();
     return sameDay || pendingPast;
   })();
   const matchOpponent = nextMatch ? (nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName) : null;
