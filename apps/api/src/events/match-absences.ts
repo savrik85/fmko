@@ -184,9 +184,13 @@ export async function findUpcomingMatchContext(
   }
 
   if (!team.league_id) return null;
+  // Nejstarší NEODEHRANÉ kolo (status='scheduled'). Bez filtru scheduled_at >= game_date —
+  // ten by přeskočil kola, která herní kalendář předběhl (cron je nestihl odsimulovat),
+  // a ukazoval by budoucí kolo místo nejbližšího nedohraného. status='scheduled' už sám
+  // zaručuje, že kolo není odehrané.
   const cal = await db.prepare(
-    "SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? AND scheduled_at >= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1",
-  ).bind(team.league_id, team.game_date).first<{ id: string; scheduled_at: string }>()
+    "SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1",
+  ).bind(team.league_id).first<{ id: string; scheduled_at: string }>()
     .catch((e) => { logger.warn({ module: "match-absences" }, "calendar lookup", e); return null; });
   if (!cal) return null;
   return { matchKey: cal.id, isFriendly: false, scheduledAt: cal.scheduled_at, gameDate: team.game_date };

@@ -2677,10 +2677,11 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       isFriendly = true;
       scheduledAt = friendlyMatch.created_at as string;
     } else if (team.league_id) {
-      // Fallback: next league match from calendar
+      // Fallback: nejstarší NEODEHRANÉ ligové kolo. Bez filtru scheduled_at >= game_date —
+      // ten přeskakuje kola předběhnutá herním kalendářem (cron je nestihl odsimulovat).
       const nextCal = await c.env.DB.prepare(
-        "SELECT sc.id, sc.scheduled_at, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.scheduled_at >= ? AND sc.status = 'scheduled' ORDER BY sc.scheduled_at ASC LIMIT 1"
-      ).bind(team.league_id, gameDate.toISOString()).first<{ id: string; scheduled_at: string; game_week: number }>();
+        "SELECT sc.id, sc.scheduled_at, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.status = 'scheduled' ORDER BY sc.scheduled_at ASC LIMIT 1"
+      ).bind(team.league_id).first<{ id: string; scheduled_at: string; game_week: number }>();
       if (!nextCal) return c.json({ nextMatch: null });
 
       calendarId = nextCal.id;

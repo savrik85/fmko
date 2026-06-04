@@ -6,7 +6,6 @@
 async function getNextMatch(db: D1Database, teamId: string, leagueId: string, gameDate: string | null): Promise<{ opponent: string; daysUntil: number; isFriendly?: boolean } | null> {
   if (!gameDate) return null;
   const gd = new Date(gameDate);
-  const dayStart = new Date(gd); dayStart.setUTCHours(0, 0, 0, 0);
 
   // Priority: friendly match waiting for lineup
   const friendly = await db.prepare(
@@ -32,11 +31,12 @@ async function getNextMatch(db: D1Database, teamId: string, leagueId: string, ga
      JOIN season_calendar sc ON m.calendar_id = sc.id
      JOIN teams t1 ON m.home_team_id = t1.id
      JOIN teams t2 ON m.away_team_id = t2.id
+     -- nejstarší NEODEHRANÉ kolo; bez filtru scheduled_at >= game_date, který přeskakuje
+     -- kola předběhnutá herním kalendářem (cron je nestihl odsimulovat)
      WHERE sc.league_id = ? AND m.status IN ('scheduled','lineups_open')
      AND (m.home_team_id = ? OR m.away_team_id = ?)
-     AND sc.scheduled_at >= ?
      ORDER BY sc.scheduled_at LIMIT 1`
-  ).bind(leagueId, teamId, teamId, dayStart.toISOString()).first<Record<string, unknown>>();
+  ).bind(leagueId, teamId, teamId).first<Record<string, unknown>>();
 
   if (!row) return null;
   const opponent = (row.home_team_id === teamId ? row.away_name : row.home_name) as string;
