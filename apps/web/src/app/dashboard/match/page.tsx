@@ -432,12 +432,13 @@ function MatchPage() {
         const matchDate = nextMatch.scheduledAt ? new Date(nextMatch.scheduledAt) : null;
         const dateStr = matchDate ? matchDate.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) : "";
         const now = teamGameDate ? new Date(teamGameDate) : new Date();
-        const daysUntil = matchDate ? Math.round((matchDate.getTime() - now.getTime()) / 86400000) : 0;
+        // Hlavička je VŽDY pro nadcházející (neodehraný) zápas. Když game_date přejel kolo,
+        // které match-tick nestihl odsimulovat, vyšlo by záporné "před X dny" — clamp na 0
+        // (= "dnes"), čeká se na odehrání. Sjednoceno s bannerem a kartou Další zápas.
+        const daysUntil = matchDate ? Math.max(0, Math.round((matchDate.getTime() - now.getTime()) / 86400000)) : 0;
         const daysLabel = daysUntil === 0 ? "dnes"
           : daysUntil === 1 ? "zítra"
-          : daysUntil === -1 ? "včera"
-          : daysUntil > 0 ? `za ${daysUntil} dní`
-          : `před ${-daysUntil} dny`;
+          : `za ${daysUntil} dní`;
         const opponentName = nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName;
 
         const switchToMatch = (um: UpcomingMatch) => {
