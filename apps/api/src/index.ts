@@ -123,11 +123,19 @@ export default {
           }
         } catch (e) { log("error", "stuck round recovery failed", e); }
 
+        // Vyloučit AI-only ligy (České Budějovice) — nikdo tam nehraje a zbytečně
+        // zvyšují zátěž. Match-tick zpracovává všechny ligy v jednom běhu; 6 lig × 7
+        // zápasů + AI reporty překračuje limit workeru → tick spadne a NEodsimuluje nic.
+        // Bez Budějovic zůstanou 4 ligy (~28 zápasů), což worker zvládne.
         const leagues = await env.DB.prepare(
-          "SELECT league_id, MAX(game_date) as max_game_date FROM teams WHERE league_id IS NOT NULL AND game_date IS NOT NULL GROUP BY league_id"
+          `SELECT t.league_id, MAX(t.game_date) as max_game_date
+           FROM teams t JOIN leagues l ON t.league_id = l.id
+           WHERE t.league_id IS NOT NULL AND t.game_date IS NOT NULL
+             AND l.name NOT LIKE '%České Budějovice%'
+           GROUP BY t.league_id`
         ).all();
 
-        // Process ALL leagues in one invocation (no KV tracking needed)
+        // Process ALL (non-excluded) leagues in one invocation (no KV tracking needed)
         let totalMatches = 0;
         for (const league of leagues.results) {
           const gameDate = league.max_game_date as string | null;
