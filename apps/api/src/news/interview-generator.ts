@@ -360,7 +360,7 @@ export async function tryCreateInterviewRequest(
       `SELECT t.id as team_id, t.user_id, t.name as team_name, t.village_id, t.league_id,
               m.id as manager_id, m.name as manager_name, m.avatar as manager_avatar
        FROM teams t
-       JOIN managers m ON m.team_id = t.id
+       JOIN managers m ON m.team_id = t.id AND m.user_id = t.user_id
        WHERE t.league_id = ? AND t.user_id != 'ai'
          AND NOT EXISTS (
            SELECT 1 FROM coach_interviews ci
@@ -437,7 +437,7 @@ export async function tryCreateInterviewRequest(
     .prepare(
       `SELECT t.user_id, m.name as manager_name
        FROM teams t
-       LEFT JOIN managers m ON m.team_id = t.id
+       LEFT JOIN managers m ON m.team_id = t.id AND m.user_id = t.user_id
        WHERE t.id = ?`,
     )
     .bind(opponentTeamId)
