@@ -381,11 +381,12 @@ teamsRouter.post("/", async (c) => {
 
   // Create manager profile (graceful — table may not exist before migration 0006)
   if (body.managerName && body.managerBackstory) {
-    // Před INSERTem smaž případného AI fallback managera (vytvořeného pro tým před onboardingem) —
-    // jinak by tu zůstaly dva záznamy a profil týmu by mohl zobrazit AI jméno.
+    // Před INSERTem smaž VŠECHNY předchozí managery týmu (AI fallback i předchozího lidského
+    // vlastníka při převzetí týmu) — jinak zůstanou duplicitní záznamy a zpravodaj/profil může
+    // vzít staré jméno trenéra. Tým má vždy jen jednoho aktuálního trenéra.
     await c.env.DB.prepare(
-      "DELETE FROM managers WHERE team_id = ? AND user_id = 'ai'"
-    ).bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "delete AI manager fallback", e));
+      "DELETE FROM managers WHERE team_id = ?"
+    ).bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "delete previous manager", e));
 
     const mgrAttrs = generateManagerAttributes(body.managerBackstory, rng);
     await c.env.DB.prepare(

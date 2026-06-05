@@ -127,8 +127,8 @@ export async function generateRoundSummary(
     FROM matches m
     JOIN teams ht ON ht.id = m.home_team_id
     JOIN teams at ON at.id = m.away_team_id
-    LEFT JOIN managers mh ON mh.team_id = ht.id
-    LEFT JOIN managers ma ON ma.team_id = at.id
+    LEFT JOIN managers mh ON mh.team_id = ht.id AND mh.user_id = ht.user_id
+    LEFT JOIN managers ma ON ma.team_id = at.id AND ma.user_id = at.user_id
     WHERE m.calendar_id = ? AND m.status = 'simulated'
   `).bind(calendarId).all<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "round-summary" }, "load results", e); return { results: [] as Record<string, unknown>[] }; });
