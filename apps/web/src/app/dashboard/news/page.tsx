@@ -242,8 +242,11 @@ export default function NewsPage() {
     ["transfer", "celebrity_arrival", "celebrity_signing"].includes(a.type),
   );
   const interviewArticles = articles.filter((a) => a.type === "interview");
+  // Kolo NEJNOVĚJŠÍHO rozhovoru (articles jsou z API seřazené dle data DESC), ne Math.max(gameWeek).
+  // Po přeházení rozpisu (dohrávka) má aktuální nadcházející kolo nižší číslo než už odehrané kolo —
+  // Math.max by ukázal staré kolo a schoval čerstvé rozhovory pro nejbližší zápas.
   const latestInterviewWeek = interviewArticles.length > 0
-    ? Math.max(...interviewArticles.map((a) => (a as any).gameWeek ?? 0))
+    ? ((interviewArticles[0] as any).gameWeek ?? 0)
     : null;
   const currentWeekInterviews = latestInterviewWeek != null && latestInterviewWeek > 0
     ? interviewArticles.filter((a) => (a as any).gameWeek === latestInterviewWeek)
