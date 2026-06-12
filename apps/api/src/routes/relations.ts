@@ -10,7 +10,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import {
-  getRelation, applyRelationEvent, relationStatus, aiArchetype, AI_ARCHETYPE_LABELS,
+  getRelation, applyRelationEvent, relationStatus, relationLabel, aiArchetype, AI_ARCHETYPE_LABELS,
   isAiTeam, aiGestureResponse, aiAcceptsBet, aiStatementResponse, shiftSquadMorale, insertRelationNews,
   getManagerName, getTeamName, getTeamGameDate,
   type GestureChoice, type StatementTone,
@@ -155,6 +155,7 @@ relationsRouter.get("/teams/:teamId/relations", async (c) => {
       respect,
       heat,
       status: relationStatus(respect, heat),
+      label: relationLabel(respect, heat),
     };
   }).sort((a, b) => (Math.abs(b.respect) + b.heat) - (Math.abs(a.respect) + a.heat));
 
@@ -240,6 +241,7 @@ relationsRouter.get("/teams/:teamId/relations/:otherId", async (c) => {
     respect: rel.respect,
     heat: rel.heat,
     status: relationStatus(rel.respect, rel.heat),
+    label: relationLabel(rel.respect, rel.heat),
     history: rel.history,
     otherIsAi,
     archetypeLabel: otherIsAi ? AI_ARCHETYPE_LABELS[aiArchetype(otherId)] : null,

@@ -29,6 +29,7 @@ interface RelationDetail {
   respect: number;
   heat: number;
   status: RelationStatus | null;
+  label: string;
   history: RelationMoment[];
   otherIsAi: boolean;
   archetypeLabel: string | null;
@@ -54,6 +55,7 @@ interface RelationListItem {
   respect: number;
   heat: number;
   status: RelationStatus | null;
+  label: string;
 }
 
 const BTN = "text-sm font-heading font-bold px-3 py-2 rounded-lg border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
@@ -153,6 +155,10 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
           )}
           <StatusBadge status={detail.status} />
         </div>
+      </div>
+
+      <div className={`font-heading font-bold text-base ${detail.heat >= 40 || detail.respect <= -10 ? "text-card-red" : detail.respect >= 30 ? "text-pitch-600" : "text-ink"}`}>
+        {detail.label}
       </div>
 
       <AxisBar label="Respekt" value={detail.respect} min={-100} max={100} color={detail.respect >= 0 ? "#22c55e" : "#ef4444"} />
@@ -521,6 +527,9 @@ export function RelationsOverview({ teamId }: { teamId: string }) {
                 <span className={r.respect >= 0 ? "text-pitch-600" : "text-card-red"}>{r.respect >= 0 ? "+" : ""}{r.respect}</span>
                 <span className="text-muted mx-1">·</span>
                 <span className={r.heat >= 60 ? "text-card-red font-bold" : "text-ink"}>🔥{r.heat}</span>
+              </div>
+              <div className={`text-xs ${r.heat >= 40 || r.respect <= -10 ? "text-card-red" : r.respect >= 30 ? "text-pitch-600" : "text-muted"}`}>
+                {r.label}
               </div>
             </div>
             <StatusBadge status={r.status} />

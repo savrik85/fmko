@@ -54,6 +54,22 @@ export function relationStatus(respect: number, heat: number): { key: string; la
   return null;
 }
 
+/**
+ * Slovní popis vztahu — vesnická škála pro každou kombinaci respektu a napětí.
+ * Na rozdíl od relationStatus (jen extrémy) vrací text vždy.
+ */
+export function relationLabel(respect: number, heat: number): string {
+  if (heat >= DERBY_HEAT_THRESHOLD) return respect >= 40 ? "Vážený rival" : "Úhlavní rival";
+  if (respect >= ALLY_RESPECT_THRESHOLD) return "Spojenec";
+  if (respect <= ENEMY_RESPECT_THRESHOLD) return "Nepřítel";
+  if (heat >= 40) return respect >= 20 ? "Vážený sok" : "Vře to mezi vámi";
+  if (heat >= 20) return respect >= 30 ? "Přátelská rivalita" : "Sousedské špičkování";
+  if (respect >= 30) return "Kamarádi od piva";
+  if (respect >= 10) return "Dobří známí";
+  if (respect <= -10) return "Křivé pohledy přes náves";
+  return "Sotva se zdravíte";
+}
+
 /** Deterministický archetyp AI manažera z team id (FNV-1a hash). */
 export function aiArchetype(teamId: string): AiArchetype {
   let h = 0x811c9dc5;
