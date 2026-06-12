@@ -30,7 +30,7 @@ import {
 
 export const relationsRouter = new Hono<{ Bindings: Bindings }>();
 
-// Write operace (interact, štamtiš, runda) smí provádět jen vlastník týmu z :teamId.
+// Write operace (interact, posezení, runda) smí provádět jen vlastník týmu z :teamId.
 relationsRouter.use("/teams/:teamId/relations/*", requireTeamOwnership);
 relationsRouter.use("/teams/:teamId/stammtisch", requireTeamOwnership);
 relationsRouter.use("/teams/:teamId/pub-round", requireTeamOwnership);
@@ -123,7 +123,7 @@ const STAMMTISCH_COOLDOWN_DAYS = 14;
 const STAMMTISCH_COST_PER_HEAD = 80;
 
 // ────────────────────────────────────────────────────────────────────────────
-// GET /teams/:teamId/social-info — dostupnost štamtiše a rundy
+// GET /teams/:teamId/social-info — dostupnost posezení s trenéry a rundy
 // ────────────────────────────────────────────────────────────────────────────
 
 relationsRouter.get("/teams/:teamId/social-info", async (c) => {
@@ -745,7 +745,7 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
     "SELECT created_at FROM manager_interactions WHERE type = 'stammtisch' AND actor_team_id = ? ORDER BY created_at DESC LIMIT 1"
   ).bind(teamId).first<{ created_at: string }>();
   if (daysSince(lastStammtisch?.created_at ?? null) < STAMMTISCH_COOLDOWN_DAYS) {
-    return c.json({ error: "Štamtiš byl nedávno. Hospodský potřebuje doplnit sudy." }, 400);
+    return c.json({ error: "Posezení s trenéry bylo nedávno. Hospodský potřebuje doplnit sudy." }, 400);
   }
 
   // Hosté musí být ze stejné ligy
@@ -788,7 +788,7 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
         comes = rel.respect >= 0;
         if (!comes) note = `${manager} pozvánku nechal bez odpovědi.`;
         else {
-          await createNotification(db, g.id, "event", "🍻 Štamtiš trenérů",
+          await createNotification(db, g.id, "event", "🍻 Posezení s trenéry",
             `Trenér ${myName} tě pozval ke společnému stolu s dalšími trenéry z ligy. Bylo to dobré pivo — respekt mezi vámi roste.`,
             `/dashboard/manager/${teamId}`, c.env as never)
             .catch((e) => logger.warn({ module: "relations" }, "stammtisch notification", e));
@@ -802,19 +802,19 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
     if (attendees.length === 0) {
       // Hospodský aspoň prodal jedno pivo hostiteli
       await recordTransaction(db, teamId, "manager_social", -STAMMTISCH_COST_PER_HEAD,
-        "Štamtiš — nikdo nedorazil, pivo na žal", gameDate, eventId);
+        "Posezení s trenéry — nikdo nedorazil, pivo na žal", gameDate, eventId);
       return c.json({ ok: true, message: "Nikdo nedorazil. Seděl jsi u velkého stolu sám a hospodský se tvářil soucitně.", details });
     }
 
     // 2. Útrata podle skutečné účasti
     const cost = STAMMTISCH_COST_PER_HEAD * (attendees.length + 1);
     await recordTransaction(db, teamId, "manager_social", -cost,
-      `Štamtiš trenérů — rundy pro ${attendees.length + 1} lidí`, gameDate, eventId);
+      `Posezení s trenéry — rundy pro ${attendees.length + 1} lidí`, gameDate, eventId);
 
     // 3. Efekty: hostitel × každý host
     for (const a of attendees) {
       await applyRelationEvent(db, teamId, a.teamId, {
-        respect: 5, icon: "🍻", text: `Štamtiš u ${myManager} — ${a.manager} seděl u stolu`,
+        respect: 5, icon: "🍻", text: `Posezení u ${myManager} — ${a.manager} seděl u stolu`,
       });
     }
 
@@ -834,7 +834,7 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
           quarrels.push(quarrelText);
         } else {
           await applyRelationEvent(db, a.teamId, b.teamId, {
-            respect: 2, icon: "🍻", text: `Sblížení u štamtiše trenéra ${myManager}`,
+            respect: 2, icon: "🍻", text: `Sblížení na posezení u trenéra ${myManager}`,
           });
         }
       }
@@ -856,7 +856,7 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
     return c.json({ ok: true, message: parts.join(" "), details });
   } catch (e) {
     logger.error({ module: "relations" }, "stammtisch failed", e);
-    return c.json({ error: "Štamtiš se nepovedl. Zkus to znovu." }, 500);
+    return c.json({ error: "Posezení se nepovedlo. Zkus to znovu." }, 500);
   }
 });
 

@@ -235,7 +235,7 @@ export function dartsLossText(n: RelationNames): string {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Štamtiš trenérů (skupinové pivo)
+// Posezení s trenéry (skupinové pivo)
 // ────────────────────────────────────────────────────────────────────────────
 
 export function stammtischNews(hostManager: string, hostTeam: string, attendeeNames: string[]): { headline: string; body: string } {

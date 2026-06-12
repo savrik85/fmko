@@ -3,7 +3,7 @@
 /**
  * Trenérský stůl — skupinové hospodské akce manažera.
  *
- * Štamtiš: pozvat 2–4 trenéry z ligy na pivo (síť vztahů, riziko hádek, summit ve zpravodaji).
+ * Posezení s trenéry: pozvat 2–4 trenéry z ligy na pivo (síť vztahů, riziko hádek, summit ve zpravodaji).
  * Runda pro hospodu: po výhře koupit pivo všem štamgastům (morálka, fanoušci, přízeň obce).
  */
 
@@ -73,7 +73,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
       load();
     } catch (e) {
       console.error("stammtisch:", e);
-      showError("Štamtiš se nepovedl", (e as Error)?.message || "Zkus to znovu.");
+      showError("Posezení se nepovedlo", (e as Error)?.message || "Zkus to znovu.");
     } finally {
       setBusy(false);
     }
@@ -112,7 +112,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
             : `Pozvi 2–4 trenéry, rundy ${info.stammtisch.costPerHead} Kč na hlavu`}
           onClick={() => setPicking((v) => !v)}
           className={`${BTN} bg-amber-50 border-amber-200 hover:bg-amber-100`}>
-          🍻 Uspořádat štamtiš{!info.stammtisch.available ? ` (za ${info.stammtisch.cooldownDaysLeft} dní)` : ""}
+          🍻 Posezení s trenéry{!info.stammtisch.available ? ` (za ${info.stammtisch.cooldownDaysLeft} dní)` : ""}
         </button>
 
         <button disabled={busy || !info.pubRound.available}
