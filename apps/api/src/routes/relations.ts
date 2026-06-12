@@ -11,9 +11,9 @@ import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import {
   getRelation, applyRelationEvent, relationStatus, aiArchetype, AI_ARCHETYPE_LABELS,
-  isAiTeam, aiGestureResponse, aiAcceptsBet, shiftSquadMorale, insertRelationNews,
+  isAiTeam, aiGestureResponse, aiAcceptsBet, aiStatementResponse, shiftSquadMorale, insertRelationNews,
   getManagerName, getTeamName, getTeamGameDate,
-  type GestureChoice,
+  type GestureChoice, type StatementTone,
 } from "../community/manager-relations";
 import { recordTransaction, assertPurchaseAllowed } from "../season/finance-processor";
 import { createNotification } from "../community/notifications";
@@ -191,6 +191,12 @@ relationsRouter.get("/teams/:teamId/relations/:otherId", async (c) => {
     cost: BEER_COST,
   };
 
+  // Předzápasový výrok do novin — 1× na vzájemný zápas
+  let statement: { matchId: string; round: number | null } | null = null;
+  if (nextMatch && !(await hasInteraction(db, "statement", teamId, nextMatch.id))) {
+    statement = { matchId: nextMatch.id, round: nextMatch.round };
+  }
+
   // Sázka — vázaná na příští vzájemný zápas
   let bet: { matchId: string; round: number | null; amount: number } | null = null;
   let pendingBet: { matchId: string; status: string; offeredByMe: boolean } | null = null;
@@ -223,6 +229,7 @@ relationsRouter.get("/teams/:teamId/relations/:otherId", async (c) => {
       beer,
       bet,
       pendingBet,
+      statement,
       ad: { available: adCooldownLeft === 0, cooldownDaysLeft: adCooldownLeft === Infinity ? 0 : adCooldownLeft, cost: AD_COST },
     },
   });
@@ -233,10 +240,10 @@ relationsRouter.get("/teams/:teamId/relations/:otherId", async (c) => {
 // ────────────────────────────────────────────────────────────────────────────
 
 interface InteractBody {
-  type: "gesture" | "beer" | "bet" | "bet_accept" | "bet_decline" | "ad" | "gift";
+  type: "gesture" | "beer" | "bet" | "bet_accept" | "bet_decline" | "ad" | "gift" | "statement";
   matchId?: string;
   choice?: GestureChoice;
-  tone?: "sincere" | "poison";
+  tone?: "sincere" | "poison" | StatementTone;
 }
 
 relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => {
@@ -437,6 +444,80 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           `/dashboard/manager/${teamId}`, c.env as never)
           .catch((e) => logger.warn({ module: "relations" }, "bet accept notification", e));
         return c.json({ ok: true, message: "Sázka platí. Hraje se o bečku." });
+      }
+
+      // ── Předzápasový výrok do novin ─────────────────────────────────────
+      case "statement": {
+        const tone = body.tone as StatementTone | undefined;
+        if (!tone || !["respect", "provoke", "humble"].includes(tone)) {
+          return c.json({ error: "Neplatný tón výroku." }, 400);
+        }
+        const match = await nextMutualMatch(db, teamId, otherId);
+        if (!match || match.id !== body.matchId) return c.json({ error: "Žádný nadcházející vzájemný zápas." }, 400);
+        if (await hasInteraction(db, "statement", teamId, match.id)) {
+          return c.json({ error: "Před tímhle zápasem už jsi do novin mluvil. Jednou stačí." }, 400);
+        }
+
+        const roundLabel = match.round != null ? `${match.round}. kolo` : "nadcházející zápas";
+        let message: string;
+
+        if (tone === "respect") {
+          const quotes = [
+            `„${theirName} má formu a kvalitu, bude to řežba. Máme před nimi respekt,“ řekl před zápasem trenér ${myManager} (${myName}).`,
+            `„Znám jejich trenéra, dělá dobrou práci. V neděli to bude férový fotbal a ať vyhraje lepší,“ uvedl trenér ${myManager} z ${myName}.`,
+          ];
+          await insertRelationNews(db, match.league_id, `Před zápasem: ${myName} smeká`, quotes[Math.floor(Math.random() * quotes.length)], teamId);
+          await applyRelationEvent(db, teamId, otherId, {
+            respect: 5, icon: "🫡", text: `${myManager} před ${roundLabel} veřejně uznal kvality soupeře`,
+          });
+          await shiftSquadMorale(db, teamId, 1);
+          message = "Uznání vyšlo v novinách. Kabina hraje bez tlaku.";
+        } else if (tone === "provoke") {
+          const quotes = [
+            `„${theirName}? Doma jim tleská třicet lidí a půlka jsou holubi. My se nebojíme,“ provokoval před zápasem trenér ${myManager} (${myName}).`,
+            `„Viděl jsem jejich poslední zápas. Kdyby fotbal byl o snaze, mají bod. Takhle nemají nic,“ vzkázal soupeři trenér ${myManager} z ${myName}.`,
+            `„Bečku, co s námi prohrají, ať rovnou vychladí,“ hlásil sebevědomě trenér ${myManager} (${myName}).`,
+          ];
+          await insertRelationNews(db, match.league_id, `PŘESTŘELKA: ${myManager} provokuje před ${roundLabel}`, quotes[Math.floor(Math.random() * quotes.length)], teamId);
+          await applyRelationEvent(db, teamId, otherId, {
+            heat: 10, icon: "😏", text: `${myManager} před ${roundLabel} provokoval v novinách`,
+          });
+          await shiftSquadMorale(db, teamId, 2);
+          await shiftSquadMorale(db, otherId, 2); // provokace soupeře nabudí — má to cenu
+          message = "Provokace vyšla v novinách. Kabina hoří — jenže soupeř taky.";
+        } else {
+          const quotes = [
+            `„Jedeme tam oslabení, půlka kluků má žně. Když to nebude debakl, bereme to,“ krotil očekávání trenér ${myManager} (${myName}).`,
+            `„${theirName} je jasný favorit. My si jedeme maximálně pro kanára a klobásu,“ tvrdil skromně trenér ${myManager} z ${myName}.`,
+          ];
+          await insertRelationNews(db, match.league_id, `${myName} hraje chudáčka`, quotes[Math.floor(Math.random() * quotes.length)], teamId);
+          message = "Skromnost vyšla v novinách. Teď nesmíš vyhrát moc vysoko… nebo vlastně smíš?";
+        }
+
+        // AI protějšek reaguje podle archetypu
+        let aiResponseText: string | null = null;
+        if (otherIsAi) {
+          const resp = aiStatementResponse(aiArchetype(otherId), tone, {
+            aiManager: theirManager, aiTeam: theirName, actorTeam: myName,
+          });
+          if (resp.respect !== 0 || resp.heat !== 0) {
+            await applyRelationEvent(db, teamId, otherId, {
+              respect: resp.respect, heat: resp.heat, icon: "🗣️", text: resp.historyText,
+            });
+          }
+          if (resp.counterQuote) {
+            await insertRelationNews(db, match.league_id, `${theirManager} odpovídá`, resp.counterQuote, otherId);
+            aiResponseText = resp.counterQuote;
+          }
+        } else {
+          await createNotification(db, otherId, "event", "🗣️ Soupeř mluví do novin",
+            `Trenér ${myName} se před vaším zápasem rozpovídal v novinách. Přečti si zpravodaj — a klidně odpověz.`,
+            `/dashboard/manager/${teamId}`, c.env as never)
+            .catch((e) => logger.warn({ module: "relations" }, "statement notification", e));
+        }
+
+        await insertInteraction(db, "statement", teamId, otherId, match.id, { tone }, tone === "humble" ? "pending" : "resolved");
+        return c.json({ ok: true, message, aiResponse: aiResponseText });
       }
 
       // ── Anonymní inzerát ────────────────────────────────────────────────

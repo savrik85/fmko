@@ -301,6 +301,49 @@ export async function applyPostMatchRelations(db: D1Database, info: PostMatchInf
 
   // Vyhodnocení sázek o bečku vázaných na tento zápas
   await resolveBets(db, info, { homeName, awayName });
+
+  // Falešná skromnost: kdo před zápasem hrál chudáčka a pak vyhrál o 3+, toho si soupeř zapamatuje
+  await resolveHumbleStatements(db, info, { homeName, awayName });
+}
+
+async function resolveHumbleStatements(
+  db: D1Database,
+  info: PostMatchInfo,
+  names: { homeName: string; awayName: string },
+): Promise<void> {
+  const statements = await db.prepare(
+    `SELECT id, actor_team_id, target_team_id FROM manager_interactions
+     WHERE match_id = ? AND type = 'statement' AND json_extract(payload, '$.tone') = 'humble' AND status = 'pending'`
+  ).bind(info.matchId).all<{ id: string; actor_team_id: string; target_team_id: string }>();
+
+  for (const st of statements.results) {
+    const actorIsHome = st.actor_team_id === info.homeTeamId;
+    const actorScore = actorIsHome ? info.homeScore : info.awayScore;
+    const targetScore = actorIsHome ? info.awayScore : info.homeScore;
+    let outcome = "no_effect";
+
+    if (actorScore - targetScore >= 3) {
+      outcome = "backfired_on_target";
+      const actorName = actorIsHome ? names.homeName : names.awayName;
+      const targetName = actorIsHome ? names.awayName : names.homeName;
+      const actorManager = await getManagerName(db, st.actor_team_id);
+      await applyRelationEvent(db, st.actor_team_id, st.target_team_id, {
+        heat: 15,
+        icon: "🎭",
+        text: `„Jedeme jen zachránit kanára“ — a pak výhra o ${actorScore - targetScore} gólů. Tohle ${targetName} nezapomene`,
+      });
+      await insertRelationNews(
+        db, info.leagueId,
+        "Skromnost, která bolela",
+        `Trenér ${actorManager} (${actorName}) celý týden tvrdil, jak jedou jen důstojně prohrát. Pak jeho tým vyhrál ${info.homeScore}:${info.awayScore}. V ${targetName} se o „skromnosti“ kolegy mluví slovy, která nelze otisknout.`,
+        st.actor_team_id,
+      );
+    }
+
+    await db.prepare(
+      "UPDATE manager_interactions SET status = 'resolved', payload = json_set(payload, '$.outcome', ?) WHERE id = ?"
+    ).bind(outcome, st.id).run();
+  }
 }
 
 const BET_AMOUNT = 500;
@@ -416,5 +459,62 @@ export function aiAcceptsBet(archetype: AiArchetype, heat: number): boolean {
     case "urazeny": return false;
     case "ferovka": return heat >= 30;
     case "pohodar": return true;
+  }
+}
+
+export type StatementTone = "respect" | "provoke" | "humble";
+
+/**
+ * Reakce AI manažera na předzápasový výrok v novinách.
+ * Vrací delty vztahu + případný protivyrok do zpravodaje (null = bez reakce).
+ */
+export function aiStatementResponse(
+  archetype: AiArchetype,
+  tone: StatementTone,
+  names: { aiManager: string; aiTeam: string; actorTeam: string },
+): { respect: number; heat: number; counterQuote: string | null; historyText: string } {
+  const { aiManager, aiTeam, actorTeam } = names;
+  switch (archetype) {
+    case "provokater":
+      if (tone === "provoke") {
+        return {
+          respect: 0, heat: 5,
+          counterQuote: `„${actorTeam}? Ať si nejdřív spočítají vlastní góly, my jim pár přidáme,“ kontroval okamžitě trenér ${aiManager} z ${aiTeam}. Přestřelka před zápasem je v plném proudu.`,
+          historyText: `${aiManager} kontroval vlastní provokací v novinách`,
+        };
+      }
+      return {
+        respect: 0, heat: 3,
+        counterQuote: `„Hezky mluví. Na hřišti se ale mluvit nebude,“ rýpl si trenér ${aiManager}.`,
+        historyText: `${aiManager} si i tak neodpustil rýpnutí`,
+      };
+    case "urazeny":
+      if (tone === "provoke") {
+        return {
+          respect: -3, heat: 8,
+          counterQuote: `Trenér ${aiManager} se proti výrokům ohradil: „Tohle se nedělá. Redakci jsem řekl svoje a víc to komentovat nebudu.“ Podle zákulisních informací to komentoval ještě dlouho.`,
+          historyText: `${aiManager} se urazil a stěžoval si redaktorovi`,
+        };
+      }
+      return { respect: 2, heat: 0, counterQuote: null, historyText: `${aiManager} výrok přešel mlčky` };
+    case "ferovka":
+      if (tone === "respect") {
+        return {
+          respect: 5, heat: 0,
+          counterQuote: `„Slušnost se na okrese cení. I my si jich vážíme a v neděli to bude férový fotbal,“ odpověděl trenér ${aiManager}.`,
+          historyText: `${aiManager} uznání opětoval`,
+        };
+      }
+      return {
+        respect: 0, heat: tone === "provoke" ? 3 : 0,
+        counterQuote: tone === "provoke" ? `„Nebudu se snižovat k přestřelkám. Odpovíme na hřišti,“ řekl klidně trenér ${aiManager}.` : null,
+        historyText: tone === "provoke" ? `${aiManager} odmítl přestřelku — odpoví na hřišti` : `${aiManager} výrok vzal na vědomí`,
+      };
+    case "pohodar":
+      return {
+        respect: tone === "respect" ? 3 : 1, heat: 0,
+        counterQuote: tone === "provoke" ? `„Dobrý, ne? Aspoň přijde víc lidí,“ smál se trenér ${aiManager} a pozval kolegu po zápase na pivo.` : null,
+        historyText: `${aiManager} to vzal s úsměvem`,
+      };
   }
 }

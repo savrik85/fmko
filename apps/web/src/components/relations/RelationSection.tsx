@@ -38,6 +38,7 @@ interface RelationDetail {
     beer: { available: boolean; minRespect: number; cooldownDaysLeft: number; cost: number };
     bet: { matchId: string; round: number | null; amount: number } | null;
     pendingBet: { matchId: string; status: string; offeredByMe: boolean } | null;
+    statement: { matchId: string; round: number | null } | null;
     ad: { available: boolean; cooldownDaysLeft: number; cost: number };
   };
 }
@@ -180,6 +181,30 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
           </>
         )}
 
+        {ix.statement && (
+          <>
+            <button disabled={busy}
+              title="Respekt +5, kabina hraje bez tlaku"
+              onClick={() => interact({ type: "statement", matchId: ix.statement!.matchId, tone: "respect" })}
+              className={`${BTN} bg-green-50 border-green-200 hover:bg-green-100`}>
+              🫡 Uznat v novinách
+            </button>
+            <button disabled={busy}
+              title="Napětí +10, obě kabiny se nabudí"
+              onClick={() => interact({ type: "statement", matchId: ix.statement!.matchId, tone: "provoke" },
+                "Provokace vyjde v novinách a zvedne napětí. Soupeř nejspíš odpoví. Do toho?")}
+              className={`${BTN} bg-red-50 border-red-200 hover:bg-red-100`}>
+              😏 Provokovat v novinách
+            </button>
+            <button disabled={busy}
+              title="Bez okamžitého efektu — ale výhra o 3+ pak pořádně zabolí (napětí +15)"
+              onClick={() => interact({ type: "statement", matchId: ix.statement!.matchId, tone: "humble" })}
+              className={`${BTN} bg-gray-50 border-gray-200 hover:bg-gray-100`}>
+              🎭 Hrát chudáčka
+            </button>
+          </>
+        )}
+
         <button disabled={busy || !ix.beer.available}
           title={!ix.beer.available
             ? (ix.beer.cooldownDaysLeft > 0 ? `Znovu za ${ix.beer.cooldownDaysLeft} dní` : `Potřebuješ respekt aspoň ${ix.beer.minRespect}`)
@@ -255,6 +280,127 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Předzápasová karta (profil týmu) ──────────────────────────────────── */
+
+export function PreMatchCard({ myTeamId, otherTeamId, otherTeamName }: {
+  myTeamId: string;
+  otherTeamId: string;
+  otherTeamName: string;
+}) {
+  const [detail, setDetail] = useState<RelationDetail | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    apiFetch<RelationDetail>(`/api/teams/${myTeamId}/relations/${otherTeamId}`)
+      .then(setDetail)
+      .catch((e) => console.error("pre-match card load:", e));
+  }, [myTeamId, otherTeamId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (!detail) return null;
+  const ix = detail.interactions;
+  const hasContent = ix.statement || ix.bet || ix.pendingBet;
+  if (!hasContent && !feedback) return null;
+
+  const interact = async (body: Record<string, unknown>, confirmText?: string) => {
+    if (confirmText && !window.confirm(confirmText)) return;
+    setBusy(true);
+    try {
+      const res = await apiFetch<{ ok: boolean; message: string; aiResponse?: string | null }>(
+        `/api/teams/${myTeamId}/relations/${otherTeamId}/interact`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+      );
+      setFeedback([res.message, res.aiResponse].filter(Boolean).join(" "));
+      load();
+    } catch (e) {
+      console.error("pre-match interact:", e);
+      showError("Akce se nepovedla", (e as Error)?.message || "Zkus to znovu.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const roundLabel = ix.statement?.round != null ? `${ix.statement.round}. kolo` : ix.bet?.round != null ? `${ix.bet.round}. kolo` : "vzájemný zápas";
+
+  return (
+    <div className="card p-4 sm:p-5 border-l-4 border-l-amber-400">
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+        <SectionLabel>Před zápasem · {roundLabel}</SectionLabel>
+        <div className="flex items-center gap-3 text-sm tabular-nums">
+          <span title="Respekt" className={detail.respect >= 0 ? "text-pitch-600" : "text-card-red"}>
+            🤝 {detail.respect >= 0 ? "+" : ""}{detail.respect}
+          </span>
+          <span title="Napětí" className={detail.heat >= 60 ? "text-card-red font-bold" : "text-ink"}>🔥 {detail.heat}</span>
+          <StatusBadge status={detail.status} />
+        </div>
+      </div>
+
+      {feedback && (
+        <div className="mb-3 text-sm bg-amber-50 border border-amber-200 rounded-lg p-3 leading-relaxed">
+          {feedback}{" "}
+          <Link href={`/dashboard/manager/${otherTeamId}`} className="underline text-pitch-600 hover:text-pitch-500">
+            Vztah s trenérem →
+          </Link>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {ix.statement && (
+          <>
+            <button disabled={busy}
+              title="Respekt +5, kabina hraje bez tlaku (+1 morálka)"
+              onClick={() => interact({ type: "statement", matchId: ix.statement!.matchId, tone: "respect" })}
+              className={`${BTN} bg-green-50 border-green-200 hover:bg-green-100`}>
+              🫡 Uznat soupeře v novinách
+            </button>
+            <button disabled={busy}
+              title="Napětí +10, kabina i fanoušci hoří (+2 morálka) — ale nabudí to i soupeře"
+              onClick={() => interact({ type: "statement", matchId: ix.statement!.matchId, tone: "provoke" },
+                `Provokace vyjde v novinách, zvedne napětí a nabudí obě kabiny. Trenér ${otherTeamName} nejspíš odpoví. Do toho?`)}
+              className={`${BTN} bg-red-50 border-red-200 hover:bg-red-100`}>
+              😏 Provokovat
+            </button>
+            <button disabled={busy}
+              title="Žádný okamžitý efekt. Ale když pak vyhraješ o 3+, soupeř ti to nezapomene (napětí +15)"
+              onClick={() => interact({ type: "statement", matchId: ix.statement!.matchId, tone: "humble" })}
+              className={`${BTN} bg-gray-50 border-gray-200 hover:bg-gray-100`}>
+              🎭 Hrát chudáčka
+            </button>
+          </>
+        )}
+
+        {ix.bet && (
+          <button disabled={busy} onClick={() => interact({ type: "bet", matchId: ix.bet!.matchId },
+            `Sázka o bečku na ${roundLabel}. Prohra stojí ${ix.bet!.amount} Kč. Jdeš do toho?`)}
+            className={`${BTN} bg-amber-50 border-amber-200 hover:bg-amber-100`}>
+            🍺 Vsadit se o bečku
+          </button>
+        )}
+        {ix.pendingBet && ix.pendingBet.status === "pending" && (
+          <span className="text-sm text-muted self-center">🍺 Sázka o bečku běží — rozhodne hřiště</span>
+        )}
+        {ix.pendingBet && ix.pendingBet.status === "offered" && !ix.pendingBet.offeredByMe && (
+          <>
+            <button disabled={busy} onClick={() => interact({ type: "bet_accept" })}
+              className={`${BTN} bg-green-50 border-green-200 hover:bg-green-100`}>
+              🍺 Přijmout sázku o bečku
+            </button>
+            <button disabled={busy} onClick={() => interact({ type: "bet_decline" })}
+              className={`${BTN} bg-gray-50 border-gray-200 hover:bg-gray-100`}>
+              Odmítnout
+            </button>
+          </>
+        )}
+        {ix.pendingBet && ix.pendingBet.status === "offered" && ix.pendingBet.offeredByMe && (
+          <span className="text-sm text-muted self-center">🍺 Nabídka sázky čeká na odpověď</span>
+        )}
+      </div>
     </div>
   );
 }
