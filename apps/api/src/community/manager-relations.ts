@@ -36,6 +36,7 @@ export const AI_ARCHETYPE_LABELS: Record<AiArchetype, string> = {
 const HISTORY_LIMIT = 20;
 const NEIGHBOR_KM = 8;
 const NEIGHBOR_BASE_HEAT = 20;
+const SAME_VILLAGE_BASE_HEAT = 30;
 
 export const DERBY_HEAT_THRESHOLD = 60;
 export const ALLY_RESPECT_THRESHOLD = 60;
@@ -107,22 +108,31 @@ export async function getRelation(db: D1Database, teamA: string, teamB: string):
     return { teamAId: a, teamBId: b, respect: row.respect, heat: row.heat, history: parseHistory(row.history) };
   }
 
-  // Lazy init — sousedství podle vzdálenosti vesnic
+  // Lazy init — stejná vesnice = místní rivalita, blízké vesnice = odvěcí sousedi
   let heat = 0;
   const history: RelationMoment[] = [];
   try {
     const villages = await db.prepare(
-      `SELECT t.id as team_id, v.latitude as lat, v.longitude as lng
+      `SELECT t.id as team_id, t.village_id, v.latitude as lat, v.longitude as lng
        FROM teams t JOIN villages v ON t.village_id = v.id
        WHERE t.id IN (?, ?)`
-    ).bind(a, b).all<{ team_id: string; lat: number | null; lng: number | null }>();
+    ).bind(a, b).all<{ team_id: string; village_id: string; lat: number | null; lng: number | null }>();
     const [va, vb] = [
       villages.results.find((r) => r.team_id === a),
       villages.results.find((r) => r.team_id === b),
     ];
-    if (va?.lat != null && va?.lng != null && vb?.lat != null && vb?.lng != null) {
+    if (va && vb && va.village_id === vb.village_id) {
+      heat = SAME_VILLAGE_BASE_HEAT;
+      history.push({
+        date: new Date().toISOString(),
+        icon: "🏘️",
+        text: "Místní rivalita — jeden plácek, dvě hospody",
+        rd: 0,
+        hd: SAME_VILLAGE_BASE_HEAT,
+      });
+    } else if (va?.lat != null && va?.lng != null && vb?.lat != null && vb?.lng != null) {
       const km = haversineKm(va.lat, va.lng, vb.lat, vb.lng);
-      if (km > 0.01 && km < NEIGHBOR_KM) {
+      if (km < NEIGHBOR_KM) {
         heat = NEIGHBOR_BASE_HEAT;
         history.push({
           date: new Date().toISOString(),
@@ -206,7 +216,7 @@ export async function getManagerName(db: D1Database, teamId: string): Promise<st
       logger.warn({ module: "manager-relations" }, "load manager name", e);
       return null;
     });
-  return row?.name ?? "trenér";
+  return row?.name ?? "Trenér";
 }
 
 export async function getTeamName(db: D1Database, teamId: string): Promise<string> {
@@ -384,7 +394,7 @@ export function aiGestureResponse(
     case "provokater":
       if (incoming === "jab") return { choice: "jab", flavor: "nezůstal nic dlužen a přisadil si" };
       return aiWon
-        ? { choice: "jab", flavor: "neodpustil si poznámku na účet poraženého" }
+        ? { choice: "jab", flavor: "si neodpustil poznámku na účet poraženého" }
         : { choice: "silent", flavor: "po porážce zmizel beze slova" };
     case "urazeny":
       if (incoming === "jab") return { choice: "silent", flavor: "uraženě odešel a bouchl dveřmi kabiny" };
