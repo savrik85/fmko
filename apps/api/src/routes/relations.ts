@@ -122,6 +122,7 @@ async function insertInteraction(
 
 const STAMMTISCH_COOLDOWN_DAYS = 14;
 const STAMMTISCH_COST_PER_HEAD = 80;
+const STAMMTISCH_RESERVATION_FEE = 100;
 
 // ────────────────────────────────────────────────────────────────────────────
 // GET /teams/:teamId/social-info — dostupnost posezení s trenéry a rundy
@@ -790,13 +791,24 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
     return c.json({ error: "Posezení je jen pro lidské trenéry — AI trenér do hospody nepřijde." }, 400);
   }
 
-  // Rozpočet — předběžná kontrola na maximum (platí se až večer podle účasti)
-  const maxCost = STAMMTISCH_COST_PER_HEAD * (guestIds.length + 1);
+  // Jeden trenér = jedna hospoda za večer: kdo přijal cizí pozvání, nemůže hostit
+  const acceptedElsewhere = await db.prepare(
+    "SELECT id FROM manager_interactions WHERE type = 'stammtisch_invite' AND target_team_id = ? AND status = 'accepted' LIMIT 1"
+  ).bind(teamId).first<{ id: string }>();
+  if (acceptedElsewhere) {
+    return c.json({ error: "Dnes večer už sedíš u stolu jinde — přijal jsi cizí pozvání." }, 400);
+  }
+
+  // Rozpočet — rezervace stolu se platí hned, rundy večer podle účasti
+  const maxCost = STAMMTISCH_RESERVATION_FEE + STAMMTISCH_COST_PER_HEAD * (guestIds.length + 1);
   const purchase = await assertPurchaseAllowed(db, teamId, maxCost);
   if (!purchase.ok) return c.json({ error: purchase.reason }, 400);
 
   const eventId = crypto.randomUUID();
   const [myName, myManager] = await Promise.all([getTeamName(db, teamId), getManagerName(db, teamId)]);
+  const gameDate = await getTeamGameDate(db, teamId);
+  await recordTransaction(db, teamId, "manager_social", -STAMMTISCH_RESERVATION_FEE,
+    "Rezervace stolu v hospodě na posezení s trenéry", gameDate, eventId);
 
   // Pozvánky hostům + notifikace s odkazem na jejich hospodu
   for (const gid of guestIds) {
@@ -811,7 +823,7 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
   return c.json({
     ok: true,
     planned: true,
-    message: "Pozvánky rozeslány! Kdo přijme a jak večer dopadne, uvidíš v hospodě.",
+    message: `Stůl rezervován (${STAMMTISCH_RESERVATION_FEE} Kč) a pozvánky rozeslány! Kdo přijme a jak večer dopadne, uvidíš v hospodě.`,
   });
 });
 
@@ -834,6 +846,22 @@ relationsRouter.post("/teams/:teamId/stammtisch-invite/:inviteId", async (c) => 
   ).bind(inviteId, teamId).first<{ id: string; actor_team_id: string; status: string }>();
   if (!invite) return c.json({ error: "Pozvánka nenalezena." }, 404);
   if (invite.status !== "invited") return c.json({ error: "Na pozvánku už jsi odpověděl." }, 400);
+
+  if (body.accept) {
+    // Jeden trenér = jedna hospoda za večer
+    const otherAccepted = await db.prepare(
+      "SELECT id FROM manager_interactions WHERE type = 'stammtisch_invite' AND target_team_id = ? AND status = 'accepted' AND id != ? LIMIT 1"
+    ).bind(teamId, inviteId).first<{ id: string }>();
+    if (otherAccepted) {
+      return c.json({ error: "Dnes večer už sedíš u jiného stolu — přijal jsi jiné pozvání." }, 400);
+    }
+    const ownPlanned = await db.prepare(
+      "SELECT id FROM manager_interactions WHERE type = 'stammtisch' AND actor_team_id = ? AND status = 'planned' LIMIT 1"
+    ).bind(teamId).first<{ id: string }>();
+    if (ownPlanned) {
+      return c.json({ error: "Dnes večer hostíš vlastní posezení — nemůžeš sedět ve dvou hospodách najednou." }, 400);
+    }
+  }
 
   await db.prepare("UPDATE manager_interactions SET status = ? WHERE id = ?")
     .bind(body.accept ? "accepted" : "declined", inviteId).run();

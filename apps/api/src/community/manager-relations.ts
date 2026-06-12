@@ -9,7 +9,7 @@
 import { logger } from "../lib/logger";
 import {
   betWonNews, betDrawNews, derbyNews, humbleBackfireNews, counterQuoteText,
-  stammtischNews, stammtischQuarrelText, stammtischSceneText,
+  stammtischNews, stammtischQuarrelText, stammtischSceneText, pickStammtischEvents,
   pubRoundMessage,
 } from "./relation-texts";
 
@@ -678,7 +678,28 @@ async function resolveStammtisch(
       }
     }
 
-    // 5. Zpravodaj — summit od 3 účastníků
+    // 5. Večerní situace — 1–2 náhodné události u stolu (pozitivní/vtipné/konflikt)
+    const eventTexts: string[] = [];
+    let extraCost = 0;
+    for (const ev of pickStammtischEvents()) {
+      const randomGuest = attendees[Math.floor(Math.random() * attendees.length)];
+      const text = ev.text.replaceAll("{host}", myManager).replaceAll("{guest}", randomGuest.manager);
+      eventTexts.push(text);
+      if (ev.effect === "respect_all") {
+        for (const a of attendees) {
+          await applyRelationEvent(db, teamId, a.teamId, { respect: 1, icon: "🍻", text });
+        }
+      } else if (ev.effect === "heat_pair") {
+        await applyRelationEvent(db, teamId, randomGuest.teamId, { heat: 3, icon: "💢", text });
+      } else if (ev.effect === "extra_cost") {
+        extraCost += 30;
+      }
+    }
+    if (extraCost > 0) {
+      await chargeSocial(db, teamId, extraCost, "Posezení s trenéry — nečekané výdaje", gameDate, row.id);
+    }
+
+    // 6. Zpravodaj — summit od 3 účastníků
     if (attendees.length >= 3 && host?.league_id) {
       const article = stammtischNews(myManager, myName, attendees.map((a) => `${a.manager} (${a.teamName})`));
       await insertRelationNews(db, host.league_id, article.headline, article.body, teamId);
@@ -687,9 +708,10 @@ async function resolveStammtisch(
     narrative = [
       `Ke stolu dorazili: ${attendees.map((a) => a.manager).join(", ")}.`,
       stammtischSceneText(attendees.length),
+      ...eventTexts,
       ...quarrels,
       ...declineNotes,
-      paid ? `Útrata: ${cost} Kč.` : "Na útratu nezbylo — hospodský to napsal křídou na futro.",
+      paid ? `Útrata: ${cost + extraCost} Kč.` : "Na útratu nezbylo — hospodský to napsal křídou na futro.",
     ].join(" ");
 
     // 6. Večer vidí i hosté — incident v JEJICH hospodě + notifikace
@@ -697,6 +719,7 @@ async function resolveStammtisch(
       `Byl jsi na posezení u trenéra ${myManager} (${myName}).`,
       `U stolu: ${attendees.map((a) => a.manager).join(", ")}.`,
       stammtischSceneText(attendees.length),
+      ...eventTexts,
       ...quarrels,
       "Útratu platil hostitel.",
     ].join(" ");

@@ -151,7 +151,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
           <button disabled={busy || !info.stammtisch.available}
             title={!info.stammtisch.available
               ? `Hospodský doplňuje sudy — znovu za ${info.stammtisch.cooldownDaysLeft} dní`
-              : `Pozvi 2–4 trenéry, rundy ${info.stammtisch.costPerHead} Kč na hlavu. Vyhodnotí se večer.`}
+              : `Rezervace stolu 100 Kč + rundy ${info.stammtisch.costPerHead} Kč na hlavu. Vyhodnotí se večer.`}
             onClick={() => setPicking((v) => !v)}
             className={`${BTN} bg-amber-50 border-amber-200 hover:bg-amber-100`}>
             🍻 Posezení s trenéry{!info.stammtisch.available ? ` (za ${info.stammtisch.cooldownDaysLeft} dní)` : ""}
@@ -196,7 +196,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
           <div className="mt-3 flex items-center gap-3">
             <button disabled={busy || selected.size < 1} onClick={runStammtisch}
               className={`${BTN} bg-amber-50 border-amber-200 hover:bg-amber-100`}>
-              Pozvat ke stolu ({selected.size ? `max ${info.stammtisch.costPerHead * (selected.size + 1)} Kč` : "vyber trenéry"})
+              Pozvat ke stolu ({selected.size ? `rezervace 100 Kč + rundy max ${info.stammtisch.costPerHead * (selected.size + 1)} Kč` : "vyber trenéry"})
             </button>
             <span className="text-xs text-muted">Pozvaní dostanou pozvánku k přijetí. Vyhodnotí se večer v hospodě — platí se jen za ty, kdo dorazí, a pozor na rivaly u jednoho stolu.</span>
           </div>
