@@ -23,13 +23,17 @@ import {
   adTextFor, jabNewsBody, praiseReplyText, praiseNews,
   beerSceneText, dartsWinText, dartsLossText,
   giftSincereMessage, giftPoisonMessage,
+  stammtischNews, stammtischQuarrelText, stammtischDeclineText, stammtischSceneText,
+  pubRoundMessage,
   type RelationNames,
 } from "../community/relation-texts";
 
 export const relationsRouter = new Hono<{ Bindings: Bindings }>();
 
-// Write operace (interact) smí provádět jen vlastník týmu z :teamId.
+// Write operace (interact, štamtiš, runda) smí provádět jen vlastník týmu z :teamId.
 relationsRouter.use("/teams/:teamId/relations/*", requireTeamOwnership);
+relationsRouter.use("/teams/:teamId/stammtisch", requireTeamOwnership);
+relationsRouter.use("/teams/:teamId/pub-round", requireTeamOwnership);
 
 const BEER_COST = 50;
 const BET_AMOUNT = 500;
@@ -114,6 +118,52 @@ async function insertInteraction(
   ).bind(id, type, actorId, targetId, matchId, JSON.stringify(payload), status).run();
   return id;
 }
+
+const STAMMTISCH_COOLDOWN_DAYS = 14;
+const STAMMTISCH_COST_PER_HEAD = 80;
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /teams/:teamId/social-info — dostupnost štamtiše a rundy
+// ────────────────────────────────────────────────────────────────────────────
+
+relationsRouter.get("/teams/:teamId/social-info", async (c) => {
+  const teamId = c.req.param("teamId");
+  const db = c.env.DB;
+
+  const lastStammtisch = await db.prepare(
+    "SELECT created_at FROM manager_interactions WHERE type = 'stammtisch' AND actor_team_id = ? ORDER BY created_at DESC LIMIT 1"
+  ).bind(teamId).first<{ created_at: string }>();
+  const stammtischCooldownLeft = Math.max(0, Math.ceil(STAMMTISCH_COOLDOWN_DAYS - daysSince(lastStammtisch?.created_at ?? null)));
+
+  // Runda: poslední odehraný zápas musí být výhra a runda za něj ještě nebyla
+  const lastMatch = await db.prepare(
+    `SELECT id, home_team_id, home_score, away_score FROM matches
+     WHERE status IN ('simulated', 'finished') AND (home_team_id = ? OR away_team_id = ?)
+     ORDER BY simulated_at DESC LIMIT 1`
+  ).bind(teamId, teamId).first<{ id: string; home_team_id: string; home_score: number; away_score: number }>();
+
+  let pubRound: { available: boolean; reason: string | null } = { available: false, reason: "Žádný odehraný zápas." };
+  if (lastMatch) {
+    const myScore = lastMatch.home_team_id === teamId ? lastMatch.home_score : lastMatch.away_score;
+    const theirScore = lastMatch.home_team_id === teamId ? lastMatch.away_score : lastMatch.home_score;
+    if (myScore <= theirScore) {
+      pubRound = { available: false, reason: "Runda se kupuje po výhře. Nejdřív vyhraj." };
+    } else if (await hasInteraction(db, "pub_round", teamId, lastMatch.id)) {
+      pubRound = { available: false, reason: "Za tuhle výhru už hospoda pila." };
+    } else {
+      pubRound = { available: true, reason: null };
+    }
+  }
+
+  return c.json({
+    stammtisch: {
+      available: stammtischCooldownLeft === 0,
+      cooldownDaysLeft: stammtischCooldownLeft === Infinity ? 0 : stammtischCooldownLeft,
+      costPerHead: STAMMTISCH_COST_PER_HEAD,
+    },
+    pubRound,
+  });
+});
 
 // ────────────────────────────────────────────────────────────────────────────
 // GET /teams/:teamId/relations — přehled
@@ -671,5 +721,193 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
   } catch (e) {
     logger.error({ module: "relations" }, "interact failed", e);
     return c.json({ error: "Interakce se nepovedla. Zkus to znovu." }, 500);
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// POST /teams/:teamId/stammtisch — skupinové pivo pro 2–4 trenéry
+// ────────────────────────────────────────────────────────────────────────────
+
+relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
+  const teamId = c.req.param("teamId");
+  const db = c.env.DB;
+  const body = await c.req.json<{ guestTeamIds?: string[] }>().catch((e) => {
+    logger.warn({ module: "relations" }, "parse stammtisch body", e);
+    return null;
+  });
+  const guestIds = [...new Set(body?.guestTeamIds ?? [])].filter((id) => id !== teamId);
+  if (guestIds.length < 2 || guestIds.length > 4) {
+    return c.json({ error: "Pozvi 2 až 4 trenéry — na míň je obyčejné pivo, na víc nemá hospoda stůl." }, 400);
+  }
+
+  // Cooldown
+  const lastStammtisch = await db.prepare(
+    "SELECT created_at FROM manager_interactions WHERE type = 'stammtisch' AND actor_team_id = ? ORDER BY created_at DESC LIMIT 1"
+  ).bind(teamId).first<{ created_at: string }>();
+  if (daysSince(lastStammtisch?.created_at ?? null) < STAMMTISCH_COOLDOWN_DAYS) {
+    return c.json({ error: "Štamtiš byl nedávno. Hospodský potřebuje doplnit sudy." }, 400);
+  }
+
+  // Hosté musí být ze stejné ligy
+  const host = await db.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string | null }>();
+  if (!host?.league_id) return c.json({ error: "Tým není v lize." }, 400);
+  const guestsRes = await db.prepare(
+    `SELECT id, name FROM teams WHERE league_id = ? AND id IN (${guestIds.map(() => "?").join(",")})`
+  ).bind(host.league_id, ...guestIds).all<{ id: string; name: string }>();
+  if (guestsRes.results.length !== guestIds.length) {
+    return c.json({ error: "Někteří pozvaní nejsou z tvojí ligy." }, 400);
+  }
+
+  // Rozpočet — host platí všem dorazivším + sobě, ověř maximum předem
+  const maxCost = STAMMTISCH_COST_PER_HEAD * (guestIds.length + 1);
+  const purchase = await assertPurchaseAllowed(db, teamId, maxCost);
+  if (!purchase.ok) return c.json({ error: purchase.reason }, 400);
+
+  const [myName, myManager] = await Promise.all([getTeamName(db, teamId), getManagerName(db, teamId)]);
+  const gameDate = await getTeamGameDate(db, teamId);
+  const eventId = crypto.randomUUID();
+
+  try {
+    // 1. Kdo dorazí
+    const attendees: Array<{ teamId: string; teamName: string; manager: string }> = [];
+    const details: Array<{ manager: string; teamName: string; came: boolean; note: string | null }> = [];
+
+    for (const g of guestsRes.results) {
+      const manager = await getManagerName(db, g.id);
+      const rel = await getRelation(db, teamId, g.id);
+      const guestIsAi = await isAiTeam(db, g.id);
+      let comes: boolean;
+      let note: string | null = null;
+      if (guestIsAi) {
+        const archetype = aiArchetype(g.id);
+        comes = archetype === "pohodar" || archetype === "provokater"
+          ? true
+          : archetype === "ferovka" ? rel.respect >= 0 : rel.respect >= 20;
+        if (!comes) note = stammtischDeclineText(archetype, manager);
+      } else {
+        comes = rel.respect >= 0;
+        if (!comes) note = `${manager} pozvánku nechal bez odpovědi.`;
+        else {
+          await createNotification(db, g.id, "event", "🍻 Štamtiš trenérů",
+            `Trenér ${myName} tě pozval ke společnému stolu s dalšími trenéry z ligy. Bylo to dobré pivo — respekt mezi vámi roste.`,
+            `/dashboard/manager/${teamId}`, c.env as never)
+            .catch((e) => logger.warn({ module: "relations" }, "stammtisch notification", e));
+        }
+      }
+      if (comes) attendees.push({ teamId: g.id, teamName: g.name, manager });
+      details.push({ manager, teamName: g.name, came: comes, note });
+      await insertInteraction(db, "stammtisch", teamId, g.id, null, { eventId, came: comes });
+    }
+
+    if (attendees.length === 0) {
+      // Hospodský aspoň prodal jedno pivo hostiteli
+      await recordTransaction(db, teamId, "manager_social", -STAMMTISCH_COST_PER_HEAD,
+        "Štamtiš — nikdo nedorazil, pivo na žal", gameDate, eventId);
+      return c.json({ ok: true, message: "Nikdo nedorazil. Seděl jsi u velkého stolu sám a hospodský se tvářil soucitně.", details });
+    }
+
+    // 2. Útrata podle skutečné účasti
+    const cost = STAMMTISCH_COST_PER_HEAD * (attendees.length + 1);
+    await recordTransaction(db, teamId, "manager_social", -cost,
+      `Štamtiš trenérů — rundy pro ${attendees.length + 1} lidí`, gameDate, eventId);
+
+    // 3. Efekty: hostitel × každý host
+    for (const a of attendees) {
+      await applyRelationEvent(db, teamId, a.teamId, {
+        respect: 5, icon: "🍻", text: `Štamtiš u ${myManager} — ${a.manager} seděl u stolu`,
+      });
+    }
+
+    // 4. Dynamika mezi hosty: pár s heat ≥ 50 → 50% hádka, jinak sbližování
+    const quarrels: string[] = [];
+    for (let i = 0; i < attendees.length; i++) {
+      for (let j = i + 1; j < attendees.length; j++) {
+        const a = attendees[i];
+        const b = attendees[j];
+        const rel = await getRelation(db, a.teamId, b.teamId);
+        if (rel.heat >= 50 && Math.random() < 0.5) {
+          const quarrelText = stammtischQuarrelText(a.manager, b.manager);
+          await applyRelationEvent(db, a.teamId, b.teamId, { heat: 8, icon: "💢", text: quarrelText });
+          // Hostitel je aspoň posadil k jednomu stolu — to se cení
+          await applyRelationEvent(db, teamId, a.teamId, { respect: 3, icon: "⚖️", text: `${myManager} se snažil hádku uklidnit` });
+          await applyRelationEvent(db, teamId, b.teamId, { respect: 3, icon: "⚖️", text: `${myManager} se snažil hádku uklidnit` });
+          quarrels.push(quarrelText);
+        } else {
+          await applyRelationEvent(db, a.teamId, b.teamId, {
+            respect: 2, icon: "🍻", text: `Sblížení u štamtiše trenéra ${myManager}`,
+          });
+        }
+      }
+    }
+
+    // 5. Zpravodaj — summit od 3 účastníků výš
+    if (attendees.length >= 3) {
+      const article = stammtischNews(myManager, myName, attendees.map((a) => `${a.manager} (${a.teamName})`));
+      await insertRelationNews(db, host.league_id, article.headline, article.body, teamId);
+    }
+
+    const parts = [
+      `Dorazili: ${attendees.map((a) => a.manager).join(", ")}.`,
+      stammtischSceneText(attendees.length),
+      ...quarrels,
+      ...details.filter((d) => !d.came && d.note).map((d) => d.note as string),
+      `Útrata: ${cost} Kč.`,
+    ];
+    return c.json({ ok: true, message: parts.join(" "), details });
+  } catch (e) {
+    logger.error({ module: "relations" }, "stammtisch failed", e);
+    return c.json({ error: "Štamtiš se nepovedl. Zkus to znovu." }, 500);
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// POST /teams/:teamId/pub-round — runda pro celou hospodu po výhře
+// ────────────────────────────────────────────────────────────────────────────
+
+relationsRouter.post("/teams/:teamId/pub-round", async (c) => {
+  const teamId = c.req.param("teamId");
+  const db = c.env.DB;
+
+  const lastMatch = await db.prepare(
+    `SELECT id, home_team_id, home_score, away_score FROM matches
+     WHERE status IN ('simulated', 'finished') AND (home_team_id = ? OR away_team_id = ?)
+     ORDER BY simulated_at DESC LIMIT 1`
+  ).bind(teamId, teamId).first<{ id: string; home_team_id: string; home_score: number; away_score: number }>();
+  if (!lastMatch) return c.json({ error: "Žádný odehraný zápas." }, 400);
+
+  const myScore = lastMatch.home_team_id === teamId ? lastMatch.home_score : lastMatch.away_score;
+  const theirScore = lastMatch.home_team_id === teamId ? lastMatch.away_score : lastMatch.home_score;
+  if (myScore <= theirScore) return c.json({ error: "Runda se kupuje po výhře. Nejdřív vyhraj." }, 400);
+  if (await hasInteraction(db, "pub_round", teamId, lastMatch.id)) {
+    return c.json({ error: "Za tuhle výhru už hospoda pila." }, 400);
+  }
+
+  // Štamgasti: 15–30 lidí × 12 Kč pivo
+  const patrons = 15 + Math.floor(Math.random() * 16);
+  const cost = patrons * 12;
+  const purchase = await assertPurchaseAllowed(db, teamId, cost);
+  if (!purchase.ok) return c.json({ error: purchase.reason }, 400);
+
+  const gameDate = await getTeamGameDate(db, teamId);
+
+  try {
+    await recordTransaction(db, teamId, "manager_social", -cost,
+      `Runda pro hospodu po výhře (${patrons} štamgastů)`, gameDate, lastMatch.id);
+    await shiftSquadMorale(db, teamId, 2);
+    await db.prepare("UPDATE fans SET satisfaction = MIN(100, satisfaction + 1) WHERE team_id = ?")
+      .bind(teamId).run().catch((e) => logger.warn({ module: "relations" }, "pub round fans satisfaction", e));
+    // Starosta sedí v rohu — přízeň obce roste
+    const team = await db.prepare("SELECT village_id FROM teams WHERE id = ?").bind(teamId).first<{ village_id: string | null }>();
+    if (team?.village_id) {
+      await db.prepare(
+        "UPDATE village_team_favor SET favor = MIN(100, favor + 2) WHERE village_id = ? AND team_id = ?"
+      ).bind(team.village_id, teamId).run().catch((e) => logger.warn({ module: "relations" }, "pub round favor", e));
+    }
+    await insertInteraction(db, "pub_round", teamId, teamId, lastMatch.id, { patrons, cost });
+
+    return c.json({ ok: true, message: pubRoundMessage(patrons), patrons, cost });
+  } catch (e) {
+    logger.error({ module: "relations" }, "pub round failed", e);
+    return c.json({ error: "Runda se nepovedla. Zkus to znovu." }, 500);
   }
 });
