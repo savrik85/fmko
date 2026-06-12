@@ -53,6 +53,12 @@ Derby (heat ≥ 60) navíc: návštěva ×1.35 (v místě výpočtu attendance v
    odhalí autora.
 5. **Dárek po debaklu** (po vlastní výhře ≥ 4 góly nad cílem, 1× na zápas, −80 Kč):
    tón upřímný (respekt +8) / jedovatý (heat +15 cíli, vlastní kabina +3 morálka).
+6. **Předzápasový výrok do novin** (1× na vzájemný zápas, karta „Před zápasem"
+   na profilu cizího týmu + profil trenéra): uznání (respekt +5, kabina +1) /
+   provokace (heat +10, vlastní kabina +2, ALE soupeřova kabina +2 — nabudí je) /
+   falešná skromnost (bez okamžitého efektu; výhra o 3+ → heat +15 + článek
+   „Skromnost, která bolela"). AI protějšek odpovídá protivyrokem dle archetypu
+   (tisková přestřelka ve zpravodaji), lidský soupeř dostane notifikaci.
 
 Princip: každá podlost má cenu (riziko prozrazení, heat), každé smíření něco
 stojí (peníze, hrdost).
@@ -86,5 +92,5 @@ notifikace přes `createNotification`. Morálka kabiny přes `json_set(life_cont
 
 Ukradený maskot, babka s kočárkem (špionáž tréninku), rezervovaná hospoda,
 pozvánka na zabijačku/ples, drby v hospodě, gentlemanské dohody (sdílení
-skautských reportů — váže na feature Scouting), předzápasová tiskovka,
-zpětný zápis rýpnutí z AI rozhovorů do heat.
+skautských reportů — váže na feature Scouting), lahev „na uklidněnou",
+oběd s trenérem (prozradí formaci), zpětný zápis rýpnutí z AI rozhovorů do heat.
