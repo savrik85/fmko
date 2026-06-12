@@ -80,6 +80,7 @@ const TXN_ICONS: Record<string, string> = {
   concession_wholesale: "📦", concession_income_external: "🏪", concession_income_self: "🍺",
   promotional_campaign: "📢",
   cash_loan_disbursement: "💳", cash_loan_repayment: "💳",
+  manager_social: "🍻", manager_bet_win: "🍺", manager_bet_loss: "🍺",
   other: "📋",
 };
 
@@ -94,6 +95,7 @@ const TXN_LABELS: Record<string, string> = {
   concession_wholesale: "Nákup zboží", concession_income_external: "Pronájem bufetu", concession_income_self: "Tržby z občerstvení",
   promotional_campaign: "Propagace zápasu",
   cash_loan_disbursement: "Půjčka — přijatá", cash_loan_repayment: "Splátka půjčky",
+  manager_social: "Trenérská diplomacie", manager_bet_win: "Vyhraná sázka", manager_bet_loss: "Prohraná sázka",
   other: "Ostatní",
 };
 

@@ -408,9 +408,24 @@ export async function runScheduledMatches(
                 });
             const promoBoost = promoRow?.promotion_boost ?? 1.0;
 
-            // Apply facility attendance bonus (parking) + celebrity bonus + satisfaction + promo, cap at stadium capacity
+            // Derby podle vztahu manažerů — heat PŘED zápasem rozhoduje o atmosféře
+            // (návštěva) i o pozápasovém morálkovém swingu.
+            let preMatchHeat = 0;
+            try {
+                const {getRelation, DERBY_HEAT_THRESHOLD} = await import("../community/manager-relations");
+                const rel = await getRelation(db, homeTeamId, awayTeamId);
+                preMatchHeat = rel.heat;
+                if (preMatchHeat >= DERBY_HEAT_THRESHOLD) {
+                    logger.info({module: "match-runner", matchId}, `derby match (heat=${preMatchHeat})`);
+                }
+            } catch (e) {
+                logger.warn({module: "match-runner"}, "load manager relation pre-match", e);
+            }
+            const derbyAttendanceMul = preMatchHeat >= 60 ? 1.35 : 1.0;
+
+            // Apply facility attendance bonus (parking) + celebrity bonus + satisfaction + promo + derby, cap at stadium capacity
             const attendance = Math.min(
-                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul),
+                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul),
                 stadiumCapacity,
             );
 
@@ -644,6 +659,22 @@ export async function runScheduledMatches(
                 await applyLossStreakPenalty(db, awayTeamId);
             } catch (e) {
                 logger.warn({module: "match-runner"}, "fanbase post-match update", e);
+            }
+
+            // ── Post-match: vztahy manažerů (pasivní heat/respekt, derby morálka, sázky) ──
+            try {
+                const {applyPostMatchRelations} = await import("../community/manager-relations");
+                await applyPostMatchRelations(db, {
+                    matchId,
+                    homeTeamId,
+                    awayTeamId,
+                    homeScore: result.homeScore,
+                    awayScore: result.awayScore,
+                    leagueId: (match.league_id as string | null) ?? null,
+                    preMatchHeat,
+                });
+            } catch (e) {
+                logger.warn({module: "match-runner"}, "manager relations post-match", e);
             }
 
             // Player stats update

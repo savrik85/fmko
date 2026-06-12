@@ -7,6 +7,7 @@ import { useTeam } from "@/context/team-context";
 import { Spinner, SectionLabel, EntityLink, BadgePreview, PositionBadge, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { PreMatchCard } from "@/components/relations/RelationSection";
 
 function isLightColor(hex: string): boolean {
   const c = hex.replace("#", "");
@@ -439,6 +440,11 @@ export default function TeamPage() {
           )}
         </div>
       </div>
+
+      {/* ═══ Před zápasem — špičkování a sázky (jen cizí tým s nadcházejícím vzájemným zápasem) ═══ */}
+      {myTeamId && !isOwnTeam && (
+        <PreMatchCard myTeamId={myTeamId} otherTeamId={teamId} otherTeamName={team.name} />
+      )}
 
       {/* ═══ Results + Top players ═══ */}
       {matchResults && matchResults.matches.length > 0 && (

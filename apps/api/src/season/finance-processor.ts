@@ -36,6 +36,9 @@ export type TransactionType =
   | "cash_loan_disbursement"
   | "cash_loan_repayment"
   | "village_brigade"
+  | "manager_social"
+  | "manager_bet_win"
+  | "manager_bet_loss"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */
@@ -74,6 +77,7 @@ const PURCHASE_TYPES = new Set<TransactionType>([
   "equipment_upgrade", "stadium_upgrade", "stadium_visual",
   "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
+  "manager_social",
 ]);
 
 /**

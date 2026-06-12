@@ -129,7 +129,7 @@ export default function DashboardPage() {
       }
       // Fetch news
       apiFetch<{ articles: typeof news }>(`/api/teams/${teamId}/news`)
-        .then((d) => setNews(d.articles.filter((a) => a.type !== "standing").slice(0, 3)))
+        .then((d) => setNews(d.articles.filter((a) => a.type !== "standing").slice(0, 5)))
         .catch((e) => console.error("news fetch:", e));
       // Fetch recent achievements (last 3 earned)
       apiFetch<{ achievements: Array<{ key: string; icon: string; title: string; tier: string; earnedAt: string | null }> }>(`/api/teams/${teamId}/achievements`)

@@ -8,6 +8,7 @@ import { Spinner, SectionLabel, BadgePreview, PositionBadge } from "@/components
 import type { BadgePattern } from "@/components/ui";
 import { useTeam } from "@/context/team-context";
 import { MatchBreakdown } from "@/components/MatchBreakdown";
+import { PostMatchGestureCard } from "@/components/relations/RelationSection";
 
 interface MatchEvent {
   minute: number; type: string; playerId: number; playerName: string;
@@ -294,6 +295,16 @@ export default function MatchDetailPage() {
       {/* ═══ CO ROZHODLO — breakdown faktorů ═══ */}
       {ownTeamId && (ownTeamId === match.home_team_id || ownTeamId === match.away_team_id) && (
         <MatchBreakdown teamId={ownTeamId} matchId={match.id} />
+      )}
+
+      {/* ═══ POZÁPASOVÉ GESTO — vztah s trenérem soupeře ═══ */}
+      {ownTeamId && (ownTeamId === match.home_team_id || ownTeamId === match.away_team_id) && (
+        <PostMatchGestureCard
+          myTeamId={ownTeamId}
+          opponentTeamId={ownTeamId === match.home_team_id ? match.away_team_id : match.home_team_id}
+          opponentName={ownTeamId === match.home_team_id ? match.away_name : match.home_name}
+          matchId={match.id}
+        />
       )}
 
       {/* ═══ HRÁČ ZÁPASU (MVP) ═══ */}
