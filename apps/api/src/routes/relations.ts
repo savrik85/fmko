@@ -18,6 +18,13 @@ import {
 import { recordTransaction, assertPurchaseAllowed } from "../season/finance-processor";
 import { createNotification } from "../community/notifications";
 import { requireTeamOwnership } from "../auth/middleware";
+import {
+  statementRespectQuote, statementProvokeQuote, statementHumbleQuote,
+  adTextFor, jabNewsBody, praiseReplyText, praiseNews,
+  beerSceneText, dartsWinText, dartsLossText,
+  giftSincereMessage, giftPoisonMessage,
+  type RelationNames,
+} from "../community/relation-texts";
 
 export const relationsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -280,6 +287,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
   ]);
   const otherIsAi = await isAiTeam(db, otherId);
   const gameDate = await getTeamGameDate(db, teamId);
+  const names: RelationNames = { myName, theirName, myManager, theirManager };
 
   try {
     switch (body.type) {
@@ -309,7 +317,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           await insertRelationNews(
             db, match.league_id,
             `${myManager} si po zápase pustil pusu na špacír`,
-            `„Soupeř? Viděli jste to sami. My jsme aspoň věděli, na kterou stranu se útočí," nechal se slyšet trenér ${myName} na adresu ${theirName}. V kabině ${myName} se prý smáli ještě u třetího piva.`,
+            jabNewsBody(names),
             teamId,
           );
           if (!otherIsAi) {
@@ -360,20 +368,26 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           respect: 4, icon: "👏", text: `${myManager} pochválil práci, kterou ${theirManager} v ${theirName} odvádí`,
         });
 
+        // Pochvala jde i do novin — na okrese se chválí tak málo, že je to zpráva
+        const myTeamRow = await db.prepare("SELECT league_id FROM teams WHERE id = ?")
+          .bind(teamId).first<{ league_id: string | null }>();
+        const praiseArticle = praiseNews(names);
+        await insertRelationNews(db, myTeamRow?.league_id ?? null, praiseArticle.headline, praiseArticle.body, teamId);
+
         let aiResponseText: string | null = null;
         if (otherIsAi) {
           const archetype = aiArchetype(otherId);
-          const reactions: Record<string, { respect: number; heat: number; reply: string }> = {
-            ferovka: { respect: 2, heat: 0, reply: `${theirManager}: „Tohle potěší. Pozdravuj u vás v kabině.“` },
-            pohodar: { respect: 2, heat: 0, reply: `${theirManager}: „No vidíš — a pivo z toho jednou bude.“` },
-            urazeny: { respect: 1, heat: 0, reply: `${theirManager}: „Hm. A co tím jako myslel?“ Ale podle všeho ho to potěšilo.` },
-            provokater: { respect: 1, heat: -2, reply: `${theirManager}: „Jasně že dělám dobrou práci. Aspoň někdo na okrese to vidí.“` },
+          const deltas: Record<string, { respect: number; heat: number }> = {
+            ferovka: { respect: 2, heat: 0 },
+            pohodar: { respect: 2, heat: 0 },
+            urazeny: { respect: 1, heat: 0 },
+            provokater: { respect: 1, heat: -2 },
           };
-          const r = reactions[archetype];
+          const r = deltas[archetype];
           await applyRelationEvent(db, teamId, otherId, {
             respect: r.respect, heat: r.heat, icon: "🗣️", text: `${theirManager} pochvalu ocenil`,
           });
-          aiResponseText = r.reply;
+          aiResponseText = praiseReplyText(archetype, names);
         } else {
           await createNotification(db, otherId, "event", "👏 Pochvala od kolegy",
             `Trenér ${myName} ocenil práci, kterou v klubu odvádíš. Respekt mezi vámi roste.`,
@@ -418,12 +432,12 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
             await applyRelationEvent(db, teamId, otherId, {
               respect: 3, icon: "🎯", text: `${myManager} porazil ${theirManager} v šipkách`,
             });
-            dartsText = `Došlo i na šipky — a ${theirManager} kupoval rundu. Tohle se bude vyprávět.`;
+            dartsText = dartsWinText(names);
           } else {
             await recordTransaction(db, teamId, "manager_social", -BEER_COST,
               `Prohrané šipky — runda pro hospodu`, gameDate);
             await shiftSquadMorale(db, otherId, 1);
-            dartsText = `Šipky nevyšly — runda šla za tebou. ${theirManager} se usmíval celý večer.`;
+            dartsText = dartsLossText(names);
           }
         }
 
@@ -434,7 +448,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
             `/dashboard/manager/${teamId}`, c.env as never)
             .catch((e) => logger.warn({ module: "relations" }, "beer notification", e));
         }
-        return c.json({ ok: true, message: `Dobrý večer u piva s trenérem ${theirName}.`, darts: dartsText });
+        return c.json({ ok: true, message: beerSceneText(names), darts: dartsText });
       }
 
       // ── Sázka o bečku ───────────────────────────────────────────────────
@@ -512,23 +526,14 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         let message: string;
 
         if (tone === "respect") {
-          const quotes = [
-            `„${theirName} má formu a kvalitu, bude to řežba. Máme před nimi respekt,“ řekl před zápasem trenér ${myManager} (${myName}).`,
-            `„Znám jejich trenéra, dělá dobrou práci. V neděli to bude férový fotbal a ať vyhraje lepší,“ uvedl trenér ${myManager} z ${myName}.`,
-          ];
-          await insertRelationNews(db, match.league_id, `Před zápasem: ${myName} smeká`, quotes[Math.floor(Math.random() * quotes.length)], teamId);
+          await insertRelationNews(db, match.league_id, `Před zápasem: ${myName} smeká`, statementRespectQuote(names), teamId);
           await applyRelationEvent(db, teamId, otherId, {
             respect: 5, icon: "🫡", text: `${myManager} před ${roundLabel} veřejně uznal kvality soupeře`,
           });
           await shiftSquadMorale(db, teamId, 1);
           message = "Uznání vyšlo v novinách. Kabina hraje bez tlaku.";
         } else if (tone === "provoke") {
-          const quotes = [
-            `„${theirName}? Doma jim tleská třicet lidí a půlka jsou holubi. My se nebojíme,“ provokoval před zápasem trenér ${myManager} (${myName}).`,
-            `„Viděl jsem jejich poslední zápas. Kdyby fotbal byl o snaze, mají bod. Takhle nemají nic,“ vzkázal soupeři trenér ${myManager} z ${myName}.`,
-            `„Bečku, co s námi prohrají, ať rovnou vychladí,“ hlásil sebevědomě trenér ${myManager} (${myName}).`,
-          ];
-          await insertRelationNews(db, match.league_id, `PŘESTŘELKA: ${myManager} provokuje před ${roundLabel}`, quotes[Math.floor(Math.random() * quotes.length)], teamId);
+          await insertRelationNews(db, match.league_id, `PŘESTŘELKA: ${myManager} provokuje před ${roundLabel}`, statementProvokeQuote(names), teamId);
           await applyRelationEvent(db, teamId, otherId, {
             heat: 10, icon: "😏", text: `${myManager} před ${roundLabel} provokoval v novinách`,
           });
@@ -536,20 +541,14 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           await shiftSquadMorale(db, otherId, 2); // provokace soupeře nabudí — má to cenu
           message = "Provokace vyšla v novinách. Kabina hoří — jenže soupeř taky.";
         } else {
-          const quotes = [
-            `„Jedeme tam oslabení, půlka kluků má žně. Když to nebude debakl, bereme to,“ krotil očekávání trenér ${myManager} (${myName}).`,
-            `„${theirName} je jasný favorit. My si jedeme maximálně pro kanára a klobásu,“ tvrdil skromně trenér ${myManager} z ${myName}.`,
-          ];
-          await insertRelationNews(db, match.league_id, `${myName} hraje chudáčka`, quotes[Math.floor(Math.random() * quotes.length)], teamId);
+          await insertRelationNews(db, match.league_id, `${myName} hraje chudáčka`, statementHumbleQuote(names), teamId);
           message = "Skromnost vyšla v novinách. Teď nesmíš vyhrát moc vysoko… nebo vlastně smíš?";
         }
 
         // AI protějšek reaguje podle archetypu
         let aiResponseText: string | null = null;
         if (otherIsAi) {
-          const resp = aiStatementResponse(aiArchetype(otherId), tone, {
-            aiManager: theirManager, aiTeam: theirName, actorTeam: myName,
-          });
+          const resp = aiStatementResponse(aiArchetype(otherId), tone, names);
           if (resp.respect !== 0 || resp.heat !== 0) {
             await applyRelationEvent(db, teamId, otherId, {
               respect: resp.respect, heat: resp.heat, icon: "🗣️", text: resp.historyText,
@@ -584,13 +583,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
 
         await recordTransaction(db, teamId, "manager_social", -AD_COST, "Inzerát v novinách", gameDate);
 
-        const ADS = [
-          `Prodám obranu, málo používaná, projeto ${Math.floor(Math.random() * 5) + 5} góly. Zn.: ${theirName}`,
-          `Hledá se útočník. Naposledy viděn střílet na bránu před měsícem. Odměna: pivo. Zn.: ${theirName}`,
-          `Daruji taktickou tabuli, majitel ji stejně nepoužívá. Zn.: kabina ${theirName}`,
-          `Vyměním tři body za cokoliv. I za slepice. Zn.: ${theirName}`,
-        ];
-        const adText = ADS[Math.floor(Math.random() * ADS.length)];
+        const adText = adTextFor(names);
         await insertRelationNews(db, team?.league_id ?? null, "Inzerce", adText);
         await shiftSquadMorale(db, otherId, -2);
 
@@ -645,7 +638,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           await applyRelationEvent(db, teamId, otherId, {
             respect: 8, icon: "🎁", text: `${myManager} poslal po výhře ${myScore}:${theirScore} upřímný dárkový koš`,
           });
-          message = "Koš s lahví a upřímnou kartičkou odeslán. Tohle se na okrese počítá.";
+          message = giftSincereMessage();
           if (!otherIsAi) {
             await createNotification(db, otherId, "event", "🎁 Dárkový koš",
               `Trenér ${myName} poslal po zápase koš s lahví a vzkazem: „Hlavu vzhůru, příště to vyjde."`,
@@ -657,7 +650,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
             heat: 15, icon: "🎁", text: `${myManager} poslal po debaklu ${myScore}:${theirScore} jedovatý dárkový koš`,
           });
           await shiftSquadMorale(db, teamId, 3);
-          message = "Koš s kartičkou „Ať se daří aspoň v hospodě“ odeslán. Kabina si fotku přeposílá dodnes.";
+          message = giftPoisonMessage();
           if (!otherIsAi) {
             await createNotification(db, otherId, "event", "🎁 „Dárek“",
               `Trenér ${myName} poslal koš s kartičkou: „Ať se daří aspoň v hospodě.“ Tohle si zapamatuj.`,
