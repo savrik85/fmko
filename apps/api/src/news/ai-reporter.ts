@@ -233,7 +233,7 @@ export async function generateAiRoundReport(
       const { getRelationPromptContext } = await import("../community/manager-relations");
       const rel = await getRelationPromptContext(db, m.home_team_id as string, m.away_team_id as string);
       if (rel && (rel.heat >= 30 || Math.abs(rel.respect) >= 30)) {
-        line += `\n  • vztah trenérů: ${rel.label} (napětí ${rel.heat}/100)${rel.moments.length ? ` — nedávno: ${rel.moments.slice(0, 2).join("; ")}` : ""} → klidně to v reportu okomentuj`;
+        line += `\n  • vztah trenérů: ${rel.label}${rel.moments.length ? ` — nedávno: ${rel.moments.slice(0, 2).join("; ")}` : ""} → klidně to v reportu okomentuj (slovně, NIKDY necituj číselné hodnoty vztahu)`;
       }
     } catch (e) {
       logger.warn({ module: "ai-reporter" }, "load relation ctx", e);

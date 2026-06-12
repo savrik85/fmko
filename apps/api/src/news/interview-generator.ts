@@ -225,7 +225,7 @@ export async function generateInterviewQuestions(
       : null,
     ctx.opponentFormStr ? `- Forma soupeře (5 zápasů): ${ctx.opponentFormStr}` : null,
     ctx.opponentLastResult ? `- Poslední výsledek soupeře: ${ctx.opponentLastResult}` : null,
-    rel ? `- Vztah trenérů: ${rel.label} (respekt ${rel.respect}, napětí ${rel.heat}/100)` : null,
+    rel ? `- Vztah trenérů: ${rel.label} (interní info — v otázce popisuj slovně, NIKDY necituj číselné hodnoty vztahu)` : null,
     rel && rel.moments.length
       ? `- Poslední události mezi kluby: ${rel.moments.join("; ")}`
       : null,

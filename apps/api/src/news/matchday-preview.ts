@@ -267,7 +267,7 @@ export async function generateMatchdayPreview(
       lines.push(`  🔥 DERBY — mezi kluby (a hlavně trenéry) to dlouhodobě vře, zápas roku pro obě vesnice`);
     }
     if (p.relation) {
-      lines.push(`  Vztah trenérů: ${p.relation.label} (respekt ${p.relation.respect}, napětí ${p.relation.heat}/100)`);
+      lines.push(`  Vztah trenérů: ${p.relation.label} (interní info — popisuj slovně, NIKDY necituj číselné hodnoty vztahu)`);
       if (p.relation.moments.length) {
         lines.push(`  Poslední události mezi kluby: ${p.relation.moments.join("; ")} — klidně na to v preview narážej`);
       }
