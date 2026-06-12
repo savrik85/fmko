@@ -23,8 +23,8 @@ interface RelationListItem {
 }
 
 interface SocialInfo {
-  stammtisch: { available: boolean; cooldownDaysLeft: number; costPerHead: number };
-  pubRound: { available: boolean; reason: string | null };
+  stammtisch: { available: boolean; planned: boolean; cooldownDaysLeft: number; costPerHead: number };
+  pubRound: { available: boolean; planned: boolean; reason: string | null };
 }
 
 const BTN = "text-sm font-heading font-bold px-3 py-2 rounded-lg border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
@@ -106,21 +106,29 @@ export function StammtischCard({ teamId }: { teamId: string }) {
       )}
 
       <div className="flex flex-wrap gap-2">
-        <button disabled={busy || !info.stammtisch.available}
-          title={!info.stammtisch.available
-            ? `Hospodský doplňuje sudy — znovu za ${info.stammtisch.cooldownDaysLeft} dní`
-            : `Pozvi 2–4 trenéry, rundy ${info.stammtisch.costPerHead} Kč na hlavu`}
-          onClick={() => setPicking((v) => !v)}
-          className={`${BTN} bg-amber-50 border-amber-200 hover:bg-amber-100`}>
-          🍻 Posezení s trenéry{!info.stammtisch.available ? ` (za ${info.stammtisch.cooldownDaysLeft} dní)` : ""}
-        </button>
+        {info.stammtisch.planned ? (
+          <span className="text-sm text-muted self-center">🍻 Posezení je domluvené — kdo dorazí, uvidíš večer v hospodě</span>
+        ) : (
+          <button disabled={busy || !info.stammtisch.available}
+            title={!info.stammtisch.available
+              ? `Hospodský doplňuje sudy — znovu za ${info.stammtisch.cooldownDaysLeft} dní`
+              : `Pozvi 2–4 trenéry, rundy ${info.stammtisch.costPerHead} Kč na hlavu. Vyhodnotí se večer.`}
+            onClick={() => setPicking((v) => !v)}
+            className={`${BTN} bg-amber-50 border-amber-200 hover:bg-amber-100`}>
+            🍻 Posezení s trenéry{!info.stammtisch.available ? ` (za ${info.stammtisch.cooldownDaysLeft} dní)` : ""}
+          </button>
+        )}
 
-        <button disabled={busy || !info.pubRound.available}
-          title={info.pubRound.reason ?? "Pivo všem štamgastům — morálka, fanoušci i starosta v rohu"}
-          onClick={buyRound}
-          className={`${BTN} bg-green-50 border-green-200 hover:bg-green-100`}>
-          🍺 Koupit rundu hospodě
-        </button>
+        {info.pubRound.planned ? (
+          <span className="text-sm text-muted self-center">🍺 Runda je slíbená — večer se roztočí</span>
+        ) : (
+          <button disabled={busy || !info.pubRound.available}
+            title={info.pubRound.reason ?? "Pivo všem štamgastům — morálka, fanoušci i starosta v rohu. Roztočí se večer."}
+            onClick={buyRound}
+            className={`${BTN} bg-green-50 border-green-200 hover:bg-green-100`}>
+            🍺 Koupit rundu hospodě
+          </button>
+        )}
       </div>
 
       {picking && info.stammtisch.available && (
@@ -148,7 +156,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
               className={`${BTN} bg-amber-50 border-amber-200 hover:bg-amber-100`}>
               Pozvat ke stolu ({selected.size ? `max ${info.stammtisch.costPerHead * (selected.size + 1)} Kč` : "vyber trenéry"})
             </button>
-            <span className="text-xs text-muted">Platí se jen za ty, kdo dorazí. Pozor na rivaly u jednoho stolu.</span>
+            <span className="text-xs text-muted">Vyhodnotí se večer v hospodě. Platí se jen za ty, kdo dorazí — a pozor na rivaly u jednoho stolu.</span>
           </div>
         </div>
       )}

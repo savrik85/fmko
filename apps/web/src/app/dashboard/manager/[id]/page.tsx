@@ -10,7 +10,6 @@ import { SectionLabel, Spinner, BadgePreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { EditManagerModal } from "@/components/manager/EditManagerModal";
 import { RelationCard, RelationsOverview } from "@/components/relations/RelationSection";
-import { StammtischCard } from "@/components/relations/StammtischCard";
 
 const BACKSTORY_LABELS: Record<string, string> = {
   byvaly_hrac: "Bývalý hráč",
@@ -205,10 +204,7 @@ export default function ManagerDetailPage() {
           <RelationCard myTeamId={teamId} otherTeamId={managerId} otherManagerName={manager.name} />
         )}
         {teamId && managerId === teamId && (
-          <>
-            <StammtischCard teamId={teamId} />
-            <RelationsOverview teamId={teamId} />
-          </>
+          <RelationsOverview teamId={teamId} />
         )}
 
         {achievements && achievements.achievements.length > 0 && (

@@ -7,7 +7,11 @@
  */
 
 import { logger } from "../lib/logger";
-import { betWonNews, betDrawNews, derbyNews, humbleBackfireNews, counterQuoteText } from "./relation-texts";
+import {
+  betWonNews, betDrawNews, derbyNews, humbleBackfireNews, counterQuoteText,
+  stammtischNews, stammtischQuarrelText, stammtischDeclineText, stammtischSceneText,
+  pubRoundMessage,
+} from "./relation-texts";
 
 export interface RelationMoment {
   date: string; // ISO timestamp
@@ -539,4 +543,219 @@ export function aiStatementResponse(
         historyText: `${aiManager} to vzal s úsměvem`,
       };
   }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Naplánované hospodské akce — vyhodnocují se při „odehrání" hospody
+// (daily-tick, hned po generování pub sessions). Výsledek se propíše jako
+// incident do pub_sessions, takže ho hráč uvidí na stránce Hospoda.
+// ────────────────────────────────────────────────────────────────────────────
+
+const STAMMTISCH_COST_PER_HEAD = 80;
+
+async function appendPubIncident(
+  db: D1Database,
+  teamId: string,
+  gameDate: string,
+  incident: { type: string; playerIds: string[]; text: string; effects: unknown[] },
+): Promise<void> {
+  const session = await db.prepare(
+    "SELECT id, incidents FROM pub_sessions WHERE team_id = ? AND game_date = ?"
+  ).bind(teamId, gameDate).first<{ id: number; incidents: string }>();
+  if (!session) return; // bez session není kam psát — výsledek dorazí aspoň notifikací
+  let incidents: unknown[] = [];
+  try {
+    const parsed = JSON.parse(session.incidents);
+    if (Array.isArray(parsed)) incidents = parsed;
+  } catch (e) {
+    logger.warn({ module: "manager-relations" }, "parse pub incidents", e);
+  }
+  incidents.push(incident);
+  await db.prepare("UPDATE pub_sessions SET incidents = ? WHERE id = ?")
+    .bind(JSON.stringify(incidents), session.id).run();
+}
+
+async function chargeSocial(
+  db: D1Database,
+  teamId: string,
+  amount: number,
+  description: string,
+  gameDate: string,
+  refId: string,
+): Promise<boolean> {
+  try {
+    const { recordTransaction } = await import("../season/finance-processor");
+    await recordTransaction(db, teamId, "manager_social", -amount, description, gameDate, refId);
+    return true;
+  } catch (e) {
+    // Záporný rozpočet — hospodský píše křídou na futro, akce ale proběhla
+    logger.warn({ module: "manager-relations" }, "social charge blocked", e);
+    return false;
+  }
+}
+
+async function resolveStammtisch(
+  db: D1Database,
+  row: { id: string; actor_team_id: string; payload: string },
+  gameDate: string,
+): Promise<void> {
+  const teamId = row.actor_team_id;
+  let guestIds: string[] = [];
+  try {
+    const parsed = JSON.parse(row.payload);
+    if (Array.isArray(parsed?.guestTeamIds)) guestIds = parsed.guestTeamIds;
+  } catch (e) {
+    logger.warn({ module: "manager-relations" }, "parse stammtisch payload", e);
+  }
+
+  const [myName, myManager] = await Promise.all([getTeamName(db, teamId), getManagerName(db, teamId)]);
+  const host = await db.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string | null }>();
+  const { createNotification } = await import("./notifications");
+
+  // 1. Kdo dorazil
+  const attendees: Array<{ teamId: string; teamName: string; manager: string }> = [];
+  const declineNotes: string[] = [];
+  for (const gid of guestIds) {
+    const gName = await getTeamName(db, gid);
+    const manager = await getManagerName(db, gid);
+    const rel = await getRelation(db, teamId, gid);
+    const guestIsAi = await isAiTeam(db, gid);
+    let comes: boolean;
+    if (guestIsAi) {
+      const archetype = aiArchetype(gid);
+      comes = archetype === "pohodar" || archetype === "provokater"
+        ? true
+        : archetype === "ferovka" ? rel.respect >= 0 : rel.respect >= 20;
+      if (!comes) declineNotes.push(stammtischDeclineText(archetype, manager));
+    } else {
+      comes = rel.respect >= 0;
+      if (!comes) declineNotes.push(`${manager} pozvánku nechal bez odpovědi.`);
+      else {
+        await createNotification(db, gid, "event", "🍻 Posezení s trenéry",
+          `Trenér ${myName} tě hostil u společného stolu s dalšími trenéry z ligy. Respekt mezi vámi roste.`,
+          `/dashboard/manager/${teamId}`)
+          .catch((e) => logger.warn({ module: "manager-relations" }, "stammtisch guest notification", e));
+      }
+    }
+    if (comes) attendees.push({ teamId: gid, teamName: gName, manager });
+  }
+
+  let narrative: string;
+  if (attendees.length === 0) {
+    await chargeSocial(db, teamId, STAMMTISCH_COST_PER_HEAD, "Posezení s trenéry — nikdo nedorazil, pivo na žal", gameDate, row.id);
+    narrative = "Nikdo z pozvaných trenérů nedorazil. Seděl jsi u velkého stolu sám a hospodský se tvářil soucitně.";
+  } else {
+    // 2. Útrata podle skutečné účasti
+    const cost = STAMMTISCH_COST_PER_HEAD * (attendees.length + 1);
+    const paid = await chargeSocial(db, teamId, cost,
+      `Posezení s trenéry — rundy pro ${attendees.length + 1} lidí`, gameDate, row.id);
+
+    // 3. Hostitel × každý host
+    for (const a of attendees) {
+      await applyRelationEvent(db, teamId, a.teamId, {
+        respect: 5, icon: "🍻", text: `Posezení u ${myManager} — ${a.manager} seděl u stolu`,
+      });
+    }
+
+    // 4. Dynamika mezi hosty: rivalové (heat ≥ 50) se 50% šancí pohádají
+    const quarrels: string[] = [];
+    for (let i = 0; i < attendees.length; i++) {
+      for (let j = i + 1; j < attendees.length; j++) {
+        const a = attendees[i];
+        const b = attendees[j];
+        const rel = await getRelation(db, a.teamId, b.teamId);
+        if (rel.heat >= 50 && Math.random() < 0.5) {
+          const quarrelText = stammtischQuarrelText(a.manager, b.manager);
+          await applyRelationEvent(db, a.teamId, b.teamId, { heat: 8, icon: "💢", text: quarrelText });
+          await applyRelationEvent(db, teamId, a.teamId, { respect: 3, icon: "⚖️", text: `${myManager} se snažil hádku uklidnit` });
+          await applyRelationEvent(db, teamId, b.teamId, { respect: 3, icon: "⚖️", text: `${myManager} se snažil hádku uklidnit` });
+          quarrels.push(quarrelText);
+        } else {
+          await applyRelationEvent(db, a.teamId, b.teamId, {
+            respect: 2, icon: "🍻", text: `Sblížení na posezení u trenéra ${myManager}`,
+          });
+        }
+      }
+    }
+
+    // 5. Zpravodaj — summit od 3 účastníků
+    if (attendees.length >= 3 && host?.league_id) {
+      const article = stammtischNews(myManager, myName, attendees.map((a) => `${a.manager} (${a.teamName})`));
+      await insertRelationNews(db, host.league_id, article.headline, article.body, teamId);
+    }
+
+    narrative = [
+      `Ke stolu dorazili: ${attendees.map((a) => a.manager).join(", ")}.`,
+      stammtischSceneText(attendees.length),
+      ...quarrels,
+      ...declineNotes,
+      paid ? `Útrata: ${cost} Kč.` : "Na útratu nezbylo — hospodský to napsal křídou na futro.",
+    ].join(" ");
+  }
+
+  await db.prepare(
+    "UPDATE manager_interactions SET status = 'resolved', payload = json_set(payload, '$.narrative', ?) WHERE id = ?"
+  ).bind(narrative, row.id).run();
+  await appendPubIncident(db, teamId, gameDate, { type: "manager_meetup", playerIds: [], text: narrative, effects: [] });
+  await createNotification(db, teamId, "event", "🍻 Posezení s trenéry proběhlo",
+    narrative.length > 140 ? narrative.slice(0, 137) + "…" : narrative, "/dashboard/hospoda")
+    .catch((e) => logger.warn({ module: "manager-relations" }, "stammtisch host notification", e));
+}
+
+async function resolvePubRound(
+  db: D1Database,
+  row: { id: string; actor_team_id: string; match_id: string | null },
+  gameDate: string,
+): Promise<void> {
+  const teamId = row.actor_team_id;
+  const { createNotification } = await import("./notifications");
+
+  const patrons = 15 + Math.floor(Math.random() * 16);
+  const cost = patrons * 12;
+  const paid = await chargeSocial(db, teamId, cost, `Runda pro hospodu po výhře (${patrons} štamgastů)`, gameDate, row.id);
+
+  let narrative: string;
+  if (paid) {
+    await shiftSquadMorale(db, teamId, 2);
+    await db.prepare("UPDATE fans SET satisfaction = MIN(100, satisfaction + 1) WHERE team_id = ?")
+      .bind(teamId).run().catch((e) => logger.warn({ module: "manager-relations" }, "pub round fans", e));
+    const team = await db.prepare("SELECT village_id FROM teams WHERE id = ?").bind(teamId).first<{ village_id: string | null }>();
+    if (team?.village_id) {
+      await db.prepare("UPDATE village_team_favor SET favor = MIN(100, favor + 2) WHERE village_id = ? AND team_id = ?")
+        .bind(team.village_id, teamId).run().catch((e) => logger.warn({ module: "manager-relations" }, "pub round favor", e));
+    }
+    narrative = pubRoundMessage(patrons);
+  } else {
+    narrative = "Slíbená runda se nekonala — pokladna zela prázdnotou a hospoda to trenérovi jen tak nezapomene.";
+  }
+
+  await db.prepare(
+    "UPDATE manager_interactions SET status = 'resolved', payload = json_set(payload, '$.narrative', ?, '$.patrons', ?, '$.paid', ?) WHERE id = ?"
+  ).bind(narrative, patrons, paid ? 1 : 0, row.id).run();
+  await appendPubIncident(db, teamId, gameDate, { type: "manager_round", playerIds: [], text: narrative, effects: [] });
+  await createNotification(db, teamId, "event", paid ? "🍺 Runda pro hospodu" : "🍺 Runda nevyšla",
+    narrative.length > 140 ? narrative.slice(0, 137) + "…" : narrative, "/dashboard/hospoda")
+    .catch((e) => logger.warn({ module: "manager-relations" }, "pub round notification", e));
+}
+
+/**
+ * Vyhodnotí všechny naplánované hospodské akce trenérů.
+ * Volat z daily-ticku PO vygenerování pub sessions (incident se píše do dnešní session).
+ */
+export async function resolvePlannedSocialEvents(db: D1Database, gameDate: string): Promise<number> {
+  const rows = await db.prepare(
+    "SELECT id, type, actor_team_id, match_id, payload FROM manager_interactions WHERE type IN ('stammtisch', 'pub_round') AND status = 'planned'"
+  ).all<{ id: string; type: string; actor_team_id: string; match_id: string | null; payload: string }>();
+
+  let resolved = 0;
+  for (const row of rows.results) {
+    try {
+      if (row.type === "stammtisch") await resolveStammtisch(db, row, gameDate);
+      else await resolvePubRound(db, row, gameDate);
+      resolved++;
+    } catch (e) {
+      logger.error({ module: "manager-relations" }, `resolve social event ${row.id}`, e);
+    }
+  }
+  return resolved;
 }
