@@ -33,6 +33,7 @@ interface MatchPreview {
   homeInterviewQuote: string | null;
   awayInterviewQuote: string | null;
   h2hSummary: string | null;
+  relation: import("../community/manager-relations").RelationPromptContext | null;
 }
 
 /** Forma posledních 5 zápasů jako řetězec WDLWD. */
@@ -190,6 +191,7 @@ export async function generateMatchdayPreview(
   for (const m of matchRows.results) {
     const homeTeamId = m.home_team_id as string;
     const awayTeamId = m.away_team_id as string;
+    const { getRelationPromptContext, DERBY_HEAT_THRESHOLD } = await import("../community/manager-relations");
     const [
       homeForm, awayForm,
       homeTop, awayTop,
@@ -197,6 +199,7 @@ export async function generateMatchdayPreview(
       homeMng, awayMng,
       homeQuote, awayQuote,
       h2h,
+      relation,
     ] = await Promise.all([
       loadForm(db, homeTeamId),
       loadForm(db, awayTeamId),
@@ -209,7 +212,9 @@ export async function generateMatchdayPreview(
       loadLastInterviewQuote(db, homeTeamId),
       loadLastInterviewQuote(db, awayTeamId),
       loadH2H(db, homeTeamId, awayTeamId),
+      getRelationPromptContext(db, homeTeamId, awayTeamId),
     ]);
+    const isHeatDerby = (relation?.heat ?? 0) >= DERBY_HEAT_THRESHOLD;
 
     previews.push({
       matchId: m.id as string,
@@ -218,7 +223,8 @@ export async function generateMatchdayPreview(
       awayName: m.away_name as string,
       homeVillage: (m.home_village as string) ?? null,
       awayVillage: (m.away_village as string) ?? null,
-      isLocalDerby: !!m.home_village_id && m.home_village_id === m.away_village_id,
+      isLocalDerby: (!!m.home_village_id && m.home_village_id === m.away_village_id) || isHeatDerby,
+      relation,
       stadiumName: (m.stadium_name as string) ?? null,
       homePos: posMap[homeTeamId]?.pos ?? null,
       awayPos: posMap[awayTeamId]?.pos ?? null,
@@ -254,7 +260,18 @@ export async function generateMatchdayPreview(
   for (const p of previews) {
     const lines: string[] = [];
     lines.push(`ZÁPAS: ${p.homeName} vs ${p.awayName}`);
-    if (p.isLocalDerby) lines.push(`  🏘️ MÍSTNÍ DERBY — oba týmy z ${p.homeVillage ?? "stejné obce"}, napětí, prestiž, hospodský souboj`);
+    const sameVillage = !!p.homeVillage && p.homeVillage === p.awayVillage;
+    if (sameVillage) {
+      lines.push(`  🏘️ MÍSTNÍ DERBY — oba týmy z ${p.homeVillage}, napětí, prestiž, hospodský souboj`);
+    } else if (p.isLocalDerby) {
+      lines.push(`  🔥 DERBY — mezi kluby (a hlavně trenéry) to dlouhodobě vře, zápas roku pro obě vesnice`);
+    }
+    if (p.relation) {
+      lines.push(`  Vztah trenérů: ${p.relation.label} (respekt ${p.relation.respect}, napětí ${p.relation.heat}/100)`);
+      if (p.relation.moments.length) {
+        lines.push(`  Poslední události mezi kluby: ${p.relation.moments.join("; ")} — klidně na to v preview narážej`);
+      }
+    }
     if (p.stadiumName) lines.push(`  Stadion: ${p.stadiumName}`);
     if (p.homeVillage) {
       const fl = VILLAGE_FLAVOR[p.homeVillage];

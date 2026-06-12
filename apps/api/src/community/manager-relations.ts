@@ -111,6 +111,39 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 /**
+ * Read-only kontext vztahu pro prompty zpravodaje (rozhovory, preview, reporty).
+ * Nezakládá řádek; vrací null, když vztah neexistuje nebo je nulový (není o čem psát).
+ */
+export interface RelationPromptContext {
+  respect: number;
+  heat: number;
+  label: string;
+  moments: string[]; // poslední ~3 události mezi kluby, lidsky čitelné
+}
+
+export async function getRelationPromptContext(
+  db: D1Database,
+  teamA: string,
+  teamB: string,
+): Promise<RelationPromptContext | null> {
+  const [a, b] = orderPair(teamA, teamB);
+  const row = await db.prepare(
+    "SELECT respect, heat, history FROM manager_relations WHERE team_a_id = ? AND team_b_id = ?"
+  ).bind(a, b).first<{ respect: number; heat: number; history: string }>()
+    .catch((e) => {
+      logger.warn({ module: "manager-relations" }, "load relation prompt ctx", e);
+      return null;
+    });
+  if (!row || (row.respect === 0 && row.heat === 0)) return null;
+  return {
+    respect: row.respect,
+    heat: row.heat,
+    label: relationLabel(row.respect, row.heat),
+    moments: parseHistory(row.history).slice(0, 3).map((m) => m.text),
+  };
+}
+
+/**
  * Načte vztah dvojice týmů; pokud neexistuje, založí ho.
  * Sousední vesnice (< 8 km) startují s heat 20 („odvěcí sousedi").
  */
