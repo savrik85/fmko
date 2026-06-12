@@ -30,6 +30,7 @@ const AD_COST = 100;
 const GIFT_COST = 80;
 const BEER_COOLDOWN_DAYS = 7;
 const AD_COOLDOWN_DAYS = 14;
+const PRAISE_COOLDOWN_DAYS = 7;
 const BEER_MIN_RESPECT = 30;
 
 interface MatchRow {
@@ -220,6 +221,10 @@ relationsRouter.get("/teams/:teamId/relations/:otherId", async (c) => {
     }
   }
 
+  // Pochvala — vstupní přátelská interakce, jen cooldown
+  const praiseAt = await lastInteractionAt(db, "praise", teamId, otherId);
+  const praiseCooldownLeft = Math.max(0, Math.ceil(PRAISE_COOLDOWN_DAYS - daysSince(praiseAt)));
+
   // Inzerát — cooldown
   const adAt = await lastInteractionAt(db, "ad", teamId, otherId);
   const adCooldownLeft = Math.max(0, Math.ceil(AD_COOLDOWN_DAYS - daysSince(adAt)));
@@ -238,6 +243,7 @@ relationsRouter.get("/teams/:teamId/relations/:otherId", async (c) => {
       bet,
       pendingBet,
       statement,
+      praise: { available: praiseCooldownLeft === 0, cooldownDaysLeft: praiseCooldownLeft === Infinity ? 0 : praiseCooldownLeft },
       ad: { available: adCooldownLeft === 0, cooldownDaysLeft: adCooldownLeft === Infinity ? 0 : adCooldownLeft, cost: AD_COST },
     },
   });
@@ -248,7 +254,7 @@ relationsRouter.get("/teams/:teamId/relations/:otherId", async (c) => {
 // ────────────────────────────────────────────────────────────────────────────
 
 interface InteractBody {
-  type: "gesture" | "beer" | "bet" | "bet_accept" | "bet_decline" | "ad" | "gift" | "statement";
+  type: "gesture" | "beer" | "bet" | "bet_accept" | "bet_decline" | "ad" | "gift" | "statement" | "praise";
   matchId?: string;
   choice?: GestureChoice;
   tone?: "sincere" | "poison" | StatementTone;
@@ -341,6 +347,42 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
 
         await insertInteraction(db, "gesture", teamId, otherId, match.id, { choice });
         return c.json({ ok: true, message: resultText, aiResponse: aiResponseText });
+      }
+
+      // ── Pochvala ────────────────────────────────────────────────────────
+      case "praise": {
+        const praiseAt = await lastInteractionAt(db, "praise", teamId, otherId);
+        if (daysSince(praiseAt) < PRAISE_COOLDOWN_DAYS) {
+          return c.json({ error: "Chválil jsi nedávno. Moc cukru kazí zuby." }, 400);
+        }
+
+        await applyRelationEvent(db, teamId, otherId, {
+          respect: 4, icon: "👏", text: `${myManager} pochválil práci, kterou ${theirManager} v ${theirName} odvádí`,
+        });
+
+        let aiResponseText: string | null = null;
+        if (otherIsAi) {
+          const archetype = aiArchetype(otherId);
+          const reactions: Record<string, { respect: number; heat: number; reply: string }> = {
+            ferovka: { respect: 2, heat: 0, reply: `${theirManager}: „Tohle potěší. Pozdravuj u vás v kabině.“` },
+            pohodar: { respect: 2, heat: 0, reply: `${theirManager}: „No vidíš — a pivo z toho jednou bude.“` },
+            urazeny: { respect: 1, heat: 0, reply: `${theirManager}: „Hm. A co tím jako myslel?“ Ale podle všeho ho to potěšilo.` },
+            provokater: { respect: 1, heat: -2, reply: `${theirManager}: „Jasně že dělám dobrou práci. Aspoň někdo na okrese to vidí.“` },
+          };
+          const r = reactions[archetype];
+          await applyRelationEvent(db, teamId, otherId, {
+            respect: r.respect, heat: r.heat, icon: "🗣️", text: `${theirManager} pochvalu ocenil`,
+          });
+          aiResponseText = r.reply;
+        } else {
+          await createNotification(db, otherId, "event", "👏 Pochvala od kolegy",
+            `Trenér ${myName} ocenil práci, kterou v klubu odvádíš. Respekt mezi vámi roste.`,
+            `/dashboard/manager/${teamId}`, c.env as never)
+            .catch((e) => logger.warn({ module: "relations" }, "praise notification", e));
+        }
+
+        await insertInteraction(db, "praise", teamId, otherId, null, {});
+        return c.json({ ok: true, message: `Vzkázal jsi trenérovi ${theirName} uznání.`, aiResponse: aiResponseText });
       }
 
       // ── Pivo po zápase (+ šipky) ────────────────────────────────────────

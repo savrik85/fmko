@@ -39,6 +39,7 @@ interface RelationDetail {
     bet: { matchId: string; round: number | null; amount: number } | null;
     pendingBet: { matchId: string; status: string; offeredByMe: boolean } | null;
     statement: { matchId: string; round: number | null } | null;
+    praise: { available: boolean; cooldownDaysLeft: number };
     ad: { available: boolean; cooldownDaysLeft: number; cost: number };
   };
 }
@@ -205,13 +206,22 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
           </>
         )}
 
+        <button disabled={busy || !ix.praise?.available}
+          title={ix.praise && !ix.praise.available && ix.praise.cooldownDaysLeft > 0
+            ? `Chválil jsi nedávno — znovu za ${ix.praise.cooldownDaysLeft} dní`
+            : "Respekt +4, nic to nestojí"}
+          onClick={() => interact({ type: "praise" })}
+          className={`${BTN} bg-green-50 border-green-200 hover:bg-green-100`}>
+          👏 Pochválit
+        </button>
+
         <button disabled={busy || !ix.beer.available}
           title={!ix.beer.available
-            ? (ix.beer.cooldownDaysLeft > 0 ? `Znovu za ${ix.beer.cooldownDaysLeft} dní` : `Potřebuješ respekt aspoň ${ix.beer.minRespect}`)
+            ? (ix.beer.cooldownDaysLeft > 0 ? `Znovu za ${ix.beer.cooldownDaysLeft} dní` : `Na pivo spolu zajdete až od respektu ${ix.beer.minRespect}`)
             : undefined}
           onClick={() => interact({ type: "beer" })}
           className={`${BTN} bg-amber-50 border-amber-200 hover:bg-amber-100`}>
-          🍻 Pozvat na pivo
+          🍻 Pozvat na pivo{!ix.beer.available && ix.beer.cooldownDaysLeft === 0 ? ` (respekt ${ix.beer.minRespect}+)` : ""}
         </button>
 
         {ix.bet && (
