@@ -17,8 +17,12 @@ import {
 } from "../community/manager-relations";
 import { recordTransaction, assertPurchaseAllowed } from "../season/finance-processor";
 import { createNotification } from "../community/notifications";
+import { requireTeamOwnership } from "../auth/middleware";
 
 export const relationsRouter = new Hono<{ Bindings: Bindings }>();
+
+// Write operace (interact) smí provádět jen vlastník týmu z :teamId.
+relationsRouter.use("/teams/:teamId/relations/*", requireTeamOwnership);
 
 const BEER_COST = 50;
 const BET_AMOUNT = 500;
