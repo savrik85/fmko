@@ -11,6 +11,7 @@ import { groupChatsRouter } from "./routes/group-chats";
 import { pushRouter } from "./routes/push";
 import { votesRouter } from "./routes/votes";
 import { cashLoansRouter } from "./routes/cash-loans";
+import { relationsRouter } from "./routes/relations";
 import u21Router from "./routes/u21";
 // transfers endpoints are in gameRouter
 import { runScheduledMatches, recoverStuckRounds } from "./multiplayer/match-runner";
@@ -69,6 +70,7 @@ app.route("/api", groupChatsRouter);
 app.route("/api", pushRouter);
 app.route("/api", votesRouter);
 app.route("/api", cashLoansRouter);
+app.route("/api", relationsRouter);
 app.route("/api", u21Router);
 
 export default {
