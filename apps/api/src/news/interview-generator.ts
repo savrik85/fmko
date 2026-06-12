@@ -27,6 +27,8 @@ interface MatchContext {
   opponentLeaguePoints?: number | null;
   opponentFormStr?: string | null;
   opponentLastResult?: string | null;
+  /** Vztah trenérů (manager_relations) — null/undefined = nic zajímavého */
+  relation?: import("../community/manager-relations").RelationPromptContext | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -215,6 +217,7 @@ export async function generateInterviewQuestions(
     ? allowedPlayerNames.map((n) => `"${n}"`).join(", ")
     : "(žádná jména hráčů nejsou povolena)";
 
+  const rel = ctx.relation;
   const opponentCtxLines = [
     ctx.opponentManagerName ? `- Trenér soupeře: ${ctx.opponentManagerName}` : null,
     ctx.opponentLeaguePos
@@ -222,11 +225,24 @@ export async function generateInterviewQuestions(
       : null,
     ctx.opponentFormStr ? `- Forma soupeře (5 zápasů): ${ctx.opponentFormStr}` : null,
     ctx.opponentLastResult ? `- Poslední výsledek soupeře: ${ctx.opponentLastResult}` : null,
+    rel ? `- Vztah trenérů: ${rel.label} (interní info — v otázce popisuj slovně, NIKDY necituj číselné hodnoty vztahu)` : null,
+    rel && rel.moments.length
+      ? `- Poslední události mezi kluby: ${rel.moments.join("; ")}`
+      : null,
   ].filter(Boolean).join("\n");
 
-  const soupereOtazka = ctx.opponentManagerName
-    ? `Můžeš použít POUZE jméno trenéra soupeře "${ctx.opponentManagerName}" (přesně tak jak je napsáno) a fakta z kontextu výše (forma, poslední výsledek, pozice). Např. "Trenér ${ctx.opponentManagerName} naposledy ${ctx.opponentLastResult ?? "(žádné info)"} — co od něj čekáte?" Ať otázka vyvolává rivalitu, ale stále vykání.`
-    : `Otázka může zmínit jen název soupeře "${ctx.opponentName}" a fakta z kontextu (pozice v tabulce, forma). NEPOUŽÍVEJ žádné jméno trenéra soupeře — žádné nemáme. NEVYMÝŠLEJ si žádná jména.`;
+  const relationHint = rel
+    ? rel.heat >= 40
+      ? ` Vztah trenérů je VYHROCENÝ (${rel.label}) — klidně se zeptej přímo na události mezi kluby (sázka, výroky v novinách, derby), trenér na to čtenáři slyší.`
+      : rel.respect >= 30
+        ? ` Trenéři se respektují (${rel.label}) — otázka může být škádlivá mezi kamarády, ne jedovatá.`
+        : ""
+    : "";
+
+  const soupereOtazka = (ctx.opponentManagerName
+    ? `Můžeš použít POUZE jméno trenéra soupeře "${ctx.opponentManagerName}" (přesně tak jak je napsáno) a fakta z kontextu výše (forma, poslední výsledek, pozice, vztah trenérů). Např. "Trenér ${ctx.opponentManagerName} naposledy ${ctx.opponentLastResult ?? "(žádné info)"} — co od něj čekáte?" Ať otázka vyvolává rivalitu, ale stále vykání.`
+    : `Otázka může zmínit jen název soupeře "${ctx.opponentName}" a fakta z kontextu (pozice v tabulce, forma, vztah trenérů). NEPOUŽÍVEJ žádné jméno trenéra soupeře — žádné nemáme. NEVYMÝŠLEJ si žádná jména.`)
+    + relationHint;
 
   const prompt = `Jsi bulvárnější redaktor Okresního zpravodaje v Čechách. Napiš přesně 3 otázky pro trenéra
 fotbalového týmu ${ctx.teamName} před zápasem ${ctx.isHome ? "doma" : "venku"} s ${ctx.opponentName} (kolo ${ctx.gameWeek}).
@@ -461,7 +477,8 @@ export async function tryCreateInterviewRequest(
   }
 
   // 6. Kontext pro otázky (vlastní tým + soupeř)
-  const [form, lastMatch, topPlayers, injuredStr, standings, opponentForm, opponentLast] =
+  const { getRelationPromptContext } = await import("../community/manager-relations");
+  const [form, lastMatch, topPlayers, injuredStr, standings, opponentForm, opponentLast, relation] =
     await Promise.all([
       loadTeamForm(db, teamRow.team_id),
       loadLastMatchResult(db, teamRow.team_id),
@@ -470,6 +487,7 @@ export async function tryCreateInterviewRequest(
       calculateStandings(db, ctx.leagueId).catch(() => []),
       loadTeamForm(db, opponentTeamId),
       loadLastMatchResult(db, opponentTeamId),
+      getRelationPromptContext(db, teamRow.team_id, opponentTeamId),
     ]);
 
   const myStanding = standings.find((s) => s.teamId === teamRow.team_id);
@@ -493,6 +511,7 @@ export async function tryCreateInterviewRequest(
     opponentLeaguePoints: opponentStanding?.points ?? null,
     opponentFormStr: opponentForm,
     opponentLastResult: opponentLast,
+    relation,
   };
 
   // 7. Generuj otázky přes Gemini

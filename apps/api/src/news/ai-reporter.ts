@@ -85,7 +85,7 @@ export async function generateAiRoundReport(
 ): Promise<void> {
   // 1. Zápasy kola s názvy týmů, obcí a flavor facts
   const matchRows = await db.prepare(
-    `SELECT m.id, m.home_score, m.away_score, m.events, m.attendance, m.stadium_name, m.weather, m.pitch_condition,
+    `SELECT m.id, m.home_team_id, m.away_team_id, m.home_score, m.away_score, m.events, m.attendance, m.stadium_name, m.weather, m.pitch_condition,
             t1.name as home_name, t2.name as away_name,
             v1.name as home_village, v2.name as away_village,
             v1.flavor_facts as home_facts, v2.flavor_facts as away_facts
@@ -226,6 +226,17 @@ export async function generateAiRoundReport(
     }
     if (awayFacts.length > 0 && awayVillage) {
       line += `\n  • zajímavosti ${awayVillage}: ${awayFacts.slice(0, 3).join(" / ")}`;
+    }
+
+    // Vztah trenérů — feudy a kamarádství jsou koření reportu
+    try {
+      const { getRelationPromptContext } = await import("../community/manager-relations");
+      const rel = await getRelationPromptContext(db, m.home_team_id as string, m.away_team_id as string);
+      if (rel && (rel.heat >= 30 || Math.abs(rel.respect) >= 30)) {
+        line += `\n  • vztah trenérů: ${rel.label}${rel.moments.length ? ` — nedávno: ${rel.moments.slice(0, 2).join("; ")}` : ""} → klidně to v reportu okomentuj (slovně, NIKDY necituj číselné hodnoty vztahu)`;
+      }
+    } catch (e) {
+      logger.warn({ module: "ai-reporter" }, "load relation ctx", e);
     }
 
     resultLines.push(line);
