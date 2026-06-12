@@ -43,14 +43,22 @@ interface MatchRow {
   league_id: string | null;
 }
 
+/**
+ * Poslední odehraný zápas týmu `a` — ale jen pokud byl proti `b`.
+ * Pozápasové interakce (gesto, dárek) se vážou na čerstvý zážitek: jakmile tým
+ * odehraje další zápas, moment u kabin je pryč.
+ */
 async function lastMutualFinishedMatch(db: D1Database, a: string, b: string): Promise<MatchRow | null> {
-  return await db.prepare(
+  const last = await db.prepare(
     `SELECT id, home_team_id, away_team_id, home_score, away_score, status, round, league_id
      FROM matches
      WHERE status IN ('simulated', 'finished')
-       AND ((home_team_id = ? AND away_team_id = ?) OR (home_team_id = ? AND away_team_id = ?))
+       AND (home_team_id = ? OR away_team_id = ?)
      ORDER BY simulated_at DESC LIMIT 1`
-  ).bind(a, b, b, a).first<MatchRow>();
+  ).bind(a, a).first<MatchRow>();
+  if (!last) return null;
+  const opponent = last.home_team_id === a ? last.away_team_id : last.home_team_id;
+  return opponent === b ? last : null;
 }
 
 async function nextMutualMatch(db: D1Database, a: string, b: string): Promise<MatchRow | null> {
