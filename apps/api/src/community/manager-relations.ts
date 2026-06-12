@@ -717,7 +717,7 @@ async function resolveStammtisch(
     // 6. Večer vidí i hosté — incident v JEJICH hospodě + notifikace
     const guestText = [
       `Byl jsi na posezení u trenéra ${myManager} (${myName}).`,
-      `U stolu: ${attendees.map((a) => a.manager).join(", ")}.`,
+      `U stolu: ${[myManager, ...attendees.map((a) => a.manager)].join(", ")}.`,
       stammtischSceneText(attendees.length),
       ...eventTexts,
       ...quarrels,
