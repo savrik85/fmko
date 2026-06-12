@@ -9,7 +9,7 @@
 import { logger } from "../lib/logger";
 import {
   betWonNews, betDrawNews, derbyNews, humbleBackfireNews, counterQuoteText,
-  stammtischNews, stammtischQuarrelText, stammtischDeclineText, stammtischSceneText,
+  stammtischNews, stammtischQuarrelText, stammtischSceneText,
   pubRoundMessage,
 } from "./relation-texts";
 
@@ -601,9 +601,11 @@ async function resolveStammtisch(
 ): Promise<void> {
   const teamId = row.actor_team_id;
   let guestIds: string[] = [];
+  let eventId: string | null = null;
   try {
     const parsed = JSON.parse(row.payload);
     if (Array.isArray(parsed?.guestTeamIds)) guestIds = parsed.guestTeamIds;
+    eventId = parsed?.eventId ?? null;
   } catch (e) {
     logger.warn({ module: "manager-relations" }, "parse stammtisch payload", e);
   }
@@ -612,38 +614,36 @@ async function resolveStammtisch(
   const host = await db.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string | null }>();
   const { createNotification } = await import("./notifications");
 
-  // 1. Kdo dorazil
+  // 1. Účast podle odpovědí na pozvánky (jen lidští trenéři)
   const attendees: Array<{ teamId: string; teamName: string; manager: string }> = [];
   const declineNotes: string[] = [];
   for (const gid of guestIds) {
     const gName = await getTeamName(db, gid);
     const manager = await getManagerName(db, gid);
-    const rel = await getRelation(db, teamId, gid);
-    const guestIsAi = await isAiTeam(db, gid);
-    let comes: boolean;
-    if (guestIsAi) {
-      const archetype = aiArchetype(gid);
-      comes = archetype === "pohodar" || archetype === "provokater"
-        ? true
-        : archetype === "ferovka" ? rel.respect >= 0 : rel.respect >= 20;
-      if (!comes) declineNotes.push(stammtischDeclineText(archetype, manager));
+    const invite = await db.prepare(
+      "SELECT id, status FROM manager_interactions WHERE type = 'stammtisch_invite' AND target_team_id = ? AND json_extract(payload, '$.eventId') = ? LIMIT 1"
+    ).bind(gid, eventId).first<{ id: string; status: string }>();
+
+    if (invite?.status === "accepted") {
+      attendees.push({ teamId: gid, teamName: gName, manager });
+    } else if (invite?.status === "declined") {
+      declineNotes.push(`${manager} pozvánku odmítl.`);
     } else {
-      comes = rel.respect >= 0;
-      if (!comes) declineNotes.push(`${manager} pozvánku nechal bez odpovědi.`);
-      else {
-        await createNotification(db, gid, "event", "🍻 Posezení s trenéry",
-          `Trenér ${myName} tě hostil u společného stolu s dalšími trenéry z ligy. Respekt mezi vámi roste.`,
-          `/dashboard/manager/${teamId}`)
-          .catch((e) => logger.warn({ module: "manager-relations" }, "stammtisch guest notification", e));
-      }
+      declineNotes.push(`${manager} nechal vzkaz bez odpovědi.`);
     }
-    if (comes) attendees.push({ teamId: gid, teamName: gName, manager });
+    if (invite) {
+      await db.prepare("UPDATE manager_interactions SET status = 'resolved', payload = json_set(payload, '$.finalStatus', ?) WHERE id = ?")
+        .bind(invite.status, invite.id).run();
+    }
   }
 
   let narrative: string;
   if (attendees.length === 0) {
     await chargeSocial(db, teamId, STAMMTISCH_COST_PER_HEAD, "Posezení s trenéry — nikdo nedorazil, pivo na žal", gameDate, row.id);
-    narrative = "Nikdo z pozvaných trenérů nedorazil. Seděl jsi u velkého stolu sám a hospodský se tvářil soucitně.";
+    narrative = [
+      "Nikdo z pozvaných trenérů nedorazil. Seděl jsi u velkého stolu sám a hospodský se tvářil soucitně.",
+      ...declineNotes,
+    ].join(" ");
   } else {
     // 2. Útrata podle skutečné účasti
     const cost = STAMMTISCH_COST_PER_HEAD * (attendees.length + 1);
@@ -691,6 +691,21 @@ async function resolveStammtisch(
       ...declineNotes,
       paid ? `Útrata: ${cost} Kč.` : "Na útratu nezbylo — hospodský to napsal křídou na futro.",
     ].join(" ");
+
+    // 6. Večer vidí i hosté — incident v JEJICH hospodě + notifikace
+    const guestText = [
+      `Byl jsi na posezení u trenéra ${myManager} (${myName}).`,
+      `U stolu: ${attendees.map((a) => a.manager).join(", ")}.`,
+      stammtischSceneText(attendees.length),
+      ...quarrels,
+      "Útratu platil hostitel.",
+    ].join(" ");
+    for (const a of attendees) {
+      await appendPubIncident(db, a.teamId, gameDate, { type: "manager_meetup", playerIds: [], text: guestText, effects: [] });
+      await createNotification(db, a.teamId, "event", "🍻 Posezení s trenéry proběhlo",
+        guestText.length > 140 ? guestText.slice(0, 137) + "…" : guestText, "/dashboard/hospoda")
+        .catch((e) => logger.warn({ module: "manager-relations" }, "stammtisch guest notification", e));
+    }
   }
 
   await db.prepare(

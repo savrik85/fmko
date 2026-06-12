@@ -33,6 +33,7 @@ export const relationsRouter = new Hono<{ Bindings: Bindings }>();
 // Write operace (interact, posezení, runda) smí provádět jen vlastník týmu z :teamId.
 relationsRouter.use("/teams/:teamId/relations/*", requireTeamOwnership);
 relationsRouter.use("/teams/:teamId/stammtisch", requireTeamOwnership);
+relationsRouter.use("/teams/:teamId/stammtisch-invite/*", requireTeamOwnership);
 relationsRouter.use("/teams/:teamId/pub-round", requireTeamOwnership);
 
 const BEER_COST = 50;
@@ -162,6 +163,16 @@ relationsRouter.get("/teams/:teamId/social-info", async (c) => {
     }
   }
 
+  // Příchozí pozvánky na posezení (čekající na odpověď)
+  const invitesRes = await db.prepare(
+    `SELECT mi.id, mi.actor_team_id, t.name as host_team, m.name as host_manager
+     FROM manager_interactions mi
+     JOIN teams t ON t.id = mi.actor_team_id
+     LEFT JOIN managers m ON m.team_id = mi.actor_team_id
+     WHERE mi.type = 'stammtisch_invite' AND mi.target_team_id = ? AND mi.status = 'invited'
+     ORDER BY mi.created_at DESC`
+  ).bind(teamId).all<{ id: string; actor_team_id: string; host_team: string; host_manager: string | null }>();
+
   return c.json({
     stammtisch: {
       available: !stammtischPlanned && stammtischCooldownLeft === 0,
@@ -170,6 +181,12 @@ relationsRouter.get("/teams/:teamId/social-info", async (c) => {
       costPerHead: STAMMTISCH_COST_PER_HEAD,
     },
     pubRound,
+    incomingInvites: invitesRes.results.map((i) => ({
+      id: i.id,
+      hostTeamId: i.actor_team_id,
+      hostTeam: i.host_team,
+      hostManager: i.host_manager ?? `Trenér ${i.host_team}`,
+    })),
   });
 });
 
@@ -745,11 +762,11 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
     return null;
   });
   const guestIds = [...new Set(body?.guestTeamIds ?? [])].filter((id) => id !== teamId);
-  if (guestIds.length < 2 || guestIds.length > 4) {
-    return c.json({ error: "Pozvi 2 až 4 trenéry — na míň je obyčejné pivo, na víc nemá hospoda stůl." }, 400);
+  if (guestIds.length < 1 || guestIds.length > 4) {
+    return c.json({ error: "Pozvi 1 až 4 trenéry — na víc nemá hospoda stůl." }, 400);
   }
 
-  // Cooldown (počítá se od posledního domluvení, kryje i čekající akci)
+  // Cooldown (kryje i čekající akci)
   const lastStammtisch = await db.prepare(
     "SELECT created_at, status FROM manager_interactions WHERE type = 'stammtisch' AND actor_team_id = ? ORDER BY created_at DESC LIMIT 1"
   ).bind(teamId).first<{ created_at: string; status: string }>();
@@ -760,14 +777,17 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
     return c.json({ error: "Posezení s trenéry bylo nedávno. Hospodský potřebuje doplnit sudy." }, 400);
   }
 
-  // Hosté musí být ze stejné ligy
+  // Hosté musí být LIDŠTÍ trenéři ze stejné ligy — AI se na posezení nezve
   const host = await db.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string | null }>();
   if (!host?.league_id) return c.json({ error: "Tým není v lize." }, 400);
   const guestsRes = await db.prepare(
-    `SELECT id FROM teams WHERE league_id = ? AND id IN (${guestIds.map(() => "?").join(",")})`
-  ).bind(host.league_id, ...guestIds).all<{ id: string }>();
+    `SELECT id, user_id FROM teams WHERE league_id = ? AND id IN (${guestIds.map(() => "?").join(",")})`
+  ).bind(host.league_id, ...guestIds).all<{ id: string; user_id: string }>();
   if (guestsRes.results.length !== guestIds.length) {
     return c.json({ error: "Někteří pozvaní nejsou z tvojí ligy." }, 400);
+  }
+  if (guestsRes.results.some((g) => g.user_id === "ai")) {
+    return c.json({ error: "Posezení je jen pro lidské trenéry — AI trenér do hospody nepřijde." }, 400);
   }
 
   // Rozpočet — předběžná kontrola na maximum (platí se až večer podle účasti)
@@ -775,11 +795,66 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
   const purchase = await assertPurchaseAllowed(db, teamId, maxCost);
   if (!purchase.ok) return c.json({ error: purchase.reason }, 400);
 
-  await insertInteraction(db, "stammtisch", teamId, teamId, null, { guestTeamIds: guestIds }, "planned");
+  const eventId = crypto.randomUUID();
+  const [myName, myManager] = await Promise.all([getTeamName(db, teamId), getManagerName(db, teamId)]);
+
+  // Pozvánky hostům + notifikace s odkazem na jejich hospodu
+  for (const gid of guestIds) {
+    await insertInteraction(db, "stammtisch_invite", teamId, gid, null, { eventId }, "invited");
+    await createNotification(db, gid, "event", "🍻 Pozvánka na posezení",
+      `Trenér ${myManager} (${myName}) tě zve dnes večer na posezení s trenéry. Přijmi nebo odmítni ve své hospodě.`,
+      "/dashboard/hospoda", c.env as never)
+      .catch((e) => logger.warn({ module: "relations" }, "stammtisch invite notification", e));
+  }
+
+  await insertInteraction(db, "stammtisch", teamId, teamId, null, { guestTeamIds: guestIds, eventId }, "planned");
   return c.json({
     ok: true,
     planned: true,
-    message: "Domluveno! Vzkazy jsou rozeslané — kdo dorazí a jak to dopadne, uvidíš večer v hospodě.",
+    message: "Pozvánky rozeslány! Kdo přijme a jak večer dopadne, uvidíš v hospodě.",
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// POST /teams/:teamId/stammtisch-invite/:inviteId — přijmout/odmítnout pozvánku
+// ────────────────────────────────────────────────────────────────────────────
+
+relationsRouter.post("/teams/:teamId/stammtisch-invite/:inviteId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const inviteId = c.req.param("inviteId");
+  const db = c.env.DB;
+  const body = await c.req.json<{ accept?: boolean }>().catch((e) => {
+    logger.warn({ module: "relations" }, "parse invite response body", e);
+    return null;
+  });
+  if (typeof body?.accept !== "boolean") return c.json({ error: "Chybí odpověď." }, 400);
+
+  const invite = await db.prepare(
+    "SELECT id, actor_team_id, status FROM manager_interactions WHERE id = ? AND type = 'stammtisch_invite' AND target_team_id = ? LIMIT 1"
+  ).bind(inviteId, teamId).first<{ id: string; actor_team_id: string; status: string }>();
+  if (!invite) return c.json({ error: "Pozvánka nenalezena." }, 404);
+  if (invite.status !== "invited") return c.json({ error: "Na pozvánku už jsi odpověděl." }, 400);
+
+  await db.prepare("UPDATE manager_interactions SET status = ? WHERE id = ?")
+    .bind(body.accept ? "accepted" : "declined", inviteId).run();
+
+  const [guestManager, hostName] = await Promise.all([
+    getManagerName(db, teamId),
+    getTeamName(db, invite.actor_team_id),
+  ]);
+  await createNotification(db, invite.actor_team_id, "event",
+    body.accept ? "🍻 Pozvánka přijata" : "🍻 Pozvánka odmítnuta",
+    body.accept
+      ? `${guestManager} dorazí na posezení. Hospodský chladí.`
+      : `${guestManager} se omluvil — dnes večer nedorazí.`,
+    "/dashboard/hospoda", c.env as never)
+    .catch((e) => logger.warn({ module: "relations" }, "invite response notification", e));
+
+  return c.json({
+    ok: true,
+    message: body.accept
+      ? `Přijato! Večer doraz do hospody ${hostName} — útratu platí hostitel.`
+      : "Odmítnuto. Třeba příště.",
   });
 });
 

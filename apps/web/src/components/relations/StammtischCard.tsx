@@ -25,6 +25,7 @@ interface RelationListItem {
 interface SocialInfo {
   stammtisch: { available: boolean; planned: boolean; cooldownDaysLeft: number; costPerHead: number };
   pubRound: { available: boolean; planned: boolean; reason: string | null };
+  incomingInvites: Array<{ id: string; hostTeamId: string; hostTeam: string; hostManager: string }>;
 }
 
 const BTN = "text-sm font-heading font-bold px-3 py-2 rounded-lg border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
@@ -79,6 +80,23 @@ export function StammtischCard({ teamId }: { teamId: string }) {
     }
   };
 
+  const respondInvite = async (inviteId: string, accept: boolean) => {
+    setBusy(true);
+    try {
+      const res = await apiFetch<{ ok: boolean; message: string }>(
+        `/api/teams/${teamId}/stammtisch-invite/${inviteId}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accept }) },
+      );
+      setFeedback(res.message);
+      load();
+    } catch (e) {
+      console.error("invite response:", e);
+      showError("Odpověď se nepovedla", (e as Error)?.message || "Zkus to znovu.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const buyRound = async () => {
     setBusy(true);
     setFeedback(null);
@@ -103,6 +121,27 @@ export function StammtischCard({ teamId }: { teamId: string }) {
 
       {feedback && (
         <div className="mt-2 mb-3 text-sm bg-amber-50 border border-amber-200 rounded-lg p-3 leading-relaxed">{feedback}</div>
+      )}
+
+      {/* Příchozí pozvánky od jiných trenérů */}
+      {info.incomingInvites.length > 0 && (
+        <div className="mb-3 space-y-2">
+          {info.incomingInvites.map((inv) => (
+            <div key={inv.id} className="border border-amber-200 bg-amber-50 rounded-lg p-3 flex items-center gap-3 flex-wrap">
+              <span className="text-sm flex-1 min-w-[200px]">
+                🍻 Trenér <b>{inv.hostManager}</b> ({inv.hostTeam}) tě zve dnes večer na posezení s trenéry. Útratu platí on.
+              </span>
+              <button disabled={busy} onClick={() => respondInvite(inv.id, true)}
+                className={`${BTN} bg-green-50 border-green-200 hover:bg-green-100`}>
+                Přijmout
+              </button>
+              <button disabled={busy} onClick={() => respondInvite(inv.id, false)}
+                className={`${BTN} bg-gray-50 border-gray-200 hover:bg-gray-100`}>
+                Odmítnout
+              </button>
+            </div>
+          ))}
+        </div>
       )}
 
       <div className="flex flex-wrap gap-2">
@@ -134,10 +173,13 @@ export function StammtischCard({ teamId }: { teamId: string }) {
       {picking && info.stammtisch.available && (
         <div className="mt-3 border border-gray-100 rounded-lg p-3">
           <div className="text-xs text-muted uppercase tracking-wide font-heading font-bold mb-2">
-            Koho pozvat? ({selected.size}/4, minimálně 2)
+            Koho pozvat? ({selected.size}/4) — zvou se jen lidští trenéři
           </div>
+          {managers.filter((m) => !m.isAi).length === 0 && (
+            <div className="text-sm text-muted">V lize zatím není žádný další lidský trenér.</div>
+          )}
           <div className="space-y-1 max-h-64 overflow-y-auto">
-            {managers.map((m) => (
+            {managers.filter((m) => !m.isAi).map((m) => (
               <label key={m.teamId}
                 className="flex items-center gap-2.5 py-1.5 px-2 rounded-md hover:bg-gray-50 cursor-pointer">
                 <input type="checkbox" checked={selected.has(m.teamId)} onChange={() => toggle(m.teamId)}
@@ -152,11 +194,11 @@ export function StammtischCard({ teamId }: { teamId: string }) {
             ))}
           </div>
           <div className="mt-3 flex items-center gap-3">
-            <button disabled={busy || selected.size < 2} onClick={runStammtisch}
+            <button disabled={busy || selected.size < 1} onClick={runStammtisch}
               className={`${BTN} bg-amber-50 border-amber-200 hover:bg-amber-100`}>
               Pozvat ke stolu ({selected.size ? `max ${info.stammtisch.costPerHead * (selected.size + 1)} Kč` : "vyber trenéry"})
             </button>
-            <span className="text-xs text-muted">Vyhodnotí se večer v hospodě. Platí se jen za ty, kdo dorazí — a pozor na rivaly u jednoho stolu.</span>
+            <span className="text-xs text-muted">Pozvaní dostanou pozvánku k přijetí. Vyhodnotí se večer v hospodě — platí se jen za ty, kdo dorazí, a pozor na rivaly u jednoho stolu.</span>
           </div>
         </div>
       )}
