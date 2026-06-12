@@ -133,7 +133,7 @@ relationsRouter.get("/teams/:teamId/relations", async (c) => {
       teamId: r.other_team_id,
       teamName: r.team_name,
       primaryColor: r.primary_color,
-      managerName: r.manager_name ?? "—",
+      managerName: r.manager_name ?? `Trenér ${r.team_name}`,
       isAi,
       archetypeLabel: isAi ? AI_ARCHETYPE_LABELS[aiArchetype(r.other_team_id)] : null,
       respect,
@@ -154,6 +154,9 @@ relationsRouter.get("/teams/:teamId/relations/:otherId", async (c) => {
   const otherId = c.req.param("otherId");
   if (teamId === otherId) return c.json({ error: "Vztah sám se sebou neexistuje. Zatím." }, 400);
   const db = c.env.DB;
+
+  const otherExists = await db.prepare("SELECT id FROM teams WHERE id = ?").bind(otherId).first();
+  if (!otherExists) return c.json({ error: "Tým nenalezen." }, 404);
 
   const rel = await getRelation(db, teamId, otherId);
   const otherIsAi = await isAiTeam(db, otherId);
@@ -246,6 +249,9 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
     return null;
   });
   if (!body?.type) return c.json({ error: "Chybí typ interakce." }, 400);
+
+  const otherExists = await db.prepare("SELECT id FROM teams WHERE id = ?").bind(otherId).first();
+  if (!otherExists) return c.json({ error: "Tým nenalezen." }, 404);
 
   const [myName, theirName, myManager, theirManager] = await Promise.all([
     getTeamName(db, teamId), getTeamName(db, otherId),
