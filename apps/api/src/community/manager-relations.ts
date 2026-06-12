@@ -113,7 +113,7 @@ export async function getRelation(db: D1Database, teamA: string, teamB: string):
   const history: RelationMoment[] = [];
   try {
     const villages = await db.prepare(
-      `SELECT t.id as team_id, t.village_id, v.latitude as lat, v.longitude as lng
+      `SELECT t.id as team_id, t.village_id, v.lat as lat, v.lng as lng
        FROM teams t JOIN villages v ON t.village_id = v.id
        WHERE t.id IN (?, ?)`
     ).bind(a, b).all<{ team_id: string; village_id: string; lat: number | null; lng: number | null }>();
