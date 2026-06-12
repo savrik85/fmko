@@ -101,6 +101,12 @@ const STORY_TEMPLATES = [
   "{name} sledoval s ostatními zápas v televizi.",
   "{name} si popovídal s hospodským o krávě, která se ztratila u sousedů.",
   "{name} dlouho přesvědčoval ostatní, že soudce v sobotu byl podplacený.",
+  "{name} vyprávěl, jak kdysi v Husinci vyhráli pouťový turnaj na penalty až po setmění.",
+  "{name} přesvědčoval ostatní, že Boubínský prales je nejlepší tréninkové hřiště v republice.",
+  "{name} se hádal s chlapama, jestli je lepší pivo z Vimperka nebo z Prachatic.",
+  "{name} líčil, jak na Mářském vrchu chytil signál a viděl celý zápas Sparty na mobilu.",
+  "{name} tvrdil, že viděl rysa nad Volary. Nikdo mu nevěřil, ale poslouchali rádi.",
+  "{name} rozebíral, proč se Netolicím pořád daří líp než nám. Shodli se, že mají štěstí.",
 ];
 
 const SOLO_TEMPLATES = [
@@ -133,6 +139,12 @@ const DAILY_SPECIALS = [
   "Vichřice strhla cedulku, zatím vchází zadem.",
   "Specialita dne: Guláš s knedlíkem",
   "Dnes: Polévka zdarma ke každému druhému pivu",
+  "Specialita dne: Zvěřinový guláš od myslivců z Volar",
+  "Dnes: Borůvkové knedlíky z boubínských borůvek",
+  "Hospodský pustil dechovku — Šumavanku, nikdo neprotestoval.",
+  "Akce ke Slavnostem Zlaté stezky: třetí pivo za pětikorunu",
+  "Dnes: Kachna s knedlíkem — recept od babičky z Lhenic",
+  "Specialita dne: Pstruh z husinecké přehrady na másle",
 ];
 
 const CAT_INCIDENT_TEMPLATES = [
@@ -228,6 +240,9 @@ const FREE_ROUND_INCIDENT_TEMPLATES = [
   "Hospodský má narozeniny — třetí pivo je dnes zdarma pro každého stálého zákazníka.",
   "Cizinec ze sousední vesnice prohrál sázku a musí platit kolo — vesnické zákony.",
   "Důchodce u stolu otevřel obálku s důchodem a hodil rundu — „za syna co je v Praze a nepíše“.",
+  "Myslivec z Volar složil divočáka a slaví — celé hospodě platí rundu.",
+  "Turista z Bavorska prohrál sázku v šipkách a platí všem — euro bere hospodský rád.",
+  "Chalupář z Prahy chtěl zapadnout mezi místní — hodil rundu a hned byl „náš“.",
 ];
 
 // Vítěz pípy — šipky, kvíz, fotbálek, karaoke (+3 morálka jednotlivci)
@@ -238,6 +253,8 @@ const BAR_CHAMPION_INCIDENT_TEMPLATES = [
   "{name} zazpíval v karaoke Michala Davida tak procítěně, že mu hospoda tleskala dvě minuty.",
   "{name} vyhrál šachy s dědou Karlem — poprvé za 5 let. Pivo si nemůže koupit do konce týdne, dostává ho zdarma.",
   "{name} si vsadil že vypije tupelák bez nadechnutí. Vsadil dobře. Hospoda dlouho komentovat nepřestane.",
+  "{name} vyhrál pivní kvíz otázkou „kterým rokem se otevřela Zlatá stezka turistům“. Trefil. Konvice piva jeho.",
+  "{name} zazpíval v karaoke „Holky z naší školky“ tak, že i chlapi z Vimperka zatleskali.",
 ];
 
 // Vesnický hrdina — hospodský / starší ho vyhlásil hráčem týdne (+3 morálka)
@@ -247,6 +264,8 @@ const VILLAGE_HERO_INCIDENT_TEMPLATES = [
   "Starosta {name}ovi přiťukl: „Tohohle si nesmíme nechat ujít, kdyby ho chtěl Sparta, půjčíme mu vlak.“",
   "Hospodský dal {name}ovi nálepku „Stálice měsíce“ za pípou. Důstojnost, jakou si dlouho nepamatuje.",
   "Stálí hosté dali {name}ovi přezdívku po legendárním Bicanovi vesnice. Nese ji statečně.",
+  "Hospodský vyvěsil {name}ův dres vedle vlajky okresu Prachatice. „Tohle je domácí poklad.“",
+  "Děda Karel přirovnal {name}a k nejlepšímu kanonýrovi, co kdy z Vimperka vyšel. Pocta nejvyšší.",
 ];
 
 // Šťastné setkání — bývalý spoluhráč / otec / kamarád z dětství (+2 morálka)
@@ -256,6 +275,8 @@ const FRIENDLY_REUNION_INCIDENT_TEMPLATES = [
   "{name} potkal kamaráda z dětství, kterého neviděl 15 let. Slzy v očích, pivo v ruce.",
   "{name} se setkal se svým bývalým trenérem od žáků. Dostal pochvalu — stále kope.",
   "Do hospody přišel novinář z deníku — {name}a se ptal na rozhovor. Druhý den bude v novinách.",
+  "Spolužák, co se odstěhoval do Vimperka, přijel na pivo. {name} s ním vzpomínal na žákovská léta.",
+  "{name} potkal kamaráda, co teď dělá průvodce na Boubíně. Slíbili si výlet, co nejspíš nebude.",
 ];
 
 // ═══════════════════════════════════════════════
@@ -313,6 +334,92 @@ const COACH_NAPS_INCIDENT_TEMPLATES = [
   "Trenér tvrdil že jen na chvíli zavřel oči — byly tři ráno a hospoda zavírala.",
   "Trenér přemístil hlavu do salátu. Nikdo ho nebudil. Salát byl lehký.",
   "Trenér chrápal hlasitěji než parní lokomotiva. Hospodský musel zesílit hudbu.",
+];
+
+// ═══════════════════════════════════════════════
+// LOKÁLNÍ KATEGORIE — Prachaticko / Šumava
+// ═══════════════════════════════════════════════
+
+// Myslivecký spolek — zvěřina, chlapská sešlost (+2 morálka lokálům)
+const HUNTERS_INCIDENT_TEMPLATES = [
+  "Myslivci z Volar přinesli srnčí — hospoda voní zvěřinou, {name} si přidal dvakrát.",
+  "Myslivecký spolek slaví konec honu. {name} dostal nejlepší kus a hrdě ho nese domů.",
+  "Po honu na Boubíně se myslivci stavili na jedno — z jednoho bylo deset, ale nálada výborná.",
+  "Starý myslivec vyprávěl o jelenu, co mu utekl na Mářském vrchu. Příběh byl lepší než úlovek.",
+  "Myslivci přinesli paroží na zeď hospody. {name} pod ním pózoval na fotku celý večer.",
+];
+
+// Zabíjačka — vesnické hody (+3 morálka lokálům, malý risk zažívačky)
+const PIG_SLAUGHTER_INCIDENT_TEMPLATES = [
+  "U Vávrů byla zabíjačka — jitrnice, jelítka, ovar. {name} se přejedl tlačenky.",
+  "Zabíjačkové hody v hospodě! {name} snědl tolik prejtu, že večer nedopil ani pivo.",
+  "Řezník přivezl čerstvou tlačenku rovnou do hospody. {name} byl první u mísy.",
+  "Sousedi ze Lhenic dělali zabíjačku a podělili se. {name} si pochvaloval ovar do prasknutí.",
+  "Zabíjačková polévka voněla po celé vsi. {name} přišel za vůní a zůstal do rána.",
+];
+
+// Zabloudilý turista — šumavský kolorit (narativ, bez efektu)
+const LOST_TOURIST_INCIDENT_TEMPLATES = [
+  "Německý turista vešel a ptal se na cestu na Boubín. {name} mu to nakreslil na tácek — opačně.",
+  "Promočený cyklista ze Zlaté stezky se schoval před deštěm. {name} mu vysvětloval pravidla mariáše.",
+  "Poutník z Bavorska si dal první české pivo v životě. {name} mu hned objednal druhé.",
+  "Dva Holanďani hledali Churáňov. Skončili na pivu a Churáňov vzdali.",
+  "Turistka se ptala, kde je nejbližší bankomat. {name} se zasmál — nejbližší je až ve Vimperku.",
+  "Zbloudilý houbař z Prahy hledal cestu z lesa. {name} ho dovedl rovnou k pípě.",
+];
+
+// Dobrovolní hasiči — SDH po soutěži/cvičení (+2 morálka lokálům)
+const FIREFIGHTERS_INCIDENT_TEMPLATES = [
+  "Dobrovolní hasiči z Lhenic vyhráli okrskovou soutěž — oslava se přesunula do hospody.",
+  "{name} pomohl hasičům dotáhnout hadici z cvičení. Odměna: rundu platí velitel.",
+  "Hasičská soutěž v požárním útoku skončila, hospoda praská ve švech.",
+  "Hasiči z Netolic přijeli s pohárem a předváděli ho každému. {name} si na něj i ťukl.",
+  "Po nočním výjezdu k planému poplachu se hasiči stavili na jedno. Bylo jich pět.",
+];
+
+// Pouť / Slavnosti Zlaté stezky (+2 morálka lokálům)
+const VILLAGE_FAIR_INCIDENT_TEMPLATES = [
+  "Začaly Slavnosti Zlaté stezky v Prachaticích — celá vesnice je v náladě, hospoda taky.",
+  "Pouťové kolotoče dorazily do vsi. {name} vyhrál na střelnici plyšáka a věnoval ho hospodské.",
+  "Po pouti zůstal v hospodě cukrář a rozdával zbylé perníky. {name} si dal tři.",
+  "Na návsi hrála kapela, ale nejlepší atmosféra byla stejně v hospodě. {name} to potvrdil.",
+  "Pouťová tombola měla hlavní cenu sele. Vyhrál ho {name} a netuší, kam ho dá.",
+];
+
+// Šumavská vichřice / výpadek proudu (narativ)
+const STORM_BLACKOUT_INCIDENT_TEMPLATES = [
+  "Vichřice na Šumavě shodila elektriku. Hospodský čepoval při svíčkách — atmosféra jak za první republiky.",
+  "Spadl strom přes silnici z Kubovy Huti. {name} uvízl v hospodě a nestěžoval si.",
+  "Sněhová kalamita na Churáňově — {name} radši přečkal nečas u piva.",
+  "Bouřka vyhodila pojistky. {name} tvrdil, že pivo při svíčkách chutná líp, a měl pravdu.",
+  "Vichr strhl plech ze střechy. Než přijde pokrývač, hospodský nalévá na uklidněnou.",
+];
+
+// Houbaři — chlubení (narativ)
+const MUSHROOM_BRAG_INCIDENT_TEMPLATES = [
+  "{name} přinesl do hospody košík hřibů z pod Boubína a chlubil se každému.",
+  "{name} tvrdil, že našel václavky velké jak talíř. Nikdo mu nevěřil, fotka byla rozmazaná.",
+  "Houbařská sezóna vrcholí — {name} prozradil své tajné místo. Ráno toho litoval.",
+  "{name} vyměnil s hospodským košík klouzků za tři piva. Obchod století.",
+  "{name} se vsadil, že pozná hřib od muchomůrky poslepu. Vyhrál, ale málem ne.",
+];
+
+// Starosta / zastupitel zaskočí (+1 morálka lokálům) — předvolební ironie
+const OFFICIAL_VISIT_INCIDENT_TEMPLATES = [
+  "Starosta zaskočil na pivo a sliboval nové hřiště. Před volbami slibuje rád.",
+  "Pan zastupitel přišel zjistit náladu mezi lidem — a zůstal do zavíračky.",
+  "Starosta vyhlásil, že obec přispěje na nové dresy. Hospoda zatleskala (a nevěří).",
+  "Místostarosta přinesl plán nové autobusové zastávky. {name} ho přemluvil i na lavičku u hřiště.",
+  "Starosta koupil klukům kolo „za reprezentaci obce“. Reprezentovali statečně až do rána.",
+];
+
+// Politický trapas v hospodě (narativ, bez efektu) — pro pobavení
+const OFFICIAL_SCANDAL_INCIDENT_TEMPLATES = [
+  "Zastupitel po šestém pivu prozradil, kolik obec utratila za kruhový objezd. Ticho jak v kostele.",
+  "Starosta se vsadil, že vykope penaltu — trefil okno radního auta. Zápis bude na příští schůzi.",
+  "Opoziční zastupitel a starosta se pohádali o dotaci přímo u baru. Hospodský musel zasáhnout.",
+  "Zastupitel slíbil, že most opraví do podzimu. Místní si tu větu zapsali na pivní tácek a schovali.",
+  "Starosta omylem poslal pracovní SMS do hospodské skupiny. Půl vsi teď ví o nové vyhlášce dřív.",
 ];
 
 function pickRandom<T>(arr: T[]): T {
@@ -607,6 +714,116 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
       playerIds: [target.playerId],
       text: pickRandom(FRIENDLY_REUNION_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
       effects: [{ playerId: target.playerId, type: "morale", delta: 2, label: "+2 morálka" }],
+    });
+  }
+
+  // ── Myslivecký spolek — 3% prob, +2 morálka VŠEM lokálům ──
+  if (locals.length > 0 && Math.random() < 0.03) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "hunters",
+      playerIds: locals.map((a) => a.playerId),
+      text: pickRandom(HUNTERS_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      effects: locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 2, label: "+2 morálka" })),
+    });
+  }
+
+  // ── Zabíjačka — 2% prob, +3 morálka VŠEM lokálům + 10% sub-roll na zažívačku targetu ──
+  if (locals.length > 0 && Math.random() < 0.02) {
+    const target = pickRandom(locals);
+    const effects: PubEffect[] = locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 3, label: "+3 morálka" }));
+    if (Math.random() < 0.10) {
+      effects.push({
+        playerId: target.playerId,
+        type: "injury",
+        injuryDays: 1,
+        injuryType: "zazivaci_potize",
+        injuryDescription: "Přejedl se na zabíjačce",
+        label: "Zažívací potíže (1 den mimo)",
+      });
+    }
+    incidents.push({
+      type: "pig_slaughter",
+      playerIds: locals.map((a) => a.playerId),
+      text: pickRandom(PIG_SLAUGHTER_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      effects,
+    });
+  }
+
+  // ── Zabloudilý turista — 3% prob, narativ ──
+  if (locals.length > 0 && Math.random() < 0.03) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "lost_tourist",
+      playerIds: [target.playerId],
+      text: pickRandom(LOST_TOURIST_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      effects: [],
+    });
+  }
+
+  // ── Dobrovolní hasiči — 3% prob, +2 morálka VŠEM lokálům ──
+  if (locals.length > 0 && Math.random() < 0.03) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "firefighters",
+      playerIds: locals.map((a) => a.playerId),
+      text: pickRandom(FIREFIGHTERS_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      effects: locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 2, label: "+2 morálka" })),
+    });
+  }
+
+  // ── Pouť / Slavnosti Zlaté stezky — 3% prob, +2 morálka VŠEM lokálům ──
+  if (locals.length > 0 && Math.random() < 0.03) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "village_fair",
+      playerIds: locals.map((a) => a.playerId),
+      text: pickRandom(VILLAGE_FAIR_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      effects: locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 2, label: "+2 morálka" })),
+    });
+  }
+
+  // ── Šumavská vichřice / blackout — 2% prob, narativ ──
+  if (locals.length > 0 && Math.random() < 0.02) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "storm_blackout",
+      playerIds: [target.playerId],
+      text: pickRandom(STORM_BLACKOUT_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      effects: [],
+    });
+  }
+
+  // ── Houbaři — 2% prob, narativ ──
+  if (locals.length > 0 && Math.random() < 0.02) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "mushroom_brag",
+      playerIds: [target.playerId],
+      text: pickRandom(MUSHROOM_BRAG_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      effects: [],
+    });
+  }
+
+  // ── Starosta / zastupitel zaskočil — 4% prob, +1 morálka VŠEM lokálům ──
+  if (locals.length > 0 && Math.random() < 0.04) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "official_visit",
+      playerIds: locals.map((a) => a.playerId),
+      text: pickRandom(OFFICIAL_VISIT_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      effects: locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 1, label: "+1 morálka" })),
+    });
+  }
+
+  // ── Politický trapas — 2% prob, narativ (bez efektu) ──
+  if (locals.length > 0 && Math.random() < 0.02) {
+    const target = pickRandom(locals);
+    incidents.push({
+      type: "official_scandal",
+      playerIds: [target.playerId],
+      text: pickRandom(OFFICIAL_SCANDAL_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      effects: [],
     });
   }
 
