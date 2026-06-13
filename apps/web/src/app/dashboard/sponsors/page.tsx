@@ -229,12 +229,17 @@ export default function SponsorsPage() {
         {data.mainContract ? (
           <>
             <ContractCard contract={data.mainContract} category="main" onTerminate={() => handleTerminate("main")} acting={acting} />
-            {data.canChangeMainSponsor && data.mainOffers.length > 0 && (
+            {data.mainOffers.length > 0 && (
               <div className="mt-4">
                 <div className="text-xs text-muted font-heading uppercase tracking-wide mb-2">
                   Konkurenční nabídky — porovnej, jestli se vyplatí ukončit
                 </div>
-                <OffersList offers={data.mainOffers} category="main" onSign={handleSign} acting={acting} current={data.mainContract} />
+                {!data.canChangeMainSponsor && (
+                  <div className="mb-2 text-xs text-card-red bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    Limit změny hlavního sponzora 1×/sezónu už vyčerpán — můžeš ukončit smlouvu, ale novou podepíšeš až příští sezónu.
+                  </div>
+                )}
+                <OffersList offers={data.mainOffers} category="main" onSign={handleSign} acting={acting} current={data.mainContract} signDisabled={!data.canChangeMainSponsor} />
               </div>
             )}
           </>
@@ -353,10 +358,11 @@ function ContractCard({ contract, category, onTerminate, acting }: {
   );
 }
 
-function OffersList({ offers, category, onSign, acting, current }: {
+function OffersList({ offers, category, onSign, acting, current, signDisabled }: {
   offers: SponsorOffer[]; category: SponsorCategory;
   onSign: (offer: SponsorOffer, category: SponsorCategory) => void; acting: boolean;
   current?: ActiveContract | null;
+  signDisabled?: boolean;
 }) {
   if (offers.length === 0) {
     return (
@@ -410,7 +416,9 @@ function OffersList({ offers, category, onSign, acting, current }: {
                     </div>
                   )}
                 </div>
-                <button onClick={() => onSign(offer, category)} disabled={acting} className="shrink-0 btn btn-primary btn-sm">
+                <button onClick={() => onSign(offer, category)} disabled={acting || signDisabled}
+                  title={signDisabled ? "Limit změny pro tuto sezónu vyčerpán" : undefined}
+                  className="shrink-0 btn btn-primary btn-sm">
                   Podepsat
                 </button>
               </div>
