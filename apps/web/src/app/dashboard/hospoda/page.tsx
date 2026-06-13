@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
+import { StammtischCard } from "@/components/relations/StammtischCard";
 import { SectionLabel, Spinner, type BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { ClubScarf, type ScarfPattern } from "@/components/team/club-scarf";
@@ -76,6 +77,15 @@ const INCIDENT_ICON: Record<string, string> = {
   coach_naps: "😴",
   official_visit: "🤵",
   official_scandal: "🚨",
+  hunters: "🦌",
+  pig_slaughter: "🐷",
+  lost_tourist: "🥾",
+  firefighters: "🚒",
+  village_fair: "🎪",
+  storm_blackout: "⚡",
+  mushroom_brag: "🍄",
+  manager_meetup: "🍻",
+  manager_round: "🍺",
 };
 
 function effectColor(ef: PubEffect): string {
@@ -211,6 +221,9 @@ export default function HospodaPage() {
         </div>
         <div className="h-1" style={{ background: scarfSecondary }} />
       </div>
+
+      {/* Trenérský stůl — posezení s trenéry a runda pro hospodu */}
+      {teamId && <StammtischCard teamId={teamId} />}
 
       {/* NPC v hospodě — náhodné setkání se zastupitelem obce */}
       {npcEncounters.length > 0 && (

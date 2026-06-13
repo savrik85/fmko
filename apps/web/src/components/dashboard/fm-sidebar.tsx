@@ -159,9 +159,6 @@ export function FMSidebar() {
                           {item.href === "/dashboard/hlasovani" && unvotedCount > 0 && (
                             <span className="ml-1.5 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unvotedCount}</span>
                           )}
-                          {item.href === "/dashboard/u21" && (
-                            <span className="ml-1.5 bg-pitch-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Nové</span>
-                          )}
                         </span>
                       )}
                     </Link>

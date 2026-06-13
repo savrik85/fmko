@@ -516,6 +516,15 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "pub sessions", e);
   }
 
+  // ── Naplánované hospodské akce trenérů (posezení, runda) — vyhodnotit po „odehrání" hospody ──
+  try {
+    const { resolvePlannedSocialEvents } = await import("../community/manager-relations");
+    const n = await resolvePlannedSocialEvents(env.DB, todayKey);
+    if (n > 0) events.push({ type: "recovery", description: `Hospoda: ${n} trenérských akcí vyhodnoceno` });
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "resolve social pub events", e);
+  }
+
   // Morale drift toward 50
   await env.DB.prepare(
     `UPDATE players SET life_context = json_set(life_context, '$.morale',

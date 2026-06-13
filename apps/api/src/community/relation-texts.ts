@@ -235,6 +235,118 @@ export function dartsLossText(n: RelationNames): string {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Posezení s trenéry (skupinové pivo)
+// ────────────────────────────────────────────────────────────────────────────
+
+export function stammtischNews(hostManager: string, hostTeam: string, attendeeNames: string[]): { headline: string; body: string } {
+  const guests = attendeeNames.join(", ");
+  return pick([
+    {
+      headline: "Trenérský summit v hospodě",
+      body: `Trenér ${hostManager} (${hostTeam}) svolal ke svému stolu kolegy z okresu: ${guests}. Co se domlouvalo u čtvrté rundy, se redakce nedozvěděla — ale když sedí tolik trenérů u jednoho stolu, fanoušci mají právo spekulovat. Přestupy? Spiknutí proti lídrovi tabulky? Nebo jen mariáš?`,
+    },
+    {
+      headline: "U jednoho stolu celý přebor",
+      body: `V hospodě se sešla trenérská elita okresu: ${hostManager} hostil kolegy (${guests}). Štamgasti hlásí, že se hlasitě smálo, dvakrát přísahalo na ofsajd a jednou málem došlo na ručníky. Okresní fotbal se nehraje jen na trávě.`,
+    },
+    {
+      headline: "Trenéři pili, okres šumí",
+      body: `Trenér ${hostManager} z ${hostTeam} zaplatil rundy kolegům: ${guests}. „Nic jsme nedomlouvali, jen jsme probrali rozhodčí,“ tvrdí účastníci jednohlasně. Tak jednohlasně, že tomu nikdo nevěří.`,
+    },
+  ]);
+}
+
+export function stammtischQuarrelText(mgrA: string, mgrB: string): string {
+  return pick([
+    `${mgrA} a ${mgrB} se chytli kvůli ofsajdu z minulé sezóny — létaly tácky a ${mgrB} odešel před poslední rundou`,
+    `Mezi ${mgrA} a ${mgrB} to u stolu zajiskřilo: začalo to penaltou z jara a skončilo převrženou židlí`,
+    `${mgrA} připomněl ${mgrB} prohranou bečku — a bylo zle. Hospodský je musel posadit každého na jiný konec stolu`,
+  ]);
+}
+
+export function stammtischDeclineText(
+  archetype: "provokater" | "urazeny" | "ferovka" | "pohodar",
+  manager: string,
+): string {
+  switch (archetype) {
+    case "urazeny":
+      return pick([
+        `${manager} pozvánku odmítl. Vzkázal, že „ví, co si o něm u toho stolu myslí“.`,
+        `${manager} nepřišel. Prý měl „něco s králíkama“, ale všichni vědí, že se pořád zlobí.`,
+      ]);
+    case "ferovka":
+      return `${manager} se slušně omluvil — bez vzájemného respektu prý ke stolu nesedá.`;
+    default:
+      return `${manager} nedorazil.`;
+  }
+}
+
+export function stammtischSceneText(attendeeCount: number): string {
+  if (attendeeCount >= 3) {
+    return pick([
+      "Stůl praskal ve švech, hospodský přinesl rezervní židle a večer skončil společným zpěvem.",
+      "Velký stůl u okna, hodiny řečí o rozhodčích a tři rundy. Tohle si okres zapamatuje.",
+    ]);
+  }
+  return pick([
+    "Komorní posezení, ale řeči o fotbale do půlnoci.",
+    "Menší sestava, o to upřímnější řeči u výčepu.",
+  ]);
+}
+
+// ── Večerní situace u trenérského stolu ─────────────────────────────────────
+// Při vyhodnocení posezení se vylosuje 1–2 situace. {host}/{guest} se doplní.
+
+export interface StammtischEventDef {
+  kind: "positive" | "funny" | "conflict";
+  text: string; // s placeholdery {host} a {guest}
+  /** Efekt aplikuje resolver: respect_all (+1 hostitel↔všichni), heat_pair (+3 hostitel↔náhodný host), extra_cost (+30 Kč hostiteli) */
+  effect: "respect_all" | "heat_pair" | "extra_cost" | "none";
+}
+
+const STAMMTISCH_EVENTS: StammtischEventDef[] = [
+  // Pozitivní
+  { kind: "positive", text: "{guest} přinesl domácí slivovici z vlastních švestek. Stůl ji jednohlasně schválil a hned bylo veseleji.", effect: "respect_all" },
+  { kind: "positive", text: "Hospodský přinesl rundu na účet podniku — prý slaví výročí otevření. Trenéři si připili na okres.", effect: "respect_all" },
+  { kind: "positive", text: "Místní opilec si přisedl a začal trenérům radit se sestavou. Vyprovodili ho společnými silami — a sblížilo je to víc než tři piva.", effect: "respect_all" },
+  { kind: "positive", text: "{guest} prozradil hostiteli kontakt na levnější sudy na klubové akce. Tohle se mezi trenéry cení.", effect: "respect_all" },
+  { kind: "positive", text: "Do hospody nakoukli fanoušci obou týmů — a místo hádky skončili u jednoho stolu s trenéry. Večer jak z plakátu o okresním fotbale.", effect: "respect_all" },
+  // Vtipné
+  { kind: "funny", text: "{guest} prohrál sázku, že vypije tuplák na ex. Vypil. Jak to vysvětlí doma, je jeho věc.", effect: "none" },
+  { kind: "funny", text: "{host} vysvětloval rozestavení na pivních táccích. Štamgasti si tácky rozebrali na památku — prý „taktika mistrů“.", effect: "none" },
+  { kind: "funny", text: "Štamgasti si trenéry spletli s komisí ze svazu. Hospodský pro jistotu schoval výherní automat a dvě hodiny se choval vzorně.", effect: "none" },
+  { kind: "funny", text: "Hospodská vyhlásila rundu zdarma, když trenéři slíbili, že příště vezmou i manželky. Slib byl dán. Uvidíme.", effect: "none" },
+  { kind: "funny", text: "{guest} zkusil trefit šipkou střed terče poslepu. Trefil rámeček dveří. Hospodský to nechá jako památku.", effect: "none" },
+  { kind: "funny", text: "Na jukeboxu vyhrávala dechovka a {guest} tvrdil, že je to nejlepší nástupová hymna na okrese. Hlasovalo se. Prošlo to.", effect: "none" },
+  // Konflikty
+  { kind: "conflict", text: "Došlo na penaltu z 5. kola a {guest} bouchl do stolu tak, že spadly tři půllitry. Škodu zaplatil hostitel.", effect: "extra_cost" },
+  { kind: "conflict", text: "{host} a {guest} se neshodli, kdo má nejhoršího rozhodčího v okrese. Chvíli bylo dusno, pak se přišlo na to, že je to stejný člověk.", effect: "heat_pair" },
+  { kind: "conflict", text: "Řeč přišla na přetahování hráčů a {guest} si neodpustil poznámku o „nákupech za pivo“. Pár minut se mluvilo opatrně.", effect: "heat_pair" },
+  { kind: "conflict", text: "{guest} začal vytahovat staré křivdy z podzimu. Hostitel to uhasil další rundou — dražší, ale účinné.", effect: "extra_cost" },
+];
+
+export function pickStammtischEvents(): StammtischEventDef[] {
+  const events: StammtischEventDef[] = [pick(STAMMTISCH_EVENTS)];
+  if (Math.random() < 0.4) {
+    const second = pick(STAMMTISCH_EVENTS.filter((e) => e !== events[0]));
+    events.push(second);
+  }
+  return events;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Runda pro celou hospodu
+// ────────────────────────────────────────────────────────────────────────────
+
+export function pubRoundMessage(patrons: number): string {
+  return pick([
+    `Hospodský třikrát přepočítal půllitry: ${patrons} štamgastů zvedlo sklenici na tvoje zdraví. Tohle se ve vsi nezapomíná.`,
+    `Runda pro všech ${patrons} přítomných! Hospoda zaburácela, někdo začal zpívat a starosta si připil dvakrát.`,
+    `${patrons} pív na tvůj účet — a celá hospoda náhle ví, kdo vyhrál víkendový zápas. Sláva vítězům.`,
+  ]);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Dárkové koše
 // ────────────────────────────────────────────────────────────────────────────
 

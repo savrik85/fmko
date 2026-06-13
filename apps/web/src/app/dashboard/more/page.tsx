@@ -10,7 +10,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
     { href: "/dashboard/klub", icon: "\u{1F3DB}️", label: "Klub", color: "#153615" },
     { href: "/dashboard/obec", icon: "\u{1F3D8}️", label: "Obec", color: "#3D6B5C" },
     { href: "/dashboard/squad", icon: "\u{1F465}", label: "Kádr", color: "#2D5F2D" },
-    { href: "/dashboard/u21", icon: "\u{1F9D2}", label: "U21", color: "#3D7A3D", isNew: true },
+    { href: "/dashboard/u21", icon: "\u{1F9D2}", label: "U21", color: "#3D7A3D" },
     { href: "/dashboard/training", icon: "\u{1F3CB}️", label: "Tréninky", color: "#3D7A3D" },
     { href: "/dashboard/transfers", icon: "\u{1F91D}", label: "Přestupy", color: "#4A8A4A" },
     { href: "/dashboard/watchlist", icon: "⭐", label: "Sledovaní", color: "#B8860B" },
