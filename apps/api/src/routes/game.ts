@@ -1697,7 +1697,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     bannerContracts: bannerContracts.map(mapContract),
     stadiumName: team.stadium_name,
     teamName: teamFull?.name ?? "",
-    mainOffers: changedThisSeason ? [] : mainOffers,
+    mainOffers,
     stadiumOffers,
     bannerOffers: bannerContracts.length >= MAX_BANNERS ? [] : bannerOffers,
     maxBanners: MAX_BANNERS,
