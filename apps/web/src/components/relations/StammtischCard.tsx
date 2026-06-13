@@ -22,11 +22,24 @@ interface RelationListItem {
   label: string;
 }
 
+interface PlannedInvite {
+  teamId: string;
+  teamName: string;
+  managerName: string;
+  status: "invited" | "accepted" | "declined" | "resolved" | string;
+}
+
 interface SocialInfo {
-  stammtisch: { available: boolean; planned: boolean; cooldownDaysLeft: number; costPerHead: number };
+  stammtisch: { available: boolean; planned: boolean; cooldownDaysLeft: number; costPerHead: number; plannedInvites: PlannedInvite[] };
   pubRound: { available: boolean; planned: boolean; reason: string | null };
   incomingInvites: Array<{ id: string; hostTeamId: string; hostTeam: string; hostManager: string }>;
 }
+
+const INVITE_LABEL: Record<string, { text: string; cls: string }> = {
+  invited: { text: "Čeká na odpověď", cls: "text-amber-700 bg-amber-50 border-amber-200" },
+  accepted: { text: "Přijal — dorazí večer", cls: "text-pitch-600 bg-green-50 border-green-200" },
+  declined: { text: "Odmítl", cls: "text-card-red bg-red-50 border-red-200" },
+};
 
 const BTN = "text-sm font-heading font-bold px-3 py-2 rounded-lg border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
 
@@ -146,7 +159,26 @@ export function StammtischCard({ teamId }: { teamId: string }) {
 
       <div className="flex flex-wrap gap-2">
         {info.stammtisch.planned ? (
-          <span className="text-sm text-muted self-center">🍻 Posezení je domluvené — kdo dorazí, uvidíš večer v hospodě</span>
+          <div className="w-full">
+            <div className="text-sm font-heading font-bold mb-2">🍻 Posezení je domluvené — odpovědi pozvaných</div>
+            <div className="space-y-1">
+              {info.stammtisch.plannedInvites.length === 0 ? (
+                <div className="text-sm text-muted">Pozvánky se rozesílají…</div>
+              ) : info.stammtisch.plannedInvites.map((inv) => {
+                const meta = INVITE_LABEL[inv.status] ?? { text: inv.status, cls: "text-muted bg-gray-50 border-gray-200" };
+                return (
+                  <div key={inv.teamId} className="flex items-center gap-2.5 py-1 px-2 rounded-md border border-gray-100">
+                    <div className="min-w-0 flex-1">
+                      <span className="font-heading font-bold text-sm">{inv.managerName}</span>
+                      <span className="text-xs text-muted ml-2">{inv.teamName}</span>
+                    </div>
+                    <span className={`text-xs font-heading font-bold px-2 py-0.5 rounded-full border ${meta.cls}`}>{meta.text}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="text-xs text-muted mt-2">Vyhodnotí se večer — kdo neodpoví do té doby, nedorazí.</div>
+          </div>
         ) : (
           <button disabled={busy || !info.stammtisch.available}
             title={!info.stammtisch.available

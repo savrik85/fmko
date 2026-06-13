@@ -133,10 +133,35 @@ relationsRouter.get("/teams/:teamId/social-info", async (c) => {
   const db = c.env.DB;
 
   const lastStammtisch = await db.prepare(
-    "SELECT created_at, status FROM manager_interactions WHERE type = 'stammtisch' AND actor_team_id = ? ORDER BY created_at DESC LIMIT 1"
-  ).bind(teamId).first<{ created_at: string; status: string }>();
+    "SELECT id, created_at, status, payload FROM manager_interactions WHERE type = 'stammtisch' AND actor_team_id = ? ORDER BY created_at DESC LIMIT 1"
+  ).bind(teamId).first<{ id: string; created_at: string; status: string; payload: string }>();
   const stammtischPlanned = lastStammtisch?.status === "planned";
   const stammtischCooldownLeft = Math.max(0, Math.ceil(STAMMTISCH_COOLDOWN_DAYS - daysSince(lastStammtisch?.created_at ?? null)));
+
+  // Stav odpovědí pozvaných (jen pokud hostuješ právě teď naplánované posezení)
+  let plannedInvites: Array<{ teamId: string; teamName: string; managerName: string; status: string }> = [];
+  if (stammtischPlanned && lastStammtisch) {
+    let eventId: string | null = null;
+    try { eventId = JSON.parse(lastStammtisch.payload)?.eventId ?? null; } catch (e) {
+      logger.warn({ module: "relations" }, "parse planned stammtisch payload", e);
+    }
+    if (eventId) {
+      const inv = await db.prepare(
+        `SELECT mi.target_team_id, mi.status, t.name as team_name, m.name as manager_name
+         FROM manager_interactions mi
+         JOIN teams t ON t.id = mi.target_team_id
+         LEFT JOIN managers m ON m.team_id = mi.target_team_id
+         WHERE mi.type = 'stammtisch_invite' AND mi.actor_team_id = ?
+           AND json_extract(mi.payload, '$.eventId') = ?`
+      ).bind(teamId, eventId).all<{ target_team_id: string; status: string; team_name: string; manager_name: string | null }>();
+      plannedInvites = inv.results.map((r) => ({
+        teamId: r.target_team_id,
+        teamName: r.team_name,
+        managerName: r.manager_name ?? `Trenér ${r.team_name}`,
+        status: r.status,
+      }));
+    }
+  }
 
   // Runda: poslední odehraný zápas musí být výhra a runda za něj ještě nebyla
   const lastMatch = await db.prepare(
@@ -180,6 +205,7 @@ relationsRouter.get("/teams/:teamId/social-info", async (c) => {
       planned: stammtischPlanned,
       cooldownDaysLeft: stammtischCooldownLeft === Infinity ? 0 : stammtischCooldownLeft,
       costPerHead: STAMMTISCH_COST_PER_HEAD,
+      plannedInvites,
     },
     pubRound,
     incomingInvites: invitesRes.results.map((i) => ({
