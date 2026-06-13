@@ -594,6 +594,77 @@ async function chargeSocial(
   }
 }
 
+/**
+ * Druhý den po hospodě — kabina reaguje podle disciplíny.
+ * Hráči s nízkou disciplínou: +1 morálka („šéf je taky lidský").
+ * Vzorňáci: −1 morálka („zase v hospodě místo aby trénoval").
+ * Alkoholici (alcohol > 70): 33% šance na kocovinu (−5 kondice).
+ */
+async function applyMorningAfter(db: D1Database, teamId: string): Promise<{ liked: number; disliked: number; hangover: number }> {
+  const counts = await db.prepare(
+    `SELECT
+       COALESCE(SUM(CASE WHEN COALESCE(json_extract(personality, '$.discipline'), 50) < 40 THEN 1 ELSE 0 END), 0) as liked,
+       COALESCE(SUM(CASE WHEN COALESCE(json_extract(personality, '$.discipline'), 50) > 70 THEN 1 ELSE 0 END), 0) as disliked
+     FROM players WHERE team_id = ? AND COALESCE(status, '') != 'released'`
+  ).bind(teamId).first<{ liked: number; disliked: number }>()
+    .catch((e) => { logger.warn({ module: "manager-relations" }, "morning after counts", e); return null; });
+
+  await db.prepare(
+    `UPDATE players SET life_context = json_set(
+       life_context, '$.morale',
+       MAX(0, MIN(100, COALESCE(json_extract(life_context, '$.morale'), 50) +
+         CASE
+           WHEN COALESCE(json_extract(personality, '$.discipline'), 50) < 40 THEN 1
+           WHEN COALESCE(json_extract(personality, '$.discipline'), 50) > 70 THEN -1
+           ELSE 0
+         END
+       ))
+     )
+     WHERE team_id = ? AND COALESCE(status, '') != 'released'`
+  ).bind(teamId).run().catch((e) => logger.warn({ module: "manager-relations" }, "morning after morale", e));
+
+  const hangoverRes = await db.prepare(
+    `UPDATE players SET life_context = json_set(
+       life_context, '$.condition',
+       MAX(0, COALESCE(json_extract(life_context, '$.condition'), 100) - 5)
+     )
+     WHERE team_id = ? AND COALESCE(status, '') != 'released'
+       AND COALESCE(json_extract(personality, '$.alcohol'), 0) > 70
+       AND (ABS(RANDOM()) % 100) < 33`
+  ).bind(teamId).run().catch((e) => { logger.warn({ module: "manager-relations" }, "morning after hangover", e); return null; });
+
+  return {
+    liked: counts?.liked ?? 0,
+    disliked: counts?.disliked ?? 0,
+    hangover: hangoverRes?.meta?.changes ?? 0,
+  };
+}
+
+function morningAfterText(eff: { liked: number; disliked: number; hangover: number }): string | null {
+  const parts: string[] = [];
+  if (eff.liked > 0) parts.push(`${eff.liked} kámošů od piva spokojených (+1 morálka)`);
+  if (eff.disliked > 0) parts.push(`${eff.disliked} vzorňáků kroutí hlavou (−1 morálka)`);
+  if (eff.hangover > 0) parts.push(`${eff.hangover} hráčů s kocovinou (−5 kondice)`);
+  return parts.length ? `Druhý den: ${parts.join(", ")}.` : null;
+}
+
+/** Počet již odehraných posezení mezi A a B (oba dorazili). */
+async function attendedPosezeniCount(db: D1Database, teamA: string, teamB: string): Promise<number> {
+  const r = await db.prepare(
+    `SELECT COUNT(*) as c FROM manager_interactions
+     WHERE type = 'stammtisch_invite' AND status = 'resolved'
+       AND json_extract(payload, '$.finalStatus') = 'accepted'
+       AND ((actor_team_id = ? AND target_team_id = ?) OR (actor_team_id = ? AND target_team_id = ?))`
+  ).bind(teamA, teamB, teamB, teamA).first<{ c: number }>()
+    .catch((e) => { logger.warn({ module: "manager-relations" }, "posezeni count", e); return null; });
+  return r?.c ?? 0;
+}
+
+/** Detekce stálého spojence z historie vztahu (marker 🏅 + text "Trvalý spojenec"). */
+export function isLoyalAlly(history: RelationMoment[]): boolean {
+  return history.some((m) => m.icon === "🏅" && m.text.startsWith("Trvalý spojenec"));
+}
+
 async function resolveStammtisch(
   db: D1Database,
   row: { id: string; actor_team_id: string; payload: string },
@@ -650,11 +721,21 @@ async function resolveStammtisch(
     const paid = await chargeSocial(db, teamId, cost,
       `Posezení s trenéry — rundy pro ${attendees.length + 1} lidí`, gameDate, row.id);
 
-    // 3. Hostitel × každý host
+    // 3. Hostitel × každý host. Při 3. společném posezení odemkne se "Trvalý spojenec".
+    const newAllies: string[] = [];
     for (const a of attendees) {
       await applyRelationEvent(db, teamId, a.teamId, {
         respect: 5, icon: "🍻", text: `Posezení u ${myManager} — ${a.manager} seděl u stolu`,
       });
+      const count = await attendedPosezeniCount(db, teamId, a.teamId);
+      const rel = await getRelation(db, teamId, a.teamId);
+      if (count >= 3 && !isLoyalAlly(rel.history)) {
+        await applyRelationEvent(db, teamId, a.teamId, {
+          respect: 10, icon: "🏅",
+          text: `Trvalý spojenec — partnerství zpečetěné u třetího pivního stolu (${myManager} × ${a.manager})`,
+        });
+        newAllies.push(a.manager);
+      }
     }
 
     // 4. Dynamika mezi hosty: rivalové (heat ≥ 50) se 50% šancí pohádají
@@ -705,6 +786,18 @@ async function resolveStammtisch(
       await insertRelationNews(db, host.league_id, article.headline, article.body, teamId);
     }
 
+    // 7. Druhý den ráno: kabina hostitele i všech účastníků reaguje podle disciplíny
+    const hostMorning = await applyMorningAfter(db, teamId);
+    const guestMorning = new Map<string, { liked: number; disliked: number; hangover: number }>();
+    for (const a of attendees) {
+      guestMorning.set(a.teamId, await applyMorningAfter(db, a.teamId));
+    }
+
+    const allyLine = newAllies.length
+      ? `🏅 Trvalý spojenec: ${newAllies.join(", ")} — partnerství zpečetěné u třetího pivního stolu.`
+      : null;
+    const hostMorningText = morningAfterText(hostMorning);
+
     narrative = [
       `Ke stolu dorazili: ${attendees.map((a) => a.manager).join(", ")}.`,
       stammtischSceneText(attendees.length),
@@ -712,18 +805,25 @@ async function resolveStammtisch(
       ...quarrels,
       ...declineNotes,
       paid ? `Útrata: ${cost + extraCost} Kč.` : "Na útratu nezbylo — hospodský to napsal křídou na futro.",
-    ].join(" ");
+      allyLine,
+      hostMorningText,
+    ].filter(Boolean).join(" ");
 
-    // 6. Večer vidí i hosté — incident v JEJICH hospodě + notifikace
-    const guestText = [
-      `Byl jsi na posezení u trenéra ${myManager} (${myName}).`,
-      `U stolu: ${[myManager, ...attendees.map((a) => a.manager)].join(", ")}.`,
-      stammtischSceneText(attendees.length),
-      ...eventTexts,
-      ...quarrels,
-      "Útratu platil hostitel.",
-    ].join(" ");
+    // 8. Večer + ráno vidí i hosté — incident v JEJICH hospodě + notifikace
     for (const a of attendees) {
+      const morn = morningAfterText(guestMorning.get(a.teamId) ?? { liked: 0, disliked: 0, hangover: 0 });
+      const guestText = [
+        `Byl jsi na posezení u trenéra ${myManager} (${myName}).`,
+        `U stolu: ${[myManager, ...attendees.map((x) => x.manager)].join(", ")}.`,
+        stammtischSceneText(attendees.length),
+        ...eventTexts,
+        ...quarrels,
+        "Útratu platil hostitel.",
+        newAllies.includes(a.manager)
+          ? `🏅 S ${myManager} jste teď Trvalí spojenci — partnerství zpečetěné u třetího pivního stolu.`
+          : null,
+        morn,
+      ].filter(Boolean).join(" ");
       await appendPubIncident(db, a.teamId, gameDate, { type: "manager_meetup", playerIds: [], text: guestText, effects: [] });
       await createNotification(db, a.teamId, "event", "🍻 Posezení s trenéry proběhlo",
         guestText.length > 140 ? guestText.slice(0, 137) + "…" : guestText, "/dashboard/hospoda")
