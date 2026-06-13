@@ -30,6 +30,7 @@ interface RelationDetail {
   heat: number;
   status: RelationStatus | null;
   label: string;
+  loyalAlly: boolean;
   history: RelationMoment[];
   otherIsAi: boolean;
   archetypeLabel: string | null;
@@ -56,6 +57,15 @@ interface RelationListItem {
   heat: number;
   status: RelationStatus | null;
   label: string;
+  loyalAlly: boolean;
+}
+
+function LoyalAllyBadge() {
+  return (
+    <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300" title="Trvalý spojenec — 3+ společných posezení v hospodě">
+      🏅 Trvalý spojenec
+    </span>
+  );
 }
 
 const BTN = "text-sm font-heading font-bold px-3 py-2 rounded-lg border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
@@ -153,6 +163,7 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
           {detail.archetypeLabel && (
             <span className="text-xs text-muted">{detail.archetypeLabel}</span>
           )}
+          {detail.loyalAlly && <LoyalAllyBadge />}
           <StatusBadge status={detail.status} />
         </div>
       </div>
@@ -532,6 +543,7 @@ export function RelationsOverview({ teamId }: { teamId: string }) {
                 {r.label}
               </div>
             </div>
+            {r.loyalAlly && <LoyalAllyBadge />}
             <StatusBadge status={r.status} />
           </Link>
         ))}

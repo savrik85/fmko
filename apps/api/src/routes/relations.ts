@@ -10,7 +10,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import {
-  getRelation, applyRelationEvent, relationStatus, relationLabel, aiArchetype, AI_ARCHETYPE_LABELS,
+  getRelation, applyRelationEvent, relationStatus, relationLabel, isLoyalAlly, aiArchetype, AI_ARCHETYPE_LABELS,
   isAiTeam, aiGestureResponse, aiAcceptsBet, aiStatementResponse, shiftSquadMorale, insertRelationNews,
   getManagerName, getTeamName, getTeamGameDate,
   type GestureChoice, type StatementTone,
@@ -231,7 +231,7 @@ relationsRouter.get("/teams/:teamId/relations", async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT t.id as other_team_id, t.name as team_name, t.primary_color,
             m.name as manager_name, m.user_id as manager_user_id,
-            r.respect, r.heat
+            r.respect, r.heat, r.history
      FROM teams t
      LEFT JOIN managers m ON m.team_id = t.id
      LEFT JOIN manager_relations r
@@ -240,13 +240,15 @@ relationsRouter.get("/teams/:teamId/relations", async (c) => {
   ).bind(teamId, teamId, team.league_id, teamId).all<{
     other_team_id: string; team_name: string; primary_color: string | null;
     manager_name: string | null; manager_user_id: string | null;
-    respect: number | null; heat: number | null;
+    respect: number | null; heat: number | null; history: string | null;
   }>();
 
   const relations = rows.results.map((r) => {
     const respect = r.respect ?? 0;
     const heat = r.heat ?? 0;
     const isAi = !r.manager_user_id || r.manager_user_id === "ai";
+    let history: Array<{ icon: string; text: string }> = [];
+    try { history = r.history ? JSON.parse(r.history) : []; } catch { history = []; }
     return {
       teamId: r.other_team_id,
       teamName: r.team_name,
@@ -258,6 +260,7 @@ relationsRouter.get("/teams/:teamId/relations", async (c) => {
       heat,
       status: relationStatus(respect, heat),
       label: relationLabel(respect, heat),
+      loyalAlly: isLoyalAlly(history as never),
     };
   }).sort((a, b) => (Math.abs(b.respect) + b.heat) - (Math.abs(a.respect) + a.heat));
 
@@ -344,6 +347,7 @@ relationsRouter.get("/teams/:teamId/relations/:otherId", async (c) => {
     heat: rel.heat,
     status: relationStatus(rel.respect, rel.heat),
     label: relationLabel(rel.respect, rel.heat),
+    loyalAlly: isLoyalAlly(rel.history),
     history: rel.history,
     otherIsAi,
     archetypeLabel: otherIsAi ? AI_ARCHETYPE_LABELS[aiArchetype(otherId)] : null,
