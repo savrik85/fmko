@@ -9,7 +9,7 @@ import { ATTRIBUTE_INFO, getTooltip, type AttrKey, type Pos } from "@/lib/attrib
 
 type Tab = "atributy" | "sezona" | "top" | "dochazka";
 type PosFilter = "all" | "GK" | "DEF" | "MID" | "FWD";
-type SortKey = "name" | "pos" | "age" | "rat" | "spd" | "tec" | "sho" | "pas" | "hea" | "def" | "gk" | "sta" | "str" | "cond" | "mor" | "wage";
+type SortKey = "name" | "pos" | "age" | "rat" | "spd" | "tec" | "sho" | "pas" | "hea" | "def" | "gk" | "sta" | "str" | "cond" | "mor" | "rel" | "wage";
 type StatsKey = "name" | "pos" | "apps" | "min" | "g" | "a" | "ga" | "y" | "r" | "cs" | "mom" | "avg";
 type AttKey = "name" | "pos" | "trainPct" | "trainAtt" | "matches" | "injury" | "suspension" | "excuse" | "bench" | "notNominated";
 type SortDir = "asc" | "desc";
@@ -70,6 +70,7 @@ const COLUMNS: Array<{ key: SortKey; label: string; tip: string; attrKey?: AttrK
   { key: "str", label: "Síl", tip: getTooltip("str"), attrKey: "str" },
   { key: "cond", label: "Kon", tip: getTooltip("cond"), attrKey: "cond" },
   { key: "mor", label: "Mor", tip: getTooltip("mor"), attrKey: "mor" },
+  { key: "rel", label: "Vzt", tip: "Vztah hráče k tobě (trenérovi) — 0 nepřítel, 50 neutrál, 100 oddán" },
   { key: "wage", label: "Mzda", tip: getTooltip("wage"), attrKey: "wage" },
 ];
 
@@ -99,6 +100,7 @@ function getVal(p: Player, key: SortKey): string | number {
     case "str": return s?.strength ?? 0;
     case "cond": return lc?.condition ?? 0;
     case "mor": return lc?.morale ?? 0;
+    case "rel": return p.coach_relationship ?? 50;
     case "wage": return p.weekly_wage ?? 0;
   }
 }
@@ -123,6 +125,22 @@ function moraleIcon(v: number): string {
   if (v >= 40) return "😐";
   if (v >= 20) return "😞";
   return "😡";
+}
+
+function relationIcon(v: number): string {
+  if (v >= 80) return "❤️";
+  if (v >= 60) return "👍";
+  if (v >= 40) return "🤝";
+  if (v >= 20) return "🙄";
+  return "💢";
+}
+
+function relationLabel(v: number): string {
+  if (v >= 80) return "Oddán trenérovi";
+  if (v >= 60) return "Spokojený";
+  if (v >= 40) return "Neutrální";
+  if (v >= 20) return "Nespokojený";
+  return "Otevřená nevraživost";
 }
 
 export default function SquadPage() {
@@ -448,6 +466,18 @@ export default function SquadPage() {
                   <td className={`py-2 px-1.5 text-center tabular-nums font-heading font-bold ${condColor(cond)}`}>{cond}%</td>
                   {/* Morale */}
                   <td className="py-2 px-1.5 text-center" title={`${morale}%`}>{moraleIcon(morale)}</td>
+                  {/* Vztah k trenérovi */}
+                  {(() => {
+                    const rel = p.coach_relationship ?? 50;
+                    return (
+                      <td className="py-2 px-1.5 text-center" title={`${relationLabel(rel)} (${rel}/100)`}>
+                        <span className="inline-flex items-center gap-1 tabular-nums">
+                          <span>{relationIcon(rel)}</span>
+                          <span className="text-[11px] text-muted">{rel}</span>
+                        </span>
+                      </td>
+                    );
+                  })()}
                   {/* Wage */}
                   <td className="py-2 px-1.5 text-center tabular-nums text-muted">{(p.weekly_wage ?? 0).toLocaleString("cs")}</td>
                 </tr>
