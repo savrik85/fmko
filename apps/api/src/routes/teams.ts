@@ -2860,7 +2860,7 @@ teamsRouter.get("/:id/pub-session", async (c) => {
     for (const r of rows.results) {
       try { avatarMap.set(r.id, JSON.parse(r.avatar)); } catch (e) { logger.warn({ module: "teams" }, "parse visitor avatar", e); }
     }
-    attendees = attendees.map((a) => a.isVisitor ? { ...a, avatar: avatarMap.get(a.playerId as string) ?? null } : a);
+    attendees = attendees.map((a) => a.isVisitor ? { ...a, avatar: avatarMap.get(a.playerId as string) ?? a.avatar ?? null } : a);
   }
 
   return c.json({
