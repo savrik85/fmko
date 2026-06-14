@@ -3257,6 +3257,13 @@ gameRouter.post("/admin/backfill-chemistry", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+// Backfill: do pub_sessions z historických posezení doplnit avatary trenérů
+gameRouter.post("/admin/backfill-stammtisch-coaches", async (c) => {
+  const { backfillStammtischCoaches } = await import("../community/manager-relations");
+  const result = await backfillStammtischCoaches(c.env.DB);
+  return c.json({ ok: true, ...result });
+});
+
 // POST /api/admin/regenerate-u21-schedule — smaže existující U21 rozpis a vygeneruje
 // single round-robin (každý s každým 1×, „polovina sezóny"). Volitelně ?leagueId=...
 gameRouter.post("/admin/regenerate-u21-schedule", async (c) => {
