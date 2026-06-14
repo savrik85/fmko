@@ -2824,7 +2824,7 @@ teamsRouter.get("/:id/pub-sessions", async (c) => {
       try { avatarMap.set(r.id, JSON.parse(r.avatar)); } catch (e) { logger.warn({ module: "teams" }, "parse visitor avatar", e); }
     }
     for (const s of sessions) {
-      s.attendees = s.attendees.map((a) => a.isVisitor ? { ...a, avatar: avatarMap.get(a.playerId as string) ?? null } : a);
+      s.attendees = s.attendees.map((a) => a.isVisitor ? { ...a, avatar: avatarMap.get(a.playerId as string) ?? a.avatar ?? null } : a);
     }
   }
 
