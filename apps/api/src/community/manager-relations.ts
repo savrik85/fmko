@@ -630,6 +630,69 @@ async function appendCoachAttendees(
     .bind(JSON.stringify(attendees), session.id).run();
 }
 
+/**
+ * Backfill: pro existující resolved stammtisch interakce dopiš avatary trenérů
+ * do pub_sessions, které ještě nemají coach attendees (sessions vytvořené před
+ * příchodem appendCoachAttendees).
+ */
+export async function backfillStammtischCoaches(db: D1Database): Promise<{ updated: number; skipped: number }> {
+  let updated = 0;
+  let skipped = 0;
+  const stamms = await db.prepare(
+    "SELECT id, actor_team_id, payload FROM manager_interactions WHERE type = 'stammtisch' AND status = 'resolved'"
+  ).all<{ id: string; actor_team_id: string; payload: string }>()
+    .catch((e) => { logger.warn({ module: "manager-relations" }, "backfill stamm list", e); return { results: [] as Array<{ id: string; actor_team_id: string; payload: string }> }; });
+
+  for (const stamm of stamms.results) {
+    let eventId: string | null = null;
+    try { eventId = JSON.parse(stamm.payload)?.eventId ?? null; } catch { eventId = null; }
+    if (!eventId) { skipped++; continue; }
+
+    // Najdi pub_session hosta s manager_meetup incidentem (tu, kterou tahle stammtisch ovlivnila)
+    const sessionRow = await db.prepare(
+      `SELECT id, game_date FROM pub_sessions
+       WHERE team_id = ? AND incidents LIKE '%manager_meetup%'
+       ORDER BY game_date DESC LIMIT 1`
+    ).bind(stamm.actor_team_id).first<{ id: number; game_date: string }>();
+    if (!sessionRow) { skipped++; continue; }
+
+    // Najdi pozvané, kteří dorazili (accepted)
+    const accepted = await db.prepare(
+      `SELECT target_team_id FROM manager_interactions
+       WHERE type = 'stammtisch_invite' AND actor_team_id = ?
+         AND json_extract(payload, '$.eventId') = ?
+         AND (json_extract(payload, '$.finalStatus') = 'accepted' OR status = 'accepted')`
+    ).bind(stamm.actor_team_id, eventId).all<{ target_team_id: string }>();
+    if (accepted.results.length === 0) { skipped++; continue; }
+
+    const guestList: Array<{ teamId: string; teamName: string }> = [];
+    for (const r of accepted.results) {
+      guestList.push({ teamId: r.target_team_id, teamName: await getTeamName(db, r.target_team_id) });
+    }
+
+    // Avatar hostitele už v session je z pub.ts. Přidej jen hosty.
+    await appendCoachAttendees(db, stamm.actor_team_id, sessionRow.game_date, guestList);
+
+    // Hosté: do jejich session přidej hostitele + ostatní hosty
+    const hostName = await getTeamName(db, stamm.actor_team_id);
+    for (const guest of guestList) {
+      const guestSession = await db.prepare(
+        `SELECT id, game_date FROM pub_sessions
+         WHERE team_id = ? AND incidents LIKE '%manager_meetup%' AND game_date = ?
+         LIMIT 1`
+      ).bind(guest.teamId, sessionRow.game_date).first<{ id: number; game_date: string }>();
+      if (!guestSession) continue;
+      const otherGuests = guestList.filter((g) => g.teamId !== guest.teamId);
+      await appendCoachAttendees(db, guest.teamId, guestSession.game_date, [
+        { teamId: stamm.actor_team_id, teamName: hostName },
+        ...otherGuests,
+      ]);
+    }
+    updated++;
+  }
+  return { updated, skipped };
+}
+
 async function chargeSocial(
   db: D1Database,
   teamId: string,
