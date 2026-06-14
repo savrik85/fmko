@@ -575,6 +575,61 @@ async function appendPubIncident(
     .bind(JSON.stringify(incidents), session.id).run();
 }
 
+/**
+ * Přidá trenérské hosty mezi attendees session, aby se zobrazili s avatary
+ * v sekci „V hospodě" stejně jako vlastní trenér.
+ */
+async function appendCoachAttendees(
+  db: D1Database,
+  hostTeamId: string,
+  gameDate: string,
+  coaches: Array<{ teamId: string; teamName: string }>,
+): Promise<void> {
+  const session = await db.prepare(
+    "SELECT id, attendees FROM pub_sessions WHERE team_id = ? AND game_date = ?"
+  ).bind(hostTeamId, gameDate).first<{ id: number; attendees: string }>();
+  if (!session) return;
+
+  let attendees: Record<string, unknown>[] = [];
+  try {
+    const parsed = JSON.parse(session.attendees);
+    if (Array.isArray(parsed)) attendees = parsed;
+  } catch (e) {
+    logger.warn({ module: "manager-relations" }, "parse pub attendees", e);
+  }
+
+  const existing = new Set(attendees.map((a) => a.playerId as string));
+  for (const c of coaches) {
+    const mgr = await db.prepare("SELECT id, name, avatar FROM managers WHERE team_id = ? LIMIT 1")
+      .bind(c.teamId).first<{ id: string; name: string; avatar: string | null }>()
+      .catch((e) => { logger.warn({ module: "manager-relations" }, "load coach avatar", e); return null; });
+    if (!mgr) continue;
+    const key = `coach-${mgr.id}`;
+    if (existing.has(key)) continue;
+    const isHost = c.teamId === hostTeamId;
+    const parts = mgr.name.split(" ");
+    const firstName = parts[0] ?? mgr.name;
+    const lastName = parts.slice(1).join(" ") || "(trenér)";
+    let avatar: Record<string, unknown> | null = null;
+    try { avatar = mgr.avatar ? JSON.parse(mgr.avatar) : null; } catch { avatar = null; }
+    attendees.push({
+      playerId: key,
+      firstName,
+      lastName,
+      alcohol: 60,
+      teamId: c.teamId,
+      isVisitor: !isHost,
+      fromTeamName: !isHost ? c.teamName : undefined,
+      avatar,
+      isCoach: true,
+    });
+    existing.add(key);
+  }
+
+  await db.prepare("UPDATE pub_sessions SET attendees = ? WHERE id = ?")
+    .bind(JSON.stringify(attendees), session.id).run();
+}
+
 async function chargeSocial(
   db: D1Database,
   teamId: string,
@@ -825,10 +880,19 @@ async function resolveStammtisch(
         morn,
       ].filter(Boolean).join(" ");
       await appendPubIncident(db, a.teamId, gameDate, { type: "manager_meetup", playerIds: [], text: guestText, effects: [] });
+      // Avatary trenérů u hosta: hostitel + ostatní dorazivší (kromě sebe)
+      const guestCoaches = [
+        { teamId, teamName: myName },
+        ...attendees.filter((x) => x.teamId !== a.teamId).map((x) => ({ teamId: x.teamId, teamName: x.teamName })),
+      ];
+      await appendCoachAttendees(db, a.teamId, gameDate, guestCoaches);
       await createNotification(db, a.teamId, "event", "🍻 Posezení s trenéry proběhlo",
         guestText.length > 140 ? guestText.slice(0, 137) + "…" : guestText, "/dashboard/hospoda")
         .catch((e) => logger.warn({ module: "manager-relations" }, "stammtisch guest notification", e));
     }
+
+    // Avatary dorazivších trenérů v hostově hospodě
+    await appendCoachAttendees(db, teamId, gameDate, attendees.map((a) => ({ teamId: a.teamId, teamName: a.teamName })));
   }
 
   await db.prepare(

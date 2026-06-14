@@ -227,7 +227,22 @@ export default function SponsorsPage() {
       <div>
         <SectionLabel>{"\u{1F4DD}"} Hlavní sponzor</SectionLabel>
         {data.mainContract ? (
-          <ContractCard contract={data.mainContract} category="main" onTerminate={() => handleTerminate("main")} acting={acting} />
+          <>
+            <ContractCard contract={data.mainContract} category="main" onTerminate={() => handleTerminate("main")} acting={acting} />
+            {data.mainOffers.length > 0 && (
+              <div className="mt-4">
+                <div className="text-xs text-muted font-heading uppercase tracking-wide mb-2">
+                  Konkurenční nabídky — porovnej, jestli se vyplatí ukončit
+                </div>
+                {!data.canChangeMainSponsor && (
+                  <div className="mb-2 text-xs text-card-red bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    Limit změny hlavního sponzora 1×/sezónu už vyčerpán — můžeš ukončit smlouvu, ale novou podepíšeš až příští sezónu.
+                  </div>
+                )}
+                <OffersList offers={data.mainOffers} category="main" onSign={handleSign} acting={acting} current={data.mainContract} signDisabled={!data.canChangeMainSponsor} />
+              </div>
+            )}
+          </>
         ) : !data.canChangeMainSponsor ? (
           <Card>
             <CardBody>
@@ -245,7 +260,17 @@ export default function SponsorsPage() {
       <div>
         <SectionLabel>{"\u{1F3DF}"} Sponzor stadionu {data.stadiumName ? `(${data.stadiumName})` : ""}</SectionLabel>
         {data.stadiumContract ? (
-          <ContractCard contract={data.stadiumContract} category="stadium" onTerminate={() => handleTerminate("stadium")} acting={acting} />
+          <>
+            <ContractCard contract={data.stadiumContract} category="stadium" onTerminate={() => handleTerminate("stadium")} acting={acting} />
+            {data.stadiumOffers.length > 0 && (
+              <div className="mt-4">
+                <div className="text-xs text-muted font-heading uppercase tracking-wide mb-2">
+                  Konkurenční nabídky — porovnej, jestli se vyplatí ukončit
+                </div>
+                <OffersList offers={data.stadiumOffers} category="stadium" onSign={handleSign} acting={acting} current={data.stadiumContract} />
+              </div>
+            )}
+          </>
         ) : (
           <OffersList offers={data.stadiumOffers} category="stadium" onSign={handleSign} acting={acting} />
         )}
@@ -333,44 +358,74 @@ function ContractCard({ contract, category, onTerminate, acting }: {
   );
 }
 
-function OffersList({ offers, category, onSign, acting }: {
+function OffersList({ offers, category, onSign, acting, current, signDisabled }: {
   offers: SponsorOffer[]; category: SponsorCategory;
   onSign: (offer: SponsorOffer, category: SponsorCategory) => void; acting: boolean;
+  current?: ActiveContract | null;
+  signDisabled?: boolean;
 }) {
   if (offers.length === 0) {
     return (
       <Card><CardBody><p className="text-center text-muted py-4">Žádné nabídky. Zvyš reputaci pro lepší sponzory.</p></CardBody></Card>
     );
   }
+  // Sankce za ukončení aktuální smlouvy (poměrná podle zbývajících sezón) — stejný vzorec jako handleTerminate
+  const currentTerminationFee = current
+    ? Math.round(current.earlyTerminationFee * (current.seasonsRemaining / 3))
+    : 0;
+  const currentWeekly = current ? Math.round(current.monthlyAmount / 4.3) : 0;
   return (
     <div className="space-y-3">
-      {offers.map((offer, i) => (
-        <Card key={i}>
-          <CardBody>
-            <div className="flex items-start gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-heading font-bold text-base">{offer.sponsorName}</span>
-                  <span className="text-xs text-muted bg-surface px-2 py-0.5 rounded-full">{offer.sponsorType}</span>
+      {offers.map((offer, i) => {
+        const offerWeekly = Math.round(offer.monthlyAmount / 4.3);
+        const weeklyDelta = offerWeekly - currentWeekly;
+        // Po kolika týdnech se odpočítá sankce za ukončení smlouvy?
+        const payback = current && weeklyDelta > 0 ? Math.ceil(currentTerminationFee / weeklyDelta) : null;
+        return (
+          <Card key={i}>
+            <CardBody>
+              <div className="flex items-start gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-heading font-bold text-base">{offer.sponsorName}</span>
+                    <span className="text-xs text-muted bg-surface px-2 py-0.5 rounded-full">{offer.sponsorType}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-sm">
+                    <span className="text-pitch-500 font-heading font-bold">+{formatCZK(offerWeekly)}/týd</span>
+                    {offer.winBonus > 0 && <span className="text-pitch-400 font-heading">+{formatCZK(offer.winBonus)} za výhru</span>}
+                    <span className="text-muted">{offer.seasons} {offer.seasons === 1 ? "sezóna" : offer.seasons <= 4 ? "sezóny" : "sezón"}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs">
+                    <span className="text-card-red">Sankce: {formatCZK(offer.earlyTerminationFee)}</span>
+                    {category === "main" && <span className="text-gold-600">Změní název klubu &middot; -3 reputace</span>}
+                    {offer.requirement && <span className="text-gold-600">{offer.requirement}</span>}
+                  </div>
+                  {current && (
+                    <div className="mt-2 pt-2 border-t border-gray-100 text-xs">
+                      <span className="text-muted">Vs. {current.sponsorName}: </span>
+                      <span className={weeklyDelta > 0 ? "text-pitch-500 font-heading font-bold" : weeklyDelta < 0 ? "text-card-red font-heading font-bold" : "text-muted"}>
+                        {weeklyDelta > 0 ? "+" : ""}{formatCZK(weeklyDelta)}/týd
+                      </span>
+                      <span className="text-muted">. Sankce za ukončení: <span className="text-card-red font-bold">{formatCZK(currentTerminationFee)}</span></span>
+                      {payback && (
+                        <span className="text-muted">. Návratnost změny: <span className="font-bold">{payback} {payback === 1 ? "týden" : payback < 5 ? "týdny" : "týdnů"}</span></span>
+                      )}
+                      {weeklyDelta <= 0 && (
+                        <span className="text-card-red"> — nevyplatí se</span>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-sm">
-                  <span className="text-pitch-500 font-heading font-bold">+{formatCZK(Math.round(offer.monthlyAmount / 4.3))}/týd</span>
-                  {offer.winBonus > 0 && <span className="text-pitch-400 font-heading">+{formatCZK(offer.winBonus)} za výhru</span>}
-                  <span className="text-muted">{offer.seasons} {offer.seasons === 1 ? "sezóna" : offer.seasons <= 4 ? "sezóny" : "sezón"}</span>
-                </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs">
-                  <span className="text-card-red">Sankce: {formatCZK(offer.earlyTerminationFee)}</span>
-                  {category === "main" && <span className="text-gold-600">Změní název klubu &middot; -3 reputace</span>}
-                  {offer.requirement && <span className="text-gold-600">{offer.requirement}</span>}
-                </div>
+                <button onClick={() => onSign(offer, category)} disabled={acting || signDisabled}
+                  title={signDisabled ? "Limit změny pro tuto sezónu vyčerpán" : undefined}
+                  className="shrink-0 btn btn-primary btn-sm">
+                  Podepsat
+                </button>
               </div>
-              <button onClick={() => onSign(offer, category)} disabled={acting} className="shrink-0 btn btn-primary btn-sm">
-                Podepsat
-              </button>
-            </div>
-          </CardBody>
-        </Card>
-      ))}
+            </CardBody>
+          </Card>
+        );
+      })}
     </div>
   );
 }

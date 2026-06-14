@@ -1618,11 +1618,14 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     requirement?: string;
   };
 
-  // Generate main sponsor offers
-  let mainOffers: Offer[] = [];
-  if (!mainContract) {
+  // Generate main sponsor offers — vždy, abys mohl porovnat se současnou smlouvou.
+  // Z poolu vynech aktuálního sponzora (nehodí smysl ho nabízet znovu).
+  const mainCurrentName = mainContract?.sponsor_name as string | undefined;
+  const mainPoolFiltered = sponsorRows.results.filter((s) => s.name !== mainCurrentName);
+  const mainOffers: Offer[] = [];
+  {
     const offerCount = team.reputation >= 60 ? 5 : team.reputation >= 40 ? 4 : 3;
-    const pool = sponsorRows.results.slice(0, offerCount * 2);
+    const pool = mainPoolFiltered.slice(0, offerCount * 2);
     for (let i = 0; i < Math.min(offerCount, pool.length); i++) {
       const s = pool[i];
       const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod * 3);
@@ -1639,10 +1642,14 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     mainOffers.sort((a, b) => b.monthlyAmount - a.monthlyAmount);
   }
 
-  // Generate stadium naming offers (lower amounts, no win bonus)
-  let stadiumOffers: Offer[] = [];
-  if (!stadiumContract) {
-    const pool = sponsorRows.results.slice(sponsorRows.results.length > 4 ? 2 : 0);
+  // Stadium naming offers — taky vždy, aby šlo porovnat.
+  const stadiumCurrentBase = (stadiumContract?.sponsor_name as string | undefined)?.replace(/\s+Arena$/i, "").trim();
+  const stadiumPoolFiltered = sponsorRows.results.filter((s) =>
+    !stadiumCurrentBase || (s.name as string).replace(/\s*s\.r\.o\.?\s*/gi, "").trim() !== stadiumCurrentBase
+  );
+  const stadiumOffers: Offer[] = [];
+  {
+    const pool = stadiumPoolFiltered.slice(stadiumPoolFiltered.length > 4 ? 2 : 0);
     for (let i = 0; i < Math.min(3, pool.length); i++) {
       const s = pool[i];
       const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod * 1.5);
@@ -1690,7 +1697,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     bannerContracts: bannerContracts.map(mapContract),
     stadiumName: team.stadium_name,
     teamName: teamFull?.name ?? "",
-    mainOffers: changedThisSeason ? [] : mainOffers,
+    mainOffers,
     stadiumOffers,
     bannerOffers: bannerContracts.length >= MAX_BANNERS ? [] : bannerOffers,
     maxBanners: MAX_BANNERS,

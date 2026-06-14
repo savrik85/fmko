@@ -88,6 +88,34 @@ const INCIDENT_ICON: Record<string, string> = {
   manager_round: "🍺",
 };
 
+/**
+ * Vykreslí text incidentu a obarví zápisy typu „(+N atribut)" / „(−N atribut)".
+ * Plus/zelená = pozitivní efekt, mínus/červená = negativní.
+ */
+function colorizeIncidentText(text: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  const regex = /\(([+\-−]\d+)\s+([^)]+)\)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let i = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    const sign = match[1][0];
+    const isPositive = sign === "+";
+    parts.push(
+      <span
+        key={`fx-${i++}`}
+        className={`font-heading font-bold ${isPositive ? "text-pitch-600" : "text-card-red"}`}
+      >
+        ({match[1]} {match[2]})
+      </span>,
+    );
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts.length > 0 ? parts : text;
+}
+
 function effectColor(ef: PubEffect): string {
   if (ef.type === "injury" || ef.type === "hangover") return "text-card-red";
   if (ef.delta != null && ef.delta < 0) return "text-card-red";
@@ -390,7 +418,7 @@ export default function HospodaPage() {
                         <li key={i} className="text-sm py-2 first:pt-0 last:pb-0">
                           <div className="flex gap-2 items-start">
                             <span className="shrink-0">{INCIDENT_ICON[inc.type] ?? "•"}</span>
-                            <span className="text-ink leading-snug">{inc.text}</span>
+                            <span className="text-ink leading-snug">{colorizeIncidentText(inc.text)}</span>
                           </div>
                           {inc.effects && inc.effects.length > 0 && (
                             <div className="ml-7 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
