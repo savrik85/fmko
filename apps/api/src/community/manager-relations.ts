@@ -670,11 +670,14 @@ export async function backfillStammtischCoaches(db: D1Database): Promise<{ updat
       guestList.push({ teamId: r.target_team_id, teamName: await getTeamName(db, r.target_team_id) });
     }
 
-    // Avatar hostitele už v session je z pub.ts. Přidej jen hosty.
-    await appendCoachAttendees(db, stamm.actor_team_id, sessionRow.game_date, guestList);
-
-    // Hosté: do jejich session přidej hostitele + ostatní hosty
+    // V hostově hospodě: on sám + dorazivší hosté
     const hostName = await getTeamName(db, stamm.actor_team_id);
+    await appendCoachAttendees(db, stamm.actor_team_id, sessionRow.game_date, [
+      { teamId: stamm.actor_team_id, teamName: hostName },
+      ...guestList,
+    ]);
+
+    // V hostů hospodách: on sám + hostitel + ostatní hosté
     for (const guest of guestList) {
       const guestSession = await db.prepare(
         `SELECT id, game_date FROM pub_sessions
@@ -684,6 +687,7 @@ export async function backfillStammtischCoaches(db: D1Database): Promise<{ updat
       if (!guestSession) continue;
       const otherGuests = guestList.filter((g) => g.teamId !== guest.teamId);
       await appendCoachAttendees(db, guest.teamId, guestSession.game_date, [
+        { teamId: guest.teamId, teamName: guest.teamName },
         { teamId: stamm.actor_team_id, teamName: hostName },
         ...otherGuests,
       ]);
@@ -943,8 +947,9 @@ async function resolveStammtisch(
         morn,
       ].filter(Boolean).join(" ");
       await appendPubIncident(db, a.teamId, gameDate, { type: "manager_meetup", playerIds: [], text: guestText, effects: [] });
-      // Avatary trenérů u hosta: hostitel + ostatní dorazivší (kromě sebe)
+      // Avatary trenérů u hosta: on sám + hostitel + ostatní dorazivší
       const guestCoaches = [
+        { teamId: a.teamId, teamName: a.teamName },
         { teamId, teamName: myName },
         ...attendees.filter((x) => x.teamId !== a.teamId).map((x) => ({ teamId: x.teamId, teamName: x.teamName })),
       ];
@@ -954,8 +959,11 @@ async function resolveStammtisch(
         .catch((e) => logger.warn({ module: "manager-relations" }, "stammtisch guest notification", e));
     }
 
-    // Avatary dorazivších trenérů v hostově hospodě
-    await appendCoachAttendees(db, teamId, gameDate, attendees.map((a) => ({ teamId: a.teamId, teamName: a.teamName })));
+    // Avatary v hostově hospodě: on sám + dorazivší hosté
+    await appendCoachAttendees(db, teamId, gameDate, [
+      { teamId, teamName: myName },
+      ...attendees.map((a) => ({ teamId: a.teamId, teamName: a.teamName })),
+    ]);
   }
 
   await db.prepare(
