@@ -382,11 +382,23 @@ export default function HospodaPage() {
                           </>
                         );
                         // Bývalý vlastní hráč (prodán/uvolněn) → není v current squadu,
-                        // /dashboard/player/:id by skončil 404. Trenér i NPC jsou taky neklikatelní.
+                        // /dashboard/player/:id by skončil 404. NPC jsou neklikatelní.
                         const isFormer = !a.isVisitor && !a.isCoach
                           && !a.playerId.startsWith("coach-") && !a.playerId.startsWith("npc-")
                           && !avatarsById[a.playerId];
-                        if (a.isCoach || a.playerId.startsWith("coach-") || a.playerId.startsWith("npc-") || isFormer) {
+                        // Trenér → profil manažera (managerId == teamId)
+                        if (a.isCoach && a.teamId) {
+                          return (
+                            <Link
+                              key={a.playerId}
+                              href={`/dashboard/manager/${a.teamId}`}
+                              className={`flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-xs ${palette}`}
+                            >
+                              {inner}
+                            </Link>
+                          );
+                        }
+                        if (a.playerId.startsWith("coach-") || a.playerId.startsWith("npc-") || isFormer) {
                           return (
                             <span key={a.playerId} className={`flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-xs ${palette}${isFormer ? " opacity-60" : ""}`} title={isFormer ? "Bývalý hráč" : undefined}>
                               {inner}
