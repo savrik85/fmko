@@ -982,6 +982,14 @@ export async function runScheduledMatches(
         } catch (e) {
             logger.warn({module: "match-runner"}, "round summary failed", e);
         }
+
+        // Rozhovor s hráčem — AI vybere zajímavého hráče, napíše rozhovor + dopad na kabinu
+        try {
+            const {generatePlayerInterview} = await import("../news/player-interview");
+            await generatePlayerInterview(db, geminiApiKey, calendarId);
+        } catch (e) {
+            logger.warn({module: "match-runner"}, "player interview failed", e);
+        }
     }
 
     return results;
