@@ -5607,6 +5607,17 @@ gameRouter.post("/admin/generate-round-summary", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+// POST /api/admin/generate-player-interview?calendarId=X — dev trigger pro Rozhovor s hráčem
+gameRouter.post("/admin/generate-player-interview", async (c) => {
+  const calendarId = c.req.query("calendarId");
+  if (!calendarId) return c.json({ error: "calendarId query parameter required" }, 400);
+  if (!c.env.GEMINI_API_KEY) return c.json({ error: "GEMINI_API_KEY není nastaven" }, 503);
+
+  const { generatePlayerInterview } = await import("../news/player-interview");
+  const result = await generatePlayerInterview(c.env.DB, c.env.GEMINI_API_KEY, calendarId);
+  return c.json({ ok: true, ...result });
+});
+
 // ── Admin: Seed data management ──
 
 gameRouter.get("/admin/seed-data", async (c) => {
