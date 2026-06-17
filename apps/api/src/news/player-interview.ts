@@ -16,6 +16,9 @@ import { logger } from "../lib/logger";
 type Mood = "boost" | "rivalry" | "kabina_drama" | "klid";
 const MOODS: Mood[] = ["boost", "rivalry", "kabina_drama", "klid"];
 
+/** Kolik rozhovorů s hráči vyjde na ligu a kolo (každý z jiného týmu). */
+const INTERVIEWS_PER_ROUND = 2;
+
 interface GeminiOutput {
   headline: string;
   article: string;
@@ -131,13 +134,14 @@ export async function generatePlayerInterview(
   db: D1Database,
   geminiApiKey: string | undefined,
   calendarId: string,
-): Promise<{ created: boolean; reason?: string }> {
+  maxPerRound: number = INTERVIEWS_PER_ROUND,
+): Promise<{ created: number; reason?: string }> {
   if (!geminiApiKey) {
     logger.warn({ module: "player-interview" }, "no gemini key, skipping");
-    return { created: false, reason: "no gemini key" };
+    return { created: 0, reason: "no gemini key" };
   }
 
-  // 1. Load kolo
+  // Load kolo
   const cal = await db
     .prepare("SELECT league_id, game_week FROM season_calendar WHERE id = ?")
     .bind(calendarId)
@@ -146,24 +150,46 @@ export async function generatePlayerInterview(
       logger.warn({ module: "player-interview" }, "load calendar", e);
       return null;
     });
-  if (!cal) return { created: false, reason: "calendar not found" };
+  if (!cal) return { created: 0, reason: "calendar not found" };
   const { league_id: leagueId, game_week: gameWeek } = cal;
 
-  // 2. Idempotency — jeden rozhovor na ligu a kolo
-  const existing = await db
-    .prepare("SELECT id FROM news WHERE league_id = ? AND game_week = ? AND type = 'player_interview'")
-    .bind(leagueId, gameWeek)
-    .first<{ id: string }>()
-    .catch((e) => {
-      logger.warn({ module: "player-interview" }, "idempotency check", e);
-      return null;
-    });
-  if (existing) {
-    logger.info({ module: "player-interview" }, `skip — already exists league ${leagueId} week ${gameWeek}`);
-    return { created: false, reason: "already exists" };
+  // Generuj až N rozhovorů na kolo, každý z jiného týmu. Počítadlo drží idempotenci
+  // i při opakovaném spuštění (re-run match-runneru nepřekročí maxPerRound).
+  let created = 0;
+  for (let i = 0; i < maxPerRound; i++) {
+    const existing = await db
+      .prepare("SELECT COUNT(*) AS c FROM news WHERE league_id = ? AND game_week = ? AND type = 'player_interview'")
+      .bind(leagueId, gameWeek)
+      .first<{ c: number }>()
+      .catch((e) => {
+        logger.warn({ module: "player-interview" }, "idempotency count", e);
+        return null;
+      });
+    if (!existing) break;
+    if (existing.c >= maxPerRound) {
+      logger.info({ module: "player-interview" }, `skip — ${existing.c}/${maxPerRound} exist league ${leagueId} week ${gameWeek}`);
+      break;
+    }
+    const r = await generateOne(db, geminiApiKey, calendarId, leagueId, gameWeek);
+    if (!r.created) {
+      logger.info({ module: "player-interview" }, `stop after ${created} — ${r.reason}`);
+      break;
+    }
+    created++;
   }
 
-  // 3. Round-robin tým: tým z tohoto kola nejdéle bez rozhovoru hráče (NULLS FIRST = nikdy)
+  return { created };
+}
+
+async function generateOne(
+  db: D1Database,
+  geminiApiKey: string,
+  calendarId: string,
+  leagueId: string,
+  gameWeek: number,
+): Promise<{ created: boolean; reason?: string }> {
+  // Round-robin tým: tým z tohoto kola nejdéle bez rozhovoru hráče (NULLS FIRST = nikdy),
+  // který v TOMTO kole ještě rozhovor nemá → dva rozhovory za kolo jsou z různých týmů.
   const teamRow = await db
     .prepare(
       `SELECT t.id, t.name FROM teams t
@@ -171,19 +197,23 @@ export async function generatePlayerInterview(
          SELECT home_team_id FROM matches WHERE calendar_id = ?
          UNION SELECT away_team_id FROM matches WHERE calendar_id = ?
        )
+       AND NOT EXISTS (
+         SELECT 1 FROM news n
+         WHERE n.type = 'player_interview' AND n.team_id = t.id AND n.game_week = ?
+       )
        ORDER BY (
          SELECT MAX(n.created_at) FROM news n
          WHERE n.type = 'player_interview' AND n.team_id = t.id
        ) ASC NULLS FIRST
        LIMIT 1`,
     )
-    .bind(calendarId, calendarId)
+    .bind(calendarId, calendarId, gameWeek)
     .first<{ id: string; name: string }>()
     .catch((e) => {
       logger.warn({ module: "player-interview" }, "round-robin team select", e);
       return null;
     });
-  if (!teamRow) return { created: false, reason: "no team in round" };
+  if (!teamRow) return { created: false, reason: "no eligible team in round" };
 
   // 4. Výběr hráče podle osobnosti
   const playerRows = await db
