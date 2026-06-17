@@ -333,6 +333,7 @@ leagueRouter.get("/leagues/:leagueId/news", async (c) => {
   const iconMap: Record<string, string> = {
     round_results: "\u26BD", ai_report: "\u270D\uFE0F", transfer: "\u{1F91D}",
     seasonal: "\u{1F389}", manager_arrival: "\u{1F4CB}",
+    interview: "\u{1F399}\uFE0F", round_summary: "\u{1F3C6}", player_interview: "\u{1F3A4}",
   };
 
   const articles = newsRows.results.map((n) => ({

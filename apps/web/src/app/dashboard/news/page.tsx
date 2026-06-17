@@ -6,6 +6,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Team } from "@/lib/api";
 import { Spinner } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { EntityLink } from "@/components/ui/entity-link";
 
 interface Classified {
   id: string;
@@ -251,8 +252,16 @@ export default function NewsPage() {
   const currentWeekInterviews = latestInterviewWeek != null && latestInterviewWeek > 0
     ? interviewArticles.filter((a) => (a as any).gameWeek === latestInterviewWeek)
     : interviewArticles;
+  // Rozhovory s hráči — nejnovější kolo (stejná logika jako u rozhovorů s trenéry)
+  const playerInterviewArticles = articles.filter((a) => a.type === "player_interview");
+  const latestPlayerIvWeek = playerInterviewArticles.length > 0
+    ? ((playerInterviewArticles[0] as any).gameWeek ?? 0)
+    : null;
+  const currentPlayerInterviews = latestPlayerIvWeek != null && latestPlayerIvWeek > 0
+    ? playerInterviewArticles.filter((a) => (a as any).gameWeek === latestPlayerIvWeek)
+    : playerInterviewArticles;
   const otherArticles = articles.filter(
-    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview"].includes(a.type),
+    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview"].includes(a.type),
   );
 
   // Lead story = nejnovější kandidát napříč typy (preview kolem zápasu vyhraje nad starým round_summary).
@@ -462,6 +471,70 @@ export default function NewsPage() {
                           <p key={i}>{p}</p>
                         ))}
                       </div>
+                      <div className="mt-3">
+                        <ShareButton articleId={iv.id} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ═══ Rozhovor s hráčem ═══ */}
+          {currentPlayerInterviews.length > 0 && (
+            <div className="border-b border-gray-200 pb-5">
+              <div className="flex items-center gap-2 mb-4 pb-2 border-b border-ink">
+                <span className="text-base">🎤</span>
+                <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">
+                  {currentPlayerInterviews.length === 1 ? "Rozhovor s hráčem" : "Rozhovory s hráči"}
+                </h3>
+              </div>
+              <div className="space-y-6">
+                {currentPlayerInterviews.map((iv, idx) => {
+                  let meta: {
+                    playerId?: string; playerName?: string; playerAvatar?: Record<string, unknown> | null;
+                    position?: string; teamName?: string; article?: string; mood?: string; effectNote?: string;
+                  } = {};
+                  try { meta = JSON.parse(iv.body); } catch (e) { console.error("parse player interview body:", e); meta = {}; }
+                  const moodStyle = meta.mood === "boost"
+                    ? "bg-green-100 text-green-800 border-green-200"
+                    : meta.mood === "rivalry"
+                    ? "bg-red-100 text-red-800 border-red-200"
+                    : meta.mood === "kabina_drama"
+                    ? "bg-amber-100 text-amber-800 border-amber-200"
+                    : "bg-sand-100 text-muted border-sand-200";
+                  return (
+                    <div key={iv.id} id={`news-${iv.id}`} className={idx > 0 ? "pt-5 border-t border-gray-100" : ""}>
+                      <div className="flex items-center gap-2 mb-2">
+                        {meta.playerAvatar && Object.keys(meta.playerAvatar).length > 0 && (
+                          <FaceAvatar faceConfig={meta.playerAvatar} size={40} className="rounded-full border-2 border-sand-200 shrink-0" />
+                        )}
+                        <div>
+                          {meta.playerId && meta.playerName ? (
+                            <EntityLink type="player" id={meta.playerId} className="font-heading font-bold text-base">
+                              {meta.playerName}
+                            </EntityLink>
+                          ) : (
+                            <span className="font-heading font-bold text-base">{meta.playerName ?? "Hráč"}</span>
+                          )}
+                          {meta.position && <span className="text-sm text-muted ml-2">{meta.position}</span>}
+                          {meta.teamName && <span className="text-sm text-muted ml-2">· {meta.teamName}</span>}
+                        </div>
+                      </div>
+                      <h4 className="font-heading font-[800] text-lg leading-snug mb-3">{iv.headline}</h4>
+                      <div className="text-sm text-ink-light leading-relaxed space-y-2">
+                        {(meta.article ?? iv.body).split("\n").filter(Boolean).map((p, i) => (
+                          <p key={i}>{p}</p>
+                        ))}
+                      </div>
+                      {meta.effectNote && (
+                        <div className="mt-3">
+                          <span className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full border ${moodStyle}`}>
+                            🧱 {meta.effectNote}
+                          </span>
+                        </div>
+                      )}
                       <div className="mt-3">
                         <ShareButton articleId={iv.id} />
                       </div>
