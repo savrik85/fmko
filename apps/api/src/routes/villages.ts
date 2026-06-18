@@ -1199,6 +1199,18 @@ villagesRouter.post("/investments/:invId/respond", requireAuth, async (c) => {
     return c.json({ error: `Nemáš dost peněz na doplatek (${inv.required_contribution.toLocaleString("cs")} Kč)` }, 400);
   }
 
+  // Český název cíle investice (do historie/transakcí — žádná angličtina v UI)
+  const TARGET_LABEL_CZ: Record<string, string> = {
+    showers: "Sprchy", stands: "Tribuny", parking: "Parkoviště", changing_rooms: "Šatny",
+    refreshments: "Občerstvení", fence: "Oplocení", pitch: "Hřiště", youth: "Mládežnická akademie",
+    stadium_upgrade: "Modernizace stadionu", pitch_renovation: "Renovace hřiště",
+    youth_facility: "Mládežnická akademie", bus_subsidy: "Příspěvek na autobus",
+  };
+  const targetCz =
+    (inv.target_facility && TARGET_LABEL_CZ[inv.target_facility]) ||
+    TARGET_LABEL_CZ[inv.type] ||
+    inv.target_facility || inv.type;
+
   // Aplikovat upgrade na stadion (pokud target_facility je stadium key)
   const stadiumFacilities = ["showers", "stands", "parking", "changing_rooms", "refreshments", "fence"];
   if (inv.target_facility && stadiumFacilities.includes(inv.target_facility)) {
@@ -1221,7 +1233,7 @@ villagesRouter.post("/investments/:invId/respond", requireAuth, async (c) => {
   const { recordTransaction: rec } = await import("../season/finance-processor");
   await rec(
     c.env.DB, teamRowAuth.id, "stadium_upgrade", -inv.required_contribution,
-    `Spolufinancování: ${inv.target_facility ?? inv.type}`, gameDate,
+    `Spolufinancování: ${targetCz}`, gameDate,
   );
 
   await c.env.DB.prepare(
@@ -1244,7 +1256,7 @@ villagesRouter.post("/investments/:invId/respond", requireAuth, async (c) => {
      VALUES (?, ?, ?, NULL, 'investment_accepted', ?, ?, ?, ?)`
   ).bind(
     crypto.randomUUID(), inv.village_id, teamRowAuth.id,
-    `Obec uhradila ${inv.offered_amount.toLocaleString("cs")} Kč na ${inv.target_facility ?? inv.type}.`,
+    `Obec uhradila ${inv.offered_amount.toLocaleString("cs")} Kč na ${targetCz}.`,
     JSON.stringify({ offeredAmount: inv.offered_amount, contribution: inv.required_contribution, politicalCost: inv.political_cost }),
     gameDate, now,
   ).run().catch((e) => logger.warn({ module: "villages" }, "investment accepted history", e));

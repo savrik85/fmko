@@ -223,6 +223,28 @@ const SIZE_LABEL: Record<string, string> = {
   city: "Město",
 };
 
+// České názvy cílů investičních nabídek obce (target_facility / type)
+const INVESTMENT_TARGET_LABEL: Record<string, string> = {
+  showers: "Sprchy",
+  stands: "Tribuny",
+  parking: "Parkoviště",
+  changing_rooms: "Šatny",
+  refreshments: "Občerstvení",
+  fence: "Oplocení",
+  pitch: "Hřiště",
+  youth: "Mládežnická akademie",
+  stadium_upgrade: "Modernizace stadionu",
+  pitch_renovation: "Renovace hřiště",
+  youth_facility: "Mládežnická akademie",
+  bus_subsidy: "Příspěvek na autobus",
+};
+
+function investmentTargetLabel(facility: string | null, type: string): string {
+  if (facility && INVESTMENT_TARGET_LABEL[facility]) return INVESTMENT_TARGET_LABEL[facility];
+  if (INVESTMENT_TARGET_LABEL[type]) return INVESTMENT_TARGET_LABEL[type];
+  return facility ?? type;
+}
+
 function favorColor(favor: number): string {
   if (favor >= 70) return "bg-pitch-500";
   if (favor >= 50) return "bg-pitch-400";
@@ -706,7 +728,7 @@ export default function ObecPage() {
                 <div key={i.id} className="border border-pitch-300 bg-pitch-50/30 rounded-lg p-3">
                   <div className="flex justify-between items-start gap-3">
                     <div className="min-w-0">
-                      <div className="font-semibold text-sm">{i.target_facility ?? i.type}</div>
+                      <div className="font-semibold text-sm">{investmentTargetLabel(i.target_facility, i.type)}</div>
                       <div className="text-xs text-gray-700 mt-0.5">
                         Obec uhradí {i.offered_amount.toLocaleString("cs")} Kč, ty doplatíš {i.required_contribution.toLocaleString("cs")} Kč.
                       </div>
