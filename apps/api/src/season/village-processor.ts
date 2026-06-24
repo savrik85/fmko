@@ -577,12 +577,8 @@ const INVESTMENT_TEMPLATES: InvestmentTemplate[] = [
     description: "Vyasfaltování plochy pro auta diváků. Vyšší dostupnost = víc návštěv.",
     totalCost: 40000, subsidyRatio: 0.5, favorThreshold: 70, politicalCost: 3,
   },
-  {
-    type: "youth_facility", targetFacility: "youth",
-    title: "Mládežnické zázemí",
-    description: "Obec přispěje na vybavení pro mládežnický fotbal — pomůže náboru talentů.",
-    totalCost: 30000, subsidyRatio: 0.6, favorThreshold: 65, politicalCost: 2,
-  },
+  // Pozn.: "youth_facility" dočasně odebráno — accept handler pro něj nemá efekt
+  // (mládežnická akademie není dotažená), platilo se za no-op. Vrátit až bude implementováno.
 ];
 
 /** Generuje investiční nabídky pro top-favor tým v obci, jednou měsíčně. */
