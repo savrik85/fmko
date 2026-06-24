@@ -1199,6 +1199,14 @@ villagesRouter.post("/investments/:invId/respond", requireAuth, async (c) => {
     return c.json({ error: `Nemáš dost peněz na doplatek (${inv.required_contribution.toLocaleString("cs")} Kč)` }, 400);
   }
 
+  // Pojistka: přijmout jde jen investici, která má reálný efekt. Jinak by se
+  // strhly peníze za no-op (např. zatím neimplementovaná mládežnická akademie).
+  const upgradeableFacilities = ["showers", "stands", "parking", "changing_rooms", "refreshments", "fence", "pitch"];
+  if (!inv.target_facility || !upgradeableFacilities.includes(inv.target_facility)) {
+    logger.warn({ module: "villages" }, `accept rejected — neimplementovaný cíl: ${inv.target_facility ?? inv.type}`);
+    return c.json({ error: "Tuto investici teď nelze přijmout — připravujeme ji." }, 409);
+  }
+
   // Český název cíle investice (do historie/transakcí — žádná angličtina v UI)
   const TARGET_LABEL_CZ: Record<string, string> = {
     showers: "Sprchy", stands: "Tribuny", parking: "Parkoviště", changing_rooms: "Šatny",
