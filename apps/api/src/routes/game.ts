@@ -5618,6 +5618,30 @@ gameRouter.post("/admin/generate-player-interview", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+// POST /api/admin/teams/:teamId/grant-budget — admin korekce rozpočtu (refundy apod.)
+// Body: { amount: number, reason: string }. Jde přes recordTransaction (audit + balance_after).
+gameRouter.post("/admin/teams/:teamId/grant-budget", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ amount: number; reason?: string }>().catch((e) => {
+    logger.warn({ module: "game.ts" }, "parse grant-budget body", e);
+    return null;
+  });
+  if (!body || typeof body.amount !== "number" || body.amount === 0) {
+    return c.json({ error: "amount (nenulové číslo) je povinné" }, 400);
+  }
+
+  const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ game_date: string }>();
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+
+  const { recordTransaction } = await import("../season/finance-processor");
+  const balanceAfter = await recordTransaction(
+    c.env.DB, teamId, "other", body.amount,
+    body.reason ?? "Admin korekce rozpočtu", team.game_date,
+  );
+  return c.json({ ok: true, teamId, amount: body.amount, balanceAfter });
+});
+
 // ── Admin: Seed data management ──
 
 gameRouter.get("/admin/seed-data", async (c) => {
