@@ -36,10 +36,17 @@ export async function calculateStandings(
   const stats: Record<string, { w: number; d: number; l: number; gf: number; ga: number }> = {};
   for (const tid of teamIds) stats[tid] = { w: 0, d: 0, l: 0, gf: 0, ga: 0 };
 
-  // Get all simulated matches
+  // Get simulated matches — JEN z aktuální (nejvyšší) sezóny dané ligy.
+  // league_id se reusuje napříč sezónami, takže bez filtru na season_number
+  // by se do tabulky počítaly i staré odehrané sezóny. JOIN na season_calendar
+  // zároveň implicitně vyžaduje calendar_id IS NOT NULL.
   const matches = await db.prepare(
-    "SELECT home_team_id, away_team_id, home_score, away_score FROM matches WHERE league_id = ? AND status = 'simulated' AND calendar_id IS NOT NULL"
-  ).bind(leagueId).all();
+    `SELECT m.home_team_id, m.away_team_id, m.home_score, m.away_score
+     FROM matches m
+     JOIN season_calendar sc ON sc.id = m.calendar_id
+     WHERE m.league_id = ? AND m.status = 'simulated'
+       AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)`
+  ).bind(leagueId, leagueId).all();
 
   for (const m of matches.results) {
     const hid = m.home_team_id as string;

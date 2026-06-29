@@ -3375,41 +3375,10 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   ).bind(teamId, player.first_name, player.last_name).first().catch((e) => { logger.warn({ module: "game" }, "check duplicate free agent", e); return null; });
   if (existingFa) return c.json({ ok: true });
 
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
-
-  const faId = crypto.randomUUID();
-
-  // Cleanup references first (can fail independently, non-critical)
-  await c.env.DB.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE player_id = ? AND status = 'active'").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "withdraw listings on release", e));
-  await c.env.DB.prepare("UPDATE transfer_offers SET status = 'withdrawn' WHERE player_id = ? AND status IN ('pending','countered')").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "withdraw offers on release", e));
-  await c.env.DB.prepare("UPDATE teams SET captain_id = NULL WHERE captain_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "clear captain on release", e));
-  await c.env.DB.prepare("UPDATE teams SET penalty_taker_id = NULL WHERE penalty_taker_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "clear penalty taker on release", e));
-  await c.env.DB.prepare("UPDATE teams SET freekick_taker_id = NULL WHERE freekick_taker_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "clear freekick taker on release", e));
-  await c.env.DB.prepare("DELETE FROM player_stats WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "delete player_stats on release", e));
-  await c.env.DB.prepare("DELETE FROM injuries WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "delete injuries on release", e));
-  // Smazat vazby — FK constraint na players(id) by blokoval DELETE FROM players
-  await c.env.DB.prepare("DELETE FROM relationships WHERE player_a_id = ? OR player_b_id = ?").bind(playerId, playerId).run().catch((e) => logger.warn({ module: "game" }, "delete relationships on release", e));
-
-  // Atomic batch: INSERT free_agent + UPDATE contract + DELETE player
-  // If any step fails, none of them commit — player won't silently disappear
-  await c.env.DB.batch([
-    c.env.DB.prepare(
-      `INSERT INTO free_agents (id, district, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, source, released_from_team_id, village_id, expires_at, is_celebrity)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'released', ?, (SELECT village_id FROM teams WHERE id = ?), ?, ?)`
-    ).bind(
-      faId, player.district, player.first_name, player.last_name, player.nickname ?? null,
-      player.age, player.position, player.overall_rating,
-      player.skills, player.physical ?? "{}", player.personality ?? "{}", player.life_context ?? "{}",
-      player.avatar ?? "{}", player.hidden_talent ?? 0, player.weekly_wage ?? 0,
-      teamId, teamId, expiresAt.toISOString(),
-      (player.is_celebrity as number) ?? 0,
-    ),
-    c.env.DB.prepare(
-      "UPDATE player_contracts SET leave_type = 'released', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1"
-    ).bind(playerId, teamId),
-    c.env.DB.prepare("DELETE FROM players WHERE id = ?").bind(playerId),
-  ]);
+  // Kompletní FK úklid + atomické odebrání (sdílené s koncem sezony)
+  const { removePlayer } = await import("../transfers/remove-player");
+  const removed = await removePlayer(c.env.DB, playerId, "released", { toFreeAgent: true, teamId });
+  if (!removed.ok) return c.json({ error: "Hráč nenalezen" }, 404);
 
   const { createTransferNews } = await import("../transfers/transfer-news");
   await createTransferNews(c.env.DB, player.league_id as string, teamId, "player_released", {
