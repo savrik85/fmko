@@ -231,10 +231,12 @@ function LigaPage() {
     <PageHeader name={displayName} detail={ctx.district ? `Okres ${ctx.district}` : undefined} badge={null}>{null}</PageHeader>
     <div className="page-container space-y-5">
 
-      {/* League picker — only show if there are other leagues */}
+      {/* Přepínače — liga + sezóna na jednom řádku */}
+      {(allLeagues.length > 1 || pastSeasons.length > 0) && (
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
       {allLeagues.length > 1 && (
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted font-medium">Zobrazit ligu:</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted font-medium">Liga:</span>
           <select
             value={selectedLeagueId ?? "own"}
             onChange={(e) => handleLeagueChange(e.target.value)}
@@ -250,7 +252,7 @@ function LigaPage() {
 
       {/* Season picker — listování minulých sezón této ligy */}
       {pastSeasons.length > 0 && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <span className="text-sm text-muted font-medium">Sezóna:</span>
           <select
             value={seasonView === "current" ? "current" : String(seasonView)}
@@ -263,6 +265,8 @@ function LigaPage() {
             ))}
           </select>
         </div>
+      )}
+      </div>
       )}
 
       {pastEntry ? (
