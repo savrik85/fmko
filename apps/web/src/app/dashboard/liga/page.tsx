@@ -59,6 +59,30 @@ type Tab = "tabulka" | "rozpis" | "vysledky" | "statistiky" | "zpravodaj";
 
 interface NewsArticle { id: string; type: string; headline: string; body: string; icon: string; date: string; gameWeek?: number | null }
 
+// ═══ Minulé sezóny (archiv) ═══
+
+interface PastStanding { pos: number; teamId: string; teamName: string; points: number; wins: number; draws: number; losses: number; gf: number; ga: number; gd: number; played: number }
+interface BestElevenEntry { playerId: string; name: string; position: string; teamName: string }
+interface AwardsSnapshot {
+  champion?: { teamId: string; name: string | null } | null;
+  playerOfSeason?: { id: string | null; name: string | null; reason: string | null };
+  topScorer?: { id: string | null; name: string | null; goals: number };
+  managerOfSeason?: { teamId: string | null; name: string | null; reason: string | null };
+  discovery?: { id: string | null; name: string | null; reason: string | null };
+  bestEleven?: BestElevenEntry[];
+}
+interface PastSeasonStats {
+  matchesPlayed: number; totalGoals: number; goalsPerMatch: number;
+  biggestWin?: { homeTeam: string; awayTeam: string; homeScore: number; awayScore: number } | null;
+  recordAttendance?: { value: number; homeTeam: string } | null;
+  totalYellowCards: number; totalRedCards: number;
+  longestWinStreak?: { teamName: string; length: number } | null;
+}
+interface HistoryEntry {
+  id: string; leagueId: string; leagueName: string; seasonNumber: number;
+  finalStandings: PastStanding[] | null; awards: AwardsSnapshot | null; seasonStats: PastSeasonStats | null;
+}
+
 // ═══ Main Page ═══
 
 export default function LigaPageWrapper() {
@@ -88,6 +112,15 @@ function LigaPage() {
   const [allLeagues, setAllLeagues] = useState<LeagueOption[]>([]);
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
   const isOtherLeague = selectedLeagueId !== null;
+
+  // Season picker (archiv minulých sezón)
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [seasonView, setSeasonView] = useState<number | "current">("current");
+  useEffect(() => {
+    apiFetch<{ history: HistoryEntry[] }>("/api/season-history")
+      .then((d) => setHistory(d.history ?? []))
+      .catch((e) => console.error("fetch season history:", e));
+  }, []);
 
   // Load available leagues
   useEffect(() => {
@@ -181,14 +214,17 @@ function LigaPage() {
     } else {
       setSelectedLeagueId(leagueId);
     }
+    setSeasonView("current");
     setTab("tabulka");
   };
 
   if (loadingStandings) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
   const displayName = seasonNum ? `${leagueName} — Sezóna ${seasonNum}` : (leagueName || "Liga");
-  // Other leagues = leagues that are NOT my own
-  const otherLeagues = allLeagues.filter((l) => l.name !== leagueName || isOtherLeague);
+
+  // Minulé sezóny aktuálně zobrazené ligy (dle názvu) + vybraný archiv
+  const pastSeasons = history.filter((h) => h.leagueName === leagueName).sort((a, b) => b.seasonNumber - a.seasonNumber);
+  const pastEntry = typeof seasonView === "number" ? pastSeasons.find((h) => h.seasonNumber === seasonView) ?? null : null;
 
   return (
     <>
@@ -212,6 +248,27 @@ function LigaPage() {
         </div>
       )}
 
+      {/* Season picker — listování minulých sezón této ligy */}
+      {pastSeasons.length > 0 && (
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted font-medium">Sezóna:</span>
+          <select
+            value={seasonView === "current" ? "current" : String(seasonView)}
+            onChange={(e) => setSeasonView(e.target.value === "current" ? "current" : Number(e.target.value))}
+            className="text-sm bg-white border border-border rounded-lg px-3 py-2 font-medium"
+          >
+            <option value="current">Aktuální{seasonNum ? ` (Sezóna ${seasonNum})` : ""}</option>
+            {pastSeasons.map((h) => (
+              <option key={h.id} value={h.seasonNumber}>Sezóna {h.seasonNumber} (archiv)</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {pastEntry ? (
+        <PastSeasonView entry={pastEntry} myTeamId={teamId} />
+      ) : (
+      <>
       {/* Tabs — cizí liga: tabulka + zpravodaj, vlastní: plné menu */}
       <div className="flex gap-1 bg-surface rounded-xl p-1">
         {(isOtherLeague ? ["tabulka", "zpravodaj"] as Tab[] : ["tabulka", "rozpis", "vysledky", "statistiky"] as Tab[]).map((key) => (
@@ -248,8 +305,118 @@ function LigaPage() {
           </div>
         )
       )}
+      </>
+      )}
     </div>
     </>
+  );
+}
+
+// ═══ Minulá sezóna (archiv) ═══
+
+function PastSeasonView({ entry, myTeamId }: { entry: HistoryEntry; myTeamId: string | null }) {
+  const a = entry.awards;
+  const s = entry.seasonStats;
+  return (
+    <div className="space-y-5">
+      {/* Ocenění */}
+      {a && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {a.champion?.name && <PastAward icon="🏆" label="Mistr"><PastTeamLink teamId={a.champion.teamId} name={a.champion.name} /></PastAward>}
+          {a.playerOfSeason?.name && <PastAward icon="⭐" label="Hráč sezóny" reason={a.playerOfSeason.reason}><span className="font-heading font-bold">{a.playerOfSeason.name}</span></PastAward>}
+          {a.topScorer?.name && <PastAward icon="👟" label="Král střelců"><span className="font-heading font-bold">{a.topScorer.name}</span><span className="text-muted text-sm"> · {a.topScorer.goals} gólů</span></PastAward>}
+          {a.managerOfSeason?.name && <PastAward icon="🎩" label="Trenér sezóny" reason={a.managerOfSeason.reason}><span className="font-heading font-bold">{a.managerOfSeason.name}</span></PastAward>}
+          {a.discovery?.name && <PastAward icon="🌱" label="Objev sezóny" reason={a.discovery.reason}><span className="font-heading font-bold">{a.discovery.name}</span></PastAward>}
+        </div>
+      )}
+
+      {/* Konečná tabulka */}
+      {entry.finalStandings && entry.finalStandings.length > 0 && (
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b-2 border-gray-200 text-muted">
+                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center w-8">#</th>
+                <th className="py-2.5 px-3 text-xs font-heading uppercase text-left">Tým</th>
+                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center w-8 hidden sm:table-cell">Z</th>
+                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center">V-R-P</th>
+                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center w-14">Skóre</th>
+                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center w-10">B</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entry.finalStandings.map((r, idx) => (
+                <tr key={r.teamId} className={`border-b border-gray-50 ${r.teamId === myTeamId ? "bg-pitch-50/60" : idx % 2 === 1 ? "bg-gray-50/30" : ""}`}>
+                  <td className="py-3 px-1.5 text-center"><span className={`font-heading font-[800] text-base tabular-nums ${r.pos === 1 ? "text-gold-500" : r.pos <= 3 ? "text-pitch-500" : "text-muted"}`}>{r.pos}</span></td>
+                  <td className="py-3 px-3"><PastTeamLink teamId={r.teamId} name={r.teamName} highlight={r.teamId === myTeamId} /></td>
+                  <td className="py-3 px-1.5 text-center tabular-nums text-muted hidden sm:table-cell">{r.played}</td>
+                  <td className="py-3 px-1.5 text-center tabular-nums text-muted">{r.wins}-{r.draws}-{r.losses}</td>
+                  <td className="py-3 px-1.5 text-center tabular-nums">{r.gf}:{r.ga}</td>
+                  <td className="py-3 px-1.5 text-center"><span className="font-heading font-[800] text-lg tabular-nums">{r.points}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Nejlepší jedenáctka */}
+      {a?.bestEleven && a.bestEleven.length > 0 && (
+        <div>
+          <SectionLabel>Nejlepší jedenáctka</SectionLabel>
+          <div className="flex flex-wrap gap-2">
+            {a.bestEleven.map((p) => (
+              <div key={p.playerId} className="bg-gray-50 rounded-lg px-3 py-1.5 text-sm">
+                <span className="text-[10px] font-heading font-bold text-pitch-600 uppercase mr-1.5">{p.position}</span>
+                <span className="font-heading font-bold">{p.name}</span>
+                <span className="text-muted text-xs"> · {p.teamName}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Sezona v číslech */}
+      {s && (
+        <div>
+          <SectionLabel>Sezona v číslech</SectionLabel>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+            <PastStat label="Branek celkem" value={`${s.totalGoals}`} sub={`${s.goalsPerMatch} / zápas`} />
+            <PastStat label="Zápasů" value={`${s.matchesPlayed}`} />
+            <PastStat label="Karty" value={`${s.totalYellowCards} 🟨 / ${s.totalRedCards} 🟥`} />
+            {s.biggestWin && <PastStat label="Nejvyšší výhra" value={`${s.biggestWin.homeScore}:${s.biggestWin.awayScore}`} sub={`${s.biggestWin.homeTeam} – ${s.biggestWin.awayTeam}`} />}
+            {s.recordAttendance && <PastStat label="Rekordní návštěva" value={`${s.recordAttendance.value}`} sub={s.recordAttendance.homeTeam} />}
+            {s.longestWinStreak && <PastStat label="Nejdelší série" value={`${s.longestWinStreak.length}×`} sub={s.longestWinStreak.teamName} />}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PastTeamLink({ teamId, name, highlight }: { teamId?: string | null; name?: string | null; highlight?: boolean }) {
+  if (!name) return <span>—</span>;
+  if (!teamId) return <span className="font-heading font-bold">{name}</span>;
+  return <Link href={`/dashboard/team/${teamId}`} className={`font-heading font-bold hover:text-pitch-500 transition-colors ${highlight ? "text-pitch-600" : ""}`}>{name}</Link>;
+}
+
+function PastAward({ icon, label, reason, children }: { icon: string; label: string; reason?: string | null; children: React.ReactNode }) {
+  return (
+    <div className="bg-gray-50 rounded-lg px-3 py-2">
+      <div className="text-[10px] font-heading font-bold text-muted uppercase">{icon} {label}</div>
+      <div className="text-base">{children}</div>
+      {reason && <div className="text-xs text-muted mt-0.5 italic">„{reason}"</div>}
+    </div>
+  );
+}
+
+function PastStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="bg-gray-50 rounded-lg px-3 py-2">
+      <div className="text-[10px] font-heading font-bold text-muted uppercase">{label}</div>
+      <div className="font-heading font-bold tabular-nums">{value}</div>
+      {sub && <div className="text-xs text-muted truncate">{sub}</div>}
+    </div>
   );
 }
 
