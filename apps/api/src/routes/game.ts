@@ -5618,6 +5618,43 @@ gameRouter.post("/admin/teams/:teamId/grant-budget", async (c) => {
   return c.json({ ok: true, teamId, amount: body.amount, balanceAfter });
 });
 
+// POST /api/admin/end-season?leagueId=<id>&force=1 — chunkovaná orchestrace konce sezóny.
+// Volat OPAKOVANĚ dokud allDone=true (admin tlačítko / curl loop). Jedna jednotka práce/invokaci.
+gameRouter.post("/admin/end-season", async (c) => {
+  const leagueId = c.req.query("leagueId") || undefined;
+  const force = c.req.query("force") === "1";
+  const { runEndSeasonStep } = await import("../season/end-season");
+  const result = await runEndSeasonStep(c.env.DB, (c.env as any).GEMINI_API_KEY, { leagueId, force });
+  return c.json(result);
+});
+
+// GET /api/season-history — archiv všech sezón (síň slávy) pro stránku Historie.
+gameRouter.get("/season-history", async (c) => {
+  const rows = await c.env.DB.prepare(
+    `SELECT lh.id, lh.league_id, lh.season_number, lh.final_standings, lh.awards, lh.season_stats, lh.created_at, l.name AS league_name
+     FROM league_history lh JOIN leagues l ON l.id = lh.league_id
+     ORDER BY lh.season_number DESC, l.name ASC`,
+  ).all<Record<string, unknown>>().catch((e) => { logger.warn({ module: "game.ts" }, "load season history", e); return { results: [] as Record<string, unknown>[] }; });
+
+  const safeParse = (v: unknown) => { try { return v ? JSON.parse(v as string) : null; } catch { return null; } };
+  const history = rows.results.map((r) => ({
+    id: r.id, leagueId: r.league_id, leagueName: r.league_name, seasonNumber: r.season_number,
+    finalStandings: safeParse(r.final_standings), awards: safeParse(r.awards), seasonStats: safeParse(r.season_stats),
+    createdAt: r.created_at,
+  }));
+  return c.json({ history });
+});
+
+// GET /api/teams/:teamId/trophies — trofeje klubu (ownership-guarded prefixem /teams/:teamId/*).
+gameRouter.get("/teams/:teamId/trophies", async (c) => {
+  const teamId = c.req.param("teamId");
+  const row = await c.env.DB.prepare("SELECT trophies FROM teams WHERE id = ?").bind(teamId).first<{ trophies: string }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "load trophies", e); return null; });
+  let trophies: unknown[] = [];
+  try { trophies = JSON.parse(row?.trophies ?? "[]"); } catch { trophies = []; }
+  return c.json({ trophies });
+});
+
 // ── Admin: Seed data management ──
 
 gameRouter.get("/admin/seed-data", async (c) => {
