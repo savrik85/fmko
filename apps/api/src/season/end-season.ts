@@ -1,16 +1,17 @@
 /**
- * Orchestrátor konce sezóny — chunkovaný a idempotentní.
+ * Orchestrátor konce sezóny — GLOBÁLNÍ, chunkovaný, idempotentní.
  *
+ * Sezóna je GLOBÁLNÍ: jeden trigger zakončí celý ročník napříč VŠEMI senior
+ * ligami a založí JEDEN nový globální ročník se synchronizovaným kalendářem.
  * Volá se OPAKOVANĚ (admin tlačítko / curl loop) dokud allDone=true.
- * Jedna jednotka práce na invokaci (1 fáze, departures po ~3 týmech) →
- * každé volání < worker timeout.
  *
- * Pořadí fází (awards + archive PŘED odchody, aby šla resolvnout jména
- * oceněných hráčů — retired se mažou z players):
- *   finalize → rewards → awards → archive → departures → replenish
- *   → village → articles → interviews → new_calendar
+ * Pořadí per-liga wrap fází (awards+archive PŘED odchody — retired se mažou
+ * z players): finalize → rewards → awards → archive → departures → replenish
+ * → village → articles → interviews. Pak JEDEN globální rollover.
  *
- * Stav drží season_end_progress (PK league_id+season_number+phase).
+ * Gate: zakončí se, až jsou dohrané LIDSKÉ senior ligy (AI-only ligy, které
+ * match-tick nezpracovává, neblokují). `force` přebije. Wrap běží jen pro ligy,
+ * co aspoň 1 zápas odehrály; rollnou se ale VŠECHNY senior ligy (kvůli poháru).
  */
 
 import { calculateStandings } from "../stats/standings";
@@ -21,70 +22,84 @@ import { processTeamDepartures, refreshFreeAgents } from "./season-departures";
 import { applyVillageSeasonReaction } from "./season-village";
 import { generateSeasonWrapArticle } from "../news/season-wrap";
 import { createSeasonWrapInterviews } from "../news/season-interview";
-import { rolloverLeague } from "./season-rollover";
+import { rolloverAllLeagues } from "./season-rollover";
 import { createRng, cryptoSeed } from "../generators/rng";
 import { logger } from "../lib/logger";
 
-const PHASES = [
+const WRAP_PHASES = [
   "finalize", "rewards", "awards", "archive", "departures",
-  "replenish", "village", "articles", "interviews", "new_calendar",
+  "replenish", "village", "articles", "interviews",
 ] as const;
-type Phase = (typeof PHASES)[number];
+type WrapPhase = (typeof WRAP_PHASES)[number];
 
+const ROLLOVER_KEY = "__global__";
 const DEPARTURES_CHUNK = 3;
 
 export interface EndSeasonStepResult {
   allDone: boolean;
-  leagueId?: string;
+  ready?: boolean;
   seasonNumber?: number;
-  phase?: Phase;
-  status?: "done" | "in_progress" | "error" | "skipped";
+  leagueId?: string;
+  phase?: string;
+  status?: "done" | "in_progress" | "error";
   remainingLeagues: number;
   detail?: string;
 }
 
 interface LeagueState {
   leagueId: string;
-  seasonNumber: number;
-  complete: boolean;
-  /** Sezóna má aspoň 1 odehraný zápas (jinak je to čerstvě rollnutá sezóna). */
+  total: number;
+  pending: number;
+  humans: number;
   started: boolean;
+  complete: boolean;
 }
 
-async function getLeagueState(db: D1Database, leagueId: string): Promise<LeagueState | null> {
-  const row = await db.prepare(
-    `SELECT MAX(season_number) AS n,
-            COUNT(*) AS total,
-            SUM(CASE WHEN status != 'simulated' THEN 1 ELSE 0 END) AS pending
-     FROM season_calendar
-     WHERE league_id = ? AND season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)`,
-  ).bind(leagueId, leagueId).first<{ n: number | null; total: number; pending: number }>()
-    .catch((e) => { logger.warn({ module: "end-season" }, "league state", e); return null; });
-  if (!row || row.n == null) return null;
-  return {
-    leagueId,
-    seasonNumber: row.n,
-    complete: row.total > 0 && row.pending === 0,
-    started: row.total > 0 && row.pending < row.total,
-  };
+async function getGlobalSeason(db: D1Database): Promise<number | null> {
+  const row = await db.prepare("SELECT MAX(number) AS n FROM seasons WHERE status = 'active'")
+    .first<{ n: number | null }>()
+    .catch((e) => { logger.warn({ module: "end-season" }, "global season", e); return null; });
+  if (row?.n != null) return row.n;
+  // fallback: nejvyšší season_number senior kalendářů
+  const fb = await db.prepare("SELECT MAX(sc.season_number) AS n FROM season_calendar sc JOIN leagues l ON l.id = sc.league_id WHERE l.league_type = 'senior'")
+    .first<{ n: number | null }>()
+    .catch((e) => { logger.warn({ module: "end-season" }, "global season fallback", e); return null; });
+  return fb?.n ?? null;
 }
 
-async function getProgress(db: D1Database, leagueId: string, seasonNumber: number, phase: Phase) {
-  return db.prepare("SELECT status, cursor, data FROM season_end_progress WHERE league_id = ? AND season_number = ? AND phase = ?")
-    .bind(leagueId, seasonNumber, phase).first<{ status: string; cursor: string | null; data: string | null }>()
+async function getSeniorStates(db: D1Database, seasonNumber: number): Promise<LeagueState[]> {
+  const res = await db.prepare(
+    `SELECT l.id AS league_id,
+            (SELECT COUNT(*) FROM season_calendar sc WHERE sc.league_id = l.id AND sc.season_number = ?) AS total,
+            (SELECT COUNT(*) FROM season_calendar sc WHERE sc.league_id = l.id AND sc.season_number = ? AND sc.status != 'simulated') AS pending,
+            (SELECT COUNT(*) FROM teams t WHERE t.league_id = l.id AND t.user_id != 'ai') AS humans
+     FROM leagues l WHERE l.league_type = 'senior'`,
+  ).bind(seasonNumber, seasonNumber).all<{ league_id: string; total: number; pending: number; humans: number }>()
+    .catch((e) => { logger.warn({ module: "end-season" }, "senior states", e); return { results: [] as { league_id: string; total: number; pending: number; humans: number }[] }; });
+
+  return res.results.map((r) => ({
+    leagueId: r.league_id,
+    total: r.total,
+    pending: r.pending,
+    humans: r.humans,
+    started: r.total > 0 && r.pending < r.total,
+    complete: r.total > 0 && r.pending === 0,
+  }));
+}
+
+async function getProgress(db: D1Database, leagueId: string, seasonNumber: number, phase: string) {
+  return db.prepare("SELECT status, cursor FROM season_end_progress WHERE league_id = ? AND season_number = ? AND phase = ?")
+    .bind(leagueId, seasonNumber, phase).first<{ status: string; cursor: string | null }>()
     .catch((e) => { logger.warn({ module: "end-season" }, "get progress", e); return null; });
 }
 
-async function setProgress(
-  db: D1Database, leagueId: string, seasonNumber: number, phase: Phase,
-  status: string, cursor?: string | null, data?: string | null,
-): Promise<void> {
+async function setProgress(db: D1Database, leagueId: string, seasonNumber: number, phase: string, status: string, cursor?: string | null): Promise<void> {
   await db.prepare(
-    `INSERT INTO season_end_progress (league_id, season_number, phase, status, cursor, data, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    `INSERT INTO season_end_progress (league_id, season_number, phase, status, cursor, updated_at)
+     VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
      ON CONFLICT(league_id, season_number, phase)
-     DO UPDATE SET status = excluded.status, cursor = excluded.cursor, data = excluded.data, updated_at = excluded.updated_at`,
-  ).bind(leagueId, seasonNumber, phase, status, cursor ?? null, data ?? null).run()
+     DO UPDATE SET status = excluded.status, cursor = excluded.cursor, updated_at = excluded.updated_at`,
+  ).bind(leagueId, seasonNumber, phase, status, cursor ?? null).run()
     .catch((e) => logger.warn({ module: "end-season" }, "set progress", e));
 }
 
@@ -95,77 +110,72 @@ async function getGameDate(db: D1Database, leagueId: string): Promise<string> {
   return row?.game_date ?? new Date().toISOString();
 }
 
-/** Spustí jednu jednotku práce konce sezóny. */
+/** Spustí jednu jednotku práce globálního konce sezóny. */
 export async function runEndSeasonStep(
   db: D1Database,
   geminiApiKey: string | undefined,
-  opts: { leagueId?: string; force?: boolean } = {},
+  opts: { force?: boolean } = {},
 ): Promise<EndSeasonStepResult> {
-  // 1. Kandidátní senior ligy
-  const leaguesRes = await db.prepare(
-    `SELECT id FROM leagues WHERE league_type = 'senior'${opts.leagueId ? " AND id = ?" : ""}`,
-  ).bind(...(opts.leagueId ? [opts.leagueId] : [])).all<{ id: string }>()
-    .catch((e) => { logger.warn({ module: "end-season" }, "load leagues", e); return { results: [] as { id: string }[] }; });
+  const seasonNumber = await getGlobalSeason(db);
+  if (seasonNumber == null) return { allDone: true, ready: false, remainingLeagues: 0, detail: "žádná aktivní sezóna" };
 
-  const states: LeagueState[] = [];
-  for (const l of leaguesRes.results) {
-    const st = await getLeagueState(db, l.id);
-    if (!st) continue;
-    // Neodehraná sezóna (čerstvě rollnutá) se NIKDY nezakončuje — ani s force.
-    // Zabraňuje smyčce: rollover → nová prázdná sezóna → znovu zakončit → ...
-    if (!st.started) continue;
-    if (!st.complete && !opts.force) continue; // nedohraná liga (force ji pustí)
-    states.push(st);
+  const states = await getSeniorStates(db, seasonNumber);
+  const started = states.filter((s) => s.started);
+
+  // Žádná odehraná liga → není co zakončit (a guard proti smyčce: čerstvě rollnutá sezóna)
+  if (started.length === 0) {
+    return { allDone: true, ready: false, seasonNumber, remainingLeagues: 0, detail: "sezóna zatím nezačala — žádná odehraná liga" };
   }
 
-  if (states.length === 0) {
-    return { allDone: true, remainingLeagues: 0, detail: opts.leagueId ? "liga není dohraná (použij force=1)" : "žádná dohraná senior liga" };
+  // Gate: lidské odehrané ligy musí být dohrané (AI-only neblokují). force přebije.
+  if (!opts.force) {
+    const blocking = started.filter((s) => s.humans > 0 && !s.complete);
+    if (blocking.length > 0) {
+      return { allDone: true, ready: false, seasonNumber, remainingLeagues: blocking.length, detail: `sezóna ještě běží — ${blocking.length} lidských lig nedohraných (force=1 přebije)` };
+    }
   }
 
-  // 2. Najdi první ligu s nedokončenou fází
-  let remainingLeagues = 0;
-  for (const st of states) {
-    let firstPending: Phase | null = null;
-    for (const phase of PHASES) {
-      const prog = await getProgress(db, st.leagueId, st.seasonNumber, phase);
+  // 1. Per-liga wrap pro odehrané ligy
+  for (const st of started) {
+    let firstPending: WrapPhase | null = null;
+    for (const phase of WRAP_PHASES) {
+      const prog = await getProgress(db, st.leagueId, seasonNumber, phase);
       if (prog?.status !== "done") { firstPending = phase; break; }
     }
     if (firstPending) {
-      remainingLeagues++;
-      // zpracuj tuto fázi (případně 1 chunk)
-      const status = await runPhase(db, geminiApiKey, st, firstPending);
-      return {
-        allDone: false,
-        leagueId: st.leagueId,
-        seasonNumber: st.seasonNumber,
-        phase: firstPending,
-        status,
-        remainingLeagues,
-        detail: `${firstPending} → ${status}`,
-      };
+      const status = await runWrapPhase(db, geminiApiKey, st.leagueId, seasonNumber, firstPending);
+      return { allDone: false, ready: true, seasonNumber, leagueId: st.leagueId, phase: firstPending, status, remainingLeagues: started.length, detail: `${firstPending} → ${status}` };
     }
   }
 
-  // 3. Vše hotovo → globální finalize (uzavřít nereferencované sezóny)
-  await db.prepare("UPDATE seasons SET status = 'finished' WHERE status = 'active' AND id NOT IN (SELECT DISTINCT season_id FROM leagues)")
-    .run().catch((e) => logger.warn({ module: "end-season" }, "finalize seasons", e));
+  // 2. Globální rollover (jednou, až mají všechny odehrané ligy wrap hotový)
+  const rollProg = await getProgress(db, ROLLOVER_KEY, seasonNumber, "rollover");
+  if (rollProg?.status !== "done") {
+    try {
+      const r = await rolloverAllLeagues(db, seasonNumber);
+      await setProgress(db, ROLLOVER_KEY, seasonNumber, "rollover", "done");
+      return { allDone: true, ready: true, seasonNumber, phase: "rollover", status: "done", remainingLeagues: 0, detail: `nová sezóna ${r.newSeasonNumber}, rollnuto ${r.rolledLeagues} lig` };
+    } catch (e) {
+      logger.error({ module: "end-season" }, "global rollover failed", e);
+      return { allDone: false, ready: true, seasonNumber, phase: "rollover", status: "error", remainingLeagues: 0, detail: "rollover selhal" };
+    }
+  }
 
-  return { allDone: true, remainingLeagues: 0, detail: "všechny ligy dokončeny" };
+  return { allDone: true, ready: true, seasonNumber, remainingLeagues: 0, detail: "sezóna zakončena" };
 }
 
-async function runPhase(
+async function runWrapPhase(
   db: D1Database,
   geminiApiKey: string | undefined,
-  st: LeagueState,
-  phase: Phase,
+  leagueId: string,
+  seasonNumber: number,
+  phase: WrapPhase,
 ): Promise<"done" | "in_progress" | "error"> {
-  const { leagueId, seasonNumber } = st;
   try {
     switch (phase) {
-      case "finalize": {
+      case "finalize":
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
-      }
       case "rewards": {
         const standings = await calculateStandings(db, leagueId);
         const levelRow = await db.prepare("SELECT level FROM leagues WHERE id = ?").bind(leagueId).first<{ level: string }>()
@@ -175,16 +185,14 @@ async function runPhase(
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
       }
-      case "awards": {
+      case "awards":
         await generateSeasonAwards(db, geminiApiKey, leagueId, seasonNumber);
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
-      }
-      case "archive": {
+      case "archive":
         await archiveLeagueSeason(db, leagueId, seasonNumber);
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
-      }
       case "departures": {
         const prog = await getProgress(db, leagueId, seasonNumber, phase);
         let processed: string[] = [];
@@ -198,9 +206,9 @@ async function runPhase(
           await processTeamDepartures(db, leagueId, tid, seasonNumber);
           processedSet.add(tid);
         }
-        const allDone = processedSet.size >= teamIds.length;
-        await setProgress(db, leagueId, seasonNumber, phase, allDone ? "done" : "pending", JSON.stringify([...processedSet]));
-        return allDone ? "done" : "in_progress";
+        const done = processedSet.size >= teamIds.length;
+        await setProgress(db, leagueId, seasonNumber, phase, done ? "done" : "pending", JSON.stringify([...processedSet]));
+        return done ? "done" : "in_progress";
       }
       case "replenish": {
         const rng = createRng(cryptoSeed());
@@ -215,24 +223,17 @@ async function runPhase(
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
       }
-      case "articles": {
+      case "articles":
         await generateSeasonWrapArticle(db, geminiApiKey, leagueId, seasonNumber);
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
-      }
-      case "interviews": {
+      case "interviews":
         await createSeasonWrapInterviews(db, geminiApiKey, leagueId, seasonNumber);
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
-      }
-      case "new_calendar": {
-        await rolloverLeague(db, leagueId, seasonNumber);
-        await setProgress(db, leagueId, seasonNumber, phase, "done");
-        return "done";
-      }
     }
   } catch (e) {
-    logger.error({ module: "end-season" }, `phase ${phase} failed league=${leagueId}`, e);
+    logger.error({ module: "end-season" }, `wrap phase ${phase} failed league=${leagueId}`, e);
     return "error";
   }
   return "error";

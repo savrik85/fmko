@@ -5621,13 +5621,13 @@ gameRouter.post("/admin/teams/:teamId/grant-budget", async (c) => {
   return c.json({ ok: true, teamId, amount: body.amount, balanceAfter });
 });
 
-// POST /api/admin/end-season?leagueId=<id>&force=1 — chunkovaná orchestrace konce sezóny.
+// POST /api/admin/end-season?force=1 — GLOBÁLNÍ chunkovaná orchestrace konce sezóny.
+// Zakončí celý ročník napříč všemi senior ligami + založí nový globální ročník.
 // Volat OPAKOVANĚ dokud allDone=true (admin tlačítko / curl loop). Jedna jednotka práce/invokaci.
 gameRouter.post("/admin/end-season", async (c) => {
-  const leagueId = c.req.query("leagueId") || undefined;
   const force = c.req.query("force") === "1";
   const { runEndSeasonStep } = await import("../season/end-season");
-  const result = await runEndSeasonStep(c.env.DB, (c.env as any).GEMINI_API_KEY, { leagueId, force });
+  const result = await runEndSeasonStep(c.env.DB, (c.env as any).GEMINI_API_KEY, { force });
   return c.json(result);
 });
 

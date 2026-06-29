@@ -149,7 +149,6 @@ function SeasonEndSection() {
   const { token } = useTeam();
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
-  const [leagueId, setLeagueId] = useState("");
   const [force, setForce] = useState(false);
 
   const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
@@ -157,11 +156,10 @@ function SeasonEndSection() {
   const add = (m: string) => setLog((p) => [...p, `[${new Date().toLocaleTimeString("cs")}] ${m}`]);
 
   const run = async () => {
-    if (!confirm("Spustit zakončení sezóny? Rozdá odměny + reputaci, vyhlásí ocenění, nechá odejít 2–3 hráče z týmu a založí novou sezónu.")) return;
+    if (!confirm("Zakončit celou sezónu (všechny ligy)? Rozdá odměny + reputaci, vyhlásí ocenění, nechá odejít 2–3 hráče z každého týmu a založí nový globální ročník.")) return;
     setRunning(true);
     setLog([]);
     const qs = new URLSearchParams();
-    if (leagueId.trim()) qs.set("leagueId", leagueId.trim());
     if (force) qs.set("force", "1");
     const url = `${API}/api/admin/end-season${qs.toString() ? `?${qs}` : ""}`;
 
@@ -199,17 +197,11 @@ function SeasonEndSection() {
     <div className="card p-4">
       <SectionLabel>🏁 Zakončení sezóny</SectionLabel>
       <div className="text-sm text-muted mb-3">
-        Spustí odměny, reputaci, ocenění, archiv, odchody hráčů, rozhovory s trenéry a založí novou sezónu.
-        Volá se opakovaně, dokud není hotovo — vydrž, chvíli to trvá.
+        Zakončí celý ročník <strong>napříč všemi senior ligami</strong> — odměny, reputaci, ocenění, archiv,
+        odchody hráčů (+1 rok všem), rozhovory s trenéry a založí jeden nový globální ročník se synchronizovaným
+        kalendářem. Volá se opakovaně, dokud není hotovo — vydrž, chvíli to trvá.
       </div>
       <div className="flex flex-wrap gap-3 items-center mb-3">
-        <input
-          type="text"
-          value={leagueId}
-          onChange={(e) => setLeagueId(e.target.value)}
-          placeholder="leagueId (volitelné — jinak všechny dohrané)"
-          className="flex-1 min-w-[220px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-pitch-400"
-        />
         <label className="flex items-center gap-1.5 text-sm">
           <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
           force (i nedohrané)
