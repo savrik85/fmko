@@ -5441,14 +5441,21 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
 
   // KROK 3: Generuj článek přes Gemini — pokud selže, odpovědi jsou bezpečně uloženy a daily-tick je zretryuje
   const qa = questions.map((q, i) => ({ q, a: answers[i] ?? "" }));
-  const { generateInterviewArticle } = await import("../news/interview-generator");
-  const article = await generateInterviewArticle(
-    (c.env as any).GEMINI_API_KEY,
-    qa,
-    managerRow.manager_name,
-    managerRow.team_name,
-    opponentName,
-  );
+  // Season-wrap rozhovor (match_calendar_id = 'season-{n}-wrap') → sezónní bilanční článek, ne pregame
+  const isSeasonWrap = String(interview.match_calendar_id ?? "").includes("-wrap");
+  let article: { headline: string; body: string } | null;
+  if (isSeasonWrap) {
+    const seasonNumber = Math.max(1, Math.round(Number(interview.game_week ?? 100) / 100));
+    const { generateSeasonInterviewArticle } = await import("../news/season-interview");
+    article = await generateSeasonInterviewArticle(
+      (c.env as any).GEMINI_API_KEY, qa, managerRow.manager_name, managerRow.team_name, seasonNumber,
+    );
+  } else {
+    const { generateInterviewArticle } = await import("../news/interview-generator");
+    article = await generateInterviewArticle(
+      (c.env as any).GEMINI_API_KEY, qa, managerRow.manager_name, managerRow.team_name, opponentName,
+    );
+  }
 
   if (!article) {
     logger.warn({ module: "game.ts", teamId }, "Gemini failed for interview article, answers saved, will retry");
