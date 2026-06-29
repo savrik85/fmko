@@ -96,10 +96,11 @@ export async function createSeasonWrapInterviews(
   geminiApiKey: string | undefined,
   leagueId: string,
   seasonNumber: number,
-): Promise<number> {
+  limit = Infinity,
+): Promise<{ created: number; remaining: number }> {
   if (!geminiApiKey) {
     logger.warn({ module: "season-interview" }, "no gemini key, skipping season interviews");
-    return 0;
+    return { created: 0, remaining: 0 };
   }
 
   const calId = wrapCalendarId(seasonNumber);
@@ -122,14 +123,19 @@ export async function createSeasonWrapInterviews(
   expiresAt.setDate(expiresAt.getDate() + 7);
   const expiresIso = expiresAt.toISOString();
 
-  let created = 0;
+  // Jen týmy bez existujícího season-wrap rozhovoru (idempotence)
+  const pending: typeof humanRes.results = [];
   for (const t of humanRes.results) {
     const existing = await db.prepare(
       "SELECT 1 FROM coach_interviews WHERE team_id = ? AND match_calendar_id = ? LIMIT 1",
     ).bind(t.team_id, calId).first()
       .catch((e) => { logger.warn({ module: "season-interview" }, "idempotency check", e); return null; });
-    if (existing) continue;
+    if (!existing) pending.push(t);
+  }
 
+  const todo = pending.slice(0, limit === Infinity ? pending.length : limit);
+  let created = 0;
+  for (const t of todo) {
     const s = standMap.get(t.team_id);
     const record = s ? `${s.wins} výher, ${s.draws} remíz, ${s.losses} proher (${s.gf}:${s.ga})` : "neznámá";
     const topPlayers = await loadTopPlayerNames(db, t.team_id);
@@ -154,8 +160,9 @@ export async function createSeasonWrapInterviews(
     created++;
   }
 
-  logger.info({ module: "season-interview" }, `created ${created} season-wrap interviews league=${leagueId}`);
-  return created;
+  const remaining = pending.length - todo.length;
+  logger.info({ module: "season-interview" }, `created ${created} season-wrap interviews league=${leagueId}, remaining ${remaining}`);
+  return { created, remaining };
 }
 
 async function notifyManager(db: D1Database, teamId: string, interviewId: string, seasonNumber: number): Promise<void> {

@@ -227,10 +227,12 @@ async function runWrapPhase(
         await generateSeasonWrapArticle(db, geminiApiKey, leagueId, seasonNumber);
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
-      case "interviews":
-        await createSeasonWrapInterviews(db, geminiApiKey, leagueId, seasonNumber);
-        await setProgress(db, leagueId, seasonNumber, phase, "done");
-        return "done";
+      case "interviews": {
+        const { remaining } = await createSeasonWrapInterviews(db, geminiApiKey, leagueId, seasonNumber, DEPARTURES_CHUNK);
+        const done = remaining === 0;
+        await setProgress(db, leagueId, seasonNumber, phase, done ? "done" : "pending");
+        return done ? "done" : "in_progress";
+      }
     }
   } catch (e) {
     logger.error({ module: "end-season" }, `wrap phase ${phase} failed league=${leagueId}`, e);
