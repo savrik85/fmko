@@ -22,10 +22,16 @@ export interface SeasonStats {
   biggestWin: (SeasonMatchHighlight & { margin: number }) | null;
   highestScoring: (SeasonMatchHighlight & { total: number }) | null;
   recordAttendance: { value: number; homeTeam: string; awayTeam: string } | null;
+  totalAttendance: number;
+  totalBeer: number;
+  wildestMatch: { homeTeam: string; awayTeam: string; cards: number } | null;
   totalYellowCards: number;
   totalRedCards: number;
   longestWinStreak: { teamName: string; length: number } | null;
 }
+
+/** Průměrná spotřeba piva na diváka (vesnický fotbal, žízeň jako trám). */
+const BEER_PER_FAN = 2.4;
 
 interface MatchRow {
   home_team_id: string;
@@ -47,6 +53,7 @@ export async function computeSeasonStats(
   const empty: SeasonStats = {
     matchesPlayed: 0, totalGoals: 0, goalsPerMatch: 0,
     biggestWin: null, highestScoring: null, recordAttendance: null,
+    totalAttendance: 0, totalBeer: 0, wildestMatch: null,
     totalYellowCards: 0, totalRedCards: 0, longestWinStreak: null,
   };
 
@@ -74,6 +81,7 @@ export async function computeSeasonStats(
   let biggestWin: (SeasonMatchHighlight & { margin: number }) | null = null;
   let highestScoring: (SeasonMatchHighlight & { total: number }) | null = null;
   let recordAttendance: { value: number; homeTeam: string; awayTeam: string } | null = null;
+  let totalAttendance = 0;
   // Vítězné série per tým (v pořadí kol)
   const streakNow = new Map<string, number>();
   let longestWinStreak: { teamName: string; length: number } | null = null;
@@ -93,8 +101,11 @@ export async function computeSeasonStats(
     if (!highestScoring || total > highestScoring.total) {
       highestScoring = { homeTeam: nameOf(m.home_team_id), awayTeam: nameOf(m.away_team_id), homeScore: hs, awayScore: as_, total };
     }
-    if (m.attendance != null && (!recordAttendance || m.attendance > recordAttendance.value)) {
-      recordAttendance = { value: m.attendance, homeTeam: nameOf(m.home_team_id), awayTeam: nameOf(m.away_team_id) };
+    if (m.attendance != null) {
+      totalAttendance += m.attendance;
+      if (!recordAttendance || m.attendance > recordAttendance.value) {
+        recordAttendance = { value: m.attendance, homeTeam: nameOf(m.home_team_id), awayTeam: nameOf(m.away_team_id) };
+      }
     }
 
     // Vítězné série
@@ -122,6 +133,21 @@ export async function computeSeasonStats(
   ).bind(leagueId, seasonNumber).first<{ y: number; r: number }>()
     .catch((e) => { logger.warn({ module: "season-stats" }, "load cards", e); return null; });
 
+  // Nejdivočejší zápas — nejvíc karet v jednom utkání
+  const wildRes = await db.prepare(
+    `SELECT mps.match_id, SUM(mps.yellow_cards) + SUM(mps.red_cards) AS cards, m.home_team_id, m.away_team_id
+     FROM match_player_stats mps
+     JOIN matches m ON m.id = mps.match_id
+     JOIN season_calendar sc ON sc.id = m.calendar_id
+     WHERE m.league_id = ? AND m.status = 'simulated' AND sc.season_number = ?
+     GROUP BY mps.match_id
+     ORDER BY cards DESC LIMIT 1`,
+  ).bind(leagueId, seasonNumber).first<{ cards: number; home_team_id: string; away_team_id: string }>()
+    .catch((e) => { logger.warn({ module: "season-stats" }, "load wildest match", e); return null; });
+  const wildestMatch = wildRes && wildRes.cards > 0
+    ? { homeTeam: nameOf(wildRes.home_team_id), awayTeam: nameOf(wildRes.away_team_id), cards: wildRes.cards }
+    : null;
+
   return {
     matchesPlayed: matches.length,
     totalGoals,
@@ -129,6 +155,9 @@ export async function computeSeasonStats(
     biggestWin,
     highestScoring,
     recordAttendance,
+    totalAttendance,
+    totalBeer: Math.round(totalAttendance * BEER_PER_FAN),
+    wildestMatch,
     totalYellowCards: cardRes?.y ?? 0,
     totalRedCards: cardRes?.r ?? 0,
     longestWinStreak,
@@ -143,6 +172,8 @@ export function seasonStatsToLines(s: SeasonStats): string[] {
   if (s.biggestWin) lines.push(`Nejvyšší výhra: ${s.biggestWin.homeTeam} ${s.biggestWin.homeScore}:${s.biggestWin.awayScore} ${s.biggestWin.awayTeam}`);
   if (s.highestScoring && s.highestScoring.total !== s.biggestWin?.margin) lines.push(`Nejgólovější zápas: ${s.highestScoring.homeTeam} ${s.highestScoring.homeScore}:${s.highestScoring.awayScore} ${s.highestScoring.awayTeam} (${s.highestScoring.total} branek)`);
   if (s.recordAttendance) lines.push(`Rekordní návštěva: ${s.recordAttendance.value} diváků (${s.recordAttendance.homeTeam} vs ${s.recordAttendance.awayTeam})`);
+  if (s.totalBeer > 0) lines.push(`Vypito piva za sezónu: zhruba ${s.totalBeer.toLocaleString("cs")} piv`);
+  if (s.wildestMatch) lines.push(`Nejdivočejší zápas: ${s.wildestMatch.homeTeam} vs ${s.wildestMatch.awayTeam} (${s.wildestMatch.cards} karet)`);
   lines.push(`Karet celkem: ${s.totalYellowCards} žlutých, ${s.totalRedCards} červených`);
   if (s.longestWinStreak) lines.push(`Nejdelší vítězná série: ${s.longestWinStreak.teamName} (${s.longestWinStreak.length} výher v řadě)`);
   return lines;

@@ -12,6 +12,8 @@ interface SeasonStats {
   matchesPlayed: number; totalGoals: number; goalsPerMatch: number;
   biggestWin?: { homeTeam: string; awayTeam: string; homeScore: number; awayScore: number } | null;
   recordAttendance?: { value: number; homeTeam: string } | null;
+  totalBeer?: number;
+  wildestMatch?: { homeTeam: string; awayTeam: string; cards: number } | null;
   totalYellowCards: number; totalRedCards: number;
   longestWinStreak?: { teamName: string; length: number } | null;
 }
@@ -257,10 +259,11 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: () => void }) {
           <h2 className="se-h2">Sezona v číslech</h2>
           <div className="se-stats">
             <Stat big={`${data.seasonStats.totalGoals}`} label="branek celkem" sub={`${data.seasonStats.goalsPerMatch} na zápas`} />
-            <Stat big={`${data.seasonStats.matchesPlayed}`} label="odehraných zápasů" />
-            <Stat big={`${data.seasonStats.totalYellowCards}/${data.seasonStats.totalRedCards}`} label="žluté / červené" />
+            {data.seasonStats.totalBeer != null && data.seasonStats.totalBeer > 0 && <Stat big={`${data.seasonStats.totalBeer.toLocaleString("cs")}`} label="🍺 vypito piv" sub="za celou sezónu" />}
+            {data.seasonStats.recordAttendance && <Stat big={`${data.seasonStats.recordAttendance.value}`} label="👥 nejvíc lidí" sub={data.seasonStats.recordAttendance.homeTeam} />}
+            {data.seasonStats.wildestMatch && <Stat big={`${data.seasonStats.wildestMatch.cards}`} label="🟥 nejdivočejší zápas" sub={`${data.seasonStats.wildestMatch.homeTeam} – ${data.seasonStats.wildestMatch.awayTeam}`} />}
             {data.seasonStats.biggestWin && <Stat big={`${data.seasonStats.biggestWin.homeScore}:${data.seasonStats.biggestWin.awayScore}`} label="nejvyšší výhra" sub={`${data.seasonStats.biggestWin.homeTeam} – ${data.seasonStats.biggestWin.awayTeam}`} />}
-            {data.seasonStats.recordAttendance && <Stat big={`${data.seasonStats.recordAttendance.value}`} label="rekordní návštěva" sub={data.seasonStats.recordAttendance.homeTeam} />}
+            <Stat big={`${data.seasonStats.matchesPlayed}`} label="odehraných zápasů" />
             {data.seasonStats.longestWinStreak && <Stat big={`${data.seasonStats.longestWinStreak.length}×`} label="nejdelší série" sub={data.seasonStats.longestWinStreak.teamName} />}
           </div>
         </Section>

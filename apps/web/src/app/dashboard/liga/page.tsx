@@ -75,6 +75,8 @@ interface PastSeasonStats {
   matchesPlayed: number; totalGoals: number; goalsPerMatch: number;
   biggestWin?: { homeTeam: string; awayTeam: string; homeScore: number; awayScore: number } | null;
   recordAttendance?: { value: number; homeTeam: string } | null;
+  totalBeer?: number;
+  wildestMatch?: { homeTeam: string; awayTeam: string; cards: number } | null;
   totalYellowCards: number; totalRedCards: number;
   longestWinStreak?: { teamName: string; length: number } | null;
 }
@@ -386,10 +388,11 @@ function PastSeasonView({ entry, myTeamId }: { entry: HistoryEntry; myTeamId: st
           <SectionLabel>Sezona v číslech</SectionLabel>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
             <PastStat label="Branek celkem" value={`${s.totalGoals}`} sub={`${s.goalsPerMatch} / zápas`} />
-            <PastStat label="Zápasů" value={`${s.matchesPlayed}`} />
-            <PastStat label="Karty" value={`${s.totalYellowCards} 🟨 / ${s.totalRedCards} 🟥`} />
+            {s.totalBeer != null && s.totalBeer > 0 && <PastStat label="🍺 Vypito piv" value={`${s.totalBeer.toLocaleString("cs")}`} sub="za sezónu" />}
+            {s.recordAttendance && <PastStat label="👥 Nejvíc lidí" value={`${s.recordAttendance.value}`} sub={s.recordAttendance.homeTeam} />}
+            {s.wildestMatch && <PastStat label="🟥 Nejdivočejší zápas" value={`${s.wildestMatch.cards} karet`} sub={`${s.wildestMatch.homeTeam} – ${s.wildestMatch.awayTeam}`} />}
             {s.biggestWin && <PastStat label="Nejvyšší výhra" value={`${s.biggestWin.homeScore}:${s.biggestWin.awayScore}`} sub={`${s.biggestWin.homeTeam} – ${s.biggestWin.awayTeam}`} />}
-            {s.recordAttendance && <PastStat label="Rekordní návštěva" value={`${s.recordAttendance.value}`} sub={s.recordAttendance.homeTeam} />}
+            <PastStat label="Zápasů" value={`${s.matchesPlayed}`} />
             {s.longestWinStreak && <PastStat label="Nejdelší série" value={`${s.longestWinStreak.length}×`} sub={s.longestWinStreak.teamName} />}
           </div>
         </div>
