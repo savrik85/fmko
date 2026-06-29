@@ -956,6 +956,9 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
         interview: "\u{1F399}\uFE0F",
         player_interview: "\u{1F3A4}",
         manager_feud: "\u{1F5E3}\uFE0F",
+        season_wrap: "\u{1F3C1}",
+        season_awards: "\u{1F3C6}",
+        legend_farewell: "\u{1F396}\uFE0F",
       };
       articles.push({
         id: n.id as string,

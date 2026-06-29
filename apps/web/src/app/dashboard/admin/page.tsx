@@ -114,6 +114,9 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* Zakončení sezóny */}
+      <SeasonEndSection />
+
       {/* Hlasování */}
       <VotesAdmin />
 
@@ -136,6 +139,94 @@ export default function AdminPage() {
           <div><span className="text-muted">Admin:</span> <span className="font-mono text-pitch-500">true</span></div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Zakončení sezóny ── */
+
+function SeasonEndSection() {
+  const { token } = useTeam();
+  const [log, setLog] = useState<string[]>([]);
+  const [running, setRunning] = useState(false);
+  const [leagueId, setLeagueId] = useState("");
+  const [force, setForce] = useState(false);
+
+  const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+  const authH: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  const add = (m: string) => setLog((p) => [...p, `[${new Date().toLocaleTimeString("cs")}] ${m}`]);
+
+  const run = async () => {
+    if (!confirm("Spustit zakončení sezóny? Rozdá odměny + reputaci, vyhlásí ocenění, nechá odejít 2–3 hráče z týmu a založí novou sezónu.")) return;
+    setRunning(true);
+    setLog([]);
+    const qs = new URLSearchParams();
+    if (leagueId.trim()) qs.set("leagueId", leagueId.trim());
+    if (force) qs.set("force", "1");
+    const url = `${API}/api/admin/end-season${qs.toString() ? `?${qs}` : ""}`;
+
+    add("Spouštím zakončení sezóny…");
+    let allDone = false;
+    let iter = 0;
+    let consecutiveErrors = 0;
+    while (!allDone && iter < 300) {
+      iter++;
+      try {
+        const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...authH } });
+        const data = await res.json();
+        if (data.phase) {
+          add(`${String(data.leagueId ?? "").slice(0, 8)} · ${data.phase} → ${data.status}${data.detail ? ` (${data.detail})` : ""}`);
+        } else {
+          add(data.detail ?? JSON.stringify(data).slice(0, 200));
+        }
+        allDone = !!data.allDone;
+        if (data.status === "error") {
+          consecutiveErrors++;
+          if (consecutiveErrors >= 3) { add("⚠️ Opakovaná chyba ve fázi — zastavuji."); break; }
+        } else {
+          consecutiveErrors = 0;
+        }
+      } catch (e: any) {
+        add(`CHYBA: ${e.message}`);
+        break;
+      }
+    }
+    add(allDone ? "✅ Hotovo — sezóna zakončena a nová založena." : "Zastaveno.");
+    setRunning(false);
+  };
+
+  return (
+    <div className="card p-4">
+      <SectionLabel>🏁 Zakončení sezóny</SectionLabel>
+      <div className="text-sm text-muted mb-3">
+        Spustí odměny, reputaci, ocenění, archiv, odchody hráčů, rozhovory s trenéry a založí novou sezónu.
+        Volá se opakovaně, dokud není hotovo — vydrž, chvíli to trvá.
+      </div>
+      <div className="flex flex-wrap gap-3 items-center mb-3">
+        <input
+          type="text"
+          value={leagueId}
+          onChange={(e) => setLeagueId(e.target.value)}
+          placeholder="leagueId (volitelné — jinak všechny dohrané)"
+          className="flex-1 min-w-[220px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-pitch-400"
+        />
+        <label className="flex items-center gap-1.5 text-sm">
+          <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
+          force (i nedohrané)
+        </label>
+        <button
+          onClick={run}
+          disabled={running}
+          className="px-4 py-2 bg-pitch-500 text-white rounded-lg font-heading font-bold text-sm disabled:opacity-50"
+        >
+          {running ? "Probíhá…" : "Ukončit sezónu"}
+        </button>
+      </div>
+      {log.length > 0 && (
+        <div className="bg-gray-900 text-green-400 font-mono text-xs p-3 rounded-lg max-h-[300px] overflow-y-auto">
+          {log.map((line, i) => <div key={i}>{line}</div>)}
+        </div>
+      )}
     </div>
   );
 }

@@ -36,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/schedule", label: "Rozpis", icon: "\u{1F4C5}", group: "league" },
   { href: "/dashboard/friendly", label: "Přáteláky", icon: "\u{1F91C}", group: "league" },
   { href: "/dashboard/liga", label: "Liga", icon: "\u{1F3C6}", group: "league" },
+  { href: "/dashboard/historie", label: "Historie", icon: "\u{1F4DC}", group: "league" },
   { href: "/dashboard/calendar", label: "Kalendář", icon: "\u{1F5D3}", group: "league" },
   { href: "/dashboard/napoveda", label: "Nápověda", icon: "\u{1F4D6}", group: "league" },
   // Sněm dočasně skryt z menu — dostupný přes přímou URL /dashboard/hlasovani.
