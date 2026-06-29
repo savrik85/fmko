@@ -103,6 +103,9 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: () => void }) {
     }));
   }, [mood, team]);
 
+  // Konfety zmizí po prvním scrollu za hero (jinak zakrývají obsah)
+  const [confettiOn, setConfettiOn] = useState(true);
+
   return (
     <div className="se-root" style={{ ["--team" as string]: team, ["--accent" as string]: mood.accent }}>
       <style>{CSS}</style>
@@ -111,14 +114,14 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: () => void }) {
       <div className="se-glow" />
       <div className="se-grain" />
       {confetti.length > 0 && (
-        <div className="se-confetti" aria-hidden>
+        <div className={`se-confetti${confettiOn ? "" : " gone"}`} aria-hidden>
           {confetti.map((c, i) => (
             <span key={i} style={{ left: `${c.left}%`, width: c.size, height: c.size * 1.6, background: c.color, animationDelay: `${c.delay}s`, animationDuration: `${c.dur}s`, ["--rot" as string]: `${c.rot}deg` }} />
           ))}
         </div>
       )}
 
-      <div className="se-scroll">
+      <div className="se-scroll" onScroll={(e) => { if (confettiOn && e.currentTarget.scrollTop > window.innerHeight * 0.4) setConfettiOn(false); }}>
         {/* 1 — HERO */}
         <Section className="se-hero">
           <div className="se-kicker">{data.leagueName} · Sezóna {data.seasonNumber}</div>
@@ -439,7 +442,8 @@ const CSS = `
 .se-cta-text{color:rgba(245,240,232,.65);max-width:30ch;margin-bottom:2.2rem;}
 .se-enter{font-family:var(--font-heading);font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:1.05rem;color:#061106;background:var(--accent);border:none;border-radius:999px;padding:1rem 2.4rem;cursor:pointer;transition:transform .2s,box-shadow .2s;box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 50%,transparent);}
 .se-enter:hover{transform:translateY(-2px) scale(1.02);box-shadow:0 12px 40px color-mix(in srgb,var(--accent) 45%,transparent);}
-.se-confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:5;}
+.se-confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:5;opacity:1;transition:opacity .7s ease;}
+.se-confetti.gone{opacity:0;}
 .se-confetti span{position:absolute;top:-6%;border-radius:2px;animation-name:seFall;animation-timing-function:linear;animation-iteration-count:infinite;opacity:.9;}
 @keyframes seFall{0%{transform:translateY(-10vh) rotate(0)}100%{transform:translateY(110vh) rotate(calc(var(--rot) * 4))}}
 .se-champhero{position:relative;display:flex;flex-direction:column;align-items:center;gap:.3rem;padding:1.5rem 0;}
