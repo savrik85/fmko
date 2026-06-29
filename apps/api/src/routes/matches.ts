@@ -394,10 +394,11 @@ matchesRouter.get("/teams/:teamId/league-schedule", async (c) => {
      FROM matches m
      JOIN teams ht ON m.home_team_id = ht.id
      JOIN teams at ON m.away_team_id = at.id
-     LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
+     JOIN season_calendar sc ON m.calendar_id = sc.id
      WHERE m.league_id = ?
+       AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)
      ORDER BY COALESCE(m.round, sc.game_week, 999), ht.name`
-  ).bind(leagueId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch league schedule matches", e); return { results: [] }; });
+  ).bind(leagueId, leagueId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch league schedule matches", e); return { results: [] }; });
 
   // Group by round
   const roundsMap = new Map<number, Array<Record<string, unknown>>>();
