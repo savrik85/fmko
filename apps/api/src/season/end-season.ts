@@ -47,6 +47,8 @@ interface LeagueState {
   leagueId: string;
   seasonNumber: number;
   complete: boolean;
+  /** Sezóna má aspoň 1 odehraný zápas (jinak je to čerstvě rollnutá sezóna). */
+  started: boolean;
 }
 
 async function getLeagueState(db: D1Database, leagueId: string): Promise<LeagueState | null> {
@@ -59,7 +61,12 @@ async function getLeagueState(db: D1Database, leagueId: string): Promise<LeagueS
   ).bind(leagueId, leagueId).first<{ n: number | null; total: number; pending: number }>()
     .catch((e) => { logger.warn({ module: "end-season" }, "league state", e); return null; });
   if (!row || row.n == null) return null;
-  return { leagueId, seasonNumber: row.n, complete: row.total > 0 && row.pending === 0 };
+  return {
+    leagueId,
+    seasonNumber: row.n,
+    complete: row.total > 0 && row.pending === 0,
+    started: row.total > 0 && row.pending < row.total,
+  };
 }
 
 async function getProgress(db: D1Database, leagueId: string, seasonNumber: number, phase: Phase) {
@@ -104,7 +111,10 @@ export async function runEndSeasonStep(
   for (const l of leaguesRes.results) {
     const st = await getLeagueState(db, l.id);
     if (!st) continue;
-    if (!st.complete && !opts.force) continue; // nedohraná liga
+    // Neodehraná sezóna (čerstvě rollnutá) se NIKDY nezakončuje — ani s force.
+    // Zabraňuje smyčce: rollover → nová prázdná sezóna → znovu zakončit → ...
+    if (!st.started) continue;
+    if (!st.complete && !opts.force) continue; // nedohraná liga (force ji pustí)
     states.push(st);
   }
 
