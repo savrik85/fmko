@@ -421,7 +421,7 @@ function PastStat({ label, value, sub }: { label: string; value: string; sub?: s
   return (
     <div className="bg-gray-50 rounded-lg px-3 py-2">
       <div className="text-[10px] font-heading font-bold text-muted uppercase">{label}</div>
-      <div className="font-heading font-bold tabular-nums">{value}</div>
+      <div className="font-heading font-bold tabular-nums whitespace-nowrap">{value}</div>
       {sub && <div className="text-xs text-muted truncate">{sub}</div>}
     </div>
   );

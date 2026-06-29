@@ -431,7 +431,7 @@ const CSS = `
 .se-trophy-sub{color:rgba(245,240,232,.55);}
 .se-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;width:100%;max-width:820px;}
 .se-stat{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:1.1rem;}
-.se-stat-big{font-family:var(--font-commentary);font-weight:700;font-size:clamp(1.6rem,4vw,2.4rem);color:#fff;}
+.se-stat-big{font-family:var(--font-commentary);font-weight:700;font-size:clamp(1.25rem,3.4vw,1.9rem);color:#fff;white-space:nowrap;}
 .se-stat-label{font-family:var(--font-heading);text-transform:uppercase;letter-spacing:.08em;font-size:.72rem;color:rgba(245,240,232,.5);margin-top:.2rem;}
 .se-stat-sub{font-size:.8rem;color:rgba(245,240,232,.4);margin-top:.15rem;}
 .se-cta-kicker{font-size:clamp(1rem,2.2vw,1.3rem);color:rgba(245,240,232,.7);}
