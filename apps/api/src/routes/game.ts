@@ -5658,6 +5658,27 @@ gameRouter.get("/teams/:teamId/trophies", async (c) => {
   return c.json({ trophies });
 });
 
+// GET /api/teams/:teamId/season-recap — nepřečtený přehled konce sezóny (nebo null).
+gameRouter.get("/teams/:teamId/season-recap", async (c) => {
+  const teamId = c.req.param("teamId");
+  const row = await c.env.DB.prepare(
+    "SELECT season_number, data FROM season_recap WHERE team_id = ? AND seen = 0 ORDER BY season_number DESC LIMIT 1",
+  ).bind(teamId).first<{ season_number: number; data: string }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "load season recap", e); return null; });
+  if (!row) return c.json({ recap: null });
+  let data: unknown = null;
+  try { data = JSON.parse(row.data); } catch (e) { logger.warn({ module: "game.ts" }, "parse recap data", e); }
+  return c.json({ recap: data, seasonNumber: row.season_number });
+});
+
+// POST /api/teams/:teamId/season-recap/dismiss — manažer viděl recap.
+gameRouter.post("/teams/:teamId/season-recap/dismiss", async (c) => {
+  const teamId = c.req.param("teamId");
+  await c.env.DB.prepare("UPDATE season_recap SET seen = 1 WHERE team_id = ? AND seen = 0").bind(teamId).run()
+    .catch((e) => logger.warn({ module: "game.ts" }, "dismiss season recap", e));
+  return c.json({ ok: true });
+});
+
 // ── Admin: Seed data management ──
 
 gameRouter.get("/admin/seed-data", async (c) => {

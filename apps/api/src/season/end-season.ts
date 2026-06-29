@@ -19,6 +19,7 @@ import { applySeasonRewards } from "./season-rewards";
 import { generateSeasonAwards } from "./season-awards";
 import { archiveLeagueSeason } from "./season-archive";
 import { processTeamDepartures, refreshFreeAgents } from "./season-departures";
+import { captureDepartures, buildTeamRecap } from "./season-recap";
 import { applyVillageSeasonReaction } from "./season-village";
 import { generateSeasonWrapArticle } from "../news/season-wrap";
 import { createSeasonWrapInterviews } from "../news/season-interview";
@@ -28,7 +29,7 @@ import { logger } from "../lib/logger";
 
 const WRAP_PHASES = [
   "finalize", "rewards", "awards", "archive", "departures",
-  "replenish", "village", "articles", "interviews",
+  "replenish", "village", "articles", "interviews", "recap",
 ] as const;
 type WrapPhase = (typeof WRAP_PHASES)[number];
 
@@ -203,7 +204,8 @@ async function runWrapPhase(
         const teamIds = teamsRes.results.map((r) => r.id);
         const todo = teamIds.filter((id) => !processedSet.has(id)).slice(0, DEPARTURES_CHUNK);
         for (const tid of todo) {
-          await processTeamDepartures(db, leagueId, tid, seasonNumber);
+          const res = await processTeamDepartures(db, leagueId, tid, seasonNumber);
+          await captureDepartures(db, tid, seasonNumber, res);
           processedSet.add(tid);
         }
         const done = processedSet.size >= teamIds.length;
@@ -232,6 +234,16 @@ async function runWrapPhase(
         const done = remaining === 0;
         await setProgress(db, leagueId, seasonNumber, phase, done ? "done" : "pending");
         return done ? "done" : "in_progress";
+      }
+      case "recap": {
+        // Sestav per-tým recap pro lidské týmy (PŘED rolloverem — jména hráčů ještě existují)
+        const humansRes = await db.prepare("SELECT id FROM teams WHERE league_id = ? AND user_id != 'ai'").bind(leagueId).all<{ id: string }>()
+          .catch((e) => { logger.warn({ module: "end-season" }, "load humans for recap", e); return { results: [] as { id: string }[] }; });
+        for (const h of humansRes.results) {
+          await buildTeamRecap(db, h.id, leagueId, seasonNumber);
+        }
+        await setProgress(db, leagueId, seasonNumber, phase, "done");
+        return "done";
       }
     }
   } catch (e) {
