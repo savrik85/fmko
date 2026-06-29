@@ -25,10 +25,14 @@ export async function rolloverAllLeagues(
   const newNum = oldSeasonNumber + 1;
   const seasonId = `season-${newNum}`;
 
-  // 1. Jedna nová globální sezóna (number UNIQUE → IGNORE pokud existuje)
+  // 1. Jedna nová globální sezóna (number UNIQUE → IGNORE pokud existuje).
+  //    Explicitně aktivovat — i kdyby řádek existoval jako finished z dřívějška.
   await db.prepare("INSERT OR IGNORE INTO seasons (id, number, status) VALUES (?, ?, 'active')")
     .bind(seasonId, newNum).run()
     .catch((e) => logger.warn({ module: "season-rollover" }, "insert season", e));
+  await db.prepare("UPDATE seasons SET status = 'active' WHERE number = ?")
+    .bind(newNum).run()
+    .catch((e) => logger.warn({ module: "season-rollover" }, "activate season", e));
 
   // 2. Synchronizovaný start — navázat na současný globální game_date
   const gdRow = await db.prepare("SELECT MAX(game_date) AS d FROM teams WHERE game_date IS NOT NULL")
