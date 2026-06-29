@@ -15,6 +15,10 @@ interface SeasonStats {
   totalYellowCards: number; totalRedCards: number;
   longestWinStreak?: { teamName: string; length: number } | null;
 }
+interface PlayerDev { playerId: string; name: string; position: string; age: number; before: number; after: number; delta: number }
+interface ManagerDelta { attr: string; label: string; before: number; after: number }
+interface ManagerDev { name: string; age: number; deltas: ManagerDelta[] }
+
 interface RecapData {
   seasonNumber: number; newSeasonNumber: number; leagueName: string; teamName: string;
   primaryColor: string; secondaryColor: string;
@@ -22,6 +26,8 @@ interface RecapData {
   champion: { name: string; isMe: boolean };
   reward: number; repDelta: number;
   departures: Departure[]; agedCount: number;
+  playerDev: { improved: PlayerDev[]; declined: PlayerDev[] };
+  manager: ManagerDev | null;
   awards: { playerOfSeason: Award | null; topScorer: Award | null; managerOfSeason: Award | null; discovery: Award | null; bestEleven: BestEleven[]; bestElevenMine: BestEleven[] };
   trophy: { place: number; title: string } | null;
   seasonStats: SeasonStats;
@@ -114,21 +120,29 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: () => void }) {
         {/* 1 — HERO */}
         <Section className="se-hero">
           <div className="se-kicker">{data.leagueName} · Sezóna {data.seasonNumber}</div>
-          <div className="se-mood" style={{ color: mood.accent }}>{mood.kicker}</div>
-          {data.finalPos != null ? (
-            <div className="se-placement">
-              <span className="se-pos" style={{ color: mood.accent }}>{data.finalPos}.</span>
-              <span className="se-pos-sub">MÍSTO<br /><em>z {data.totalTeams} týmů</em></span>
+          {mood.kind === "champion" ? (
+            <div className="se-champhero">
+              <div className="se-rays" aria-hidden />
+              <div className="se-crown">🏆</div>
+              <div className="se-mistr">MISTR LIGY</div>
+              <div className="se-team se-team-gold">{data.teamName}</div>
+              <div className="se-champ-sub">1. místo z {data.totalTeams} týmů — <strong>kraluješ Přeboru!</strong></div>
             </div>
           ) : (
-            <div className="se-placement"><span className="se-pos" style={{ color: mood.accent }}>—</span></div>
+            <>
+              <div className="se-mood" style={{ color: mood.accent }}>{mood.kicker}</div>
+              {data.finalPos != null ? (
+                <div className="se-placement">
+                  <span className="se-pos" style={{ color: mood.accent }}>{data.finalPos}.</span>
+                  <span className="se-pos-sub">MÍSTO<br /><em>z {data.totalTeams} týmů</em></span>
+                </div>
+              ) : (
+                <div className="se-placement"><span className="se-pos" style={{ color: mood.accent }}>—</span></div>
+              )}
+              <div className="se-team">{data.teamName}</div>
+              <div className="se-champ">Mistrem ligy se stal <strong style={{ color: "#F0D060" }}>{data.champion.name}</strong></div>
+            </>
           )}
-          <div className="se-team">{data.teamName}</div>
-          <div className="se-champ">
-            {data.champion.isMe
-              ? <><span className="se-trophy-emoji">🏆</span> Mistrem se stáváš TY!</>
-              : <>Mistrem ligy se stal <strong style={{ color: "#F0D060" }}>{data.champion.name}</strong></>}
-          </div>
           <div className="se-scrollhint">scroll ↓</div>
         </Section>
 
@@ -192,6 +206,40 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: () => void }) {
           )}
           <p className="se-aged">…a všem ostatním přibyl rok. Kádr o sezónu zestárl.</p>
         </Section>
+
+        {/* 4b — VÝVOJ */}
+        {(data.manager || data.playerDev.improved.length > 0 || data.playerDev.declined.length > 0) && (
+          <Section className="se-block">
+            <h2 className="se-h2">Vývoj týmu</h2>
+            {data.manager && (
+              <div className="se-mgr">
+                <div className="se-mgr-head">Trenér <strong>{data.manager.name}</strong> · {data.manager.age} let</div>
+                {data.manager.deltas.length > 0 ? (
+                  <div className="se-mgr-deltas">
+                    {data.manager.deltas.map((d) => {
+                      const up = d.after > d.before;
+                      return <span key={d.attr} className={`se-mgr-chip ${up ? "up" : "down"}`}>{d.label} {up ? "▲" : "▼"} {d.after}</span>;
+                    })}
+                  </div>
+                ) : <div className="se-mgr-flat">Trenér beze změny atributů.</div>}
+              </div>
+            )}
+            <div className="se-dev-grid">
+              {data.playerDev.improved.length > 0 && (
+                <div className="se-dev-col">
+                  <div className="se-dev-title up">📈 Největší zlepšení</div>
+                  {data.playerDev.improved.map((p) => <DevRow key={p.playerId} p={p} />)}
+                </div>
+              )}
+              {data.playerDev.declined.length > 0 && (
+                <div className="se-dev-col">
+                  <div className="se-dev-title down">📉 Největší zhoršení</div>
+                  {data.playerDev.declined.map((p) => <DevRow key={p.playerId} p={p} />)}
+                </div>
+              )}
+            </div>
+          </Section>
+        )}
 
         {/* 5 — TROFEJ */}
         {data.trophy && (
@@ -305,6 +353,18 @@ function Stat({ big, label, sub }: { big: string; label: string; sub?: string })
   );
 }
 
+function DevRow({ p }: { p: PlayerDev }) {
+  const up = p.delta > 0;
+  return (
+    <div className="se-dev-row">
+      <span className="se-dev-pos">{POS_LABEL[p.position] ?? p.position}</span>
+      <span className="se-dev-name">{p.name}</span>
+      <span className="se-dev-rating">{p.before}→<strong>{p.after}</strong></span>
+      <span className={`se-dev-delta ${up ? "up" : "down"}`}>{up ? "+" : ""}{p.delta}</span>
+    </div>
+  );
+}
+
 // ═══ Styles ═══
 
 const CSS = `
@@ -379,5 +439,35 @@ const CSS = `
 .se-confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:5;}
 .se-confetti span{position:absolute;top:-6%;border-radius:2px;animation-name:seFall;animation-timing-function:linear;animation-iteration-count:infinite;opacity:.9;}
 @keyframes seFall{0%{transform:translateY(-10vh) rotate(0)}100%{transform:translateY(110vh) rotate(calc(var(--rot) * 4))}}
+.se-champhero{position:relative;display:flex;flex-direction:column;align-items:center;gap:.3rem;padding:1.5rem 0;}
+.se-rays{position:absolute;top:50%;left:50%;width:150vmax;height:150vmax;transform:translate(-50%,-52%);background:conic-gradient(from 0deg,transparent 0 7deg,color-mix(in srgb,#F0D060 26%,transparent) 7deg 11deg,transparent 11deg 18deg);animation:seSpin 26s linear infinite;pointer-events:none;opacity:.45;-webkit-mask:radial-gradient(circle,#000 0,transparent 60%);mask:radial-gradient(circle,#000 0,transparent 60%);}
+@keyframes seSpin{to{transform:translate(-50%,-52%) rotate(360deg)}}
+.se-crown{position:relative;font-size:clamp(5rem,20vw,12rem);filter:drop-shadow(0 0 55px rgba(240,208,96,.8));animation:seCrownIn .9s cubic-bezier(.2,1.5,.4,1) both,seFloat 3.2s ease-in-out 1s infinite;}
+@keyframes seCrownIn{0%{transform:scale(0) rotate(-28deg);opacity:0}100%{transform:scale(1) rotate(0);opacity:1}}
+.se-mistr{position:relative;font-family:var(--font-heading);font-weight:700;text-transform:uppercase;letter-spacing:.12em;font-size:clamp(2.4rem,8.5vw,5.6rem);line-height:1;background:linear-gradient(100deg,#A88A2A,#F0D060,#FFF6D0,#F0D060,#A88A2A);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:seShimmer 3.6s linear infinite;}
+@keyframes seShimmer{to{background-position:250% 0}}
+.se-team-gold{color:#F0D060!important;position:relative;}
+.se-champ-sub{position:relative;margin-top:.6rem;font-size:clamp(1rem,2.2vw,1.3rem);color:rgba(245,240,232,.82);}
+.se-champ-sub strong{color:#F0D060;}
+.se-mgr{width:100%;max-width:640px;margin:0 auto 1.8rem;text-align:center;}
+.se-mgr-head{font-size:1.05rem;color:rgba(245,240,232,.75);margin-bottom:.7rem;}
+.se-mgr-head strong{font-family:var(--font-heading);color:#fff;}
+.se-mgr-deltas{display:flex;flex-wrap:wrap;justify-content:center;gap:.5rem;}
+.se-mgr-chip{font-family:var(--font-heading);font-weight:600;font-size:.92rem;padding:.35rem .85rem;border-radius:999px;border:1px solid rgba(255,255,255,.12);}
+.se-mgr-chip.up{color:#7BD88F;border-color:rgba(123,216,143,.4);background:rgba(123,216,143,.08);}
+.se-mgr-chip.down{color:#E89890;border-color:rgba(232,152,144,.4);background:rgba(232,152,144,.08);}
+.se-mgr-flat{color:rgba(245,240,232,.5);}
+.se-dev-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.4rem;width:100%;max-width:760px;}
+.se-dev-col{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1rem 1.1rem;}
+.se-dev-title{font-family:var(--font-heading);text-transform:uppercase;letter-spacing:.08em;font-size:.85rem;margin-bottom:.6rem;}
+.se-dev-title.up{color:#7BD88F;}.se-dev-title.down{color:#E89890;}
+.se-dev-row{display:flex;align-items:center;gap:.6rem;padding:.45rem 0;border-bottom:1px solid rgba(255,255,255,.05);}
+.se-dev-row:last-child{border-bottom:none;}
+.se-dev-pos{font-family:var(--font-heading);font-size:.66rem;color:var(--accent);width:1.7rem;flex-shrink:0;}
+.se-dev-name{font-family:var(--font-heading);font-weight:600;flex:1;text-align:left;color:#fff;}
+.se-dev-rating{font-family:var(--font-commentary);font-size:.85rem;color:rgba(245,240,232,.55);}
+.se-dev-rating strong{color:#fff;}
+.se-dev-delta{font-family:var(--font-commentary);font-weight:700;font-size:.98rem;width:2.4rem;text-align:right;flex-shrink:0;}
+.se-dev-delta.up{color:#7BD88F;}.se-dev-delta.down{color:#E89890;}
 @media(max-width:640px){.se-pos-sub{padding-top:.6rem}.se-dep-tag{margin-left:0}}
 `;

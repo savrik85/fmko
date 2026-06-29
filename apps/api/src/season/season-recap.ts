@@ -30,6 +30,8 @@ export async function captureDepartures(
   const data = parseJson<Record<string, unknown>>(existing?.data, {});
   data.departures = result.departures.map((d) => ({ name: d.name, age: d.age, position: d.position, kind: d.kind, reason: d.reason, wasCaptain: d.wasCaptain }));
   data.agedCount = result.agedCount;
+  data.playerDev = { improved: result.dev.improved, declined: result.dev.declined };
+  data.manager = result.dev.manager;
   await db.prepare(
     "INSERT INTO season_recap (team_id, season_number, data, seen) VALUES (?, ?, ?, 0) ON CONFLICT(team_id, season_number) DO UPDATE SET data = excluded.data",
   ).bind(teamId, seasonNumber, JSON.stringify(data)).run()
@@ -99,6 +101,8 @@ export async function buildTeamRecap(
     repDelta,
     departures: prev.departures ?? [],
     agedCount: prev.agedCount ?? 0,
+    playerDev: prev.playerDev ?? { improved: [], declined: [] },
+    manager: prev.manager ?? null,
     awards: {
       playerOfSeason: awards.playerOfSeason ?? null,
       topScorer: awards.topScorer ?? null,

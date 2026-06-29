@@ -15,6 +15,7 @@
 import { createRng } from "../generators/rng";
 import { removePlayer } from "../transfers/remove-player";
 import { maintainFreeAgentPool } from "../transfers/free-agent-pool";
+import { developSquadAndManager, type DevResult } from "./season-development";
 import { logger } from "../lib/logger";
 
 /** Minimální velikost kádru, pod kterou odchody nikdy nesnižují. */
@@ -55,6 +56,7 @@ export interface TeamDeparturesResult {
   teamId: string;
   departures: DepartureInfo[];
   agedCount: number;
+  dev: DevResult;
 }
 
 interface PlayerRow {
@@ -120,16 +122,17 @@ export async function processTeamDepartures(
   const playersRes = await db.prepare(
     "SELECT id, first_name, last_name, nickname, age, position, overall_rating, life_context FROM players WHERE team_id = ? AND status = 'active'",
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "season-departures" }, "load squad", e); return null; });
-  if (!playersRes) return { teamId, departures: [], agedCount: 0 };
+  if (!playersRes) return { teamId, departures: [], agedCount: 0, dev: { improved: [], declined: [], manager: null } };
 
   const players = playersRes.results as unknown as PlayerRow[];
   const activeCount = players.length;
 
   const cap = Math.min(3, Math.max(0, activeCount - MIN_SQUAD));
   if (cap <= 0) {
-    // Příliš tenký kádr — žádné odchody, jen zestárnout.
+    // Příliš tenký kádr — žádné odchody, jen vývoj + zestárnutí.
+    const dev = await developSquadAndManager(db, leagueId, teamId, seasonNumber);
     const aged = await bumpAges(db, teamId);
-    return { teamId, departures: [], agedCount: aged };
+    return { teamId, departures: [], agedCount: aged, dev };
   }
 
   // Cílový počet 2–3 (nebo méně, když to cap nedovolí)
@@ -176,13 +179,16 @@ export async function processTeamDepartures(
     });
   }
 
+  // Vývoj kádru + trenéra (před zestárnutím — používá aktuální věk zbylých hráčů)
+  const dev = await developSquadAndManager(db, leagueId, teamId, seasonNumber);
+
   // Zestárnout zbytek kádru
   const agedCount = await bumpAges(db, teamId);
 
   // Rozloučení s legendou — nejvýraznější odcházející hráč (kapitán / vysoký rating / vysoký věk)
   await maybeCreateLegendFarewell(db, leagueId, teamId, seasonNumber, departures, rng);
 
-  return { teamId, departures, agedCount };
+  return { teamId, departures, agedCount, dev };
 }
 
 async function bumpAges(db: D1Database, teamId: string): Promise<number> {
