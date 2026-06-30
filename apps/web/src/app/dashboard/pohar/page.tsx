@@ -83,10 +83,12 @@ export default function PoharPage() {
 
   if (!data?.cup) {
     return (
-      <div className="space-y-5">
+      <>
         <PageHeader name="Pohár" detail="Celorepublikový amatérský pohár">{null}</PageHeader>
-        <div className="card p-8 text-center text-muted">Celorepublikový pohár zatím nezačal. Rozlosuje se v průběhu sezóny.</div>
-      </div>
+        <div className="page-container space-y-5">
+          <div className="card p-8 text-center text-muted">Celorepublikový pohár zatím nezačal. Rozlosuje se v průběhu sezóny.</div>
+        </div>
+      </>
     );
   }
 
@@ -95,8 +97,9 @@ export default function PoharPage() {
   const matchIsMine = (m: BracketMatch) => !!myCtName && (m.home?.name === myCtName || m.away?.name === myCtName);
 
   return (
-    <div className="space-y-5">
+    <>
       <PageHeader name={cup.name} detail={`Sezóna ${cup.seasonNumber} · ${cup.status === "finished" ? "ukončeno" : `${rounds.find((r) => r.round === cup.currentRound)?.roundName ?? "probíhá"}`} · ${rounds[0]?.matches.length ? rounds[0].matches.length * 2 : ""} týmů`}>{null}</PageHeader>
+      <div className="page-container space-y-5">
 
       {/* Vítěz (stejný highlight jako jinde v projektu) */}
       {cup.status === "finished" && cup.winner && (
@@ -155,6 +158,7 @@ export default function PoharPage() {
           </div>
         </div>
       ))}
-    </div>
+      </div>
+    </>
   );
 }
