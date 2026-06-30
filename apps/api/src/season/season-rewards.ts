@@ -44,8 +44,8 @@ export async function applySeasonRewards(
 
   for (const entry of standings) {
     const { teamId, pos } = entry;
-    // Lineární škála: 1. ~50 000, poslední ~5 000 (× levelMult)
-    const base = n > 1 ? 5000 + (45000 * (n - pos)) / (n - 1) : 27500;
+    // Lineární škála: 1. ~150 000, poslední ~15 000 (× levelMult)
+    const base = n > 1 ? 15000 + (135000 * (n - pos)) / (n - 1) : 82500;
     const reward = Math.round(base * levelMult);
     const managerRepDelta = Math.round((n / 2 - pos + 0.5) * 1.5);
     const teamRepDelta = Math.round((n / 2 - pos + 0.5) * 0.8);
