@@ -147,7 +147,7 @@ export default function PoharPage() {
       )}
 
       {/* Všechna kola */}
-      {rounds.map((r) => (
+      {[...rounds].reverse().map((r) => (
         <div key={r.round}>
           <div className="flex items-baseline gap-2 mb-2">
             <span className="font-heading font-bold text-base text-pitch-600">{r.roundName}</span>
