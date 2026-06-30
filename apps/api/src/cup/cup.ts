@@ -8,7 +8,7 @@ import { logger } from "../lib/logger";
 import { recordTransaction } from "../season/finance-processor";
 
 /** Odměna za VÝHRU kola podle hloubky (od finále). Platí pro libovolný počet kol. */
-const CUP_PRIZE_BY_DEPTH = [80000, 40000, 24000, 14000, 8000, 5000, 3000];
+const CUP_PRIZE_BY_DEPTH = [240000, 120000, 72000, 42000, 24000, 15000, 9000];
 export function cupPrize(round: number, totalRounds: number): number {
   return CUP_PRIZE_BY_DEPTH[Math.min(Math.max(0, totalRounds - round), CUP_PRIZE_BY_DEPTH.length - 1)];
 }
