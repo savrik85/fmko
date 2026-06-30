@@ -5,7 +5,9 @@ import { apiFetch } from "@/lib/api";
 
 // ═══ Types ═══
 
-interface Departure { name: string; age: number; position: string; kind: "retirement" | "family"; reason: string; wasCaptain?: boolean }
+interface Departure { name: string; age: number; position: string; kind: "retirement" | "family" | "decision"; reason: string; wasCaptain?: boolean }
+interface DuelPlayer { playerId: string; name: string; position: string; age: number; overallRating: number }
+interface Duel { a: DuelPlayer; b: DuelPlayer }
 interface Award { id?: string | null; name?: string | null; reason?: string | null; goals?: number }
 interface BestEleven { playerId: string; name: string; position: string; teamName: string }
 interface SeasonStats {
@@ -42,6 +44,7 @@ interface RecapData {
   } | null;
   village?: { name: string; favor: number; verdict: string } | null;
   quote?: { question: string; text: string } | null;
+  decision?: { duels: Duel[] } | null;
 }
 
 const POS_LABEL: Record<string, string> = { GK: "BR", DEF: "OB", MID: "ZÁ", FWD: "ÚT" };
@@ -72,10 +75,15 @@ export default function SeasonEndPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const dismiss = async () => {
+  const finish = async (leaving?: string[]) => {
     const teamId = (recap as (RecapData & { __teamId?: string }) | null)?.__teamId;
     if (teamId) {
-      await apiFetch(`/api/teams/${teamId}/season-recap/dismiss`, { method: "POST" }).catch((e) => console.error("dismiss recap:", e));
+      if (recap?.decision?.duels?.length) {
+        await apiFetch(`/api/teams/${teamId}/season-recap/decide`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leaving: leaving ?? [] }) })
+          .catch((e) => console.error("decide recap:", e));
+      } else {
+        await apiFetch(`/api/teams/${teamId}/season-recap/dismiss`, { method: "POST" }).catch((e) => console.error("dismiss recap:", e));
+      }
     }
     window.location.replace("/dashboard");
   };
@@ -83,7 +91,7 @@ export default function SeasonEndPage() {
   if (state !== "ready" || !recap) {
     return <div className="fixed inset-0 bg-[#061106] flex items-center justify-center text-white/30 font-heading uppercase tracking-widest text-sm">Načítám sezónu…</div>;
   }
-  return <Recap data={recap} onEnter={dismiss} />;
+  return <Recap data={recap} onEnter={finish} />;
 }
 
 // ═══ Recap experience ═══
@@ -95,7 +103,7 @@ function moodFor(pos: number | null, total: number) {
   return { kind: "tough", kicker: "TĚŽKÁ SEZÓNA", accent: "#D94032", confetti: 0 };
 }
 
-function Recap({ data, onEnter }: { data: RecapData; onEnter: () => void }) {
+function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[]) => void }) {
   const team = data.primaryColor || "#2D5F2D";
   const mood = useMemo(() => moodFor(data.finalPos, data.totalTeams), [data]);
 
@@ -114,6 +122,15 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: () => void }) {
 
   // Konfety zmizí po prvním scrollu za hero (jinak zakrývají obsah)
   const [confettiOn, setConfettiOn] = useState(true);
+
+  // Souboje „kdo zůstane" — index duelu → playerId, který zůstává
+  const duels = data.decision?.duels ?? [];
+  const [choices, setChoices] = useState<Record<number, string>>({});
+  const computeLeaving = () => duels.map((d, i) => {
+    const keep = choices[i] ?? (d.a.overallRating >= d.b.overallRating ? d.a.playerId : d.b.playerId);
+    return keep === d.a.playerId ? d.b.playerId : d.a.playerId;
+  });
+  const allDecided = duels.length === 0 || duels.every((_, i) => choices[i] != null);
 
   return (
     <div className="se-root" style={{ ["--team" as string]: team, ["--accent" as string]: mood.accent }}>
@@ -199,27 +216,44 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: () => void }) {
           )}
         </Section>
 
-        {/* 4 — ODCHODY */}
-        <Section className="se-block">
-          <h2 className="se-h2">Rozloučili jsme se</h2>
-          {data.departures.length === 0 ? (
-            <p className="se-empty">Kádr zůstal pohromadě — nikdo nepověsil kopačky na hřebík.</p>
-          ) : (
-            <div className="se-deps">
-              {data.departures.map((d, i) => (
-                <div key={i} className="se-dep">
-                  <div className="se-dep-head">
-                    <span className="se-dep-name">{d.name}{d.wasCaptain ? " (kapitán)" : ""}</span>
-                    <span className="se-dep-meta">{d.age} let · {POS_LABEL[d.position] ?? d.position}</span>
-                    <span className={`se-dep-tag ${d.kind}`}>{d.kind === "retirement" ? "důchod" : "rodinné důvody"}</span>
-                  </div>
-                  <div className="se-dep-reason">„{d.reason}"</div>
+        {/* 4 — ODCHODY / ROZHODNUTÍ */}
+        {duels.length > 0 ? (
+          <Section className="se-block">
+            <h2 className="se-h2">Kdo zůstane?</h2>
+            <p className="se-decision-intro">Máš místo jen pro jednoho z každé dvojice — druhý pověsí kopačky na hřebík. Klikni, kdo zůstává. <strong>Tvoje rozhodnutí.</strong></p>
+            <div className="se-duels">
+              {duels.map((d, i) => (
+                <div key={i} className="se-duel">
+                  <DuelCard p={d.a} state={choices[i] === d.a.playerId ? "stay" : choices[i] === d.b.playerId ? "leave" : "none"} onPick={() => setChoices((c) => ({ ...c, [i]: d.a.playerId }))} />
+                  <div className="se-duel-vs">vs</div>
+                  <DuelCard p={d.b} state={choices[i] === d.b.playerId ? "stay" : choices[i] === d.a.playerId ? "leave" : "none"} onPick={() => setChoices((c) => ({ ...c, [i]: d.b.playerId }))} />
                 </div>
               ))}
             </div>
-          )}
-          <p className="se-aged">…a všem ostatním přibyl rok. Kádr o sezónu zestárl.</p>
-        </Section>
+            <p className="se-aged">{allDecided ? "Rozhodnuto. Zbytek kádru o sezónu zestárl." : "Vyber u každé dvojice, kdo zůstane."}</p>
+          </Section>
+        ) : (
+          <Section className="se-block">
+            <h2 className="se-h2">Rozloučili jsme se</h2>
+            {data.departures.length === 0 ? (
+              <p className="se-empty">Kádr zůstal pohromadě — nikdo nepověsil kopačky na hřebík.</p>
+            ) : (
+              <div className="se-deps">
+                {data.departures.map((d, i) => (
+                  <div key={i} className="se-dep">
+                    <div className="se-dep-head">
+                      <span className="se-dep-name">{d.name}{d.wasCaptain ? " (kapitán)" : ""}</span>
+                      <span className="se-dep-meta">{d.age} let · {POS_LABEL[d.position] ?? d.position}</span>
+                      <span className={`se-dep-tag ${d.kind}`}>{d.kind === "retirement" ? "důchod" : d.kind === "decision" ? "rozhodnutí trenéra" : "rodinné důvody"}</span>
+                    </div>
+                    <div className="se-dep-reason">„{d.reason}"</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="se-aged">…a všem ostatním přibyl rok. Kádr o sezónu zestárl.</p>
+          </Section>
+        )}
 
         {/* 4b — VÝVOJ */}
         {(data.manager || data.playerDev.improved.length > 0 || data.playerDev.declined.length > 0) && (
@@ -347,7 +381,10 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: () => void }) {
           <div className="se-cta-kicker">Píšťalka zazněla. Začíná</div>
           <div className="se-cta-season" style={{ color: mood.accent }}>SEZÓNA {data.newSeasonNumber}</div>
           <p className="se-cta-text">Nový rozpis, čistá tabulka, nové naděje. Hodně štěstí, trenére.</p>
-          <button className="se-enter" onClick={onEnter}>Vstoupit do nové sezóny →</button>
+          {duels.length > 0 && !allDecided && <p className="se-cta-warn">U nerozhodnutých dvojic zůstane silnější hráč.</p>}
+          <button className="se-enter" onClick={() => onEnter(computeLeaving())}>
+            {duels.length > 0 ? "Potvrdit a vstoupit do nové sezóny →" : "Vstoupit do nové sezóny →"}
+          </button>
         </Section>
       </div>
     </div>
@@ -439,6 +476,17 @@ function DevRow({ p }: { p: PlayerDev }) {
       <span className="se-dev-rating">{p.before}→<strong>{p.after}</strong></span>
       <span className={`se-dev-delta ${up ? "up" : "down"}`}>{up ? "+" : ""}{p.delta}</span>
     </div>
+  );
+}
+
+function DuelCard({ p, state, onPick }: { p: DuelPlayer; state: "stay" | "leave" | "none"; onPick: () => void }) {
+  return (
+    <button type="button" className={`se-duelcard ${state}`} onClick={onPick}>
+      <div className="se-duel-pos">{POS_LABEL[p.position] ?? p.position}</div>
+      <div className="se-duel-name">{p.name}</div>
+      <div className="se-duel-meta">{p.age} let · rating {p.overallRating}</div>
+      <div className="se-duel-badge">{state === "stay" ? "✓ ZŮSTÁVÁ" : state === "leave" ? "✕ ODEJDE" : "klikni"}</div>
+    </button>
   );
 }
 
@@ -561,5 +609,21 @@ const CSS = `
 .se-clubfact{margin-top:1.6rem;font-size:1rem;color:rgba(245,240,232,.7);font-style:italic;max-width:620px;}
 .se-quote{font-family:var(--font-heading);font-weight:700;font-size:clamp(1.6rem,4.6vw,3.1rem);line-height:1.16;max-width:20ch;color:#fff;margin:1.4rem 0 1rem;}
 .se-quote-q{font-size:.95rem;color:rgba(245,240,232,.5);max-width:36ch;}
-@media(max-width:640px){.se-pos-sub{padding-top:.6rem}.se-dep-tag{margin-left:0}}
+.se-decision-intro{color:rgba(245,240,232,.74);max-width:48ch;margin:-1rem auto 1.7rem;font-size:1.02rem;line-height:1.45;}
+.se-decision-intro strong{color:var(--accent);}
+.se-duels{display:flex;flex-direction:column;gap:1rem;width:100%;max-width:680px;}
+.se-duel{display:grid;grid-template-columns:1fr auto 1fr;align-items:stretch;gap:.6rem;}
+.se-duel-vs{align-self:center;font-family:var(--font-heading);text-transform:uppercase;color:rgba(245,240,232,.4);font-size:.85rem;}
+.se-duelcard{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:.85rem 1rem;text-align:left;cursor:pointer;transition:transform .18s,border-color .2s,background .2s,opacity .2s,box-shadow .2s;color:inherit;font-family:inherit;}
+.se-duelcard:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.32);}
+.se-duelcard.stay{border-color:#7BD88F;background:rgba(123,216,143,.1);box-shadow:0 0 0 1px #7BD88F,0 0 26px rgba(123,216,143,.18);}
+.se-duelcard.leave{opacity:.4;border-color:rgba(217,64,50,.4);}
+.se-duel-pos{font-family:var(--font-heading);font-size:.66rem;color:var(--accent);letter-spacing:.05em;}
+.se-duel-name{font-family:var(--font-heading);font-weight:700;font-size:1.15rem;color:#fff;margin-top:.1rem;}
+.se-duel-meta{font-size:.8rem;color:rgba(245,240,232,.55);margin-top:.15rem;}
+.se-duel-badge{font-family:var(--font-heading);text-transform:uppercase;letter-spacing:.07em;font-size:.66rem;margin-top:.5rem;color:rgba(245,240,232,.4);}
+.se-duelcard.stay .se-duel-badge{color:#7BD88F;}
+.se-duelcard.leave .se-duel-badge{color:#E89890;}
+.se-cta-warn{color:rgba(245,240,232,.5);font-size:.85rem;margin-top:-.6rem;margin-bottom:1.4rem;}
+@media(max-width:640px){.se-pos-sub{padding-top:.6rem}.se-dep-tag{margin-left:0}.se-duel{grid-template-columns:1fr;}.se-duel-vs{padding:.2rem 0;}}
 `;

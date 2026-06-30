@@ -32,6 +32,7 @@ export async function captureDepartures(
   data.agedCount = result.agedCount;
   data.playerDev = { improved: result.dev.improved, declined: result.dev.declined };
   data.manager = result.dev.manager;
+  data.decision = result.duels.length > 0 ? { duels: result.duels } : null;
   await db.prepare(
     "INSERT INTO season_recap (team_id, season_number, data, seen) VALUES (?, ?, ?, 0) ON CONFLICT(team_id, season_number) DO UPDATE SET data = excluded.data",
   ).bind(teamId, seasonNumber, JSON.stringify(data)).run()
@@ -105,6 +106,7 @@ export async function buildTeamRecap(
     agedCount: prev.agedCount ?? 0,
     playerDev: prev.playerDev ?? { improved: [], declined: [] },
     manager: prev.manager ?? null,
+    decision: prev.decision ?? null,
     awards: {
       playerOfSeason: awards.playerOfSeason ?? null,
       topScorer: awards.topScorer ?? null,

@@ -52,11 +52,22 @@ export interface DepartureInfo {
   wasCaptain: boolean;
 }
 
+export interface DuelPlayer {
+  playerId: string;
+  name: string;
+  position: string;
+  age: number;
+  overallRating: number;
+}
+export interface Duel { a: DuelPlayer; b: DuelPlayer }
+
 export interface TeamDeparturesResult {
   teamId: string;
   departures: DepartureInfo[];
   agedCount: number;
   dev: DevResult;
+  /** U lidských týmů: souboje „kdo zůstane" k rozhodnutí manažerem (jinak prázdné). */
+  duels: Duel[];
 }
 
 interface PlayerRow {
@@ -115,14 +126,15 @@ export async function processTeamDepartures(
 ): Promise<TeamDeparturesResult> {
   const rng = createRng(hashSeed(`${teamId}:s${seasonNumber}:departures`));
 
-  const captainRow = await db.prepare("SELECT captain_id FROM teams WHERE id = ?").bind(teamId)
-    .first<{ captain_id: string | null }>().catch((e) => { logger.warn({ module: "season-departures" }, "load captain", e); return null; });
-  const captainId = captainRow?.captain_id ?? null;
+  const teamRow = await db.prepare("SELECT captain_id, user_id FROM teams WHERE id = ?").bind(teamId)
+    .first<{ captain_id: string | null; user_id: string }>().catch((e) => { logger.warn({ module: "season-departures" }, "load team", e); return null; });
+  const captainId = teamRow?.captain_id ?? null;
+  const isHuman = (teamRow?.user_id ?? "ai") !== "ai";
 
   const playersRes = await db.prepare(
     "SELECT id, first_name, last_name, nickname, age, position, overall_rating, life_context FROM players WHERE team_id = ? AND status = 'active'",
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "season-departures" }, "load squad", e); return null; });
-  if (!playersRes) return { teamId, departures: [], agedCount: 0, dev: { improved: [], declined: [], manager: null } };
+  if (!playersRes) return { teamId, departures: [], agedCount: 0, dev: { improved: [], declined: [], manager: null }, duels: [] };
 
   const players = playersRes.results as unknown as PlayerRow[];
   const activeCount = players.length;
@@ -132,7 +144,15 @@ export async function processTeamDepartures(
     // Příliš tenký kádr — žádné odchody, jen vývoj + zestárnutí.
     const dev = await developSquadAndManager(db, leagueId, teamId, seasonNumber);
     const aged = await bumpAges(db, teamId);
-    return { teamId, departures: [], agedCount: aged, dev };
+    return { teamId, departures: [], agedCount: aged, dev, duels: [] };
+  }
+
+  // Lidský tým: NEodebírej automaticky — připrav souboje „kdo zůstane" a nech rozhodnout manažera.
+  if (isHuman) {
+    const dev = await developSquadAndManager(db, leagueId, teamId, seasonNumber);
+    const duels = await buildDuels(db, teamId, cap, rng);
+    const agedCount = await bumpAges(db, teamId);
+    return { teamId, departures: [], agedCount, dev, duels };
   }
 
   // Cílový počet 2–3 (nebo méně, když to cap nedovolí)
@@ -188,7 +208,35 @@ export async function processTeamDepartures(
   // Rozloučení s legendou — nejvýraznější odcházející hráč (kapitán / vysoký rating / vysoký věk)
   await maybeCreateLegendFarewell(db, leagueId, teamId, seasonNumber, departures, rng);
 
-  return { teamId, departures, agedCount, dev };
+  return { teamId, departures, agedCount, dev, duels: [] };
+}
+
+/** Sestaví souboje „kdo zůstane" z nejohroženějších hráčů (srovnatelné dvojice). */
+async function buildDuels(db: D1Database, teamId: string, cap: number, rng: ReturnType<typeof createRng>): Promise<Duel[]> {
+  const res = await db.prepare(
+    "SELECT id, first_name, last_name, position, age, overall_rating, life_context FROM players WHERE team_id = ? AND status = 'active'",
+  ).bind(teamId).all<{ id: string; first_name: string; last_name: string; position: string; age: number; overall_rating: number; life_context: string }>()
+    .catch((e) => { logger.warn({ module: "season-departures" }, "load squad for duels", e); return { results: [] as any[] }; });
+  const players = res.results;
+  const numDuels = Math.min(cap, Math.floor(players.length / 2));
+  if (numDuels <= 0) return [];
+
+  // Skóre ohrožení: starší + slabší + nižší morálka (+ špetka náhody)
+  const scored = players.map((p) => ({
+    p,
+    score: p.age * 1.5 - p.overall_rating * 0.5 + (50 - moraleOf(p.life_context)) * 0.15 + rng.random() * 2,
+  }));
+  scored.sort((a, b) => b.score - a.score);
+  const pool = scored.slice(0, numDuels * 2).map((s) => s.p);
+
+  // Srovnatelné dvojice — seřaď podle ratingu a páruj sousedy
+  pool.sort((a, b) => b.overall_rating - a.overall_rating);
+  const mk = (p: typeof pool[number]): DuelPlayer => ({
+    playerId: p.id, name: `${p.first_name} ${p.last_name}`, position: p.position, age: p.age, overallRating: p.overall_rating,
+  });
+  const duels: Duel[] = [];
+  for (let i = 0; i + 1 < pool.length; i += 2) duels.push({ a: mk(pool[i]), b: mk(pool[i + 1]) });
+  return duels;
 }
 
 async function bumpAges(db: D1Database, teamId: string): Promise<number> {
