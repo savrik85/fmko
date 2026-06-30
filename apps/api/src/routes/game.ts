@@ -5777,7 +5777,7 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
     .catch((e) => { logger.warn({ module: "game.ts" }, "load cup", e); return null; });
   if (!cup) return c.json({ cup: null });
 
-  const { roundName } = await import("../cup/cup");
+  const { roundName, cupPrizeTable } = await import("../cup/cup");
   const teamsRes = await c.env.DB.prepare("SELECT id, team_id, name, strength, is_big_club, primary_color, eliminated_round FROM cup_teams WHERE cup_id = ?")
     .bind(cup.id).all<{ id: string; team_id: string | null; name: string; strength: number; is_big_club: number; primary_color: string | null; eliminated_round: number | null }>()
     .catch((e) => { logger.warn({ module: "game.ts" }, "load cup teams", e); return { results: [] as any[] }; });
@@ -5822,6 +5822,7 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
     myTeam: myCt ? { name: myCt.name, eliminatedRound: myCt.eliminated_round, alive: myCt.eliminated_round == null && cup.status === "active", isChampion: cup.winner_team_id === myCt.id } : null,
     myMatches,
     rounds,
+    prizes: cupPrizeTable(cup.total_rounds),
   });
 });
 

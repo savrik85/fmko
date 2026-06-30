@@ -5,6 +5,26 @@
 
 import { createRng, type Rng } from "../generators/rng";
 import { logger } from "../lib/logger";
+import { recordTransaction } from "../season/finance-processor";
+
+/** Odměna za VÝHRU kola podle hloubky (od finále). Platí pro libovolný počet kol. */
+const CUP_PRIZE_BY_DEPTH = [80000, 40000, 24000, 14000, 8000, 5000, 3000];
+export function cupPrize(round: number, totalRounds: number): number {
+  return CUP_PRIZE_BY_DEPTH[Math.min(Math.max(0, totalRounds - round), CUP_PRIZE_BY_DEPTH.length - 1)];
+}
+function cupRepBonus(round: number, totalRounds: number): number {
+  const fromEnd = totalRounds - round;
+  if (fromEnd === 0) return 3;   // vítěz poháru
+  if (fromEnd <= 2) return 2;    // semifinále / čtvrtfinále
+  if (fromEnd <= 3) return 1;    // osmifinále
+  return 0;
+}
+/** Tabulka odměn pro UI: název kola → částka za výhru. */
+export function cupPrizeTable(totalRounds: number): { round: number; roundName: string; prize: number }[] {
+  const out: { round: number; roundName: string; prize: number }[] = [];
+  for (let r = 1; r <= totalRounds; r++) out.push({ round: r, roundName: roundName(r, totalRounds), prize: cupPrize(r, totalRounds) });
+  return out;
+}
 
 const M = "cup";
 const CUP_NAME = "Český amatérský pohár";
@@ -128,9 +148,18 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
     .bind(cupId, round).all<{ id: string; bracket_pos: number; home_cup_team_id: string | null; away_cup_team_id: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "load round matches", e); return { results: [] as any[] }; });
 
-  const teamsRes = await db.prepare("SELECT id, strength FROM cup_teams WHERE cup_id = ?").bind(cupId).all<{ id: string; strength: number }>()
+  const teamsRes = await db.prepare("SELECT id, strength, team_id FROM cup_teams WHERE cup_id = ?").bind(cupId).all<{ id: string; strength: number; team_id: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "load cup teams", e); return { results: [] as any[] }; });
   const strengthOf = new Map<string, number>(teamsRes.results.map((t) => [t.id, t.strength]));
+  const realTeamOf = new Map<string, string | null>(teamsRes.results.map((t) => [t.id, t.team_id]));
+
+  // Odměny za postup — herní datum pro transakce + částka/reputace daného kola
+  const gdRow = await db.prepare("SELECT MAX(game_date) AS d FROM teams WHERE game_date IS NOT NULL").first<{ d: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "load game date", e); return null; });
+  const gameDate = gdRow?.d ?? new Date().toISOString();
+  const prize = cupPrize(round, cup.total_rounds);
+  const repBonus = cupRepBonus(round, cup.total_rounds);
+  const roundLabel = roundName(round, cup.total_rounds);
 
   const rng = createRng((cupId.charCodeAt(0) + round * 7919) >>> 0);
   const winners: { pos: number; teamId: string }[] = [];
@@ -146,6 +175,17 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
     await db.prepare("UPDATE cup_teams SET eliminated_round = ? WHERE id = ?").bind(round, loserId).run()
       .catch((e) => logger.warn({ module: M }, "eliminate", e));
     winners.push({ pos: m.bracket_pos, teamId: winnerId });
+
+    // Odměna reálnému vítězi (velkokluby nemají rozpočet)
+    const realWinner = realTeamOf.get(winnerId);
+    if (realWinner) {
+      await recordTransaction(db, realWinner, "cup_prize", prize, `Pohár — postup (${roundLabel})`, gameDate, `cup-${cupId}-r${round}-${winnerId}`)
+        .catch((e) => logger.warn({ module: M }, "cup prize", e));
+      if (repBonus > 0) {
+        await db.prepare("UPDATE teams SET reputation = MAX(0, MIN(100, reputation + ?)) WHERE id = ?").bind(repBonus, realWinner).run()
+          .catch((e) => logger.warn({ module: M }, "cup reputation", e));
+      }
+    }
   }
 
   // Finále hotové?

@@ -22,6 +22,7 @@ interface CupData {
   myTeam: { name: string; eliminatedRound: number | null; alive: boolean; isChampion: boolean } | null;
   myMatches: MyMatch[];
   rounds: { round: number; roundName: string; matches: BracketMatch[] }[];
+  prizes?: { round: number; roundName: string; prize: number }[];
 }
 
 function initials(name: string) {
@@ -95,6 +96,8 @@ export default function PoharPage() {
   const { cup, myTeam, myMatches, rounds } = data;
   const myCtName = myTeam?.name;
   const matchIsMine = (m: BracketMatch) => !!myCtName && (m.home?.name === myCtName || m.away?.name === myCtName);
+  const prizeByRound = new Map((data.prizes ?? []).map((p) => [p.round, p.prize]));
+  const myEarnings = myMatches.filter((m) => m.won).reduce((s, m) => s + (prizeByRound.get(m.round) ?? 0), 0);
 
   return (
     <>
@@ -112,11 +115,26 @@ export default function PoharPage() {
         </div>
       )}
 
+      {/* Odměny za postup */}
+      {data.prizes && data.prizes.length > 0 && (
+        <div>
+          <SectionLabel>Odměny za výhru v kole</SectionLabel>
+          <div className="card p-3 flex flex-wrap gap-x-5 gap-y-1.5 mt-2">
+            {data.prizes.map((p) => (
+              <div key={p.round} className="flex items-center gap-1.5 text-sm">
+                <span className="text-muted">{p.roundName}:</span>
+                <span className="font-heading font-bold tabular-nums">{p.prize.toLocaleString("cs")} Kč</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Tvoje cesta */}
       {myTeam && (
         <div>
           <div className="flex items-center justify-between mb-2">
-            <SectionLabel>Tvoje cesta</SectionLabel>
+            <SectionLabel>Tvoje cesta{myEarnings > 0 && <span className="text-pitch-600 font-bold normal-case"> · vyděláno {myEarnings.toLocaleString("cs")} Kč</span>}</SectionLabel>
             <span className={`text-xs font-heading font-bold ${myTeam.isChampion ? "text-gold-600" : myTeam.alive ? "text-pitch-600" : "text-muted"}`}>
               {myTeam.isChampion ? "🏆 vítěz poháru" : myTeam.alive ? "ve hře" : `vyřazeni — ${myMatches.find((m) => m.round === myTeam.eliminatedRound)?.roundName ?? ""}`}
             </span>

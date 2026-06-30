@@ -39,6 +39,7 @@ export type TransactionType =
   | "manager_social"
   | "manager_bet_win"
   | "manager_bet_loss"
+  | "cup_prize"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */
