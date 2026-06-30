@@ -30,7 +30,7 @@ function initials(name: string) {
 
 function TeamCell({ s, align, bold }: { s: Side | null; align: "left" | "right"; bold: boolean }) {
   const badge = (
-    <span className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-heading font-bold text-white shrink-0" style={{ background: s?.color || "#9aa18c" }}>
+    <span className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-heading font-bold text-white shrink-0" style={{ background: s?.color || "#9aa18c" }}>
       {s ? initials(s.name) : "?"}
     </span>
   );
@@ -38,9 +38,9 @@ function TeamCell({ s, align, bold }: { s: Side | null; align: "left" | "right";
     ? <Link href={`/dashboard/team/${s.teamId}`} className={`truncate hover:underline ${s.isBig ? "italic" : ""}`}>{s.name}</Link>
     : <span className={`truncate ${s?.isBig ? "italic" : ""} ${!s ? "text-muted" : ""}`}>{s?.name ?? "volný los"}</span>;
   return (
-    <div className={`flex items-center gap-2 min-w-0 flex-1 ${align === "right" ? "flex-row-reverse text-right" : ""}`}>
+    <div className={`flex items-center gap-1.5 min-w-0 flex-1 ${align === "right" ? "flex-row-reverse text-right" : ""}`}>
       {badge}
-      <span className={`min-w-0 text-sm leading-tight ${bold ? "font-bold text-ink" : "text-ink/75"}`}>{name}</span>
+      <span className={`min-w-0 text-[13px] leading-tight ${bold ? "font-bold text-ink" : "text-ink/70"}`}>{name}</span>
     </div>
   );
 }
@@ -52,15 +52,15 @@ function TieRow({ m, mine }: { m: BracketMatch; mine: boolean }) {
   const awayWon = sim && !homeWon;
   const pens = sim && m.homeScore === m.awayScore && m.homePens != null;
   return (
-    <div className={`flex items-center gap-2 px-3 py-2.5 border-b border-gray-50 last:border-b-0 ${mine ? "bg-pitch-50/60" : ""}`}>
+    <div className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border ${mine ? "border-pitch-300 bg-pitch-50" : "border-gray-100 bg-white"}`}>
       <TeamCell s={m.home} align="right" bold={homeWon} />
-      <div className="shrink-0 text-center px-1">
+      <div className="shrink-0 w-14 text-center">
         {sim
-          ? <div className="font-heading font-[800] text-sm tabular-nums leading-none">{m.homeScore}:{m.awayScore}{pens && <div className="text-[10px] text-muted font-normal mt-0.5">pen {m.homePens}:{m.awayPens}</div>}</div>
+          ? <div className="font-heading font-[800] text-sm tabular-nums leading-none">{m.homeScore}:{m.awayScore}{pens && <div className="text-[9px] text-muted font-normal mt-0.5">pen {m.homePens}:{m.awayPens}</div>}</div>
           : <span className="text-xs text-muted font-heading">vs</span>}
       </div>
       <TeamCell s={m.away} align="left" bold={awayWon} />
-      <span className="w-4 shrink-0 text-center text-xs">{m.upset ? "🔥" : ""}</span>
+      <span className="w-3.5 shrink-0 text-center text-xs">{m.upset ? "🔥" : ""}</span>
     </div>
   );
 }
@@ -146,11 +146,11 @@ export default function PoharPage() {
       {/* Všechna kola */}
       {rounds.map((r) => (
         <div key={r.round}>
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-baseline gap-2 mb-2">
             <span className="font-heading font-bold text-base text-pitch-600">{r.roundName}</span>
-            <span className="text-sm text-muted">{r.matches.length} {r.matches.length === 1 ? "zápas" : r.matches.length < 5 ? "zápasy" : "zápasů"}</span>
+            <span className="text-sm text-muted">· {r.matches.length} {r.matches.length === 1 ? "zápas" : r.matches.length < 5 ? "zápasy" : "zápasů"}</span>
           </div>
-          <div className="card">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-1.5">
             {r.matches.map((m, i) => <TieRow key={i} m={m} mine={matchIsMine(m)} />)}
           </div>
         </div>
