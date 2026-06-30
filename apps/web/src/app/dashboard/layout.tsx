@@ -12,7 +12,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 
 const DETAIL_PREFIXES = ["/dashboard/player/", "/dashboard/team/", "/dashboard/match/"];
-const CUSTOM_HEADER_PAGES = ["/dashboard/liga", "/dashboard/schedule"];
+const CUSTOM_HEADER_PAGES = ["/dashboard/liga", "/dashboard/schedule", "/dashboard/pohar"];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
