@@ -33,6 +33,15 @@ interface RecapData {
   awards: { playerOfSeason: Award | null; topScorer: Award | null; managerOfSeason: Award | null; discovery: Award | null; bestEleven: BestEleven[]; bestElevenMine: BestEleven[] };
   trophy: { place: number; title: string } | null;
   seasonStats: SeasonStats;
+  relationships?: {
+    rival?: { teamName: string; managerName: string | null; heat: number; moment: string | null; verdict: string } | null;
+    ally?: { teamName: string; managerName: string | null; respect: number } | null;
+    favorite?: { name: string; position: string; value: number } | null;
+    blackSheep?: { name: string; position: string; value: number } | null;
+    clubFact?: string | null;
+  } | null;
+  village?: { name: string; favor: number; verdict: string } | null;
+  quote?: { question: string; text: string } | null;
 }
 
 const POS_LABEL: Record<string, string> = { GK: "BR", DEF: "OB", MID: "ZÁ", FWD: "ÚT" };
@@ -243,6 +252,68 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: () => void }) {
                 </div>
               )}
             </div>
+          </Section>
+        )}
+
+        {/* 4c — KABINA & RIVALOVÉ */}
+        {(() => {
+          const rel = data.relationships;
+          const hasRel = rel && (rel.rival || rel.ally || rel.favorite || rel.blackSheep || rel.clubFact);
+          if (!hasRel && !data.village) return null;
+          return (
+            <Section className="se-block">
+              <h2 className="se-h2">Kabina &amp; rivalové</h2>
+              <div className="se-rel-grid">
+                {rel?.rival && (
+                  <div className="se-rel-card rival">
+                    <div className="se-rel-label">💢 Největší rival</div>
+                    <div className="se-rel-name">{rel.rival.managerName ?? rel.rival.teamName}</div>
+                    {rel.rival.managerName && <div className="se-rel-team">{rel.rival.teamName}</div>}
+                    <div className="se-rel-verdict">{rel.rival.verdict}</div>
+                    {rel.rival.moment && <div className="se-rel-moment">„{rel.rival.moment}"</div>}
+                  </div>
+                )}
+                {rel?.ally && (
+                  <div className="se-rel-card ally">
+                    <div className="se-rel-label">🤝 Spojenec na lavičce</div>
+                    <div className="se-rel-name">{rel.ally.managerName ?? rel.ally.teamName}</div>
+                    {rel.ally.managerName && <div className="se-rel-team">{rel.ally.teamName}</div>}
+                    <div className="se-rel-verdict">Vzájemný respekt — člověk, co ti drží place.</div>
+                  </div>
+                )}
+                {rel?.favorite && (
+                  <div className="se-rel-card">
+                    <div className="se-rel-label">❤️ Miláček kabiny</div>
+                    <div className="se-rel-name">{rel.favorite.name}</div>
+                    <div className="se-rel-verdict">Tvůj člověk v šatně.</div>
+                  </div>
+                )}
+                {rel?.blackSheep && (
+                  <div className="se-rel-card">
+                    <div className="se-rel-label">🐑 Černá ovce</div>
+                    <div className="se-rel-name">{rel.blackSheep.name}</div>
+                    <div className="se-rel-verdict">S tímhle to skřípe.</div>
+                  </div>
+                )}
+                {data.village && (
+                  <div className="se-rel-card village">
+                    <div className="se-rel-label">🏘️ Vesnice ({data.village.name})</div>
+                    <div className="se-rel-name">přízeň {data.village.favor}/100</div>
+                    <div className="se-rel-verdict">{data.village.verdict}</div>
+                  </div>
+                )}
+              </div>
+              {rel?.clubFact && <p className="se-clubfact">{rel.clubFact}</p>}
+            </Section>
+          );
+        })()}
+
+        {/* 4d — VÝROK SEZONY */}
+        {data.quote && (
+          <Section className="se-center">
+            <div className="se-label">Výrok sezóny</div>
+            <blockquote className="se-quote">„{data.quote.text}"</blockquote>
+            {data.quote.question && <div className="se-quote-q">na otázku „{data.quote.question}"</div>}
           </Section>
         )}
 
@@ -476,5 +547,19 @@ const CSS = `
 .se-dev-rating strong{color:#fff;}
 .se-dev-delta{font-family:var(--font-commentary);font-weight:700;font-size:.98rem;width:2.4rem;text-align:right;flex-shrink:0;}
 .se-dev-delta.up{color:#7BD88F;}.se-dev-delta.down{color:#E89890;}
+.se-rel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;width:100%;max-width:900px;}
+.se-rel-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1.1rem 1.3rem;text-align:left;transition:transform .25s;}
+.se-rel-card:hover{transform:translateY(-3px);}
+.se-rel-card.rival{border-color:rgba(217,64,50,.45);box-shadow:0 0 34px rgba(217,64,50,.12);}
+.se-rel-card.ally{border-color:rgba(123,216,143,.4);}
+.se-rel-card.village{border-color:rgba(240,208,96,.35);}
+.se-rel-label{font-family:var(--font-heading);text-transform:uppercase;letter-spacing:.08em;font-size:.78rem;color:rgba(245,240,232,.55);}
+.se-rel-name{font-family:var(--font-heading);font-weight:700;font-size:1.4rem;color:#fff;margin-top:.2rem;}
+.se-rel-team{font-size:.85rem;color:rgba(245,240,232,.5);}
+.se-rel-verdict{font-size:.92rem;color:rgba(245,240,232,.7);margin-top:.4rem;}
+.se-rel-moment{font-size:.85rem;font-style:italic;color:rgba(245,240,232,.55);margin-top:.5rem;border-left:2px solid rgba(217,64,50,.4);padding-left:.6rem;}
+.se-clubfact{margin-top:1.6rem;font-size:1rem;color:rgba(245,240,232,.7);font-style:italic;max-width:620px;}
+.se-quote{font-family:var(--font-heading);font-weight:700;font-size:clamp(1.6rem,4.6vw,3.1rem);line-height:1.16;max-width:20ch;color:#fff;margin:1.4rem 0 1rem;}
+.se-quote-q{font-size:.95rem;color:rgba(245,240,232,.5);max-width:36ch;}
 @media(max-width:640px){.se-pos-sub{padding-top:.6rem}.se-dep-tag{margin-left:0}}
 `;
