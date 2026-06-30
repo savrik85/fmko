@@ -86,7 +86,10 @@ async function rolloverLeagueCalendar(
   const rng = createRng(cryptoSeed());
 
   const schedule = generateSchedule(rng, teamIds.length);
-  const calendar = generateSeasonCalendar(leagueId, newNum, new Date(startDate));
+  // Týden předsezóny — posuň start kalendáře o +7 dní, ať první zápas není hned po rolloveru
+  const calStart = new Date(startDate);
+  calStart.setDate(calStart.getDate() + 7);
+  const calendar = generateSeasonCalendar(leagueId, newNum, calStart);
 
   for (const entry of calendar.entries) {
     await db.prepare(
@@ -109,12 +112,13 @@ async function rolloverLeagueCalendar(
     if (res) matchesCreated++;
   }
 
-  // game_date + hranice sezóny — JEDNOTNĚ napříč ligami (stejný startDate → stejný kalendář týden 1)
+  // game_date + hranice sezóny — JEDNOTNĚ napříč ligami (stejný startDate → stejný kalendář týden 1).
+  // Den 1 sezóny = týden PŘED prvním zápasem (předsezóna), ať se dá nachystat kádr/sestava.
   if (calendar.entries.length > 0) {
-    const firstMatch = new Date(calendar.entries[0].scheduledAt);
-    firstMatch.setDate(firstMatch.getDate() - 1);
+    const seasonStart = new Date(calendar.entries[0].scheduledAt);
+    seasonStart.setDate(seasonStart.getDate() - 7);
     await db.prepare("UPDATE teams SET game_date = ?, season_start = ?, season_end = ? WHERE league_id = ?")
-      .bind(firstMatch.toISOString(), calendar.autumnStart, calendar.seasonEnd, leagueId).run()
+      .bind(seasonStart.toISOString(), seasonStart.toISOString(), calendar.seasonEnd, leagueId).run()
       .catch((e) => logger.warn({ module: "season-rollover" }, "set team dates", e));
   }
 
