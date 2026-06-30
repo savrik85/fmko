@@ -79,6 +79,9 @@ export async function removePlayer(
   await db.prepare("DELETE FROM injuries WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "delete injuries", e));
   await db.prepare("DELETE FROM player_watchlist WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "delete watchlist", e));
   // FK constraint na players(id) by blokoval DELETE FROM players
+  await db.prepare("DELETE FROM training_log WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "delete training_log", e));
+  await db.prepare("DELETE FROM condition_log WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "delete condition_log", e));
+  await db.prepare("UPDATE matches SET mom_player_id = NULL WHERE mom_player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "clear mom_player_id", e));
   await db.prepare("DELETE FROM relationships WHERE player_a_id = ? OR player_b_id = ?").bind(playerId, playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "delete relationships", e));
 
   // Aktuální globální sezóna pro archivní záznam (best-effort)
