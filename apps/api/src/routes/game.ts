@@ -5717,6 +5717,49 @@ gameRouter.post("/teams/:teamId/season-recap/decide", async (c) => {
   return c.json({ ok: true });
 });
 
+// POST /api/teams/:teamId/season-recap/party — proslov trenéra na závěrečné.
+// Body: { tone: 'pokorny'|'chvastavy'|'nemuzu'|'opily' } → dopad na morálku kádru, přízeň vesnice, reputaci.
+const PARTY_TONE_FX: Record<string, { morale: number; favor: number; rep: number }> = {
+  pokorny: { morale: 4, favor: 4, rep: 1 },
+  chvastavy: { morale: 5, favor: -3, rep: 0 },
+  nemuzu: { morale: -5, favor: -4, rep: -1 },
+  opily: { morale: 2, favor: 5, rep: -1 },
+};
+gameRouter.post("/teams/:teamId/season-recap/party", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ tone: string }>().catch((e) => { logger.warn({ module: "game.ts" }, "parse party body", e); return null; });
+  const fx = body?.tone ? PARTY_TONE_FX[body.tone] : null;
+  if (!fx) return c.json({ error: "Neznámý tón proslovu" }, 400);
+
+  const row = await c.env.DB.prepare("SELECT season_number, data FROM season_recap WHERE team_id = ? AND seen = 0 ORDER BY season_number DESC LIMIT 1")
+    .bind(teamId).first<{ season_number: number; data: string }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "load recap for party", e); return null; });
+  if (!row) return c.json({ error: "Recap nenalezen" }, 404);
+
+  let data: Record<string, any> = {};
+  try { data = JSON.parse(row.data); } catch (e) { logger.warn({ module: "game.ts" }, "parse recap data for party", e); }
+  if (data?.party?.appliedTone) return c.json({ ok: true, already: true }); // jen jednou
+
+  // Dopady (clamp), každý nekritický
+  await c.env.DB.prepare(
+    "UPDATE players SET life_context = json_set(COALESCE(life_context,'{}'), '$.morale', MAX(0, MIN(100, COALESCE(json_extract(life_context,'$.morale'),50) + ?))) WHERE team_id = ? AND status = 'active'",
+  ).bind(fx.morale, teamId).run().catch((e) => logger.warn({ module: "game.ts" }, "party morale", e));
+  await c.env.DB.prepare(
+    "UPDATE village_team_favor SET favor = MAX(0, MIN(100, favor + ?)) WHERE team_id = ? AND official_id IS NULL",
+  ).bind(fx.favor, teamId).run().catch((e) => logger.warn({ module: "game.ts" }, "party favor", e));
+  if (fx.rep !== 0) {
+    await c.env.DB.prepare(
+      "UPDATE managers SET reputation = MAX(15, MIN(75, reputation + ?)) WHERE team_id = ?",
+    ).bind(fx.rep, teamId).run().catch((e) => logger.warn({ module: "game.ts" }, "party rep", e));
+  }
+
+  if (data.party) data.party.appliedTone = body!.tone;
+  await c.env.DB.prepare("UPDATE season_recap SET data = ? WHERE team_id = ? AND season_number = ?")
+    .bind(JSON.stringify(data), teamId, row.season_number).run()
+    .catch((e) => logger.warn({ module: "game.ts" }, "mark party applied", e));
+  return c.json({ ok: true });
+});
+
 // ── Admin: Seed data management ──
 
 gameRouter.get("/admin/seed-data", async (c) => {

@@ -45,6 +45,8 @@ interface RecapData {
   village?: { name: string; favor: number; verdict: string } | null;
   quote?: { question: string; text: string } | null;
   decision?: { duels: Duel[] } | null;
+  party?: { awards: { title: string; emoji: string; playerName: string; detail: string }[]; scenes: { text: string }[]; appliedTone?: string } | null;
+  summer?: { name: string; text: string; effect: string | null }[];
 }
 
 const POS_LABEL: Record<string, string> = { GK: "BR", DEF: "OB", MID: "ZÁ", FWD: "ÚT" };
@@ -105,6 +107,7 @@ function moodFor(pos: number | null, total: number) {
 
 function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[]) => void }) {
   const team = data.primaryColor || "#2D5F2D";
+  const myTeamId = (data as RecapData & { __teamId?: string }).__teamId;
   const mood = useMemo(() => moodFor(data.finalPos, data.totalTeams), [data]);
 
   const confetti = useMemo(() => {
@@ -379,6 +382,55 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
           </div>
         </Section>
 
+        {/* 6b — ZÁVĚREČNÁ V HOSPODĚ */}
+        {data.party && (
+          <Section className="se-pub">
+            <h2 className="se-h2">Závěrečná U Pralesa 🍺</h2>
+            <p className="se-pub-intro">Po posledním hvizdu se mužstvo i ves nahrnulo do hospody. Postav se a řekni něco.</p>
+
+            <SpeechPicker teamId={myTeamId} initial={data.party.appliedTone} />
+
+            {data.party.awards.length > 0 && (
+              <div className="se-pub-block">
+                <div className="se-pub-label">🏅 Ceny hospodského</div>
+                <div className="se-pub-awards">
+                  {data.party.awards.map((a, i) => (
+                    <div key={i} className="se-pub-award">
+                      <span className="se-pub-award-emoji">{a.emoji}</span>
+                      <div>
+                        <div className="se-pub-award-title">{a.title} — <strong>{a.playerName}</strong></div>
+                        <div className="se-pub-award-detail">{a.detail}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {data.party.scenes.length > 0 && (
+              <div className="se-pub-block">
+                <div className="se-pub-label">🍻 Co se semlelo</div>
+                {data.party.scenes.map((s, i) => <p key={i} className="se-pub-scene">{s.text}</p>)}
+              </div>
+            )}
+          </Section>
+        )}
+
+        {/* 6c — CO SE STALO PŘES LÉTO */}
+        {data.summer && data.summer.length > 0 && (
+          <Section className="se-block">
+            <h2 className="se-h2">Co se stalo přes léto 👷</h2>
+            <div className="se-summer">
+              {data.summer.map((s, i) => (
+                <div key={i} className={`se-summer-row${s.effect ? ` ${s.effect}` : ""}`}>
+                  <span className="se-summer-dot" />
+                  <span className="se-summer-text">{s.text}</span>
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
+
         {/* 7 — CTA */}
         <Section className="se-cta">
           <div className="se-cta-kicker">Píšťalka zazněla. Začíná</div>
@@ -478,6 +530,43 @@ function DevRow({ p }: { p: PlayerDev }) {
       <span className="se-dev-name">{p.name}</span>
       <span className="se-dev-rating">{p.before}→<strong>{p.after}</strong></span>
       <span className={`se-dev-delta ${up ? "up" : "down"}`}>{up ? "+" : ""}{p.delta}</span>
+    </div>
+  );
+}
+
+const SPEECH_TONES = [
+  { key: "pokorny", label: "Pokorně", desc: "o partě a dřině", outcome: "Mluvil jsi pokorně o partě a dřině. Vesnice zatleskala, kabina tě má radši. (morálka ↑, vesnice ↑)" },
+  { key: "chvastavy", label: "Chvástavě", desc: "je to celé moje zásluha", outcome: "Chvástal ses, jak je to celé tvoje zásluha. Hráči se culili, vesnice kroutila hlavou. (morálka ↑, vesnice ↓)" },
+  { key: "nemuzu", label: "Já za to nemůžu", desc: "rozhodčí, hřiště, smůla", outcome: "Svaloval jsi to na rozhodčí, hřiště a smůlu. Kabina protočila oči. (morálka ↓, vesnice ↓)" },
+  { key: "opily", label: "Už lehce opilý", desc: "cosi o titulu", outcome: "Po pátém pivu jsi blábolil cosi o titulu. Hospoda se řehtala, ráno si to pamatovat nebudeš. (vesnice ↑)" },
+];
+
+function SpeechPicker({ teamId, initial }: { teamId?: string; initial?: string }) {
+  const [picked, setPicked] = useState<string | undefined>(initial);
+  const choose = (key: string) => {
+    if (picked) return;
+    setPicked(key);
+    if (teamId) {
+      apiFetch(`/api/teams/${teamId}/season-recap/party`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tone: key }) })
+        .catch((e) => console.error("party speech:", e));
+    }
+  };
+  const chosen = SPEECH_TONES.find((t) => t.key === picked);
+  return (
+    <div className="se-pub-block">
+      <div className="se-pub-label">🎤 Proslov trenéra</div>
+      {!picked ? (
+        <div className="se-speech-opts">
+          {SPEECH_TONES.map((t) => (
+            <button key={t.key} type="button" className="se-speech-btn" onClick={() => choose(t.key)}>
+              <span className="se-speech-label">{t.label}</span>
+              <span className="se-speech-desc">{t.desc}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="se-speech-outcome">„{chosen?.outcome}"</p>
+      )}
     </div>
   );
 }
@@ -630,5 +719,26 @@ const CSS = `
 .se-duelcard.stay .se-duel-badge{color:#7BD88F;}
 .se-duelcard.leave .se-duel-badge{color:#E89890;}
 .se-cta-warn{color:rgba(245,240,232,.5);font-size:.85rem;margin-top:-.6rem;margin-bottom:1.4rem;}
+.se-pub-intro{color:rgba(245,240,232,.7);max-width:46ch;margin:-0.4rem auto 1.8rem;line-height:1.5;}
+.se-pub-block{width:100%;max-width:640px;margin:0 auto 1.7rem;text-align:left;}
+.se-pub-label{font-family:var(--font-heading);text-transform:uppercase;letter-spacing:.08em;font-size:.82rem;color:#E8B84B;margin-bottom:.7rem;}
+.se-speech-opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.6rem;}
+.se-speech-btn{background:rgba(232,184,75,.06);border:1px solid rgba(232,184,75,.25);border-radius:12px;padding:.7rem .9rem;text-align:left;cursor:pointer;transition:transform .15s,background .2s,border-color .2s;color:inherit;font-family:inherit;display:flex;flex-direction:column;gap:.15rem;}
+.se-speech-btn:hover{transform:translateY(-2px);background:rgba(232,184,75,.14);border-color:#E8B84B;}
+.se-speech-label{font-family:var(--font-heading);font-weight:700;font-size:1.05rem;color:#fff;}
+.se-speech-desc{font-size:.8rem;color:rgba(245,240,232,.55);}
+.se-speech-outcome{font-size:1.02rem;color:rgba(245,240,232,.85);font-style:italic;border-left:3px solid #E8B84B;padding-left:.9rem;line-height:1.5;}
+.se-pub-awards{display:flex;flex-direction:column;gap:.7rem;}
+.se-pub-award{display:flex;gap:.7rem;align-items:flex-start;}
+.se-pub-award-emoji{font-size:1.5rem;line-height:1.1;}
+.se-pub-award-title{font-size:1rem;color:rgba(245,240,232,.9);}
+.se-pub-award-detail{font-size:.85rem;color:rgba(245,240,232,.55);font-style:italic;}
+.se-pub-scene{font-size:.98rem;color:rgba(245,240,232,.72);font-style:italic;line-height:1.5;margin-bottom:.6rem;}
+.se-summer{display:flex;flex-direction:column;gap:.7rem;width:100%;max-width:620px;margin:0 auto;text-align:left;}
+.se-summer-row{display:flex;gap:.7rem;align-items:flex-start;font-size:1rem;color:rgba(245,240,232,.78);line-height:1.45;}
+.se-summer-dot{width:8px;height:8px;border-radius:50%;background:rgba(245,240,232,.4);margin-top:.5rem;flex-shrink:0;}
+.se-summer-row.injury .se-summer-dot{background:#E06850;}
+.se-summer-row.fit .se-summer-dot{background:#7BD88F;}
+.se-summer-row.rusty .se-summer-dot{background:#E8B84B;}
 @media(max-width:640px){.se-pos-sub{padding-top:.6rem}.se-dep-tag{margin-left:0}.se-duel{grid-template-columns:1fr;}.se-duel-vs{padding:.2rem 0;}}
 `;

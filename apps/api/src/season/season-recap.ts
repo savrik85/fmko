@@ -9,6 +9,7 @@
 
 import { logger } from "../lib/logger";
 import type { TeamDeparturesResult } from "./season-departures";
+import { createRng } from "../generators/rng";
 
 const M = "season-recap";
 
@@ -89,6 +90,7 @@ export async function buildTeamRecap(
   const championIsMe = awards.champion?.teamId === teamId || finalStandings[0]?.teamId === teamId;
 
   const extras = await buildRecapExtras(db, teamId);
+  const pub = await buildPubNight(db, teamId, seasonNumber);
 
   const data = {
     seasonNumber,
@@ -120,6 +122,8 @@ export async function buildTeamRecap(
     relationships: extras.relationships,
     village: extras.village,
     quote: extras.quote,
+    party: pub.party,
+    summer: pub.summer,
   };
 
   await db.prepare(
@@ -233,4 +237,108 @@ async function buildRecapExtras(db: D1Database, teamId: string) {
   }
 
   return { relationships: { rival, ally, favorite, blackSheep, clubFact }, village, quote };
+}
+
+// ── Závěrečná v hospodě + Co se stalo přes léto ──
+
+function pubSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+const PARTY_SCENES = [
+  "{p} a {p2} se servali o poslední topinku u výčepu. Smírčí pivo to naštěstí vyřešilo.",
+  "Předseda se po čtvrtém pivu postavil na židli a slíbil příští rok titul. Nikdo mu nevěřil, ale tleskalo se.",
+  "{p} celý večer balil servírku Marušku. Maruška balila {p2}.",
+  "Stoper {p} usnul na záchodě, ráno ho našla uklízečka. Prý spal jak nemluvně.",
+  "Brankář vyzval celou hospodu na panáky. Sám to nezvládl jako první.",
+  "{p} vytáhl foťák na teamovku. Půlka mužstva už nestála rovně.",
+  "Došlo pivo. Hospodský poslal {p} pro soudek — vrátil se za hodinu a bez soudku.",
+  "Kapitán pronesl dojemný proslov o partě, v půlce se rozbrečel a objímal i soupeře, co tam zabloudil.",
+  "{p} se s {p2} vsadil, kdo dřív sní deset utopenců. Vyhrál místní sanitář.",
+  "Diskotéka skončila, když {p} pustil z repráku hymnu klubu a nutil všechny zpívat.",
+];
+
+const SUMMER_EVENTS: { text: string; effect: "injury" | "fit" | "rusty" | null }[] = [
+  { text: "{p} se přes léto oženil — žena mu prý zatrhla středeční tréninky.", effect: null },
+  { text: "{p} si naproti hospodě otevřel kebab. Konkurence Pralesu, ale aspoň je co jíst po zápase.", effect: null },
+  { text: "{p} odjel na montáže do Německa. Vrátí se možná na jaře, možná s novým autem.", effect: null },
+  { text: "{p} spadl v práci z lešení — sezónu začne v sádře.", effect: "injury" },
+  { text: "{p} přibral přes léto pět kilo na grilovačkách. Trenér zuří, {p} mlčí.", effect: "rusty" },
+  { text: "{p} celé léto makal na stavbě a nabral sílu jak medvěd — přijde nabušený.", effect: "fit" },
+  { text: "{p} si pořídil štěně a teď chodí na ranní výběhy. Kondička jako nikdy.", effect: "fit" },
+  { text: "{p}ovi se narodil syn. Noci nespí, ale úsměv mu z ksichtu nezmizel.", effect: null },
+  { text: "{p} si o pauze zlomil ruku na kole. Chvíli to potrvá.", effect: "injury" },
+  { text: "{p} přes léto rozjel nohejbal v hospodě a chytil formu života.", effect: "fit" },
+  { text: "{p} si nechal narůst knír a tvrdí, že mu dává sílu. Uvidíme.", effect: null },
+  { text: "{p} prohrál sázku a musí celý podzim nosit dresy na praní.", effect: null },
+];
+
+interface PubSquad { id: string; name: string; position: string; age: number; alcohol: number }
+
+async function buildPubNight(db: D1Database, teamId: string, seasonNumber: number) {
+  const rng = createRng(pubSeed(`${teamId}:s${seasonNumber}:pub`));
+
+  const squadRes = await db.prepare(
+    "SELECT id, first_name, last_name, position, age, personality FROM players WHERE team_id = ? AND status = 'active'",
+  ).bind(teamId).all<{ id: string; first_name: string; last_name: string; position: string; age: number; personality: string }>()
+    .catch((e) => { logger.warn({ module: M }, "pub load squad", e); return { results: [] as any[] }; });
+  const squad: PubSquad[] = squadRes.results.map((p) => {
+    let alcohol = 30;
+    try { const pe = JSON.parse(p.personality || "{}"); if (typeof pe.alcohol === "number") alcohol = pe.alcohol; } catch { alcohol = 30; }
+    return { id: p.id, name: `${p.first_name} ${p.last_name}`, position: p.position, age: p.age, alcohol };
+  });
+  if (squad.length === 0) return { party: null, summer: [] as { name: string; text: string; effect: string | null }[] };
+  const nameOf = (id: string) => squad.find((s) => s.id === id)?.name ?? null;
+
+  // Statistické agregace sezóny (karty, hodnocení, zápasy)
+  const statRes = await db.prepare(
+    `SELECT mps.player_id AS pid, SUM(mps.yellow_cards) AS y, SUM(mps.red_cards) AS r, COUNT(*) AS apps, AVG(mps.rating) AS ar
+     FROM match_player_stats mps
+     JOIN matches m ON m.id = mps.match_id
+     JOIN season_calendar sc ON sc.id = m.calendar_id
+     WHERE mps.team_id = ? AND m.status = 'simulated' AND sc.season_number = ?
+     GROUP BY mps.player_id`,
+  ).bind(teamId, seasonNumber).all<{ pid: string; y: number; r: number; apps: number; ar: number }>()
+    .catch((e) => { logger.warn({ module: M }, "pub load stats", e); return { results: [] as any[] }; });
+  const stats = statRes.results.filter((s) => nameOf(s.pid));
+
+  const awards: { title: string; emoji: string; playerName: string; detail: string }[] = [];
+  // Král žlutých
+  const yellowKing = [...stats].filter((s) => (s.y ?? 0) > 0).sort((a, b) => b.y - a.y)[0];
+  if (yellowKing) awards.push({ title: "Král žlutých", emoji: "🟨", playerName: nameOf(yellowKing.pid)!, detail: `${yellowKing.y} žlutých — rozhodčí ho znali jménem` });
+  // Nejhorší první dotek (min průměr, alespoň 3 zápasy)
+  const regulars = stats.filter((s) => (s.apps ?? 0) >= 3);
+  const worstTouch = [...regulars].sort((a, b) => a.ar - b.ar)[0];
+  if (worstTouch) awards.push({ title: "Nejhorší první dotek", emoji: "👎", playerName: nameOf(worstTouch.pid)!, detail: `průměr ${(worstTouch.ar ?? 0).toFixed(1)} — míč od něj odskakoval jak od plotu` });
+  // Tahoun sezóny (nejvyšší průměr)
+  const workhorse = [...regulars].sort((a, b) => b.ar - a.ar)[0];
+  if (workhorse && (!worstTouch || workhorse.pid !== worstTouch.pid)) awards.push({ title: "Tahoun sezóny", emoji: "💪", playerName: nameOf(workhorse.pid)!, detail: `průměr ${(workhorse.ar ?? 0).toFixed(1)} — tahal to za celou kabinu` });
+  // Nejdřív pod stolem (nejvyšší alkohol)
+  const drinker = [...squad].sort((a, b) => b.alcohol - a.alcohol)[0];
+  if (drinker && drinker.alcohol >= 40) awards.push({ title: "Nejdřív pod stolem", emoji: "🍺", playerName: drinker.name, detail: "do hymny už ho museli držet dva" });
+
+  // Scénky — 2 různé, seeded, jména náhodných hráčů
+  const scenes: { text: string }[] = [];
+  const scenePool = [...PARTY_SCENES];
+  for (let i = scenePool.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [scenePool[i], scenePool[j]] = [scenePool[j], scenePool[i]]; }
+  const pickName = () => squad[Math.floor(rng.random() * squad.length)].name;
+  for (let i = 0; i < Math.min(2, scenePool.length); i++) {
+    let p = pickName(), p2 = pickName(); let guard = 0;
+    while (p2 === p && squad.length > 1 && guard++ < 5) p2 = pickName();
+    scenes.push({ text: scenePool[i].replace(/\{p2\}/g, p2).replace(/\{p\}/g, p) });
+  }
+
+  // Co se stalo přes léto — 4 hráči, různé události
+  const shuffledSquad = [...squad];
+  for (let i = shuffledSquad.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [shuffledSquad[i], shuffledSquad[j]] = [shuffledSquad[j], shuffledSquad[i]]; }
+  const eventPool = [...SUMMER_EVENTS];
+  for (let i = eventPool.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [eventPool[i], eventPool[j]] = [eventPool[j], eventPool[i]]; }
+  const summer = shuffledSquad.slice(0, Math.min(4, shuffledSquad.length)).map((pl, i) => {
+    const tmpl = eventPool[i % eventPool.length];
+    return { name: pl.name, text: tmpl.text.replace(/\{p\}/g, pl.name), effect: tmpl.effect };
+  });
+
+  return { party: { awards, scenes }, summer };
 }
