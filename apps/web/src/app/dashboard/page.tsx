@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
@@ -944,48 +944,53 @@ export default function DashboardPage() {
               <div className="card p-4 sm:p-5">
                 <SectionLabel>Střelci</SectionLabel>
                 {topScorers.length > 0 ? topScorers.map((p, i) => (
-                  <a key={p.playerId} href={`/dashboard/player/${p.playerId}`}
-                    className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 -mx-1 px-1 rounded transition-colors">
-                    <span className="text-xs text-muted w-4 tabular-nums">{i + 1}.</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-heading font-bold text-sm truncate">{p.name}</div>
-                    </div>
+                  <ScorerRow key={p.playerId} p={p} i={i}>
                     <span className="font-heading font-bold tabular-nums">{p.goals}</span>
-                  </a>
+                  </ScorerRow>
                 )) : <div className="text-sm text-muted py-2">Žádné góly</div>}
               </div>
               <div className="card p-4 sm:p-5">
                 <SectionLabel>Nahrávači</SectionLabel>
                 {topAssisters.length > 0 ? topAssisters.map((p, i) => (
-                  <a key={p.playerId} href={`/dashboard/player/${p.playerId}`}
-                    className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 -mx-1 px-1 rounded transition-colors">
-                    <span className="text-xs text-muted w-4 tabular-nums">{i + 1}.</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-heading font-bold text-sm truncate">{p.name}</div>
-                    </div>
+                  <ScorerRow key={p.playerId} p={p} i={i}>
                     <span className="font-heading font-bold tabular-nums">{p.assists}</span>
-                  </a>
+                  </ScorerRow>
                 )) : <div className="text-sm text-muted py-2">Žádné asistence</div>}
               </div>
               <div className="card p-4 sm:p-5">
                 <SectionLabel>Hodnocení</SectionLabel>
                 {topRated.length > 0 ? topRated.map((p, i) => (
-                  <a key={p.playerId} href={`/dashboard/player/${p.playerId}`}
-                    className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 -mx-1 px-1 rounded transition-colors">
-                    <span className="text-xs text-muted w-4 tabular-nums">{i + 1}.</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-heading font-bold text-sm truncate">{p.name}</div>
-                    </div>
+                  <ScorerRow key={p.playerId} p={p} i={i}>
                     <span className={`font-heading font-bold text-xs px-1.5 py-0.5 rounded tabular-nums ${
                       (p.avgRating as number) >= 7 ? "bg-pitch-50 text-pitch-600" : "bg-gray-50 text-ink"
                     }`}>{(p.avgRating as number)?.toFixed(1)}</span>
-                  </a>
+                  </ScorerRow>
                 )) : <div className="text-sm text-muted py-2">Žádná data</div>}
               </div>
             </div>
           );
       })()}
     </div>
+  );
+}
+
+function ScorerRow({ p, i, children }: { p: { playerId: string; name: string; isDeparted?: boolean }; i: number; children: ReactNode }) {
+  const inner = (
+    <>
+      <span className="text-xs text-muted w-4 tabular-nums">{i + 1}.</span>
+      <div className="min-w-0 flex-1">
+        <div className="font-heading font-bold text-sm truncate">
+          {p.name}{p.isDeparted && <span className="ml-1.5 text-[9px] text-muted uppercase font-normal">(bývalý)</span>}
+        </div>
+      </div>
+      {children}
+    </>
+  );
+  const base = "flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 -mx-1 px-1 rounded";
+  return p.isDeparted ? (
+    <div className={`${base} opacity-60`}>{inner}</div>
+  ) : (
+    <a href={`/dashboard/player/${p.playerId}`} className={`${base} hover:bg-gray-50/50 transition-colors`}>{inner}</a>
   );
 }
 

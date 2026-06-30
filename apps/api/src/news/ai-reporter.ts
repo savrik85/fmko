@@ -143,9 +143,12 @@ export async function generateAiRoundReport(
 
   const statsRows = await db.prepare(
     `SELECT mps.match_id, mps.goals, mps.assists, mps.yellow_cards, mps.red_cards, mps.rating,
-            p.first_name, p.last_name, t.name as team_name
+            COALESCE(p.first_name, dp.first_name) as first_name,
+            COALESCE(p.last_name, dp.last_name) as last_name,
+            t.name as team_name
      FROM match_player_stats mps
-     JOIN players p ON mps.player_id = p.id
+     LEFT JOIN players p ON mps.player_id = p.id
+     LEFT JOIN departed_players dp ON mps.player_id = dp.id
      JOIN teams t ON mps.team_id = t.id
      WHERE mps.match_id IN (${placeholders})
      ORDER BY mps.rating DESC`

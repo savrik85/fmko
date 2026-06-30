@@ -110,11 +110,17 @@ export async function generateSeasonAwards(
 
   // Agregace hráčských statistik aktuální sezóny
   const aggRes = await db.prepare(
-    `SELECT mps.player_id, p.first_name, p.last_name, p.position, p.age, p.team_id,
+    `SELECT mps.player_id,
+            COALESCE(p.first_name, dp.first_name) AS first_name,
+            COALESCE(p.last_name, dp.last_name) AS last_name,
+            COALESCE(p.position, dp.position) AS position,
+            COALESCE(p.age, dp.age) AS age,
+            COALESCE(p.team_id, dp.team_id) AS team_id,
             SUM(mps.goals) AS goals, SUM(mps.assists) AS assists,
             AVG(mps.rating) AS avg_rating, COUNT(*) AS apps
      FROM match_player_stats mps
-     JOIN players p ON p.id = mps.player_id
+     LEFT JOIN players p ON p.id = mps.player_id
+     LEFT JOIN departed_players dp ON dp.id = mps.player_id
      JOIN matches m ON m.id = mps.match_id
      JOIN season_calendar sc ON sc.id = m.calendar_id
      WHERE m.league_id = ? AND m.status = 'simulated' AND sc.season_number = ?

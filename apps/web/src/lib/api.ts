@@ -220,6 +220,7 @@ export interface TeamMatchResults {
   topPlayers: {
     playerId: string;
     name: string;
+    isDeparted?: boolean;
     nickname: string | null;
     position: string;
     goals: number;

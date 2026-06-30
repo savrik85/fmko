@@ -76,14 +76,18 @@ export async function generateRoundSummary(
 
   // 3. Load candidates (TOP 10 hráčů)
   const candidateRows = await db.prepare(`
-    SELECT mps.player_id, p.first_name, p.last_name, p.position as player_pos,
-           p.team_id, t.name as team_name,
+    SELECT mps.player_id,
+           COALESCE(p.first_name, dp.first_name) as first_name,
+           COALESCE(p.last_name, dp.last_name) as last_name,
+           COALESCE(p.position, dp.position) as player_pos,
+           mps.team_id, t.name as team_name,
            mps.rating, mps.goals, mps.assists, mps.minutes_played,
            m.home_team_id, m.away_team_id, m.home_score, m.away_score,
            ht.name as home_name, at.name as away_name
     FROM match_player_stats mps
-    JOIN players p ON p.id = mps.player_id
-    JOIN teams t ON t.id = p.team_id
+    LEFT JOIN players p ON p.id = mps.player_id
+    LEFT JOIN departed_players dp ON dp.id = mps.player_id
+    JOIN teams t ON t.id = mps.team_id
     JOIN matches m ON m.id = mps.match_id
     JOIN teams ht ON ht.id = m.home_team_id
     JOIN teams at ON at.id = m.away_team_id

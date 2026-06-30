@@ -81,8 +81,25 @@ export async function removePlayer(
   // FK constraint na players(id) by blokoval DELETE FROM players
   await db.prepare("DELETE FROM relationships WHERE player_a_id = ? OR player_b_id = ?").bind(playerId, playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "delete relationships", e));
 
-  // 2) Atomický batch: (volitelně) INSERT free_agent + UPDATE contract + DELETE player
+  // Aktuální globální sezóna pro archivní záznam (best-effort)
+  const seasonRow = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
+    .first<{ number: number }>().catch((e) => { logger.warn({ module: "remove-player" }, "load season for archive", e); return null; });
+
+  // 2) Atomický batch: archiv identity + (volitelně) INSERT free_agent + UPDATE contract + DELETE player
   const batch: D1PreparedStatement[] = [];
+
+  // Archiv odešlého hráče — jméno přežije pro historické statistiky (neklikatelný záznam)
+  batch.push(
+    db.prepare(
+      `INSERT OR REPLACE INTO departed_players
+         (id, first_name, last_name, nickname, position, age, overall_rating, team_id, team_name, league_id, leave_type, season_number, left_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
+    ).bind(
+      playerId, row.first_name, row.last_name, row.nickname ?? null, row.position,
+      row.age ?? null, row.overall_rating ?? null, teamId, row.team_name ?? null,
+      (row.team_league_id as string) ?? null, leaveType, seasonRow?.number ?? null,
+    ),
+  );
 
   if (opts.toFreeAgent) {
     // free_agents.source CHECK povoluje jen 'generated' | 'released' | 'quit'

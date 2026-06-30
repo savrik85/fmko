@@ -497,24 +497,34 @@ export default function TeamPage() {
             <div className="card p-4 sm:p-5">
               <SectionLabel>Statistiky hráčů</SectionLabel>
               <div className="space-y-0">
-                {matchResults.topPlayers.map((p) => (
-                  <a key={p.playerId} href={`/dashboard/player/${p.playerId}`}
-                    className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 transition-colors -mx-2 px-2 rounded">
-                    <div className="min-w-0">
-                      <div className="font-heading font-bold text-sm truncate">{p.name}</div>
-                      <div className="text-[10px] text-muted uppercase">{POS_LABELS[p.position] ?? p.position} &middot; {p.appearances} zápasů</div>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm tabular-nums shrink-0">
-                      {(p.goals as number) > 0 && <span className="font-heading font-bold" title="Góly">{p.goals}</span>}
-                      {(p.assists as number) > 0 && <span className="text-muted font-heading" title="Asistence">{p.assists}a</span>}
-                      {(p.yellowCards as number) > 0 && <span className="inline-block w-2.5 h-3.5 rounded-[1px] bg-gold-400" title={`${p.yellowCards} žlutých`} />}
-                      {(p.redCards as number) > 0 && <span className="inline-block w-2.5 h-3.5 rounded-[1px] bg-card-red" title={`${p.redCards} červených`} />}
-                      <span className={`font-heading font-bold text-xs px-1.5 py-0.5 rounded ${
-                        (p.avgRating as number) >= 7 ? "bg-pitch-50 text-pitch-600" : "bg-gray-50 text-ink"
-                      }`}>{(p.avgRating as number)?.toFixed(1) ?? "—"}</span>
-                    </div>
-                  </a>
-                ))}
+                {matchResults.topPlayers.map((p) => {
+                  const inner = (
+                    <>
+                      <div className="min-w-0">
+                        <div className="font-heading font-bold text-sm truncate">
+                          {p.name}
+                          {p.isDeparted && <span className="ml-1.5 text-[9px] text-muted uppercase font-normal">(bývalý)</span>}
+                        </div>
+                        <div className="text-[10px] text-muted uppercase">{POS_LABELS[p.position] ?? p.position} &middot; {p.appearances} zápasů</div>
+                      </div>
+                      <div className="flex items-center gap-3 text-sm tabular-nums shrink-0">
+                        {(p.goals as number) > 0 && <span className="font-heading font-bold" title="Góly">{p.goals}</span>}
+                        {(p.assists as number) > 0 && <span className="text-muted font-heading" title="Asistence">{p.assists}a</span>}
+                        {(p.yellowCards as number) > 0 && <span className="inline-block w-2.5 h-3.5 rounded-[1px] bg-gold-400" title={`${p.yellowCards} žlutých`} />}
+                        {(p.redCards as number) > 0 && <span className="inline-block w-2.5 h-3.5 rounded-[1px] bg-card-red" title={`${p.redCards} červených`} />}
+                        <span className={`font-heading font-bold text-xs px-1.5 py-0.5 rounded ${
+                          (p.avgRating as number) >= 7 ? "bg-pitch-50 text-pitch-600" : "bg-gray-50 text-ink"
+                        }`}>{(p.avgRating as number)?.toFixed(1) ?? "—"}</span>
+                      </div>
+                    </>
+                  );
+                  const base = "flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0 -mx-2 px-2 rounded";
+                  return p.isDeparted ? (
+                    <div key={p.playerId} className={`${base} opacity-60`}>{inner}</div>
+                  ) : (
+                    <a key={p.playerId} href={`/dashboard/player/${p.playerId}`} className={`${base} hover:bg-gray-50/50 transition-colors`}>{inner}</a>
+                  );
+                })}
               </div>
             </div>
           )}
