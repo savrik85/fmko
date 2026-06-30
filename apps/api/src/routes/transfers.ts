@@ -88,6 +88,15 @@ transfersRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
     await checkReleaseAchievements(c.env.DB, teamId);
   } catch (e) { logger.warn({ module: "transfers" }, "check release achievements", e); }
 
+  // Archiv odešlého hráče — jméno přežije pro historické statistiky (neklikatelný záznam)
+  await c.env.DB.prepare(
+    `INSERT OR REPLACE INTO departed_players (id, first_name, last_name, nickname, position, age, overall_rating, team_id, team_name, league_id, leave_type, season_number, left_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'released', (SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
+  ).bind(
+    playerId, player.first_name, player.last_name, player.nickname ?? null, player.position,
+    player.age, player.overall_rating, teamId, player.team_name ?? null, player.league_id ?? null,
+  ).run().catch((e) => logger.warn({ module: "transfers" }, "archive released player", e));
+
   // Delete player
   await c.env.DB.prepare("DELETE FROM players WHERE id = ?").bind(playerId).run();
 
