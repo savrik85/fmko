@@ -12,12 +12,15 @@ const CUP_PRIZE_BY_DEPTH = [240000, 120000, 72000, 42000, 24000, 15000, 9000];
 export function cupPrize(round: number, totalRounds: number): number {
   return CUP_PRIZE_BY_DEPTH[Math.min(Math.max(0, totalRounds - round), CUP_PRIZE_BY_DEPTH.length - 1)];
 }
-function cupRepBonus(round: number, totalRounds: number): number {
+/** Reputace za výhru kola (trenér + tým). Pohár je prestižnější než liga —
+ *  vítěz poháru naskládá kumulativně víc reputace než vítěz ligy. */
+function cupRepBonus(round: number, totalRounds: number): { manager: number; team: number } {
   const fromEnd = totalRounds - round;
-  if (fromEnd === 0) return 3;   // vítěz poháru
-  if (fromEnd <= 2) return 2;    // semifinále / čtvrtfinále
-  if (fromEnd <= 3) return 1;    // osmifinále
-  return 0;
+  if (fromEnd === 0) return { manager: 8, team: 5 }; // výhra ve finále = vítěz poháru
+  if (fromEnd === 1) return { manager: 5, team: 3 }; // výhra v semifinále (postup do finále)
+  if (fromEnd === 2) return { manager: 3, team: 2 }; // výhra ve čtvrtfinále
+  if (fromEnd === 3) return { manager: 2, team: 1 }; // výhra v osmifinále
+  return { manager: 0, team: 0 };
 }
 /** Tabulka odměn pro UI: název kola → částka za výhru. */
 export function cupPrizeTable(totalRounds: number): { round: number; roundName: string; prize: number }[] {
@@ -181,9 +184,13 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
     if (realWinner) {
       await recordTransaction(db, realWinner, "cup_prize", prize, `Pohár — postup (${roundLabel})`, gameDate, `cup-${cupId}-r${round}-${winnerId}`)
         .catch((e) => logger.warn({ module: M }, "cup prize", e));
-      if (repBonus > 0) {
-        await db.prepare("UPDATE teams SET reputation = MAX(0, MIN(100, reputation + ?)) WHERE id = ?").bind(repBonus, realWinner).run()
-          .catch((e) => logger.warn({ module: M }, "cup reputation", e));
+      if (repBonus.manager > 0) {
+        await db.prepare("UPDATE managers SET reputation = MAX(15, MIN(75, reputation + ?)) WHERE team_id = ?").bind(repBonus.manager, realWinner).run()
+          .catch((e) => logger.warn({ module: M }, "cup manager reputation", e));
+      }
+      if (repBonus.team > 0) {
+        await db.prepare("UPDATE teams SET reputation = MAX(0, MIN(100, reputation + ?)) WHERE id = ?").bind(repBonus.team, realWinner).run()
+          .catch((e) => logger.warn({ module: M }, "cup team reputation", e));
       }
     }
   }
