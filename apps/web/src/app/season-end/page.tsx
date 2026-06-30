@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 
 interface Departure { name: string; age: number; position: string; kind: "retirement" | "family" | "decision"; reason: string; wasCaptain?: boolean }
 interface DuelPlayer { playerId: string; name: string; position: string; age: number; overallRating: number }
-interface Duel { a: DuelPlayer; b: DuelPlayer }
+interface Duel { a: DuelPlayer; b: DuelPlayer; story: string }
 interface Award { id?: string | null; name?: string | null; reason?: string | null; goals?: number }
 interface BestEleven { playerId: string; name: string; position: string; teamName: string }
 interface SeasonStats {
@@ -220,13 +220,16 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
         {duels.length > 0 ? (
           <Section className="se-block">
             <h2 className="se-h2">Kdo zůstane?</h2>
-            <p className="se-decision-intro">Máš místo jen pro jednoho z každé dvojice — druhý pověsí kopačky na hřebík. Klikni, kdo zůstává. <strong>Tvoje rozhodnutí.</strong></p>
+            <p className="se-decision-intro">Místo je jen pro jednoho z každé dvojice — druhý pověsí kopačky na hřebík a <strong>nikdo za něj nepřijde</strong>. Klikni, kdo zůstává. Tvoje rozhodnutí.</p>
             <div className="se-duels">
               {duels.map((d, i) => (
-                <div key={i} className="se-duel">
-                  <DuelCard p={d.a} state={choices[i] === d.a.playerId ? "stay" : choices[i] === d.b.playerId ? "leave" : "none"} onPick={() => setChoices((c) => ({ ...c, [i]: d.a.playerId }))} />
-                  <div className="se-duel-vs">vs</div>
-                  <DuelCard p={d.b} state={choices[i] === d.b.playerId ? "stay" : choices[i] === d.a.playerId ? "leave" : "none"} onPick={() => setChoices((c) => ({ ...c, [i]: d.b.playerId }))} />
+                <div key={i} className="se-duel-wrap">
+                  <p className="se-duel-story">{d.story}</p>
+                  <div className="se-duel">
+                    <DuelCard p={d.a} state={choices[i] === d.a.playerId ? "stay" : choices[i] === d.b.playerId ? "leave" : "none"} onPick={() => setChoices((c) => ({ ...c, [i]: d.a.playerId }))} />
+                    <div className="se-duel-vs">vs</div>
+                    <DuelCard p={d.b} state={choices[i] === d.b.playerId ? "stay" : choices[i] === d.a.playerId ? "leave" : "none"} onPick={() => setChoices((c) => ({ ...c, [i]: d.b.playerId }))} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -611,7 +614,9 @@ const CSS = `
 .se-quote-q{font-size:.95rem;color:rgba(245,240,232,.5);max-width:36ch;}
 .se-decision-intro{color:rgba(245,240,232,.74);max-width:48ch;margin:-1rem auto 1.7rem;font-size:1.02rem;line-height:1.45;}
 .se-decision-intro strong{color:var(--accent);}
-.se-duels{display:flex;flex-direction:column;gap:1rem;width:100%;max-width:680px;}
+.se-duels{display:flex;flex-direction:column;gap:1.9rem;width:100%;max-width:680px;}
+.se-duel-wrap{display:flex;flex-direction:column;gap:.55rem;}
+.se-duel-story{font-style:italic;color:rgba(245,240,232,.62);font-size:.92rem;line-height:1.4;text-align:left;}
 .se-duel{display:grid;grid-template-columns:1fr auto 1fr;align-items:stretch;gap:.6rem;}
 .se-duel-vs{align-self:center;font-family:var(--font-heading);text-transform:uppercase;color:rgba(245,240,232,.4);font-size:.85rem;}
 .se-duelcard{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:.85rem 1rem;text-align:left;cursor:pointer;transition:transform .18s,border-color .2s,background .2s,opacity .2s,box-shadow .2s;color:inherit;font-family:inherit;}

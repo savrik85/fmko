@@ -59,7 +59,7 @@ export interface DuelPlayer {
   age: number;
   overallRating: number;
 }
-export interface Duel { a: DuelPlayer; b: DuelPlayer }
+export interface Duel { a: DuelPlayer; b: DuelPlayer; story: string }
 
 export interface TeamDeparturesResult {
   teamId: string;
@@ -139,20 +139,21 @@ export async function processTeamDepartures(
   const players = playersRes.results as unknown as PlayerRow[];
   const activeCount = players.length;
 
+  // Lidský tým: NEodebírej automaticky — připrav souboje „kdo zůstane" (vždy až 3)
+  // a nech rozhodnout manažera. Poražení odejdou, nikoho za ně klub nepřivede.
+  if (isHuman) {
+    const dev = await developSquadAndManager(db, leagueId, teamId, seasonNumber);
+    const duels = await buildDuels(db, teamId, rng);
+    const agedCount = await bumpAges(db, teamId);
+    return { teamId, departures: [], agedCount, dev, duels };
+  }
+
   const cap = Math.min(3, Math.max(0, activeCount - MIN_SQUAD));
   if (cap <= 0) {
     // Příliš tenký kádr — žádné odchody, jen vývoj + zestárnutí.
     const dev = await developSquadAndManager(db, leagueId, teamId, seasonNumber);
     const aged = await bumpAges(db, teamId);
     return { teamId, departures: [], agedCount: aged, dev, duels: [] };
-  }
-
-  // Lidský tým: NEodebírej automaticky — připrav souboje „kdo zůstane" a nech rozhodnout manažera.
-  if (isHuman) {
-    const dev = await developSquadAndManager(db, leagueId, teamId, seasonNumber);
-    const duels = await buildDuels(db, teamId, cap, rng);
-    const agedCount = await bumpAges(db, teamId);
-    return { teamId, departures: [], agedCount, dev, duels };
   }
 
   // Cílový počet 2–3 (nebo méně, když to cap nedovolí)
@@ -211,14 +212,43 @@ export async function processTeamDepartures(
   return { teamId, departures, agedCount, dev, duels: [] };
 }
 
-/** Sestaví souboje „kdo zůstane" z nejohroženějších hráčů (srovnatelné dvojice). */
-async function buildDuels(db: D1Database, teamId: string, cap: number, rng: ReturnType<typeof createRng>): Promise<Duel[]> {
+/** Absolutní dno kádru — pod 11 už nelze postavit jedenáctku. */
+const PLAYABLE_FLOOR = 11;
+
+/** Krátké (vtipné) příběhy, proč musí jeden ze dvojice skončit. {a}/{b} = jména. */
+const DUEL_STORIES = [
+  "Oba si dělají zálusk na dres s číslem 9. V kabině visí jen jeden a ustoupit nehodlá ani jeden.",
+  "{a} i {b} chodí za stejnou servírkou Maruškou od Pralesa. Pro klid v hospodě musí jeden zmizet.",
+  "Hospoda-sponzor spočítala pípu: na celoroční žízeň obou kasa nestačí. Vyber jednoho.",
+  "Oba bydlí u stejné zastávky, ale do felicie, co je vozí na zápasy, se vejde jenom jeden.",
+  "{a} dává góly, ale na trénink chodí, kdy se mu zachce. {b} maká, ale netrefí ani vrata od stodoly.",
+  "Po posledním zápase se servali o poslední řízek v kabině. Předseda rozhodl: spolu už ne.",
+  "Manželky obou si na tribuně nadávají do kuropáčů. Pro klid v dědině zůstane jen jeden.",
+  "Oba slíbili dvacet gólů. Rozpočet ale věří jen jednomu slibu — komu dáš šanci?",
+  "Jeden má klíče od kabiny, druhý od sekačky na trávník. Místo v kádru zbylo jen pro jednoho.",
+  "{a} a {b} se věčně hádají, kdo kope penaltu. Vyřešíme to natvrdo — jeden končí.",
+  "Po dědině se šušká, že jeden z nich kope i za úhlavního soka z vedlejší vsi. Pro jistotu vyber toho druhého.",
+  "Trenér má v sestavě místo jen pro jednoho. Ten druhý by celý rok jen hřál lavici a remcal.",
+  "Oba chtějí kapitánskou pásku a druhou nemáme. Klubu jedno ego bohatě stačí.",
+  "Pan hospodský dává dres už jen jednomu — ten druhý mu dluží za moc piv a mlčel o tom.",
+  "{a} i {b} si zamluvili stejné číslo na kabinu i stejnou holku na zábavě. Tohle dobře neskončí — vyber.",
+];
+
+/**
+ * Sestaví souboje „kdo zůstane" z nejohroženějších hráčů (srovnatelné dvojice).
+ * Vždy se snaží o 3 souboje; omezí je jen aby kádr neklesl pod hratelné dno (11).
+ * Nikdo nepřichází — poražení prostě odejdou.
+ */
+async function buildDuels(db: D1Database, teamId: string, rng: ReturnType<typeof createRng>): Promise<Duel[]> {
   const res = await db.prepare(
     "SELECT id, first_name, last_name, position, age, overall_rating, life_context FROM players WHERE team_id = ? AND status = 'active'",
   ).bind(teamId).all<{ id: string; first_name: string; last_name: string; position: string; age: number; overall_rating: number; life_context: string }>()
     .catch((e) => { logger.warn({ module: "season-departures" }, "load squad for duels", e); return { results: [] as any[] }; });
   const players = res.results;
-  const numDuels = Math.min(cap, Math.floor(players.length / 2));
+  const activeCount = players.length;
+  // Vždy až 3 souboje (= až 3 odchody), ale nikdy nesmí kádr klesnout pod 11.
+  let numDuels = Math.min(3, Math.max(0, activeCount - PLAYABLE_FLOOR));
+  numDuels = Math.min(numDuels, Math.floor(activeCount / 2));
   if (numDuels <= 0) return [];
 
   // Skóre ohrožení: starší + slabší + nižší morálka (+ špetka náhody)
@@ -231,11 +261,24 @@ async function buildDuels(db: D1Database, teamId: string, cap: number, rng: Retu
 
   // Srovnatelné dvojice — seřaď podle ratingu a páruj sousedy
   pool.sort((a, b) => b.overall_rating - a.overall_rating);
+
+  // Příběhy bez opakování (deterministický Fisher–Yates)
+  const stories = [...DUEL_STORIES];
+  for (let i = stories.length - 1; i > 0; i--) {
+    const j = Math.floor(rng.random() * (i + 1));
+    [stories[i], stories[j]] = [stories[j], stories[i]];
+  }
+
   const mk = (p: typeof pool[number]): DuelPlayer => ({
     playerId: p.id, name: `${p.first_name} ${p.last_name}`, position: p.position, age: p.age, overallRating: p.overall_rating,
   });
   const duels: Duel[] = [];
-  for (let i = 0; i + 1 < pool.length; i += 2) duels.push({ a: mk(pool[i]), b: mk(pool[i + 1]) });
+  for (let i = 0; i + 1 < pool.length; i += 2) {
+    const a = mk(pool[i]);
+    const b = mk(pool[i + 1]);
+    const story = stories[(i / 2) % stories.length].replace(/\{a\}/g, a.name).replace(/\{b\}/g, b.name);
+    duels.push({ a, b, story });
+  }
   return duels;
 }
 
