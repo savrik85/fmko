@@ -5,6 +5,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { FIRSTNAMES } from "../data/czech-names";
 import type { Rng } from "../generators/rng";
 import {
   generateCelebrityLegend,
@@ -16,14 +17,6 @@ import {
 } from "../generators/player";
 import { generatePlayerFace } from "../routes/teams";
 
-const FIRSTNAMES: Record<string, Record<string, number>> = {
-  "1960s": { "Jiří": 0.08, "Jan": 0.07, "Petr": 0.06, "Josef": 0.06, "Jaroslav": 0.05 },
-  "1970s": { "Petr": 0.08, "Jan": 0.07, "Martin": 0.06, "Jiří": 0.06, "Pavel": 0.05 },
-  "1980s": { "Jan": 0.08, "Martin": 0.07, "Tomáš": 0.06, "Pavel": 0.05, "Michal": 0.05 },
-  "1990s": { "Jan": 0.09, "Tomáš": 0.07, "Jakub": 0.06, "David": 0.06, "Lukáš": 0.05 },
-  "2000s": { "Jakub": 0.08, "Jan": 0.07, "Adam": 0.06, "Matěj": 0.06, "Ondřej": 0.05 },
-  "2010s": { "Jakub": 0.07, "Jan": 0.07, "Adam": 0.06, "Vojtěch": 0.05, "Filip": 0.05 },
-};
 
 interface SpawnResult {
   name: string;

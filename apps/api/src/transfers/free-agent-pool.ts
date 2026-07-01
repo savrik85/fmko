@@ -4,20 +4,13 @@
  */
 
 import { logger } from "../lib/logger";
+import { FIRSTNAMES } from "../data/czech-names";
 import type { Rng } from "../generators/rng";
 import { generatePlayer, type VillageInfo } from "../generators/player";
 import { generateHeightWeight } from "../generators/physicals";
 import { getDistrictDataFromDB } from "../data/districts";
 import { generatePlayerFace } from "../routes/teams";
 
-const FIRSTNAMES: Record<string, Record<string, number>> = {
-  "1960s": { "Jiří": 0.08, "Jan": 0.07, "Petr": 0.06, "Josef": 0.06, "Jaroslav": 0.05, "Milan": 0.05, "Zdeněk": 0.04 },
-  "1970s": { "Petr": 0.08, "Jan": 0.07, "Martin": 0.06, "Jiří": 0.06, "Pavel": 0.05, "Tomáš": 0.04, "Roman": 0.03 },
-  "1980s": { "Jan": 0.08, "Martin": 0.07, "Tomáš": 0.06, "Pavel": 0.05, "Michal": 0.05, "David": 0.05, "Lukáš": 0.04 },
-  "1990s": { "Jan": 0.09, "Tomáš": 0.07, "Jakub": 0.06, "David": 0.06, "Lukáš": 0.05, "Ondřej": 0.05, "Filip": 0.04 },
-  "2000s": { "Jakub": 0.08, "Jan": 0.07, "Adam": 0.06, "Matěj": 0.06, "Ondřej": 0.05, "Filip": 0.05, "Vojtěch": 0.04 },
-  "2010s": { "Jakub": 0.07, "Jan": 0.07, "Adam": 0.06, "Vojtěch": 0.05, "Filip": 0.05, "Tomáš": 0.05, "Šimon": 0.04 },
-};
 
 const POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
 
