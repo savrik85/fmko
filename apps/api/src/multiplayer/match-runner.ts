@@ -1015,8 +1015,11 @@ export async function buildMatchPlayers(
     userLineupJson?: string | null,
     idOffset: number = 0,
     options?: { friendlyMultiplier?: number; matchKey?: string },
+    // Volitelně předané řádky kádru (stejný tvar jako players) — pro pohárové velkokluby
+    // z cup_club_players. Když je zadáno, přeskočí se dotaz na tabulku players.
+    sourceRows?: { results: Record<string, unknown>[] },
 ): Promise<BuildResult> {
-    const rows = await db.prepare(
+    const rows = sourceRows ?? await db.prepare(
         "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
     ).bind(teamId).all();
 
