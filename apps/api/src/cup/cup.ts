@@ -358,8 +358,10 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
   if (!cup || cup.status !== "active") return { ok: false };
   const round = cup.current_round;
 
-  const matchesRes = await db.prepare("SELECT id, bracket_pos, home_cup_team_id, away_cup_team_id FROM cup_matches WHERE cup_id = ? AND round = ? AND status = 'scheduled'")
-    .bind(cupId, round).all<{ id: string; bracket_pos: number; home_cup_team_id: string | null; away_cup_team_id: string | null }>()
+  // Chunk: max 12 zápasů na invokaci (plný engine je drahý — 64 zápasů kola by přeteklo limit workeru).
+  const CUP_CHUNK = 12;
+  const matchesRes = await db.prepare("SELECT id, bracket_pos, home_cup_team_id, away_cup_team_id FROM cup_matches WHERE cup_id = ? AND round = ? AND status = 'scheduled' ORDER BY bracket_pos LIMIT ?")
+    .bind(cupId, round, CUP_CHUNK).all<{ id: string; bracket_pos: number; home_cup_team_id: string | null; away_cup_team_id: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "load round matches", e); return { results: [] as any[] }; });
 
   const teamsRes = await db.prepare("SELECT id, strength, team_id FROM cup_teams WHERE cup_id = ?").bind(cupId).all<{ id: string; strength: number; team_id: string | null }>()
@@ -408,18 +410,28 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
     }
   }
 
+  // Ještě zbývají zápasy tohoto kola? → zpracují se v dalším chunku (příští invokace/tick).
+  const remain = await db.prepare("SELECT COUNT(*) AS c FROM cup_matches WHERE cup_id = ? AND round = ? AND status = 'scheduled'").bind(cupId, round).first<{ c: number }>()
+    .catch((e) => { logger.warn({ module: M }, "count remaining", e); return { c: 0 }; });
+  if ((remain?.c ?? 0) > 0) return { ok: true, round }; // kolo ještě není celé dohrané
+
+  // Celé kolo dohrané → posbírej všechny vítěze z DB (napříč chunky).
+  const winnersRes = await db.prepare("SELECT bracket_pos, winner_cup_team_id FROM cup_matches WHERE cup_id = ? AND round = ? AND status = 'simulated' AND winner_cup_team_id IS NOT NULL").bind(cupId, round).all<{ bracket_pos: number; winner_cup_team_id: string }>()
+    .catch((e) => { logger.warn({ module: M }, "gather winners", e); return { results: [] as { bracket_pos: number; winner_cup_team_id: string }[] }; });
+  const winnersAll = winnersRes.results.map((w) => ({ pos: w.bracket_pos, teamId: w.winner_cup_team_id }));
+
   // Finále hotové?
   if (round >= cup.total_rounds) {
-    const champ = winners[0]?.teamId ?? null;
+    const champ = winnersAll[0]?.teamId ?? null;
     await db.prepare("UPDATE cup_competitions SET status='finished', winner_team_id=? WHERE id=?").bind(champ, cupId).run()
       .catch((e) => logger.warn({ module: M }, "finish cup", e));
     return { ok: true, round, finished: true, winner: champ ?? undefined };
   }
 
   // Vygeneruj další kolo: vítěz pozice i → další kolo pozice floor(i/2), home pokud i sudé
-  winners.sort((a, b) => a.pos - b.pos);
+  winnersAll.sort((a, b) => a.pos - b.pos);
   const nextByPos = new Map<number, { home?: string; away?: string }>();
-  for (const w of winners) {
+  for (const w of winnersAll) {
     const np = Math.floor(w.pos / 2);
     const slot = nextByPos.get(np) ?? {};
     if (w.pos % 2 === 0) slot.home = w.teamId; else slot.away = w.teamId;
@@ -465,7 +477,7 @@ export async function maybeAdvanceCup(db: D1Database): Promise<number> {
   await ensureBigClubSquads(db, anyCup.id, 8).catch((e) => logger.warn({ module: M }, "ensure big club squads", e));
 
   let advanced = 0, guard = 0;
-  while (guard++ < 8) {
+  while (guard++ < 3) { // max 3 chunky/tick (plný engine je drahý na subrequesty)
     const cup = await db.prepare("SELECT id, current_round FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1")
       .bind(season.n).first<{ id: string; current_round: number }>()
       .catch((e) => { logger.warn({ module: M }, "advance: load cup", e); return null; });
