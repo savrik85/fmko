@@ -29,6 +29,32 @@ export function cupPrizeTable(totalRounds: number): { round: number; roundName: 
   return out;
 }
 
+/**
+ * Datumy jednotlivých kol poháru — rozprostřené přes celou sezónu, FINÁLE na konci ligy.
+ * Kola padají na sobotu (ligový den je po/čt), takže se s ligou nekříží.
+ */
+export async function cupRoundDates(db: D1Database, seasonNumber: number, totalRounds: number): Promise<string[]> {
+  const span = await db.prepare(
+    "SELECT MIN(scheduled_at) AS first, MAX(scheduled_at) AS last FROM season_calendar sc JOIN leagues l ON l.id = sc.league_id WHERE l.league_type = 'senior' AND sc.season_number = ?",
+  ).bind(seasonNumber).first<{ first: string | null; last: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "cup span", e); return null; });
+  const startMs = span?.first ? new Date(span.first).getTime() : Date.now();
+  const endMs = span?.last ? new Date(span.last).getTime() : startMs + totalRounds * 14 * 86400000;
+  const dates: string[] = [];
+  for (let r = 1; r <= totalRounds; r++) {
+    const frac = r / totalRounds; // r = totalRounds → 1.0 → konec ligy (finále)
+    const d = new Date(startMs + frac * (endMs - startMs));
+    while (d.getUTCDay() !== 6) d.setUTCDate(d.getUTCDate() + 1); // snap na sobotu (pohárový den)
+    d.setUTCHours(16, 0, 0, 0);
+    dates.push(d.toISOString());
+  }
+  // Zajisti přísně rostoucí (snap mohl kola slepit) — posuň duplicity o týden.
+  for (let i = 1; i < dates.length; i++) {
+    if (dates[i] <= dates[i - 1]) { const nd = new Date(dates[i - 1]); nd.setUTCDate(nd.getUTCDate() + 7); dates[i] = nd.toISOString(); }
+  }
+  return dates;
+}
+
 const M = "cup";
 const CUP_NAME = "Český amatérský pohár";
 const HOME_ADV = 3;
@@ -98,6 +124,7 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
   const bracketSize = nextPow2(real.length);
   const totalRounds = Math.round(Math.log2(bracketSize));
   const cupId = crypto.randomUUID();
+  const roundDates = await cupRoundDates(db, seasonNumber, totalRounds);
 
   // Účastníci: reálné týmy + velkokluby
   const participants: CupTeamRow[] = real.map((t) => ({
@@ -130,8 +157,8 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
   const matchStmts: D1PreparedStatement[] = [];
   for (let pos = 0; pos < order.length / 2; pos++) {
     matchStmts.push(db.prepare(
-      "INSERT INTO cup_matches (id, cup_id, round, bracket_pos, home_cup_team_id, away_cup_team_id, status) VALUES (?, ?, 1, ?, ?, ?, 'scheduled')",
-    ).bind(crypto.randomUUID(), cupId, pos, order[pos * 2].id, order[pos * 2 + 1].id));
+      "INSERT INTO cup_matches (id, cup_id, round, bracket_pos, home_cup_team_id, away_cup_team_id, scheduled_at, status) VALUES (?, ?, 1, ?, ?, ?, ?, 'scheduled')",
+    ).bind(crypto.randomUUID(), cupId, pos, order[pos * 2].id, order[pos * 2 + 1].id, roundDates[0] ?? null));
   }
   for (let i = 0; i < matchStmts.length; i += 40) await db.batch(matchStmts.slice(i, i + 40)).catch((e) => logger.error({ module: M }, "insert round1", e));
 
@@ -141,8 +168,8 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
 
 /** Odsimuluje aktuální kolo poháru a vygeneruje další kolo z vítězů (nebo ukončí pohár ve finále). */
 export async function simulateCupRound(db: D1Database, cupId: string): Promise<{ ok: boolean; round?: number; finished?: boolean; winner?: string }> {
-  const cup = await db.prepare("SELECT total_rounds, current_round, status FROM cup_competitions WHERE id = ?").bind(cupId)
-    .first<{ total_rounds: number; current_round: number; status: string }>()
+  const cup = await db.prepare("SELECT total_rounds, current_round, status, season_number FROM cup_competitions WHERE id = ?").bind(cupId)
+    .first<{ total_rounds: number; current_round: number; status: string; season_number: number }>()
     .catch((e) => { logger.warn({ module: M }, "load cup", e); return null; });
   if (!cup || cup.status !== "active") return { ok: false };
   const round = cup.current_round;
@@ -212,15 +239,46 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
     if (w.pos % 2 === 0) slot.home = w.teamId; else slot.away = w.teamId;
     nextByPos.set(np, slot);
   }
+  const roundDates = await cupRoundDates(db, cup.season_number, cup.total_rounds);
+  const nextDate = roundDates[round] ?? null; // datum kola round+1 (0-indexováno)
   const nextStmts: D1PreparedStatement[] = [];
   for (const [np, slot] of nextByPos) {
     nextStmts.push(db.prepare(
-      "INSERT INTO cup_matches (id, cup_id, round, bracket_pos, home_cup_team_id, away_cup_team_id, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')",
-    ).bind(crypto.randomUUID(), cupId, round + 1, np, slot.home ?? null, slot.away ?? null));
+      "INSERT INTO cup_matches (id, cup_id, round, bracket_pos, home_cup_team_id, away_cup_team_id, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled')",
+    ).bind(crypto.randomUUID(), cupId, round + 1, np, slot.home ?? null, slot.away ?? null, nextDate));
   }
   for (let i = 0; i < nextStmts.length; i += 40) await db.batch(nextStmts.slice(i, i + 40)).catch((e) => logger.error({ module: M }, "insert next round", e));
   await db.prepare("UPDATE cup_competitions SET current_round = ? WHERE id = ?").bind(round + 1, cupId).run()
     .catch((e) => logger.warn({ module: M }, "bump round", e));
 
   return { ok: true, round };
+}
+
+/**
+ * Auto-postup poháru: pokud aktuální kolo aktivního poháru má naplánované datum
+ * <= herní den, odsimuluj ho (i víc kol dozadu, kdyby se hra opozdila). Volá se z daily-ticku.
+ */
+export async function maybeAdvanceCup(db: D1Database): Promise<number> {
+  const season = await db.prepare("SELECT MAX(number) AS n FROM seasons WHERE status = 'active'").first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, "advance: season", e); return null; });
+  if (!season?.n) return 0;
+  const gd = await db.prepare("SELECT MAX(game_date) AS d FROM teams WHERE game_date IS NOT NULL").first<{ d: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "advance: game date", e); return null; });
+  if (!gd?.d) return 0;
+
+  let advanced = 0, guard = 0;
+  while (guard++ < 8) {
+    const cup = await db.prepare("SELECT id, current_round FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1")
+      .bind(season.n).first<{ id: string; current_round: number }>()
+      .catch((e) => { logger.warn({ module: M }, "advance: load cup", e); return null; });
+    if (!cup) break;
+    const cur = await db.prepare("SELECT MIN(scheduled_at) AS d FROM cup_matches WHERE cup_id = ? AND round = ? AND status = 'scheduled'")
+      .bind(cup.id, cup.current_round).first<{ d: string | null }>()
+      .catch((e) => { logger.warn({ module: M }, "advance: round date", e); return null; });
+    if (!cur?.d || cur.d > gd.d) break; // kolo ještě nemá nadejít / už je dohrané
+    await simulateCupRound(db, cup.id);
+    advanced++;
+  }
+  if (advanced > 0) logger.info({ module: M }, `cup auto-advanced ${advanced} kol (s=${season.n})`);
+  return advanced;
 }

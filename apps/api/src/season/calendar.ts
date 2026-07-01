@@ -33,7 +33,7 @@ export interface CalendarEntry {
   leagueId: string;
   seasonNumber: number;
   gameWeek: number;       // 1-30
-  matchDay: "wednesday" | "saturday" | "sunday";
+  matchDay: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
   scheduledAt: string;    // ISO datetime
   status: "scheduled" | "lineup_locked" | "simulated";
 }
@@ -66,7 +66,7 @@ export function generateSeasonCalendar(
   let round = 1;
 
   // Find first Wednesday from adjusted start date
-  while (currentDate.getDay() !== 3) { // 3 = Wednesday
+  while (currentDate.getDay() !== 1) { // 1 = pondělí (ligový hrací den)
     currentDate.setDate(currentDate.getDate() + 1);
   }
 
@@ -85,7 +85,7 @@ export function generateSeasonCalendar(
       leagueId,
       seasonNumber,
       gameWeek: round,
-      matchDay: "wednesday",
+      matchDay: "monday",
       scheduledAt: wed.toISOString(),
       status: "scheduled",
     });
@@ -103,7 +103,7 @@ export function generateSeasonCalendar(
       leagueId,
       seasonNumber,
       gameWeek: round,
-      matchDay: "saturday",
+      matchDay: "thursday",
       scheduledAt: sat.toISOString(),
       status: "scheduled",
     });
@@ -120,7 +120,7 @@ export function generateSeasonCalendar(
   springStart.setDate(springStart.getDate() + 7);
 
   // Find next Wednesday for spring
-  while (springStart.getDay() !== 3) {
+  while (springStart.getDay() !== 1) {
     springStart.setDate(springStart.getDate() + 1);
   }
 
@@ -135,7 +135,7 @@ export function generateSeasonCalendar(
       leagueId,
       seasonNumber,
       gameWeek: round,
-      matchDay: "wednesday",
+      matchDay: "monday",
       scheduledAt: wed.toISOString(),
       status: "scheduled",
     });
@@ -152,7 +152,7 @@ export function generateSeasonCalendar(
       leagueId,
       seasonNumber,
       gameWeek: round,
-      matchDay: "saturday",
+      matchDay: "thursday",
       scheduledAt: sat.toISOString(),
       status: "scheduled",
     });

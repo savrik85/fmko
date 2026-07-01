@@ -56,6 +56,12 @@ export async function rolloverAllLeagues(
     .bind(oldSeasonNumber).run()
     .catch((e) => logger.warn({ module: "season-rollover" }, "finish old season", e));
 
+  // 5. Celorepublikový pohár pro novou sezónu (kola na soboty, finále na konci ligy).
+  try {
+    const { createCup } = await import("../cup/cup");
+    await createCup(db, newNum);
+  } catch (e) { logger.warn({ module: "season-rollover" }, "create cup on rollover failed", e); }
+
   logger.info({ module: "season-rollover" }, `global rollover → sezóna ${newNum}, ${rolledLeagues} lig, ${matchesCreated} zápasů`);
   return { newSeasonNumber: newNum, rolledLeagues, matchesCreated };
 }

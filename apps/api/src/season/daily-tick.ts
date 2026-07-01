@@ -559,6 +559,27 @@ export async function executeDailyTick(
   const allTeams = await env.DB.prepare(
     "SELECT t.id, t.user_id, t.league_id, t.game_date, t.training_type, t.training_sessions, t.training_days, v.size as village_size, v.district as village_district, v.population as village_population FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
   ).all();
+
+  // ── Globální herní den: reálný den (16:00 UTC) + pevný offset (násobek 7 → den v týdnu = realita) ──
+  // Jeden datum pro CELOU hru — žádná liga nemůže mít jiný den a nedochází k driftu (počítá se z reality).
+  const clock = await env.DB.prepare("SELECT offset_days FROM game_clock WHERE id = 1").first<{ offset_days: number }>()
+    .catch((e) => { logger.warn({ module: "daily-tick" }, "load game clock", e); return null; });
+  let globalGameDate: string | null = null;
+  if (clock) {
+    const now = new Date();
+    const g = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 16, 0, 0, 0));
+    g.setUTCDate(g.getUTCDate() + clock.offset_days);
+    globalGameDate = g.toISOString();
+    await env.DB.prepare("UPDATE teams SET game_date = ? WHERE game_date IS NOT NULL").bind(globalGameDate).run()
+      .catch((e) => logger.warn({ module: "daily-tick" }, "set global game date", e));
+
+    // Pohár: postup kol podle herního dne (kola padají na soboty, finále na konci ligy).
+    try {
+      const { maybeAdvanceCup } = await import("../cup/cup");
+      await maybeAdvanceCup(env.DB);
+    } catch (e) { logger.warn({ module: "daily-tick" }, "cup auto-advance failed", e); }
+  }
+
   for (const team of allTeams.results) {
     const teamId = team.id as string;
     let gameDate = team.game_date as string | null;
@@ -572,27 +593,12 @@ export async function executeDailyTick(
         logger.info({ module: "daily-tick" }, `synced game_date for team ${teamId} from league peer`);
       }
     }
-    if (gameDate) {
-      // Advance the date — bulk update per league to keep all teams in sync
-      const gd = new Date(gameDate);
-      gd.setDate(gd.getDate() + 1);
+    if (globalGameDate) {
+      // Datum je nastaveno globálně výše (reálný den + offset). Tady jen odvodíme hodnoty pro navazující per-tým logiku.
+      const gd = new Date(globalGameDate);
       const newDayOfWeek = gd.getUTCDay();
-      const newGameDate = gd.toISOString();
-
-      // Skip if this league was already advanced by another team in this tick
-      const leagueKey = team.league_id as string | null;
-      if (leagueKey && advancedLeagues.has(leagueKey)) {
-        // Already advanced — just read the new date for this team's logic below
-      } else if (leagueKey) {
-        await env.DB.prepare("UPDATE teams SET game_date = ? WHERE league_id = ?")
-          .bind(newGameDate, leagueKey).run()
-          .catch((e) => logger.warn({ module: "daily-tick" }, "bulk advance league date", e));
-        advancedLeagues.add(leagueKey);
-      } else {
-        await env.DB.prepare("UPDATE teams SET game_date = ? WHERE id = ?")
-          .bind(newGameDate, teamId).run()
-          .catch((e) => logger.warn({ module: "daily-tick" }, "advance team date", e));
-      }
+      const newGameDate = globalGameDate;
+      gameDate = globalGameDate;
 
       events.push({ type: "day", description: `Herní den: ${gd.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" })}` });
 
