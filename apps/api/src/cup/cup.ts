@@ -60,7 +60,18 @@ const CUP_NAME = "Český amatérský pohár";
 const HOME_ADV = 3;
 
 const BIG_CLUB_PREFIX = ["FC", "Sparta", "Slávia", "Viktoria", "Baník", "Tatran", "Sokol", "Union", "Dynamo", "Slovan", "Spartak", "Lokomotiva", "Jiskra", "Real", "Inter", "Dukla", "Slavoj", "AC", "FK", "SK"];
-const BIG_CLUB_PLACE = ["Vysočina", "Podhůří", "Polabí", "Pošumaví", "Pohraničí", "Kovárna", "Pivovar", "Chmelnice", "Šachta", "Halda", "Kasárna", "Rybník", "Sklepmistr", "Knedlík", "Klobása", "Traktor", "Severka", "Stará Garda", "Velký Týnec", "Dolní Lhota", "Horní Ves", "Depo", "Brambory", "Okres", "Kotelna", "Sklárna", "Cihelna", "Mlýn", "Pila", "Kamenolom", "Bažina", "Močál", "Stráň", "Úžlabí", "Kopec"];
+// Reálná česká města seřazená dle velikosti (největší první) — velkokluby jsou z měst,
+// síla klubu roste s velikostí města (Praha nejsilnější, menší města slabší).
+const BIG_CITIES = [
+  "Praha", "Brno", "Ostrava", "Plzeň", "Liberec", "Olomouc", "České Budějovice", "Hradec Králové",
+  "Ústí nad Labem", "Pardubice", "Zlín", "Havířov", "Kladno", "Most", "Opava", "Frýdek-Místek",
+  "Karviná", "Jihlava", "Teplice", "Děčín", "Karlovy Vary", "Jablonec nad Nisou", "Mladá Boleslav", "Prostějov",
+  "Přerov", "Chomutov", "Třebíč", "Třinec", "Tábor", "Znojmo", "Příbram", "Kolín",
+  "Cheb", "Trutnov", "Písek", "Kroměříž", "Šumperk", "Vsetín", "Uherské Hradiště", "Břeclav",
+  "Hodonín", "Český Těšín", "Litoměřice", "Havlíčkův Brod", "Nový Jičín", "Krnov", "Sokolov", "Vyškov",
+  "Náchod", "Bohumín", "Klatovy", "Žďár nad Sázavou", "Jindřichův Hradec", "Kutná Hora", "Blansko", "Strakonice",
+  "Rakovník", "Benešov", "Jičín", "Chrudim", "Beroun", "Mělník", "Valašské Meziříčí", "Kopřivnice",
+];
 
 function nextPow2(n: number): number { let p = 1; while (p < n) p <<= 1; return p; }
 
@@ -131,12 +142,18 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
     id: crypto.randomUUID(), team_id: t.id, name: t.name, strength: t.strength, is_big_club: 0, primary_color: t.primary_color,
   }));
   const usedNames = new Set<string>();
-  let guard = 0;
-  while (participants.length < bracketSize && guard++ < 2000) {
-    const nm = `${BIG_CLUB_PREFIX[Math.floor(rng.random() * BIG_CLUB_PREFIX.length)]} ${BIG_CLUB_PLACE[Math.floor(rng.random() * BIG_CLUB_PLACE.length)]}`;
-    if (usedNames.has(nm)) continue;
+  const bigCount = bracketSize - participants.length;
+  for (let i = 0; i < bigCount; i++) {
+    const rank = i % BIG_CITIES.length;           // pořadí města dle velikosti (0 = největší)
+    const city = BIG_CITIES[rank];
+    let nm = `${BIG_CLUB_PREFIX[Math.floor(rng.random() * BIG_CLUB_PREFIX.length)]} ${city}`;
+    let g = 0;
+    while (usedNames.has(nm) && g++ < 30) nm = `${BIG_CLUB_PREFIX[Math.floor(rng.random() * BIG_CLUB_PREFIX.length)]} ${city}`;
     usedNames.add(nm);
-    participants.push({ id: crypto.randomUUID(), team_id: null, name: nm, strength: 45 + Math.floor(rng.random() * 21), is_big_club: 1, primary_color: null });
+    // Síla ~ velikost města: největší ~68, nejmenší z listu ~44 (+ malý rozptyl).
+    const base = Math.round(68 - (rank / (BIG_CITIES.length - 1)) * 24);
+    const strength = Math.max(42, Math.min(70, base + Math.floor(rng.random() * 5) - 2));
+    participants.push({ id: crypto.randomUUID(), team_id: null, name: nm, strength, is_big_club: 1, primary_color: null });
   }
 
   // Insert competition + teams

@@ -5693,6 +5693,60 @@ gameRouter.post("/teams/:teamId/season-recap/dismiss", async (c) => {
   return c.json({ ok: true });
 });
 
+// GET /api/teams/:teamId/season-welcome — uvítání do nové sezóny (novinky + co tě čeká), pokud ještě nebylo viděno.
+gameRouter.get("/teams/:teamId/season-welcome", async (c) => {
+  const teamId = c.req.param("teamId");
+  const w = await c.env.DB.prepare("SELECT season_number FROM season_welcome WHERE team_id = ? AND seen = 0 ORDER BY season_number DESC LIMIT 1")
+    .bind(teamId).first<{ season_number: number }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "load season welcome", e); return null; });
+  if (!w) return c.json(null);
+  const seasonNumber = w.season_number;
+
+  const team = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "welcome team", e); return null; });
+  const firstMatch = await c.env.DB.prepare(
+    "SELECT MIN(sc.scheduled_at) AS d FROM season_calendar sc JOIN matches m ON m.calendar_id = sc.id WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'scheduled' AND sc.season_number = ?"
+  ).bind(teamId, teamId, seasonNumber).first<{ d: string | null }>().catch((e) => { logger.warn({ module: "game.ts" }, "welcome first match", e); return null; });
+  const squad = await c.env.DB.prepare("SELECT COUNT(*) AS c FROM players WHERE team_id = ? AND (status IS NULL OR status != 'released')").bind(teamId).first<{ c: number }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "welcome squad", e); return null; });
+
+  // Pohár — síla soupeřů vs tvoje.
+  let cup: { name: string; rounds: number; myStrength: number | null; bigMin: number; bigMax: number; realAvg: number } | null = null;
+  const cupRow = await c.env.DB.prepare("SELECT id, name, total_rounds FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1").bind(seasonNumber).first<{ id: string; name: string; total_rounds: number }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "welcome cup", e); return null; });
+  if (cupRow) {
+    const mine = await c.env.DB.prepare("SELECT strength FROM cup_teams WHERE cup_id = ? AND team_id = ?").bind(cupRow.id, teamId).first<{ strength: number }>().catch((e) => { logger.warn({ module: "game.ts" }, "welcome cup mine", e); return null; });
+    const big = await c.env.DB.prepare("SELECT MIN(strength) mn, MAX(strength) mx FROM cup_teams WHERE cup_id = ? AND is_big_club = 1").bind(cupRow.id).first<{ mn: number; mx: number }>().catch((e) => { logger.warn({ module: "game.ts" }, "welcome cup big", e); return null; });
+    const real = await c.env.DB.prepare("SELECT ROUND(AVG(strength)) a FROM cup_teams WHERE cup_id = ? AND is_big_club = 0").bind(cupRow.id).first<{ a: number }>().catch((e) => { logger.warn({ module: "game.ts" }, "welcome cup real", e); return null; });
+    cup = { name: cupRow.name, rounds: cupRow.total_rounds, myStrength: mine?.strength ?? null, bigMin: big?.mn ?? 0, bigMax: big?.mx ?? 0, realAvg: real?.a ?? 0 };
+  }
+
+  const news = seasonNumber === 2 ? [
+    { icon: "🏆", title: "Celorepublikový pohár", text: "Nově hraješ i pohár — 128 týmů, vyřazovací pavouk. Los je náhodný, můžeš narazit i na velkoklub." },
+    { icon: "🌦️", title: "Počasí rozhoduje", text: "Déšť, sníh a vítr mění hru — horší technika, víc soubojů, míň diváků i míň vypitého piva." },
+    { icon: "🧢", title: "Kabina žije", text: "Tahoun drží partu a zvedá morálku, potížista dělá dusno. Rivalové v kádru se hádají, kámoši od piva táhnou spolu." },
+    { icon: "🌍", title: "Cizinci na trhu", text: "Na trhu potkáš Slováky, Ukrajince, Vietnamce i Romy — s vlastními jmény a vzhledem." },
+    { icon: "📅", title: "Pevné hrací dny", text: "Liga se hraje v pondělí a čtvrtek, pohár v sobotu." },
+  ] : [];
+
+  return c.json({
+    seasonNumber,
+    teamName: team?.name ?? "",
+    firstMatch: firstMatch?.d ?? null,
+    squadSize: squad?.c ?? 0,
+    cup,
+    news,
+  });
+});
+
+// POST /api/teams/:teamId/season-welcome/dismiss
+gameRouter.post("/teams/:teamId/season-welcome/dismiss", async (c) => {
+  const teamId = c.req.param("teamId");
+  await c.env.DB.prepare("UPDATE season_welcome SET seen = 1 WHERE team_id = ? AND seen = 0").bind(teamId).run()
+    .catch((e) => logger.warn({ module: "game.ts" }, "dismiss season welcome", e));
+  return c.json({ ok: true });
+});
+
 // POST /api/teams/:teamId/season-recap/decide — manažer rozhodl souboje „kdo zůstane".
 // Body: { leaving: string[] } — ID hráčů, kteří odejdou (poražení v duelech). Validuje proti staged duelům.
 gameRouter.post("/teams/:teamId/season-recap/decide", async (c) => {
