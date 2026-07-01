@@ -775,6 +775,24 @@ export async function executeDailyTick(
         }
       }
 
+      // ── Kabina & frakce (pondělí) — tahoun/potížista + rivalové/parťáci upraví morálku kádru ──
+      if (newDayOfWeek === 1) {
+        try {
+          const { processKabina } = await import("./kabina");
+          const kab = await processKabina(env.DB, teamId);
+          // Lidský tým: čas od času zpráva do kabiny, ať je dynamika vidět (ne každý týden — nespamovat).
+          if (kab.applied && team.user_id !== "ai" && (kab.tahoun || kab.potizista) && Math.random() < 0.4) {
+            const parts: string[] = [];
+            if (kab.tahoun) parts.push(`${kab.tahoun.name} drží partu`);
+            if (kab.potizista) parts.push(`${kab.potizista.name} dělá v kabině dusno`);
+            const { createNotification } = await import("../community/notifications");
+            await createNotification(env.DB, teamId, "event", "🧢 Kabina", `${parts.join(" · ")} (nálada ${kab.mood})`, "/dashboard/kadr",
+              { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB },
+            ).catch((e) => logger.warn({ module: "daily-tick" }, "kabina notification", e));
+          }
+        } catch (e) { logger.warn({ module: "daily-tick" }, `kabina failed for team ${teamId}`, e); }
+      }
+
       // ── Training cost (only on actual training days that ran — custom training_days
       // override default mapping, smart-skip se kontroluje u top loop a tady musíme
       // replikovat stejné podmínky, aby se náklad netáhl při skipnutém tréninku) ──
