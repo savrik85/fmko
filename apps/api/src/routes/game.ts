@@ -1615,6 +1615,14 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   const { seedFromString } = await import("../lib/seed");
   const rng = createRng(seedFromString(teamId + "sponsors" + seedSeason));
 
+  // Zamíchej pool per tým (stabilně dle seedu) — jinak všechny týmy v okrese dostávají
+  // stejné sponzory (první podle abecedy) a mají tak pořád ty samé.
+  const shuffledSponsors = [...sponsorRows.results];
+  for (let i = shuffledSponsors.length - 1; i > 0; i--) {
+    const j = Math.floor(rng.random() * (i + 1));
+    [shuffledSponsors[i], shuffledSponsors[j]] = [shuffledSponsors[j], shuffledSponsors[i]];
+  }
+
   type Offer = {
     sponsorName: string; sponsorType: string;
     monthlyAmount: number; winBonus: number;
@@ -1625,7 +1633,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   // Generate main sponsor offers — vždy, abys mohl porovnat se současnou smlouvou.
   // Z poolu vynech aktuálního sponzora (nehodí smysl ho nabízet znovu).
   const mainCurrentName = mainContract?.sponsor_name as string | undefined;
-  const mainPoolFiltered = sponsorRows.results.filter((s) => s.name !== mainCurrentName);
+  const mainPoolFiltered = shuffledSponsors.filter((s) => s.name !== mainCurrentName);
   const mainOffers: Offer[] = [];
   {
     const offerCount = team.reputation >= 60 ? 5 : team.reputation >= 40 ? 4 : 3;
@@ -1648,7 +1656,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
 
   // Stadium naming offers — taky vždy, aby šlo porovnat.
   const stadiumCurrentBase = (stadiumContract?.sponsor_name as string | undefined)?.replace(/\s+Arena$/i, "").trim();
-  const stadiumPoolFiltered = sponsorRows.results.filter((s) =>
+  const stadiumPoolFiltered = shuffledSponsors.filter((s) =>
     !stadiumCurrentBase || (s.name as string).replace(/\s*s\.r\.o\.?\s*/gi, "").trim() !== stadiumCurrentBase
   );
   const stadiumOffers: Offer[] = [];
@@ -1672,7 +1680,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   const MAX_BANNERS = 6;
   const bannerOffers: Offer[] = [];
   const usedNames = new Set<string>(bannerContracts.map((c) => c.sponsor_name as string));
-  const bannerPool = sponsorRows.results.filter((s) => !usedNames.has(s.name as string));
+  const bannerPool = shuffledSponsors.filter((s) => !usedNames.has(s.name as string));
   for (let i = 0; i < Math.min(12, bannerPool.length); i++) {
     const s = bannerPool[i];
     const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod * 0.8);
