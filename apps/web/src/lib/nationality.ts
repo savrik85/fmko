@@ -1,5 +1,6 @@
-/** Vlajka dle národnosti hráče. Pro Čechy (CZ) vrací prázdno — vlaječku ukazujeme jen u cizinců. */
+/** Vlajka dle národnosti hráče (vč. 🇨🇿 pro Čechy). */
 const FLAGS: Record<string, string> = {
+  CZ: "🇨🇿",
   SK: "🇸🇰",
   UA: "🇺🇦",
   PL: "🇵🇱",
@@ -9,8 +10,7 @@ const FLAGS: Record<string, string> = {
 };
 
 export function nationalityFlag(code?: string | null): string {
-  if (!code || code === "CZ") return "";
-  return FLAGS[code] ?? "";
+  return FLAGS[code || "CZ"] ?? "🇨🇿";
 }
 
 const LABELS: Record<string, string> = {
