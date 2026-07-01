@@ -102,15 +102,16 @@ export async function maintainFreeAgentPool(
 
       const id = crypto.randomUUID();
       await db.prepare(
-        `INSERT INTO free_agents (id, district, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, source, village_id, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?)`
+        `INSERT INTO free_agents (id, district, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, nationality, weekly_wage, source, village_id, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?)`
       ).bind(
         id, district, player.firstName, player.lastName, player.age, pos, overallRating,
         JSON.stringify(skills),
         JSON.stringify({ stamina: player.stamina, strength: player.strength, injuryProneness: player.injuryProneness ?? 50, ...generateHeightWeight(rng, pos, player.bodyType ?? "normal"), preferredFoot: player.preferredFoot, preferredSide: player.preferredSide }),
         JSON.stringify({ discipline: player.discipline, patriotism: player.patriotism, alcohol: player.alcohol, temper: player.temper, leadership: player.leadership ?? 30, workRate: player.workRate ?? 50, aggression: player.aggression ?? 40, consistency: player.consistency ?? 50, clutch: player.clutch ?? 50 }),
         JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
-        JSON.stringify(generatePlayerFace({ age: player.age, bodyType: player.bodyType ?? "normal" })),
+        JSON.stringify(generatePlayerFace({ age: player.age, bodyType: player.bodyType ?? "normal", ethnicity: player.ethnicity })),
+        player.nationality ?? "CZ",
         weeklyWage, resVillage?.id ?? null, expiresAt.toISOString(),
       ).run();
 

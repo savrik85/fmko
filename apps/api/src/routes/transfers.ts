@@ -203,13 +203,13 @@ transfersRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   // Create player from free agent
   const playerId = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
+    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, nationality, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
   ).bind(
     playerId, teamId, fa.first_name, fa.last_name, fa.nickname ?? null,
     fa.age, fa.position, fa.overall_rating,
     fa.skills, fa.physical, fa.personality, fa.life_context, fa.avatar,
-    fa.hidden_talent ?? 0, body.offeredWage,
+    fa.hidden_talent ?? 0, body.offeredWage, fa.nationality ?? "CZ",
   ).run();
 
   // Create contract

@@ -39,14 +39,24 @@ function uuid(): string {
  * Generate a facesjs-compatible config on the server.
  * No DOM needed — just a JSON object that facesjs display() can render on the client.
  */
-export function generatePlayerFace(player: { age: number; bodyType: string }): Record<string, unknown> {
+export function generatePlayerFace(player: { age: number; bodyType: string; ethnicity?: "white" | "asian" | "brown" }): Record<string, unknown> {
   const r = () => Math.random();
   const pick = <T,>(arr: T[]): T => arr[Math.floor(r() * arr.length)];
 
-  // Skin colors — white/European only
-  const skinColors = ["#f2d6cb", "#ddb7a0", "#e8c4a0", "#f5d5c0", "#d4a882", "#eabd93", "#f0c8a8"];
-  // Hair colors — European
-  const hairColors = ["#1a1a1a", "#3b2214", "#5b3a1a", "#8b6e3e", "#d4a843", "#a0330a"];
+  // Pleť + vlasy dle etnika (barvy ověřené z facesjs generate({race})).
+  const eth = player.ethnicity ?? "white";
+  const SKIN: Record<string, string[]> = {
+    white: ["#f2d6cb", "#ddb7a0", "#e8c4a0", "#f5d5c0", "#d4a882", "#eabd93", "#f0c8a8"],
+    asian: ["#f0c5a3", "#eab687", "#fedac7", "#e8c4a0", "#f5d5c0"],
+    brown: ["#a67358", "#aa816f", "#bb876f", "#b5876a", "#c39079", "#9e6f57"],
+  };
+  const HAIR: Record<string, string[]> = {
+    white: ["#1a1a1a", "#3b2214", "#5b3a1a", "#8b6e3e", "#d4a843", "#a0330a"],
+    asian: ["#272421", "#0f0902", "#1a1a1a"],
+    brown: ["#1c1008", "#272421", "#0f0902", "#1a1a1a"],
+  };
+  const skinColors = SKIN[eth] ?? SKIN.white;
+  const hairColors = HAIR[eth] ?? HAIR.white;
 
   // Real facesjs IDs (verified from generate() output)
   const headIds = ["head1", "head3", "head6", "head8", "head9", "head10", "head11", "head13"];
@@ -324,12 +334,12 @@ teamsRouter.post("/", async (c) => {
     playerResidences.push(res.residence);
 
     await c.env.DB.prepare(
-      "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, residence, commute_km, weekly_wage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, residence, commute_km, weekly_wage, nationality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(pid, teamId, player.firstName, player.lastName, nickname, player.age, player.position, rating,
       JSON.stringify(skillsCurrent), JSON.stringify(physical), JSON.stringify(personality),
       JSON.stringify(lifeContext), JSON.stringify(generatePlayerFace(player)), description,
       JSON.stringify(skillsMax), hiddenTalent, isGK ? (gkSkills!.experience.current) : (fieldSkills!.experience.current),
-      res.residence, res.commuteKm, Math.round(10 + rating * 4),
+      res.residence, res.commuteKm, Math.round(10 + rating * 4), player.nationality ?? "CZ",
     ).run();
 
     playerConvData.push({
