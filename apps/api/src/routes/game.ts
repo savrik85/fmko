@@ -605,10 +605,13 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
   const team = await c.env.DB.prepare("SELECT t.league_id, v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.id = ?").bind(teamId).first<{ league_id: string; district: string }>();
   if (!team?.league_id) return c.json({ events: [] });
 
-  // Batch: seasonal events + current game week
+  const seasonNum = await activeSeasonNumber(c.env.DB);
+  const seasonStr = String(seasonNum);
+
+  // Batch: seasonal events (AKTUÁLNÍ sezóny) + current game week (AKTUÁLNÍ sezóny)
   const [dbEventsRes, lastCalRes] = await c.env.DB.batch([
-    c.env.DB.prepare("SELECT * FROM seasonal_events WHERE league_id = ? ORDER BY game_week").bind(team.league_id),
-    c.env.DB.prepare("SELECT MAX(game_week) as gw FROM season_calendar WHERE league_id = ? AND status = 'simulated'").bind(team.league_id),
+    c.env.DB.prepare("SELECT * FROM seasonal_events WHERE league_id = ? AND season = ? ORDER BY game_week").bind(team.league_id, seasonStr),
+    c.env.DB.prepare("SELECT MAX(game_week) as gw FROM season_calendar WHERE league_id = ? AND status = 'simulated' AND season_number = ?").bind(team.league_id, seasonNum),
   ]);
   const dbEvents = { results: dbEventsRes.results };
   const currentGameWeek = (lastCalRes.results[0] as { gw: number | null } | undefined)?.gw ?? 0;
@@ -636,10 +639,10 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
     for (const ev of weekEvents) {
       const id = crypto.randomUUID();
       await c.env.DB.prepare(
-        "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?, ?)"
+        "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(id, team.league_id, ev.type, ev.title, ev.description,
         JSON.stringify(ev.effects), ev.choices ? JSON.stringify(ev.choices) : null,
-        ev.gameWeek, ev.choices ? "pending" : "active",
+        seasonStr, ev.gameWeek, ev.choices ? "pending" : "active",
       ).run().catch((e) => logger.warn({ module: "game" }, "insert seasonal event", e));
 
       allEvents.push({ ...ev, id, status: ev.choices ? "pending" : "active" });
@@ -795,9 +798,10 @@ gameRouter.post("/teams/:teamId/pub-visit", async (c) => {
 
   // Cooldown event
   await c.env.DB.prepare(
-    "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, season, game_week, status, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'hospoda_action', 'Posezení v hospodě', ?, '[]', '1', 0, 'resolved', ?)",
+    "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, season, game_week, status, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'hospoda_action', 'Posezení v hospodě', ?, '[]', ?, 0, 'resolved', ?)",
   ).bind(crypto.randomUUID(), teamId,
     body.choice === "all" ? "Celý tým šel do hospody" : body.choice === "one" ? "Jen jedno pivo" : "Trenér zakázal hospodu",
+    String(await activeSeasonNumber(c.env.DB)),
     team.game_date,
   ).run().catch((e) => logger.warn({ module: "game" }, "record pub cooldown event", e));
 
@@ -2415,9 +2419,9 @@ gameRouter.post("/game/run-matches", async (c) => {
               const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek, ht.district as string);
               if (adhocEvent) {
                 await c.env.DB.prepare(
-                  "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?, 'pending')"
+                  "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
                 ).bind(crypto.randomUUID(), ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
-                  JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), adhocEvent.gameWeek
+                  JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), String(await activeSeasonNumber(c.env.DB)), adhocEvent.gameWeek
                 ).run().catch((e: any) => logger.warn({ module: "game" }, `ad-hoc event insert: ${e.message}`));
               }
             }

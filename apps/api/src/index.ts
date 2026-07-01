@@ -371,15 +371,17 @@ export default {
                 const humanTeams = await env.DB.prepare(
                   "SELECT t.id, t.league_id, v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.league_id = ? AND t.user_id <> 'ai'"
                 ).bind(leagueId).all();
+                const adhocSeasonRow = await env.DB.prepare("SELECT MAX(number) AS n FROM seasons WHERE status = 'active'").first<{ n: number }>().catch((e) => { log("warn", "adhoc season lookup failed", e); return null; });
+                const adhocSeason = String(adhocSeasonRow?.n ?? 1);
 
                 for (const ht of humanTeams.results) {
                   const adhocRng = createAdhocRng(cryptoSeedAdhoc());
                   const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek, ht.district as string);
                   if (adhocEvent) {
                     await env.DB.prepare(
-                      "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?, 'pending')"
+                      "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
                     ).bind(crypto.randomUUID(), ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
-                      JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), adhocEvent.gameWeek
+                      JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), adhocSeason, adhocEvent.gameWeek
                     ).run().catch((e) => log("warn", "adhoc event insert failed", e));
                     // event notifikace
                     const { createNotification } = await import("./community/notifications");
