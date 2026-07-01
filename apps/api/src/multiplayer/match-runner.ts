@@ -4,6 +4,7 @@
  */
 
 import {simulateMatch} from "../engine/simulation";
+import {weatherAttendanceFactor} from "../season/weather";
 import {generateMatchCommentary, loadCommentaryFromDB} from "../engine/commentary";
 import {createRng} from "../generators/rng";
 import type {MatchPlayer, TeamSetup, Weather} from "../engine/types";
@@ -423,9 +424,9 @@ export async function runScheduledMatches(
             }
             const derbyAttendanceMul = preMatchHeat >= 60 ? 1.35 : 1.0;
 
-            // Apply facility attendance bonus (parking) + celebrity bonus + satisfaction + promo + derby, cap at stadium capacity
+            // Apply facility attendance bonus (parking) + celebrity bonus + satisfaction + promo + derby + počasí, cap at stadium capacity
             const attendance = Math.min(
-                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul),
+                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul * weatherAttendanceFactor(weather)),
                 stadiumCapacity,
             );
 
@@ -831,8 +832,8 @@ export async function runScheduledMatches(
                 const repMap = new Map(repRows.results.map((r) => [r.id, r.reputation ?? 50]));
                 const homeRep = repMap.get(homeTeamId) ?? 50;
                 const awayRep = repMap.get(awayTeamId) ?? 50;
-                await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate, awayRep);
-                await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate, homeRep);
+                await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate, awayRep, false, weather);
+                await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate, homeRep, false, weather);
                 // Cash loan repayments — po všech ostatních match-day financích (na čerstvém budgetu)
                 await processCashLoanRepayment(db, homeTeamId, matchId, gameDate);
                 await processCashLoanRepayment(db, awayTeamId, matchId, gameDate);

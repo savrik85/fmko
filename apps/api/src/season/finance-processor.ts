@@ -1,4 +1,5 @@
 import { logger } from "../lib/logger";
+import type { Weather } from "../engine/types";
 /**
  * Centrální finanční procesor — jediný způsob jak měnit rozpočet týmu.
  * Každá změna se zaznamená do transaction ledgeru.
@@ -273,6 +274,7 @@ export async function processMatchDayFinances(
   gameDate: string,
   opponentReputation: number = 50,
   isFriendly: boolean = false,
+  weather: Weather = "cloudy",
 ): Promise<void> {
   // Get village info for ticket price calculation
   const team = await db.prepare(
@@ -322,7 +324,7 @@ export async function processMatchDayFinances(
 
     // Concession income — podle módu
     if (fansCtx?.concessionMode === "self") {
-      const sale = computeSelfConcessionMatch(attendance, satisfaction, fansCtx.products);
+      const sale = computeSelfConcessionMatch(attendance, satisfaction, fansCtx.products, weather);
       soldProducts = sale.products;
 
       // Persist stock decrements + zaznamenat příjem
