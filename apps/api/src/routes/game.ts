@@ -5850,7 +5850,7 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
     .catch((e) => { logger.warn({ module: "game.ts" }, "load cup teams", e); return { results: [] as any[] }; });
   const tmap = new Map(teamsRes.results.map((t) => [t.id, t]));
   const ctOf = (id: string | null) => (id ? tmap.get(id) : null);
-  const side = (id: string | null) => { const t = ctOf(id); return t ? { name: t.name, color: t.primary_color, isBig: !!t.is_big_club, teamId: t.team_id } : null; };
+  const side = (id: string | null) => { const t = ctOf(id); return t ? { name: t.name, color: t.primary_color, isBig: !!t.is_big_club, teamId: t.team_id, strength: t.strength } : null; };
 
   const matchesRes = await c.env.DB.prepare("SELECT round, bracket_pos, home_cup_team_id, away_cup_team_id, home_score, away_score, home_pens, away_pens, winner_cup_team_id, status, upset FROM cup_matches WHERE cup_id = ? ORDER BY round, bracket_pos")
     .bind(cup.id).all<{ round: number; bracket_pos: number; home_cup_team_id: string | null; away_cup_team_id: string | null; home_score: number | null; away_score: number | null; home_pens: number | null; away_pens: number | null; winner_cup_team_id: string | null; status: string; upset: number }>()

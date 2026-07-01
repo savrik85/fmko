@@ -125,8 +125,8 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
   if (existing) return { created: false, cupId: existing.id };
 
   const teamsRes = await db.prepare(
-    "SELECT t.id, t.name, t.primary_color, CAST(COALESCE(ROUND(AVG(p.overall_rating)), 30) AS INTEGER) AS strength FROM teams t LEFT JOIN players p ON p.team_id = t.id AND p.status = 'active' WHERE t.team_type = 'senior' GROUP BY t.id",
-  ).all<{ id: string; name: string; primary_color: string | null; strength: number }>()
+    "SELECT t.id, t.name, t.primary_color, t.user_id, CAST(COALESCE(ROUND(AVG(p.overall_rating)), 30) AS INTEGER) AS strength FROM teams t LEFT JOIN players p ON p.team_id = t.id AND p.status = 'active' WHERE t.team_type = 'senior' GROUP BY t.id",
+  ).all<{ id: string; name: string; primary_color: string | null; user_id: string; strength: number }>()
     .catch((e) => { logger.warn({ module: M }, "load teams for cup", e); return { results: [] as any[] }; });
   const real = teamsRes.results;
   if (real.length < 2) return { created: false };
@@ -169,8 +169,23 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
   }
 
   // Los: zamíchej a spáruj sousedy → 1. kolo
-  const order = [...participants];
-  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+  // Los: 1. kolo real-vs-real + big-vs-big (seskupené, ať real týmy zůstanou spolu i v dalších kolech,
+  // a lidské týmy nenarazí na velkoklub hned v 1. kole → šance projít aspoň 2 kola).
+  const humanIds = new Set(real.filter((t) => t.user_id !== "ai").map((t) => t.id));
+  const shuf = <T,>(arr: T[]): T[] => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+  const realHuman = shuf(participants.filter((p) => p.is_big_club === 0 && p.team_id !== null && humanIds.has(p.team_id)));
+  const realAi = shuf(participants.filter((p) => p.is_big_club === 0 && !(p.team_id !== null && humanIds.has(p.team_id))));
+  const bigs = shuf(participants.filter((p) => p.is_big_club === 1));
+  const orderedReal = [...realHuman, ...realAi]; // lidské první → případný lichý zbytek je AI
+
+  const order: CupTeamRow[] = [];
+  const realPairs = Math.floor(orderedReal.length / 2);
+  for (let i = 0; i < realPairs * 2; i++) order.push(orderedReal[i]);
+  const bigPairs = Math.floor(bigs.length / 2);
+  for (let i = 0; i < bigPairs * 2; i++) order.push(bigs[i]);
+  // liché zbytky (real + big) spárované na konci pavouka
+  if (orderedReal.length % 2 === 1) order.push(orderedReal[orderedReal.length - 1]);
+  if (bigs.length % 2 === 1) order.push(bigs[bigs.length - 1]);
   const matchStmts: D1PreparedStatement[] = [];
   for (let pos = 0; pos < order.length / 2; pos++) {
     matchStmts.push(db.prepare(
