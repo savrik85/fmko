@@ -16,6 +16,7 @@ import { pickOccupation } from "../generators/occupations";
 import { generatePlayerFace } from "../routes/teams";
 import { getDistrictDataFromDB } from "../data/districts";
 import { logger } from "../lib/logger";
+import { mustSeason } from "../lib/season";
 
 const POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
 type Position = typeof POSITIONS[number];
@@ -360,7 +361,7 @@ export async function regenerateU21Schedule(
     calStmts.push(
       db.prepare(
         "INSERT INTO season_calendar (id, league_id, season_number, game_week, match_day, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
-      ).bind(calId, u21LeagueId, seasonNumber?.number ?? 1, round, matchDay, matchDate.toISOString())
+      ).bind(calId, u21LeagueId, mustSeason(seasonNumber?.number), round, matchDay, matchDate.toISOString())
     );
 
     for (const m of ms) {

@@ -11,6 +11,7 @@ import { generateDescription } from "../generators/description-generator";
 import { pickOccupation } from "../generators/occupations";
 import { generatePlayerFace } from "../routes/teams";
 import { logger } from "../lib/logger";
+import { mustSeason } from "../lib/season";
 
 export async function insertAITeamsIntoDB(
   db: D1Database,
@@ -25,7 +26,7 @@ export async function insertAITeamsIntoDB(
   const activeSeason = await db.prepare(
     "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
   ).first<{ id: string }>().catch((e) => { logger.warn({ module: "insert-ai-teams" }, "fetch active season", e); return null; });
-  const seasonId = activeSeason?.id ?? "season-1";
+  const seasonId = mustSeason(activeSeason?.id);
 
   // Collect all statements and batch them
   const teamStmts: D1PreparedStatement[] = [];

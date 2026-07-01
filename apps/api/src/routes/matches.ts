@@ -7,6 +7,7 @@ import type { Bindings } from "../index";
 import { requireTeamOwnership } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { logger } from "../lib/logger";
+import { mustSeason } from "../lib/season";
 
 const matchesRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -233,7 +234,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
 
   return c.json({
     leagueName: league?.name ?? "Liga",
-    season: league?.season_number ?? 1,
+    season: mustSeason(league?.season_number),
     matches,
     promotionPrice: teamPromotionPrice,
   });
@@ -435,7 +436,7 @@ matchesRouter.get("/teams/:teamId/league-schedule", async (c) => {
 
   return c.json({
     leagueName: league?.name ?? "Liga",
-    season: league?.season_number ?? 1,
+    season: mustSeason(league?.season_number),
     rounds,
   });
 });

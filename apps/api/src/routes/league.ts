@@ -5,6 +5,7 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
+import { mustSeason } from "../lib/season";
 
 const leagueRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -134,7 +135,7 @@ leagueRouter.get("/teams/:teamId/standings", async (c) => {
   return c.json({
     leagueName: leagueInfo?.name ?? `Okresní přebor ${team.district}`,
     leagueLevel: leagueInfo?.level ?? "okresni_prebor",
-    season: leagueInfo?.season_number ?? 1,
+    season: mustSeason(leagueInfo?.season_number),
     standings,
   });
 });
@@ -151,7 +152,7 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
   const season = await c.env.DB.prepare(
     "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
   ).first<{ id: string }>().catch((e) => { logger.warn({ module: "league" }, "fetch active season for stats", e); return null; });
-  const seasonId = season?.id ?? "season-1";
+  const seasonId = mustSeason(season?.id);
 
   const stats = await c.env.DB.prepare(
     `SELECT ps.goals, ps.assists, ps.appearances, ps.man_of_match as motm,

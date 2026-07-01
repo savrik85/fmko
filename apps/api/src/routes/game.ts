@@ -12,6 +12,7 @@ import { generateBetweenRoundEvents } from "../events/between-rounds";
 import { getSeasonalEventsForWeek, type SeasonalEventDef } from "../season/seasonal-events";
 import type { GeneratedPlayer } from "../generators/player";
 import { logger } from "../lib/logger";
+import { mustSeason } from "../lib/season";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
 import { buildPlayerView } from "../transfers/player-view";
@@ -1107,7 +1108,7 @@ gameRouter.get("/teams/:teamId/equipment", async (c) => {
   ]);
   const team = teamRes.results[0] as { reputation: number } | undefined;
   const matchCount = matchCountRes.results[0] as { cnt: number } | undefined;
-  const seasonNum = (seasonRes.results[0] as { number: number } | undefined)?.number ?? 1;
+  const seasonNum = mustSeason((seasonRes.results[0] as { number: number } | undefined)?.number);
 
   const levels: Record<string, number> = {};
   const conditions: Record<string, number> = {};
@@ -1322,7 +1323,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     facilities,
     customization,
     visualUpgrades,
-    upgrades: getUpgradeOptions(facilities, teamInfo?.reputation ?? 0, matchCount?.cnt ?? 0, currentSeason?.number ?? 1),
+    upgrades: getUpgradeOptions(facilities, teamInfo?.reputation ?? 0, matchCount?.cnt ?? 0, mustSeason(currentSeason?.number)),
     pitchActions,
     pitchUpgrades,
   });
@@ -1350,7 +1351,7 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
   const seasonRow = await c.env.DB.prepare(
     "SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
   ).first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for stadium upgrade", e); return null; });
-  const seasonNum = seasonRow?.number ?? 1;
+  const seasonNum = mustSeason(seasonRow?.number);
 
   const { getUpgradeOptions } = await import("../stadium/stadium-generator");
   const facilities: Record<string, number> = {
@@ -1611,7 +1612,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
 
   // Get current season for stable seed
   const seasonForSeed = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ number: number }>().catch((e) => { logger.warn({ module: "sponsors" }, "fetch season for seed", e); return null; });
-  const seedSeason = seasonForSeed?.number ?? 1;
+  const seedSeason = mustSeason(seasonForSeed?.number);
 
   const repMod = team.reputation / 50;
   const sizeMod = team.size === "mesto" ? 1.3 : team.size === "mestys" ? 1.1 : team.size === "obec" ? 1.0 : 0.8;
@@ -1702,7 +1703,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"),
     c.env.DB.prepare("SELECT name, last_main_sponsor_change_season FROM teams WHERE id = ?").bind(teamId),
   ]);
-  const seasonNum = (currentSeasonRes.results[0] as { number: number } | undefined)?.number ?? 1;
+  const seasonNum = mustSeason((currentSeasonRes.results[0] as { number: number } | undefined)?.number);
   const teamFull = (teamFullRes.results[0] as { name: string; last_main_sponsor_change_season: number | null } | undefined) ?? null;
 
   const changedThisSeason = (teamFull?.last_main_sponsor_change_season ?? 0) >= seasonNum;
@@ -1755,7 +1756,7 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
   if (category === "main") {
     const season = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
       .first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for sponsor signing", e); return null; });
-    const sn = season?.number ?? 1;
+    const sn = mustSeason(season?.number);
     const team = await c.env.DB.prepare("SELECT last_main_sponsor_change_season FROM teams WHERE id = ?")
       .bind(teamId).first<{ last_main_sponsor_change_season: number | null }>().catch((e) => { logger.warn({ module: "game" }, "fetch sponsor change limit", e); return null; });
     if ((team?.last_main_sponsor_change_season ?? 0) >= sn) {
@@ -1784,7 +1785,7 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
       .first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for sponsor rename", e); return null; });
     // Reputation penalty for name change (-3)
     await c.env.DB.prepare("UPDATE teams SET name = ?, last_main_sponsor_change_season = ?, reputation = MAX(0, reputation - 3) WHERE id = ?")
-      .bind(newName, season?.number ?? 1, teamId).run();
+      .bind(newName, mustSeason(season?.number), teamId).run();
 
     // News for entire league
     await c.env.DB.prepare(
@@ -1884,7 +1885,7 @@ gameRouter.post("/teams/:teamId/rename", async (c) => {
   // Check season limit
   const season = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
     .first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for rename", e); return null; });
-  const sn = season?.number ?? 1;
+  const sn = mustSeason(season?.number);
   const team = await c.env.DB.prepare("SELECT name, last_main_sponsor_change_season FROM teams WHERE id = ?")
     .bind(teamId).first<{ name: string; last_main_sponsor_change_season: number | null }>().catch((e) => { logger.warn({ module: "game" }, "fetch team for rename", e); return null; });
 
@@ -1987,7 +1988,7 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
   const league = (leagueRes.results[0] as { id: string; season_number: number } | undefined) ?? null;
   const calEntries = calRes.results as Record<string, unknown>[];
 
-  if (calEntries.length === 0) return c.json({ season: league?.season_number ?? 1, currentDay: 1, totalDays: 1, upcoming: [] });
+  if (calEntries.length === 0) return c.json({ season: mustSeason(league?.season_number), currentDay: 1, totalDays: 1, upcoming: [] });
 
   // Calculate season day
   const firstEntry = calEntries[0];
@@ -2111,7 +2112,7 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
   const futureEvents = upcoming.filter((e) => new Date(e.date) >= gameNow || e.status === "Naplánováno");
 
   return c.json({
-    season: league?.season_number ?? 1,
+    season: mustSeason(league?.season_number),
     currentDay,
     totalDays,
     gameDate: now.toISOString(),
@@ -2240,7 +2241,7 @@ gameRouter.post("/game/bootstrap-league", async (c) => {
   const teamIds = allTeams.results.map(r => r.id as string);
 
   const seasonRow = await db.prepare("SELECT number FROM seasons WHERE id = ?").bind(league.season_id).first<{ number: number }>();
-  const seasonNumber = seasonRow?.number ?? 1;
+  const seasonNumber = mustSeason(seasonRow?.number);
 
   const schedule = generateSchedule(rng, teamIds.length);
   const calendar = generateSeasonCalendar(league.id, seasonNumber, new Date());
@@ -4818,7 +4819,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   // Get current season for contract records
   const currentSeason = await c.env.DB.prepare("SELECT id FROM seasons ORDER BY number DESC LIMIT 1")
     .first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for offer accept", e); return null; });
-  const seasonId = currentSeason?.id ?? "season-1";
+  const seasonId = mustSeason(currentSeason?.id);
 
   // Cross-league admin fee (20 %) — jen pro trvalý přestup.
   const isCrossLeague = !!(seller?.league_id && buyer.league_id && seller.league_id !== buyer.league_id);
@@ -5238,7 +5239,7 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/accept", async (c) => {
   // Contract
   const season = await c.env.DB.prepare("SELECT id FROM seasons ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, ?, 0, 1)")
-    .bind(crypto.randomUUID(), playerId, teamId, season?.id ?? "season-1", offer.source).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
+    .bind(crypto.randomUUID(), playerId, teamId, mustSeason(season?.id), offer.source).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
 
   // Registration fee
   const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
@@ -5776,9 +5777,8 @@ gameRouter.post("/teams/:teamId/season-recap/party", async (c) => {
 // ── Celorepublikový pohár (KO) ──
 
 async function activeSeasonNumber(db: D1Database): Promise<number> {
-  const s = await db.prepare("SELECT MAX(number) AS n FROM seasons WHERE status = 'active'").first<{ n: number }>()
-    .catch((e: unknown) => { logger.warn({ module: "game.ts" }, "active season", e); return null; });
-  return s?.n ?? 1;
+  const s = await db.prepare("SELECT MAX(number) AS n FROM seasons WHERE status = 'active'").first<{ n: number }>();
+  return mustSeason(s?.n, "aktivní sezóna");
 }
 
 // GET /api/teams/:teamId/cup — pohár aktuální sezóny: pavouk + cesta daného týmu.
