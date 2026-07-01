@@ -6,6 +6,7 @@
 import { createRng, type Rng } from "../generators/rng";
 import { logger } from "../lib/logger";
 import { recordTransaction } from "../season/finance-processor";
+import type { Weather, TeamSetup } from "../engine/types";
 
 /** Odměna za VÝHRU kola podle hloubky (od finále). Platí pro libovolný počet kol. */
 const CUP_PRIZE_BY_DEPTH = [240000, 120000, 72000, 42000, 24000, 15000, 9000];
@@ -249,6 +250,106 @@ export async function ensureBigClubSquads(db: D1Database, cupId: string, maxClub
   return done;
 }
 
+/** Načte kádr velkoklubu z cup_club_players ve tvaru řádků `players` (pro buildMatchPlayers sourceRows). */
+async function loadCupClubRows(db: D1Database, cupTeamId: string): Promise<{ results: Record<string, unknown>[] }> {
+  const res = await db.prepare("SELECT * FROM cup_club_players WHERE cup_team_id = ? ORDER BY overall_rating DESC").bind(cupTeamId).all<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: M }, "load cup club rows", e); return { results: [] as Record<string, unknown>[] }; });
+  return {
+    results: res.results.map((r) => ({
+      ...r, nickname: null, status: "active",
+      life_context: JSON.stringify({ morale: r.morale ?? 60, condition: r.condition ?? 100 }),
+    })),
+  };
+}
+
+/** Penaltový rozstřel — mírně zvýhodní silnější tým. */
+function cupShootout(rng: Rng, sHome: number, sAway: number): { hp: number; ap: number } {
+  let hp = 0, ap = 0;
+  const pHome = Math.max(0.55, Math.min(0.9, 0.72 + (sHome - 50) / 500));
+  const pAway = Math.max(0.55, Math.min(0.9, 0.72 + (sAway - 50) / 500));
+  for (let i = 0; i < 5; i++) { if (rng.random() < pHome) hp++; if (rng.random() < pAway) ap++; }
+  let guard = 0;
+  while (hp === ap && guard++ < 20) { if (rng.random() < pHome) hp++; if (rng.random() < pAway) ap++; }
+  if (hp === ap) hp++; // pojistka
+  return { hp, ap };
+}
+
+/**
+ * Plnohodnotná simulace pohárového zápasu — reálný zápasový engine (sestavy, morálka, kondice,
+ * absence, počasí) + uložení hráčských statistik do match_player_stats.
+ */
+async function simulateCupTie(
+  db: D1Database, rng: Rng, cupMatchId: string,
+  homeCupTeamId: string, awayCupTeamId: string,
+  realTeamOf: Map<string, string | null>, strengthOf: Map<string, number>, weather: Weather,
+): Promise<{ hg: number; ag: number; hp: number; ap: number; homeWin: boolean; upset: boolean }> {
+  const { buildMatchPlayers } = await import("../multiplayer/match-runner");
+  const { simulateMatch } = await import("../engine/simulation");
+  const { calculatePlayerRatings, extractStatsFromEvents, saveMatchPlayerStats, determineManOfMatch, saveMatchMom } = await import("../stats/update-stats");
+
+  const homeReal = realTeamOf.get(homeCupTeamId) ?? null;
+  const awayReal = realTeamOf.get(awayCupTeamId) ?? null;
+  const savedLineup = async (rid: string | null) => rid
+    ? await db.prepare("SELECT players_data, formation FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC LIMIT 1").bind(rid).first<{ players_data: string; formation: string }>().catch((e) => { logger.warn({ module: M }, "cup saved lineup", e); return null; })
+    : null;
+  const homeLR = await savedLineup(homeReal);
+  const awayLR = await savedLineup(awayReal);
+
+  const homeBuild = homeReal
+    ? await buildMatchPlayers(db, homeReal, homeLR?.players_data ?? null, 0, { matchKey: cupMatchId })
+    : await buildMatchPlayers(db, homeCupTeamId, null, 0, { matchKey: cupMatchId }, await loadCupClubRows(db, homeCupTeamId));
+  const awayBuild = awayReal
+    ? await buildMatchPlayers(db, awayReal, awayLR?.players_data ?? null, 100, { matchKey: cupMatchId })
+    : await buildMatchPlayers(db, awayCupTeamId, null, 100, { matchKey: cupMatchId }, await loadCupClubRows(db, awayCupTeamId));
+
+  const homeLineup = homeBuild.players; const homeSubs = homeLineup.splice(11);
+  const awayLineup = awayBuild.players; const awaySubs = awayLineup.splice(11);
+  if (homeLineup.length < 7 || awayLineup.length < 7) {
+    const fb = simMatch(strengthOf.get(homeCupTeamId) ?? 30, strengthOf.get(awayCupTeamId) ?? 30, rng); // pojistka
+    return { ...fb, hp: fb.hp ?? 0, ap: fb.ap ?? 0 };
+  }
+  const homePre = homeLineup.map((p) => ({ ...p }));
+  const awayPre = awayLineup.map((p) => ({ ...p }));
+
+  const homeSetup: TeamSetup = { teamId: 1, teamName: "Domácí", lineup: homeLineup, subs: homeSubs, tactic: "balanced", formation: homeLR?.formation ?? "4-4-2", formationFamiliarity: 0 };
+  const awaySetup: TeamSetup = { teamId: 2, teamName: "Hosté", lineup: awayLineup, subs: awaySubs, tactic: "balanced", formation: awayLR?.formation ?? "4-4-2", formationFamiliarity: 0 };
+  const result = simulateMatch(rng, { home: homeSetup, away: awaySetup, weather, isHomeAdvantage: false });
+
+  const fullIdMap = new Map<number, string>();
+  for (const [e, d] of homeBuild.idMap) fullIdMap.set(e, d);
+  for (const [e, d] of awayBuild.idMap) fullIdMap.set(e, d);
+  const positions = new Map<string, string>();       // dbId → pozice (pro záznamy statistik)
+  for (const [d, p] of homeBuild.positionMap) positions.set(d, p);
+  for (const [d, p] of awayBuild.positionMap) positions.set(d, p);
+  const enginePos = new Map<number, string>();        // engineId → pozice (pro výpočet ratingů)
+  for (const p of [...homePre, ...homeSubs, ...awayPre, ...awaySubs]) enginePos.set(p.id, p.matchPosition ?? p.position);
+
+  const ratings = calculatePlayerRatings(result.events, fullIdMap, 1, result.homeScore, result.awayScore, enginePos);
+  const homeStarterIds = homePre.map((p) => homeBuild.idMap.get(p.id) ?? "").filter(Boolean);
+  const awayStarterIds = awayPre.map((p) => awayBuild.idMap.get(p.id) ?? "").filter(Boolean);
+  const homeUpdates = extractStatsFromEvents(result.events, homeBuild.idMap, homeStarterIds, ratings, result.playerMinutes);
+  const awayUpdates = extractStatsFromEvents(result.events, awayBuild.idMap, awayStarterIds, ratings, result.playerMinutes);
+  const toEntry = (u: (typeof homeUpdates)[number], cupTeamId: string, starters: string[]) => ({
+    playerId: u.playerId, teamId: cupTeamId, started: starters.includes(u.playerId), position: positions.get(u.playerId) ?? "MID",
+    minutesPlayed: u.minutesPlayed, goals: u.goals, assists: u.assists, yellowCards: u.yellowCards, redCards: u.redCards, rating: u.rating,
+  });
+  const entries = [
+    ...homeUpdates.map((u) => toEntry(u, homeCupTeamId, homeStarterIds)),
+    ...awayUpdates.map((u) => toEntry(u, awayCupTeamId, awayStarterIds)),
+  ];
+  await saveMatchPlayerStats(db, cupMatchId, entries).catch((e) => logger.warn({ module: M }, "save cup player stats", e));
+  await saveMatchMom(db, cupMatchId, determineManOfMatch(ratings)).catch((e) => logger.warn({ module: M }, "cup mom", e));
+
+  let hp = 0, ap = 0;
+  if (result.homeScore === result.awayScore) {
+    ({ hp, ap } = cupShootout(rng, strengthOf.get(homeCupTeamId) ?? 50, strengthOf.get(awayCupTeamId) ?? 50));
+  }
+  const homeWin = result.homeScore > result.awayScore || (result.homeScore === result.awayScore && hp > ap);
+  const winnerStr = homeWin ? (strengthOf.get(homeCupTeamId) ?? 30) : (strengthOf.get(awayCupTeamId) ?? 30);
+  const loserStr = homeWin ? (strengthOf.get(awayCupTeamId) ?? 30) : (strengthOf.get(homeCupTeamId) ?? 30);
+  return { hg: result.homeScore, ag: result.awayScore, hp, ap, homeWin, upset: loserStr - winnerStr >= 12 };
+}
+
 /** Odsimuluje aktuální kolo poháru a vygeneruje další kolo z vítězů (nebo ukončí pohár ve finále). */
 export async function simulateCupRound(db: D1Database, cupId: string): Promise<{ ok: boolean; round?: number; finished?: boolean; winner?: string }> {
   const cup = await db.prepare("SELECT total_rounds, current_round, status, season_number FROM cup_competitions WHERE id = ?").bind(cupId)
@@ -279,7 +380,9 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
 
   for (const m of matchesRes.results) {
     if (!m.home_cup_team_id || !m.away_cup_team_id) continue;
-    const r = simMatch(strengthOf.get(m.home_cup_team_id) ?? 30, strengthOf.get(m.away_cup_team_id) ?? 30, rng);
+    const cupWeathers: Weather[] = ["sunny", "cloudy", "cloudy", "rain", "wind", "snow"];
+    const tieWeather = cupWeathers[rng.int(0, cupWeathers.length - 1)];
+    const r = await simulateCupTie(db, rng, m.id, m.home_cup_team_id, m.away_cup_team_id, realTeamOf, strengthOf, tieWeather);
     const winnerId = r.homeWin ? m.home_cup_team_id : m.away_cup_team_id;
     const loserId = r.homeWin ? m.away_cup_team_id : m.home_cup_team_id;
     await db.prepare("UPDATE cup_matches SET home_score=?, away_score=?, home_pens=?, away_pens=?, winner_cup_team_id=?, status='simulated', upset=? WHERE id=?")
