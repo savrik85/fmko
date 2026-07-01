@@ -29,9 +29,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           window.location.replace(`/match-day/${data.matchId}`);
           return;
         }
-        // Žádný nezhlédnutý zápas → zkontroluj přehled konce sezóny
+        // Žádný nezhlédnutý zápas → přehled konce sezóny, jinak uvítání do nové sezóny.
         apiFetch<{ recap: unknown | null }>(`/api/teams/${teamId}/season-recap`)
-          .then((r) => { if (r && r.recap) window.location.replace("/season-end"); })
+          .then((r) => {
+            if (r && r.recap) { window.location.replace("/season-end"); return; }
+            apiFetch<{ seasonNumber: number } | null>(`/api/teams/${teamId}/season-welcome`)
+              .then((w) => { if (w) window.location.replace("/nova-sezona"); })
+              .catch((e) => console.error("fetch season-welcome:", e));
+          })
           .catch((e) => console.error("fetch season-recap:", e));
       })
       .catch((e) => console.error("fetch unseen-match:", e));
