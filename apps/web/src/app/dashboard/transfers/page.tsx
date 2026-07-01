@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
+import { nationalityFlag } from "@/lib/nationality";
 import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern } from "@/components/ui";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -371,7 +372,7 @@ function skillColor(v: number): string {
 }
 
 interface FreeAgent {
-  id: string; firstName: string; lastName: string; nickname?: string; age: number;
+  id: string; firstName: string; lastName: string; nickname?: string; nationality?: string; age: number;
   position: string; overallRating: number; weeklyWage: number; occupation: string;
   source: string; villageName: string | null; distanceKm: number | null;
   expiresAt: string; avatar: Record<string, unknown>;
@@ -1367,7 +1368,7 @@ export default function TransfersPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                          <span className="font-heading font-bold text-base">{fa.firstName} {fa.lastName}</span>
+                          <span className="font-heading font-bold text-base">{fa.firstName} {fa.lastName}{nationalityFlag(fa.nationality) && <span className="ml-1" title={fa.nationality}>{nationalityFlag(fa.nationality)}</span>}</span>
                           <PositionBadge position={fa.position as "GK" | "DEF" | "MID" | "FWD"} />
                           {fa.isCelebrity && (
                             <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200">

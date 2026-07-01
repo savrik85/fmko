@@ -134,6 +134,7 @@ transfersRouter.get("/teams/:teamId/free-agents", async (c) => {
       firstName: fa.first_name,
       lastName: fa.last_name,
       nickname: fa.nickname,
+      nationality: fa.nationality ?? "CZ",
       age: fa.age,
       position: fa.position,
       overallRating: fa.overall_rating,
