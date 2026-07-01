@@ -9,4 +9,5 @@ INSERT INTO district_sponsors (district, name, type, monthly_min, monthly_max, w
 ('Prachatice','Schwan','firma',4800,7800,700,1300),
 ('Prachatice','Hauser','firma',4600,7200,650,1150),
 ('Prachatice','Kávoviny','obchod',4500,7000,600,1050),
-('Prachatice','Gama','firma',4300,6600,550,1000);
+('Prachatice','Gama','firma',4300,6600,550,1000),
+('Prachatice','FaSta','obchod',5000,8000,750,1350);
