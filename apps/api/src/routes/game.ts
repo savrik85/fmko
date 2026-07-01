@@ -5826,6 +5826,18 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
   });
 });
 
+// POST /api/admin/run-daily-tick — ruční spuštění denního ticku (globální hodiny + auto-pohár + vše).
+gameRouter.post("/admin/run-daily-tick", async (c) => {
+  const { executeDailyTick } = await import("../season/daily-tick");
+  try {
+    const r = await executeDailyTick(c.env);
+    return c.json({ ok: true, events: r.events?.length ?? 0 });
+  } catch (e) {
+    logger.error({ module: "game.ts" }, "manual daily tick", e);
+    return c.json({ error: "tick selhal" }, 500);
+  }
+});
+
 // POST /api/admin/cup/create — vytvoří pohár pro aktuální sezónu.
 gameRouter.post("/admin/cup/create", async (c) => {
   const { createCup } = await import("../cup/cup");

@@ -266,6 +266,15 @@ export async function maybeAdvanceCup(db: D1Database): Promise<number> {
     .catch((e) => { logger.warn({ module: M }, "advance: game date", e); return null; });
   if (!gd?.d) return 0;
 
+  // Lazy vytvoření: pokud pro aktivní sezónu pohár ještě není (rollover je těžká invokace,
+  // vytvoření tam může padnout na limit subrequestů), vytvoř ho tady a postup nech na příště.
+  const anyCup = await db.prepare("SELECT id FROM cup_competitions WHERE season_number = ? LIMIT 1").bind(season.n).first<{ id: string }>()
+    .catch((e) => { logger.warn({ module: M }, "advance: any cup", e); return null; });
+  if (!anyCup) {
+    await createCup(db, season.n).catch((e) => logger.warn({ module: M }, "lazy create cup", e));
+    return 0;
+  }
+
   let advanced = 0, guard = 0;
   while (guard++ < 8) {
     const cup = await db.prepare("SELECT id, current_round FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1")
