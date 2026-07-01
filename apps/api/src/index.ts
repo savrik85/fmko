@@ -147,10 +147,11 @@ export default {
           const gd = new Date(gameDate);
           const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
 
-          // Process exactly 1 round per invocation — never more
+          // Process exactly 1 round per invocation — never more.
+          // Jen AKTUÁLNÍ sezóna (nejvyšší season_number) — staré neodehrané zápasy z minulých sezón se nikdy nepálí.
           const matchCal = await env.DB.prepare(
-            "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
-          ).bind(leagueId, dayEnd.toISOString()).first<{ id: string }>();
+            "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' AND season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?) ORDER BY scheduled_at ASC LIMIT 1"
+          ).bind(leagueId, dayEnd.toISOString(), leagueId).first<{ id: string }>();
 
           if (matchCal) {
             // Atomický lock: zabrání souběžnému cronu / endpointu zpracovat stejné kolo
