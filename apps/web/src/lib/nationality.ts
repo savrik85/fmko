@@ -6,6 +6,9 @@ const FLAGS: Record<string, string> = {
   PL: "🇵🇱",
   DE: "🇩🇪",
   AT: "🇦🇹",
+  HR: "🇭🇷",
+  HU: "🇭🇺",
+  RO: "🇷🇴",
   VN: "🇻🇳",
 };
 
@@ -20,6 +23,9 @@ const LABELS: Record<string, string> = {
   PL: "🇵🇱 Polsko",
   DE: "🇩🇪 Německo",
   AT: "🇦🇹 Rakousko",
+  HR: "🇭🇷 Chorvatsko",
+  HU: "🇭🇺 Maďarsko",
+  RO: "🇷🇴 Rumunsko",
   VN: "🇻🇳 Vietnam",
 };
 

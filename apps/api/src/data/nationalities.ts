@@ -42,6 +42,26 @@ export const NATIONALITIES: Nationality[] = [
     surnames: ["Müller", "Schmidt", "Fischer", "Weber", "Wagner", "Becker", "Hoffmann", "Schäfer", "Koch", "Bauer", "Richter", "Klein", "Wolf", "Schröder"],
   },
   {
+    code: "AT", label: "Rakousko", flag: "🇦🇹", ethnicity: "white", weight: 0.006,
+    firstNames: ["Thomas", "Stefan", "Lukas", "Andreas", "Markus", "Christian", "Florian", "Sebastian", "Tobias", "Maximilian", "Fabian", "Dominik", "Bernhard", "Alexander"],
+    surnames: ["Gruber", "Huber", "Bauer", "Wagner", "Steiner", "Moser", "Mayer", "Pichler", "Berger", "Fuchs", "Wimmer", "Leitner", "Weber", "Hofer"],
+  },
+  {
+    code: "HR", label: "Chorvatsko", flag: "🇭🇷", ethnicity: "white", weight: 0.006,
+    firstNames: ["Ivan", "Marko", "Luka", "Ante", "Josip", "Marin", "Domagoj", "Nikola", "Filip", "Petar", "Mateo", "Tomislav", "Dario", "Stjepan"],
+    surnames: ["Horvat", "Kovačević", "Marić", "Jurić", "Novak", "Babić", "Petrović", "Knežević", "Kovačić", "Vuković", "Perić", "Matić", "Tomić", "Blažević"],
+  },
+  {
+    code: "HU", label: "Maďarsko", flag: "🇭🇺", ethnicity: "white", weight: 0.006,
+    firstNames: ["László", "István", "Gábor", "Zoltán", "Attila", "Péter", "Tamás", "Balázs", "Ádám", "Dávid", "Bence", "Máté", "Gergő", "Levente"],
+    surnames: ["Nagy", "Kovács", "Tóth", "Szabó", "Horváth", "Varga", "Kiss", "Molnár", "Németh", "Farkas", "Balogh", "Papp", "Takács", "Juhász"],
+  },
+  {
+    code: "RO", label: "Rumunsko", flag: "🇷🇴", ethnicity: "white", weight: 0.006,
+    firstNames: ["Andrei", "Ionuț", "Gabriel", "Alexandru", "Cristian", "Florin", "Marius", "Bogdan", "Mihai", "Daniel", "Răzvan", "Ștefan", "Cătălin", "Vlad"],
+    surnames: ["Popescu", "Ionescu", "Popa", "Radu", "Dumitru", "Stoica", "Munteanu", "Constantin", "Marin", "Gheorghe", "Stan", "Rusu", "Matei", "Florea"],
+  },
+  {
     code: "VN", label: "Vietnam", flag: "🇻🇳", ethnicity: "asian", weight: 0.015,
     firstNames: ["Minh", "Anh", "Hùng", "Nam", "Tuấn", "Dũng", "Long", "Hải", "Quang", "Đức", "Thanh", "Bình", "Sơn", "Huy", "Khoa"],
     surnames: ["Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Huỳnh", "Phan", "Vũ", "Võ", "Đặng", "Bùi", "Đỗ", "Hồ", "Ngô", "Dương", "Lý"],
