@@ -3430,6 +3430,7 @@ gameRouter.get("/teams/:teamId/free-agents", async (c) => {
       }
       return {
         id: fa.id, firstName: fa.first_name, lastName: fa.last_name, nickname: fa.nickname,
+        nationality: fa.nationality ?? "CZ",
         age: fa.age, position: fa.position, overallRating: fa.overall_rating, weeklyWage: fa.weekly_wage,
         occupation: (() => { try { return JSON.parse(fa.life_context as string)?.occupation ?? ""; } catch (e) { logger.warn({ module: "game" }, "parse free agent life_context", e); return ""; } })(),
         source: fa.source, villageName: fa.village_name ?? null, distanceKm: distKm, expiresAt: fa.expires_at,

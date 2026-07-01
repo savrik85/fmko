@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import type { Player } from "@/lib/api";
 import { FaceAvatar } from "./face-avatar";
+import { nationalityFlag } from "@/lib/nationality";
 
 interface RevealCardProps {
   player: Player;
@@ -171,6 +172,9 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
       <div className="text-center px-4 pb-2">
         <div className="font-heading font-bold text-lg text-ink leading-tight truncate">
           {player.first_name} {player.last_name}
+          {nationalityFlag((player as { nationality?: string }).nationality) && (
+            <span className="ml-1">{nationalityFlag((player as { nationality?: string }).nationality)}</span>
+          )}
         </div>
         {player.nickname && (
           <div className="text-sm mt-0.5 font-medium truncate" style={{ color: teamColor }}>
