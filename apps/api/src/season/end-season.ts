@@ -71,8 +71,8 @@ async function getGlobalSeason(db: D1Database): Promise<number | null> {
 async function getSeniorStates(db: D1Database, seasonNumber: number): Promise<LeagueState[]> {
   const res = await db.prepare(
     `SELECT l.id AS league_id,
-            (SELECT COUNT(*) FROM season_calendar sc WHERE sc.league_id = l.id AND sc.season_number = ?) AS total,
-            (SELECT COUNT(*) FROM season_calendar sc WHERE sc.league_id = l.id AND sc.season_number = ? AND sc.status != 'simulated') AS pending,
+            (SELECT COUNT(*) FROM season_calendar sc WHERE sc.league_id = l.id AND sc.season_number = ? AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id)) AS total,
+            (SELECT COUNT(*) FROM season_calendar sc WHERE sc.league_id = l.id AND sc.season_number = ? AND sc.status != 'simulated' AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id)) AS pending,
             (SELECT COUNT(*) FROM teams t WHERE t.league_id = l.id AND t.user_id != 'ai') AS humans
      FROM leagues l WHERE l.league_type = 'senior'`,
   ).bind(seasonNumber, seasonNumber).all<{ league_id: string; total: number; pending: number; humans: number }>()
@@ -227,7 +227,7 @@ async function runWrapPhase(
       }
       case "village": {
         const standings = await calculateStandings(db, leagueId);
-        await applyVillageSeasonReaction(db, standings);
+        await applyVillageSeasonReaction(db, standings, seasonNumber);
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
       }

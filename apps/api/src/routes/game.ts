@@ -637,10 +637,13 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
 
   for (let week = 0; week <= 30; week++) {
     const weekEvents = getSeasonalEventsForWeek(rng, week, team.district);
-    for (const ev of weekEvents) {
-      const id = crypto.randomUUID();
+    for (let idx = 0; idx < weekEvents.length; idx++) {
+      const ev = weekEvents[idx];
+      // Deterministické id (league+sezóna+týden+index) + INSERT OR IGNORE → dvě souběžná první načtení
+      // (obě vidí prázdno) nevloží duplicity; seed rng je deterministický, takže id sedí napříč běhy.
+      const id = `se-${team.league_id}-s${seasonStr}-w${week}-${idx}`;
       await c.env.DB.prepare(
-        "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT OR IGNORE INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(id, team.league_id, ev.type, ev.title, ev.description,
         JSON.stringify(ev.effects), ev.choices ? JSON.stringify(ev.choices) : null,
         seasonStr, ev.gameWeek, ev.choices ? "pending" : "active",
@@ -1752,6 +1755,34 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
     if (existing) return c.json({ error: `Už máš aktivní smlouvu pro ${category === "main" ? "hlavního sponzora" : "stadion"}` }, 400);
   }
 
+  // Anti-podvrh: klient NESMÍ určovat ekonomické hodnoty. Ověř je proti serverovým mezím sponzora
+  // (rng.int nikdy nepřekročí monthly_max × přesné multiplikátory z generování) + fee dopočítej serverově.
+  const econ = await c.env.DB.prepare(
+    "SELECT t.reputation, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
+  ).bind(teamId).first<{ reputation: number; size: string; district: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "sponsor econ lookup", e); return null; });
+  if (!econ) return c.json({ error: "Tým nenalezen" }, 404);
+  const spBounds = await c.env.DB.prepare("SELECT name, monthly_max, win_bonus_max FROM district_sponsors WHERE district = ?")
+    .bind(econ.district).all<{ name: string; monthly_max: number; win_bonus_max: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "sponsor bounds lookup", e); return { results: [] as { name: string; monthly_max: number; win_bonus_max: number }[] }; });
+  const cleanSp = (nm: string) => nm.replace(/\s*s\.r\.o\.?\s*/gi, "").trim();
+  const baseName = category === "stadium" ? body.sponsorName.replace(/\s+Arena$/i, "").trim() : body.sponsorName;
+  const spRow = category === "stadium"
+    ? spBounds.results.find((r) => cleanSp(r.name) === baseName)
+    : spBounds.results.find((r) => r.name === body.sponsorName);
+  if (!spRow) return c.json({ error: "Neplatný sponzor pro tento okres" }, 400);
+  const repMod = econ.reputation / 50;
+  const sizeMod = econ.size === "mesto" ? 1.3 : econ.size === "mestys" ? 1.1 : econ.size === "obec" ? 1.0 : 0.8;
+  const catMult = category === "main" ? 3 : category === "stadium" ? 1.5 : 0.8;
+  const maxMonthly = Math.ceil(spRow.monthly_max * repMod * sizeMod * catMult) + 1;
+  const maxWinBonus = category === "main" ? Math.ceil(spRow.win_bonus_max * repMod * 2) + 1 : 0;
+  const maxSeasons = category === "banner" ? 2 : 3;
+  if (!Number.isFinite(body.monthlyAmount) || body.monthlyAmount < 0 || body.monthlyAmount > maxMonthly) return c.json({ error: "Neplatná výše sponzoringu" }, 400);
+  if (!Number.isFinite(body.winBonus) || body.winBonus < 0 || body.winBonus > maxWinBonus) return c.json({ error: "Neplatný bonus za výhru" }, 400);
+  if (!Number.isInteger(body.seasons) || body.seasons < 1 || body.seasons > maxSeasons) return c.json({ error: "Neplatná délka smlouvy" }, 400);
+  // earlyTerminationFee se NEbere od klienta — dopočítej serverově dle skutečných hodnot.
+  const validatedTerminationFee = Math.round(body.monthlyAmount * body.seasons * (category === "banner" ? 1.5 : 2));
+
   // Season limit for main sponsor
   if (category === "main") {
     const season = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
@@ -1770,7 +1801,7 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
       seasons_total, seasons_remaining, early_termination_fee, is_naming_rights, category)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(id, teamId, body.sponsorName, body.sponsorType, body.monthlyAmount, body.winBonus,
-    body.seasons, body.seasons, body.earlyTerminationFee, body.isNamingRights ? 1 : 0, category,
+    body.seasons, body.seasons, validatedTerminationFee, body.isNamingRights ? 1 : 0, category,
   ).run();
 
   if (category === "main") {

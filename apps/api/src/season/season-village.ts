@@ -27,6 +27,7 @@ function favorDelta(pos: number, n: number): number {
 export async function applyVillageSeasonReaction(
   db: D1Database,
   standings: StandingEntry[],
+  seasonNumber: number,
 ): Promise<VillageReactionResult[]> {
   const n = standings.length;
   const results: VillageReactionResult[] = [];
@@ -34,9 +35,11 @@ export async function applyVillageSeasonReaction(
   for (const s of standings) {
     const delta = favorDelta(s.pos, n);
     if (delta !== 0) {
+      // Gate na last_reaction_season → idempotence: rerun fáze (nebo pád před zápisem 'done')
+      // už favor nepřičte podruhé. Marker se nastaví ve stejném UPDATE.
       await db.prepare(
-        "UPDATE village_team_favor SET favor = MAX(0, MIN(100, favor + ?)), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ? AND official_id IS NULL",
-      ).bind(delta, s.teamId).run()
+        "UPDATE village_team_favor SET favor = MAX(0, MIN(100, favor + ?)), last_reaction_season = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ? AND official_id IS NULL AND COALESCE(last_reaction_season, 0) < ?",
+      ).bind(delta, seasonNumber, s.teamId, seasonNumber).run()
         .catch((e) => logger.warn({ module: "season-village" }, "update favor", e));
     }
     results.push({ teamId: s.teamId, pos: s.pos, favorDelta: delta });
