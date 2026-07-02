@@ -73,11 +73,17 @@ async function rolloverLeagueCalendar(
   seasonId: string,
   startDate: Date,
 ): Promise<{ rolled: boolean; matchesCreated: number }> {
-  // Idempotence: už má nová sezóna kalendář?
-  const exists = await db.prepare("SELECT 1 FROM season_calendar WHERE league_id = ? AND season_number = ? LIMIT 1")
+  // Idempotence: rollover je HOTOVÝ jen když existují ZÁPASY nové sezóny (kalendář sám nestačí —
+  // pád mezi vložením kalendáře a zápasů by jinak nechal ligu tiše bez zápasů).
+  const hasMatches = await db.prepare("SELECT 1 FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id WHERE sc.league_id = ? AND sc.season_number = ? LIMIT 1")
     .bind(leagueId, newNum).first()
-    .catch((e) => { logger.warn({ module: "season-rollover" }, "guard", e); return null; });
-  if (exists) return { rolled: false, matchesCreated: 0 };
+    .catch((e) => { logger.warn({ module: "season-rollover" }, "guard matches", e); return null; });
+  if (hasMatches) return { rolled: false, matchesCreated: 0 };
+  // Uklidit částečný stav z předchozího spadlého pokusu (kalendář bez zápasů) → čistá regenerace.
+  await db.prepare("DELETE FROM matches WHERE calendar_id IN (SELECT id FROM season_calendar WHERE league_id = ? AND season_number = ?)").bind(leagueId, newNum).run()
+    .catch((e) => logger.warn({ module: "season-rollover" }, "cleanup partial matches", e));
+  await db.prepare("DELETE FROM season_calendar WHERE league_id = ? AND season_number = ?").bind(leagueId, newNum).run()
+    .catch((e) => logger.warn({ module: "season-rollover" }, "cleanup partial calendar", e));
 
   await db.prepare("UPDATE leagues SET season_id = ? WHERE id = ?").bind(seasonId, leagueId).run()
     .catch((e) => logger.warn({ module: "season-rollover" }, "repoint league season", e));

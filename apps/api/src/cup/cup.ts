@@ -305,7 +305,8 @@ async function simulateCupTie(
   const homeLineup = homeBuild.players; const homeSubs = homeLineup.splice(11);
   const awayLineup = awayBuild.players; const awaySubs = awayLineup.splice(11);
   if (homeLineup.length < 7 || awayLineup.length < 7) {
-    const fb = simMatch(strengthOf.get(homeCupTeamId) ?? 30, strengthOf.get(awayCupTeamId) ?? 30, rng); // pojistka
+    logger.warn({ module: M }, `cup tie ${cupMatchId}: málo hráčů (home ${homeLineup.length}, away ${awayLineup.length}) → silová simulace bez statistik (kádr velkoklubu nebo tenký reálný kádr)`);
+    const fb = simMatch(strengthOf.get(homeCupTeamId) ?? 30, strengthOf.get(awayCupTeamId) ?? 30, rng);
     return { ...fb, hp: fb.hp ?? 0, ap: fb.ap ?? 0 };
   }
   const homePre = homeLineup.map((p) => ({ ...p }));

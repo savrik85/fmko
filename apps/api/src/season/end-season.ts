@@ -207,6 +207,9 @@ async function runWrapPhase(
           const res = await processTeamDepartures(db, leagueId, tid, seasonNumber);
           await captureDepartures(db, tid, seasonNumber, res);
           processedSet.add(tid);
+          // Cursor po KAŽDÉM týmu (ne až po chunku) — jinak pád u týmu 2 způsobí při retry
+          // dvojité zpracování týmu 1 (bumpAges +1 podruhé, developSquadAndManager 2×) = korupce dat.
+          await setProgress(db, leagueId, seasonNumber, phase, "pending", JSON.stringify([...processedSet]));
         }
         const done = processedSet.size >= teamIds.length;
         await setProgress(db, leagueId, seasonNumber, phase, done ? "done" : "pending", JSON.stringify([...processedSet]));
