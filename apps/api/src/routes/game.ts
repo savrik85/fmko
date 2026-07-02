@@ -5884,12 +5884,33 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
   const rounds = [...roundsMap.entries()].sort(([a], [b]) => a - b).map(([round, matches]) => ({ round, roundName: roundName(round, cup.total_rounds), matches }));
   const winner = cup.winner_team_id ? side(cup.winner_team_id) : null;
 
+  // Pohárové statistiky — střelci/asistence/karty z match_player_stats (reální hráči i velkokluby).
+  const statsRes = await c.env.DB.prepare(
+    `SELECT mps.player_id, SUM(mps.goals) AS goals, SUM(mps.assists) AS assists, SUM(mps.yellow_cards) AS yc, SUM(mps.red_cards) AS rc, COUNT(*) AS apps,
+       COALESCE(p.first_name || ' ' || p.last_name, cc.first_name || ' ' || cc.last_name, '?') AS name,
+       ct.name AS team_name, ct.team_id AS real_team_id
+     FROM match_player_stats mps
+     JOIN cup_matches cm ON cm.id = mps.match_id AND cm.cup_id = ?
+     LEFT JOIN players p ON p.id = mps.player_id
+     LEFT JOIN cup_club_players cc ON cc.id = mps.player_id
+     LEFT JOIN cup_teams ct ON ct.id = mps.team_id
+     GROUP BY mps.player_id
+     HAVING SUM(mps.goals) > 0 OR SUM(mps.assists) > 0 OR SUM(mps.red_cards) > 0
+     ORDER BY goals DESC, assists DESC LIMIT 20`
+  ).bind(cup.id).all<{ player_id: string; goals: number; assists: number; yc: number; rc: number; apps: number; name: string; team_name: string; real_team_id: string | null }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "cup stats", e); return { results: [] as { player_id: string; goals: number; assists: number; yc: number; rc: number; apps: number; name: string; team_name: string; real_team_id: string | null }[] }; });
+  const scorers = statsRes.results.map((r) => ({
+    playerId: r.player_id, name: r.name, teamName: r.team_name ?? "", teamId: r.real_team_id,
+    goals: r.goals, assists: r.assists, yellow: r.yc, red: r.rc, apps: r.apps,
+  }));
+
   return c.json({
     cup: { name: cup.name, seasonNumber: cup.season_number, status: cup.status, totalRounds: cup.total_rounds, currentRound: cup.current_round, winner },
     myTeam: myCt ? { name: myCt.name, eliminatedRound: myCt.eliminated_round, alive: myCt.eliminated_round == null && cup.status === "active", isChampion: cup.winner_team_id === myCt.id } : null,
     myMatches,
     rounds,
     prizes: cupPrizeTable(cup.total_rounds),
+    scorers,
   });
 });
 

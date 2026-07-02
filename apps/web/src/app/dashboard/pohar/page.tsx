@@ -24,12 +24,17 @@ interface MyMatch {
   myScore: number | null; oppScore: number | null; myPens: number | null; oppPens: number | null;
   status: string; won: boolean | null;
 }
+interface Scorer {
+  playerId: string; name: string; teamName: string; teamId: string | null;
+  goals: number; assists: number; yellow: number; red: number; apps: number;
+}
 interface CupData {
   cup: { name: string; seasonNumber: number; status: string; totalRounds: number; currentRound: number; winner: Side | null } | null;
   myTeam: { name: string; eliminatedRound: number | null; alive: boolean; isChampion: boolean } | null;
   myMatches: MyMatch[];
   rounds: { round: number; roundName: string; matches: BracketMatch[] }[];
   prizes?: { round: number; roundName: string; prize: number }[];
+  scorers?: Scorer[];
 }
 
 function initials(name: string) {
@@ -168,6 +173,32 @@ export default function PoharPage() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Střelci poháru */}
+      {data.scorers && data.scorers.length > 0 && (
+        <div>
+          <SectionLabel>Střelci poháru</SectionLabel>
+          <div className="card mt-2">
+            {data.scorers.map((s, i) => (
+              <div key={s.playerId} className="flex items-center gap-3 px-3 py-2 border-b border-gray-50 last:border-b-0">
+                <span className="w-5 text-right text-xs text-muted tabular-nums shrink-0">{i + 1}.</span>
+                <span className="flex-1 min-w-0 text-sm truncate">
+                  <span className="font-bold">{s.teamId ? <Link href={`/dashboard/team/${s.teamId}`} className="hover:underline">{s.name}</Link> : s.name}</span>
+                  <span className="text-muted"> · {s.teamName}</span>
+                </span>
+                {s.assists > 0 && <span className="text-xs text-muted shrink-0">{s.assists} A</span>}
+                {(s.yellow > 0 || s.red > 0) && (
+                  <span className="text-xs shrink-0 tabular-nums">
+                    {s.yellow > 0 && <span className="text-amber-600">🟨{s.yellow}</span>}
+                    {s.red > 0 && <span className="text-card-red ml-1">🟥{s.red}</span>}
+                  </span>
+                )}
+                <span className="font-heading font-[800] text-sm tabular-nums shrink-0 w-6 text-right">{s.goals}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
