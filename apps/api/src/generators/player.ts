@@ -320,7 +320,7 @@ export function generatePlayer(
   const aggressionBase = rng.int(15, 65)
     + (bodyType === "stocky" ? 15 : bodyType === "athletic" ? 10 : bodyType === "thin" ? -10 : 0)
     + (AGGRESSIVE_OCCUPATIONS[occupation] ?? 0)
-    + Math.round(temper * 0.2); // temper 0-100, *0.2 gives 0-20
+    + Math.round(temper * 0.2) // temper 0-100, *0.2 gives 0-20
     + (position === "DEF" ? 10 : position === "FWD" ? 5 : position === "GK" ? -10 : 0);
   const aggression = Math.min(100, Math.max(1, aggressionBase));
 

@@ -70,12 +70,13 @@ export async function processKabina(db: D1Database, teamId: string): Promise<Kab
     moodSum += nm;
     if (d !== 0) stmts.push(db.prepare("UPDATE players SET life_context = json_set(life_context, '$.morale', ?) WHERE id = ?").bind(nm, p.id));
   }
-  for (let i = 0; i < stmts.length; i += 40) await db.batch(stmts.slice(i, i + 40)).catch((e) => logger.warn({ module: M }, "apply morale", e));
+  let failed = false;
+  for (let i = 0; i < stmts.length; i += 40) await db.batch(stmts.slice(i, i + 40)).catch((e) => { logger.warn({ module: M }, "apply morale", e); failed = true; });
 
   return {
     tahoun: tahoun ? { id: tahoun.id, name: tahoun.name } : null,
     potizista: potizista ? { id: potizista.id, name: potizista.name } : null,
     mood: Math.round(moodSum / players.length),
-    applied: true,
+    applied: !failed, // když batch spadl, nehlásit úspěch (jinak notifikace „nálada X" neodpovídá DB)
   };
 }

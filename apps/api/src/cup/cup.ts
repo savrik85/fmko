@@ -395,10 +395,16 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
       .catch((e) => logger.warn({ module: M }, "eliminate", e));
     winners.push({ pos: m.bracket_pos, teamId: winnerId });
 
-    // Odměna reálnému vítězi (velkokluby nemají rozpočet)
+    // Odměna reálnému vítězi (velkokluby nemají rozpočet). Idempotence přes reference_id —
+    // když zápas zůstane 'scheduled' (status-flip selhal) a kolo se přepočítá, odměna/reputace
+    // se NEpřipíšou podruhé.
     const realWinner = realTeamOf.get(winnerId);
-    if (realWinner) {
-      await recordTransaction(db, realWinner, "cup_prize", prize, `Pohár — postup (${roundLabel})`, gameDate, `cup-${cupId}-r${round}-${winnerId}`)
+    const cupRefId = `cup-${cupId}-r${round}-${winnerId}`;
+    const alreadyPaid = realWinner
+      ? await db.prepare("SELECT 1 FROM transactions WHERE reference_id = ?").bind(cupRefId).first().catch((e) => { logger.warn({ module: M }, "cup prize gate", e); return null; })
+      : null;
+    if (realWinner && !alreadyPaid) {
+      await recordTransaction(db, realWinner, "cup_prize", prize, `Pohár — postup (${roundLabel})`, gameDate, cupRefId)
         .catch((e) => logger.warn({ module: M }, "cup prize", e));
       if (repBonus.manager > 0) {
         await db.prepare("UPDATE managers SET reputation = MAX(15, MIN(75, reputation + ?)) WHERE team_id = ?").bind(repBonus.manager, realWinner).run()

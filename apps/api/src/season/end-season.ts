@@ -179,10 +179,12 @@ async function runWrapPhase(
         return "done";
       case "rewards": {
         const standings = await calculateStandings(db, leagueId);
-        const levelRow = await db.prepare("SELECT level FROM leagues WHERE id = ?").bind(leagueId).first<{ level: string }>()
-          .catch((e) => { logger.warn({ module: "end-season" }, "load level", e); return null; });
+        // Level ligy MUSÍ být načtený — bez něj se odměny počítají špatně (tichý fallback na okresní
+        // přebor podhodnotí vyšší soutěže o 30-43 %). Když chybí, propadne throw → fáze se zopakuje.
+        const levelRow = await db.prepare("SELECT level FROM leagues WHERE id = ?").bind(leagueId).first<{ level: string }>();
+        if (!levelRow?.level) throw new Error(`rewards: nelze načíst level ligy ${leagueId}`);
         const gameDate = await getGameDate(db, leagueId);
-        await applySeasonRewards(db, standings, seasonNumber, gameDate, levelRow?.level ?? "okresni_prebor");
+        await applySeasonRewards(db, standings, seasonNumber, gameDate, levelRow.level);
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
       }
@@ -204,12 +206,13 @@ async function runWrapPhase(
         const teamIds = teamsRes.results.map((r) => r.id);
         const todo = teamIds.filter((id) => !processedSet.has(id)).slice(0, DEPARTURES_CHUNK);
         for (const tid of todo) {
+          // Cursor PŘED mutacemi (bumpAges/development jsou NEidempotentní) — pád uprostřed týmu →
+          // tým je už označen → retry ho přeskočí → NIKDY dvojité stárnutí (age+2). Cena: vzácně
+          // částečné odchody u týmu, kde pád nastal (přijatelnější než trvalá korupce věku).
+          processedSet.add(tid);
+          await setProgress(db, leagueId, seasonNumber, phase, "pending", JSON.stringify([...processedSet]));
           const res = await processTeamDepartures(db, leagueId, tid, seasonNumber);
           await captureDepartures(db, tid, seasonNumber, res);
-          processedSet.add(tid);
-          // Cursor po KAŽDÉM týmu (ne až po chunku) — jinak pád u týmu 2 způsobí při retry
-          // dvojité zpracování týmu 1 (bumpAges +1 podruhé, developSquadAndManager 2×) = korupce dat.
-          await setProgress(db, leagueId, seasonNumber, phase, "pending", JSON.stringify([...processedSet]));
         }
         const done = processedSet.size >= teamIds.length;
         await setProgress(db, leagueId, seasonNumber, phase, done ? "done" : "pending", JSON.stringify([...processedSet]));

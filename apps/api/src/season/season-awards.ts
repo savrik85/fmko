@@ -155,7 +155,8 @@ export async function generateSeasonAwards(
   // Deterministické defaulty (fallback i základ pro AI validaci)
   const defaultPlayer = byComposite[0] ?? null;
   const defaultManagerTeamId = champion?.id ?? null;
-  const defaultDiscovery = youngCandidates[0] ?? defaultPlayer;
+  // Objev sezóny = mladík ≤21. Když žádný není, MÁ být null (ne tichý fallback na veterána).
+  const defaultDiscovery = youngCandidates[0] ?? null;
 
   // Manažeři top týmů (kandidáti na trenéra sezóny)
   const managerRes = await db.prepare(

@@ -57,7 +57,14 @@ export async function applySeasonRewards(
       continue;
     }
 
-    // Reputace nejdřív, transakce jako "commit marker" naposledy
+    // Transakce (kredit + idempotenční marker) NEJDŘÍV a BEZ .catch — když zápis selže, chyba MÁ
+    // propadnout (throw → fáze vrátí "error" → zopakuje se). Dřív spolknutá do warn → tým tiše bez odměny.
+    await recordTransaction(
+      db, teamId, "season_reward", reward,
+      `Odměna za ${seasonNumber}. sezónu (${pos}. místo)`, gameDate, refId,
+    );
+
+    // Reputace AŽ PO markeru — na retry gate (exists) přeskočí celý tým, takže se reputace nepřičte podruhé.
     if (managerRepDelta !== 0) {
       await db.prepare("UPDATE managers SET reputation = MAX(15, MIN(75, reputation + ?)) WHERE team_id = ?")
         .bind(managerRepDelta, teamId).run()
@@ -68,10 +75,6 @@ export async function applySeasonRewards(
         .bind(teamRepDelta, teamId).run()
         .catch((e) => logger.warn({ module: "season-rewards" }, "team reputation update", e));
     }
-    await recordTransaction(
-      db, teamId, "season_reward", reward,
-      `Odměna za ${seasonNumber}. sezónu (${pos}. místo)`, gameDate, refId,
-    ).catch((e) => logger.warn({ module: "season-rewards" }, "record season reward", e));
 
     results.push({ teamId, pos, reward, managerRepDelta, teamRepDelta, skipped: false });
   }
