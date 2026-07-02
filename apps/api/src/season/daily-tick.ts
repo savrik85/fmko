@@ -578,6 +578,10 @@ export async function executeDailyTick(
       const { maybeAdvanceCup } = await import("../cup/cup");
       await maybeAdvanceCup(env.DB);
     } catch (e) { logger.warn({ module: "daily-tick" }, "cup auto-advance failed", e); }
+  } else {
+    // Chybí seed řádek game_clock → herní čas by se TIŠE zastavil (žádný posun data, pohár, finance, kabina).
+    // Musí se doplnit `INSERT INTO game_clock (id, offset_days) VALUES (1, <offset>)` (viz migrace 0107).
+    logger.error({ module: "daily-tick" }, "CHYBÍ řádek game_clock (id=1) — herní čas se NEPOSOUVÁ. Doplň seed dle migrace 0107.");
   }
 
   for (const team of allTeams.results) {
