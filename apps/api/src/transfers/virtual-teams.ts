@@ -145,7 +145,7 @@ export async function generateAiListings(
 
   const askingPrice = calcAskingPrice(overallRating, rng);
   const weeklyWage = Math.round(10 + (overallRating / 100) * 400);
-  const avatar = generatePlayerFace({ age, bodyType: player.bodyType });
+  const avatar = generatePlayerFace({ age, bodyType: player.bodyType, ethnicity: player.ethnicity });
 
   const playerData = JSON.stringify({
     firstName: player.firstName,
@@ -158,6 +158,7 @@ export async function generateAiListings(
     personality: { discipline: player.discipline, workRate: player.workRate, leadership: player.leadership },
     weeklyWage,
     avatar,
+    nationality: player.nationality ?? "CZ",
     fromTeam: team.name,
     fromCity: team.city,
     fromDistrict: team.district,

@@ -1,4 +1,6 @@
 -- 10 nových top sponzorů do okresu Prachatice — reálné jihočeské firmy (víc variety na špičce).
+-- Idempotence (re-run bezpečný — district_sponsors nemá UNIQUE): nejdřív smaž tyto sponzory dle jména.
+DELETE FROM district_sponsors WHERE district = 'Prachatice' AND name IN ('Madeta','Budvar','Jihostroj','Engel','Jitona','Fezko','Schwan','Hauser','Kávoviny','Gama','FaSta');
 INSERT INTO district_sponsors (district, name, type, monthly_min, monthly_max, win_bonus_min, win_bonus_max) VALUES
 ('Prachatice','Madeta','farma',5500,9000,900,1600),
 ('Prachatice','Budvar','obchod',5300,8800,850,1550),

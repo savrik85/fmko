@@ -157,16 +157,18 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
     participants.push({ id: crypto.randomUUID(), team_id: null, name: nm, strength, is_big_club: 1, primary_color: null });
   }
 
-  // Insert competition + teams
+  // Insert competition + teams. D1 NENÍ transakční napříč dotazy → po vložení ověříme počty a při
+  // neúplnosti celý pohár smažeme + hodíme chybu (raději žádný pohár než trvale rozbitý pavouk s dangling id).
+  let failed = false;
   await db.prepare("INSERT INTO cup_competitions (id, season_number, name, status, total_rounds, current_round) VALUES (?, ?, ?, 'active', ?, 1)")
     .bind(cupId, seasonNumber, CUP_NAME, totalRounds).run()
-    .catch((e) => logger.error({ module: M }, "insert cup", e));
+    .catch((e) => { failed = true; logger.error({ module: M }, "insert cup", e); });
 
   for (let i = 0; i < participants.length; i += 20) {
     const batch = participants.slice(i, i + 20).map((p) =>
       db.prepare("INSERT INTO cup_teams (id, cup_id, team_id, name, strength, is_big_club, primary_color) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .bind(p.id, cupId, p.team_id, p.name, p.strength, p.is_big_club, p.primary_color));
-    await db.batch(batch).catch((e) => logger.error({ module: M }, "insert cup teams", e));
+    await db.batch(batch).catch((e) => { failed = true; logger.error({ module: M }, "insert cup teams", e); });
   }
 
   // Los: zamíchej a spáruj sousedy → 1. kolo
@@ -193,7 +195,21 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
       "INSERT INTO cup_matches (id, cup_id, round, bracket_pos, home_cup_team_id, away_cup_team_id, scheduled_at, status) VALUES (?, ?, 1, ?, ?, ?, ?, 'scheduled')",
     ).bind(crypto.randomUUID(), cupId, pos, order[pos * 2].id, order[pos * 2 + 1].id, roundDates[0] ?? null));
   }
-  for (let i = 0; i < matchStmts.length; i += 40) await db.batch(matchStmts.slice(i, i + 40)).catch((e) => logger.error({ module: M }, "insert round1", e));
+  const expectedMatches = matchStmts.length;
+  for (let i = 0; i < matchStmts.length; i += 40) await db.batch(matchStmts.slice(i, i + 40)).catch((e) => { failed = true; logger.error({ module: M }, "insert round1", e); });
+
+  // Ověření úplnosti — počty MUSÍ sedět, jinak úklid + throw (guard výše by jinak rozbitý pohár nikdy neopravil).
+  const teamCount = await db.prepare("SELECT COUNT(*) AS c FROM cup_teams WHERE cup_id = ?").bind(cupId).first<{ c: number }>()
+    .catch((e) => { logger.warn({ module: M }, "verify cup teams count", e); return null; });
+  const matchCount = await db.prepare("SELECT COUNT(*) AS c FROM cup_matches WHERE cup_id = ?").bind(cupId).first<{ c: number }>()
+    .catch((e) => { logger.warn({ module: M }, "verify cup matches count", e); return null; });
+  if (failed || (teamCount?.c ?? -1) !== participants.length || (matchCount?.c ?? -1) !== expectedMatches) {
+    logger.error({ module: M }, `createCup NEÚPLNÝ (teams ${teamCount?.c}/${participants.length}, matches ${matchCount?.c}/${expectedMatches}) → úklid + throw`);
+    await db.prepare("DELETE FROM cup_matches WHERE cup_id = ?").bind(cupId).run().catch((e) => logger.warn({ module: M }, "cleanup cup matches", e));
+    await db.prepare("DELETE FROM cup_teams WHERE cup_id = ?").bind(cupId).run().catch((e) => logger.warn({ module: M }, "cleanup cup teams", e));
+    await db.prepare("DELETE FROM cup_competitions WHERE id = ?").bind(cupId).run().catch((e) => logger.warn({ module: M }, "cleanup cup competition", e));
+    throw new Error("createCup: neúplné vytvoření poháru — zrušeno (viz error log)");
+  }
 
   logger.info({ module: M }, `cup created s=${seasonNumber} teams=${participants.length} rounds=${totalRounds}`);
   return { created: true, cupId, teams: participants.length, rounds: totalRounds };

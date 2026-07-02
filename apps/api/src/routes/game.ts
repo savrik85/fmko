@@ -4118,10 +4118,11 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     const weeklyWage = aiData.weeklyWage ?? Math.round(10 + ((aiData.overallRating ?? 40) / 100) * 400);
 
     await c.env.DB.prepare(
-      `INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
+      `INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
     ).bind(playerId, teamId, aiData.firstName, aiData.lastName, aiData.age, aiData.position, aiData.overallRating,
-      skills, physical, personality, lifeContext, avatar, weeklyWage).run();
+      skills, physical, personality, lifeContext, avatar, weeklyWage,
+      (aiData as { nationality?: string }).nationality ?? "CZ").run();
 
     // Deduct budget (recordTransaction handles both budget update + logging)
     const { recordTransaction } = await import("../season/finance-processor");
@@ -5251,10 +5252,11 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/accept", async (c) => {
 
   const playerId = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status)
-     VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
+    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality)
+     VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
   ).bind(playerId, teamId, offer.first_name, offer.last_name, offer.age, offer.position, offer.overall_rating,
-    offer.skills, offer.physical, offer.personality, offer.life_context, offer.avatar, offer.weekly_wage).run();
+    offer.skills, offer.physical, offer.personality, offer.life_context, offer.avatar, offer.weekly_wage,
+    (offer.nationality as string) ?? "CZ").run();
 
   // Set residence
   const { generateResidence } = await import("../generators/residence");

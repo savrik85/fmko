@@ -129,8 +129,8 @@ export async function generatePlayerOffer(
 
   const offerId = crypto.randomUUID();
   await db.prepare(
-    `INSERT INTO player_offers (id, team_id, source, source_name, message, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO player_offers (id, team_id, source, source_name, message, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, expires_at, nationality)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     offerId, teamId, sourceType.source, sourceType.senderName, message,
     player.firstName, player.lastName, null, age, pos, overallRating,
@@ -142,8 +142,8 @@ export async function generatePlayerOffer(
       ...(isYouth ? { hiddenTalent: rng.int(20, 65) } : {}),
     }),
     JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
-    JSON.stringify(generatePlayerFace({ age: player.age ?? age, bodyType: player.bodyType ?? "normal" })),
-    weeklyWage, expiresAt.toISOString(),
+    JSON.stringify(generatePlayerFace({ age: player.age ?? age, bodyType: player.bodyType ?? "normal", ethnicity: player.ethnicity })),
+    weeklyWage, expiresAt.toISOString(), player.nationality ?? "CZ",
   ).run();
 
   logger.info({ module: "player-offers", teamId }, `new offer: ${player.firstName} ${player.lastName} (${pos}, ${overallRating}) from ${sourceType.source}`);

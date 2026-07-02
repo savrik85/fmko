@@ -255,16 +255,17 @@ export async function createU21TeamAndSquad(
     const playerId = crypto.randomUUID();
     playerStmts.push(
       db.prepare(
-        "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage, nationality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(
         playerId, u21TeamId, base.firstName, base.lastName, "", age, position, rating,
         JSON.stringify(skills), JSON.stringify(physical), JSON.stringify(personality),
         JSON.stringify(lifeContext),
-        JSON.stringify(generatePlayerFace({ age, bodyType: base.bodyType })),
+        JSON.stringify(generatePlayerFace({ age, bodyType: base.bodyType, ethnicity: base.ethnicity })),
         description,
         JSON.stringify(isGK ? gkSkills : fieldSkills), hiddenTalent,
         isGK ? gkSkills!.experience.current : fieldSkills!.experience.current,
         Math.round(5 + rating * 2), // U21 nižší mzdy
+        base.nationality ?? "CZ",
       )
     );
 

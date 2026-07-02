@@ -90,13 +90,13 @@ export async function insertAITeamsIntoDB(
         });
 
         playerStmts.push(
-          db.prepare("INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+          db.prepare("INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage, nationality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(apId, aiTeamId, ap.firstName, ap.lastName, apNickname, ap.age, ap.position, apRating,
               JSON.stringify(apSkills), JSON.stringify(apPhysical), JSON.stringify(apPersonality),
               JSON.stringify(apLifeContext), JSON.stringify(generatePlayerFace(ap)), apDescription,
               JSON.stringify(isGK ? apGkSkills : apFieldSkills), apHiddenTalent,
               isGK ? apGkSkills!.experience.current : apFieldSkills!.experience.current,
-              Math.round(10 + apRating * 4))
+              Math.round(10 + apRating * 4), ap.nationality ?? "CZ")
         );
 
         contractStmts.push(
