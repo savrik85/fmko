@@ -11,6 +11,7 @@ import type { Weather, TeamSetup } from "../engine/types";
 /** Odměna za VÝHRU kola podle hloubky (od finále). Platí pro libovolný počet kol. */
 const CUP_PRIZE_BY_DEPTH = [240000, 120000, 72000, 42000, 24000, 15000, 9000];
 export function cupPrize(round: number, totalRounds: number): number {
+  if (round <= 2) return 2000; // předkolo proti slabým amatérům — jen symbolická odměna
   return CUP_PRIZE_BY_DEPTH[Math.min(Math.max(0, totalRounds - round), CUP_PRIZE_BY_DEPTH.length - 1)];
 }
 /** Reputace za výhru kola (trenér + tým). Pohár je prestižnější než liga —
@@ -76,14 +77,16 @@ const BIG_CITIES = [
 
 function nextPow2(n: number): number { let p = 1; while (p < n) p <<= 1; return p; }
 
-/** Název kola podle vzdálenosti od finále. */
+/** Název kola. Kola 1-2 = předkola (slabé týmy), hlavní pavouk od kola 3 (číslován od 1). */
 export function roundName(round: number, totalRounds: number): string {
+  if (round === 1) return "1. předkolo";
+  if (round === 2) return "2. předkolo";
   const fromEnd = totalRounds - round;
   if (fromEnd === 0) return "Finále";
   if (fromEnd === 1) return "Semifinále";
   if (fromEnd === 2) return "Čtvrtfinále";
   if (fromEnd === 3) return "Osmifinále";
-  return `${round}. kolo`;
+  return `${round - 2}. kolo`;
 }
 
 function samplePoisson(lambda: number, rng: Rng): number {
@@ -126,24 +129,25 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
   if (existing) return { created: false, cupId: existing.id };
 
   const teamsRes = await db.prepare(
-    "SELECT t.id, t.name, t.primary_color, t.user_id, CAST(COALESCE(ROUND(AVG(p.overall_rating)), 30) AS INTEGER) AS strength FROM teams t LEFT JOIN players p ON p.team_id = t.id AND p.status = 'active' WHERE t.team_type = 'senior' GROUP BY t.id",
+    "SELECT t.id, t.name, t.primary_color, t.user_id, CAST(COALESCE(ROUND(AVG(p.overall_rating)), 30) AS INTEGER) AS strength FROM teams t LEFT JOIN players p ON p.team_id = t.id AND p.status = 'active' WHERE t.team_type = 'senior' AND t.league_id IS NOT NULL AND t.name NOT LIKE 'DELETED-%' GROUP BY t.id",
   ).all<{ id: string; name: string; primary_color: string | null; user_id: string; strength: number }>()
     .catch((e) => { logger.warn({ module: M }, "load teams for cup", e); return { results: [] as any[] }; });
   const real = teamsRes.results;
   if (real.length < 2) return { created: false };
 
   const rng = createRng((seasonNumber * 2654435761) >>> 0);
-  const bracketSize = nextPow2(real.length);
-  const totalRounds = Math.round(Math.log2(bracketSize));
+  const seedBracket = nextPow2(real.length);            // hlavní pavouk (od 3. kola): reálné týmy + velkokluby
+  const PRELIM_ROUNDS = 2;                                // 2 předkola se slabými týmy → lidé mají velkou šanci odehrát aspoň 2 kola
+  const totalRounds = Math.round(Math.log2(seedBracket)) + PRELIM_ROUNDS;
   const cupId = crypto.randomUUID();
   const roundDates = await cupRoundDates(db, seasonNumber, totalRounds);
 
-  // Účastníci: reálné týmy + velkokluby
+  // Účastníci hlavního pavouku (od 3. kola): reálné týmy + velkokluby (doplnění na mocninu 2).
   const participants: CupTeamRow[] = real.map((t) => ({
     id: crypto.randomUUID(), team_id: t.id, name: t.name, strength: t.strength, is_big_club: 0, primary_color: t.primary_color,
   }));
   const usedNames = new Set<string>();
-  const bigCount = bracketSize - participants.length;
+  const bigCount = seedBracket - participants.length;
   for (let i = 0; i < bigCount; i++) {
     const rank = i % BIG_CITIES.length;           // pořadí města dle velikosti (0 = největší)
     const city = BIG_CITIES[rank];
@@ -157,23 +161,8 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
     participants.push({ id: crypto.randomUUID(), team_id: null, name: nm, strength, is_big_club: 1, primary_color: null });
   }
 
-  // Insert competition + teams. D1 NENÍ transakční napříč dotazy → po vložení ověříme počty a při
-  // neúplnosti celý pohár smažeme + hodíme chybu (raději žádný pohár než trvale rozbitý pavouk s dangling id).
-  let failed = false;
-  await db.prepare("INSERT INTO cup_competitions (id, season_number, name, status, total_rounds, current_round) VALUES (?, ?, ?, 'active', ?, 1)")
-    .bind(cupId, seasonNumber, CUP_NAME, totalRounds).run()
-    .catch((e) => { failed = true; logger.error({ module: M }, "insert cup", e); });
-
-  for (let i = 0; i < participants.length; i += 20) {
-    const batch = participants.slice(i, i + 20).map((p) =>
-      db.prepare("INSERT INTO cup_teams (id, cup_id, team_id, name, strength, is_big_club, primary_color) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .bind(p.id, cupId, p.team_id, p.name, p.strength, p.is_big_club, p.primary_color));
-    await db.batch(batch).catch((e) => { failed = true; logger.error({ module: M }, "insert cup teams", e); });
-  }
-
-  // Los: zamíchej a spáruj sousedy → 1. kolo
-  // Los: 1. kolo real-vs-real + big-vs-big (seskupené, ať real týmy zůstanou spolu i v dalších kolech,
-  // a lidské týmy nenarazí na velkoklub hned v 1. kole → šance projít aspoň 2 kola).
+  // Los hlavního pavouku (3. kolo): lidé první, real-vs-real + big-vs-big seskupené — lidé nenarazí
+  // na velkoklub hned po předkolech (a real týmy zůstanou spolu).
   const humanIds = new Set(real.filter((t) => t.user_id !== "ai").map((t) => t.id));
   const shuf = <T,>(arr: T[]): T[] => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
   const realHuman = shuf(participants.filter((p) => p.is_big_club === 0 && p.team_id !== null && humanIds.has(p.team_id)));
@@ -186,14 +175,50 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
   for (let i = 0; i < realPairs * 2; i++) order.push(orderedReal[i]);
   const bigPairs = Math.floor(bigs.length / 2);
   for (let i = 0; i < bigPairs * 2; i++) order.push(bigs[i]);
-  // liché zbytky (real + big) spárované na konci pavouka
   if (orderedReal.length % 2 === 1) order.push(orderedReal[orderedReal.length - 1]);
   if (bigs.length % 2 === 1) order.push(bigs[bigs.length - 1]);
+
+  // 2 PŘEDKOLA: každý seed dostane 3 vyloženě slabé amatérské týmy (síla ~8-18, bez kádru → rychlý
+  // silový výsledek). Sub-pavouk [seed, slabý, slabý, slabý] → seed hraje 2 kola proti slabým a
+  // skoro jistě postoupí do 3. kola (hlavní pavouk). Reální hráči tak mají velkou šanci odehrát ≥2 kola.
+  const WEAK_A = ["TJ", "SK", "FC", "Sokol", "Slavoj", "Tatran", "Jiskra", "Baník"];
+  const WEAK_B = ["Dolní Lhota", "Horní Ves", "Kozojedy", "Trnávka", "Zadní Chlum", "Kravaře", "Suchdol", "Blaťany", "Ořechov", "Bahňany", "Vlčí Důl", "Mokrá", "Podhájí", "Křemže", "Zálesí", "Nová Ves"];
+  const weakTeams: CupTeamRow[] = [];
+  for (let i = 0; i < order.length * 3; i++) {
+    let nm = `${WEAK_A[Math.floor(rng.random() * WEAK_A.length)]} ${WEAK_B[Math.floor(rng.random() * WEAK_B.length)]}`;
+    let g = 0;
+    while (usedNames.has(nm) && g++ < 60) nm = `${WEAK_A[Math.floor(rng.random() * WEAK_A.length)]} ${WEAK_B[Math.floor(rng.random() * WEAK_B.length)]} ${String.fromCharCode(66 + (g % 8))}`;
+    usedNames.add(nm);
+    // Vyloženě slabí amatéři (síla 4-10) — velký odstup i od nejslabšího lidského týmu, ať lidé skoro jistě projdou.
+    weakTeams.push({ id: crypto.randomUUID(), team_id: null, name: nm, strength: 4 + Math.floor(rng.random() * 7), is_big_club: 0, primary_color: null });
+  }
+  // ×4 pavouk: [seed, slabý, slabý, slabý] pro každý seed → 2 předkola pak hlavní pavouk.
+  const bracketOrder: CupTeamRow[] = [];
+  for (let i = 0; i < order.length; i++) {
+    bracketOrder.push(order[i], weakTeams[i * 3], weakTeams[i * 3 + 1], weakTeams[i * 3 + 2]);
+  }
+  const allTeams = [...participants, ...weakTeams];
+
+  // Insert competition + teams. D1 NENÍ transakční napříč dotazy → po vložení ověříme počty a při
+  // neúplnosti celý pohár smažeme + hodíme chybu (raději žádný pohár než rozbitý pavouk s dangling id).
+  let failed = false;
+  await db.prepare("INSERT INTO cup_competitions (id, season_number, name, status, total_rounds, current_round) VALUES (?, ?, ?, 'active', ?, 1)")
+    .bind(cupId, seasonNumber, CUP_NAME, totalRounds).run()
+    .catch((e) => { failed = true; logger.error({ module: M }, "insert cup", e); });
+
+  for (let i = 0; i < allTeams.length; i += 20) {
+    const batch = allTeams.slice(i, i + 20).map((p) =>
+      db.prepare("INSERT INTO cup_teams (id, cup_id, team_id, name, strength, is_big_club, primary_color) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .bind(p.id, cupId, p.team_id, p.name, p.strength, p.is_big_club, p.primary_color));
+    await db.batch(batch).catch((e) => { failed = true; logger.error({ module: M }, "insert cup teams", e); });
+  }
+
+  // 1. kolo (první předkolo) — párování sousedů v ×4 pavouku.
   const matchStmts: D1PreparedStatement[] = [];
-  for (let pos = 0; pos < order.length / 2; pos++) {
+  for (let pos = 0; pos < bracketOrder.length / 2; pos++) {
     matchStmts.push(db.prepare(
       "INSERT INTO cup_matches (id, cup_id, round, bracket_pos, home_cup_team_id, away_cup_team_id, scheduled_at, status) VALUES (?, ?, 1, ?, ?, ?, ?, 'scheduled')",
-    ).bind(crypto.randomUUID(), cupId, pos, order[pos * 2].id, order[pos * 2 + 1].id, roundDates[0] ?? null));
+    ).bind(crypto.randomUUID(), cupId, pos, bracketOrder[pos * 2].id, bracketOrder[pos * 2 + 1].id, roundDates[0] ?? null));
   }
   const expectedMatches = matchStmts.length;
   for (let i = 0; i < matchStmts.length; i += 40) await db.batch(matchStmts.slice(i, i + 40)).catch((e) => { failed = true; logger.error({ module: M }, "insert round1", e); });
@@ -203,16 +228,16 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
     .catch((e) => { logger.warn({ module: M }, "verify cup teams count", e); return null; });
   const matchCount = await db.prepare("SELECT COUNT(*) AS c FROM cup_matches WHERE cup_id = ?").bind(cupId).first<{ c: number }>()
     .catch((e) => { logger.warn({ module: M }, "verify cup matches count", e); return null; });
-  if (failed || (teamCount?.c ?? -1) !== participants.length || (matchCount?.c ?? -1) !== expectedMatches) {
-    logger.error({ module: M }, `createCup NEÚPLNÝ (teams ${teamCount?.c}/${participants.length}, matches ${matchCount?.c}/${expectedMatches}) → úklid + throw`);
+  if (failed || (teamCount?.c ?? -1) !== allTeams.length || (matchCount?.c ?? -1) !== expectedMatches) {
+    logger.error({ module: M }, `createCup NEÚPLNÝ (teams ${teamCount?.c}/${allTeams.length}, matches ${matchCount?.c}/${expectedMatches}) → úklid + throw`);
     await db.prepare("DELETE FROM cup_matches WHERE cup_id = ?").bind(cupId).run().catch((e) => logger.warn({ module: M }, "cleanup cup matches", e));
     await db.prepare("DELETE FROM cup_teams WHERE cup_id = ?").bind(cupId).run().catch((e) => logger.warn({ module: M }, "cleanup cup teams", e));
     await db.prepare("DELETE FROM cup_competitions WHERE id = ?").bind(cupId).run().catch((e) => logger.warn({ module: M }, "cleanup cup competition", e));
     throw new Error("createCup: neúplné vytvoření poháru — zrušeno (viz error log)");
   }
 
-  logger.info({ module: M }, `cup created s=${seasonNumber} teams=${participants.length} rounds=${totalRounds}`);
-  return { created: true, cupId, teams: participants.length, rounds: totalRounds };
+  logger.info({ module: M }, `cup created s=${seasonNumber} teams=${allTeams.length} (${participants.length} seedů + ${weakTeams.length} slabých) rounds=${totalRounds}`);
+  return { created: true, cupId, teams: allTeams.length, rounds: totalRounds };
 }
 
 /**

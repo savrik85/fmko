@@ -62,6 +62,11 @@ export async function rolloverAllLeagues(
     await createCup(db, newNum);
   } catch (e) { logger.warn({ module: "season-rollover" }, "create cup on rollover failed", e); }
 
+  // 6. Uvítání do nové sezóny pro všechny lidské týmy → obrazovka /nova-sezona (INSERT OR IGNORE = idempotentní).
+  await db.prepare(
+    "INSERT OR IGNORE INTO season_welcome (team_id, season_number, seen) SELECT id, ?, 0 FROM teams WHERE user_id != 'ai' AND team_type = 'senior'",
+  ).bind(newNum).run().catch((e) => logger.warn({ module: "season-rollover" }, "create season welcome", e));
+
   logger.info({ module: "season-rollover" }, `global rollover → sezóna ${newNum}, ${rolledLeagues} lig, ${matchesCreated} zápasů`);
   return { newSeasonNumber: newNum, rolledLeagues, matchesCreated };
 }

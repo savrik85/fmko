@@ -189,6 +189,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
      LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
      LEFT JOIN lineups l ON l.team_id = ? AND l.calendar_id = COALESCE(m.calendar_id, m.id)
      WHERE (m.home_team_id = ? OR m.away_team_id = ?)
+       AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = m.league_id)
      ORDER BY COALESCE(sc.scheduled_at, m.created_at) ASC`
   ).bind(teamId, teamId, teamId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team schedule", e); return { results: [] }; });
 
