@@ -90,7 +90,9 @@ export async function buildTeamRecap(
   const championIsMe = awards.champion?.teamId === teamId || finalStandings[0]?.teamId === teamId;
 
   const extras = await buildRecapExtras(db, teamId);
-  const pub = await buildPubNight(db, teamId, seasonNumber);
+  // Efekty aplikuj jen jednou — marker summerApplied v datech (řádek season_recap už existuje z fáze
+  // departures, takže !existing nestačí; při retry recap fáze se marker postará o idempotenci).
+  const pub = await buildPubNight(db, teamId, seasonNumber, !prev.summerApplied);
 
   const data = {
     seasonNumber,
@@ -124,6 +126,7 @@ export async function buildTeamRecap(
     quote: extras.quote,
     party: pub.party,
     summer: pub.summer,
+    summerApplied: true, // efekty aplikovány (marker proti dvojí aplikaci při retry recap fáze)
   };
 
   await db.prepare(
@@ -260,24 +263,23 @@ const PARTY_SCENES = [
   "Diskotéka skončila, když {p} pustil z repráku hymnu klubu a nutil všechny zpívat.",
 ];
 
-const SUMMER_EVENTS: { text: string; effect: "injury" | "fit" | "rusty" | null }[] = [
-  { text: "{p} se přes léto oženil — žena mu prý zatrhla středeční tréninky.", effect: null },
-  { text: "{p} si naproti hospodě otevřel kebab. Konkurence Pralesu, ale aspoň je co jíst po zápase.", effect: null },
-  { text: "{p} odjel na montáže do Německa. Vrátí se možná na jaře, možná s novým autem.", effect: null },
+// Jen události s REÁLNÝM, aplikovatelným dopadem (fit → +síla/kondice, rusty → −kondice, injury → zranění).
+const SUMMER_EVENTS: { text: string; effect: "injury" | "fit" | "rusty" }[] = [
   { text: "{p} spadl v práci z lešení — sezónu začne v sádře.", effect: "injury" },
+  { text: "{p} si o pauze zlomil ruku na kole. Chvíli bude mimo hru.", effect: "injury" },
+  { text: "{p} si na dovolené natáhl sval při plážovém fotbálku.", effect: "injury" },
   { text: "{p} přibral přes léto pět kilo na grilovačkách. Trenér zuří, {p} mlčí.", effect: "rusty" },
+  { text: "{p}ovi se narodil syn — noci nespí a na trénink dochodí jako náměsíčník.", effect: "rusty" },
+  { text: "{p} se přes léto oženil, žena mu zatrhla tréninky. Přišel o formu.", effect: "rusty" },
   { text: "{p} celé léto makal na stavbě a nabral sílu jak medvěd — přijde nabušený.", effect: "fit" },
   { text: "{p} si pořídil štěně a teď chodí na ranní výběhy. Kondička jako nikdy.", effect: "fit" },
-  { text: "{p}ovi se narodil syn. Noci nespí, ale úsměv mu z ksichtu nezmizel.", effect: null },
-  { text: "{p} si o pauze zlomil ruku na kole. Chvíli to potrvá.", effect: "injury" },
-  { text: "{p} přes léto rozjel nohejbal v hospodě a chytil formu života.", effect: "fit" },
-  { text: "{p} si nechal narůst knír a tvrdí, že mu dává sílu. Uvidíme.", effect: null },
-  { text: "{p} prohrál sázku a musí celý podzim nosit dresy na praní.", effect: null },
+  { text: "{p} přes léto dřel v posilovně a vrací se výrazně silnější.", effect: "fit" },
+  { text: "{p} rozjel nohejbal v hospodě a chytil formu života.", effect: "fit" },
 ];
 
 interface PubSquad { id: string; name: string; position: string; age: number; alcohol: number }
 
-async function buildPubNight(db: D1Database, teamId: string, seasonNumber: number) {
+async function buildPubNight(db: D1Database, teamId: string, seasonNumber: number, applyEffects = false) {
   const rng = createRng(pubSeed(`${teamId}:s${seasonNumber}:pub`));
 
   const squadRes = await db.prepare(
@@ -335,10 +337,34 @@ async function buildPubNight(db: D1Database, teamId: string, seasonNumber: numbe
   for (let i = shuffledSquad.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [shuffledSquad[i], shuffledSquad[j]] = [shuffledSquad[j], shuffledSquad[i]]; }
   const eventPool = [...SUMMER_EVENTS];
   for (let i = eventPool.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [eventPool[i], eventPool[j]] = [eventPool[j], eventPool[i]]; }
-  const summer = shuffledSquad.slice(0, Math.min(4, shuffledSquad.length)).map((pl, i) => {
+  const summerRaw = shuffledSquad.slice(0, Math.min(4, shuffledSquad.length)).map((pl, i) => {
     const tmpl = eventPool[i % eventPool.length];
-    return { name: pl.name, text: tmpl.text.replace(/\{p\}/g, pl.name), effect: tmpl.effect };
+    return { id: pl.id, name: pl.name, text: tmpl.text.replace(/\{p\}/g, pl.name), effect: tmpl.effect };
   });
 
+  // Reálný dopad na hráče (jen při 1. generování recapu — idempotence přes applyEffects).
+  if (applyEffects) {
+    const stmts: D1PreparedStatement[] = [];
+    for (const s of summerRaw) {
+      if (s.effect === "fit") {
+        // Trvalý fyzický bonus (+2 síla i vytrvalost, cap 99) + čerstvá kondice na start sezóny.
+        stmts.push(db.prepare(
+          "UPDATE players SET physical = json_set(json_set(physical, '$.stamina', MIN(99, COALESCE(json_extract(physical,'$.stamina'),50) + 2)), '$.strength', MIN(99, COALESCE(json_extract(physical,'$.strength'),50) + 2)), life_context = json_set(life_context, '$.condition', 100) WHERE id = ?",
+        ).bind(s.id));
+      } else if (s.effect === "rusty") {
+        // Mimo formu — nízká kondice na start (postupně se dotrénuje).
+        stmts.push(db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', 58) WHERE id = ?").bind(s.id));
+      } else if (s.effect === "injury") {
+        // Opravdové zranění — začíná sezónu mimo hru (~12 herních dní) + nízká kondice.
+        stmts.push(db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', 45) WHERE id = ?").bind(s.id));
+        stmts.push(db.prepare(
+          "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total) VALUES (?, ?, ?, 'obecne', 'Letní zranění — začíná sezónu mimo hru.', 'stredni', 12, 12)",
+        ).bind(crypto.randomUUID(), s.id, teamId));
+      }
+    }
+    for (let i = 0; i < stmts.length; i += 20) await db.batch(stmts.slice(i, i + 20)).catch((e) => logger.warn({ module: M }, "apply summer effects", e));
+  }
+
+  const summer = summerRaw.map((s) => ({ name: s.name, text: s.text, effect: s.effect }));
   return { party: { awards, scenes }, summer };
 }
