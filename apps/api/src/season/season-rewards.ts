@@ -44,9 +44,9 @@ export async function applySeasonRewards(
 
   for (const entry of standings) {
     const { teamId, pos } = entry;
-    // Strmá geometrická škála — umístění reálně rozhoduje: 1. místo 150 000, každé další ×0,60,
-    // spodek dostane účastnický floor 8 000 (vše × násobič úrovně soutěže).
-    const base = Math.max(8000, 150000 * Math.pow(0.60, pos - 1));
+    // Mírná geometrická škála — 1. místo 150 000, každé další ×0,80 (každé místo jiné, žádný plateau),
+    // floor 6 000 jako pojistka pro malé ligy (× násobič úrovně soutěže).
+    const base = Math.max(6000, 150000 * Math.pow(0.80, pos - 1));
     const reward = Math.round(base * levelMult);
     const managerRepDelta = Math.round((n / 2 - pos + 0.5) * 1.5);
     const teamRepDelta = Math.round((n / 2 - pos + 0.5) * 0.8);
