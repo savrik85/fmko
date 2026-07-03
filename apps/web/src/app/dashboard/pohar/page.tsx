@@ -6,7 +6,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, PageHeader } from "@/components/ui";
 
-interface Side { name: string; color: string | null; isBig: boolean; teamId: string | null; strength: number }
+interface Side { name: string; color: string | null; isBig: boolean; teamId: string | null; strength: number; cupTeamId?: string }
 
 /** Barva síly soupeře — zelená lehký, jantar střední, červená těžký. */
 function strengthColor(s: number): string {
@@ -49,7 +49,9 @@ function TeamCell({ s, align, bold }: { s: Side | null; align: "left" | "right";
   );
   const name = s?.teamId
     ? <Link href={`/dashboard/team/${s.teamId}`} className={`truncate hover:underline ${s.isBig ? "italic" : ""}`}>{s.name}</Link>
-    : <span className={`truncate ${s?.isBig ? "italic" : ""} ${!s ? "text-muted" : ""}`}>{s?.name ?? "volný los"}</span>;
+    : s?.cupTeamId
+      ? <Link href={`/dashboard/pohar/tym/${s.cupTeamId}`} className={`truncate hover:underline ${s.isBig ? "italic" : ""}`}>{s.name}</Link>
+      : <span className={`truncate ${s?.isBig ? "italic" : ""} ${!s ? "text-muted" : ""}`}>{s?.name ?? "volný los"}</span>;
   return (
     <div className={`flex items-center gap-1.5 min-w-0 flex-1 ${align === "right" ? "flex-row-reverse text-right" : ""}`}>
       {badge}
@@ -123,7 +125,7 @@ export default function PoharPage() {
           <div className="text-3xl mb-1">🏆</div>
           <div className="text-xs font-heading uppercase tracking-wider text-muted">Vítěz poháru</div>
           <div className="text-2xl font-heading font-bold mt-0.5">
-            {cup.winner.teamId ? <Link href={`/dashboard/team/${cup.winner.teamId}`} className="hover:underline">{cup.winner.name}</Link> : <span className={cup.winner.isBig ? "italic" : ""}>{cup.winner.name}</span>}
+            {cup.winner.teamId ? <Link href={`/dashboard/team/${cup.winner.teamId}`} className="hover:underline">{cup.winner.name}</Link> : cup.winner.cupTeamId ? <Link href={`/dashboard/pohar/tym/${cup.winner.cupTeamId}`} className={`hover:underline ${cup.winner.isBig ? "italic" : ""}`}>{cup.winner.name}</Link> : <span className={cup.winner.isBig ? "italic" : ""}>{cup.winner.name}</span>}
           </div>
         </div>
       )}
@@ -162,7 +164,7 @@ export default function PoharPage() {
                   <span className="text-[11px] font-heading uppercase text-muted w-24 shrink-0">{m.roundName}</span>
                   <span className="text-xs text-muted shrink-0 w-12">{m.isHome ? "doma" : "venku"}</span>
                   <span className="flex-1 min-w-0 text-sm font-bold truncate">
-                    {m.opponent?.teamId ? <Link href={`/dashboard/team/${m.opponent.teamId}`} className="hover:underline">{m.opponent.name}</Link> : <span className={m.opponent?.isBig ? "italic" : ""}>{m.opponent?.name}</span>}
+                    {m.opponent?.teamId ? <Link href={`/dashboard/team/${m.opponent.teamId}`} className="hover:underline">{m.opponent.name}</Link> : m.opponent?.cupTeamId ? <Link href={`/dashboard/pohar/tym/${m.opponent.cupTeamId}`} className={`hover:underline ${m.opponent.isBig ? "italic" : ""}`}>{m.opponent.name}</Link> : <span className={m.opponent?.isBig ? "italic" : ""}>{m.opponent?.name}</span>}
                   </span>
                   {m.status === "simulated" ? (
                     <>

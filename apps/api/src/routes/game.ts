@@ -2734,10 +2734,11 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       isFriendly = true;
       scheduledAt = friendlyMatch.created_at as string;
     } else if (team.league_id) {
-      // Fallback: nejstarší NEODEHRANÉ ligové kolo. Bez filtru scheduled_at >= game_date —
-      // ten přeskakuje kola předběhnutá herním kalendářem (cron je nestihl odsimulovat).
+      // Fallback: nejstarší NEODEHRANÉ ligové kolo AKTUÁLNÍ sezóny, které MÁ zápasy. Bez filtru
+      // scheduled_at >= game_date (přeskakoval by kola předběhnutá kalendářem); prázdné týdny
+      // (kalendář má 30 týdnů, zápasy ~26) a minulé sezóny se přeskakují — jinak blokují sestavu.
       const nextCal = await c.env.DB.prepare(
-        "SELECT sc.id, sc.scheduled_at, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.status = 'scheduled' ORDER BY sc.scheduled_at ASC LIMIT 1"
+        "SELECT sc.id, sc.scheduled_at, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.status = 'scheduled' AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = sc.league_id) AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id) ORDER BY sc.scheduled_at ASC LIMIT 1"
       ).bind(team.league_id).first<{ id: string; scheduled_at: string; game_week: number }>();
       if (!nextCal) return c.json({ nextMatch: null });
 
@@ -5884,7 +5885,7 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
     .catch((e) => { logger.warn({ module: "game.ts" }, "load cup teams", e); return { results: [] as any[] }; });
   const tmap = new Map(teamsRes.results.map((t) => [t.id, t]));
   const ctOf = (id: string | null) => (id ? tmap.get(id) : null);
-  const side = (id: string | null) => { const t = ctOf(id); return t ? { name: t.name, color: t.primary_color, isBig: !!t.is_big_club, teamId: t.team_id, strength: t.strength } : null; };
+  const side = (id: string | null) => { const t = ctOf(id); return t ? { name: t.name, color: t.primary_color, isBig: !!t.is_big_club, teamId: t.team_id, strength: t.strength, cupTeamId: t.id } : null; };
 
   const matchesRes = await c.env.DB.prepare("SELECT round, bracket_pos, home_cup_team_id, away_cup_team_id, home_score, away_score, home_pens, away_pens, winner_cup_team_id, status, upset FROM cup_matches WHERE cup_id = ? ORDER BY round, bracket_pos")
     .bind(cup.id).all<{ round: number; bracket_pos: number; home_cup_team_id: string | null; away_cup_team_id: string | null; home_score: number | null; away_score: number | null; home_pens: number | null; away_pens: number | null; winner_cup_team_id: string | null; status: string; upset: number }>()
@@ -5945,6 +5946,49 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
     rounds,
     prizes: cupPrizeTable(cup.total_rounds),
     scorers,
+  });
+});
+
+// GET /api/teams/:teamId/cup/team/:cupTeamId — detail pohárového týmu (síla, soupiska velkoklubu, cesta pohárem).
+gameRouter.get("/teams/:teamId/cup/team/:cupTeamId", async (c) => {
+  const cupTeamId = c.req.param("cupTeamId");
+  const ct = await c.env.DB.prepare("SELECT ct.id, ct.cup_id, ct.team_id, ct.name, ct.strength, ct.is_big_club, ct.primary_color, ct.eliminated_round, cc.total_rounds FROM cup_teams ct JOIN cup_competitions cc ON cc.id = ct.cup_id WHERE ct.id = ?")
+    .bind(cupTeamId).first<{ id: string; cup_id: string; team_id: string | null; name: string; strength: number; is_big_club: number; primary_color: string | null; eliminated_round: number | null; total_rounds: number }>();
+  if (!ct) return c.json({ error: "Pohárový tým nenalezen" }, 404);
+
+  const { roundName } = await import("../cup/cup");
+  // Soupiska (velkokluby mají plný kádr v cup_club_players; slabé týmy z předkol kádr nemají)
+  const squadRes = await c.env.DB.prepare(
+    "SELECT first_name, last_name, position, overall_rating, age, condition, morale, suspended_matches FROM cup_club_players WHERE cup_team_id = ? ORDER BY CASE position WHEN 'GK' THEN 0 WHEN 'DEF' THEN 1 WHEN 'MID' THEN 2 ELSE 3 END, overall_rating DESC",
+  ).bind(cupTeamId).all<{ first_name: string; last_name: string; position: string; overall_rating: number; age: number; condition: number; morale: number; suspended_matches: number }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "load cup squad", e); return { results: [] as any[] }; });
+
+  // Cesta pohárem — zápasy tohoto pohárového týmu
+  const matchesRes = await c.env.DB.prepare(
+    `SELECT cm.round, cm.status, cm.home_score, cm.away_score, cm.home_pens, cm.away_pens, cm.winner_cup_team_id,
+       h.name AS home_name, a.name AS away_name, h.id AS home_id, a.id AS away_id
+     FROM cup_matches cm JOIN cup_teams h ON h.id = cm.home_cup_team_id JOIN cup_teams a ON a.id = cm.away_cup_team_id
+     WHERE cm.cup_id = ? AND (cm.home_cup_team_id = ? OR cm.away_cup_team_id = ?) ORDER BY cm.round`,
+  ).bind(ct.cup_id, cupTeamId, cupTeamId).all<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "load cup team matches", e); return { results: [] as Record<string, unknown>[] }; });
+
+  return c.json({
+    team: {
+      cupTeamId: ct.id, teamId: ct.team_id, name: ct.name, strength: ct.strength,
+      isBig: !!ct.is_big_club, color: ct.primary_color,
+      eliminatedRound: ct.eliminated_round, alive: ct.eliminated_round == null,
+    },
+    squad: squadRes.results.map((p) => ({
+      name: `${p.first_name} ${p.last_name}`, position: p.position, rating: p.overall_rating,
+      age: p.age, condition: p.condition, morale: p.morale, suspended: p.suspended_matches > 0,
+    })),
+    matches: matchesRes.results.map((m) => ({
+      round: m.round, roundName: roundName(m.round as number, ct.total_rounds), status: m.status,
+      homeName: m.home_name, awayName: m.away_name,
+      homeScore: m.home_score, awayScore: m.away_score, homePens: m.home_pens, awayPens: m.away_pens,
+      won: m.winner_cup_team_id === cupTeamId,
+      isHome: m.home_id === cupTeamId,
+    })),
   });
 });
 

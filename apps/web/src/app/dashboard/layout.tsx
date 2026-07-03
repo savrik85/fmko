@@ -11,7 +11,7 @@ import { Napoveda } from "@/components/ui/napoveda";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 
-const DETAIL_PREFIXES = ["/dashboard/player/", "/dashboard/team/", "/dashboard/match/"];
+const DETAIL_PREFIXES = ["/dashboard/player/", "/dashboard/team/", "/dashboard/match/", "/dashboard/pohar/tym/"];
 const CUSTOM_HEADER_PAGES = ["/dashboard/liga", "/dashboard/schedule", "/dashboard/pohar"];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
