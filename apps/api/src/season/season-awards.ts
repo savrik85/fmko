@@ -103,7 +103,8 @@ export async function generateSeasonAwards(
   }
 
   const standings = await calculateStandings(db, leagueId);
-  const teamNameRes = await db.prepare("SELECT id, name FROM teams WHERE league_id = ?").bind(leagueId).all()
+  // Všechny týmy (ne jen z ligy) — hráč v nejlepší jedenáctce může být z U21 apod., ať se tým dohledá.
+  const teamNameRes = await db.prepare("SELECT id, name FROM teams").all()
     .catch((e) => { logger.warn({ module: "season-awards" }, "load teams", e); return { results: [] as Record<string, unknown>[] }; });
   const teamName = new Map<string, string>();
   for (const t of teamNameRes.results) teamName.set(t.id as string, t.name as string);

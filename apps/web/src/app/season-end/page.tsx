@@ -210,7 +210,10 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
                   return (
                     <div key={p.playerId} className={`se-xi-chip${mine ? " mine" : ""}`}>
                       <span className="se-xi-pos">{POS_LABEL[p.position] ?? p.position}</span>
-                      <span className="se-xi-name">{p.name}</span>
+                      <span className="se-xi-info">
+                        <span className="se-xi-name">{p.name}</span>
+                        {p.teamName && <span className="se-xi-team">{p.teamName}</span>}
+                      </span>
                     </div>
                   );
                 })}
@@ -624,11 +627,15 @@ const CSS = `
 .se-award-reason{font-size:.9rem;font-style:italic;color:rgba(245,240,232,.6);margin-top:.4rem;line-height:1.35;}
 .se-xi{margin-top:2rem;width:100%;max-width:900px;}
 .se-xi-title{font-family:var(--font-heading);text-transform:uppercase;letter-spacing:.16em;font-size:.85rem;color:rgba(245,240,232,.5);margin-bottom:.8rem;}
-.se-xi-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:.5rem;}
-.se-xi-chip{display:flex;align-items:center;gap:.5rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:.35rem .9rem;font-size:.92rem;}
+.se-xi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.55rem;width:100%;max-width:940px;margin:0 auto;}
+.se-xi-chip{display:flex;align-items:center;gap:.6rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:.5rem .85rem;font-size:.92rem;min-width:0;}
+.se-xi-chip .se-xi-info{min-width:0;}
+.se-xi-chip .se-xi-name,.se-xi-chip .se-xi-team{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .se-xi-chip.mine{border-color:var(--accent);color:#fff;background:color-mix(in srgb,var(--accent) 14%,transparent);}
 .se-xi-pos{font-family:var(--font-heading);font-size:.65rem;color:var(--accent);letter-spacing:.05em;}
+.se-xi-info{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15;}
 .se-xi-name{font-family:var(--font-heading);font-weight:600;}
+.se-xi-team{font-size:.68rem;color:rgba(245,240,232,.55);margin-top:.05rem;}
 .se-empty{color:rgba(245,240,232,.6);font-size:1.1rem;}
 .se-deps{display:flex;flex-direction:column;gap:.7rem;width:100%;max-width:680px;}
 .se-dep{background:rgba(255,255,255,.04);border-left:3px solid rgba(255,255,255,.15);border-radius:0 12px 12px 0;padding:.9rem 1.2rem;text-align:left;}
