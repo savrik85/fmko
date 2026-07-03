@@ -8,7 +8,7 @@ import { apiFetch } from "@/lib/api";
 interface Departure { name: string; age: number; position: string; kind: "retirement" | "family" | "decision"; reason: string; wasCaptain?: boolean }
 interface DuelPlayer { playerId: string; name: string; position: string; age: number; overallRating: number }
 interface Duel { a: DuelPlayer; b: DuelPlayer; story: string }
-interface Award { id?: string | null; name?: string | null; reason?: string | null; goals?: number }
+interface Award { id?: string | null; name?: string | null; teamName?: string | null; reason?: string | null; goals?: number }
 interface BestEleven { playerId: string; name: string; position: string; teamName: string }
 interface SeasonStats {
   matchesPlayed: number; totalGoals: number; goalsPerMatch: number;
@@ -507,6 +507,7 @@ function AwardCard({ icon, label, a, extra, mine }: { icon: string; label: strin
     <div className={`se-award${mine ? " mine" : ""}`}>
       <div className="se-award-label">{icon} {label}{mine ? <span className="se-award-mine"> · tvůj hráč</span> : null}</div>
       <div className="se-award-name">{a.name}{extra ? <span className="se-award-extra"> · {extra}</span> : null}</div>
+      {a.teamName && <div className="se-award-team">{a.teamName}</div>}
       {a.reason && <div className="se-award-reason">„{a.reason}"</div>}
     </div>
   );
@@ -619,6 +620,7 @@ const CSS = `
 .se-award-mine{color:var(--accent);}
 .se-award-name{font-family:var(--font-heading);font-weight:700;font-size:1.45rem;margin-top:.25rem;color:#fff;}
 .se-award-extra{font-size:.7em;color:var(--accent);}
+.se-award-team{font-size:.9rem;font-weight:600;color:rgba(245,240,232,.7);margin-top:.15rem;}
 .se-award-reason{font-size:.9rem;font-style:italic;color:rgba(245,240,232,.6);margin-top:.4rem;line-height:1.35;}
 .se-xi{margin-top:2rem;width:100%;max-width:900px;}
 .se-xi-title{font-family:var(--font-heading);text-transform:uppercase;letter-spacing:.16em;font-size:.85rem;color:rgba(245,240,232,.5);margin-bottom:.8rem;}
