@@ -2014,7 +2014,7 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
   // Batch: league info + calendar entries
   const [leagueRes, calRes] = await c.env.DB.batch([
     c.env.DB.prepare("SELECT l.id, s.number as season_number FROM leagues l JOIN seasons s ON l.season_id = s.id WHERE l.id = ?").bind(team.league_id),
-    c.env.DB.prepare("SELECT sc.*, m.home_team_id, m.away_team_id, m.status as match_status, m.home_score, m.away_score, ht.name as home_name, at.name as away_name FROM season_calendar sc LEFT JOIN matches m ON m.calendar_id = sc.id AND (m.home_team_id = ? OR m.away_team_id = ?) LEFT JOIN teams ht ON m.home_team_id = ht.id LEFT JOIN teams at ON m.away_team_id = at.id WHERE sc.league_id = ? ORDER BY sc.scheduled_at ASC").bind(teamId, teamId, team.league_id),
+    c.env.DB.prepare("SELECT sc.*, m.home_team_id, m.away_team_id, m.status as match_status, m.home_score, m.away_score, ht.name as home_name, at.name as away_name FROM season_calendar sc LEFT JOIN matches m ON m.calendar_id = sc.id AND (m.home_team_id = ? OR m.away_team_id = ?) LEFT JOIN teams ht ON m.home_team_id = ht.id LEFT JOIN teams at ON m.away_team_id = at.id WHERE sc.league_id = ? AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = sc.league_id) ORDER BY sc.scheduled_at ASC").bind(teamId, teamId, team.league_id),
   ]);
   const league = (leagueRes.results[0] as { id: string; season_number: number } | undefined) ?? null;
   const calEntries = calRes.results as Record<string, unknown>[];
@@ -2067,8 +2067,9 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
      JOIN teams t1 ON m.home_team_id = t1.id
      JOIN teams t2 ON m.away_team_id = t2.id
      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.calendar_id IS NULL
+       AND COALESCE(m.simulated_at, m.created_at) >= ?
      ORDER BY m.created_at DESC LIMIT 10`
-  ).bind(teamId, teamId).all().catch(() => ({ results: [] }));
+  ).bind(teamId, teamId, team.season_start ?? "1970-01-01").all().catch((e) => { logger.warn({ module: "game" }, "load friendlies for calendar", e); return { results: [] }; });
 
   for (const fm of friendlyMatches.results as Record<string, unknown>[]) {
     const isHome = fm.home_team_id === teamId;
