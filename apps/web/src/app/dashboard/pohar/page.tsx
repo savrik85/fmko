@@ -23,6 +23,15 @@ interface MyMatch {
   round: number; roundName: string; opponent: Side | null; isHome: boolean;
   myScore: number | null; oppScore: number | null; myPens: number | null; oppPens: number | null;
   status: string; won: boolean | null;
+  scheduledAt?: string | null; daysUntil?: number | null;
+}
+
+/** „za 5 dní" / „zítra" / „dnes" — český countdown k zápasu. */
+function daysLabel(d: number): string {
+  if (d <= 0) return "dnes";
+  if (d === 1) return "zítra";
+  if (d <= 4) return `za ${d} dny`;
+  return `za ${d} dní`;
 }
 interface Scorer {
   playerId: string; name: string; teamName: string; teamId: string | null;
@@ -171,7 +180,13 @@ export default function PoharPage() {
                       <span className="font-heading font-[800] text-sm tabular-nums shrink-0">{m.myScore}:{m.oppScore}{pen && <span className="text-[10px] text-muted font-normal"> (p {m.myPens}:{m.oppPens})</span>}</span>
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${m.won ? "bg-pitch-50 text-pitch-600" : "bg-card-red/10 text-card-red"}`}>{m.won ? "POSTUP" : "KONEC"}</span>
                     </>
-                  ) : <span className="text-xs text-muted shrink-0">naplánováno</span>}
+                  ) : (
+                    <span className="text-xs shrink-0">
+                      {m.scheduledAt && <span className="text-muted">{new Date(m.scheduledAt).toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" })}</span>}
+                      {m.daysUntil != null && <span className="ml-1.5 font-heading font-bold text-pitch-600">{daysLabel(m.daysUntil)}</span>}
+                      {!m.scheduledAt && m.daysUntil == null && <span className="text-muted">naplánováno</span>}
+                    </span>
+                  )}
                 </div>
               );
             })}

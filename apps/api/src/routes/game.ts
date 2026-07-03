@@ -5889,9 +5889,15 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
   const ctOf = (id: string | null) => (id ? tmap.get(id) : null);
   const side = (id: string | null) => { const t = ctOf(id); return t ? { name: t.name, color: t.primary_color, isBig: !!t.is_big_club, teamId: t.team_id, strength: t.strength, cupTeamId: t.id } : null; };
 
-  const matchesRes = await c.env.DB.prepare("SELECT round, bracket_pos, home_cup_team_id, away_cup_team_id, home_score, away_score, home_pens, away_pens, winner_cup_team_id, status, upset FROM cup_matches WHERE cup_id = ? ORDER BY round, bracket_pos")
-    .bind(cup.id).all<{ round: number; bracket_pos: number; home_cup_team_id: string | null; away_cup_team_id: string | null; home_score: number | null; away_score: number | null; home_pens: number | null; away_pens: number | null; winner_cup_team_id: string | null; status: string; upset: number }>()
+  const matchesRes = await c.env.DB.prepare("SELECT round, bracket_pos, home_cup_team_id, away_cup_team_id, home_score, away_score, home_pens, away_pens, winner_cup_team_id, status, upset, scheduled_at FROM cup_matches WHERE cup_id = ? ORDER BY round, bracket_pos")
+    .bind(cup.id).all<{ round: number; bracket_pos: number; home_cup_team_id: string | null; away_cup_team_id: string | null; home_score: number | null; away_score: number | null; home_pens: number | null; away_pens: number | null; winner_cup_team_id: string | null; status: string; upset: number; scheduled_at: string | null }>()
     .catch((e) => { logger.warn({ module: "game.ts" }, "load cup matches", e); return { results: [] as any[] }; });
+
+  // Herní datum — pro "za X dní" u naplánovaných pohárových zápasů
+  const gdRow = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "load game_date for cup", e); return null; });
+  const gameNow = gdRow?.game_date ? new Date(gdRow.game_date).getTime() : Date.now();
+  const daysUntil = (iso: string | null) => iso ? Math.max(0, Math.ceil((new Date(iso).getTime() - gameNow) / 86400000)) : null;
 
   const myCt = teamsRes.results.find((t) => t.team_id === teamId);
   const roundsMap = new Map<number, any[]>();
@@ -5915,6 +5921,7 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
         myScore: isHome ? m.home_score : m.away_score, oppScore: isHome ? m.away_score : m.home_score,
         myPens: isHome ? m.home_pens : m.away_pens, oppPens: isHome ? m.away_pens : m.home_pens,
         status: m.status, won: m.status === "simulated" ? won : null,
+        scheduledAt: m.scheduled_at, daysUntil: m.status === "simulated" ? null : daysUntil(m.scheduled_at),
       });
     }
   }
