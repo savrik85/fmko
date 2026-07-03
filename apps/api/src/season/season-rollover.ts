@@ -105,10 +105,9 @@ async function rolloverLeagueCalendar(
   const rng = createRng(cryptoSeed());
 
   const schedule = generateSchedule(rng, teamIds.length);
-  // Týden předsezóny — posuň start kalendáře o +7 dní, ať první zápas není hned po rolloveru
-  const calStart = new Date(startDate);
-  calStart.setDate(calStart.getDate() + 7);
-  const calendar = generateSeasonCalendar(leagueId, newNum, calStart);
+  // Krátká předsezóna — generátor sám posune o +2 dny a snapne na ligové pondělí,
+  // takže první zápas padne 2-8 dní po konci sezóny (max ~týden, žádných 10-15 dní čekání).
+  const calendar = generateSeasonCalendar(leagueId, newNum, startDate);
 
   for (const entry of calendar.entries) {
     await db.prepare(
