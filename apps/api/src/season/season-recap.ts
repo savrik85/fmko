@@ -265,16 +265,34 @@ const PARTY_SCENES = [
 
 // Jen události s REÁLNÝM, aplikovatelným dopadem (fit → +síla/kondice, rusty → −kondice, injury → zranění).
 const SUMMER_EVENTS: { text: string; effect: "injury" | "fit" | "rusty" }[] = [
+  // ── Zranění (opravdové zranění na start sezóny) ──
   { text: "{p} spadl v práci z lešení — sezónu začne v sádře.", effect: "injury" },
   { text: "{p} si o pauze zlomil ruku na kole. Chvíli bude mimo hru.", effect: "injury" },
   { text: "{p} si na dovolené natáhl sval při plážovém fotbálku.", effect: "injury" },
+  { text: "{p} pochroumal koleno při skoku z lodě do moře v Chorvatsku.", effect: "injury" },
+  { text: "{p} spadl z traktoru při senoseči — sezónu začne o berlích.", effect: "injury" },
+  { text: "{p} se na srazu spolužáků porval o kulečník a odnesl to rameno.", effect: "injury" },
+  { text: "{p} přebral na pouti a spadl z kolotoče. Otřes mozku a pauza.", effect: "injury" },
+  { text: "{p} si na brigádě u strejdy usekl málem prst cirkulárkou. Naštěstí jen šití.", effect: "injury" },
+  // ── Mimo formu (nízká kondice na start, dotrénuje se) ──
   { text: "{p} přibral přes léto pět kilo na grilovačkách. Trenér zuří, {p} mlčí.", effect: "rusty" },
   { text: "{p}ovi se narodil syn — noci nespí a na trénink dochodí jako náměsíčník.", effect: "rusty" },
   { text: "{p} se přes léto oženil, žena mu zatrhla tréninky. Přišel o formu.", effect: "rusty" },
+  { text: "{p} si otevřel hospodu a od té doby má formu spíš u výčepu než na hřišti.", effect: "rusty" },
+  { text: "{p} strávil léto na chatě u piva a grilu. Břicho mluví za vše.", effect: "rusty" },
+  { text: "{p} celé léto jen rybařil — klid maximální, pohyb žádný.", effect: "rusty" },
+  { text: "{p} objížděl svatby jako svědek. Každý víkend jiná, každé ráno kocovina.", effect: "rusty" },
+  { text: "{p} si koupil gauč a Netflix a od té doby ho venku nikdo neviděl.", effect: "rusty" },
+  // ── V kondici (trvalý fyzický boost + čerstvá kondice) ──
   { text: "{p} celé léto makal na stavbě a nabral sílu jak medvěd — přijde nabušený.", effect: "fit" },
   { text: "{p} si pořídil štěně a teď chodí na ranní výběhy. Kondička jako nikdy.", effect: "fit" },
   { text: "{p} přes léto dřel v posilovně a vrací se výrazně silnější.", effect: "fit" },
   { text: "{p} rozjel nohejbal v hospodě a chytil formu života.", effect: "fit" },
+  { text: "{p} přes léto sekal dřevo na zimu — ruce má jak lopaty.", effect: "fit" },
+  { text: "{p} jezdil celé léto na kole do práce, 30 km denně. Plíce jak měch.", effect: "fit" },
+  { text: "{p} pomáhal tchánovi na poli od rána do večera — síla jako býk.", effect: "fit" },
+  { text: "{p} chodil celé léto plavat do rybníka. Kondice vzorová.", effect: "fit" },
+  { text: "{p} zhubl s partou z vesnice na společném běhání a je zpátky ve formě.", effect: "fit" },
 ];
 
 interface PubSquad { id: string; name: string; position: string; age: number; alcohol: number }
@@ -337,7 +355,7 @@ async function buildPubNight(db: D1Database, teamId: string, seasonNumber: numbe
   for (let i = shuffledSquad.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [shuffledSquad[i], shuffledSquad[j]] = [shuffledSquad[j], shuffledSquad[i]]; }
   const eventPool = [...SUMMER_EVENTS];
   for (let i = eventPool.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [eventPool[i], eventPool[j]] = [eventPool[j], eventPool[i]]; }
-  const summerRaw = shuffledSquad.slice(0, Math.min(4, shuffledSquad.length)).map((pl, i) => {
+  const summerRaw = shuffledSquad.slice(0, Math.min(5, shuffledSquad.length)).map((pl, i) => {
     const tmpl = eventPool[i % eventPool.length];
     return { id: pl.id, name: pl.name, text: tmpl.text.replace(/\{p\}/g, pl.name), effect: tmpl.effect };
   });

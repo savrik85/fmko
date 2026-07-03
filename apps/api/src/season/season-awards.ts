@@ -125,6 +125,7 @@ export async function generateSeasonAwards(
      JOIN matches m ON m.id = mps.match_id
      JOIN season_calendar sc ON sc.id = m.calendar_id
      WHERE m.league_id = ? AND m.status = 'simulated' AND sc.season_number = ?
+       AND COALESCE(p.first_name, dp.first_name) IS NOT NULL
      GROUP BY mps.player_id
      HAVING apps >= 1`,
   ).bind(leagueId, seasonNumber).all<Record<string, unknown>>()
