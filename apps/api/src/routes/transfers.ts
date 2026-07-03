@@ -297,7 +297,7 @@ transfersRouter.get("/teams/:teamId/market", async (c) => {
   // Listings from other teams in same league (real players)
   const listings = await c.env.DB.prepare(
     `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at, tl.is_ai_listing, tl.ai_player_data,
-     p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
+     p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.nationality,
      t.name as team_name
      FROM transfer_listings tl
      LEFT JOIN players p ON tl.player_id = p.id AND tl.is_ai_listing = 0
@@ -334,6 +334,7 @@ transfersRouter.get("/teams/:teamId/market", async (c) => {
         playerId: isAi ? null : l.player_id,
         askingPrice: l.asking_price,
         playerName: isAi ? `${aiData?.firstName ?? ""} ${aiData?.lastName ?? ""}` : `${l.first_name} ${l.last_name}`,
+        nationality: isAi ? (aiData?.nationality ?? "CZ") : ((l.nationality as string) ?? "CZ"),
         playerAge: isAi ? aiData?.age : l.age,
         position: isAi ? aiData?.position : l.position,
         overallRating: isAi ? aiData?.overallRating : l.overall_rating,

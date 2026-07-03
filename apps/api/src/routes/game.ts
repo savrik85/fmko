@@ -3499,7 +3499,7 @@ gameRouter.get("/teams/:teamId/search-players", async (c) => {
 
     const rows = await c.env.DB.prepare(
       `SELECT p.id, p.first_name, p.last_name, p.nickname, p.age, p.position, p.overall_rating, p.weekly_wage,
-       p.skills, p.physical, p.personality, p.life_context, p.avatar, p.squad_number,
+       p.skills, p.physical, p.personality, p.life_context, p.avatar, p.squad_number, p.nationality,
        t.id as team_id, t.name as team_name
        FROM players p JOIN teams t ON p.team_id = t.id
        WHERE t.league_id = ? AND t.id != ? AND t.user_id != 'ai' AND (p.status IS NULL OR p.status = 'active')
@@ -3522,6 +3522,7 @@ gameRouter.get("/teams/:teamId/search-players", async (c) => {
 
       return {
         id: r.id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname,
+        nationality: (r.nationality as string) ?? "CZ",
         age: r.age, position: r.position, overallRating: r.overall_rating, weeklyWage: r.weekly_wage,
         squadNumber: r.squad_number,
         teamId: r.team_id, teamName: r.team_name, isOwnTeam: isOwn,
@@ -3944,7 +3945,7 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
 
   const listings = await c.env.DB.prepare(
     `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at, tl.is_ai_listing, tl.ai_player_data, tl.rejected_by,
-     p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.skills,
+     p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.skills, p.nationality,
      t.name as team_name, i.days_remaining as injury_days
      FROM transfer_listings tl
      LEFT JOIN players p ON tl.player_id = p.id AND tl.is_ai_listing = 0
@@ -4013,7 +4014,7 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
         const blur = (v: number) => Math.round(v / 5) * 5;
         return {
           id: l.id, playerId: "virtual_ai", askingPrice: l.asking_price, isAiListing: true,
-          playerName: `${ai.firstName ?? "?"} ${ai.lastName ?? "?"}`, playerAge: ai.age, position: ai.position,
+          playerName: `${ai.firstName ?? "?"} ${ai.lastName ?? "?"}`, nationality: ai.nationality ?? "CZ", playerAge: ai.age, position: ai.position,
           overallRating: ai.overallRating, teamName: ai.fromTeam ?? "Neznámý tým", expiresAt: l.expires_at,
           avatar: ai.avatar ?? {},
           skills: ai.skills ? Object.fromEntries(Object.entries(ai.skills).map(([k, v]) => [k, typeof v === "number" ? blur(v as number) : v])) : {},
@@ -4023,7 +4024,7 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
       const activeOffer = myOffersByPlayer[l.player_id as string] ?? null;
       return {
         id: l.id, playerId: l.player_id, askingPrice: l.asking_price, isAiListing: false,
-        playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,
+        playerName: `${l.first_name} ${l.last_name}`, nationality: (l.nationality as string) ?? "CZ", playerAge: l.age, position: l.position,
         overallRating: l.overall_rating, teamName: l.team_name, expiresAt: l.expires_at,
         injuryDays: (l.injury_days as number) ?? null,
         avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "game" }, `parse market avatar: ${e}`); return {}; } })(),
@@ -5227,6 +5228,7 @@ gameRouter.get("/teams/:teamId/player-offers", async (c) => {
   return c.json(offers.results.map((o) => ({
     id: o.id, source: o.source, sourceName: o.source_name, message: o.message,
     firstName: o.first_name, lastName: o.last_name, age: o.age, position: o.position,
+    nationality: (o.nationality as string) ?? "CZ",
     overallRating: o.overall_rating, weeklyWage: o.weekly_wage, expiresAt: o.expires_at,
     skills: JSON.parse((o.skills as string) ?? "{}"),
     physical: JSON.parse((o.physical as string) ?? "{}"),

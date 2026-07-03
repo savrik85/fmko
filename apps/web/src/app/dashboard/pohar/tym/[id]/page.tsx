@@ -49,7 +49,7 @@ export default function CupTeamDetailPage() {
     if (!teamId || !params.id) return;
     apiFetch<CupTeamDetail>(`/api/teams/${teamId}/cup/team/${params.id}`)
       .then(setData)
-      .catch((e) => { console.error("fetch cup team:", e); showError("Pohárový tým se nepodařilo načíst"); })
+      .catch((e) => { console.error("fetch cup team:", e); showError("Pohár", "Pohárový tým se nepodařilo načíst"); })
       .finally(() => setLoading(false));
   }, [teamId, params.id]);
 
