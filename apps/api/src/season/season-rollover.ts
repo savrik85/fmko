@@ -34,11 +34,13 @@ export async function rolloverAllLeagues(
     .bind(newNum).run()
     .catch((e) => logger.warn({ module: "season-rollover" }, "activate season", e));
 
-  // 2. Synchronizovaný start — navázat na současný globální game_date
-  const gdRow = await db.prepare("SELECT MAX(game_date) AS d FROM teams WHERE game_date IS NOT NULL")
-    .first<{ d: string | null }>()
-    .catch((e) => { logger.warn({ module: "season-rollover" }, "load global game_date", e); return null; });
-  const startDate = gdRow?.d ? new Date(gdRow.d) : new Date();
+  // 2. SYNCHRONIZACE S REÁLNÝM KALENDÁŘEM — nová sezóna se kotví na REÁLNÉ dnešní datum (ne na
+  // herní game_date, které nese starý posun). Zároveň se vynuluje game_clock offset → herní datum
+  // = reálné datum a rozpis (po/čt/so) sedí 1:1 se skutečným kalendářem.
+  const now = new Date();
+  const startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 16, 0, 0, 0));
+  await db.prepare("INSERT INTO game_clock (id, offset_days) VALUES (1, 0) ON CONFLICT(id) DO UPDATE SET offset_days = 0").run()
+    .catch((e) => logger.warn({ module: "season-rollover" }, "reset game clock offset", e));
 
   // 3. Roll každou senior ligu se SDÍLENÝM startem
   const leagues = await db.prepare("SELECT id FROM leagues WHERE league_type = 'senior'").all<{ id: string }>()
@@ -129,13 +131,11 @@ async function rolloverLeagueCalendar(
     if (res) matchesCreated++;
   }
 
-  // game_date + hranice sezóny — JEDNOTNĚ napříč ligami (stejný startDate → stejný kalendář týden 1).
-  // Den 1 sezóny = týden PŘED prvním zápasem (předsezóna), ať se dá nachystat kádr/sestava.
+  // game_date + hranice sezóny — JEDNOTNĚ napříč ligami. Den 1 = startDate = REÁLNÉ dnešní datum
+  // (offset 0 → denní tick drží herní datum 1:1 s realitou); první zápas je ~týden po startu (předsezóna).
   if (calendar.entries.length > 0) {
-    const seasonStart = new Date(calendar.entries[0].scheduledAt);
-    seasonStart.setDate(seasonStart.getDate() - 7);
     await db.prepare("UPDATE teams SET game_date = ?, season_start = ?, season_end = ? WHERE league_id = ?")
-      .bind(seasonStart.toISOString(), seasonStart.toISOString(), calendar.seasonEnd, leagueId).run()
+      .bind(startDate.toISOString(), startDate.toISOString(), calendar.seasonEnd, leagueId).run()
       .catch((e) => logger.warn({ module: "season-rollover" }, "set team dates", e));
   }
 
