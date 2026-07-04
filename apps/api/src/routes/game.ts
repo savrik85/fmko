@@ -992,7 +992,24 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
        ORDER BY n.created_at DESC LIMIT 20`
     ).bind(team.league_id, teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch news articles", e); return { results: [] }; });
 
-    for (const n of newsRows.results) {
+    // Jednorázové sezónní články (otevírák, ohlédnutí) nesmí vytlačit smršť přestupových
+    // zpráv z AI trhu — čerstvé (do 7 dní) se přišpendlí i mimo LIMIT okno výše.
+    const pinnedRows = await c.env.DB.prepare(
+      `SELECT id, type, headline, body, game_week, created_at FROM news
+       WHERE league_id = ? AND type IN ('season_opener', 'season_wrap')
+         AND created_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-7 days')
+       ORDER BY created_at DESC LIMIT 2`
+    ).bind(team.league_id).all().catch((e) => { logger.warn({ module: "game" }, "fetch pinned season news", e); return { results: [] }; });
+
+    const seenNewsIds = new Set<string>();
+    const combinedRows = [...newsRows.results, ...pinnedRows.results].filter((n) => {
+      const id = n.id as string;
+      if (seenNewsIds.has(id)) return false;
+      seenNewsIds.add(id);
+      return true;
+    });
+
+    for (const n of combinedRows) {
       const iconMap: Record<string, string> = {
         manager_arrival: "\u{1F4CB}",
         round_results: "\u26BD",
@@ -1006,6 +1023,7 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
         player_interview: "\u{1F3A4}",
         manager_feud: "\u{1F5E3}\uFE0F",
         season_wrap: "\u{1F3C1}",
+        season_opener: "\u{1F3BA}",
         season_awards: "\u{1F3C6}",
         legend_farewell: "\u{1F396}\uFE0F",
       };
