@@ -7,13 +7,6 @@ import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, PageHeader } from "@/components/ui";
 
 interface Side { name: string; color: string | null; isBig: boolean; teamId: string | null; strength: number; cupTeamId?: string }
-
-/** Barva síly soupeře — zelená lehký, jantar střední, červená těžký. */
-function strengthColor(s: number): string {
-  if (s >= 55) return "bg-card-red/10 text-card-red";
-  if (s >= 42) return "bg-amber-50 text-amber-700";
-  return "bg-pitch-50 text-pitch-600";
-}
 interface BracketMatch {
   bracketPos: number; home: Side | null; away: Side | null;
   homeScore: number | null; awayScore: number | null; homePens: number | null; awayPens: number | null;
@@ -65,7 +58,6 @@ function TeamCell({ s, align, bold }: { s: Side | null; align: "left" | "right";
     <div className={`flex items-center gap-1.5 min-w-0 flex-1 ${align === "right" ? "sm:flex-row-reverse sm:text-right" : ""}`}>
       {badge}
       <span className={`min-w-0 text-sm leading-tight ${bold ? "font-bold text-ink" : "text-ink/70"}`}>{name}</span>
-      {s && <span className={`shrink-0 text-[10px] font-heading font-bold tabular-nums px-1 py-0.5 rounded ${strengthColor(s.strength)}`} title="síla soupeře">{s.strength}</span>}
     </div>
   );
 }
