@@ -164,11 +164,11 @@ export default function PoharPage() {
       {data.prizes && data.prizes.length > 0 && (
         <div>
           <SectionLabel>Odměny za výhru v kole</SectionLabel>
-          <div className="card p-3 flex flex-wrap gap-x-5 gap-y-1.5 mt-2">
+          <div className="card p-3 sm:p-4 mt-2 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3">
             {data.prizes.map((p) => (
-              <div key={p.round} className="flex items-center gap-1.5 text-sm">
-                <span className="text-muted">{p.roundName}:</span>
-                <span className="font-heading font-bold tabular-nums">{p.prize.toLocaleString("cs")} Kč</span>
+              <div key={p.round}>
+                <div className="text-xs text-muted">{p.roundName}</div>
+                <div className="font-heading font-bold tabular-nums text-base leading-tight">{p.prize.toLocaleString("cs")} Kč</div>
               </div>
             ))}
           </div>
