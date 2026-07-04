@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
-import { apiFetch, type Player } from "@/lib/api";
+import { apiFetch, apiAction, type Player } from "@/lib/api";
 import Link from "next/link";
 import { Spinner, SectionLabel } from "@/components/ui";
 
@@ -28,6 +28,7 @@ interface TrainingResult {
   teamChemistry: number;
   attendedCount: number;
   totalCount: number;
+  rested?: Array<{ playerId: string; playerName: string }>;
 }
 
 const ATTR_LABELS: Record<string, string> = {
@@ -67,12 +68,14 @@ export default function TrainingPage() {
   const [stats, setStats] = useState<TrainingStats | null>(null);
   const [dirty, setDirty] = useState(false);
   const [playerMap, setPlayerMap] = useState<Map<string, string>>(new Map());
+  const [squad, setSquad] = useState<Player[]>([]);
+  const [restIds, setRestIds] = useState<Set<string>>(new Set());
   const [absences, setAbsences] = useState<Array<{ playerId: string; firstName: string; lastName: string; position: string; absence: { reason?: string; category?: string } | null }>>([]);
 
   useEffect(() => {
     if (!teamId) return;
     Promise.all([
-      apiFetch<{ type: TrainingType; approach: TrainingApproach; sessionsPerWeek: number; trainingDays: number[] | null; lastResult: TrainingResult | null }>(
+      apiFetch<{ type: TrainingType; approach: TrainingApproach; sessionsPerWeek: number; trainingDays: number[] | null; restPlayerIds?: string[]; lastResult: TrainingResult | null }>(
         `/api/teams/${teamId}/training`
       ),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
@@ -83,9 +86,16 @@ export default function TrainingPage() {
       setApproach(data.approach);
       setSessions(data.sessionsPerWeek);
       setTrainingDays(data.trainingDays ?? null);
+      setRestIds(new Set(data.restPlayerIds ?? []));
       setResult(data.lastResult);
       setStats(statsData);
       setAbsences(absencesData.absences ?? []);
+      // Squad pro výběr volna — jen aktivní hráči (quit netrénují), unavení (nízká kondice) nahoře
+      setSquad(
+        players
+          .filter((p) => !p.status || p.status === "active")
+          .sort((a, b) => (a.lifeContext?.condition ?? 100) - (b.lifeContext?.condition ?? 100))
+      );
       // Build name → id map for linking (covers old results without playerId)
       const map = new Map<string, string>();
       for (const p of players) {
@@ -99,17 +109,33 @@ export default function TrainingPage() {
   const savePlan = async () => {
     if (!teamId || saving) return;
     setSaving(true);
-    try {
-      await apiFetch(`/api/teams/${teamId}/training`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, approach, sessionsPerWeek: sessions, trainingDays }),
-      });
-      setDirty(false);
-    } catch (e) {
-      console.error("save training plan:", e);
-    }
+    const ok = await apiAction(
+      Promise.all([
+        apiFetch(`/api/teams/${teamId}/training`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type, approach, sessionsPerWeek: sessions, trainingDays }),
+        }),
+        apiFetch(`/api/teams/${teamId}/training-rest`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playerIds: [...restIds] }),
+        }),
+      ]),
+      "Uložení tréninku se nezdařilo"
+    );
+    if (ok) setDirty(false);
     setSaving(false);
+  };
+
+  const toggleRest = (id: string) => {
+    setRestIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setDirty(true);
   };
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
@@ -269,6 +295,58 @@ export default function TrainingPage() {
         })()}
       </div>
 
+      {/* Volno z příštího tréninku */}
+      <div className="card p-4 sm:p-5">
+        <SectionLabel>🌴 Volno z příštího tréninku{restIds.size > 0 ? ` (${restIds.size})` : ""}</SectionLabel>
+        <p className="text-sm text-muted mt-1 leading-relaxed">
+          Vybraní hráči dostanou od trenéra volno — nejbližší trénink vynechají. Neztratí kondici,
+          ale ani se nezlepší. Po proběhnutí tréninku se volno automaticky zruší.
+        </p>
+        <div className="mt-3 max-h-80 overflow-y-auto rounded-lg border border-gray-100 divide-y divide-gray-50">
+          {squad.map((p) => {
+            const checked = restIds.has(p.id);
+            // Zraněnému nejde volno dát (netrénuje tak jako tak), ale dřív nastavené jde odvolat
+            const locked = !!p.injury && !checked;
+            const cond = p.lifeContext?.condition ?? 100;
+            return (
+              <div
+                key={p.id}
+                onClick={() => { if (!locked) toggleRest(p.id); }}
+                className={`flex items-center gap-3 px-3 py-2 ${locked ? "opacity-40" : "cursor-pointer hover:bg-gray-50"} ${checked ? "bg-pitch-50/40" : ""}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={locked}
+                  onChange={() => toggleRest(p.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="accent-pitch-500 w-4 h-4 shrink-0"
+                />
+                <Link
+                  href={`/dashboard/player/${p.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="font-heading font-bold text-base hover:text-pitch-500 transition-colors truncate"
+                >
+                  {p.first_name} {p.last_name}
+                </Link>
+                <span className="text-sm text-muted shrink-0">{p.position}</span>
+                <span className="flex-1" />
+                {p.injury ? (
+                  <span className="text-sm text-card-red shrink-0">🤕 Zraněný — netrénuje</span>
+                ) : (
+                  <span className="text-sm text-muted shrink-0">
+                    Kondice{" "}
+                    <span className={`font-heading font-bold tabular-nums ${cond >= 70 ? "text-pitch-500" : cond >= 40 ? "text-gold-600" : "text-card-red"}`}>
+                      {cond}
+                    </span>
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Save — right after settings, always visible */}
       <div>
         <button
@@ -276,7 +354,7 @@ export default function TrainingPage() {
           disabled={!dirty || saving}
           className={`btn btn-lg w-full ${dirty ? "btn-primary" : "btn-ghost"}`}
         >
-          {saving ? "Ukládám..." : dirty ? "Uložit změny taktiky" : "Vše uloženo"}
+          {saving ? "Ukládám..." : dirty ? "Uložit změny tréninku" : "Vše uloženo"}
         </button>
       </div>
 
@@ -413,6 +491,20 @@ export default function TrainingPage() {
 
             {result.improvements.length === 0 && (
               <div className="card p-3 sm:p-4 text-sm text-muted italic">Dnes bez zlepšení</div>
+            )}
+
+            {/* ── Rested — volno od trenéra ── */}
+            {result.rested && result.rested.length > 0 && (
+              <div className="card p-3 sm:p-4">
+                <div className="font-heading font-bold text-sm text-pitch-600 mb-1.5">
+                  🌴 Volno od trenéra ({result.rested.length})
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                  {result.rested.map((r) => (
+                    <PlayerLink key={r.playerId} id={r.playerId} name={r.playerName} playerMap={playerMap} />
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* ── Absences — own card, collapsible ── */}

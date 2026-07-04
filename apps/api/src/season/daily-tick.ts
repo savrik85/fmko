@@ -186,12 +186,31 @@ export async function executeDailyTick(
 
     if (isTrainingDay && isTeamTrainingDay && !skipTrainingForMatch && team.training_type) {
       try {
+        // Volno od trenéra: hráči s life_context.$.trainingRest tento trénink vynechají
+        // (žádný drain kondice, žádná zlepšení, žádné riziko absence). Zranění se nereportují
+        // jako "volno" — ti netrénují kvůli zranění tak jako tak.
+        const restedResult = await env.DB.prepare(
+          `SELECT id, first_name, last_name FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')
+             AND id NOT IN (SELECT player_id FROM injuries WHERE days_remaining > 0)
+             AND json_extract(life_context, '$.trainingRest') = 1`,
+        ).bind(teamId).all<{ id: string; first_name: string; last_name: string }>()
+          .catch((e) => { logger.warn({ module: "daily-tick", teamId }, "load training rest", e); return { results: [] as Array<{ id: string; first_name: string; last_name: string }> }; });
+        const restedPlayers = restedResult.results.map((r) => ({ playerId: r.id, playerName: `${r.first_name} ${r.last_name}` }));
+
         // Vyloučit zraněné — zraněný hráč netrenuje (předtím byl pre-existing bug, šel do simulátoru).
         const playersResult = await env.DB.prepare(
           `SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')
              AND id NOT IN (SELECT player_id FROM injuries WHERE days_remaining > 0)
+             AND COALESCE(json_extract(life_context, '$.trainingRest'), 0) != 1
            ORDER BY overall_rating DESC`,
         ).bind(teamId).all();
+
+        // Volno je vyčerpáno tímto tréninkem — smazat flag hned (nepodmíněně, WHERE je no-op
+        // bez flagů). Kdyby clear běžel až na konci try bloku, transientní chyba mezi tím
+        // by flag nechala žít a hráč by dostal volno opakovaně.
+        await env.DB.prepare(
+          `UPDATE players SET life_context = json_remove(life_context, '$.trainingRest') WHERE team_id = ? AND json_extract(life_context, '$.trainingRest') IS NOT NULL`,
+        ).bind(teamId).run().catch((e) => logger.warn({ module: "daily-tick", teamId }, "clear training rest", e));
 
         const squad = playersResult.results.map((row) => {
           const skills = JSON.parse(row.skills as string);
@@ -274,6 +293,7 @@ export async function executeDailyTick(
           teamChemistry: result.teamChemistry,
           attendedCount: attendanceWithNames.filter((a) => a.attended).length,
           totalCount: attendanceWithNames.length,
+          rested: restedPlayers,
           day: now.toLocaleDateString("cs", { weekday: "long" }),
         };
 
@@ -392,7 +412,7 @@ export async function executeDailyTick(
 
         events.push({
           type: "training",
-          description: `Trénink: ${summary.attendedCount}/${summary.totalCount} hráčů, ${improvementsWithNames.length} zlepšení`,
+          description: `Trénink: ${summary.attendedCount}/${summary.totalCount} hráčů, ${improvementsWithNames.length} zlepšení${restedPlayers.length > 0 ? `, ${restedPlayers.length} volno` : ""}`,
           data: summary,
         });
       } catch (e) {
