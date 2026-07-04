@@ -114,6 +114,7 @@ export default function PoharPage() {
   const { teamId } = useTeam();
   const [data, setData] = useState<CupData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"pavouk" | "strelci">("pavouk");
 
   useEffect(() => {
     if (!teamId) return;
@@ -220,11 +221,22 @@ export default function PoharPage() {
         </div>
       )}
 
+      {/* Taby — pavouk / střelci */}
+      <div className="flex gap-1 bg-surface rounded-xl p-1">
+        {(["pavouk", "strelci"] as const).map((key) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`flex-1 py-2.5 text-sm font-heading font-bold rounded-lg transition-colors ${
+              tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
+            }`}>
+            {key === "pavouk" ? "🏆 Pavouk" : "⚽ Střelci"}
+          </button>
+        ))}
+      </div>
+
       {/* Střelci poháru */}
-      {data.scorers && data.scorers.length > 0 && (
-        <div>
-          <SectionLabel>Střelci poháru</SectionLabel>
-          <div className="card mt-2">
+      {tab === "strelci" && (
+        (data.scorers && data.scorers.length > 0) ? (
+          <div className="card">
             {data.scorers.map((s, i) => (
               <div key={s.playerId} className="flex items-center gap-3 px-3 py-2 border-b border-gray-50 last:border-b-0">
                 <span className="w-5 text-right text-xs text-muted tabular-nums shrink-0">{i + 1}.</span>
@@ -243,11 +255,13 @@ export default function PoharPage() {
               </div>
             ))}
           </div>
-        </div>
+        ) : (
+          <div className="card p-8 text-center text-muted text-sm">Zatím žádní střelci — góly se objeví po odehrání zápasů.</div>
+        )
       )}
 
       {/* Všechna kola */}
-      {[...rounds].reverse().map((r) => (
+      {tab === "pavouk" && [...rounds].reverse().map((r) => (
         <div key={r.round}>
           <div className="flex items-baseline gap-2 mb-2">
             <span className="font-heading font-bold text-base text-pitch-600">{r.roundName}</span>
