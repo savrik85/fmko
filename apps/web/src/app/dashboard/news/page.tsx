@@ -260,26 +260,27 @@ export default function NewsPage() {
   const currentPlayerInterviews = latestPlayerIvWeek != null && latestPlayerIvWeek > 0
     ? playerInterviewArticles.filter((a) => (a as any).gameWeek === latestPlayerIvWeek)
     : playerInterviewArticles;
-  const otherArticles = articles.filter(
-    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "season_opener", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview"].includes(a.type),
-  );
-
   // Lead story = nejnovější kandidát napříč typy (preview kolem zápasu vyhraje nad starým round_summary).
   // standing je dynamicky generovaný se současným časem, proto zůstává až jako poslední fallback.
   const openerArticles = articles.filter((a) => a.type === "season_opener");
+  const wrapArticles = articles.filter((a) => a.type === "season_wrap");
   const leadStory = [openerArticles[0], previewArticles[0], roundSummaryArticles[0], aiReportArticles[0], matchArticles[0]]
     .filter(Boolean)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
     || standingArticles[0] || articles[0];
-  // Druhý hlavní článek — round_summary nebo ai_report, podle toho co není lead.
-  // Když je lead ai_report → secondary je round_summary (Hráč kola). A naopak.
-  // Když lead je něco jiného (preview/match) → preferuj round_summary, fallback ai_report.
+  // Druhý hlavní článek — kolem přelomu sezóny je to ohlédnutí za sezónou (season_wrap),
+  // jinak round_summary / ai_report (podle toho, co není lead).
   const secondaryStory =
-    (roundSummaryArticles[0] && roundSummaryArticles[0].id !== leadStory?.id ? roundSummaryArticles[0] : null)
+    (wrapArticles[0] && wrapArticles[0].id !== leadStory?.id ? wrapArticles[0] : null)
+    ?? (roundSummaryArticles[0] && roundSummaryArticles[0].id !== leadStory?.id ? roundSummaryArticles[0] : null)
     ?? (aiReportArticles[0] && aiReportArticles[0].id !== leadStory?.id ? aiReportArticles[0] : null);
   // Všechny match stories sjednocené (bez lead story pokud je match)
   const matchStories = matchArticles.slice(leadStory?.type === "match" ? 1 : 0);
-  // Ostatní drobnosti (classified ads apod.) — bez duplicit s promocemi / přestupy
+  // Ostatní drobnosti — bez typů z hlavních sekcí a bez duplicit s lead/secondary (podle id)
+  const otherArticles = articles.filter(
+    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview"].includes(a.type)
+      && a.id !== leadStory?.id && a.id !== secondaryStory?.id,
+  );
   const miscArticles = otherArticles;
 
   const today = new Date().toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -423,6 +424,7 @@ export default function NewsPage() {
                   <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">
                     {secondaryStory.type === "round_summary" ? "🏆 Hráč a trenér kola"
                       : secondaryStory.type === "matchday_preview" ? "Předzápasové preview"
+                      : secondaryStory.type === "season_wrap" ? "📜 Ohlédnutí za sezónou"
                       : "Komentář kola"}
                   </div>
                   <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
