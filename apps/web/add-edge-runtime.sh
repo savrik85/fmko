@@ -12,6 +12,7 @@ for f in \
   "src/app/dashboard/phone/[id]/page.tsx" \
   "src/app/dashboard/player/[id]/page.tsx" \
   "src/app/dashboard/transfers/offer/[id]/page.tsx" \
+  "src/app/dashboard/pohar/tym/[id]/page.tsx" \
   "src/app/match-day/[id]/page.tsx"; do
   if [ -f "$f" ] && head -1 "$f" | grep -q '"use client"'; then
     sed -i '1 a\export const runtime = "edge";' "$f"
