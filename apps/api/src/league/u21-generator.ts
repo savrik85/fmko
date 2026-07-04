@@ -8,6 +8,7 @@
  */
 
 import type { Rng } from "../generators/rng";
+import { FIRSTNAMES } from "../data/czech-names";
 import { generatePlayer, type VillageInfo } from "../generators/player";
 import { generateFieldSkills, generateGKSkills, generateHiddenTalent, calculateOverallRating } from "../skills/generator";
 import { generateDescription } from "../generators/description-generator";
@@ -15,6 +16,7 @@ import { pickOccupation } from "../generators/occupations";
 import { generatePlayerFace } from "../routes/teams";
 import { getDistrictDataFromDB } from "../data/districts";
 import { logger } from "../lib/logger";
+import { mustSeason } from "../lib/season";
 
 const POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
 type Position = typeof POSITIONS[number];
@@ -23,14 +25,6 @@ type Position = typeof POSITIONS[number];
 const U21_POSITION_COUNTS: Record<Position, number> = { GK: 2, DEF: 5, MID: 5, FWD: 2 };
 
 // Inline firstnames (stejné jako v transfers/free-agent-pool.ts)
-const FIRSTNAMES: Record<string, Record<string, number>> = {
-  "1960s": { "Jiří": 0.08, "Jan": 0.07, "Petr": 0.06, "Josef": 0.06, "Jaroslav": 0.05, "Milan": 0.05, "Zdeněk": 0.04 },
-  "1970s": { "Petr": 0.08, "Jan": 0.07, "Martin": 0.06, "Jiří": 0.06, "Pavel": 0.05, "Tomáš": 0.04, "Roman": 0.03 },
-  "1980s": { "Jan": 0.08, "Martin": 0.07, "Tomáš": 0.06, "Pavel": 0.05, "Michal": 0.05, "David": 0.05, "Lukáš": 0.04 },
-  "1990s": { "Jan": 0.09, "Tomáš": 0.07, "Jakub": 0.06, "David": 0.06, "Lukáš": 0.05, "Ondřej": 0.05, "Filip": 0.04 },
-  "2000s": { "Jakub": 0.08, "Jan": 0.07, "Adam": 0.06, "Matěj": 0.06, "Ondřej": 0.05, "Filip": 0.05, "Vojtěch": 0.04 },
-  "2010s": { "Jakub": 0.07, "Jan": 0.07, "Adam": 0.06, "Vojtěch": 0.05, "Filip": 0.05, "Tomáš": 0.05, "Šimon": 0.04 },
-};
 
 interface SeniorTeam {
   id: string;
@@ -261,16 +255,17 @@ export async function createU21TeamAndSquad(
     const playerId = crypto.randomUUID();
     playerStmts.push(
       db.prepare(
-        "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage, nationality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(
         playerId, u21TeamId, base.firstName, base.lastName, "", age, position, rating,
         JSON.stringify(skills), JSON.stringify(physical), JSON.stringify(personality),
         JSON.stringify(lifeContext),
-        JSON.stringify(generatePlayerFace({ age, bodyType: base.bodyType })),
+        JSON.stringify(generatePlayerFace({ age, bodyType: base.bodyType, ethnicity: base.ethnicity })),
         description,
         JSON.stringify(isGK ? gkSkills : fieldSkills), hiddenTalent,
         isGK ? gkSkills!.experience.current : fieldSkills!.experience.current,
         Math.round(5 + rating * 2), // U21 nižší mzdy
+        base.nationality ?? "CZ",
       )
     );
 
@@ -367,7 +362,7 @@ export async function regenerateU21Schedule(
     calStmts.push(
       db.prepare(
         "INSERT INTO season_calendar (id, league_id, season_number, game_week, match_day, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, 'scheduled')"
-      ).bind(calId, u21LeagueId, seasonNumber?.number ?? 1, round, matchDay, matchDate.toISOString())
+      ).bind(calId, u21LeagueId, mustSeason(seasonNumber?.number), round, matchDay, matchDate.toISOString())
     );
 
     for (const m of ms) {

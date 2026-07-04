@@ -6,6 +6,7 @@ import type {
 } from "@okresni-masina/shared";
 import type { PreferredFoot, PreferredSide } from "../skills/types";
 import { pickOccupation } from "./occupations";
+import { pickForeignName, type Ethnicity } from "../data/nationalities";
 
 // Seed data types
 interface SurnameData {
@@ -47,6 +48,8 @@ export interface GeneratedPlayer {
   occupation: string;
   bodyType: BodyType;
   avatarConfig: AvatarConfig;
+  nationality?: string;
+  ethnicity?: Ethnicity;
   condition: number;
   morale: number;
   // New attributes
@@ -197,8 +200,18 @@ export function generatePlayer(
       : rng.int(19, 37);
 
   const decade = ageToDecade(age);
-  const firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1980s"]);
-  const lastName = rng.weighted(surnameData.surnames);
+  let firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1980s"]);
+  let lastName = rng.weighted(surnameData.surnames);
+  // Nízké % cizinců/menšin — přepíše jméno + nastaví etnikum pro avatar.
+  let nationality = "CZ";
+  let ethnicity: Ethnicity = "white";
+  const foreign = pickForeignName(rng);
+  if (foreign) {
+    firstName = foreign.firstName;
+    lastName = foreign.lastName;
+    nationality = foreign.nationality;
+    ethnicity = foreign.ethnicity;
+  }
 
   let qualityBase = QUALITY_BY_CATEGORY[village.category] + rng.int(-2, 2);
   // Wonderkid: 2% šance na výjimečný talent (+15-25 quality boost)
@@ -307,7 +320,7 @@ export function generatePlayer(
   const aggressionBase = rng.int(15, 65)
     + (bodyType === "stocky" ? 15 : bodyType === "athletic" ? 10 : bodyType === "thin" ? -10 : 0)
     + (AGGRESSIVE_OCCUPATIONS[occupation] ?? 0)
-    + Math.round(temper * 0.2); // temper 0-100, *0.2 gives 0-20
+    + Math.round(temper * 0.2) // temper 0-100, *0.2 gives 0-20
     + (position === "DEF" ? 10 : position === "FWD" ? 5 : position === "GK" ? -10 : 0);
   const aggression = Math.min(100, Math.max(1, aggressionBase));
 
@@ -347,6 +360,8 @@ export function generatePlayer(
     occupation,
     bodyType,
     avatarConfig,
+    nationality,
+    ethnicity,
     condition: 100,
     morale: 50 + rng.int(-10, 10),
     preferredFoot,

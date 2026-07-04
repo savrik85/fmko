@@ -123,8 +123,8 @@ authRouter.post("/login", async (c) => {
     `SELECT t.id, t.name, t.primary_color, t.secondary_color, t.badge_pattern, t.game_date, v.name as village_name, v.district, t.budget, t.league_id,
      (SELECT COUNT(*) FROM players p WHERE p.team_id = t.id) as player_count,
      (SELECT s.number FROM seasons s WHERE s.status='active' LIMIT 1) as season,
-     (SELECT MIN(sc.scheduled_at) FROM season_calendar sc WHERE sc.league_id = t.league_id) as season_start,
-     (SELECT MAX(sc.scheduled_at) FROM season_calendar sc WHERE sc.league_id = t.league_id) as season_end
+     (SELECT MIN(sc.scheduled_at) FROM season_calendar sc WHERE sc.league_id = t.league_id AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = t.league_id)) as season_start,
+     (SELECT MAX(sc.scheduled_at) FROM season_calendar sc WHERE sc.league_id = t.league_id AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = t.league_id)) as season_end
      FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.user_id = ? LIMIT 1`
   ).bind(user.id).first<Record<string, unknown>>();
 
@@ -199,8 +199,8 @@ authRouter.get("/me", async (c) => {
      t.badge_primary_color, t.badge_secondary_color, t.badge_initials, t.badge_symbol,
      t.game_date, v.name as village_name, v.district, t.budget, t.league_id,
      (SELECT s.number FROM seasons s WHERE s.status='active' LIMIT 1) as season,
-     (SELECT MIN(sc.scheduled_at) FROM season_calendar sc WHERE sc.league_id = t.league_id) as season_start,
-     (SELECT MAX(sc.scheduled_at) FROM season_calendar sc WHERE sc.league_id = t.league_id) as season_end
+     (SELECT MIN(sc.scheduled_at) FROM season_calendar sc WHERE sc.league_id = t.league_id AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = t.league_id)) as season_start,
+     (SELECT MAX(sc.scheduled_at) FROM season_calendar sc WHERE sc.league_id = t.league_id AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = t.league_id)) as season_end
      FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.user_id = ? LIMIT 1`
   ).bind(session.userId).first<Record<string, unknown>>();
 

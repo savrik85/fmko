@@ -33,7 +33,7 @@ export interface CalendarEntry {
   leagueId: string;
   seasonNumber: number;
   gameWeek: number;       // 1-30
-  matchDay: "wednesday" | "saturday" | "sunday";
+  matchDay: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
   scheduledAt: string;    // ISO datetime
   status: "scheduled" | "lineup_locked" | "simulated";
 }
@@ -60,103 +60,48 @@ export function generateSeasonCalendar(
   startDate: Date,
 ): SeasonCalendar {
   const entries: CalendarEntry[] = [];
-  let currentDate = new Date(startDate);
-  // Skip 2 days so first match is ~3-4 days after registration (2 + nearest Wednesday)
-  currentDate.setDate(currentDate.getDate() + 2);
+  // Liga hraje 2× týdně (po + čt) → sezóna může začít i čtvrtkem. První kolo = nejbližší
+  // ligový den aspoň 5 dní po startu → pauza po konci sezóny je vždy 5-8 dní (~týden).
+  const cursor = new Date(startDate);
+  cursor.setDate(cursor.getDate() + 5);
+  while (cursor.getDay() !== 1 && cursor.getDay() !== 4) cursor.setDate(cursor.getDate() + 1);
+
+  const advance = () => cursor.setDate(cursor.getDate() + (cursor.getDay() === 1 ? 3 : 4)); // po→čt, čt→po
+  const pushRound = (round: number) => {
+    const e = new Date(cursor);
+    setPrague18(e);
+    entries.push({
+      id: crypto.randomUUID(),
+      leagueId,
+      seasonNumber,
+      gameWeek: round,
+      matchDay: cursor.getDay() === 1 ? "monday" : "thursday",
+      scheduledAt: e.toISOString(),
+      status: "scheduled",
+    });
+  };
+
+  const autumnStart = cursor.toISOString();
   let round = 1;
 
-  // Find first Wednesday from adjusted start date
-  while (currentDate.getDay() !== 3) { // 3 = Wednesday
-    currentDate.setDate(currentDate.getDate() + 1);
+  // PODZIM: kola 1-15, každý ligový den (po/čt)
+  for (; round <= 15; round++) {
+    pushRound(round);
+    advance();
   }
 
-  const autumnStart = currentDate.toISOString();
-
-  // AUTUMN: 8 weeks, 2 rounds per week (St + So)
-  for (let week = 0; week < 8 && round <= 15; week++) {
-    // Wednesday 18:00 Europe/Prague
-    const wed = new Date(currentDate);
-    wed.setDate(currentDate.getDate() + week * 7);
-    setPrague18(wed);
-
-    // Check if this is a cup week (week 5, 8) — still a match slot
-    entries.push({
-      id: crypto.randomUUID(),
-      leagueId,
-      seasonNumber,
-      gameWeek: round,
-      matchDay: "wednesday",
-      scheduledAt: wed.toISOString(),
-      status: "scheduled",
-    });
-    round++;
-
-    if (round > 15) break;
-
-    // Saturday 18:00 Europe/Prague
-    const sat = new Date(wed);
-    sat.setDate(wed.getDate() + 3);
-    setPrague18(sat);
-
-    entries.push({
-      id: crypto.randomUUID(),
-      leagueId,
-      seasonNumber,
-      gameWeek: round,
-      matchDay: "saturday",
-      scheduledAt: sat.toISOString(),
-      status: "scheduled",
-    });
-    round++;
-  }
-
-  // Winter break start
-  const lastAutumnEntry = entries[entries.length - 1];
-  const winterBreakStart = new Date(lastAutumnEntry.scheduledAt);
+  // Zimní přestávka + jaro začíná dalším ligovým dnem ~týden po přestávce
+  const winterBreakStart = new Date(entries[entries.length - 1].scheduledAt);
   winterBreakStart.setDate(winterBreakStart.getDate() + 3);
+  cursor.setTime(winterBreakStart.getTime());
+  cursor.setDate(cursor.getDate() + 7);
+  while (cursor.getDay() !== 1 && cursor.getDay() !== 4) cursor.setDate(cursor.getDate() + 1);
+  const springStart = new Date(cursor);
 
-  // Spring start: 1 week after winter break
-  const springStart = new Date(winterBreakStart);
-  springStart.setDate(springStart.getDate() + 7);
-
-  // Find next Wednesday for spring
-  while (springStart.getDay() !== 3) {
-    springStart.setDate(springStart.getDate() + 1);
-  }
-
-  // SPRING: 8 weeks, rounds 16-30
-  for (let week = 0; week < 8 && round <= 30; week++) {
-    const wed = new Date(springStart);
-    wed.setDate(springStart.getDate() + week * 7);
-    setPrague18(wed);
-
-    entries.push({
-      id: crypto.randomUUID(),
-      leagueId,
-      seasonNumber,
-      gameWeek: round,
-      matchDay: "wednesday",
-      scheduledAt: wed.toISOString(),
-      status: "scheduled",
-    });
-    round++;
-
-    if (round > 30) break;
-
-    const sat = new Date(wed);
-    sat.setDate(wed.getDate() + 3);
-    setPrague18(sat);
-
-    entries.push({
-      id: crypto.randomUUID(),
-      leagueId,
-      seasonNumber,
-      gameWeek: round,
-      matchDay: "saturday",
-      scheduledAt: sat.toISOString(),
-      status: "scheduled",
-    });
-    round++;
+  // JARO: kola 16-30
+  for (; round <= 30; round++) {
+    pushRound(round);
+    advance();
   }
 
   const seasonEnd = new Date(entries[entries.length - 1].scheduledAt);

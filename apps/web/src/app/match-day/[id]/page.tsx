@@ -93,15 +93,15 @@ export default function MatchDayPage() {
                   {match.round}. kolo · Zápas odehrán
                 </div>
               )}
-              <div className="flex items-center justify-center gap-8">
-                <div className="text-center">
+              <div className="flex items-start justify-center gap-6">
+                <div className="flex flex-col items-center text-center w-[130px]">
                   <BadgePreview primary={hc} secondary={match.home_secondary} pattern={match.home_badge as BadgePattern} initials={ini(match.home_name)} size={56} />
-                  <div className="font-heading font-bold text-white text-base mt-2 max-w-[120px]">{match.home_name}</div>
+                  <div className="font-heading font-bold text-white text-base mt-2 leading-tight">{match.home_name}</div>
                 </div>
-                <div className="font-heading font-[800] text-5xl text-white/30">vs</div>
-                <div className="text-center">
+                <div className="font-heading font-[800] text-4xl text-white/30 mt-3">vs</div>
+                <div className="flex flex-col items-center text-center w-[130px]">
                   <BadgePreview primary={ac} secondary={match.away_secondary} pattern={match.away_badge as BadgePattern} initials={ini(match.away_name)} size={56} />
-                  <div className="font-heading font-bold text-white text-base mt-2 max-w-[120px]">{match.away_name}</div>
+                  <div className="font-heading font-bold text-white text-base mt-2 leading-tight">{match.away_name}</div>
                 </div>
               </div>
             </div>

@@ -52,6 +52,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   // ── Sezónní ──
   { key: "season_finished", icon: "🎂", title: "Výročí sezóny", desc: "Dokončit celou sezónu", tier: "silver" },
   { key: "champion", icon: "🏅", title: "Šampion kraje", desc: "Vyhrát krajský přebor", tier: "gold" },
+  { key: "season_champion", icon: "🏆", title: "Mistr sezóny", desc: "Vyhrát svou ligu", tier: "gold" },
 ];
 
 const BY_KEY: Record<string, AchievementDef> = {};
@@ -185,6 +186,14 @@ export async function checkTransferAchievements(
   const unlocked: string[] = [];
   if (await award(db, buyerTeamId, "first_signing")) unlocked.push("first_signing");
   if (playerInfo.isCelebrity && await award(db, buyerTeamId, "celebrity_signing")) unlocked.push("celebrity_signing");
+  return unlocked;
+}
+
+/** Konec sezóny — dokončení sezóny (všem) + mistr (vítězi). Idempotentní. */
+export async function awardSeasonEnd(db: D1Database, teamId: string, opts: { champion: boolean }): Promise<string[]> {
+  const unlocked: string[] = [];
+  if (await award(db, teamId, "season_finished")) unlocked.push("season_finished");
+  if (opts.champion && await award(db, teamId, "season_champion")) unlocked.push("season_champion");
   return unlocked;
 }
 

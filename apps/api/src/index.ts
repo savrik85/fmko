@@ -147,10 +147,11 @@ export default {
           const gd = new Date(gameDate);
           const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
 
-          // Process exactly 1 round per invocation — never more
+          // Process exactly 1 round per invocation — never more.
+          // Jen AKTUÁLNÍ sezóna (nejvyšší season_number) — staré neodehrané zápasy z minulých sezón se nikdy nepálí.
           const matchCal = await env.DB.prepare(
-            "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
-          ).bind(leagueId, dayEnd.toISOString()).first<{ id: string }>();
+            "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' AND season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?) ORDER BY scheduled_at ASC LIMIT 1"
+          ).bind(leagueId, dayEnd.toISOString(), leagueId).first<{ id: string }>();
 
           if (matchCal) {
             // Atomický lock: zabrání souběžnému cronu / endpointu zpracovat stejné kolo
@@ -370,15 +371,19 @@ export default {
                 const humanTeams = await env.DB.prepare(
                   "SELECT t.id, t.league_id, v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.league_id = ? AND t.user_id <> 'ai'"
                 ).bind(leagueId).all();
+                const adhocSeasonRow = await env.DB.prepare("SELECT MAX(number) AS n FROM seasons WHERE status = 'active'").first<{ n: number }>().catch((e) => { log("warn", "adhoc season lookup failed", e); return null; });
+                const adhocSeasonN = adhocSeasonRow?.n ?? null;
+                if (adhocSeasonN == null) log("error", "adhoc events: žádná aktivní sezóna → přeskočeno (žádný tichý fallback na season 1)");
 
                 for (const ht of humanTeams.results) {
+                  if (adhocSeasonN == null) break; // negenerovat s podvrženou season='1' (konzument by je skryl)
                   const adhocRng = createAdhocRng(cryptoSeedAdhoc());
                   const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek, ht.district as string);
                   if (adhocEvent) {
                     await env.DB.prepare(
-                      "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?, 'pending')"
+                      "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
                     ).bind(crypto.randomUUID(), ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
-                      JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), adhocEvent.gameWeek
+                      JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), String(adhocSeasonN), adhocEvent.gameWeek
                     ).run().catch((e) => log("warn", "adhoc event insert failed", e));
                     // event notifikace
                     const { createNotification } = await import("./community/notifications");

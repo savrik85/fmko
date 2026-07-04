@@ -11,8 +11,8 @@ import { Napoveda } from "@/components/ui/napoveda";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 
-const DETAIL_PREFIXES = ["/dashboard/player/", "/dashboard/team/", "/dashboard/match/"];
-const CUSTOM_HEADER_PAGES = ["/dashboard/liga", "/dashboard/schedule"];
+const DETAIL_PREFIXES = ["/dashboard/player/", "/dashboard/team/", "/dashboard/match/", "/dashboard/pohar/tym/"];
+const CUSTOM_HEADER_PAGES = ["/dashboard/liga", "/dashboard/schedule", "/dashboard/pohar"];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -27,7 +27,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .then((data) => {
         if (data && data.matchId) {
           window.location.replace(`/match-day/${data.matchId}`);
+          return;
         }
+        // Žádný nezhlédnutý zápas → přehled konce sezóny, jinak uvítání do nové sezóny.
+        apiFetch<{ recap: unknown | null }>(`/api/teams/${teamId}/season-recap`)
+          .then((r) => {
+            if (r && r.recap) { window.location.replace("/season-end"); return; }
+            apiFetch<{ seasonNumber: number } | null>(`/api/teams/${teamId}/season-welcome`)
+              .then((w) => { if (w) window.location.replace("/nova-sezona"); })
+              .catch((e) => console.error("fetch season-welcome:", e));
+          })
+          .catch((e) => console.error("fetch season-recap:", e));
       })
       .catch((e) => console.error("fetch unseen-match:", e));
   }, [teamId, pathname]);

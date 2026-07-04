@@ -11,6 +11,7 @@ import { generateDescription } from "../generators/description-generator";
 import { pickOccupation } from "../generators/occupations";
 import { generatePlayerFace } from "../routes/teams";
 import { logger } from "../lib/logger";
+import { mustSeason } from "../lib/season";
 
 export async function insertAITeamsIntoDB(
   db: D1Database,
@@ -25,7 +26,7 @@ export async function insertAITeamsIntoDB(
   const activeSeason = await db.prepare(
     "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
   ).first<{ id: string }>().catch((e) => { logger.warn({ module: "insert-ai-teams" }, "fetch active season", e); return null; });
-  const seasonId = activeSeason?.id ?? "season-1";
+  const seasonId = mustSeason(activeSeason?.id);
 
   // Collect all statements and batch them
   const teamStmts: D1PreparedStatement[] = [];
@@ -89,13 +90,13 @@ export async function insertAITeamsIntoDB(
         });
 
         playerStmts.push(
-          db.prepare("INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+          db.prepare("INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage, nationality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(apId, aiTeamId, ap.firstName, ap.lastName, apNickname, ap.age, ap.position, apRating,
               JSON.stringify(apSkills), JSON.stringify(apPhysical), JSON.stringify(apPersonality),
               JSON.stringify(apLifeContext), JSON.stringify(generatePlayerFace(ap)), apDescription,
               JSON.stringify(isGK ? apGkSkills : apFieldSkills), apHiddenTalent,
               isGK ? apGkSkills!.experience.current : apFieldSkills!.experience.current,
-              Math.round(10 + apRating * 4))
+              Math.round(10 + apRating * 4), ap.nationality ?? "CZ")
         );
 
         contractStmts.push(

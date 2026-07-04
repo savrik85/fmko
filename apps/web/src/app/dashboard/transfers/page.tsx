@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
+import { nationalityFlag } from "@/lib/nationality";
 import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern } from "@/components/ui";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -371,7 +372,7 @@ function skillColor(v: number): string {
 }
 
 interface FreeAgent {
-  id: string; firstName: string; lastName: string; nickname?: string; age: number;
+  id: string; firstName: string; lastName: string; nickname?: string; nationality?: string; age: number;
   position: string; overallRating: number; weeklyWage: number; occupation: string;
   source: string; villageName: string | null; distanceKm: number | null;
   expiresAt: string; avatar: Record<string, unknown>;
@@ -382,7 +383,7 @@ interface FreeAgent {
 }
 
 interface MarketListing {
-  id: string; playerId: string; askingPrice: number; playerName: string;
+  id: string; playerId: string; askingPrice: number; playerName: string; nationality?: string;
   playerAge: number; position: string; overallRating: number; teamName: string;
   expiresAt: string; avatar: Record<string, unknown>;
   myBidAmount?: number | null;
@@ -1079,6 +1080,7 @@ export default function TransfersPage() {
                             <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors truncate">
                               {p.firstName} {p.lastName}
                             </Link>
+                            {nationalityFlag((p as { nationality?: string }).nationality) && <span title={(p as { nationality?: string }).nationality}>{nationalityFlag((p as { nationality?: string }).nationality)}</span>}
                             <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
                             <span className="text-sm font-heading font-bold tabular-nums">{p.overallRating}</span>
                           </div>
@@ -1367,7 +1369,7 @@ export default function TransfersPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                          <span className="font-heading font-bold text-base">{fa.firstName} {fa.lastName}</span>
+                          <span className="font-heading font-bold text-base">{fa.firstName} {fa.lastName}{nationalityFlag(fa.nationality) && <span className="ml-1" title={fa.nationality}>{nationalityFlag(fa.nationality)}</span>}</span>
                           <PositionBadge position={fa.position as "GK" | "DEF" | "MID" | "FWD"} />
                           {fa.isCelebrity && (
                             <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200">
@@ -1501,6 +1503,7 @@ export default function TransfersPage() {
                             ? <span className="font-heading font-bold">{l.playerName}</span>
                             : <Link href={`/dashboard/player/${l.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">{l.playerName}</Link>
                           }
+                          {nationalityFlag(l.nationality) && <span title={l.nationality}>{nationalityFlag(l.nationality)}</span>}
                           <PositionBadge position={l.position as "GK" | "DEF" | "MID" | "FWD"} />
                           <span className="text-sm text-muted">{l.playerAge} let</span>
                           <span className="text-sm font-heading font-bold tabular-nums">{l.overallRating}</span>
@@ -1749,6 +1752,7 @@ export default function TransfersPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap mb-0.5">
                             <span className="font-heading font-bold text-base">{o.firstName} {o.lastName}</span>
+                            {nationalityFlag((o as { nationality?: string }).nationality) && <span title={(o as { nationality?: string }).nationality}>{nationalityFlag((o as { nationality?: string }).nationality)}</span>}
                             <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
                             <span className="text-sm text-muted">{o.age} let</span>
                             {isYouth && <span className="text-xs bg-pitch-100 text-pitch-700 px-2 py-0.5 rounded-full font-heading font-bold">Dorostenec</span>}

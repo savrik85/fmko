@@ -98,6 +98,30 @@ export function generateForecast(scheduledAt: string | null, seed?: number): Wea
   };
 }
 
+/** Násobič návštěvy dle počasí — v ošklivu přijde míň lidí. */
+export function weatherAttendanceFactor(weather: Weather): number {
+  switch (weather) {
+    case "sunny": return 1.12;
+    case "cloudy": return 1.0;
+    case "wind": return 0.92;
+    case "rain": return 0.80;
+    case "snow": return 0.62;
+    default: return 1.0;
+  }
+}
+
+/** Násobič prodeje piva dle počasí — v mrazu se pije míň, v teple víc. */
+export function weatherBeerFactor(weather: Weather): number {
+  switch (weather) {
+    case "sunny": return 1.30;
+    case "cloudy": return 1.0;
+    case "wind": return 0.95;
+    case "rain": return 0.85;
+    case "snow": return 0.55;
+    default: return 1.0;
+  }
+}
+
 /**
  * Generate actual match-day weather — similar to forecast but with slight variation.
  */

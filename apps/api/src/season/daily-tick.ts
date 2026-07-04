@@ -29,14 +29,26 @@ export async function executeDailyTick(
   gameDate?: Date,
 ): Promise<DailyTickResult> {
   const now = gameDate ?? new Date();
-  // Use GAME DATE for day-of-week, not real date
-  // Find any human team's game_date to determine the in-game day
-  const gameDateRow = await env.DB.prepare("SELECT game_date FROM teams WHERE user_id != 'ai' AND game_date IS NOT NULL LIMIT 1")
-    .first<{ game_date: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "load game_date failed", e); return null; });
-  const effectiveDate = gameDateRow?.game_date ? new Date(gameDateRow.game_date) : now;
+  // Kanonický herní den ticku = DETERMINISTICKY reálný den (16:00 UTC) + offset (game_clock).
+  // MUSÍ se spočítat PŘED KV guardem i posunem game_date — jinak guard keyuje na starou hodnotu,
+  // posun ji přepíše na deterministickou a druhý běh ve stejný reálný den keyuje na novou → NEchytí se
+  // → dvojité pondělní finance/trénink/kabina. Klíč z deterministického data → všechny běhy dne = stejný klíč.
+  const clock = await env.DB.prepare("SELECT offset_days FROM game_clock WHERE id = 1").first<{ offset_days: number }>()
+    .catch((e) => { logger.warn({ module: "daily-tick" }, "load game clock", e); return null; });
+  let effectiveDate: Date;
+  if (clock) {
+    const g = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 16, 0, 0, 0));
+    g.setUTCDate(g.getUTCDate() + clock.offset_days);
+    effectiveDate = g;
+  } else {
+    // Chybí seed řádek game_clock → herní čas by se TIŠE zastavil. Doplnit dle migrace 0107.
+    logger.error({ module: "daily-tick" }, "CHYBÍ řádek game_clock (id=1) — herní čas se NEPOSOUVÁ. Doplň seed dle migrace 0107.");
+    const gameDateRow = await env.DB.prepare("SELECT game_date FROM teams WHERE user_id != 'ai' AND game_date IS NOT NULL LIMIT 1")
+      .first<{ game_date: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "load game_date failed", e); return null; });
+    effectiveDate = gameDateRow?.game_date ? new Date(gameDateRow.game_date) : now;
+  }
 
-  // Idempotency: zabránit dvojitému spuštění pro stejný herní den
-  // Klíč je aktuální game_date (před posunem), takže druhé spuštění vidí novou hodnotu a přeskočí.
+  // Idempotency: zabránit dvojitému spuštění pro stejný herní den (klíč z deterministického data výše).
   const todayKey = effectiveDate.toISOString().slice(0, 10); // YYYY-MM-DD
   const alreadyRan = await env.CACHE_KV.get(`daily-tick:${todayKey}`).catch((e) => { logger.warn({ module: "daily-tick" }, "read tick KV flag failed", e); return null; });
   if (alreadyRan) {
@@ -559,6 +571,23 @@ export async function executeDailyTick(
   const allTeams = await env.DB.prepare(
     "SELECT t.id, t.user_id, t.league_id, t.game_date, t.training_type, t.training_sessions, t.training_days, v.size as village_size, v.district as village_district, v.population as village_population FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
   ).all();
+
+  // ── Globální herní den ── clock + effectiveDate jsou spočítané na začátku ticku (deterministicky
+  // z reality) a už použité pro KV guard. Tady jen zapíšeme datum do teams + posuneme pohár.
+  let globalGameDate: string | null = null;
+  if (clock) {
+    globalGameDate = effectiveDate.toISOString();
+    await env.DB.prepare("UPDATE teams SET game_date = ? WHERE game_date IS NOT NULL").bind(globalGameDate).run()
+      .catch((e) => logger.warn({ module: "daily-tick" }, "set global game date", e));
+
+    // Pohár: postup kol podle herního dne (kola padají na soboty, finále na konci ligy).
+    try {
+      const { maybeAdvanceCup } = await import("../cup/cup");
+      await maybeAdvanceCup(env.DB);
+    } catch (e) { logger.warn({ module: "daily-tick" }, "cup auto-advance failed", e); }
+  }
+  // (Chybějící game_clock už je zalogováno jako error na začátku ticku.)
+
   for (const team of allTeams.results) {
     const teamId = team.id as string;
     let gameDate = team.game_date as string | null;
@@ -572,27 +601,12 @@ export async function executeDailyTick(
         logger.info({ module: "daily-tick" }, `synced game_date for team ${teamId} from league peer`);
       }
     }
-    if (gameDate) {
-      // Advance the date — bulk update per league to keep all teams in sync
-      const gd = new Date(gameDate);
-      gd.setDate(gd.getDate() + 1);
+    if (globalGameDate) {
+      // Datum je nastaveno globálně výše (reálný den + offset). Tady jen odvodíme hodnoty pro navazující per-tým logiku.
+      const gd = new Date(globalGameDate);
       const newDayOfWeek = gd.getUTCDay();
-      const newGameDate = gd.toISOString();
-
-      // Skip if this league was already advanced by another team in this tick
-      const leagueKey = team.league_id as string | null;
-      if (leagueKey && advancedLeagues.has(leagueKey)) {
-        // Already advanced — just read the new date for this team's logic below
-      } else if (leagueKey) {
-        await env.DB.prepare("UPDATE teams SET game_date = ? WHERE league_id = ?")
-          .bind(newGameDate, leagueKey).run()
-          .catch((e) => logger.warn({ module: "daily-tick" }, "bulk advance league date", e));
-        advancedLeagues.add(leagueKey);
-      } else {
-        await env.DB.prepare("UPDATE teams SET game_date = ? WHERE id = ?")
-          .bind(newGameDate, teamId).run()
-          .catch((e) => logger.warn({ module: "daily-tick" }, "advance team date", e));
-      }
+      const newGameDate = globalGameDate;
+      gameDate = globalGameDate;
 
       events.push({ type: "day", description: `Herní den: ${gd.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" })}` });
 
@@ -767,6 +781,24 @@ export async function executeDailyTick(
         } catch (e) {
           logger.error({ module: "daily-tick" }, `weekly finances failed for team ${teamId}`, e);
         }
+      }
+
+      // ── Kabina & frakce (pondělí) — tahoun/potížista + rivalové/parťáci upraví morálku kádru ──
+      if (newDayOfWeek === 1) {
+        try {
+          const { processKabina } = await import("./kabina");
+          const kab = await processKabina(env.DB, teamId);
+          // Lidský tým: čas od času zpráva do kabiny, ať je dynamika vidět (ne každý týden — nespamovat).
+          if (kab.applied && team.user_id !== "ai" && (kab.tahoun || kab.potizista) && Math.random() < 0.4) {
+            const parts: string[] = [];
+            if (kab.tahoun) parts.push(`${kab.tahoun.name} drží partu`);
+            if (kab.potizista) parts.push(`${kab.potizista.name} dělá v kabině dusno`);
+            const { createNotification } = await import("../community/notifications");
+            await createNotification(env.DB, teamId, "event", "🧢 Kabina", `${parts.join(" · ")} (nálada ${kab.mood})`, "/dashboard/kadr",
+              { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB },
+            ).catch((e) => logger.warn({ module: "daily-tick" }, "kabina notification", e));
+          }
+        } catch (e) { logger.warn({ module: "daily-tick" }, `kabina failed for team ${teamId}`, e); }
       }
 
       // ── Training cost (only on actual training days that ran — custom training_days

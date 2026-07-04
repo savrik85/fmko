@@ -1,5 +1,7 @@
 import { logger } from "../lib/logger";
 import { CONCESSION_CATALOG, CONCESSION_PRODUCT_KEYS, type ProductKey } from "./concession-catalog";
+import { weatherBeerFactor } from "./weather";
+import type { Weather } from "../engine/types";
 
 /**
  * Fans processor — satisfaction delta a self-concession prodej.
@@ -157,6 +159,7 @@ export function computeSelfConcessionMatch(
   attendance: number,
   satisfaction: number,
   products: ConcessionProductRow[],
+  weather: Weather = "cloudy",
 ): ConcessionSaleResult {
   // satisfaction mul pro poptávku: 0.7 (nespokojení) -> 1.3 (nadšení)
   const satMul = 0.7 + (clamp(satisfaction, 0, 100) / 100) * 0.6;
@@ -190,8 +193,10 @@ export function computeSelfConcessionMatch(
     // Quality boost: vyšší quality → mírně víc demand (lidé chtějí "to dobré")
     const qualityBoost = 1 + (p.qualityLevel - 1) * 0.1; // L1=1.0, L2=1.1, L3=1.2
 
+    // Nápoje (pivo, limo) se řídí počasím — v mrazu se pije míň, v teple víc.
+    const weatherMul = (p.key === "beer" || p.key === "lemonade") ? weatherBeerFactor(weather) : 1;
     const demand = Math.round(
-      attendance * catalog.baseDemandRate * satMul * priceFactor * qualityBoost,
+      attendance * catalog.baseDemandRate * satMul * priceFactor * qualityBoost * weatherMul,
     );
     const actualSold = Math.max(0, Math.min(demand, p.stockQuantity));
     const revenue = actualSold * p.sellPrice;

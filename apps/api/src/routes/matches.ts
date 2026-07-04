@@ -7,6 +7,7 @@ import type { Bindings } from "../index";
 import { requireTeamOwnership } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { logger } from "../lib/logger";
+import { mustSeason } from "../lib/season";
 
 const matchesRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -188,6 +189,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
      LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
      LEFT JOIN lineups l ON l.team_id = ? AND l.calendar_id = COALESCE(m.calendar_id, m.id)
      WHERE (m.home_team_id = ? OR m.away_team_id = ?)
+       AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = m.league_id)
      ORDER BY COALESCE(sc.scheduled_at, m.created_at) ASC`
   ).bind(teamId, teamId, teamId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team schedule", e); return { results: [] }; });
 
@@ -233,7 +235,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
 
   return c.json({
     leagueName: league?.name ?? "Liga",
-    season: league?.season_number ?? 1,
+    season: mustSeason(league?.season_number),
     matches,
     promotionPrice: teamPromotionPrice,
   });
@@ -394,10 +396,11 @@ matchesRouter.get("/teams/:teamId/league-schedule", async (c) => {
      FROM matches m
      JOIN teams ht ON m.home_team_id = ht.id
      JOIN teams at ON m.away_team_id = at.id
-     LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
+     JOIN season_calendar sc ON m.calendar_id = sc.id
      WHERE m.league_id = ?
+       AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)
      ORDER BY COALESCE(m.round, sc.game_week, 999), ht.name`
-  ).bind(leagueId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch league schedule matches", e); return { results: [] }; });
+  ).bind(leagueId, leagueId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch league schedule matches", e); return { results: [] }; });
 
   // Group by round
   const roundsMap = new Map<number, Array<Record<string, unknown>>>();
@@ -434,7 +437,7 @@ matchesRouter.get("/teams/:teamId/league-schedule", async (c) => {
 
   return c.json({
     leagueName: league?.name ?? "Liga",
-    season: league?.season_number ?? 1,
+    season: mustSeason(league?.season_number),
     rounds,
   });
 });
@@ -667,12 +670,18 @@ matchesRouter.get("/teams/:teamId/match-results", async (c) => {
 
   // Get top scorers for this team from match_player_stats
   const scorers = await c.env.DB.prepare(
-    `SELECT mps.player_id, p.first_name, p.last_name, p.nickname, p.position,
+    `SELECT mps.player_id,
+       COALESCE(p.first_name, dp.first_name) as first_name,
+       COALESCE(p.last_name, dp.last_name) as last_name,
+       COALESCE(p.nickname, dp.nickname) as nickname,
+       COALESCE(p.position, dp.position) as position,
+       (p.id IS NULL) as is_departed,
        SUM(mps.goals) as total_goals, SUM(mps.assists) as total_assists,
        SUM(mps.yellow_cards) as total_yellows, SUM(mps.red_cards) as total_reds,
        COUNT(*) as appearances, ROUND(AVG(mps.rating), 1) as avg_rating
      FROM match_player_stats mps
-     JOIN players p ON mps.player_id = p.id
+     LEFT JOIN players p ON mps.player_id = p.id
+     LEFT JOIN departed_players dp ON mps.player_id = dp.id
      WHERE mps.team_id = ?
      GROUP BY mps.player_id
      ORDER BY total_goals DESC, total_assists DESC
@@ -720,7 +729,8 @@ matchesRouter.get("/teams/:teamId/match-results", async (c) => {
     summary: { played: leagueMatches.length, wins: totalW, draws: totalD, losses: totalL, goalsFor, goalsAgainst },
     topPlayers: scorers.results.map((r) => ({
       playerId: r.player_id,
-      name: `${r.first_name} ${r.last_name}`,
+      name: (r.first_name || r.last_name) ? `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim() : "Bývalý hráč",
+      isDeparted: !!r.is_departed,
       nickname: r.nickname,
       position: r.position,
       goals: r.total_goals,

@@ -4,6 +4,7 @@
  */
 
 import {simulateMatch} from "../engine/simulation";
+import {weatherAttendanceFactor} from "../season/weather";
 import {generateMatchCommentary, loadCommentaryFromDB} from "../engine/commentary";
 import {createRng} from "../generators/rng";
 import type {MatchPlayer, TeamSetup, Weather} from "../engine/types";
@@ -423,9 +424,9 @@ export async function runScheduledMatches(
             }
             const derbyAttendanceMul = preMatchHeat >= 60 ? 1.35 : 1.0;
 
-            // Apply facility attendance bonus (parking) + celebrity bonus + satisfaction + promo + derby, cap at stadium capacity
+            // Apply facility attendance bonus (parking) + celebrity bonus + satisfaction + promo + derby + počasí, cap at stadium capacity
             const attendance = Math.min(
-                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul),
+                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul * weatherAttendanceFactor(weather)),
                 stadiumCapacity,
             );
 
@@ -831,8 +832,8 @@ export async function runScheduledMatches(
                 const repMap = new Map(repRows.results.map((r) => [r.id, r.reputation ?? 50]));
                 const homeRep = repMap.get(homeTeamId) ?? 50;
                 const awayRep = repMap.get(awayTeamId) ?? 50;
-                await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate, awayRep);
-                await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate, homeRep);
+                await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate, awayRep, false, weather);
+                await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate, homeRep, false, weather);
                 // Cash loan repayments — po všech ostatních match-day financích (na čerstvém budgetu)
                 await processCashLoanRepayment(db, homeTeamId, matchId, gameDate);
                 await processCashLoanRepayment(db, awayTeamId, matchId, gameDate);
@@ -840,29 +841,36 @@ export async function runScheduledMatches(
                 logger.error({module: "match-runner"}, `Match finances failed for ${matchId}`, e);
             }
 
-            // Manager experience — small chance to improve attributes after each match
+            // Manager development po každém zápase — OBOUSMĚRNĚ podle výsledku.
             for (const tid of [homeTeamId, awayTeamId]) {
                 try {
-                    // 10% chance per attribute per match
-                    const attrs = ["coaching", "motivation", "tactics", "discipline"];
-                    const attr = attrs[Math.floor(Math.random() * attrs.length)];
-                    if (Math.random() < 0.10) {
-                        await db.prepare(`UPDATE managers
-                                          SET ${attr} = MIN(100, ${attr} + 1)
-                                          WHERE team_id = ?`)
-                            .bind(tid).run();
-                    }
-                    // Youth development improves if young players played
-                    if (Math.random() < 0.05) {
-                        await db.prepare("UPDATE managers SET youth_development = MIN(100, youth_development + 1) WHERE team_id = ?")
-                            .bind(tid).run();
-                    }
-                    // Reputation grows with wins
                     const isHome = tid === homeTeamId;
-                    const won = isHome ? result.homeScore > result.awayScore : result.awayScore > result.homeScore;
-                    if (won && Math.random() < 0.15) {
-                        await db.prepare("UPDATE managers SET reputation = MIN(100, reputation + 1) WHERE team_id = ?")
-                            .bind(tid).run();
+                    const gf = isHome ? result.homeScore : result.awayScore; // vstřelené
+                    const ga = isHome ? result.awayScore : result.homeScore; // obdržené
+                    const margin = gf - ga;
+                    const won = margin > 0, lost = margin < 0;
+                    const bigWin = margin >= 3, blowoutLoss = margin <= -3;
+
+                    // Atributy: zkušenost (koučink/taktika) roste — víc při výhře.
+                    if (Math.random() < (won ? 0.16 : 0.10)) {
+                        const upAttr = ["coaching", "tactics"][Math.floor(Math.random() * 2)];
+                        await db.prepare(`UPDATE managers SET ${upAttr} = MIN(99, ${upAttr} + 1) WHERE team_id = ?`).bind(tid).run();
+                    }
+                    // Prohra erozuje motivaci/disciplínu (blamáž víc).
+                    if (lost && Math.random() < (blowoutLoss ? 0.25 : 0.12)) {
+                        const downAttr = ["motivation", "discipline"][Math.floor(Math.random() * 2)];
+                        await db.prepare(`UPDATE managers SET ${downAttr} = MAX(10, ${downAttr} - 1) WHERE team_id = ?`).bind(tid).run();
+                    }
+                    // Mládežnický rozvoj — pomalu roste.
+                    if (Math.random() < 0.05) {
+                        await db.prepare("UPDATE managers SET youth_development = MIN(99, youth_development + 1) WHERE team_id = ?").bind(tid).run();
+                    }
+                    // Reputace: OBOUSMĚRNĚ dle výsledku, strop 15–75 (sjednoceno se sezónou/pohárem).
+                    let repDelta = 0;
+                    if (won) repDelta = bigWin ? 2 : 1;
+                    else if (lost) repDelta = blowoutLoss ? -2 : -1;
+                    if (repDelta !== 0 && Math.random() < 0.35) {
+                        await db.prepare("UPDATE managers SET reputation = MAX(15, MIN(75, reputation + ?)) WHERE team_id = ?").bind(repDelta, tid).run();
                     }
                 } catch (e) {
                     logger.warn({module: "match-runner"}, "manager xp update", e);
@@ -1007,8 +1015,11 @@ export async function buildMatchPlayers(
     userLineupJson?: string | null,
     idOffset: number = 0,
     options?: { friendlyMultiplier?: number; matchKey?: string },
+    // Volitelně předané řádky kádru (stejný tvar jako players) — pro pohárové velkokluby
+    // z cup_club_players. Když je zadáno, přeskočí se dotaz na tabulku players.
+    sourceRows?: { results: Record<string, unknown>[] },
 ): Promise<BuildResult> {
-    const rows = await db.prepare(
+    const rows = sourceRows ?? await db.prepare(
         "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
     ).bind(teamId).all();
 

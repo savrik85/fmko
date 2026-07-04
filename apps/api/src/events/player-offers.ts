@@ -4,6 +4,7 @@
  */
 
 import type { Rng } from "../generators/rng";
+import { FIRSTNAMES } from "../data/czech-names";
 import { generatePlayer, type VillageInfo } from "../generators/player";
 import { generateHeightWeight } from "../generators/physicals";
 import { getDistrictDataFromDB } from "../data/districts";
@@ -55,14 +56,6 @@ const SOURCES = [
   },
 ];
 
-const FIRSTNAMES: Record<string, Record<string, number>> = {
-  "1960s": { "Jiří": 0.08, "Jan": 0.07, "Petr": 0.06, "Josef": 0.06 },
-  "1970s": { "Petr": 0.08, "Jan": 0.07, "Martin": 0.06, "Pavel": 0.05 },
-  "1980s": { "Jan": 0.08, "Martin": 0.07, "Tomáš": 0.06, "David": 0.05 },
-  "1990s": { "Jan": 0.09, "Tomáš": 0.07, "Jakub": 0.06, "Lukáš": 0.05 },
-  "2000s": { "Jakub": 0.08, "Jan": 0.07, "Adam": 0.06, "Filip": 0.05 },
-  "2010s": { "Jakub": 0.07, "Jan": 0.07, "Adam": 0.06, "Vojtěch": 0.05 },
-};
 
 /**
  * Generate a player offer for a team. Returns null if conditions not met.
@@ -136,8 +129,8 @@ export async function generatePlayerOffer(
 
   const offerId = crypto.randomUUID();
   await db.prepare(
-    `INSERT INTO player_offers (id, team_id, source, source_name, message, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO player_offers (id, team_id, source, source_name, message, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, expires_at, nationality)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     offerId, teamId, sourceType.source, sourceType.senderName, message,
     player.firstName, player.lastName, null, age, pos, overallRating,
@@ -149,8 +142,8 @@ export async function generatePlayerOffer(
       ...(isYouth ? { hiddenTalent: rng.int(20, 65) } : {}),
     }),
     JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
-    JSON.stringify(generatePlayerFace({ age: player.age ?? age, bodyType: player.bodyType ?? "normal" })),
-    weeklyWage, expiresAt.toISOString(),
+    JSON.stringify(generatePlayerFace({ age: player.age ?? age, bodyType: player.bodyType ?? "normal", ethnicity: player.ethnicity })),
+    weeklyWage, expiresAt.toISOString(), player.nationality ?? "CZ",
   ).run();
 
   logger.info({ module: "player-offers", teamId }, `new offer: ${player.firstName} ${player.lastName} (${pos}, ${overallRating}) from ${sourceType.source}`);

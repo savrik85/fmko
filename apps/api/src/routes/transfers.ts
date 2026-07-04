@@ -88,6 +88,15 @@ transfersRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
     await checkReleaseAchievements(c.env.DB, teamId);
   } catch (e) { logger.warn({ module: "transfers" }, "check release achievements", e); }
 
+  // Archiv odešlého hráče — jméno přežije pro historické statistiky (neklikatelný záznam)
+  await c.env.DB.prepare(
+    `INSERT OR REPLACE INTO departed_players (id, first_name, last_name, nickname, position, age, overall_rating, team_id, team_name, league_id, leave_type, season_number, left_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'released', (SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
+  ).bind(
+    playerId, player.first_name, player.last_name, player.nickname ?? null, player.position,
+    player.age, player.overall_rating, teamId, player.team_name ?? null, player.league_id ?? null,
+  ).run().catch((e) => logger.warn({ module: "transfers" }, "archive released player", e));
+
   // Delete player
   await c.env.DB.prepare("DELETE FROM players WHERE id = ?").bind(playerId).run();
 
@@ -125,6 +134,7 @@ transfersRouter.get("/teams/:teamId/free-agents", async (c) => {
       firstName: fa.first_name,
       lastName: fa.last_name,
       nickname: fa.nickname,
+      nationality: fa.nationality ?? "CZ",
       age: fa.age,
       position: fa.position,
       overallRating: fa.overall_rating,
@@ -194,13 +204,13 @@ transfersRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   // Create player from free agent
   const playerId = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
+    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, nationality, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
   ).bind(
     playerId, teamId, fa.first_name, fa.last_name, fa.nickname ?? null,
     fa.age, fa.position, fa.overall_rating,
     fa.skills, fa.physical, fa.personality, fa.life_context, fa.avatar,
-    fa.hidden_talent ?? 0, body.offeredWage,
+    fa.hidden_talent ?? 0, body.offeredWage, fa.nationality ?? "CZ",
   ).run();
 
   // Create contract
@@ -287,7 +297,7 @@ transfersRouter.get("/teams/:teamId/market", async (c) => {
   // Listings from other teams in same league (real players)
   const listings = await c.env.DB.prepare(
     `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at, tl.is_ai_listing, tl.ai_player_data,
-     p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
+     p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.nationality,
      t.name as team_name
      FROM transfer_listings tl
      LEFT JOIN players p ON tl.player_id = p.id AND tl.is_ai_listing = 0
@@ -324,6 +334,7 @@ transfersRouter.get("/teams/:teamId/market", async (c) => {
         playerId: isAi ? null : l.player_id,
         askingPrice: l.asking_price,
         playerName: isAi ? `${aiData?.firstName ?? ""} ${aiData?.lastName ?? ""}` : `${l.first_name} ${l.last_name}`,
+        nationality: isAi ? (aiData?.nationality ?? "CZ") : ((l.nationality as string) ?? "CZ"),
         playerAge: isAi ? aiData?.age : l.age,
         position: isAi ? aiData?.position : l.position,
         overallRating: isAi ? aiData?.overallRating : l.overall_rating,

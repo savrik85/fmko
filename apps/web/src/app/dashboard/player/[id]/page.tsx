@@ -8,6 +8,7 @@ import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
+import { nationalityLabel } from "@/lib/nationality";
 import type { BadgePattern } from "@/components/ui";
 
 /* ── Helpers ── */
@@ -771,6 +772,7 @@ export default function PlayerDetailPage() {
           <div className="space-y-0">
             <DetailRow label="Pozice" value={<PositionBadge position={player.position} />} />
             <DetailRow label="Věk" value={`${player.age} let`} />
+            <DetailRow label="Národnost" value={nationalityLabel((player as { nationality?: string }).nationality)} />
             <DetailRow label="Povolání" value={player.lifeContext?.occupation ?? "—"} />
             <DetailRow label="Bydliště" value={player.residence ?? "—"} />
             <DetailRow label="Dojíždění" value={player.commute_km != null ? `${player.commute_km} km` : "—"} />
