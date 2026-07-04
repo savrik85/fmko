@@ -261,12 +261,13 @@ export default function NewsPage() {
     ? playerInterviewArticles.filter((a) => (a as any).gameWeek === latestPlayerIvWeek)
     : playerInterviewArticles;
   const otherArticles = articles.filter(
-    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview"].includes(a.type),
+    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "season_opener", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview"].includes(a.type),
   );
 
   // Lead story = nejnovější kandidát napříč typy (preview kolem zápasu vyhraje nad starým round_summary).
   // standing je dynamicky generovaný se současným časem, proto zůstává až jako poslední fallback.
-  const leadStory = [previewArticles[0], roundSummaryArticles[0], aiReportArticles[0], matchArticles[0]]
+  const openerArticles = articles.filter((a) => a.type === "season_opener");
+  const leadStory = [openerArticles[0], previewArticles[0], roundSummaryArticles[0], aiReportArticles[0], matchArticles[0]]
     .filter(Boolean)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
     || standingArticles[0] || articles[0];
@@ -335,11 +336,12 @@ export default function NewsPage() {
               {/* Lead story */}
               <div id={`news-${leadStory.id}`}>
                 <ArticleWrapper article={leadStory}>
-                  {leadStory.type === "ai_report" || leadStory.type === "matchday_preview" || leadStory.type === "round_summary" ? (
+                  {leadStory.type === "ai_report" || leadStory.type === "matchday_preview" || leadStory.type === "round_summary" || leadStory.type === "season_opener" ? (
                     <div>
                       <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">
                         {leadStory.type === "matchday_preview" ? "Předzápasové preview"
                           : leadStory.type === "round_summary" ? "🏆 Hráč a trenér kola"
+                          : leadStory.type === "season_opener" ? "🎺 Otevírák sezóny"
                           : "Komentář kola"}
                       </div>
                       <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
