@@ -312,9 +312,12 @@ export async function regenerateU21Schedule(
     "SELECT number FROM seasons WHERE id = ?"
   ).bind(league?.season_id).first<{ number: number }>();
 
-  // Smaž existing rozpis
-  const delMatch = await db.prepare("DELETE FROM matches WHERE league_id = ?").bind(u21LeagueId).run();
-  const delCal = await db.prepare("DELETE FROM season_calendar WHERE league_id = ?").bind(u21LeagueId).run();
+  // Smaž JEN rozpis cílové sezóny (dřív se mazala celá historie ligy vč. odehraných zápasů minulých sezón)
+  const delMatch = await db.prepare(
+    "DELETE FROM matches WHERE league_id = ? AND calendar_id IN (SELECT id FROM season_calendar WHERE league_id = ? AND season_number = ?)",
+  ).bind(u21LeagueId, u21LeagueId, seasonNumber?.number ?? 1).run();
+  const delCal = await db.prepare("DELETE FROM season_calendar WHERE league_id = ? AND season_number = ?")
+    .bind(u21LeagueId, seasonNumber?.number ?? 1).run();
 
   // Načti U21 týmy
   const teamRows = await db.prepare(

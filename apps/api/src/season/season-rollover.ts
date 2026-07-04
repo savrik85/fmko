@@ -69,6 +69,32 @@ export async function rolloverAllLeagues(
     "INSERT OR IGNORE INTO season_welcome (team_id, season_number, seen) SELECT id, ?, 0 FROM teams WHERE user_id != 'ai' AND team_type = 'senior'",
   ).bind(newNum).run().catch((e) => logger.warn({ module: "season-rollover" }, "create season welcome", e));
 
+  // 7. U21: nová sezóna i pro mládež — repoint season_id, nový rozpis (šetrná regenerace maže jen
+  //    cílovou sezónu) a stárnutí hráčů +1 (idempotentně přes marker v season_end_progress).
+  try {
+    const { regenerateU21Schedule } = await import("../league/u21-generator");
+    const u21Leagues = await db.prepare("SELECT id FROM leagues WHERE league_type = 'u21'").all<{ id: string }>()
+      .catch((e) => { logger.warn({ module: "season-rollover" }, "load u21 leagues", e); return { results: [] as { id: string }[] }; });
+    for (const ul of u21Leagues.results) {
+      await db.prepare("UPDATE leagues SET season_id = ? WHERE id = ?").bind(seasonId, ul.id).run()
+        .catch((e) => logger.warn({ module: "season-rollover" }, "repoint u21 season", e));
+      // Idempotence: přeskoč, když už U21 liga má rozpis nové sezóny se zápasy
+      const has = await db.prepare(
+        "SELECT 1 FROM season_calendar sc WHERE sc.league_id = ? AND sc.season_number = ? AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id) LIMIT 1",
+      ).bind(ul.id, newNum).first().catch((e) => { logger.warn({ module: "season-rollover" }, "u21 guard", e); return null; });
+      if (!has) await regenerateU21Schedule(db, ul.id, createRng(cryptoSeed()), startDate);
+    }
+    // Stárnutí U21 hráčů (+1) — jednou za rollover (marker), senior kádry řeší fáze departures.
+    const agedMark = await db.prepare("SELECT status FROM season_end_progress WHERE league_id = '__u21__' AND season_number = ? AND phase = 'u21_aging'")
+      .bind(newNum).first<{ status: string }>().catch((e) => { logger.warn({ module: "season-rollover" }, "u21 aging marker", e); return { status: "done" }; });
+    if (agedMark?.status !== "done") {
+      await db.prepare("UPDATE players SET age = age + 1 WHERE team_id IN (SELECT id FROM teams WHERE team_type = 'u21')").run()
+        .catch((e) => logger.warn({ module: "season-rollover" }, "u21 aging", e));
+      await db.prepare("INSERT INTO season_end_progress (league_id, season_number, phase, status, updated_at) VALUES ('__u21__', ?, 'u21_aging', 'done', strftime('%Y-%m-%dT%H:%M:%SZ','now')) ON CONFLICT(league_id, season_number, phase) DO UPDATE SET status = 'done'")
+        .bind(newNum).run().catch((e) => logger.warn({ module: "season-rollover" }, "u21 aging marker save", e));
+    }
+  } catch (e) { logger.warn({ module: "season-rollover" }, "u21 rollover failed", e); }
+
   logger.info({ module: "season-rollover" }, `global rollover → sezóna ${newNum}, ${rolledLeagues} lig, ${matchesCreated} zápasů`);
   return { newSeasonNumber: newNum, rolledLeagues, matchesCreated };
 }
