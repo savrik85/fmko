@@ -59,11 +59,12 @@ async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: 
     // Simple: if residence matches new village → 0, else random 5-20km
     const sameVillage = player.residence === team.name;
     const newCommute = sameVillage ? 0 : Math.floor(5 + Math.random() * 15);
-    await db.prepare("UPDATE players SET commute_km = ?, squad_number = NULL WHERE id = ?")
+    // trainingRest nemá cestovat s hráčem k novému týmu — volno dal starý trenér
+    await db.prepare("UPDATE players SET commute_km = ?, squad_number = NULL, life_context = json_remove(life_context, '$.trainingRest') WHERE id = ?")
       .bind(newCommute, playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   } else {
     // At minimum reset squad number
-    await db.prepare("UPDATE players SET squad_number = NULL WHERE id = ?")
+    await db.prepare("UPDATE players SET squad_number = NULL, life_context = json_remove(life_context, '$.trainingRest') WHERE id = ?")
       .bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   }
 }
@@ -93,11 +94,18 @@ gameRouter.get("/teams/:teamId/training", async (c) => {
     } catch (e) { logger.warn({ module: "game", teamId }, "parse training_days", e); }
   }
 
+  // Hráči s naplánovaným volnem z příštího tréninku (life_context.$.trainingRest)
+  const restRows = await c.env.DB.prepare(
+    `SELECT id FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') AND json_extract(life_context, '$.trainingRest') = 1`
+  ).bind(teamId).all<{ id: string }>()
+    .catch((e) => { logger.warn({ module: "game", teamId }, "load training rest players", e); return { results: [] as Array<{ id: string }> }; });
+
   return c.json({
     type: team.training_type ?? "conditioning",
     approach: team.training_approach ?? "balanced",
     sessionsPerWeek: team.training_sessions ?? 2,
     trainingDays,
+    restPlayerIds: restRows.results.map((r) => r.id),
     lastTrainingAt: team.last_training_at,
     lastResult,
   });
@@ -122,6 +130,39 @@ gameRouter.post("/teams/:teamId/training", async (c) => {
   ).bind(body.type, body.approach, body.sessionsPerWeek, trainingDaysJson, teamId).run().catch((e) => logger.warn({ module: "game" }, "update training plan", e));
 
   return c.json({ ok: true });
+});
+
+// POST /api/teams/:teamId/training-rest — volno z příštího tréninku pro vybrané hráče
+gameRouter.post("/teams/:teamId/training-rest", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ playerIds: string[] }>()
+    .catch((e) => { logger.warn({ module: "game", teamId }, "parse training-rest body", e); return null; });
+  if (!body || !Array.isArray(body.playerIds)) return c.json({ error: "Chybí playerIds" }, 400);
+
+  const playerIds = Array.from(new Set(
+    body.playerIds.filter((id): id is string => typeof id === "string" && id.length > 0 && id.length <= 64)
+  )).slice(0, 60);
+
+  // Idempotentní zápis: nejdřív smazat flag celému týmu, pak nastavit vybraným
+  const stmts: D1PreparedStatement[] = [
+    c.env.DB.prepare(
+      `UPDATE players SET life_context = json_remove(life_context, '$.trainingRest') WHERE team_id = ? AND json_extract(life_context, '$.trainingRest') IS NOT NULL`
+    ).bind(teamId),
+  ];
+  if (playerIds.length > 0) {
+    const placeholders = playerIds.map(() => "?").join(", ");
+    stmts.push(c.env.DB.prepare(
+      `UPDATE players SET life_context = json_set(life_context, '$.trainingRest', 1) WHERE team_id = ? AND (status IS NULL OR status = 'active') AND id IN (${placeholders})`
+    ).bind(teamId, ...playerIds));
+  }
+  try {
+    await c.env.DB.batch(stmts);
+  } catch (e) {
+    logger.error({ module: "game", teamId }, "save training rest", e);
+    return c.json({ error: "Uložení volna se nepovedlo" }, 500);
+  }
+
+  return c.json({ ok: true, count: playerIds.length });
 });
 
 // Training simulation removed from manual endpoint — runs only via daily tick (cron)
@@ -951,7 +992,24 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
        ORDER BY n.created_at DESC LIMIT 20`
     ).bind(team.league_id, teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch news articles", e); return { results: [] }; });
 
-    for (const n of newsRows.results) {
+    // Jednorázové sezónní články (otevírák, ohlédnutí) nesmí vytlačit smršť přestupových
+    // zpráv z AI trhu — čerstvé (do 7 dní) se přišpendlí i mimo LIMIT okno výše.
+    const pinnedRows = await c.env.DB.prepare(
+      `SELECT id, type, headline, body, game_week, created_at FROM news
+       WHERE league_id = ? AND type IN ('season_opener', 'season_wrap')
+         AND created_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-7 days')
+       ORDER BY created_at DESC LIMIT 2`
+    ).bind(team.league_id).all().catch((e) => { logger.warn({ module: "game" }, "fetch pinned season news", e); return { results: [] }; });
+
+    const seenNewsIds = new Set<string>();
+    const combinedRows = [...newsRows.results, ...pinnedRows.results].filter((n) => {
+      const id = n.id as string;
+      if (seenNewsIds.has(id)) return false;
+      seenNewsIds.add(id);
+      return true;
+    });
+
+    for (const n of combinedRows) {
       const iconMap: Record<string, string> = {
         manager_arrival: "\u{1F4CB}",
         round_results: "\u26BD",
@@ -965,6 +1023,7 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
         player_interview: "\u{1F3A4}",
         manager_feud: "\u{1F5E3}\uFE0F",
         season_wrap: "\u{1F3C1}",
+        season_opener: "\u{1F3BA}",
         season_awards: "\u{1F3C6}",
         legend_farewell: "\u{1F396}\uFE0F",
       };

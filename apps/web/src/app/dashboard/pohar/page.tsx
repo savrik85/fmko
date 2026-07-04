@@ -7,13 +7,6 @@ import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, PageHeader } from "@/components/ui";
 
 interface Side { name: string; color: string | null; isBig: boolean; teamId: string | null; strength: number; cupTeamId?: string }
-
-/** Barva síly soupeře — zelená lehký, jantar střední, červená těžký. */
-function strengthColor(s: number): string {
-  if (s >= 55) return "bg-card-red/10 text-card-red";
-  if (s >= 42) return "bg-amber-50 text-amber-700";
-  return "bg-pitch-50 text-pitch-600";
-}
 interface BracketMatch {
   bracketPos: number; home: Side | null; away: Side | null;
   homeScore: number | null; awayScore: number | null; homePens: number | null; awayPens: number | null;
@@ -62,30 +55,49 @@ function TeamCell({ s, align, bold }: { s: Side | null; align: "left" | "right";
       ? <Link href={`/dashboard/pohar/tym/${s.cupTeamId}`} className={`truncate hover:underline ${s.isBig ? "italic" : ""}`}>{s.name}</Link>
       : <span className={`truncate ${s?.isBig ? "italic" : ""} ${!s ? "text-muted" : ""}`}>{s?.name ?? "volný los"}</span>;
   return (
-    <div className={`flex items-center gap-1.5 min-w-0 flex-1 ${align === "right" ? "flex-row-reverse text-right" : ""}`}>
+    <div className={`flex items-center gap-1.5 min-w-0 flex-1 ${align === "right" ? "sm:flex-row-reverse sm:text-right" : ""}`}>
       {badge}
-      <span className={`min-w-0 text-[13px] leading-tight ${bold ? "font-bold text-ink" : "text-ink/70"}`}>{name}</span>
-      {s && <span className={`shrink-0 text-[10px] font-heading font-bold tabular-nums px-1 py-0.5 rounded ${strengthColor(s.strength)}`} title="síla soupeře">{s.strength}</span>}
+      <span className={`min-w-0 text-sm leading-tight ${bold ? "font-bold text-ink" : "text-ink/70"}`}>{name}</span>
     </div>
   );
 }
 
-/** Řádek pohárového zápasu — domácí | skóre | hosté, vítěz tučně. */
+/** Řádek pohárového zápasu — desktop: domácí | skóre | hosté; mobil: týmy pod sebou. */
 function TieRow({ m, mine }: { m: BracketMatch; mine: boolean }) {
   const sim = m.status === "simulated" && m.homeScore != null && m.awayScore != null;
   const homeWon = sim && (m.homeScore! > m.awayScore! || (m.homeScore === m.awayScore && (m.homePens ?? 0) > (m.awayPens ?? 0)));
   const awayWon = sim && !homeWon;
   const pens = sim && m.homeScore === m.awayScore && m.homePens != null;
   return (
-    <div className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border ${mine ? "border-pitch-300 bg-pitch-50" : "border-gray-100 bg-white"}`}>
-      <TeamCell s={m.home} align="right" bold={homeWon} />
-      <div className="shrink-0 w-14 text-center">
-        {sim
-          ? <div className="font-heading font-[800] text-sm tabular-nums leading-none">{m.homeScore}:{m.awayScore}{pens && <div className="text-[9px] text-muted font-normal mt-0.5">pen {m.homePens}:{m.awayPens}</div>}</div>
-          : <span className="text-xs text-muted font-heading">vs</span>}
+    <div className={`rounded-lg border ${mine ? "border-pitch-300 bg-pitch-50" : "border-gray-100 bg-white"}`}>
+      {/* ≥sm: jeden řádek — domácí | skóre | hosté */}
+      <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-2">
+        <TeamCell s={m.home} align="right" bold={homeWon} />
+        <div className="shrink-0 w-14 text-center">
+          {sim
+            ? <div className="font-heading font-[800] text-sm tabular-nums leading-none">{m.homeScore}:{m.awayScore}{pens && <div className="text-[9px] text-muted font-normal mt-0.5">pen {m.homePens}:{m.awayPens}</div>}</div>
+            : <span className="text-xs text-muted font-heading">vs</span>}
+        </div>
+        <TeamCell s={m.away} align="left" bold={awayWon} />
+        <span className="w-3.5 shrink-0 text-center text-xs">{m.upset ? "🔥" : ""}</span>
       </div>
-      <TeamCell s={m.away} align="left" bold={awayWon} />
-      <span className="w-3.5 shrink-0 text-center text-xs">{m.upset ? "🔥" : ""}</span>
+      {/* mobil: týmy pod sebou, skóre vpravo */}
+      <div className="sm:hidden px-2.5 py-2 space-y-1.5">
+        <div className="flex items-center gap-2">
+          <TeamCell s={m.home} align="left" bold={homeWon} />
+          <span className={`font-heading font-[800] text-sm tabular-nums shrink-0 w-5 text-right ${homeWon ? "text-ink" : "text-ink/60"}`}>{sim ? m.homeScore : "–"}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <TeamCell s={m.away} align="left" bold={awayWon} />
+          <span className={`font-heading font-[800] text-sm tabular-nums shrink-0 w-5 text-right ${awayWon ? "text-ink" : "text-ink/60"}`}>{sim ? m.awayScore : "–"}</span>
+        </div>
+        {(pens || m.upset) && (
+          <div className="text-[11px] text-muted pl-8">
+            {pens && <span>na penalty {m.homePens}:{m.awayPens}</span>}
+            {m.upset && <span className={pens ? "ml-2" : ""}>🔥 překvapení</span>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -94,6 +106,7 @@ export default function PoharPage() {
   const { teamId } = useTeam();
   const [data, setData] = useState<CupData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"pavouk" | "strelci">("pavouk");
 
   useEffect(() => {
     if (!teamId) return;
@@ -143,11 +156,11 @@ export default function PoharPage() {
       {data.prizes && data.prizes.length > 0 && (
         <div>
           <SectionLabel>Odměny za výhru v kole</SectionLabel>
-          <div className="card p-3 flex flex-wrap gap-x-5 gap-y-1.5 mt-2">
+          <div className="card p-3 sm:p-4 mt-2 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3">
             {data.prizes.map((p) => (
-              <div key={p.round} className="flex items-center gap-1.5 text-sm">
-                <span className="text-muted">{p.roundName}:</span>
-                <span className="font-heading font-bold tabular-nums">{p.prize.toLocaleString("cs")} Kč</span>
+              <div key={p.round}>
+                <div className="text-xs text-muted">{p.roundName}</div>
+                <div className="font-heading font-bold tabular-nums text-base leading-tight">{p.prize.toLocaleString("cs")} Kč</div>
               </div>
             ))}
           </div>
@@ -169,24 +182,30 @@ export default function PoharPage() {
             ) : myMatches.map((m, i) => {
               const pen = m.status === "simulated" && m.myScore === m.oppScore && m.myPens != null;
               return (
-                <div key={i} className="flex items-center gap-3 px-3 py-2.5 border-b border-gray-50 last:border-b-0">
-                  <span className="text-[11px] font-heading uppercase text-muted w-24 shrink-0">{m.roundName}</span>
-                  <span className="text-xs text-muted shrink-0 w-12">{m.isHome ? "doma" : "venku"}</span>
-                  <span className="flex-1 min-w-0 text-sm font-bold truncate">
-                    {m.opponent?.teamId ? <Link href={`/dashboard/team/${m.opponent.teamId}`} className="hover:underline">{m.opponent.name}</Link> : m.opponent?.cupTeamId ? <Link href={`/dashboard/pohar/tym/${m.opponent.cupTeamId}`} className={`hover:underline ${m.opponent.isBig ? "italic" : ""}`}>{m.opponent.name}</Link> : <span className={m.opponent?.isBig ? "italic" : ""}>{m.opponent?.name}</span>}
-                  </span>
-                  {m.status === "simulated" ? (
-                    <>
-                      <span className="font-heading font-[800] text-sm tabular-nums shrink-0">{m.myScore}:{m.oppScore}{pen && <span className="text-[10px] text-muted font-normal"> (p {m.myPens}:{m.oppPens})</span>}</span>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${m.won ? "bg-pitch-50 text-pitch-600" : "bg-card-red/10 text-card-red"}`}>{m.won ? "POSTUP" : "KONEC"}</span>
-                    </>
-                  ) : (
-                    <span className="text-xs shrink-0">
-                      {m.scheduledAt && <span className="text-muted">{new Date(m.scheduledAt).toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" })}</span>}
-                      {m.daysUntil != null && <span className="ml-1.5 font-heading font-bold text-pitch-600">{daysLabel(m.daysUntil)}</span>}
-                      {!m.scheduledAt && m.daysUntil == null && <span className="text-muted">naplánováno</span>}
+                <div key={i} className="px-3 py-2.5 border-b border-gray-50 last:border-b-0">
+                  {/* mobil: kolo + doma/venku nad soupeřem */}
+                  <div className="sm:hidden text-[11px] font-heading uppercase text-muted mb-1">
+                    {m.roundName} · {m.isHome ? "doma" : "venku"}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="hidden sm:block text-[11px] font-heading uppercase text-muted w-24 shrink-0">{m.roundName}</span>
+                    <span className="hidden sm:block text-xs text-muted shrink-0 w-12">{m.isHome ? "doma" : "venku"}</span>
+                    <span className="flex-1 min-w-0 text-base sm:text-sm font-bold truncate">
+                      {m.opponent?.teamId ? <Link href={`/dashboard/team/${m.opponent.teamId}`} className="hover:underline">{m.opponent.name}</Link> : m.opponent?.cupTeamId ? <Link href={`/dashboard/pohar/tym/${m.opponent.cupTeamId}`} className={`hover:underline ${m.opponent.isBig ? "italic" : ""}`}>{m.opponent.name}</Link> : <span className={m.opponent?.isBig ? "italic" : ""}>{m.opponent?.name}</span>}
                     </span>
-                  )}
+                    {m.status === "simulated" ? (
+                      <>
+                        <span className="font-heading font-[800] text-sm tabular-nums shrink-0">{m.myScore}:{m.oppScore}{pen && <span className="text-[10px] text-muted font-normal"> (p {m.myPens}:{m.oppPens})</span>}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${m.won ? "bg-pitch-50 text-pitch-600" : "bg-card-red/10 text-card-red"}`}>{m.won ? "POSTUP" : "KONEC"}</span>
+                      </>
+                    ) : (
+                      <span className="text-xs shrink-0">
+                        {m.scheduledAt && <span className="text-muted">{new Date(m.scheduledAt).toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" })}</span>}
+                        {m.daysUntil != null && <span className="ml-1.5 font-heading font-bold text-pitch-600">{daysLabel(m.daysUntil)}</span>}
+                        {!m.scheduledAt && m.daysUntil == null && <span className="text-muted">naplánováno</span>}
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -194,11 +213,22 @@ export default function PoharPage() {
         </div>
       )}
 
+      {/* Taby — pavouk / střelci */}
+      <div className="flex gap-1 bg-surface rounded-xl p-1">
+        {(["pavouk", "strelci"] as const).map((key) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`flex-1 py-2.5 text-sm font-heading font-bold rounded-lg transition-colors ${
+              tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
+            }`}>
+            {key === "pavouk" ? "🏆 Pavouk" : "⚽ Střelci"}
+          </button>
+        ))}
+      </div>
+
       {/* Střelci poháru */}
-      {data.scorers && data.scorers.length > 0 && (
-        <div>
-          <SectionLabel>Střelci poháru</SectionLabel>
-          <div className="card mt-2">
+      {tab === "strelci" && (
+        (data.scorers && data.scorers.length > 0) ? (
+          <div className="card">
             {data.scorers.map((s, i) => (
               <div key={s.playerId} className="flex items-center gap-3 px-3 py-2 border-b border-gray-50 last:border-b-0">
                 <span className="w-5 text-right text-xs text-muted tabular-nums shrink-0">{i + 1}.</span>
@@ -217,11 +247,13 @@ export default function PoharPage() {
               </div>
             ))}
           </div>
-        </div>
+        ) : (
+          <div className="card p-8 text-center text-muted text-sm">Zatím žádní střelci — góly se objeví po odehrání zápasů.</div>
+        )
       )}
 
       {/* Všechna kola */}
-      {[...rounds].reverse().map((r) => (
+      {tab === "pavouk" && [...rounds].reverse().map((r) => (
         <div key={r.round}>
           <div className="flex items-baseline gap-2 mb-2">
             <span className="font-heading font-bold text-base text-pitch-600">{r.roundName}</span>

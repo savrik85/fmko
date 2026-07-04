@@ -24,6 +24,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
   ]},
   { title: "Soutěž", items: [
     { href: "/dashboard/liga", icon: "\u{1F3C6}", label: "Liga", color: "#B8860B" },
+    { href: "/dashboard/pohar", icon: "\u{1F3C5}", label: "Pohár", color: "#A0722D", isNew: true },
     { href: "/dashboard/schedule", icon: "\u{1F4C5}", label: "Rozpis", color: "#3D6B5C" },
     { href: "/dashboard/friendly", icon: "\u{1F91C}", label: "Přáteláky", color: "#4A7A5C" },
     { href: "/dashboard/calendar", icon: "\u{1F5D3}️", label: "Kalendář", color: "#6B7B3D" },

@@ -125,6 +125,8 @@ export interface Player {
   weekly_wage?: number | null;
   is_celebrity?: number;
   coach_relationship?: number;
+  injury?: { type: string; daysRemaining: number } | null;
+  status?: string | null;
 }
 
 export interface CareerStats {

@@ -11,6 +11,7 @@ interface NavItem {
   label: string;
   icon: string;
   group: "main" | "club" | "league";
+  isNew?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -36,7 +37,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/schedule", label: "Rozpis", icon: "\u{1F4C5}", group: "league" },
   { href: "/dashboard/friendly", label: "Přáteláky", icon: "\u{1F91C}", group: "league" },
   { href: "/dashboard/liga", label: "Liga", icon: "\u{1F3C6}", group: "league" },
-  { href: "/dashboard/pohar", label: "Pohár", icon: "\u{1F3C5}", group: "league" },
+  { href: "/dashboard/pohar", label: "Pohár", icon: "\u{1F3C5}", group: "league", isNew: true },
   { href: "/dashboard/calendar", label: "Kalendář", icon: "\u{1F5D3}", group: "league" },
   { href: "/dashboard/napoveda", label: "Nápověda", icon: "\u{1F4D6}", group: "league" },
   // Sněm dočasně skryt z menu — dostupný přes přímou URL /dashboard/hlasovani.
@@ -148,9 +149,15 @@ export function FMSidebar() {
                         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r bg-green-400" />
                       )}
                       <span className="text-sm shrink-0 w-5 text-center leading-none">{item.icon}</span>
+                      {!expanded && item.isNew && (
+                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-green-400" />
+                      )}
                       {expanded && (
                         <span className="text-[13px] font-medium whitespace-nowrap leading-none">
                           {item.label}
+                          {item.isNew && (
+                            <span className="ml-1.5 bg-pitch-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Nové</span>
+                          )}
                           {item.href === "/dashboard/phone" && unreadMessages > 0 && (
                             <span className="ml-1.5 bg-card-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unreadMessages}</span>
                           )}

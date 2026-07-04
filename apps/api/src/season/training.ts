@@ -319,7 +319,7 @@ export function simulateTraining(
 
   // Team chemistry from tactics training
   let chemistryChange = 0;
-  if (plan.type === "tactics") {
+  if (plan.type === "tactics" && squad.length > 0) {
     const attendRate = [...attendanceCounts.values()].filter((v) => v > 0).length / squad.length;
     chemistryChange = Math.round(attendRate * 3);
   }
