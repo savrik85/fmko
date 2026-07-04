@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
+import { hasUnseenNotes } from "@/data/release-notes";
 
 interface NavItem {
   href: string;
@@ -18,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Domů", icon: "\u{1F3E0}", group: "main" },
   { href: "/dashboard/phone", label: "Zprávy", icon: "\u{1F4F1}", group: "main" },
   { href: "/dashboard/news", label: "Zpravodaj", icon: "\u{1F4F0}", group: "main" },
+  { href: "/dashboard/novinky", label: "Co je nového", icon: "✨", group: "main" },
   { href: "/dashboard/invite", label: "Pozvi kamar\u00E1da", icon: "\u2709\uFE0F", group: "main" },
   { href: "/dashboard/klub", label: "Klub", icon: "\u{1F3DB}\uFE0F", group: "club" },
   { href: "/dashboard/obec", label: "Obec", icon: "\u{1F3D8}\uFE0F", group: "club" },
@@ -54,6 +56,7 @@ export function FMSidebar() {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [incomingOffers, setIncomingOffers] = useState(0);
   const [unvotedCount, setUnvotedCount] = useState(0);
+  const [notesUnseen, setNotesUnseen] = useState(false);
   const pathname = usePathname();
   const { teamId, isAdmin, logout, token } = useTeam();
 
@@ -77,6 +80,11 @@ export function FMSidebar() {
     const interval = setInterval(load, 30000);
     return () => clearInterval(interval);
   }, [teamId, token, pathname]);
+
+  // Badge „Nové" u Co je nového — přehodnotit při každé navigaci (stránka Novinky ho maže)
+  useEffect(() => {
+    setNotesUnseen(hasUnseenNotes());
+  }, [pathname]);
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -149,13 +157,13 @@ export function FMSidebar() {
                         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r bg-green-400" />
                       )}
                       <span className="text-sm shrink-0 w-5 text-center leading-none">{item.icon}</span>
-                      {!expanded && item.isNew && (
+                      {!expanded && (item.isNew || (item.href === "/dashboard/novinky" && notesUnseen)) && (
                         <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-green-400" />
                       )}
                       {expanded && (
                         <span className="text-[13px] font-medium whitespace-nowrap leading-none">
                           {item.label}
-                          {item.isNew && (
+                          {(item.isNew || (item.href === "/dashboard/novinky" && notesUnseen)) && (
                             <span className="ml-1.5 bg-pitch-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Nové</span>
                           )}
                           {item.href === "/dashboard/phone" && unreadMessages > 0 && (

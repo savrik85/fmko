@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
+import { hasUnseenNotes } from "@/data/release-notes";
 
 const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string; label: string; color: string; isNew?: boolean }> }> = [
   { title: "Klub", items: [
@@ -32,6 +33,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
     // Sněm dočasně skryt z menu — dostupný přes přímou URL /dashboard/hlasovani.
   ]},
   { title: "Ostatní", items: [
+    { href: "/dashboard/novinky", icon: "✨", label: "Co je nového", color: "#3D7A3D" },
     { href: "/dashboard/napoveda", icon: "\u{1F4D6}", label: "Nápověda", color: "#2D5F2D" },
     { href: "/dashboard/app", icon: "\u{1F4F2}", label: "Nainstaluj", color: "#153615" },
     { href: "/dashboard/invite", icon: "✉️", label: "Pozvi kamaráda", color: "#3D6B5C" },
@@ -42,12 +44,14 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
 export default function MorePage() {
   const { logout, token } = useTeam();
   const [unvotedCount, setUnvotedCount] = useState(0);
+  const [notesUnseen, setNotesUnseen] = useState(false);
 
   useEffect(() => {
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
     apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers })
       .then((votes) => setUnvotedCount(votes.filter((v) => v.status === "open" && v.my_answer === null).length))
       .catch((e) => console.error("fetch votes:", e));
+    setNotesUnseen(hasUnseenNotes());
   }, [token]);
 
   return (
@@ -77,7 +81,7 @@ export default function MorePage() {
                       {badge}
                     </span>
                   )}
-                  {item.isNew && (
+                  {(item.isNew || (item.href === "/dashboard/novinky" && notesUnseen)) && (
                     <span className="absolute top-1 right-1 bg-pitch-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
                       Nové
                     </span>
