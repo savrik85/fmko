@@ -160,10 +160,11 @@ function simulateAttendance(
   squad: GeneratedPlayer[],
   approach: TrainingApproach,
   commuteKms?: number[],
+  attendanceBonus: number = 0,
 ): TrainingAttendance[] {
   return squad.map((player, i) => {
-    // Base attendance from discipline
-    let attendProb = player.discipline / 100 * 0.6 + 0.3;
+    // Base attendance from discipline (+ bonus z vybavení, např. klubová dodávka)
+    let attendProb = player.discipline / 100 * 0.6 + 0.3 + attendanceBonus;
 
     const km = commuteKms?.[i] ?? 0;
 
@@ -227,13 +228,14 @@ export function simulateTraining(
   commuteKms?: number[],
   equipmentMultiplier: number = 1.0,
   managerBonus: { coaching: number; discipline: number; youthDev: number } = { coaching: 40, discipline: 40, youthDev: 40 },
+  equipExtras: { attendanceBonus?: number; youthTrainingMod?: number } = {},
 ): TrainingResult {
   const allAttendance: TrainingAttendance[] = [];
   const attendanceCounts = new Map<number, number>();
 
   // Simulate each session
   for (let s = 0; s < plan.sessionsPerWeek; s++) {
-    const session = simulateAttendance(rng, squad, plan.approach);
+    const session = simulateAttendance(rng, squad, plan.approach, commuteKms, equipExtras.attendanceBonus ?? 0);
     for (const a of session) {
       if (a.attended) {
         attendanceCounts.set(a.playerIndex, (attendanceCounts.get(a.playerIndex) ?? 0) + 1);
@@ -266,7 +268,9 @@ export function simulateTraining(
     // Manager coaching bonus: 40=1.0x, 60=1.2x, 80=1.4x, 100=1.6x
     const coachMod = 0.8 + (managerBonus.coaching / 100) * 0.8;
     // Youth development bonus for players under 22
-    const youthMod = player.age < 22 ? (0.9 + (managerBonus.youthDev / 100) * 0.6) : 1.0;
+    const youthMod = player.age < 22
+      ? (0.9 + (managerBonus.youthDev / 100) * 0.6) * (1 + (equipExtras.youthTrainingMod ?? 0))
+      : 1.0;
 
     // Independent roll per session attended (base 10% per session)
     for (let s = 0; s < sessions; s++) {

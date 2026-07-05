@@ -71,6 +71,27 @@ export async function fetchTeamDistrict(
 }
 
 /**
+ * Klubová dodávka: 0-0.45 útlum absencí z dojíždění. Sdílené — každé volání
+ * `generateAbsences` MUSÍ předat stejný mod (stejný důvod jako u district:
+ * jinak divergence SMS vs. simulace pro stejný seed).
+ */
+export async function fetchTeamCommuteMod(
+  db: D1Database,
+  teamId: string,
+): Promise<number> {
+  const row = await db.prepare(
+    "SELECT team_van, team_van_condition FROM equipment WHERE team_id = ?",
+  ).bind(teamId).first<{ team_van: number; team_van_condition: number }>()
+    .catch((e) => { logger.warn({ module: "match-absences" }, "van query", e); return null; });
+  if (!row || !row.team_van) return 0;
+  const { calculateEffects } = await import("../equipment/equipment-generator");
+  return calculateEffects(
+    { team_van: row.team_van },
+    { team_van_condition: row.team_van_condition ?? 50 },
+  ).commuteAbsenceMod;
+}
+
+/**
  * Vrátí Map<playerId, info> pro hráče absentní z generátoru (ne injury/suspension).
  * Prázdná mapa pokud je zápas vzdálenější než den a není přátelák.
  */
@@ -124,12 +145,13 @@ export async function getAbsentPlayersMap(
   });
 
   const friendlyMultiplier = ctx.isFriendly ? 1.8 : undefined;
+  const commuteMod = await fetchTeamCommuteMod(db, teamId);
   const dayBeforeRng = createRng(absenceSeedForMatch({ matchKey: ctx.matchKey, teamId, phase: "day_before" }));
   const matchDayRng = createRng(absenceSeedForMatch({ matchKey: ctx.matchKey, teamId, phase: "match_day" }));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, "day_before", district, friendlyMultiplier);
+  const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, "day_before", district, friendlyMultiplier, commuteMod);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, "match_day", district, friendlyMultiplier);
+  const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, "match_day", district, friendlyMultiplier, commuteMod);
   const seen = new Set<number>();
   const absences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
     if (seen.has(a.playerIndex)) return false;

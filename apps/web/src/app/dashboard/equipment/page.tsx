@@ -8,12 +8,19 @@ import { Spinner, SectionLabel, useConfirm } from "@/components/ui";
 interface CategoryInfo { key: string; label: string; level: number; condition: number; effectiveLevel: number; description: string }
 interface UpgradeOption { category: string; label: string; currentLevel: number; nextLevel: number; cost: number; effect: string; description: string; locked: boolean; lockReason?: string }
 interface RepairOption { category: string; label: string; level: number; condition: number; cost: number }
-interface EquipmentEffects { trainingMultiplier: number; tacticsTrainingBonus: number; matchTechniqueMod: number; moraleMod: number; injurySeverityMod: number; conditionDrainMod: number; teamChemistryMod: number; gkBonus: number }
+interface EquipmentEffects {
+  trainingMultiplier: number; tacticsTrainingBonus: number; matchTechniqueMod: number; moraleMod: number;
+  injurySeverityMod: number; conditionDrainMod: number; teamChemistryMod: number; gkBonus: number;
+  injuryDaysReduction?: number; commuteAbsenceMod?: number; attendanceBonus?: number; conditionRegenBonus?: number;
+  setPiecesMod?: number; moraleTargetBonus?: number; crowdMod?: number; weatherResistMod?: number; youthTrainingMod?: number;
+}
 interface EquipmentData { categories: CategoryInfo[]; upgrades: UpgradeOption[]; repairs: RepairOption[]; effects: EquipmentEffects }
 
 const ICONS: Record<string, string> = {
   balls: "⚽", jerseys: "👕", training_cones: "🔶", first_aid: "🩺",
   boots_stock: "👟", bibs: "🎽", goalkeeper_gear: "🧤", water_bottles: "🫗", tactics_board: "📋",
+  team_van: "🚐", gym_corner: "💪", training_wall: "🧱", club_grill: "🍖",
+  fan_drums: "📣", winter_gear: "🧥", video_setup: "📹",
 };
 
 function condColor(c: number): string {
@@ -104,6 +111,15 @@ export default function EquipmentPage() {
     fx.conditionDrainMod > 0.01 && { label: "Výdrž", value: `-${Math.round(fx.conditionDrainMod * 100)}%`, icon: "🔋" },
     fx.gkBonus > 0 && { label: "Brankář", value: `+${fx.gkBonus}`, icon: "🧤" },
     fx.teamChemistryMod > 0 && { label: "Chemie", value: `+${fx.teamChemistryMod}`, icon: "🤝" },
+    (fx.injuryDaysReduction ?? 0) > 0 && { label: "Ošetření", value: `zranění o ${fx.injuryDaysReduction} ${fx.injuryDaysReduction === 1 ? "den" : "dny"} kratší`, icon: "🩺" },
+    (fx.attendanceBonus ?? 0) > 0.001 && { label: "Docházka", value: `+${Math.round((fx.attendanceBonus ?? 0) * 100)} p.b.`, icon: "🚐" },
+    (fx.commuteAbsenceMod ?? 0) > 0.01 && { label: "Dojíždění", value: `-${Math.round((fx.commuteAbsenceMod ?? 0) * 100)}% absencí`, icon: "🛣" },
+    (fx.conditionRegenBonus ?? 0) > 0 && { label: "Regenerace", value: `+${fx.conditionRegenBonus} denně`, icon: "💪" },
+    (fx.setPiecesMod ?? 0) > 0 && { label: "Standardky", value: `+${fx.setPiecesMod}`, icon: "🧱" },
+    (fx.moraleTargetBonus ?? 0) > 0 && { label: "Nálada kabiny", value: `+${fx.moraleTargetBonus}`, icon: "🍖" },
+    (fx.crowdMod ?? 0) > 0.01 && { label: "Návštěva", value: `+${Math.round((fx.crowdMod ?? 0) * 100)}%`, icon: "📣" },
+    (fx.weatherResistMod ?? 0) > 0.01 && { label: "Počasí", value: `-${Math.round((fx.weatherResistMod ?? 0) * 100)}% postih`, icon: "🧥" },
+    (fx.youthTrainingMod ?? 0) > 0.01 && { label: "Mladíci", value: `+${Math.round((fx.youthTrainingMod ?? 0) * 100)}%`, icon: "📹" },
   ].filter(Boolean) as { label: string; value: string; icon: string }[];
 
   return (

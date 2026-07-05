@@ -85,7 +85,13 @@ function calcChanceProb(
 ): number {
   // Defensive — pokud se neznámá tactic prolomi (data corruption), použij balanced
   const tacticMod = TACTIC_MODS[attacking.tactic] ?? TACTIC_MODS.balanced;
-  const weatherMod = WEATHER_MODS[weather];
+  const baseWeatherMod = WEATHER_MODS[weather];
+  // Zimní výbava lavičky tlumí postih počasí (1 - penalizace se zmenší o resist)
+  const weatherResist = attacking.weatherResist ?? 0;
+  const weatherMod = {
+    ...baseWeatherMod,
+    techniqueMod: 1 - (1 - baseWeatherMod.techniqueMod) * (1 - weatherResist),
+  };
 
   // Effectiveness: skill-fit × formation synergy × familiarity (taktika + formace).
   // Pokud je taktika neumělá / formace nesedí / tým ji nehrál → effectiveness < 1 → modifikátory se ztlumí k 1.0.
@@ -305,22 +311,28 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       p.technique = Math.min(100, p.technique + homeEq.techniqueMod);
       if (p.position === "GK") p.goalkeeping = Math.min(100, p.goalkeeping + homeEq.gkBonus);
       p.morale = Math.min(100, p.morale + homeEq.moraleMod);
+      p.setPieces = Math.min(100, p.setPieces + (homeEq.setPiecesMod ?? 0));
     }
     for (const p of home.subs) {
       p.technique = Math.min(100, p.technique + homeEq.techniqueMod);
       if (p.position === "GK") p.goalkeeping = Math.min(100, p.goalkeeping + homeEq.gkBonus);
+      p.setPieces = Math.min(100, p.setPieces + (homeEq.setPiecesMod ?? 0));
     }
+    home.weatherResist = homeEq.weatherResistMod ?? 0;
   }
   if (awayEq) {
     for (const p of away.lineup) {
       p.technique = Math.min(100, p.technique + awayEq.techniqueMod);
       if (p.position === "GK") p.goalkeeping = Math.min(100, p.goalkeeping + awayEq.gkBonus);
       p.morale = Math.min(100, p.morale + awayEq.moraleMod);
+      p.setPieces = Math.min(100, p.setPieces + (awayEq.setPiecesMod ?? 0));
     }
     for (const p of away.subs) {
       p.technique = Math.min(100, p.technique + awayEq.techniqueMod);
       if (p.position === "GK") p.goalkeeping = Math.min(100, p.goalkeeping + awayEq.gkBonus);
+      p.setPieces = Math.min(100, p.setPieces + (awayEq.setPiecesMod ?? 0));
     }
+    away.weatherResist = awayEq.weatherResistMod ?? 0;
   }
 
   // Equipment condition drain modifiers
@@ -613,7 +625,13 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       const unlucky = rng.pick(allPlayers);
       // Equipment first-aid kit reduces injury chance for the affected team
       const teamInjMod = home.lineup.includes(unlucky) ? homeInjuryMod : awayInjuryMod;
-      if (teamInjMod < 1 && rng.random() > teamInjMod) {
+      // Zimní výbava tlumí NAVÝŠENÍ rizika zranění z počasí (základní 1% riziko nechává)
+      const wResist = (home.lineup.includes(unlucky) ? home.weatherResist : away.weatherResist) ?? 0;
+      const wInjMod = WEATHER_MODS[weather].injuryMod;
+      const weatherSkipChance = wInjMod > 1 && wResist > 0 ? ((wInjMod - 1) * wResist) / wInjMod : 0;
+      if (weatherSkipChance > 0 && rng.random() < weatherSkipChance) {
+        // Zimní výbava zabránila zranění z počasí — skip
+      } else if (teamInjMod < 1 && rng.random() > teamInjMod) {
         // Equipment prevented this injury — skip
       } else {
         const teamId = home.lineup.includes(unlucky) ? home.teamId : away.teamId;

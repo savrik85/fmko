@@ -10,6 +10,7 @@ import type { Rng } from "../generators/rng";
 export const CATEGORIES = [
   "balls", "jerseys", "training_cones", "first_aid",
   "boots_stock", "bibs", "goalkeeper_gear", "water_bottles", "tactics_board",
+  "team_van", "gym_corner", "training_wall", "club_grill", "fan_drums", "winter_gear", "video_setup",
 ] as const;
 export type EquipmentCategory = typeof CATEGORIES[number];
 
@@ -23,6 +24,13 @@ export const CATEGORY_LABELS: Record<string, string> = {
   goalkeeper_gear: "Brankářské vybavení",
   water_bottles: "Láhve a občerstvení",
   tactics_board: "Taktická tabule",
+  team_van: "Klubová dodávka",
+  gym_corner: "Posilovna v kabině",
+  training_wall: "Tréninková zeď",
+  club_grill: "Klubový gril",
+  fan_drums: "Kotel — bubny a vlajky",
+  winter_gear: "Zimní výbava lavičky",
+  video_setup: "Kamera a rozbory",
 };
 
 // ── Level descriptions (Czech village humor) ──
@@ -82,6 +90,48 @@ const LEVEL_DESCRIPTIONS: Record<string, string[]> = {
     "Flipchart + sada magnetů se jmény",
     "Profi taktická tabule + video analýza",
   ],
+  team_van: [
+    "Kdo nemá auto, nedorazí",
+    "Ojetá Felicia combi — vejde se pět kluků",
+    "Devítimístná dodávka po elektrikáři",
+    "Klubový mikrobus s logem",
+  ],
+  gym_corner: [
+    "Posilovna? Zvedáme půllitry",
+    "Činky a stará lavička v rohu kabiny",
+    "Rotoped a hrazda",
+    "Posilovna s trenažérem",
+  ],
+  training_wall: [
+    "Na standardky se nevěří",
+    "Zeď z palet za brankou",
+    "Přenosné branky a figuríny",
+    "Profi zeď + figuríny na kolečkách",
+  ],
+  club_grill: [
+    "Po zápase se jde rovnou domů",
+    "Gril z hobbymarketu za brankou",
+    "Zděná udírna, dělá ji Pepa",
+    "Klubovka s krbem a výčepem",
+  ],
+  fan_drums: [
+    "Fandí jen štamgasti od piva",
+    "Bedna vlajek a jeden buben",
+    "Fanshop se šálami",
+    "Kotel s bubny a chorea",
+  ],
+  winter_gear: [
+    "V zimě se klepe celá lavička",
+    "Deky a čaj v termosce",
+    "Zimní bundy pro celou lavičku",
+    "Vyhřívaná lavička jak v lize",
+  ],
+  video_setup: [
+    "Rozbory? Vyprávění u piva",
+    "Stará kamera na stativu",
+    "GoPro + notebook",
+    "Kamera + střižna, rozbory na plátně",
+  ],
 };
 
 // ── Upgrade effects (actual game modifiers) ──
@@ -91,10 +141,19 @@ export interface EquipmentEffects {
   tacticsTrainingBonus: number; // extra bonus for tactics training type
   matchTechniqueMod: number;    // technique modifier in matches
   moraleMod: number;            // morale bonus
-  injurySeverityMod: number;    // injury severity reduction (0.0 = none, 0.3 = 30% less severe)
+  injurySeverityMod: number;    // šance na zranění v zápase ×(1 - mod)
   conditionDrainMod: number;    // condition drain reduction in matches
-  teamChemistryMod: number;     // team chemistry bonus per tactics training
+  teamChemistryMod: number;     // chemie k taktickému tréninku (bibs + tabule)
   gkBonus: number;              // goalkeeper performance bonus
+  injuryDaysReduction: number;  // lékárnička Lv2+: nové zranění o N dní kratší (min 2 dny)
+  commuteAbsenceMod: number;    // dodávka: šance na absenci kvůli dojíždění ×(1 - mod)
+  attendanceBonus: number;      // dodávka: bonus k docházce na trénink (aditivní k pravděpodobnosti)
+  conditionRegenBonus: number;  // posilovna: denní regenerace kondice navíc (body)
+  setPiecesMod: number;         // tréninková zeď: +standardky v zápase
+  moraleTargetBonus: number;    // gril: denní drift morálky míří na 50 + bonus
+  crowdMod: number;             // kotel: domácí návštěva ×(1 + mod)
+  weatherResistMod: number;     // zimní výbava: postih počasí ×(1 - mod)
+  youthTrainingMod: number;     // kamera: růst hráčů do 22 let ×(1 + mod)
 }
 
 /** Calculate actual game effects from equipment levels + conditions */
@@ -105,15 +164,27 @@ export function calculateEffects(levels: Record<string, number>, conditions: Rec
     return lv * (cond / 100);
   };
 
+  const firstAidEff = eff("first_aid");
+
   return {
     trainingMultiplier: 1.0 + eff("balls") * 0.05 + eff("training_cones") * 0.07,
     tacticsTrainingBonus: eff("bibs") * 0.05 + eff("tactics_board") * 0.06,
     matchTechniqueMod: Math.round(eff("balls") * 1.5),
     moraleMod: Math.round(eff("jerseys") * 2.5),
-    injurySeverityMod: eff("first_aid") * 0.10,
+    injurySeverityMod: firstAidEff * 0.10,
     conditionDrainMod: eff("boots_stock") * 0.05 + eff("water_bottles") * 0.03,
     teamChemistryMod: Math.round(eff("bibs") * 1.0 + eff("tactics_board") * 1.5),
     gkBonus: Math.round(eff("goalkeeper_gear") * 1.5),
+    // Lékárnička Lv2+ „ošetření hned na hřišti" — opotřebení snižuje práh (Lv3 @ 50 % = 1 den)
+    injuryDaysReduction: firstAidEff >= 2.5 ? 2 : firstAidEff >= 1.5 ? 1 : 0,
+    commuteAbsenceMod: eff("team_van") * 0.15,
+    attendanceBonus: eff("team_van") * 0.02,
+    conditionRegenBonus: Math.round(eff("gym_corner")),
+    setPiecesMod: Math.round(eff("training_wall") * 1.5),
+    moraleTargetBonus: Math.round(eff("club_grill") * 2),
+    crowdMod: eff("fan_drums") * 0.04,
+    weatherResistMod: eff("winter_gear") * 0.15,
+    youthTrainingMod: eff("video_setup") * 0.05,
   };
 }
 
@@ -131,6 +202,13 @@ const UPGRADE_COSTS: Record<string, number[]> = {
   goalkeeper_gear: [0, 3000, 12000, 35000],
   water_bottles:   [0, 800, 4000, 12000],
   tactics_board:   [0, 2000, 10000, 30000],
+  team_van:        [0, 25000, 90000, 220000],
+  gym_corner:      [0, 6000, 25000, 80000],
+  training_wall:   [0, 3000, 15000, 45000],
+  club_grill:      [0, 4000, 15000, 120000],
+  fan_drums:       [0, 5000, 20000, 60000],
+  winter_gear:     [0, 2500, 12000, 70000],
+  video_setup:     [0, 5000, 25000, 75000],
 };
 
 // ── Unlock requirements per level ──
@@ -158,12 +236,19 @@ const UPGRADE_EFFECT_LABELS: Record<string, string[]> = {
   balls:           ["", "+5% trénink", "+10% trénink, +1 technika v zápase", "+20% trénink, +4 technika"],
   jerseys:         ["", "+2 morálka", "+5 morálka", "+8 morálka, zájem sponzorů"],
   training_cones:  ["", "+7% trénink efektivita", "+14% trénink", "+21% trénink"],
-  first_aid:       ["", "Zranění -10% závažnost", "-20% závažnost, rychlejší zotavení", "-30% závažnost"],
+  first_aid:       ["", "Šance na zranění -10 %", "-20 % šance, nová zranění o den kratší", "-30 % šance, o 2 dny kratší"],
   boots_stock:     ["", "-5% kondice ztráta", "-10% kondice", "-15% kondice"],
   bibs:            ["", "+5% taktický trénink, +1 chemie", "+10%, +2 chemie", "+15%, +3 chemie"],
   goalkeeper_gear: ["", "+1 brankář bonus", "+3 brankář", "+5 brankář výkon"],
   water_bottles:   ["", "-3% kondice ztráta", "-6% kondice", "-9% kondice"],
   tactics_board:   ["", "+6% taktický trénink, +1 chemie", "+12%, +3 chemie", "+18%, +5 chemie"],
+  team_van:        ["", "Míň absencí z dojíždění, +2 % docházka", "-30 % absence z dojíždění, +4 % docházka", "-45 % absence, +6 % docházka"],
+  gym_corner:      ["", "+1 kondice denně", "+2 kondice denně", "+3 kondice denně"],
+  training_wall:   ["", "+1 standardky v zápase", "+3 standardky", "+5 standardky"],
+  club_grill:      ["", "Nálada kabiny drží na 52", "Nálada drží na 54", "Nálada drží na 56"],
+  fan_drums:       ["", "+4 % domácí návštěva", "+8 % návštěva", "+12 % návštěva"],
+  winter_gear:     ["", "-15 % postih počasí", "-30 % postih počasí", "-45 % postih počasí"],
+  video_setup:     ["", "Hráči do 22 let +5 % trénink", "+10 % trénink mladíků", "+15 % trénink mladíků"],
 };
 
 // ── Starting equipment by village size ──

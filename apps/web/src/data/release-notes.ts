@@ -13,6 +13,18 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-07-05",
+    emoji: "🚐",
+    title: "Sedm nových kusů vybavení",
+    items: [
+      "Klubová dodávka — míň omluvenek kvůli dojíždění a lepší docházka na tréninky. Od ojeté Felicie po mikrobus s logem.",
+      "Posilovna v kabině (+kondice denně), tréninková zeď (+standardky), klubový gril (nálada kabiny drží výš).",
+      "Kotel s bubny a vlajkami (+návštěva doma), zimní výbava lavičky (menší postih počasí), kamera a rozbory (mladíci rostou rychleji).",
+      "Lékárnička konečně dělá, co slibovala: od úrovně 2 jsou nová zranění o 1-2 dny kratší.",
+      "Chemie z rozlišováků a taktické tabule se nově skutečně počítá do sehranosti formace.",
+    ],
+  },
+  {
+    date: "2026-07-05",
     emoji: "🤝",
     title: "Přestupový tlak — o hvězdy se hraje",
     items: [

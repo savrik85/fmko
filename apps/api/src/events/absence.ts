@@ -447,6 +447,7 @@ export function generateAbsences(
   timing: AbsenceTiming = "any",
   district?: string,
   friendlyMultiplier?: number,
+  commuteMod: number = 0, // klubová dodávka: 0-0.45 — tlumí absence z dojíždění (MUSÍ být stejný ve všech voláních pro tentýž zápas, jinak se rozjede SMS vs. simulace)
 ): AbsenceResult[] {
   const absences: AbsenceResult[] = [];
   // District filter: Praha = urban, definovaný non-Praha = rural, undefined = jen univerzální výmluvy
@@ -466,7 +467,7 @@ export function generateAbsences(
     const disciplineFactor = (100 - p.discipline) / 100;
     const patriotismFactor = (100 - p.patriotism) / 200;
     const moraleFactor = (100 - p.morale) / 300;
-    const commuteFactor = Math.min(0.04, (p.commuteKm ?? 0) * 0.002);
+    const commuteFactor = Math.min(0.04, (p.commuteKm ?? 0) * 0.002) * (1 - commuteMod);
     let baseChance = (0.02 + disciplineFactor * 0.10 + patriotismFactor * 0.03 + moraleFactor * 0.02 + commuteFactor) * 0.95;
 
     // Transfer truc — naštvaný hráč si hledá výmluvy častěji
@@ -519,8 +520,8 @@ export function generateAbsences(
       // Kocovina: závisí hlavně na alcohol atributu
       hangover: p.alcohol > 60 ? 0.15 : p.alcohol > 40 ? 0.08 : 0.02,
 
-      // Doprava: vyšší pro dojíždějící hráče
-      commute: (p.commuteKm ?? 0) > 5 ? 0.10 + (p.commuteKm ?? 0) * 0.005 : 0,
+      // Doprava: vyšší pro dojíždějící hráče (klubová dodávka tlumí)
+      commute: ((p.commuteKm ?? 0) > 5 ? 0.10 + (p.commuteKm ?? 0) * 0.005 : 0) * (1 - commuteMod),
     };
 
     const category = rng.weighted(weights) as AbsenceResult["category"];
