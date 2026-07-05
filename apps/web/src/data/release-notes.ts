@@ -16,6 +16,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     emoji: "📋",
     title: "Sponzorské smlouvy po sezónách a opravené přáteláky",
     items: [
+      "Sponzorskou smlouvu jde nově PRODLOUŽIT přímo na kartě smlouvy — stejný sponzor, podmínky podle aktuální reputace, bez přejmenování klubu a bez sankce.",
       "Sponzorské smlouvy nově s koncem sezóny ztratí sezónu platnosti — roční smlouvy vyprší a podepíšeš novou za podmínek podle své aktuální reputace. O vypršení přijde SMS.",
       "Opravené zvaní na přátelské zápasy — zápasy z minulé sezóny už neblokují nové výzvy.",
       "V nabídce soupeřů pro přáteláky už nejsou U21 týmy.",

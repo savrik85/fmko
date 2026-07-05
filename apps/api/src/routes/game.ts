@@ -1636,6 +1636,38 @@ gameRouter.get("/teams/:teamId/injuries", async (c) => {
 // ═══ SPONSOR CONTRACTS ═══
 
 // GET /api/teams/:id/sponsors — active contracts (main + stadium) + available offers
+/** Podmínky prodloužení smlouvy — deterministické (tým+sponzor+sezóna), stejný vzorec jako nabídky.
+ *  Sponzor mimo okresní pool (např. z onboardingu) → prodloužení za stávající částky. */
+function computeRenewalTerms(
+  teamId: string,
+  seasonNum: number,
+  contract: { sponsor_name: string; category: string | null; monthly_amount: number; win_bonus: number },
+  reputation: number,
+  size: string,
+  spRows: Array<{ name: string; monthly_min: number; monthly_max: number; win_bonus_min: number; win_bonus_max: number }>,
+  seedFn: (s: string) => number,
+): { monthlyAmount: number; winBonus: number; seasons: number; earlyTerminationFee: number } {
+  const category = contract.category || "main";
+  const seasons = category === "banner" ? 2 : 3;
+  const repMod = reputation / 50;
+  const sizeMod = size === "mesto" ? 1.3 : size === "mestys" ? 1.1 : size === "obec" ? 1.0 : 0.8;
+  const catMult = category === "main" ? 3 : category === "stadium" ? 1.5 : 0.8;
+  const cleanSp = (nm: string) => nm.replace(/\s*s\.r\.o\.?\s*/gi, "").trim();
+  const baseName = category === "stadium" ? contract.sponsor_name.replace(/\s+Arena$/i, "").trim() : contract.sponsor_name;
+  const spRow = category === "stadium"
+    ? spRows.find((r) => cleanSp(r.name) === baseName)
+    : spRows.find((r) => r.name === contract.sponsor_name);
+  let monthly = contract.monthly_amount;
+  let winBonus = contract.win_bonus;
+  if (spRow) {
+    const rng = createRng(seedFn(teamId + "renew" + contract.sponsor_name + seasonNum));
+    monthly = Math.round(rng.int(spRow.monthly_min, spRow.monthly_max) * repMod * sizeMod * catMult);
+    winBonus = category === "main" ? Math.round(rng.int(spRow.win_bonus_min, spRow.win_bonus_max) * repMod * 2) : 0;
+  }
+  const earlyTerminationFee = Math.round(monthly * seasons * (category === "banner" ? 1.5 : 2));
+  return { monthlyAmount: monthly, winBonus, seasons, earlyTerminationFee };
+}
+
 gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   const teamId = c.req.param("teamId");
 
@@ -1770,10 +1802,17 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
 
   const changedThisSeason = (teamFull?.last_main_sponsor_change_season ?? 0) >= seasonNum;
 
+  // Nabídka prodloužení pro každou aktivní smlouvu — nové podmínky dle aktuální reputace
+  type SpRow = { name: string; monthly_min: number; monthly_max: number; win_bonus_min: number; win_bonus_max: number };
+  const renewalFor = (row: Record<string, unknown> | undefined | null) => row
+    ? computeRenewalTerms(teamId, seedSeason, row as { sponsor_name: string; category: string | null; monthly_amount: number; win_bonus: number },
+        team.reputation, team.size, sponsorRows.results as unknown as SpRow[], seedFromString)
+    : null;
+
   return c.json({
-    mainContract: mainContract ? mapContract(mainContract) : null,
-    stadiumContract: stadiumContract ? mapContract(stadiumContract) : null,
-    bannerContracts: bannerContracts.map(mapContract),
+    mainContract: mainContract ? { ...mapContract(mainContract), renewal: renewalFor(mainContract) } : null,
+    stadiumContract: stadiumContract ? { ...mapContract(stadiumContract), renewal: renewalFor(stadiumContract) } : null,
+    bannerContracts: bannerContracts.map((r) => ({ ...mapContract(r), renewal: renewalFor(r) })),
     stadiumName: team.stadium_name,
     teamName: teamFull?.name ?? "",
     mainOffers,
@@ -1895,6 +1934,47 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
   }
 
   return c.json({ ok: true, contractId: id });
+});
+
+// POST /api/teams/:teamId/sponsors/renew — prodloužení stávající smlouvy za aktuální podmínky
+// (stejný sponzor: bez přejmenování, bez reputační sankce, nepočítá se jako změna hlavního sponzora)
+gameRouter.post("/teams/:teamId/sponsors/renew", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ contractId: string }>()
+    .catch((e) => { logger.warn({ module: "game", teamId }, "parse sponsor renew body", e); return null; });
+  if (!body?.contractId) return c.json({ error: "Chybí contractId" }, 400);
+
+  const contract = await c.env.DB.prepare(
+    "SELECT * FROM sponsor_contracts WHERE id = ? AND team_id = ? AND status = 'active'"
+  ).bind(body.contractId, teamId).first<Record<string, unknown>>();
+  if (!contract) return c.json({ error: "Smlouva nenalezena" }, 404);
+
+  const econ = await c.env.DB.prepare(
+    "SELECT t.reputation, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
+  ).bind(teamId).first<{ reputation: number; size: string; district: string }>()
+    .catch((e) => { logger.warn({ module: "game", teamId }, "sponsor renew econ lookup", e); return null; });
+  if (!econ) return c.json({ error: "Tým nenalezen" }, 404);
+
+  const spRows = await c.env.DB.prepare("SELECT * FROM district_sponsors WHERE district = ?")
+    .bind(econ.district).all().catch((e) => { logger.warn({ module: "game", teamId }, "sponsor renew bounds", e); return { results: [] }; });
+  const season = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
+    .first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for renew", e); return null; });
+  const { seedFromString } = await import("../lib/seed");
+
+  // Server-side přepočet — klient neposílá žádné částky (anti-podvrh)
+  const terms = computeRenewalTerms(
+    teamId, mustSeason(season?.number),
+    contract as unknown as { sponsor_name: string; category: string | null; monthly_amount: number; win_bonus: number },
+    econ.reputation, econ.size,
+    spRows.results as unknown as Array<{ name: string; monthly_min: number; monthly_max: number; win_bonus_min: number; win_bonus_max: number }>,
+    seedFromString,
+  );
+
+  await c.env.DB.prepare(
+    "UPDATE sponsor_contracts SET monthly_amount = ?, win_bonus = ?, seasons_total = ?, seasons_remaining = ?, early_termination_fee = ? WHERE id = ?"
+  ).bind(terms.monthlyAmount, terms.winBonus, terms.seasons, terms.seasons, terms.earlyTerminationFee, body.contractId).run();
+
+  return c.json({ ok: true, renewed: terms });
 });
 
 // POST /api/teams/:id/sponsors/terminate — early termination (with fee)
