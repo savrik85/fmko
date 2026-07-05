@@ -453,7 +453,7 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   // není žádný "příchod". Doplníme je jako odchozí přestupy z pohledu prodávajícího týmu v lize.
   const virtualSalesRes = await c.env.DB.prepare(
     `SELECT o.player_id, o.offer_amount as fee, o.resolved_at as joined_at,
-            dp.first_name, dp.last_name, dp.age, dp.position, dp.overall_rating,
+            dp.first_name, dp.last_name, dp.age, dp.position, dp.overall_rating, dp.avatar as player_avatar,
             json_extract(o.virtual_team_data, '$.name') as virtual_club,
             t.id as from_team_id, t.name as from_team_name,
             t.badge_primary_color, t.badge_secondary_color, t.badge_pattern, t.badge_initials, t.badge_symbol,
@@ -473,10 +473,11 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
       initials: (r.badge_initials as string | null) ?? deriveInitials(r.from_team_name as string),
       symbol: (r.badge_symbol as string | null) ?? null,
     };
+    const avatar = (() => { try { return r.player_avatar ? JSON.parse(r.player_avatar as string) : {}; } catch { return {}; } })();
     return {
       playerId: r.player_id as string,
       playerName: `${r.first_name} ${r.last_name}`,
-      playerAvatar: {},
+      playerAvatar: avatar,
       age: (r.age as number) ?? 0,
       position: (r.position as string) ?? "",
       fromTeamId: r.from_team_id as string | null,

@@ -93,16 +93,17 @@ export async function removePlayer(
   // 2) Atomický batch: archiv identity + (volitelně) INSERT free_agent + UPDATE contract + DELETE player
   const batch: D1PreparedStatement[] = [];
 
-  // Archiv odešlého hráče — jméno přežije pro historické statistiky (neklikatelný záznam)
+  // Archiv odešlého hráče — jméno i obličej přežije pro historické statistiky (neklikatelný záznam)
   batch.push(
     db.prepare(
       `INSERT OR REPLACE INTO departed_players
-         (id, first_name, last_name, nickname, position, age, overall_rating, team_id, team_name, league_id, leave_type, season_number, left_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
+         (id, first_name, last_name, nickname, position, age, overall_rating, team_id, team_name, league_id, leave_type, season_number, avatar, left_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
     ).bind(
       playerId, row.first_name, row.last_name, row.nickname ?? null, row.position,
       row.age ?? null, row.overall_rating ?? null, teamId, row.team_name ?? null,
       (row.team_league_id as string) ?? null, leaveType, seasonRow?.number ?? null,
+      (row.avatar as string) ?? null,
     ),
   );
 
