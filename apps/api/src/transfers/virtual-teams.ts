@@ -9,6 +9,7 @@ import { FIRSTNAMES } from "../data/czech-names";
 import { generatePlayer, type VillageInfo } from "../generators/player";
 import { generateHeightWeight } from "../generators/physicals";
 import { generatePlayerFace } from "../routes/teams";
+import { estimateMarketValue } from "../season/economy";
 import { logger } from "../lib/logger";
 
 // ═══════════════════════════════════════════════
@@ -79,11 +80,14 @@ function calcAskingPrice(rating: number, rng: Rng): number {
   return rng.int(1500, 3000);
 }
 
-function calcOfferPrice(rating: number, rng: Rng): number {
-  if (rating >= 60) return rng.int(7000, 12000);
-  if (rating >= 50) return rng.int(4000, 7000);
-  if (rating >= 40) return rng.int(2000, 4000);
-  return rng.int(1000, 2500);
+/**
+ * Cena CPU nabídky: ~1,5× tržní hodnoty hráče (1,40–1,65) — má být lákavá,
+ * aby odmítnutí bolelo. Tržní hodnota zohledňuje rating i věk (estimateMarketValue).
+ */
+function calcOfferPrice(rating: number, age: number, rng: Rng): number {
+  const marketValue = estimateMarketValue(rating, age);
+  const premium = rng.int(140, 165) / 100;
+  return Math.round((marketValue * premium) / 100) * 100;
 }
 
 // ═══════════════════════════════════════════════
@@ -304,14 +308,14 @@ async function maybeOfferForTeam(
   const virtualTeam = betterTeams.length > 0 ? rng.pick(betterTeams) : teams.reduce((a, b) => (a.rating >= b.rating ? a : b));
 
   let target = rng.pick(candidates);
-  let offerPrice = calcOfferPrice(target.overall_rating as number, rng);
+  let offerPrice = calcOfferPrice(target.overall_rating as number, (target.age as number) ?? 25, rng);
   let interest = await computeInterestForOffer(db, target.id as string, {
     fromTeamId: "virtual_ai", offerAmount: offerPrice, virtualRating: virtualTeam.rating,
   }).catch((e) => { logger.warn({ module: "virtual-teams" }, "compute interest", e); return null; });
 
   if (interest && interest.level === 0 && candidates.length > 1) {
     const other = rng.pick(candidates.filter((p) => p.id !== target.id));
-    const otherPrice = calcOfferPrice(other.overall_rating as number, rng);
+    const otherPrice = calcOfferPrice(other.overall_rating as number, (other.age as number) ?? 25, rng);
     const otherInterest = await computeInterestForOffer(db, other.id as string, {
       fromTeamId: "virtual_ai", offerAmount: otherPrice, virtualRating: virtualTeam.rating,
     }).catch((e) => { logger.warn({ module: "virtual-teams" }, "compute interest #2", e); return null; });

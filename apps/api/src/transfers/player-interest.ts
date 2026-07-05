@@ -7,6 +7,7 @@
  *  - čerstvý přepočet při reject/expire → rozhoduje o dopadu na morálku (offer-rejection-impact)
  */
 
+import { estimateMarketValue } from "../season/economy";
 import { logger } from "../lib/logger";
 
 /** 0 = nechce odejít, 1 = váhá, 2 = chce přestoupit, 3 = velmi chce přestoupit */
@@ -36,7 +37,7 @@ export interface InterestInputs {
   coachRelationship: number;
   recentMinutes: number; // odehrané minuty za posledních 30 dní
   age: number;
-  weeklyWage: number;
+  overallRating: number; // pro odhad tržní hodnoty (faktor peněz)
   currentTeamStrength: number; // AVG(overall_rating) kádru prodávajícího
   offerTeamStrength: number;   // AVG kádru kupujícího / rating virtuálního klubu
   offerAmount: number;
@@ -71,8 +72,10 @@ export function computePlayerInterest(input: InterestInputs): InterestResult {
   // Vztah k vesnici/klubu
   add("Vztah k obci", (50 - (p.patriotism ?? 50)) * 0.35);
 
-  // Peníze a ambice
-  if (input.weeklyWage > 0 && input.offerAmount > input.weeklyWage * 15) add("Lákavé peníze", 5);
+  // Peníze a ambice — nabídka vs. tržní hodnota hráče (rating + věk)
+  const marketValue = estimateMarketValue(input.overallRating, input.age);
+  if (input.offerAmount >= marketValue * 1.3) add("Lákavé peníze", 6);
+  else if (input.offerAmount > 0 && input.offerAmount <= marketValue * 0.7) add("Urážlivě málo", -4);
   if ((p.workRate ?? 50) > 60 && input.age < 28) add("Ambice", 5);
 
   // Věk a pohodlí
@@ -94,7 +97,7 @@ export async function loadInterestInputs(
   offer: { fromTeamId: string; offerAmount: number; virtualRating?: number | null },
 ): Promise<InterestInputs | null> {
   const player = await db.prepare(
-    `SELECT p.team_id, p.age, p.weekly_wage, p.coach_relationship, p.personality, p.life_context,
+    `SELECT p.team_id, p.age, p.overall_rating, p.coach_relationship, p.personality, p.life_context,
             COALESCE(stats.recent_minutes, 0) as recent_minutes
      FROM players p
      LEFT JOIN (
@@ -136,7 +139,7 @@ export async function loadInterestInputs(
     coachRelationship: (player.coach_relationship as number) ?? 50,
     recentMinutes: (player.recent_minutes as number) ?? 0,
     age: (player.age as number) ?? 25,
-    weeklyWage: (player.weekly_wage as number) ?? 0,
+    overallRating: (player.overall_rating as number) ?? 40,
     currentTeamStrength,
     offerTeamStrength,
     offerAmount: offer.offerAmount,
