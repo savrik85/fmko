@@ -112,19 +112,20 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
   if (!convOwner || convOwner.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
 
   // Trucující hráč (transferUnrest) → nabídnout trenérovi usmiřovací akce (chips na FE)
-  let unrest: { level: number; teamName?: string; actions: { id: string; label: string; description: string }[] } | null = null;
+  let unrest: { level: number; teamName?: string; mood: string; actions: { id: string; label: string; description: string }[] } | null = null;
   if (convOwner.type === "player" && convOwner.participant_id && convOwner.ai_thread_active !== 1) {
     try {
       const playerRow = await c.env.DB.prepare("SELECT life_context FROM players WHERE id = ? AND team_id = ?")
         .bind(convOwner.participant_id, teamId).first<{ life_context: string | null }>();
       const lc = playerRow?.life_context ? JSON.parse(playerRow.life_context) : {};
       if (lc?.transferUnrest?.level > 0) {
-        const { availableActions } = await import("../transfers/unrest");
+        const { availableActions, unrestMoodQuote } = await import("../transfers/unrest");
         const seasonRow = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
           .first<{ number: number }>().catch((e) => { logger.warn({ module: "messaging" }, "load season for unrest", e); return null; });
         unrest = {
           level: lc.transferUnrest.level,
           teamName: lc.transferUnrest.teamName,
+          mood: unrestMoodQuote(convOwner.participant_id, lc.transferUnrest.level, lc.transferUnrest.teamName),
           actions: availableActions(lc.transferUnrest, lc, seasonRow?.number ?? null)
             .map((a) => ({ id: a.id, label: a.label, description: a.description })),
         };

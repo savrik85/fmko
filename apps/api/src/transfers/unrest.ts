@@ -84,6 +84,36 @@ export interface UnrestTalkResult {
   unrestLevel?: number;
 }
 
+// Hláška hráče do panelu nespokojenosti — podle úrovně trucu, deterministicky per hráč
+const MOOD_QUOTES_HIGH: string[] = [
+  "Chtěl jsem do {team} a vy jste mi to vzal. Tohle jen tak nerozdejchám.",
+  "Nemá cenu se přetvařovat, trenére. Hlavou jsem už jinde.",
+  "Každej trénink si říkám, co tady ještě dělám.",
+];
+const MOOD_QUOTES_MID: string[] = [
+  "Pořád to ve mně vře. Jestli se nic nezmění, řeknu si o přestup znovu.",
+  "Snažím se makat, ale ta nabídka mi pořád leží v hlavě.",
+  "Zatím jsem tady. Ale sledujte, jak se mnou počítáte.",
+];
+const MOOD_QUOTES_LOW: string[] = [
+  "Už se to trochu usadilo… ale nezapomněl jsem.",
+  "Dobrý, trenére. Jedeme dál. Jen na mě nezapomeňte.",
+  "Beru to sportovně. Zatím.",
+];
+
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+/** Deterministická hláška hráče k jeho aktuálnímu trucu (stejný hráč + úroveň = stejná věta). */
+export function unrestMoodQuote(playerId: string, level: number, teamName?: string): string {
+  const pool = level >= 70 ? MOOD_QUOTES_HIGH : level >= 40 ? MOOD_QUOTES_MID : MOOD_QUOTES_LOW;
+  const quote = pool[hashStr(playerId + String(level >= 70 ? 2 : level >= 40 ? 1 : 0)) % pool.length];
+  return quote.replace("{team}", teamName ?? "jinam");
+}
+
 /** Vrátí akce dostupné pro hráče (pro FE chips) — s ohledem na jednorázové guardy. */
 export function availableActions(unrest: TransferUnrest, lifeContext: Record<string, unknown>, seasonNumber: number | null): UnrestActionDef[] {
   return UNREST_ACTIONS.filter((a) => {
