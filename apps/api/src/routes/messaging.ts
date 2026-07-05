@@ -111,14 +111,16 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
     .catch((e) => { logger.warn({ module: "messaging" }, "conv ownership check", e); return null; });
   if (!convOwner || convOwner.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
 
-  // Trucující hráč (transferUnrest) → nabídnout trenérovi usmiřovací akce (chips na FE)
+  // Trucující hráč (transferUnrest) → konkrétní dohody (chips na FE).
+  // Primární kanál je živá konverzace (AI thread po odmítnuté nabídce) — dohody
+  // se nabízejí až když řeči nestačily: vážný truc (≥40) a žádný aktivní thread.
   let unrest: { level: number; teamName?: string; mood: string; actions: { id: string; label: string; description: string }[] } | null = null;
   if (convOwner.type === "player" && convOwner.participant_id && convOwner.ai_thread_active !== 1) {
     try {
       const playerRow = await c.env.DB.prepare("SELECT life_context FROM players WHERE id = ? AND team_id = ?")
         .bind(convOwner.participant_id, teamId).first<{ life_context: string | null }>();
       const lc = playerRow?.life_context ? JSON.parse(playerRow.life_context) : {};
-      if (lc?.transferUnrest?.level > 0) {
+      if (lc?.transferUnrest?.level >= 40) {
         const { availableActions, unrestMoodQuote } = await import("../transfers/unrest");
         const seasonRow = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
           .first<{ number: number }>().catch((e) => { logger.warn({ module: "messaging" }, "load season for unrest", e); return null; });

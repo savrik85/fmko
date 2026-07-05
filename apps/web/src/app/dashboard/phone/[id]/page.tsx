@@ -382,17 +382,18 @@ export default function ConversationPage() {
         <div ref={endRef} />
       </div>
 
-      {/* Unrest — trucující hráč: usmiřovací akce */}
-      {!isGroup && unrest && unrest.level > 0 && !aiThreadActive && (
+      {/* Unrest — vážně trucující hráč: konkrétní dohody (řeči nestačily) */}
+      {!isGroup && unrest && unrest.level >= 40 && !aiThreadActive && (
         <div className="bg-orange-50 border-t border-orange-200 px-3 py-2 shrink-0">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[11px] font-heading font-bold text-orange-700">
-              {unrest.level >= 40 ? "😠 Nespokojený" : "😕 Doutná to"}{unrest.teamName ? ` (nabídka od ${unrest.teamName})` : ""} — {unrest.level}/100
+              😠 Nespokojený{unrest.teamName ? ` (nabídka od ${unrest.teamName})` : ""} — {unrest.level}/100
             </span>
           </div>
           {unrest.mood && (
-            <div className="text-[11px] italic text-orange-800/80 mb-1.5">&bdquo;{unrest.mood}&ldquo;</div>
+            <div className="text-[11px] italic text-orange-800/80 mb-1">&bdquo;{unrest.mood}&ldquo;</div>
           )}
+          <div className="text-[10px] font-heading font-bold text-orange-700/70 uppercase tracking-wide mb-1.5">🤝 Nabídni mu něco konkrétního:</div>
           {unrestEffects && (
             <div className="mb-1.5 bg-white rounded-lg px-2.5 py-1.5 text-[11px] text-gray-700 space-y-0.5">
               {unrestEffects.map((ef, i) => <div key={i}>• {ef}</div>)}
