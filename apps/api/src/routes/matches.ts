@@ -786,14 +786,14 @@ matchesRouter.post("/teams/:teamId/challenge/:opponentTeamId", async (c) => {
 
   if (teamId === opponentTeamId) return c.json({ error: "Nemůžeš vyzvat sám sebe" }, 400);
 
-  // Verify opponent is human
-  const opponent = await c.env.DB.prepare("SELECT id, name, user_id FROM teams WHERE id = ?")
-    .bind(opponentTeamId).first<{ id: string; name: string; user_id: string }>();
-  if (!opponent || opponent.user_id === "ai") return c.json({ error: "Přáteláky lze hrát pouze proti hráčským týmům" }, 400);
+  // Verify opponent is human senior team (U21 dědí user_id majitele, ale zvát se nedá)
+  const opponent = await c.env.DB.prepare("SELECT id, name, user_id, team_type FROM teams WHERE id = ?")
+    .bind(opponentTeamId).first<{ id: string; name: string; user_id: string; team_type: string | null }>();
+  if (!opponent || opponent.user_id === "ai" || opponent.team_type === "u21") return c.json({ error: "Přáteláky lze hrát pouze proti hráčským týmům" }, 400);
 
   // Check budget
-  const team = await c.env.DB.prepare("SELECT name, budget, game_date FROM teams WHERE id = ?")
-    .bind(teamId).first<{ name: string; budget: number; game_date: string }>();
+  const team = await c.env.DB.prepare("SELECT name, budget, game_date, season_start FROM teams WHERE id = ?")
+    .bind(teamId).first<{ name: string; budget: number; game_date: string; season_start: string | null }>();
   if (!team) return c.json({ error: "Team not found" }, 404);
   if (team.budget < 1000) return c.json({ error: "Nedostatek peněz (min 1 000 Kč)" }, 400);
 
@@ -805,7 +805,8 @@ matchesRouter.post("/teams/:teamId/challenge/:opponentTeamId", async (c) => {
 
   if (lastChallenge) {
     const daysDiff = (new Date(team.game_date).getTime() - new Date(lastChallenge.created_at).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysDiff < 3) return c.json({ error: "Přátelák je možný jednou za 3 dny", cooldown: true }, 400);
+    // Záporný rozdíl = výzva z časového prostoru staré sezóny (před resetem game_clock) — cooldown neaplikovat
+    if (daysDiff >= 0 && daysDiff < 3) return c.json({ error: "Přátelák je možný jednou za 3 dny", cooldown: true }, 400);
   }
 
   // Check no pending challenge already exists between these teams
@@ -815,21 +816,24 @@ matchesRouter.post("/teams/:teamId/challenge/:opponentTeamId", async (c) => {
     .catch((e) => { logger.warn({ module: "matches" }, "fetch existing pending challenge", e); return null; });
   if (existing) return c.json({ error: "Výzva už byla odeslána" }, 400);
 
-  // Check neither team has a league match or friendly today (same game_date)
+  // Check neither team has a league match or friendly today (same game_date).
+  // Omezeno na aktuální sezónu (>= season_start) — data staré sezóny žila v posunutém
+  // časovém prostoru (game_clock offset) a jejich datumy kolidují s reálným kalendářem.
   const gameDateStr = team.game_date;
   const gameDateDay = gameDateStr ? gameDateStr.split("T")[0] : null;
   if (gameDateDay) {
+    const seasonStart = team.season_start ?? "1970-01-01";
     const [leagueRes, friendlyRes] = await c.env.DB.batch([
       c.env.DB.prepare(
         `SELECT m.id FROM matches m JOIN season_calendar sc ON m.calendar_id = sc.id
          WHERE (m.home_team_id = ? OR m.away_team_id = ? OR m.home_team_id = ? OR m.away_team_id = ?)
-         AND sc.scheduled_at LIKE ? AND m.status IN ('scheduled','lineups_open','simulated') LIMIT 1`
-      ).bind(teamId, teamId, opponentTeamId, opponentTeamId, `${gameDateDay}%`),
+         AND sc.scheduled_at LIKE ? AND sc.scheduled_at >= ? AND m.status IN ('scheduled','lineups_open','simulated') LIMIT 1`
+      ).bind(teamId, teamId, opponentTeamId, opponentTeamId, `${gameDateDay}%`, seasonStart),
       c.env.DB.prepare(
         `SELECT id FROM matches WHERE calendar_id IS NULL AND status IN ('lineups_open','simulated')
          AND (home_team_id = ? OR away_team_id = ? OR home_team_id = ? OR away_team_id = ?)
-         AND created_at LIKE ? LIMIT 1`
-      ).bind(teamId, teamId, opponentTeamId, opponentTeamId, `${gameDateDay}%`),
+         AND created_at LIKE ? AND created_at >= ? LIMIT 1`
+      ).bind(teamId, teamId, opponentTeamId, opponentTeamId, `${gameDateDay}%`, seasonStart),
     ]);
     if (leagueRes.results.length > 0) return c.json({ error: "Dnes máš nebo soupeř má ligový zápas — přátelák lze hrát jen v dny bez ligového zápasu" }, 400);
     if (friendlyRes.results.length > 0) return c.json({ error: "Jeden z týmů už dnes hrál nebo má naplánovaný přátelák" }, 400);
@@ -870,8 +874,8 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
   if (!challenge) return c.json({ error: "Výzva nenalezena nebo už zpracována" }, 404);
 
   // Check budget
-  const team = await c.env.DB.prepare("SELECT name, budget, game_date FROM teams WHERE id = ?")
-    .bind(teamId).first<{ name: string; budget: number; game_date: string }>();
+  const team = await c.env.DB.prepare("SELECT name, budget, game_date, season_start FROM teams WHERE id = ?")
+    .bind(teamId).first<{ name: string; budget: number; game_date: string; season_start: string | null }>();
   if (!team || team.budget < 1000) return c.json({ error: "Nedostatek peněz (min 1 000 Kč)" }, 400);
 
   const challengerTeamId = challenge.challenger_team_id as string;
@@ -879,20 +883,22 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
     .bind(challengerTeamId).first<{ name: string; game_date: string; budget: number }>();
   if (!challenger || challenger.budget < 1000) return c.json({ error: "Soupeř nemá dostatek peněz (min 1 000 Kč)" }, 400);
 
-  // Check neither team has a league match or friendly today
+  // Check neither team has a league match or friendly today.
+  // Omezeno na aktuální sezónu (>= season_start) — stará data žila v posunutém čase (viz POST výše).
   const gameDateDay = team.game_date ? team.game_date.split("T")[0] : null;
   if (gameDateDay) {
+    const seasonStart = team.season_start ?? "1970-01-01";
     const [leagueRes, friendlyRes] = await c.env.DB.batch([
       c.env.DB.prepare(
         `SELECT m.id FROM matches m JOIN season_calendar sc ON m.calendar_id = sc.id
          WHERE (m.home_team_id = ? OR m.away_team_id = ? OR m.home_team_id = ? OR m.away_team_id = ?)
-         AND sc.scheduled_at LIKE ? AND m.status IN ('scheduled','lineups_open','simulated') LIMIT 1`
-      ).bind(teamId, teamId, challengerTeamId, challengerTeamId, `${gameDateDay}%`),
+         AND sc.scheduled_at LIKE ? AND sc.scheduled_at >= ? AND m.status IN ('scheduled','lineups_open','simulated') LIMIT 1`
+      ).bind(teamId, teamId, challengerTeamId, challengerTeamId, `${gameDateDay}%`, seasonStart),
       c.env.DB.prepare(
         `SELECT id FROM matches WHERE calendar_id IS NULL AND status IN ('lineups_open','simulated')
          AND (home_team_id = ? OR away_team_id = ? OR home_team_id = ? OR away_team_id = ?)
-         AND created_at LIKE ? LIMIT 1`
-      ).bind(teamId, teamId, challengerTeamId, challengerTeamId, `${gameDateDay}%`),
+         AND created_at LIKE ? AND created_at >= ? LIMIT 1`
+      ).bind(teamId, teamId, challengerTeamId, challengerTeamId, `${gameDateDay}%`, seasonStart),
     ]);
     if (leagueRes.results.length > 0) return c.json({ error: "Dnes máš nebo soupeř má ligový zápas — přátelák nelze přijmout" }, 400);
     if (friendlyRes.results.length > 0) return c.json({ error: "Jeden z týmů už dnes hrál nebo má naplánovaný přátelák" }, 400);
@@ -1019,12 +1025,13 @@ matchesRouter.get("/teams/:teamId/challenges", async (c) => {
   let cooldownDaysLeft = 0;
   if (lastChallenge && team) {
     const daysDiff = (new Date(team.game_date).getTime() - new Date(lastChallenge.created_at).getTime()) / (1000 * 60 * 60 * 24);
-    cooldownDaysLeft = Math.max(0, Math.ceil(3 - daysDiff));
+    // Záporný rozdíl = výzva z časového prostoru staré sezóny (před resetem game_clock) — bez cooldownu
+    cooldownDaysLeft = daysDiff < 0 ? 0 : Math.max(0, Math.ceil(3 - daysDiff));
   }
 
-  // List of human teams to challenge (exclude self)
+  // List of human teams to challenge (exclude self + U21, které dědí user_id majitele)
   const humanTeams = await c.env.DB.prepare(
-    "SELECT t.id, t.name, v.name as village FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id <> 'ai' AND t.id <> ? ORDER BY t.name"
+    "SELECT t.id, t.name, v.name as village FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id <> 'ai' AND t.id <> ? AND COALESCE(t.team_type, 'senior') <> 'u21' ORDER BY t.name"
   ).bind(teamId).all();
 
   return c.json({
