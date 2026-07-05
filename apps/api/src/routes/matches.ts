@@ -827,8 +827,9 @@ matchesRouter.post("/teams/:teamId/challenge/:opponentTeamId", async (c) => {
       c.env.DB.prepare(
         `SELECT m.id FROM matches m JOIN season_calendar sc ON m.calendar_id = sc.id
          WHERE (m.home_team_id = ? OR m.away_team_id = ? OR m.home_team_id = ? OR m.away_team_id = ?)
-         AND sc.scheduled_at LIKE ? AND sc.scheduled_at >= ? AND m.status IN ('scheduled','lineups_open','simulated') LIMIT 1`
-      ).bind(teamId, teamId, opponentTeamId, opponentTeamId, `${gameDateDay}%`, seasonStart),
+         AND sc.scheduled_at LIKE ? AND sc.season_number = (SELECT MAX(number) FROM seasons WHERE status = 'active')
+         AND m.status IN ('scheduled','lineups_open','simulated') LIMIT 1`
+      ).bind(teamId, teamId, opponentTeamId, opponentTeamId, `${gameDateDay}%`),
       c.env.DB.prepare(
         `SELECT id FROM matches WHERE calendar_id IS NULL AND status IN ('lineups_open','simulated')
          AND (home_team_id = ? OR away_team_id = ? OR home_team_id = ? OR away_team_id = ?)
@@ -892,8 +893,9 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
       c.env.DB.prepare(
         `SELECT m.id FROM matches m JOIN season_calendar sc ON m.calendar_id = sc.id
          WHERE (m.home_team_id = ? OR m.away_team_id = ? OR m.home_team_id = ? OR m.away_team_id = ?)
-         AND sc.scheduled_at LIKE ? AND sc.scheduled_at >= ? AND m.status IN ('scheduled','lineups_open','simulated') LIMIT 1`
-      ).bind(teamId, teamId, challengerTeamId, challengerTeamId, `${gameDateDay}%`, seasonStart),
+         AND sc.scheduled_at LIKE ? AND sc.season_number = (SELECT MAX(number) FROM seasons WHERE status = 'active')
+         AND m.status IN ('scheduled','lineups_open','simulated') LIMIT 1`
+      ).bind(teamId, teamId, challengerTeamId, challengerTeamId, `${gameDateDay}%`),
       c.env.DB.prepare(
         `SELECT id FROM matches WHERE calendar_id IS NULL AND status IN ('lineups_open','simulated')
          AND (home_team_id = ? OR away_team_id = ? OR home_team_id = ? OR away_team_id = ?)
