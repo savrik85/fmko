@@ -6283,6 +6283,19 @@ gameRouter.post("/admin/run-daily-tick", async (c) => {
   }
 });
 
+// POST /api/admin/run-transfer-tick — ruční spuštění transfer pressure ticku
+// (expirace nabídek, CPU nabídky, truc). Testing env nemá crony — jediná cesta, jak ho tam spustit.
+gameRouter.post("/admin/run-transfer-tick", async (c) => {
+  const { executeTransferPressureTick } = await import("../transfers/transfer-pressure-tick");
+  try {
+    const r = await executeTransferPressureTick(c.env, { force: true });
+    return c.json({ ok: true, ...r });
+  } catch (e) {
+    logger.error({ module: "game.ts" }, "manual transfer pressure tick", e);
+    return c.json({ error: "tick selhal" }, 500);
+  }
+});
+
 // POST /api/admin/cup/create — vytvoří pohár pro aktuální sezónu.
 gameRouter.post("/admin/cup/create", async (c) => {
   const { createCup } = await import("../cup/cup");

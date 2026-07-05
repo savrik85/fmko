@@ -97,6 +97,18 @@ export default {
       }
     }
 
+    // ── TRANSFER PRESSURE: 12:00 CEST (10:00 UTC) — expirace nabídek, CPU nabídky, truc ──
+    if (cron === "0 10 * * *") {
+      try {
+        log("info", "transfer pressure tick starting");
+        const { executeTransferPressureTick } = await import("./transfers/transfer-pressure-tick");
+        const r = await executeTransferPressureTick(env);
+        log("info", `transfer pressure tick done: expired=${r.expiredOffers} aiOffers=${r.aiOffers} unrest=${r.unrestProcessed}${r.skipped ? " (skipped)" : ""}`);
+      } catch (e: any) {
+        log("error", "transfer pressure tick failed", e);
+      }
+    }
+
     // ── AI PLAYER CHATS: 16:00 CEST (14:00 UTC) — random thready od hráčů + expirace stale ──
     if (cron === "0 14 * * *") {
       try {
@@ -442,11 +454,11 @@ export default {
           }
         } catch (e) { log("error", "celebrity spawn failed", e); }
 
-        // ── Virtual AI market activity (listings + offers from neighboring districts) ──
+        // ── Virtual AI market activity (listings only — offers běží v transfer pressure ticku 10:00 UTC) ──
         try {
           const { createRng, cryptoSeed: cryptoSeedMarket } = await import("./generators/rng");
           const marketRng = createRng(cryptoSeedMarket());
-          const { generateAiListings, generateAiOffers } = await import("./transfers/virtual-teams");
+          const { generateAiListings } = await import("./transfers/virtual-teams");
           const marketLeagues = await env.DB.prepare(
             "SELECT l.id, l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.user_id != 'ai' GROUP BY l.id"
           ).all().catch((e) => { log("error", "fetch leagues for AI market", e); return { results: [] }; });
@@ -454,9 +466,8 @@ export default {
             const lid = ml.id as string;
             const dist = ml.district as string;
             const listings = await generateAiListings(env.DB, dist, lid, marketRng);
-            const offers = await generateAiOffers(env.DB, dist, lid, marketRng);
-            if (listings > 0 || offers > 0) {
-              log("info", `AI market: ${dist} — ${listings} listings, ${offers} offers`);
+            if (listings > 0) {
+              log("info", `AI market: ${dist} — ${listings} listings`);
             }
           }
         } catch (e) { log("error", "AI market activity failed", e); }

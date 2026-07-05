@@ -1058,9 +1058,9 @@ export async function executeDailyTick(
   // Celebrity spawn moved to match tick (index.ts) to avoid D1 query limit in daily tick
 
   // ── Transfer expiry cleanup ──
+  // transfer_offers expirují v transfer pressure ticku (transfers/transfer-pressure-tick.ts),
+  // kde se řeší i dopad na morálku hráče, který o přestup stál.
   try {
-    await env.DB.prepare("UPDATE transfer_offers SET status = 'expired' WHERE status = 'pending' AND expires_at < ?")
-      .bind(now.toISOString()).run();
     await env.DB.prepare("UPDATE transfer_listings SET status = 'expired' WHERE status = 'active' AND expires_at < ?")
       .bind(now.toISOString()).run();
     await env.DB.prepare("UPDATE player_offers SET status = 'expired' WHERE status = 'pending' AND expires_at < ?")
