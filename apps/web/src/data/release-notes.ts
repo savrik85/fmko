@@ -12,6 +12,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-07-05",
+    emoji: "📋",
+    title: "Sponzorské smlouvy po sezónách a opravené přáteláky",
+    items: [
+      "Sponzorské smlouvy nově s koncem sezóny ztratí sezónu platnosti — roční smlouvy vyprší a podepíšeš novou za podmínek podle své aktuální reputace. O vypršení přijde SMS.",
+      "Opravené zvaní na přátelské zápasy — zápasy z minulé sezóny už neblokují nové výzvy.",
+      "V nabídce soupeřů pro přáteláky už nejsou U21 týmy.",
+    ],
+  },
+  {
     date: "2026-07-04",
     emoji: "🌴",
     title: "Volno z tréninku a přehlednější Pohár",

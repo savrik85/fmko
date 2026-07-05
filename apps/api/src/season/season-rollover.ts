@@ -58,6 +58,31 @@ export async function rolloverAllLeagues(
     .bind(oldSeasonNumber).run()
     .catch((e) => logger.warn({ module: "season-rollover" }, "finish old season", e));
 
+  // 4b. Sponzorské smlouvy: nová sezóna = o sezónu méně platnosti; na nule smlouva vyprší.
+  //     Nabídky se generují per sezóna (seed obsahuje číslo sezóny) a škálují s reputací,
+  //     takže expirovaný tým si hned může podepsat novou za aktualizovaných podmínek.
+  try {
+    const expiring = await db.prepare(
+      `SELECT sc.team_id, sc.sponsor_name FROM sponsor_contracts sc
+       JOIN teams t ON t.id = sc.team_id
+       WHERE sc.status = 'active' AND sc.seasons_remaining <= 1 AND t.user_id != 'ai'`,
+    ).all<{ team_id: string; sponsor_name: string }>()
+      .catch((e) => { logger.warn({ module: "season-rollover" }, "load expiring sponsors", e); return { results: [] as Array<{ team_id: string; sponsor_name: string }> }; });
+
+    await db.prepare("UPDATE sponsor_contracts SET seasons_remaining = seasons_remaining - 1 WHERE status = 'active'").run();
+    await db.prepare("UPDATE sponsor_contracts SET status = 'expired' WHERE status = 'active' AND seasons_remaining <= 0").run();
+
+    const { sendSystemSMS } = await import("../lib/sms");
+    for (const row of expiring.results) {
+      await sendSystemSMS(db, row.team_id, "Sportovní ředitel", "Sportovní ředitel",
+        `📋 Sponzorská smlouva s ${row.sponsor_name} vypršela s koncem sezóny. Mrkni na Sponzory — čekají tam nové nabídky.`,
+      );
+    }
+    logger.info({ module: "season-rollover" }, `sponzorské smlouvy: -1 sezóna, ${expiring.results.length} expirací u lidských týmů`);
+  } catch (e) {
+    logger.error({ module: "season-rollover" }, "sponsor contracts rollover", e);
+  }
+
   // 5. Celorepublikový pohár pro novou sezónu (kola na soboty, finále na konci ligy).
   try {
     const { createCup } = await import("../cup/cup");
