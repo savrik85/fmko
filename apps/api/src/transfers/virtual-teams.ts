@@ -303,9 +303,16 @@ async function maybeOfferForTeam(
   const { computeInterestForOffer } = await import("./player-interest");
   const teamAvg = players.results.reduce((s, p) => s + (p.overall_rating as number), 0) / players.results.length;
 
-  // "Lepší klub než my" — preferuj virtuální týmy s ratingem nad průměrem kádru
-  const betterTeams = teams.filter((t) => t.rating > teamAvg);
-  const virtualTeam = betterTeams.length > 0 ? rng.pick(betterTeams) : teams.reduce((a, b) => (a.rating >= b.rating ? a : b));
+  // "Lepší klub než my" — nabízející klub musí být lákavý i pro hvězdy silných kádrů.
+  // Rating pro tuto nabídku zvedneme aspoň na průměr kádru +3..12 (ambiciózní klub, co staví tým) —
+  // jinak by top hráčům vycházel faktor „Slabší klub" a tlak na hvězdy by nefungoval.
+  const baseTeam = teams.filter((t) => t.rating > teamAvg).length > 0
+    ? rng.pick(teams.filter((t) => t.rating > teamAvg))
+    : teams.reduce((a, b) => (a.rating >= b.rating ? a : b));
+  const virtualTeam: VirtualTeam = {
+    ...baseTeam,
+    rating: Math.max(baseTeam.rating, Math.round(teamAvg) + 3 + rng.int(0, 9)),
+  };
 
   let target = rng.pick(candidates);
   let offerPrice = calcOfferPrice(target.overall_rating as number, (target.age as number) ?? 25, rng);
