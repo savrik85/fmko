@@ -32,6 +32,8 @@ export interface PlayerSnapshot {
   recentMinutes: number;     // 0-450
   recentRatingAvg: number;   // 1-10
   isCelebrity: boolean;
+  /** 0-100 — aktivní transferový truc (vynechává AI transfer scénáře, řeší unrest-talk) */
+  transferUnrest?: number;
   // optional context
   occupation?: string;
   injuredUntil?: string | null;
@@ -235,9 +237,12 @@ export function pickScenarioForPlayer(
   player: PlayerSnapshot,
   rng: () => number,
 ): AiScenario | null {
+  // Hráč s aktivním transferovým trucem řeší přestup přes unrest-talk flow —
+  // AI transfer scénáře by se s ním dublovaly, proto je vynecháme.
+  const hasTransferUnrest = ((player as PlayerSnapshot & { transferUnrest?: number }).transferUnrest ?? 0) >= 40;
   const candidates = AI_PLAYER_SCENARIOS.map((s) => ({
     scenario: s,
-    weight: Math.max(0, s.weight(player)),
+    weight: hasTransferUnrest && s.category === "transfer" ? 0 : Math.max(0, s.weight(player)),
   })).filter((c) => c.weight > 0);
 
   if (candidates.length === 0) return null;

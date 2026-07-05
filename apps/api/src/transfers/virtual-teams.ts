@@ -215,8 +215,8 @@ export async function generateAiOffers(
   leagueId: string,
   rng: Rng,
 ): Promise<number> {
-  const teams = VIRTUAL_TEAMS[district];
-  if (!teams || teams.length === 0) return 0;
+  const teams = await getVirtualTeamsForDistrict(db, district);
+  if (teams.length === 0) return 0;
 
   const humanTeams = await db.prepare(
     "SELECT id FROM teams WHERE league_id = ? AND user_id != 'ai'"
@@ -231,6 +231,31 @@ export async function generateAiOffers(
     }
   }
   return created;
+}
+
+/**
+ * Virtuální kluby pro okres: hardcoded pokud existují, jinak deterministický
+ * fallback z měst/městysů okresu (stejná jména každý den — kluby mají stabilní
+ * identitu). Díky tomu CPU nabídky fungují ve VŠECH okresech.
+ */
+const CLUB_PREFIXES = ["SK", "FK", "TJ", "Sokol"] as const;
+
+export async function getVirtualTeamsForDistrict(db: D1Database, district: string): Promise<VirtualTeam[]> {
+  const hardcoded = VIRTUAL_TEAMS[district];
+  if (hardcoded && hardcoded.length > 0) return hardcoded;
+
+  const towns = await db.prepare(
+    `SELECT name, population FROM villages WHERE district = ? AND size IN ('town','small_city','city')
+     ORDER BY population DESC LIMIT 8`
+  ).bind(district).all<{ name: string; population: number }>()
+    .catch((e) => { logger.warn({ module: "virtual-teams" }, "fetch towns for virtual teams", e); return { results: [] as { name: string; population: number }[] }; });
+
+  return towns.results.map((t, i) => ({
+    name: `${CLUB_PREFIXES[i % CLUB_PREFIXES.length]} ${t.name}`,
+    city: t.name,
+    district,
+    rating: Math.max(45, 58 - i * 2), // 58, 56, 54… — "lepší kluby než my"
+  }));
 }
 
 /** Šance na CPU nabídku per tým a den (~1 nabídka za 2 týdny, cooldowny to dál ředí). */
@@ -256,11 +281,13 @@ async function maybeOfferForTeam(
   ).bind(targetTeamId).first().catch((e) => { logger.warn({ module: "virtual-teams" }, "check active offer", e); return null; });
   if (activeOffer) return 0;
 
-  // Top hráči TOHOTO kádru dle ratingu (~15 %, min 2) — CPU jde po hvězdách týmu
+  // Top hráči TOHOTO kádru dle ratingu (~15 %, min 2) — CPU jde po hvězdách týmu.
+  // Per-hráč cooldown 14 dní: koho nedávno řešila JAKÁKOLI nabídka, toho CPU nechá být.
   const players = await db.prepare(
     `SELECT id, first_name, last_name, age, position, overall_rating, personality, life_context
-     FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') AND is_celebrity = 0
+     FROM players p WHERE team_id = ? AND (status IS NULL OR status = 'active') AND is_celebrity = 0
      AND loan_from_team_id IS NULL
+     AND NOT EXISTS (SELECT 1 FROM transfer_offers o WHERE o.player_id = p.id AND o.created_at > datetime('now', '-14 days'))
      ORDER BY overall_rating DESC`
   ).bind(targetTeamId).all().catch((e) => { logger.warn({ module: "virtual-teams" }, "fetch players", e); return { results: [] }; });
   if (players.results.length < 5) return 0; // too small squad, don't poach

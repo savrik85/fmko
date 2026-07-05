@@ -4704,6 +4704,20 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   ).bind(body.playerId, teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "check duplicate offer", e); return null; });
   if (existing) return c.json({ error: "Již máte aktivní nabídku na tohoto hráče", offerId: existing.id }, 409);
 
+  // Anti-spam: odmítnutá/vypršelá nabídka kazí hráči morálku — opakovat na stejného hráče
+  // jde až po 10 dnech (jinak by šlo soupeři rozkládat kádr nabídkovým spamem zadarmo).
+  const recentClosed = await c.env.DB.prepare(
+    `SELECT resolved_at FROM transfer_offers
+     WHERE player_id = ? AND from_team_id = ? AND status IN ('rejected','expired','withdrawn')
+       AND resolved_at > datetime('now', '-10 days')
+     ORDER BY resolved_at DESC LIMIT 1`
+  ).bind(body.playerId, teamId).first<{ resolved_at: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "check offer cooldown", e); return null; });
+  if (recentClosed) {
+    const daysLeft = Math.max(1, 10 - Math.floor((Date.now() - new Date(recentClosed.resolved_at).getTime()) / 86400000));
+    return c.json({ error: `Na tohoto hráče jsi nedávno nabízel — počkej ještě ${daysLeft} ${daysLeft === 1 ? "den" : daysLeft < 5 ? "dny" : "dní"}` }, 429);
+  }
+
   // Snapshot zájmu hráče o přestup (0-3) — stabilní badge v UI po celou dobu jednání.
   const { computeInterestForOffer } = await import("../transfers/player-interest");
   const interest = await computeInterestForOffer(c.env.DB, body.playerId, { fromTeamId: teamId, offerAmount: body.amount })

@@ -101,6 +101,7 @@ export function loadPlayerSnapshot(row: Record<string, unknown>): PlayerSnapshot
     recentMinutes: (row.recent_minutes as number) ?? 0,
     recentRatingAvg: (row.recent_rating_avg as number) ?? 6.5,
     isCelebrity: !!(row.is_celebrity as number),
+    transferUnrest: lifeContext.transferUnrest?.level ?? 0,
     occupation: lifeContext.occupation,
     injuredUntil: row.injured_until as string | null,
   };
