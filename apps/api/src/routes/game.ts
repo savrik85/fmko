@@ -1736,7 +1736,9 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   const mainOffers: Offer[] = [];
   {
     const offerCount = team.reputation >= 60 ? 5 : team.reputation >= 40 ? 4 : 3;
-    const pool = mainPoolFiltered.slice(0, offerCount * 2);
+    // Vždy zahrnout 2 největší sponzory okresu — ať jsou velké ryby (Madeta, Budvar…) vidět
+    const bigFish = [...mainPoolFiltered].sort((a, b) => (b.monthly_max as number) - (a.monthly_max as number)).slice(0, 2);
+    const pool = [...bigFish, ...mainPoolFiltered.filter((s) => !bigFish.includes(s))].slice(0, offerCount * 2);
     for (let i = 0; i < Math.min(offerCount, pool.length); i++) {
       const s = pool[i];
       const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod * 3);
@@ -1809,9 +1811,22 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
         team.reputation, team.size, sponsorRows.results as unknown as SpRow[], seedFromString)
     : null;
 
+  // Nedávno vypršelá smlouva (main/stadium) — nabídnout obnovu se stejným sponzorem
+  const lastExpiredFor = async (cat: "main" | "stadium") => {
+    const row = await c.env.DB.prepare(
+      "SELECT * FROM sponsor_contracts WHERE team_id = ? AND status = 'expired' AND COALESCE(category, 'main') = ? ORDER BY signed_at DESC LIMIT 1"
+    ).bind(teamId, cat).first<Record<string, unknown>>()
+      .catch((e) => { logger.warn({ module: "game", teamId }, "fetch expired contract", e); return null; });
+    return row ? { ...mapContract(row), renewal: renewalFor(row) } : null;
+  };
+  const mainExpired = mainContract ? null : await lastExpiredFor("main");
+  const stadiumExpired = stadiumContract ? null : await lastExpiredFor("stadium");
+
   return c.json({
     mainContract: mainContract ? { ...mapContract(mainContract), renewal: renewalFor(mainContract) } : null,
     stadiumContract: stadiumContract ? { ...mapContract(stadiumContract), renewal: renewalFor(stadiumContract) } : null,
+    mainExpired,
+    stadiumExpired,
     bannerContracts: bannerContracts.map((r) => ({ ...mapContract(r), renewal: renewalFor(r) })),
     stadiumName: team.stadium_name,
     teamName: teamFull?.name ?? "",
@@ -1945,9 +1960,22 @@ gameRouter.post("/teams/:teamId/sponsors/renew", async (c) => {
   if (!body?.contractId) return c.json({ error: "Chybí contractId" }, 400);
 
   const contract = await c.env.DB.prepare(
-    "SELECT * FROM sponsor_contracts WHERE id = ? AND team_id = ? AND status = 'active'"
+    "SELECT * FROM sponsor_contracts WHERE id = ? AND team_id = ? AND status IN ('active', 'expired')"
   ).bind(body.contractId, teamId).first<Record<string, unknown>>();
   if (!contract) return c.json({ error: "Smlouva nenalezena" }, 404);
+
+  // Obnova expirované smlouvy — jen pokud v kategorii mezitím nevznikla jiná aktivní
+  if (contract.status === "expired") {
+    const cat = (contract.category as string) || "main";
+    const active = await c.env.DB.prepare(
+      "SELECT id, category FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
+    ).bind(teamId).all().catch((e) => { logger.warn({ module: "game", teamId }, "renew expired active check", e); return { results: [] }; });
+    if (cat === "banner") {
+      if (active.results.filter((r) => r.category === "banner").length >= 6) return c.json({ error: "Maximální počet bannerů je dosažen" }, 400);
+    } else if (active.results.some((r) => ((r.category as string) || "main") === cat)) {
+      return c.json({ error: "V této kategorii už máš aktivní smlouvu" }, 400);
+    }
+  }
 
   const econ = await c.env.DB.prepare(
     "SELECT t.reputation, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
@@ -1971,7 +1999,7 @@ gameRouter.post("/teams/:teamId/sponsors/renew", async (c) => {
   );
 
   await c.env.DB.prepare(
-    "UPDATE sponsor_contracts SET monthly_amount = ?, win_bonus = ?, seasons_total = ?, seasons_remaining = ?, early_termination_fee = ? WHERE id = ?"
+    "UPDATE sponsor_contracts SET status = 'active', monthly_amount = ?, win_bonus = ?, seasons_total = ?, seasons_remaining = ?, early_termination_fee = ? WHERE id = ?"
   ).bind(terms.monthlyAmount, terms.winBonus, terms.seasons, terms.seasons, terms.earlyTerminationFee, body.contractId).run();
 
   return c.json({ ok: true, renewed: terms });

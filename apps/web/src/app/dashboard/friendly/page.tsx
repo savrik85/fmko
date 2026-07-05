@@ -176,8 +176,16 @@ export default function FriendlyPage() {
         <SectionLabel>Vyzvat soupeře</SectionLabel>
         {!data.canChallenge ? (
           <div className="text-sm text-muted">Cooldown: ještě {data.cooldownDaysLeft} {data.cooldownDaysLeft === 1 ? "den" : "dny"}</div>
-        ) : (
+        ) : (() => {
+          // Zápas se hraje v 18:00 v den PŘIJETÍ výzvy; přijetí po 19:00 → hraje se další den
+          const pragueHour = Number(new Intl.DateTimeFormat("cs", { hour: "numeric", hour12: false, timeZone: "Europe/Prague" }).format(new Date()));
+          const slotLabel = pragueHour >= 19 ? "zítra" : "dnes";
+          return (
           <div className="space-y-2">
+            <p className="text-sm text-muted leading-relaxed">
+              Zápas se hraje v 18:00 v den, kdy soupeř výzvu přijme (přijetí po 19:00 = hraje se další den).
+              Po odehraném přáteláku je 3denní pauza.
+            </p>
             {data.teams.map((t) => (
               <Card key={t.id}>
                 <CardBody>
@@ -188,7 +196,7 @@ export default function FriendlyPage() {
                     </div>
                     <button onClick={() => sendChallenge(t.id)} disabled={sending === t.id}
                       className="px-3 py-1.5 bg-pitch-500 text-white rounded-lg font-heading font-bold text-xs disabled:opacity-50 shrink-0">
-                      Vyzvat ⚽
+                      Vyzvat ⚽ · {slotLabel} 18:00
                     </button>
                   </div>
                 </CardBody>
@@ -198,7 +206,8 @@ export default function FriendlyPage() {
               <div className="text-sm text-muted">Žádní další hráčští manažeři v lize.</div>
             )}
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Played friendlies */}

@@ -35,6 +35,8 @@ interface SponsorOffer {
 interface SponsorsData {
   mainContract: ActiveContract | null;
   stadiumContract: ActiveContract | null;
+  mainExpired?: ActiveContract | null;
+  stadiumExpired?: ActiveContract | null;
   bannerContracts: ActiveContract[];
   stadiumName: string | null;
   teamName: string;
@@ -153,9 +155,9 @@ export default function SponsorsPage() {
   const handleRenew = async (category: SponsorCategory, contractId?: string) => {
     if (!teamId || acting) return;
     const contract = category === "main"
-      ? data?.mainContract
+      ? (data?.mainContract ?? data?.mainExpired)
       : category === "stadium"
-      ? data?.stadiumContract
+      ? (data?.stadiumContract ?? data?.stadiumExpired)
       : data?.bannerContracts.find((c) => c.id === contractId);
     if (!contract?.renewal) return;
     const r = contract.renewal;
@@ -282,7 +284,10 @@ export default function SponsorsPage() {
             </CardBody>
           </Card>
         ) : (
-          <OffersList offers={data.mainOffers} category="main" onSign={handleSign} acting={acting} />
+          <>
+            {data.mainExpired?.renewal && <ExpiredRenewCard contract={data.mainExpired} onRenew={() => handleRenew("main")} acting={acting} />}
+            <OffersList offers={data.mainOffers} category="main" onSign={handleSign} acting={acting} />
+          </>
         )}
       </div>
 
@@ -302,7 +307,10 @@ export default function SponsorsPage() {
             )}
           </>
         ) : (
-          <OffersList offers={data.stadiumOffers} category="stadium" onSign={handleSign} acting={acting} />
+          <>
+            {data.stadiumExpired?.renewal && <ExpiredRenewCard contract={data.stadiumExpired} onRenew={() => handleRenew("stadium")} acting={acting} />}
+            <OffersList offers={data.stadiumOffers} category="stadium" onSign={handleSign} acting={acting} />
+          </>
         )}
       </div>
 
@@ -343,6 +351,27 @@ export default function SponsorsPage() {
 }
 
 // ═══ Components ═══
+
+/** Karta nedávno vypršelé smlouvy — nabídka obnovy se stejným sponzorem za aktuální podmínky. */
+function ExpiredRenewCard({ contract, onRenew, acting }: { contract: ActiveContract; onRenew: () => void; acting: boolean }) {
+  const r = contract.renewal!;
+  return (
+    <Card>
+      <CardBody>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <div className="font-heading font-bold text-base">{contract.sponsorName}</div>
+            <div className="text-sm text-muted">Smlouva vypršela s koncem sezóny — sponzor je připraven jednat o nové.</div>
+          </div>
+          <button onClick={onRenew} disabled={acting}
+            className="px-3 py-2 bg-pitch-500 text-white rounded-lg font-heading font-bold text-sm disabled:opacity-50 shrink-0">
+            🤝 Obnovit (+{formatCZK(Math.round(r.monthlyAmount / 4.3))}/týd · {r.seasons} sezóny)
+          </button>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
 
 function ContractCard({ contract, category, onTerminate, onRenew, acting }: {
   contract: ActiveContract; category: SponsorCategory; onTerminate: () => void; onRenew?: () => void; acting: boolean;
