@@ -5368,6 +5368,21 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
   return c.json({ ok: true });
 });
 
+// POST /teams/:teamId/players/:playerId/unrest-talk — usmiřovací akce s trucujícím hráčem.
+// Deterministické efekty, AI generuje jen textaci odpovědi hráče (s fallbackem).
+gameRouter.post("/teams/:teamId/players/:playerId/unrest-talk", async (c) => {
+  const teamId = c.req.param("teamId");
+  const playerId = c.req.param("playerId");
+  const body = await c.req.json<{ action?: string }>().catch((e) => { logger.warn({ module: "game" }, "parse unrest-talk body", e); return {}; });
+  const actionId = (body as { action?: string }).action;
+  if (!actionId) return c.json({ error: "Chybí akce" }, 400);
+
+  const { performUnrestAction } = await import("../transfers/unrest");
+  const result = await performUnrestAction(c.env.DB, c.env, teamId, playerId, actionId);
+  if (!result.ok) return c.json({ error: result.error }, (result.status ?? 400) as 400);
+  return c.json(result);
+});
+
 gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");

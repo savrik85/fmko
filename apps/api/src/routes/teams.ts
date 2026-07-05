@@ -999,6 +999,8 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     // Hide condition and morale
     lifeContext.condition = Math.round((lifeContext.condition ?? 50) / 10) * 10;
     lifeContext.morale = Math.round((lifeContext.morale ?? 50) / 10) * 10;
+    // Truc je interní věc kabiny — soupeř ho nevidí
+    delete lifeContext.transferUnrest;
   }
 
   // Check for active injury

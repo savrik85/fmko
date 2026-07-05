@@ -245,6 +245,42 @@ export async function generateReply(
   };
 }
 
+/**
+ * Odpověď nespokojeného hráče na usmiřovací akci trenéra (unrest-talk).
+ * Jediný levný Gemini call (text je jen kosmetika — efekty jsou deterministické).
+ * Při selhání vyhazuje GeminiUnavailableError — volající MUSÍ mít fallback šablonu.
+ */
+export async function generateUnrestReply(
+  env: { GEMINI_API_KEY?: string },
+  player: PlayerSnapshot,
+  team: TeamContext,
+  context: {
+    coachMessage: string;       // co trenér hráči napsal (šablona akce)
+    unrestReason: string;       // proč hráč trucuje (např. odmítnutá nabídka od X)
+    outcome: "calmed" | "partial" | "backfired"; // deterministický výsledek akce
+  },
+): Promise<string> {
+  const system = buildSystemPrompt(player, team);
+  const outcomeHint = context.outcome === "calmed"
+    ? "Trenérova nabídka tě UKLIDNILA — odpověz smířlivě, s úlevou nebo vděkem (dle povahy třeba i s rýpnutím)."
+    : context.outcome === "partial"
+      ? "Trenérova slova tě uklidnila JEN ČÁSTEČNĚ — odpověz zdrženlivě, dáš mu šanci, ale připomeneš že to sleduješ."
+      : "Trenérova slova tě NEUKLIDNILA, spíš naštvala — odpověz odmítavě nebo sarkasticky, dle temperamentu.";
+
+  const prompt = [
+    system,
+    "",
+    `KONTEXT: Trucuješ, protože ${context.unrestReason}.`,
+    `TRENÉR ti právě napsal: "${context.coachMessage}"`,
+    "",
+    outcomeHint,
+    "NEPIŠ podpis. Vrať POUZE text SMS (1-2 věty, max 200 znaků).",
+  ].join("\n");
+
+  const raw = await callGemini(env, prompt, { maxTokens: 200, temperature: 0.9 });
+  return trimSms(raw);
+}
+
 export async function evaluateResolution(
   env: { GEMINI_API_KEY?: string },
   player: PlayerSnapshot,

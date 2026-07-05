@@ -42,10 +42,18 @@ interface AiThreadState {
   } | null;
 }
 
+interface UnrestInfo {
+  level: number;
+  teamName?: string;
+  actions: { id: string; label: string; description: string }[];
+}
+
 interface ConvDetailResponse {
   messages: Message[];
   aiThreadActive: boolean;
   aiThreadState: AiThreadState | null;
+  participantId?: string | null;
+  unrest?: UnrestInfo | null;
 }
 
 const EMOTICONS: [RegExp, string][] = [
@@ -99,6 +107,10 @@ export default function ConversationPage() {
   const [conv, setConv] = useState<ConvInfo | null>(null);
   const [aiThreadState, setAiThreadState] = useState<AiThreadState | null>(null);
   const [aiThreadActive, setAiThreadActive] = useState(false);
+  const [unrest, setUnrest] = useState<UnrestInfo | null>(null);
+  const [participantId, setParticipantId] = useState<string | null>(null);
+  const [unrestBusy, setUnrestBusy] = useState(false);
+  const [unrestEffects, setUnrestEffects] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [newMsg, setNewMsg] = useState("");
   const [sending, setSending] = useState(false);
@@ -120,10 +132,14 @@ export default function ConversationPage() {
       if (isGroup) {
         return apiFetch<Message[]>(messagesUrl).then((msgs) => ({ msgs, ai: { active: false, state: null } }));
       }
-      return apiFetch<ConvDetailResponse>(messagesUrl).then((res) => ({
-        msgs: res.messages,
-        ai: { active: res.aiThreadActive, state: res.aiThreadState },
-      }));
+      return apiFetch<ConvDetailResponse>(messagesUrl).then((res) => {
+        setUnrest(res.unrest ?? null);
+        setParticipantId(res.participantId ?? null);
+        return {
+          msgs: res.messages,
+          ai: { active: res.aiThreadActive, state: res.aiThreadState },
+        };
+      });
     };
 
     Promise.all([
@@ -198,6 +214,26 @@ export default function ConversationPage() {
       setNewMsg("");
     } catch (e) { console.error("send message:", e); }
     setSending(false);
+  };
+
+  const handleUnrestAction = async (actionId: string) => {
+    if (!teamId || !participantId || unrestBusy) return;
+    setUnrestBusy(true);
+    try {
+      const res = await apiFetch<{ ok: boolean; effects?: string[]; unrestLevel?: number }>(
+        `/api/teams/${teamId}/players/${participantId}/unrest-talk`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: actionId }) },
+      );
+      setUnrestEffects(res.effects ?? null);
+      // Zprávy (trenér + odpověď hráče) vložil server — načíst čerstvě
+      const fresh = await apiFetch<ConvDetailResponse>(messagesUrl);
+      setMessages(fresh.messages);
+      setUnrest(fresh.unrest ?? null);
+    } catch (e) {
+      console.error("unrest action:", e);
+      setUnrestEffects([e instanceof Error ? e.message : "Akce se nezdařila"]);
+    }
+    setUnrestBusy(false);
   };
 
   const grouped: Array<{ date: string; messages: Message[] }> = [];
@@ -344,6 +380,36 @@ export default function ConversationPage() {
         )}
         <div ref={endRef} />
       </div>
+
+      {/* Unrest — trucující hráč: usmiřovací akce */}
+      {!isGroup && unrest && unrest.level > 0 && !aiThreadActive && (
+        <div className="bg-orange-50 border-t border-orange-200 px-3 py-2 shrink-0">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] font-heading font-bold text-orange-700">
+              😠 Nespokojený{unrest.teamName ? ` (nabídka od ${unrest.teamName})` : ""} — {unrest.level}/100
+            </span>
+          </div>
+          {unrestEffects && (
+            <div className="mb-1.5 bg-white rounded-lg px-2.5 py-1.5 text-[11px] text-gray-700 space-y-0.5">
+              {unrestEffects.map((ef, i) => <div key={i}>• {ef}</div>)}
+              <button onClick={() => setUnrestEffects(null)} className="text-[10px] text-muted underline">skrýt</button>
+            </div>
+          )}
+          <div className="flex flex-wrap gap-1.5">
+            {unrest.actions.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => handleUnrestAction(a.id)}
+                disabled={unrestBusy}
+                title={a.description}
+                className="text-[11px] font-heading font-bold bg-white border border-orange-300 text-orange-800 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors disabled:opacity-50"
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* AI thread done banner */}
       {aiThreadState?.awaiting === "done" && (

@@ -336,6 +336,18 @@ export default function PlayerDetailPage() {
     </span>
   ) : null;
 
+  // Transfer truc — jen vlastník vidí (nespokojenost po odmítnuté nabídce)
+  const unrestInfo = isOwnPlayer
+    ? ((player.lifeContext as unknown as { transferUnrest?: { level?: number; teamName?: string } })?.transferUnrest ?? null)
+    : null;
+  const unrestPill = unrestInfo && (unrestInfo.level ?? 0) >= 40 ? (
+    <span className="inline-flex items-center gap-1 bg-orange-500/25 text-orange-50 border border-orange-300/40 rounded-md px-2 py-0.5 text-[11px] font-heading font-bold whitespace-nowrap"
+      title={unrestInfo.teamName ? `Trucuje po odmítnuté nabídce od ${unrestInfo.teamName}` : "Trucuje po odmítnuté nabídce"}>
+      <span>😠</span>
+      <span>Nespokojený · chce pryč</span>
+    </span>
+  ) : null;
+
   return (
     <>
       {/* ═══ Player header ═══ */}
@@ -380,6 +392,7 @@ export default function PlayerDetailPage() {
                 </a>
                 {injuryPill}
                 {absencePill}
+                {unrestPill}
               </div>
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
@@ -448,6 +461,7 @@ export default function PlayerDetailPage() {
               </a>
               {injuryPill}
               {absencePill}
+              {unrestPill}
             </div>
             {/* Řádek 3: staty přes celou šířku */}
             <div className="flex gap-2 mt-3">
@@ -516,6 +530,17 @@ export default function PlayerDetailPage() {
                   <button onClick={toggleWatch} disabled={watchLoading}
                     className={`${btnBase} disabled:opacity-50 ${isWatched ? btnWatched : btnNeutral}`}>
                     {isWatched ? "★ Sleduji" : "☆ Sledovat"}
+                  </button>
+                )}
+                {/* Promluvit si — trucující vlastní hráč */}
+                {isOwnPlayer && unrestInfo && (unrestInfo.level ?? 0) > 0 && (
+                  <button onClick={async () => {
+                    try {
+                      const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/player-conversation/${player.id}`, { method: "POST" });
+                      router.push(`/dashboard/phone/${res.conversationId}`);
+                    } catch (e) { console.error("open player conversation:", e); }
+                  }} className={`${btnBase} ${btnNeutral}`}>
+                    💬 Promluvit si
                   </button>
                 )}
                 {/* Own player actions — ne pro hostující */}

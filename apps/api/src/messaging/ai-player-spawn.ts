@@ -75,7 +75,7 @@ function uuid(): string {
   return crypto.randomUUID();
 }
 
-function loadPlayerSnapshot(row: Record<string, unknown>): PlayerSnapshot {
+export function loadPlayerSnapshot(row: Record<string, unknown>): PlayerSnapshot {
   const personality = (() => {
     try { return JSON.parse((row.personality as string) ?? "{}"); } catch { return {}; }
   })();
