@@ -7,7 +7,7 @@ type DialogKind = "accept" | "counter" | "reject" | null;
 export function ActionBar({
   onAccept, onCounter, onReject,
   currentAmount, defaultCounter,
-  canAfford, waiting, role, hideCounter,
+  canAfford, waiting, role, hideCounter, rejectWarning,
 }: {
   onAccept: (message: string) => Promise<void>;
   onCounter: (amount: number, message: string) => Promise<void>;
@@ -18,6 +18,7 @@ export function ActionBar({
   waiting: boolean;
   role: "buyer" | "seller";
   hideCounter?: boolean; // virtuální klub o ceně nejedná
+  rejectWarning?: string | null; // varování, když hráč o přestup stojí
 }) {
   const [dialog, setDialog] = useState<DialogKind>(null);
 
@@ -79,7 +80,7 @@ export function ActionBar({
       {dialog === "reject" && (
         <MessageDialog
           title="Odmítnout nabídku?"
-          description="Krátká zpráva protistraně (volitelné)"
+          description={rejectWarning ? `${rejectWarning} Krátká zpráva protistraně (volitelné).` : "Krátká zpráva protistraně (volitelné)"}
           confirmLabel="Odmítnout"
           confirmColor="red"
           onCancel={() => setDialog(null)}

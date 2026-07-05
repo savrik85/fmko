@@ -1876,6 +1876,19 @@ export default function TransfersPage() {
                             <span className="text-muted">na výměnu</span>
                           </div>
                         )}
+                        {o.player_interest != null && (
+                          <div className="mt-1">
+                            <span className={`inline-flex items-center gap-1 rounded-full text-[10px] font-heading font-bold px-2 py-0.5 ${
+                              o.player_interest >= 3 ? "bg-red-50 text-red-700 border border-red-200"
+                              : o.player_interest === 2 ? "bg-orange-50 text-orange-700 border border-orange-200"
+                              : o.player_interest === 1 ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                              : "bg-gray-100 text-muted"
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${o.player_interest >= 3 ? "bg-red-500" : o.player_interest === 2 ? "bg-orange-500" : o.player_interest === 1 ? "bg-yellow-400" : "bg-gray-400"}`} />
+                              {o.player_interest >= 3 ? "Velmi chce přestoupit" : o.player_interest === 2 ? "Chce přestoupit" : o.player_interest === 1 ? "Váhá" : "Nechce odejít"}
+                            </span>
+                          </div>
+                        )}
                         {o.message && <div className="text-xs text-muted mt-1 italic">&ldquo;{o.message}&rdquo;</div>}
                         {o.status === "countered" && <div className="text-xs text-gold-600 mt-1">Protinabídka: {formatCZK(o.counter_amount!)}</div>}
                         {o.on_turn === false && <div className="text-xs text-muted mt-1 italic">Čeká se na odpověď soupeře</div>}

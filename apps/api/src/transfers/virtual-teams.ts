@@ -198,6 +198,17 @@ const OFFER_MESSAGES_LOW_MORALE = [
   "Trenére, ozval se mi {team}. Vzhledem k tomu jak to tu jde... asi bych šel.",
 ];
 
+const OFFER_MESSAGES_LOYAL = [
+  "Trenére, volali z {team}. Řekl jsem jim, že jsem tady doma. Ale ať víte.",
+  "Šéfe, {team} se na mě ptal. Mě to nezajímá, ale nabídka vám asi přijde.",
+  "Trenére, {team} nabízí {price} Kč. Já nikam nechci, jen hlásím.",
+];
+
+/**
+ * CPU nabídky od virtuálních klubů — spravedlivě per tým: každý lidský tým v lize
+ * se posuzuje samostatně se stejnou šancí, cílí se na top hráče JEHO kádru
+ * (hvězdy slabších týmů jsou v ohrožení stejně jako hvězdy lídra).
+ */
 export async function generateAiOffers(
   db: D1Database,
   district: string,
@@ -207,67 +218,104 @@ export async function generateAiOffers(
   const teams = VIRTUAL_TEAMS[district];
   if (!teams || teams.length === 0) return 0;
 
-  // 10% chance per tick
-  if (rng.random() > 0.10) return 0;
-
-  // Find human teams in this league
   const humanTeams = await db.prepare(
     "SELECT id FROM teams WHERE league_id = ? AND user_id != 'ai'"
   ).bind(leagueId).all().catch((e) => { logger.warn({ module: "virtual-teams" }, "fetch human teams", e); return { results: [] }; });
-  if (humanTeams.results.length === 0) return 0;
 
-  const targetTeamId = rng.pick(humanTeams.results).id as string;
+  let created = 0;
+  for (const ht of humanTeams.results) {
+    try {
+      created += await maybeOfferForTeam(db, ht.id as string, teams, rng);
+    } catch (e) {
+      logger.warn({ module: "virtual-teams" }, "offer for team failed", e);
+    }
+  }
+  return created;
+}
 
-  // Check cooldown — no offer if one was made in last 5 game days
+/** Šance na CPU nabídku per tým a den (~1 nabídka za 2 týdny, cooldowny to dál ředí). */
+const OFFER_CHANCE_PER_TEAM = 0.08;
+
+async function maybeOfferForTeam(
+  db: D1Database,
+  targetTeamId: string,
+  teams: VirtualTeam[],
+  rng: Rng,
+): Promise<number> {
+  if (rng.random() > OFFER_CHANCE_PER_TEAM) return 0;
+
+  // Cooldown — žádná nabídka, pokud v posledních 5 dnech nějaká přišla
   const recentOffer = await db.prepare(
     "SELECT id FROM transfer_offers WHERE to_team_id = ? AND from_team_id = 'virtual_ai' AND created_at > datetime('now', '-5 days')"
   ).bind(targetTeamId).first().catch((e) => { logger.warn({ module: "virtual-teams" }, "check cooldown", e); return null; });
   if (recentOffer) return 0;
 
-  // Check no active AI offer already
+  // Žádná aktivní CPU nabídka na tento tým
   const activeOffer = await db.prepare(
     "SELECT id FROM transfer_offers WHERE to_team_id = ? AND from_team_id = 'virtual_ai' AND status = 'pending'"
   ).bind(targetTeamId).first().catch((e) => { logger.warn({ module: "virtual-teams" }, "check active offer", e); return null; });
   if (activeOffer) return 0;
 
-  // Get top 30% players by rating — target the better ones
+  // Top hráči TOHOTO kádru dle ratingu (~15 %, min 2) — CPU jde po hvězdách týmu
   const players = await db.prepare(
     `SELECT id, first_name, last_name, age, position, overall_rating, personality, life_context
      FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') AND is_celebrity = 0
+     AND loan_from_team_id IS NULL
      ORDER BY overall_rating DESC`
   ).bind(targetTeamId).all().catch((e) => { logger.warn({ module: "virtual-teams" }, "fetch players", e); return { results: [] }; });
   if (players.results.length < 5) return 0; // too small squad, don't poach
 
-  const top30pct = Math.max(3, Math.ceil(players.results.length * 0.3));
-  const candidates = players.results.slice(0, top30pct);
-  const target = rng.pick(candidates);
+  const topCount = Math.max(2, Math.ceil(players.results.length * 0.15));
+  const candidates = players.results.slice(0, topCount);
 
-  const pers = (() => { try { return JSON.parse(target.personality as string); } catch { return {}; } })();
-  const lc = (() => { try { return JSON.parse(target.life_context as string); } catch { return {}; } })();
+  // Preferovat hráče, který o přestup stojí: max 2 pokusy, první se zájmem ≥ 1 vyhrává
+  const { computeInterestForOffer } = await import("./player-interest");
+  const teamAvg = players.results.reduce((s, p) => s + (p.overall_rating as number), 0) / players.results.length;
+
+  // "Lepší klub než my" — preferuj virtuální týmy s ratingem nad průměrem kádru
+  const betterTeams = teams.filter((t) => t.rating > teamAvg);
+  const virtualTeam = betterTeams.length > 0 ? rng.pick(betterTeams) : teams.reduce((a, b) => (a.rating >= b.rating ? a : b));
+
+  let target = rng.pick(candidates);
+  let offerPrice = calcOfferPrice(target.overall_rating as number, rng);
+  let interest = await computeInterestForOffer(db, target.id as string, {
+    fromTeamId: "virtual_ai", offerAmount: offerPrice, virtualRating: virtualTeam.rating,
+  }).catch((e) => { logger.warn({ module: "virtual-teams" }, "compute interest", e); return null; });
+
+  if (interest && interest.level === 0 && candidates.length > 1) {
+    const other = rng.pick(candidates.filter((p) => p.id !== target.id));
+    const otherPrice = calcOfferPrice(other.overall_rating as number, rng);
+    const otherInterest = await computeInterestForOffer(db, other.id as string, {
+      fromTeamId: "virtual_ai", offerAmount: otherPrice, virtualRating: virtualTeam.rating,
+    }).catch((e) => { logger.warn({ module: "virtual-teams" }, "compute interest #2", e); return null; });
+    if (otherInterest && otherInterest.level >= 1) {
+      target = other;
+      offerPrice = otherPrice;
+      interest = otherInterest;
+    }
+  }
+
   const rating = target.overall_rating as number;
-  const morale = lc.morale ?? 50;
-  const patriotism = pers.patriotism ?? 50;
-
-  const virtualTeam = rng.pick(teams);
-  const offerPrice = calcOfferPrice(rating, rng);
 
   const offerId = crypto.randomUUID();
   await db.prepare(
-    `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, message, virtual_team_data, expires_at, created_at)
-     VALUES (?, ?, 'virtual_ai', ?, ?, 'transfer', 'pending', ?, ?, datetime('now', '+7 days'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
+    `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, message, virtual_team_data, player_interest, expires_at, created_at)
+     VALUES (?, ?, 'virtual_ai', ?, ?, 'transfer', 'pending', ?, ?, ?, datetime('now', '+7 days'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
   ).bind(
     offerId, target.id, targetTeamId, offerPrice,
     `Máme vážný zájem o vašeho hráče. Nabízíme ${offerPrice.toLocaleString("cs")} Kč, peníze máme připravené.`,
     JSON.stringify({ name: virtualTeam.name, city: virtualTeam.city, district: virtualTeam.district, rating: virtualTeam.rating }),
+    interest?.level ?? null,
   ).run();
 
-  // Player message in Kabina
+  // Player message in Kabina — tón podle toho, jak moc hráč o přestup stojí
   const kabinaConv = await db.prepare(
     "SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group' AND title = 'Kabina' ORDER BY created_at DESC LIMIT 1"
   ).bind(targetTeamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "virtual-teams" }, "find kabina", e); return null; });
 
   if (kabinaConv) {
-    const templates = morale < 35 || patriotism < 30 ? OFFER_MESSAGES_LOW_MORALE : OFFER_MESSAGES_NORMAL;
+    const level = interest?.level ?? 1;
+    const templates = level >= 2 ? OFFER_MESSAGES_LOW_MORALE : level === 0 ? OFFER_MESSAGES_LOYAL : OFFER_MESSAGES_NORMAL;
     const msgText = rng.pick(templates)
       .replace("{team}", virtualTeam.name)
       .replace("{city}", virtualTeam.city)
@@ -285,6 +333,6 @@ export async function generateAiOffers(
       .catch((e) => logger.warn({ module: "virtual-teams" }, "update conv", e));
   }
 
-  logger.info({ module: "virtual-teams" }, `AI offer: ${virtualTeam.name} → ${target.first_name} ${target.last_name} (${rating}) for ${offerPrice} Kč`);
+  logger.info({ module: "virtual-teams" }, `AI offer: ${virtualTeam.name} → ${target.first_name} ${target.last_name} (${rating}) for ${offerPrice} Kč, interest=${interest?.level ?? "?"}`);
   return 1;
 }

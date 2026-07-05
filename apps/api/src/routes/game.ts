@@ -4704,11 +4704,16 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   ).bind(body.playerId, teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "check duplicate offer", e); return null; });
   if (existing) return c.json({ error: "Již máte aktivní nabídku na tohoto hráče", offerId: existing.id }, 409);
 
+  // Snapshot zájmu hráče o přestup (0-3) — stabilní badge v UI po celou dobu jednání.
+  const { computeInterestForOffer } = await import("../transfers/player-interest");
+  const interest = await computeInterestForOffer(c.env.DB, body.playerId, { fromTeamId: teamId, offerAmount: body.amount })
+    .catch((e) => { logger.warn({ module: "game" }, "compute player interest", e); return null; });
+
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
   const id = crypto.randomUUID();
-  await c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, offered_player_id, target_squad) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, body.playerId, teamId, targetOwnerId, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration, teamId, offeredPlayerId, targetSquad).run();
+  await c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, offered_player_id, target_squad, player_interest) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, body.playerId, teamId, targetOwnerId, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration, teamId, offeredPlayerId, targetSquad, interest?.level ?? null).run();
 
   // Log initial offer event
   await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'offer', ?, ?)")
@@ -4972,6 +4977,27 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
   const crossLeague = !!(fromTeamRow?.league_id && toTeamRow?.league_id && fromTeamRow.league_id !== toTeamRow.league_id);
   const adminFee = crossLeague ? Math.round(currentAmount * 0.20) : 0;
 
+  // Zájem hráče o přestup — u aktivní nabídky čerstvý přepočet, u uzavřené snapshot.
+  // Detailní faktory vidí jen vlastník hráče (role seller); kupec jen úroveň.
+  let playerInterest: { level: number; label: string; factors?: { label: string; delta: number }[] } | null = null;
+  try {
+    const { computeInterestForOffer, INTEREST_LABELS } = await import("../transfers/player-interest");
+    const isOfferActive = offer.status === "pending" || offer.status === "countered";
+    if (isOfferActive && playerRow) {
+      const virtualRating = virtualFromTeam ? (virtualFromTeam.reputation as number | null) : null;
+      const fresh = await computeInterestForOffer(c.env.DB, offer.player_id as string, {
+        fromTeamId: offer.from_team_id as string, offerAmount: currentAmount, virtualRating,
+      });
+      if (fresh) {
+        playerInterest = { level: fresh.level, label: INTEREST_LABELS[fresh.level] };
+        if (role === "seller") playerInterest.factors = fresh.factors;
+      }
+    } else if (offer.player_interest != null) {
+      const lvl = offer.player_interest as 0 | 1 | 2 | 3;
+      playerInterest = { level: lvl, label: INTEREST_LABELS[lvl] };
+    }
+  } catch (e) { logger.warn({ module: "game" }, "player interest for offer detail", e); }
+
   return c.json({
     offer: {
       id: offer.id,
@@ -5005,6 +5031,7 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
     currentAmount,
     crossLeague,
     adminFee,
+    playerInterest,
   });
 });
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PositionBadge } from "@/components/ui";
+import { InterestBadge, type PlayerInterest } from "./InterestBadge";
 
 export interface PlayerSummary {
   id: string;
@@ -37,7 +38,7 @@ function positionSkills(pos: string, skills: Record<string, number>): Array<[str
 
 export function PlayerHero({
   player, offeredPlayer, currentAmount, offerType, loanDuration,
-  crossLeague, adminFee, message,
+  crossLeague, adminFee, message, playerInterest,
 }: {
   player: PlayerSummary;
   offeredPlayer: PlayerSummary | null;
@@ -47,6 +48,7 @@ export function PlayerHero({
   crossLeague: boolean;
   adminFee: number;
   message: string | null;
+  playerInterest?: PlayerInterest | null;
 }) {
   const hasAvatar = player.avatar && Object.keys(player.avatar).length > 0;
   const swapHasAvatar = offeredPlayer?.avatar && Object.keys(offeredPlayer.avatar).length > 0;
@@ -90,6 +92,7 @@ export function PlayerHero({
         <span>•</span>
         <span>{blurPrefix}{player.overall_rating} OVR</span>
       </div>
+      {playerInterest && <InterestBadge interest={playerInterest} />}
       <div className="flex gap-3 text-xs">
         {posSkills.map(([label, value]) => (
           <div key={label} className="flex flex-col items-center tabular-nums">

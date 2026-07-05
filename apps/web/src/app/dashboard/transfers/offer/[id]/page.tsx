@@ -11,6 +11,7 @@ import { PlayerHero, type PlayerSummary } from "./components/PlayerHero";
 import { OfferTimeline, type OfferEvent } from "./components/OfferTimeline";
 import { ActionBar } from "./components/ActionBar";
 import { MessageDialog } from "./components/MessageDialog";
+import { type PlayerInterest } from "./components/InterestBadge";
 
 interface OfferDetail {
   offer: {
@@ -45,6 +46,7 @@ interface OfferDetail {
   currentAmount: number;
   crossLeague: boolean;
   adminFee: number;
+  playerInterest?: PlayerInterest | null;
 }
 
 const statusLabel: Record<OfferDetail["offer"]["status"], string> = {
@@ -103,7 +105,10 @@ export default function OfferDetailPage() {
     );
   }
 
-  const { offer, role, on_turn, player, offeredPlayer, fromTeam, toTeam, fromManager, toManager, events, currentAmount, crossLeague, adminFee } = data;
+  const { offer, role, on_turn, player, offeredPlayer, fromTeam, toTeam, fromManager, toManager, events, currentAmount, crossLeague, adminFee, playerInterest } = data;
+  const rejectWarning = role === "seller" && (playerInterest?.level ?? 0) >= 2
+    ? `⚠️ ${player?.first_name ?? "Hráč"} o přestup stojí — odmítnutí mu srazí náladu.`
+    : null;
   const isActive = offer.status === "pending" || offer.status === "countered";
   const myTeam = role === "buyer" ? fromTeam : toTeam;
   const myBudget = myTeam?.budget ?? null;
@@ -184,6 +189,7 @@ export default function OfferDetailPage() {
                 crossLeague={crossLeague}
                 adminFee={adminFee}
                 message={offer.message}
+                playerInterest={playerInterest}
               />
             </div>
           )}
@@ -227,6 +233,7 @@ export default function OfferDetailPage() {
               crossLeague={crossLeague}
               adminFee={adminFee}
               message={offer.message}
+              playerInterest={playerInterest}
             />
           )}
           {toTeam && (
@@ -278,6 +285,7 @@ export default function OfferDetailPage() {
             defaultCounter={defaultCounterAmount}
             canAfford={canAfford}
             hideCounter={!!offer.is_virtual}
+            rejectWarning={rejectWarning}
             onAccept={accept}
             onCounter={counter}
             onReject={reject}
