@@ -53,9 +53,12 @@ export async function executeTransferPressureTick(
     ).bind(nowIso, EXPIRY_IMPACT_LIMIT).all<Record<string, unknown>>()
       .catch((e) => { logger.warn({ module: "transfer-pressure" }, "fetch expiring offers", e); return { results: [] as Record<string, unknown>[] }; });
 
-    // Dopad na hráče, který o přestup stál (zapojeno ve fázi 4 — placeholder, ať se
-    // expirace chová stejně jako dřív, jen na novém místě).
-    // for (const offer of expiring.results) await applyOfferRejectionImpact(env, offer, "expire");
+    // Vypršení = tiché odmítnutí — hráč, který o přestup stál, se naštve stejně.
+    const { applyOfferRejectionImpact } = await import("./offer-rejection-impact");
+    for (const offer of expiring.results) {
+      await applyOfferRejectionImpact(env.DB, offer, "expire", env)
+        .catch((e) => logger.warn({ module: "transfer-pressure" }, "expiry impact", e));
+    }
 
     await env.DB.prepare("UPDATE transfer_offers SET status = 'expired', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE status = 'pending' AND expires_at < ?")
       .bind(nowIso).run();
@@ -79,8 +82,13 @@ export async function executeTransferPressureTick(
     logger.error({ module: "transfer-pressure" }, "AI offers failed", e);
   }
 
-  // ── 3. Truc (transferUnrest) — decay, fake injuries, pledge checks (fáze 4) ──
-  // result.unrestProcessed = await processTransferUnrest(env);
+  // ── 3. Truc (transferUnrest) — decay, fake injuries, fyzio hint, pledge checks ──
+  try {
+    const { processTransferUnrest } = await import("./offer-rejection-impact");
+    result.unrestProcessed = await processTransferUnrest(env.DB);
+  } catch (e) {
+    logger.error({ module: "transfer-pressure" }, "unrest processing failed", e);
+  }
 
   logger.info({ module: "transfer-pressure" },
     `DONE expired=${result.expiredOffers} aiOffers=${result.aiOffers} unrest=${result.unrestProcessed}`);

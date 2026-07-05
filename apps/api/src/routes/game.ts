@@ -5315,9 +5315,9 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
 
   // Reject smí ten, kdo JE na tahu — buyer i seller.
   const offer = await c.env.DB.prepare(
-    `SELECT player_id, from_team_id, to_team_id, offer_type, status, last_action_by
+    `SELECT id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, offer_type, status, last_action_by, virtual_team_data
      FROM transfer_offers WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered')`
-  ).bind(offerId, teamId, teamId).first<{ player_id: string; from_team_id: string; to_team_id: string; offer_type: string; status: string; last_action_by: string | null }>()
+  ).bind(offerId, teamId, teamId).first<{ id: string; player_id: string; from_team_id: string; to_team_id: string; offer_amount: number; counter_amount: number | null; offer_type: string; status: string; last_action_by: string | null; virtual_team_data: string | null }>()
     .catch((e) => { logger.warn({ module: "game" }, "fetch offer for reject", e); return null; });
   if (!offer) return c.json({ error: "Nabídka nenalezena" }, 404);
   const canReject = offer.last_action_by != null
@@ -5328,6 +5328,16 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
   await c.env.DB.prepare(
     "UPDATE transfer_offers SET status = 'rejected', reject_message = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
   ).bind((body as { message?: string }).message ?? null, offerId).run();
+
+  // Dopad na hráče — jen když nabídku odmítl VLASTNÍK hráče (prodávající).
+  if (offer.to_team_id === teamId) {
+    const { applyOfferRejectionImpact } = await import("../transfers/offer-rejection-impact");
+    c.executionCtx.waitUntil(
+      applyOfferRejectionImpact(c.env.DB, offer, "reject", {
+        VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB,
+      }).catch((e) => logger.warn({ module: "game" }, "rejection impact", e))
+    );
+  }
 
   await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'reject', NULL, ?)")
     .bind(crypto.randomUUID(), offerId, teamId, (body as { message?: string }).message ?? null).run()

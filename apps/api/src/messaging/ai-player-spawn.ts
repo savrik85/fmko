@@ -122,7 +122,7 @@ async function loadTeamContext(db: D1Database, teamId: string): Promise<TeamCont
   };
 }
 
-async function getOrCreatePlayerConversation(
+export async function getOrCreatePlayerConversation(
   db: D1Database,
   teamId: string,
   player: { id: string; firstName: string; lastName: string; nickname?: string | null; avatar?: string | null },

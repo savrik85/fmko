@@ -116,6 +116,7 @@ export async function getAbsentPlayersMap(
       stamina: (phys as { stamina?: number }).stamina ?? 50,
       injuryProneness: (pers as { injuryProneness?: number }).injuryProneness ?? 50,
       commuteKm: (row.commute_km as number) ?? 0,
+      transferUnrest: (lc as { transferUnrest?: { level?: number } }).transferUnrest?.level ?? 0,
       isCelebrity: !!(row.is_celebrity as number),
       celebrityType: (pers as { celebrityType?: "legend" | "fallen_star" | "glass_man" }).celebrityType,
       celebrityTier: (pers as { celebrityTier?: "S" | "A" | "B" | "C" }).celebrityTier,

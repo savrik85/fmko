@@ -40,6 +40,7 @@ interface PlayerForAbsence {
   isCelebrity?: boolean;
   celebrityType?: "legend" | "fallen_star" | "glass_man";
   celebrityTier?: "S" | "A" | "B" | "C";
+  transferUnrest?: number; // 0-100 — truc po odmítnutém přestupu
 }
 
 // ═══════════════════════════════════════════════
@@ -467,6 +468,9 @@ export function generateAbsences(
     const moraleFactor = (100 - p.morale) / 300;
     const commuteFactor = Math.min(0.04, (p.commuteKm ?? 0) * 0.002);
     let baseChance = (0.02 + disciplineFactor * 0.10 + patriotismFactor * 0.03 + moraleFactor * 0.02 + commuteFactor) * 0.95;
+
+    // Transfer truc — naštvaný hráč si hledá výmluvy častěji
+    if ((p.transferUnrest ?? 0) >= 40) baseChance += 0.05;
 
     // ── Celebrity override — much higher absence rates ──
     if (p.isCelebrity) {
