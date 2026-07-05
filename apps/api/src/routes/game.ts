@@ -4704,11 +4704,30 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   ).bind(body.playerId, teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "check duplicate offer", e); return null; });
   if (existing) return c.json({ error: "Již máte aktivní nabídku na tohoto hráče", offerId: existing.id }, 409);
 
+  // Anti-spam: odmítnutá/vypršelá nabídka kazí hráči morálku — opakovat na stejného hráče
+  // jde až po 10 dnech (jinak by šlo soupeři rozkládat kádr nabídkovým spamem zadarmo).
+  const recentClosed = await c.env.DB.prepare(
+    `SELECT resolved_at FROM transfer_offers
+     WHERE player_id = ? AND from_team_id = ? AND status IN ('rejected','expired','withdrawn')
+       AND resolved_at > datetime('now', '-10 days')
+     ORDER BY resolved_at DESC LIMIT 1`
+  ).bind(body.playerId, teamId).first<{ resolved_at: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "check offer cooldown", e); return null; });
+  if (recentClosed) {
+    const daysLeft = Math.max(1, 10 - Math.floor((Date.now() - new Date(recentClosed.resolved_at).getTime()) / 86400000));
+    return c.json({ error: `Na tohoto hráče jsi nedávno nabízel — počkej ještě ${daysLeft} ${daysLeft === 1 ? "den" : daysLeft < 5 ? "dny" : "dní"}` }, 429);
+  }
+
+  // Snapshot zájmu hráče o přestup (0-3) — stabilní badge v UI po celou dobu jednání.
+  const { computeInterestForOffer } = await import("../transfers/player-interest");
+  const interest = await computeInterestForOffer(c.env.DB, body.playerId, { fromTeamId: teamId, offerAmount: body.amount })
+    .catch((e) => { logger.warn({ module: "game" }, "compute player interest", e); return null; });
+
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
   const id = crypto.randomUUID();
-  await c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, offered_player_id, target_squad) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, body.playerId, teamId, targetOwnerId, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration, teamId, offeredPlayerId, targetSquad).run();
+  await c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, offered_player_id, target_squad, player_interest) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, body.playerId, teamId, targetOwnerId, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration, teamId, offeredPlayerId, targetSquad, interest?.level ?? null).run();
 
   // Log initial offer event
   await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'offer', ?, ?)")
@@ -4747,11 +4766,18 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
 
 gameRouter.get("/teams/:teamId/offers", async (c) => {
   const teamId = c.req.param("teamId");
+  // LEFT JOIN teams — nabídky od virtuálních klubů (from_team_id='virtual_ai') nemají řádek v teams.
+  // Jméno klubu: virtual_team_data.$.name, u legacy nabídek message.$.teamName.
+  const virtualNameSql = `CASE WHEN to2.from_team_id = 'virtual_ai' THEN COALESCE(
+       json_extract(to2.virtual_team_data, '$.name'),
+       CASE WHEN json_valid(to2.message) THEN json_extract(to2.message, '$.teamName') END,
+       'Neznámý klub') ELSE t.name END`;
   const incoming = await c.env.DB.prepare(
     `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.skills as player_skills,
-     t.name as from_team_name, t.league_id as from_league_id,
+     ${virtualNameSql} as from_team_name, t.league_id as from_league_id,
+     CASE WHEN to2.from_team_id = 'virtual_ai' THEN 1 ELSE 0 END as is_virtual,
      op.first_name as offered_first_name, op.last_name as offered_last_name, op.position as offered_position
-     FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.from_team_id = t.id
+     FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id LEFT JOIN teams t ON to2.from_team_id = t.id
      LEFT JOIN players op ON to2.offered_player_id = op.id
      WHERE to2.to_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
   ).bind(teamId).all();
@@ -4766,13 +4792,18 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
   ).bind(teamId).all();
 
   // Historie — uzavrene offery (accepted, rejected, withdrawn, expired). Kam tym patril, ta role zustava.
+  // LEFT JOIN kvůli virtuálním klubům; hráč může být po prodeji virtuálnímu klubu smazán → LEFT JOIN players + fallback.
   const history = await c.env.DB.prepare(
-    `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar,
-     tf.name as from_team_name, tt.name as to_team_name,
-     tf.league_id as from_league_id, tt.league_id as to_league_id
+    `SELECT to2.*, COALESCE(p.first_name, dp.first_name) as first_name, COALESCE(p.last_name, dp.last_name) as last_name,
+     COALESCE(p.age, dp.age) as age, COALESCE(p.position, dp.position) as position,
+     COALESCE(p.overall_rating, dp.overall_rating) as overall_rating, p.avatar as player_avatar,
+     ${virtualNameSql.replace("ELSE t.name END", "ELSE tf.name END")} as from_team_name, tt.name as to_team_name,
+     tf.league_id as from_league_id, tt.league_id as to_league_id,
+     CASE WHEN to2.from_team_id = 'virtual_ai' THEN 1 ELSE 0 END as is_virtual
      FROM transfer_offers to2
-     JOIN players p ON to2.player_id = p.id
-     JOIN teams tf ON to2.from_team_id = tf.id
+     LEFT JOIN players p ON to2.player_id = p.id
+     LEFT JOIN departed_players dp ON to2.player_id = dp.id
+     LEFT JOIN teams tf ON to2.from_team_id = tf.id
      JOIN teams tt ON to2.to_team_id = tt.id
      WHERE (to2.from_team_id = ? OR to2.to_team_id = ?)
        AND to2.status IN ('accepted','rejected','withdrawn','expired')
@@ -4885,8 +4916,37 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
   }
 
   const teamFields = "id, name, primary_color, secondary_color, badge_pattern, badge_symbol, badge_initials, badge_primary_color, badge_secondary_color, budget, reputation, league_id";
-  const fromTeamRow = await c.env.DB.prepare(`SELECT ${teamFields} FROM teams WHERE id = ?`).bind(offer.from_team_id).first<Record<string, unknown>>();
+  const isVirtualOffer = offer.from_team_id === "virtual_ai";
+  const fromTeamRow = isVirtualOffer
+    ? null
+    : await c.env.DB.prepare(`SELECT ${teamFields} FROM teams WHERE id = ?`).bind(offer.from_team_id).first<Record<string, unknown>>();
   const toTeamRow = await c.env.DB.prepare(`SELECT ${teamFields} FROM teams WHERE id = ?`).bind(offer.to_team_id).first<Record<string, unknown>>();
+
+  // Virtuální klub nemá řádek v teams — syntetický profil z virtual_team_data (legacy: message JSON).
+  let virtualFromTeam: Record<string, unknown> | null = null;
+  if (isVirtualOffer) {
+    let vd: { name?: string; city?: string; district?: string; rating?: number } = {};
+    try {
+      if (offer.virtual_team_data) vd = JSON.parse(offer.virtual_team_data as string);
+      else if (offer.message) { const legacy = JSON.parse(offer.message as string); vd = { name: legacy.teamName, city: legacy.city }; }
+    } catch (e) { logger.warn({ module: "game" }, "parse virtual_team_data", e); }
+    const vName = vd.name ?? "Neznámý klub";
+    virtualFromTeam = {
+      id: "virtual_ai",
+      name: vName,
+      primary_color: "#4a5d43",
+      secondary_color: "#e8e4d8",
+      badge_pattern: "plain",
+      badge_symbol: null,
+      initials: vName.split(" ").map((w) => w[0]).join("").slice(0, 3).toUpperCase(),
+      budget: null,
+      reputation: vd.rating ?? null,
+      league_id: null,
+      is_virtual: true,
+      city: vd.city ?? null,
+      district: vd.district ?? null,
+    };
+  }
 
   const teamPublic = (row: Record<string, unknown>, isMine: boolean) => ({
     id: row.id, name: row.name,
@@ -4917,7 +4977,7 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
     };
   };
   const [fromManager, toManager] = await Promise.all([
-    fetchManager(offer.from_team_id as string),
+    isVirtualOffer ? Promise.resolve(null) : fetchManager(offer.from_team_id as string),
     fetchManager(offer.to_team_id as string),
   ]);
 
@@ -4930,6 +4990,27 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
   const currentAmount = (offer.counter_amount != null ? offer.counter_amount : offer.offer_amount) as number;
   const crossLeague = !!(fromTeamRow?.league_id && toTeamRow?.league_id && fromTeamRow.league_id !== toTeamRow.league_id);
   const adminFee = crossLeague ? Math.round(currentAmount * 0.20) : 0;
+
+  // Zájem hráče o přestup — u aktivní nabídky čerstvý přepočet, u uzavřené snapshot.
+  // Detailní faktory vidí jen vlastník hráče (role seller); kupec jen úroveň.
+  let playerInterest: { level: number; label: string; factors?: { label: string; delta: number }[] } | null = null;
+  try {
+    const { computeInterestForOffer, INTEREST_LABELS } = await import("../transfers/player-interest");
+    const isOfferActive = offer.status === "pending" || offer.status === "countered";
+    if (isOfferActive && playerRow) {
+      const virtualRating = virtualFromTeam ? (virtualFromTeam.reputation as number | null) : null;
+      const fresh = await computeInterestForOffer(c.env.DB, offer.player_id as string, {
+        fromTeamId: offer.from_team_id as string, offerAmount: currentAmount, virtualRating,
+      });
+      if (fresh) {
+        playerInterest = { level: fresh.level, label: INTEREST_LABELS[fresh.level] };
+        if (role === "seller") playerInterest.factors = fresh.factors;
+      }
+    } else if (offer.player_interest != null) {
+      const lvl = offer.player_interest as 0 | 1 | 2 | 3;
+      playerInterest = { level: lvl, label: INTEREST_LABELS[lvl] };
+    }
+  } catch (e) { logger.warn({ module: "game" }, "player interest for offer detail", e); }
 
   return c.json({
     offer: {
@@ -4949,12 +5030,14 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
       created_at: offer.created_at,
       resolved_at: offer.resolved_at,
       offered_player_id: offer.offered_player_id,
+      player_interest: offer.player_interest ?? null,
+      is_virtual: isVirtualOffer,
     },
     role,
     on_turn: onTurn,
     player,
     offeredPlayer,
-    fromTeam: fromTeamRow ? teamPublic(fromTeamRow, offer.from_team_id === teamId) : null,
+    fromTeam: fromTeamRow ? teamPublic(fromTeamRow, offer.from_team_id === teamId) : virtualFromTeam,
     toTeam: toTeamRow ? teamPublic(toTeamRow, offer.to_team_id === teamId) : null,
     fromManager,
     toManager,
@@ -4962,6 +5045,7 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
     currentAmount,
     crossLeague,
     adminFee,
+    playerInterest,
   });
 });
 
@@ -4998,6 +5082,60 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const loanDuration = offer.loan_duration as number | null;
   const swapPlayerId = (offer.offered_player_id as string | null) ?? null;
   const targetSquad = ((offer.target_squad as string) ?? "senior") === "u21" ? "u21" : "senior";
+
+  // ── Prodej virtuálnímu klubu — hráč odchází ze hry, prodávající dostane peníze ──
+  if (buyerTeamId === "virtual_ai") {
+    let vd: { name?: string; city?: string } = {};
+    try {
+      if (offer.virtual_team_data) vd = JSON.parse(offer.virtual_team_data as string);
+      else if (offer.message) { const legacy = JSON.parse(offer.message as string); vd = { name: legacy.teamName, city: legacy.city }; }
+    } catch (e) { logger.warn({ module: "game" }, "parse virtual_team_data on accept", e); }
+    const virtualName = vd.name ?? "Neznámý klub";
+
+    const vSeller = await c.env.DB.prepare("SELECT name, league_id, budget, game_date FROM teams WHERE id = ?")
+      .bind(sellerTeamId).first<{ name: string; league_id: string; budget: number; game_date: string }>();
+    if (!vSeller) return c.json({ error: "Prodávající nenalezen" }, 400);
+    const vGameDate = vSeller.game_date ?? new Date().toISOString();
+
+    // removePlayer: FK úklid + archiv departed_players + uzavření kontraktu + DELETE hráče.
+    // Zároveň stáhne všechny pending nabídky na hráče (včetně této — hned poté ji přepíšeme na accepted).
+    const { removePlayer } = await import("../transfers/remove-player");
+    const removed = await removePlayer(c.env.DB, playerId, "transfer", { toFreeAgent: false, teamId: sellerTeamId });
+    if (!removed.ok || !removed.player) return c.json({ error: "Hráč již není v kádru" }, 409);
+    const soldName = `${removed.player.firstName} ${removed.player.lastName}`;
+
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, sellerTeamId),
+      c.env.DB.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(offerId),
+    ]);
+    await c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_income', ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), sellerTeamId, amount, vSeller.budget + amount, `Prodej: ${soldName} → ${virtualName}`, vGameDate)
+      .run().catch((e) => logger.warn({ module: "game" }, "log virtual sale transaction", e));
+
+    // Event log — jen za lidskou stranu (transfer_offer_events.team_id má FK na teams).
+    await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'accept', ?, ?)")
+      .bind(crypto.randomUUID(), offerId, sellerTeamId, amount, acceptMessage).run()
+      .catch((e) => logger.warn({ module: "game" }, "insert virtual accept event", e));
+
+    const { createTransferNews } = await import("../transfers/transfer-news");
+    await createTransferNews(c.env.DB, vSeller.league_id ?? "", null, "transfer_completed", {
+      playerName: soldName, playerAge: removed.player.age,
+      playerPosition: removed.player.position, teamName: vSeller.name,
+      fromTeamName: vSeller.name, toTeamName: virtualName, fee: amount,
+    }).catch((e) => logger.warn({ module: "game" }, "create virtual sale news", e));
+
+    await sendPhoneSMS(c.env.DB, sellerTeamId, "Sportovní ředitel", "Sportovní ředitel",
+      `📤 Přestup potvrzen. ${soldName} odchází do ${virtualName}${vd.city ? ` (${vd.city})` : ""} za ${amount.toLocaleString("cs")} Kč.`
+    ).catch((e) => logger.warn({ module: "game" }, "virtual sale SMS", e));
+    try {
+      const { createNotification } = await import("../community/notifications");
+      const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+      await createNotification(c.env.DB, sellerTeamId, "transfer", `✅ Přestup ${soldName} dokončen`,
+        `${virtualName} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.`, `/dashboard/transfers`, pushEnv);
+    } catch (e) { logger.warn({ module: "game" }, "virtual sale notification", e); }
+
+    return c.json({ ok: true, sold_to: virtualName });
+  }
 
   // Pokud má hráč jít do U21 kupujícího, dohledej cílový tým. Budget a notifikace stále řeší A-tým.
   let buyerDestTeamId = offer.from_team_id as string;
@@ -5191,9 +5329,9 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
 
   // Reject smí ten, kdo JE na tahu — buyer i seller.
   const offer = await c.env.DB.prepare(
-    `SELECT player_id, from_team_id, to_team_id, offer_type, status, last_action_by
+    `SELECT id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, offer_type, status, last_action_by, virtual_team_data
      FROM transfer_offers WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered')`
-  ).bind(offerId, teamId, teamId).first<{ player_id: string; from_team_id: string; to_team_id: string; offer_type: string; status: string; last_action_by: string | null }>()
+  ).bind(offerId, teamId, teamId).first<{ id: string; player_id: string; from_team_id: string; to_team_id: string; offer_amount: number; counter_amount: number | null; offer_type: string; status: string; last_action_by: string | null; virtual_team_data: string | null }>()
     .catch((e) => { logger.warn({ module: "game" }, "fetch offer for reject", e); return null; });
   if (!offer) return c.json({ error: "Nabídka nenalezena" }, 404);
   const canReject = offer.last_action_by != null
@@ -5205,11 +5343,24 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
     "UPDATE transfer_offers SET status = 'rejected', reject_message = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
   ).bind((body as { message?: string }).message ?? null, offerId).run();
 
+  // Dopad na hráče — jen když nabídku odmítl VLASTNÍK hráče (prodávající).
+  if (offer.to_team_id === teamId) {
+    const { applyOfferRejectionImpact } = await import("../transfers/offer-rejection-impact");
+    c.executionCtx.waitUntil(
+      applyOfferRejectionImpact(c.env.DB, offer, "reject", {
+        GEMINI_API_KEY: c.env.GEMINI_API_KEY,
+        VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB,
+      }).catch((e) => logger.warn({ module: "game" }, "rejection impact", e))
+    );
+  }
+
   await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'reject', NULL, ?)")
     .bind(crypto.randomUUID(), offerId, teamId, (body as { message?: string }).message ?? null).run()
     .catch((e) => logger.warn({ module: "game" }, "insert reject event", e));
 
   const otherTeamId = offer.from_team_id === teamId ? offer.to_team_id : offer.from_team_id;
+  // Virtuální klub nemá telefon ani notifikace — odmítnutí končí tady.
+  if (otherTeamId === "virtual_ai") return c.json({ ok: true });
   const player = await c.env.DB.prepare("SELECT first_name, last_name FROM players WHERE id = ?")
     .bind(offer.player_id).first<{ first_name: string; last_name: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch player for reject notif", e); return null; });
   const rejecterTeam = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
@@ -5232,6 +5383,21 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
   return c.json({ ok: true });
 });
 
+// POST /teams/:teamId/players/:playerId/unrest-talk — usmiřovací akce s trucujícím hráčem.
+// Deterministické efekty, AI generuje jen textaci odpovědi hráče (s fallbackem).
+gameRouter.post("/teams/:teamId/players/:playerId/unrest-talk", async (c) => {
+  const teamId = c.req.param("teamId");
+  const playerId = c.req.param("playerId");
+  const body = await c.req.json<{ action?: string }>().catch((e) => { logger.warn({ module: "game" }, "parse unrest-talk body", e); return {}; });
+  const actionId = (body as { action?: string }).action;
+  if (!actionId) return c.json({ error: "Chybí akce" }, 400);
+
+  const { performUnrestAction } = await import("../transfers/unrest");
+  const result = await performUnrestAction(c.env.DB, c.env, teamId, playerId, actionId);
+  if (!result.ok) return c.json({ error: result.error }, (result.status ?? 400) as 400);
+  return c.json(result);
+});
+
 gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
@@ -5245,6 +5411,9 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
     "SELECT player_id, from_team_id, to_team_id, status, last_action_by, expires_at FROM transfer_offers WHERE id = ? AND (from_team_id = ? OR to_team_id = ?) AND status IN ('pending','countered')"
   ).bind(offerId, teamId, teamId).first<{ player_id: string; from_team_id: string; to_team_id: string; status: string; last_action_by: string | null; expires_at: string }>();
   if (!offer) return c.json({ error: "Nabídka nenalezena" }, 404);
+  if (offer.from_team_id === "virtual_ai") {
+    return c.json({ error: "Virtuální klub o ceně nejedná — ber, nebo nech být" }, 400);
+  }
   const canCounter = offer.last_action_by != null
     ? offer.last_action_by !== teamId
     : (offer.status === "pending" ? offer.to_team_id === teamId : offer.from_team_id === teamId);
@@ -5362,7 +5531,7 @@ gameRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
   const offer = await c.env.DB.prepare("SELECT player_id, from_team_id, to_team_id FROM transfer_offers WHERE id = ?")
     .bind(offerId).first<{ player_id: string; from_team_id: string; to_team_id: string }>()
     .catch((e) => { logger.warn({ module: "game" }, "fetch offer for withdraw notif", e); return null; });
-  if (offer) {
+  if (offer && offer.from_team_id !== "virtual_ai") {
     const otherTeamId = teamId === offer.from_team_id ? offer.to_team_id : offer.from_team_id;
     const initiatorIsBuyer = teamId === offer.from_team_id;
     const player = await c.env.DB.prepare("SELECT first_name, last_name FROM players WHERE id = ?").bind(offer.player_id).first<{ first_name: string; last_name: string }>()
@@ -6177,6 +6346,19 @@ gameRouter.post("/admin/run-daily-tick", async (c) => {
     return c.json({ ok: true, events: r.events?.length ?? 0 });
   } catch (e) {
     logger.error({ module: "game.ts" }, "manual daily tick", e);
+    return c.json({ error: "tick selhal" }, 500);
+  }
+});
+
+// POST /api/admin/run-transfer-tick — ruční spuštění transfer pressure ticku
+// (expirace nabídek, CPU nabídky, truc). Testing env nemá crony — jediná cesta, jak ho tam spustit.
+gameRouter.post("/admin/run-transfer-tick", async (c) => {
+  const { executeTransferPressureTick } = await import("../transfers/transfer-pressure-tick");
+  try {
+    const r = await executeTransferPressureTick(c.env, { force: true });
+    return c.json({ ok: true, ...r });
+  } catch (e) {
+    logger.error({ module: "game.ts" }, "manual transfer pressure tick", e);
     return c.json({ error: "tick selhal" }, 500);
   }
 });

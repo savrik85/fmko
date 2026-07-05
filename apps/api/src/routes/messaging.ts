@@ -106,10 +106,34 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
 
   // Ověřit že konverzace patří tomuto týmu + načíst AI thread state
   const convOwner = await c.env.DB.prepare(
-    "SELECT team_id, ai_thread_active, ai_thread_state FROM conversations WHERE id = ?",
-  ).bind(convId).first<{ team_id: string; ai_thread_active: number; ai_thread_state: string | null }>()
+    "SELECT team_id, type, participant_id, ai_thread_active, ai_thread_state FROM conversations WHERE id = ?",
+  ).bind(convId).first<{ team_id: string; type: string; participant_id: string | null; ai_thread_active: number; ai_thread_state: string | null }>()
     .catch((e) => { logger.warn({ module: "messaging" }, "conv ownership check", e); return null; });
   if (!convOwner || convOwner.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
+
+  // Trucující hráč (transferUnrest) → konkrétní dohody (chips na FE).
+  // Primární kanál je živá konverzace (AI thread po odmítnuté nabídce) — dohody
+  // se nabízejí až když řeči nestačily: vážný truc (≥40) a žádný aktivní thread.
+  let unrest: { level: number; teamName?: string; mood: string; actions: { id: string; label: string; description: string }[] } | null = null;
+  if (convOwner.type === "player" && convOwner.participant_id && convOwner.ai_thread_active !== 1) {
+    try {
+      const playerRow = await c.env.DB.prepare("SELECT life_context FROM players WHERE id = ? AND team_id = ?")
+        .bind(convOwner.participant_id, teamId).first<{ life_context: string | null }>();
+      const lc = playerRow?.life_context ? JSON.parse(playerRow.life_context) : {};
+      if (lc?.transferUnrest?.level >= 40) {
+        const { availableActions, unrestMoodQuote } = await import("../transfers/unrest");
+        const seasonRow = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
+          .first<{ number: number }>().catch((e) => { logger.warn({ module: "messaging" }, "load season for unrest", e); return null; });
+        unrest = {
+          level: lc.transferUnrest.level,
+          teamName: lc.transferUnrest.teamName,
+          mood: unrestMoodQuote(convOwner.participant_id, lc.transferUnrest.level, lc.transferUnrest.teamName),
+          actions: availableActions(lc.transferUnrest, lc, seasonRow?.number ?? null)
+            .map((a) => ({ id: a.id, label: a.label, description: a.description })),
+        };
+      }
+    } catch (e) { logger.warn({ module: "messaging" }, "load unrest for conversation", e); }
+  }
 
   let query = "SELECT * FROM messages WHERE conversation_id = ?";
   const binds: unknown[] = [convId];
@@ -147,7 +171,31 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
     messages,
     aiThreadActive: convOwner.ai_thread_active === 1,
     aiThreadState: parseAiThreadState(convOwner.ai_thread_state),
+    participantId: convOwner.participant_id,
+    unrest,
   });
+});
+
+// POST /api/teams/:teamId/player-conversation/:playerId — najdi/založ 1:1 konverzaci s hráčem
+// (pro CTA "Promluvit si" z profilu hráče / kádru)
+messagingRouter.post("/teams/:teamId/player-conversation/:playerId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const playerId = c.req.param("playerId");
+  const player = await c.env.DB.prepare(
+    "SELECT id, first_name, last_name, nickname, avatar FROM players WHERE id = ? AND team_id = ?"
+  ).bind(playerId, teamId).first<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: "messaging" }, "load player for conversation", e); return null; });
+  if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
+
+  const { getOrCreatePlayerConversation } = await import("../messaging/ai-player-spawn");
+  const convId = await getOrCreatePlayerConversation(c.env.DB, teamId, {
+    id: player.id as string,
+    firstName: player.first_name as string,
+    lastName: player.last_name as string,
+    nickname: player.nickname as string | null,
+    avatar: player.avatar as string | null,
+  });
+  return c.json({ conversationId: convId });
 });
 
 // POST /api/teams/:teamId/conversations/:convId — odeslat zprávu

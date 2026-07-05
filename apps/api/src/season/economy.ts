@@ -291,6 +291,23 @@ export function calculatePlayerWage(overallRating: number): number {
 }
 
 /**
+ * Odhad tržní hodnoty hráče (Kč) — exponenciála podle ratingu s výrazným
+ * věkovým modifikátorem (věk je klíčový: talent má příplatek, veterán strmou slevu).
+ * Kalibrace: 21 let / 64 OVR → ~20,5k; 27 let / 60 OVR → ~13k; 34 let / 40 OVR → ~2,2k.
+ */
+export function estimateMarketValue(overallRating: number, age: number): number {
+  const base = 400 * Math.exp(0.058 * overallRating);
+  const ageMod = age <= 19 ? 1.35
+    : age <= 22 ? 1.25
+    : age <= 26 ? 1.1
+    : age <= 29 ? 1.0
+    : age <= 32 ? 0.75
+    : age <= 35 ? 0.55
+    : 0.4;
+  return Math.max(500, Math.round((base * ageMod) / 100) * 100);
+}
+
+/**
  * Equipment repair cost — scales with level and missing condition.
  */
 export function calculateRepairCost(level: number, condition: number): number {

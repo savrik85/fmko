@@ -186,6 +186,9 @@ function simulateAttendance(
       // Morale: low morale = less motivated
       if (player.morale < 30) attendProb -= 0.15;
 
+      // Transfer truc: hráč naštvaný z odmítnutého přestupu chodí míň
+      if (((player as any).transferUnrest ?? 0) >= 40) attendProb -= 0.15;
+
       // Commute: farther players attend less
       if (km > 0) {
         attendProb -= Math.min(0.22, km * 0.008);

@@ -14,6 +14,8 @@ export interface TeamSummary {
   initials: string | null;
   budget: number | null;
   reputation: number | null;
+  is_virtual?: boolean; // virtuální (počítačový) klub — nemá profil ani trenéra
+  city?: string | null;
 }
 
 export interface ManagerSummary {
@@ -54,8 +56,21 @@ export function TeamSide({
             {manager.name}
           </Link>
         ) : (
-          <div className="font-heading font-bold text-base text-muted italic">bez trenéra</div>
+          <div className="font-heading font-bold text-base text-muted italic">{team.is_virtual ? "Cizí klub" : "bez trenéra"}</div>
         )}
+        {team.is_virtual ? (
+          <div className={`flex items-center gap-2 ${isRight ? "flex-row-reverse" : ""}`}>
+            <BadgePreview
+              primary={team.primary_color}
+              secondary={team.secondary_color}
+              pattern={badgePattern}
+              symbol={team.badge_symbol}
+              initials={initials}
+              size={32}
+            />
+            <span className="font-heading font-bold text-sm truncate">{team.name}</span>
+          </div>
+        ) : (
         <Link href={`/klub/${team.id}`} className={`flex items-center gap-2 group ${isRight ? "flex-row-reverse" : ""}`}>
           <BadgePreview
             primary={team.primary_color}
@@ -67,6 +82,10 @@ export function TeamSide({
           />
           <span className="font-heading font-bold text-sm group-hover:text-pitch-500 transition-colors truncate">{team.name}</span>
         </Link>
+        )}
+        {team.is_virtual && team.city && (
+          <div className="text-xs text-muted">{team.city}</div>
+        )}
         <div className={`flex flex-wrap gap-1.5 mt-1 ${isRight ? "justify-end" : "justify-start"}`}>
           {team.budget != null && (
             <span className="px-2 py-0.5 rounded-full bg-gray-100 text-xs font-heading font-bold tabular-nums">

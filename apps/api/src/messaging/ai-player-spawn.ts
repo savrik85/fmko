@@ -75,7 +75,7 @@ function uuid(): string {
   return crypto.randomUUID();
 }
 
-function loadPlayerSnapshot(row: Record<string, unknown>): PlayerSnapshot {
+export function loadPlayerSnapshot(row: Record<string, unknown>): PlayerSnapshot {
   const personality = (() => {
     try { return JSON.parse((row.personality as string) ?? "{}"); } catch { return {}; }
   })();
@@ -101,6 +101,7 @@ function loadPlayerSnapshot(row: Record<string, unknown>): PlayerSnapshot {
     recentMinutes: (row.recent_minutes as number) ?? 0,
     recentRatingAvg: (row.recent_rating_avg as number) ?? 6.5,
     isCelebrity: !!(row.is_celebrity as number),
+    transferUnrest: lifeContext.transferUnrest?.level ?? 0,
     occupation: lifeContext.occupation,
     injuredUntil: row.injured_until as string | null,
   };
@@ -122,7 +123,7 @@ async function loadTeamContext(db: D1Database, teamId: string): Promise<TeamCont
   };
 }
 
-async function getOrCreatePlayerConversation(
+export async function getOrCreatePlayerConversation(
   db: D1Database,
   teamId: string,
   player: { id: string; firstName: string; lastName: string; nickname?: string | null; avatar?: string | null },
@@ -518,6 +519,22 @@ async function applyResolutionAndClose(
       db.prepare(
         "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, created_at) VALUES (?, ?, ?, 'obecne', ?, 'lehke', ?, ?, ?)",
       ).bind(uuid(), playerId, teamId, resolution.absence_reason || "Schválené osobní volno", absenceDays, absenceDays, now),
+    );
+  }
+
+  // Konverzace po zatrhnutém přestupu hýbe i trucem (transferUnrest):
+  // uklidnil ho → −30, neutrál → −10, naštval ho ještě víc → +15.
+  if (scenarioId === "rejected_offer") {
+    const unrestDelta = resolution.tone === "positive" ? -30 : resolution.tone === "negative" ? 15 : -10;
+    stmts.push(
+      db.prepare(
+        `UPDATE players SET life_context = json_set(
+           life_context,
+           '$.transferUnrest.level',
+           MAX(0, MIN(100, COALESCE(json_extract(life_context, '$.transferUnrest.level'), 0) + ?))
+         )
+         WHERE id = ? AND json_extract(life_context, '$.transferUnrest') IS NOT NULL`,
+      ).bind(unrestDelta, playerId),
     );
   }
 

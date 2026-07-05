@@ -48,6 +48,8 @@ export function buildPlayerView(row: Record<string, unknown>, viewerTeamId: stri
     for (const k of Object.keys(personality)) { if (typeof personality[k] === "number") personality[k] = blur5(personality[k]); }
     lifeContext.condition = blur10((lifeContext.condition as number) ?? 50);
     lifeContext.morale = blur10((lifeContext.morale as number) ?? 50);
+    // Truc je interní věc kabiny — soupeř ho nevidí (zájem hráče o přestup se dozví z nabídky)
+    delete lifeContext.transferUnrest;
   }
 
   return {

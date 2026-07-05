@@ -239,6 +239,7 @@ export async function executeDailyTick(
             aggression: personality.aggression ?? 40, consistency: personality.consistency ?? 50,
             clutch: personality.clutch ?? 50,
             isCelebrity: !!(row.is_celebrity as number), celebrityType: personality.celebrityType,
+            transferUnrest: lifeContext.transferUnrest?.level ?? 0,
           };
         });
 
@@ -673,6 +674,7 @@ export async function executeDailyTick(
                   return { firstName: r.first_name as string, lastName: r.last_name as string, age: (r.age as number) ?? 25, occupation: lc.occupation ?? "",
                     discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
                     morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0,
+                    transferUnrest: lc.transferUnrest?.level ?? 0,
                     isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
                 });
                 const teamDistrict = (team.village_district as string | null) ?? undefined;
@@ -901,6 +903,7 @@ export async function executeDailyTick(
                 return { firstName: r.first_name as string, lastName: r.last_name as string, age: (r.age as number) ?? 25, occupation: lc.occupation ?? "",
                   discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
                   morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0,
+                  transferUnrest: lc.transferUnrest?.level ?? 0,
                   isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
               });
               // Find the match conversation created day before
@@ -1058,9 +1061,9 @@ export async function executeDailyTick(
   // Celebrity spawn moved to match tick (index.ts) to avoid D1 query limit in daily tick
 
   // ── Transfer expiry cleanup ──
+  // transfer_offers expirují v transfer pressure ticku (transfers/transfer-pressure-tick.ts),
+  // kde se řeší i dopad na morálku hráče, který o přestup stál.
   try {
-    await env.DB.prepare("UPDATE transfer_offers SET status = 'expired' WHERE status = 'pending' AND expires_at < ?")
-      .bind(now.toISOString()).run();
     await env.DB.prepare("UPDATE transfer_listings SET status = 'expired' WHERE status = 'active' AND expires_at < ?")
       .bind(now.toISOString()).run();
     await env.DB.prepare("UPDATE player_offers SET status = 'expired' WHERE status = 'pending' AND expires_at < ?")

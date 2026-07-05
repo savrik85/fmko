@@ -7,7 +7,7 @@ type DialogKind = "accept" | "counter" | "reject" | null;
 export function ActionBar({
   onAccept, onCounter, onReject,
   currentAmount, defaultCounter,
-  canAfford, waiting, role,
+  canAfford, waiting, role, hideCounter, rejectWarning,
 }: {
   onAccept: (message: string) => Promise<void>;
   onCounter: (amount: number, message: string) => Promise<void>;
@@ -17,6 +17,8 @@ export function ActionBar({
   canAfford: boolean;
   waiting: boolean;
   role: "buyer" | "seller";
+  hideCounter?: boolean; // virtuální klub o ceně nejedná
+  rejectWarning?: string | null; // varování, když hráč o přestup stojí
 }) {
   const [dialog, setDialog] = useState<DialogKind>(null);
 
@@ -43,12 +45,14 @@ export function ActionBar({
           >
             Přijmout {currentAmount > 0 ? `${currentAmount.toLocaleString("cs")} Kč` : "zdarma"}
           </button>
+          {!hideCounter && (
           <button
             onClick={() => setDialog("counter")}
             className="flex-1 sm:flex-none min-w-[120px] px-4 py-2.5 rounded-lg font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors"
           >
             Protinabídka
           </button>
+          )}
           <button
             onClick={() => setDialog("reject")}
             className="flex-1 sm:flex-none min-w-[120px] px-4 py-2.5 rounded-lg font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
@@ -76,7 +80,7 @@ export function ActionBar({
       {dialog === "reject" && (
         <MessageDialog
           title="Odmítnout nabídku?"
-          description="Krátká zpráva protistraně (volitelné)"
+          description={rejectWarning ? `${rejectWarning} Krátká zpráva protistraně (volitelné).` : "Krátká zpráva protistraně (volitelné)"}
           confirmLabel="Odmítnout"
           confirmColor="red"
           onCancel={() => setDialog(null)}

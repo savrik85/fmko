@@ -423,6 +423,8 @@ interface TransferOffer {
   offered_first_name?: string | null;
   offered_last_name?: string | null;
   offered_position?: string | null;
+  is_virtual?: number; // 1 = nabídka od virtuálního (počítačového) klubu
+  player_interest?: number | null; // 0-3 zájem hráče o přestup
 }
 
 type FASortKey = "rating" | "wage" | "age" | "distance";
@@ -1856,6 +1858,9 @@ export default function TransfersPage() {
                         })()}
                         <div className="text-sm">
                           <span className="font-heading font-bold">{o.from_team_name}</span>
+                          {!!o.is_virtual && (
+                            <span className="ml-1.5 inline-block align-middle text-[10px] font-heading font-bold uppercase tracking-wide bg-ink/80 text-white rounded px-1.5 py-0.5">Cizí klub</span>
+                          )}
                           <span className="text-muted"> nabízí </span>
                           {o.offer_type === "loan" ? (
                             <span className="text-yellow-600 font-heading font-bold">Hostování{o.loan_duration ? ` (${o.loan_duration} dní)` : ""}{(o.counter_amount ?? o.offer_amount) > 0 ? ` za ${formatCZK(o.counter_amount ?? o.offer_amount)}` : " zdarma"}</span>
@@ -1869,6 +1874,19 @@ export default function TransfersPage() {
                             <span className="font-heading font-bold text-ink">{o.offered_first_name} {o.offered_last_name}</span>
                             {o.offered_position && <span className="text-muted">({o.offered_position})</span>}
                             <span className="text-muted">na výměnu</span>
+                          </div>
+                        )}
+                        {o.player_interest != null && (
+                          <div className="mt-1">
+                            <span className={`inline-flex items-center gap-1 rounded-full text-[10px] font-heading font-bold px-2 py-0.5 ${
+                              o.player_interest >= 3 ? "bg-red-50 text-red-700 border border-red-200"
+                              : o.player_interest === 2 ? "bg-orange-50 text-orange-700 border border-orange-200"
+                              : o.player_interest === 1 ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                              : "bg-gray-100 text-muted"
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${o.player_interest >= 3 ? "bg-red-500" : o.player_interest === 2 ? "bg-orange-500" : o.player_interest === 1 ? "bg-yellow-400" : "bg-gray-400"}`} />
+                              {o.player_interest >= 3 ? "Velmi chce přestoupit" : o.player_interest === 2 ? "Chce přestoupit" : o.player_interest === 1 ? "Váhá" : "Nechce odejít"}
+                            </span>
                           </div>
                         )}
                         {o.message && <div className="text-xs text-muted mt-1 italic">&ldquo;{o.message}&rdquo;</div>}
@@ -1893,7 +1911,7 @@ export default function TransfersPage() {
                         }} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                           Přijmout
                         </button>
-                        <button onClick={() => {
+                        {!o.is_virtual && <button onClick={() => {
                           const currentAmount = o.counter_amount ?? o.offer_amount;
                           setPriceDialog({
                             title: `Protinabídka za ${o.first_name} ${o.last_name}`,
@@ -1912,7 +1930,7 @@ export default function TransfersPage() {
                           });
                         }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
                           Protinabídka
-                        </button>
+                        </button>}
                         <button onClick={async () => {
                           if (!teamId) return;
                           if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }), "Odmítnutí nabídky se nezdařilo")) await refresh();
