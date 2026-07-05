@@ -522,6 +522,22 @@ async function applyResolutionAndClose(
     );
   }
 
+  // Konverzace po zatrhnutém přestupu hýbe i trucem (transferUnrest):
+  // uklidnil ho → −30, neutrál → −10, naštval ho ještě víc → +15.
+  if (scenarioId === "rejected_offer") {
+    const unrestDelta = resolution.tone === "positive" ? -30 : resolution.tone === "negative" ? 15 : -10;
+    stmts.push(
+      db.prepare(
+        `UPDATE players SET life_context = json_set(
+           life_context,
+           '$.transferUnrest.level',
+           MAX(0, MIN(100, COALESCE(json_extract(life_context, '$.transferUnrest.level'), 0) + ?))
+         )
+         WHERE id = ? AND json_extract(life_context, '$.transferUnrest') IS NOT NULL`,
+      ).bind(unrestDelta, playerId),
+    );
+  }
+
   await db.batch(stmts);
 
   const fmt = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);

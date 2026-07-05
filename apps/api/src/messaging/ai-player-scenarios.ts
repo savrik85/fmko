@@ -227,6 +227,17 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
       w(p.coachRelationship > 65, 3) +
       w(p.age >= 28, 2),
   },
+  {
+    // Spouští se VÝHRADNĚ z offer-rejection-impact (odmítnutá nabídka, o kterou hráč stál).
+    // weight 0 → nikdy se nevylosuje náhodně.
+    id: "rejected_offer",
+    label: "Zatrhnutý přestup",
+    category: "transfer",
+    expectedTurns: 2,
+    description:
+      "Trenér právě odmítl přestupovou nabídku od jiného klubu, o kterou hráč STÁL (klub a částka jsou v první zprávě hráče). Hráč je naštvaný a chce vysvětlení. Podle trenérovy reakce se buď uklidní (vysvětlení, ocenění, slib), nebo se naštve ještě víc (odbytí, ignorace, arogance). Nechce slyšet výmluvy, chce respekt.",
+    weight: () => 0,
+  },
 ];
 
 /**

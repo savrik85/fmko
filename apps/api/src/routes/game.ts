@@ -5348,6 +5348,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
     const { applyOfferRejectionImpact } = await import("../transfers/offer-rejection-impact");
     c.executionCtx.waitUntil(
       applyOfferRejectionImpact(c.env.DB, offer, "reject", {
+        GEMINI_API_KEY: c.env.GEMINI_API_KEY,
         VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB,
       }).catch((e) => logger.warn({ module: "game" }, "rejection impact", e))
     );

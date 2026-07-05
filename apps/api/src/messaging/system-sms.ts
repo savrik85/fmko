@@ -26,13 +26,13 @@ export async function sendSystemSMS(
     .bind(body.slice(0, 100), convId).run().catch((e) => logger.warn({ module: "system-sms" }, "update system conv", e));
 }
 
-/** Pošle zprávu OD HRÁČE do jeho 1:1 konverzace s trenérem (typ 'player'). */
+/** Pošle zprávu OD HRÁČE do jeho 1:1 konverzace s trenérem (typ 'player'). Vrací id konverzace. */
 export async function sendPlayerSMS(
   db: D1Database,
   teamId: string,
   player: { id: string; firstName: string; lastName: string; nickname?: string | null; avatar?: string | null },
   body: string,
-): Promise<void> {
+): Promise<string> {
   const { getOrCreatePlayerConversation } = await import("./ai-player-spawn");
   const convId = await getOrCreatePlayerConversation(db, teamId, player);
   await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at) VALUES (?, ?, 'player', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
@@ -40,4 +40,5 @@ export async function sendPlayerSMS(
     .catch((e) => logger.warn({ module: "system-sms" }, "insert player msg", e));
   await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
     .bind(body.slice(0, 100), convId).run().catch((e) => logger.warn({ module: "system-sms" }, "update player conv", e));
+  return convId;
 }

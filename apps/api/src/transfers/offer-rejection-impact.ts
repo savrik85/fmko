@@ -82,7 +82,7 @@ export async function applyOfferRejectionImpact(
   db: D1Database,
   offer: OfferLike,
   trigger: "reject" | "expire",
-  env?: { VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string; DB?: D1Database },
+  env?: { GEMINI_API_KEY?: string; VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string; DB?: D1Database },
 ): Promise<void> {
   const playerId = offer.player_id as string;
   const sellerTeamId = offer.to_team_id as string;
@@ -183,7 +183,32 @@ export async function applyOfferRejectionImpact(
   const smsBody = brokenTransferPledge
     ? `Slíbil jste, že mě při další dobré nabídce pustíte! ${teamName} přišel a vy nic. S vámi jsem skončil.`
     : pick(pool).replace("{team}", teamName);
-  await sendPlayerSMS(db, sellerTeamId, playerRef, smsBody);
+  const convId = await sendPlayerSMS(db, sellerTeamId, playerRef, smsBody);
+
+  // Otevřít živou konverzaci (AI thread): trenér může volně odpovědět, hráč reaguje,
+  // po max 2 výměnách AI vyhodnotí dopad (viz applyResolutionAndClose — upravuje i truc).
+  // Bez Gemini klíče thread neaktivujeme — zůstanou usmiřovací chips.
+  if (env?.GEMINI_API_KEY) {
+    await db.prepare(
+      `UPDATE conversations
+       SET ai_thread_active = 1, ai_thread_last_at = ?,
+           ai_thread_state = ?
+       WHERE id = ? AND ai_thread_active != 1`
+    ).bind(
+      nowIso,
+      JSON.stringify({
+        trigger: "rejected_offer",
+        scenario_id: "rejected_offer",
+        max_replies: 2,
+        current_replies: 0,
+        awaiting: "coach",
+        initiated_at: nowIso,
+        player_id: playerId,
+        resolution: null,
+      }),
+      convId,
+    ).run().catch((e) => logger.warn({ module: "rejection-impact" }, "activate unrest thread", e));
+  }
 
   // In-app notifikace (+push, pokud má env VAPID klíče)
   try {
