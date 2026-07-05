@@ -21,11 +21,11 @@ interface TransfersOverview {
     crossLeagueCount: number;
     crossLeagueAdminTotal: number;
   };
-  biggest: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean }>;
+  biggest: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean; toVirtual?: boolean }>;
   topSellers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; earned: number; count: number }>;
   topBuyers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; spent: number; count: number }>;
   mostActive: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; in: number; out: number; total: number }>;
-  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean; joinType?: string }>;
+  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean; joinType?: string; toVirtual?: boolean }>;
   speculations?: Array<{
     playerId: string;
     playerName: string;
@@ -209,7 +209,7 @@ function HeroTransfer({ t }: { t: TransfersOverview["biggest"][number] }) {
               <FreeAgentLabel size="md" />
             )}
             <FancyArrow size="lg" />
-            <ClubLink teamId={t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={`/dashboard/team/${t.toTeamId}`} textSize="md" badgeSize={32} />
+            <ClubLink teamId={t.toVirtual ? null : t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={t.toVirtual ? null : `/dashboard/team/${t.toTeamId}`} textSize="md" badgeSize={32} />
           </div>
 
           {/* Cena */}
@@ -260,7 +260,7 @@ function MidTransferCard({ rank, t }: { rank: number; t: TransfersOverview["bigg
               <FreeAgentLabel />
             )}
             <FancyArrow size="sm" />
-            <ClubLink teamId={t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={`/dashboard/team/${t.toTeamId}`} bold={false} />
+            <ClubLink teamId={t.toVirtual ? null : t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={t.toVirtual ? null : `/dashboard/team/${t.toTeamId}`} bold={false} />
           </div>
           <div className="font-heading font-[800] text-base sm:text-lg text-pitch-500 tabular-nums">
             {t.fee.toLocaleString("cs")} <span className="text-xs text-pitch-700">Kč</span>
@@ -350,7 +350,7 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
             <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/dashboard/team/${t.fromTeamId}` : null} bold={false} />
           )}
           <FancyArrow size="xs" />
-          <ClubLink teamId={t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={`/dashboard/team/${t.toTeamId}`} bold={false} />
+          <ClubLink teamId={t.toVirtual ? null : t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={t.toVirtual ? null : `/dashboard/team/${t.toTeamId}`} bold={false} />
         </div>
       </div>
       <div className="shrink-0 text-right">

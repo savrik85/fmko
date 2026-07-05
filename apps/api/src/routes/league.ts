@@ -445,8 +445,57 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
         date: r.joined_at as string,
         isCrossLeague: !!isCrossLeague,
         joinType: (r.join_type as string) ?? "transfer",
+        toVirtual: false,
       };
     });
+
+  // Prodeje do CPU (virtuálních) klubů — hráč odešel ze hry (departed_players), takže v contracts
+  // není žádný "příchod". Doplníme je jako odchozí přestupy z pohledu prodávajícího týmu v lize.
+  const virtualSalesRes = await c.env.DB.prepare(
+    `SELECT o.player_id, o.offer_amount as fee, o.resolved_at as joined_at,
+            dp.first_name, dp.last_name, dp.age, dp.position, dp.overall_rating,
+            json_extract(o.virtual_team_data, '$.name') as virtual_club,
+            t.id as from_team_id, t.name as from_team_name,
+            t.badge_primary_color, t.badge_secondary_color, t.badge_pattern, t.badge_initials, t.badge_symbol,
+            t.primary_color, t.secondary_color
+     FROM transfer_offers o
+     JOIN departed_players dp ON dp.id = o.player_id
+     JOIN teams t ON t.id = o.to_team_id
+     WHERE o.from_team_id = 'virtual_ai' AND o.status = 'accepted' AND t.league_id = ?
+     ORDER BY o.resolved_at DESC`
+  ).bind(leagueId).all().catch((e) => { logger.warn({ module: "league" }, "fetch virtual sales", e); return { results: [] }; });
+
+  const virtualSales = (virtualSalesRes.results as any[]).map((r) => {
+    const fromBadge = {
+      primary: (r.badge_primary_color as string | null) ?? (r.primary_color as string | null) ?? "#374151",
+      secondary: (r.badge_secondary_color as string | null) ?? (r.secondary_color as string | null) ?? "#9ca3af",
+      pattern: (r.badge_pattern as string | null) ?? "shield",
+      initials: (r.badge_initials as string | null) ?? deriveInitials(r.from_team_name as string),
+      symbol: (r.badge_symbol as string | null) ?? null,
+    };
+    return {
+      playerId: r.player_id as string,
+      playerName: `${r.first_name} ${r.last_name}`,
+      playerAvatar: {},
+      age: (r.age as number) ?? 0,
+      position: (r.position as string) ?? "",
+      fromTeamId: r.from_team_id as string | null,
+      fromTeam: r.from_team_name as string | null,
+      fromTeamBadge: fromBadge,
+      toTeamId: "virtual_ai",
+      toTeam: (r.virtual_club as string | null) ?? "Cizí klub",
+      toTeamBadge: { primary: "#4a5d43", secondary: "#e8e4d8", pattern: "shield", initials: "?", symbol: null },
+      fee: (r.fee as number) ?? 0,
+      date: r.joined_at as string,
+      isCrossLeague: false,
+      joinType: "transfer",
+      toVirtual: true,
+    };
+  });
+
+  // Sloučit a seřadit podle data (nejnovější první) — virtuální prodeje se propletou mezi ostatní.
+  leagueTransfers.push(...virtualSales);
+  leagueTransfers.sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
 
   // Placené přestupy (bez free agentů) — pro stats, biggest, sellers, buyers
   const paidTransfers = leagueTransfers.filter((t) => t.joinType === "transfer");
@@ -484,9 +533,11 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   }
   const topSellers = [...sellersMap.values()].sort((a, b) => b.earned - a.earned).slice(0, 5);
 
-  // Top buyers (most spent) — aggregate by toTeamId, jen placené
+  // Top buyers (most spent) — aggregate by toTeamId, jen placené. Virtuální klub (odchod ze hry)
+  // do kupujících nepatří — je to fiktivní tým bez profilu.
   const buyersMap = new Map<string, { teamId: string; teamName: string; badge: TeamBadge | null; spent: number; count: number }>();
   for (const t of paidTransfers) {
+    if (t.toVirtual) continue;
     const existing = buyersMap.get(t.toTeamId);
     if (existing) { existing.spent += t.fee; existing.count++; }
     else buyersMap.set(t.toTeamId, { teamId: t.toTeamId, teamName: t.toTeam, badge: t.toTeamBadge, spent: t.fee, count: 1 });
@@ -496,9 +547,11 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   // Most active (in + out combined)
   const activeMap = new Map<string, { teamId: string; teamName: string; badge: TeamBadge | null; in: number; out: number; total: number }>();
   for (const t of leagueTransfers) {
-    const buyer = activeMap.get(t.toTeamId) ?? { teamId: t.toTeamId, teamName: t.toTeam, badge: t.toTeamBadge, in: 0, out: 0, total: 0 };
-    buyer.in++; buyer.total++;
-    activeMap.set(t.toTeamId, buyer);
+    if (!t.toVirtual) {
+      const buyer = activeMap.get(t.toTeamId) ?? { teamId: t.toTeamId, teamName: t.toTeam, badge: t.toTeamBadge, in: 0, out: 0, total: 0 };
+      buyer.in++; buyer.total++;
+      activeMap.set(t.toTeamId, buyer);
+    }
     if (t.fromTeamId && t.fromTeam) {
       const seller = activeMap.get(t.fromTeamId) ?? { teamId: t.fromTeamId, teamName: t.fromTeam, badge: t.fromTeamBadge, in: 0, out: 0, total: 0 };
       seller.out++; seller.total++;
