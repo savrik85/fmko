@@ -6363,6 +6363,22 @@ gameRouter.post("/admin/run-transfer-tick", async (c) => {
   }
 });
 
+// POST /api/admin/generate-ai-offers — force vygeneruje CPU nabídku pro KAŽDÝ lidský tým
+// (přeskočí denní šanci, cooldowny i kontrolu aktivní nabídky; per-hráč cooldown 14 dní platí).
+gameRouter.post("/admin/generate-ai-offers", async (c) => {
+  const { generateAiOffers } = await import("../transfers/virtual-teams");
+  const { createRng, cryptoSeed } = await import("../generators/rng");
+  const rng = createRng(cryptoSeed());
+  const leagues = await c.env.DB.prepare(
+    "SELECT l.id, l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.user_id != 'ai' GROUP BY l.id"
+  ).all().catch((e) => { logger.warn({ module: "game" }, "fetch leagues for force offers", e); return { results: [] }; });
+  let created = 0;
+  for (const lg of leagues.results) {
+    created += await generateAiOffers(c.env.DB, lg.district as string, lg.id as string, rng, { force: true });
+  }
+  return c.json({ ok: true, created });
+});
+
 // POST /api/admin/cup/create — vytvoří pohár pro aktuální sezónu.
 gameRouter.post("/admin/cup/create", async (c) => {
   const { createCup } = await import("../cup/cup");

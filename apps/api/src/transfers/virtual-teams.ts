@@ -218,6 +218,7 @@ export async function generateAiOffers(
   district: string,
   leagueId: string,
   rng: Rng,
+  opts: { force?: boolean } = {},
 ): Promise<number> {
   const teams = await getVirtualTeamsForDistrict(db, district);
   if (teams.length === 0) return 0;
@@ -229,7 +230,7 @@ export async function generateAiOffers(
   let created = 0;
   for (const ht of humanTeams.results) {
     try {
-      created += await maybeOfferForTeam(db, ht.id as string, teams, rng);
+      created += await maybeOfferForTeam(db, ht.id as string, teams, rng, opts);
     } catch (e) {
       logger.warn({ module: "virtual-teams" }, "offer for team failed", e);
     }
@@ -270,20 +271,25 @@ async function maybeOfferForTeam(
   targetTeamId: string,
   teams: VirtualTeam[],
   rng: Rng,
+  opts: { force?: boolean } = {},
 ): Promise<number> {
-  if (rng.random() > OFFER_CHANCE_PER_TEAM) return 0;
+  // force (admin generování): přeskočí denní šanci, cooldown i kontrolu aktivní nabídky —
+  // per-hráč cooldown 14 dní zůstává (nová nabídka půjde na jiného hráče).
+  if (!opts.force) {
+    if (rng.random() > OFFER_CHANCE_PER_TEAM) return 0;
 
-  // Cooldown — žádná nabídka, pokud v posledních 5 dnech nějaká přišla
-  const recentOffer = await db.prepare(
-    "SELECT id FROM transfer_offers WHERE to_team_id = ? AND from_team_id = 'virtual_ai' AND created_at > datetime('now', '-5 days')"
-  ).bind(targetTeamId).first().catch((e) => { logger.warn({ module: "virtual-teams" }, "check cooldown", e); return null; });
-  if (recentOffer) return 0;
+    // Cooldown — žádná nabídka, pokud v posledních 5 dnech nějaká přišla
+    const recentOffer = await db.prepare(
+      "SELECT id FROM transfer_offers WHERE to_team_id = ? AND from_team_id = 'virtual_ai' AND created_at > datetime('now', '-5 days')"
+    ).bind(targetTeamId).first().catch((e) => { logger.warn({ module: "virtual-teams" }, "check cooldown", e); return null; });
+    if (recentOffer) return 0;
 
-  // Žádná aktivní CPU nabídka na tento tým
-  const activeOffer = await db.prepare(
-    "SELECT id FROM transfer_offers WHERE to_team_id = ? AND from_team_id = 'virtual_ai' AND status = 'pending'"
-  ).bind(targetTeamId).first().catch((e) => { logger.warn({ module: "virtual-teams" }, "check active offer", e); return null; });
-  if (activeOffer) return 0;
+    // Žádná aktivní CPU nabídka na tento tým
+    const activeOffer = await db.prepare(
+      "SELECT id FROM transfer_offers WHERE to_team_id = ? AND from_team_id = 'virtual_ai' AND status = 'pending'"
+    ).bind(targetTeamId).first().catch((e) => { logger.warn({ module: "virtual-teams" }, "check active offer", e); return null; });
+    if (activeOffer) return 0;
+  }
 
   // Top hráči TOHOTO kádru dle ratingu (~15 %, min 2) — CPU jde po hvězdách týmu.
   // Per-hráč cooldown 14 dní: koho nedávno řešila JAKÁKOLI nabídka, toho CPU nechá být.
