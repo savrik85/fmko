@@ -72,9 +72,11 @@ export function computePlayerInterest(input: InterestInputs): InterestResult {
   // Vztah k vesnici/klubu
   add("Vztah k obci", (50 - (p.patriotism ?? 50)) * 0.35);
 
-  // Peníze a ambice — nabídka vs. tržní hodnota hráče (rating + věk)
+  // Peníze a ambice — nabídka vs. tržní hodnota hráče (rating + věk).
+  // Na vesnici jsou peníze hlavní motiv — výrazný přeplatek táhne hodně.
   const marketValue = estimateMarketValue(input.overallRating, input.age);
-  if (input.offerAmount >= marketValue * 1.3) add("Lákavé peníze", 6);
+  if (input.offerAmount >= marketValue * 1.5) add("Balík peněz", 12);
+  else if (input.offerAmount >= marketValue * 1.3) add("Lákavé peníze", 7);
   else if (input.offerAmount > 0 && input.offerAmount <= marketValue * 0.7) add("Urážlivě málo", -4);
   if ((p.workRate ?? 50) > 60 && input.age < 28) add("Ambice", 5);
 
