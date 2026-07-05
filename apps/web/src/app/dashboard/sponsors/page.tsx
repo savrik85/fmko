@@ -17,6 +17,7 @@ interface ActiveContract {
   earlyTerminationFee: number;
   isNamingRights: boolean;
   signedAt: string;
+  renewal?: { monthlyAmount: number; winBonus: number; seasons: number; earlyTerminationFee: number } | null;
 }
 
 type SponsorCategory = "main" | "stadium" | "banner";
@@ -149,6 +150,35 @@ export default function SponsorsPage() {
     setActing(false);
   };
 
+  const handleRenew = async (category: SponsorCategory, contractId?: string) => {
+    if (!teamId || acting) return;
+    const contract = category === "main"
+      ? data?.mainContract
+      : category === "stadium"
+      ? data?.stadiumContract
+      : data?.bannerContracts.find((c) => c.id === contractId);
+    if (!contract?.renewal) return;
+    const r = contract.renewal;
+    const ok = await confirm({
+      title: `Prodloužit smlouvu s ${contract.sponsorName}?`,
+      description: `Nová smlouva na ${r.seasons} sezóny za podmínek podle aktuální reputace. Beze změny názvu klubu a bez sankce.`,
+      details: [
+        { label: "Nově týdně", value: `+${formatCZK(Math.round(r.monthlyAmount / 4.3))}`, color: "text-pitch-500" },
+        ...(r.winBonus > 0 ? [{ label: "Za výhru", value: `+${formatCZK(r.winBonus)}`, color: "text-pitch-400" }] : []),
+        { label: "Délka", value: `${r.seasons} sezóny` },
+      ],
+      confirmLabel: "Prodloužit smlouvu",
+    });
+    if (!ok) return;
+    setActing(true);
+    await apiFetch(`/api/teams/${teamId}/sponsors/renew`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contractId: contract.id }),
+    }).catch((e) => { console.error("sponsors/renew:", e); return null; });
+    await refresh();
+    setActing(false);
+  };
+
   const handleRename = async () => {
     if (!teamId || acting || !renameInput.trim()) return;
     const ok = await confirm({
@@ -228,7 +258,7 @@ export default function SponsorsPage() {
         <SectionLabel>{"\u{1F4DD}"} Hlavní sponzor</SectionLabel>
         {data.mainContract ? (
           <>
-            <ContractCard contract={data.mainContract} category="main" onTerminate={() => handleTerminate("main")} acting={acting} />
+            <ContractCard contract={data.mainContract} category="main" onTerminate={() => handleTerminate("main")} onRenew={() => handleRenew("main")} acting={acting} />
             {data.mainOffers.length > 0 && (
               <div className="mt-4">
                 <div className="text-xs text-muted font-heading uppercase tracking-wide mb-2">
@@ -261,7 +291,7 @@ export default function SponsorsPage() {
         <SectionLabel>{"\u{1F3DF}"} Sponzor stadionu {data.stadiumName ? `(${data.stadiumName})` : ""}</SectionLabel>
         {data.stadiumContract ? (
           <>
-            <ContractCard contract={data.stadiumContract} category="stadium" onTerminate={() => handleTerminate("stadium")} acting={acting} />
+            <ContractCard contract={data.stadiumContract} category="stadium" onTerminate={() => handleTerminate("stadium")} onRenew={() => handleRenew("stadium")} acting={acting} />
             {data.stadiumOffers.length > 0 && (
               <div className="mt-4">
                 <div className="text-xs text-muted font-heading uppercase tracking-wide mb-2">
@@ -290,6 +320,7 @@ export default function SponsorsPage() {
                 contract={c}
                 category="banner"
                 onTerminate={() => handleTerminate("banner", c.id)}
+                onRenew={() => handleRenew("banner", c.id)}
                 acting={acting}
               />
             ))}
@@ -313,8 +344,8 @@ export default function SponsorsPage() {
 
 // ═══ Components ═══
 
-function ContractCard({ contract, category, onTerminate, acting }: {
-  contract: ActiveContract; category: SponsorCategory; onTerminate: () => void; acting: boolean;
+function ContractCard({ contract, category, onTerminate, onRenew, acting }: {
+  contract: ActiveContract; category: SponsorCategory; onTerminate: () => void; onRenew?: () => void; acting: boolean;
 }) {
   const icon = category === "main" ? "\u{1F4DD}" : category === "stadium" ? "\u{1F3DF}" : "\u{1F3AF}";
   return (
@@ -347,7 +378,13 @@ function ContractCard({ contract, category, onTerminate, acting }: {
             </div>
           </div>
         </div>
-        <div className="mt-4 pt-3 border-t border-gray-100">
+        <div className="mt-4 pt-3 border-t border-gray-100 flex items-center gap-5 flex-wrap">
+          {contract.renewal && onRenew && (
+            <button onClick={onRenew} disabled={acting}
+              className="text-sm text-pitch-600 hover:text-pitch-500 font-heading font-bold transition-colors">
+              🤝 Prodloužit na {contract.renewal.seasons} sezóny (+{formatCZK(Math.round(contract.renewal.monthlyAmount / 4.3))}/týd)
+            </button>
+          )}
           <button onClick={onTerminate} disabled={acting}
             className="text-sm text-card-red hover:text-red-700 font-heading font-bold transition-colors">
             Ukončit smlouvu předčasně
