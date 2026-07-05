@@ -6363,9 +6363,18 @@ gameRouter.post("/admin/run-transfer-tick", async (c) => {
   }
 });
 
-// POST /api/admin/generate-ai-offers — force vygeneruje CPU nabídku pro KAŽDÝ lidský tým
-// (přeskočí denní šanci, cooldowny i kontrolu aktivní nabídky; per-hráč cooldown 14 dní platí).
+// POST /api/admin/generate-ai-offers — force vygeneruje čerstvé CPU nabídky pro KAŽDÝ lidský tým.
+// ?replace=1 nejdřív expiruje stávající pending virtuální nabídky (přímý UPDATE, BEZ dopadu na
+// hráče), takže se stará „studená" várka nahradí novou dle aktuálního modelu zájmu.
 gameRouter.post("/admin/generate-ai-offers", async (c) => {
+  const replace = c.req.query("replace") === "1";
+  let expired = 0;
+  if (replace) {
+    const res = await c.env.DB.prepare(
+      "UPDATE transfer_offers SET status = 'expired', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE from_team_id = 'virtual_ai' AND status = 'pending'"
+    ).run().catch((e) => { logger.warn({ module: "game" }, "expire virtual offers", e); return null; });
+    expired = res?.meta?.changes ?? 0;
+  }
   const { generateAiOffers } = await import("../transfers/virtual-teams");
   const { createRng, cryptoSeed } = await import("../generators/rng");
   const rng = createRng(cryptoSeed());
@@ -6376,7 +6385,7 @@ gameRouter.post("/admin/generate-ai-offers", async (c) => {
   for (const lg of leagues.results) {
     created += await generateAiOffers(c.env.DB, lg.district as string, lg.id as string, rng, { force: true });
   }
-  return c.json({ ok: true, created });
+  return c.json({ ok: true, expired, created });
 });
 
 // POST /api/admin/cup/create — vytvoří pohár pro aktuální sezónu.
