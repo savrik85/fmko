@@ -19,7 +19,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Cizí kluby z okolí nově posílají nabídky na tvoje nejlepší hráče — peníze mají připravené a nabízejí víc, než je tržní cena. Ber, nebo nech být: o ceně nejednají.",
       "U každé nabídky vidíš, jestli hráč o přestup STOJÍ — a u vlastních hráčů i proč (málo hraje, špatná nálada, silnější klub, lákavé peníze…).",
       "Odmítneš nabídku, o kterou hráč stál? Napíše ti naštvanou SMS a můžeš si to s ním vyříkat — vlastními slovy, po pár zprávách se ukáže, jak sis vedl.",
-      "Nespokojený hráč chodí míň na tréninky, vymlouvá se ze zápasů a může i „záhadně" marodit. Fyzioterapeut ti poradí, když mu zranění nesedí.",
+      "Nespokojený hráč chodí míň na tréninky, vymlouvá se ze zápasů a může i „záhadně“ marodit. Fyzioterapeut ti poradí, když mu zranění nesedí.",
       "Když řeči nestačí, nabídni dohodu: místo v sestavě (slib se hlídá!), vyšší odměny, nebo slib prodeje při další nabídce.",
       "Pozor: stejná pravidla platí i pro nabídky lidských soupeřů — dobře mířenou nabídkou jde rozhodit hráče cizí kabiny. A naopak.",
     ],
