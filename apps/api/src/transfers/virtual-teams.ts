@@ -113,7 +113,8 @@ export async function generateAiListings(
   if (rng.random() > 0.30) return 0;
 
   const team = rng.pick(teams);
-  const position = rng.pick([...POSITIONS]);
+  // Brankáři vzácně (viz free-agent-pool) — trh nemá být zaplavený gólmany
+  const position = rng.weighted({ GK: 1, DEF: 8, MID: 8, FWD: 7 }) as typeof POSITIONS[number];
   const age = rng.int(19, 35);
   const qualityBase = team.rating + rng.int(-5, 5);
 
