@@ -65,7 +65,8 @@ export async function maintainFreeAgentPool(
     ).bind(district).all().catch((e) => { logger.warn({ module: "free-agent-pool" }, "query", e); return { results: [] }; });
 
     for (let i = 0; i < count; i++) {
-      const pos = rng.pick([...POSITIONS]);
+      // Brankáři vzácně — na trhu jich má být málo (klub potřebuje jen 1–2 a nerad je pouští)
+      const pos = rng.weighted({ GK: 1, DEF: 8, MID: 8, FWD: 7 }) as typeof POSITIONS[number];
       const player = generatePlayer(rng, villageInfo, pos, surnameData, firstnameData);
 
       // Build skills from generated player

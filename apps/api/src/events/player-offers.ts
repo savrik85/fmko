@@ -85,7 +85,8 @@ export async function generatePlayerOffer(
   const firstnameData = { male: FIRSTNAMES, female: {} as Record<string, Record<string, number>> };
 
   const positions = ["GK", "DEF", "MID", "FWD"] as const;
-  const pos = rng.pick([...positions]);
+  // Brankáři vzácně (~4 %) — trh i nabídky nemají být zaplavené gólmany
+  const pos = rng.weighted({ GK: 1, DEF: 8, MID: 8, FWD: 7 }) as typeof positions[number];
 
   const player = generatePlayer(rng, villageInfo, pos, surnameData, firstnameData);
 

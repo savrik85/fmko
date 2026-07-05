@@ -395,8 +395,8 @@ export function generateSquad(
       positions.push(pos as PlayerPosition);
     }
   }
-  // Pad or trim to exact squad size
-  while (positions.length < size) positions.push(rng.pick(POSITIONS));
+  // Pad or trim to exact squad size — doplňovat spíš hráče v poli, ne další gólmany
+  while (positions.length < size) positions.push(rng.weighted({ GK: 1, DEF: 8, MID: 8, FWD: 7 }) as PlayerPosition);
   while (positions.length > size) positions.pop();
   rng.shuffle(positions);
 
