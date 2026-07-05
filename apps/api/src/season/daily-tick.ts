@@ -248,6 +248,9 @@ export async function executeDailyTick(
           .bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "daily-tick" }, "fetch equipment", e); return null; });
 
         let equipMul = 1.0;
+        let equipAttendanceBonus = 0;   // dodávka: lepší docházka na trénink
+        let equipYouthMod = 0;          // kamera: rychlejší růst hráčů do 22 let
+        let equipChemistryMod = 0;      // rozlišováky + tabule: chemie k taktickému tréninku
         if (equip) {
           const levels: Record<string, number> = {};
           const conditions: Record<string, number> = {};
@@ -261,6 +264,9 @@ export async function executeDailyTick(
           if ((team.training_type as string) === "tactics") {
             equipMul *= 1.0 + eff.tacticsTrainingBonus;
           }
+          equipAttendanceBonus = eff.attendanceBonus;
+          equipYouthMod = eff.youthTrainingMod;
+          equipChemistryMod = eff.teamChemistryMod;
         }
 
         // Load manager attributes for training bonuses
@@ -273,7 +279,7 @@ export async function executeDailyTick(
           type: (team.training_type as any) ?? "conditioning",
           approach: (team.training_approach as any) ?? "balanced",
           sessionsPerWeek: (team.training_sessions as number) ?? 2,
-        }, undefined, equipMul, mgrBonus);
+        }, undefined, equipMul, mgrBonus, { attendanceBonus: equipAttendanceBonus, youthTrainingMod: equipYouthMod });
 
         const attendanceWithNames = result.attendance.map((a) => ({
           playerId: playersResult.results[a.playerIndex].id as string,
@@ -311,7 +317,8 @@ export async function executeDailyTick(
             const form = lastLineup?.formation;
             if (form) {
               const { applyTrainingBoost } = await import("../engine/chemistry");
-              await applyTrainingBoost(env.DB, teamId, form);
+              // Chemie z vybavení (rozlišováky + taktická tabule) — dřív mrtvý efekt, teď reálný boost
+              await applyTrainingBoost(env.DB, teamId, form, equipChemistryMod);
             }
           } catch (e) {
             logger.warn({ module: "daily-tick" }, "tactics training boost", e);
@@ -432,8 +439,11 @@ export async function executeDailyTick(
     "UPDATE stadiums SET pitch_condition = MAX(10, pitch_condition - 1) WHERE pitch_type = 'hybrid' AND (ABS(RANDOM()) % 2 = 0)"
   ).run();
 
-  // Equipment condition degradation (slow — 1-2 points per day for used items)
-  const equipCategories = ["balls", "jerseys", "training_cones", "first_aid", "boots_stock", "bibs", "goalkeeper_gear", "water_bottles", "tactics_board"];
+  // Equipment condition degradation (slow — 1-2 points per day for used items).
+  // team_van ZÁMĚRNĚ vynechán: jeho kondice ovlivňuje commuteMod, který musí zůstat stejný
+  // mezi day_before SMS a match_day simulací (jinak divergence absencí). Dodávku „opotřebí" jen zápas/nákup.
+  const equipCategories = ["balls", "jerseys", "training_cones", "first_aid", "boots_stock", "bibs", "goalkeeper_gear", "water_bottles", "tactics_board",
+    "gym_corner", "training_wall", "club_grill", "fan_drums", "winter_gear", "video_setup"];
   for (const cat of equipCategories) {
     // Only degrade items with level > 0, by 1 point/day (50% chance)
     await env.DB.prepare(
@@ -529,6 +539,41 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "shower bonus failed", e);
   }
 
+  // Posilovna v kabině: extra regenerace kondice per tým (stejný vzor jako sprchy)
+  try {
+    const { calculateEffects } = await import("../equipment/equipment-generator");
+    const gyms = await env.DB.prepare(
+      "SELECT team_id, gym_corner, gym_corner_condition FROM equipment WHERE gym_corner > 0"
+    ).all();
+    for (const row of gyms.results) {
+      const fx = calculateEffects(
+        { gym_corner: row.gym_corner as number },
+        { gym_corner_condition: row.gym_corner_condition as number },
+      );
+      if (fx.conditionRegenBonus <= 0) continue;
+      await env.DB.prepare(
+        `INSERT INTO condition_log (player_id, team_id, old_value, new_value, delta, source, description)
+         SELECT id, team_id,
+           json_extract(life_context, '$.condition'),
+           MIN(100, json_extract(life_context, '$.condition') + ?),
+           MIN(100, json_extract(life_context, '$.condition') + ?) - json_extract(life_context, '$.condition'),
+           'facility', 'Bonus z vybavení (posilovna)'
+         FROM players
+         WHERE team_id = ?
+           AND json_extract(life_context, '$.condition') IS NOT NULL
+           AND MIN(100, json_extract(life_context, '$.condition') + ?) != json_extract(life_context, '$.condition')`,
+      ).bind(fx.conditionRegenBonus, fx.conditionRegenBonus, row.team_id, fx.conditionRegenBonus)
+        .run().catch((e) => logger.warn({ module: "daily-tick" }, "log gym regen", e));
+      await env.DB.prepare(
+        `UPDATE players SET life_context = json_set(life_context, '$.condition',
+          MIN(100, json_extract(life_context, '$.condition') + ?))
+        WHERE team_id = ?`,
+      ).bind(fx.conditionRegenBonus, row.team_id).run();
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "gym regen failed", e);
+  }
+
   // ── Random life events ── (vesnické +/-, cooldown 5 dní per hráč, ~2% per hráč/den)
   try {
     const { applyRandomLifeEvents } = await import("./random-events");
@@ -558,15 +603,50 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "resolve social pub events", e);
   }
 
-  // Morale drift toward 50
-  await env.DB.prepare(
-    `UPDATE players SET life_context = json_set(life_context, '$.morale',
-      CASE
-        WHEN json_extract(life_context, '$.morale') > 55 THEN json_extract(life_context, '$.morale') - 1
-        WHEN json_extract(life_context, '$.morale') < 45 THEN json_extract(life_context, '$.morale') + 1
-        ELSE json_extract(life_context, '$.morale')
-      END)`
-  ).run();
+  // Morale drift toward 50 — týmy s klubovým grilem mají pásmo posunuté nahoru (nálada drží výš).
+  // Základní drift v try/catch s fallbackem: kdyby sloupec club_grill ještě neexistoval (deploy
+  // před migrací), nesmí spadnout celý tick — spadne jen na drift bez gril-výjimky.
+  try {
+    await env.DB.prepare(
+      `UPDATE players SET life_context = json_set(life_context, '$.morale',
+        CASE
+          WHEN json_extract(life_context, '$.morale') > 55 THEN json_extract(life_context, '$.morale') - 1
+          WHEN json_extract(life_context, '$.morale') < 45 THEN json_extract(life_context, '$.morale') + 1
+          ELSE json_extract(life_context, '$.morale')
+        END)
+      WHERE team_id NOT IN (SELECT team_id FROM equipment WHERE club_grill > 0)`
+    ).run();
+    const { calculateEffects: calcGrillFx } = await import("../equipment/equipment-generator");
+    const grills = await env.DB.prepare(
+      "SELECT team_id, club_grill, club_grill_condition FROM equipment WHERE club_grill > 0"
+    ).all();
+    for (const row of grills.results) {
+      const bonus = calcGrillFx(
+        { club_grill: row.club_grill as number },
+        { club_grill_condition: row.club_grill_condition as number },
+      ).moraleTargetBonus;
+      await env.DB.prepare(
+        `UPDATE players SET life_context = json_set(life_context, '$.morale',
+          CASE
+            WHEN json_extract(life_context, '$.morale') > 55 + ? THEN json_extract(life_context, '$.morale') - 1
+            WHEN json_extract(life_context, '$.morale') < 45 + ? THEN json_extract(life_context, '$.morale') + 1
+            ELSE json_extract(life_context, '$.morale')
+          END)
+        WHERE team_id = ?`
+      ).bind(bonus, bonus, row.team_id).run()
+        .catch((e) => logger.warn({ module: "daily-tick" }, "grill morale drift", e));
+    }
+  } catch (e) {
+    logger.warn({ module: "daily-tick" }, "grill morale drift failed, fallback to plain drift", e);
+    await env.DB.prepare(
+      `UPDATE players SET life_context = json_set(life_context, '$.morale',
+        CASE
+          WHEN json_extract(life_context, '$.morale') > 55 THEN json_extract(life_context, '$.morale') - 1
+          WHEN json_extract(life_context, '$.morale') < 45 THEN json_extract(life_context, '$.morale') + 1
+          ELSE json_extract(life_context, '$.morale')
+        END)`
+    ).run().catch((e2) => logger.error({ module: "daily-tick" }, "plain morale drift fallback failed", e2));
+  }
   events.push({ type: "morale", description: "Morálka se stabilizuje" });
 
   // Fans satisfaction drift toward loyalty (1 bod denně)
@@ -678,7 +758,8 @@ export async function executeDailyTick(
                     isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
                 });
                 const teamDistrict = (team.village_district as string | null) ?? undefined;
-                const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, "day_before", teamDistrict);
+                const { fetchTeamCommuteMod } = await import("../events/match-absences");
+                const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, "day_before", teamDistrict, undefined, await fetchTeamCommuteMod(env.DB, teamId));
                 const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
                 const matchConvId = crypto.randomUUID();
                 await env.DB.prepare(
@@ -919,7 +1000,8 @@ export async function executeDailyTick(
                 const alreadyIds = new Set(alreadyMessaged.results.map((r) => r.sender_id as string));
 
                 const teamDistrictMd = (team.village_district as string | null) ?? undefined;
-                const matchDayAbsences = generateAbsences(mdRng as any, absSquad, "match_day", teamDistrictMd)
+                const { fetchTeamCommuteMod: fetchVanModMd } = await import("../events/match-absences");
+                const matchDayAbsences = generateAbsences(mdRng as any, absSquad, "match_day", teamDistrictMd, undefined, await fetchVanModMd(env.DB, teamId))
                   .filter((a) => {
                     const pid = squadRows.results[a.playerIndex]?.id as string;
                     return pid && !alreadyIds.has(pid);

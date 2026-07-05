@@ -478,6 +478,10 @@ export async function runScheduledMatches(
                     injurySeverityMod: eff.injurySeverityMod,
                     conditionDrainMod: eff.conditionDrainMod,
                     moraleMod: eff.moraleMod,
+                    setPiecesMod: eff.setPiecesMod,
+                    weatherResistMod: eff.weatherResistMod,
+                    crowdMod: eff.crowdMod,
+                    injuryDaysReduction: eff.injuryDaysReduction,
                 };
             };
             const [homeEquipment, awayEquipment] = await Promise.all([
@@ -529,7 +533,12 @@ export async function runScheduledMatches(
             });
             const officialCount = acceptedOfficials?.cnt ?? 0;
             const homeAdvantage = Math.min(0.10, 0.05 + officialCount * 0.015);
-            const attendanceWithOfficials = (attendance ?? 0) + officialCount * 50;
+            // Kotel (bubny a vlajky) domácích zvedá návštěvu; strop kapacity stadionu platí dál
+            const crowdBoost = 1 + (homeEquipment?.crowdMod ?? 0);
+            const attendanceWithOfficials = Math.min(
+                stadiumCapacity,
+                Math.round((attendance ?? 0) * crowdBoost) + officialCount * 50,
+            );
 
             // Simulate
             const result = simulateMatch(rng, {
@@ -611,7 +620,7 @@ export async function runScheduledMatches(
             ).bind(
                 result.homeScore, result.awayScore,
                 JSON.stringify(result.events), JSON.stringify(commentary),
-                attendance, stadiumName, pitchCondition, weather,
+                attendanceWithOfficials, stadiumName, pitchCondition, weather,
                 JSON.stringify(buildLineupData(homeLineupPreSim, homeSubsPreSim, homeBuild.idMap, homeFormation, homeTactic, homeCaptainEngineId)),
                 JSON.stringify(buildLineupData(awayLineupPreSim, awaySubsPreSim, awayBuild.idMap, awayFormation, awayTactic, awayCaptainEngineId)),
                 matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null,
@@ -804,7 +813,9 @@ export async function runScheduledMatches(
                         const idMap = event.teamId === 1 ? homeBuild.idMap : awayBuild.idMap;
                         const realPlayerId = idMap.get(event.playerId);
                         if (realPlayerId) {
-                            const days = 3 + Math.floor(Math.random() * 18);
+                            // Lékárnička Lv2+: ošetření hned na hřišti — nové zranění o 1-2 dny kratší
+                            const injuryReduction = (event.teamId === 1 ? homeEquipment : awayEquipment)?.injuryDaysReduction ?? 0;
+                            const days = Math.max(2, 3 + Math.floor(Math.random() * 18) - injuryReduction);
                             const injType = injuryTypeMap[event.detail ?? ""] ?? "obecne";
                             const severity = days <= 7 ? "lehke" : days <= 14 ? "stredni" : "tezke";
                             injuryStmts.push(db.prepare(
@@ -832,8 +843,8 @@ export async function runScheduledMatches(
                 const repMap = new Map(repRows.results.map((r) => [r.id, r.reputation ?? 50]));
                 const homeRep = repMap.get(homeTeamId) ?? 50;
                 const awayRep = repMap.get(awayTeamId) ?? 50;
-                await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate, awayRep, false, weather);
-                await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate, homeRep, false, weather);
+                await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendanceWithOfficials, gameDate, awayRep, false, weather);
+                await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendanceWithOfficials, gameDate, homeRep, false, weather);
                 // Cash loan repayments — po všech ostatních match-day financích (na čerstvém budgetu)
                 await processCashLoanRepayment(db, homeTeamId, matchId, gameDate);
                 await processCashLoanRepayment(db, awayTeamId, matchId, gameDate);
@@ -1092,8 +1103,10 @@ export async function buildMatchPlayers(
                 teamId,
                 phase: "match_day"
             }));
-            const dayBeforeAbs = generateAbsences(dayBeforeRng, squadForAbsence, "day_before", district, options.friendlyMultiplier);
-            const matchDayAbs = generateAbsences(matchDayRng, squadForAbsence, "match_day", district, options.friendlyMultiplier);
+            const { fetchTeamCommuteMod } = await import("../events/match-absences");
+            const vanCommuteMod = await fetchTeamCommuteMod(db, teamId);
+            const dayBeforeAbs = generateAbsences(dayBeforeRng, squadForAbsence, "day_before", district, options.friendlyMultiplier, vanCommuteMod);
+            const matchDayAbs = generateAbsences(matchDayRng, squadForAbsence, "match_day", district, options.friendlyMultiplier, vanCommuteMod);
             const seen = new Set<number>();
             const allAbsences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
                 if (seen.has(a.playerIndex)) return false;

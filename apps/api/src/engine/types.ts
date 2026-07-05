@@ -56,6 +56,7 @@ export interface TeamSetup {
   formation?: string;      // např. "4-4-2", "3-4-3" — pro formationSynergy
   captainId?: number;      // engine ID kapitána (ovlivňuje morale)
   formationFamiliarity?: number;  // 0-100, sehranost zvolené formace
+  weatherResist?: number;  // 0-0.45 ze zimní výbavy — tlumí postih počasí (nastavuje simulateMatch)
 }
 
 export interface EquipmentMods {
@@ -64,6 +65,8 @@ export interface EquipmentMods {
   injurySeverityMod: number; // 0-0.3, reduces injury chance
   conditionDrainMod: number; // 0-0.24, reduces condition drain
   moraleMod: number;        // bonus morale at start
+  setPiecesMod?: number;    // tréninková zeď: bonus ke standardkám
+  weatherResistMod?: number; // zimní výbava: postih počasí ×(1 - mod)
 }
 
 export interface MatchConfig {

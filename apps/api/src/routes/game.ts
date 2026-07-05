@@ -1220,7 +1220,11 @@ gameRouter.post("/teams/:teamId/equipment/upgrade", async (c) => {
   const levels: Record<string, number> = {};
   for (const cat of CATEGORIES) levels[cat] = (equip[cat] as number) ?? 0;
 
-  const upgrades = getUpgradeOptions(levels, team.reputation, matchCount?.cnt ?? 0);
+  // Aktuální sezóna — bez ní by season-gate pro Lv3 (season 2+) padal i v pozdějších sezónách.
+  const upgradeSeason = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
+    .first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for equip upgrade", e); return null; });
+
+  const upgrades = getUpgradeOptions(levels, team.reputation, matchCount?.cnt ?? 0, mustSeason(upgradeSeason?.number));
   const upgrade = upgrades.find((u) => u.category === body.category);
   if (!upgrade) return c.json({ error: "No upgrade available" }, 400);
   if (upgrade.locked) return c.json({ error: upgrade.lockReason ?? "Zamčeno" }, 400);

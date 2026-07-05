@@ -76,10 +76,11 @@ export async function applyTrainingBoost(
   db: D1Database,
   teamId: string,
   formation: string,
+  extraBoost: number = 0, // chemie z vybavení (rozlišováky + taktická tabule)
 ): Promise<void> {
   const snap = await readFamiliarity(db, teamId);
   const next = { ...snap.formation };
-  next[formation] = clamp((next[formation] ?? 0) + TRAINING_BOOST);
+  next[formation] = clamp((next[formation] ?? 0) + TRAINING_BOOST + extraBoost);
   await db.prepare("UPDATE teams SET formation_familiarity = ? WHERE id = ?")
     .bind(JSON.stringify(next), teamId).run()
     .catch((e) => logger.warn({ module: "chemistry" }, "training boost", e));
