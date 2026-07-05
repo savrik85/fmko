@@ -86,7 +86,7 @@ function calcAskingPrice(rating: number, rng: Rng): number {
  */
 function calcOfferPrice(rating: number, age: number, rng: Rng): number {
   const marketValue = estimateMarketValue(rating, age);
-  const premium = rng.int(140, 165) / 100;
+  const premium = rng.int(155, 190) / 100; // lákavý přeplatek — většina nabídek nad 1,6× trhu
   return Math.round((marketValue * premium) / 100) * 100;
 }
 
@@ -317,7 +317,7 @@ async function maybeOfferForTeam(
     : teams.reduce((a, b) => (a.rating >= b.rating ? a : b));
   const virtualTeam: VirtualTeam = {
     ...baseTeam,
-    rating: Math.max(baseTeam.rating, Math.round(teamAvg) + 3 + rng.int(0, 9)),
+    rating: Math.max(baseTeam.rating, Math.round(teamAvg) + 8 + rng.int(0, 12)),
   };
 
   let target = rng.pick(candidates);

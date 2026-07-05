@@ -48,7 +48,7 @@ const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(ma
 export function computePlayerInterest(input: InterestInputs): InterestResult {
   const p = input.personality ?? {};
   const factors: InterestFactor[] = [];
-  let score = 30;
+  let score = 48; // většina hráčů zváží dobrou nabídku; brzdí je jen věrnost + spokojenost
 
   const add = (label: string, delta: number) => {
     if (Math.round(delta) === 0) return;
@@ -57,31 +57,29 @@ export function computePlayerInterest(input: InterestInputs): InterestResult {
   };
 
   // Atraktivita nabízejícího klubu vs. současný tým
-  const strengthDiff = clamp((input.offerTeamStrength - input.currentTeamStrength) * 1.2, -25, 25);
-  add(strengthDiff >= 0 ? "Silnější klub" : "Slabší klub", strengthDiff);
+  const strengthDiff = clamp((input.offerTeamStrength - input.currentTeamStrength) * 1.3, -20, 30);
+  add(strengthDiff >= 0 ? "Lepší klub" : "Slabší klub", strengthDiff);
 
-  // Spokojenost: morálka + vztah s trenérem
-  add("Morálka", (50 - input.morale) * 0.5);
+  // Peníze — na vesnici hlavní motiv, výrazný přeplatek táhne nejvíc.
+  const marketValue = estimateMarketValue(input.overallRating, input.age);
+  if (input.offerAmount >= marketValue * 1.6) add("Balík peněz", 22);
+  else if (input.offerAmount >= marketValue * 1.35) add("Lákavé peníze", 15);
+  else if (input.offerAmount >= marketValue * 1.1) add("Slušné peníze", 8);
+  else if (input.offerAmount > 0 && input.offerAmount <= marketValue * 0.7) add("Urážlivě málo", -6);
+
+  // Spokojenost brzdí — jen opravdu spokojený a spřízněný hráč zůstane
+  add("Morálka", (50 - input.morale) * 0.4);
   add("Vztah s trenérem", (50 - input.coachRelationship) * 0.3);
+  add("Vztah k obci", (50 - (p.patriotism ?? 50)) * 0.4);
 
   // Herní vytížení
   if (input.recentMinutes < 90) add("Skoro nehraje", 15);
   else if (input.recentMinutes < 180) add("Hraje málo", 8);
-  else if (input.recentMinutes > 300) add("Hraje pravidelně", -8);
+  else if (input.recentMinutes > 300) add("Hraje pravidelně", -5);
 
-  // Vztah k vesnici/klubu
-  add("Vztah k obci", (50 - (p.patriotism ?? 50)) * 0.35);
-
-  // Peníze a ambice — nabídka vs. tržní hodnota hráče (rating + věk).
-  // Na vesnici jsou peníze hlavní motiv — výrazný přeplatek táhne hodně.
-  const marketValue = estimateMarketValue(input.overallRating, input.age);
-  if (input.offerAmount >= marketValue * 1.5) add("Balík peněz", 12);
-  else if (input.offerAmount >= marketValue * 1.3) add("Lákavé peníze", 7);
-  else if (input.offerAmount > 0 && input.offerAmount <= marketValue * 0.7) add("Urážlivě málo", -4);
-  if ((p.workRate ?? 50) > 60 && input.age < 28) add("Ambice", 5);
-
-  // Věk a pohodlí
-  if (input.age > 32) add("Zvyk a věk", -8);
+  // Ambice / věk / povaha
+  if ((p.workRate ?? 50) > 60 && input.age < 28) add("Ambice", 6);
+  if (input.age > 33) add("Zvyk a věk", -8);
   if ((p.discipline ?? 50) < 35) add("Nestálost", 5);
 
   score = clamp(Math.round(score), 0, 100);
