@@ -6388,6 +6388,25 @@ gameRouter.post("/admin/generate-ai-offers", async (c) => {
   return c.json({ ok: true, expired, created });
 });
 
+// POST /api/admin/backfill-departed-avatars — doplní náhodný obličej všem archivovaným
+// hráčům bez avataru (prodaní/odešlí před migrací 0115), aby v souhrnu přestupů nebyli bez ksichtu.
+gameRouter.post("/admin/backfill-departed-avatars", async (c) => {
+  const { generatePlayerFace } = await import("./teams");
+  const rows = await c.env.DB.prepare(
+    "SELECT id, age FROM departed_players WHERE avatar IS NULL OR avatar = '' OR avatar = '{}'"
+  ).all<{ id: string; age: number }>().catch((e) => { logger.warn({ module: "game" }, "load departed for avatar backfill", e); return { results: [] as { id: string; age: number }[] }; });
+
+  const stmts = rows.results.map((r) => {
+    const face = generatePlayerFace({ age: (r.age as number) ?? 25, bodyType: "normal" });
+    return c.env.DB.prepare("UPDATE departed_players SET avatar = ? WHERE id = ?").bind(JSON.stringify(face), r.id);
+  });
+  // Dávkovat po 50 (limit D1 batch)
+  for (let i = 0; i < stmts.length; i += 50) {
+    await c.env.DB.batch(stmts.slice(i, i + 50)).catch((e) => logger.warn({ module: "game" }, "avatar backfill batch", e));
+  }
+  return c.json({ ok: true, updated: stmts.length });
+});
+
 // POST /api/admin/cup/create — vytvoří pohár pro aktuální sezónu.
 gameRouter.post("/admin/cup/create", async (c) => {
   const { createCup } = await import("../cup/cup");
