@@ -302,8 +302,13 @@ async function maybeOfferForTeam(
   ).bind(targetTeamId).all().catch((e) => { logger.warn({ module: "virtual-teams" }, "fetch players", e); return { results: [] }; });
   if (players.results.length < 5) return 0; // too small squad, don't poach
 
-  const topCount = Math.max(2, Math.ceil(players.results.length * 0.15));
-  const candidates = players.results.slice(0, topCount);
+  // Brankáři mají nafouknutý overall_rating (goalkeeping táhne průměr nahoru), takže by jinak
+  // pořád vedli žebříček a CPU by lovila i náhradní gólmany. Amatérský klub jde po hráčích v poli.
+  const outfield = players.results.filter((p) => p.position !== "GK");
+  if (outfield.length < 4) return 0;
+
+  const topCount = Math.max(2, Math.ceil(outfield.length * 0.15));
+  const candidates = outfield.slice(0, topCount);
 
   // Preferovat hráče, který o přestup stojí: max 2 pokusy, první se zájmem ≥ 1 vyhrává
   const { computeInterestForOffer } = await import("./player-interest");
