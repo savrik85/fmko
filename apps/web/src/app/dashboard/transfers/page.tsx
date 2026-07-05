@@ -423,6 +423,8 @@ interface TransferOffer {
   offered_first_name?: string | null;
   offered_last_name?: string | null;
   offered_position?: string | null;
+  is_virtual?: number; // 1 = nabídka od virtuálního (počítačového) klubu
+  player_interest?: number | null; // 0-3 zájem hráče o přestup
 }
 
 type FASortKey = "rating" | "wage" | "age" | "distance";
@@ -1856,6 +1858,9 @@ export default function TransfersPage() {
                         })()}
                         <div className="text-sm">
                           <span className="font-heading font-bold">{o.from_team_name}</span>
+                          {!!o.is_virtual && (
+                            <span className="ml-1.5 inline-block align-middle text-[10px] font-heading font-bold uppercase tracking-wide bg-ink/80 text-white rounded px-1.5 py-0.5">Cizí klub</span>
+                          )}
                           <span className="text-muted"> nabízí </span>
                           {o.offer_type === "loan" ? (
                             <span className="text-yellow-600 font-heading font-bold">Hostování{o.loan_duration ? ` (${o.loan_duration} dní)` : ""}{(o.counter_amount ?? o.offer_amount) > 0 ? ` za ${formatCZK(o.counter_amount ?? o.offer_amount)}` : " zdarma"}</span>
@@ -1893,7 +1898,7 @@ export default function TransfersPage() {
                         }} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                           Přijmout
                         </button>
-                        <button onClick={() => {
+                        {!o.is_virtual && <button onClick={() => {
                           const currentAmount = o.counter_amount ?? o.offer_amount;
                           setPriceDialog({
                             title: `Protinabídka za ${o.first_name} ${o.last_name}`,
@@ -1912,7 +1917,7 @@ export default function TransfersPage() {
                           });
                         }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
                           Protinabídka
-                        </button>
+                        </button>}
                         <button onClick={async () => {
                           if (!teamId) return;
                           if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }), "Odmítnutí nabídky se nezdařilo")) await refresh();

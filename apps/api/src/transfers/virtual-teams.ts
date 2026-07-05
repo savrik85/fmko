@@ -253,17 +253,13 @@ export async function generateAiOffers(
 
   const offerId = crypto.randomUUID();
   await db.prepare(
-    `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, message, expires_at, created_at)
-     VALUES (?, ?, 'virtual_ai', ?, ?, 'transfer', 'pending', ?, datetime('now', '+7 days'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
+    `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, message, virtual_team_data, expires_at, created_at)
+     VALUES (?, ?, 'virtual_ai', ?, ?, 'transfer', 'pending', ?, ?, datetime('now', '+7 days'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
   ).bind(
-    offerId, target.id, targetTeamId, offerPrice, `Nabídka od ${virtualTeam.name}`,
+    offerId, target.id, targetTeamId, offerPrice,
+    `Máme vážný zájem o vašeho hráče. Nabízíme ${offerPrice.toLocaleString("cs")} Kč, peníze máme připravené.`,
+    JSON.stringify({ name: virtualTeam.name, city: virtualTeam.city, district: virtualTeam.district, rating: virtualTeam.rating }),
   ).run();
-
-  // Store virtual team info in offer metadata for FE display
-  await db.prepare(
-    "UPDATE transfer_offers SET message = ? WHERE id = ?"
-  ).bind(JSON.stringify({ teamName: virtualTeam.name, city: virtualTeam.city, price: offerPrice }), offerId).run()
-    .catch((e) => logger.warn({ module: "virtual-teams" }, "update offer metadata", e));
 
   // Player message in Kabina
   const kabinaConv = await db.prepare(

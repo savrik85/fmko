@@ -30,6 +30,8 @@ interface OfferDetail {
     created_at: string;
     resolved_at: string | null;
     offered_player_id: string | null;
+    is_virtual?: boolean;
+    player_interest?: number | null;
   };
   role: "buyer" | "seller";
   on_turn: boolean;
@@ -275,6 +277,7 @@ export default function OfferDetailPage() {
             currentAmount={currentAmount}
             defaultCounter={defaultCounterAmount}
             canAfford={canAfford}
+            hideCounter={!!offer.is_virtual}
             onAccept={accept}
             onCounter={counter}
             onReject={reject}

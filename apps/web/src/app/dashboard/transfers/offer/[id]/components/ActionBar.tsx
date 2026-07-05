@@ -7,7 +7,7 @@ type DialogKind = "accept" | "counter" | "reject" | null;
 export function ActionBar({
   onAccept, onCounter, onReject,
   currentAmount, defaultCounter,
-  canAfford, waiting, role,
+  canAfford, waiting, role, hideCounter,
 }: {
   onAccept: (message: string) => Promise<void>;
   onCounter: (amount: number, message: string) => Promise<void>;
@@ -17,6 +17,7 @@ export function ActionBar({
   canAfford: boolean;
   waiting: boolean;
   role: "buyer" | "seller";
+  hideCounter?: boolean; // virtuální klub o ceně nejedná
 }) {
   const [dialog, setDialog] = useState<DialogKind>(null);
 
@@ -43,12 +44,14 @@ export function ActionBar({
           >
             Přijmout {currentAmount > 0 ? `${currentAmount.toLocaleString("cs")} Kč` : "zdarma"}
           </button>
+          {!hideCounter && (
           <button
             onClick={() => setDialog("counter")}
             className="flex-1 sm:flex-none min-w-[120px] px-4 py-2.5 rounded-lg font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors"
           >
             Protinabídka
           </button>
+          )}
           <button
             onClick={() => setDialog("reject")}
             className="flex-1 sm:flex-none min-w-[120px] px-4 py-2.5 rounded-lg font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
