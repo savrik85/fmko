@@ -177,14 +177,18 @@ export default function FriendlyPage() {
         {!data.canChallenge ? (
           <div className="text-sm text-muted">Cooldown: ještě {data.cooldownDaysLeft} {data.cooldownDaysLeft === 1 ? "den" : "dny"}</div>
         ) : (() => {
-          // Zápas se hraje v 18:00 v den PŘIJETÍ výzvy; přijetí po 19:00 → hraje se další den
+          // Zápas se hraje v 18:00 v den PŘIJETÍ výzvy; přijetí po 19:00 → hraje se další den.
+          // Když už čeká jiná výzva / domluvený zápas, další přátelák přijde na řadu až následující volný den.
           const pragueHour = Number(new Intl.DateTimeFormat("cs", { hour: "numeric", hour12: false, timeZone: "Europe/Prague" }).format(new Date()));
-          const slotLabel = pragueHour >= 19 ? "zítra" : "dnes";
+          const hasOpenChallenge = data.incoming.length > 0
+            || data.outgoing.some((ch) => ch.status === "pending" || (ch.status === "accepted" && ch.matchStatus !== "simulated"));
+          const slotLabel = hasOpenChallenge ? "další volný den" : (pragueHour >= 19 ? "zítra 18:00" : "dnes 18:00");
           return (
           <div className="space-y-2">
             <p className="text-sm text-muted leading-relaxed">
-              Zápas se hraje v 18:00 v den, kdy soupeř výzvu přijme (přijetí po 19:00 = hraje se další den).
-              Po odehraném přáteláku je 3denní pauza.
+              {hasOpenChallenge
+                ? "Už máš rozjednanou výzvu — ta má přednost. Další domluvený přátelák se odehraje nejbližší volný den po ní."
+                : "Zápas se hraje v 18:00 v den, kdy soupeř výzvu přijme (přijetí po 19:00 = hraje se další den). Po odehraném přáteláku je 3denní pauza."}
             </p>
             {data.teams.map((t) => (
               <Card key={t.id}>
@@ -196,7 +200,7 @@ export default function FriendlyPage() {
                     </div>
                     <button onClick={() => sendChallenge(t.id)} disabled={sending === t.id}
                       className="px-3 py-1.5 bg-pitch-500 text-white rounded-lg font-heading font-bold text-xs disabled:opacity-50 shrink-0">
-                      Vyzvat ⚽ · {slotLabel} 18:00
+                      Vyzvat ⚽ · {slotLabel}
                     </button>
                   </div>
                 </CardBody>
