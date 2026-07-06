@@ -2372,6 +2372,10 @@ gameRouter.post("/game/seed-market", async (c) => {
   const district = league.district;
   const rng = createRng(cryptoSeed());
 
+  // Rozumné horní meze — ruční admin doplnění, ne hromadná generace (ochrana DB/CPU).
+  const wantFreeAgents = Math.min(Math.max(0, body.freeAgents ?? 0), 30);
+  const wantListings = Math.min(Math.max(0, body.listings ?? 0), 30);
+
   // Herní datum ligy (pro expiraci volných hráčů v herním čase)
   const gd = await c.env.DB.prepare("SELECT game_date FROM teams WHERE league_id = ? AND game_date IS NOT NULL LIMIT 1")
     .bind(body.leagueId).first<{ game_date: string }>().catch((e) => { logger.warn({ module: "game" }, "seed-market game_date lookup", e); return null; });
@@ -2380,24 +2384,24 @@ gameRouter.post("/game/seed-market", async (c) => {
   const result: Record<string, unknown> = { district };
 
   // 1) Volní hráči — obnova (smazat nejslabší) + doplnění
-  if (body.freeAgents && body.freeAgents > 0) {
+  if (wantFreeAgents > 0) {
     const { generateFreeAgentsForDistrict } = await import("../transfers/free-agent-pool");
     let removed = 0;
     if (body.replaceFreeAgents) {
       const del = await c.env.DB.prepare(
         "DELETE FROM free_agents WHERE id IN (SELECT id FROM free_agents WHERE district = ? ORDER BY overall_rating ASC LIMIT ?)"
-      ).bind(district, body.freeAgents).run().catch((e) => { logger.warn({ module: "game" }, "seed-market delete weak FA", e); return null; });
+      ).bind(district, wantFreeAgents).run().catch((e) => { logger.warn({ module: "game" }, "seed-market delete weak FA", e); return null; });
       removed = del?.meta?.changes ?? 0;
     }
-    const gen = await generateFreeAgentsForDistrict(c.env.DB, rng, district, body.freeAgents, gameDate);
+    const gen = await generateFreeAgentsForDistrict(c.env.DB, rng, district, wantFreeAgents, gameDate);
     result.freeAgents = { removed, generated: gen };
   }
 
   // 2) Trh — force AI listingy (obejde strop 5)
-  if (body.listings && body.listings > 0) {
+  if (wantListings > 0) {
     const { generateAiListings } = await import("../transfers/virtual-teams");
     let made = 0;
-    for (let i = 0; i < body.listings; i++) {
+    for (let i = 0; i < wantListings; i++) {
       made += await generateAiListings(c.env.DB, district, body.leagueId, rng, { force: true });
     }
     result.listings = made;
