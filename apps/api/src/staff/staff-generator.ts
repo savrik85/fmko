@@ -74,7 +74,7 @@ const DESC_BY_PROFESSION: Record<StaffRole, string[]> = {
   ekonom: ["účetní, co ušetří na každé faktuře", "excel má radši než fotbal", "vyjedná slevu i u sponzora"],
 };
 
-/** Generuje facesjs faceConfig (kompat. s <FaceAvatar>). Ženy: ženský vlas, bez vousů. */
+/** Generuje facesjs faceConfig (kompat. s <FaceAvatar>). Ženy dostanou ženské hlavy/oči/obočí/vlasy. */
 export function generateStaffFace(rng: Rng, isFemale: boolean, age: number): Record<string, unknown> {
   const pick = <T,>(arr: T[]): T => arr[rng.int(0, arr.length - 1)];
   const r01 = () => rng.int(0, 100) / 100;
@@ -84,30 +84,36 @@ export function generateStaffFace(rng: Rng, isFemale: boolean, age: number): Rec
   const hairColors = young
     ? ["#3b2214", "#5b3a1a", "#8b6e3e", "#2a1a0e", "#6b4a2a"]
     : ["#8e8e8e", "#b0b0b0", "#5b3a1a", "#9c9c9c", "#c8c8c8"];
-  const headIds = ["head1", "head3", "head6", "head8", "head9", "head10", "head11", "head13"];
-  const eyeIds = ["eye1", "eye3", "eye6", "eye9", "eye11", "eye13"];
+
   const noseIds = ["nose1", "nose2", "nose6", "nose9", "nose13"];
   const mouthIds = ["mouth", "mouth2", "mouth3", "smile3", "straight"];
   const earIds = ["ear1", "ear2", "ear3"];
-  const eyebrowIds = ["eyebrow2", "eyebrow3", "eyebrow7", "eyebrow10", "eyebrow14"];
 
-  const femaleHair = ["female1", "female2", "female3", "female4", "female6", "female7", "female8", "female9", "female10", "female12", "long", "curly", "curly2", "shaggy1"];
+  // Ženské vs mužské části (dle facesjs gender palety)
+  const headIds = isFemale ? ["female1", "female2", "female3"] : ["head1", "head3", "head6", "head8", "head9", "head11", "head13"];
+  const eyeIds = isFemale
+    ? ["female1", "female2", "female5", "female6", "female8", "female9", "female11", "female12"]
+    : ["eye1", "eye3", "eye6", "eye9", "eye11"];
+  const eyebrowIds = isFemale
+    ? ["female1", "female2", "female3", "female5", "female7", "female8"]
+    : ["eyebrow2", "eyebrow3", "eyebrow7", "eyebrow10", "eyebrow14"];
+  const femaleHair = ["female1", "female2", "female3", "female4", "female6", "female7", "female8", "female10", "female12", "longHair", "curly", "curly2", "shaggy1"];
   const maleHair = young
-    ? ["short-fade", "crop-fade2", "spike4", "short3", "middle-part-short"]
+    ? ["short-fade", "crop-fade2", "spike4", "short3", "messy-short"]
     : ["short-fade", "crop-fade2", "short-bald", "short3"];
 
   const skinColor = pick(skinColors);
   const maleBald = !isFemale && !young && r01() < 0.35;
 
   return {
-    fatness: 0.3 + r01() * 0.4,
+    fatness: isFemale ? 0.25 + r01() * 0.3 : 0.3 + r01() * 0.4,
     teamColors: ["#555555", "#FFFFFF", "#333333"],
     hairBg: { id: "none" },
-    body: { id: isFemale ? "body4" : pick(["body", "body2", "body3"]), color: skinColor, size: 0.95 + r01() * 0.1 },
+    body: { id: isFemale ? pick(["body2", "body4"]) : pick(["body", "body2", "body3"]), color: skinColor, size: (isFemale ? 0.85 : 0.95) + r01() * 0.1 },
     jersey: { id: "jersey" },
     ear: { id: pick(earIds), size: 0.6 + r01() * 0.4 },
     head: { id: pick(headIds), shave: "rgba(0,0,0,0)", fatness: 0.3 + r01() * 0.35 },
-    eyeLine: { id: pick(["line1", "line2", "line3"]) },
+    eyeLine: { id: "none" },
     smileLine: { id: pick(["line1", "line2"]), size: 0.9 + r01() * 0.3 },
     miscLine: { id: "none" },
     facialHair: { id: !isFemale && r01() < 0.4 ? pick(["goatee3", "goatee4", "fullgoatee2", "mustache"]) : "none" },
@@ -116,7 +122,7 @@ export function generateStaffFace(rng: Rng, isFemale: boolean, age: number): Rec
     hair: { id: isFemale ? pick(femaleHair) : (maleBald ? "short-bald" : pick(maleHair)), color: pick(hairColors), flip: r01() < 0.5 },
     mouth: { id: pick(mouthIds), flip: r01() < 0.5 },
     nose: { id: pick(noseIds), flip: r01() < 0.5, size: 0.7 + r01() * 0.4 },
-    glasses: { id: r01() < 0.2 ? "glasses1" : "none" },
+    glasses: { id: r01() < 0.15 ? "glasses1" : "none" },
     accessories: { id: "none" },
   };
 }
@@ -214,8 +220,15 @@ export function generateStaffCandidate(
   };
 }
 
-const POOL_TARGET = 18; // cíl volných kandidátů na okres
-const LISTED_WEEKS = 3; // za jak dlouho kandidát z poolu zmizí
+// Cíl volných kandidátů škáluje s počtem lidských týmů v okrese (sdílený trh — víc týmů = víc lidí).
+const POOL_PER_TEAM = 5;   // kandidátů na lidský tým v okrese
+const POOL_MIN = 24;       // minimum i pro malý okres
+const POOL_MAX = 200;      // strop
+const LISTED_WEEKS = 3;    // za jak dlouho kandidát z poolu zmizí
+
+function poolTargetFor(humanTeams: number): number {
+  return Math.max(POOL_MIN, Math.min(POOL_MAX, humanTeams * POOL_PER_TEAM));
+}
 
 /**
  * Údržba poolu zaměstnanců: expirace starých, doplnění nových — per okres s lidským týmem.
@@ -227,27 +240,29 @@ export async function maintainStaffPool(db: D1Database, rng: Rng, gameDate: Date
     .bind(gameDate.toISOString()).run()
     .catch((e) => logger.warn({ module: "staff-pool" }, "expire", e));
 
-  // 2. Okresy s lidským týmem
+  // 2. Okresy s lidským týmem + počet lidských týmů (pro škálování cíle)
   const districts = await db.prepare(
-    "SELECT DISTINCT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id != 'ai'"
-  ).all().catch((e) => { logger.warn({ module: "staff-pool" }, "districts", e); return { results: [] as unknown[] }; });
+    "SELECT v.district, COUNT(*) as teams FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id != 'ai' GROUP BY v.district"
+  ).all<{ district: string; teams: number }>()
+    .catch((e) => { logger.warn({ module: "staff-pool" }, "districts", e); return { results: [] as { district: string; teams: number }[] }; });
 
   const listedUntil = new Date(gameDate.getTime() + LISTED_WEEKS * 7 * 24 * 3600 * 1000).toISOString();
   let generated = 0;
 
-  for (const row of districts.results as Array<{ district: string }>) {
+  for (const row of districts.results) {
     const district = row.district;
+    const target = poolTargetFor(row.teams ?? 1);
 
     const poolCount = await db.prepare(
       "SELECT COUNT(*) as cnt FROM staff_members WHERE district = ? AND team_id IS NULL"
     ).bind(district).first<{ cnt: number }>()
       .catch((e) => { logger.warn({ module: "staff-pool" }, "count", e); return { cnt: 0 }; });
 
-    const missing = POOL_TARGET - (poolCount?.cnt ?? 0);
+    const missing = target - (poolCount?.cnt ?? 0);
     if (missing <= 0) continue;
 
-    // Doplnit postupně (0–3/den), ne skokově celý pool naráz.
-    const count = Math.min(missing, rng.int(1, 3));
+    // Doplnit postupně (nárazově ne celý pool), ale svižně — nahradit najaté + růst k cíli.
+    const count = Math.min(missing, rng.int(4, 10));
     const districtData = await getDistrictDataFromDB(db, district);
 
     for (let i = 0; i < count; i++) {
