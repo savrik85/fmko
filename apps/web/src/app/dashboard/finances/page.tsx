@@ -78,9 +78,10 @@ const TXN_ICONS: Record<string, string> = {
   transfer_fee: "🤝", transfer_income: "💵", signing_fee: "✍",
   loan_fee: "📄", loan_income: "📄", transfer_admin_fee: "🗂",
   concession_wholesale: "📦", concession_income_external: "🏪", concession_income_self: "🍺",
-  promotional_campaign: "📢",
-  cash_loan_disbursement: "💳", cash_loan_repayment: "💳",
-  manager_social: "🍻", manager_bet_win: "🍺", manager_bet_loss: "🍺",
+  promotional_campaign: "📢", stadium_visual: "🎨", bus_subsidy: "🚌",
+  cash_loan_disbursement: "💳", cash_loan_repayment: "💳", village_brigade: "🔨",
+  manager_social: "🍻", manager_bet_win: "🍺", manager_bet_loss: "🍺", cup_prize: "🏅",
+  staff_wage: "👔", staff_signing: "✍", course_fee: "🎓",
   other: "📋",
 };
 
@@ -93,9 +94,10 @@ const TXN_LABELS: Record<string, string> = {
   transfer_fee: "Přestupová cena", transfer_income: "Prodej hráče", signing_fee: "Podpisový bonus",
   loan_fee: "Hostování — platba", loan_income: "Hostování — příjem", transfer_admin_fee: "Přestupní poplatek",
   concession_wholesale: "Nákup zboží", concession_income_external: "Pronájem bufetu", concession_income_self: "Tržby z občerstvení",
-  promotional_campaign: "Propagace zápasu",
-  cash_loan_disbursement: "Půjčka — přijatá", cash_loan_repayment: "Splátka půjčky",
-  manager_social: "Trenérská diplomacie", manager_bet_win: "Vyhraná sázka", manager_bet_loss: "Prohraná sázka",
+  promotional_campaign: "Propagace zápasu", stadium_visual: "Vzhled stadionu", bus_subsidy: "Autobus fanoušků",
+  cash_loan_disbursement: "Půjčka — přijatá", cash_loan_repayment: "Splátka půjčky", village_brigade: "Brigáda v obci",
+  manager_social: "Trenérská diplomacie", manager_bet_win: "Vyhraná sázka", manager_bet_loss: "Prohraná sázka", cup_prize: "Odměna z poháru",
+  staff_wage: "Mzdy zaměstnanců", staff_signing: "Podpisné zaměstnance", course_fee: "Kurz zaměstnance",
   other: "Ostatní",
 };
 

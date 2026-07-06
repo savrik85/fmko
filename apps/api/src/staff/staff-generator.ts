@@ -173,19 +173,31 @@ export function generateStaffCandidate(
     : prof === "sef_fanklubu" ? rng.int(24, 58)
     : rng.int(24, 63);
 
-  // Atributy: baseline nízké, primární profese vysoká, sekundární střední.
+  // Atributy: okresní úroveň — většina průměrných, špička vzácně.
+  // Baseline (ostatní atributy) nízké.
   const attrs: Record<string, number> = {
-    coaching: rng.int(3, 11),
-    medicine: rng.int(3, 11),
-    maintenance: rng.int(3, 11),
-    judgement: rng.int(3, 11),
-    communication: rng.int(3, 11),
-    work_rate: rng.int(4, 12),
-    charm: rng.int(3, 12),
+    coaching: rng.int(2, 9),
+    medicine: rng.int(2, 9),
+    maintenance: rng.int(2, 9),
+    judgement: rng.int(2, 9),
+    communication: rng.int(2, 9),
+    work_rate: rng.int(3, 10),
+    charm: rng.int(2, 10),
   };
   const def = ROLE_DEFS[prof];
-  attrs[def.primary] = rng.int(13, 18);
-  attrs[def.secondary] = clamp(Math.max(attrs[def.secondary], rng.int(10, 16)), 1, 20);
+
+  // Kvalita v profesi — tier roll (většina slabší, málokdo špička).
+  const q = rng.int(0, 100);
+  const [pLo, pHi] = q < 50 ? [6, 10]   // 50 % průměrní
+    : q < 80 ? [9, 13]                    // 30 % slušní
+    : q < 95 ? [12, 15]                   // 15 % dobří
+    : [15, 19];                           // 5 % špička
+  attrs[def.primary] = rng.int(pLo, pHi);
+  // Sekundární o kus níž než primární (realistické), ale ne pod baseline.
+  attrs[def.secondary] = clamp(
+    Math.max(attrs[def.secondary], attrs[def.primary] - rng.int(2, 6)),
+    2, 20,
+  );
 
   // Efektivita v profesi (best-role) pro nacenění mzdy.
   const bestEff = (2 * attrs[def.primary] + attrs[def.secondary]) / 3;
