@@ -311,7 +311,7 @@ export async function processMatchDayFinances(
     .bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "finance" }, "query stadium", e); return null; });
   const facilities: Record<string, number> = {};
   if (stadiumRow) {
-    for (const key of ["changing_rooms", "showers", "refreshments", "stands", "parking", "fence"]) {
+    for (const key of ["changing_rooms", "showers", "refreshments", "stands", "parking", "fence", "roof", "ultras_stand", "toilets"]) {
       facilities[key] = (stadiumRow[key] as number) ?? 0;
     }
   }
@@ -477,6 +477,12 @@ export async function processMatchDayFinances(
     if (isHome && fansCtx.concessionMode === "self" && staffFx.concessionSatBonus > 0) {
       satCalc.delta = Math.max(-15, Math.min(15, satCalc.delta + staffFx.concessionSatBonus));
       satCalc.reasons.push(`Usměvavá obsluha +${staffFx.concessionSatBonus}`);
+    }
+
+    // Sociálky: čisté záchodky zvedají spokojenost fanoušků (jen doma)
+    if (isHome && facilityFx.matchSatisfactionBonus > 0) {
+      satCalc.delta = Math.max(-15, Math.min(15, satCalc.delta + facilityFx.matchSatisfactionBonus));
+      satCalc.reasons.push(`Čisté sociálky +${facilityFx.matchSatisfactionBonus}`);
     }
 
     // Načíst jméno soupeře pro archivaci v historii

@@ -74,6 +74,9 @@ const FACILITY_LABELS: Record<string, string> = {
   showers: "Sprchy",
   refreshments: "Občerstvení",
   stands: "Tribuny",
+  roof: "Zastřešení tribun",
+  ultras_stand: "Sektor kotle",
+  toilets: "Sociálky",
   parking: "Parkoviště",
   fence: "Oplocení",
 };
@@ -86,6 +89,9 @@ const UPGRADE_COSTS: Record<string, number[]> = {
   showers: [0, 18000, 60000, 160000],
   refreshments: [0, 5000, 110000, 280000],
   stands: [0, 55000, 170000, 450000],
+  roof: [0, 30000, 90000, 230000],
+  ultras_stand: [0, 22000, 70000, 175000],
+  toilets: [0, 12000, 40000, 100000],
   parking: [0, 20000, 60000, 150000],
   fence: [0, 15000, 50000, 130000],
 };
@@ -95,6 +101,9 @@ const UPGRADE_EFFECTS: Record<string, string[]> = {
   showers: ["", "+2 regenerace kondice/den", "+4 regenerace kondice/den", "+6 regenerace kondice/den"],
   refreshments: ["", "Umožní vlastní provoz občerstvení", "Vyšší pronájem pro externí provozovatele", "Prémiové zázemí, bez výdajů za občerstvení po zápase"],
   stands: ["", "+50 kapacita", "+150 kapacita", "+300 kapacita"],
+  roof: ["", "V ošklivém počasí odejde míň lidí", "Solidní zastřešení — počasí moc neřeší", "Kompletní střecha — na počasí kašlou"],
+  ultras_stand: ["", "Hlasitější kotel — mírná výhoda doma", "Bubny a vlajky — větší výhoda doma", "Peklo pro soupeře — velká domácí výhoda"],
+  toilets: ["", "Kadibudky místo kopřiv — +spokojenost", "Slušné záchodky — víc spokojenosti", "Čisté sociálky s teplou vodou — fanoušci spokojení"],
   parking: ["", "+5% návštěvnost", "+10% návštěvnost", "+15% návštěvnost"],
   fence: ["", "Víc lidí zaplatí vstupné", "Platí všichni diváci", "Platí všichni, prémiový stadion"],
 };
@@ -150,6 +159,12 @@ export function getUpgradeOptions(
       lockReason = `Dostupné od sezóny ${req.season} (aktuální: ${currentSeason})`;
     }
 
+    // Zastřešení tribun vyžaduje aspoň základní tribuny (co jinak zastřešit?).
+    if (key === "roof" && (stadium.stands ?? 0) < 1) {
+      locked = true;
+      lockReason = "Nejdřív postav aspoň základní tribuny";
+    }
+
     options.push({
       facility: key,
       label,
@@ -175,6 +190,10 @@ export interface StadiumFacilityEffects {
   capacityBonus: number;          // tribuny: +kapacita
   ticketPriceBonus: number;       // oplocení L2+: % bonus na cenu vstupného
   fencePayingRatio: number;       // oplocení: podíl diváků co reálně zaplatí (L0 = 0.3, L1+ = 1.0)
+  weatherAttendanceShield: number; // zastřešení: podíl počasového postihu návštěvy, který se zruší (0.0-1.0)
+  homeAdvantageBonus: number;     // sektor kotle: + k domácí výhodě v zápase
+  homeCrowdMoraleBonus: number;   // sektor kotle: + morálka domácích od kotle
+  matchSatisfactionBonus: number; // sociálky: + spokojenost fanoušků po domácím zápase
 }
 
 export function calculateFacilityEffects(facilities: Record<string, number>): StadiumFacilityEffects {
@@ -184,6 +203,9 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
   const st = facilities.stands ?? 0;
   const pa = facilities.parking ?? 0;
   const fe = facilities.fence ?? 0;
+  const ro = facilities.roof ?? 0;
+  const ul = facilities.ultras_stand ?? 0;
+  const to = facilities.toilets ?? 0;
 
   return {
     homeMoraleBonus: [0, 3, 5, 8][cr] ?? 0,
@@ -195,6 +217,10 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
     capacityBonus: [0, 50, 150, 300][st] ?? 0,
     ticketPriceBonus: [0, 0, 0.10, 0.20][fe] ?? 0,
     fencePayingRatio: [0.3, 0.65, 1.0, 1.0][fe] ?? 0.3,
+    weatherAttendanceShield: [0, 0.35, 0.65, 1.0][ro] ?? 0,
+    homeAdvantageBonus: [0, 0.015, 0.03, 0.05][ul] ?? 0,
+    homeCrowdMoraleBonus: [0, 1, 2, 3][ul] ?? 0,
+    matchSatisfactionBonus: [0, 1, 2, 3][to] ?? 0,
   };
 }
 

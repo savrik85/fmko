@@ -31,6 +31,7 @@ interface Customization {
   accentColor: string | null;
   scoreboardLevel: number;
   flagSize: number;
+  ultrasText: string | null;
 }
 
 interface StadiumData {

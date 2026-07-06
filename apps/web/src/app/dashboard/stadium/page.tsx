@@ -60,6 +60,7 @@ interface Customization {
   accentColor: string | null;
   scoreboardLevel: number;
   flagSize: number;
+  ultrasText: string | null;
 }
 
 interface VisualUpgrade {
@@ -88,6 +89,9 @@ const FACILITY_ICONS: Record<string, string> = {
   showers: "🚿",
   refreshments: "🍺",
   stands: "🏟",
+  roof: "☂️",
+  ultras_stand: "🥁",
+  toilets: "🚻",
   parking: "🚗",
   fence: "🏗",
 };
@@ -97,6 +101,9 @@ const FACILITY_LABELS: Record<string, string> = {
   showers: "Sprchy",
   refreshments: "Občerstvení",
   stands: "Tribuny",
+  roof: "Zastřešení tribun",
+  ultras_stand: "Sektor kotle",
+  toilets: "Sociálky",
   parking: "Parkoviště",
   fence: "Oplocení",
 };
@@ -106,6 +113,9 @@ const FACILITY_DESCRIPTIONS: Record<string, string[]> = {
   showers: ["Hadice na dvoře", "Jedna sprcha se studenou vodou", "Sprchy s teplou vodou", "Sprchy s masážními tryskami"],
   refreshments: ["Žádné", "Pivní stan z bazaru", "Karavan", "Hospůdka"],
   stands: ["Diváci stojí kolem hřiště", "Pár laviček", "Dřevěná tribuna se střechou", "Betonová tribuna se sedačkami"],
+  roof: ["Bez střechy — v dešti se to vylidní", "Plachta nad lavičkami", "Plechová stříška nad tribunou", "Kompletní zastřešení tribun"],
+  ultras_stand: ["Bez kotle", "Pár bubeníků za brankou", "Vlajkový sektor s bubny", "Peklo — chorály slyšet do vedlejší vsi"],
+  toilets: ["Kopřivy za střídačkou", "Kadibudka", "Zděné záchodky", "Čisté sociálky s teplou vodou"],
   parking: ["Žádné", "Louka vedle hřiště", "Štěrkové parkoviště", "Asfaltové parkoviště s čarami"],
   fence: ["Žádné", "Provizorní páska", "Drátěný plot", "Zděné oplocení s branami"],
 };
@@ -154,6 +164,7 @@ export default function StadiumPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("3d");
   const [openPicker, setOpenPicker] = useState<keyof Customization | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [ultrasDraft, setUltrasDraft] = useState<string | null>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -398,6 +409,34 @@ export default function StadiumPage() {
                 </div>
               );
             })()}
+
+            {/* Nápis v kotli — jen když je postavený sektor kotle */}
+            {(stadium.facilities.ultras_stand ?? 0) > 0 && (
+              <div className="pt-2 border-t border-gray-50">
+                <div className="text-xs text-muted font-heading uppercase mb-1.5">Nápis v kotli</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    maxLength={22}
+                    value={ultrasDraft ?? stadium.customization.ultrasText ?? ""}
+                    onChange={(e) => setUltrasDraft(e.target.value)}
+                    placeholder="např. PRALES BOHDALEC"
+                    className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-heading uppercase"
+                  />
+                  <button
+                    onClick={async () => {
+                      const v = (ultrasDraft ?? stadium.customization.ultrasText ?? "").trim();
+                      await handleCustomize("ultrasText", v || null);
+                      setUltrasDraft(null);
+                    }}
+                    className="btn btn-primary btn-sm shrink-0"
+                  >
+                    Uložit
+                  </button>
+                </div>
+                <div className="text-[11px] text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 22 znaků).</div>
+              </div>
+            )}
 
             <div className="pt-2 border-t border-gray-50 space-y-1">
               <div className="text-xs text-muted font-heading uppercase mb-1">Vybavení (placené)</div>
