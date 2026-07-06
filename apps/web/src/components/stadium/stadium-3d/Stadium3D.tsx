@@ -27,6 +27,8 @@ export interface Stadium3DCustomization {
   scoreboardLevel?: number;
   flagSize?: number;
   ultrasText?: string | null;
+  ultrasBannerColor?: string | null;
+  ultrasTextColor?: string | null;
 }
 
 export interface LastMatchScore {
@@ -142,7 +144,14 @@ export function Stadium3D({
         <StandRoof standsLevel={f.stands ?? 0} roofLevel={f.roof ?? 0} roofColor={roofColor} />
 
         {/* Sektor kotle — vlajkový sektor + buben + baner s nápisem */}
-        <UltrasSector level={f.ultras_stand ?? 0} primaryColor={teamColor} secondaryColor={secondaryColor} text={cust.ultrasText} />
+        <UltrasSector
+          level={f.ultras_stand ?? 0}
+          primaryColor={teamColor}
+          secondaryColor={secondaryColor}
+          text={cust.ultrasText}
+          bannerColor={cust.ultrasBannerColor}
+          textColor={cust.ultrasTextColor}
+        />
 
         {/* Budovy v rozích */}
         <Building kind="changing_rooms" level={f.changing_rooms ?? 0} position={layout.buildings.changing_rooms} roofColorOverride={roofColor} />

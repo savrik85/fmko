@@ -32,6 +32,8 @@ interface Customization {
   scoreboardLevel: number;
   flagSize: number;
   ultrasText: string | null;
+  ultrasBannerColor: string | null;
+  ultrasTextColor: string | null;
 }
 
 interface StadiumData {

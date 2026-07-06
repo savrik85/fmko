@@ -61,6 +61,8 @@ interface Customization {
   scoreboardLevel: number;
   flagSize: number;
   ultrasText: string | null;
+  ultrasBannerColor: string | null;
+  ultrasTextColor: string | null;
 }
 
 interface VisualUpgrade {
@@ -435,6 +437,37 @@ export default function StadiumPage() {
                   </button>
                 </div>
                 <div className="text-[11px] text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 22 znaků).</div>
+
+                {/* Barvy plachty a nápisu */}
+                {([
+                  { field: "ultrasBannerColor" as const, label: "Barva plachty", fallback: team?.primary_color ?? "#2D5F2D" },
+                  { field: "ultrasTextColor" as const, label: "Barva nápisu", fallback: "#FFFFFF" },
+                ]).map(({ field, label, fallback }) => {
+                  const current = stadium.customization[field];
+                  return (
+                    <div key={field} className="mt-2.5">
+                      <div className="text-[11px] text-muted font-heading uppercase mb-1">{label}</div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => handleCustomize(field, null)}
+                          className={`w-7 h-7 rounded-md border-2 flex items-center justify-center text-xs ${current === null ? "border-pitch-500" : "border-gray-300"}`}
+                          style={{ backgroundColor: fallback }}
+                          title="Výchozí"
+                        >
+                          ✕
+                        </button>
+                        {COLOR_PALETTE.map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => handleCustomize(field, c)}
+                            className={`w-7 h-7 rounded-md border-2 ${current === c ? "border-pitch-500" : "border-gray-200 hover:border-gray-400"}`}
+                            style={{ backgroundColor: c }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
