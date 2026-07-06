@@ -13,6 +13,18 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-07-06",
+    emoji: "🏟️",
+    title: "Tři nové stavby na stadionu",
+    items: [
+      "Zastřešení tribun — v dešti a mrazu ti neuteče tolik diváků. Od plachty nad lavičkami po pořádnou plechovou stříšku. (Nejdřív musíš mít tribuny — co jinak zastřešit.)",
+      "Sektor kotle — vlajkový sektor za brankou s bubnem. Zvedá domácí výhodu v zápase a náladu týmu. Čím větší kotel, tím větší peklo pro soupeře.",
+      "Na plachtu v kotli si napíšeš vlastní nápis — chorál, jméno klubu, cokoli. Nastavíš v Stadion → Vzhled stadionu (jakmile kotel postavíš).",
+      "Sociálky — kadibudka, zděné záchodky nebo čisté sociálky s teplou vodou. Fanoušci nemusí do kopřiv a jsou spokojenější.",
+      "Všechny tři stavby vidíš i ve 3D vizualizaci stadionu.",
+    ],
+  },
+  {
+    date: "2026-07-06",
     emoji: "👔",
     title: "Zaměstnanci — realizační tým klubu",
     items: [
