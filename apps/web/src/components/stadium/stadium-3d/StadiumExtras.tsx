@@ -128,8 +128,8 @@ export function UltrasSector({
 
   return (
     <group>
-      {/* Nízký baner na zábradlí — s nápisem (textura) nebo jednobarevný */}
-      <mesh position={[0, 0.72, z]} castShadow>
+      {/* Baner na zábradlí — zvednutý nad reklamy; s nápisem (textura) nebo jednobarevný */}
+      <mesh position={[0, 1.5, z]} castShadow>
         <planeGeometry args={[spread + 2, 1.35]} />
         <meshStandardMaterial
           color={bannerTex ? "#ffffff" : primaryColor}
@@ -140,7 +140,7 @@ export function UltrasSector({
       </mesh>
       {/* Pruh druhé barvy nahoře na baneru (jen bez nápisu) */}
       {!bannerTex && (
-        <mesh position={[0, 1.28, z + 0.02]}>
+        <mesh position={[0, 2.06, z + 0.02]}>
           <planeGeometry args={[spread + 2, 0.22]} />
           <meshStandardMaterial color={sec} side={2} roughness={0.85} />
         </mesh>
