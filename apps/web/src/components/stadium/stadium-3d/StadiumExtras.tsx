@@ -114,16 +114,27 @@ export function UltrasSector({
         );
       })}
 
-      {/* Velký buben uprostřed (od L2) — za stěnou, pryč od hřiště */}
+      {/* Velký buben (od L2) — před choreo stěnou, ale pořád za brankou mimo hřiště (z+1.5 = -31) */}
       {lvl >= 2 && (
-        <group position={[0, 0, z - 1.0]}>
-          <mesh position={[0, 1.0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <group position={[0, 0, z + 1.5]}>
+          {/* Tělo bubnu — stojí svisle, blána směrem k hřišti */}
+          <mesh position={[0, 1.0, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
             <cylinderGeometry args={[1.0, 1.0, 1.3, 20]} />
             <meshStandardMaterial color={primaryColor} roughness={0.6} />
           </mesh>
-          <mesh position={[0.66, 1.0, 0]} rotation={[0, 0, Math.PI / 2]}>
+          {/* Blána směrem k hřišti (světlá) */}
+          <mesh position={[0, 1.0, 0.66]} rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[1.02, 1.02, 0.05, 20]} />
             <meshStandardMaterial color="#F5F0E8" />
+          </mesh>
+          {/* Kříž na bláně */}
+          <mesh position={[0, 1.0, 0.69]}>
+            <boxGeometry args={[1.6, 0.12, 0.02]} />
+            <meshStandardMaterial color={primaryColor} />
+          </mesh>
+          <mesh position={[0, 1.0, 0.69]}>
+            <boxGeometry args={[0.12, 1.6, 0.02]} />
+            <meshStandardMaterial color={primaryColor} />
           </mesh>
         </group>
       )}
