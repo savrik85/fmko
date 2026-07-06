@@ -65,11 +65,14 @@ export function StandRoof({
 
   // Stříška v LOKÁLNÍCH souřadnicích tribuny: kryje zadní 2/3 sedaček,
   // klesá od zadku (výš) k hřišti (níž) — jako reálná krytá tribuna.
+  // U nízké tribuny (L1) zvednout stříšku výš, ať na ni neplácne — jako krytá tribuna na sloupech.
+  const clearance = standsLevel === 1 ? 2.6 : 1.1;
   const Canopy = ({ alongLen }: { alongLen: number }) => {
     const roofDepth = dims.depth * 0.7 + overhang;
     const roofZ = dims.depth * 0.45;               // těžiště nad zadní částí sedaček
-    const roofY = dims.height + 1.1;               // jasně nad sedačkami
+    const roofY = dims.height + clearance;          // jasně nad sedačkami
     const backZ = dims.depth + overhang * 0.5;      // zadní podpěry
+    const postH = roofY + 0.2;
     return (
       <group>
         {/* Nakloněná plocha stříšky */}
@@ -77,10 +80,10 @@ export function StandRoof({
           <boxGeometry args={[alongLen + 1, 0.14, roofDepth]} />
           <meshStandardMaterial color={color} roughness={0.5} metalness={0.35} />
         </mesh>
-        {/* Zadní sloupky (2) */}
+        {/* Zadní sloupky (2) — sahají až ke stříšce */}
         {[-alongLen * 0.4, alongLen * 0.4].map((x, i) => (
-          <mesh key={i} position={[x, dims.height * 0.55, backZ]} castShadow>
-            <cylinderGeometry args={[0.09, 0.09, dims.height + 1.1, 6]} />
+          <mesh key={i} position={[x, postH / 2, backZ]} castShadow>
+            <cylinderGeometry args={[0.09, 0.09, postH, 6]} />
             <meshStandardMaterial color="#4A4D54" metalness={0.5} roughness={0.5} />
           </mesh>
         ))}
