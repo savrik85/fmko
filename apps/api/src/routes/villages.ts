@@ -1320,39 +1320,41 @@ villagesRouter.post("/admin/run-elections", requireAdmin, async (c) => {
   let officialsReplaced = 0;
 
   for (const v of villages.results ?? []) {
-    // Smaž per-official favor řádky stávajících zastupitelů + samotné zastupitele.
-    const old = await c.env.DB.prepare(
-      "SELECT id FROM village_officials WHERE village_id = ?"
-    ).bind(v.id).all<{ id: string }>();
-    const oldIds = (old.results ?? []).map((o) => o.id);
-    if (oldIds.length > 0) {
-      const ph = oldIds.map(() => "?").join(",");
-      await c.env.DB.prepare(
-        `DELETE FROM village_team_favor WHERE official_id IN (${ph})`
-      ).bind(...oldIds).run().catch((e) => logger.warn({ module: "villages" }, "delete old official favor", e));
-    }
-    await c.env.DB.prepare(
-      "DELETE FROM village_officials WHERE village_id = ?"
-    ).bind(v.id).run().catch((e) => logger.warn({ module: "villages" }, "delete old officials", e));
-
-    // Nové vedení.
+    // Obměna vedení UPDATE-in-place: zachová id zastupitele (a tím i FK vazby z
+    // historie/brigád/pozvánek), jen přepíše personu + termín. Delete+insert by
+    // u obcí s nahromaděnou historií padal na FK a následně na UNIQUE(village_id, role).
     const generated = generateOfficialsForVillage(v.id, currentSeason, nonce);
     for (const g of generated) {
       try {
-        await c.env.DB.prepare(
-          `INSERT INTO village_officials
-            (id, village_id, role, first_name, last_name, age, occupation,
-             face_config, personality, portfolio, preferences, term_start_at, term_end_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        const res = await c.env.DB.prepare(
+          `UPDATE village_officials
+             SET first_name = ?, last_name = ?, age = ?, occupation = ?,
+                 face_config = ?, personality = ?, portfolio = ?, preferences = ?,
+                 term_start_at = ?, term_end_at = ?
+           WHERE village_id = ? AND role = ?`
         ).bind(
-          crypto.randomUUID(), v.id, g.role, g.firstName, g.lastName, g.age, g.occupation,
+          g.firstName, g.lastName, g.age, g.occupation,
           JSON.stringify(g.faceConfig), g.personality,
           JSON.stringify(g.portfolio), JSON.stringify(g.preferences),
-          nowIso, termEndIso,
+          nowIso, termEndIso, v.id, g.role,
         ).run();
+        if ((res.meta?.changes ?? 0) === 0) {
+          // Role v obci chyběla — doplň nového zastupitele.
+          await c.env.DB.prepare(
+            `INSERT INTO village_officials
+              (id, village_id, role, first_name, last_name, age, occupation,
+               face_config, personality, portfolio, preferences, term_start_at, term_end_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(
+            crypto.randomUUID(), v.id, g.role, g.firstName, g.lastName, g.age, g.occupation,
+            JSON.stringify(g.faceConfig), g.personality,
+            JSON.stringify(g.portfolio), JSON.stringify(g.preferences),
+            nowIso, termEndIso,
+          ).run();
+        }
         officialsReplaced++;
       } catch (e) {
-        logger.warn({ module: "villages" }, `insert new official ${g.role} for village ${v.id}`, e);
+        logger.warn({ module: "villages" }, `replace official ${g.role} for village ${v.id}`, e);
       }
     }
 
