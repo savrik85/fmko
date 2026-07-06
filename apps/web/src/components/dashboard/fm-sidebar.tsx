@@ -7,50 +7,55 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { hasUnseenNotes } from "@/data/release-notes";
 
+type SectionKey = "pinned" | "tym" | "prestupy" | "klub" | "penize" | "soutez" | "ostatni";
+
 interface NavItem {
   href: string;
   label: string;
   icon: string;
-  group: "main" | "club" | "league";
+  section: SectionKey;
   isNew?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Domů", icon: "\u{1F3E0}", group: "main" },
-  { href: "/dashboard/phone", label: "Zprávy", icon: "\u{1F4F1}", group: "main" },
-  { href: "/dashboard/news", label: "Zpravodaj", icon: "\u{1F4F0}", group: "main" },
-  { href: "/dashboard/novinky", label: "Co je nového", icon: "✨", group: "main" },
-  { href: "/dashboard/invite", label: "Pozvi kamar\u00E1da", icon: "\u2709\uFE0F", group: "main" },
-  { href: "/dashboard/klub", label: "Klub", icon: "\u{1F3DB}\uFE0F", group: "club" },
-  { href: "/dashboard/obec", label: "Obec", icon: "\u{1F3D8}\uFE0F", group: "club" },
-  { href: "/dashboard/squad", label: "Kádr", icon: "\u{1F465}", group: "club" },
-  { href: "/dashboard/u21", label: "U21", icon: "\u{1F9D2}", group: "club" },
-  { href: "/dashboard/training", label: "Tréninky", icon: "\u{1F3CB}", group: "club" },
-  { href: "/dashboard/zamestnanci", label: "Zaměstnanci", icon: "\u{1F454}", group: "club", isNew: true },
-  { href: "/dashboard/transfers", label: "Přestupy", icon: "\u{1F91D}", group: "club" },
-  { href: "/dashboard/watchlist", label: "Sledovaní", icon: "\u{2B50}", group: "club" },
-  { href: "/dashboard/finances", label: "Finance", icon: "\u{1F4B0}", group: "club" },
-  { href: "/dashboard/sponsors", label: "Sponzoři", icon: "\u{1F4BC}", group: "club" },
-  { href: "/dashboard/equipment", label: "Vybavení", icon: "\u{1F45F}", group: "club" },
-  { href: "/dashboard/stadium", label: "Stadion", icon: "\u{1F3DF}", group: "club" },
-  { href: "/dashboard/fans", label: "Fanoušci", icon: "\u{1F4E3}", group: "club" },
-  { href: "/dashboard/events", label: "Události", icon: "\u{1F389}", group: "club" },
-  { href: "/dashboard/hospoda", label: "Hospoda", icon: "\u{1F37A}", group: "club" },
-  { href: "/dashboard/match", label: "Sestava", icon: "\u{1F4CB}", group: "league" },
-  { href: "/dashboard/schedule", label: "Rozpis", icon: "\u{1F4C5}", group: "league" },
-  { href: "/dashboard/friendly", label: "Přáteláky", icon: "\u{1F91C}", group: "league" },
-  { href: "/dashboard/liga", label: "Liga", icon: "\u{1F3C6}", group: "league" },
-  { href: "/dashboard/pohar", label: "Pohár", icon: "\u{1F3C5}", group: "league", isNew: true },
-  { href: "/dashboard/calendar", label: "Kalendář", icon: "\u{1F5D3}", group: "league" },
-  { href: "/dashboard/napoveda", label: "Nápověda", icon: "\u{1F4D6}", group: "league" },
+  { href: "/dashboard", label: "Domů", icon: "\u{1F3E0}", section: "pinned" },
+  { href: "/dashboard/phone", label: "Zprávy", icon: "\u{1F4F1}", section: "pinned" },
+  { href: "/dashboard/news", label: "Zpravodaj", icon: "\u{1F4F0}", section: "pinned" },
+  { href: "/dashboard/novinky", label: "Co je nového", icon: "✨", section: "ostatni" },
+  { href: "/dashboard/invite", label: "Pozvi kamar\u00E1da", icon: "\u2709\uFE0F", section: "ostatni" },
+  { href: "/dashboard/klub", label: "Klub", icon: "\u{1F3DB}\uFE0F", section: "klub" },
+  { href: "/dashboard/obec", label: "Obec", icon: "\u{1F3D8}\uFE0F", section: "klub" },
+  { href: "/dashboard/squad", label: "Kádr", icon: "\u{1F465}", section: "tym" },
+  { href: "/dashboard/u21", label: "U21", icon: "\u{1F9D2}", section: "tym" },
+  { href: "/dashboard/training", label: "Tréninky", icon: "\u{1F3CB}", section: "tym" },
+  { href: "/dashboard/zamestnanci", label: "Zaměstnanci", icon: "\u{1F454}", section: "tym", isNew: true },
+  { href: "/dashboard/transfers", label: "Přestupy", icon: "\u{1F91D}", section: "prestupy" },
+  { href: "/dashboard/watchlist", label: "Sledovaní", icon: "\u{2B50}", section: "prestupy" },
+  { href: "/dashboard/finances", label: "Finance", icon: "\u{1F4B0}", section: "penize" },
+  { href: "/dashboard/sponsors", label: "Sponzoři", icon: "\u{1F4BC}", section: "penize" },
+  { href: "/dashboard/equipment", label: "Vybavení", icon: "\u{1F45F}", section: "klub" },
+  { href: "/dashboard/stadium", label: "Stadion", icon: "\u{1F3DF}", section: "klub" },
+  { href: "/dashboard/fans", label: "Fanoušci", icon: "\u{1F4E3}", section: "klub" },
+  { href: "/dashboard/events", label: "Události", icon: "\u{1F389}", section: "klub" },
+  { href: "/dashboard/hospoda", label: "Hospoda", icon: "\u{1F37A}", section: "klub" },
+  { href: "/dashboard/match", label: "Sestava", icon: "\u{1F4CB}", section: "tym" },
+  { href: "/dashboard/schedule", label: "Rozpis", icon: "\u{1F4C5}", section: "soutez" },
+  { href: "/dashboard/friendly", label: "Přáteláky", icon: "\u{1F91C}", section: "soutez" },
+  { href: "/dashboard/liga", label: "Liga", icon: "\u{1F3C6}", section: "soutez" },
+  { href: "/dashboard/pohar", label: "Pohár", icon: "\u{1F3C5}", section: "soutez", isNew: true },
+  { href: "/dashboard/calendar", label: "Kalendář", icon: "\u{1F5D3}", section: "soutez" },
+  { href: "/dashboard/napoveda", label: "Nápověda", icon: "\u{1F4D6}", section: "ostatni" },
   // Sněm dočasně skryt z menu — dostupný přes přímou URL /dashboard/hlasovani.
 ];
 
-const GROUP_LABELS: Record<string, string> = {
-  main: "",
-  club: "Klub",
-  league: "Soutěž",
-};
+const SECTIONS: { key: Exclude<SectionKey, "pinned">; label: string }[] = [
+  { key: "tym", label: "Tým" },
+  { key: "prestupy", label: "Přestupy" },
+  { key: "klub", label: "Klub" },
+  { key: "penize", label: "Peníze" },
+  { key: "soutez", label: "Soutěž" },
+  { key: "ostatni", label: "Ostatní" },
+];
 
 export function FMSidebar() {
   const [expanded, setExpanded] = useState(true);
@@ -58,6 +63,7 @@ export function FMSidebar() {
   const [incomingOffers, setIncomingOffers] = useState(0);
   const [unvotedCount, setUnvotedCount] = useState(0);
   const [notesUnseen, setNotesUnseen] = useState(false);
+  const [openSection, setOpenSection] = useState<SectionKey | null>(null);
   const pathname = usePathname();
   const { teamId, isAdmin, logout, token } = useTeam();
 
@@ -95,11 +101,54 @@ export function FMSidebar() {
     return pathname.startsWith(href);
   };
 
-  const items = isAdmin
-    ? [...NAV_ITEMS, { href: "/dashboard/admin", label: "Admin", icon: "⚙️", group: "main" as const }]
+  const items: NavItem[] = isAdmin
+    ? [...NAV_ITEMS, { href: "/dashboard/admin", label: "Admin", icon: "⚙️", section: "ostatni" }]
     : NAV_ITEMS;
 
-  const groups = ["main", "club", "league"] as const;
+  const activeSection: SectionKey = items.find((i) => isActive(i.href))?.section ?? "pinned";
+
+  // Sekce s aktivní stránkou se otevře; ruční toggle mezi navigacemi zůstává.
+  useEffect(() => { setOpenSection(activeSection); }, [activeSection]);
+
+  // Badge helpers
+  const itemCount = (href: string): number =>
+    href === "/dashboard/phone" ? unreadMessages
+    : href === "/dashboard/transfers" ? incomingOffers
+    : href === "/dashboard/hlasovani" ? unvotedCount : 0;
+  const itemDot = (item: NavItem): boolean => !!(item.isNew || (item.href === "/dashboard/novinky" && notesUnseen));
+
+  const renderItem = (item: NavItem, indented: boolean) => {
+    const active = isActive(item.href);
+    const count = itemCount(item.href);
+    const dot = itemDot(item);
+    return (
+      <Link
+        key={item.href + item.label}
+        href={item.href}
+        title={!expanded ? item.label : undefined}
+        className={`relative flex items-center gap-2.5 mx-1 my-px rounded transition-all duration-100 ${
+          expanded ? (indented ? "pl-7 pr-2.5 py-1.5" : "px-2.5 py-1.5") : "px-0 py-1.5 justify-center"
+        } ${active ? "bg-white/10 text-white" : "text-white/35 hover:text-white/80 hover:bg-white/5"}`}
+      >
+        {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r bg-green-400" />}
+        <span className="text-sm shrink-0 w-5 text-center leading-none">{item.icon}</span>
+        {!expanded && (dot || count > 0) && (
+          <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-green-400" />
+        )}
+        {expanded && (
+          <span className="flex-1 flex items-center text-[13px] font-medium whitespace-nowrap leading-none">
+            {item.label}
+            {dot && <span className="ml-1.5 bg-pitch-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Nové</span>}
+            {count > 0 && (
+              <span className={`ml-auto ${item.href === "/dashboard/hlasovani" ? "bg-amber-500" : "bg-card-red"} text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full`}>{count}</span>
+            )}
+          </span>
+        )}
+      </Link>
+    );
+  };
+
+  const pinnedItems = items.filter((i) => i.section === "pinned");
 
   return (
     <>
@@ -126,61 +175,39 @@ export function FMSidebar() {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-1">
-          {groups.map((group) => {
-            const groupItems = items.filter((i) => i.group === group);
-            return (
-              <div key={group}>
-                {expanded && GROUP_LABELS[group] && (
-                  <div className="px-3 pt-3 pb-1 text-[9px] font-heading font-bold text-white/20 uppercase tracking-widest">
-                    {GROUP_LABELS[group]}
-                  </div>
-                )}
-                {!expanded && group !== "main" && (
+          {/* Pinned (vždy vidět) */}
+          {pinnedItems.map((i) => renderItem(i, false))}
+
+          {SECTIONS.map((sec) => {
+            const secItems = items.filter((i) => i.section === sec.key);
+            if (secItems.length === 0) return null;
+
+            // Rail (sbaleno na ikony): oddělovač + ikony naplocho, bez accordionu
+            if (!expanded) {
+              return (
+                <div key={sec.key}>
                   <div className="mx-2.5 my-1 border-t border-white/5" />
-                )}
-                {groupItems.map((item) => {
-                  const active = isActive(item.href);
-                  return (
-                    <Link
-                      key={item.href + item.label}
-                      href={item.href}
-                      title={!expanded ? item.label : undefined}
-                      className={`relative flex items-center gap-2.5 mx-1 my-px rounded transition-all duration-100 ${
-                        expanded ? "px-2.5 py-1.5" : "px-0 py-1.5 justify-center"
-                      } ${
-                        active
-                          ? "bg-white/10 text-white"
-                          : "text-white/35 hover:text-white/80 hover:bg-white/5"
-                      }`}
-                    >
-                      {/* Active indicator bar */}
-                      {active && (
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r bg-green-400" />
-                      )}
-                      <span className="text-sm shrink-0 w-5 text-center leading-none">{item.icon}</span>
-                      {!expanded && (item.isNew || (item.href === "/dashboard/novinky" && notesUnseen)) && (
-                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-green-400" />
-                      )}
-                      {expanded && (
-                        <span className="text-[13px] font-medium whitespace-nowrap leading-none">
-                          {item.label}
-                          {(item.isNew || (item.href === "/dashboard/novinky" && notesUnseen)) && (
-                            <span className="ml-1.5 bg-pitch-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Nové</span>
-                          )}
-                          {item.href === "/dashboard/phone" && unreadMessages > 0 && (
-                            <span className="ml-1.5 bg-card-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unreadMessages}</span>
-                          )}
-                          {item.href === "/dashboard/transfers" && incomingOffers > 0 && (
-                            <span className="ml-1.5 bg-card-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{incomingOffers}</span>
-                          )}
-                          {item.href === "/dashboard/hlasovani" && unvotedCount > 0 && (
-                            <span className="ml-1.5 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unvotedCount}</span>
-                          )}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
+                  {secItems.map((i) => renderItem(i, false))}
+                </div>
+              );
+            }
+
+            const open = openSection === sec.key;
+            const hasDot = secItems.some((i) => itemDot(i));
+            const totalCount = secItems.reduce((s, i) => s + itemCount(i.href), 0);
+            return (
+              <div key={sec.key}>
+                <button
+                  onClick={() => setOpenSection(open ? null : sec.key)}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 mt-1 text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors"
+                >
+                  <span className="text-[10px] w-3 text-center text-white/30 leading-none">{open ? "▾" : "▸"}</span>
+                  <span className="flex-1 text-left text-[10px] font-heading font-bold uppercase tracking-widest">{sec.label}</span>
+                  {!open && (hasDot || totalCount > 0) && (
+                    <span className={`w-1.5 h-1.5 rounded-full ${totalCount > 0 ? "bg-card-red" : "bg-green-400"}`} />
+                  )}
+                </button>
+                {open && secItems.map((i) => renderItem(i, true))}
               </div>
             );
           })}
