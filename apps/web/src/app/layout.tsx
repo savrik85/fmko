@@ -50,7 +50,7 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
-      <body className="min-h-screen">
+      <body className="min-h-dvh">
         <TeamProvider>{children}</TeamProvider>
         <PushNotificationManager />
         <ErrorDialogProvider />

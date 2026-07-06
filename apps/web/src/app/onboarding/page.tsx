@@ -163,7 +163,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col bg-paper">
+    <main className="min-h-dvh flex flex-col bg-paper">
       {/* Header with progress */}
       <div className="bg-pitch-800 px-5 py-3 flex items-center justify-between">
         <span className="font-heading font-bold text-white/80 text-sm tracking-wide uppercase">Prales</span>

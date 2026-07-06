@@ -26,7 +26,7 @@ export function InvitePageClient({ team, manager, position }: Props) {
   const initials = team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
 
   return (
-    <main className="min-h-screen bg-auth relative overflow-hidden flex flex-col items-center px-4 py-8 sm:p-6">
+    <main className="min-h-dvh bg-auth relative overflow-hidden flex flex-col items-center px-4 py-8 sm:p-6">
       {/* Background accents */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-[-20%] left-[50%] -translate-x-1/2 w-[600px] h-[600px] rounded-full" style={{ background: `${color}12` }} />

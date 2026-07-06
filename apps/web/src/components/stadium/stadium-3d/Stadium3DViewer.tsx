@@ -111,7 +111,7 @@ export function Stadium3DViewer(props: Stadium3DViewerProps) {
           </button>
         </div>
       ) : (
-        <div className="w-screen h-screen sm:w-[90vw] sm:h-[90vh] bg-gradient-to-b from-sky-100 to-sky-50 sm:rounded-2xl overflow-hidden">
+        <div className="w-screen h-dvh sm:w-[90vw] sm:h-[90vh] bg-gradient-to-b from-sky-100 to-sky-50 sm:rounded-2xl overflow-hidden">
           <Stadium3D {...sceneProps} />
         </div>
       )}

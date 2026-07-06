@@ -91,7 +91,7 @@ export default async function InvitePage({ params }: { params: Promise<{ teamId:
 
   if (!team) {
     return (
-      <main className="min-h-screen bg-auth flex items-center justify-center">
+      <main className="min-h-dvh bg-auth flex items-center justify-center">
         <div className="text-white text-center">
           <h1 className="text-2xl font-heading font-bold mb-2">Tym nenalezen</h1>
           <p className="text-white/50 mb-6">Tento odkaz je neplatny.</p>

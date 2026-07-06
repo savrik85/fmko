@@ -37,13 +37,13 @@ export default function NovaSezonaPage() {
     router.replace("/dashboard");
   };
 
-  if (loading) return <div className="min-h-screen flex justify-center items-center bg-pitch-700"><Spinner /></div>;
+  if (loading) return <div className="min-h-dvh flex justify-center items-center bg-pitch-700"><Spinner /></div>;
   if (!data) return null;
 
   const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString("cs", { day: "numeric", month: "long" }) : "—";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-pitch-600 to-pitch-800 text-white">
+    <div className="min-h-dvh bg-gradient-to-b from-pitch-600 to-pitch-800 text-white">
       <div className="max-w-2xl mx-auto px-4 py-10">
         <div className="text-center mb-8">
           <div className="text-xs font-heading uppercase tracking-[0.2em] text-white/60">Nová sezóna</div>
