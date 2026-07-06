@@ -159,6 +159,12 @@ export function getUpgradeOptions(
       lockReason = `Dostupné od sezóny ${req.season} (aktuální: ${currentSeason})`;
     }
 
+    // Zastřešení tribun vyžaduje aspoň základní tribuny (co jinak zastřešit?).
+    if (key === "roof" && (stadium.stands ?? 0) < 1) {
+      locked = true;
+      lockReason = "Nejdřív postav aspoň základní tribuny";
+    }
+
     options.push({
       facility: key,
       label,
