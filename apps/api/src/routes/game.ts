@@ -6520,6 +6520,24 @@ gameRouter.post("/admin/cup/advance", async (c) => {
   return c.json(r);
 });
 
+// POST /api/admin/cup/sync-names — srovná jméno + barvu převzatých lidských týmů v poháru
+// s reálným týmem. Oprava historických nesouladů (převzetí AI týmu dřív cup_teams neaktualizovalo).
+gameRouter.post("/admin/cup/sync-names", async (c) => {
+  const cup = await c.env.DB.prepare("SELECT id FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1")
+    .bind(await activeSeasonNumber(c.env.DB)).first<{ id: string }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "sync-names load cup", e); return null; });
+  if (!cup) return c.json({ error: "Žádný aktivní pohár" }, 404);
+  const res = await c.env.DB.prepare(
+    `UPDATE cup_teams
+       SET name = (SELECT t.name FROM teams t WHERE t.id = cup_teams.team_id),
+           primary_color = (SELECT t.primary_color FROM teams t WHERE t.id = cup_teams.team_id)
+     WHERE cup_id = ?
+       AND team_id IN (SELECT id FROM teams WHERE user_id != 'ai')
+       AND name != (SELECT t.name FROM teams t WHERE t.id = cup_teams.team_id)`
+  ).bind(cup.id).run().catch((e) => { logger.warn({ module: "game.ts" }, "sync cup team names", e); return null; });
+  return c.json({ ok: true, updated: res?.meta?.changes ?? 0 });
+});
+
 // ── Admin: Seed data management ──
 
 gameRouter.get("/admin/seed-data", async (c) => {

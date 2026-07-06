@@ -458,6 +458,12 @@ teamsRouter.post("/", async (c) => {
           body.stadiumName ?? null, oldId).run();
       teamId = oldId;
 
+      // Sync jméno + barvu do aktivního poháru — převzatý AI tým je v cup_teams pod starým
+      // AI jménem/barvou; bez tohoto by hráč svůj tým v pavouku nepoznal (viděl staré jméno).
+      await c.env.DB.prepare("UPDATE cup_teams SET name = ?, primary_color = ? WHERE team_id = ?")
+        .bind(body.name, body.primaryColor ?? "#2D5F2D", teamId).run()
+        .catch((e) => logger.warn({ module: "teams" }, "sync cup_teams identity on takeover", e));
+
       // 1. Delete OLD AI players first (they are under teamId = oldId)
       const aiPlayers = await c.env.DB.prepare("SELECT id FROM players WHERE team_id = ?").bind(teamId).all();
       for (const ap of aiPlayers.results) {
