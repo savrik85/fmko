@@ -149,12 +149,14 @@ const COLOR_PALETTE = [
   "#558B2F", "#A0432C", "#C9A84C", "#E63946", "#F5E6C8",
 ];
 
-const CUSTOM_FIELDS: Array<{ field: keyof Customization; label: string; defaultColor: string }> = [
+const CUSTOM_FIELDS: Array<{ field: keyof Customization; label: string; defaultColor: string; requiresKotel?: boolean }> = [
   { field: "fenceColor", label: "Plot", defaultColor: "#A89078" },
   { field: "standColor", label: "Tribuny", defaultColor: "#9CA3AF" },
   { field: "seatColor", label: "Sedačky", defaultColor: "#9CA3AF" },
   { field: "roofColor", label: "Střechy", defaultColor: "#A0432C" },
   { field: "accentColor", label: "Akcent (VIP)", defaultColor: "#C9A84C" },
+  { field: "ultrasBannerColor", label: "Kotel plachta", defaultColor: "#7A2530", requiresKotel: true },
+  { field: "ultrasTextColor", label: "Kotel nápis", defaultColor: "#FFFFFF", requiresKotel: true },
 ];
 
 export default function StadiumPage() {
@@ -366,11 +368,11 @@ export default function StadiumPage() {
           <div className="mt-4 pt-4 border-t border-gray-100 space-y-4">
             <div className="text-xs text-muted font-heading uppercase">Vzhled stadionu (zdarma)</div>
 
-            {/* Záložky – výběr položky */}
+            {/* Záložky – výběr položky (kotel jen když je postavený) */}
             <div className="flex flex-wrap gap-1.5">
-              {CUSTOM_FIELDS.map(({ field, label, defaultColor }) => {
+              {CUSTOM_FIELDS.filter((f) => !f.requiresKotel || (stadium.facilities.ultras_stand ?? 0) > 0).map(({ field, label, defaultColor }) => {
                 const current = stadium.customization[field] as string | null;
-                const displayColor = current ?? defaultColor;
+                const displayColor = current ?? (field === "ultrasBannerColor" ? (team?.primary_color ?? defaultColor) : defaultColor);
                 const isActive = openPicker === field;
                 return (
                   <button
@@ -395,8 +397,8 @@ export default function StadiumPage() {
                   <button
                     onClick={() => { handleCustomize(openPicker, null); setOpenPicker(null); }}
                     className={`w-10 h-10 rounded-md border-2 flex items-center justify-center text-sm ${current === null ? "border-pitch-500" : "border-gray-300"}`}
-                    style={{ backgroundColor: cf.defaultColor }}
-                    title="Default"
+                    style={{ backgroundColor: openPicker === "ultrasBannerColor" ? (team?.primary_color ?? cf.defaultColor) : cf.defaultColor }}
+                    title="Výchozí"
                   >
                     ✕
                   </button>
@@ -436,38 +438,7 @@ export default function StadiumPage() {
                     Uložit
                   </button>
                 </div>
-                <div className="text-[11px] text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 22 znaků).</div>
-
-                {/* Barvy plachty a nápisu */}
-                {([
-                  { field: "ultrasBannerColor" as const, label: "Barva plachty", fallback: team?.primary_color ?? "#2D5F2D" },
-                  { field: "ultrasTextColor" as const, label: "Barva nápisu", fallback: "#FFFFFF" },
-                ]).map(({ field, label, fallback }) => {
-                  const current = stadium.customization[field];
-                  return (
-                    <div key={field} className="mt-2.5">
-                      <div className="text-[11px] text-muted font-heading uppercase mb-1">{label}</div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => handleCustomize(field, null)}
-                          className={`w-7 h-7 rounded-md border-2 flex items-center justify-center text-xs ${current === null ? "border-pitch-500" : "border-gray-300"}`}
-                          style={{ backgroundColor: fallback }}
-                          title="Výchozí"
-                        >
-                          ✕
-                        </button>
-                        {COLOR_PALETTE.map((c) => (
-                          <button
-                            key={c}
-                            onClick={() => handleCustomize(field, c)}
-                            className={`w-7 h-7 rounded-md border-2 ${current === c ? "border-pitch-500" : "border-gray-200 hover:border-gray-400"}`}
-                            style={{ backgroundColor: c }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
+                <div className="text-[11px] text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 22 znaků). Barvu plachty a nápisu nastavíš výše u „Kotel plachta" / „Kotel nápis".</div>
               </div>
             )}
 
