@@ -10,6 +10,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/dashboard/match": "Sestava",
   "/dashboard/friendly": "Přáteláky",
   "/dashboard/training": "Tréninky",
+  "/dashboard/zamestnanci": "Zaměstnanci",
   "/dashboard/transfers": "Přestupy",
   "/dashboard/watchlist": "Sledovaní hráči",
   "/dashboard/finances": "Finance",

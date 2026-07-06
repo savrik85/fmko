@@ -41,6 +41,9 @@ export type TransactionType =
   | "manager_bet_win"
   | "manager_bet_loss"
   | "cup_prize"
+  | "staff_wage"
+  | "staff_signing"
+  | "course_fee"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */
@@ -79,7 +82,7 @@ const PURCHASE_TYPES = new Set<TransactionType>([
   "equipment_upgrade", "stadium_upgrade", "stadium_visual",
   "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
-  "manager_social",
+  "manager_social", "staff_signing", "course_fee",
 ]);
 
 /**
@@ -145,6 +148,16 @@ export async function processWeeklyFinances(
     .bind(teamId).first<{ reputation: number }>();
   const reputation = teamInfo?.reputation ?? 50;
 
+  // Staff efekty (ekonom: opsCostMul, sponsorBonusMul) + týdenní mzdy zaměstnanců
+  const { calculateStaffEffects } = await import("../staff/staff-effects");
+  const staffRows = await db.prepare(
+    "SELECT role, coaching, medicine, maintenance, judgement, communication, work_rate, charm, weekly_wage FROM staff_members WHERE team_id = ?"
+  ).bind(teamId).all<{
+    role: string; coaching: number; medicine: number; maintenance: number; judgement: number;
+    communication: number; work_rate: number; charm: number; weekly_wage: number;
+  }>().catch((e) => { logger.warn({ module: "finance" }, "load staff", e); return { results: [] as never[] }; });
+  const staffFx = calculateStaffEffects(staffRows.results);
+
   // ── VÝDAJE ──
 
   // 1. Player wages — jen aktivní hráči, released se neplatí
@@ -157,17 +170,25 @@ export async function processWeeklyFinances(
       `Týdenní mzdy: ${wageResult.cnt} hráčů`, gameDate);
   }
 
+  // 1b. Staff wages — mzdy zaměstnanců realizačního týmu
+  const staffWage = staffRows.results.reduce((sum, s) => sum + (s.weekly_wage ?? 0), 0);
+  if (staffWage > 0) {
+    await recordTransaction(db, teamId, "staff_wage", -staffWage,
+      `Mzdy zaměstnanců: ${staffRows.results.length}`, gameDate);
+  }
+
   // 2. Pitch maintenance (weekly = monthly / 4.3)
   const maintenanceCosts: Record<string, number> = {
     vesnice: 500, obec: 1000, mestys: 2000, mesto: 3000,
   };
   const monthlyMaintenance = maintenanceCosts[category] ?? 1000;
-  const weeklyMaintenance = Math.round(monthlyMaintenance / 4.3);
+  // Ekonom snižuje provozní náklady (opsCostMul <= 1)
+  const weeklyMaintenance = Math.round((monthlyMaintenance / 4.3) * staffFx.opsCostMul);
   await recordTransaction(db, teamId, "pitch_maintenance", -weeklyMaintenance,
     `Údržba hřiště`, gameDate);
 
   // 3. Equipment amortization (500/month = ~116/week)
-  const weeklyEquipment = Math.round(500 / 4.3);
+  const weeklyEquipment = Math.round((500 / 4.3) * staffFx.opsCostMul);
   await recordTransaction(db, teamId, "equipment_expense", -weeklyEquipment,
     `Amortizace vybavení`, gameDate);
 
@@ -179,14 +200,15 @@ export async function processWeeklyFinances(
   ).bind(teamId).first<{ total: number }>();
 
   if (sponsorResult && sponsorResult.total > 0) {
-    const weeklyIncome = Math.round(sponsorResult.total / 4.3) * 2;
+    // Ekonom zvedá sponzorské příjmy (sponsorBonusMul >= 1)
+    const weeklyIncome = Math.round((sponsorResult.total / 4.3) * 2 * staffFx.sponsorBonusMul);
     await recordTransaction(db, teamId, "sponsor_income", weeklyIncome,
       `Sponzorské příjmy`, gameDate);
   }
 
   // 5. Base sponsorship income (dle reputace — místní podpora)
   const baseSponsorMonthly = reputation * 100;
-  const weeklyBaseSponsor = Math.round(baseSponsorMonthly / 4.3);
+  const weeklyBaseSponsor = Math.round((baseSponsorMonthly / 4.3) * staffFx.sponsorBonusMul);
   if (weeklyBaseSponsor > 0) {
     await recordTransaction(db, teamId, "sponsor_income", weeklyBaseSponsor,
       `Podpora místních podnikatelů`, gameDate);
@@ -311,6 +333,16 @@ export async function processMatchDayFinances(
 
   let soldProducts: Awaited<ReturnType<typeof computeSelfConcessionMatch>>["products"] = [];
 
+  // Staff efekty — obsluha občerstvení (poptávka + spokojenost)
+  const { calculateStaffEffects: calcStaffFx } = await import("../staff/staff-effects");
+  const staffMatchRows = await db.prepare(
+    "SELECT role, coaching, medicine, maintenance, judgement, communication, work_rate, charm FROM staff_members WHERE team_id = ?"
+  ).bind(teamId).all<{
+    role: string; coaching: number; medicine: number; maintenance: number; judgement: number;
+    communication: number; work_rate: number; charm: number;
+  }>().catch((e) => { logger.warn({ module: "finance" }, "load staff for match", e); return { results: [] as never[] }; });
+  const staffFx = calcStaffFx(staffMatchRows.results);
+
   if (isHome && attendance > 0) {
     // Fence guard: bez plnohodnotného plotu platí jen část diváků
     const payingAttendance = Math.round(attendance * facilityFx.fencePayingRatio);
@@ -324,7 +356,7 @@ export async function processMatchDayFinances(
 
     // Concession income — podle módu
     if (fansCtx?.concessionMode === "self") {
-      const sale = computeSelfConcessionMatch(attendance, satisfaction, fansCtx.products, weather);
+      const sale = computeSelfConcessionMatch(attendance, satisfaction, fansCtx.products, weather, staffFx.concessionDemandMul);
       soldProducts = sale.products;
 
       // Persist stock decrements + zaznamenat příjem
@@ -440,6 +472,12 @@ export async function processMatchDayFinances(
       soldProducts: isHome ? soldProducts : [],
       manager: mgrRow ?? undefined,
     });
+
+    // Obsluha občerstvení: usměvavá obsluha zvedá spokojenost (jen doma, self mode)
+    if (isHome && fansCtx.concessionMode === "self" && staffFx.concessionSatBonus > 0) {
+      satCalc.delta = Math.max(-15, Math.min(15, satCalc.delta + staffFx.concessionSatBonus));
+      satCalc.reasons.push(`Usměvavá obsluha +${staffFx.concessionSatBonus}`);
+    }
 
     // Načíst jméno soupeře pro archivaci v historii
     const opponentRow = await db.prepare(

@@ -274,12 +274,23 @@ export async function executeDailyTick(
           .bind(teamId).first<{ coaching: number; discipline: number; youth_development: number }>().catch((e) => { logger.warn({ module: "daily-tick" }, "load manager for training", e); return null; });
         const mgrBonus = { coaching: mgr?.coaching ?? 40, discipline: mgr?.discipline ?? 40, youthDev: mgr?.youth_development ?? 40 };
 
+        // Staff efekty na trénink (asistent, trenér mládeže, trenér brankářů, kondiční trenér)
+        const { calculateStaffEffects } = await import("../staff/staff-effects");
+        const staffTrainRows = await env.DB.prepare(
+          "SELECT role, coaching, medicine, maintenance, judgement, communication, work_rate, charm FROM staff_members WHERE team_id = ?"
+        ).bind(teamId).all<{ role: string; coaching: number; medicine: number; maintenance: number; judgement: number; communication: number; work_rate: number; charm: number }>()
+          .catch((e) => { logger.warn({ module: "daily-tick" }, "load staff for training", e); return { results: [] as never[] }; });
+        const staffFx = calculateStaffEffects(staffTrainRows.results);
+        equipMul *= staffFx.trainingMultiplier;
+        equipAttendanceBonus += staffFx.trainingAttendanceBonus;
+        equipYouthMod += staffFx.youthTrainingMod;
+
         const rng = createRng(now.getTime() + teamId.charCodeAt(0));
         const result = simulateTraining(rng, squad, {
           type: (team.training_type as any) ?? "conditioning",
           approach: (team.training_approach as any) ?? "balanced",
           sessionsPerWeek: (team.training_sessions as number) ?? 2,
-        }, undefined, equipMul, mgrBonus, { attendanceBonus: equipAttendanceBonus, youthTrainingMod: equipYouthMod });
+        }, undefined, equipMul, mgrBonus, { attendanceBonus: equipAttendanceBonus, youthTrainingMod: equipYouthMod, gkTrainingMul: staffFx.gkTrainingMul });
 
         const attendanceWithNames = result.attendance.map((a) => ({
           playerId: playersResult.results[a.playerIndex].id as string,
@@ -370,7 +381,9 @@ export async function executeDailyTick(
           technique: 4,
           tactical: 3,
         };
-        const condDrain = drainMap[(team.training_type as string)] ?? 4;
+        // Kondiční trenér snižuje úbytek kondice z tréninku (min 1 bod)
+        const baseDrain = drainMap[(team.training_type as string)] ?? 4;
+        const condDrain = Math.max(1, Math.round(baseDrain * (1 - staffFx.conditionDrainReduction)));
         const { logConditionStmt } = await import("../lib/condition-log");
         for (const a of result.attendance) {
           const playerRow = playersResult.results[a.playerIndex];

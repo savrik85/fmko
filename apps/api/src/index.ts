@@ -13,6 +13,7 @@ import { votesRouter } from "./routes/votes";
 import { cashLoansRouter } from "./routes/cash-loans";
 import { relationsRouter } from "./routes/relations";
 import u21Router from "./routes/u21";
+import { staffRouter } from "./routes/staff";
 // transfers endpoints are in gameRouter
 import { runScheduledMatches, recoverStuckRounds } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -72,6 +73,7 @@ app.route("/api", votesRouter);
 app.route("/api", cashLoansRouter);
 app.route("/api", relationsRouter);
 app.route("/api", u21Router);
+app.route("/api", staffRouter);
 
 export default {
   fetch: app.fetch,
@@ -94,6 +96,19 @@ export default {
         log("info", `daily tick done: ${result.events.length} events, training=${result.isTrainingDay}`);
       } catch (e: any) {
         log("error", "daily tick failed", e);
+      }
+    }
+
+    // ── STAFF TICK: 5:00 UTC — efekty zaměstnanců (masér, lékař, správce, psycholog, kurzy, skaut, pool) ──
+    // Samostatný cron mimo daily-tick. Manuální trigger (!cron) ho spustí taky.
+    if (cron === "0 5 * * *" || !cron) {
+      try {
+        log("info", "staff tick starting");
+        const { executeStaffTick } = await import("./staff/staff-tick");
+        const r = await executeStaffTick(env);
+        log("info", `staff tick done: regen=${r.regenTeams} healed=${r.healedExtra} courses=${r.coursesDone} scout=${r.scoutTips} newCand=${r.newCandidates}`);
+      } catch (e: any) {
+        log("error", "staff tick failed", e);
       }
     }
 

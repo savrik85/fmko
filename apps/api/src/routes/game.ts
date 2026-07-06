@@ -2534,6 +2534,14 @@ gameRouter.post("/game/advance-day", async (c) => {
   return c.json({ ok: true, type: "daily", result });
 });
 
+// POST /api/game/staff-tick — staff tick (masér, lékař, správce, psycholog, kurzy, skaut, pool).
+// Samostatný cron (0 5 * * *); tenhle endpoint je pro ruční spuštění na testu (bez cronů).
+gameRouter.post("/game/staff-tick", async (c) => {
+  const { executeStaffTick } = await import("../staff/staff-tick");
+  const result = await executeStaffTick(c.env);
+  return c.json({ ok: true, type: "staff", result });
+});
+
 // POST /api/game/run-matches — simulace zápasů, max 1 liga za invokaci
 gameRouter.post("/game/run-matches", async (c) => {
   const { runScheduledMatches, recoverStuckRounds } = await import("../multiplayer/match-runner");
