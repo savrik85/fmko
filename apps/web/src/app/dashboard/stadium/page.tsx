@@ -145,8 +145,8 @@ function teamInitials(name: string): string {
 }
 
 const COLOR_PALETTE = [
-  "#A89078", "#8B7355", "#9CA3AF", "#374151", "#3B6B8C",
-  "#558B2F", "#A0432C", "#C9A84C", "#E63946", "#F5E6C8",
+  "#141414", "#A89078", "#8B7355", "#9CA3AF", "#374151", "#3B6B8C",
+  "#558B2F", "#A0432C", "#C9A84C", "#E63946", "#F5E6C8", "#FFFFFF",
 ];
 
 const CUSTOM_FIELDS: Array<{ field: keyof Customization; label: string; defaultColor: string; requiresKotel?: boolean }> = [
