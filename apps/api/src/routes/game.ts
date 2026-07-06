@@ -2360,6 +2360,62 @@ gameRouter.post("/game/ai-market", async (c) => {
   return c.json({ ok: true, listings, offers, district: league.district });
 });
 
+// POST /api/game/seed-market — admin: napln trh AI hráči, obnov/dopln volné hráče v okrese,
+// volitelně vygeneruj legendu. Vše pro danou ligu, obejde běžné stropy (ruční admin doplnění).
+// Body: { leagueId, listings?, freeAgents?, replaceFreeAgents?, celebrity?, celebrityTier? }
+gameRouter.post("/game/seed-market", async (c) => {
+  const body = await c.req.json<{ leagueId: string; listings?: number; freeAgents?: number; replaceFreeAgents?: boolean; celebrity?: boolean; celebrityTier?: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "parse seed-market body", e); return null; });
+  if (!body?.leagueId) return c.json({ error: "Missing leagueId" }, 400);
+  const league = await c.env.DB.prepare("SELECT district FROM leagues WHERE id = ?").bind(body.leagueId).first<{ district: string }>();
+  if (!league) return c.json({ error: "League not found" }, 404);
+  const district = league.district;
+  const rng = createRng(cryptoSeed());
+
+  // Rozumné horní meze — ruční admin doplnění, ne hromadná generace (ochrana DB/CPU).
+  const wantFreeAgents = Math.min(Math.max(0, body.freeAgents ?? 0), 30);
+  const wantListings = Math.min(Math.max(0, body.listings ?? 0), 30);
+
+  // Herní datum ligy (pro expiraci volných hráčů v herním čase)
+  const gd = await c.env.DB.prepare("SELECT game_date FROM teams WHERE league_id = ? AND game_date IS NOT NULL LIMIT 1")
+    .bind(body.leagueId).first<{ game_date: string }>().catch((e) => { logger.warn({ module: "game" }, "seed-market game_date lookup", e); return null; });
+  const gameDate = gd?.game_date ? new Date(gd.game_date) : new Date();
+
+  const result: Record<string, unknown> = { district };
+
+  // 1) Volní hráči — obnova (smazat nejslabší) + doplnění
+  if (wantFreeAgents > 0) {
+    const { generateFreeAgentsForDistrict } = await import("../transfers/free-agent-pool");
+    let removed = 0;
+    if (body.replaceFreeAgents) {
+      const del = await c.env.DB.prepare(
+        "DELETE FROM free_agents WHERE id IN (SELECT id FROM free_agents WHERE district = ? ORDER BY overall_rating ASC LIMIT ?)"
+      ).bind(district, wantFreeAgents).run().catch((e) => { logger.warn({ module: "game" }, "seed-market delete weak FA", e); return null; });
+      removed = del?.meta?.changes ?? 0;
+    }
+    const gen = await generateFreeAgentsForDistrict(c.env.DB, rng, district, wantFreeAgents, gameDate);
+    result.freeAgents = { removed, generated: gen };
+  }
+
+  // 2) Trh — force AI listingy (obejde strop 5)
+  if (wantListings > 0) {
+    const { generateAiListings } = await import("../transfers/virtual-teams");
+    let made = 0;
+    for (let i = 0; i < wantListings; i++) {
+      made += await generateAiListings(c.env.DB, district, body.leagueId, rng, { force: true });
+    }
+    result.listings = made;
+  }
+
+  // 3) Legenda — bývalá ligová hvězda jako volný hráč (is_celebrity)
+  if (body.celebrity) {
+    const { spawnCelebrity } = await import("../season/celebrity-spawn");
+    result.celebrity = await spawnCelebrity(c.env.DB, body.leagueId, rng, "legend", (body.celebrityTier as any) ?? "A");
+  }
+
+  return c.json({ ok: true, ...result });
+});
+
 // POST /api/game/spawn-celebrity — force spawn celebrity for testing
 gameRouter.post("/game/spawn-celebrity", async (c) => {
   const body = await c.req.json<{ leagueId: string; type?: string; tier?: string }>().catch((e) => { logger.warn({ module: "game" }, "parse spawn-celebrity body", e); return null; });
