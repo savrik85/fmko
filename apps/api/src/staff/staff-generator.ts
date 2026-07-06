@@ -214,7 +214,7 @@ export function generateStaffCandidate(
   };
 }
 
-const POOL_TARGET = 10; // cíl volných kandidátů na okres
+const POOL_TARGET = 18; // cíl volných kandidátů na okres
 const LISTED_WEEKS = 3; // za jak dlouho kandidát z poolu zmizí
 
 /**
