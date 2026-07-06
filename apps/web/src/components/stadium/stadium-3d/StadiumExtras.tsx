@@ -114,9 +114,9 @@ export function UltrasSector({
         );
       })}
 
-      {/* Velký buben (od L2) — před choreo stěnou, ale pořád za brankou mimo hřiště (z+1.5 = -31) */}
+      {/* Velký buben (od L2) — stranou od branky, mezi brankou a choreo stěnou (mimo hřiště) */}
       {lvl >= 2 && (
-        <group position={[0, 0, z + 1.5]}>
+        <group position={[spread * 0.3, 0, z + 0.9]}>
           {/* Tělo bubnu — stojí svisle, blána směrem k hřišti */}
           <mesh position={[0, 1.0, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
             <cylinderGeometry args={[1.0, 1.0, 1.3, 20]} />
