@@ -76,43 +76,53 @@ export function UltrasSector({
 }) {
   if (level <= 0) return null;
   const lvl = Math.min(level, 3);
-  const count = [0, 3, 5, 7][lvl];
-  const poleH = 3 + lvl * 0.6;
-  // Před jižní brankou (z-), u čáry hřiště
-  const z = -(PITCH.depth / 2 + STAND_GAP + 0.5);
-  const spread = PITCH.width * 0.7;
+  const count = [0, 4, 6, 8][lvl];
+  const poleH = 5 + lvl * 0.8;
+  // Za jižní brankou (z-), kousek za čárou hřiště
+  const z = -(PITCH.depth / 2 + STAND_GAP + 1.2);
+  const spread = PITCH.width * 0.85;
   const sec = secondaryColor ?? "#ffffff";
 
   return (
     <group>
+      {/* Choreo stěna — velký vodorovný baner v barvě týmu */}
+      <mesh position={[0, poleH * 0.62, z + 0.1]} castShadow>
+        <planeGeometry args={[spread + 2, poleH * 0.7]} />
+        <meshStandardMaterial color={primaryColor} side={2} roughness={0.85} />
+      </mesh>
+      {/* Vodorovný pruh (druhá barva) */}
+      <mesh position={[0, poleH * 0.85, z + 0.11]}>
+        <planeGeometry args={[spread + 2, poleH * 0.14]} />
+        <meshStandardMaterial color={sec} side={2} roughness={0.85} />
+      </mesh>
+
       {Array.from({ length: count }).map((_, i) => {
         const x = -spread / 2 + (spread / Math.max(count - 1, 1)) * i;
-        const banner = i % 2 === 0 ? primaryColor : sec;
         return (
           <group key={i} position={[x, 0, z]}>
             {/* Žerď */}
             <mesh position={[0, poleH / 2, 0]} castShadow>
-              <cylinderGeometry args={[0.06, 0.06, poleH, 6]} />
-              <meshStandardMaterial color="#3A3A3A" metalness={0.5} roughness={0.5} />
+              <cylinderGeometry args={[0.08, 0.08, poleH, 6]} />
+              <meshStandardMaterial color="#2E2E2E" metalness={0.5} roughness={0.5} />
             </mesh>
-            {/* Svislý baner */}
-            <mesh position={[0, poleH * 0.6, 0.05]} castShadow>
-              <planeGeometry args={[0.9, poleH * 0.7]} />
-              <meshStandardMaterial color={banner} side={2} roughness={0.8} />
+            {/* Vlaječka nahoře (střídavě barvy) */}
+            <mesh position={[0.45, poleH - 0.5, 0.02]}>
+              <planeGeometry args={[0.9, 0.6]} />
+              <meshStandardMaterial color={i % 2 === 0 ? sec : primaryColor} side={2} roughness={0.8} />
             </mesh>
           </group>
         );
       })}
+
       {/* Velký buben uprostřed (od L2) */}
       {lvl >= 2 && (
-        <group position={[0, 0, z - 0.6]}>
-          <mesh position={[0, 0.9, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-            <cylinderGeometry args={[0.8, 0.8, 1.0, 20]} />
+        <group position={[0, 0, z + 1.2]}>
+          <mesh position={[0, 1.0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[1.0, 1.0, 1.3, 20]} />
             <meshStandardMaterial color={primaryColor} roughness={0.6} />
           </mesh>
-          {/* Blány bubnu */}
-          <mesh position={[0.5, 0.9, 0]} rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[0.82, 0.82, 0.04, 20]} />
+          <mesh position={[0.66, 1.0, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[1.02, 1.02, 0.05, 20]} />
             <meshStandardMaterial color="#F5F0E8" />
           </mesh>
         </group>
