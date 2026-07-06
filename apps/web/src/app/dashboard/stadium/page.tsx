@@ -88,6 +88,9 @@ const FACILITY_ICONS: Record<string, string> = {
   showers: "🚿",
   refreshments: "🍺",
   stands: "🏟",
+  roof: "☂️",
+  ultras_stand: "🥁",
+  toilets: "🚻",
   parking: "🚗",
   fence: "🏗",
 };
@@ -97,6 +100,9 @@ const FACILITY_LABELS: Record<string, string> = {
   showers: "Sprchy",
   refreshments: "Občerstvení",
   stands: "Tribuny",
+  roof: "Zastřešení tribun",
+  ultras_stand: "Sektor kotle",
+  toilets: "Sociálky",
   parking: "Parkoviště",
   fence: "Oplocení",
 };
@@ -106,6 +112,9 @@ const FACILITY_DESCRIPTIONS: Record<string, string[]> = {
   showers: ["Hadice na dvoře", "Jedna sprcha se studenou vodou", "Sprchy s teplou vodou", "Sprchy s masážními tryskami"],
   refreshments: ["Žádné", "Pivní stan z bazaru", "Karavan", "Hospůdka"],
   stands: ["Diváci stojí kolem hřiště", "Pár laviček", "Dřevěná tribuna se střechou", "Betonová tribuna se sedačkami"],
+  roof: ["Bez střechy — v dešti se to vylidní", "Plachta nad lavičkami", "Plechová stříška nad tribunou", "Kompletní zastřešení tribun"],
+  ultras_stand: ["Bez kotle", "Pár bubeníků za brankou", "Vlajkový sektor s bubny", "Peklo — chorály slyšet do vedlejší vsi"],
+  toilets: ["Kopřivy za střídačkou", "Kadibudka", "Zděné záchodky", "Čisté sociálky s teplou vodou"],
   parking: ["Žádné", "Louka vedle hřiště", "Štěrkové parkoviště", "Asfaltové parkoviště s čarami"],
   fence: ["Žádné", "Provizorní páska", "Drátěný plot", "Zděné oplocení s branami"],
 };

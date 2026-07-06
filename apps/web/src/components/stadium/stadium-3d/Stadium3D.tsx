@@ -15,6 +15,7 @@ import { StadiumSign } from "./StadiumSign";
 import { AdBoards } from "./AdBoards";
 import { Scoreboard } from "./Scoreboard";
 import { TeamFlag } from "./TeamFlag";
+import { StandRoof, UltrasSector } from "./StadiumExtras";
 import { getStadiumLayout, SKY_SUN_POSITION } from "./constants";
 
 export interface Stadium3DCustomization {
@@ -136,10 +137,17 @@ export function Stadium3D({
         {(f.stands ?? 0) >= 2 && <Stand side="east" level={f.stands} teamColor={teamColor} standColor={standColor} seatColor={seatColor} accentColor={accentColor} reducedDetail={isMobile} />}
         {(f.stands ?? 0) >= 2 && <Stand side="west" level={f.stands} teamColor={teamColor} standColor={standColor} seatColor={seatColor} accentColor={accentColor} reducedDetail={isMobile} />}
 
+        {/* Zastřešení tribun */}
+        <StandRoof standsLevel={f.stands ?? 0} roofLevel={f.roof ?? 0} roofColor={roofColor} />
+
+        {/* Sektor kotle — vlajkový sektor + buben před jižní tribunou */}
+        <UltrasSector level={f.ultras_stand ?? 0} primaryColor={teamColor} secondaryColor={secondaryColor} />
+
         {/* Budovy v rozích */}
         <Building kind="changing_rooms" level={f.changing_rooms ?? 0} position={layout.buildings.changing_rooms} roofColorOverride={roofColor} />
         <Building kind="showers" level={f.showers ?? 0} position={layout.buildings.showers} roofColorOverride={roofColor} />
         <Building kind="refreshments" level={f.refreshments ?? 0} position={layout.buildings.refreshments} roofColorOverride={roofColor} />
+        <Building kind="toilets" level={f.toilets ?? 0} position={layout.buildings.toilets} roofColorOverride={roofColor} />
 
         {/* Parkoviště */}
         <Parking level={f.parking ?? 0} position={layout.parking} />

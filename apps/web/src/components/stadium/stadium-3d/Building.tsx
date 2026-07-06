@@ -2,7 +2,7 @@
 
 import { BUILDING_COLORS, BUILDING_DIMS } from "./constants";
 
-type BuildingKind = "changing_rooms" | "showers" | "refreshments";
+type BuildingKind = "changing_rooms" | "showers" | "refreshments" | "toilets";
 
 interface BuildingProps {
   kind: BuildingKind;
@@ -20,6 +20,100 @@ export function Building({ kind, level, position, roofColorOverride }: BuildingP
       {kind === "refreshments" && <Refreshments level={lvl} roofColor={roofColorOverride} />}
       {kind === "changing_rooms" && <ChangingRooms level={lvl} roofColor={roofColorOverride} />}
       {kind === "showers" && <Showers level={lvl} roofColor={roofColorOverride} />}
+      {kind === "toilets" && <Toilets level={lvl} roofColor={roofColorOverride} />}
+    </group>
+  );
+}
+
+// ─── SOCIÁLKY — kadibudka / zděné záchodky / moderní sociálky ───
+function Toilets({ level, roofColor }: { level: number; roofColor?: string | null }) {
+  if (level === 1) return <Outhouse roofColor={roofColor} />;
+  if (level === 2) return <BrickToilets roofColor={roofColor} />;
+  return <ModernToilets roofColor={roofColor} />;
+}
+
+function Outhouse({ roofColor }: { roofColor?: string | null }) {
+  // Kadibudka — úzká vysoká dřevěná budka s dvířky a srdíčkem
+  const w = 1.2, h = 2.3, d = 1.2;
+  return (
+    <group>
+      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, h, d]} />
+        <meshStandardMaterial color="#8B6F47" roughness={0.95} />
+      </mesh>
+      {/* Šikmá pultová stříška */}
+      <mesh position={[0, h + 0.1, -0.1]} rotation={[-0.15, 0, 0]} castShadow>
+        <boxGeometry args={[w + 0.3, 0.1, d + 0.3]} />
+        <meshStandardMaterial color={roofColor ?? "#5C3A1E"} />
+      </mesh>
+      {/* Dvířka */}
+      <mesh position={[0, h * 0.45, d / 2 + 0.01]}>
+        <planeGeometry args={[w * 0.7, h * 0.8]} />
+        <meshStandardMaterial color="#5C3A1E" />
+      </mesh>
+      {/* Srdíčko (otvor) */}
+      <mesh position={[0, h * 0.7, d / 2 + 0.02]}>
+        <circleGeometry args={[0.1, 8]} />
+        <meshStandardMaterial color="#2A2A2A" />
+      </mesh>
+    </group>
+  );
+}
+
+function BrickToilets({ roofColor }: { roofColor?: string | null }) {
+  // Zděné záchodky — nízká cihlová budova, dvoje dveře (M/Ž)
+  const w = 3.5, h = 2.4, d = 2.5;
+  return (
+    <group>
+      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, h, d]} />
+        <meshStandardMaterial color="#C08A6A" roughness={0.9} />
+      </mesh>
+      {/* Plochá střecha */}
+      <mesh position={[0, h + 0.06, 0]} castShadow>
+        <boxGeometry args={[w + 0.3, 0.12, d + 0.3]} />
+        <meshStandardMaterial color={roofColor ?? "#6B6B6B"} />
+      </mesh>
+      {/* Dveře M/Ž */}
+      <mesh position={[-w * 0.22, h * 0.42, d / 2 + 0.01]}>
+        <planeGeometry args={[w * 0.22, h * 0.75]} />
+        <meshStandardMaterial color="#3B6B8C" />
+      </mesh>
+      <mesh position={[w * 0.22, h * 0.42, d / 2 + 0.01]}>
+        <planeGeometry args={[w * 0.22, h * 0.75]} />
+        <meshStandardMaterial color="#A03A4C" />
+      </mesh>
+    </group>
+  );
+}
+
+function ModernToilets({ roofColor }: { roofColor?: string | null }) {
+  // Moderní sociálky — světlá budova s velkým WC piktogramem
+  const w = 4.5, h = 2.8, d = 3;
+  return (
+    <group>
+      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, h, d]} />
+        <meshStandardMaterial color="#EAF0F2" roughness={0.55} metalness={0.1} />
+      </mesh>
+      <mesh position={[0, h + 0.09, 0]} castShadow>
+        <boxGeometry args={[w + 0.4, 0.18, d + 0.4]} />
+        <meshStandardMaterial color={roofColor ?? "#3B6B8C"} />
+      </mesh>
+      {/* Modrý pruh s WC piktogramem */}
+      <mesh position={[0, h * 0.75, d / 2 + 0.01]}>
+        <planeGeometry args={[w * 0.9, h * 0.22]} />
+        <meshStandardMaterial color="#2C6FB0" />
+      </mesh>
+      {/* Dveře M/Ž */}
+      <mesh position={[-w * 0.25, h * 0.35, d / 2 + 0.02]}>
+        <planeGeometry args={[w * 0.24, h * 0.6]} />
+        <meshStandardMaterial color="#2A2A2A" metalness={0.4} />
+      </mesh>
+      <mesh position={[w * 0.25, h * 0.35, d / 2 + 0.02]}>
+        <planeGeometry args={[w * 0.24, h * 0.6]} />
+        <meshStandardMaterial color="#2A2A2A" metalness={0.4} />
+      </mesh>
     </group>
   );
 }

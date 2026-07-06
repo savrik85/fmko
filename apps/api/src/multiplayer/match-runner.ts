@@ -303,7 +303,7 @@ export async function runScheduledMatches(
             const {calculateFacilityEffects} = await import("../stadium/stadium-generator");
             const facilities: Record<string, number> = {};
             if (stadiumRow) {
-                for (const key of ["changing_rooms", "showers", "refreshments", "stands", "parking", "fence"]) {
+                for (const key of ["changing_rooms", "showers", "refreshments", "stands", "parking", "fence", "roof", "ultras_stand", "toilets"]) {
                     facilities[key] = (stadiumRow[key] as number) ?? 0;
                 }
             }
@@ -424,19 +424,24 @@ export async function runScheduledMatches(
             }
             const derbyAttendanceMul = preMatchHeat >= 60 ? 1.35 : 1.0;
 
-            // Apply facility attendance bonus (parking) + celebrity bonus + satisfaction + promo + derby + počasí, cap at stadium capacity
+            // Zastřešení tribun: zmírní počasový postih návštěvy (shield 0-1 → wf se blíží k 1)
+            const wf = weatherAttendanceFactor(weather);
+            const shieldedWeather = wf + (1 - wf) * facilityEffects.weatherAttendanceShield;
+
+            // Apply facility attendance bonus (parking) + celebrity bonus + satisfaction + promo + derby + počasí (se zastřešením), cap at stadium capacity
             const attendance = Math.min(
-                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul * weatherAttendanceFactor(weather)),
+                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul * shieldedWeather),
                 stadiumCapacity,
             );
 
-            // Apply changing room morale bonus to home lineup
-            if (facilityEffects.homeMoraleBonus > 0) {
+            // Morálka domácích: šatny + sektor kotle (atmosféra)
+            const homeMoraleBoost = facilityEffects.homeMoraleBonus + facilityEffects.homeCrowdMoraleBonus;
+            if (homeMoraleBoost > 0) {
                 for (const p of homeLineup) {
-                    p.morale = Math.min(100, p.morale + facilityEffects.homeMoraleBonus);
+                    p.morale = Math.min(100, p.morale + homeMoraleBoost);
                 }
                 for (const p of homeSubs) {
-                    p.morale = Math.min(100, p.morale + facilityEffects.homeMoraleBonus);
+                    p.morale = Math.min(100, p.morale + homeMoraleBoost);
                 }
             }
 
@@ -558,7 +563,8 @@ export async function runScheduledMatches(
                 return null;
             });
             const officialCount = acceptedOfficials?.cnt ?? 0;
-            const homeAdvantage = Math.min(0.10, 0.05 + officialCount * 0.015);
+            // Domácí výhoda: základ + pozvaní zastupitelé + sektor kotle (atmosféra). Strop zvednut na 0.15.
+            const homeAdvantage = Math.min(0.15, 0.05 + officialCount * 0.015 + facilityEffects.homeAdvantageBonus);
             // Kotel (bubny a vlajky) domácích zvedá návštěvu; strop kapacity stadionu platí dál
             const crowdBoost = 1 + (homeEquipment?.crowdMod ?? 0);
             const attendanceWithOfficials = Math.min(

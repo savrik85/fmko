@@ -1313,6 +1313,9 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     showers: stadium.showers as number ?? 0,
     refreshments: stadium.refreshments as number ?? 0,
     stands: stadium.stands as number ?? 0,
+    roof: stadium.roof as number ?? 0,
+    ultras_stand: stadium.ultras_stand as number ?? 0,
+    toilets: stadium.toilets as number ?? 0,
     parking: stadium.parking as number ?? 0,
     fence: stadium.fence as number ?? 0,
   };
@@ -1425,6 +1428,9 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
     showers: stadium.showers as number ?? 0,
     refreshments: stadium.refreshments as number ?? 0,
     stands: stadium.stands as number ?? 0,
+    roof: stadium.roof as number ?? 0,
+    ultras_stand: stadium.ultras_stand as number ?? 0,
+    toilets: stadium.toilets as number ?? 0,
     parking: stadium.parking as number ?? 0,
     fence: stadium.fence as number ?? 0,
   };
