@@ -110,16 +110,21 @@ export function UltrasSector({
   primaryColor,
   secondaryColor,
   text,
+  bannerColor,
+  textColor,
 }: {
   level: number;
   primaryColor: string;
   secondaryColor?: string;
   text?: string | null;
+  bannerColor?: string | null;
+  textColor?: string | null;
 }) {
   const sec = secondaryColor ?? "#ffffff";
-  // Text v kontrastní barvě k primární (na světlé primární tmavý text a naopak).
-  const textColor = isLightHex(primaryColor) ? "#1a1a1a" : sec;
-  const bannerTex = useBannerTexture(text, primaryColor, textColor);
+  const bannerBg = bannerColor ?? primaryColor;
+  // Barva nápisu: volitelná; jinak čitelný kontrast k barvě plachty (bílá na tmavé, tmavá na světlé).
+  const bannerFg = textColor ?? (isLightHex(bannerBg) ? "#1a1a1a" : "#ffffff");
+  const bannerTex = useBannerTexture(text, bannerBg, bannerFg);
 
   if (level <= 0) return null;
   const lvl = Math.min(level, 3);
@@ -131,11 +136,11 @@ export function UltrasSector({
 
   return (
     <group>
-      {/* Baner na zábradlí — zvednutý nad reklamy; s nápisem (textura) nebo jednobarevný */}
-      <mesh position={[0, 1.5, z]} castShadow>
-        <planeGeometry args={[spread + 2, 1.35]} />
+      {/* Baner na zábradlí — zvednutý nad reklamy; s nápisem (textura) nebo jednobarevný. Výška ~75 %. */}
+      <mesh position={[0, 1.45, z]} castShadow>
+        <planeGeometry args={[spread + 2, 1.0]} />
         <meshStandardMaterial
-          color={bannerTex ? "#ffffff" : primaryColor}
+          color={bannerTex ? "#ffffff" : bannerBg}
           map={bannerTex ?? undefined}
           side={2}
           roughness={0.85}
@@ -143,8 +148,8 @@ export function UltrasSector({
       </mesh>
       {/* Pruh druhé barvy nahoře na baneru (jen bez nápisu) */}
       {!bannerTex && (
-        <mesh position={[0, 2.06, z + 0.02]}>
-          <planeGeometry args={[spread + 2, 0.22]} />
+        <mesh position={[0, 1.87, z + 0.02]}>
+          <planeGeometry args={[spread + 2, 0.18]} />
           <meshStandardMaterial color={sec} side={2} roughness={0.85} />
         </mesh>
       )}
