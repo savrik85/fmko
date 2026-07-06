@@ -99,18 +99,22 @@ export async function generateAiListings(
   district: string,
   leagueId: string,
   rng: Rng,
+  opts?: { force?: boolean },
 ): Promise<number> {
   const teams = VIRTUAL_TEAMS[district];
   if (!teams || teams.length === 0) return 0;
 
-  // Check current AI listing count
-  const currentCount = await db.prepare(
-    "SELECT COUNT(*) as cnt FROM transfer_listings WHERE status = 'active' AND is_ai_listing = 1 AND league_id = ?"
-  ).bind(leagueId).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "virtual-teams" }, "count listings", e); return { cnt: 0 }; });
-  if ((currentCount?.cnt ?? 0) >= 5) return 0;
+  // force = admin ruční doplnění trhu — obejde běžný strop 5 i 30% šanci na tick.
+  if (!opts?.force) {
+    // Check current AI listing count
+    const currentCount = await db.prepare(
+      "SELECT COUNT(*) as cnt FROM transfer_listings WHERE status = 'active' AND is_ai_listing = 1 AND league_id = ?"
+    ).bind(leagueId).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "virtual-teams" }, "count listings", e); return { cnt: 0 }; });
+    if ((currentCount?.cnt ?? 0) >= 5) return 0;
 
-  // 30% chance per tick
-  if (rng.random() > 0.30) return 0;
+    // 30% chance per tick
+    if (rng.random() > 0.30) return 0;
+  }
 
   const team = rng.pick(teams);
   // Brankáři vzácně (viz free-agent-pool) — trh nemá být zaplavený gólmany

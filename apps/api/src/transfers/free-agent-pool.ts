@@ -15,6 +15,104 @@ import { generatePlayerFace } from "../routes/teams";
 const POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
 
 /**
+ * Vygeneruje `count` volných hráčů pro daný okres a vloží je do free_agents.
+ * Sdílené jádro — používá maintainFreeAgentPool (respektuje strop) i admin
+ * force-doplnění (strop ignoruje, volá s libovolným count).
+ * Returns count of free agents actually inserted.
+ */
+export async function generateFreeAgentsForDistrict(
+  db: D1Database,
+  rng: Rng,
+  district: string,
+  count: number,
+  gameDate: Date,
+): Promise<number> {
+  if (count <= 0) return 0;
+
+  const districtData = await getDistrictDataFromDB(db, district);
+  const surnameData = { surnames: districtData.surnames, female_forms: {} as Record<string, string> };
+  const firstnameData = { male: FIRSTNAMES, female: {} as Record<string, Record<string, number>> };
+
+  // Info o okrese z libovolné vesnice (population/size pro generátor)
+  const villageRow = await db.prepare(
+    "SELECT population, size FROM villages WHERE district = ? ORDER BY RANDOM() LIMIT 1"
+  ).bind(district).first<{ population: number; size: string }>()
+    .catch((e) => { logger.warn({ module: "free-agent-pool" }, "district village info", e); return null; });
+
+  const sizeMap: Record<string, string> = { hamlet: "vesnice", village: "obec", town: "mestys", small_city: "mesto", city: "mesto" };
+  const villageInfo: VillageInfo = {
+    region_code: district,
+    category: (sizeMap[(villageRow?.size as string)] ?? "obec") as VillageInfo["category"],
+    population: (villageRow?.population as number) ?? 500,
+    district,
+  };
+
+  // Pick random villages from the district for residence
+  const nearbyVillages = await db.prepare(
+    "SELECT id, lat, lng FROM villages WHERE district = ? ORDER BY RANDOM() LIMIT 10"
+  ).bind(district).all().catch((e) => { logger.warn({ module: "free-agent-pool" }, "query", e); return { results: [] }; });
+
+  let generated = 0;
+  for (let i = 0; i < count; i++) {
+    // Brankáři vzácně — na trhu jich má být málo (klub potřebuje jen 1–2 a nerad je pouští)
+    const pos = rng.weighted({ GK: 1, DEF: 8, MID: 8, FWD: 7 }) as typeof POSITIONS[number];
+    const player = generatePlayer(rng, villageInfo, pos, surnameData, firstnameData);
+
+    // Build skills from generated player
+    const skills = {
+      speed: player.speed, technique: player.technique, shooting: player.shooting,
+      passing: player.passing, heading: player.heading, defense: player.defense,
+      goalkeeping: player.goalkeeping ?? 0, stamina: player.stamina, strength: player.strength,
+      vision: player.technique, creativity: player.passing, setPieces: rng.int(10, 50),
+      experience: Math.min(80, player.age * 2),
+    };
+    const posWeights: Record<string, Record<string, number>> = {
+      GK: { goalkeeping: 4, strength: 2, stamina: 1 },
+      DEF: { defense: 3, heading: 2, strength: 2, speed: 1, stamina: 2, passing: 1 },
+      MID: { passing: 3, technique: 2, stamina: 3, speed: 1, shooting: 1, vision: 2 },
+      FWD: { shooting: 3, speed: 3, technique: 2, heading: 1, stamina: 1 },
+    };
+    const w = posWeights[pos] ?? posWeights.MID;
+    let wSum = 0, wTotal = 0;
+    for (const [k, wt] of Object.entries(w)) {
+      wSum += ((skills as Record<string, number>)[k] ?? 30) * wt;
+      wTotal += wt;
+    }
+    const rawRating = wTotal > 0 ? wSum / wTotal : 30;
+    const overallRating = Number.isFinite(rawRating) ? Math.round(rawRating) : 30;
+    const weeklyWage = Math.round(10 + (overallRating / 100) * 400);
+
+    // Pick a random village for residence
+    const resVillage = nearbyVillages.results.length > 0
+      ? nearbyVillages.results[rng.int(0, nearbyVillages.results.length - 1)]
+      : null;
+
+    const expiresAt = new Date(gameDate);
+    expiresAt.setDate(expiresAt.getDate() + rng.int(5, 7));
+
+    const id = crypto.randomUUID();
+    await db.prepare(
+      `INSERT INTO free_agents (id, district, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, nationality, weekly_wage, source, village_id, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?)`
+    ).bind(
+      id, district, player.firstName, player.lastName, player.age, pos, overallRating,
+      JSON.stringify(skills),
+      JSON.stringify({ stamina: player.stamina, strength: player.strength, injuryProneness: player.injuryProneness ?? 50, ...generateHeightWeight(rng, pos, player.bodyType ?? "normal"), preferredFoot: player.preferredFoot, preferredSide: player.preferredSide }),
+      JSON.stringify({ discipline: player.discipline, patriotism: player.patriotism, alcohol: player.alcohol, temper: player.temper, leadership: player.leadership ?? 30, workRate: player.workRate ?? 50, aggression: player.aggression ?? 40, consistency: player.consistency ?? 50, clutch: player.clutch ?? 50 }),
+      JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
+      JSON.stringify(generatePlayerFace({ age: player.age, bodyType: player.bodyType ?? "normal", ethnicity: player.ethnicity })),
+      player.nationality ?? "CZ",
+      weeklyWage, resVillage?.id ?? null, expiresAt.toISOString(),
+    ).run();
+
+    generated++;
+    logger.info({ module: "free-agent-pool" }, `inserted ${player.firstName} ${player.lastName} (${pos}, ${overallRating}) in ${district}`);
+  }
+
+  return generated;
+}
+
+/**
  * Maintain the free agent pool: expire old entries, generate new ones.
  * Returns count of new free agents generated.
  */
@@ -29,7 +127,7 @@ export async function maintainFreeAgentPool(
 
   // 2. Find districts with active human teams
   const districts = await db.prepare(
-    "SELECT DISTINCT v.district, v.id as village_id, v.population, v.size, v.lat, v.lng FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id != 'ai'"
+    "SELECT DISTINCT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id != 'ai'"
   ).all().catch((e) => { logger.warn({ module: "free-agent-pool" }, "query", e); return { results: [] }; });
 
   let generated = 0;
@@ -47,78 +145,7 @@ export async function maintainFreeAgentPool(
     const count = rng.int(0, 2);
     if (count === 0) continue;
 
-    const districtData = await getDistrictDataFromDB(db, district);
-    const surnameData = { surnames: districtData.surnames, female_forms: {} as Record<string, string> };
-    const firstnameData = { male: FIRSTNAMES, female: {} as Record<string, Record<string, number>> };
-
-    const sizeMap: Record<string, string> = { hamlet: "vesnice", village: "obec", town: "mestys", small_city: "mesto", city: "mesto" };
-    const villageInfo: VillageInfo = {
-      region_code: district,
-      category: (sizeMap[(row.size as string)] ?? "obec") as VillageInfo["category"],
-      population: (row.population as number) ?? 500,
-      district,
-    };
-
-    // Pick random villages from the district for residence
-    const nearbyVillages = await db.prepare(
-      "SELECT id, lat, lng FROM villages WHERE district = ? ORDER BY RANDOM() LIMIT 10"
-    ).bind(district).all().catch((e) => { logger.warn({ module: "free-agent-pool" }, "query", e); return { results: [] }; });
-
-    for (let i = 0; i < count; i++) {
-      // Brankáři vzácně — na trhu jich má být málo (klub potřebuje jen 1–2 a nerad je pouští)
-      const pos = rng.weighted({ GK: 1, DEF: 8, MID: 8, FWD: 7 }) as typeof POSITIONS[number];
-      const player = generatePlayer(rng, villageInfo, pos, surnameData, firstnameData);
-
-      // Build skills from generated player
-      const skills = {
-        speed: player.speed, technique: player.technique, shooting: player.shooting,
-        passing: player.passing, heading: player.heading, defense: player.defense,
-        goalkeeping: player.goalkeeping ?? 0, stamina: player.stamina, strength: player.strength,
-        vision: player.technique, creativity: player.passing, setPieces: rng.int(10, 50),
-        experience: Math.min(80, player.age * 2),
-      };
-      const posWeights: Record<string, Record<string, number>> = {
-        GK: { goalkeeping: 4, strength: 2, stamina: 1 },
-        DEF: { defense: 3, heading: 2, strength: 2, speed: 1, stamina: 2, passing: 1 },
-        MID: { passing: 3, technique: 2, stamina: 3, speed: 1, shooting: 1, vision: 2 },
-        FWD: { shooting: 3, speed: 3, technique: 2, heading: 1, stamina: 1 },
-      };
-      const w = posWeights[pos] ?? posWeights.MID;
-      let wSum = 0, wTotal = 0;
-      for (const [k, wt] of Object.entries(w)) {
-        wSum += ((skills as Record<string, number>)[k] ?? 30) * wt;
-        wTotal += wt;
-      }
-      const rawRating = wTotal > 0 ? wSum / wTotal : 30;
-      const overallRating = Number.isFinite(rawRating) ? Math.round(rawRating) : 30;
-      const weeklyWage = Math.round(10 + (overallRating / 100) * 400);
-
-      // Pick a random village for residence
-      const resVillage = nearbyVillages.results.length > 0
-        ? nearbyVillages.results[rng.int(0, nearbyVillages.results.length - 1)]
-        : null;
-
-      const expiresAt = new Date(gameDate);
-      expiresAt.setDate(expiresAt.getDate() + rng.int(5, 7));
-
-      const id = crypto.randomUUID();
-      await db.prepare(
-        `INSERT INTO free_agents (id, district, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, nationality, weekly_wage, source, village_id, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?)`
-      ).bind(
-        id, district, player.firstName, player.lastName, player.age, pos, overallRating,
-        JSON.stringify(skills),
-        JSON.stringify({ stamina: player.stamina, strength: player.strength, injuryProneness: player.injuryProneness ?? 50, ...generateHeightWeight(rng, pos, player.bodyType ?? "normal"), preferredFoot: player.preferredFoot, preferredSide: player.preferredSide }),
-        JSON.stringify({ discipline: player.discipline, patriotism: player.patriotism, alcohol: player.alcohol, temper: player.temper, leadership: player.leadership ?? 30, workRate: player.workRate ?? 50, aggression: player.aggression ?? 40, consistency: player.consistency ?? 50, clutch: player.clutch ?? 50 }),
-        JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
-        JSON.stringify(generatePlayerFace({ age: player.age, bodyType: player.bodyType ?? "normal", ethnicity: player.ethnicity })),
-        player.nationality ?? "CZ",
-        weeklyWage, resVillage?.id ?? null, expiresAt.toISOString(),
-      ).run();
-
-      generated++;
-      logger.info({ module: "free-agent-pool" }, `inserted ${player.firstName} ${player.lastName} (${pos}, ${overallRating}) in ${district}`);
-    }
+    generated += await generateFreeAgentsForDistrict(db, rng, district, count, gameDate);
   }
 
   return generated;
