@@ -1,17 +1,33 @@
-export type { Village, VillageCategory, PitchType } from "./village.js";
-export type { Team } from "./team.js";
+export type { Village, VillageCategory, PitchType } from "./village";
+export type { Team } from "./team";
 export type {
   Player,
   PlayerPosition,
   BodyType,
   PlayerAttributes,
   AvatarConfig,
-} from "./player.js";
-export type { Relationship, RelationshipType } from "./relationship.js";
-export type { League, LeagueStatus } from "./league.js";
-export type { LeagueStanding } from "./league-standing.js";
-export type { Match, MatchStatus, MatchEvent, EventType } from "./match.js";
-export type { Sponsor, SponsorType } from "./sponsor.js";
-export type { GameEvent, GameEventType } from "./event.js";
-export type { User } from "./user.js";
-export type { Manager, ManagerBackstory } from "./manager.js";
+} from "./player";
+export type { Relationship, RelationshipType } from "./relationship";
+export type { League, LeagueStatus } from "./league";
+export type { LeagueStanding } from "./league-standing";
+export type { Match, MatchStatus, MatchEvent, EventType } from "./match";
+export type { Sponsor, SponsorType } from "./sponsor";
+export type { GameEvent, GameEventType } from "./event";
+export type { User } from "./user";
+export type { Manager, ManagerBackstory } from "./manager";
+export type {
+  StaffRole,
+  StaffAttributeKey,
+  StaffGender,
+  StaffGroup,
+  StaffMember,
+  StaffRoleDef,
+} from "./staff";
+export {
+  ROLE_DEFS,
+  STAFF_ATTRIBUTE_LABELS,
+  STAFF_GROUP_LABELS,
+  STAFF_ROLE_ORDER,
+  staffAttributeValue,
+  staffEffectiveness,
+} from "./staff";

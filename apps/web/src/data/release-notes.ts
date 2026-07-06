@@ -12,6 +12,19 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-07-06",
+    emoji: "👔",
+    title: "Zaměstnanci — realizační tým klubu",
+    items: [
+      "Nová stránka Zaměstnanci: najmi si realizační tým. Dvanáct rolí (asistent, trenér mládeže/brankářů, kondiční trenér, masér, lékař, psycholog, správce hřiště, skaut, obsluha občerstvení, šéf fanklubu, ekonom), každou obsadíš max jedním člověkem. Nejsou povinní — jsou to bonusy.",
+      "V záložce Volní je nabídka lidí z okresu (kdo dřív přijde…). Každý má sedm vlastností a profesi, ve které je nejlepší — ale najmout ho můžeš na jakoukoli roli. Jeho vlastnosti určují, jak dobrý v ní bude.",
+      "Masér zvedá regeneraci, lékař hojí zranění rychleji, kondiční trenér šetří síly, asistent a trenér mládeže zrychlují tréninky, trenér brankářů kouše gólmany, psycholog drží náladu, správce se stará o trávník a vybavení, šéf fanklubu přitáhne diváky.",
+      "Obsluha občerstvení (klidně i šikovná servírka — rozhoduje šarm) zvýší prodej piva a klobás. Ekonom osekne provozní náklady a vyjedná víc od sponzorů. Skaut jednou týdně tipne talent.",
+      "Za peníze můžeš zaměstnance poslat na kurz a vylepšit mu konkrétní vlastnost — třeba maséra přeškolit na lékaře. Během kurzu normálně pracuje.",
+      "Platí se podpisné při náboru a týdenní mzda (strhává se s ostatními mzdami). Propuštění je zdarma.",
+    ],
+  },
+  {
     date: "2026-07-05",
     emoji: "🚐",
     title: "Sedm nových kusů vybavení",

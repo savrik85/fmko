@@ -228,7 +228,7 @@ export function simulateTraining(
   commuteKms?: number[],
   equipmentMultiplier: number = 1.0,
   managerBonus: { coaching: number; discipline: number; youthDev: number } = { coaching: 40, discipline: 40, youthDev: 40 },
-  equipExtras: { attendanceBonus?: number; youthTrainingMod?: number } = {},
+  equipExtras: { attendanceBonus?: number; youthTrainingMod?: number; gkTrainingMul?: number } = {},
 ): TrainingResult {
   const allAttendance: TrainingAttendance[] = [];
   const attendanceCounts = new Map<number, number>();
@@ -287,7 +287,9 @@ export function simulateTraining(
       // Diminishing returns: each point above 50 reduces chance
       const diminishing = current >= 50 ? Math.max(0.15, 1.0 - (current - 50) * 0.017) : 1.0;
 
-      const improveChance = 0.10 * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod;
+      // Trenér brankářů: extra multiplikátor jen pro brankáře
+      const gkMul = player.position === "GK" ? (equipExtras.gkTrainingMul ?? 1) : 1;
+      const improveChance = 0.10 * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul;
       if (rng.random() < improveChance) {
         if (current < 100) {
           (player as unknown as Record<string, number>)[attr] = current + 1;

@@ -13,6 +13,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
     { href: "/dashboard/squad", icon: "\u{1F465}", label: "Kádr", color: "#2D5F2D" },
     { href: "/dashboard/u21", icon: "\u{1F9D2}", label: "U21", color: "#3D7A3D" },
     { href: "/dashboard/training", icon: "\u{1F3CB}️", label: "Tréninky", color: "#3D7A3D" },
+    { href: "/dashboard/zamestnanci", icon: "\u{1F454}", label: "Zaměstnanci", color: "#4E6B7B", isNew: true },
     { href: "/dashboard/transfers", icon: "\u{1F91D}", label: "Přestupy", color: "#4A8A4A" },
     { href: "/dashboard/watchlist", icon: "⭐", label: "Sledovaní", color: "#B8860B" },
     { href: "/dashboard/finances", icon: "\u{1F4B0}", label: "Finance", color: "#6B8E23" },
