@@ -65,7 +65,11 @@ export default function SeasonEndPage() {
         if (!me.teamId) { window.location.replace("/dashboard"); return; }
         const d = await apiFetch<{ recap: RecapData | null }>(`/api/teams/${me.teamId}/season-recap`);
         if (cancelled) return;
-        if (!d.recap) { window.location.replace("/dashboard"); return; }
+        // Neúplný recap (chybí champion/awards/seasonStats) neumíme vyrenderovat — pojistka
+        // proti bílé stránce (crash na data.champion.name apod.). Přeskoč rovnou na dashboard.
+        if (!d.recap || !d.recap.champion || !d.recap.awards || !d.recap.seasonStats) {
+          window.location.replace("/dashboard"); return;
+        }
         (d.recap as RecapData & { __teamId: string }).__teamId = me.teamId;
         setRecap(d.recap);
         setState("ready");

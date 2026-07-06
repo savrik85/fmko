@@ -6086,8 +6086,15 @@ gameRouter.get("/teams/:teamId/season-recap", async (c) => {
   ).bind(teamId).first<{ season_number: number; data: string }>()
     .catch((e) => { logger.warn({ module: "game.ts" }, "load season recap", e); return null; });
   if (!row) return c.json({ recap: null });
-  let data: unknown = null;
-  try { data = JSON.parse(row.data); } catch (e) { logger.warn({ module: "game.ts" }, "parse recap data", e); }
+  let data: Record<string, unknown> | null = null;
+  try { data = JSON.parse(row.data) as Record<string, unknown>; } catch (e) { logger.warn({ module: "game.ts" }, "parse recap data", e); }
+  // Neúplný recap (jen "departures" snapshot z fáze departures, bez champion/awards/seasonStats)
+  // se nikdy nesmí servírovat na FE — /season-end očekává plný recap a bez těch polí spadne.
+  // Vzniká např. u AI týmu, který dohrál sezónu a NIKDY neprošel buildTeamRecap (běží jen pro
+  // lidské týmy); po převzetí takového týmu ho nový manažer zdědí. Ber ho jako neexistující.
+  if (!data || !data.champion || !data.awards || !data.seasonStats) {
+    return c.json({ recap: null });
+  }
   return c.json({ recap: data, seasonNumber: row.season_number });
 });
 
