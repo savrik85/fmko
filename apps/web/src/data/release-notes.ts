@@ -13,6 +13,16 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-07-06",
+    emoji: "🗳️",
+    title: "Komunální volby v obcích",
+    items: [
+      "Proběhla nová sezóna a s ní komunální volby — na mnoha místech se vyměnilo vedení obcí. Podívej se do sekce Obec, kdo ti teď sedí na radnici.",
+      "Vztahy klubů s obcemi (přízeň) začínají nanovo — všem se resetovala na neutrál.",
+      "Získat si přízeň obce je teď těžší — brigády, petice i posezení v hospodě dávají méně přízně než dřív. Budování vztahu s radnicí je běh na delší trať.",
+    ],
+  },
+  {
+    date: "2026-07-06",
     emoji: "🏟️",
     title: "Tři nové stavby na stadionu",
     items: [
