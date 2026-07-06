@@ -60,6 +60,7 @@ interface Customization {
   accentColor: string | null;
   scoreboardLevel: number;
   flagSize: number;
+  ultrasText: string | null;
 }
 
 interface VisualUpgrade {
@@ -163,6 +164,7 @@ export default function StadiumPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("3d");
   const [openPicker, setOpenPicker] = useState<keyof Customization | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [ultrasDraft, setUltrasDraft] = useState<string | null>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -407,6 +409,34 @@ export default function StadiumPage() {
                 </div>
               );
             })()}
+
+            {/* Nápis v kotli — jen když je postavený sektor kotle */}
+            {(stadium.facilities.ultras_stand ?? 0) > 0 && (
+              <div className="pt-2 border-t border-gray-50">
+                <div className="text-xs text-muted font-heading uppercase mb-1.5">Nápis v kotli</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    maxLength={22}
+                    value={ultrasDraft ?? stadium.customization.ultrasText ?? ""}
+                    onChange={(e) => setUltrasDraft(e.target.value)}
+                    placeholder="např. PRALES BOHDALEC"
+                    className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-heading uppercase"
+                  />
+                  <button
+                    onClick={async () => {
+                      const v = (ultrasDraft ?? stadium.customization.ultrasText ?? "").trim();
+                      await handleCustomize("ultrasText", v || null);
+                      setUltrasDraft(null);
+                    }}
+                    className="btn btn-primary btn-sm shrink-0"
+                  >
+                    Uložit
+                  </button>
+                </div>
+                <div className="text-[11px] text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 22 znaků).</div>
+              </div>
+            )}
 
             <div className="pt-2 border-t border-gray-50 space-y-1">
               <div className="text-xs text-muted font-heading uppercase mb-1">Vybavení (placené)</div>

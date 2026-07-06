@@ -1,8 +1,45 @@
 "use client";
 
+import { useMemo } from "react";
+import * as THREE from "three";
 import { PITCH, STAND_DIMS } from "./constants";
 
 const STAND_GAP = 1;
+
+function isLightHex(hex: string): boolean {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.substring(0, 2), 16) || 0;
+  const g = parseInt(c.substring(2, 4), 16) || 0;
+  const b = parseInt(c.substring(4, 6), 16) || 0;
+  return (r * 299 + g * 587 + b * 114) / 1000 > 150;
+}
+
+/** Canvas textura s nápisem na choreo plachtu (bez externích fontů). */
+function useBannerTexture(text: string | null | undefined, bg: string, fg: string): THREE.CanvasTexture | null {
+  return useMemo(() => {
+    if (!text || typeof document === "undefined") return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = 2048;
+    canvas.height = 160;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const label = text.toUpperCase();
+    ctx.fillStyle = fg;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    let fs = 130;
+    for (; fs >= 40; fs -= 4) {
+      ctx.font = `bold ${fs}px Arial, sans-serif`;
+      if (ctx.measureText(label).width <= canvas.width - 80) break;
+    }
+    ctx.fillText(label, canvas.width / 2, canvas.height / 2 + 4);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.anisotropy = 4;
+    return tex;
+  }, [text, bg, fg]);
+}
 
 /**
  * Zastřešení tribun — stříška nad severní/jižní (a od L2 i V/Z) tribunou.
@@ -69,11 +106,18 @@ export function UltrasSector({
   level,
   primaryColor,
   secondaryColor,
+  text,
 }: {
   level: number;
   primaryColor: string;
   secondaryColor?: string;
+  text?: string | null;
 }) {
+  const sec = secondaryColor ?? "#ffffff";
+  // Text v kontrastní barvě k primární (na světlé primární tmavý text a naopak).
+  const textColor = isLightHex(primaryColor) ? "#1a1a1a" : sec;
+  const bannerTex = useBannerTexture(text, primaryColor, textColor);
+
   if (level <= 0) return null;
   const lvl = Math.min(level, 3);
   const count = [0, 4, 6, 8][lvl];
@@ -81,20 +125,26 @@ export function UltrasSector({
   // V mezeře mezi brankou (-30) a přední hranou tribuny (-31) — nízký baner nezakryje tribunu za sebou.
   const z = -(PITCH.depth / 2 + 0.85);
   const spread = PITCH.width * 0.85;
-  const sec = secondaryColor ?? "#ffffff";
 
   return (
     <group>
-      {/* Nízký baner na zábradlí (nezakrývá sedačky nad ním) */}
-      <mesh position={[0, 0.65, z]} castShadow>
-        <planeGeometry args={[spread + 2, 1.1]} />
-        <meshStandardMaterial color={primaryColor} side={2} roughness={0.85} />
+      {/* Nízký baner na zábradlí — s nápisem (textura) nebo jednobarevný */}
+      <mesh position={[0, 0.72, z]} castShadow>
+        <planeGeometry args={[spread + 2, 1.35]} />
+        <meshStandardMaterial
+          color={bannerTex ? "#ffffff" : primaryColor}
+          map={bannerTex ?? undefined}
+          side={2}
+          roughness={0.85}
+        />
       </mesh>
-      {/* Pruh druhé barvy nahoře na baneru */}
-      <mesh position={[0, 1.18, z + 0.02]}>
-        <planeGeometry args={[spread + 2, 0.22]} />
-        <meshStandardMaterial color={sec} side={2} roughness={0.85} />
-      </mesh>
+      {/* Pruh druhé barvy nahoře na baneru (jen bez nápisu) */}
+      {!bannerTex && (
+        <mesh position={[0, 1.28, z + 0.02]}>
+          <planeGeometry args={[spread + 2, 0.22]} />
+          <meshStandardMaterial color={sec} side={2} roughness={0.85} />
+        </mesh>
+      )}
 
       {/* Žerdě s vlajkami — trčí nad tribunu, nezakrývají ji */}
       {Array.from({ length: count }).map((_, i) => {

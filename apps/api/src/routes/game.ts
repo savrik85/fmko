@@ -1356,6 +1356,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     accentColor: (stadium.accent_color as string | null) ?? null,
     scoreboardLevel: (stadium.scoreboard_level as number | null) ?? 0,
     flagSize: (stadium.flag_size as number | null) ?? 0,
+    ultrasText: (stadium.ultras_text as string | null) ?? null,
   };
 
   // Scoreboard a vlajka upgrady
@@ -1464,6 +1465,17 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
 gameRouter.patch("/teams/:teamId/stadium/customize", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ field: string; value: string | null }>();
+
+  // Nápis v kotli — text (ne barva). Sanitizace + max délka.
+  if (body.field === "ultras_text") {
+    const clean = body.value === null
+      ? null
+      : String(body.value).replace(/[^\p{L}\p{N} .!?#'-]/gu, "").slice(0, 22).trim() || null;
+    await c.env.DB.prepare("UPDATE stadiums SET ultras_text = ? WHERE team_id = ?")
+      .bind(clean, teamId).run();
+    return c.json({ ok: true, value: clean });
+  }
+
   const allowed = new Set(["fence_color", "stand_color", "seat_color", "roof_color", "accent_color"]);
   if (!allowed.has(body.field)) return c.json({ error: "Invalid field" }, 400);
   // Hex color validation (jednoduchá)
