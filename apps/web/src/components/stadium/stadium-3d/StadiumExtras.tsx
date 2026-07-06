@@ -78,62 +78,58 @@ export function UltrasSector({
   const lvl = Math.min(level, 3);
   const count = [0, 4, 6, 8][lvl];
   const poleH = 5 + lvl * 0.8;
-  // Za jižní brankou, mimo hřiště (hřiště končí na -30) — nikdy na hrací ploše
-  const z = -(PITCH.depth / 2 + 2.5);
+  // V mezeře mezi brankou (-30) a přední hranou tribuny (-31) — nízký baner nezakryje tribunu za sebou.
+  const z = -(PITCH.depth / 2 + 0.85);
   const spread = PITCH.width * 0.85;
   const sec = secondaryColor ?? "#ffffff";
 
   return (
     <group>
-      {/* Choreo stěna — baner v barvě týmu za brankou */}
-      <mesh position={[0, 2.2, z]} castShadow>
-        <planeGeometry args={[spread + 2, 3.6]} />
+      {/* Nízký baner na zábradlí (nezakrývá sedačky nad ním) */}
+      <mesh position={[0, 0.65, z]} castShadow>
+        <planeGeometry args={[spread + 2, 1.1]} />
         <meshStandardMaterial color={primaryColor} side={2} roughness={0.85} />
       </mesh>
-      {/* Vodorovný pruh (druhá barva) */}
-      <mesh position={[0, 3.7, z + 0.02]}>
-        <planeGeometry args={[spread + 2, 0.6]} />
+      {/* Pruh druhé barvy nahoře na baneru */}
+      <mesh position={[0, 1.18, z + 0.02]}>
+        <planeGeometry args={[spread + 2, 0.22]} />
         <meshStandardMaterial color={sec} side={2} roughness={0.85} />
       </mesh>
 
+      {/* Žerdě s vlajkami — trčí nad tribunu, nezakrývají ji */}
       {Array.from({ length: count }).map((_, i) => {
         const x = -spread / 2 + (spread / Math.max(count - 1, 1)) * i;
         return (
           <group key={i} position={[x, 0, z]}>
-            {/* Žerď */}
             <mesh position={[0, poleH / 2, 0]} castShadow>
-              <cylinderGeometry args={[0.08, 0.08, poleH, 6]} />
+              <cylinderGeometry args={[0.07, 0.07, poleH, 6]} />
               <meshStandardMaterial color="#2E2E2E" metalness={0.5} roughness={0.5} />
             </mesh>
-            {/* Vlaječka nahoře (střídavě barvy) */}
-            <mesh position={[0.45, poleH - 0.5, 0.02]}>
-              <planeGeometry args={[0.9, 0.6]} />
+            <mesh position={[0.5, poleH - 0.6, 0.02]}>
+              <planeGeometry args={[1.0, 0.7]} />
               <meshStandardMaterial color={i % 2 === 0 ? sec : primaryColor} side={2} roughness={0.8} />
             </mesh>
           </group>
         );
       })}
 
-      {/* Velký buben (od L2) — stranou od branky, mezi brankou a choreo stěnou (mimo hřiště) */}
+      {/* Buben (od L2) — v rohu vedle branky, mimo hřiště, čelem k hřišti */}
       {lvl >= 2 && (
-        <group position={[spread * 0.3, 0, z + 0.9]}>
-          {/* Tělo bubnu — stojí svisle, blána směrem k hřišti */}
-          <mesh position={[0, 1.0, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-            <cylinderGeometry args={[1.0, 1.0, 1.3, 20]} />
+        <group position={[spread * 0.5 + 1.6, 0, z]}>
+          <mesh position={[0, 0.9, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+            <cylinderGeometry args={[0.75, 0.75, 1.0, 18]} />
             <meshStandardMaterial color={primaryColor} roughness={0.6} />
           </mesh>
-          {/* Blána směrem k hřišti (světlá) */}
-          <mesh position={[0, 1.0, 0.66]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[1.02, 1.02, 0.05, 20]} />
+          <mesh position={[0, 0.9, 0.5]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.77, 0.77, 0.04, 18]} />
             <meshStandardMaterial color="#F5F0E8" />
           </mesh>
-          {/* Kříž na bláně */}
-          <mesh position={[0, 1.0, 0.69]}>
-            <boxGeometry args={[1.6, 0.12, 0.02]} />
+          <mesh position={[0, 0.9, 0.53]}>
+            <boxGeometry args={[1.2, 0.1, 0.02]} />
             <meshStandardMaterial color={primaryColor} />
           </mesh>
-          <mesh position={[0, 1.0, 0.69]}>
-            <boxGeometry args={[0.12, 1.6, 0.02]} />
+          <mesh position={[0, 0.9, 0.53]}>
+            <boxGeometry args={[0.1, 1.2, 0.02]} />
             <meshStandardMaterial color={primaryColor} />
           </mesh>
         </group>
