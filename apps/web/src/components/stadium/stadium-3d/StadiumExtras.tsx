@@ -78,8 +78,8 @@ export function UltrasSector({
   const lvl = Math.min(level, 3);
   const count = [0, 4, 6, 8][lvl];
   const poleH = 5 + lvl * 0.8;
-  // V mezeře mezi jižní brankou (z=-30) a tribunou (z=-31) — jasně viditelné, netlačí se za tribunu
-  const z = -(PITCH.depth / 2 + 0.5);
+  // Za jižní brankou, mimo hřiště (hřiště končí na -30) — nikdy na hrací ploše
+  const z = -(PITCH.depth / 2 + 2.5);
   const spread = PITCH.width * 0.85;
   const sec = secondaryColor ?? "#ffffff";
 
@@ -114,9 +114,9 @@ export function UltrasSector({
         );
       })}
 
-      {/* Velký buben uprostřed (od L2) */}
+      {/* Velký buben uprostřed (od L2) — za stěnou, pryč od hřiště */}
       {lvl >= 2 && (
-        <group position={[0, 0, z + 1.2]}>
+        <group position={[0, 0, z - 1.0]}>
           <mesh position={[0, 1.0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
             <cylinderGeometry args={[1.0, 1.0, 1.3, 20]} />
             <meshStandardMaterial color={primaryColor} roughness={0.6} />
