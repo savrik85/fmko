@@ -19,40 +19,44 @@ export function StandRoof({
 }) {
   if (roofLevel <= 0 || standsLevel <= 0) return null;
   const dims = STAND_DIMS[Math.min(standsLevel, 3)];
-  const color = roofColor ?? "#6B6E76";
-  const overhang = 0.6 + roofLevel * 0.3;
+  const color = roofColor ?? "#9A9DA4"; // světlejší plech
+  const overhang = 0.5 + roofLevel * 0.35; // přesah nad hřiště roste s levelem
 
+  // Stejné umístění jako Stand: skupina na okraji hřiště, lokální +Z = od hřiště dozadu.
   const nsDistance = PITCH.depth / 2 + STAND_GAP + dims.depth / 2;
   const ewDistance = PITCH.width / 2 + STAND_GAP + dims.depth / 2;
-  const canopyY = dims.height + 0.9;
 
-  // Jedna stříška nad tribunou. `axis` = podél které osy jde délka tribuny.
-  const Canopy = ({ pos, alongX, rot }: { pos: [number, number, number]; alongX: boolean; rot: number }) => {
-    const lengthAlong = (alongX ? PITCH.width : PITCH.depth) + 2;
-    const spanDepth = dims.depth + overhang * 2;
+  // Stříška v LOKÁLNÍCH souřadnicích tribuny: kryje zadní 2/3 sedaček,
+  // klesá od zadku (výš) k hřišti (níž) — jako reálná krytá tribuna.
+  const Canopy = ({ alongLen }: { alongLen: number }) => {
+    const roofDepth = dims.depth * 0.7 + overhang;
+    const roofZ = dims.depth * 0.45;               // těžiště nad zadní částí sedaček
+    const roofY = dims.height + 1.1;               // jasně nad sedačkami
+    const backZ = dims.depth + overhang * 0.5;      // zadní podpěry
     return (
-      <group position={pos} rotation={[0, rot, 0]}>
-        <mesh position={[0, 0, 0]} rotation={[-0.12, 0, 0]} castShadow>
-          <boxGeometry args={[lengthAlong, 0.18, spanDepth]} />
-          <meshStandardMaterial color={color} roughness={0.6} metalness={0.2} />
+      <group>
+        {/* Nakloněná plocha stříšky */}
+        <mesh position={[0, roofY, roofZ]} rotation={[-0.32, 0, 0]} castShadow>
+          <boxGeometry args={[alongLen + 1, 0.14, roofDepth]} />
+          <meshStandardMaterial color={color} roughness={0.5} metalness={0.35} />
         </mesh>
-        {/* Přední nosník (okraj u hřiště) */}
-        <mesh position={[0, -0.35, -spanDepth / 2]} castShadow>
-          <boxGeometry args={[lengthAlong, 0.12, 0.12]} />
-          <meshStandardMaterial color="#4A4D54" metalness={0.5} roughness={0.5} />
-        </mesh>
+        {/* Zadní sloupky (2) */}
+        {[-alongLen * 0.4, alongLen * 0.4].map((x, i) => (
+          <mesh key={i} position={[x, dims.height * 0.55, backZ]} castShadow>
+            <cylinderGeometry args={[0.09, 0.09, dims.height + 1.1, 6]} />
+            <meshStandardMaterial color="#4A4D54" metalness={0.5} roughness={0.5} />
+          </mesh>
+        ))}
       </group>
     );
   };
 
   return (
     <group>
-      {/* Sever (z+) a jih (z-) */}
-      <Canopy pos={[0, canopyY, nsDistance + dims.depth * 0.1]} alongX rot={0} />
-      <Canopy pos={[0, canopyY, -(nsDistance + dims.depth * 0.1)]} alongX rot={Math.PI} />
-      {/* Východ/Západ jen když stojí (stands >= 2) */}
-      {standsLevel >= 2 && <Canopy pos={[ewDistance + dims.depth * 0.1, canopyY, 0]} alongX={false} rot={Math.PI / 2} />}
-      {standsLevel >= 2 && <Canopy pos={[-(ewDistance + dims.depth * 0.1), canopyY, 0]} alongX={false} rot={-Math.PI / 2} />}
+      <group position={[0, 0, nsDistance]} rotation={[0, 0, 0]}><Canopy alongLen={PITCH.width} /></group>
+      <group position={[0, 0, -nsDistance]} rotation={[0, Math.PI, 0]}><Canopy alongLen={PITCH.width} /></group>
+      {standsLevel >= 2 && <group position={[ewDistance, 0, 0]} rotation={[0, Math.PI / 2, 0]}><Canopy alongLen={PITCH.depth} /></group>}
+      {standsLevel >= 2 && <group position={[-ewDistance, 0, 0]} rotation={[0, -Math.PI / 2, 0]}><Canopy alongLen={PITCH.depth} /></group>}
     </group>
   );
 }
