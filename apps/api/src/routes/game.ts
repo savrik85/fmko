@@ -1014,6 +1014,7 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
         manager_arrival: "\u{1F4CB}",
         round_results: "\u26BD",
         seasonal: "\u{1F389}",
+        municipal_elections: "\u{1F5F3}\uFE0F",
         transfer: "\u{1F91D}",
         celebrity_arrival: "\u{1F31F}",
         celebrity_signing: "\u{1F4DD}",

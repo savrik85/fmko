@@ -197,17 +197,21 @@ function generateOfficialFace(rng: Rng, isFemale: boolean): Record<string, unkno
 export function generateOfficialsForVillage(
   villageId: string,
   termStartSeason: number,
+  nonce?: string,
 ): GeneratedOfficial[] {
   const roles: OfficialRole[] = ["starosta", "mistostarosta", "zastupitel_1", "zastupitel_2"];
-  return roles.map((role) => generateOfficial(villageId, role, termStartSeason));
+  return roles.map((role) => generateOfficial(villageId, role, termStartSeason, nonce));
 }
 
 export function generateOfficial(
   villageId: string,
   role: OfficialRole,
   termStartSeason: number,
+  nonce?: string,
 ): GeneratedOfficial {
-  const seed = hashSeed(`${villageId}|${role}|${termStartSeason}|v4-elderly-faces`);
+  // nonce = "volební kolo" — umožní vygenerovat jiné lidi pro stejnou obec/role/sezónu
+  // (jinak je seed deterministický a "noví" zastupitelé by byli titíž lidé).
+  const seed = hashSeed(`${villageId}|${role}|${termStartSeason}|v4-elderly-faces${nonce ? `|${nonce}` : ""}`);
   const rng = createRng(seed);
 
   const personalityPool = PERSONA_PER_ROLE[role];

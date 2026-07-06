@@ -30,7 +30,7 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Úklid náměstí po hodech",
     description: "Po víkendových hodech zbývá uklidit pivní stánky a sebrat odpad. Obec hledá pomocné ruce.",
     minPlayers: 3, maxPlayers: 5, durationHours: 5,
-    rewardFavor: 8, conditionDrain: 12, moraleChange: -3,
+    rewardFavor: 5, conditionDrain: 12, moraleChange: -3,
     preferredPersonality: ["populista", "tradicionalista"],
   },
   {
@@ -38,7 +38,7 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Sekání obecní zeleně",
     description: "Posekat travnaté plochy okolo obecního úřadu, hřbitova a zastávek. Práce v horku.",
     minPlayers: 4, maxPlayers: 6, durationHours: 7,
-    rewardFavor: 10, conditionDrain: 22, moraleChange: -5,
+    rewardFavor: 6, conditionDrain: 22, moraleChange: -5,
     preferredPersonality: ["podnikatel"],
   },
   {
@@ -46,7 +46,7 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Oprava plotu kolem obecního hřiště",
     description: "Plot kolem dětského hřiště je v havarijním stavu. Nutno vyměnit prkna a natřít.",
     minPlayers: 4, maxPlayers: 6, durationHours: 8,
-    rewardFavor: 14, conditionDrain: 25, moraleChange: -4,
+    rewardFavor: 8, conditionDrain: 25, moraleChange: -4,
     preferredPersonality: ["podnikatel", "tradicionalista"],
   },
   {
@@ -54,7 +54,7 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Příprava sálu na ples",
     description: "Postavit pódium, rozestavět stoly a židle, pomoci s ozvučením.",
     minPlayers: 3, maxPlayers: 5, durationHours: 4,
-    rewardFavor: 12, conditionDrain: 8, moraleChange: -2,
+    rewardFavor: 7, conditionDrain: 8, moraleChange: -2,
     preferredPersonality: ["aktivista", "populista"],
   },
   {
@@ -62,7 +62,7 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Odhrnování chodníků po sněhové kalamitě",
     description: "Obec potřebuje rychle zprůjeznit hlavní chodníky a přístup k obchodu a škole.",
     minPlayers: 4, maxPlayers: 7, durationHours: 6,
-    rewardFavor: 15, conditionDrain: 20, moraleChange: -5,
+    rewardFavor: 9, conditionDrain: 20, moraleChange: -5,
     preferredPersonality: ["tradicionalista", "populista"],
   },
   {
@@ -70,7 +70,7 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Sběr starého papíru pro školu",
     description: "Místní ZŠ pořádá sběr a obecní úřad prosí o pomoc s odvozem ke kontejneru.",
     minPlayers: 3, maxPlayers: 5, durationHours: 4,
-    rewardFavor: 10, conditionDrain: 10, moraleChange: -2,
+    rewardFavor: 6, conditionDrain: 10, moraleChange: -2,
     preferredPersonality: ["aktivista"],
   },
   {
@@ -78,7 +78,7 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Údržba pomníků padlých",
     description: "Před státním svátkem upravit prostranství kolem památníku.",
     minPlayers: 3, maxPlayers: 4, durationHours: 4,
-    rewardFavor: 12, conditionDrain: 9, moraleChange: -2,
+    rewardFavor: 7, conditionDrain: 9, moraleChange: -2,
     preferredPersonality: ["tradicionalista"],
   },
   {
@@ -86,7 +86,7 @@ const BRIGADE_TEMPLATES: BrigadeTemplate[] = [
     title: "Pomoc dobrovolným hasičům",
     description: "Obec vyhlásila brigádu na úklid hasičské zbrojnice a údržbu techniky.",
     minPlayers: 4, maxPlayers: 6, durationHours: 6,
-    rewardFavor: 13, conditionDrain: 15, moraleChange: -3,
+    rewardFavor: 8, conditionDrain: 15, moraleChange: -3,
     preferredPersonality: ["tradicionalista", "sportovec"],
   },
 ];
@@ -135,7 +135,7 @@ export async function applyLocalSensations(
   const locals = players.results ?? [];
   if (locals.length === 0) return;
 
-  // Bonus per local sensation: +3 favor, +5 morale celému kádru
+  // Bonus per local sensation: +2 favor, +5 morale celému kádru
   const now = new Date().toISOString();
   for (const p of locals) {
     const isHatTrick = (homeUpdates.find((u) => u.playerId === p.id)?.goals ?? 0) >= 3;
@@ -154,13 +154,13 @@ export async function applyLocalSensations(
     ).run().catch((e) => logger.warn({ module: "village-processor" }, "insert local sensation history", e));
   }
 
-  // Favor +3 globálnímu řádku (jeden bump per zápas, ne per hráč)
+  // Favor +2 globálnímu řádku (jeden bump per zápas, ne per hráč)
   const favorRow = await db.prepare(
     `SELECT id FROM village_team_favor WHERE team_id = ? AND official_id IS NULL`
   ).bind(homeTeamId).first<{ id: string }>();
   if (favorRow) {
     await db.prepare(
-      `UPDATE village_team_favor SET favor = MIN(100, favor + 3),
+      `UPDATE village_team_favor SET favor = MIN(100, favor + 2),
        last_interaction_at = ?, updated_at = ? WHERE id = ?`
     ).bind(now, now, favorRow.id).run().catch((e) => {
       logger.warn({ module: "village-processor" }, "bump global favor", e);
@@ -168,7 +168,7 @@ export async function applyLocalSensations(
   } else {
     await db.prepare(
       `INSERT INTO village_team_favor (id, village_id, team_id, official_id, favor, trust, last_interaction_at, updated_at)
-       VALUES (?, ?, ?, NULL, 53, 50, ?, ?)`
+       VALUES (?, ?, ?, NULL, 52, 50, ?, ?)`
     ).bind(crypto.randomUUID(), team.village_id, homeTeamId, now, now).run().catch((e) => {
       logger.warn({ module: "village-processor" }, "seed favor with sensation", e);
     });
@@ -456,37 +456,37 @@ const PETITION_TEMPLATES: PetitionTemplate[] = [
     topic: "detsky_den",
     title: "Petice za dětský den",
     description: "Občané žádají, aby klub uspořádal pro místní děti odpoledne s autogramiádou a soutěžemi.",
-    costMoney: 1500, rewardFavor: 6, ignorePenalty: -3,
+    costMoney: 1500, rewardFavor: 4, ignorePenalty: -3,
   },
   {
     topic: "oprava_satnen",
     title: "Stížnost na stav šaten",
     description: "Občané si stěžují, že šatny v obecních prostorách potřebují drobnou opravu — dveře, sedátka, věšáky.",
-    costMoney: 3000, rewardFavor: 8, ignorePenalty: -4,
+    costMoney: 3000, rewardFavor: 5, ignorePenalty: -4,
   },
   {
     topic: "verejny_trenink",
     title: "Petice za otevřený trénink",
     description: "Místní by chtěli vidět tým v akci — žádají uspořádat veřejný trénink s občerstvením.",
-    costMoney: 800, rewardFavor: 5, ignorePenalty: -2,
+    costMoney: 800, rewardFavor: 3, ignorePenalty: -2,
   },
   {
     topic: "darek_seniori",
     title: "Dárek seniorům",
     description: "Klub Senior obce prosí o symbolický příspěvek — dresy nebo balíčky pro účastníky setkání.",
-    costMoney: 1200, rewardFavor: 6, ignorePenalty: -3,
+    costMoney: 1200, rewardFavor: 4, ignorePenalty: -3,
   },
   {
     topic: "zahrebenec_kasna",
     title: "Petice za záhonek u kašny",
     description: "Občané chtějí, aby se klub podílel na úpravě veřejné zeleně. Stačí finanční příspěvek na sazenice.",
-    costMoney: 600, rewardFavor: 4, ignorePenalty: -2,
+    costMoney: 600, rewardFavor: 2, ignorePenalty: -2,
   },
   {
     topic: "podpora_hasicu",
     title: "Příspěvek hasičům",
     description: "SDH potřebuje pomoct s nákupem nářadí pro nadcházející soutěž. Občané čekají, že klub přispěje.",
-    costMoney: 2000, rewardFavor: 7, ignorePenalty: -3,
+    costMoney: 2000, rewardFavor: 4, ignorePenalty: -3,
   },
 ];
 

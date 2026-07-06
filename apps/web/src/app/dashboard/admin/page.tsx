@@ -117,6 +117,9 @@ export default function AdminPage() {
       {/* Zakončení sezóny */}
       <SeasonEndSection />
 
+      {/* Komunální volby */}
+      <MunicipalElectionsSection />
+
       {/* Hlasování */}
       <VotesAdmin />
 
@@ -212,6 +215,62 @@ function SeasonEndSection() {
           className="px-4 py-2 bg-pitch-500 text-white rounded-lg font-heading font-bold text-sm disabled:opacity-50"
         >
           {running ? "Probíhá…" : "Ukončit sezónu"}
+        </button>
+      </div>
+      {log.length > 0 && (
+        <div className="bg-gray-900 text-green-400 font-mono text-xs p-3 rounded-lg max-h-[300px] overflow-y-auto">
+          {log.map((line, i) => <div key={i}>{line}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Komunální volby ── */
+
+function MunicipalElectionsSection() {
+  const { token } = useTeam();
+  const [log, setLog] = useState<string[]>([]);
+  const [running, setRunning] = useState(false);
+
+  const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+  const authH: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  const add = (m: string) => setLog((p) => [...p, `[${new Date().toLocaleTimeString("cs")}] ${m}`]);
+
+  const run = async () => {
+    if (!confirm("Spustit komunální volby? Kompletně vymění vedení VŠECH obcí, resetuje přízeň všech týmů na 50 a vydá článek do Zpravodaje. Nevratné.")) return;
+    setRunning(true);
+    setLog([]);
+    add("Spouštím komunální volby…");
+    try {
+      const res = await fetch(`${API}/api/villages/admin/run-elections`, { method: "POST", headers: { "Content-Type": "application/json", ...authH } });
+      const data = await res.json().catch(() => ({}));
+      if (data.ok) {
+        add(`✅ Hotovo — obcí: ${data.villagesProcessed}, nových zastupitelů: ${data.officialsReplaced}, reset přízně: ${data.favorRowsReset} řádků, článků: ${data.articlesPublished}.`);
+      } else {
+        add(`CHYBA: ${JSON.stringify(data).slice(0, 200)}`);
+      }
+    } catch (e: any) {
+      add(`CHYBA: ${e.message}`);
+    }
+    setRunning(false);
+  };
+
+  return (
+    <div className="card p-4">
+      <SectionLabel>🗳️ Komunální volby</SectionLabel>
+      <div className="text-sm text-muted mb-3">
+        Nová sezóna = volby v obcích. <strong>Kompletně obmění vedení všech obcí</strong> (starosta,
+        místostarosta, 2 zastupitelé), resetuje přízeň všech týmů na neutrál (50) a vydá článek do
+        Zpravodaje v každé lize. Spustit jednou na začátku sezóny.
+      </div>
+      <div className="flex flex-wrap gap-3 items-center mb-3">
+        <button
+          onClick={run}
+          disabled={running}
+          className="px-4 py-2 bg-pitch-500 text-white rounded-lg font-heading font-bold text-sm disabled:opacity-50"
+        >
+          {running ? "Probíhá…" : "Spustit volby"}
         </button>
       </div>
       {log.length > 0 && (
