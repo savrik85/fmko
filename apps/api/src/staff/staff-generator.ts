@@ -48,14 +48,13 @@ const FEMALE_FIRST_NAMES = [
   "Dana", "Michaela", "Nikola", "Kristýna", "Denisa", "Pavla", "Iveta", "Monika",
 ];
 
-/** Přechýlení příjmení do ženského tvaru. */
+/** Přechýlení příjmení do ženského tvaru (spolehlivá pravidla; okrajové -ec ap. řeší prosté +ová). */
 export function feminizeSurname(surname: string): string {
   if (surname.endsWith("á") || surname.endsWith("ová")) return surname; // už ženské
   if (surname.endsWith("ý")) return surname.slice(0, -1) + "á";          // Veselý → Veselá
   if (surname.endsWith("a")) return surname.slice(0, -1) + "ová";        // Vávra → Vávrová, Svoboda → Svobodová
-  if (surname.endsWith("ek")) return surname.slice(0, -2) + "ková";      // Marek → Marková, Jelínek → Jelínková
-  if (surname.endsWith("ec")) return surname.slice(0, -2) + "cová";      // Němec → Němcová
-  return surname + "ová";                                                 // Novák → Nováková
+  if (surname.endsWith("ek")) return surname.slice(0, -2) + "ková";      // Marek → Marková, Pešek → Pešková
+  return surname + "ová";                                                 // Novák → Nováková, Švec → Švecová
 }
 
 // ── Flavor popisy (vesnický humor) ──
@@ -215,7 +214,7 @@ export function generateStaffCandidate(
   };
 }
 
-const POOL_TARGET = 10; // cíl volných kandidátů na okres
+const POOL_TARGET = 18; // cíl volných kandidátů na okres
 const LISTED_WEEKS = 3; // za jak dlouho kandidát z poolu zmizí
 
 /**
