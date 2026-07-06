@@ -78,21 +78,21 @@ export function UltrasSector({
   const lvl = Math.min(level, 3);
   const count = [0, 4, 6, 8][lvl];
   const poleH = 5 + lvl * 0.8;
-  // Za jižní brankou (z-), kousek za čárou hřiště
-  const z = -(PITCH.depth / 2 + STAND_GAP + 1.2);
+  // V mezeře mezi jižní brankou (z=-30) a tribunou (z=-31) — jasně viditelné, netlačí se za tribunu
+  const z = -(PITCH.depth / 2 + 0.5);
   const spread = PITCH.width * 0.85;
   const sec = secondaryColor ?? "#ffffff";
 
   return (
     <group>
-      {/* Choreo stěna — velký vodorovný baner v barvě týmu */}
-      <mesh position={[0, poleH * 0.62, z + 0.1]} castShadow>
-        <planeGeometry args={[spread + 2, poleH * 0.7]} />
+      {/* Choreo stěna — baner v barvě týmu za brankou */}
+      <mesh position={[0, 2.2, z]} castShadow>
+        <planeGeometry args={[spread + 2, 3.6]} />
         <meshStandardMaterial color={primaryColor} side={2} roughness={0.85} />
       </mesh>
       {/* Vodorovný pruh (druhá barva) */}
-      <mesh position={[0, poleH * 0.85, z + 0.11]}>
-        <planeGeometry args={[spread + 2, poleH * 0.14]} />
+      <mesh position={[0, 3.7, z + 0.02]}>
+        <planeGeometry args={[spread + 2, 0.6]} />
         <meshStandardMaterial color={sec} side={2} roughness={0.85} />
       </mesh>
 
