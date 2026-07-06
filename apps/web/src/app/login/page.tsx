@@ -37,7 +37,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-auth relative overflow-hidden flex items-center justify-center p-4">
+    <main className="min-h-dvh bg-auth relative overflow-hidden flex items-center justify-center p-4">
       {/* Decorative background */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-[-20%] left-[50%] -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-pitch-400/[0.08]" />

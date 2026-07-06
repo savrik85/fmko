@@ -54,7 +54,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-auth relative overflow-hidden flex items-center justify-center p-4">
+    <main className="min-h-dvh bg-auth relative overflow-hidden flex items-center justify-center p-4">
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-[-20%] left-[50%] -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-pitch-400/[0.08]" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] rounded-full bg-gold-500/[0.04]" />

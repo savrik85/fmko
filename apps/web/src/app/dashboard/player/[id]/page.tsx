@@ -304,7 +304,7 @@ export default function PlayerDetailPage() {
     setOfferSending(false);
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>;
+  if (loading) return <div className="min-h-dvh flex items-center justify-center"><Spinner size="lg" /></div>;
   if (!player || !team) return <div className="page-container">Hráč nenalezen.</div>;
 
   const cond = conditionLabel(player.lifeContext?.condition ?? 50);

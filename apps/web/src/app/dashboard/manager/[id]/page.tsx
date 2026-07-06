@@ -64,7 +64,7 @@ export default function ManagerDetailPage() {
     }).catch((e) => { console.error("manager page load:", e); setLoading(false); });
   }, [teamId, managerId]);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>;
+  if (loading) return <div className="min-h-dvh flex items-center justify-center"><Spinner size="lg" /></div>;
   if (!manager || !team) return <div className="page-container">Trenér nenalezen.</div>;
 
   const color = team.primary_color || "#2D5F2D";

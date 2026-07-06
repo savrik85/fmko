@@ -89,7 +89,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
 
   if (!club || !team) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[#0a0f0a] text-white">
+      <main className="min-h-dvh flex items-center justify-center bg-[#0a0f0a] text-white">
         <div className="text-center max-w-md px-8">
           <div className="text-6xl mb-4">{"\u{1F937}"}</div>
           <h1 className="text-3xl font-heading font-[900] mb-2">Klub nenalezen</h1>
@@ -124,7 +124,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
     : [];
 
   return (
-    <main className="min-h-screen bg-[#0a0f0a] text-white">
+    <main className="min-h-dvh bg-[#0a0f0a] text-white">
       {/* ═══ HERO — full bleed, dramatic ═══ */}
       <section className="relative overflow-hidden">
         {/* Layered gradients */}

@@ -73,14 +73,14 @@ export default function MatchDayPage() {
     window.location.href = `/dashboard/match/${matchId}`;
   };
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen"><Spinner size="lg" /></div>;
+  if (loading) return <div className="flex items-center justify-center min-h-dvh"><Spinner size="lg" /></div>;
   if (!match) return null;
 
   const hc = match.home_color;
   const ac = match.away_color;
 
   return (
-    <div className="flex items-center justify-center min-h-[80vh] px-4">
+    <div className="flex items-center justify-center min-h-[80dvh] px-4">
       <div className="w-full max-w-md">
         {/* Match card */}
         <div className="rounded-2xl overflow-hidden shadow-xl">
@@ -128,6 +128,7 @@ export default function MatchDayPage() {
           </div>
         </div>
       </div>
+
     </div>
   );
 }
