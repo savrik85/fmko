@@ -6069,6 +6069,16 @@ gameRouter.post("/admin/generate-round-summary", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+// POST /api/admin/generate-ultras-report?calendarId=X — dev trigger rubriky Prales Ultras
+gameRouter.post("/admin/generate-ultras-report", async (c) => {
+  const calendarId = c.req.query("calendarId");
+  if (!calendarId) return c.json({ error: "calendarId query parameter required" }, 400);
+  if (!c.env.GEMINI_API_KEY) return c.json({ error: "GEMINI_API_KEY není nastaven" }, 503);
+  const { generateUltrasReport } = await import("../news/ultras-report");
+  const result = await generateUltrasReport(c.env.DB, c.env.GEMINI_API_KEY, calendarId);
+  return c.json({ ok: true, ...result });
+});
+
 // POST /api/admin/generate-player-interview?calendarId=X — dev trigger pro Rozhovor s hráčem
 gameRouter.post("/admin/generate-player-interview", async (c) => {
   const calendarId = c.req.query("calendarId");
