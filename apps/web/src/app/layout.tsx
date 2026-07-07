@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Outfit, Barlow_Condensed, JetBrains_Mono } from "next/font/google";
 import { TeamProvider } from "@/context/team-context";
 import { PushNotificationManager } from "@/components/PushNotificationManager";
@@ -34,6 +34,16 @@ export const metadata: Metadata = {
   },
 };
 
+// Next.js aplikuje viewport-fit=cover SPRÁVNĚ jen přes tento export (ne přes <meta>
+// v <head>, který ignoroval). Bez toho byl viewport menší než obrazovka a
+// safe-area-inset = 0 → pod spodní lištou zůstával pruh (lišta nebyla u kraje).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#153615",
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -42,8 +52,6 @@ export default function RootLayout({
   return (
     <html lang="cs" className={`${outfit.variable} ${barlowCondensed.variable} ${jetbrainsMono.variable}`}>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta name="theme-color" content="#153615" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Prales FM" />
