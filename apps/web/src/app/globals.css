@@ -416,6 +416,14 @@ input[type="number"] { -moz-appearance: textfield; }
     z-index: 49;
     pointer-events: none;
   }
+
+  /* S viewport-fit=cover je viewport celá obrazovka — obsah musí být odsazen od
+     status baru (nahoře) a home indikátoru (dole), jinak leze pod ně. */
+  .h-dvh { padding-top: env(safe-area-inset-top, 0px); }
+  .min-h-dvh {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }
 
 .divider { height: 1px; background: rgba(139,133,120,0.08); }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { FMSidebar } from "@/components/dashboard/fm-sidebar";
 import { FMTopBar } from "@/components/dashboard/fm-topbar";
@@ -54,6 +54,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
       </div>
 
+      {/* Vyplní spodní safe-area (home indikátor v PWA) barvou spodní lišty —
+          jinak pod lištou prosvítá béžové pozadí a lišta působí odtrženě od kraje.
+          Jen mobil (sm:hidden), z-40 (pod lištou z-50). */}
+      <div
+        aria-hidden
+        className="sm:hidden fixed inset-x-0 bottom-0 z-40 pointer-events-none"
+        style={{ height: "env(safe-area-inset-bottom, 0px)", background: "#1e2d1e" }}
+      />
       <BottomNav />
       <Napoveda />
       <NotificationTitle />
