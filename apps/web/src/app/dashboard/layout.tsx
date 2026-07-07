@@ -48,9 +48,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <FMTopBar />
-        <main className="flex-1 overflow-y-auto pb-20 sm:pb-0">
+        <main className="flex-1 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0 flex flex-col">
           {!isDetailPage && !hasCustomHeader && <PageHeader />}
-          {children}
+          <div className="flex-1 flex flex-col">{children}</div>
         </main>
       </div>
 
