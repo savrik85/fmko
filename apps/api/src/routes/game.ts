@@ -1956,6 +1956,12 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
     await c.env.DB.prepare("UPDATE teams SET name = ?, last_main_sponsor_change_season = ?, reputation = MAX(0, reputation - 3) WHERE id = ?")
       .bind(newName, mustSeason(season?.number), teamId).run();
 
+    // Přejmenování promítnout i do poháru a do U21 týmu klubu (jinak drží starý název).
+    await c.env.DB.prepare("UPDATE cup_teams SET name = ? WHERE team_id = ?")
+      .bind(newName, teamId).run().catch((e) => logger.warn({ module: "game" }, "rename cup_teams on sponsor change", e));
+    await c.env.DB.prepare("UPDATE teams SET name = ? WHERE parent_team_id = ? AND team_type = 'u21'")
+      .bind(`${newName} U21`, teamId).run().catch((e) => logger.warn({ module: "game" }, "rename U21 on sponsor change", e));
+
     // News for entire league
     await c.env.DB.prepare(
       "INSERT INTO news (id, league_id, type, title, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
@@ -6521,22 +6527,36 @@ gameRouter.post("/admin/cup/advance", async (c) => {
   return c.json(r);
 });
 
-// POST /api/admin/cup/sync-names — srovná jméno + barvu převzatých lidských týmů v poháru
-// s reálným týmem. Oprava historických nesouladů (převzetí AI týmu dřív cup_teams neaktualizovalo).
+// POST /api/admin/cup/sync-names — srovná názvy s reálným týmem tam, kde přejmenování
+// (naming sponzor / převzetí) nebylo promítnuto: (1) pohár, (2) U21 týmy podle rodiče.
 gameRouter.post("/admin/cup/sync-names", async (c) => {
   const cup = await c.env.DB.prepare("SELECT id FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1")
     .bind(await activeSeasonNumber(c.env.DB)).first<{ id: string }>()
     .catch((e) => { logger.warn({ module: "game.ts" }, "sync-names load cup", e); return null; });
-  if (!cup) return c.json({ error: "Žádný aktivní pohár" }, 404);
-  const res = await c.env.DB.prepare(
-    `UPDATE cup_teams
-       SET name = (SELECT t.name FROM teams t WHERE t.id = cup_teams.team_id),
-           primary_color = (SELECT t.primary_color FROM teams t WHERE t.id = cup_teams.team_id)
-     WHERE cup_id = ?
-       AND team_id IN (SELECT id FROM teams WHERE user_id != 'ai')
-       AND name != (SELECT t.name FROM teams t WHERE t.id = cup_teams.team_id)`
-  ).bind(cup.id).run().catch((e) => { logger.warn({ module: "game.ts" }, "sync cup team names", e); return null; });
-  return c.json({ ok: true, updated: res?.meta?.changes ?? 0 });
+
+  // Pohár — srovnat jméno + barvu se reálným týmem (všechny reální týmy s team_id, kde nesedí).
+  let cupUpdated = 0;
+  if (cup) {
+    const res = await c.env.DB.prepare(
+      `UPDATE cup_teams
+         SET name = (SELECT t.name FROM teams t WHERE t.id = cup_teams.team_id),
+             primary_color = (SELECT t.primary_color FROM teams t WHERE t.id = cup_teams.team_id)
+       WHERE cup_id = ?
+         AND team_id IS NOT NULL
+         AND name != (SELECT t.name FROM teams t WHERE t.id = cup_teams.team_id)`
+    ).bind(cup.id).run().catch((e) => { logger.warn({ module: "game.ts" }, "sync cup team names", e); return null; });
+    cupUpdated = res?.meta?.changes ?? 0;
+  }
+
+  // U21 týmy — jméno má být "<rodič> U21"; přejmenování rodiče se dřív do U21 nepromítlo.
+  const u21 = await c.env.DB.prepare(
+    `UPDATE teams
+       SET name = (SELECT p.name FROM teams p WHERE p.id = teams.parent_team_id) || ' U21'
+     WHERE team_type = 'u21' AND parent_team_id IS NOT NULL
+       AND name != (SELECT p.name FROM teams p WHERE p.id = teams.parent_team_id) || ' U21'`
+  ).run().catch((e) => { logger.warn({ module: "game.ts" }, "sync u21 names", e); return null; });
+
+  return c.json({ ok: true, cupUpdated, u21Updated: u21?.meta?.changes ?? 0 });
 });
 
 // ── Admin: Seed data management ──
