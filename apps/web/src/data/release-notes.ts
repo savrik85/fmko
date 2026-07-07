@@ -12,6 +12,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-07-07",
+    emoji: "🔥",
+    title: "Prales Ultras — pohled z kotle",
+    items: [
+      "Po každém kole vychází v Zpravodaji nová rubrika Prales Ultras — souhrn zápasů očima fanoušků. Kam přišlo nejvíc lidí, kde bylo vyprodáno a kde zely ochozy prázdnotou.",
+      "K článku patří fotky kotlů — pohled na sektor s plachtou, vlajkami a bubnem. Čím větší kotel a čím víc lidí, tím větší peklo na fotce.",
+      "Máš v kotli plachtu s vlastním nápisem? Objeví se přímo na fotce v novinách.",
+    ],
+  },
+  {
     date: "2026-07-06",
     emoji: "🗳️",
     title: "Komunální volby v obcích",
