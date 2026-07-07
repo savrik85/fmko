@@ -416,6 +416,13 @@ input[type="number"] { -moz-appearance: textfield; }
     z-index: 49;
     pointer-events: none;
   }
+
+  /* Mobil/PWA: dashboard obsah vyplní výšku ke spodní liště. Pod krátkým obsahem
+     (např. Trenér) tak nezůstává prázdná béžová plocha a spodní lišta navazuje na
+     obsah. JEN pro mobil (max-width 639px) — desktop layout se vůbec nemění. */
+  main.overflow-y-auto { display: flex; flex-direction: column; }
+  main.overflow-y-auto > *:last-child { flex: 1 0 auto; display: flex; flex-direction: column; }
+  main.overflow-y-auto > *:last-child > *:last-child { flex: 1 0 auto; }
 }
 
 .divider { height: 1px; background: rgba(139,133,120,0.08); }
