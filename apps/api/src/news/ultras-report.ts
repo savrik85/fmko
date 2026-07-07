@@ -202,6 +202,14 @@ export async function generateUltrasReport(
 }
 
 /** Inline Gemini REST volání (vzor ai-reporter.ts). Volný text, 1. řádek = headline. */
+/** Kotel popsaný lidsky (bez herních „level" termínů) — pro grounding Gemini. */
+function kotelDesc(level: number): string {
+  if (level >= 3) return "velký kotel (spousta vlajek, bubny)";
+  if (level === 2) return "pořádný kotel (vlajky, buben)";
+  if (level === 1) return "malý kotel (pár vlajek)";
+  return "bez kotle";
+}
+
 async function callGeminiUltras(
   apiKey: string,
   gameWeek: number,
@@ -209,7 +217,7 @@ async function callGeminiUltras(
   photos: UltrasPhoto[],
 ): Promise<string> {
   const facts = homeMatches
-    .map((m) => `- ${m.homeName} (doma) vs ${m.awayName}: ${m.homeScore}:${m.awayScore}, návštěva ${m.attendance}/${m.capacity} (${m.fillPct} %), kotel level ${m.ultrasStand}${m.ultrasText ? `, plachta „${m.ultrasText}"` : ""}${m.weather ? `, počasí ${m.weather}` : ""}`)
+    .map((m) => `- ${m.homeName} (doma) vs ${m.awayName} ${m.homeScore}:${m.awayScore}: dorazilo ${m.attendance} diváků z ${m.capacity} možných (${m.fillPct} % zaplněno), ${kotelDesc(m.ultrasStand)}${m.ultrasText ? `, na plachtě „${m.ultrasText}"` : ""}${m.weather ? `, ${m.weather}` : ""}`)
     .join("\n");
   const galleryNote = photos.length
     ? `Na fotkách budou kotle: ${photos.map((p) => `${p.teamName} (${p.caption})`).join("; ")}.`
@@ -219,8 +227,10 @@ async function callGeminiUltras(
 
 Napiš krátký článek (120–200 slov) hodnotící ATMOSFÉRU ${gameWeek}. kola. Páteří je žebříček:
 - kam přišlo NEJVÍC lidí a kam NEJMÍŇ,
-- který stadion byl nejvíc nabitý (fill %), který zel prázdnotou,
+- kde bylo vyprodáno / plný dům a kde zely ochozy prázdnotou,
 - zmiň prvky kotlů (plachta s nápisem, vlajky, buben) u týmů, co je mají.
+
+DŮLEŽITÉ: Píšeš jako fanoušek, NE jako hra. NIKDY nepoužívej herní ani technické termíny — žádné „level", „úroveň", čísla úrovní kotle, „fill", „kapacita %". Kotel a atmosféru popiš lidsky: velký/malý kotel, kolik vlajek, jestli buší buben, jestli visí plachta, vyprodáno / poloprázdno.
 
 DATA (jen tato smíš použít):
 ${facts}
