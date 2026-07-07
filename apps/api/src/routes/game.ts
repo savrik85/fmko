@@ -985,8 +985,9 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
   // 3. Persistent news articles (zpravodaj, round results, manager arrival)
   if (team.league_id) {
     const newsRows = await c.env.DB.prepare(
-      `SELECT n.id, n.type, n.headline, n.body, n.game_week, n.created_at FROM news n
+      `SELECT n.id, n.type, n.headline, n.body, n.game_week, n.created_at, ur.photos_json FROM news n
        LEFT JOIN matches m ON n.match_id = m.id AND n.type = 'promotion'
+       LEFT JOIN ultras_reports ur ON ur.news_id = n.id
        WHERE (n.league_id = ? OR n.team_id = ?)
          AND (n.type != 'promotion' OR COALESCE(m.status, 'upcoming') != 'simulated')
        ORDER BY n.created_at DESC LIMIT 20`
@@ -1027,6 +1028,7 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
         season_opener: "\u{1F3BA}",
         season_awards: "\u{1F3C6}",
         legend_farewell: "\u{1F396}\uFE0F",
+        ultras_report: "\u{1F525}",
       };
       articles.push({
         id: n.id as string,
@@ -1036,6 +1038,7 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
         icon: iconMap[n.type as string] ?? "\u{1F4F0}",
         date: n.created_at as string,
         gameWeek: n.game_week as number | null,
+        photos: n.photos_json ? JSON.parse(n.photos_json as string) : undefined,
       } as any);
     }
   }

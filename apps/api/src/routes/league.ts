@@ -335,7 +335,7 @@ leagueRouter.get("/leagues/:leagueId/news", async (c) => {
   const leagueId = c.req.param("leagueId");
 
   const newsRows = await c.env.DB.prepare(
-    "SELECT id, type, headline, body, game_week, created_at FROM news WHERE league_id = ? ORDER BY created_at DESC LIMIT 30"
+    "SELECT n.id, n.type, n.headline, n.body, n.game_week, n.created_at, ur.photos_json FROM news n LEFT JOIN ultras_reports ur ON ur.news_id = n.id WHERE n.league_id = ? ORDER BY n.created_at DESC LIMIT 30"
   ).bind(leagueId).all().catch((e) => { logger.error({ module: "league" }, "fetch league news", e); return { results: [] }; });
 
   const iconMap: Record<string, string> = {
@@ -343,6 +343,7 @@ leagueRouter.get("/leagues/:leagueId/news", async (c) => {
     seasonal: "\u{1F389}", manager_arrival: "\u{1F4CB}",
     interview: "\u{1F399}\uFE0F", round_summary: "\u{1F3C6}", player_interview: "\u{1F3A4}",
     season_wrap: "\u{1F3C1}", season_awards: "\u{1F3C6}", legend_farewell: "\u{1F396}\uFE0F",
+    ultras_report: "\u{1F525}",
   };
 
   const articles = newsRows.results.map((n) => ({
@@ -350,6 +351,7 @@ leagueRouter.get("/leagues/:leagueId/news", async (c) => {
     headline: (n.headline ?? n.type) as string, body: (n.body ?? "") as string,
     icon: iconMap[n.type as string] ?? "\u{1F4F0}",
     date: n.created_at as string, gameWeek: n.game_week as number | null,
+    photos: n.photos_json ? JSON.parse(n.photos_json as string) : undefined,
   }));
 
   return c.json({ articles });
