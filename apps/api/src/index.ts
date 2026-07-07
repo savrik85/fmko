@@ -287,6 +287,15 @@ export default {
                       .catch((e) => log("error", "AI report failed", e))
                   );
                 } catch (e) { log("error", "AI reporter import failed", e); }
+
+                // Prales Ultras — fan-voice hodnocení atmosféry + galerie kotlů (async, neblokuje)
+                try {
+                  const { generateUltrasReport } = await import("./news/ultras-report");
+                  ctx.waitUntil(
+                    generateUltrasReport(env.DB, env.GEMINI_API_KEY, matchCal.id as string)
+                      .catch((e) => log("error", "Ultras report failed", e))
+                  );
+                } catch (e) { log("error", "Ultras reporter import failed", e); }
               }
 
               // Between-round events for human teams

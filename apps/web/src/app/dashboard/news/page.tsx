@@ -28,6 +28,19 @@ interface ClassifiedCategory {
   icon: string;
 }
 
+interface UltrasPhoto {
+  teamId: string;
+  teamName: string;
+  ultrasText: string;
+  bannerColor: string;
+  textColor: string;
+  level: number;
+  attendance: number;
+  capacity: number;
+  fillPct: number;
+  caption: string;
+}
+
 interface Article {
   id: string;
   type: string;
@@ -35,6 +48,8 @@ interface Article {
   body: string;
   icon: string;
   date: string;
+  gameWeek?: number | null;
+  photos?: UltrasPhoto[];
 }
 
 /** Parse **bold** markdown in text */
@@ -252,6 +267,7 @@ export default function NewsPage() {
   const currentWeekInterviews = latestInterviewWeek != null && latestInterviewWeek > 0
     ? interviewArticles.filter((a) => (a as any).gameWeek === latestInterviewWeek)
     : interviewArticles;
+  const ultrasReports = articles.filter((a) => a.type === "ultras_report");
   // Rozhovory s hráči — nejnovější kolo (stejná logika jako u rozhovorů s trenéry)
   const playerInterviewArticles = articles.filter((a) => a.type === "player_interview");
   const latestPlayerIvWeek = playerInterviewArticles.length > 0
@@ -267,7 +283,7 @@ export default function NewsPage() {
   const leadStory = [openerArticles[0], previewArticles[0], roundSummaryArticles[0], aiReportArticles[0], matchArticles[0]]
     .filter(Boolean)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
-    || standingArticles[0] || articles[0];
+    || standingArticles[0] || articles.find((a) => a.type !== "ultras_report");
   // Druhý hlavní článek — kolem přelomu sezóny je to ohlédnutí za sezónou (season_wrap),
   // jinak round_summary / ai_report (podle toho, co není lead).
   const secondaryStory =
@@ -278,7 +294,7 @@ export default function NewsPage() {
   const matchStories = matchArticles.slice(leadStory?.type === "match" ? 1 : 0);
   // Ostatní drobnosti — bez typů z hlavních sekcí a bez duplicit s lead/secondary (podle id)
   const otherArticles = articles.filter(
-    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview"].includes(a.type)
+    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview", "ultras_report"].includes(a.type)
       && a.id !== leadStory?.id && a.id !== secondaryStory?.id,
   );
   const miscArticles = otherArticles;
@@ -444,6 +460,50 @@ export default function NewsPage() {
               </ArticleWrapper>
             </div>
           )}
+
+          {/* ═══ Prales Ultras — hlavní blok(y), všechny reporty ═══ */}
+          {ultrasReports.map((ur) => (
+            <div key={ur.id} id={`news-${ur.id}`} className="border-b border-gray-200 pb-5">
+              <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">
+                🔥 Prales Ultras
+              </div>
+              <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
+                {ur.headline}
+              </h2>
+              <div className="text-base text-ink-light leading-relaxed space-y-3 columns-1 sm:columns-2 gap-8">
+                {ur.body.split("\n").filter(Boolean).map((p, i) => (
+                  <p key={i} className="break-inside-avoid">{renderMarkdown(p)}</p>
+                ))}
+              </div>
+              {ur.photos && ur.photos.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-5">
+                  {ur.photos.map((ph) => (
+                    <figure key={ph.teamId} className="overflow-hidden rounded-lg border border-sand-200 bg-sand-50">
+                      <img
+                        src={`/kotel-foto?text=${encodeURIComponent(ph.ultrasText)}&bg=${encodeURIComponent(ph.bannerColor)}&fg=${encodeURIComponent(ph.textColor)}&p=${encodeURIComponent(ph.bannerColor)}&s=${encodeURIComponent(ph.textColor)}&lvl=${encodeURIComponent(String(ph.level))}&att=${encodeURIComponent(String(ph.attendance))}&team=${encodeURIComponent(ph.teamName)}&cap=${encodeURIComponent(ph.caption)}`}
+                        alt={`Kotel ${ph.teamName}`}
+                        width={1200}
+                        height={630}
+                        className="w-full h-auto"
+                        loading="lazy"
+                      />
+                      <figcaption className="px-3 py-2 text-sm">
+                        <EntityLink type="team" id={ph.teamId} className="font-heading font-bold text-base">
+                          {ph.teamName}
+                        </EntityLink>
+                        <span className="text-muted ml-2">· {ph.caption}</span>
+                      </figcaption>
+                    </figure>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center justify-center gap-3 mt-3">
+                <div className="text-xs text-muted italic">{timeAgo(ur.date)}</div>
+                <span className="text-muted/40">·</span>
+                <ShareButton articleId={ur.id} />
+              </div>
+            </div>
+          ))}
 
           {/* ═══ Rozhovory kola ═══ */}
           {currentWeekInterviews.length > 0 && (
