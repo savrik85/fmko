@@ -423,6 +423,7 @@ villagesRouter.get("/:id/teams", async (c) => {
      FROM teams t
      LEFT JOIN village_team_favor vtf ON vtf.team_id = t.id AND vtf.official_id IS NULL
      WHERE t.village_id = ? AND t.name NOT LIKE 'DELETED%'
+       AND COALESCE(t.team_type, 'senior') != 'u21'
      ORDER BY t.name`
   ).bind(villageId).all<{
     id: string; name: string; user_id: string; primary_color: string;
