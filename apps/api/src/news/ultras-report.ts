@@ -76,7 +76,7 @@ function pickGallery(homeMatches: HomeMatch[]): UltrasPhoto[] {
   add(byAtt[0], `${fmtNum(byAtt[0].attendance)} diváků — nejvíc v kole`);
 
   const byFill = [...cands].sort((a, b) => b.fillPct - a.fillPct).find((m) => !used.has(m.homeTeamId));
-  add(byFill, byFill ? `kotel nabitý na ${byFill.fillPct} %` : "");
+  add(byFill, byFill ? "nejnabitější kotel kola" : "");
 
   const byLevel = [...cands]
     .sort((a, b) => b.ultrasStand - a.ultrasStand || (b.ultrasText ? 1 : 0) - (a.ultrasText ? 1 : 0))
@@ -96,7 +96,7 @@ function fallbackArticle(gameWeek: number, homeMatches: HomeMatch[]): string {
   parts.push(`Kotel hodnotí ${gameWeek}. kolo`);
   parts.push(`Nejvíc lidí dorazilo na **${top.homeName}** — ${fmtNum(top.attendance)} diváků. Naopak nejprázdněji bylo u **${bottom.homeName}** (${fmtNum(bottom.attendance)}).`);
   const byFill = [...homeMatches].sort((a, b) => b.fillPct - a.fillPct)[0];
-  parts.push(`Nejnabitější stadion kola: **${byFill.homeName}** (${byFill.fillPct} % kapacity).`);
+  parts.push(`Nejlepší atmosféru kola měl **${byFill.homeName}** — bylo tam ${fullnessDesc(byFill.fillPct)}.`);
   return parts.join("\n");
 }
 
@@ -210,6 +210,15 @@ function kotelDesc(level: number): string {
   return "bez kotle";
 }
 
+/** Zaplněnost stadionu slovy (bez procent) — fanouškovské, ne stats. */
+function fullnessDesc(fillPct: number): string {
+  if (fillPct >= 95) return "vyprodáno";
+  if (fillPct >= 80) return "narváno";
+  if (fillPct >= 55) return "slušně zaplněno";
+  if (fillPct >= 30) return "poloprázdno";
+  return "skoro prázdno";
+}
+
 async function callGeminiUltras(
   apiKey: string,
   gameWeek: number,
@@ -217,7 +226,7 @@ async function callGeminiUltras(
   photos: UltrasPhoto[],
 ): Promise<string> {
   const facts = homeMatches
-    .map((m) => `- ${m.homeName} (doma) vs ${m.awayName} ${m.homeScore}:${m.awayScore}: dorazilo ${m.attendance} diváků z ${m.capacity} možných (${m.fillPct} % zaplněno), ${kotelDesc(m.ultrasStand)}${m.ultrasText ? `, na plachtě „${m.ultrasText}"` : ""}${m.weather ? `, ${m.weather}` : ""}`)
+    .map((m) => `- ${m.homeName} (doma) vs ${m.awayName} ${m.homeScore}:${m.awayScore}: dorazilo ${m.attendance} diváků (${fullnessDesc(m.fillPct)}), ${kotelDesc(m.ultrasStand)}${m.ultrasText ? `, na plachtě „${m.ultrasText}"` : ""}${m.weather ? `, ${m.weather}` : ""}`)
     .join("\n");
   const galleryNote = photos.length
     ? `Na fotkách budou kotle: ${photos.map((p) => `${p.teamName} (${p.caption})`).join("; ")}.`
@@ -230,7 +239,7 @@ Napiš krátký článek (120–200 slov) hodnotící ATMOSFÉRU ${gameWeek}. ko
 - kde bylo vyprodáno / plný dům a kde zely ochozy prázdnotou,
 - zmiň prvky kotlů (plachta s nápisem, vlajky, buben) u týmů, co je mají.
 
-DŮLEŽITÉ: Píšeš jako fanoušek, NE jako hra. NIKDY nepoužívej herní ani technické termíny — žádné „level", „úroveň", čísla úrovní kotle, „fill", „kapacita %". Kotel a atmosféru popiš lidsky: velký/malý kotel, kolik vlajek, jestli buší buben, jestli visí plachta, vyprodáno / poloprázdno.
+DŮLEŽITÉ: Píšeš jako fanoušek, NE jako hra. NIKDY nepoužívej herní ani technické termíny ani procenta zaplněnosti — žádné „level", „úroveň", čísla úrovní kotle, „fill", „kapacita", „X % zaplněno / z kapacity". Počty diváků (kolik lidí dorazilo) používej klidně. Zaplněnost a kotel popiš lidsky: vyprodáno / narváno / poloprázdno, velký/malý kotel, kolik vlajek, jestli buší buben, jestli visí plachta.
 
 DATA (jen tato smíš použít):
 ${facts}
