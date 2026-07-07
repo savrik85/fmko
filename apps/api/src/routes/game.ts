@@ -2702,6 +2702,12 @@ gameRouter.post("/game/run-matches", async (c) => {
             } catch (e: any) {
               logger.warn({ module: "game" }, `AI reporter error: ${e.message}`);
             }
+            try {
+              const { generateUltrasReport } = await import("../news/ultras-report");
+              await generateUltrasReport(c.env.DB, c.env.GEMINI_API_KEY, matchCal.id);
+            } catch (e: any) {
+              logger.warn({ module: "game" }, `ultras report error: ${e.message}`);
+            }
           }
           try {
             const { pickRandomAdhocEvent } = await import("../season/seasonal-events");
