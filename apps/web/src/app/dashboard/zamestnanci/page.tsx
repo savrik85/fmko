@@ -105,6 +105,7 @@ export default function ZamestnanciPage() {
   const [hired, setHired] = useState<StaffMember[]>([]);
   const [market, setMarket] = useState<StaffMember[]>([]);
   const [pickRole, setPickRole] = useState<Record<string, StaffRole>>({});
+  const [marketRoleFilter, setMarketRoleFilter] = useState<StaffRole | "all">("all");
 
   const refresh = async () => {
     if (!teamId) return;
@@ -197,6 +198,7 @@ export default function ZamestnanciPage() {
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
   const tabs: [Tab, string, number][] = [["team", "Tým", hired.length], ["market", "Volní", market.length]];
+  const filteredMarket = marketRoleFilter === "all" ? market : market.filter((c) => c.profession === marketRoleFilter);
 
   return (
     <>
@@ -316,7 +318,28 @@ export default function ZamestnanciPage() {
                 <p className="text-sm">V okrese zrovna nikdo nehledá práci. Mrkni zítra — nabídka se průběžně obměňuje.</p>
               </div>
             ) : (
-              market.map((cand) => {
+              <>
+                {/* Filtr podle role (zaměření kandidáta) */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] uppercase font-heading font-bold text-muted tracking-wide shrink-0">Filtr role</span>
+                  <select
+                    value={marketRoleFilter}
+                    onChange={(e) => setMarketRoleFilter(e.target.value as StaffRole | "all")}
+                    className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 font-heading bg-white flex-1 min-w-[10rem]">
+                    <option value="all">Všechny role ({market.length})</option>
+                    {STAFF_ROLE_ORDER.map((r) => {
+                      const n = market.filter((c) => c.profession === r).length;
+                      return <option key={r} value={r} disabled={n === 0}>{ROLE_DEFS[r].label} ({n})</option>;
+                    })}
+                  </select>
+                </div>
+
+                {filteredMarket.length === 0 ? (
+                  <div className="card p-6 text-center text-muted text-sm">
+                    Pro roli <strong>{marketRoleFilter !== "all" ? ROLE_DEFS[marketRoleFilter].label : ""}</strong> zrovna nikdo volný není.
+                  </div>
+                ) : (
+                filteredMarket.map((cand) => {
                 const selected = pickRole[cand.id] ?? cand.profession;
                 const eff = staffEffectiveness(cand, selected);
                 return (
@@ -368,6 +391,8 @@ export default function ZamestnanciPage() {
                   </div>
                 );
               })
+                )}
+              </>
             )}
           </div>
         )}
