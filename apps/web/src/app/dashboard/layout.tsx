@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { FMSidebar } from "@/components/dashboard/fm-sidebar";
 import { FMTopBar } from "@/components/dashboard/fm-topbar";
@@ -17,18 +17,6 @@ const CUSTOM_HEADER_PAGES = ["/dashboard/liga", "/dashboard/schedule", "/dashboa
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { teamId, isAdmin } = useTeam();
-  const [dbg, setDbg] = useState("");
-  useEffect(() => {
-    const probe = document.createElement("div");
-    probe.style.cssText = "position:fixed;bottom:0;left:0;width:0;height:env(safe-area-inset-bottom,0px);";
-    document.body.appendChild(probe);
-    const sab = Math.round(probe.getBoundingClientRect().height);
-    probe.remove();
-    const nav = document.querySelector("nav.fixed") as HTMLElement | null;
-    const nr = nav?.getBoundingClientRect();
-    const dash = document.querySelector(".h-dvh") as HTMLElement | null;
-    setDbg(`iH:${window.innerHeight} scr:${window.screen.height} sab:${sab} navB:${nr ? Math.round(nr.bottom) : "?"} navH:${nr ? Math.round(nr.height) : "?"} dashH:${dash ? Math.round(dash.getBoundingClientRect().height) : "?"}`);
-  }, [pathname]);
   const isDetailPage = DETAIL_PREFIXES.some((p) => pathname.startsWith(p) && pathname !== p.slice(0, -1));
   const hasCustomHeader = CUSTOM_HEADER_PAGES.includes(pathname);
   // Check for unseen match — redirect to match-day screen (skip on replay pages)
@@ -56,8 +44,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="h-dvh flex bg-paper overflow-hidden">
-      {/* DOČASNÁ DIAGNOSTIKA — smazat po odečtu */}
-      <div className="sm:hidden fixed top-16 left-1 z-[99999] bg-red-600 text-white text-[11px] font-mono px-1.5 py-1 rounded pointer-events-none leading-tight">{dbg || "…"}</div>
       <FMSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
