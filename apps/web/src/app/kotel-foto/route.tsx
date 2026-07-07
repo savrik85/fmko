@@ -15,6 +15,10 @@ function isLight(hex: string): boolean {
 function hex(v: string | null, fallback: string): string {
   return v && /^#[0-9A-Fa-f]{6}$/.test(v) ? v : fallback;
 }
+// Bez Intl, který je na Workers omezený — viz apps/api/src/news/ultras-report.ts
+function fmtNum(n: number): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
 
 export async function GET(req: Request) {
   const q = new URL(req.url).searchParams;
@@ -24,7 +28,7 @@ export async function GET(req: Request) {
   const bannerBg = hex(q.get("bg"), primary);
   const bannerFg = hex(q.get("fg"), isLight(bannerBg) ? "#1a1a1a" : "#ffffff");
   const lvl = Math.max(1, Math.min(3, parseInt(q.get("lvl") ?? "1", 10) || 1));
-  const att = parseInt(q.get("att") ?? "0", 10) || 0;
+  const att = Math.max(0, parseInt(q.get("att") ?? "0", 10) || 0);
   const team = (q.get("team") ?? "").slice(0, 40);
   const cap = (q.get("cap") ?? "").slice(0, 60);
   const flags = [0, 4, 6, 8][lvl];
@@ -64,7 +68,7 @@ export async function GET(req: Request) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 40px 26px", background: "rgba(0,0,0,0.35)" }}>
           <div style={{ display: "flex", fontSize: 34, fontWeight: 800, color: "#fff" }}>{team}</div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-            <div style={{ display: "flex", fontSize: 40, fontWeight: 900, color: "#fff" }}>{att.toLocaleString("cs-CZ")} diváků</div>
+            <div style={{ display: "flex", fontSize: 40, fontWeight: 900, color: "#fff" }}>{fmtNum(att)} diváků</div>
             {cap && <div style={{ display: "flex", fontSize: 22, color: "rgba(255,255,255,0.7)" }}>{cap}</div>}
           </div>
         </div>
