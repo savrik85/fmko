@@ -301,7 +301,7 @@ const ABSURD_EXCUSES: Array<{ text: string; emoji: string; timing: AbsenceTiming
 // KOCOVINA
 // ═══════════════════════════════════════════════
 
-const HANGOVER_EXCUSES = [
+const HANGOVER_EXCUSES: Array<{ text: string; emoji: string; env?: ExcuseEnv }> = [
   { text: "Sorry trenere, není mi dobře... včera to bylo silný", emoji: "\u{1F37A}" },
   { text: "Nemůžuuu... hlava mi třeští. Příště určitě", emoji: "\u{1F635}" },
   { text: "Neni mi dobře, asi jsem něco špatného snědl (nepil)", emoji: "\u{1F922}" },
@@ -340,21 +340,34 @@ const HANGOVER_EXCUSES = [
   { text: "Oslava povýšení se zvrhla, v práci zítra koukám jak sejra", emoji: "\u{1F389}" },
 
   // Prachaticko / Šumava
-  { text: "Vimperská pouť mě složila, hlava jak škopek", emoji: "\u{1F3A1}" },
-  { text: "Lhenickej košt slivovice, přežiju to tak do středy", emoji: "\u{1F351}" },
-  { text: "Hasičskej bál ve Vacově, pil jsem za celej sbor", emoji: "\u{1F692}" },
-  { text: "Po zabijačce ve Zdíkově došla nálada dřív než slivovice", emoji: "\u{1F943}" },
-  { text: "Tancovačka ve Čkyni skončila ráno, dneska mě nikam nedostanete", emoji: "\u{1FA97}" },
-  { text: "Degustace ve vimperským pivovaru se protáhla do rána", emoji: "\u{1F37A}" },
-  { text: "Sklářská slavnost v Lenoře, pil jsem s mistrama do rána", emoji: "\u{1F377}" },
-  { text: "Výlov v Netolicích, k tomu rybí polívka a slivovice, ležím", emoji: "\u{1F372}" },
-  { text: "Masopust ve Vlachově Březí, průvod skončil v hospodě", emoji: "\u{1F3AD}" },
-  { text: "Myslivecká poslední leč v Záblatí, zvěřina a štamprlata", emoji: "\u{1F98C}" },
-  { text: "Posvícení v Bavorově, koláče zapíjený slivovicí, dneska ne", emoji: "\u{1F967}" },
-  { text: "Vimperskej pivovar stáčel várku, ochutnávali jsme každou sudou", emoji: "\u{1F37A}" },
-  { text: "Pouť ve Čkyni, na Votáčce zavírali až k ránu", emoji: "\u{1F3A0}" },
-  { text: "Hasičskej táborák v Hradčanech, dopadlo to jak vždycky", emoji: "\u{1F525}" },
-  { text: "Zabíjačka ve Spůli, do slivovice nám dali ještě domácí likér", emoji: "\u{1F943}" },
+  { text: "Vimperská pouť mě složila, hlava jak škopek", emoji: "\u{1F3A1}", env: "rural" },
+  { text: "Lhenickej košt slivovice, přežiju to tak do středy", emoji: "\u{1F351}", env: "rural" },
+  { text: "Hasičskej bál ve Vacově, pil jsem za celej sbor", emoji: "\u{1F692}", env: "rural" },
+  { text: "Po zabijačce ve Zdíkově došla nálada dřív než slivovice", emoji: "\u{1F943}", env: "rural" },
+  { text: "Tancovačka ve Čkyni skončila ráno, dneska mě nikam nedostanete", emoji: "\u{1FA97}", env: "rural" },
+  { text: "Degustace ve vimperským pivovaru se protáhla do rána", emoji: "\u{1F37A}", env: "rural" },
+  { text: "Sklářská slavnost v Lenoře, pil jsem s mistrama do rána", emoji: "\u{1F377}", env: "rural" },
+  { text: "Výlov v Netolicích, k tomu rybí polívka a slivovice, ležím", emoji: "\u{1F372}", env: "rural" },
+  { text: "Masopust ve Vlachově Březí, průvod skončil v hospodě", emoji: "\u{1F3AD}", env: "rural" },
+  { text: "Myslivecká poslední leč v Záblatí, zvěřina a štamprlata", emoji: "\u{1F98C}", env: "rural" },
+  { text: "Posvícení v Bavorově, koláče zapíjený slivovicí, dneska ne", emoji: "\u{1F967}", env: "rural" },
+  { text: "Vimperskej pivovar stáčel várku, ochutnávali jsme každou sudou", emoji: "\u{1F37A}", env: "rural" },
+  { text: "Pouť ve Čkyni, na Votáčce zavírali až k ránu", emoji: "\u{1F3A0}", env: "rural" },
+  { text: "Hasičskej táborák v Hradčanech, dopadlo to jak vždycky", emoji: "\u{1F525}", env: "rural" },
+  { text: "Zabíjačka ve Spůli, do slivovice nám dali ještě domácí likér", emoji: "\u{1F943}", env: "rural" },
+
+  // Praha / město
+  { text: "Bar crawl po Žižkově, obešli jsme sedm hospod a osmou už nepamatuju", emoji: "\u{1F37A}", env: "urban" },
+  { text: "Degustace craftů v pivnici na Vinohradech, dvanáct piv, dvanáct chutí", emoji: "\u{1F37A}", env: "urban" },
+  { text: "Náplavka do rána, každej stánek jinej drink a já všechny", emoji: "\u{1F379}", env: "urban" },
+  { text: "Rozlučka v koktejlovým baru v centru, barman to se mnou přehnal", emoji: "\u{1F378}", env: "urban" },
+  { text: "Afterpárty v klubu na Smíchově, domů jsem šel pěšky přes celý město", emoji: "\u{1F57A}", env: "urban" },
+  { text: "Firemní večírek v rooftop baru, otevřenej bar byla chyba", emoji: "\u{1F3D9}", env: "urban" },
+  { text: "Ochutnávka v minipivovaru v Karlíně, každou várku jsme museli zkontrolovat", emoji: "\u{1F37A}", env: "urban" },
+  { text: "Techno párty do sedmi ráno, uši mi zvoní a hlava taky", emoji: "\u{1F3A7}", env: "urban" },
+  { text: "Vinnej festival na Hradě, bílý, červený, růžový a ráno zelený", emoji: "\u{1F377}", env: "urban" },
+  { text: "Sešli jsme se na jedno u Anděla, skončili jsme v pěti podnicích", emoji: "\u{1F37A}", env: "urban" },
+  { text: "Silvestr v červenci? Ne, jen normální čtvrtek v Praze", emoji: "\u{1F389}", env: "urban" },
 ];
 
 // ═══════════════════════════════════════════════
@@ -562,7 +575,8 @@ export function generateAbsences(
         break;
       }
       case "hangover": {
-        const pick = rng.pick(HANGOVER_EXCUSES);
+        const hangoverFiltered = HANGOVER_EXCUSES.filter(envFilter);
+        const pick = rng.pick(hangoverFiltered.length > 0 ? hangoverFiltered : HANGOVER_EXCUSES);
         smsText = pick.text;
         emoji = pick.emoji;
         break;
