@@ -150,9 +150,11 @@ export function buildMatchSummary(input: BuildInput): MatchSummary | null {
     const delta = ownVal - oppVal;
     if (Math.abs(delta) < 0.3) continue; // nezajímavé
     const impact = deltaToImpact(delta);
+    // Hodnocení je o VÝKONU v zápase (match rating), ne o kvalitě kádru — formulace to musí
+    // dát jasně najevo, jinak čtenář čte „slabší útok" jako sílu týmu, i když kádrově je vyrovnaný.
     const description = delta > 0
-      ? `${label} byl o ${Math.abs(delta).toFixed(1)} bodu lepší než soupeř (${ownVal.toFixed(1)} vs ${oppVal.toFixed(1)}).`
-      : `${label} byl o ${Math.abs(delta).toFixed(1)} bodu slabší než soupeř (${ownVal.toFixed(1)} vs ${oppVal.toFixed(1)}).`;
+      ? `${label}: o ${Math.abs(delta).toFixed(1)} lepší výkon než soupeř (${ownVal.toFixed(1)} vs ${oppVal.toFixed(1)}).`
+      : `${label}: o ${Math.abs(delta).toFixed(1)} slabší výkon než soupeř (${ownVal.toFixed(1)} vs ${oppVal.toFixed(1)}).`;
     candidates.push({
       type: line === "gk" ? "goalkeeper" : "key_matchup",
       label,
