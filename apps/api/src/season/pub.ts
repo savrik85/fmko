@@ -7,6 +7,7 @@
 
 import { logConditionStmt } from "../lib/condition-log";
 import { logger } from "../lib/logger";
+import { districtPoolFor, type DistrictPool } from "../data/flavor/district-pool";
 
 interface PubAttendee {
   playerId: string;
@@ -94,20 +95,34 @@ function attendanceProb(p: DbPlayer, ctx: {
   return Math.min(0.85, prob);
 }
 
-const STORY_TEMPLATES = [
-  "{name} vyprávěl o legendárním zápase, kdy v Bohdalci dali 7 gólů soupeři za poločas.",
-  "{name} říkal, že strejda Mlejnek mu doporučil nového kopáče z Petrovic.",
-  "{name} stěžoval na to, že žena už dva dny neuvařila vepřové.",
-  "{name} sledoval s ostatními zápas v televizi.",
-  "{name} si popovídal s hospodským o krávě, která se ztratila u sousedů.",
-  "{name} dlouho přesvědčoval ostatní, že soudce v sobotu byl podplacený.",
-  "{name} vyprávěl, jak kdysi v Husinci vyhráli pouťový turnaj na penalty až po setmění.",
-  "{name} přesvědčoval ostatní, že Boubínský prales je nejlepší tréninkové hřiště v republice.",
-  "{name} se hádal s chlapama, jestli je lepší pivo z Vimperka nebo z Prachatic.",
-  "{name} líčil, jak na Mářském vrchu chytil signál a viděl celý zápas Sparty na mobilu.",
-  "{name} tvrdil, že viděl rysa nad Volary. Nikdo mu nevěřil, ale poslouchali rádi.",
-  "{name} rozebíral, proč se Netolicím pořád daří líp než nám. Shodli se, že mají štěstí.",
-];
+const STORY_POOL: DistrictPool<string> = {
+  core: [
+    "{name} vyprávěl o legendárním zápase, kdy dali 7 gólů soupeři za jediný poločas.",
+    "{name} stěžoval na to, že žena už dva dny neuvařila vepřové.",
+    "{name} sledoval s ostatními zápas v televizi.",
+    "{name} dlouho přesvědčoval ostatní, že soudce v sobotu byl podplacený.",
+    "{name} rozebíral, proč se favoritovi pořád daří líp než nám. Shodli se, že mají štěstí.",
+    "{name} tvrdil, že jako mladej byl rychlejší než všichni tady dohromady. Nikdo neoponoval.",
+  ],
+  prachatice: [
+    "{name} říkal, že strejda Mlejnek mu doporučil nového kopáče z Petrovic.",
+    "{name} si popovídal s hospodským o krávě, která se ztratila u sousedů.",
+    "{name} vyprávěl, jak kdysi v Husinci vyhráli pouťový turnaj na penalty až po setmění.",
+    "{name} přesvědčoval ostatní, že Boubínský prales je nejlepší tréninkové hřiště v republice.",
+    "{name} se hádal s chlapama, jestli je lepší pivo z Vimperka nebo z Prachatic.",
+    "{name} líčil, jak na Mářském vrchu chytil signál a viděl celý zápas Sparty na mobilu.",
+    "{name} tvrdil, že viděl rysa nad Volary. Nikdo mu nevěřil, ale poslouchali rádi.",
+    "{name} rozebíral, proč se Netolicím pořád daří líp než nám. Shodli se, že mají štěstí.",
+  ],
+  praha: [
+    "{name} vyprávěl, jak kdysi na Julisce viděl zápas z tribuny za stovku a bagetu.",
+    "{name} rozebíral, jestli je lepší Sparta nebo Slavia. Hospoda se rozdělila na dva tábory.",
+    "{name} přesvědčoval ostatní, že v Praze má fotbal na klepnutí — tři zápasy za víkend, stačí tramvaj.",
+    "{name} líčil, jak přišel o dres v šatně na Strahově a našel ho pak na burze na Kolbence.",
+    "{name} se hádal, jestli se dá stihnout druhý poločas, když dáš první u výčepu na Andělu.",
+    "{name} tvrdil, že potkal v metru bývalého ligistu. Nikdo nevěřil, ale poslouchali rádi.",
+  ],
+};
 
 const SOLO_TEMPLATES = [
   "{name} seděl sám u baru, ostatní chlapci dnes nikam nešli.",
@@ -123,29 +138,42 @@ const NOBODY_TEMPLATES = [
 
 // Cena piva je v hospodě stálá — nedává smysl ji každý den měnit. Specials se proto
 // točí kolem jídla / atmosféry, ne kolem ceny.
-const DAILY_SPECIALS = [
-  "Specialita dne: Vepřo-knedlo-zelo",
-  "Specialita dne: Smažený sýr s tatarkou",
-  "Specialita dne: Klobásy na pivu",
-  "Dnes: Utopenci · Polévka 25 Kč",
-  "Specialita dne: Svíčková (jak od babičky)",
-  "Kuchyň zavřená — hospodský dělá sám: jen utopenci a klobásy.",
-  "Hospodský pustil polku z gramofonu — nikdo neprotestoval.",
-  "Nová pohovka v rohu — zatím se na ni nikdo neodvažuje.",
-  "Akce: páté pivo zdarma · Specialita: Žebra na Plzni",
-  "Dnes čepujeme Krušovice — z dovozu od strejdy.",
-  "Pan starosta sliboval, že platí pivo všem — slib nesplnil.",
-  "Hospodský má nový televizor — Sport 1 v HD.",
-  "Vichřice strhla cedulku, zatím vchází zadem.",
-  "Specialita dne: Guláš s knedlíkem",
-  "Dnes: Polévka zdarma ke každému druhému pivu",
-  "Specialita dne: Zvěřinový guláš od myslivců z Volar",
-  "Dnes: Borůvkové knedlíky z boubínských borůvek",
-  "Hospodský pustil dechovku — Šumavanku, nikdo neprotestoval.",
-  "Akce ke Slavnostem Zlaté stezky: třetí pivo za pětikorunu",
-  "Dnes: Kachna s knedlíkem — recept od babičky z Lhenic",
-  "Specialita dne: Pstruh z husinecké přehrady na másle",
-];
+const DAILY_SPECIALS_POOL: DistrictPool<string> = {
+  core: [
+    "Specialita dne: Vepřo-knedlo-zelo",
+    "Specialita dne: Smažený sýr s tatarkou",
+    "Specialita dne: Klobásy na pivu",
+    "Dnes: Utopenci · Polévka 25 Kč",
+    "Specialita dne: Svíčková (jak od babičky)",
+    "Kuchyň zavřená — hospodský dělá sám: jen utopenci a klobásy.",
+    "Hospodský pustil polku z gramofonu — nikdo neprotestoval.",
+    "Nová pohovka v rohu — zatím se na ni nikdo neodvažuje.",
+    "Akce: páté pivo zdarma · Specialita: Žebra na Plzni",
+    "Dnes čepujeme Krušovice — z dovozu od strejdy.",
+    "Pan starosta sliboval, že platí pivo všem — slib nesplnil.",
+    "Hospodský má nový televizor — Sport 1 v HD.",
+    "Vichřice strhla cedulku, zatím vchází zadem.",
+    "Specialita dne: Guláš s knedlíkem",
+    "Dnes: Polévka zdarma ke každému druhému pivu",
+  ],
+  prachatice: [
+    "Specialita dne: Zvěřinový guláš od myslivců z Volar",
+    "Dnes: Borůvkové knedlíky z boubínských borůvek",
+    "Hospodský pustil dechovku — Šumavanku, nikdo neprotestoval.",
+    "Akce ke Slavnostem Zlaté stezky: třetí pivo za pětikorunu",
+    "Dnes: Kachna s knedlíkem — recept od babičky z Lhenic",
+    "Specialita dne: Pstruh z husinecké přehrady na másle",
+  ],
+  praha: [
+    "Specialita dne: Trhané vepřové v bulce · IPA na čepu",
+    "Dnes: Utopenci klasika — a k tomu točená dvanáctka",
+    "Hospodský dal na čepu nový craft z minipivovaru v Karlíně.",
+    "Akce: burger a hranolky za stovku · Sport na velkoplošce",
+    "Dnes: Svíčková jak od babičky, i když ji vaří kluk z bistra vedle",
+    "Nová kávovar za barem — flat white i k pivu, časy se mění.",
+    "Akce ke šlágru kola Sparta–Slavia: třetí pivo za pětikorunu",
+  ],
+};
 
 const CAT_INCIDENT_TEMPLATES = [
   "Hospodská kočka se otřela o {name}ovu nohu — Marcela mu doma vyčte chlupy.",
@@ -233,51 +261,85 @@ const JACKPOT_INCIDENT_TEMPLATES = [
 ];
 
 // Někdo platí kolo (starosta, sponzor, strejda) — všichni lokálové +1 morálka
-const FREE_ROUND_INCIDENT_TEMPLATES = [
-  "Starosta vlétl do hospody, vyhlásil že platí kolo. Před volbami je hodný i na fotbalisty.",
-  "Sponzor zaskočil na inspekci — a za jásotu zaplatil všem druhou rundu.",
-  "Strejda Mlejnek se vrátil z Rakouska a hodil na pult padesátku. „Pijte, kluci, je dobře.“",
-  "Hospodský má narozeniny — třetí pivo je dnes zdarma pro každého stálého zákazníka.",
-  "Cizinec ze sousední vesnice prohrál sázku a musí platit kolo — vesnické zákony.",
-  "Důchodce u stolu otevřel obálku s důchodem a hodil rundu — „za syna co je v Praze a nepíše“.",
-  "Myslivec z Volar složil divočáka a slaví — celé hospodě platí rundu.",
-  "Turista z Bavorska prohrál sázku v šipkách a platí všem — euro bere hospodský rád.",
-  "Chalupář z Prahy chtěl zapadnout mezi místní — hodil rundu a hned byl „náš“.",
-];
+const FREE_ROUND_POOL: DistrictPool<string> = {
+  core: [
+    "Starosta vlétl do hospody, vyhlásil že platí kolo. Před volbami je hodný i na fotbalisty.",
+    "Sponzor zaskočil na inspekci — a za jásotu zaplatil všem druhou rundu.",
+    "Hospodský má narozeniny — třetí pivo je dnes zdarma pro každého stálého zákazníka.",
+    "Důchodce u stolu otevřel obálku s důchodem a hodil rundu — „za syna co nepíše“.",
+  ],
+  prachatice: [
+    "Strejda Mlejnek se vrátil z Rakouska a hodil na pult padesátku. „Pijte, kluci, je dobře.“",
+    "Cizinec ze sousední vesnice prohrál sázku a musí platit kolo — vesnické zákony.",
+    "Myslivec z Volar složil divočáka a slaví — celé hospodě platí rundu.",
+    "Turista z Bavorska prohrál sázku v šipkách a platí všem — euro bere hospodský rád.",
+    "Chalupář z Prahy chtěl zapadnout mezi místní — hodil rundu a hned byl „náš“.",
+  ],
+  praha: [
+    "Bývalý spoluhráč, co to dotáhl do korporátu, dorazil v obleku a hodil rundu — „dneska platím já“.",
+    "Sponzor z Karlína zaskočil po práci a za jásotu zaplatil všem druhou rundu.",
+    "Cizinec od vedlejšího stolu prohrál sázku u baru a platí všem — hospodský bere i karty.",
+  ],
+};
 
 // Vítěz pípy — šipky, kvíz, fotbálek, karaoke (+3 morálka jednotlivci)
-const BAR_CHAMPION_INCIDENT_TEMPLATES = [
-  "{name} hodil v šipkách 180. Hospoda zaburácela jak po gólu v derby.",
-  "{name} vyhrál pivní kvíz — věděl, kolik gólů dal Bican za Slavii. Trofej: konvice piva.",
-  "{name} vyhrál fotbálkový turnaj „o korunu hospody“. Pohár prý nese domů, ale spíš ho nedonese.",
-  "{name} zazpíval v karaoke Michala Davida tak procítěně, že mu hospoda tleskala dvě minuty.",
-  "{name} vyhrál šachy s dědou Karlem — poprvé za 5 let. Pivo si nemůže koupit do konce týdne, dostává ho zdarma.",
-  "{name} si vsadil že vypije tupelák bez nadechnutí. Vsadil dobře. Hospoda dlouho komentovat nepřestane.",
-  "{name} vyhrál pivní kvíz otázkou „kterým rokem se otevřela Zlatá stezka turistům“. Trefil. Konvice piva jeho.",
-  "{name} zazpíval v karaoke „Holky z naší školky“ tak, že i chlapi z Vimperka zatleskali.",
-];
+const BAR_CHAMPION_POOL: DistrictPool<string> = {
+  core: [
+    "{name} hodil v šipkách 180. Hospoda zaburácela jak po gólu v derby.",
+    "{name} vyhrál pivní kvíz — věděl, kolik gólů dal Bican za Slavii. Trofej: konvice piva.",
+    "{name} vyhrál fotbálkový turnaj „o korunu hospody“. Pohár prý nese domů, ale spíš ho nedonese.",
+    "{name} zazpíval v karaoke Michala Davida tak procítěně, že mu hospoda tleskala dvě minuty.",
+    "{name} vyhrál šachy s dědou Karlem — poprvé za 5 let. Pivo dostává do konce týdne zdarma.",
+    "{name} si vsadil že vypije tupelák bez nadechnutí. Vsadil dobře. Hospoda dlouho nepřestane komentovat.",
+  ],
+  prachatice: [
+    "{name} vyhrál pivní kvíz otázkou „kterým rokem se otevřela Zlatá stezka turistům“. Trefil. Konvice piva jeho.",
+    "{name} zazpíval v karaoke „Holky z naší školky“ tak, že i chlapi z Vimperka zatleskali.",
+  ],
+  praha: [
+    "{name} vyhrál pivní kvíz otázkou, kolik stanic má metro C. Věděl. Konvice piva jeho.",
+    "{name} zazpíval v karaoke Nohavicu tak, že mu i partička z Vinohrad zatleskala.",
+    "{name} vyhrál fotbálkový turnaj o pivo — poražení museli rundu objednat přes appku.",
+  ],
+};
 
 // Vesnický hrdina — hospodský / starší ho vyhlásil hráčem týdne (+3 morálka)
-const VILLAGE_HERO_INCIDENT_TEMPLATES = [
-  "Hospodský v rohu vyvěsil dres s {name}ovým jménem. „Náš nejlepší — pivo dnes zdarma.“",
-  "Děda Karel vstal od stolu, dopil pivo a oznámil, že {name} je „budoucnost klubu“. Slza ukápla.",
-  "Starosta {name}ovi přiťukl: „Tohohle si nesmíme nechat ujít, kdyby ho chtěl Sparta, půjčíme mu vlak.“",
-  "Hospodský dal {name}ovi nálepku „Stálice měsíce“ za pípou. Důstojnost, jakou si dlouho nepamatuje.",
-  "Stálí hosté dali {name}ovi přezdívku po legendárním Bicanovi vesnice. Nese ji statečně.",
-  "Hospodský vyvěsil {name}ův dres vedle vlajky okresu Prachatice. „Tohle je domácí poklad.“",
-  "Děda Karel přirovnal {name}a k nejlepšímu kanonýrovi, co kdy z Vimperka vyšel. Pocta nejvyšší.",
-];
+const VILLAGE_HERO_POOL: DistrictPool<string> = {
+  core: [
+    "Hospodský v rohu vyvěsil dres s {name}ovým jménem. „Náš nejlepší — pivo dnes zdarma.“",
+    "Děda Karel vstal od stolu, dopil pivo a oznámil, že {name} je „budoucnost klubu“. Slza ukápla.",
+    "Starosta {name}ovi přiťukl: „Tohohle si nesmíme nechat ujít, kdyby ho chtěl velkoklub, půjčíme mu vlak.“",
+    "Hospodský dal {name}ovi nálepku „Stálice měsíce“ za pípou. Důstojnost, jakou si dlouho nepamatuje.",
+    "Stálí hosté dali {name}ovi přezdívku po legendárním Bicanovi. Nese ji statečně.",
+  ],
+  prachatice: [
+    "Hospodský vyvěsil {name}ův dres vedle vlajky okresu Prachatice. „Tohle je domácí poklad.“",
+    "Děda Karel přirovnal {name}a k nejlepšímu kanonýrovi, co kdy z Vimperka vyšel. Pocta nejvyšší.",
+  ],
+  praha: [
+    "Hospodský vyvěsil {name}ův dres vedle šály se lvíčkem. „Náš nejlepší — pivo dnes zdarma.“",
+    "Stálí hosté dali {name}ovi přezdívku po pražské ligové legendě. Nese ji hrdě.",
+  ],
+};
 
 // Šťastné setkání — bývalý spoluhráč / otec / kamarád z dětství (+2 morálka)
-const FRIENDLY_REUNION_INCIDENT_TEMPLATES = [
-  "Do hospody přijel bývalý kapitán z 90. let. {name} s ním seděl do třetí — vzpomínky léčí morálku.",
-  "{name}ův táta zaskočil na pivo — povídali si o starém klubu. {name} odcházel s úsměvem.",
-  "{name} potkal kamaráda z dětství, kterého neviděl 15 let. Slzy v očích, pivo v ruce.",
-  "{name} se setkal se svým bývalým trenérem od žáků. Dostal pochvalu — stále kope.",
-  "Do hospody přišel novinář z deníku — {name}a se ptal na rozhovor. Druhý den bude v novinách.",
-  "Spolužák, co se odstěhoval do Vimperka, přijel na pivo. {name} s ním vzpomínal na žákovská léta.",
-  "{name} potkal kamaráda, co teď dělá průvodce na Boubíně. Slíbili si výlet, co nejspíš nebude.",
-];
+const FRIENDLY_REUNION_POOL: DistrictPool<string> = {
+  core: [
+    "Do hospody přijel bývalý kapitán z 90. let. {name} s ním seděl do třetí — vzpomínky léčí morálku.",
+    "{name}ův táta zaskočil na pivo — povídali si o starém klubu. {name} odcházel s úsměvem.",
+    "{name} potkal kamaráda z dětství, kterého neviděl 15 let. Slzy v očích, pivo v ruce.",
+    "{name} se setkal se svým bývalým trenérem od žáků. Dostal pochvalu — stále kope.",
+    "Do hospody přišel novinář z deníku — {name}a se ptal na rozhovor. Druhý den bude v novinách.",
+  ],
+  prachatice: [
+    "Spolužák, co se odstěhoval do Vimperka, přijel na pivo. {name} s ním vzpomínal na žákovská léta.",
+    "{name} potkal kamaráda, co teď dělá průvodce na Boubíně. Slíbili si výlet, co nejspíš nebude.",
+  ],
+  praha: [
+    "Do hospody dorazil kamarád, co teď dělá v centru — {name} s ním vzpomínal na žákovská léta na Pankráci.",
+    "{name} potkal spoluhráče, co se odstěhoval na druhý konec Prahy. Slíbili si, že zajdou na ligu.",
+  ],
+};
 
 // ═══════════════════════════════════════════════
 // TRENÉR INCIDENTY — for fun, generic "Trenér"
@@ -340,69 +402,111 @@ const COACH_NAPS_INCIDENT_TEMPLATES = [
 // LOKÁLNÍ KATEGORIE — Prachaticko / Šumava
 // ═══════════════════════════════════════════════
 
-// Myslivecký spolek — zvěřina, chlapská sešlost (+2 morálka lokálům)
-const HUNTERS_INCIDENT_TEMPLATES = [
-  "Myslivci z Volar přinesli srnčí — hospoda voní zvěřinou, {name} si přidal dvakrát.",
-  "Myslivecký spolek slaví konec honu. {name} dostal nejlepší kus a hrdě ho nese domů.",
-  "Po honu na Boubíně se myslivci stavili na jedno — z jednoho bylo deset, ale nálada výborná.",
-  "Starý myslivec vyprávěl o jelenu, co mu utekl na Mářském vrchu. Příběh byl lepší než úlovek.",
-  "Myslivci přinesli paroží na zeď hospody. {name} pod ním pózoval na fotku celý večer.",
-];
+// Myslivecký spolek — zvěřina, chlapská sešlost (+2 morálka lokálům). Venkovská záležitost,
+// v Praze/ČB nefiruje (prázdné core → districtPoolFor vrátí [] a incident se přeskočí).
+const HUNTERS_POOL: DistrictPool<string> = {
+  core: [],
+  prachatice: [
+    "Myslivci z Volar přinesli srnčí — hospoda voní zvěřinou, {name} si přidal dvakrát.",
+    "Myslivecký spolek slaví konec honu. {name} dostal nejlepší kus a hrdě ho nese domů.",
+    "Po honu na Boubíně se myslivci stavili na jedno — z jednoho bylo deset, ale nálada výborná.",
+    "Starý myslivec vyprávěl o jelenu, co mu utekl na Mářském vrchu. Příběh byl lepší než úlovek.",
+    "Myslivci přinesli paroží na zeď hospody. {name} pod ním pózoval na fotku celý večer.",
+  ],
+};
 
-// Zabíjačka — vesnické hody (+3 morálka lokálům, malý risk zažívačky)
-const PIG_SLAUGHTER_INCIDENT_TEMPLATES = [
-  "U Vávrů byla zabíjačka — jitrnice, jelítka, ovar. {name} se přejedl tlačenky.",
-  "Zabíjačkové hody v hospodě! {name} snědl tolik prejtu, že večer nedopil ani pivo.",
-  "Řezník přivezl čerstvou tlačenku rovnou do hospody. {name} byl první u mísy.",
-  "Sousedi ze Lhenic dělali zabíjačku a podělili se. {name} si pochvaloval ovar do prasknutí.",
-  "Zabíjačková polévka voněla po celé vsi. {name} přišel za vůní a zůstal do rána.",
-];
+// Zabíjačka — vesnické hody (+3 morálka lokálům, malý risk zažívačky). Venkovská záležitost.
+const PIG_SLAUGHTER_POOL: DistrictPool<string> = {
+  core: [],
+  prachatice: [
+    "U Vávrů byla zabíjačka — jitrnice, jelítka, ovar. {name} se přejedl tlačenky.",
+    "Zabíjačkové hody v hospodě! {name} snědl tolik prejtu, že večer nedopil ani pivo.",
+    "Řezník přivezl čerstvou tlačenku rovnou do hospody. {name} byl první u mísy.",
+    "Sousedi ze Lhenic dělali zabíjačku a podělili se. {name} si pochvaloval ovar do prasknutí.",
+    "Zabíjačková polévka voněla po celé vsi. {name} přišel za vůní a zůstal do rána.",
+  ],
+};
 
-// Zabloudilý turista — šumavský kolorit (narativ, bez efektu)
-const LOST_TOURIST_INCIDENT_TEMPLATES = [
-  "Německý turista vešel a ptal se na cestu na Boubín. {name} mu to nakreslil na tácek — opačně.",
-  "Promočený cyklista ze Zlaté stezky se schoval před deštěm. {name} mu vysvětloval pravidla mariáše.",
-  "Poutník z Bavorska si dal první české pivo v životě. {name} mu hned objednal druhé.",
-  "Dva Holanďani hledali Churáňov. Skončili na pivu a Churáňov vzdali.",
-  "Turistka se ptala, kde je nejbližší bankomat. {name} se zasmál — nejbližší je až ve Vimperku.",
-  "Zbloudilý houbař z Prahy hledal cestu z lesa. {name} ho dovedl rovnou k pípě.",
-];
+// Zabloudilý turista — funguje všude (core), Šumava/Praha přidávají kolorit.
+const LOST_TOURIST_POOL: DistrictPool<string> = {
+  core: [
+    "Zbloudilý turista vešel a ptal se na cestu. {name} mu to nakreslil na tácek — opačně.",
+    "Promočený cyklista se schoval před deštěm. {name} mu mezitím vysvětlil pravidla mariáše.",
+    "Cizinec si dal první české pivo v životě. {name} mu hned objednal druhé.",
+    "Turistka se ptala, kde je nejbližší bankomat. {name} se zasmál a ukázal na kasu u hospodského.",
+  ],
+  prachatice: [
+    "Německý turista vešel a ptal se na cestu na Boubín. {name} mu to nakreslil na tácek — opačně.",
+    "Promočený cyklista ze Zlaté stezky se schoval před deštěm. {name} mu vysvětloval pravidla mariáše.",
+    "Poutník z Bavorska si dal první české pivo v životě. {name} mu hned objednal druhé.",
+    "Dva Holanďani hledali Churáňov. Skončili na pivu a Churáňov vzdali.",
+    "Zbloudilý houbař z Prahy hledal cestu z lesa. {name} ho dovedl rovnou k pípě.",
+  ],
+  praha: [
+    "Ztracený cizinec hledal Airbnb, mobil vybitej. {name} mu půjčil nabíječku a pivo.",
+    "Dva turisti hledali Karlův most a skončili u nás. Most vzdali, pivo ne.",
+    "Zmatený návštěvník vystoupil na špatné zastávce tramvaje. {name} ho navedl rovnou k pípě.",
+    "Influencerka si u nás dělala story, že objevila „autentickou pražskou hospodu“. {name} zamával do kamery.",
+    "Cizinec se ptal, kde koupí lístek na metro. {name} mu vysvětloval Lítačku a pak to vzdal.",
+  ],
+};
 
-// Dobrovolní hasiči — SDH po soutěži/cvičení (+2 morálka lokálům)
-const FIREFIGHTERS_INCIDENT_TEMPLATES = [
-  "Dobrovolní hasiči z Lhenic vyhráli okrskovou soutěž — oslava se přesunula do hospody.",
-  "{name} pomohl hasičům dotáhnout hadici z cvičení. Odměna: rundu platí velitel.",
-  "Hasičská soutěž v požárním útoku skončila, hospoda praská ve švech.",
-  "Hasiči z Netolic přijeli s pohárem a předváděli ho každému. {name} si na něj i ťukl.",
-  "Po nočním výjezdu k planému poplachu se hasiči stavili na jedno. Bylo jich pět.",
-];
+// Dobrovolní hasiči — SDH po soutěži/cvičení (+2 morálka lokálům). Venkovská záležitost.
+const FIREFIGHTERS_POOL: DistrictPool<string> = {
+  core: [],
+  prachatice: [
+    "Dobrovolní hasiči z Lhenic vyhráli okrskovou soutěž — oslava se přesunula do hospody.",
+    "{name} pomohl hasičům dotáhnout hadici z cvičení. Odměna: rundu platí velitel.",
+    "Hasičská soutěž v požárním útoku skončila, hospoda praská ve švech.",
+    "Hasiči z Netolic přijeli s pohárem a předváděli ho každému. {name} si na něj i ťukl.",
+    "Po nočním výjezdu k planému poplachu se hasiči stavili na jedno. Bylo jich pět.",
+  ],
+};
 
-// Pouť / Slavnosti Zlaté stezky (+2 morálka lokálům)
-const VILLAGE_FAIR_INCIDENT_TEMPLATES = [
-  "Začaly Slavnosti Zlaté stezky v Prachaticích — celá vesnice je v náladě, hospoda taky.",
-  "Pouťové kolotoče dorazily do vsi. {name} vyhrál na střelnici plyšáka a věnoval ho hospodské.",
-  "Po pouti zůstal v hospodě cukrář a rozdával zbylé perníky. {name} si dal tři.",
-  "Na návsi hrála kapela, ale nejlepší atmosféra byla stejně v hospodě. {name} to potvrdil.",
-  "Pouťová tombola měla hlavní cenu sele. Vyhrál ho {name} a netuší, kam ho dá.",
-];
+// Pouť / slavnost (+2 morálka lokálům). Šumava = Zlatá stezka, Praha = čtvrťové slavnosti.
+const VILLAGE_FAIR_POOL: DistrictPool<string> = {
+  core: [],
+  prachatice: [
+    "Začaly Slavnosti Zlaté stezky v Prachaticích — celá vesnice je v náladě, hospoda taky.",
+    "Pouťové kolotoče dorazily do vsi. {name} vyhrál na střelnici plyšáka a věnoval ho hospodské.",
+    "Po pouti zůstal v hospodě cukrář a rozdával zbylé perníky. {name} si dal tři.",
+    "Na návsi hrála kapela, ale nejlepší atmosféra byla stejně v hospodě. {name} to potvrdil.",
+    "Pouťová tombola měla hlavní cenu sele. Vyhrál ho {name} a netuší, kam ho dá.",
+  ],
+  praha: [
+    "Začala Žižkovská noc — celá čtvrť je v náladě, hospoda taky.",
+    "Food festival na náplavce skončil a zbylí kuchaři dorozdávali porce. {name} si dal tři.",
+    "Sousedská slavnost v parku, kapela hrála, ale nejlepší atmosféra byla stejně v hospodě.",
+    "Farmářské trhy skončily a prodavači zapadli na jedno. {name} vyhandloval kýbl jahod za rundu.",
+    "Po slavnosti na Výstavišti zůstal v hospodě žonglér a učil kluky triky s tácky.",
+  ],
+};
 
-// Šumavská vichřice / výpadek proudu (narativ)
-const STORM_BLACKOUT_INCIDENT_TEMPLATES = [
-  "Vichřice na Šumavě shodila elektriku. Hospodský čepoval při svíčkách — atmosféra jak za první republiky.",
-  "Spadl strom přes silnici z Kubovy Huti. {name} uvízl v hospodě a nestěžoval si.",
-  "Sněhová kalamita na Churáňově — {name} radši přečkal nečas u piva.",
-  "Bouřka vyhodila pojistky. {name} tvrdil, že pivo při svíčkách chutná líp, a měl pravdu.",
-  "Vichr strhl plech ze střechy. Než přijde pokrývač, hospodský nalévá na uklidněnou.",
-];
+// Vichřice / výpadek proudu (narativ). Šumavská verze.
+const STORM_BLACKOUT_POOL: DistrictPool<string> = {
+  core: [],
+  prachatice: [
+    "Vichřice na Šumavě shodila elektriku. Hospodský čepoval při svíčkách — atmosféra jak za první republiky.",
+    "Spadl strom přes silnici z Kubovy Huti. {name} uvízl v hospodě a nestěžoval si.",
+    "Sněhová kalamita na Churáňově — {name} radši přečkal nečas u piva.",
+    "Bouřka vyhodila pojistky. {name} tvrdil, že pivo při svíčkách chutná líp, a měl pravdu.",
+    "Vichr strhl plech ze střechy. Než přijde pokrývač, hospodský nalévá na uklidněnou.",
+  ],
+};
 
-// Houbaři — chlubení (narativ)
-const MUSHROOM_BRAG_INCIDENT_TEMPLATES = [
-  "{name} přinesl do hospody košík hřibů z pod Boubína a chlubil se každému.",
-  "{name} tvrdil, že našel václavky velké jak talíř. Nikdo mu nevěřil, fotka byla rozmazaná.",
-  "Houbařská sezóna vrcholí — {name} prozradil své tajné místo. Ráno toho litoval.",
-  "{name} vyměnil s hospodským košík klouzků za tři piva. Obchod století.",
-  "{name} se vsadil, že pozná hřib od muchomůrky poslepu. Vyhrál, ale málem ne.",
-];
+// Houbaři — chlubení (narativ). Funguje všude, Boubín jako topup.
+const MUSHROOM_BRAG_POOL: DistrictPool<string> = {
+  core: [
+    "{name} přinesl do hospody plný košík hřibů a chlubil se každému.",
+    "{name} tvrdil, že našel václavky velké jak talíř. Nikdo mu nevěřil, fotka byla rozmazaná.",
+    "Houbařská sezóna vrcholí — {name} prozradil své tajné místo. Ráno toho litoval.",
+    "{name} vyměnil s hospodským košík klouzků za tři piva. Obchod století.",
+    "{name} se vsadil, že pozná hřib od muchomůrky poslepu. Vyhrál, ale málem ne.",
+  ],
+  prachatice: [
+    "{name} přinesl košík hřibů z pod Boubína a dušoval se, že tam roste to nejlepší v republice.",
+  ],
+};
 
 // Starosta / zastupitel zaskočí (+1 morálka lokálům) — předvolební ironie
 const OFFICIAL_VISIT_INCIDENT_TEMPLATES = [
@@ -426,7 +530,7 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<string>>, _buddiesMap: Map<string, Set<string>>, coachName: string = "Trenér"): PubIncident[] {
+function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<string>>, _buddiesMap: Map<string, Set<string>>, coachName: string = "Trenér", district?: string): PubIncident[] {
   const incidents: PubIncident[] = [];
 
   if (attendees.length === 0) {
@@ -538,7 +642,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "story",
       playerIds: [teller.playerId],
-      text: pickRandom(STORY_TEMPLATES).replaceAll("{name}", `${teller.firstName} ${teller.lastName}`),
+      text: pickRandom(districtPoolFor(STORY_POOL, district)).replaceAll("{name}", `${teller.firstName} ${teller.lastName}`),
       effects: [],
     });
   }
@@ -679,7 +783,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "free_round",
       playerIds: locals.map((a) => a.playerId),
-      text: pickRandom(FREE_ROUND_INCIDENT_TEMPLATES),
+      text: pickRandom(districtPoolFor(FREE_ROUND_POOL, district)),
       effects: locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 1, label: "+1 morálka" })),
     });
   }
@@ -690,7 +794,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "bar_champion",
       playerIds: [target.playerId],
-      text: pickRandom(BAR_CHAMPION_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      text: pickRandom(districtPoolFor(BAR_CHAMPION_POOL, district)).replaceAll("{name}", target.firstName),
       effects: [{ playerId: target.playerId, type: "morale", delta: 3, label: "+3 morálka" }],
     });
   }
@@ -701,7 +805,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "village_hero",
       playerIds: [target.playerId],
-      text: pickRandom(VILLAGE_HERO_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      text: pickRandom(districtPoolFor(VILLAGE_HERO_POOL, district)).replaceAll("{name}", target.firstName),
       effects: [{ playerId: target.playerId, type: "morale", delta: 3, label: "+3 morálka" }],
     });
   }
@@ -712,24 +816,24 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "friendly_reunion",
       playerIds: [target.playerId],
-      text: pickRandom(FRIENDLY_REUNION_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      text: pickRandom(districtPoolFor(FRIENDLY_REUNION_POOL, district)).replaceAll("{name}", target.firstName),
       effects: [{ playerId: target.playerId, type: "morale", delta: 2, label: "+2 morálka" }],
     });
   }
 
   // ── Myslivecký spolek — 3% prob, +2 morálka VŠEM lokálům ──
-  if (locals.length > 0 && Math.random() < 0.03) {
+  if (locals.length > 0 && districtPoolFor(HUNTERS_POOL, district).length > 0 && Math.random() < 0.03) {
     const target = pickRandom(locals);
     incidents.push({
       type: "hunters",
       playerIds: locals.map((a) => a.playerId),
-      text: pickRandom(HUNTERS_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      text: pickRandom(districtPoolFor(HUNTERS_POOL, district)).replaceAll("{name}", target.firstName),
       effects: locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 2, label: "+2 morálka" })),
     });
   }
 
   // ── Zabíjačka — 2% prob, +3 morálka VŠEM lokálům + 10% sub-roll na zažívačku targetu ──
-  if (locals.length > 0 && Math.random() < 0.02) {
+  if (locals.length > 0 && districtPoolFor(PIG_SLAUGHTER_POOL, district).length > 0 && Math.random() < 0.02) {
     const target = pickRandom(locals);
     const effects: PubEffect[] = locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 3, label: "+3 morálka" }));
     if (Math.random() < 0.10) {
@@ -745,7 +849,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "pig_slaughter",
       playerIds: locals.map((a) => a.playerId),
-      text: pickRandom(PIG_SLAUGHTER_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      text: pickRandom(districtPoolFor(PIG_SLAUGHTER_POOL, district)).replaceAll("{name}", target.firstName),
       effects,
     });
   }
@@ -756,40 +860,40 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "lost_tourist",
       playerIds: [target.playerId],
-      text: pickRandom(LOST_TOURIST_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      text: pickRandom(districtPoolFor(LOST_TOURIST_POOL, district)).replaceAll("{name}", target.firstName),
       effects: [],
     });
   }
 
   // ── Dobrovolní hasiči — 3% prob, +2 morálka VŠEM lokálům ──
-  if (locals.length > 0 && Math.random() < 0.03) {
+  if (locals.length > 0 && districtPoolFor(FIREFIGHTERS_POOL, district).length > 0 && Math.random() < 0.03) {
     const target = pickRandom(locals);
     incidents.push({
       type: "firefighters",
       playerIds: locals.map((a) => a.playerId),
-      text: pickRandom(FIREFIGHTERS_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      text: pickRandom(districtPoolFor(FIREFIGHTERS_POOL, district)).replaceAll("{name}", target.firstName),
       effects: locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 2, label: "+2 morálka" })),
     });
   }
 
   // ── Pouť / Slavnosti Zlaté stezky — 3% prob, +2 morálka VŠEM lokálům ──
-  if (locals.length > 0 && Math.random() < 0.03) {
+  if (locals.length > 0 && districtPoolFor(VILLAGE_FAIR_POOL, district).length > 0 && Math.random() < 0.03) {
     const target = pickRandom(locals);
     incidents.push({
       type: "village_fair",
       playerIds: locals.map((a) => a.playerId),
-      text: pickRandom(VILLAGE_FAIR_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      text: pickRandom(districtPoolFor(VILLAGE_FAIR_POOL, district)).replaceAll("{name}", target.firstName),
       effects: locals.map((a) => ({ playerId: a.playerId, type: "morale" as const, delta: 2, label: "+2 morálka" })),
     });
   }
 
   // ── Šumavská vichřice / blackout — 2% prob, narativ ──
-  if (locals.length > 0 && Math.random() < 0.02) {
+  if (locals.length > 0 && districtPoolFor(STORM_BLACKOUT_POOL, district).length > 0 && Math.random() < 0.02) {
     const target = pickRandom(locals);
     incidents.push({
       type: "storm_blackout",
       playerIds: [target.playerId],
-      text: pickRandom(STORM_BLACKOUT_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      text: pickRandom(districtPoolFor(STORM_BLACKOUT_POOL, district)).replaceAll("{name}", target.firstName),
       effects: [],
     });
   }
@@ -800,7 +904,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "mushroom_brag",
       playerIds: [target.playerId],
-      text: pickRandom(MUSHROOM_BRAG_INCIDENT_TEMPLATES).replaceAll("{name}", target.firstName),
+      text: pickRandom(districtPoolFor(MUSHROOM_BRAG_POOL, district)).replaceAll("{name}", target.firstName),
       effects: [],
     });
   }
@@ -1002,6 +1106,12 @@ export async function createCoachLedSession(
 
   if (players.results.length === 0) return { ok: false, reason: "Žádní dostupní hráči" };
 
+  const districtRow = await db.prepare(
+    "SELECT v.district FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.id = ?",
+  ).bind(teamId).first<{ district: string | null }>()
+    .catch((e) => { logger.warn({ module: "pub" }, "load district for coach-led", e); return null; });
+  const district = districtRow?.district ?? undefined;
+
   const attendees: PubAttendee[] = [];
   const incidents: PubIncident[] = [];
 
@@ -1059,7 +1169,7 @@ export async function createCoachLedSession(
 
   await db.prepare(
     `INSERT INTO pub_sessions (team_id, game_date, attendees, incidents, daily_special) VALUES (?, ?, ?, ?, ?)`,
-  ).bind(teamId, gameDate, JSON.stringify(attendees), JSON.stringify(incidents), pickRandom(DAILY_SPECIALS)).run()
+  ).bind(teamId, gameDate, JSON.stringify(attendees), JSON.stringify(incidents), pickRandom(districtPoolFor(DAILY_SPECIALS_POOL, district))).run()
     .catch((e) => logger.warn({ module: "pub" }, "insert coach-led session", e));
 
   // Apply effects
@@ -1094,8 +1204,8 @@ export async function backfillYesterdayPubSession(
 export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: string): Promise<{ sessionsCreated: number }> {
   // Načti všechny lidské týmy + AI týmy (visitors můžou být i AI)
   const allTeams = await db.prepare(
-    `SELECT id, name, user_id, league_id FROM teams`,
-  ).all<{ id: string; name: string; user_id: string; league_id: string | null }>()
+    `SELECT t.id, t.name, t.user_id, t.league_id, v.district FROM teams t LEFT JOIN villages v ON t.village_id = v.id`,
+  ).all<{ id: string; name: string; user_id: string; league_id: string | null; district: string | null }>()
     .catch((e) => { logger.warn({ module: "pub" }, "load teams", e); return { results: [] }; });
 
   const humanTeams = allTeams.results.filter((t) => t.user_id !== "ai");
@@ -1230,7 +1340,7 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
     }
 
     // Generate incidents
-    const incidents = generateIncidents(attendees, rivalsMap, buddiesMap, coachName);
+    const incidents = generateIncidents(attendees, rivalsMap, buddiesMap, coachName, team.district ?? undefined);
 
     // Pokud incidents obsahují coach_*, přidej trenéra mezi attendees s avatarem
     const hasCoach = incidents.some((inc) => inc.type.startsWith("coach_"));
@@ -1252,7 +1362,7 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
     // Persist session
     await db.prepare(
       `INSERT INTO pub_sessions (team_id, game_date, attendees, incidents, daily_special) VALUES (?, ?, ?, ?, ?)`,
-    ).bind(team.id, gameDate, JSON.stringify(attendees), JSON.stringify(incidents), pickRandom(DAILY_SPECIALS)).run().catch((e) => logger.warn({ module: "pub" }, "insert pub_session", e));
+    ).bind(team.id, gameDate, JSON.stringify(attendees), JSON.stringify(incidents), pickRandom(districtPoolFor(DAILY_SPECIALS_POOL, team.district ?? undefined))).run().catch((e) => logger.warn({ module: "pub" }, "insert pub_session", e));
 
     // Apply effects
     const effectStmts = await applyIncidentEffects(db, incidents);
