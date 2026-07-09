@@ -599,13 +599,16 @@ export async function runScheduledMatches(
                 });
             }
 
-            // Load commentary templates from DB + generate
+            // Load commentary templates from DB + generate (okresově dle domácího = dějiště)
             await loadCommentaryFromDB(db);
+            const commDistrict = (await db.prepare("SELECT v.district FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.id = ?").bind(homeTeamId).first<{ district: string | null }>()
+                .catch((e) => { logger.warn({ module: "match-runner" }, "load district for commentary", e); return null; }))?.district ?? undefined;
             const commentary = generateMatchCommentary(
                 rng,
                 result.events,
                 homeSetup.teamName,
                 awaySetup.teamName,
+                commDistrict,
             );
 
             // Build lineup data for storage (name, position, number, rating)
