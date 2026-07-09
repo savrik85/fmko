@@ -988,6 +988,39 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/decline", async (c) =>
   return c.json({ ok: true });
 });
 
+// POST /api/teams/:teamId/challenge/:challengeId/cancel — stáhnout vlastní odeslanou výzvu (jen pending)
+matchesRouter.post("/teams/:teamId/challenge/:challengeId/cancel", async (c) => {
+  const teamId = c.req.param("teamId");
+  const challengeId = c.req.param("challengeId");
+
+  // Jen vlastní odchozí výzva ve stavu pending — accepted už má naplánovaný zápas, nelze stáhnout.
+  const challenge = await c.env.DB.prepare(
+    "SELECT challenged_team_id FROM challenges WHERE id = ? AND challenger_team_id = ? AND status = 'pending'"
+  ).bind(challengeId, teamId).first<{ challenged_team_id: string }>();
+  if (!challenge) return c.json({ error: "Výzva nenalezena nebo už zpracována" }, 404);
+
+  // Atomický claim — kdyby soupeř mezitím výzvu přijal (accept nastaví 'accepted'),
+  // náš UPDATE WHERE status='pending' se netrefí a výzvu nestáhneme falešně.
+  const cancelled = await c.env.DB.prepare(
+    "UPDATE challenges SET status = 'cancelled' WHERE id = ? AND challenger_team_id = ? AND status = 'pending' RETURNING id"
+  ).bind(challengeId, teamId).first<{ id: string }>();
+  if (!cancelled) return c.json({ error: "Výzva už byla mezitím přijata nebo zpracována" }, 409);
+
+  const team = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>();
+  await sendSMS(c.env.DB, challenge.challenged_team_id, "Sportovní ředitel", "Sportovní ředitel",
+    `↩️ ${team?.name ?? "Soupeř"} stáhl výzvu na přátelský zápas.`
+  );
+
+  // notifikace vyzvanému, ať mu zmizí otevřená výzva
+  try {
+    const { createNotification } = await import("../community/notifications");
+    const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
+    await createNotification(c.env.DB, challenge.challenged_team_id, "challenge", `↩️ ${team?.name ?? "Soupeř"} stáhl výzvu`, "Výzva na přátelák byla zrušena.", "/dashboard/friendly", pushEnv);
+  } catch (e) { logger.warn({ module: "matches" }, "challenge cancel notification", e); }
+
+  return c.json({ ok: true });
+});
+
 // GET /api/teams/:teamId/challenges — seznam výzev + cooldown
 matchesRouter.get("/teams/:teamId/challenges", async (c) => {
   const teamId = c.req.param("teamId");
