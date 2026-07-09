@@ -30,6 +30,14 @@ import {
 
 export const relationsRouter = new Hono<{ Bindings: Bindings }>();
 
+/** Okres týmu (pro lokalizaci relation textů). Neznámý → undefined → generický core. */
+async function districtOfTeam(db: D1Database, teamId: string): Promise<string | undefined> {
+  const row = await db.prepare("SELECT v.district FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
+    .bind(teamId).first<{ district: string | null }>()
+    .catch((e) => { logger.warn({ module: "relations" }, "load district", e); return null; });
+  return row?.district ?? undefined;
+}
+
 // Write operace (interact, posezení, runda) smí provádět jen vlastník týmu z :teamId.
 relationsRouter.use("/teams/:teamId/relations/*", requireTeamOwnership);
 relationsRouter.use("/teams/:teamId/stammtisch", requireTeamOwnership);
@@ -425,7 +433,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           await insertRelationNews(
             db, match.league_id,
             `${myManager} si po zápase pustil pusu na špacír`,
-            jabNewsBody(names),
+            jabNewsBody(names, await districtOfTeam(db, teamId)),
             teamId,
           );
           if (!otherIsAi) {
@@ -479,7 +487,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         // Pochvala jde i do novin — na okrese se chválí tak málo, že je to zpráva
         const myTeamRow = await db.prepare("SELECT league_id FROM teams WHERE id = ?")
           .bind(teamId).first<{ league_id: string | null }>();
-        const praiseArticle = praiseNews(names);
+        const praiseArticle = praiseNews(names, await districtOfTeam(db, teamId));
         await insertRelationNews(db, myTeamRow?.league_id ?? null, praiseArticle.headline, praiseArticle.body, teamId);
 
         let aiResponseText: string | null = null;
@@ -634,14 +642,14 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         let message: string;
 
         if (tone === "respect") {
-          await insertRelationNews(db, match.league_id, `Před zápasem: ${myName} smeká`, statementRespectQuote(names), teamId);
+          await insertRelationNews(db, match.league_id, `Před zápasem: ${myName} smeká`, statementRespectQuote(names, await districtOfTeam(db, teamId)), teamId);
           await applyRelationEvent(db, teamId, otherId, {
             respect: 5, icon: "🫡", text: `${myManager} před ${roundLabel} veřejně uznal kvality soupeře`,
           });
           await shiftSquadMorale(db, teamId, 1);
           message = "Uznání vyšlo v novinách. Kabina hraje bez tlaku.";
         } else if (tone === "provoke") {
-          await insertRelationNews(db, match.league_id, `PŘESTŘELKA: ${myManager} provokuje před ${roundLabel}`, statementProvokeQuote(names), teamId);
+          await insertRelationNews(db, match.league_id, `PŘESTŘELKA: ${myManager} provokuje před ${roundLabel}`, statementProvokeQuote(names, await districtOfTeam(db, teamId)), teamId);
           await applyRelationEvent(db, teamId, otherId, {
             heat: 10, icon: "😏", text: `${myManager} před ${roundLabel} provokoval v novinách`,
           });

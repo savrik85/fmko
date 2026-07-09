@@ -12,6 +12,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-07-09",
+    emoji: "🗺️",
+    title: "Hlášky sedící k okresu",
+    items: [
+      "Hospodské historky, denní speciality, přestupové hlášky, komentář zápasu i výroky trenérů teď ladí k okresu — Praha dostává městský kolorit (Sparta–Slavia, tramvaj, náplavka, kavárny), Prachaticko šumavský (Boubín, myslivci, pouť, zabíjačka).",
+      "Přibyla velká várka nových hlášek pro obě prostředí, tak se to tak často neopakuje.",
+      "Týmy z jiných okresů (třeba Budějovice) dostávají neutrální texty místo šumavských — už žádní myslivci z Volar v Praze.",
+    ],
+  },
+  {
     date: "2026-07-07",
     emoji: "🔥",
     title: "Prales Ultras — pohled z kotle",

@@ -4,41 +4,72 @@
 
 import { logger } from "../lib/logger";
 import type { Rng } from "../generators/rng";
+import { districtPoolFor, type DistrictPool } from "../data/flavor/district-pool";
 
-const HUMOR = [
-  "Rekordní přestup okresu!",
-  "Spoluhráči mu na rozloučenou koupili klobásu.",
-  "Prý mu slíbili, že bude kopat penalty.",
-  "Přestupová bomba otřásla okresním fotbalem.",
-  "Za ty prachy si koupíš maximálně sud piva.",
-  "V hospodě se o ničem jiném nemluví.",
-  "Trenér si mne ruce.",
-  "Fanoušci jsou nadšení — oba dva.",
-  "Starosta obce pogratuloval osobně.",
-  "Říká se, že rozhodla nabídka domácího guláše po zápase.",
-  "Přestup století! No, alespoň tohoto měsíce.",
-  "Údajně o něj stálo i sousední vesnice, ale prohráli v hospodě v kartách.",
-  "Prý se rozhodoval mezi fotbalem a hasičama. Zvítězil míč.",
-  "Dres mu šijou na míru. Tedy — svlékají ze starého hráče.",
-  "Slavnostní podpis proběhl v místní hospodě za přítomnosti výčepní.",
-  "Přestupní papíry podepsal na kapotě traktoru.",
-];
+const HUMOR_POOL: DistrictPool<string> = {
+  core: [
+    "Rekordní přestup okresu!",
+    "Prý mu slíbili, že bude kopat penalty.",
+    "Přestupová bomba otřásla okresním fotbalem.",
+    "Za ty prachy si koupíš maximálně sud piva.",
+    "V hospodě se o ničem jiném nemluví.",
+    "Trenér si mne ruce.",
+    "Fanoušci jsou nadšení — oba dva.",
+    "Přestup století! No, alespoň tohoto měsíce.",
+    "Dres mu šijou na míru. Tedy — svlékají ze starého hráče.",
+    "Papíry podepsal, teď jen aby si zapamatoval jméno klubu.",
+    "Údajně rozhodla nabídka lepšího čísla na dresu.",
+  ],
+  prachatice: [
+    "Spoluhráči mu na rozloučenou koupili klobásu.",
+    "Starosta obce pogratuloval osobně.",
+    "Říká se, že rozhodla nabídka domácího guláše po zápase.",
+    "Údajně o něj stálo i sousední vesnice, ale prohráli v hospodě v kartách.",
+    "Prý se rozhodoval mezi fotbalem a hasičama. Zvítězil míč.",
+    "Slavnostní podpis proběhl v místní hospodě za přítomnosti výčepní.",
+    "Přestupní papíry podepsal na kapotě traktoru.",
+    "Ruku na to si plácli u pípy, zbytek dořešili na pivním tácku.",
+    "Prý ho zlákala nabídka, že bude po zápase první u kotle s gulášem.",
+    "Na rozloučenou mu myslivci nabalili zvěřinu na cestu.",
+    "Papíry doputovaly do klubu v tašce s houbama z Boubína.",
+    "O přestupu věděla celá ves dřív než hráč sám — u pumpy v Netolicích.",
+    "Trenér si ho vyhlídl na pouti mezi kolotočem a střelnicí.",
+  ],
+  praha: [
+    "Podpis proběhl v kavárně na Vinohradech nad flat white.",
+    "Manažer to prý dojednal cestou tramvají, mezi Andělem a Národní.",
+    "Za ty peníze si v Praze koupíš tak měsíc nájmu.",
+    "Přestup okomentovali i influenceři na Instagramu.",
+    "Papíry podepsal na iPadu ve sdíleném officu.",
+    "Fanoušci to řešili hlavně v komentech pod postem klubu.",
+    "Detaily doladili v metru na céčku, než jim ujela zastávka.",
+    "Podpis stihli mezi dvěma zastávkami tramvaje na Smíchov.",
+    "Manažer to oslavil matchou na náplavce, hráč craftem na Žižkově.",
+    "Klub o přestupu vypustil reel dřív, než hráč dojel z Karlína.",
+    "Smlouvu poslali přes DocuSign, podepsal ji na mobilu v kavárně.",
+    "Prý rozhodlo hlavně, že to má blíž na metro než k bývalému klubu.",
+  ],
+};
 
-const HUMOR_YOUNG = [
-  "Mladá krev! Snad vydrží aspoň do konce sezóny.",
-  "Prý ho doporučil učitel tělocviku.",
-  "Ještě nemá ani řidičák, ale na hřišti je jako blesk.",
-  "Spoluhráči se těší — konečně někdo, kdo poběží místo nich.",
-  "Mládí vpřed! A hlavně na tréninky.",
-];
+const HUMOR_YOUNG_POOL: DistrictPool<string> = {
+  core: [
+    "Mladá krev! Snad vydrží aspoň do konce sezóny.",
+    "Prý ho doporučil učitel tělocviku.",
+    "Ještě nemá ani řidičák, ale na hřišti je jako blesk.",
+    "Spoluhráči se těší — konečně někdo, kdo poběží místo nich.",
+    "Mládí vpřed! A hlavně na tréninky.",
+  ],
+};
 
-const HUMOR_OLD = [
-  "Zkušenosti k nezaplacení. Tedy — zaplatili jsme trochu.",
-  "Říká se mu okresní Maldini.",
-  "Kolena sice vrzou, ale hlava to pořád má.",
-  "Veterán, který viděl víc sobot v kabině než většina hráčů.",
-  "Přišel s vlastní masážní emulzí a ibuprofenem.",
-];
+const HUMOR_OLD_POOL: DistrictPool<string> = {
+  core: [
+    "Zkušenosti k nezaplacení. Tedy — zaplatili jsme trochu.",
+    "Říká se mu okresní Maldini.",
+    "Kolena sice vrzou, ale hlava to pořád má.",
+    "Veterán, který viděl víc sobot v kabině než většina hráčů.",
+    "Přišel s vlastní masážní emulzí a ibuprofenem.",
+  ],
+};
 
 export async function createTransferNews(
   db: D1Database,
@@ -60,8 +91,18 @@ export async function createTransferNews(
 ): Promise<void> {
   let headline = "";
   let body = "";
+  // Okres pro lokalizaci hlášek — z ligy (nula úprav volajících, leagueId už předávají).
+  const district = leagueId
+    ? (await db.prepare("SELECT district FROM leagues WHERE id = ?").bind(leagueId).first<{ district: string }>()
+        .catch((e) => { logger.warn({ module: "transfer-news" }, "load district", e); return null; }))?.district
+    : undefined;
   const pick = rng?.pick.bind(rng) ?? ((arr: string[]) => arr[Math.floor(Math.random() * arr.length)]);
-  const agePool = data.playerAge <= 22 ? [...HUMOR, ...HUMOR_YOUNG] : data.playerAge >= 33 ? [...HUMOR, ...HUMOR_OLD] : HUMOR;
+  const coreHumor = districtPoolFor(HUMOR_POOL, district);
+  const agePool = data.playerAge <= 22
+    ? [...coreHumor, ...districtPoolFor(HUMOR_YOUNG_POOL, district)]
+    : data.playerAge >= 33
+      ? [...coreHumor, ...districtPoolFor(HUMOR_OLD_POOL, district)]
+      : coreHumor;
   const humor = pick(agePool);
 
   switch (type) {

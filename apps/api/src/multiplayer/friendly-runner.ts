@@ -126,9 +126,11 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         attendance: friendlyAttendance,
       });
 
-      // Commentary
+      // Commentary (okresově dle domácího = dějiště)
       await loadCommentaryFromDB(db);
-      const commentary = generateMatchCommentary(rng, result.events, homeSetup.teamName, awaySetup.teamName);
+      const commDistrict = (await db.prepare("SELECT v.district FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.id = ?").bind(homeTeamId).first<{ district: string | null }>()
+        .catch((e) => { logger.warn({ module: "friendly-runner" }, "load district for commentary", e); return null; }))?.district ?? undefined;
+      const commentary = generateMatchCommentary(rng, result.events, homeSetup.teamName, awaySetup.teamName, commDistrict);
 
       // Build lineup data (max 1 GK in starters) — VČETNĚ formation/tactic/captain
       const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>, formation: string, tactic: string, captainEngineId?: number) => {
