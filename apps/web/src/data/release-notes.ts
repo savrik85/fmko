@@ -12,6 +12,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-07-10",
+    emoji: "⚽",
+    title: "Přátelák jde domluvit i v den ligy",
+    items: [
+      "Výzvu na přátelák teď pošleš, i když máš ten den ligový zápas. Přátelák se stejně hraje až v den, kdy ho soupeř přijme — a to nikdy nepadne na den s ligou. Dřív to hlásilo, že dnes máš ligový zápas, a nešlo výzvu ani odeslat.",
+    ],
+  },
+  {
+    date: "2026-07-09",
+    emoji: "↩️",
+    title: "Zrušení odeslané výzvy na přátelák",
+    items: [
+      "Odeslal jsi výzvu na přátelák a rozmyslel sis to? U čekajících odeslaných výzev v sekci Přáteláky je teď tlačítko Zrušit. Soupeři přijde SMS, že jsi výzvu stáhl.",
+    ],
+  },
+  {
     date: "2026-07-09",
     emoji: "📊",
     title: "Pozápasové hodnocení — o výkonu, ne o kádru",

@@ -32,6 +32,7 @@ interface ChallengesData {
   cooldownDaysLeft: number;
   canChallenge: boolean;
   teams: TeamOption[];
+  leagueMatchToday?: boolean;
 }
 
 export default function FriendlyPage() {
@@ -203,7 +204,10 @@ export default function FriendlyPage() {
           const pragueHour = Number(new Intl.DateTimeFormat("cs", { hour: "numeric", hour12: false, timeZone: "Europe/Prague" }).format(new Date()));
           const hasOpenChallenge = data.incoming.length > 0
             || data.outgoing.some((ch) => ch.status === "pending" || (ch.status === "accepted" && ch.matchStatus !== "simulated"));
-          const slotLabel = hasOpenChallenge ? "další volný den" : (pragueHour >= 19 ? "zítra 18:00" : "dnes 18:00");
+          // V den ligového zápasu se přátelák nesehraje dnes — sehraje se, až ho soupeř přijme na volný den.
+          const slotLabel = hasOpenChallenge ? "další volný den"
+            : data.leagueMatchToday ? "nejbližší volný den"
+            : (pragueHour >= 19 ? "zítra 18:00" : "dnes 18:00");
           return (
           <div className="space-y-2">
             <p className="text-sm text-muted leading-relaxed">

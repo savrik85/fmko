@@ -822,27 +822,20 @@ matchesRouter.post("/teams/:teamId/challenge/:opponentTeamId", async (c) => {
     .catch((e) => { logger.warn({ module: "matches" }, "fetch existing pending challenge", e); return null; });
   if (existing) return c.json({ error: "Výzva už byla odeslána" }, 400);
 
-  // Check neither team has a league match or friendly today (same game_date).
-  // Omezeno na aktuální sezónu (>= season_start) — data staré sezóny žila v posunutém
-  // časovém prostoru (game_clock offset) a jejich datumy kolidují s reálným kalendářem.
+  // Přátelák se hraje až v den PŘIJETÍ výzvy, ne v den odeslání — a accept endpoint si sám
+  // hlídá, že v den odehrání nemá ligový zápas ANI JEDEN tým (kontroluje oba). Den odeslání
+  // proto ligovým zápasem NEblokujeme; jinak by z ligového dne nešlo domluvit přátelák na volný
+  // den. Blokujeme jen zjevné dvojí booking: některý z týmů už dnes přátelák hrál / má naplánovaný.
+  // Omezeno na aktuální sezónu (>= season_start) — data staré sezóny žila v posunutém čase.
   const gameDateStr = team.game_date;
   const gameDateDay = gameDateStr ? gameDateStr.split("T")[0] : null;
   if (gameDateDay) {
     const seasonStart = team.season_start ?? "1970-01-01";
-    const [leagueRes, friendlyRes] = await c.env.DB.batch([
-      c.env.DB.prepare(
-        `SELECT m.id FROM matches m JOIN season_calendar sc ON m.calendar_id = sc.id
-         WHERE (m.home_team_id = ? OR m.away_team_id = ? OR m.home_team_id = ? OR m.away_team_id = ?)
-         AND sc.scheduled_at LIKE ? AND sc.season_number = (SELECT MAX(number) FROM seasons WHERE status = 'active')
-         AND m.status IN ('scheduled','lineups_open','simulated') LIMIT 1`
-      ).bind(teamId, teamId, opponentTeamId, opponentTeamId, `${gameDateDay}%`),
-      c.env.DB.prepare(
-        `SELECT id FROM matches WHERE calendar_id IS NULL AND status IN ('lineups_open','simulated')
-         AND (home_team_id = ? OR away_team_id = ? OR home_team_id = ? OR away_team_id = ?)
-         AND created_at LIKE ? AND created_at >= ? LIMIT 1`
-      ).bind(teamId, teamId, opponentTeamId, opponentTeamId, `${gameDateDay}%`, seasonStart),
-    ]);
-    if (leagueRes.results.length > 0) return c.json({ error: "Dnes máš nebo soupeř má ligový zápas — přátelák lze hrát jen v dny bez ligového zápasu" }, 400);
+    const friendlyRes = await c.env.DB.prepare(
+      `SELECT id FROM matches WHERE calendar_id IS NULL AND status IN ('lineups_open','simulated')
+       AND (home_team_id = ? OR away_team_id = ? OR home_team_id = ? OR away_team_id = ?)
+       AND created_at LIKE ? AND created_at >= ? LIMIT 1`
+    ).bind(teamId, teamId, opponentTeamId, opponentTeamId, `${gameDateDay}%`, seasonStart).all();
     if (friendlyRes.results.length > 0) return c.json({ error: "Jeden z týmů už dnes hrál nebo má naplánovaný přátelák" }, 400);
   }
 
@@ -1078,7 +1071,23 @@ matchesRouter.get("/teams/:teamId/challenges", async (c) => {
     "SELECT t.id, t.name, v.name as village FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id <> 'ai' AND t.id <> ? AND COALESCE(t.team_type, 'senior') <> 'u21' ORDER BY t.name"
   ).bind(teamId).all();
 
+  // Má tento tým DNES (game_date) ligový zápas? FE popisek slotu pak v ten den neslibuje "dnes 18:00"
+  // (přátelák se v den ligy odehrát nemůže — sehraje se, až ho soupeř přijme na volný den).
+  const gameDateDay = team?.game_date ? team.game_date.split("T")[0] : null;
+  let leagueMatchToday = false;
+  if (gameDateDay) {
+    const lm = await c.env.DB.prepare(
+      `SELECT m.id FROM matches m JOIN season_calendar sc ON m.calendar_id = sc.id
+       WHERE (m.home_team_id = ? OR m.away_team_id = ?)
+       AND sc.scheduled_at LIKE ? AND sc.season_number = (SELECT MAX(number) FROM seasons WHERE status = 'active')
+       AND m.status IN ('scheduled','lineups_open','simulated') LIMIT 1`
+    ).bind(teamId, teamId, `${gameDateDay}%`).all()
+      .catch((e) => { logger.warn({ module: "matches" }, "league match today check", e); return { results: [] as unknown[] }; });
+    leagueMatchToday = lm.results.length > 0;
+  }
+
   return c.json({
+    leagueMatchToday,
     incoming: incoming.results.map((r) => ({
       id: r.id, challengerName: r.challenger_name, message: r.message, createdAt: r.created_at,
     })),
