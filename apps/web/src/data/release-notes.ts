@@ -13,6 +13,14 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-07-09",
+    emoji: "📊",
+    title: "Pozápasové hodnocení — o výkonu, ne o kádru",
+    items: [
+      "Rozbor toho, co rozhodlo zápas, teď jasně říká, že srovnává VÝKON v daném zápase, ne kvalitu kádru. Dřív formulace zněla, jako bys měl slabý útok — i když jsi byl kádrově vyrovnaný a jen se ti zápas nepovedl.",
+    ],
+  },
+  {
+    date: "2026-07-09",
     emoji: "🗺️",
     title: "Hlášky sedící k okresu",
     items: [
