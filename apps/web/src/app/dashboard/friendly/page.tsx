@@ -98,6 +98,21 @@ export default function FriendlyPage() {
     setSending(null);
   };
 
+  const cancelChallenge = async (challengeId: string) => {
+    if (!teamId || sending) return;
+    setSending(challengeId);
+    try {
+      await apiFetch(`/api/teams/${teamId}/challenge/${challengeId}/cancel`, { method: "POST" });
+      setStatus("Výzva zrušena.");
+      setTimeout(() => setStatus(""), 3000);
+      load();
+    } catch (e: any) {
+      setStatus(e.message ?? "Chyba");
+      setTimeout(() => setStatus(""), 3000);
+    }
+    setSending(null);
+  };
+
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
   if (!data) return <div className="page-container"><div className="text-center text-muted py-8">Chyba načítání</div></div>;
 
@@ -161,6 +176,12 @@ export default function FriendlyPage() {
                           className="px-3 py-1.5 bg-pitch-500 text-white rounded-lg font-heading font-bold text-xs shrink-0">
                           Sestava ▶
                         </Link>
+                      )}
+                      {!isAccepted && (
+                        <button onClick={() => cancelChallenge(ch.id)} disabled={sending === ch.id}
+                          className="px-3 py-1.5 bg-gray-200 text-ink rounded-lg font-heading font-bold text-xs disabled:opacity-50 shrink-0">
+                          Zrušit
+                        </button>
                       )}
                     </div>
                   </CardBody>
