@@ -10,6 +10,8 @@
  * zůstává v manager-relations.ts a routes/relations.ts.
  */
 
+import { pickDistrictFlavor } from "../data/flavor/district-pool";
+
 export interface RelationNames {
   myName: string;      // název mého klubu
   theirName: string;   // název soupeřova klubu
@@ -25,31 +27,50 @@ function pick<T>(arr: T[]): T {
 // Předzápasové výroky do novin
 // ────────────────────────────────────────────────────────────────────────────
 
-export function statementRespectQuote(n: RelationNames): string {
-  return pick([
-    `„${n.theirName} hraje nejlepší fotbal od Libína po Boubín. Bude to dřina a my to víme,“ řekl před zápasem trenér ${n.myManager} (${n.myName}).`,
-    `„Trenér ${n.theirManager} odvádí poctivou práci. Tohle bude zápas, na který má přijít celá náves,“ uznal kvality soupeře trenér ${n.myManager} z ${n.myName}.`,
-    `„Mají formu jak borůvky v červenci. Jestli nebudeme stoprocentní, odvezeme si nášup,“ smekl před soupeřem trenér ${n.myManager} (${n.myName}).`,
-    `„Před ${n.theirName} klobouk dolů. Ale v neděli se to rozdá férově na trávě, ne v novinách,“ vzkázal trenér ${n.myManager} z ${n.myName}.`,
-    `„Jejich záloha šlape jak hodiny na prachatický věži. Musíme je vypnout dřív, než se rozjedou,“ chválil soupeře trenér ${n.myManager} (${n.myName}).`,
-    `„Znám jejich kluky z brigád i z hospody. Poctiví chlapi, poctivej fotbal. Těším se na ně,“ řekl trenér ${n.myManager} z ${n.myName}.`,
-    `„Kdyby se okres hrál jen na srdce, ${n.theirName} už dávno slaví titul. Naštěstí se hraje i na nohy,“ uznale pokýval hlavou trenér ${n.myManager} (${n.myName}).`,
-  ]);
+export function statementRespectQuote(n: RelationNames, district?: string): string {
+  return pickDistrictFlavor({
+    core: [
+      `„${n.theirName} hraje nejlepší fotbal široko daleko. Bude to dřina a my to víme,“ řekl před zápasem trenér ${n.myManager} (${n.myName}).`,
+      `„Před ${n.theirName} klobouk dolů. Ale v neděli se to rozdá férově na trávě, ne v novinách,“ vzkázal trenér ${n.myManager} z ${n.myName}.`,
+      `„Znám jejich kluky z tréninků i z hospody. Poctiví chlapi, poctivej fotbal. Těším se na ně,“ řekl trenér ${n.myManager} z ${n.myName}.`,
+      `„Kdyby se fotbal hrál jen na srdce, ${n.theirName} už dávno slaví titul. Naštěstí se hraje i na nohy,“ uznale pokýval hlavou trenér ${n.myManager} (${n.myName}).`,
+    ],
+    prachatice: [
+      `„${n.theirName} hraje nejlepší fotbal od Libína po Boubín. Bude to dřina a my to víme,“ řekl před zápasem trenér ${n.myManager} (${n.myName}).`,
+      `„Trenér ${n.theirManager} odvádí poctivou práci. Tohle bude zápas, na který má přijít celá náves,“ uznal kvality soupeře trenér ${n.myManager} z ${n.myName}.`,
+      `„Mají formu jak borůvky v červenci. Jestli nebudeme stoprocentní, odvezeme si nášup,“ smekl před soupeřem trenér ${n.myManager} (${n.myName}).`,
+      `„Jejich záloha šlape jak hodiny na prachatický věži. Musíme je vypnout dřív, než se rozjedou,“ chválil soupeře trenér ${n.myManager} (${n.myName}).`,
+    ],
+    praha: [
+      `„${n.theirName} hraje nejlíp široko daleko po Praze. Bude to dřina a my to víme,“ řekl před zápasem trenér ${n.myManager} (${n.myName}).`,
+      `„Mají formu jak metro ve špičce — jede jim to bez zastavení. Musíme je vypnout včas,“ chválil soupeře trenér ${n.myManager} (${n.myName}).`,
+      `„Před ${n.theirName} smekám. V neděli se ale hraje na trávě, ne na sociálních sítích,“ vzkázal trenér ${n.myManager} z ${n.myName}.`,
+    ],
+  }, district, pick);
 }
 
-export function statementProvokeQuote(n: RelationNames): string {
-  return pick([
-    `„${n.theirName}? Ti by neuhlídali ani kozu na návsi, natož náš útok,“ provokoval před zápasem trenér ${n.myManager} (${n.myName}).`,
-    `„Viděl jsem o víkendu v lese hřiby, co měly lepší postavení než jejich obrana,“ rýpl si do soupeře trenér ${n.myManager} z ${n.myName}.`,
-    `„Jejich hřiště zná každej kanec ze Šumavy. Taky si na něm ryje, kdo chce,“ vzkázal směrem k ${n.theirName} trenér ${n.myManager}.`,
-    `„Půlka jejich sestavy hraje fotbal jen na pouti. A druhá půlka ani to ne,“ nebral si servítky trenér ${n.myManager} (${n.myName}).`,
-    `„Prej trénujou presink. Zatím stíhaj presovat akorát zelí,“ bavil se na účet soupeře trenér ${n.myManager} z ${n.myName}.`,
-    `„Bečku ať chladí předem. A pořádnou, ne tu jejich břečku,“ hlásil sebevědomě trenér ${n.myManager} (${n.myName}).`,
-    `„Jejich trenér má taktiku z dob, kdy se ještě psalo křídou na vrata kravína,“ provokoval kolegu trenér ${n.myManager} z ${n.myName}.`,
-    `„Na Zlatý stezce se odjakživa obchodovalo se solí. My jim v neděli osolíme,“ sliboval trenér ${n.myManager} (${n.myName}).`,
-    `„${n.theirManager} říká, že mají formu. Jo, formu na buchty,“ neodpustil si trenér ${n.myManager} z ${n.myName}.`,
-    `„Slyšel jsem, že přes léto posilovali. Asi ten plot kolem hřiště,“ ušklíbl se trenér ${n.myManager} (${n.myName}).`,
-  ]);
+export function statementProvokeQuote(n: RelationNames, district?: string): string {
+  return pickDistrictFlavor({
+    core: [
+      `„${n.theirName}? Ti by neuhlídali ani balón, natož náš útok,“ provokoval před zápasem trenér ${n.myManager} (${n.myName}).`,
+      `„Půlka jejich sestavy hraje fotbal jen na pouti. A druhá půlka ani to ne,“ nebral si servítky trenér ${n.myManager} (${n.myName}).`,
+      `„Prej trénujou presink. Zatím stíhaj presovat akorát u výčepu,“ bavil se na účet soupeře trenér ${n.myManager} z ${n.myName}.`,
+      `„Bečku ať chladí předem. A pořádnou, ne tu jejich břečku,“ hlásil sebevědomě trenér ${n.myManager} (${n.myName}).`,
+      `„Jejich trenér má taktiku z dob, kdy se ještě psalo křídou na vrata,“ provokoval kolegu trenér ${n.myManager} z ${n.myName}.`,
+      `„${n.theirManager} říká, že mají formu. Jo, formu na buchty,“ neodpustil si trenér ${n.myManager} z ${n.myName}.`,
+      `„Slyšel jsem, že přes léto posilovali. Asi ten plot kolem hřiště,“ ušklíbl se trenér ${n.myManager} (${n.myName}).`,
+    ],
+    prachatice: [
+      `„Viděl jsem o víkendu v lese hřiby, co měly lepší postavení než jejich obrana,“ rýpl si do soupeře trenér ${n.myManager} z ${n.myName}.`,
+      `„Jejich hřiště zná každej kanec ze Šumavy. Taky si na něm ryje, kdo chce,“ vzkázal směrem k ${n.theirName} trenér ${n.myManager}.`,
+      `„Na Zlatý stezce se odjakživa obchodovalo se solí. My jim v neděli osolíme,“ sliboval trenér ${n.myManager} (${n.myName}).`,
+    ],
+    praha: [
+      `„Jejich obrana má rozestupy jak lidi v tramvaji — každej sám za sebe,“ rýpl si trenér ${n.myManager} z ${n.myName}.`,
+      `„${n.theirName}? Ti drží balón asi jak Pražák místo na parkování — chvilku a je pryč,“ provokoval trenér ${n.myManager} (${n.myName}).`,
+      `„Prej mají formu. Na Instagramu možná. Na trávě uvidíme,“ neodpustil si trenér ${n.myManager} z ${n.myName}.`,
+    ],
+  }, district, pick);
 }
 
 export function statementHumbleQuote(n: RelationNames): string {
@@ -144,15 +165,23 @@ export function adTextFor(n: RelationNames): string {
 // Pozápasové rýpnutí do novin (gesto jab)
 // ────────────────────────────────────────────────────────────────────────────
 
-export function jabNewsBody(n: RelationNames): string {
-  return pick([
-    `„Soupeř? Viděli jste to sami. My jsme aspoň věděli, na kterou stranu se útočí,“ nechal se slyšet trenér ${n.myName} na adresu ${n.theirName}. V kabině ${n.myName} se prý smáli ještě u třetího piva.`,
-    `„Kdyby se body dávaly za řeči, jsou mistři okresu už v srpnu,“ rýpl si po zápase trenér ${n.myName} do ${n.theirName}.`,
-    `„Poděkoval bych jim za zápas, ale ono se vlastně nic nekonalo,“ glosoval utkání s ${n.theirName} trenér ${n.myName}. Slyšet to bylo prý až na náves.`,
-    `„Jejich největší šance dneska? Že stihnou poslední rundu v hospodě,“ utrousil směrem k ${n.theirName} trenér ${n.myName}.`,
-    `„Hráli jsme proti jedenácti kuželkám. Aspoň že se nekácely samy,“ neodpustil si trenér ${n.myName} na účet ${n.theirName}.`,
-    `„Na Šumavě se říká: kdo nic neumí, ať aspoň fauluje. Oni dneska zvládli obojí naopak,“ vzkázal po zápase ${n.theirName} trenér ${n.myName}.`,
-  ]);
+export function jabNewsBody(n: RelationNames, district?: string): string {
+  return pickDistrictFlavor({
+    core: [
+      `„Soupeř? Viděli jste to sami. My jsme aspoň věděli, na kterou stranu se útočí,“ nechal se slyšet trenér ${n.myName} na adresu ${n.theirName}. V kabině ${n.myName} se prý smáli ještě u třetího piva.`,
+      `„Kdyby se body dávaly za řeči, jsou mistři okresu už v srpnu,“ rýpl si po zápase trenér ${n.myName} do ${n.theirName}.`,
+      `„Poděkoval bych jim za zápas, ale ono se vlastně nic nekonalo,“ glosoval utkání s ${n.theirName} trenér ${n.myName}. Slyšet to bylo prý přes celý areál.`,
+      `„Jejich největší šance dneska? Že stihnou poslední rundu v hospodě,“ utrousil směrem k ${n.theirName} trenér ${n.myName}.`,
+      `„Hráli jsme proti jedenácti kuželkám. Aspoň že se nekácely samy,“ neodpustil si trenér ${n.myName} na účet ${n.theirName}.`,
+    ],
+    prachatice: [
+      `„Na Šumavě se říká: kdo nic neumí, ať aspoň fauluje. Oni dneska zvládli obojí naopak,“ vzkázal po zápase ${n.theirName} trenér ${n.myName}.`,
+    ],
+    praha: [
+      `„Jejich největší šance dneska? Že chytnou poslední tramvaj domů,“ utrousil směrem k ${n.theirName} trenér ${n.myName}.`,
+      `„Hráli, jako by čekali na spoj — pořád někam koukali, ale nikam nedošli,“ glosoval ${n.theirName} trenér ${n.myName}.`,
+    ],
+  }, district, pick);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -187,21 +216,31 @@ export function praiseReplyText(
   }
 }
 
-export function praiseNews(n: RelationNames): { headline: string; body: string } {
-  return pick([
-    {
-      headline: "Pochvala přes celý okres",
-      body: `„${n.theirManager} odvádí v ${n.theirName} poctivou práci. To se musí umět ocenit i u konkurence,“ vzkázal kolegovi trenér ${n.myManager} z ${n.myName}. Na okrese, kde se víc pomlouvá než chválí, je to zpráva sama o sobě.`,
-    },
-    {
-      headline: `${n.myManager} smeká před kolegou`,
-      body: `Trenér ${n.myName} veřejně pochválil práci, kterou ${n.theirManager} dělá v ${n.theirName}: „Klobouk dolů, takhle se vede mančaft.“ Slušnost na okrese nevymřela.`,
-    },
-    {
-      headline: "Mezi trenéry to (kupodivu) vře respektem",
-      body: `„Co ${n.theirManager} dokázal s ${n.theirName}, by mu mohl závidět kdekdo od Blanice po Boubín,“ nechal se slyšet trenér ${n.myManager} (${n.myName}). Hospodští štamgasti nevěří vlastním uším.`,
-    },
-  ]);
+export function praiseNews(n: RelationNames, district?: string): { headline: string; body: string } {
+  return pickDistrictFlavor({
+    core: [
+      {
+        headline: "Pochvala přes celý okres",
+        body: `„${n.theirManager} odvádí v ${n.theirName} poctivou práci. To se musí umět ocenit i u konkurence,“ vzkázal kolegovi trenér ${n.myManager} z ${n.myName}. Na okrese, kde se víc pomlouvá než chválí, je to zpráva sama o sobě.`,
+      },
+      {
+        headline: `${n.myManager} smeká před kolegou`,
+        body: `Trenér ${n.myName} veřejně pochválil práci, kterou ${n.theirManager} dělá v ${n.theirName}: „Klobouk dolů, takhle se vede mančaft.“ Slušnost na okrese nevymřela.`,
+      },
+    ],
+    prachatice: [
+      {
+        headline: "Mezi trenéry to (kupodivu) vře respektem",
+        body: `„Co ${n.theirManager} dokázal s ${n.theirName}, by mu mohl závidět kdekdo od Blanice po Boubín,“ nechal se slyšet trenér ${n.myManager} (${n.myName}). Hospodští štamgasti nevěří vlastním uším.`,
+      },
+    ],
+    praha: [
+      {
+        headline: "Respekt napříč metropolí",
+        body: `„Co ${n.theirManager} dokázal s ${n.theirName}, by mu záviděl kdekdo od Vltavy po Vinohrady,“ nechal se slyšet trenér ${n.myManager} (${n.myName}). Štamgasti u výčepu nevěří vlastním uším.`,
+      },
+    ],
+  }, district, pick);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
