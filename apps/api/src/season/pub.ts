@@ -113,6 +113,11 @@ const STORY_POOL: DistrictPool<string> = {
     "{name} líčil, jak na Mářském vrchu chytil signál a viděl celý zápas Sparty na mobilu.",
     "{name} tvrdil, že viděl rysa nad Volary. Nikdo mu nevěřil, ale poslouchali rádi.",
     "{name} rozebíral, proč se Netolicím pořád daří líp než nám. Shodli se, že mají štěstí.",
+    "{name} vykládal, jak jednou v Netolicích čekali na rozhodčího dvě hodiny — přijel na traktoru rovnou z pole a pískal v holínkách.",
+    "{name} rozebíral, že kdyby se hřiště v Lhenicích neklonilo k potoku, nikdy by nedostali gól z penalty — míč prostě jede z kopce sám.",
+    "{name} tvrdil, že když se fouká od Boubína, míč zatáčí sám a stačí ho jen postavit na roh a počkat.",
+    "{name} vyprávěl, jak v zimě trénovali na zamrzlém rybníku ve Volarech a gólman chytal rovnou v bruslích.",
+    "{name} přesvědčoval hospodu, že nejtěžší soupeř na Prachaticku není žádné mužstvo, ale ten zlatostezkový kopec za brankou.",
   ],
   praha: [
     "{name} vyprávěl, jak kdysi na Julisce viděl zápas z tribuny za stovku a bagetu.",
@@ -121,6 +126,11 @@ const STORY_POOL: DistrictPool<string> = {
     "{name} líčil, jak přišel o dres v šatně na Strahově a našel ho pak na burze na Kolbence.",
     "{name} se hádal, jestli se dá stihnout druhý poločas, když dáš první u výčepu na Andělu.",
     "{name} tvrdil, že potkal v metru bývalého ligistu. Nikdo nevěřil, ale poslouchali rádi.",
+    "{name} vykládal, jak jednou stihl derby na Letné i rozlučku na Smíchově v jednom odpoledni — jen díky sedmnáctce.",
+    "{name} rozebíral, proč se na Žižkově nedá zaparkovat ani autobus s hráči — museli dojít pěšky a prohráli unavení.",
+    "{name} tvrdil, že v Karlíně je tolik kaváren, že po zápase nenajdeš jedinou hospodu s pivem pod padesát.",
+    "{name} přesvědčoval ostatní, že náplavka je nejlepší tribuna v Praze — vidíš na hřiště přes řeku a pivo je z bedny.",
+    "{name} vyprávěl, jak na Smíchově potkal rozhodčího z minulého kola v metru a celou cestu mu vysvětloval ofsajd.",
   ],
 };
 
@@ -163,6 +173,13 @@ const DAILY_SPECIALS_POOL: DistrictPool<string> = {
     "Akce ke Slavnostem Zlaté stezky: třetí pivo za pětikorunu",
     "Dnes: Kachna s knedlíkem — recept od babičky z Lhenic",
     "Specialita dne: Pstruh z husinecké přehrady na másle",
+    "Specialita dne: Houbová omáčka z boubínských hřibů, houbař ručí za všechny",
+    "Dnes: Srnčí na smetaně — myslivci z Volar zvěřinu dovezli za rozbřesku",
+    "Akce: ke každému pivu panák hruškovice od souseda z Netolic",
+    "Hospodský naškvařil sádlo se škvarky, chleba mizí rychleji než pivo",
+    "Dnes: Lhenické buchty s povidly — pekly se od rána, voní po celé návsi",
+    "Specialita dne: Jitrnice a jelítka ze zabíjačky, dokud jsou teplé",
+    "Traktor přivezl brambory z pole — dnes bramboráky, dokud těsto stačí",
   ],
   praha: [
     "Specialita dne: Trhané vepřové v bulce · IPA na čepu",
@@ -172,6 +189,13 @@ const DAILY_SPECIALS_POOL: DistrictPool<string> = {
     "Dnes: Svíčková jak od babičky, i když ji vaří kluk z bistra vedle",
     "Nová kávovar za barem — flat white i k pivu, časy se mění.",
     "Akce ke šlágru kola Sparta–Slavia: třetí pivo za pětikorunu",
+    "Specialita dne: Smash burger s cibulovým chutney · NEIPA z Vinohrad na čepu",
+    "Dnes: Poké bowl vedle utopence — kuchař z Karlína zkouší, co štamgasti dají",
+    "Akce: druhá flat white zdarma těm, co dorazí z korporátu po šichtě",
+    "Hospodský dal na stůl QR menu, půlka štamgastů ho ignoruje a ukazuje prstem",
+    "Dnes: Guláš v chlebu jak z náplavky, ale bez fronty a bez pražských cen",
+    "Specialita dne: Tatarák s topinkami · sour ze žižkovského minipivovaru",
+    "Nová várka craftu z Holešovic — prý chutná po grepu, štamgasti nevědí, co říct",
   ],
 };
 
@@ -274,11 +298,21 @@ const FREE_ROUND_POOL: DistrictPool<string> = {
     "Myslivec z Volar složil divočáka a slaví — celé hospodě platí rundu.",
     "Turista z Bavorska prohrál sázku v šipkách a platí všem — euro bere hospodský rád.",
     "Chalupář z Prahy chtěl zapadnout mezi místní — hodil rundu a hned byl „náš“.",
+    "Traktorista stihl svézt seno těsně před bouřkou a z čiré radosti hodil celé hospodě rundu.",
+    "Řezník z Netolic prodal celé sele na pouť a z první výplaty koupil chlapům kolo.",
+    "Děda přinesl první letošní slivovici na ochutnávku — po třech štamprlích platil pivo všem, aby prý bylo co zajíst.",
+    "Houbař prodal bedýnku hřibů překupníkovi u silnice a rovnou v hospodě proměnil výdělek v rundu pro všechny.",
+    "Chalupář konečně dostavěl plot bez pomoci vesnice — a z čistého svědomí zaplatil kolo, aby se s místními udobřil.",
   ],
   praha: [
     "Bývalý spoluhráč, co to dotáhl do korporátu, dorazil v obleku a hodil rundu — „dneska platím já“.",
     "Sponzor z Karlína zaskočil po práci a za jásotu zaplatil všem druhou rundu.",
     "Cizinec od vedlejšího stolu prohrál sázku u baru a platí všem — hospodský bere i karty.",
+    "Ajťák od vedle dostal padáka i s balíkem odstupného — přišel to zapít a rundu hodil celé hospodě.",
+    "Chlápek prodal byt na Vinohradech za majland, stavil se na poslední pivo do staré čtvrti a platil všem do zavíračky.",
+    "Kurýr dojezdil směnu na kole a z dýšek postavil celému lokálu rundu — nohy prý stejně necítí.",
+    "Bývalý barman z Karlína přišel na návštěvu a ze cti řemesla načepoval všem pivo na pult sám.",
+    "Influencer natočil o hospodě story, dostal zaplaceno od pivovaru a z radosti koupil všem druhé kolo.",
   ],
 };
 
@@ -295,11 +329,21 @@ const BAR_CHAMPION_POOL: DistrictPool<string> = {
   prachatice: [
     "{name} vyhrál pivní kvíz otázkou „kterým rokem se otevřela Zlatá stezka turistům“. Trefil. Konvice piva jeho.",
     "{name} zazpíval v karaoke „Holky z naší školky“ tak, že i chlapi z Vimperka zatleskali.",
+    "{name} vyhrál turnaj v prší o poslední jitrnici — poražení mlčeli ještě celý týden.",
+    "{name} v páce přepral řezníka z Netolic. Hospoda nevěřila, řezník taky ne.",
+    "{name} trefil v šipkách třikrát za sebou dvacítku a hospodský mu na počest pojmenoval štamprli.",
+    "{name} vyhrál soutěž kdo dýl udrží plný půllitr v natažené ruce — vydržel, než dohrála celá dechovka.",
+    "{name} v pivním kvízu věděl přesně, kolik metrů měří rozhledna na Libíně. Konev piva putovala k němu.",
   ],
   praha: [
     "{name} vyhrál pivní kvíz otázkou, kolik stanic má metro C. Věděl. Konvice piva jeho.",
     "{name} zazpíval v karaoke Nohavicu tak, že mu i partička z Vinohrad zatleskala.",
     "{name} vyhrál fotbálkový turnaj o pivo — poražení museli rundu objednat přes appku.",
+    "{name} vyhrál kvíz otázkou, ve kterém roce padla stará sparťanská tribuna. Věděl přesně, konev byla jeho.",
+    "{name} přepral v páce chlápka z posilovny na Smíchově, co si o sobě moc myslel. Hospoda skandovala.",
+    "{name} zazpíval v karaoke Kabát tak procítěně, že se přidal i stůl korporátů a rozlili si latté.",
+    "{name} vyhrál fotbálkový turnaj o pivo a poraženého donutil zaplatit přes hospodskou appku, co nikdo neumí.",
+    "{name} v šipkách sundal místního přeborníka ze Žižkova. Přeborník od té doby chodí radši na Vinohrady.",
   ],
 };
 
@@ -315,10 +359,20 @@ const VILLAGE_HERO_POOL: DistrictPool<string> = {
   prachatice: [
     "Hospodský vyvěsil {name}ův dres vedle vlajky okresu Prachatice. „Tohle je domácí poklad.“",
     "Děda Karel přirovnal {name}a k nejlepšímu kanonýrovi, co kdy z Vimperka vyšel. Pocta nejvyšší.",
+    "Hospodský napsal {name}ovo jméno křídou nad pípu s hvězdičkou. Na Prachaticku vyšší pocty není.",
+    "Starý pan Kubů prohlásil, že {name} kope líp než celá základka z Husince dohromady, a to už je co říct.",
+    "Hospodský {name}ovi věnoval vlastní štamprli s ryskou „jen pro hrdinu kola“. Ostatní jen záviděli.",
+    "Děda od vedle vylovil z peněženky zažloutlou fotku svého mužstva a přiznal, že {name} by se mezi ně vešel.",
+    "Na nástěnce u hasičárny visí od pondělí {name}ovo jméno jako hráč týdne — hned vedle rozpisu služeb.",
   ],
   praha: [
     "Hospodský vyvěsil {name}ův dres vedle šály se lvíčkem. „Náš nejlepší — pivo dnes zdarma.“",
     "Stálí hosté dali {name}ovi přezdívku po pražské ligové legendě. Nese ji hrdě.",
+    "Hospodský {name}ovi rezervoval štamgastskou židli u okna s cedulkou. V pražské hospodě vzácnost k nezaplacení.",
+    "Starý pán od kulečníku prohlásil, že {name} by se neztratil ani na Letné. Vyšší chvála v téhle čtvrti nepadla.",
+    "Barman napsal {name}ovo jméno na tabuli s denním menu místo polévky. Hospoda to brala jako poctu.",
+    "Parta z Vinohrad uznala, že {name} je „ten z naší hospody, co to fakt umí“. Titul, co se nekupuje.",
+    "Hospodský {name}ovi natočil první pivo dřív, než si stačil sednout. Vyšší respekt v Praze neexistuje.",
   ],
 };
 
@@ -334,10 +388,20 @@ const FRIENDLY_REUNION_POOL: DistrictPool<string> = {
   prachatice: [
     "Spolužák, co se odstěhoval do Vimperka, přijel na pivo. {name} s ním vzpomínal na žákovská léta.",
     "{name} potkal kamaráda, co teď dělá průvodce na Boubíně. Slíbili si výlet, co nejspíš nebude.",
+    "Přišel starý brankář, co se odstěhoval do Volar — {name} s ním do noci řešil, který gól tenkrát vlastně platil.",
+    "{name} potkal souseda, co dělá na pile ve Vimperku. Vzpomínali, jak spolu jako kluci nosili dřevo a míč zároveň.",
+    "Do hospody zapadl bývalý trenér žáků z Netolic. {name} od něj zase po letech slyšel „dobrá práce, chlapče“.",
+    "{name}ovi zaskočil kmotr z Lhenic s demižonem vlastního moštu. Vzpomínek bylo víc než moštu.",
+    "Přijel kamarád, co teď hlídá chatu na Kubově Huti. Slíbili si zimní zápas na sněhu, co se nejspíš neuskuteční.",
   ],
   praha: [
     "Do hospody dorazil kamarád, co teď dělá v centru — {name} s ním vzpomínal na žákovská léta na Pankráci.",
     "{name} potkal spoluhráče, co se odstěhoval na druhý konec Prahy. Slíbili si, že zajdou na ligu.",
+    "Do hospody dorazil bývalý spolubydlící z koleje na Strahově. {name} s ním vzpomínal na zápasy mezi bloky.",
+    "{name} potkal kluka, se kterým jako malý kopal na hřišti za Nuselákem. Most stojí, hřiště zmizelo, přátelství zůstalo.",
+    "Přišel starý parťák, co teď dělá číšníka v Karlíně. {name} od něj dostal pivo „na účet starých časů“.",
+    "{name}ovi zaskočil táta rovnou z práce v obleku — dali si jedno a probrali, proč se dneska nekope jako dřív.",
+    "Do hospody zapadl bývalý spoluhráč, co teď trénuje mládež na Smíchově. {name} slíbil, že se přijde podívat.",
   ],
 };
 
@@ -412,6 +476,11 @@ const HUNTERS_POOL: DistrictPool<string> = {
     "Po honu na Boubíně se myslivci stavili na jedno — z jednoho bylo deset, ale nálada výborná.",
     "Starý myslivec vyprávěl o jelenu, co mu utekl na Mářském vrchu. Příběh byl lepší než úlovek.",
     "Myslivci přinesli paroží na zeď hospody. {name} pod ním pózoval na fotku celý večer.",
+    "Myslivci přinesli čerstvou klobásu z divočáka a hospoda voněla až na náves. {name} stál frontu dvakrát.",
+    "Starý myslivec předváděl, jak troubí na jelena, a rozezvučel celou hospodu. {name} se přidal na lesní roh od pípy.",
+    "Po honu na Lhenicku se spolek stavil na guláš — {name} snědl porci určenou pro dva.",
+    "Myslivci se dohadovali, kdo trefil zajíce první. {name} spor rozhodl tím, že objednal všem rundu.",
+    "Hajný přinesl srnčí hřbet a hospodský ho hned dal na pánev. {name} tvrdil, že líp nejedl ani na svatbě.",
   ],
 };
 
@@ -424,6 +493,11 @@ const PIG_SLAUGHTER_POOL: DistrictPool<string> = {
     "Řezník přivezl čerstvou tlačenku rovnou do hospody. {name} byl první u mísy.",
     "Sousedi ze Lhenic dělali zabíjačku a podělili se. {name} si pochvaloval ovar do prasknutí.",
     "Zabíjačková polévka voněla po celé vsi. {name} přišel za vůní a zůstal do rána.",
+    "U sousedů zabíjeli a přinesli do hospody plný hrnec ovaru. {name} si nabral, ještě než stačil pozdravit.",
+    "Řezník rozdával čerstvé jitrnice přímo přes pípu. {name} tvrdil, že takhle snídat by mohl klidně každý den.",
+    "Zabíjačková mísa doputovala až do hospody a byla prázdná dřív, než dohrála dechovka. {name} u toho nechyběl.",
+    "Po zabíjačce u Nováků voněla celá ves po škvarcích. {name} přišel na jedno a odešel s pytlíkem tlačenky.",
+    "Řezník uspořádal na baru ochutnávku jelítek a jitrnic. {name} hlasoval pro jelítka — třikrát po sobě.",
   ],
 };
 
@@ -441,6 +515,11 @@ const LOST_TOURIST_POOL: DistrictPool<string> = {
     "Poutník z Bavorska si dal první české pivo v životě. {name} mu hned objednal druhé.",
     "Dva Holanďani hledali Churáňov. Skončili na pivu a Churáňov vzdali.",
     "Zbloudilý houbař z Prahy hledal cestu z lesa. {name} ho dovedl rovnou k pípě.",
+    "Rakouský cyklista si spletl hranici a myslel, že je pořád doma. {name} ho ujistil, že pivo je tu levnější, a on zůstal.",
+    "Turistka hledala vlak do Vimperka. {name} jí vysvětlil, že další jede až ráno, tak ať si sedne a dá si jedno.",
+    "Skupinka skautů z Plzně zabloudila při přechodu Šumavy. {name} jim nad mapou poradil zkratku rovnou k pípě.",
+    "Němec se ptal, kde tu mají „echt böhmisch“ knedlík. {name} ukázal na kuchyň a objednal mu rovnou dva.",
+    "Pár z Prahy hledal romantickou chatu u jezera. {name} jim nakreslil cestu, ale nejdřív je nechal v klidu dopít.",
   ],
   praha: [
     "Ztracený cizinec hledal Airbnb, mobil vybitej. {name} mu půjčil nabíječku a pivo.",
@@ -448,6 +527,11 @@ const LOST_TOURIST_POOL: DistrictPool<string> = {
     "Zmatený návštěvník vystoupil na špatné zastávce tramvaje. {name} ho navedl rovnou k pípě.",
     "Influencerka si u nás dělala story, že objevila „autentickou pražskou hospodu“. {name} zamával do kamery.",
     "Cizinec se ptal, kde koupí lístek na metro. {name} mu vysvětloval Lítačku a pak to vzdal.",
+    "Zmatený turista hledal Pražský hrad a byl si jistý, že je za rohem. {name} mu řekl, ať dopije, stejně už je zavřeno.",
+    "Skupinka Italů si spletla náplavku s přístavištěm lodí. {name} jim objednal pivo a loď pustili z hlavy.",
+    "Turista se ptal, proč tramvaj nejede, když má být „nonstop“. {name} mu vysvětlil výluku a pak to vzdal.",
+    "Slovenka hledala nejlepší trdelník ve městě. {name} ji přesvědčil, že utopenec je lepší volba, a měl pravdu.",
+    "Zabloudilý beďar s foťákem chtěl vyfotit „opravdovou Prahu“. {name} mu nastavil půllitr a byl na fotce první.",
   ],
 };
 
@@ -460,6 +544,11 @@ const FIREFIGHTERS_POOL: DistrictPool<string> = {
     "Hasičská soutěž v požárním útoku skončila, hospoda praská ve švech.",
     "Hasiči z Netolic přijeli s pohárem a předváděli ho každému. {name} si na něj i ťukl.",
     "Po nočním výjezdu k planému poplachu se hasiči stavili na jedno. Bylo jich pět.",
+    "SDH Husinec vyhrálo pohár v požárním sportu a přivezlo ho rovnou do hospody. {name} do něj na oslavu načepoval.",
+    "Hasiči po celodenním cvičení vysušili hadice a zapadli na jedno. {name} platil za to, že vloni pomohli hasit stodolu.",
+    "Velitel sboru vyprávěl, jak kdysi vyprošťovali traktor z rybníka. Historka rostla s každým dalším pivem.",
+    "Mladí hasiči trénovali s proudnicí na návsi a pokropili kolemjdoucí. {name} to vzal s humorem a pozval je na pivo.",
+    "Po výjezdu k hořícímu seníku se sbor stavil na uklidněnou. {name} jim nechal donést guláš na účet hospody.",
   ],
 };
 
@@ -472,6 +561,11 @@ const VILLAGE_FAIR_POOL: DistrictPool<string> = {
     "Po pouti zůstal v hospodě cukrář a rozdával zbylé perníky. {name} si dal tři.",
     "Na návsi hrála kapela, ale nejlepší atmosféra byla stejně v hospodě. {name} to potvrdil.",
     "Pouťová tombola měla hlavní cenu sele. Vyhrál ho {name} a netuší, kam ho dá.",
+    "Na pouti v Husinci vyhrával flašinet a chlapi z hospody vyrazili tancovat — vrátili se s cukrovou vatou místo piva.",
+    "Pouťové autodromy hučely do noci. {name} prohrál se synem tři koruny a odvetu si dal až u pípy.",
+    "Na netolické pouti prodávali trdelník na každém rohu. {name} přišel navoněný skořicí a nikdo nevěřil, že nepekl.",
+    "Po slavnosti zbyl u hospody stánek s klobásami — {name} dojedl vše, co pouť nezvládla.",
+    "Kolotočáři po zavíračce pouti zapadli na jedno a vyprávěli, jak to chodí od Vimperka až po Sušici.",
   ],
   praha: [
     "Začala Žižkovská noc — celá čtvrť je v náladě, hospoda taky.",
@@ -479,6 +573,11 @@ const VILLAGE_FAIR_POOL: DistrictPool<string> = {
     "Sousedská slavnost v parku, kapela hrála, ale nejlepší atmosféra byla stejně v hospodě.",
     "Farmářské trhy skončily a prodavači zapadli na jedno. {name} vyhandloval kýbl jahod za rundu.",
     "Po slavnosti na Výstavišti zůstal v hospodě žonglér a učil kluky triky s tácky.",
+    "Vinohradské vinobraní skončilo a poslední stánkaři dorozdávali burčák. {name} si dal dva a tvrdil, že to není alkohol.",
+    "Na Smíchově byla pouliční slavnost s kapelou z Balkánu. {name} se vrátil do hospody a učil chlapy tancovat kolo.",
+    "Karlínské sousedské grilování rozehnal déšť. Celá čtvrť se přesunula k nám i s buřty.",
+    "Po festivalu světel bloudili lidi s foťáky od výlohy k výloze. {name} jim posvítil rovnou na cestu do hospody.",
+    "Žižkovský blešák sbalil stánky a trhovci zapadli na pivo. {name} vyhandloval starý dres za rundu.",
   ],
 };
 
@@ -491,6 +590,11 @@ const STORM_BLACKOUT_POOL: DistrictPool<string> = {
     "Sněhová kalamita na Churáňově — {name} radši přečkal nečas u piva.",
     "Bouřka vyhodila pojistky. {name} tvrdil, že pivo při svíčkách chutná líp, a měl pravdu.",
     "Vichr strhl plech ze střechy. Než přijde pokrývač, hospodský nalévá na uklidněnou.",
+    "Vichr shodil dráty a celá ves byla ve tmě. Hospodský vytáhl petrolejku a {name} tvrdil, že takhle bylo líp za mlada.",
+    "Ledovka spolkla cestu z Vimperka a nikdo se nedostal domů. {name} přečkal noc na lavici u kamen a byl spokojený.",
+    "Blesk uhodil do trafostanice a půl Prachaticka zůstalo bez proudu. {name} navrhl, že dokud netočí televize, budou točit pivo.",
+    "Orkán lámal stromy nad Boubínem a hospodský radši zavřel okenice. {name} u svíčky vyprávěl strašidelné historky.",
+    "Sníh zavál příjezdovku a pluh nikde. {name} pomohl odházet vchod a odměnou dostal pivo na účet podniku.",
   ],
 };
 
@@ -505,6 +609,11 @@ const MUSHROOM_BRAG_POOL: DistrictPool<string> = {
   ],
   prachatice: [
     "{name} přinesl košík hřibů z pod Boubína a dušoval se, že tam roste to nejlepší v republice.",
+    "{name} se dušoval, že pod Boubínem našel křemenáče, co by jim záviděl i lesník. Lesník přisvědčil, ale místo slyšet nechtěl.",
+    "{name} přinesl hřiby z volarských slatí a tvrdil, že rostou jen tam, kde ví jen on a jeden jelen.",
+    "{name} položil na barpult hřib velký jak bochník a prohlásil, že takový roste jen nad Zlatou stezkou.",
+    "{name} vyrazil na houby ještě za tmy, aby předběhl souseda z Lhenic. Soused tam byl dřív a nechal mu na pařezu vzkaz.",
+    "{name} se chlubil sušenými hřiby z pod Boubína a hospodský přiznal, že do zvěřinového guláše by je vzal hned.",
   ],
 };
 

@@ -28,6 +28,12 @@ const HUMOR_POOL: DistrictPool<string> = {
     "Prý se rozhodoval mezi fotbalem a hasičama. Zvítězil míč.",
     "Slavnostní podpis proběhl v místní hospodě za přítomnosti výčepní.",
     "Přestupní papíry podepsal na kapotě traktoru.",
+    "Ruku na to si plácli u pípy, zbytek dořešili na pivním tácku.",
+    "Prý ho zlákala nabídka, že bude po zápase první u kotle s gulášem.",
+    "Na rozloučenou mu myslivci nabalili zvěřinu na cestu.",
+    "Papíry doputovaly do klubu v tašce s houbama z Boubína.",
+    "O přestupu věděla celá ves dřív než hráč sám — u pumpy v Netolicích.",
+    "Trenér si ho vyhlídl na pouti mezi kolotočem a střelnicí.",
   ],
   praha: [
     "Podpis proběhl v kavárně na Vinohradech nad flat white.",
@@ -36,6 +42,12 @@ const HUMOR_POOL: DistrictPool<string> = {
     "Přestup okomentovali i influenceři na Instagramu.",
     "Papíry podepsal na iPadu ve sdíleném officu.",
     "Fanoušci to řešili hlavně v komentech pod postem klubu.",
+    "Detaily doladili v metru na céčku, než jim ujela zastávka.",
+    "Podpis stihli mezi dvěma zastávkami tramvaje na Smíchov.",
+    "Manažer to oslavil matchou na náplavce, hráč craftem na Žižkově.",
+    "Klub o přestupu vypustil reel dřív, než hráč dojel z Karlína.",
+    "Smlouvu poslali přes DocuSign, podepsal ji na mobilu v kavárně.",
+    "Prý rozhodlo hlavně, že to má blíž na metro než k bývalému klubu.",
   ],
 };
 

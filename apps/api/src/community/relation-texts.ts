@@ -40,11 +40,17 @@ export function statementRespectQuote(n: RelationNames, district?: string): stri
       `„Trenér ${n.theirManager} odvádí poctivou práci. Tohle bude zápas, na který má přijít celá náves,“ uznal kvality soupeře trenér ${n.myManager} z ${n.myName}.`,
       `„Mají formu jak borůvky v červenci. Jestli nebudeme stoprocentní, odvezeme si nášup,“ smekl před soupeřem trenér ${n.myManager} (${n.myName}).`,
       `„Jejich záloha šlape jak hodiny na prachatický věži. Musíme je vypnout dřív, než se rozjedou,“ chválil soupeře trenér ${n.myManager} (${n.myName}).`,
+      `„${n.theirName} kombinuje tak čistě, že by před tím i myslivci z Boubína sundali klobouk. Bude to pořádná dřina,“ smekl před zápasem trenér ${n.myManager} (${n.myName}).`,
+      `„Co ${n.theirManager} postavil ve Volarech, to na okrese jen tak nenajdeš. V neděli si na ně budeme muset dát pořádnýho majzla,“ chválil soupeře trenér ${n.myManager} z ${n.myName}.`,
+      `„Jejich hra je sladká jak lhenický třešně. My budeme rádi za každej míč, co jim vůbec uzmeme,“ uznal kvality ${n.theirName} trenér ${n.myManager} (${n.myName}).`,
     ],
     praha: [
       `„${n.theirName} hraje nejlíp široko daleko po Praze. Bude to dřina a my to víme,“ řekl před zápasem trenér ${n.myManager} (${n.myName}).`,
       `„Mají formu jak metro ve špičce — jede jim to bez zastavení. Musíme je vypnout včas,“ chválil soupeře trenér ${n.myManager} (${n.myName}).`,
       `„Před ${n.theirName} smekám. V neděli se ale hraje na trávě, ne na sociálních sítích,“ vzkázal trenér ${n.myManager} z ${n.myName}.`,
+      `„${n.theirName} si drží balón, jako by měl předplacenou lítačku — pořád v pohybu a nikdy nezaváhá. Bude to dřina,“ smekl před zápasem trenér ${n.myManager} (${n.myName}).`,
+      `„Co ${n.theirManager} vybudoval, šlape jak dobře seřízenej karlínskej korporát — všechno klape a nic se neztratí. Klobouk dolů,“ chválil soupeře trenér ${n.myManager} z ${n.myName}.`,
+      `„Jejich zálohu nezastavíš, ani kdybys jim na Andělu postavil zátaras. Musíme být stoprocentní,“ uznal kvality ${n.theirName} trenér ${n.myManager} (${n.myName}).`,
     ],
   }, district, pick);
 }
@@ -64,11 +70,17 @@ export function statementProvokeQuote(n: RelationNames, district?: string): stri
       `„Viděl jsem o víkendu v lese hřiby, co měly lepší postavení než jejich obrana,“ rýpl si do soupeře trenér ${n.myManager} z ${n.myName}.`,
       `„Jejich hřiště zná každej kanec ze Šumavy. Taky si na něm ryje, kdo chce,“ vzkázal směrem k ${n.theirName} trenér ${n.myManager}.`,
       `„Na Zlatý stezce se odjakživa obchodovalo se solí. My jim v neděli osolíme,“ sliboval trenér ${n.myManager} (${n.myName}).`,
+      `„${n.theirName}? Ti se na trávníku ztratěj rychlejc než houbař bez buzoly na Boubíně,“ provokoval před zápasem trenér ${n.myManager} (${n.myName}).`,
+      `„Slyšel jsem, že přes zimu dřeli na kondičce. Nejspíš tahali traktor z bahna, běhat pořád neuměj,“ ušklíbl se trenér ${n.myManager} z ${n.myName}.`,
+      `„${n.theirManager} slibuje presink. Von akorát stihne přesíknout jelito na zabíjačce,“ nebral si servítky trenér ${n.myManager} (${n.myName}).`,
     ],
     praha: [
       `„Jejich obrana má rozestupy jak lidi v tramvaji — každej sám za sebe,“ rýpl si trenér ${n.myManager} z ${n.myName}.`,
       `„${n.theirName}? Ti drží balón asi jak Pražák místo na parkování — chvilku a je pryč,“ provokoval trenér ${n.myManager} (${n.myName}).`,
       `„Prej mají formu. Na Instagramu možná. Na trávě uvidíme,“ neodpustil si trenér ${n.myManager} z ${n.myName}.`,
+      `„${n.theirName}? Ti se do vápna dostanou tak akorát, když je tam sveze metro,“ provokoval trenér ${n.myManager} (${n.myName}).`,
+      `„Prej mají moderní styl. Jo, popíjet craft pivo na náplavce a fotit se u toho, to jim de,“ nebral si servítky trenér ${n.myManager} z ${n.myName}.`,
+      `„Jejich obrana se otvírá jak kavárna na Vinohradech — každou chvíli a pro každýho,“ rýpl si trenér ${n.myManager} (${n.myName}).`,
     ],
   }, district, pick);
 }
@@ -176,10 +188,16 @@ export function jabNewsBody(n: RelationNames, district?: string): string {
     ],
     prachatice: [
       `„Na Šumavě se říká: kdo nic neumí, ať aspoň fauluje. Oni dneska zvládli obojí naopak,“ vzkázal po zápase ${n.theirName} trenér ${n.myName}.`,
+      `„Řekl bych, že hráli, jak když jdeš z Vimperka do Netolic pěšky — pomalu a s věčným reptáním,“ vzkázal po zápase ${n.theirName} trenér ${n.myName}. V kabině ${n.myName} se u toho řehtali až do zavíračky.`,
+      `„Jejich obrana měla dneska víc děr než ementál na husinecký pouti,“ neodpustil si na účet ${n.theirName} trenér ${n.myName}.`,
+      `„Bránili se jak zajíc na začátku myslivecký sezóny — spousta pobíhání, málo platný,“ glosoval utkání s ${n.theirName} trenér ${n.myName}.`,
     ],
     praha: [
       `„Jejich největší šance dneska? Že chytnou poslední tramvaj domů,“ utrousil směrem k ${n.theirName} trenér ${n.myName}.`,
       `„Hráli, jako by čekali na spoj — pořád někam koukali, ale nikam nedošli,“ glosoval ${n.theirName} trenér ${n.myName}.`,
+      `„Jejich největší akce dneska? Že po zápase stihli obsadit stůl v kavárně na Smíchově,“ utrousil směrem k ${n.theirName} trenér ${n.myName}.`,
+      `„Hráli jak korporát v pátek odpoledne — hlavou už dávno na náplavce,“ glosoval ${n.theirName} trenér ${n.myName}.`,
+      `„Za celej zápas se dostali na naši polovinu asi tak často jak tramvaj na Žižkov včas,“ neodpustil si na adresu ${n.theirName} trenér ${n.myName}.`,
     ],
   }, district, pick);
 }
@@ -233,11 +251,35 @@ export function praiseNews(n: RelationNames, district?: string): { headline: str
         headline: "Mezi trenéry to (kupodivu) vře respektem",
         body: `„Co ${n.theirManager} dokázal s ${n.theirName}, by mu mohl závidět kdekdo od Blanice po Boubín,“ nechal se slyšet trenér ${n.myManager} (${n.myName}). Hospodští štamgasti nevěří vlastním uším.`,
       },
+      {
+        headline: `Respekt až za Boubín`,
+        body: `„Co ${n.theirManager} dokázal s ${n.theirName}, by mu záviděl kdekdo od Vimperka po Netolice,“ smekl před kolegou trenér ${n.myManager} (${n.myName}). Štamgasti u výčepu nevěří vlastním uším.`,
+      },
+      {
+        headline: `${n.myManager} chválí, náves kroutí hlavou`,
+        body: `Trenér ${n.myName} veřejně ocenil, jakou práci odvádí ${n.theirManager} v ${n.theirName}: „Takhle poctivě se mančaft vede jen málokde na Šumavě.“ Na okrese, kde se u zabíjačky víc pomlouvá než chválí, je to událost.`,
+      },
+      {
+        headline: `Uznání přes celou Zlatou stezku`,
+        body: `„${n.theirManager} maká v ${n.theirName} jak myslivec před honem — poctivě a bez keců,“ nechal se slyšet trenér ${n.myManager} z ${n.myName}. Hospodští štamgasti si radši objednali další rundu, aby se z toho vzpamatovali.`,
+      },
     ],
     praha: [
       {
         headline: "Respekt napříč metropolí",
         body: `„Co ${n.theirManager} dokázal s ${n.theirName}, by mu záviděl kdekdo od Vltavy po Vinohrady,“ nechal se slyšet trenér ${n.myManager} (${n.myName}). Štamgasti u výčepu nevěří vlastním uším.`,
+      },
+      {
+        headline: `Respekt od Vltavy po Žižkov`,
+        body: `„Co ${n.theirManager} dokázal s ${n.theirName}, by mu záviděl kdekdo od Karlína po Smíchov,“ smekl před kolegou trenér ${n.myManager} (${n.myName}). Štamgasti od výčepu nevěří vlastním uším.`,
+      },
+      {
+        headline: `${n.myManager} smeká uprostřed metropole`,
+        body: `Trenér ${n.myName} veřejně pochválil práci, kterou ${n.theirManager} odvádí v ${n.theirName}: „Klobouk dolů, takhle se dneska mančaft vede málokde.“ I mezi kávou a craft pivem na náplavce zůstala slušnost.`,
+      },
+      {
+        headline: `Pochvala, co obletěla Instagram`,
+        body: `„${n.theirManager} vede ${n.theirName} tak, že to člověk nevidí ani ve Spartě,“ nechal se slyšet trenér ${n.myManager} z ${n.myName}. Do hodiny to viselo na všech fotbalových profilech v Praze.`,
       },
     ],
   }, district, pick);
