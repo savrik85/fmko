@@ -47,9 +47,15 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
   const allTeams = await c.env.DB.prepare("SELECT id FROM teams WHERE league_id = ?").bind(leagueId).all();
   const tIds = allTeams.results.map((t) => t.id as string);
   const ph = tIds.map(() => "?").join(",");
+  // Jen aktuální sezóna — league_id se recykluje napříč sezónami, bez filtru by se
+  // do pozic i formy počítaly staré odehrané sezóny (vzor viz stats/standings.ts, league.ts).
   const leagueMatches = await c.env.DB.prepare(
-    `SELECT home_team_id, away_team_id, home_score, away_score FROM matches WHERE status = 'simulated' AND league_id = ?`
-  ).bind(leagueId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch league matches for preview", e); return { results: [] }; });
+    `SELECT m.home_team_id, m.away_team_id, m.home_score, m.away_score
+     FROM matches m
+     JOIN season_calendar sc ON sc.id = m.calendar_id
+     WHERE m.status = 'simulated' AND m.league_id = ?
+       AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)`
+  ).bind(leagueId, leagueId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch league matches for preview", e); return { results: [] }; });
 
   // Calculate standings
   const stats: Record<string, { w: number; d: number; l: number; gf: number; ga: number; form: string[] }> = {};
