@@ -13,6 +13,14 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-07-09",
+    emoji: "↩️",
+    title: "Zrušení odeslané výzvy na přátelák",
+    items: [
+      "Odeslal jsi výzvu na přátelák a rozmyslel sis to? U čekajících odeslaných výzev v sekci Přáteláky je teď tlačítko Zrušit. Soupeři přijde SMS, že jsi výzvu stáhl.",
+    ],
+  },
+  {
+    date: "2026-07-09",
     emoji: "📊",
     title: "Pozápasové hodnocení — o výkonu, ne o kádru",
     items: [
