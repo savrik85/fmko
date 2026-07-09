@@ -1001,8 +1001,11 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/cancel", async (c) => 
 
   // Atomický claim — kdyby soupeř mezitím výzvu přijal (accept nastaví 'accepted'),
   // náš UPDATE WHERE status='pending' se netrefí a výzvu nestáhneme falešně.
+  // Status = 'declined' (ne 'cancelled') — sloupec má CHECK constraint na povolené hodnoty
+  // ('pending','accepted','declined','expired','played'); stažená výzva je funkčně jako
+  // odmítnutá (skončí bez zápasu, mizí z odchozích, nespouští cooldown).
   const cancelled = await c.env.DB.prepare(
-    "UPDATE challenges SET status = 'cancelled' WHERE id = ? AND challenger_team_id = ? AND status = 'pending' RETURNING id"
+    "UPDATE challenges SET status = 'declined' WHERE id = ? AND challenger_team_id = ? AND status = 'pending' RETURNING id"
   ).bind(challengeId, teamId).first<{ id: string }>();
   if (!cancelled) return c.json({ error: "Výzva už byla mezitím přijata nebo zpracována" }, 409);
 
