@@ -16,7 +16,7 @@ interface StandProps {
   reducedDetail?: boolean;
 }
 
-const STAND_GAP = 1;
+const STAND_GAP = 2.5;
 
 export function Stand({ side, level, teamColor, standColor, seatColor, accentColor, reducedDetail = false }: StandProps) {
   if (level <= 0) return null;

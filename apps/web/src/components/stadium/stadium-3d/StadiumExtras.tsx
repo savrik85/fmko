@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import { PITCH, STAND_DIMS } from "./constants";
 
-const STAND_GAP = 1;
+const STAND_GAP = 2.5;
 
 function isLightHex(hex: string): boolean {
   const c = hex.replace("#", "");
@@ -138,8 +138,8 @@ export function UltrasSector({
   const lvl = Math.min(level, 3);
   const count = [0, 4, 6, 8][lvl];
   const poleH = 5 + lvl * 0.8;
-  // V mezeře mezi brankou (-30) a přední hranou tribuny (-31) — nízký baner nezakryje tribunu za sebou.
-  const z = -(PITCH.depth / 2 + 0.85);
+  // V mezeře mezi brankou/sítí (končí ~PITCH.depth/2 + 1.5) a čelem tribuny (PITCH.depth/2 + STAND_GAP).
+  const z = -(PITCH.depth / 2 + 2.0);
   const spread = PITCH.width * 0.85;
 
   return (
