@@ -1363,6 +1363,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     ultrasText: (stadium.ultras_text as string | null) ?? null,
     ultrasBannerColor: (stadium.ultras_banner_color as string | null) ?? null,
     ultrasTextColor: (stadium.ultras_text_color as string | null) ?? null,
+    flagColor: (stadium.flag_color as string | null) ?? null,
   };
 
   // Scoreboard a vlajka upgrady
@@ -1482,7 +1483,7 @@ gameRouter.patch("/teams/:teamId/stadium/customize", async (c) => {
     return c.json({ ok: true, value: clean });
   }
 
-  const allowed = new Set(["fence_color", "stand_color", "seat_color", "roof_color", "accent_color", "ultras_banner_color", "ultras_text_color"]);
+  const allowed = new Set(["fence_color", "stand_color", "seat_color", "roof_color", "accent_color", "ultras_banner_color", "ultras_text_color", "flag_color"]);
   if (!allowed.has(body.field)) return c.json({ error: "Invalid field" }, 400);
   // Hex color validation (jednoduchá)
   if (body.value !== null && !/^#[0-9A-Fa-f]{6}$/.test(body.value)) {

@@ -63,6 +63,7 @@ interface Customization {
   ultrasText: string | null;
   ultrasBannerColor: string | null;
   ultrasTextColor: string | null;
+  flagColor: string | null;
 }
 
 interface VisualUpgrade {
@@ -149,13 +150,14 @@ const COLOR_PALETTE = [
   "#558B2F", "#A0432C", "#C9A84C", "#E63946", "#F5E6C8", "#FFFFFF",
 ];
 
-const CUSTOM_FIELDS: Array<{ field: keyof Customization; label: string; defaultColor: string; requiresKotel?: boolean }> = [
+const CUSTOM_FIELDS: Array<{ field: keyof Customization; label: string; defaultColor: string; requiresKotel?: boolean; requiresFlag?: boolean; teamDefault?: boolean }> = [
   { field: "fenceColor", label: "Plot", defaultColor: "#A89078" },
   { field: "standColor", label: "Tribuny", defaultColor: "#9CA3AF" },
   { field: "seatColor", label: "Sedačky", defaultColor: "#9CA3AF" },
   { field: "roofColor", label: "Střechy", defaultColor: "#A0432C" },
   { field: "accentColor", label: "Akcent (VIP)", defaultColor: "#C9A84C" },
-  { field: "ultrasBannerColor", label: "Kotel plachta", defaultColor: "#7A2530", requiresKotel: true },
+  { field: "flagColor", label: "Vlajka", defaultColor: "#2D5F2D", requiresFlag: true, teamDefault: true },
+  { field: "ultrasBannerColor", label: "Kotel plachta", defaultColor: "#7A2530", requiresKotel: true, teamDefault: true },
   { field: "ultrasTextColor", label: "Kotel nápis", defaultColor: "#FFFFFF", requiresKotel: true },
 ];
 
@@ -270,7 +272,10 @@ export default function StadiumPage() {
         teamColor={team.primary_color}
         secondaryColor={team.secondary_color}
         badgePattern={team.badge_pattern}
-        badgeInitials={teamInitials(team.name)}
+        badgeInitials={team.badge_initials || teamInitials(team.name)}
+        badgeSymbol={team.badge_symbol}
+        badgePrimary={team.badge_primary_color}
+        badgeSecondary={team.badge_secondary_color}
         stadiumName={stadium.stadiumName}
         sponsors={sponsorNames}
         customization={stadium.customization}
@@ -321,7 +326,10 @@ export default function StadiumPage() {
                 teamColor={team.primary_color}
                 secondaryColor={team.secondary_color}
                 badgePattern={team.badge_pattern}
-                badgeInitials={teamInitials(team.name)}
+                badgeInitials={team.badge_initials || teamInitials(team.name)}
+                badgeSymbol={team.badge_symbol}
+                badgePrimary={team.badge_primary_color}
+                badgeSecondary={team.badge_secondary_color}
                 stadiumName={stadium.stadiumName}
                 sponsors={sponsorNames}
                 customization={stadium.customization}
@@ -370,9 +378,9 @@ export default function StadiumPage() {
 
             {/* Záložky – výběr položky (kotel jen když je postavený) */}
             <div className="flex flex-wrap gap-1.5">
-              {CUSTOM_FIELDS.filter((f) => !f.requiresKotel || (stadium.facilities.ultras_stand ?? 0) > 0).map(({ field, label, defaultColor }) => {
+              {CUSTOM_FIELDS.filter((f) => (!f.requiresKotel || (stadium.facilities.ultras_stand ?? 0) > 0) && (!f.requiresFlag || (stadium.customization.flagSize ?? 0) > 0)).map(({ field, label, defaultColor, teamDefault }) => {
                 const current = stadium.customization[field] as string | null;
-                const displayColor = current ?? (field === "ultrasBannerColor" ? (team?.primary_color ?? defaultColor) : defaultColor);
+                const displayColor = current ?? (teamDefault ? (team?.primary_color ?? defaultColor) : defaultColor);
                 const isActive = openPicker === field;
                 return (
                   <button
@@ -397,7 +405,7 @@ export default function StadiumPage() {
                   <button
                     onClick={() => { handleCustomize(openPicker, null); setOpenPicker(null); }}
                     className={`w-10 h-10 rounded-md border-2 flex items-center justify-center text-sm ${current === null ? "border-pitch-500" : "border-gray-300"}`}
-                    style={{ backgroundColor: openPicker === "ultrasBannerColor" ? (team?.primary_color ?? cf.defaultColor) : cf.defaultColor }}
+                    style={{ backgroundColor: cf.teamDefault ? (team?.primary_color ?? cf.defaultColor) : cf.defaultColor }}
                     title="Výchozí"
                   >
                     ✕

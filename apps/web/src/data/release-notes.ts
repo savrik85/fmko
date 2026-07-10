@@ -13,6 +13,16 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-07-10",
+    emoji: "🚩",
+    title: "Klubová vlajka na stadionu",
+    items: [
+      "Vlajka ve 3D vizualizaci stadionu teď nese tvůj klubový znak přesně jako v profilu — správný tvar, barvy i symbol (emoji/půlměsíc).",
+      "Vlajka je celá v klubové barvě a pořádně vlaje ve větru.",
+      "Nově si vybereš i vlastní barvu vlajky — ve Stadion → Vzhled stadionu přibyl výběr barvy vlajky (jakmile ji máš postavenou). Výchozí je týmová barva.",
+    ],
+  },
+  {
+    date: "2026-07-10",
     emoji: "⚽",
     title: "Přátelák jde domluvit i v den ligy",
     items: [
