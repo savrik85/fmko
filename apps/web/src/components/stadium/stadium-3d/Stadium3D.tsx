@@ -29,6 +29,7 @@ export interface Stadium3DCustomization {
   ultrasText?: string | null;
   ultrasBannerColor?: string | null;
   ultrasTextColor?: string | null;
+  flagColor?: string | null;
 }
 
 export interface LastMatchScore {
@@ -197,7 +198,7 @@ export function Stadium3D({
         {(cust.flagSize ?? 0) > 0 && (
           <TeamFlag
             size={cust.flagSize ?? 0}
-            primaryColor={teamColor}
+            primaryColor={cust.flagColor || teamColor}
             secondaryColor={secondaryColor ?? "#fff"}
             badgePrimary={badgePrimary || teamColor}
             badgeSecondary={badgeSecondary || secondaryColor || "#fff"}
