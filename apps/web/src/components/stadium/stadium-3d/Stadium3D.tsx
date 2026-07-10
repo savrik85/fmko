@@ -98,7 +98,7 @@ export function Stadium3D({
     <Canvas
       shadows={!isMobile}
       camera={{ position: [55, 45, 55], fov: 35 }}
-      frameloop="demand"
+      frameloop="always"
       dpr={isMobile ? [1, 1.5] : [1, 2]}
       gl={{ antialias: !isMobile, alpha: false, powerPreference: "high-performance" }}
     >
