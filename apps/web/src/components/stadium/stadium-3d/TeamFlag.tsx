@@ -33,7 +33,7 @@ function shade(hex: string, amt: number): string {
   return `#${[f(r), f(g), f(b)].map((v) => clamp(v).toString(16).padStart(2, "0")).join("")}`;
 }
 
-export function TeamFlag({ size, primaryColor, secondaryColor, badgePrimary, badgeSecondary, pattern, initials, symbol, position }: TeamFlagProps) {
+export function TeamFlag({ size, primaryColor, badgePrimary, badgeSecondary, pattern, initials, symbol, position }: TeamFlagProps) {
   const lvl = Math.min(Math.max(size, 0), 3);
   const poleHeight = HEIGHTS[lvl];
   const flagW = poleHeight * FLAG_W_RATIO;
@@ -41,7 +41,7 @@ export function TeamFlag({ size, primaryColor, secondaryColor, badgePrimary, bad
 
   // Klubová vlajka: pole týmové barvy + proužek u žerdi + kotouč se znakem (identickým s profilem).
   const texture = useClubFlagTexture({
-    field: primaryColor, hoist: secondaryColor,
+    field: primaryColor,
     badgePrimary, badgeSecondary, pattern, initials, symbol,
   });
 
@@ -61,15 +61,20 @@ export function TeamFlag({ size, primaryColor, secondaryColor, badgePrimary, bad
   const flagRefFront = useRef<THREE.Mesh>(null);
   const flagRefBack = useRef<THREE.Mesh>(null);
   useFrame(({ clock }) => {
-    const t = clock.elapsedTime * 2;
+    const t = clock.elapsedTime * 2.5;
+    const amp = flagW * 0.11;            // amplituda škáluje s velikostí vlajky
     const updateMesh = (m: THREE.Mesh | null) => {
       if (!m) return;
       const geom = m.geometry as THREE.PlaneGeometry;
       const pos = geom.attributes.position;
       for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i);
-        const distance = (x + flagW / 2) / flagW;
-        const wave = Math.sin(t + distance * 4) * 0.15 * distance;
+        const y = pos.getY(i);
+        const distance = (x + flagW / 2) / flagW; // 0 u žerdi, 1 na volném konci
+        // Hlavní vlna + jemnější druhá vlna (závislá i na y) = organické vlání
+        const wave =
+          Math.sin(t + distance * 5) * amp * distance +
+          Math.sin(t * 1.7 + distance * 9 + y * 2.5) * amp * 0.35 * distance;
         pos.setZ(i, wave);
       }
       pos.needsUpdate = true;
@@ -120,10 +125,10 @@ export function TeamFlag({ size, primaryColor, secondaryColor, badgePrimary, bad
  * takže sedí tvar, barvy i symbol. Load SVG → Image je async → texture přes useState.
  */
 function useClubFlagTexture(opts: {
-  field: string; hoist: string; badgePrimary: string; badgeSecondary: string;
+  field: string; badgePrimary: string; badgeSecondary: string;
   pattern: string; initials: string; symbol?: string | null;
 }): THREE.Texture | null {
-  const { field, hoist, badgePrimary, badgeSecondary, pattern, initials, symbol } = opts;
+  const { field, badgePrimary, badgeSecondary, pattern, initials, symbol } = opts;
   const [tex, setTex] = useState<THREE.Texture | null>(null);
 
   useEffect(() => {
@@ -135,24 +140,22 @@ function useClubFlagTexture(opts: {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const hoistW = W * 0.11;
-    const discCx = hoistW + (W - hoistW) / 2;
+    const discCx = W / 2;
     const discCy = H / 2;
     const discR = H * 0.4;
 
     const compose = (crest?: HTMLImageElement) => {
-      // Pole — jemný svislý gradient týmové barvy
+      // CELÁ plocha týmovou barvou (jemný svislý gradient pro hloubku)
       const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, shade(field, 0.06));
-      g.addColorStop(1, shade(field, -0.14));
+      g.addColorStop(0, shade(field, 0.10));
+      g.addColorStop(1, shade(field, -0.16));
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, H);
 
-      // Proužek u žerdi (dresová sekundární) + jemný předěl
-      ctx.fillStyle = hoist;
-      ctx.fillRect(0, 0, hoistW, H);
-      ctx.fillStyle = "rgba(0,0,0,0.18)";
-      ctx.fillRect(hoistW, 0, Math.max(2, W * 0.006), H);
+      // Jemný tmavší lem téže barvy — okraj vlajky, ale zůstává barevný
+      ctx.strokeStyle = shade(field, -0.32);
+      ctx.lineWidth = Math.max(3, H * 0.03);
+      ctx.strokeRect(0, 0, W, H);
 
       // Kotouč pod znakem — bílý, s prstencem, aby znak vynikl na jakékoli barvě
       ctx.save();
@@ -194,7 +197,7 @@ function useClubFlagTexture(opts: {
     img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 
     return () => { cancelled = true; };
-  }, [field, hoist, badgePrimary, badgeSecondary, pattern, initials, symbol]);
+  }, [field, badgePrimary, badgeSecondary, pattern, initials, symbol]);
 
   // Dispose při unmountu
   useEffect(() => () => { tex?.dispose(); }, [tex]);
