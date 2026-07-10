@@ -99,17 +99,22 @@ export function StadiumSign({ name, position, teamColor }: StadiumSignProps) {
   return (
     <group position={position}>
       {/* Levý sloupek */}
-      <mesh position={[-plateW / 2 + 0.4, postH / 2, 0]} castShadow>
+      <mesh position={[-plateW / 2 + 0.4, postH / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[0.3, postH, 0.3]} />
         <meshStandardMaterial color="#525252" />
       </mesh>
       {/* Pravý sloupek */}
-      <mesh position={[plateW / 2 - 0.4, postH / 2, 0]} castShadow>
+      <mesh position={[plateW / 2 - 0.4, postH / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[0.3, postH, 0.3]} />
         <meshStandardMaterial color="#525252" />
       </mesh>
+      {/* Traverza spojující sloupky pod plotnou — ať cedule nepůsobí jako plovoucí díly */}
+      <mesh position={[0, postH - 0.15, 0]} castShadow>
+        <boxGeometry args={[plateW - 0.8, 0.22, 0.34]} />
+        <meshStandardMaterial color="#3F3F3F" />
+      </mesh>
       {/* Plotna - rámeček v týmové barvě */}
-      <mesh position={[0, postH + plateH / 2, 0]} castShadow>
+      <mesh position={[0, postH + plateH / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[plateW, plateH, plateThickness]} />
         <meshStandardMaterial color={teamColor} roughness={0.7} />
       </mesh>

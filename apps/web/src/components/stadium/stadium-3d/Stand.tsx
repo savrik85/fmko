@@ -16,7 +16,7 @@ interface StandProps {
   reducedDetail?: boolean;
 }
 
-const STAND_GAP = 1;
+const STAND_GAP = 2.5;
 
 export function Stand({ side, level, teamColor, standColor, seatColor, accentColor, reducedDetail = false }: StandProps) {
   if (level <= 0) return null;
@@ -201,13 +201,15 @@ function Spectators({
   length: number;
   density: number;
 }) {
-  const ref = useRef<THREE.InstancedMesh>(null);
+  const torsoRef = useRef<THREE.InstancedMesh>(null);
+  const headRef = useRef<THREE.InstancedMesh>(null);
   const colors = useMemo(() => ["#E63946", "#1D3557", "#2A9D8F", "#F4A261", "#264653", "#E76F51", "#6A4C93"], []);
+  const skins = useMemo(() => ["#E8B48C", "#D19A6A", "#A9713F", "#F0C9A0"], []);
   const matrix = useMemo(() => new THREE.Matrix4(), []);
   const color = useMemo(() => new THREE.Color(), []);
 
   const filled = useMemo(() => {
-    const out: Array<{ r: number; c: number; col: string }> = [];
+    const out: Array<{ r: number; c: number; col: string; skin: string }> = [];
     let seed = 12345;
     const rand = () => {
       seed = (seed * 9301 + 49297) % 233280;
@@ -216,34 +218,51 @@ function Spectators({
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < columns; c++) {
         if (rand() < density) {
-          out.push({ r, c, col: colors[Math.floor(rand() * colors.length)] });
+          out.push({ r, c, col: colors[Math.floor(rand() * colors.length)], skin: skins[(r * 3 + c) % skins.length] });
         }
       }
     }
     return out;
-  }, [rows, columns, density, colors]);
+  }, [rows, columns, density, colors, skins]);
+
+  const TORSO_H = 0.45;
+  const HEAD_H = 0.28;
 
   useEffect(() => {
-    if (!ref.current || filled.length === 0) return;
+    if (!torsoRef.current || !headRef.current || filled.length === 0) return;
     const stepX = length / columns;
     filled.forEach((f, i) => {
       const x = -length / 2 + stepX * f.c + stepX / 2;
       const z = f.r * seatDepth + seatDepth * 0.5;
-      const y = f.r * seatRise + seatRise + 0.45;
-      matrix.makeTranslation(x, y, z);
-      ref.current!.setMatrixAt(i, matrix);
+      const yb = f.r * seatRise + seatRise + 0.42; // střed torza
+      // Torzo (barva trika)
+      matrix.makeTranslation(x, yb, z);
+      torsoRef.current!.setMatrixAt(i, matrix);
       color.set(f.col);
-      ref.current!.setColorAt(i, color);
+      torsoRef.current!.setColorAt(i, color);
+      // Hlava (odstín kůže) — posazená na torzo
+      matrix.makeTranslation(x, yb + TORSO_H / 2 + HEAD_H / 2, z);
+      headRef.current!.setMatrixAt(i, matrix);
+      color.set(f.skin);
+      headRef.current!.setColorAt(i, color);
     });
-    ref.current.instanceMatrix.needsUpdate = true;
-    if (ref.current.instanceColor) ref.current.instanceColor.needsUpdate = true;
+    torsoRef.current.instanceMatrix.needsUpdate = true;
+    if (torsoRef.current.instanceColor) torsoRef.current.instanceColor.needsUpdate = true;
+    headRef.current.instanceMatrix.needsUpdate = true;
+    if (headRef.current.instanceColor) headRef.current.instanceColor.needsUpdate = true;
   }, [filled, length, columns, seatDepth, seatRise, matrix, color]);
 
   if (filled.length === 0) return null;
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, filled.length]} castShadow>
-      <boxGeometry args={[seatSize * 0.5, 0.5, seatSize * 0.4]} />
-      <meshStandardMaterial vertexColors />
-    </instancedMesh>
+    <group>
+      <instancedMesh ref={torsoRef} args={[undefined, undefined, filled.length]} castShadow>
+        <boxGeometry args={[seatSize * 0.42, TORSO_H, seatSize * 0.34]} />
+        <meshStandardMaterial vertexColors />
+      </instancedMesh>
+      <instancedMesh ref={headRef} args={[undefined, undefined, filled.length]} castShadow>
+        <boxGeometry args={[seatSize * 0.28, HEAD_H, seatSize * 0.28]} />
+        <meshStandardMaterial vertexColors />
+      </instancedMesh>
+    </group>
   );
 }

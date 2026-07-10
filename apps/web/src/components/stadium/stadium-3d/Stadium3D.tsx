@@ -1,9 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Sky } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import { Pitch } from "./Pitch";
 import { Stand } from "./Stand";
@@ -16,7 +16,7 @@ import { AdBoards } from "./AdBoards";
 import { Scoreboard } from "./Scoreboard";
 import { TeamFlag } from "./TeamFlag";
 import { StandRoof, UltrasSector } from "./StadiumExtras";
-import { getStadiumLayout, SKY_SUN_POSITION } from "./constants";
+import { getStadiumLayout } from "./constants";
 
 export interface Stadium3DCustomization {
   fenceColor?: string | null;
@@ -98,18 +98,19 @@ export function Stadium3D({
     <Canvas
       shadows={!isMobile}
       camera={{ position: [55, 45, 55], fov: 35 }}
-      frameloop="demand"
+      frameloop="always"
       dpr={isMobile ? [1, 1.5] : [1, 2]}
       gl={{ antialias: !isMobile, alpha: false, powerPreference: "high-performance" }}
     >
-      <color attach="background" args={["#B8DCEC"]} />
-      <Sky sunPosition={SKY_SUN_POSITION} turbidity={6} rayleigh={2} mieCoefficient={0.005} mieDirectionalG={0.8} />
+      {/* Stylizovaná gradientová obloha (sedí k low-poly víc než fyzikálně realistická drei Sky) */}
+      <GradientSky />
 
       {/* Lighting */}
-      <ambientLight intensity={0.65} />
+      <ambientLight intensity={0.6} />
       <directionalLight
         position={[40, 60, 25]}
-        intensity={1.2}
+        intensity={1.25}
+        color="#FFF6E8"
         castShadow={!isMobile}
         shadow-mapSize-width={shadowMapSize}
         shadow-mapSize-height={shadowMapSize}
@@ -120,7 +121,9 @@ export function Stadium3D({
         shadow-camera-top={60}
         shadow-camera-bottom={-60}
       />
-      <hemisphereLight args={["#B8DCEC", "#4A7A2C", 0.3]} />
+      {/* Fill světlo z opačné strany — měkčí stíny na low-poly plochách (bez shadow mapy) */}
+      <directionalLight position={[-35, 28, -30]} intensity={0.45} color="#DCE8FF" />
+      <hemisphereLight args={["#BFE0F0", "#4A7A2C", 0.35]} />
 
       <OrbitControls
         enableZoom
@@ -219,4 +222,30 @@ export function Stadium3D({
       )}
     </Canvas>
   );
+}
+
+/**
+ * Stylizovaná obloha jako svislý gradient (CanvasTexture jako scene.background).
+ * Levné, bez shaderu, konzistentnější s low-poly než fyzikálně realistická drei Sky.
+ */
+function GradientSky() {
+  const texture = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const c = document.createElement("canvas");
+    c.width = 4; c.height = 512;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    const g = ctx.createLinearGradient(0, 0, 0, 512);
+    g.addColorStop(0, "#6FB0DC");    // zenit — sytější modrá
+    g.addColorStop(0.5, "#A6D2EC");
+    g.addColorStop(1, "#E7F2F9");    // horizont — bledá
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 4, 512);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, []);
+  useEffect(() => () => { texture?.dispose(); }, [texture]);
+  if (!texture) return null;
+  return <primitive object={texture} attach="background" />;
 }

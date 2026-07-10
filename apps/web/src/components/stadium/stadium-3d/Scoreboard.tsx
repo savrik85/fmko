@@ -1,8 +1,23 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
 import { PITCH } from "./constants";
+
+/** LED panel s jemně pulzujícím glow (emissiveIntensity „dýchá") — živý displej. */
+function PulsingLedPanel({ position, width, height, texture }: { position: [number, number, number]; width: number; height: number; texture: THREE.Texture }) {
+  const matRef = useRef<THREE.MeshStandardMaterial>(null);
+  useFrame(({ clock }) => {
+    if (matRef.current) matRef.current.emissiveIntensity = 1.6 + Math.sin(clock.elapsedTime * 2.2) * 0.35;
+  });
+  return (
+    <mesh position={position}>
+      <planeGeometry args={[width, height]} />
+      <meshStandardMaterial ref={matRef} color="#000000" emissive="#ffffff" emissiveMap={texture} emissiveIntensity={1.7} toneMapped={false} />
+    </mesh>
+  );
+}
 
 interface ScoreboardProps {
   level: number;            // 1-3
@@ -77,10 +92,7 @@ function LedMonoScoreboard({ homeScore, awayScore, homeName, awayName }: { homeS
         <boxGeometry args={[6, 2, 0.25]} />
         <meshStandardMaterial color="#1A1A1A" />
       </mesh>
-      <mesh position={[0, poleH + 1, 0.13]}>
-        <planeGeometry args={[5.7, 1.7]} />
-        <meshBasicMaterial map={texture} toneMapped={false} />
-      </mesh>
+      <PulsingLedPanel position={[0, poleH + 1, 0.13]} width={5.7} height={1.7} texture={texture} />
     </group>
   );
 }
@@ -104,10 +116,7 @@ function FullLedScoreboard({ homeScore, awayScore, homeName, awayName }: { homeS
         <boxGeometry args={[7.6, 2.6, 0.3]} />
         <meshStandardMaterial color="#1A1A1A" />
       </mesh>
-      <mesh position={[0, poleH + 1.3, 0.16]}>
-        <planeGeometry args={[7.4, 2.4]} />
-        <meshBasicMaterial map={texture} toneMapped={false} />
-      </mesh>
+      <PulsingLedPanel position={[0, poleH + 1.3, 0.16]} width={7.4} height={2.4} texture={texture} />
     </group>
   );
 }

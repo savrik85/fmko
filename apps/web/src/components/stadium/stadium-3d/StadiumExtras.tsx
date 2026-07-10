@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
 import { PITCH, STAND_DIMS } from "./constants";
 
-const STAND_GAP = 1;
+const STAND_GAP = 2.5;
 
 function isLightHex(hex: string): boolean {
   const c = hex.replace("#", "");
@@ -41,6 +42,59 @@ function useBannerTexture(text: string | null | undefined, bg: string, fg: strin
   }, [text, bg, fg]);
 }
 
+/** Plachta kotle jako látka — jemné billowing v hloubce (dole rozvlněnější). */
+function ClothBanner({ width, height, y, z, color, map }: { width: number; height: number; y: number; z: number; color: string; map?: THREE.Texture | null }) {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame(({ clock }) => {
+    const m = ref.current;
+    if (!m) return;
+    const t = clock.elapsedTime * 1.5;
+    const geom = m.geometry as THREE.PlaneGeometry;
+    const p = geom.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      const yv = p.getY(i);
+      const amp = 0.05 + (0.5 - (yv / height + 0.5)) * 0.045; // dole víc
+      p.setZ(i, (Math.sin(x * 0.5 + t) + Math.sin(x * 0.22 + t * 0.6)) * amp);
+    }
+    p.needsUpdate = true;
+    geom.computeVertexNormals();
+  });
+  return (
+    <mesh ref={ref} position={[0, y, z]} castShadow>
+      <planeGeometry args={[width, height, 40, 4]} />
+      <meshStandardMaterial color={color} map={map ?? undefined} side={THREE.DoubleSide} roughness={0.85} />
+    </mesh>
+  );
+}
+
+/** Vlnící se vlaječka na žerdi kotle — per-vertex sinusová vlna (jako hlavní vlajka).
+ *  Levý okraj u žerdi (fixed), volný konec vlaje. Fáze posouvá vlnu mezi vlaječkami (organické). */
+function WavingPennant({ color, y, phase }: { color: string; y: number; phase: number }) {
+  const ref = useRef<THREE.Mesh>(null);
+  const W = 1.0, H = 0.7;
+  useFrame(({ clock }) => {
+    const m = ref.current;
+    if (!m) return;
+    const t = clock.elapsedTime * 3 + phase;
+    const geom = m.geometry as THREE.PlaneGeometry;
+    const p = geom.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      const d = (x + W / 2) / W;           // 0 u žerdi, 1 na volném konci
+      p.setZ(i, Math.sin(t + d * 6) * 0.16 * d);
+    }
+    p.needsUpdate = true;
+    geom.computeVertexNormals();
+  });
+  return (
+    <mesh ref={ref} position={[W / 2, y, 0.02]}>
+      <planeGeometry args={[W, H, 10, 3]} />
+      <meshStandardMaterial color={color} side={THREE.DoubleSide} roughness={0.8} />
+    </mesh>
+  );
+}
+
 /**
  * Zastřešení tribun — stříška nad severní/jižní (a od L2 i V/Z) tribunou.
  * Renderuje se jen když je postavené (roofLevel>0) a existují tribuny (standsLevel>0).
@@ -73,6 +127,9 @@ export function StandRoof({
     const roofY = dims.height + clearance;          // jasně nad sedačkami
     const backZ = dims.depth + overhang * 0.5;      // zadní podpěry
     const postH = roofY + 0.2;
+    // Přední lem střechy (okap) — přibližná pozice předního okraje nakloněné desky
+    const frontY = roofY - Math.sin(0.32) * roofDepth / 2;
+    const frontZ = roofZ - Math.cos(0.32) * roofDepth / 2;
     return (
       <group>
         {/* Nakloněná plocha stříšky */}
@@ -80,10 +137,15 @@ export function StandRoof({
           <boxGeometry args={[alongLen + 1, 0.14, roofDepth]} />
           <meshStandardMaterial color={color} roughness={0.5} metalness={0.35} />
         </mesh>
-        {/* Zadní sloupky (2) — sahají až ke stříšce */}
-        {[-alongLen * 0.4, alongLen * 0.4].map((x, i) => (
+        {/* Přední okapový lem — rámuje střechu, ať nepůsobí jako plovoucí plát */}
+        <mesh position={[0, frontY, frontZ]} rotation={[-0.32, 0, 0]} castShadow>
+          <boxGeometry args={[alongLen + 1.1, 0.2, 0.14]} />
+          <meshStandardMaterial color="#3A3D42" metalness={0.4} roughness={0.5} />
+        </mesh>
+        {/* Zadní sloupky (3 — krajní + prostřední pro širší rozpon) */}
+        {[-alongLen * 0.4, 0, alongLen * 0.4].map((x, i) => (
           <mesh key={i} position={[x, postH / 2, backZ]} castShadow>
-            <cylinderGeometry args={[0.09, 0.09, postH, 6]} />
+            <cylinderGeometry args={[0.09, 0.09, postH, 8]} />
             <meshStandardMaterial color="#4A4D54" metalness={0.5} roughness={0.5} />
           </mesh>
         ))}
@@ -130,22 +192,14 @@ export function UltrasSector({
   const lvl = Math.min(level, 3);
   const count = [0, 4, 6, 8][lvl];
   const poleH = 5 + lvl * 0.8;
-  // V mezeře mezi brankou (-30) a přední hranou tribuny (-31) — nízký baner nezakryje tribunu za sebou.
-  const z = -(PITCH.depth / 2 + 0.85);
+  // V mezeře mezi brankou/sítí (končí ~PITCH.depth/2 + 1.5) a čelem tribuny (PITCH.depth/2 + STAND_GAP).
+  const z = -(PITCH.depth / 2 + 2.0);
   const spread = PITCH.width * 0.85;
 
   return (
     <group>
-      {/* Baner na zábradlí — zvednutý nad reklamy; s nápisem (textura) nebo jednobarevný. Výška ~75 %. */}
-      <mesh position={[0, 1.45, z]} castShadow>
-        <planeGeometry args={[spread + 2, 1.0]} />
-        <meshStandardMaterial
-          color={bannerTex ? "#ffffff" : bannerBg}
-          map={bannerTex ?? undefined}
-          side={2}
-          roughness={0.85}
-        />
-      </mesh>
+      {/* Baner na zábradlí — jako látka (jemné billowing); s nápisem (textura) nebo jednobarevný. */}
+      <ClothBanner width={spread + 2} height={1.0} y={1.45} z={z} color={bannerTex ? "#ffffff" : bannerBg} map={bannerTex} />
       {/* Pruh druhé barvy nahoře na baneru (jen bez nápisu) */}
       {!bannerTex && (
         <mesh position={[0, 1.87, z + 0.02]}>
@@ -163,10 +217,7 @@ export function UltrasSector({
               <cylinderGeometry args={[0.07, 0.07, poleH, 6]} />
               <meshStandardMaterial color="#2E2E2E" metalness={0.5} roughness={0.5} />
             </mesh>
-            <mesh position={[0.5, poleH - 0.6, 0.02]}>
-              <planeGeometry args={[1.0, 0.7]} />
-              <meshStandardMaterial color={i % 2 === 0 ? sec : primaryColor} side={2} roughness={0.8} />
-            </mesh>
+            <WavingPennant color={i % 2 === 0 ? sec : primaryColor} y={poleH - 0.6} phase={i * 0.8} />
           </group>
         );
       })}

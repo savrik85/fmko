@@ -192,18 +192,27 @@ function Car({ position, color, type }: { position: [number, number, number]; co
         <planeGeometry args={[cabinDepth * 0.85, cabinH * 0.55]} />
         <meshStandardMaterial color="#1a2a3a" roughness={0.1} metalness={0.7} />
       </mesh>
-      {/* 4 kola */}
+      {/* 4 kola — pneu + kovový hubcap na vnější straně */}
       {[
         [-w / 2, d / 2 - 0.4],
         [w / 2, d / 2 - 0.4],
         [-w / 2, -d / 2 + 0.4],
         [w / 2, -d / 2 + 0.4],
-      ].map((p, i) => (
-        <mesh key={i} position={[p[0], wheelR, p[1]]} rotation={[0, 0, Math.PI / 2]} castShadow>
-          <cylinderGeometry args={[wheelR, wheelR, wheelW, 12]} />
-          <meshStandardMaterial color="#1a1a1a" roughness={0.85} />
-        </mesh>
-      ))}
+      ].map((p, i) => {
+        const side = p[0] < 0 ? -1 : 1;
+        return (
+          <group key={i}>
+            <mesh position={[p[0], wheelR, p[1]]} rotation={[0, 0, Math.PI / 2]} castShadow>
+              <cylinderGeometry args={[wheelR, wheelR, wheelW, 14]} />
+              <meshStandardMaterial color="#1a1a1a" roughness={0.85} />
+            </mesh>
+            <mesh position={[p[0] + side * (wheelW / 2 + 0.005), wheelR, p[1]]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[wheelR * 0.55, wheelR * 0.55, 0.03, 10]} />
+              <meshStandardMaterial color="#9AA0A6" metalness={0.7} roughness={0.4} />
+            </mesh>
+          </group>
+        );
+      })}
       {/* Přední světla (bílá) */}
       <mesh position={[-w * 0.3, wheelR + bodyH * 0.6, d / 2 + 0.001]}>
         <planeGeometry args={[w * 0.22, bodyH * 0.35]} />

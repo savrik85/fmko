@@ -13,6 +13,16 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-07-10",
+    emoji: "🏟️",
+    title: "Velký upgrade 3D stadionu",
+    items: [
+      "Stadion ve 3D dostal pořádný vizuální posun — stylizovaná obloha, měkčí světlo a rozsvícený, jemně pulzující scoreboard.",
+      "Vlajky, kotel plachta i vlaječky teď vlají ve větru, diváci vypadají jako lidi místo barevných kostek a branky mají skutečnou síť.",
+      "Tribuny sedí dál od hřiště, střechy tribun a cedule už neplavou ve vzduchu, plot je pořádně vidět, kolem hřiště je souvislá řada reklam a v okolí smíšený les.",
+    ],
+  },
+  {
+    date: "2026-07-10",
     emoji: "🚩",
     title: "Klubová vlajka na stadionu",
     items: [

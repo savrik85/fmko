@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+import * as THREE from "three";
 import { BUILDING_COLORS, BUILDING_DIMS } from "./constants";
 
 type BuildingKind = "changing_rooms" | "showers" | "refreshments" | "toilets";
@@ -446,6 +448,15 @@ function SaddleRoof({
 }) {
   const slopeLength = Math.sqrt((width / 2) ** 2 + roofHeight ** 2);
   const angle = Math.atan2(roofHeight, width / 2);
+  // Skutečný trojúhelníkový štít (base na eave, apex nahoře) místo plochého boxu
+  const gableShape = useMemo(() => {
+    const s = new THREE.Shape();
+    s.moveTo(-width / 2, 0);
+    s.lineTo(width / 2, 0);
+    s.lineTo(0, roofHeight);
+    s.closePath();
+    return s;
+  }, [width, roofHeight]);
   return (
     <group position={[0, baseY, 0]}>
       <mesh position={[-width / 4, roofHeight / 2, 0]} rotation={[0, 0, angle]} castShadow>
@@ -456,14 +467,14 @@ function SaddleRoof({
         <boxGeometry args={[slopeLength, 0.15, depth + 0.4]} />
         <meshStandardMaterial color={color} roughness={0.6} />
       </mesh>
-      {/* Štíty (tenký box jako trojúhelník-substitut) */}
-      <mesh position={[0, roofHeight / 2, depth / 2 + 0.05]} castShadow>
-        <boxGeometry args={[width, roofHeight, 0.1]} />
-        <meshStandardMaterial color={color} />
+      {/* Štíty — skutečné trojúhelníky */}
+      <mesh position={[0, 0, depth / 2 + 0.05]} castShadow>
+        <shapeGeometry args={[gableShape]} />
+        <meshStandardMaterial color={color} side={THREE.DoubleSide} roughness={0.6} />
       </mesh>
-      <mesh position={[0, roofHeight / 2, -depth / 2 - 0.05]} castShadow>
-        <boxGeometry args={[width, roofHeight, 0.1]} />
-        <meshStandardMaterial color={color} />
+      <mesh position={[0, 0, -depth / 2 - 0.05]} castShadow>
+        <shapeGeometry args={[gableShape]} />
+        <meshStandardMaterial color={color} side={THREE.DoubleSide} roughness={0.6} />
       </mesh>
     </group>
   );
