@@ -6,14 +6,14 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { hasUnseenNotes } from "@/data/release-notes";
 
-const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string; label: string; color: string; isNew?: boolean }> }> = [
+const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string; label: string; color: string }> }> = [
   { title: "Klub", items: [
     { href: "/dashboard/klub", icon: "\u{1F3DB}️", label: "Klub", color: "#153615" },
     { href: "/dashboard/obec", icon: "\u{1F3D8}️", label: "Obec", color: "#3D6B5C" },
     { href: "/dashboard/squad", icon: "\u{1F465}", label: "Kádr", color: "#2D5F2D" },
     { href: "/dashboard/u21", icon: "\u{1F9D2}", label: "U21", color: "#3D7A3D" },
     { href: "/dashboard/training", icon: "\u{1F3CB}️", label: "Tréninky", color: "#3D7A3D" },
-    { href: "/dashboard/zamestnanci", icon: "\u{1F454}", label: "Zaměstnanci", color: "#4E6B7B", isNew: true },
+    { href: "/dashboard/zamestnanci", icon: "\u{1F454}", label: "Zaměstnanci", color: "#4E6B7B" },
     { href: "/dashboard/transfers", icon: "\u{1F91D}", label: "Přestupy", color: "#4A8A4A" },
     { href: "/dashboard/watchlist", icon: "⭐", label: "Sledovaní", color: "#B8860B" },
     { href: "/dashboard/finances", icon: "\u{1F4B0}", label: "Finance", color: "#6B8E23" },
@@ -26,7 +26,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
   ]},
   { title: "Soutěž", items: [
     { href: "/dashboard/liga", icon: "\u{1F3C6}", label: "Liga", color: "#B8860B" },
-    { href: "/dashboard/pohar", icon: "\u{1F3C5}", label: "Pohár", color: "#A0722D", isNew: true },
+    { href: "/dashboard/pohar", icon: "\u{1F3C5}", label: "Pohár", color: "#A0722D" },
     { href: "/dashboard/schedule", icon: "\u{1F4C5}", label: "Rozpis", color: "#3D6B5C" },
     { href: "/dashboard/friendly", icon: "\u{1F91C}", label: "Přáteláky", color: "#4A7A5C" },
     { href: "/dashboard/calendar", icon: "\u{1F5D3}️", label: "Kalendář", color: "#6B7B3D" },
@@ -82,7 +82,7 @@ export default function MorePage() {
                       {badge}
                     </span>
                   )}
-                  {(item.isNew || (item.href === "/dashboard/novinky" && notesUnseen)) && (
+                  {item.href === "/dashboard/novinky" && notesUnseen && (
                     <span className="absolute top-1 right-1 bg-pitch-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
                       Nové
                     </span>
