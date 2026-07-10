@@ -73,6 +73,9 @@ export function StandRoof({
     const roofY = dims.height + clearance;          // jasně nad sedačkami
     const backZ = dims.depth + overhang * 0.5;      // zadní podpěry
     const postH = roofY + 0.2;
+    // Přední lem střechy (okap) — přibližná pozice předního okraje nakloněné desky
+    const frontY = roofY - Math.sin(0.32) * roofDepth / 2;
+    const frontZ = roofZ - Math.cos(0.32) * roofDepth / 2;
     return (
       <group>
         {/* Nakloněná plocha stříšky */}
@@ -80,10 +83,15 @@ export function StandRoof({
           <boxGeometry args={[alongLen + 1, 0.14, roofDepth]} />
           <meshStandardMaterial color={color} roughness={0.5} metalness={0.35} />
         </mesh>
-        {/* Zadní sloupky (2) — sahají až ke stříšce */}
-        {[-alongLen * 0.4, alongLen * 0.4].map((x, i) => (
+        {/* Přední okapový lem — rámuje střechu, ať nepůsobí jako plovoucí plát */}
+        <mesh position={[0, frontY, frontZ]} rotation={[-0.32, 0, 0]} castShadow>
+          <boxGeometry args={[alongLen + 1.1, 0.2, 0.14]} />
+          <meshStandardMaterial color="#3A3D42" metalness={0.4} roughness={0.5} />
+        </mesh>
+        {/* Zadní sloupky (3 — krajní + prostřední pro širší rozpon) */}
+        {[-alongLen * 0.4, 0, alongLen * 0.4].map((x, i) => (
           <mesh key={i} position={[x, postH / 2, backZ]} castShadow>
-            <cylinderGeometry args={[0.09, 0.09, postH, 6]} />
+            <cylinderGeometry args={[0.09, 0.09, postH, 8]} />
             <meshStandardMaterial color="#4A4D54" metalness={0.5} roughness={0.5} />
           </mesh>
         ))}

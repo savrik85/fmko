@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import * as THREE from "three";
 import { PITCH, pitchColor } from "./constants";
 
 interface PitchProps {
@@ -241,35 +242,74 @@ function Circle({ radius, y, color, width, opacity }: { radius: number; y: numbe
 }
 
 function Goal({ position, flip }: { position: [number, number, number]; flip?: boolean }) {
-  // Branka: 2 sloupky + břevno + jednoduchá síť (linkami)
+  // Branka: 2 sloupky + břevno (oblejší) + skutečná síť z mřížkové textury na panelech
   const goalWidth = 7;
   const goalHeight = 2.5;
   const goalDepth = 1.5;
   const postRadius = 0.1;
   const dir = flip ? 1 : -1;
 
+  // Mřížková textura sítě (průhledné pozadí + bílé linky), repeat per panel pro ~čtvercová oka
+  const nets = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const c = document.createElement("canvas");
+    c.width = 64; c.height = 64;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, 64, 64);
+    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    for (let i = 0; i <= 64; i += 8) { ctx.moveTo(i, 0); ctx.lineTo(i, 64); ctx.moveTo(0, i); ctx.lineTo(64, i); }
+    ctx.stroke();
+    const mk = (rx: number, ry: number) => {
+      const t = new THREE.CanvasTexture(c);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(rx, ry);
+      t.needsUpdate = true;
+      return t;
+    };
+    return { back: mk(goalWidth * 1.4, goalHeight * 1.4), roof: mk(goalWidth * 1.4, goalDepth * 1.4), side: mk(goalDepth * 1.4, goalHeight * 1.4) };
+  }, [goalWidth, goalHeight, goalDepth]);
+
   return (
     <group position={position}>
       {/* Levý sloupek */}
       <mesh position={[-goalWidth / 2, goalHeight / 2, 0]} castShadow>
-        <cylinderGeometry args={[postRadius, postRadius, goalHeight, 8]} />
+        <cylinderGeometry args={[postRadius, postRadius, goalHeight, 12]} />
         <meshStandardMaterial color="#fff" />
       </mesh>
       {/* Pravý sloupek */}
       <mesh position={[goalWidth / 2, goalHeight / 2, 0]} castShadow>
-        <cylinderGeometry args={[postRadius, postRadius, goalHeight, 8]} />
+        <cylinderGeometry args={[postRadius, postRadius, goalHeight, 12]} />
         <meshStandardMaterial color="#fff" />
       </mesh>
       {/* Břevno */}
       <mesh position={[0, goalHeight, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[postRadius, postRadius, goalWidth, 8]} />
+        <cylinderGeometry args={[postRadius, postRadius, goalWidth, 12]} />
         <meshStandardMaterial color="#fff" />
       </mesh>
-      {/* Síť - jednoduchý průhledný blok za brankou */}
-      <mesh position={[0, goalHeight / 2, dir * goalDepth / 2]}>
-        <boxGeometry args={[goalWidth, goalHeight, goalDepth]} />
-        <meshStandardMaterial color="#fff" opacity={0.15} transparent wireframe />
-      </mesh>
+      {/* Síť: zadní + horní + 2 boční panely s mřížkovou texturou (otevřené vpředu) */}
+      {nets && (
+        <group>
+          <mesh position={[0, goalHeight / 2, dir * goalDepth]}>
+            <planeGeometry args={[goalWidth, goalHeight]} />
+            <meshBasicMaterial map={nets.back} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.9} />
+          </mesh>
+          <mesh position={[0, goalHeight, dir * goalDepth / 2]} rotation={[Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[goalWidth, goalDepth]} />
+            <meshBasicMaterial map={nets.roof} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.9} />
+          </mesh>
+          <mesh position={[-goalWidth / 2, goalHeight / 2, dir * goalDepth / 2]} rotation={[0, Math.PI / 2, 0]}>
+            <planeGeometry args={[goalDepth, goalHeight]} />
+            <meshBasicMaterial map={nets.side} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.9} />
+          </mesh>
+          <mesh position={[goalWidth / 2, goalHeight / 2, dir * goalDepth / 2]} rotation={[0, Math.PI / 2, 0]}>
+            <planeGeometry args={[goalDepth, goalHeight]} />
+            <meshBasicMaterial map={nets.side} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.9} />
+          </mesh>
+        </group>
+      )}
     </group>
   );
 }
