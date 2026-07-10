@@ -46,6 +46,9 @@ interface Stadium3DProps {
   secondaryColor?: string;
   badgePattern?: string;
   badgeInitials?: string;
+  badgeSymbol?: string | null;
+  badgePrimary?: string | null;
+  badgeSecondary?: string | null;
   stadiumName?: string | null;
   sponsors?: string[];
   customization?: Stadium3DCustomization;
@@ -60,6 +63,9 @@ export function Stadium3D({
   secondaryColor,
   badgePattern,
   badgeInitials,
+  badgeSymbol,
+  badgePrimary,
+  badgeSecondary,
   stadiumName,
   sponsors,
   customization,
@@ -193,8 +199,11 @@ export function Stadium3D({
             size={cust.flagSize ?? 0}
             primaryColor={teamColor}
             secondaryColor={secondaryColor ?? "#fff"}
+            badgePrimary={badgePrimary || teamColor}
+            badgeSecondary={badgeSecondary || secondaryColor || "#fff"}
             pattern={badgePattern ?? "shield"}
             initials={badgeInitials ?? "?"}
+            symbol={badgeSymbol}
             position={[12, 0, -(layout.fence.depth / 2 + 3)]}
           />
         )}

@@ -1,15 +1,19 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
+import { badgeSvgMarkup, type BadgePattern } from "@/components/ui/badge-preview";
 
 interface TeamFlagProps {
   size: number;            // 1=malá 3m, 2=střední 5m, 3=velká 8m
-  primaryColor: string;
-  secondaryColor: string;
+  primaryColor: string;    // dresová primární — pole vlajky
+  secondaryColor: string;  // dresová sekundární — proužek u žerdi
+  badgePrimary: string;    // barvy znaku (jako v profilu)
+  badgeSecondary: string;
   pattern: string;         // shield/circle/diamond/...
   initials: string;
+  symbol?: string | null;  // emoji / svg:crescent — jako v profilu
   position: [number, number, number];
 }
 
@@ -17,17 +21,31 @@ const HEIGHTS = [0, 3, 5, 8];        // poleHeight per level
 const FLAG_W_RATIO = 0.55;            // flag width relative to pole height
 const FLAG_H_RATIO = 0.35;
 
-export function TeamFlag({ size, primaryColor, secondaryColor, pattern, initials, position }: TeamFlagProps) {
-  if (size <= 0) return null;
-  const lvl = Math.min(size, 3);
+// Ztmavení/zesvětlení hex barvy o poměr amt (-1..1)
+function shade(hex: string, amt: number): string {
+  const h = hex.replace("#", "");
+  if (h.length < 6) return hex;
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  const f = (v: number) => clamp(amt < 0 ? v * (1 + amt) : v + (255 - v) * amt);
+  return `#${[f(r), f(g), f(b)].map((v) => clamp(v).toString(16).padStart(2, "0")).join("")}`;
+}
+
+export function TeamFlag({ size, primaryColor, secondaryColor, badgePrimary, badgeSecondary, pattern, initials, symbol, position }: TeamFlagProps) {
+  const lvl = Math.min(Math.max(size, 0), 3);
   const poleHeight = HEIGHTS[lvl];
   const flagW = poleHeight * FLAG_W_RATIO;
   const flagH = poleHeight * FLAG_H_RATIO;
 
-  // Logo texture z BadgePreview SVG
-  const texture = useBadgeTexture(primaryColor, secondaryColor, pattern, initials);
+  // Klubová vlajka: pole týmové barvy + proužek u žerdi + kotouč se znakem (identickým s profilem).
+  const texture = useClubFlagTexture({
+    field: primaryColor, hoist: secondaryColor,
+    badgePrimary, badgeSecondary, pattern, initials, symbol,
+  });
 
-  // Flipnutá texturu pro zadní stranu (BackSide rendering by jinak ukázal mirror)
+  // Flipnutá textura pro zadní stranu (BackSide by jinak ukázal mirror)
   const flippedTexture = useMemo(() => {
     if (!texture) return null;
     const c = texture.clone();
@@ -39,7 +57,7 @@ export function TeamFlag({ size, primaryColor, secondaryColor, pattern, initials
     return c;
   }, [texture]);
 
-  // Animace vlnění — synchronizovaná wave pro oba meshes (stejná lokální poloha)
+  // Animace vlnění — synchronizovaná wave pro oba meshes
   const flagRefFront = useRef<THREE.Mesh>(null);
   const flagRefBack = useRef<THREE.Mesh>(null);
   useFrame(({ clock }) => {
@@ -61,6 +79,8 @@ export function TeamFlag({ size, primaryColor, secondaryColor, pattern, initials
     updateMesh(flagRefBack.current);
   });
 
+  if (size <= 0) return null;
+
   return (
     <group position={position}>
       {/* Stožár */}
@@ -73,9 +93,7 @@ export function TeamFlag({ size, primaryColor, secondaryColor, pattern, initials
         <coneGeometry args={[0.12, 0.3, 8]} />
         <meshStandardMaterial color="#FFD700" metalness={0.8} roughness={0.3} />
       </mesh>
-      {/* Vlajka — single mesh, oboustranná. Front strana = original texture.
-          Back strana má `BackSide` material s flipnutou texturou aby logo
-          bylo správně orientované i z opačného úhlu. */}
+      {/* Vlajka — dva meshe (front/back), oboustranná. */}
       <mesh
         ref={flagRefFront}
         position={[flagW / 2 + 0.07, poleHeight - flagH / 2 - 0.2, 0]}
@@ -97,103 +115,89 @@ export function TeamFlag({ size, primaryColor, secondaryColor, pattern, initials
 }
 
 /**
- * Vyrenderuje team badge přímo na canvas (bez SVG → Image conversion).
- * Reused logic z BadgePreview ale jako Canvas API draw calls.
+ * Klubová vlajka jako textura: pole týmové barvy (jemný gradient) + proužek u žerdi
+ * + kotouč se znakem. Znak se rasterizuje ze SDÍLENÉHO badgeSvgMarkup (jako v profilu),
+ * takže sedí tvar, barvy i symbol. Load SVG → Image je async → texture přes useState.
  */
-function useBadgeTexture(primary: string, secondary: string, pattern: string, initials: string): THREE.Texture | null {
-  return useMemo(() => {
-    if (typeof document === "undefined") return null;
-    const s = 512;
-    const c = document.createElement("canvas");
-    c.width = s; c.height = s;
-    const ctx = c.getContext("2d")!;
+function useClubFlagTexture(opts: {
+  field: string; hoist: string; badgePrimary: string; badgeSecondary: string;
+  pattern: string; initials: string; symbol?: string | null;
+}): THREE.Texture | null {
+  const { field, hoist, badgePrimary, badgeSecondary, pattern, initials, symbol } = opts;
+  const [tex, setTex] = useState<THREE.Texture | null>(null);
 
-    // Bílé pozadí
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, s, s);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    let cancelled = false;
+    const W = 512, H = Math.round(W * (FLAG_H_RATIO / FLAG_W_RATIO)); // aspekt vlajky → bez deformace
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-    const lum = (hex: string) => {
-      const h = hex.replace("#", "");
-      const r = parseInt(h.substring(0, 2), 16);
-      const g = parseInt(h.substring(2, 4), 16);
-      const b = parseInt(h.substring(4, 6), 16);
-      return (r * 299 + g * 587 + b * 114) / 1000;
+    const hoistW = W * 0.11;
+    const discCx = hoistW + (W - hoistW) / 2;
+    const discCy = H / 2;
+    const discR = H * 0.4;
+
+    const compose = (crest?: HTMLImageElement) => {
+      // Pole — jemný svislý gradient týmové barvy
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, shade(field, 0.06));
+      g.addColorStop(1, shade(field, -0.14));
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+
+      // Proužek u žerdi (dresová sekundární) + jemný předěl
+      ctx.fillStyle = hoist;
+      ctx.fillRect(0, 0, hoistW, H);
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      ctx.fillRect(hoistW, 0, Math.max(2, W * 0.006), H);
+
+      // Kotouč pod znakem — bílý, s prstencem, aby znak vynikl na jakékoli barvě
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = H * 0.05;
+      ctx.beginPath();
+      ctx.arc(discCx, discCy, discR, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.restore();
+      ctx.beginPath();
+      ctx.arc(discCx, discCy, discR, 0, Math.PI * 2);
+      ctx.lineWidth = H * 0.022;
+      ctx.strokeStyle = badgeSecondary;
+      ctx.stroke();
+
+      // Znak (transparentní SVG) do kotouče
+      if (crest) {
+        const cs = discR * 1.8;
+        ctx.drawImage(crest, discCx - cs / 2, discCy - cs / 2, cs, cs);
+      }
+
+      if (cancelled) return;
+      const t = new THREE.CanvasTexture(canvas);
+      t.anisotropy = 4;
+      t.needsUpdate = true;
+      setTex((old) => { old?.dispose(); return t; });
     };
-    const primaryLight = lum(primary) > 200;
-    const stroke = primaryLight && lum(secondary) > 200 ? "#bbbbbb" : secondary;
-    const textFill = primaryLight ? "#333333" : "#ffffff";
-    const half = s / 2;
 
-    // Draw shape
-    ctx.fillStyle = primary;
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = s * 0.04;
-    ctx.lineJoin = "round";
-    ctx.beginPath();
+    const inner = badgeSvgMarkup({
+      primary: badgePrimary, secondary: badgeSecondary,
+      pattern: pattern as BadgePattern, initials, symbol,
+      size: 512, font: "Arial, Helvetica, sans-serif",
+    });
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">${inner}</svg>`;
+    const img = new Image();
+    img.onload = () => { if (!cancelled) compose(img); };
+    img.onerror = (e) => { console.warn("znak vlajky se nenačetl:", e); if (!cancelled) compose(); };
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 
-    if (pattern === "circle") {
-      ctx.arc(half, half, half * 0.85, 0, Math.PI * 2);
-    } else if (pattern === "square") {
-      const x = s * 0.1, w = s * 0.8, r = s * 0.12;
-      roundedRectPath(ctx, x, x, w, w, r);
-    } else if (pattern === "diamond") {
-      ctx.moveTo(half, s * 0.05);
-      ctx.lineTo(s * 0.92, half);
-      ctx.lineTo(half, s * 0.95);
-      ctx.lineTo(s * 0.08, half);
-      ctx.closePath();
-    } else if (pattern === "hexagon") {
-      ctx.moveTo(half, s * 0.05);
-      ctx.lineTo(s * 0.9, s * 0.27);
-      ctx.lineTo(s * 0.9, s * 0.73);
-      ctx.lineTo(half, s * 0.95);
-      ctx.lineTo(s * 0.1, s * 0.73);
-      ctx.lineTo(s * 0.1, s * 0.27);
-      ctx.closePath();
-    } else if (pattern === "pennant") {
-      ctx.moveTo(s * 0.15, s * 0.05);
-      ctx.lineTo(s * 0.85, s * 0.05);
-      ctx.lineTo(half, s * 0.95);
-      ctx.closePath();
-    } else {
-      // shield (default), crest, rounded_shield — all approximated as shield path
-      ctx.moveTo(half, s * 0.05);
-      ctx.lineTo(s * 0.9, s * 0.25);
-      ctx.lineTo(s * 0.9, s * 0.6);
-      ctx.quadraticCurveTo(s * 0.9, s * 0.85, half, s * 0.95);
-      ctx.quadraticCurveTo(s * 0.1, s * 0.85, s * 0.1, s * 0.6);
-      ctx.lineTo(s * 0.1, s * 0.25);
-      ctx.closePath();
-    }
-    ctx.fill();
-    ctx.stroke();
+    return () => { cancelled = true; };
+  }, [field, hoist, badgePrimary, badgeSecondary, pattern, initials, symbol]);
 
-    // Text
-    const fontSize = s * 0.28;
-    ctx.font = `800 ${fontSize * 0.85}px Arial, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    // Stroke pro lepší čitelnost
-    ctx.strokeStyle = primaryLight ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.4)";
-    ctx.lineWidth = s * 0.02;
-    ctx.strokeText(initials, half, half);
-    ctx.fillStyle = textFill;
-    ctx.fillText(initials, half, half);
+  // Dispose při unmountu
+  useEffect(() => () => { tex?.dispose(); }, [tex]);
 
-    const tex = new THREE.CanvasTexture(c);
-    tex.needsUpdate = true;
-    return tex;
-  }, [primary, secondary, pattern, initials]);
-}
-
-function roundedRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
+  return tex;
 }

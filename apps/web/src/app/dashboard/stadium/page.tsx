@@ -270,7 +270,10 @@ export default function StadiumPage() {
         teamColor={team.primary_color}
         secondaryColor={team.secondary_color}
         badgePattern={team.badge_pattern}
-        badgeInitials={teamInitials(team.name)}
+        badgeInitials={team.badge_initials || teamInitials(team.name)}
+        badgeSymbol={team.badge_symbol}
+        badgePrimary={team.badge_primary_color}
+        badgeSecondary={team.badge_secondary_color}
         stadiumName={stadium.stadiumName}
         sponsors={sponsorNames}
         customization={stadium.customization}
@@ -321,7 +324,10 @@ export default function StadiumPage() {
                 teamColor={team.primary_color}
                 secondaryColor={team.secondary_color}
                 badgePattern={team.badge_pattern}
-                badgeInitials={teamInitials(team.name)}
+                badgeInitials={team.badge_initials || teamInitials(team.name)}
+                badgeSymbol={team.badge_symbol}
+                badgePrimary={team.badge_primary_color}
+                badgeSecondary={team.badge_secondary_color}
                 stadiumName={stadium.stadiumName}
                 sponsors={sponsorNames}
                 customization={stadium.customization}

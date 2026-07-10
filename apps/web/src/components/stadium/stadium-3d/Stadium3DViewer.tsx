@@ -14,6 +14,9 @@ interface Stadium3DViewerProps {
   secondaryColor?: string;
   badgePattern?: string;
   badgeInitials?: string;
+  badgeSymbol?: string | null;
+  badgePrimary?: string | null;
+  badgeSecondary?: string | null;
   stadiumName?: string | null;
   sponsors?: string[];
   customization?: Stadium3DCustomization;

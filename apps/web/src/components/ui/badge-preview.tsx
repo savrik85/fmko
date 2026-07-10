@@ -24,10 +24,31 @@ function starPath(cx: number, cy: number, R: number, r: number, points = 5): str
   return p + "Z";
 }
 
-export function BadgePreview({ primary, secondary, pattern, initials, size = 64, symbol }: { primary: string; secondary: string; pattern: BadgePattern; initials: string; size?: number; symbol?: string | null }) {
+function escapeXml(s: string): string {
+  return s.replace(/[&<>"']/g, (ch) => (
+    ch === "&" ? "&amp;" : ch === "<" ? "&lt;" : ch === ">" ? "&gt;" : ch === '"' ? "&quot;" : "&apos;"
+  ));
+}
+
+interface BadgeOpts {
+  primary: string;
+  secondary: string;
+  pattern: BadgePattern;
+  initials: string;
+  size?: number;
+  symbol?: string | null;
+  /** Font pro iniciály. Default = heading font (přes CSS var). Pro rasterizaci mimo DOM
+   *  (3D vlajka jako <img>) předej konkrétní web-safe font, CSS var se tam neresolvne. */
+  font?: string;
+}
+
+/**
+ * Vygeneruje VNITŘNÍ SVG markup znaku (bez <svg> obalu) — jediný zdroj pravdy pro znak.
+ * Používá ho profilový <BadgePreview> i 3D vlajka (rasterizuje ho na texturu), aby byly identické.
+ */
+export function badgeSvgMarkup({ primary, secondary, pattern, initials, size = 64, symbol, font = "var(--font-heading)" }: BadgeOpts): string {
   const s = size;
   const half = s / 2;
-  // Pokud je symbol → iniciály nahoru + symbol dole, menší font
   const hasSymbol = !!symbol;
   const fontSize = hasSymbol ? s * 0.2 : s * 0.28;
   const initialsY = hasSymbol ? s * 0.42 : half + fontSize * 0.35;
@@ -42,8 +63,14 @@ export function BadgePreview({ primary, secondary, pattern, initials, size = 64,
     return (r * 299 + g * 587 + b * 114) / 1000;
   };
   const primaryLight = lum(primary) > 200;
-  const stroke = primaryLight && lum(secondary) > 200 ? "#bbb" : secondary;
+  const sw = s * 0.04;
+  // Escapuj VŠECHNY interpolované hodnoty do atributů — markup jde přes dangerouslySetInnerHTML
+  // (profil) i do data-URI SVG (vlajka), takže React auto-escape neplatí. Struktura elementů
+  // a názvy atributů jsou pevné; escapují se jen hodnoty (barvy z color-pickeru, font, iniciály).
+  const P = escapeXml(primary);
+  const stroke = escapeXml(primaryLight && lum(secondary) > 200 ? "#bbb" : secondary);
   const textFill = primaryLight ? "#333" : "white";
+  const FONT = escapeXml(font);
 
   const shapes: Record<Exclude<BadgePattern, SpecialPattern>, string> = {
     shield: `M${half},${s * 0.05} L${s * 0.9},${s * 0.25} L${s * 0.9},${s * 0.6} Q${s * 0.9},${s * 0.85} ${half},${s * 0.95} Q${s * 0.1},${s * 0.85} ${s * 0.1},${s * 0.6} L${s * 0.1},${s * 0.25}Z`,
@@ -61,40 +88,39 @@ export function BadgePreview({ primary, secondary, pattern, initials, size = 64,
     double_shield: `M${half},${s * 0.05} L${s * 0.9},${s * 0.2} L${s * 0.9},${s * 0.58} Q${s * 0.9},${s * 0.85} ${half},${s * 0.95} Q${s * 0.1},${s * 0.85} ${s * 0.1},${s * 0.58} L${s * 0.1},${s * 0.2}Z M${half},${s * 0.05} L${half},${s * 0.95}`,
   };
 
+  const shapeEl = pattern === "circle"
+    ? `<circle cx="${half}" cy="${half}" r="${half * 0.85}" fill="${P}" stroke="${stroke}" stroke-width="${sw}"/>`
+    : pattern === "oval"
+    ? `<ellipse cx="${half}" cy="${half}" rx="${half * 0.82}" ry="${half * 0.65}" fill="${P}" stroke="${stroke}" stroke-width="${sw}"/>`
+    : pattern === "square"
+    ? `<rect x="${s * 0.1}" y="${s * 0.1}" width="${s * 0.8}" height="${s * 0.8}" rx="${s * 0.12}" fill="${P}" stroke="${stroke}" stroke-width="${sw}"/>`
+    : `<path d="${shapes[pattern as Exclude<BadgePattern, SpecialPattern>]}" fill="${P}" stroke="${stroke}" stroke-width="${sw}" stroke-linejoin="round"/>`;
+
+  const textEl = `<text x="${half}" y="${initialsY}" text-anchor="middle" font-size="${fontSize * 0.85}" font-weight="800" fill="${textFill}" stroke="${primaryLight ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.4)"}" stroke-width="${s * 0.02}" paint-order="stroke" font-family="${FONT}" letter-spacing="0.05em">${escapeXml(initials)}</text>`;
+
+  let symbolEl = "";
+  if (symbol === "svg:crescent") {
+    const cR = symbolSize * 0.42;
+    const cx = half;
+    const cy = symbolY;
+    const off = cR * 0.42;
+    symbolEl = `<g><circle cx="${cx}" cy="${cy}" r="${cR}" fill="white"/><circle cx="${cx + off}" cy="${cy}" r="${cR * 0.92}" fill="${P}"/></g>`;
+  } else if (symbol) {
+    symbolEl = `<text x="${half}" y="${symbolY}" text-anchor="middle" font-size="${symbolSize}" dominant-baseline="middle" font-family="system-ui, -apple-system, 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif">${escapeXml(symbol)}</text>`;
+  }
+
+  return shapeEl + textEl + symbolEl;
+}
+
+export function BadgePreview({ primary, secondary, pattern, initials, size = 64, symbol }: { primary: string; secondary: string; pattern: BadgePattern; initials: string; size?: number; symbol?: string | null }) {
+  const s = size;
   return (
-    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} style={{ verticalAlign: "middle", flexShrink: 0 }}>
-      {pattern === "circle" ? (
-        <circle cx={half} cy={half} r={half * 0.85} fill={primary} stroke={stroke} strokeWidth={s * 0.04} />
-      ) : pattern === "oval" ? (
-        <ellipse cx={half} cy={half} rx={half * 0.82} ry={half * 0.65} fill={primary} stroke={stroke} strokeWidth={s * 0.04} />
-      ) : pattern === "square" ? (
-        <rect x={s * 0.1} y={s * 0.1} width={s * 0.8} height={s * 0.8} rx={s * 0.12} fill={primary} stroke={stroke} strokeWidth={s * 0.04} />
-      ) : (
-        <path d={shapes[pattern as Exclude<BadgePattern, SpecialPattern>]} fill={primary} stroke={stroke} strokeWidth={s * 0.04} strokeLinejoin="round" />
-      )}
-      <text x={half} y={initialsY} textAnchor="middle" fontSize={fontSize * 0.85} fontWeight="800"
-        fill={textFill} stroke={primaryLight ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.4)"} strokeWidth={s * 0.02} paintOrder="stroke"
-        fontFamily="var(--font-heading)" letterSpacing="0.05em">{initials}</text>
-      {symbol === "svg:crescent" ? (
-        // Turecký půlměsíc (bílý) — kruh + ofsetovaný "ořezávací" kruh barvy primary, simulující subtract
-        (() => {
-          const cR = symbolSize * 0.42;
-          const cx = half;
-          const cy = symbolY;
-          const off = cR * 0.42;
-          return (
-            <g>
-              <circle cx={cx} cy={cy} r={cR} fill="white" />
-              <circle cx={cx + off} cy={cy} r={cR * 0.92} fill={primary} />
-            </g>
-          );
-        })()
-      ) : symbol ? (
-        <text x={half} y={symbolY} textAnchor="middle" fontSize={symbolSize}
-          dominantBaseline="middle" style={{ fontFamily: "system-ui, -apple-system, 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif" }}>
-          {symbol}
-        </text>
-      ) : null}
-    </svg>
+    <svg
+      width={s}
+      height={s}
+      viewBox={`0 0 ${s} ${s}`}
+      style={{ verticalAlign: "middle", flexShrink: 0 }}
+      dangerouslySetInnerHTML={{ __html: badgeSvgMarkup({ primary, secondary, pattern, initials, size: s, symbol }) }}
+    />
   );
 }
