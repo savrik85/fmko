@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { badgeSvgMarkup, type BadgePattern } from "@/components/ui/badge-preview";
+import { drawBadgeOnCanvas, type BadgePattern } from "@/components/ui/badge-preview";
 
 interface TeamFlagProps {
   size: number;            // 1=malá 3m, 2=střední 5m, 3=velká 8m
   primaryColor: string;    // dresová primární — pole vlajky
-  secondaryColor: string;  // dresová sekundární — proužek u žerdi
+  secondaryColor?: string; // dresová sekundární (nepoužito přímo, drženo pro kompatibilitu)
   badgePrimary: string;    // barvy znaku (jako v profilu)
   badgeSecondary: string;
   pattern: string;         // shield/circle/diamond/...
@@ -39,11 +39,57 @@ export function TeamFlag({ size, primaryColor, badgePrimary, badgeSecondary, pat
   const flagW = poleHeight * FLAG_W_RATIO;
   const flagH = poleHeight * FLAG_H_RATIO;
 
-  // Klubová vlajka: pole týmové barvy + proužek u žerdi + kotouč se znakem (identickým s profilem).
-  const texture = useClubFlagTexture({
-    field: primaryColor,
-    badgePrimary, badgeSecondary, pattern, initials, symbol,
-  });
+  // Klubová vlajka jako textura — SYNCHRONNĚ (žádný async/<img>, tedy žádné canvas tainting).
+  // Celá plocha týmovou barvou + kotouč se znakem kresleným přímo přes drawBadgeOnCanvas.
+  const texture = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const W = 512, H = Math.round(W * (FLAG_H_RATIO / FLAG_W_RATIO)); // aspekt vlajky → bez deformace
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    // CELÁ plocha týmovou barvou (jemný svislý gradient pro hloubku)
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, shade(primaryColor, 0.10));
+    g.addColorStop(1, shade(primaryColor, -0.16));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // Jemný tmavší lem téže barvy
+    ctx.strokeStyle = shade(primaryColor, -0.32);
+    ctx.lineWidth = Math.max(3, H * 0.03);
+    ctx.strokeRect(0, 0, W, H);
+
+    // Kotouč pod znakem — bílý s prstencem, ať znak vynikne na jakékoli barvě
+    const discCx = W / 2, discCy = H / 2, discR = H * 0.4;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.35)";
+    ctx.shadowBlur = H * 0.05;
+    ctx.beginPath();
+    ctx.arc(discCx, discCy, discR, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(discCx, discCy, discR, 0, Math.PI * 2);
+    ctx.lineWidth = H * 0.022;
+    ctx.strokeStyle = badgeSecondary;
+    ctx.stroke();
+
+    // Znak přímo na canvas (stejná geometrie jako profil)
+    drawBadgeOnCanvas(ctx, {
+      primary: badgePrimary, secondary: badgeSecondary,
+      pattern: pattern as BadgePattern, initials, symbol,
+      cx: discCx, cy: discCy, size: discR * 1.8,
+    });
+
+    const t = new THREE.CanvasTexture(canvas);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    t.needsUpdate = true;
+    return t;
+  }, [primaryColor, badgePrimary, badgeSecondary, pattern, initials, symbol]);
 
   // Flipnutá textura pro zadní stranu (BackSide by jinak ukázal mirror)
   const flippedTexture = useMemo(() => {
@@ -56,6 +102,9 @@ export function TeamFlag({ size, primaryColor, badgePrimary, badgeSecondary, pat
     c.needsUpdate = true;
     return c;
   }, [texture]);
+
+  // Dispose textur při změně/unmountu
+  useEffect(() => () => { texture?.dispose(); flippedTexture?.dispose(); }, [texture, flippedTexture]);
 
   // Animace vlnění — synchronizovaná wave pro oba meshes
   const flagRefFront = useRef<THREE.Mesh>(null);
@@ -117,90 +166,4 @@ export function TeamFlag({ size, primaryColor, badgePrimary, badgeSecondary, pat
       </mesh>
     </group>
   );
-}
-
-/**
- * Klubová vlajka jako textura: pole týmové barvy (jemný gradient) + proužek u žerdi
- * + kotouč se znakem. Znak se rasterizuje ze SDÍLENÉHO badgeSvgMarkup (jako v profilu),
- * takže sedí tvar, barvy i symbol. Load SVG → Image je async → texture přes useState.
- */
-function useClubFlagTexture(opts: {
-  field: string; badgePrimary: string; badgeSecondary: string;
-  pattern: string; initials: string; symbol?: string | null;
-}): THREE.Texture | null {
-  const { field, badgePrimary, badgeSecondary, pattern, initials, symbol } = opts;
-  const [tex, setTex] = useState<THREE.Texture | null>(null);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    let cancelled = false;
-    const W = 512, H = Math.round(W * (FLAG_H_RATIO / FLAG_W_RATIO)); // aspekt vlajky → bez deformace
-    const canvas = document.createElement("canvas");
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const discCx = W / 2;
-    const discCy = H / 2;
-    const discR = H * 0.4;
-
-    const compose = (crest?: HTMLImageElement) => {
-      // CELÁ plocha týmovou barvou (jemný svislý gradient pro hloubku)
-      const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, shade(field, 0.10));
-      g.addColorStop(1, shade(field, -0.16));
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, W, H);
-
-      // Jemný tmavší lem téže barvy — okraj vlajky, ale zůstává barevný
-      ctx.strokeStyle = shade(field, -0.32);
-      ctx.lineWidth = Math.max(3, H * 0.03);
-      ctx.strokeRect(0, 0, W, H);
-
-      // Kotouč pod znakem — bílý, s prstencem, aby znak vynikl na jakékoli barvě
-      ctx.save();
-      ctx.shadowColor = "rgba(0,0,0,0.35)";
-      ctx.shadowBlur = H * 0.05;
-      ctx.beginPath();
-      ctx.arc(discCx, discCy, discR, 0, Math.PI * 2);
-      ctx.fillStyle = "#ffffff";
-      ctx.fill();
-      ctx.restore();
-      ctx.beginPath();
-      ctx.arc(discCx, discCy, discR, 0, Math.PI * 2);
-      ctx.lineWidth = H * 0.022;
-      ctx.strokeStyle = badgeSecondary;
-      ctx.stroke();
-
-      // Znak (transparentní SVG) do kotouče
-      if (crest) {
-        const cs = discR * 1.8;
-        ctx.drawImage(crest, discCx - cs / 2, discCy - cs / 2, cs, cs);
-      }
-
-      if (cancelled) return;
-      const t = new THREE.CanvasTexture(canvas);
-      t.anisotropy = 4;
-      t.needsUpdate = true;
-      setTex((old) => { old?.dispose(); return t; });
-    };
-
-    const inner = badgeSvgMarkup({
-      primary: badgePrimary, secondary: badgeSecondary,
-      pattern: pattern as BadgePattern, initials, symbol,
-      size: 512, font: "Arial, Helvetica, sans-serif",
-    });
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">${inner}</svg>`;
-    const img = new Image();
-    img.onload = () => { if (!cancelled) compose(img); };
-    img.onerror = (e) => { console.warn("znak vlajky se nenačetl:", e); if (!cancelled) compose(); };
-    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
-
-    return () => { cancelled = true; };
-  }, [field, badgePrimary, badgeSecondary, pattern, initials, symbol]);
-
-  // Dispose při unmountu
-  useEffect(() => () => { tex?.dispose(); }, [tex]);
-
-  return tex;
 }
