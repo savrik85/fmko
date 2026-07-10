@@ -48,11 +48,13 @@ function Road() {
 
 function Trees({ reduce = false }: { reduce?: boolean }) {
   const trunkRef = useRef<THREE.InstancedMesh>(null);
-  const crownRef = useRef<THREE.InstancedMesh>(null);
+  const coneRef = useRef<THREE.InstancedMesh>(null);
+  const roundRef = useRef<THREE.InstancedMesh>(null);
   const matrix = useMemo(() => new THREE.Matrix4(), []);
   const color = useMemo(() => new THREE.Color(), []);
+  const crownColors = useMemo(() => ["#3D5A28", "#4A7A2C", "#5B8C3A"], []);
 
-  // Pseudo-random varianty velikosti; na mobilu redukujeme na polovinu
+  // Pseudo-random varianty velikosti + typ koruny (jehličnatá kužel / listnatá kulatá)
   const trees = useMemo(() => {
     let seed = 7777;
     const rand = () => {
@@ -64,28 +66,38 @@ function Trees({ reduce = false }: { reduce?: boolean }) {
       x,
       z,
       scale: 0.7 + rand() * 0.6,
-      crownColor: rand() > 0.6 ? "#3D5A28" : "#4A7A2C",
+      crownColor: crownColors[Math.floor(rand() * crownColors.length)],
+      round: rand() > 0.5,
     }));
-  }, [reduce]);
+  }, [reduce, crownColors]);
 
   useEffect(() => {
-    if (!trunkRef.current || !crownRef.current) return;
+    if (!trunkRef.current || !coneRef.current || !roundRef.current) return;
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0); // skryté instance druhého typu
     trees.forEach((t, i) => {
-      // Trunk - cylinder, base at 0
       matrix.makeScale(t.scale, t.scale, t.scale);
       matrix.setPosition(t.x, 1.2 * t.scale, t.z);
       trunkRef.current!.setMatrixAt(i, matrix);
-
-      // Crown - cone above trunk
-      matrix.makeScale(t.scale, t.scale, t.scale);
-      matrix.setPosition(t.x, (2.4 + 1.5) * t.scale, t.z);
-      crownRef.current!.setMatrixAt(i, matrix);
       color.set(t.crownColor);
-      crownRef.current!.setColorAt(i, color);
+      if (t.round) {
+        matrix.makeScale(t.scale, t.scale * 0.9, t.scale);
+        matrix.setPosition(t.x, (2.4 + 1.1) * t.scale, t.z);
+        roundRef.current!.setMatrixAt(i, matrix);
+        roundRef.current!.setColorAt(i, color);
+        coneRef.current!.setMatrixAt(i, zero);
+      } else {
+        matrix.makeScale(t.scale, t.scale, t.scale);
+        matrix.setPosition(t.x, (2.4 + 1.5) * t.scale, t.z);
+        coneRef.current!.setMatrixAt(i, matrix);
+        coneRef.current!.setColorAt(i, color);
+        roundRef.current!.setMatrixAt(i, zero);
+      }
     });
     trunkRef.current.instanceMatrix.needsUpdate = true;
-    crownRef.current.instanceMatrix.needsUpdate = true;
-    if (crownRef.current.instanceColor) crownRef.current.instanceColor.needsUpdate = true;
+    coneRef.current.instanceMatrix.needsUpdate = true;
+    roundRef.current.instanceMatrix.needsUpdate = true;
+    if (coneRef.current.instanceColor) coneRef.current.instanceColor.needsUpdate = true;
+    if (roundRef.current.instanceColor) roundRef.current.instanceColor.needsUpdate = true;
   }, [trees, matrix, color]);
 
   return (
@@ -94,9 +106,13 @@ function Trees({ reduce = false }: { reduce?: boolean }) {
         <cylinderGeometry args={[0.25, 0.35, 2.4, 6]} />
         <meshStandardMaterial color="#5C3A1E" roughness={0.95} />
       </instancedMesh>
-      <instancedMesh ref={crownRef} args={[undefined, undefined, trees.length]} castShadow>
+      <instancedMesh ref={coneRef} args={[undefined, undefined, trees.length]} castShadow>
         <coneGeometry args={[1.6, 3, 8]} />
         <meshStandardMaterial vertexColors roughness={0.9} />
+      </instancedMesh>
+      <instancedMesh ref={roundRef} args={[undefined, undefined, trees.length]} castShadow>
+        <icosahedronGeometry args={[1.6, 0]} />
+        <meshStandardMaterial vertexColors roughness={0.9} flatShading />
       </instancedMesh>
     </group>
   );
