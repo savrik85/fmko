@@ -42,6 +42,32 @@ function useBannerTexture(text: string | null | undefined, bg: string, fg: strin
   }, [text, bg, fg]);
 }
 
+/** Plachta kotle jako látka — jemné billowing v hloubce (dole rozvlněnější). */
+function ClothBanner({ width, height, y, z, color, map }: { width: number; height: number; y: number; z: number; color: string; map?: THREE.Texture | null }) {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame(({ clock }) => {
+    const m = ref.current;
+    if (!m) return;
+    const t = clock.elapsedTime * 1.5;
+    const geom = m.geometry as THREE.PlaneGeometry;
+    const p = geom.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      const yv = p.getY(i);
+      const amp = 0.05 + (0.5 - (yv / height + 0.5)) * 0.045; // dole víc
+      p.setZ(i, (Math.sin(x * 0.5 + t) + Math.sin(x * 0.22 + t * 0.6)) * amp);
+    }
+    p.needsUpdate = true;
+    geom.computeVertexNormals();
+  });
+  return (
+    <mesh ref={ref} position={[0, y, z]} castShadow>
+      <planeGeometry args={[width, height, 40, 4]} />
+      <meshStandardMaterial color={color} map={map ?? undefined} side={THREE.DoubleSide} roughness={0.85} />
+    </mesh>
+  );
+}
+
 /** Vlnící se vlaječka na žerdi kotle — per-vertex sinusová vlna (jako hlavní vlajka).
  *  Levý okraj u žerdi (fixed), volný konec vlaje. Fáze posouvá vlnu mezi vlaječkami (organické). */
 function WavingPennant({ color, y, phase }: { color: string; y: number; phase: number }) {
@@ -172,16 +198,8 @@ export function UltrasSector({
 
   return (
     <group>
-      {/* Baner na zábradlí — zvednutý nad reklamy; s nápisem (textura) nebo jednobarevný. Výška ~75 %. */}
-      <mesh position={[0, 1.45, z]} castShadow>
-        <planeGeometry args={[spread + 2, 1.0]} />
-        <meshStandardMaterial
-          color={bannerTex ? "#ffffff" : bannerBg}
-          map={bannerTex ?? undefined}
-          side={2}
-          roughness={0.85}
-        />
-      </mesh>
+      {/* Baner na zábradlí — jako látka (jemné billowing); s nápisem (textura) nebo jednobarevný. */}
+      <ClothBanner width={spread + 2} height={1.0} y={1.45} z={z} color={bannerTex ? "#ffffff" : bannerBg} map={bannerTex} />
       {/* Pruh druhé barvy nahoře na baneru (jen bez nápisu) */}
       {!bannerTex && (
         <mesh position={[0, 1.87, z + 0.02]}>

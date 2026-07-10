@@ -23,15 +23,25 @@ const BANNER_COLORS = [
   "#E76F51", "#6A4C93", "#0077B6", "#A03A4C", "#3D5A28",
 ];
 
-// 6 fixních pozic — žádná uprostřed branky:
-// 0 jih-levá, 1 jih-pravá, 2 východ-střed, 3 sever-pravá, 4 sever-levá, 5 západ-střed
+// Souvislejší prstenec: jih/sever 2 each (mimo branku uprostřed), východ/západ 4 each
+// (delší strana ~téměř souvislá řada reklam).
 const SLOT_POSITIONS: Array<{ x: number; z: number; rotY: number }> = [
+  // Jih (z-)
   { x: -SIDE_OFFSET, z: -HALF_D - BOARD_OFFSET, rotY: 0 },
   { x:  SIDE_OFFSET, z: -HALF_D - BOARD_OFFSET, rotY: 0 },
-  { x:  HALF_W + BOARD_OFFSET, z: 0, rotY: -Math.PI / 2 },
-  { x:  SIDE_OFFSET, z:  HALF_D + BOARD_OFFSET, rotY: Math.PI },
+  // Sever (z+)
   { x: -SIDE_OFFSET, z:  HALF_D + BOARD_OFFSET, rotY: Math.PI },
-  { x: -HALF_W - BOARD_OFFSET, z: 0, rotY: Math.PI / 2 },
+  { x:  SIDE_OFFSET, z:  HALF_D + BOARD_OFFSET, rotY: Math.PI },
+  // Východ (x+)
+  { x: HALF_W + BOARD_OFFSET, z: -18, rotY: -Math.PI / 2 },
+  { x: HALF_W + BOARD_OFFSET, z:  -6, rotY: -Math.PI / 2 },
+  { x: HALF_W + BOARD_OFFSET, z:   6, rotY: -Math.PI / 2 },
+  { x: HALF_W + BOARD_OFFSET, z:  18, rotY: -Math.PI / 2 },
+  // Západ (x-)
+  { x: -HALF_W - BOARD_OFFSET, z: -18, rotY: Math.PI / 2 },
+  { x: -HALF_W - BOARD_OFFSET, z:  -6, rotY: Math.PI / 2 },
+  { x: -HALF_W - BOARD_OFFSET, z:   6, rotY: Math.PI / 2 },
+  { x: -HALF_W - BOARD_OFFSET, z:  18, rotY: Math.PI / 2 },
 ];
 
 export function AdBoards({ sponsors, teamColor }: AdBoardsProps) {
@@ -78,7 +88,7 @@ function AdBoard({
 
   return (
     <group position={position} rotation={rotation}>
-      <mesh castShadow>
+      <mesh castShadow receiveShadow>
         <boxGeometry args={[length, BOARD_HEIGHT, BOARD_THICKNESS]} />
         <meshStandardMaterial color={color} roughness={0.6} />
       </mesh>
