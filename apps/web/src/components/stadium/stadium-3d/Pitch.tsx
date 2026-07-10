@@ -98,21 +98,23 @@ export function Pitch({ condition, pitchType }: PitchProps) {
     [condition]
   );
 
+  const grassTex = useMemo(() => makeGrassTexture(finalGrassColor), [finalGrassColor]);
+
   return (
     <group>
-      {/* Hlavní hřiště — solid color (procedurální texture vypadala hůř) */}
+      {/* Hlavní hřiště — jemná grass struktura (nízkokontrastní šum) na základní barvě */}
       <mesh rotation={pitchRotation} position={[0, 0.01, 0]} receiveShadow>
         <planeGeometry args={[PITCH.width, PITCH.depth]} />
-        <meshStandardMaterial color={finalGrassColor} roughness={0.95} />
+        <meshStandardMaterial map={grassTex ?? undefined} color={grassTex ? "#ffffff" : finalGrassColor} roughness={0.95} />
       </mesh>
 
-      {/* Mowing stripes — alternující světlejší pruhy */}
+      {/* Mowing stripes — alternující světlejší pruhy (výraznější než dřív) */}
       {hasStripes && (
         <group>
           {Array.from({ length: 8 }).map((_, i) => (
             <mesh key={i} rotation={pitchRotation} position={[0, 0.02, -HALF_D + i * 7.5 + 3.75]}>
               <planeGeometry args={[PITCH.width, 3.75]} />
-              <meshStandardMaterial color={i % 2 === 0 ? "#000" : "#fff"} opacity={0.07} transparent depthWrite={false} />
+              <meshStandardMaterial color={i % 2 === 0 ? "#000" : "#fff"} opacity={0.13} transparent depthWrite={false} />
             </mesh>
           ))}
         </group>
@@ -239,6 +241,33 @@ function Circle({ radius, y, color, width, opacity }: { radius: number; y: numbe
     points.push([Math.cos(a) * radius, y, Math.sin(a) * radius]);
   }
   return <Line points={points} color={color} width={width} opacity={opacity} />;
+}
+
+// Jemná grass textura — základní barva + nízkokontrastní per-pixel šum, dlaždicově opakovaná.
+function makeGrassTexture(baseColor: string): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  const s = 256;
+  const c = document.createElement("canvas");
+  c.width = s; c.height = s;
+  const ctx = c.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = baseColor;
+  ctx.fillRect(0, 0, s, s);
+  const img = ctx.getImageData(0, 0, s, s);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (Math.random() - 0.5) * 12; // ±6 — jemné, ne speckle
+    d[i] = Math.max(0, Math.min(255, d[i] + n));
+    d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + n));
+    d[i + 2] = Math.max(0, Math.min(255, d[i + 2] + n));
+  }
+  ctx.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(8, 12);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.needsUpdate = true;
+  return t;
 }
 
 function Goal({ position, flip }: { position: [number, number, number]; flip?: boolean }) {
