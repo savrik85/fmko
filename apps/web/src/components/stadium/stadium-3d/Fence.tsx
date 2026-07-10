@@ -10,6 +10,29 @@ interface FenceProps {
 
 const GATE_WIDTH = 8;
 
+// Diamantová mřížka pletiva jako textura (průhledné pozadí + šedé diagonály).
+function makeMeshTexture(repeatX: number, repeatY: number): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  const c = document.createElement("canvas");
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext("2d");
+  if (!ctx) return null;
+  ctx.strokeStyle = "rgba(150,150,150,0.65)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  for (let o = -64; o <= 128; o += 16) {
+    ctx.moveTo(o, 0); ctx.lineTo(o + 64, 64);
+    ctx.moveTo(o, 64); ctx.lineTo(o + 64, 0);
+  }
+  ctx.stroke();
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repeatX, repeatY);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.needsUpdate = true;
+  return t;
+}
+
 export function Fence({ level, bounds, colorOverride }: FenceProps) {
   if (level <= 0) return null;
   const halfW = bounds.width / 2;
@@ -63,6 +86,13 @@ function WireFence({ halfW, halfD, totalW, totalD, colorOverride }: { halfW: num
   const wireColor = colorOverride ?? "#525252";
   const ref = useRef<THREE.InstancedMesh>(null);
   const matrix = useMemo(() => new THREE.Matrix4(), []);
+
+  // Pletivo — diamantová mřížka jako textura, repeat ~1 buňka/jednotku
+  const segLen = halfW - GATE_WIDTH / 2;
+  const texSeg = useMemo(() => makeMeshTexture(Math.max(1, Math.round(segLen)), 2), [segLen]);
+  const texW = useMemo(() => makeMeshTexture(Math.max(1, Math.round(totalW)), 2), [totalW]);
+  const texD = useMemo(() => makeMeshTexture(Math.max(1, Math.round(totalD)), 2), [totalD]);
+  useEffect(() => () => { texSeg?.dispose(); texW?.dispose(); texD?.dispose(); }, [texSeg, texW, texD]);
 
   const posts = useMemo(() => {
     const out: Array<[number, number]> = [];
@@ -126,26 +156,26 @@ function WireFence({ halfW, halfD, totalW, totalD, colorOverride }: { halfW: num
                 </mesh>
               </group>
             ))}
-            {/* Drátěné panely (jih - 2 segmenty) */}
+            {/* Pletivo — planes s diamantovou texturou (jih 2 segmenty, sever, V, Z) */}
             <mesh position={[leftCenterX, 1, -halfD]}>
-              <boxGeometry args={[segmentLen, 2, 0.02]} />
-              <meshStandardMaterial color="#888" wireframe transparent opacity={0.5} />
+              <planeGeometry args={[segmentLen, 2]} />
+              <meshBasicMaterial map={texSeg ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.85} />
             </mesh>
             <mesh position={[rightCenterX, 1, -halfD]}>
-              <boxGeometry args={[segmentLen, 2, 0.02]} />
-              <meshStandardMaterial color="#888" wireframe transparent opacity={0.5} />
+              <planeGeometry args={[segmentLen, 2]} />
+              <meshBasicMaterial map={texSeg ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.85} />
             </mesh>
             <mesh position={[0, 1, halfD]}>
-              <boxGeometry args={[totalW, 2, 0.02]} />
-              <meshStandardMaterial color="#888" wireframe transparent opacity={0.5} />
+              <planeGeometry args={[totalW, 2]} />
+              <meshBasicMaterial map={texW ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.85} />
             </mesh>
             <mesh position={[-halfW, 1, 0]} rotation={[0, Math.PI / 2, 0]}>
-              <boxGeometry args={[totalD, 2, 0.02]} />
-              <meshStandardMaterial color="#888" wireframe transparent opacity={0.5} />
+              <planeGeometry args={[totalD, 2]} />
+              <meshBasicMaterial map={texD ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.85} />
             </mesh>
             <mesh position={[halfW, 1, 0]} rotation={[0, Math.PI / 2, 0]}>
-              <boxGeometry args={[totalD, 2, 0.02]} />
-              <meshStandardMaterial color="#888" wireframe transparent opacity={0.5} />
+              <planeGeometry args={[totalD, 2]} />
+              <meshBasicMaterial map={texD ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.85} />
             </mesh>
           </>
         );
