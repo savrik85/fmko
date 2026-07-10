@@ -43,39 +43,51 @@ export function Fence({ level, bounds, colorOverride }: FenceProps) {
   return <BrickWall halfW={halfW} halfD={halfD} totalD={bounds.depth} colorOverride={colorOverride} />;
 }
 
-// L1 — žluto-černá páska s mezerou pro bránu na jihu
+// L1 — páska na hustší řadě sloupků (viditelný plot), mezera pro bránu na jihu
 function TapeFence({ halfW, halfD, totalW, totalD, colorOverride }: { halfW: number; halfD: number; totalW: number; totalD: number; colorOverride?: string | null }) {
   const tapeColor = colorOverride ?? "#F4C430";
   const segmentLen = halfW - GATE_WIDTH / 2;
-  const lines: Array<{ pos: [number, number, number]; rot: [number, number, number]; len: number }> = [];
-  // Jih — 2 segmenty s mezerou pro bránu
-  lines.push({ pos: [-(halfW + GATE_WIDTH / 2) / 2, 0.5, -halfD], rot: [0, 0, 0], len: segmentLen });
-  lines.push({ pos: [(halfW + GATE_WIDTH / 2) / 2, 0.5, -halfD], rot: [0, 0, 0], len: segmentLen });
-  // Sever — celý
-  lines.push({ pos: [0, 0.5, halfD], rot: [0, 0, 0], len: totalW });
-  // Východ + Západ — celé
-  lines.push({ pos: [-halfW, 0.5, 0], rot: [0, Math.PI / 2, 0], len: totalD });
-  lines.push({ pos: [halfW, 0.5, 0], rot: [0, Math.PI / 2, 0], len: totalD });
+  // Pásky na 2 výškách (víc vidět než jedna)
+  const sides: Array<{ x: number; z: number; rot: [number, number, number]; len: number }> = [
+    { x: -(halfW + GATE_WIDTH / 2) / 2, z: -halfD, rot: [0, 0, 0], len: segmentLen },
+    { x: (halfW + GATE_WIDTH / 2) / 2, z: -halfD, rot: [0, 0, 0], len: segmentLen },
+    { x: 0, z: halfD, rot: [0, 0, 0], len: totalW },
+    { x: -halfW, z: 0, rot: [0, Math.PI / 2, 0], len: totalD },
+    { x: halfW, z: 0, rot: [0, Math.PI / 2, 0], len: totalD },
+  ];
+  const bandYs = [0.45, 0.9];
+  // Sloupky á 5 m po celém obvodu (mimo bránu na jihu)
+  const posts: Array<[number, number]> = [];
+  const spacing = 5;
+  for (let x = -halfW; x <= halfW; x += spacing) {
+    if (Math.abs(x) > GATE_WIDTH / 2 + 0.01) posts.push([x, -halfD]);
+    posts.push([x, halfD]);
+  }
+  for (let z = -halfD + spacing; z <= halfD - spacing; z += spacing) {
+    posts.push([-halfW, z]);
+    posts.push([halfW, z]);
+  }
+  posts.push([-GATE_WIDTH / 2, -halfD], [GATE_WIDTH / 2, -halfD]);
 
   return (
     <group>
-      {lines.map((l, i) => (
-        <mesh key={i} position={l.pos} rotation={l.rot}>
-          <boxGeometry args={[l.len, 0.2, 0.05]} />
+      {sides.flatMap((l, i) => bandYs.map((y, j) => (
+        <mesh key={`${i}-${j}`} position={[l.x, y, l.z]} rotation={l.rot} castShadow>
+          <boxGeometry args={[l.len, 0.14, 0.05]} />
           <meshStandardMaterial color={tapeColor} />
         </mesh>
-      ))}
-      {[
-        [-halfW, -halfD], [halfW, -halfD],
-        [-halfW, halfD],  [halfW, halfD],
-        [0, halfD],
-        // Sloupky lemující bránu na jihu
-        [-GATE_WIDTH / 2, -halfD], [GATE_WIDTH / 2, -halfD],
-      ].map((p, i) => (
-        <mesh key={i} position={[p[0], 0.5, p[1]]} castShadow>
-          <cylinderGeometry args={[0.07, 0.07, 1, 6]} />
-          <meshStandardMaterial color="#1A1A1A" />
-        </mesh>
+      )))}
+      {posts.map((p, i) => (
+        <group key={i} position={[p[0], 0, p[1]]}>
+          <mesh position={[0, 0.55, 0]} castShadow>
+            <cylinderGeometry args={[0.08, 0.09, 1.1, 8]} />
+            <meshStandardMaterial color="#3A3A3A" />
+          </mesh>
+          <mesh position={[0, 1.12, 0]} castShadow>
+            <sphereGeometry args={[0.1, 8, 6]} />
+            <meshStandardMaterial color="#2A2A2A" />
+          </mesh>
+        </group>
       ))}
     </group>
   );
