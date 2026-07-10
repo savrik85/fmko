@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
 import { PITCH, STAND_DIMS } from "./constants";
 
 const STAND_GAP = 2.5;
@@ -39,6 +40,33 @@ function useBannerTexture(text: string | null | undefined, bg: string, fg: strin
     tex.anisotropy = 4;
     return tex;
   }, [text, bg, fg]);
+}
+
+/** Vlnící se vlaječka na žerdi kotle — per-vertex sinusová vlna (jako hlavní vlajka).
+ *  Levý okraj u žerdi (fixed), volný konec vlaje. Fáze posouvá vlnu mezi vlaječkami (organické). */
+function WavingPennant({ color, y, phase }: { color: string; y: number; phase: number }) {
+  const ref = useRef<THREE.Mesh>(null);
+  const W = 1.0, H = 0.7;
+  useFrame(({ clock }) => {
+    const m = ref.current;
+    if (!m) return;
+    const t = clock.elapsedTime * 3 + phase;
+    const geom = m.geometry as THREE.PlaneGeometry;
+    const p = geom.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      const d = (x + W / 2) / W;           // 0 u žerdi, 1 na volném konci
+      p.setZ(i, Math.sin(t + d * 6) * 0.16 * d);
+    }
+    p.needsUpdate = true;
+    geom.computeVertexNormals();
+  });
+  return (
+    <mesh ref={ref} position={[W / 2, y, 0.02]}>
+      <planeGeometry args={[W, H, 10, 3]} />
+      <meshStandardMaterial color={color} side={THREE.DoubleSide} roughness={0.8} />
+    </mesh>
+  );
 }
 
 /**
@@ -171,10 +199,7 @@ export function UltrasSector({
               <cylinderGeometry args={[0.07, 0.07, poleH, 6]} />
               <meshStandardMaterial color="#2E2E2E" metalness={0.5} roughness={0.5} />
             </mesh>
-            <mesh position={[0.5, poleH - 0.6, 0.02]}>
-              <planeGeometry args={[1.0, 0.7]} />
-              <meshStandardMaterial color={i % 2 === 0 ? sec : primaryColor} side={2} roughness={0.8} />
-            </mesh>
+            <WavingPennant color={i % 2 === 0 ? sec : primaryColor} y={poleH - 0.6} phase={i * 0.8} />
           </group>
         );
       })}
