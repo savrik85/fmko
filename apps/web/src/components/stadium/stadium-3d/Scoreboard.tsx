@@ -79,7 +79,7 @@ function LedMonoScoreboard({ homeScore, awayScore, homeName, awayName }: { homeS
       </mesh>
       <mesh position={[0, poleH + 1, 0.13]}>
         <planeGeometry args={[5.7, 1.7]} />
-        <meshBasicMaterial map={texture} toneMapped={false} />
+        <meshStandardMaterial color="#000000" emissive="#ffffff" emissiveMap={texture} emissiveIntensity={1.7} toneMapped={false} />
       </mesh>
     </group>
   );
@@ -106,7 +106,7 @@ function FullLedScoreboard({ homeScore, awayScore, homeName, awayName }: { homeS
       </mesh>
       <mesh position={[0, poleH + 1.3, 0.16]}>
         <planeGeometry args={[7.4, 2.4]} />
-        <meshBasicMaterial map={texture} toneMapped={false} />
+        <meshStandardMaterial color="#000000" emissive="#ffffff" emissiveMap={texture} emissiveIntensity={1.7} toneMapped={false} />
       </mesh>
     </group>
   );
