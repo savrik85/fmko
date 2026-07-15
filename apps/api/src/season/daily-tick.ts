@@ -817,8 +817,11 @@ export async function executeDailyTick(
             checkDayStart2.setDate(checkDayStart2.getDate() + 2);
             const cs2 = new Date(checkDayStart2); cs2.setUTCHours(0, 0, 0, 0);
             const ce2 = new Date(checkDayStart2); ce2.setUTCHours(23, 59, 59, 999);
+            // Pozor: pro tutéž ligu můžou existovat 2 řádky se stejným scheduled_at —
+            // aktuální sezóna + osiřelý pozůstatek z minulé sezóny (bez navázaného zápasu).
+            // Bereme jen řádek s reálným zápasem (EXISTS) a preferujeme nejnovější sezónu.
             const tomorrowCalEntry = await env.DB.prepare(
-              "SELECT id, game_week FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled' LIMIT 1"
+              "SELECT sc.id, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.scheduled_at BETWEEN ? AND ? AND sc.status = 'scheduled' AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id) ORDER BY sc.season_number DESC LIMIT 1"
             ).bind(interviewLeagueId, cs2.toISOString(), ce2.toISOString()).first<{ id: string; game_week: number }>()
               .catch((e) => { logger.warn({ module: "daily-tick" }, "interview tomorrow cal lookup", e); return null; });
             if (tomorrowCalEntry) {
