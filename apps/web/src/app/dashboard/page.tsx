@@ -40,6 +40,10 @@ interface ScheduleMatch {
   awayScore: number | null;
   scheduledAt: string | null;
   isFriendly?: boolean;
+  isCup?: boolean;
+  roundName?: string | null;
+  homeTeamId?: string | null;
+  awayTeamId?: string | null;
   isHome: boolean;
   promoted?: boolean;
   promotionCost?: number | null;
@@ -69,7 +73,8 @@ interface PreviewTeam {
 }
 
 interface MatchPreview {
-  matchId: string; round: number; scheduledAt: string | null; isHome: boolean;
+  matchId: string; round: number | null; scheduledAt: string | null; isHome: boolean;
+  isCup?: boolean; roundName?: string | null;
   home: PreviewTeam; away: PreviewTeam;
   venue: { name: string; capacity: number; pitchCondition: number; pitchType: string };
   weather: { icon: string; expected: string; temperature: number; description: string };
@@ -122,8 +127,12 @@ export default function DashboardPage() {
       setLoading(false);
       // Fetch match preview for next unplayed match
       const next = m.matches.find((mx: ScheduleMatch) => mx.status !== "simulated");
+      // Pohár má vlastní preview endpoint (oddělené tabulky cup_matches/cup_teams)
       if (next) {
-        apiFetch<MatchPreview>(`/api/teams/${teamId}/match-preview/${next.id}`)
+        const previewUrl = next.isCup
+          ? `/api/teams/${teamId}/cup-preview/${next.id}`
+          : `/api/teams/${teamId}/match-preview/${next.id}`;
+        apiFetch<MatchPreview>(previewUrl)
           .then(setPreview)
           .catch((e) => console.error("match-preview fetch:", e));
       }
@@ -282,7 +291,7 @@ export default function DashboardPage() {
               secondary: team.badge_secondary_color || team.secondary_color || "#FFF",
               badge: (team.badge_pattern as BadgePattern) || "shield",
               customInitials: team.badge_initials, symbol: team.badge_symbol, pos: my };
-            const oppTeamData = { id: (nextMatch.isHome ? preview?.away?.id : preview?.home?.id) ?? "",
+            const oppTeamData = { id: (nextMatch.isHome ? preview?.away?.id : preview?.home?.id) ?? (nextMatch.isHome ? nextMatch.awayTeamId : nextMatch.homeTeamId) ?? "",
               name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge,
               customInitials: null, symbol: null, pos: opp };
             const homeTeam = nextMatch.isHome ? myTeamData : oppTeamData;
@@ -290,12 +299,17 @@ export default function DashboardPage() {
             const homeForm = preview ? (nextMatch.isHome ? my : opp) : null;
             const awayForm = preview ? (nextMatch.isHome ? opp : my) : null;
             const ini = (n: string) => n.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+            // Velkokluby v poháru nemají vlastní stránku (chybí reálné team id) → nelinkovat.
+            const TeamCell = ({ t, children }: { t: { id: string }; children: ReactNode }) =>
+              t.id
+                ? <Link href={`/dashboard/team/${t.id}`} className="flex-1 text-center hover:opacity-80 transition-opacity">{children}</Link>
+                : <div className="flex-1 text-center">{children}</div>;
             return (
               <div className="overflow-hidden rounded-xl border border-gray-100">
                 {/* Dark header — kolo + badges + jména */}
                 <div className="bg-gradient-to-b from-[#1e2d1e] to-[#2a3f2a] px-4 py-5 text-white">
                   <div className="text-center mb-4 flex items-center justify-center gap-2">
-                    <span className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40">{nextMatch.round != null ? `${nextMatch.round}. kolo` : "Přátelák"}</span>
+                    <span className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40">{nextMatch.isCup ? (nextMatch.roundName ?? "🏆 Pohár") : nextMatch.round != null ? `${nextMatch.round}. kolo` : "Přátelák"}</span>
                     {(() => {
                       if (!nextMatch.scheduledAt || !gameDate) return null;
                       const matchDate = new Date(nextMatch.scheduledAt);
@@ -311,12 +325,12 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-start gap-3">
                     {/* Domácí */}
-                    <Link href={`/dashboard/team/${homeTeam.id}`} className="flex-1 text-center hover:opacity-80 transition-opacity">
+                    <TeamCell t={homeTeam}>
                       <div className="flex justify-center mb-2">
                         <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary} pattern={homeTeam.badge} initials={homeTeam.customInitials || ini(homeTeam.name)} symbol={homeTeam.symbol} size={48} />
                       </div>
                       <div className="font-heading font-bold text-sm leading-tight">{homeTeam.name}</div>
-                    </Link>
+                    </TeamCell>
                     {/* VS */}
                     <div className="shrink-0 flex flex-col items-center pt-3">
                       <div className="w-10 h-10 rounded-full border-2 border-white/10 flex items-center justify-center">
@@ -324,12 +338,12 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     {/* Hosté */}
-                    <Link href={`/dashboard/team/${awayTeam.id}`} className="flex-1 text-center hover:opacity-80 transition-opacity">
+                    <TeamCell t={awayTeam}>
                       <div className="flex justify-center mb-2">
                         <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary} pattern={awayTeam.badge} initials={awayTeam.customInitials || ini(awayTeam.name)} symbol={awayTeam.symbol} size={48} />
                       </div>
                       <div className="font-heading font-bold text-sm leading-tight">{awayTeam.name}</div>
-                    </Link>
+                    </TeamCell>
                   </div>
                   {/* Pozice — jen pro ligové zápasy */}
                   {nextMatch.round != null && (homeTeam.pos || awayTeam.pos) && (
@@ -341,8 +355,8 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* Forma */}
-                {homeForm && awayForm && (
+                {/* Forma — jen když je co ukázat (pohár formu nemá) */}
+                {homeForm && awayForm && (homeForm.form.length > 0 || awayForm.form.length > 0) && (
                   <div className="flex items-center px-4 py-3 border-b border-gray-100 overflow-hidden">
                     <div className="flex-1 min-w-0 flex gap-1 justify-end overflow-hidden">
                       {homeForm.form.slice(0, 5).map((f, i) => (
@@ -422,10 +436,10 @@ export default function DashboardPage() {
                 )}
                 <div className="text-center px-4 py-2">
                   <Link href="/dashboard/match" className="inline text-xs text-pitch-500 font-heading font-bold hover:underline">Sestava →</Link>
-                  {nextMatch.isHome && nextMatch.promoted && (
+                  {nextMatch.isHome && !nextMatch.isCup && nextMatch.promoted && (
                     <span className="inline ml-4 text-xs text-gold-600 font-heading font-bold">📢 Propagováno</span>
                   )}
-                  {nextMatch.isHome && !nextMatch.promoted && (
+                  {nextMatch.isHome && !nextMatch.isCup && !nextMatch.promoted && (
                     <button
                       onClick={() => promoteMatch(nextMatch)}
                       disabled={promoting}

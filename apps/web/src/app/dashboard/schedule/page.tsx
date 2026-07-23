@@ -36,6 +36,10 @@ interface ScheduleMatch {
   isDefaultLineup?: boolean;
   defaultPresetSlot?: "A" | "B" | "C" | null;
   isLocalDerby?: boolean;
+  isCup?: boolean;
+  roundName?: string | null;
+  homePens?: number | null;
+  awayPens?: number | null;
 }
 
 interface LeagueRound {
@@ -154,7 +158,7 @@ export default function SchedulePage() {
   const upcoming = matches.filter((m) => m.status !== "simulated");
   const upcomingIds = new Set(upcoming.map((m) => m.id));
 
-  const nextHome = upcoming.find((m) => m.isHome);
+  const nextHome = upcoming.find((m) => m.isHome && !m.isCup); // pohár nemá propagaci
 
   return (
     <>
@@ -305,7 +309,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
       {/* Mobile layout */}
       <div className="flex md:hidden items-center gap-2">
         <div className="shrink-0 w-6 text-center text-xs text-muted font-heading">
-          {m.isLocalDerby ? <span title="Místní derby" className="text-red-600">🏘️</span> : (m.round ? `${m.round}.` : "")}
+          {m.isLocalDerby ? <span title="Místní derby" className="text-red-600">🏘️</span> : m.isCup ? <span title={m.roundName ?? "Pohár"} className="text-gold-600">🏆</span> : (m.round ? `${m.round}.` : "")}
         </div>
         <BadgePreview primary={opp.color} secondary={opp.secondary} pattern={opp.badge as BadgePattern}
           initials={oppInitials} size={22} />
@@ -333,6 +337,8 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
         <div className="shrink-0 w-8 text-center">
           {m.isLocalDerby ? (
             <div className="text-sm text-red-600" title="Místní derby">🏘️</div>
+          ) : m.isCup ? (
+            <div className="text-sm text-gold-600" title={m.roundName ?? "Pohár"}>🏆</div>
           ) : (
             <div className="text-xs text-muted font-heading">{m.round ? `${m.round}.` : ""}</div>
           )}
@@ -383,9 +389,10 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
     </div>
   );
 
-  if (isPlayed) return <Link href={`/dashboard/match/${m.id}`}>{inner}</Link>;
+  // Odehraný pohárový zápas nemá detail v /dashboard/match/[id] (oddělené tabulky) → vede na stránku Pohár
+  if (isPlayed) return <Link href={m.isCup ? "/dashboard/pohar" : `/dashboard/match/${m.id}`}>{inner}</Link>;
   if (canEditLineup) {
-    // Pro friendly (calendarId=null) použij m.id — BE next-match pro friendly mapuje match.id jako calendarId
+    // Pro friendly (calendarId=null) i pohár použij m.id/calendarId — BE next-match to mapuje jako calendarId
     const switchId = m.calendarId ?? m.id;
     return <Link href={`/dashboard/match?calendarId=${switchId}`}>{inner}</Link>;
   }
