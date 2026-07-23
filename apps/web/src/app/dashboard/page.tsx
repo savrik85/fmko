@@ -73,7 +73,8 @@ interface PreviewTeam {
 }
 
 interface MatchPreview {
-  matchId: string; round: number; scheduledAt: string | null; isHome: boolean;
+  matchId: string; round: number | null; scheduledAt: string | null; isHome: boolean;
+  isCup?: boolean; roundName?: string | null;
   home: PreviewTeam; away: PreviewTeam;
   venue: { name: string; capacity: number; pitchCondition: number; pitchType: string };
   weather: { icon: string; expected: string; temperature: number; description: string };
@@ -126,9 +127,12 @@ export default function DashboardPage() {
       setLoading(false);
       // Fetch match preview for next unplayed match
       const next = m.matches.find((mx: ScheduleMatch) => mx.status !== "simulated");
-      // Pohár nemá match-preview (oddělené tabulky) → preview jen pro ligu/přátelák
-      if (next && !next.isCup) {
-        apiFetch<MatchPreview>(`/api/teams/${teamId}/match-preview/${next.id}`)
+      // Pohár má vlastní preview endpoint (oddělené tabulky cup_matches/cup_teams)
+      if (next) {
+        const previewUrl = next.isCup
+          ? `/api/teams/${teamId}/cup-preview/${next.id}`
+          : `/api/teams/${teamId}/match-preview/${next.id}`;
+        apiFetch<MatchPreview>(previewUrl)
           .then(setPreview)
           .catch((e) => console.error("match-preview fetch:", e));
       }
@@ -351,8 +355,8 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* Forma */}
-                {homeForm && awayForm && (
+                {/* Forma — jen když je co ukázat (pohár formu nemá) */}
+                {homeForm && awayForm && (homeForm.form.length > 0 || awayForm.form.length > 0) && (
                   <div className="flex items-center px-4 py-3 border-b border-gray-100 overflow-hidden">
                     <div className="flex-1 min-w-0 flex gap-1 justify-end overflow-hidden">
                       {homeForm.form.slice(0, 5).map((f, i) => (

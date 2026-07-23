@@ -160,6 +160,88 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
   });
 });
 
+// GET /api/teams/:teamId/cup-preview/:cupMatchId — preview pohárového zápasu (síla kádrů + počasí).
+// Pohár má oddělené tabulky; forma/pozice se nepočítají (pohár není liga, velkoklub nemá tabulku).
+// Vrací stejný tvar jako match-preview, aby FE komponenty fungovaly beze změny.
+matchesRouter.get("/teams/:teamId/cup-preview/:cupMatchId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const cupMatchId = c.req.param("cupMatchId");
+
+  const cm = await c.env.DB.prepare(
+    `SELECT cm.id, cm.round, cm.scheduled_at, cm.home_cup_team_id, cm.away_cup_team_id, cc.total_rounds
+     FROM cup_matches cm JOIN cup_competitions cc ON cc.id = cm.cup_id WHERE cm.id = ?`
+  ).bind(cupMatchId).first<{ id: string; round: number; scheduled_at: string | null; home_cup_team_id: string | null; away_cup_team_id: string | null; total_rounds: number }>()
+    .catch((e) => { logger.warn({ module: "matches" }, "fetch cup match for preview", e); return null; });
+  if (!cm || !cm.home_cup_team_id || !cm.away_cup_team_id) return c.json({ error: "Cup match not found" }, 404);
+
+  // Postaví PreviewTeam pro jednu stranu — reálný tým (players + barvy z teams) nebo velkoklub (cup_club_players).
+  const buildSide = async (cupTeamId: string) => {
+    const ct = await c.env.DB.prepare("SELECT id, team_id, name, strength, primary_color FROM cup_teams WHERE id = ?")
+      .bind(cupTeamId).first<{ id: string; team_id: string | null; name: string; strength: number; primary_color: string | null }>();
+    if (!ct) return null;
+    let realTeam: { primary_color: string | null; secondary_color: string | null; badge_pattern: string | null; stadium_name: string | null } | null = null;
+    let squad: Array<{ position: string; overall_rating: number; age: number }> = [];
+    if (ct.team_id) {
+      realTeam = await c.env.DB.prepare("SELECT primary_color, secondary_color, badge_pattern, stadium_name FROM teams WHERE id = ?")
+        .bind(ct.team_id).first<{ primary_color: string | null; secondary_color: string | null; badge_pattern: string | null; stadium_name: string | null }>();
+      const rows = await c.env.DB.prepare("SELECT position, overall_rating, age FROM players WHERE team_id = ? AND (status IS NULL OR status != 'released')")
+        .bind(ct.team_id).all<{ position: string; overall_rating: number; age: number }>().catch(() => ({ results: [] as { position: string; overall_rating: number; age: number }[] }));
+      squad = rows.results;
+    } else {
+      const rows = await c.env.DB.prepare("SELECT position, overall_rating, age FROM cup_club_players WHERE cup_team_id = ?")
+        .bind(ct.id).all<{ position: string; overall_rating: number; age: number }>().catch(() => ({ results: [] as { position: string; overall_rating: number; age: number }[] }));
+      squad = rows.results;
+    }
+    const avgRating = squad.length ? Math.round(squad.reduce((s, p) => s + p.overall_rating, 0) / squad.length) : ct.strength;
+    return {
+      ct,
+      team: {
+        id: ct.team_id ?? "", // velkoklub nemá reálné id → "" (FE ho pak nelinkuje)
+        name: ct.name,
+        primaryColor: realTeam?.primary_color ?? ct.primary_color ?? "#2D5F2D",
+        secondaryColor: realTeam?.secondary_color ?? "#FFFFFF",
+        badgePattern: realTeam?.badge_pattern ?? "shield",
+        position: 0, points: 0, played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0,
+        form: [] as string[], // pohár není liga → bez formy
+        avgRating,
+        squadSize: squad.length,
+        squad: squad.map((p) => ({ age: p.age, position: p.position, rating: p.overall_rating })),
+        isPlayer: ct.team_id === teamId,
+      },
+      stadiumName: realTeam?.stadium_name ?? null,
+    };
+  };
+
+  const [home, away] = await Promise.all([buildSide(cm.home_cup_team_id), buildSide(cm.away_cup_team_id)]);
+  if (!home || !away) return c.json({ error: "Cup team not found" }, 404);
+
+  const { generateForecast } = await import("../season/weather");
+  const forecast = generateForecast(cm.scheduled_at, cupMatchId.charCodeAt(0) + cupMatchId.charCodeAt(1));
+  const { roundName } = await import("../cup/cup");
+
+  return c.json({
+    matchId: cm.id,
+    round: null,
+    isCup: true,
+    roundName: roundName(cm.round, cm.total_rounds),
+    scheduledAt: cm.scheduled_at,
+    isHome: home.ct.team_id === teamId,
+    isLocalDerby: false,
+    home: home.team,
+    away: away.team,
+    venue: {
+      name: home.stadiumName || `Hřiště ${home.team.name}`,
+      capacity: 0, pitchCondition: 50, pitchType: "natural",
+    },
+    weather: {
+      icon: forecast.icon,
+      expected: forecast.expected,
+      temperature: forecast.temperature,
+      description: forecast.description,
+    },
+  });
+});
+
 // GET /api/teams/:teamId/schedule — rozpis zápasů (odehrané + nadcházející)
 matchesRouter.get("/teams/:teamId/schedule", async (c) => {
   const teamId = c.req.param("teamId");
