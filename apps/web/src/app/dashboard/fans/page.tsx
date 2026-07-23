@@ -12,6 +12,7 @@ interface ScheduleMatch {
   awayName: string;
   scheduledAt: string | null;
   isHome: boolean;
+  isCup?: boolean;
   promoted?: boolean;
   promotionCost?: number | null;
 }
@@ -296,7 +297,9 @@ export default function FansPage() {
     setSalesHistory(s.matches ?? []);
     setFanbase(fb);
     setFanbaseHistory(fbh.history ?? []);
-    const home = sched.matches.find((m) => m.status !== "simulated" && m.isHome) ?? null;
+    // Propagace i doprava fanoušků jsou vázané na ligové/přátelské zápasy (tabulka matches);
+    // pohár má oddělené tabulky a tyhle akce neumí → z „nejbližšího domácího" ho vyloučíme.
+    const home = sched.matches.find((m) => m.status !== "simulated" && m.isHome && !m.isCup) ?? null;
     setNextHomeMatch(home);
     setPromotionPrice((sched as { promotionPrice?: number }).promotionPrice ?? null);
     // Předvyplnit cenu vstupenky: user override, jinak automatická podle obce
