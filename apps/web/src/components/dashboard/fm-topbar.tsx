@@ -84,7 +84,8 @@ export function FMTopBar() {
         )}
         {nextMatch && (
           <span className="text-white/60 whitespace-nowrap truncate">
-            {"⚽"} {nextMatch.isFriendly && <span className="text-amber-400 text-xs mr-1 hidden sm:inline">přátelák</span>}
+            {nextMatch.isCup ? "🏆" : "⚽"} {nextMatch.isFriendly && <span className="text-amber-400 text-xs mr-1 hidden sm:inline">přátelák</span>}
+            {nextMatch.isCup && <span className="text-gold-400 text-xs mr-1 hidden sm:inline">pohár</span>}
             <span className="text-white font-bold">{nextMatch.opponent}</span>
             {" · "}
             {nextMatch.isFriendly ? (

@@ -25,7 +25,7 @@ interface AuthState {
   seasonDay: number | null;
   seasonTotal: number | null;
   gameDate: string | null;
-  nextMatch: { opponent: string; daysUntil: number; isFriendly?: boolean } | null;
+  nextMatch: { opponent: string; daysUntil: number; isFriendly?: boolean; isCup?: boolean } | null;
   isAdmin: boolean;
   isLoading: boolean;
 }
@@ -39,7 +39,7 @@ type AuthMeResponse = {
   budget?: number | null; leaguePosition?: number | null;
   season?: number | null; seasonDay?: number | null; seasonTotal?: number | null;
   gameDate?: string | null;
-  nextMatch?: { opponent: string; daysUntil: number } | null;
+  nextMatch?: { opponent: string; daysUntil: number; isFriendly?: boolean; isCup?: boolean } | null;
 };
 
 function buildTeamData(user: AuthMeResponse) {
