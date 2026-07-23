@@ -120,12 +120,16 @@ interface NextMatchInfo {
   matchId: string; calendarId: string; gameWeek: number | null; scheduledAt: string;
   isHome: boolean; homeName: string; awayName: string; homeColor: string; awayColor: string;
   isFriendly?: boolean;
+  isCup?: boolean;
+  roundName?: string | null;
   isLocalDerby?: boolean;
 }
 
 interface UpcomingMatch {
   calendarId: string; gameWeek: number | null; scheduledAt: string;
   opponentName: string; isHome: boolean; hasLineup: boolean; isFriendly: boolean;
+  isCup?: boolean;
+  roundName?: string | null;
 }
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
@@ -237,7 +241,7 @@ function MatchPage() {
           // při přechodu doma↔venku — předchozí prev.homeName mohlo být kdokoliv)
           const myName = ourTeamName ?? (data.nextMatch.isHome ? data.nextMatch.homeName : data.nextMatch.awayName);
           setNextMatch((prev) => prev ? {
-            ...prev, calendarId: target.calendarId, gameWeek: target.gameWeek, scheduledAt: target.scheduledAt, isHome: target.isHome, isFriendly: target.isFriendly,
+            ...prev, calendarId: target.calendarId, gameWeek: target.gameWeek, scheduledAt: target.scheduledAt, isHome: target.isHome, isFriendly: target.isFriendly, isCup: target.isCup, roundName: target.roundName,
             homeName: target.isHome ? myName : target.opponentName,
             awayName: target.isHome ? target.opponentName : myName,
           } : prev);
@@ -447,7 +451,7 @@ function MatchPage() {
           // myName z contextu — jinak by se mixovalo při přepínání doma↔venku
           const myName = ourTeamName ?? (nextMatch?.isHome ? nextMatch.homeName : nextMatch?.awayName ?? "");
           setNextMatch((prev) => prev ? {
-            ...prev, calendarId: um.calendarId, gameWeek: um.gameWeek, scheduledAt: um.scheduledAt, isHome: um.isHome, isFriendly: um.isFriendly,
+            ...prev, calendarId: um.calendarId, gameWeek: um.gameWeek, scheduledAt: um.scheduledAt, isHome: um.isHome, isFriendly: um.isFriendly, isCup: um.isCup, roundName: um.roundName,
             homeName: um.isHome ? myName : um.opponentName,
             awayName: um.isHome ? um.opponentName : myName,
           } : prev);
@@ -506,7 +510,7 @@ function MatchPage() {
                 vs {opponentName} · <span className="text-pitch-500">{nextMatch.isHome ? "doma" : "venku"}</span> · <span className="text-muted">{daysLabel}</span>
               </div>
               <div className="text-xs text-muted">
-                {nextMatch.isFriendly ? <span className="font-heading font-bold text-pitch-600">Přátelák</span> : `${nextMatch.gameWeek}. kolo`} · {dateStr}
+                {nextMatch.isCup ? <span className="font-heading font-bold text-gold-600">🏆 {nextMatch.roundName ?? "Pohár"}</span> : nextMatch.isFriendly ? <span className="font-heading font-bold text-pitch-600">Přátelák</span> : `${nextMatch.gameWeek}. kolo`} · {dateStr}
                 {absentPlayers.length > 0 && <span className="ml-2 text-card-red font-heading font-bold">⚠ {absentPlayers.length} nedostupných</span>}
               </div>
               {/* Warning jen pokud nic uloženého — info o sestavě je už v presetech + selectorech níže */}
@@ -527,8 +531,8 @@ function MatchPage() {
         );
       })()}
 
-      {/* Bus z okolí — jen pro domácí zápasy (ne přátelák) */}
-      {nextMatch?.isHome && !nextMatch.isFriendly && teamId && (
+      {/* Bus z okolí — jen pro domácí ligové zápasy (ne přátelák, ne pohár) */}
+      {nextMatch?.isHome && !nextMatch.isFriendly && !nextMatch.isCup && teamId && (
         <BusSelector teamId={teamId} matchId={nextMatch.matchId} />
       )}
 
@@ -969,7 +973,7 @@ function MatchPage() {
       {teamId && nextMatch && selected.filter(Boolean).length === 11 && (
         <LineupPreview
           teamId={teamId}
-          matchId={nextMatch.matchId}
+          matchId={nextMatch.isCup ? undefined : nextMatch.matchId}
           formation={formation}
           tactic={tactic}
           captainId={captainId}

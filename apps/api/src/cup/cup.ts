@@ -330,9 +330,17 @@ async function simulateCupTie(
 
   const homeReal = realTeamOf.get(homeCupTeamId) ?? null;
   const awayReal = realTeamOf.get(awayCupTeamId) ?? null;
-  const savedLineup = async (rid: string | null) => rid
-    ? await db.prepare("SELECT players_data, formation FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC LIMIT 1").bind(rid).first<{ players_data: string; formation: string }>().catch((e) => { logger.warn({ module: M }, "cup saved lineup", e); return null; })
-    : null;
+  // Sestava: preferuj tu uloženou přímo pro TENTO pohárový zápas (lineups.calendar_id = cupMatchId,
+  // ukládá ji FE stránka Sestavy), fallback na poslední uloženou sestavu týmu (zpětná kompatibilita
+  // — kdo si pohár explicitně nenastaví, hraje v poslední použité sestavě).
+  const savedLineup = async (rid: string | null) => {
+    if (!rid) return null;
+    const perMatch = await db.prepare("SELECT players_data, formation FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(rid, cupMatchId).first<{ players_data: string; formation: string }>()
+      .catch((e) => { logger.warn({ module: M }, "cup per-match lineup", e); return null; });
+    if (perMatch) return perMatch;
+    return await db.prepare("SELECT players_data, formation FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC LIMIT 1").bind(rid).first<{ players_data: string; formation: string }>()
+      .catch((e) => { logger.warn({ module: M }, "cup saved lineup", e); return null; });
+  };
   const homeLR = await savedLineup(homeReal);
   const awayLR = await savedLineup(awayReal);
 

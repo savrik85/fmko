@@ -2954,6 +2954,8 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   let gameWeek: number | null = null;
   let scheduledAt: string | null = null;
   let isFriendly = false;
+  let isCup = false;
+  let cupRoundName: string | null = null;
 
   // Pokud klient požaduje konkrétní calendarId/matchId, najdi přesně ten zápas
   if (requestedCalId) {
@@ -2983,6 +2985,30 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
         match = friend;
         isFriendly = true;
         scheduledAt = friend.created_at as string;
+      } else {
+        // Možná je to pohárový zápas (cup_matches.id). Pohár má oddělené tabulky (cup_teams),
+        // soupeř může být velkoklub bez reálného teams řádku → jméno/barvy bereme z cup_teams.
+        const cupM = await c.env.DB.prepare(
+          `SELECT cm.id, cm.round, cm.scheduled_at, cc.total_rounds, cm.home_cup_team_id,
+             ht.name AS home_name, ht.primary_color AS home_color, ht.team_id AS home_team_id,
+             at.name AS away_name, at.primary_color AS away_color, at.team_id AS away_team_id,
+             myct.id AS my_cup_team_id
+           FROM cup_matches cm
+           JOIN cup_competitions cc ON cc.id = cm.cup_id
+           JOIN cup_teams myct ON myct.cup_id = cm.cup_id AND myct.team_id = ? AND (myct.id = cm.home_cup_team_id OR myct.id = cm.away_cup_team_id)
+           JOIN cup_teams ht ON ht.id = cm.home_cup_team_id
+           JOIN cup_teams at ON at.id = cm.away_cup_team_id
+           WHERE cm.id = ?`
+        ).bind(teamId, requestedCalId).first<Record<string, unknown>>()
+          .catch((e) => { logger.warn({ module: "game" }, "load requested cup match", e); return null; });
+        if (cupM) {
+          match = cupM;
+          isCup = true;
+          calendarId = cupM.id as string;
+          scheduledAt = cupM.scheduled_at as string | null;
+          const { roundName } = await import("../cup/cup");
+          cupRoundName = roundName(cupM.round as number, cupM.total_rounds as number);
+        }
       }
     }
   }
@@ -3005,22 +3031,54 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       match = friendlyMatch;
       isFriendly = true;
       scheduledAt = friendlyMatch.created_at as string;
-    } else if (team.league_id) {
-      // Fallback: nejstarší NEODEHRANÉ ligové kolo AKTUÁLNÍ sezóny, které MÁ zápasy. Bez filtru
-      // scheduled_at >= game_date (přeskakoval by kola předběhnutá kalendářem); prázdné týdny
-      // (kalendář má 30 týdnů, zápasy ~26) a minulé sezóny se přeskakují — jinak blokují sestavu.
-      const nextCal = await c.env.DB.prepare(
-        "SELECT sc.id, sc.scheduled_at, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.status = 'scheduled' AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = sc.league_id) AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id) ORDER BY sc.scheduled_at ASC LIMIT 1"
-      ).bind(team.league_id).first<{ id: string; scheduled_at: string; game_week: number }>();
-      if (!nextCal) return c.json({ nextMatch: null });
+    } else {
+      // Kandidáti na "nejbližší zápas": nejbližší ligové kolo + nejbližší pohárový zápas.
+      // Vybereme chronologicky dřívější — pohár se tak správně zařadí mezi ligová kola.
+      let leagueCand: { calId: string; gameWeek: number; scheduledAt: string; match: Record<string, unknown> } | null = null;
+      if (team.league_id) {
+        // Nejstarší NEODEHRANÉ ligové kolo AKTUÁLNÍ sezóny, které MÁ zápasy. Bez filtru
+        // scheduled_at >= game_date (přeskakoval by kola předběhnutá kalendářem); prázdné týdny
+        // a minulé sezóny se přeskakují — jinak blokují sestavu.
+        const nextCal = await c.env.DB.prepare(
+          "SELECT sc.id, sc.scheduled_at, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.status = 'scheduled' AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = sc.league_id) AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id) ORDER BY sc.scheduled_at ASC LIMIT 1"
+        ).bind(team.league_id).first<{ id: string; scheduled_at: string; game_week: number }>();
+        if (nextCal) {
+          const lm = await c.env.DB.prepare(
+            "SELECT m.id, m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name, t1.primary_color as home_color, t2.primary_color as away_color FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?)"
+          ).bind(nextCal.id, teamId, teamId).first<Record<string, unknown>>();
+          if (lm) leagueCand = { calId: nextCal.id, gameWeek: nextCal.game_week, scheduledAt: nextCal.scheduled_at, match: lm };
+        }
+      }
+      // Nejbližší neodehraný pohárový zápas tohoto týmu (oba soupeři už známí).
+      const nextCup = await c.env.DB.prepare(
+        `SELECT cm.id, cm.round, cm.scheduled_at, cc.total_rounds, cm.home_cup_team_id,
+           ht.name AS home_name, ht.primary_color AS home_color, ht.team_id AS home_team_id,
+           at.name AS away_name, at.primary_color AS away_color, at.team_id AS away_team_id,
+           myct.id AS my_cup_team_id
+         FROM cup_matches cm
+         JOIN cup_competitions cc ON cc.id = cm.cup_id AND cc.season_number = (SELECT MAX(season_number) FROM cup_competitions)
+         JOIN cup_teams myct ON myct.cup_id = cm.cup_id AND myct.team_id = ? AND (myct.id = cm.home_cup_team_id OR myct.id = cm.away_cup_team_id)
+         JOIN cup_teams ht ON ht.id = cm.home_cup_team_id
+         JOIN cup_teams at ON at.id = cm.away_cup_team_id
+         WHERE cm.status = 'scheduled' AND cm.scheduled_at IS NOT NULL
+         ORDER BY cm.scheduled_at ASC LIMIT 1`
+      ).bind(teamId).first<Record<string, unknown>>()
+        .catch((e) => { logger.warn({ module: "game" }, "load next cup match", e); return null; });
 
-      calendarId = nextCal.id;
-      gameWeek = nextCal.game_week;
-      scheduledAt = nextCal.scheduled_at;
-
-      match = await c.env.DB.prepare(
-        "SELECT m.id, m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name, t1.primary_color as home_color, t2.primary_color as away_color FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?)"
-      ).bind(nextCal.id, teamId, teamId).first<Record<string, unknown>>();
+      const useCup = nextCup && (!leagueCand || ((nextCup.scheduled_at as string) ?? "") < leagueCand.scheduledAt);
+      if (useCup && nextCup) {
+        match = nextCup;
+        isCup = true;
+        calendarId = nextCup.id as string;
+        scheduledAt = nextCup.scheduled_at as string | null;
+        const { roundName } = await import("../cup/cup");
+        cupRoundName = roundName(nextCup.round as number, nextCup.total_rounds as number);
+      } else if (leagueCand) {
+        calendarId = leagueCand.calId;
+        gameWeek = leagueCand.gameWeek;
+        scheduledAt = leagueCand.scheduledAt;
+        match = leagueCand.match;
+      }
     }
   }
 
@@ -3164,8 +3222,8 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     };
   });
 
-  // Upcoming matches strip — ligové i přátelské, sloučené chronologicky
-  let upcomingMatches: Array<{ calendarId: string; gameWeek: number | null; scheduledAt: string; opponentName: string; isHome: boolean; hasLineup: boolean; isFriendly: boolean }> = [];
+  // Upcoming matches strip — ligové, přátelské i pohárové, sloučené chronologicky
+  let upcomingMatches: Array<{ calendarId: string; gameWeek: number | null; scheduledAt: string; opponentName: string; isHome: boolean; hasLineup: boolean; isFriendly: boolean; isCup?: boolean; roundName?: string | null }> = [];
   try {
     // Ligové zápasy z kalendáře
     if (team.league_id) {
@@ -3217,6 +3275,36 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
         isFriendly: true,
       });
     }
+    // Pohárové zápasy (nadcházející, oba soupeři známí) — cup_matches.id jako calendarId
+    const upcomingCup = await c.env.DB.prepare(
+      `SELECT cm.id, cm.round, cm.scheduled_at, cc.total_rounds, cm.home_cup_team_id,
+        ht.name AS home_name, at.name AS away_name, myct.id AS my_cup_team_id,
+        (SELECT COUNT(*) FROM lineups l WHERE l.team_id = ? AND l.calendar_id = cm.id) AS has_lineup
+      FROM cup_matches cm
+      JOIN cup_competitions cc ON cc.id = cm.cup_id AND cc.season_number = (SELECT MAX(season_number) FROM cup_competitions)
+      JOIN cup_teams myct ON myct.cup_id = cm.cup_id AND myct.team_id = ? AND (myct.id = cm.home_cup_team_id OR myct.id = cm.away_cup_team_id)
+      JOIN cup_teams ht ON ht.id = cm.home_cup_team_id
+      JOIN cup_teams at ON at.id = cm.away_cup_team_id
+      WHERE cm.status = 'scheduled'
+      ORDER BY cm.scheduled_at ASC`
+    ).bind(teamId, teamId).all();
+    if (upcomingCup.results.length > 0) {
+      const { roundName } = await import("../cup/cup");
+      for (const u of upcomingCup.results) {
+        const isHome = u.home_cup_team_id === u.my_cup_team_id;
+        upcomingMatches.push({
+          calendarId: u.id as string,
+          gameWeek: null,
+          scheduledAt: (u.scheduled_at as string | null) ?? "",
+          opponentName: (isHome ? u.away_name : u.home_name) as string,
+          isHome,
+          hasLineup: (u.has_lineup as number) > 0,
+          isFriendly: false,
+          isCup: true,
+          roundName: roundName(u.round as number, u.total_rounds as number),
+        });
+      }
+    }
     // Sloučit chronologicky
     upcomingMatches.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
   } catch (e) { logger.warn({ module: "game" }, "fetch upcoming matches", e); }
@@ -3224,13 +3312,15 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   return c.json({
     nextMatch: {
       matchId: match.id,
-      calendarId: isFriendly ? (match.id as string) : calendarId,
+      calendarId: (isFriendly || isCup) ? (match.id as string) : calendarId,
       gameWeek: gameWeek,
       scheduledAt: scheduledAt,
       isHome: match.home_team_id === teamId,
       homeName: match.home_name, awayName: match.away_name,
       homeColor: match.home_color, awayColor: match.away_color,
       isFriendly,
+      isCup,
+      roundName: cupRoundName,
       isLocalDerby,
     },
     lineup: lineup ? {

@@ -227,6 +227,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     scheduledAt: row.scheduled_at || row.simulated_at || row.created_at,
     gameWeek: row.game_week,
     isFriendly: row.calendar_id === null,
+    isCup: false,
     isHome: row.home_team_id === teamId,
     simulatedAt: row.simulated_at,
     promoted: (row.promoted as number | null) === 1,
@@ -237,7 +238,71 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     isDefaultLineup: (row.lineup_is_auto === null || row.lineup_is_auto !== 0) && hasAnyDefaultLineup, // má fallback default
     defaultPresetSlot, // jaký preset slot má poslední uložená sestava (pro indikaci u "(výchozí)")
     isLocalDerby: !!row.home_village_id && row.home_village_id === row.away_village_id,
+    roundName: null as string | null, // jen pro pohár (label kola)
+    homePens: null as number | null,
+    awayPens: null as number | null,
   }));
+
+  // Pohárové zápasy tohoto týmu — pohár má oddělenou strukturu (cup_matches/cup_teams), proto
+  // se sem musí dohledat zvlášť (přes cup_teams.team_id) a sloučit do rozpisu. Odlišeno isCup=true.
+  try {
+    const { roundName } = await import("../cup/cup");
+    const cupRows = await c.env.DB.prepare(
+      `SELECT cm.id, cm.round, cm.status, cm.scheduled_at, cm.home_score, cm.away_score, cm.home_pens, cm.away_pens,
+         cm.home_cup_team_id, cc.total_rounds,
+         ht.name AS home_name, ht.primary_color AS home_color, ht.team_id AS home_real_id,
+         at.name AS away_name, at.primary_color AS away_color, at.team_id AS away_real_id,
+         myct.id AS my_cup_team_id,
+         (SELECT COUNT(*) FROM lineups l WHERE l.team_id = ? AND l.calendar_id = cm.id) AS has_lineup
+       FROM cup_matches cm
+       JOIN cup_competitions cc ON cc.id = cm.cup_id AND cc.season_number = (SELECT MAX(season_number) FROM cup_competitions)
+       JOIN cup_teams myct ON myct.cup_id = cm.cup_id AND myct.team_id = ? AND (myct.id = cm.home_cup_team_id OR myct.id = cm.away_cup_team_id)
+       JOIN cup_teams ht ON ht.id = cm.home_cup_team_id
+       JOIN cup_teams at ON at.id = cm.away_cup_team_id`
+    ).bind(teamId, teamId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch cup matches for schedule", e); return { results: [] }; });
+
+    for (const row of cupRows.results) {
+      const isHome = row.home_cup_team_id === row.my_cup_team_id;
+      matches.push({
+        id: row.id as string,
+        calendarId: row.id as string, // pohár používá cup_matches.id jako calendarId (jako přátelák match.id)
+        round: null, // ne ligové kolo → FE nezobrazí "X. kolo", použije roundName
+        status: row.status as string,
+        homeTeamId: (row.home_real_id as string | null), // velkoklub nemá reálný tým → null
+        homeName: row.home_name as string,
+        homeColor: (row.home_color as string) || "#2D5F2D",
+        homeSecondary: "#FFFFFF",
+        homeBadge: "shield",
+        homeScore: row.home_score as number | null,
+        awayTeamId: (row.away_real_id as string | null),
+        awayName: row.away_name as string,
+        awayColor: (row.away_color as string) || "#2D5F2D",
+        awaySecondary: "#FFFFFF",
+        awayBadge: "shield",
+        awayScore: row.away_score as number | null,
+        scheduledAt: (row.scheduled_at as string | null) ?? "",
+        gameWeek: null,
+        isFriendly: false,
+        isCup: true,
+        isHome,
+        simulatedAt: null,
+        promoted: false,
+        promotionCost: null,
+        promotionBoost: 1.0,
+        presetSlot: null,
+        hasLineup: (row.has_lineup as number) > 0,
+        isDefaultLineup: false,
+        defaultPresetSlot,
+        isLocalDerby: false,
+        // Pohár-specifická pole
+        roundName: roundName(row.round as number, row.total_rounds as number),
+        homePens: row.home_pens as number | null,
+        awayPens: row.away_pens as number | null,
+      });
+    }
+    // Přeřaď celý rozpis chronologicky (cup se vloží mezi ligová kola dle data)
+    matches.sort((a, b) => String(a.scheduledAt ?? "").localeCompare(String(b.scheduledAt ?? "")));
+  } catch (e) { logger.warn({ module: "matches" }, "merge cup into schedule", e); }
 
   return c.json({
     leagueName: league?.name ?? "Liga",
