@@ -192,6 +192,15 @@ matchesRouter.get("/teams/:teamId/cup-preview/:cupMatchId", async (c) => {
         .bind(ct.id).all<{ position: string; overall_rating: number; age: number }>().catch(() => ({ results: [] as { position: string; overall_rating: number; age: number }[] }));
       squad = rows.results;
     }
+    // Slabé předkolové týmy (a velkokluby, jimž se ještě lazy nevygeneroval kádr) nemají rozepsané
+    // hráče — jen celkovou sílu (cup_teams.strength). Bez tohohle by preview v pruzích obrana/útok/věk
+    // ukázalo nuly (viz IMG_4532 — soupeř s ratingem 6 měl BRA/OBR/ZÁL/ÚTO/VĚK = 0). Nahradíme
+    // reprezentativní jedenáctkou o síle ~ strength, aby pruhy odpovídaly reálné síle soupeře.
+    const realSquadSize = squad.length;
+    if (squad.length === 0) {
+      const layout = ["GK", "DEF", "DEF", "DEF", "DEF", "MID", "MID", "MID", "MID", "FWD", "FWD"];
+      squad = layout.map((position) => ({ position, overall_rating: ct.strength, age: 26 }));
+    }
     const avgRating = squad.length ? Math.round(squad.reduce((s, p) => s + p.overall_rating, 0) / squad.length) : ct.strength;
     return {
       ct,
@@ -204,7 +213,7 @@ matchesRouter.get("/teams/:teamId/cup-preview/:cupMatchId", async (c) => {
         position: 0, points: 0, played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0,
         form: [] as string[], // pohár není liga → bez formy
         avgRating,
-        squadSize: squad.length,
+        squadSize: realSquadSize,
         squad: squad.map((p) => ({ age: p.age, position: p.position, rating: p.overall_rating })),
         isPlayer: ct.team_id === teamId,
       },
