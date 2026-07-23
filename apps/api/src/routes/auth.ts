@@ -3,11 +3,12 @@
  * PBKDF2 hashování, KV sessions.
  */
 
-async function getNextMatch(db: D1Database, teamId: string, leagueId: string, gameDate: string | null): Promise<{ opponent: string; daysUntil: number; isFriendly?: boolean } | null> {
+async function getNextMatch(db: D1Database, teamId: string, leagueId: string, gameDate: string | null): Promise<{ opponent: string; daysUntil: number; isFriendly?: boolean; isCup?: boolean } | null> {
   if (!gameDate) return null;
   const gd = new Date(gameDate);
+  const daysFrom = (iso: string) => Math.max(0, Math.round((new Date(iso).getTime() - gd.getTime()) / 86400000));
 
-  // Priority: friendly match waiting for lineup
+  // Priority: friendly match waiting for lineup (potřebuje sestavu hned)
   const friendly = await db.prepare(
     `SELECT m.home_team_id, m.away_team_id, m.created_at,
      t1.name as home_name, t2.name as away_name
@@ -23,8 +24,8 @@ async function getNextMatch(db: D1Database, teamId: string, leagueId: string, ga
     return { opponent, daysUntil: 0, isFriendly: true };
   }
 
-  // Fallback: next league match
-  const row = await db.prepare(
+  // Kandidáti: nejbližší ligové kolo + nejbližší pohárový zápas → vybrat chronologicky dřívější.
+  const leagueRow = await db.prepare(
     `SELECT m.home_team_id, m.away_team_id, sc.scheduled_at,
      t1.name as home_name, t2.name as away_name
      FROM matches m
@@ -38,11 +39,37 @@ async function getNextMatch(db: D1Database, teamId: string, leagueId: string, ga
      ORDER BY sc.scheduled_at LIMIT 1`
   ).bind(leagueId, teamId, teamId).first<Record<string, unknown>>();
 
-  if (!row) return null;
-  const opponent = (row.home_team_id === teamId ? row.away_name : row.home_name) as string;
-  const matchDate = new Date(row.scheduled_at as string);
-  const daysUntil = Math.max(0, Math.round((matchDate.getTime() - gd.getTime()) / 86400000));
-  return { opponent, daysUntil };
+  const cupRow = await db.prepare(
+    `SELECT cm.scheduled_at, cm.home_cup_team_id, ht.name AS home_name, at.name AS away_name, myct.id AS my_cup_team_id
+     FROM cup_matches cm
+     JOIN cup_competitions cc ON cc.id = cm.cup_id AND cc.season_number = (SELECT MAX(season_number) FROM cup_competitions)
+     JOIN cup_teams myct ON myct.cup_id = cm.cup_id AND myct.team_id = ? AND (myct.id = cm.home_cup_team_id OR myct.id = cm.away_cup_team_id)
+     JOIN cup_teams ht ON ht.id = cm.home_cup_team_id
+     JOIN cup_teams at ON at.id = cm.away_cup_team_id
+     WHERE cm.status = 'scheduled' AND cm.scheduled_at IS NOT NULL
+     ORDER BY cm.scheduled_at LIMIT 1`
+  ).bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "auth" }, "next cup match for topbar", e); return null; });
+
+  const cands: { scheduledAt: string; opponent: string; isCup: boolean }[] = [];
+  if (leagueRow) {
+    cands.push({
+      scheduledAt: leagueRow.scheduled_at as string,
+      opponent: (leagueRow.home_team_id === teamId ? leagueRow.away_name : leagueRow.home_name) as string,
+      isCup: false,
+    });
+  }
+  if (cupRow) {
+    const isHome = cupRow.home_cup_team_id === cupRow.my_cup_team_id;
+    cands.push({
+      scheduledAt: cupRow.scheduled_at as string,
+      opponent: (isHome ? cupRow.away_name : cupRow.home_name) as string,
+      isCup: true,
+    });
+  }
+  if (cands.length === 0) return null;
+  cands.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+  const best = cands[0];
+  return { opponent: best.opponent, daysUntil: daysFrom(best.scheduledAt), isCup: best.isCup || undefined };
 }
 
 import { Hono } from "hono";
