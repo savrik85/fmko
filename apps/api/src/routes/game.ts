@@ -6638,6 +6638,14 @@ gameRouter.post("/admin/cup/advance", async (c) => {
   return c.json(r);
 });
 
+// POST /api/admin/cup/backfill-finances — zpětně dopočítá návštěvu + tržby pro už odehrané
+// domácí pohárové zápasy reálných týmů (idempotentní: jen zápasy bez uložené návštěvy).
+gameRouter.post("/admin/cup/backfill-finances", async (c) => {
+  const { backfillCupFinances } = await import("../cup/cup");
+  const r = await backfillCupFinances(c.env.DB);
+  return c.json({ ok: true, ...r });
+});
+
 // POST /api/admin/cup/sync-names — srovná názvy s reálným týmem tam, kde přejmenování
 // (naming sponzor / převzetí) nebylo promítnuto: (1) pohár, (2) U21 týmy podle rodiče.
 gameRouter.post("/admin/cup/sync-names", async (c) => {

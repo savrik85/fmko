@@ -699,3 +699,41 @@ export async function maybeAdvanceCup(db: D1Database): Promise<number> {
   if (advanced > 0) logger.info({ module: M }, `cup auto-advanced ${advanced} kol (s=${season.n})`);
   return advanced;
 }
+
+/**
+ * Zpětný dopočet návštěvy + tržeb pro už odehrané domácí pohárové zápasy reálných týmů.
+ * Idempotentní: zpracuje jen zápasy, které ještě nemají uloženou návštěvu (attendance IS NULL).
+ * Průběh/sestavy NEdoplňuje (ta data neexistují a přesimulovat by změnilo výsledky) — jen
+ * návštěvu a finance (vstupné + občerstvení − rozhodčí) pro domácí reálný tým.
+ */
+export async function backfillCupFinances(db: D1Database): Promise<{ processed: number; skipped: number }> {
+  const rows = await db.prepare(
+    `SELECT cm.id, cm.home_score, cm.away_score, cm.weather, cm.scheduled_at,
+       hc.team_id AS home_real, ac.strength AS away_strength
+     FROM cup_matches cm
+     JOIN cup_teams hc ON hc.id = cm.home_cup_team_id
+     JOIN cup_teams ac ON ac.id = cm.away_cup_team_id
+     JOIN cup_competitions cc ON cc.id = cm.cup_id AND cc.status = 'active'
+     WHERE cm.status = 'simulated' AND cm.attendance IS NULL AND hc.team_id IS NOT NULL AND cm.home_score IS NOT NULL`
+  ).all<{ id: string; home_score: number; away_score: number; weather: string | null; scheduled_at: string | null; home_real: string; away_strength: number }>()
+    .catch((e) => { logger.warn({ module: M }, "backfill: load cup matches", e); return { results: [] as any[] }; });
+
+  const { processMatchDayFinances } = await import("../season/finance-processor");
+  let processed = 0, skipped = 0;
+  for (const m of rows.results) {
+    const weather = (m.weather ?? "cloudy") as Weather;
+    const ctx = await cupHomeMatchContext(db, m.home_real, weather);
+    if (!ctx) { skipped++; continue; }
+    // Návštěvu ulož PŘED financemi — attendance IS NULL guard tak brání dvojitému připsání.
+    await db.prepare("UPDATE cup_matches SET attendance = ?, stadium_name = ?, pitch_condition = ? WHERE id = ? AND attendance IS NULL")
+      .bind(ctx.attendance, ctx.stadiumName, ctx.pitchCondition, m.id).run()
+      .catch((e) => logger.warn({ module: M }, "backfill: save attendance", e));
+    const homeResult = m.home_score > m.away_score ? "win" : m.home_score < m.away_score ? "loss" : "draw";
+    const gd = m.scheduled_at ?? new Date().toISOString();
+    await processMatchDayFinances(db, m.home_real, m.id, true, homeResult, ctx.attendance, gd, m.away_strength ?? 50, false, weather)
+      .catch((e) => logger.warn({ module: M }, "backfill: finances", e));
+    processed++;
+  }
+  logger.info({ module: M }, `cup backfill finances: ${processed} zpracováno, ${skipped} přeskočeno`);
+  return { processed, skipped };
+}
