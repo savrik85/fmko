@@ -88,6 +88,10 @@ export default function MatchDetailPage() {
   const [lineupSort, setLineupSort] = useState<"position" | "rating">("position");
 
   useEffect(() => {
+    // Pohárový zápas má oddělené tabulky → vlastní endpoint. Ligový detail neexistuje → 404 → fallback na pohár.
+    const loadCup = () => apiFetch<MatchDetail>(`/api/cup-matches/${matchId}`)
+      .then((m) => { setMatch(m); setLoading(false); })
+      .catch((e) => { console.error("Failed to load cup match:", e); setLoading(false); });
     apiFetch<MatchDetail & { calendar_id?: string | null }>(`/api/matches/${matchId}`)
       .then((m) => {
         // Pre-match (neodehráno) → redirect na editor sestavy. Tato stránka je jen pro výsledky.
@@ -99,7 +103,7 @@ export default function MatchDetailPage() {
         setMatch(m);
         setLoading(false);
       })
-      .catch((e) => { console.error("Failed to load match:", e); setLoading(false); });
+      .catch(() => loadCup());
   }, [matchId, router]);
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;

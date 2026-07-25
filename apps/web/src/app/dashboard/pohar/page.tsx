@@ -13,6 +13,7 @@ interface BracketMatch {
   winnerId: string | null; status: string; upset: boolean;
 }
 interface MyMatch {
+  matchId: string;
   round: number; roundName: string; opponent: Side | null; isHome: boolean;
   myScore: number | null; oppScore: number | null; myPens: number | null; oppPens: number | null;
   status: string; won: boolean | null;
@@ -206,6 +207,11 @@ export default function PoharPage() {
                       </span>
                     )}
                   </div>
+                  {m.status === "simulated" && m.matchId && (
+                    <div className="mt-1 text-right">
+                      <Link href={`/dashboard/match/${m.matchId}`} className="text-xs font-heading font-bold text-pitch-600 hover:underline">Detail zápasu →</Link>
+                    </div>
+                  )}
                 </div>
               );
             })}
