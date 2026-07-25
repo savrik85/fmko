@@ -661,6 +661,62 @@ matchesRouter.get("/matches/:id", async (c) => {
 });
 
 
+// GET /api/cup-matches/:id — detail pohárového zápasu (stejný tvar jako /matches/:id).
+// Pohár má oddělené tabulky; jména/barvy z cup_teams, průběh/sestavy/ratingy z cup_matches (od migrace 0122).
+matchesRouter.get("/cup-matches/:id", async (c) => {
+  const row = await c.env.DB.prepare(
+    `SELECT cm.*, cc.total_rounds,
+       hc.name AS home_name, hc.primary_color AS home_color, hc.team_id AS home_real_id,
+       ac.name AS away_name, ac.primary_color AS away_color, ac.team_id AS away_real_id
+     FROM cup_matches cm
+     JOIN cup_competitions cc ON cc.id = cm.cup_id
+     JOIN cup_teams hc ON hc.id = cm.home_cup_team_id
+     JOIN cup_teams ac ON ac.id = cm.away_cup_team_id
+     WHERE cm.id = ?`
+  ).bind(c.req.param("id")).first<Record<string, unknown>>();
+  if (!row) return c.json({ error: "Match not found" }, 404);
+
+  const { roundName } = await import("../cup/cup");
+  const homeLineup = JSON.parse((row.home_lineup_data as string) ?? "null");
+  const awayLineup = JSON.parse((row.away_lineup_data as string) ?? "null");
+
+  // Doplň aktuální squad_number reálných hráčů (velkoklub je nemá, zůstane null)
+  type LP = { id: string; squadNumber?: number | null };
+  const collectIds = (ld: { starters: LP[]; subs: LP[] } | null): string[] =>
+    ld ? [...ld.starters, ...ld.subs].map((p) => p.id).filter(Boolean) : [];
+  const allIds = [...collectIds(homeLineup), ...collectIds(awayLineup)];
+  if (allIds.length > 0) {
+    try {
+      const ph = allIds.map(() => "?").join(",");
+      const players = await c.env.DB.prepare(`SELECT id, squad_number FROM players WHERE id IN (${ph})`).bind(...allIds).all<{ id: string; squad_number: number | null }>();
+      const byId = new Map(players.results.map((p) => [p.id, p.squad_number]));
+      for (const ld of [homeLineup, awayLineup]) {
+        if (!ld) continue;
+        for (const list of [ld.starters, ld.subs]) for (const p of list) { const n = byId.get(p.id); if (n != null) p.squadNumber = n; }
+      }
+    } catch (e) { logger.warn({ module: "matches" }, "merge cup squad numbers", e); }
+  }
+
+  return c.json({
+    ...row,
+    id: row.id,
+    isCup: true,
+    round: null,
+    roundName: roundName(row.round as number, row.total_rounds as number),
+    home_team_id: row.home_real_id ?? null,
+    away_team_id: row.away_real_id ?? null,
+    home_badge: "shield", away_badge: "shield",
+    home_secondary: "#FFFFFF", away_secondary: "#FFFFFF",
+    events: JSON.parse((row.events as string) ?? "[]"),
+    commentary: JSON.parse((row.commentary as string) ?? "[]"),
+    player_ratings: JSON.parse((row.player_ratings as string) ?? "{}"),
+    home_lineup_data: homeLineup,
+    away_lineup_data: awayLineup,
+    absences: JSON.parse((row.absences as string) ?? "[]"),
+    isLocalDerby: false,
+  });
+});
+
 // GET /api/teams/:teamId/match-summary/:matchId — "co rozhodlo" breakdown po zápase
 // JIT compute: vezme uložená data zápasu, vrátí top 3 faktory + per-line strength.
 matchesRouter.get("/teams/:teamId/match-summary/:matchId", async (c) => {

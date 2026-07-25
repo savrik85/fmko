@@ -6438,8 +6438,8 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
   const ctOf = (id: string | null) => (id ? tmap.get(id) : null);
   const side = (id: string | null) => { const t = ctOf(id); return t ? { name: t.name, color: t.primary_color, isBig: !!t.is_big_club, teamId: t.team_id, strength: t.strength, cupTeamId: t.id } : null; };
 
-  const matchesRes = await c.env.DB.prepare("SELECT round, bracket_pos, home_cup_team_id, away_cup_team_id, home_score, away_score, home_pens, away_pens, winner_cup_team_id, status, upset, scheduled_at FROM cup_matches WHERE cup_id = ? ORDER BY round, bracket_pos")
-    .bind(cup.id).all<{ round: number; bracket_pos: number; home_cup_team_id: string | null; away_cup_team_id: string | null; home_score: number | null; away_score: number | null; home_pens: number | null; away_pens: number | null; winner_cup_team_id: string | null; status: string; upset: number; scheduled_at: string | null }>()
+  const matchesRes = await c.env.DB.prepare("SELECT id, round, bracket_pos, home_cup_team_id, away_cup_team_id, home_score, away_score, home_pens, away_pens, winner_cup_team_id, status, upset, scheduled_at FROM cup_matches WHERE cup_id = ? ORDER BY round, bracket_pos")
+    .bind(cup.id).all<{ id: string; round: number; bracket_pos: number; home_cup_team_id: string | null; away_cup_team_id: string | null; home_score: number | null; away_score: number | null; home_pens: number | null; away_pens: number | null; winner_cup_team_id: string | null; status: string; upset: number; scheduled_at: string | null }>()
     .catch((e) => { logger.warn({ module: "game.ts" }, "load cup matches", e); return { results: [] as any[] }; });
 
   // Herní datum — pro "za X dní" u naplánovaných pohárových zápasů
@@ -6465,6 +6465,7 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
       const opp = side(isHome ? m.away_cup_team_id : m.home_cup_team_id);
       const won = m.winner_cup_team_id === myCt.id;
       myMatches.push({
+        matchId: m.id,
         round: m.round, roundName: roundName(m.round, cup.total_rounds),
         opponent: opp, isHome,
         myScore: isHome ? m.home_score : m.away_score, oppScore: isHome ? m.away_score : m.home_score,

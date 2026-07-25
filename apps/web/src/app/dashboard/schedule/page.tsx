@@ -389,8 +389,8 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
     </div>
   );
 
-  // Odehraný pohárový zápas nemá detail v /dashboard/match/[id] (oddělené tabulky) → vede na stránku Pohár
-  if (isPlayed) return <Link href={m.isCup ? "/dashboard/pohar" : `/dashboard/match/${m.id}`}>{inner}</Link>;
+  // Odehraný zápas (i pohárový — má vlastní detail endpoint) → detail zápasu
+  if (isPlayed) return <Link href={`/dashboard/match/${m.id}`}>{inner}</Link>;
   if (canEditLineup) {
     // Pro friendly (calendarId=null) i pohár použij m.id/calendarId — BE next-match to mapuje jako calendarId
     const switchId = m.calendarId ?? m.id;
