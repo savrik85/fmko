@@ -426,6 +426,22 @@ async function simulateCupTie(
   if (homeLineup.length < 7 || awayLineup.length < 7) {
     logger.warn({ module: M }, `cup tie ${cupMatchId}: málo hráčů (home ${homeLineup.length}, away ${awayLineup.length}) → silová simulace bez statistik (kádr velkoklubu nebo tenký reálný kádr)`);
     const fb = simMatch(strengthOf.get(homeCupTeamId) ?? 30, strengthOf.get(awayCupTeamId) ?? 30, rng);
+    // I silová simulace (slabý předkolový soupeř): domácí zápas → návštěva + tržby pro domácí
+    // reálný tým. Průběh/sestavy nejsou (bez plného enginu), ale výsledek + návštěva se uloží.
+    try {
+      const ctx = await cupHomeMatchContext(db, homeReal, weather);
+      await db.prepare(
+        "UPDATE cup_matches SET attendance = ?, stadium_name = ?, pitch_condition = ?, weather = ?, simulated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?"
+      ).bind(ctx?.attendance ?? null, ctx?.stadiumName ?? null, ctx?.pitchCondition ?? null, weather, cupMatchId).run()
+        .catch((e) => logger.warn({ module: M }, "save cup fallback detail", e));
+      if (homeReal && ctx) {
+        const { processMatchDayFinances } = await import("../season/finance-processor");
+        const homeResult = fb.hg > fb.ag ? "win" : fb.hg < fb.ag ? "loss" : "draw";
+        const gd = (await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(homeReal).first<{ game_date: string | null }>().catch((e) => { logger.warn({ module: M }, "cup fallback game_date", e); return null; }))?.game_date ?? new Date().toISOString();
+        await processMatchDayFinances(db, homeReal, cupMatchId, true, homeResult, ctx.attendance, gd, strengthOf.get(awayCupTeamId) ?? 50, false, weather)
+          .catch((e) => logger.warn({ module: M }, "cup fallback finances", e));
+      }
+    } catch (e) { logger.warn({ module: M }, "cup fallback tržby", e); }
     return { ...fb, hp: fb.hp ?? 0, ap: fb.ap ?? 0 };
   }
   const homePre = homeLineup.map((p) => ({ ...p }));
