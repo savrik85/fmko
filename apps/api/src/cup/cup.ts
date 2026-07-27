@@ -442,6 +442,26 @@ async function simulateCupTie(
           .catch((e) => logger.warn({ module: M }, "cup fallback finances", e));
       }
     } catch (e) { logger.warn({ module: M }, "cup fallback tržby", e); }
+    // Paušální únava + morálka reálného týmu i u silové simulace (odehráli zápas, jen bez
+    // per-hráč modelu). Bez tohohle by pohár proti slabým soupeřům byl "zadarmo" (žádná únava).
+    try {
+      const homeWon = fb.hg > fb.ag, draw = fb.hg === fb.ag;
+      const applyFatigue = async (realTeam: string | null, lineup: typeof homeLineup, idMap: Map<number, string>, teamWon: boolean) => {
+        if (!realTeam || lineup.length === 0) return;
+        const moraleDelta = draw ? 0 : teamWon ? 3 : -3;
+        const stmts: D1PreparedStatement[] = [];
+        for (const p of lineup.slice(0, 11)) {
+          const dbId = idMap.get(p.id);
+          if (!dbId) continue;
+          const newCond = Math.max(30, Math.round(((p as any).condition ?? 80) - 9));
+          const newMorale = Math.max(0, Math.min(100, Math.round(((p as any).morale ?? 50) + moraleDelta)));
+          stmts.push(db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?").bind(newCond, newMorale, dbId));
+        }
+        if (stmts.length > 0) await db.batch(stmts).catch((e) => logger.warn({ module: M }, "cup fallback fatigue batch", e));
+      };
+      await applyFatigue(homeReal, homeLineup, homeBuild.idMap, homeWon);
+      await applyFatigue(awayReal, awayLineup, awayBuild.idMap, !homeWon && !draw);
+    } catch (e) { logger.warn({ module: M }, "cup fallback kondice/morálka", e); }
     return { ...fb, hp: fb.hp ?? 0, ap: fb.ap ?? 0 };
   }
   const homePre = homeLineup.map((p) => ({ ...p }));
