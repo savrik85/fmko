@@ -476,6 +476,37 @@ async function simulateCupTie(
   await saveMatchPlayerStats(db, cupMatchId, entries).catch((e) => logger.warn({ module: M }, "save cup player stats", e));
   await saveMatchMom(db, cupMatchId, determineManOfMatch(ratings)).catch((e) => logger.warn({ module: M }, "cup mom", e));
 
+  // ── Kondice + morálka hráčů po zápase + suspendace (červená karta) — jen reálné týmy.
+  // Velkoklubové kádry jsou v cup_club_players (ne players), takže se do players nezapisují.
+  try {
+    // Suspendace za červenou kartu (jako liga: red card = ban na 1 zápas)
+    const susStmts: D1PreparedStatement[] = [];
+    for (const u of homeUpdates) if (u.redCards > 0 && homeReal) susStmts.push(db.prepare("UPDATE players SET suspended_matches = suspended_matches + 1 WHERE id = ?").bind(u.playerId));
+    for (const u of awayUpdates) if (u.redCards > 0 && awayReal) susStmts.push(db.prepare("UPDATE players SET suspended_matches = suspended_matches + 1 WHERE id = ?").bind(u.playerId));
+    if (susStmts.length > 0) await db.batch(susStmts).catch((e) => logger.warn({ module: M }, "cup suspensions", e));
+
+    // Kondice + morálka zpět do players (post-sim hodnoty z result.homeLineup/awayLineup)
+    const { logConditionStmt } = await import("../lib/condition-log");
+    const preSimCondById = new Map<number, number>();
+    for (const p of [...homePre, ...awayPre]) preSimCondById.set(p.id, p.condition);
+    const condStmts: D1PreparedStatement[] = [];
+    const homePost = result.homeLineup ?? [];
+    for (const p of [...homePost, ...(result.awayLineup ?? [])]) {
+      const dbId = fullIdMap.get(p.id);
+      if (!dbId) continue;
+      const realTeam = homePost.includes(p) ? homeReal : awayReal;
+      if (!realTeam) continue; // velkoklub → není v players
+      condStmts.push(db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?").bind(Math.round(p.condition), Math.round(p.morale), dbId));
+      const oldCond = preSimCondById.get(p.id);
+      if (oldCond != null && Math.round(oldCond) !== Math.round(p.condition)) {
+        condStmts.push(logConditionStmt(db, dbId, realTeam, oldCond, p.condition, "match", `Pohár (${result.homeScore}:${result.awayScore})`));
+      }
+    }
+    if (condStmts.length > 0) await db.batch(condStmts).catch((e) => logger.warn({ module: M }, "cup condition/morale persist", e));
+  } catch (e) {
+    logger.warn({ module: M }, "cup kondice/morálka/suspendace", e);
+  }
+
   // ── Detail zápasu (průběh, sestavy, ratingy, počasí) + domácí tržby — parita s ligovým zápasem ──
   try {
     const homeLineupData = buildCupLineupData(homePre, homeSubs, homeBuild.idMap, homeLR?.formation ?? "4-4-2", "balanced");
