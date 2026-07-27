@@ -19,6 +19,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { teamId, isAdmin } = useTeam();
   const isDetailPage = DETAIL_PREFIXES.some((p) => pathname.startsWith(p) && pathname !== p.slice(0, -1));
   const hasCustomHeader = CUSTOM_HEADER_PAGES.includes(pathname);
+  // Přehrávání záznamu zápasu — skrýt horní lištu, stav konta by prozrazoval výsledek.
+  const isReplay = pathname.includes("/replay");
   // Check for unseen match — redirect to match-day screen (skip on replay pages)
   useEffect(() => {
     if (!teamId) return;
@@ -47,7 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <FMSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <FMTopBar />
+        {!isReplay && <FMTopBar />}
         <main className="flex-1 overflow-y-auto pb-20 sm:pb-0">
           {!isDetailPage && !hasCustomHeader && <PageHeader />}
           {children}
