@@ -13,3 +13,6 @@ apps/web/.open-next/
 apps/web/.vercel/
 .vercel/
 .next/
+
+# Zkompilované .js vedle .ts ve zdrojích — bundler je může vzít místo aktuálního .ts
+apps/api/src/**/*.js
