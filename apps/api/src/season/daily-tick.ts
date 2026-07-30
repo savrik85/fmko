@@ -7,6 +7,7 @@ import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
 import { simulateTraining } from "./training";
 import { logger } from "../lib/logger";
+import { overallRatingFromFlat } from "../skills/generator";
 
 export interface DailyTickEvent {
   type: "training" | "recovery" | "injury_healed" | "pitch" | "morale" | "match" | "day" | "loan_return";
@@ -358,12 +359,36 @@ export async function executeDailyTick(
               .bind(JSON.stringify(currentPhysical), playerId).run();
           }
 
-          // Adjust overall_rating relative to the change (don't recalculate from scratch
-          // because initial rating includes hidden_talent bonus that plain skills don't reflect)
-          const ratingDelta = imp.change > 0 ? 1 : -1; // +1 or -1 per skill point change
+          // Přepočítat hodnocení z aktuálních atributů. Dřív se přičítalo ±1 za každý
+          // natrénovaný bod, jenže hodnocení je vážený průměr ~10 atributů — jeden bod v něm
+          // váží 0,03–0,15. Ratingy tak utíkaly nahoru řádově rychleji než skutečná síla
+          // hráče (naměřeno 0,88 bodu na trénink místo ~0,1).
+          const row = playersResult.results[imp.playerIndex];
+          const physicalForRating = row.physical ? JSON.parse(row.physical as string) : {};
+          const skillsMaxForRating = row.skills_max ? JSON.parse(row.skills_max as string) : undefined;
+          const newRating = Math.max(1, overallRatingFromFlat(
+            row.position as string,
+            currentSkills,
+            physicalForRating,
+            (row.hidden_talent as number) ?? 0,
+            skillsMaxForRating,
+          ));
+
+          // Mzdu posunout jen v poměru, v jakém se změnilo hodnocení. Přepsat ji holým vzorcem
+          // nejde — smazalo by to vyjednané navýšení (unrest „raise_wage" ho slibuje trvale)
+          // a hráčům pod vzorcem by naopak samo od sebe přidalo. Beze změny ratingu = beze
+          // změny mzdy.
+          const baseWageFor = (r: number) => Math.round(10 + (r / 100) * 400);
+          const oldRating = (row.overall_rating as number) ?? newRating;
+          const oldWage = (row.weekly_wage as number) ?? 0;
+          const oldBase = baseWageFor(oldRating);
+          const newWage = oldWage > 0 && oldBase > 0
+            ? Math.round(oldWage * (baseWageFor(newRating) / oldBase))
+            : baseWageFor(newRating);
+
           await env.DB.prepare(
-            "UPDATE players SET overall_rating = MAX(1, overall_rating + ?), weekly_wage = ROUND(10 + (MAX(1, overall_rating + ?) / 100.0) * 400) WHERE id = ?"
-          ).bind(ratingDelta, ratingDelta, playerId).run();
+            "UPDATE players SET overall_rating = ?, weekly_wage = ? WHERE id = ?"
+          ).bind(newRating, newWage, playerId).run();
 
           // Log to training_log
           await env.DB.prepare(

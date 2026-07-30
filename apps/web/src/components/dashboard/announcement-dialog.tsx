@@ -28,23 +28,23 @@ export const ANNOUNCEMENT: Announcement = {
   id: "prepocet-hodnoceni-2026-07-31",
   active: true,
   emoji: "📊",
-  title: "Přepočet hodnocení hráčů",
-  subtitle: "Zítra opravíme chybu, která se táhne od začátku hry",
+  title: "Hodnocení hráčů je přepočítané",
+  subtitle: "Opravili jsme chybu, která se táhla od začátku hry",
   paragraphs: [
     "Celkové hodnocení hráčů — to velké číslo u každého jména — se celou dobu zobrazovalo špatně. Když hráč něco natrénoval, hodnocení mu vyskočilo mnohem víc, než odpovídalo tomu, co se doopravdy naučil.",
-    "Čím pilněji se u vás trénovalo, tím větší byla odchylka. U nejvytíženějších hráčů je rozdíl přes 30 bodů. Sestavy jste tak skládali podle špatně zobrazeného čísla — hráč s hodnocením 67 mohl být ve skutečnosti ten nejslabší muž na hřišti.",
+    "Čím pilněji se u vás trénovalo, tím větší byla odchylka. U nejvytíženějších hráčů dělala přes 30 bodů. Sestavy jste tak skládali podle špatně zobrazeného čísla — hráč s hodnocením 67 mohl být ve skutečnosti ten nejslabší muž na hřišti.",
   ],
   highlight: {
-    title: "Zápasy se ale počítaly správně",
-    text: "Simulace s tím rozbitým číslem nikdy nepracovala — vždycky brala skutečné schopnosti hráčů. Žádný výsledek, gól ani tabulka se neruší. Všechno platí.",
+    title: "Na sílu vašeho týmu to nemá vliv",
+    text: "Zápasy se počítaly vždycky ze skutečných schopností hráčů, ne z toho zobrazeného čísla. Vaši hráči jsou dnes přesně tak dobří jako včera a žádný odehraný výsledek, gól ani tabulka se nemění. Opravilo se zobrazení, ne hráči.",
   },
   bullets: {
-    title: "Co se stane zítra",
+    title: "Co se změnilo",
     items: [
-      "Všem hráčům ve hře přepočítáme hodnocení na správnou hodnotu.",
-      "Čísla půjdou dolů, u některých výrazně. Není to oslabení ani trest — váš hráč je přesně tak dobrý jako včera, jen konečně uvidíte pravdu.",
-      "Týká se to úplně všech týmů včetně soupeřů. Poměr sil v soutěži zůstává stejný.",
-      "Mzdy se počítají z hodnocení, takže většině hráčů klesnou. O přidání, které jste komu vyjednali, nikdo nepřijde.",
+      "Hodnocení je přepočítané u 1 409 hráčů ve hře. Průměrně kleslo o 3 body, u nejvíc trénovaných až o 32.",
+      "Týká se to všech týmů včetně soupeřů — nikdo si nepolepšil ani nepohoršil proti ostatním.",
+      "Mzdy se odvíjejí od hodnocení, takže většině hráčů klesly. O přidání, které jste komu vyjednali, nikdo nepřišel.",
+      "U brankářů zůstává hodnocení zatím beze změny — počítá se z jiných atributů a potřebuje samostatnou opravu.",
     ],
   },
   aside:
