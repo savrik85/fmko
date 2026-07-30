@@ -48,9 +48,9 @@ export const ANNOUNCEMENT: Announcement = {
     ],
   },
   aside:
-    "Pevně věřím, že jste všichni sestavy skládali podle podrobných statistik a na to velké číslo se nikdo z vás ani nepodíval. Kdyby se přece jen někdo nechal zlákat — teď je ta pravá chvíle projít si soupisku znovu. Klidně zjistíte, že váš nejlepší hráč vám celou sezónu seděl na lavičce.",
+    "Pevně věřím, že jste všichni sestavy skládali podle podrobných statistik a na to velké číslo se nikdo z vás ani nepodíval. 😄 Kdyby se přece jen někdo nechal zlákat — teď je ta pravá chvíle projít si soupisku znovu. Klidně zjistíte, že váš nejlepší hráč vám celou sezónu seděl na lavičce.",
   footer: "Omlouvám se. Byla to chyba od samého začátku.",
-  buttonLabel: "Rozumím",
+  buttonLabel: "Chápu, stane se...",
 };
 
 const SEEN_KEY_PREFIX = "announcement_seen_";
