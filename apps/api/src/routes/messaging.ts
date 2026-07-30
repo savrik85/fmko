@@ -8,6 +8,7 @@ import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
 import { listGroupChatsForTeam } from "./group-chats";
+import { sendWebPushToTeam, getNotificationPreferences } from "../community/web-push";
 
 const messagingRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -423,11 +424,16 @@ function pickGreeting(firstName: string): string {
 // ── Admin: Broadcast message to all human teams ──
 
 messagingRouter.post("/admin/broadcast", async (c) => {
-  const body = await c.req.json<{ message: string }>();
+  const body = await c.req.json<{ message: string; pushTitle?: string; pushBody?: string }>();
   if (!body.message?.trim()) return c.json({ error: "Empty message" }, 400);
 
   const msg = body.message.trim();
   const roleTitle = "Předseda Přeboru";
+
+  // Push na mobil — bez něj si zprávy všimne jen ten, kdo appku sám otevře.
+  // Krátký text jde poslat zvlášť; jinak se ořízne začátek zprávy.
+  const pushTitle = body.pushTitle?.trim() || roleTitle;
+  const pushBody = body.pushBody?.trim() || (msg.length > 120 ? `${msg.slice(0, 117)}...` : msg);
 
   // Get all human teams
   const teams = await c.env.DB.prepare(
@@ -435,6 +441,7 @@ messagingRouter.post("/admin/broadcast", async (c) => {
   ).all().catch((e) => { logger.warn({ module: "messaging" }, "fetch human teams for broadcast", e); return { results: [] }; });
 
   let sent = 0;
+  let pushed = 0;
   const now = new Date().toISOString();
 
   for (const team of teams.results) {
@@ -461,9 +468,19 @@ messagingRouter.post("/admin/broadcast", async (c) => {
     ).bind(msg.slice(0, 100), now, convId).run().catch((e) => logger.warn({ module: "messaging" }, "update broadcast conv unread", e));
 
     sent++;
+
+    // Push notifikace — respektuje vypnuté systémové notifikace. Selhání push
+    // nesmí shodit rozeslání zpráv, proto se jen loguje.
+    const prefs = await getNotificationPreferences(c.env.DB, teamId)
+      .catch((e) => { logger.warn({ module: "messaging" }, `load push prefs for team ${teamId}`, e); return null; });
+    if (prefs?.system !== false) {
+      await sendWebPushToTeam(c.env, teamId, pushTitle, pushBody, "/dashboard/phone")
+        .then(() => { pushed++; })
+        .catch((e) => logger.warn({ module: "messaging" }, `broadcast push for team ${teamId}`, e));
+    }
   }
 
-  return c.json({ ok: true, sent });
+  return c.json({ ok: true, sent, pushed });
 });
 
 // ── Admin: Get replies to broadcast messages ──
