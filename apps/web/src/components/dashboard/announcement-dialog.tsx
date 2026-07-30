@@ -31,7 +31,7 @@ export const ANNOUNCEMENT: Announcement = {
   title: "Hodnocení hráčů je přepočítané",
   subtitle: "Opravili jsme chybu, která se táhla od začátku hry",
   paragraphs: [
-    "Celkové hodnocení hráčů — to velké číslo u každého jména — se celou dobu zobrazovalo špatně. Když hráč něco natrénoval, hodnocení mu vyskočilo mnohem víc, než odpovídalo tomu, co se doopravdy naučil.",
+    "Celkové hodnocení hráčů se celou dobu zobrazovalo špatně. Když hráč něco natrénoval, hodnocení mu vyskočilo mnohem víc, než odpovídalo tomu, co se doopravdy naučil.",
     "Čím pilněji se u vás trénovalo, tím větší byla odchylka. U nejvytíženějších hráčů dělala přes 30 bodů. Sestavy jste tak skládali podle špatně zobrazeného čísla — hráč s hodnocením 67 mohl být ve skutečnosti ten nejslabší muž na hřišti.",
   ],
   highlight: {
@@ -49,7 +49,7 @@ export const ANNOUNCEMENT: Announcement = {
     ],
   },
   aside:
-    "Pevně věřím, že jste všichni sestavy skládali podle podrobných statistik a na to velké číslo se nikdo z vás ani nepodíval. 😄 Kdyby se přece jen někdo nechal zlákat — teď je ta pravá chvíle projít si soupisku znovu. Klidně zjistíte, že váš nejlepší hráč vám celou sezónu seděl na lavičce.",
+    "Pevně věřím, že jste všichni sestavy skládali podle podrobných statistik a na celkové hodnocení se nikdo z vás ani nepodíval. 😄 Kdyby se přece jen někdo nechal zlákat — teď je ta pravá chvíle projít si soupisku znovu. Klidně zjistíte, že váš nejlepší hráč vám celou sezónu seděl na lavičce.",
   footer: "Omlouvám se. Byla to chyba od samého začátku.",
   buttonLabel: "Chápu, stane se...",
 };
