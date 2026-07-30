@@ -5,6 +5,7 @@
 
 import { createRng, type Rng } from "../generators/rng";
 import { logger } from "../lib/logger";
+import { experienceGainChance } from "../skills/training";
 import { recordTransaction } from "../season/finance-processor";
 import type { Weather, TeamSetup } from "../engine/types";
 
@@ -525,6 +526,63 @@ async function simulateCupTie(
     if (condStmts.length > 0) await db.batch(condStmts).catch((e) => logger.warn({ module: M }, "cup condition/morale persist", e));
   } catch (e) {
     logger.warn({ module: M }, "cup kondice/morálka/suspendace", e);
+  }
+
+  // ── Zkušenost + zlepšení dovedností za odehrané minuty — parita s ligou.
+  // Pohár je ostřejší než liga (importance 1.2). Velkoklubové kádry se přeskakují,
+  // nejsou v tabulce players.
+  try {
+    const expRng = createRng(cupMatchId.charCodeAt(1) * 7919 + result.homeScore);
+    for (const [engineId, pm] of Object.entries(result.playerMinutes)) {
+      const dbId = fullIdMap.get(Number(engineId));
+      if (!dbId) continue;
+      const isHome = homeBuild.idMap.has(Number(engineId));
+      if (!(isHome ? homeReal : awayReal)) continue;
+
+      const minutes = ((pm as { left?: number; entered: number }).left ?? 90) - (pm as { entered: number }).entered;
+      if (minutes < 15) continue;
+
+      const row = await db.prepare("SELECT age, skills, position FROM players WHERE id = ?")
+        .bind(dbId).first<{ age: number; skills: string; position: string }>()
+        .catch((e) => { logger.warn({ module: M }, "load player for cup experience", e); return null; });
+      if (!row) continue;
+
+      const skills = JSON.parse(row.skills);
+      let changed = false;
+
+      const currentExp = skills.experience ?? 0;
+      if (currentExp < 100 && expRng.random() < experienceGainChance(minutes, "cup", row.age)) {
+        skills.experience = currentExp + 1;
+        changed = true;
+      }
+
+      // Zlepšení dovednosti — stejné šance jako v lize
+      const ageMod = row.age < 22 ? 0.08 : row.age < 26 ? 0.05 : row.age < 30 ? 0.03 : 0.01;
+      if (expRng.random() < ageMod * (minutes / 90)) {
+        const posSkills: Record<string, string[]> = {
+          GK: ["goalkeeping"], DEF: ["defense", "heading", "strength"],
+          MID: ["passing", "vision", "technique"], FWD: ["shooting", "speed", "technique"],
+        };
+        const attr = expRng.pick(posSkills[row.position] ?? ["technique"]);
+        const current = skills[attr] ?? 50;
+        if (current < 85) {
+          skills[attr] = current + 1;
+          changed = true;
+          await db.prepare(
+            "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'cup', ?)"
+          ).bind(dbId, isHome ? homeCupTeamId : awayCupTeamId, attr, current, current + 1, new Date().toISOString())
+            .run().catch((e) => logger.warn({ module: M }, "cup training log", e));
+        }
+      }
+
+      if (changed) {
+        await db.prepare("UPDATE players SET skills = ? WHERE id = ?")
+          .bind(JSON.stringify(skills), dbId).run()
+          .catch((e) => logger.warn({ module: M }, "cup skills persist", e));
+      }
+    }
+  } catch (e) {
+    logger.warn({ module: M }, "cup zkušenost/zlepšení", e);
   }
 
   // ── Detail zápasu (průběh, sestavy, ratingy, počasí) + domácí tržby — parita s ligovým zápasem ──
