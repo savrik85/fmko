@@ -31,3 +31,5 @@ export {
   staffAttributeValue,
   staffEffectiveness,
 } from "./staff";
+export type { RatingPosition, AttrImportance } from "./rating-weights";
+export { RATING_WEIGHTS, ratingWeightsFor, attributeImportance } from "./rating-weights";

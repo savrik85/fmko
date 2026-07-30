@@ -5,6 +5,8 @@
 import type { Rng } from "../generators/rng";
 import type { FieldSkills, GoalkeeperSkills, SkillValue, LeagueLevelRange } from "./types";
 import { SKILL_RANGES_BY_LEVEL } from "./types";
+// Váhy hodnocení žijí ve sdíleném balíku — používá je i web pro zvýraznění atributů v profilu.
+import { ratingWeightsFor } from "@okresni-masina/shared";
 
 function generateSkillValue(rng: Rng, range: LeagueLevelRange, positionBonus: number): SkillValue {
   const cap = rng.int(range.capMin + positionBonus, range.capMax + positionBonus);
@@ -134,25 +136,12 @@ export function generateHiddenTalent(rng: Rng, villageSize: string): number {
 /**
  * Calculate overall rating from skills and position.
  */
-/**
- * Váhy atributů pro celkové hodnocení, podle pozice.
- *
- * Jediný zdroj pravdy — používá je `calculateOverallRating` (struktura se `.current`)
- * i `overallRatingFromFlat` (ploché atributy z DB). Když se změní tady, změní se obojí.
- */
-export const RATING_WEIGHTS: Record<string, Record<string, number>> = {
-  GK: { reflexes: 3, positioning: 3, rushing: 2, catching: 3, kicking: 1, distribution: 1, strength: 1, reach: 2, communication: 2, experience: 2 },
-  DEF: { speed: 1, stamina: 2, strength: 3, technique: 1, shooting: 0.5, passing: 2, heading: 3, defense: 3, vision: 2, experience: 2 },
-  MID: { speed: 2, stamina: 3, strength: 1, technique: 2, shooting: 1.5, passing: 3, heading: 1, defense: 1.5, vision: 3, experience: 2 },
-  FWD: { speed: 3, stamina: 1.5, strength: 1.5, technique: 3, shooting: 3, passing: 2, heading: 2, defense: 0.5, vision: 2, experience: 1.5 },
-};
-
 export function calculateOverallRating(
   position: string,
   skills: FieldSkills | GoalkeeperSkills,
   hiddenTalent: number,
 ): number {
-  const weights = RATING_WEIGHTS[position] ?? RATING_WEIGHTS.FWD;
+  const weights = ratingWeightsFor(position);
 
   let weightedSum = 0;
   let totalWeight = 0;
@@ -187,7 +176,7 @@ export function overallRatingFromFlat(
   hiddenTalent: number,
   fallback?: Record<string, unknown>,
 ): number | null {
-  const weights = RATING_WEIGHTS[position] ?? RATING_WEIGHTS.FWD;
+  const weights = ratingWeightsFor(position);
   const fullWeight = Object.values(weights).reduce((a, b) => a + b, 0);
 
   let weightedSum = 0;
