@@ -166,5 +166,8 @@
       "mcp__plugin_serena_serena__initial_instructions",
       "Bash(echo \"exit: $?\")"
     ]
+  },
+  "remote": {
+    "defaultEnvironmentId": "env_01WAAHa5YFKzaYXAPszX84JN"
   }
 }

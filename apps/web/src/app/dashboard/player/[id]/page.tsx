@@ -9,6 +9,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
 import { nationalityLabel } from "@/lib/nationality";
+import { attributeImportance, type AttrImportance } from "@okresni-masina/shared";
 import type { BadgePattern } from "@/components/ui";
 
 /* ── Helpers ── */
@@ -78,6 +79,10 @@ export default function PlayerDetailPage() {
   const [player, setPlayer] = useState<Player | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
   const [playerTeam, setPlayerTeam] = useState<Team | null>(null);
+
+  // Váha atributu na pozici hráče — řídí zvýraznění v seznamu dovedností.
+  const imp = (attr: string): AttrImportance => attributeImportance(player?.position ?? "", attr);
+
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [mySquad, setMySquad] = useState<Player[]>([]);
   const [careerStats, setCareerStats] = useState<CareerStats | null>(null);
@@ -815,25 +820,32 @@ export default function PlayerDetailPage() {
         <div className="card p-4 sm:p-5">
           <SectionLabel>Dovednosti</SectionLabel>
           <div className="grid grid-cols-2 gap-x-4 gap-y-0">
-            <AttrRow label="Rychlost" value={player.skills?.speed ?? 0} />
-            <AttrRow label="Technika" value={player.skills?.technique ?? 0} />
-            <AttrRow label="Střelba" value={player.skills?.shooting ?? 0} />
-            <AttrRow label="Přihrávky" value={player.skills?.passing ?? 0} />
-            <AttrRow label="Hlavičky" value={player.skills?.heading ?? 0} />
-            <AttrRow label="Obrana" value={player.skills?.defense ?? 0} />
-            <AttrRow label="Kreativita" value={player.skills?.creativity ?? 0} />
-            <AttrRow label="Standardky" value={player.skills?.setPieces ?? 0} />
-            {player.position === "GK" && <AttrRow label="Brankář" value={player.skills?.goalkeeping ?? 0} />}
+            <AttrRow label="Rychlost" value={player.skills?.speed ?? 0} importance={imp("speed")} />
+            <AttrRow label="Technika" value={player.skills?.technique ?? 0} importance={imp("technique")} />
+            <AttrRow label="Střelba" value={player.skills?.shooting ?? 0} importance={imp("shooting")} />
+            <AttrRow label="Přihrávky" value={player.skills?.passing ?? 0} importance={imp("passing")} />
+            <AttrRow label="Hlavičky" value={player.skills?.heading ?? 0} importance={imp("heading")} />
+            <AttrRow label="Obrana" value={player.skills?.defense ?? 0} importance={imp("defense")} />
+            <AttrRow label="Přehled" value={attrValue(player, "vision")} importance={imp("vision")} />
+            <AttrRow label="Zkušenost" value={attrValue(player, "experience")} importance={imp("experience")} />
+            <AttrRow label="Kreativita" value={player.skills?.creativity ?? 0} importance={imp("creativity")} />
+            <AttrRow label="Standardky" value={player.skills?.setPieces ?? 0} importance={imp("setPieces")} />
+            {player.position === "GK" && <AttrRow label="Brankář" value={player.skills?.goalkeeping ?? 0} importance="key" />}
           </div>
 
           <div className="mt-4 pt-3 border-t border-gray-100">
             <div className="text-label text-[11px] uppercase tracking-wide mb-2">Fyzické</div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-0">
-              <AttrRow label="Výdrž" value={player.physical?.stamina ?? 0} />
-              <AttrRow label="Síla" value={player.physical?.strength ?? 0} />
+              <AttrRow label="Výdrž" value={player.physical?.stamina ?? 0} importance={imp("stamina")} />
+              <AttrRow label="Síla" value={player.physical?.strength ?? 0} importance={imp("strength")} />
               <AttrRow label="Náchylnost" value={player.physical?.injuryProneness ?? 0} inverted />
             </div>
           </div>
+
+          <p className="mt-3 pt-3 border-t border-gray-100 text-sm text-muted flex items-center gap-1.5">
+            <span className="text-pitch-500 text-[10px] leading-none" aria-hidden>●</span>
+            Zvýrazněné jsou klíčové pro {positionLabel(player.position)}.
+          </p>
         </div>
 
         {/* Column 3: Character traits */}
@@ -1650,11 +1662,59 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-function AttrRow({ label, value, inverted }: { label: string; value: number; inverted?: boolean }) {
+const POSITION_LABELS: Record<string, string> = {
+  GK: "brankáře", DEF: "obránce", MID: "záložníka", FWD: "útočníka",
+};
+function positionLabel(position: string): string {
+  return POSITION_LABELS[position] ?? "této pozice";
+}
+
+/**
+ * Hodnota atributu, který nemusí být v plochém `skills` — přehled a zkušenost tam u části
+ * hráčů chybí, přestože do hodnocení vstupují. Dohledá se ze `skills_max` (resp. ze sloupce
+ * `experience`), stejně jako to dělá přepočet hodnocení na serveru.
+ */
+function attrValue(player: Player, key: "vision" | "experience"): number {
+  const flat = (player.skills as Record<string, unknown> | undefined)?.[key];
+  if (typeof flat === "number") return flat;
+
+  const raw = (player as unknown as Record<string, unknown>).skills_max;
+  let parsed: Record<string, unknown> | undefined;
+  if (typeof raw === "string") {
+    try { parsed = JSON.parse(raw); } catch (e) { console.warn("parse skills_max:", e); }
+  } else if (raw && typeof raw === "object") {
+    parsed = raw as Record<string, unknown>;
+  }
+  const entry = parsed?.[key];
+  if (typeof entry === "number") return entry;
+  if (entry && typeof entry === "object" && typeof (entry as { current?: unknown }).current === "number") {
+    return (entry as { current: number }).current;
+  }
+
+  const column = (player as unknown as Record<string, unknown>).experience;
+  if (key === "experience" && typeof column === "number") return column;
+  return 0;
+}
+
+function AttrRow({ label, value, inverted, importance }: {
+  label: string;
+  value: number;
+  inverted?: boolean;
+  /** Váha atributu na hráčově pozici — řídí zvýraznění. */
+  importance?: AttrImportance;
+}) {
   const colorValue = inverted ? 100 - value : value;
+  const isKey = importance === "key";
   return (
-    <div className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-b-0">
-      <span className="text-sm text-ink-light">{label}</span>
+    <div
+      className={`flex items-center justify-between py-1.5 border-b border-gray-50 last:border-b-0 ${
+        isKey ? "-mx-2 px-2 bg-pitch-50/70 rounded border-b-pitch-100" : ""
+      }`}
+    >
+      <span className={`text-sm flex items-center gap-1.5 ${isKey ? "text-pitch-700 font-bold" : "text-ink-light"}`}>
+        {isKey && <span className="text-pitch-500 text-[10px] leading-none" aria-hidden>●</span>}
+        {label}
+      </span>
       <span className={`inline-flex items-center justify-center w-8 h-6 rounded text-xs font-heading font-bold tabular-nums ${attrBg(colorValue)}`}>
         {value}
       </span>

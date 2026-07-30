@@ -5,6 +5,8 @@
 import type { Rng } from "../generators/rng";
 import type { FieldSkills, GoalkeeperSkills, SkillValue, LeagueLevelRange } from "./types";
 import { SKILL_RANGES_BY_LEVEL } from "./types";
+// Váhy hodnocení žijí ve sdíleném balíku — používá je i web pro zvýraznění atributů v profilu.
+import { ratingWeightsFor } from "@okresni-masina/shared";
 
 function generateSkillValue(rng: Rng, range: LeagueLevelRange, positionBonus: number): SkillValue {
   const cap = rng.int(range.capMin + positionBonus, range.capMax + positionBonus);
@@ -139,13 +141,7 @@ export function calculateOverallRating(
   skills: FieldSkills | GoalkeeperSkills,
   hiddenTalent: number,
 ): number {
-  const weights: Record<string, number> = position === "GK"
-    ? { reflexes: 3, positioning: 3, rushing: 2, catching: 3, kicking: 1, distribution: 1, strength: 1, reach: 2, communication: 2, experience: 2 }
-    : position === "DEF"
-      ? { speed: 1, stamina: 2, strength: 3, technique: 1, shooting: 0.5, passing: 2, heading: 3, defense: 3, vision: 2, experience: 2 }
-      : position === "MID"
-        ? { speed: 2, stamina: 3, strength: 1, technique: 2, shooting: 1.5, passing: 3, heading: 1, defense: 1.5, vision: 3, experience: 2 }
-        : { speed: 3, stamina: 1.5, strength: 1.5, technique: 3, shooting: 3, passing: 2, heading: 2, defense: 0.5, vision: 2, experience: 1.5 };
+  const weights = ratingWeightsFor(position);
 
   let weightedSum = 0;
   let totalWeight = 0;
@@ -162,4 +158,53 @@ export function calculateOverallRating(
   const baseRating = totalWeight > 0 ? weightedSum / totalWeight : 0;
   const bonus = hiddenTalent * 0.15;
   return Math.round(baseRating + bonus);
+}
+
+/**
+ * Celkové hodnocení z plochých atributů, jak jsou uložené v DB.
+ *
+ * `calculateOverallRating` čte strukturu `{ skill: { current, maxPotential } }`, tedy sloupec
+ * `skills_max`. Ten se ale po vzniku hráče už neaktualizuje — trénink zapisuje do plochého
+ * `skills` (a u stamina/strength i do `physical`). Pro přepočet aktuálního hodnocení je proto
+ * potřeba číst ploché hodnoty; `fallback` (typicky `skills_max`) doplní atributy, které
+ * v `skills` u části hráčů vůbec nejsou (stamina, strength, vision, experience).
+ */
+export function overallRatingFromFlat(
+  position: string,
+  skills: Record<string, unknown>,
+  physical: Record<string, unknown>,
+  hiddenTalent: number,
+  fallback?: Record<string, unknown>,
+): number | null {
+  const weights = ratingWeightsFor(position);
+  const fullWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  for (const [key, weight] of Object.entries(weights)) {
+    let value: number | undefined;
+
+    if (typeof skills[key] === "number") value = skills[key] as number;
+    // stamina/strength drží pravdu v physical (read path ho preferuje)
+    if (value === undefined && typeof physical[key] === "number") value = physical[key] as number;
+    if (value === undefined && fallback) {
+      const entry = fallback[key];
+      if (typeof entry === "number") value = entry;
+      else if (entry && typeof entry === "object" && typeof (entry as { current?: unknown }).current === "number") {
+        value = (entry as { current: number }).current;
+      }
+    }
+
+    if (value === undefined) continue; // atribut chybí → vynechat z průměru (shodně s calculateOverallRating)
+    weightedSum += value * weight;
+    totalWeight += weight;
+  }
+
+  // Když chybí většina atributů (část brankářů nemá vyplněné brankářské dovednosti nikde),
+  // je zbylý průměr nereprezentativní — vrátit null a nechat volajícího hodnocení nesahat,
+  // ať se z pár náhodných atributů nespočítá nesmysl.
+  if (totalWeight < fullWeight / 2) return null;
+
+  return Math.round(weightedSum / totalWeight + hiddenTalent * 0.15);
 }
