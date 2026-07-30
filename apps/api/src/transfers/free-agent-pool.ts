@@ -64,7 +64,9 @@ export async function generateFreeAgentsForDistrict(
       passing: player.passing, heading: player.heading, defense: player.defense,
       goalkeeping: player.goalkeeping ?? 0, stamina: player.stamina, strength: player.strength,
       vision: player.technique, creativity: player.passing, setPieces: rng.int(10, 50),
-      experience: Math.min(80, player.age * 2),
+      // Shodně s generátorem hráčů: zkušenost roste od 16 let, ne od narození.
+      // Dřív `age * 2` — dvacetiletý dostal 40 místo 12–24, třicetiletý 60.
+      experience: Math.min(100, Math.max(1, (player.age - 16) * rng.int(3, 6))),
     };
     const posWeights: Record<string, Record<string, number>> = {
       GK: { goalkeeping: 4, strength: 2, stamina: 1 },

@@ -7,6 +7,7 @@ import {simulateMatch} from "../engine/simulation";
 import {weatherAttendanceFactor} from "../season/weather";
 import {generateMatchCommentary, loadCommentaryFromDB} from "../engine/commentary";
 import {createRng} from "../generators/rng";
+import {experienceGainChance} from "../skills/training";
 import type {MatchPlayer, TeamSetup, Weather} from "../engine/types";
 import {
     calculatePlayerRatings,
@@ -965,14 +966,29 @@ export async function runScheduledMatches(
                     const minutes = ((pm as any).left ?? 90) - (pm as any).entered;
                     if (minutes < 15) continue; // too few minutes to learn anything
 
-                    const playerRow = await db.prepare("SELECT age, skills, position FROM players WHERE id = ?")
-                        .bind(dbId).first<{ age: number; skills: string; position: string }>().catch((e) => {
+                    const playerRow = await db.prepare("SELECT p.age, p.skills, p.position, t.team_type FROM players p LEFT JOIN teams t ON t.id = p.team_id WHERE p.id = ?")
+                        .bind(dbId).first<{ age: number; skills: string; position: string; team_type: string | null }>().catch((e) => {
                             logger.warn({module: "match-runner"}, "Failed to load player for match experience", e);
                             return null;
                         });
                     if (!playerRow) continue;
 
                     const age = playerRow.age;
+
+                    // Zkušenost — hlavní zdroj růstu jsou odehrané ostrté zápasy.
+                    // Řeší se zvlášť od dovedností: nezávisí na pozici a roste častěji.
+                    {
+                        const expSkills = JSON.parse(playerRow.skills);
+                        const current = expSkills.experience ?? 0;
+                        if (current < 100 && matchRng.random() < experienceGainChance(minutes, playerRow.team_type === "u21" ? "u21" : "league", age)) {
+                            expSkills.experience = current + 1;
+                            await db.prepare("UPDATE players SET skills = ? WHERE id = ?")
+                                .bind(JSON.stringify(expSkills), dbId).run()
+                                .catch((e) => logger.warn({ module: "match-runner" }, "gain experience", e));
+                            playerRow.skills = JSON.stringify(expSkills); // ať navazující zápis nepřepíše přírůstek
+                        }
+                    }
+
                     const ageMod = age < 22 ? 0.08 : age < 26 ? 0.05 : age < 30 ? 0.03 : 0.01;
                     const minutesMod = minutes / 90; // full match = 1.0
                     const improveChance = ageMod * minutesMod;

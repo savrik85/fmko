@@ -6,6 +6,7 @@
 import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
 import { simulateTraining } from "./training";
+import { trainingExperienceChance } from "../skills/training";
 import { logger } from "../lib/logger";
 import { overallRatingFromFlat } from "../skills/generator";
 
@@ -338,6 +339,25 @@ export async function executeDailyTick(
         }
 
         // Persist skill changes to DB + recalculate wages + log training
+        // Zkušenost za odtrénovaný den. Sbírá se hlavně v zápasech, tohle je doplněk —
+        // šance je řádově menší, aby trénink nenahradil odehrané minuty.
+        for (const att of result.attendance) {
+          if (!att.attended) continue;
+          const row = playersResult.results[att.playerIndex];
+          if (!row) continue;
+          const age = row.age as number;
+          if (rng.random() >= trainingExperienceChance(age)) continue;
+
+          const expSkills = JSON.parse(row.skills as string);
+          const current = (expSkills.experience as number) ?? 0;
+          if (current >= 100) continue;
+          expSkills.experience = current + 1;
+          row.skills = JSON.stringify(expSkills); // ať navazující zápisy vychází z aktuální hodnoty
+          await env.DB.prepare("UPDATE players SET skills = ? WHERE id = ?")
+            .bind(row.skills, row.id as string).run()
+            .catch((e) => logger.warn({ module: "daily-tick" }, "gain training experience", e));
+        }
+
         for (const imp of result.improvements) {
           const player = squad[imp.playerIndex];
           const playerId = playersResult.results[imp.playerIndex].id as string;

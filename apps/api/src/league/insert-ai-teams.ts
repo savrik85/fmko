@@ -60,8 +60,8 @@ export async function insertAITeamsIntoDB(
         const apHiddenTalent = generateHiddenTalent(rng, villageSize);
 
         const apSkills = isGK
-          ? { speed: 0, technique: 0, shooting: 0, passing: apGkSkills!.distribution.current, heading: 0, defense: 0, goalkeeping: apGkSkills!.reflexes.current, creativity: 0, setPieces: 0 }
-          : { speed: apFieldSkills!.speed.current, technique: apFieldSkills!.technique.current, shooting: apFieldSkills!.shooting.current, passing: apFieldSkills!.passing.current, heading: apFieldSkills!.heading.current, defense: apFieldSkills!.defense.current, goalkeeping: 0, creativity: apFieldSkills!.creativity.current, setPieces: apFieldSkills!.setPieces.current };
+          ? { speed: apGkSkills!.rushing.current, technique: apGkSkills!.kicking.current, shooting: apGkSkills!.kicking.current, passing: apGkSkills!.distribution.current, heading: apGkSkills!.reach.current, defense: apGkSkills!.positioning.current, goalkeeping: apGkSkills!.reflexes.current, creativity: apGkSkills!.communication.current, setPieces: apGkSkills!.kicking.current, stamina: apGkSkills!.strength.current, strength: apGkSkills!.strength.current, vision: apGkSkills!.positioning.current, experience: apGkSkills!.experience.current }
+          : { speed: apFieldSkills!.speed.current, technique: apFieldSkills!.technique.current, shooting: apFieldSkills!.shooting.current, passing: apFieldSkills!.passing.current, heading: apFieldSkills!.heading.current, defense: apFieldSkills!.defense.current, goalkeeping: 1, creativity: apFieldSkills!.creativity.current, setPieces: apFieldSkills!.setPieces.current, stamina: apFieldSkills!.stamina.current, strength: apFieldSkills!.strength.current, vision: apFieldSkills!.vision.current, experience: apFieldSkills!.experience.current };
 
         const apHeight = (ap.position === "GK" ? 185 : ap.position === "DEF" ? 180 : ap.position === "FWD" ? 178 : 176) + rng.int(-8, 8);
         const apBaseWeight = ap.bodyType === "obese" ? 100 : ap.bodyType === "stocky" ? 88 : ap.bodyType === "thin" ? 68 : ap.bodyType === "athletic" ? 78 : 80;

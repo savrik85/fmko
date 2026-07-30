@@ -5,6 +5,7 @@
 import { simulateMatch } from "../engine/simulation";
 import { generateMatchCommentary, loadCommentaryFromDB } from "../engine/commentary";
 import { createRng } from "../generators/rng";
+import { experienceGainChance } from "../skills/training";
 import type { TeamSetup, Weather } from "../engine/types";
 import { buildMatchPlayers } from "./match-runner";
 import { logger } from "../lib/logger";
@@ -256,6 +257,20 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
           if (!playerRow) continue;
 
           const age = playerRow.age;
+
+          // Zkušenost — v přáteláku roste, ale výrazně pomaleji než v ostrém zápase.
+          {
+            const expSkills = JSON.parse(playerRow.skills);
+            const current = expSkills.experience ?? 0;
+            if (current < 100 && matchRng.random() < experienceGainChance(minutes, "friendly", age)) {
+              expSkills.experience = current + 1;
+              await db.prepare("UPDATE players SET skills = ? WHERE id = ?")
+                .bind(JSON.stringify(expSkills), dbId).run()
+                .catch((e) => logger.warn({ module: "friendly-runner" }, "gain experience", e));
+              playerRow.skills = JSON.stringify(expSkills); // ať navazující zápis nepřepíše přírůstek
+            }
+          }
+
           const ageMod = age < 22 ? 0.04 : age < 26 ? 0.025 : age < 30 ? 0.015 : 0.005; // halved vs league
           const minutesMod = minutes / 90;
           const improveChance = ageMod * minutesMod;

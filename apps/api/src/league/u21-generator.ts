@@ -222,8 +222,8 @@ export async function createU21TeamAndSquad(
     const hiddenTalent = generateHiddenTalent(rng, villageSize);
 
     const skills = isGK
-      ? { speed: 0, technique: 0, shooting: 0, passing: gkSkills!.distribution.current, heading: 0, defense: 0, goalkeeping: gkSkills!.reflexes.current, creativity: 0, setPieces: 0 }
-      : { speed: fieldSkills!.speed.current, technique: fieldSkills!.technique.current, shooting: fieldSkills!.shooting.current, passing: fieldSkills!.passing.current, heading: fieldSkills!.heading.current, defense: fieldSkills!.defense.current, goalkeeping: 0, creativity: fieldSkills!.creativity.current, setPieces: fieldSkills!.setPieces.current };
+      ? { speed: gkSkills!.rushing.current, technique: gkSkills!.kicking.current, shooting: gkSkills!.kicking.current, passing: gkSkills!.distribution.current, heading: gkSkills!.reach.current, defense: gkSkills!.positioning.current, goalkeeping: gkSkills!.reflexes.current, creativity: gkSkills!.communication.current, setPieces: gkSkills!.kicking.current, stamina: gkSkills!.strength.current, strength: gkSkills!.strength.current, vision: gkSkills!.positioning.current, experience: gkSkills!.experience.current }
+      : { speed: fieldSkills!.speed.current, technique: fieldSkills!.technique.current, shooting: fieldSkills!.shooting.current, passing: fieldSkills!.passing.current, heading: fieldSkills!.heading.current, defense: fieldSkills!.defense.current, goalkeeping: 1, creativity: fieldSkills!.creativity.current, setPieces: fieldSkills!.setPieces.current, stamina: fieldSkills!.stamina.current, strength: fieldSkills!.strength.current, vision: fieldSkills!.vision.current, experience: fieldSkills!.experience.current };
 
     const height = (position === "GK" ? 185 : position === "DEF" ? 180 : position === "FWD" ? 178 : 176) + rng.int(-8, 8);
     const baseWeight = base.bodyType === "obese" ? 92 : base.bodyType === "stocky" ? 82 : base.bodyType === "thin" ? 65 : base.bodyType === "athletic" ? 72 : 74;

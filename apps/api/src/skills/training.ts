@@ -103,3 +103,39 @@ export function gainExperience(
   const gain = (minutesPlayed / 90) * matchImportance * ageFactor * 0.5;
   return Math.min(100, current + gain);
 }
+
+/** Váha zápasu pro růst zkušenosti — ostrý zápas naučí víc než přátelák. */
+export const MATCH_IMPORTANCE = {
+  league: 1.0,
+  cup: 1.2,
+  u21: 0.7,
+  friendly: 0.4,
+} as const;
+
+export type MatchKind = keyof typeof MATCH_IMPORTANCE;
+
+/**
+ * Pravděpodobnost, že hráč po zápase získá +1 ke zkušenosti.
+ *
+ * Zkušenost se drží v celých číslech (stejně jako ostatní atributy), proto se
+ * zlomkový přírůstek převádí na šanci — přes sezónu vyjde nastejno.
+ * Mladí sbírají rychleji, po pětatřiceti už jen výjimečně.
+ */
+export function experienceGainChance(
+  minutesPlayed: number,
+  kind: MatchKind,
+  age: number,
+): number {
+  if (minutesPlayed < 15) return 0; // střídání na pár minut nikoho nic nenaučí
+  const ageFactor = age < 25 ? 1.5 : age < 35 ? 1.0 : 0.5;
+  return Math.min(1, (minutesPlayed / 90) * MATCH_IMPORTANCE[kind] * ageFactor * 0.5);
+}
+
+/**
+ * Šance na +1 ke zkušenosti za odtrénovaný den. Řádově menší než zápas —
+ * zkušenost se sbírá hlavně v ostrých zápasech, trénink je jen doplněk.
+ */
+export function trainingExperienceChance(age: number): number {
+  const ageFactor = age < 25 ? 1.5 : age < 35 ? 1.0 : 0.5;
+  return 0.06 * ageFactor;
+}
