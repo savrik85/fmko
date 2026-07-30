@@ -45,6 +45,7 @@ export const ANNOUNCEMENT: Announcement = {
       "Týká se to všech týmů včetně soupeřů — nikdo si nepolepšil ani nepohoršil proti ostatním.",
       "Mzdy se odvíjejí od hodnocení, takže většině hráčů klesly. O přidání, které jste komu vyjednali, nikdo nepřišel.",
       "Trénink teď hodnocení počítá správně, takže už znovu neuteče.",
+      "Pro lepší orientaci navíc v profilu hráče zvýrazňujeme vlastnosti, které jsou pro jeho pozici klíčové — ať je na první pohled vidět, podle čeho ho posuzovat.",
     ],
   },
   aside:

@@ -13,6 +13,15 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-07-30",
+    emoji: "🎯",
+    title: "V profilu hráče je vidět, co je pro jeho pozici klíčové",
+    items: [
+      "V profilu hráče se nově zvýrazní vlastnosti, na kterých u jeho pozice nejvíc záleží — u obránce třeba Obrana, Hlavičky nebo Síla, u záložníka Přihrávky a Přehled. Na první pohled tak vidíš, podle čeho hráče posuzovat.",
+      "Přibyly taky Přehled a Zkušenost, které se v profilu dřív vůbec nezobrazovaly.",
+    ],
+  },
+  {
+    date: "2026-07-30",
     emoji: "📊",
     title: "Oprava celkového hodnocení hráčů",
     items: [
