@@ -186,8 +186,9 @@ export function overallRatingFromFlat(
   physical: Record<string, unknown>,
   hiddenTalent: number,
   fallback?: Record<string, unknown>,
-): number {
+): number | null {
   const weights = RATING_WEIGHTS[position] ?? RATING_WEIGHTS.FWD;
+  const fullWeight = Object.values(weights).reduce((a, b) => a + b, 0);
 
   let weightedSum = 0;
   let totalWeight = 0;
@@ -211,6 +212,10 @@ export function overallRatingFromFlat(
     totalWeight += weight;
   }
 
-  const baseRating = totalWeight > 0 ? weightedSum / totalWeight : 0;
-  return Math.round(baseRating + hiddenTalent * 0.15);
+  // Když chybí většina atributů (část brankářů nemá vyplněné brankářské dovednosti nikde),
+  // je zbylý průměr nereprezentativní — vrátit null a nechat volajícího hodnocení nesahat,
+  // ať se z pár náhodných atributů nespočítá nesmysl.
+  if (totalWeight < fullWeight / 2) return null;
+
+  return Math.round(weightedSum / totalWeight + hiddenTalent * 0.15);
 }

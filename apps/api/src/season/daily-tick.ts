@@ -366,29 +366,34 @@ export async function executeDailyTick(
           const row = playersResult.results[imp.playerIndex];
           const physicalForRating = row.physical ? JSON.parse(row.physical as string) : {};
           const skillsMaxForRating = row.skills_max ? JSON.parse(row.skills_max as string) : undefined;
-          const newRating = Math.max(1, overallRatingFromFlat(
+          const computed = overallRatingFromFlat(
             row.position as string,
             currentSkills,
             physicalForRating,
             (row.hidden_talent as number) ?? 0,
             skillsMaxForRating,
-          ));
+          );
 
-          // Mzdu posunout jen v poměru, v jakém se změnilo hodnocení. Přepsat ji holým vzorcem
-          // nejde — smazalo by to vyjednané navýšení (unrest „raise_wage" ho slibuje trvale)
-          // a hráčům pod vzorcem by naopak samo od sebe přidalo. Beze změny ratingu = beze
-          // změny mzdy.
-          const baseWageFor = (r: number) => Math.round(10 + (r / 100) * 400);
-          const oldRating = (row.overall_rating as number) ?? newRating;
-          const oldWage = (row.weekly_wage as number) ?? 0;
-          const oldBase = baseWageFor(oldRating);
-          const newWage = oldWage > 0 && oldBase > 0
-            ? Math.round(oldWage * (baseWageFor(newRating) / oldBase))
-            : baseWageFor(newRating);
+          // null = hráč nemá dost vyplněných atributů (část brankářů). Hodnocení ani mzdy
+          // se pak nedotýkáme — dřív by tu drift pokračoval, teď se prostě nic nestane.
+          if (computed !== null) {
+            const newRating = Math.max(1, computed);
 
-          await env.DB.prepare(
-            "UPDATE players SET overall_rating = ?, weekly_wage = ? WHERE id = ?"
-          ).bind(newRating, newWage, playerId).run();
+            // Mzdu posunout jen v poměru, v jakém se změnilo hodnocení. Přepsat ji holým
+            // vzorcem nejde — smazalo by to vyjednané navýšení (unrest „raise_wage" ho
+            // slibuje trvale) a hráčům pod vzorcem by naopak samo od sebe přidalo.
+            const baseWageFor = (r: number) => Math.round(10 + (r / 100) * 400);
+            const oldRating = (row.overall_rating as number) ?? newRating;
+            const oldWage = (row.weekly_wage as number) ?? 0;
+            const oldBase = baseWageFor(oldRating);
+            const newWage = oldWage > 0 && oldBase > 0
+              ? Math.round(oldWage * (baseWageFor(newRating) / oldBase))
+              : baseWageFor(newRating);
+
+            await env.DB.prepare(
+              "UPDATE players SET overall_rating = ?, weekly_wage = ? WHERE id = ?"
+            ).bind(newRating, newWage, playerId).run();
+          }
 
           // Log to training_log
           await env.DB.prepare(

@@ -17,10 +17,9 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     title: "Oprava celkového hodnocení hráčů",
     items: [
       "Celkové hodnocení se po tréninku zvyšovalo mnohem rychleji, než odpovídalo skutečnému zlepšení — za každý natrénovaný bod povyskočilo o celý bod, přestože je to vážený průměr deseti atributů. U nejvíc trénovaných hráčů se rozdíl vyšplhal přes 30 bodů.",
-      "Hodnocení je nově přepočítané u 1 409 hráčů ve hře, průměrně kleslo o 3 body. Tvoji hráči jsou přesně tak dobří jako předtím — zápasy se vždycky počítaly ze skutečných schopností, ne ze zobrazeného čísla. Žádný odehraný výsledek ani tabulka se nemění.",
+      "Hodnocení je nově přepočítané u všech hráčů ve hře, průměrně kleslo o 3 body. Tvoji hráči jsou přesně tak dobří jako předtím — zápasy se vždycky počítaly ze skutečných schopností, ne ze zobrazeného čísla. Žádný odehraný výsledek ani tabulka se nemění.",
       "Mzdy se odvíjejí od hodnocení, takže většině hráčů klesly. Vyjednané navýšení zůstává každému zachované.",
       "Trénink teď hodnocení přepočítává správně, takže už znovu neutíká.",
-      "U brankářů zůstává hodnocení zatím beze změny — počítá se z jiné sady atributů a potřebuje samostatnou opravu.",
     ],
   },
   {

@@ -41,10 +41,10 @@ export const ANNOUNCEMENT: Announcement = {
   bullets: {
     title: "Co se změnilo",
     items: [
-      "Hodnocení je přepočítané u 1 409 hráčů ve hře. Průměrně kleslo o 3 body, u nejvíc trénovaných až o 32.",
+      "Hodnocení je přepočítané u všech hráčů ve hře. Průměrně kleslo o 3 body, u nejvíc trénovaných až o 34.",
       "Týká se to všech týmů včetně soupeřů — nikdo si nepolepšil ani nepohoršil proti ostatním.",
       "Mzdy se odvíjejí od hodnocení, takže většině hráčů klesly. O přidání, které jste komu vyjednali, nikdo nepřišel.",
-      "U brankářů zůstává hodnocení zatím beze změny — počítá se z jiných atributů a potřebuje samostatnou opravu.",
+      "Trénink teď hodnocení počítá správně, takže už znovu neuteče.",
     ],
   },
   aside:
