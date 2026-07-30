@@ -844,7 +844,7 @@ export default function PlayerDetailPage() {
 
           <p className="mt-3 pt-3 border-t border-gray-100 text-sm text-muted flex items-center gap-1.5">
             <span className="text-pitch-500 text-[10px] leading-none" aria-hidden>●</span>
-            Klíčové pro pozici {positionLabel(player.position)}. Zešedlé atributy do celkového hodnocení nevstupují.
+            Zvýrazněné jsou klíčové pro {positionLabel(player.position)}.
           </p>
         </div>
 
@@ -1704,17 +1704,15 @@ function AttrRow({ label, value, inverted, importance }: {
   importance?: AttrImportance;
 }) {
   const colorValue = inverted ? 100 - value : value;
-  // Klíčové atributy vystoupí, ty bez vlivu na hodnocení ustoupí do pozadí.
-  const labelStyle =
-    importance === "key" ? "text-ink font-semibold"
-    : importance === "none" ? "text-muted-light"
-    : "text-ink-light";
+  const isKey = importance === "key";
   return (
-    <div className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-b-0">
-      <span className={`text-sm ${labelStyle} flex items-center gap-1.5`}>
-        {importance === "key" && (
-          <span className="text-pitch-500 text-[10px] leading-none" title="Klíčový atribut pro tuto pozici" aria-hidden>●</span>
-        )}
+    <div
+      className={`flex items-center justify-between py-1.5 border-b border-gray-50 last:border-b-0 ${
+        isKey ? "-mx-2 px-2 bg-pitch-50/70 rounded border-b-pitch-100" : ""
+      }`}
+    >
+      <span className={`text-sm flex items-center gap-1.5 ${isKey ? "text-pitch-700 font-bold" : "text-ink-light"}`}>
+        {isKey && <span className="text-pitch-500 text-[10px] leading-none" aria-hidden>●</span>}
         {label}
       </span>
       <span className={`inline-flex items-center justify-center w-8 h-6 rounded text-xs font-heading font-bold tabular-nums ${attrBg(colorValue)}`}>
