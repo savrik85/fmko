@@ -31,8 +31,8 @@ export const ANNOUNCEMENT: Announcement = {
   title: "Přepočet hodnocení hráčů",
   subtitle: "Zítra opravíme chybu, která se táhne od začátku hry",
   paragraphs: [
-    "Celkové hodnocení hráčů — to velké číslo u každého jména — vám celou dobu ukazovalo nesmysl. Když hráč něco natrénoval, hodnocení mu vyskočilo mnohem víc, než odpovídalo tomu, co se doopravdy naučil.",
-    "Čím pilněji se u vás trénovalo, tím falešnější číslo jste viděli. U nejvytíženějších hráčů je rozdíl až 37 bodů. Sestavy jste tak stavěli podle údaje, který lhal — hráč s hodnocením 67 mohl být ve skutečnosti ten nejslabší muž na hřišti.",
+    "Celkové hodnocení hráčů — to velké číslo u každého jména — se celou dobu zobrazovalo špatně. Když hráč něco natrénoval, hodnocení mu vyskočilo mnohem víc, než odpovídalo tomu, co se doopravdy naučil.",
+    "Čím pilněji se u vás trénovalo, tím větší byla odchylka. U nejvytíženějších hráčů je rozdíl přes 30 bodů. Sestavy jste tak skládali podle špatně zobrazeného čísla — hráč s hodnocením 67 mohl být ve skutečnosti ten nejslabší muž na hřišti.",
   ],
   highlight: {
     title: "Zápasy se ale počítaly správně",
@@ -44,7 +44,7 @@ export const ANNOUNCEMENT: Announcement = {
       "Všem hráčům ve hře přepočítáme hodnocení na správnou hodnotu.",
       "Čísla půjdou dolů, u některých výrazně. Není to oslabení ani trest — váš hráč je přesně tak dobrý jako včera, jen konečně uvidíte pravdu.",
       "Týká se to úplně všech týmů včetně soupeřů. Poměr sil v soutěži zůstává stejný.",
-      "Mzdy se počítají z hodnocení, takže vám klesnou. Na tom vyděláte.",
+      "Mzdy se počítají z hodnocení, takže většině hráčů klesnou. O přidání, které jste komu vyjednali, nikdo nepřijde.",
     ],
   },
   aside:
