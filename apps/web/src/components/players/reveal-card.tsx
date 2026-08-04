@@ -163,7 +163,7 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
         {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
           <FaceAvatar faceConfig={player.avatar} size={88} />
         ) : (
-          <div className={`w-[88px] h-[88px] rounded-full flex items-center justify-center font-heading font-bold text-3xl ${bestTextOn(teamColor) === "light" ? "text-white" : "text-gray-900"}`} style={{ backgroundColor: teamColor }}>
+          <div className={`w-[88px] h-[88px] rounded-full flex items-center justify-center font-heading font-bold text-3xl ${bestTextOn(teamColor) === "light" ? "text-white border border-transparent" : "text-gray-900 border border-gray-300"}`} style={{ backgroundColor: teamColor }}>
             {player.first_name[0]}
           </div>
         )}

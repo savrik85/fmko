@@ -157,7 +157,10 @@ export default function TeamPage() {
   const boxBgHover = light ? "hover:bg-black/10" : "hover:bg-white/20";
   const boxLabel = light ? "text-gray-400" : "text-white/50";
   const ratingColor = readableOnLight(color);
-  const onColorText = bestTextOn(color) === "light" ? "text-white" : "text-gray-900";
+  // Bílé a velmi světlé dresy splynou s bílou kartou — okraj drží tvar prvku viditelný.
+  const onColorText = bestTextOn(color) === "light"
+    ? "text-white border border-transparent"
+    : "text-gray-900 border border-gray-300";
   const avgRating = players.length > 0 ? Math.round(players.reduce((s, p) => s + p.overall_rating, 0) / players.length) : 0;
 
   return (

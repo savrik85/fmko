@@ -514,7 +514,7 @@ export default function DashboardPage() {
                 {manager.avatar && Object.keys(manager.avatar).length > 2 ? (
                   <FaceAvatar faceConfig={manager.avatar} size={48} className="shrink-0 rounded-xl" />
                 ) : (
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-heading font-bold text-lg shrink-0 ${bestTextOn(color) === "light" ? "text-white" : "text-gray-900"}`} style={{ backgroundColor: color }}>
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-heading font-bold text-lg shrink-0 ${bestTextOn(color) === "light" ? "text-white border border-transparent" : "text-gray-900 border border-gray-300"}`} style={{ backgroundColor: color }}>
                     {manager.name[0]}
                   </div>
                 )}
