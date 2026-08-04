@@ -9,6 +9,7 @@ import { nationalityFlag } from "@/lib/nationality";
 import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern } from "@/components/ui";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { isLightColor } from "@/lib/team-color";
 
 type Tab = "overview" | "search" | "free_agents" | "market" | "offers" | "squad";
 
@@ -51,14 +52,6 @@ interface TeamBadge {
 
 function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
 
-function isLightColor(hex: string): boolean {
-  const c = hex.replace("#", "");
-  if (c.length < 6) return false;
-  const r = parseInt(c.substring(0, 2), 16);
-  const g = parseInt(c.substring(2, 4), 16);
-  const b = parseInt(c.substring(4, 6), 16);
-  return (r * 299 + g * 587 + b * 114) / 1000 > 160;
-}
 
 function relativeTimeCs(iso: string): string {
   const t = new Date(iso).getTime();

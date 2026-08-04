@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PositionBadge } from "@/components/ui";
 import type { Player } from "@/lib/api";
+import { readableOnLight } from "@/lib/team-color";
 
 /* ── Helpers ── */
 
@@ -90,7 +91,7 @@ export function PlayerCardCompact({
 
       {/* Rating */}
       <div className="text-right shrink-0">
-        <div className="font-heading font-bold text-xl tabular-nums" style={{ color: teamColor }}>
+        <div className="font-heading font-bold text-xl tabular-nums" style={{ color: readableOnLight(teamColor) }}>
           {player.overall_rating}
         </div>
       </div>

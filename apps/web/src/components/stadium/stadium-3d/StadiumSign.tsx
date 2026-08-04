@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
+import { isLightColor } from "@/lib/team-color";
 
 interface StadiumSignProps {
   name: string;
@@ -9,13 +10,6 @@ interface StadiumSignProps {
   teamColor: string;
 }
 
-function isLightColor(hex: string): boolean {
-  const c = hex.replace("#", "");
-  const r = parseInt(c.substring(0, 2), 16);
-  const g = parseInt(c.substring(2, 4), 16);
-  const b = parseInt(c.substring(4, 6), 16);
-  return (r * 299 + g * 587 + b * 114) / 1000 > 160;
-}
 
 /**
  * Reklamní cedule s názvem stadionu — velký billboard na 2 sloupcích.

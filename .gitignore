@@ -16,3 +16,6 @@ apps/web/.vercel/
 
 # Zkompilované .js vedle .ts ve zdrojích — bundler je může vzít místo aktuálního .ts
 apps/api/src/**/*.js
+
+# TypeScript inkrementální build cache
+*.tsbuildinfo

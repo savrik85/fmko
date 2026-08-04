@@ -10,6 +10,7 @@ import { SectionLabel, Spinner, BadgePreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { EditManagerModal } from "@/components/manager/EditManagerModal";
 import { RelationCard, RelationsOverview } from "@/components/relations/RelationSection";
+import { isLightColor } from "@/lib/team-color";
 
 const BACKSTORY_LABELS: Record<string, string> = {
   byvaly_hrac: "Bývalý hráč",
@@ -68,6 +69,12 @@ export default function ManagerDetailPage() {
   if (!manager || !team) return <div className="page-container">Trenér nenalezen.</div>;
 
   const color = team.primary_color || "#2D5F2D";
+  const light = isLightColor(color);
+  const txt = light ? "text-gray-900" : "text-white";
+  const txtMuted = light ? "text-gray-600" : "text-white/80";
+  const txtLabel = light ? "text-gray-500" : "text-white/70";
+  const txtSoft = light ? "text-gray-400" : "text-white/40";
+  const boxBg = light ? "bg-black/5 hover:bg-black/10" : "bg-white/10 hover:bg-white/20";
 
   return (
     <>
@@ -77,27 +84,27 @@ export default function ManagerDetailPage() {
           {manager.avatar && Object.keys(manager.avatar).length > 2 ? (
             <FaceAvatar faceConfig={manager.avatar} size={80} className="shrink-0 bg-white/10 rounded-xl" />
           ) : (
-            <div className="shrink-0 w-20 h-20 rounded-xl bg-white/10 flex items-center justify-center text-white font-heading font-bold text-3xl">
+            <div className={`shrink-0 w-20 h-20 rounded-xl ${light ? "bg-black/5" : "bg-white/10"} flex items-center justify-center ${txt} font-heading font-bold text-3xl`}>
               {manager.name[0]}
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <h1 className="font-heading font-extrabold text-white text-xl sm:text-2xl leading-tight truncate">
+            <h1 className={`font-heading font-extrabold ${txt} text-xl sm:text-2xl leading-tight truncate`}>
               {manager.name}
             </h1>
             {manager.backstory && (
-              <div className="text-white/70 text-sm mt-0.5">{BACKSTORY_LABELS[manager.backstory] ?? manager.backstory}</div>
+              <div className={`${txtLabel} text-sm mt-0.5`}>{BACKSTORY_LABELS[manager.backstory] ?? manager.backstory}</div>
             )}
             <div className="flex items-center gap-3 mt-1 flex-wrap">
-              {manager.age && <span className="text-white/80 text-sm">{manager.age} let</span>}
+              {manager.age && <span className={`${txtMuted} text-sm`}>{manager.age} let</span>}
               {manager.birthplace && (
                 <>
-                  <span className="text-white/40">&middot;</span>
-                  <span className="text-white/80 text-sm">{manager.birthplace}</span>
+                  <span className={txtSoft}>&middot;</span>
+                  <span className={`${txtMuted} text-sm`}>{manager.birthplace}</span>
                 </>
               )}
-              <span className="text-white/40">&middot;</span>
-              <a href={`/dashboard/team/${team.id}`} className="text-white/90 text-sm hover:text-white underline decoration-white/30 transition-colors flex items-center gap-1.5">
+              <span className={txtSoft}>&middot;</span>
+              <a href={`/dashboard/team/${team.id}`} className={`${txtMuted} text-sm hover:opacity-80 underline ${light ? "decoration-gray-300" : "decoration-white/30"} transition-colors flex items-center gap-1.5`}>
                 <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
                   initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
                 {team.name}
@@ -108,9 +115,9 @@ export default function ManagerDetailPage() {
           {/* Edit button for own profile */}
           {canEdit && (
             <button onClick={() => setEditing(true)}
-              className="bg-white/10 hover:bg-white/20 rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0">
+              className={`${boxBg} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0`}>
               <div className="text-xl leading-none">{"✏️"}</div>
-              <div className="text-white/70 text-[10px] font-heading font-bold uppercase mt-1">Upravit</div>
+              <div className={`${txtLabel} text-[10px] font-heading font-bold uppercase mt-1`}>Upravit</div>
             </button>
           )}
 
@@ -128,9 +135,9 @@ export default function ManagerDetailPage() {
                 showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
               }
             }}
-              className="bg-white/10 hover:bg-white/20 rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0">
+              className={`${boxBg} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0`}>
               <div className="text-xl leading-none">{"\u{1F4AC}"}</div>
-              <div className="text-white/70 text-[10px] font-heading font-bold uppercase mt-1">Napsat</div>
+              <div className={`${txtLabel} text-[10px] font-heading font-bold uppercase mt-1`}>Napsat</div>
             </button>
           )}
         </div>

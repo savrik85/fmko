@@ -9,6 +9,7 @@ import type { BadgePattern } from "@/components/ui";
 import { useTeam } from "@/context/team-context";
 import { MatchBreakdown } from "@/components/MatchBreakdown";
 import { PostMatchGestureCard } from "@/components/relations/RelationSection";
+import { isLightColor } from "@/lib/team-color";
 
 interface MatchEvent {
   minute: number; type: string; playerId: number; playerName: string;
@@ -42,13 +43,6 @@ interface MatchDetail {
 }
 
 // Light/dark color detection — pro adaptivní kontrast u team-color pozadí
-function isLightColor(hex: string): boolean {
-  const c = hex.replace("#", "");
-  const r = parseInt(c.slice(0, 2), 16);
-  const g = parseInt(c.slice(2, 4), 16);
-  const b = parseInt(c.slice(4, 6), 16);
-  return (r * 0.299 + g * 0.587 + b * 0.114) > 165;
-}
 
 const POS_LABEL: Record<string, string> = {
   GK: "brankář", DEF: "obránce", MID: "záložník", FWD: "útočník",

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import type { Player } from "@/lib/api";
 import { FaceAvatar } from "./face-avatar";
 import { nationalityFlag } from "@/lib/nationality";
+import { readableOnLight, bestTextOn } from "@/lib/team-color";
 
 interface RevealCardProps {
   player: Player;
@@ -162,7 +163,7 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
         {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
           <FaceAvatar faceConfig={player.avatar} size={88} />
         ) : (
-          <div className="w-[88px] h-[88px] rounded-full flex items-center justify-center text-white font-heading font-bold text-3xl" style={{ backgroundColor: teamColor }}>
+          <div className={`w-[88px] h-[88px] rounded-full flex items-center justify-center font-heading font-bold text-3xl ${bestTextOn(teamColor) === "light" ? "text-white" : "text-gray-900"}`} style={{ backgroundColor: teamColor }}>
             {player.first_name[0]}
           </div>
         )}
@@ -177,7 +178,7 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
           )}
         </div>
         {player.nickname && (
-          <div className="text-sm mt-0.5 font-medium truncate" style={{ color: teamColor }}>
+          <div className="text-sm mt-0.5 font-medium truncate" style={{ color: readableOnLight(teamColor) }}>
             &bdquo;{player.nickname}&ldquo;
           </div>
         )}

@@ -8,14 +8,7 @@ import { Spinner, SectionLabel, EntityLink, BadgePreview, PositionBadge, JerseyP
 import type { BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PreMatchCard } from "@/components/relations/RelationSection";
-
-function isLightColor(hex: string): boolean {
-  const c = hex.replace("#", "");
-  const r = parseInt(c.substring(0, 2), 16);
-  const g = parseInt(c.substring(2, 4), 16);
-  const b = parseInt(c.substring(4, 6), 16);
-  return (r * 299 + g * 587 + b * 114) / 1000 > 160;
-}
+import { isLightColor, readableOnLight, bestTextOn } from "@/lib/team-color";
 
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
@@ -163,6 +156,8 @@ export default function TeamPage() {
   const boxBg = light ? "bg-black/5" : "bg-white/10";
   const boxBgHover = light ? "hover:bg-black/10" : "hover:bg-white/20";
   const boxLabel = light ? "text-gray-400" : "text-white/50";
+  const ratingColor = readableOnLight(color);
+  const onColorText = bestTextOn(color) === "light" ? "text-white" : "text-gray-900";
   const avgRating = players.length > 0 ? Math.round(players.reduce((s, p) => s + p.overall_rating, 0) / players.length) : 0;
 
   return (
@@ -372,7 +367,7 @@ export default function TeamPage() {
                 {manager.avatar && Object.keys(manager.avatar).length > 2 ? (
                   <FaceAvatar faceConfig={manager.avatar} size={56} className="rounded-xl" />
                 ) : (
-                  <div className="w-14 h-14 rounded-xl flex items-center justify-center text-white font-heading font-bold text-xl" style={{ backgroundColor: color }}>
+                  <div className={`w-14 h-14 rounded-xl flex items-center justify-center font-heading font-bold text-xl ${onColorText}`} style={{ backgroundColor: color }}>
                     {manager.name[0]}
                   </div>
                 )}
@@ -582,7 +577,7 @@ export default function TeamPage() {
                           {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
                             <FaceAvatar faceConfig={p.avatar} size={28} className="shrink-0" />
                           ) : (
-                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: color }}>
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${onColorText}`} style={{ backgroundColor: color }}>
                               {p.first_name[0]}
                             </div>
                           )}
@@ -594,7 +589,7 @@ export default function TeamPage() {
                       </td>
                       <td className="py-2 pr-2 text-center tabular-nums text-muted">{p.age}</td>
                       <td className="py-2 pr-2 text-center">
-                        <span className="font-heading font-bold tabular-nums" style={{ color }}>{p.overall_rating}</span>
+                        <span className="font-heading font-bold tabular-nums" style={{ color: ratingColor }}>{p.overall_rating}</span>
                       </td>
                       <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.speed ?? 0)}`}>{p.skills?.speed ?? 0}</td>
                       <td className={`py-2 pr-2 text-center tabular-nums ${attrColor(p.skills?.technique ?? 0)}`}>{p.skills?.technique ?? 0}</td>
@@ -651,7 +646,7 @@ export default function TeamPage() {
                 {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
                   <FaceAvatar faceConfig={p.avatar} size={36} className="shrink-0" />
                 ) : (
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0" style={{ backgroundColor: color }}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${onColorText}`} style={{ backgroundColor: color }}>
                     {p.first_name[0]}
                   </div>
                 )}
@@ -669,7 +664,7 @@ export default function TeamPage() {
                       <span key={a.key} className={`w-6 text-center py-0.5 rounded ${attrColor(a.value)}`} title={a.label}>{a.value}</span>
                     ))}
                   </div>
-                  <span className="px-2 py-1 rounded-lg font-heading font-bold text-sm tabular-nums text-white ml-1" style={{ backgroundColor: color }}>
+                  <span className={`px-2 py-1 rounded-lg font-heading font-bold text-sm tabular-nums ml-1 ${onColorText}`} style={{ backgroundColor: color }}>
                     {ratingValue}
                   </span>
                 </div>
