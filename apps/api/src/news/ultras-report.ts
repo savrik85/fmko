@@ -50,14 +50,22 @@ function fmtNum(n: number): string {
   return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
-/** Vybere ≤3 kotle doprovázející žebříček (nejvyšší návštěva, nejnabitější kotel, výrazná plachta). */
+/** Popisek pro kotel bez „nej" titulu — plachta má přednost, jinak podle vybavení kotle. */
+function plainCaption(m: HomeMatch): string {
+  if (m.ultrasText) return `plachta „${m.ultrasText}"`;
+  if (m.ultrasStand >= 3) return "vlajky, bubny, plné hrdlo";
+  if (m.ultrasStand === 2) return "vlajky a buben";
+  return "pár vlajek, o to větší hlas";
+}
+
+/** Vybere kotle do galerie — VŠECHNY týmy s kotlem, „nej" (návštěva, zaplněnost, velikost kotle) jdou první. */
 function pickGallery(homeMatches: HomeMatch[]): UltrasPhoto[] {
   const cands = homeMatches.filter((m) => m.ultrasStand > 0);
   if (cands.length === 0) return [];
   const used = new Set<string>();
   const chosen: UltrasPhoto[] = [];
   const add = (m: HomeMatch | undefined, caption: string) => {
-    if (!m || used.has(m.homeTeamId) || chosen.length >= 3) return;
+    if (!m || used.has(m.homeTeamId)) return;
     used.add(m.homeTeamId);
     chosen.push({
       teamId: m.homeTeamId,
@@ -75,13 +83,19 @@ function pickGallery(homeMatches: HomeMatch[]): UltrasPhoto[] {
   const byAtt = [...cands].sort((a, b) => b.attendance - a.attendance);
   add(byAtt[0], `${fmtNum(byAtt[0].attendance)} diváků — nejvíc v kole`);
 
-  const byFill = [...cands].sort((a, b) => b.fillPct - a.fillPct).find((m) => !used.has(m.homeTeamId));
+  // Při shodné zaplněnosti (běžné — vyprodáno má víc stadionů) rozhodne počet diváků.
+  const byFill = [...cands]
+    .sort((a, b) => b.fillPct - a.fillPct || b.attendance - a.attendance)
+    .find((m) => !used.has(m.homeTeamId));
   add(byFill, byFill ? "nejnabitější kotel kola" : "");
 
   const byLevel = [...cands]
     .sort((a, b) => b.ultrasStand - a.ultrasStand || (b.ultrasText ? 1 : 0) - (a.ultrasText ? 1 : 0))
     .find((m) => !used.has(m.homeTeamId));
-  add(byLevel, byLevel ? (byLevel.ultrasStand >= 3 ? "největší kotel v lize" : byLevel.ultrasText ? `plachta „${byLevel.ultrasText}"` : "kotel v plné palbě") : "");
+  add(byLevel, byLevel ? (byLevel.ultrasStand >= 3 ? "největší kotel v lize" : plainCaption(byLevel)) : "");
+
+  // Zbytek — každý kotel v kole má v galerii svoje místo, řazeno podle návštěvy.
+  for (const m of byAtt) add(m, plainCaption(m));
 
   return chosen;
 }
@@ -95,8 +109,16 @@ function fallbackArticle(gameWeek: number, homeMatches: HomeMatch[]): string {
   const parts: string[] = [];
   parts.push(`Kotel hodnotí ${gameWeek}. kolo`);
   parts.push(`Nejvíc lidí dorazilo na **${top.homeName}** — ${fmtNum(top.attendance)} diváků. Naopak nejprázdněji bylo u **${bottom.homeName}** (${fmtNum(bottom.attendance)}).`);
-  const byFill = [...homeMatches].sort((a, b) => b.fillPct - a.fillPct)[0];
+  const byFill = [...homeMatches].sort((a, b) => b.fillPct - a.fillPct || b.attendance - a.attendance)[0];
   parts.push(`Nejlepší atmosféru kola měl **${byFill.homeName}** — bylo tam ${fullnessDesc(byFill.fillPct)}.`);
+  const banners = homeMatches.filter((m) => m.ultrasText);
+  if (banners.length > 0) {
+    parts.push(`Na plachtách viselo: ${banners.map((m) => `**${m.homeName}** „${m.ultrasText}"`).join(", ")}.`);
+  }
+  const kotle = homeMatches.filter((m) => m.ultrasStand > 0 && !m.ultrasText);
+  if (kotle.length > 0) {
+    parts.push(`Bez plachty, zato s vlajkami řvali doma i ${kotle.map((m) => `**${m.homeName}**`).join(", ")}.`);
+  }
   return parts.join("\n");
 }
 
@@ -231,18 +253,26 @@ async function callGeminiUltras(
   const galleryNote = photos.length
     ? `Na fotkách budou kotle: ${photos.map((p) => `${p.teamName} (${p.caption})`).join("; ")}.`
     : "V tomto kole neměl doma pořádný kotel nikdo — zmiň to s nadhledem.";
+  const banners = homeMatches.filter((m) => m.ultrasText);
+  const bannerNote = banners.length
+    ? `PLACHTY, které MUSÍŠ všechny zmínit i s doslovným nápisem: ${banners.map((m) => `${m.homeName} — „${m.ultrasText}"`).join("; ")}.`
+    : "V tomto kole nikdo nevyvěsil plachtu s nápisem.";
 
   const prompt = `Jsi pisatel fanouškovského zpravodaje "Prales Ultras" v amatérské fotbalové lize. Píšeš z pohledu lidí na kotli, zaujatě pro atmosféru, s vtipem a nadsázkou, ale VÝHRADNĚ z dodaných dat — NIKDY nevymýšlej jména ani čísla.
 
-Napiš krátký článek (120–200 slov) hodnotící ATMOSFÉRU ${gameWeek}. kola. Páteří je žebříček:
+Napiš článek (150–250 slov) hodnotící ATMOSFÉRU ${gameWeek}. kola. Páteří je žebříček:
 - kam přišlo NEJVÍC lidí a kam NEJMÍŇ,
 - kde bylo vyprodáno / plný dům a kde zely ochozy prázdnotou,
-- zmiň prvky kotlů (plachta s nápisem, vlajky, buben) u týmů, co je mají.
+- projdi VŠECHNY týmy, co měly kotel — žádný nevynech, i kdyby jen jednou větou.
+
+PLACHTY: nápisy na plachtách jsou fanouškovský folklor a kotelní recese — patří ke koloritu jako buben. Cituj je doslova tak, jak jsou, a ber je s humorem a nadsázkou. Neupravuj je, necenzuruj, nekomentuj vážně a nemoralizuj nad nimi — jsi fanoušek na kotli, ne rozhodčí. Když je nápis provokativní nebo ujetý, prostě to odlehči vtipem.
 
 DŮLEŽITÉ: Píšeš jako fanoušek, NE jako hra. NIKDY nepoužívej herní ani technické termíny ani procenta zaplněnosti — žádné „level", „úroveň", čísla úrovní kotle, „fill", „kapacita", „X % zaplněno / z kapacity". Počty diváků (kolik lidí dorazilo) používej klidně. Zaplněnost a kotel popiš lidsky: vyprodáno / narváno / poloprázdno, velký/malý kotel, kolik vlajek, jestli buší buben, jestli visí plachta.
 
 DATA (jen tato smíš použít):
 ${facts}
+
+${bannerNote}
 
 ${galleryNote}
 
@@ -256,15 +286,26 @@ Formát: PRVNÍ ŘÁDEK je úderný titulek (bez markdownu). Další řádky jso
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { maxOutputTokens: 2048, temperature: 0.6, thinkingConfig: { thinkingBudget: 0 } },
+        // Texty plachet píšou hráči a bývají provokativní — jinak model odpověď utne.
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
+        ],
       }),
     },
   );
   if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
   const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[];
+    candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
+    promptFeedback?: { blockReason?: string };
   };
   const parts = data.candidates?.[0]?.content?.parts ?? [];
   const text = parts.filter((p) => !p.thought).map((p) => p.text ?? "").join("");
-  if (!text) throw new Error("Gemini empty response");
+  if (!text) {
+    const why = data.promptFeedback?.blockReason ?? data.candidates?.[0]?.finishReason ?? "unknown";
+    throw new Error(`Gemini empty response (${why})`);
+  }
   return text;
 }
