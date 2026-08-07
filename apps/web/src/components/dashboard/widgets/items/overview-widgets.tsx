@@ -14,7 +14,7 @@ import { timeAgo, safeTeamColor, MoreLink } from "./shared";
 export function NewsWidget({ data, height }: WidgetProps) {
   if (data.news.loading) return <WidgetSkeleton />;
   if (data.news.error) return <WidgetError />;
-  const news = (data.news.data ?? []).slice(0, rowsForHeight(height, ROW_PX.list, 32));
+  const news = (data.news.data ?? []).slice(0, rowsForHeight(height, ROW_PX.rich, 32));
   if (news.length === 0) return <ChartEmpty>Zpravodaj zatím mlčí.</ChartEmpty>;
 
   return (

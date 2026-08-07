@@ -357,7 +357,7 @@ export function RecentMatchesWidget({ data, height }: WidgetProps) {
             </tr>
           </thead>
           <tbody>
-            {matches.slice(0, rowsForHeight(height, ROW_PX.table, 60)).map((m) => {
+            {matches.slice(0, rowsForHeight(height, ROW_PX.tableBadge, 60)).map((m) => {
               const resultBg = m.result === "W" ? "bg-pitch-50" : m.result === "L" ? "bg-red-50" : "bg-gray-50";
               const resultText = m.result === "W" ? "text-pitch-600" : m.result === "L" ? "text-card-red" : "text-muted";
               return (

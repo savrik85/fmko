@@ -53,16 +53,21 @@ const CHROME_PX = 64;
 /** Výška podle obsahu žádnou mez nemá; ať je aspoň v rozumné délce. */
 const AUTO_ROWS = 6;
 
-/** Přibližné výšky řádku podle toho, co seznam obsahuje. */
+/**
+ * Výšky řádku podle toho, co seznam obsahuje. Čísla jsou naměřená v prohlížeči,
+ * ne odhadnutá — s odhadem seznamy přetékaly přes spodní hranu karty.
+ */
 export const ROW_PX = {
   /** Jméno nad vodorovným pruhem (HBarChart). */
-  bar: 40,
-  /** Prostý řádek se jménem a hodnotou. */
-  list: 34,
-  /** Řádek tabulky. */
-  table: 30,
+  bar: 45,
+  /** Prostý řádek: jméno a hodnota vedle sebe. */
+  list: 41,
+  /** Řádek tabulky bez grafiky. */
+  table: 33,
+  /** Řádek tabulky s erbem soupeře. */
+  tableBadge: 41,
   /** Řádek s ikonou a dvěma řádky textu. */
-  rich: 46,
+  rich: 55,
 } as const;
 
 /**
