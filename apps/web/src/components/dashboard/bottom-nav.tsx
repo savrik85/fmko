@@ -5,12 +5,14 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
+import { hasUnseenNotes } from "@/data/release-notes";
 
 export function BottomNav() {
   const pathname = usePathname();
   const { teamId, token } = useTeam();
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unvotedCount, setUnvotedCount] = useState(0);
+  const [notesUnseen, setNotesUnseen] = useState(false);
 
   useEffect(() => {
     if (!teamId) return;
@@ -28,12 +30,19 @@ export function BottomNav() {
     return () => clearInterval(interval);
   }, [teamId, token, pathname]);
 
+  // Badge „Nové" u novinek — přehodnotit při každé navigaci (stránka Novinky ho maže)
+  useEffect(() => {
+    setNotesUnseen(hasUnseenNotes());
+  }, [pathname]);
+
   const items = [
     { href: "/dashboard", label: "Domů", icon: "🏟" },
     { href: "/dashboard/phone", label: "Zprávy", icon: "📱", badge: unreadMessages },
     { href: "/dashboard/match", label: "Sestava", icon: "📋" },
     { href: "/dashboard/liga", label: "Liga", icon: "🏆" },
-    { href: "/dashboard/more", label: "Více", icon: "⚙", badge: unvotedCount },
+    // Novinky se schovávají pod Více, takže se musí připočíst sem — jinak by
+    // hráč na mobilu neměl jak poznat, že něco nového vyšlo.
+    { href: "/dashboard/more", label: "Více", icon: "⚙", badge: unvotedCount + (notesUnseen ? 1 : 0) },
   ];
 
   return (

@@ -231,13 +231,25 @@ export const RELEASE_NOTES: ReleaseNote[] = [
 
 export const LATEST_NOTE_DATE = RELEASE_NOTES[0]?.date ?? "";
 
+/**
+ * Otisk nejnovějšího záznamu.
+ *
+ * Dřív se porovnávalo jen datum, jenže za jeden den může vyjít víc záznamů —
+ * a hráči, který mezitím Novinky otevřel, se ten druhý už nikdy neohlásil,
+ * protože "2026-08-07" < "2026-08-07" neplatí. Otisk zahrnuje i nadpis, takže
+ * každý nový záznam badge spolehlivě vyvolá.
+ */
+export const LATEST_NOTE_KEY = RELEASE_NOTES[0]
+  ? `${RELEASE_NOTES[0].date}|${RELEASE_NOTES[0].title}`
+  : "";
+
 const NOTES_SEEN_KEY = "release_notes_seen";
 
 /** Má hráč neprohlédnuté novinky? (SSR-safe) */
 export function hasUnseenNotes(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return (localStorage.getItem(NOTES_SEEN_KEY) ?? "") < LATEST_NOTE_DATE;
+    return localStorage.getItem(NOTES_SEEN_KEY) !== LATEST_NOTE_KEY;
   } catch (e) {
     console.warn("release notes seen check:", e);
     return false;
@@ -248,7 +260,7 @@ export function hasUnseenNotes(): boolean {
 export function markNotesSeen(): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(NOTES_SEEN_KEY, LATEST_NOTE_DATE);
+    localStorage.setItem(NOTES_SEEN_KEY, LATEST_NOTE_KEY);
   } catch (e) {
     console.warn("release notes seen store:", e);
   }
