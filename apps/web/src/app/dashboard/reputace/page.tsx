@@ -367,15 +367,18 @@ function ReputationScale({
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-pitch-600 inline-block" /> odemčeno
+          <span className="w-3 h-3 rounded-full bg-pitch-600 border-2 border-white ring-1 ring-gray-300 inline-block" />
+          odemčeno
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-white border-2 border-gray-300 inline-block" /> zamčeno
+          <span className="w-3 h-3 rounded-full bg-white border-2 border-gray-300 inline-block" />
+          zamčeno
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-0 h-3 border-l border-dashed border-gray-400 inline-block" /> práh útlumu ({baseline})
+          <span className="w-0 h-3.5 border-l border-dashed border-gray-500 inline-block" />
+          práh útlumu ({baseline})
         </span>
       </div>
     </div>
@@ -427,7 +430,7 @@ function SourceRow({
   positive: boolean;
 }) {
   return (
-    <div className={`pl-3 border-l-2 ${positive ? "border-pitch-500/30" : "border-card-red/30"}`}>
+    <div className={`pl-3 border-l-2 ${positive ? "border-pitch-400" : "border-card-red/60"}`}>
       <div className="text-sm font-heading font-bold text-ink">
         {href ? (
           <Link href={href} className="hover:text-pitch-600 underline decoration-pitch-500/20">{label}</Link>
