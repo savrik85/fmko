@@ -277,8 +277,11 @@ body::before {
    MODAL / BOTTOM SHEET
    ═══════════════════════════════════════════════ */
 
+/* z-index 60: nad spodní navigací (z-50), jinak by lišta překryla patičku
+   dialogu a tlačítka v ní by na mobilu nešla zmáčknout. Chybový dialog (z-100)
+   zůstává nad vším. */
 .modal-backdrop {
-  position: fixed; inset: 0; z-index: 50;
+  position: fixed; inset: 0; z-index: 60;
   background: rgba(26,23,20,0.5);
   backdrop-filter: blur(4px);
   display: flex;
