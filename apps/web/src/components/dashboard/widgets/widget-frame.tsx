@@ -51,9 +51,8 @@ export function WidgetFrame({
 
   // Widget s vlastním obalem si výšku řídí sám — pevná výška by mu rozbila chrome.
   const cssHeight = bare ? null : heightVar(height);
-  const heightProps = cssHeight
-    ? { className: "widget-h", style: { "--widget-h": cssHeight } as React.CSSProperties }
-    : {};
+  const heightClass = cssHeight ? "widget-h" : "";
+  const heightStyle = cssHeight ? ({ "--widget-h": cssHeight } as React.CSSProperties) : undefined;
 
   // Odsazení zůstává na vnitřním divu, aby barevný proužek sedl na horní hranu
   // karty. Widgety, které roztahují tabulky zápornými okraji, tím nejsou dotčené.
@@ -67,7 +66,7 @@ export function WidgetFrame({
     </div>
   );
 
-  if (!editing) return <div {...heightProps}>{body}</div>;
+  if (!editing) return <div className={heightClass} style={heightStyle}>{body}</div>;
 
   // Tlačítka v liště nesmí spustit tažení — pointerdown se u nich zastaví.
   const stopDrag = { onPointerDown: (e: React.PointerEvent) => e.stopPropagation() };
@@ -200,8 +199,14 @@ export function WidgetFrame({
         ))}
       </div>
 
-      {/* V editaci widget nereaguje na klikání — ovládá se jen lišta */}
-      <div className={`pointer-events-none select-none ${dragActive && !dragging ? "opacity-70" : ""}`}>{body}</div>
+      {/* V editaci widget nereaguje na klikání — ovládá se jen lišta. Výška se
+          uplatní i tady, aby bylo hned vidět, jak karta doopravdy vypadá. */}
+      <div
+        className={`pointer-events-none select-none ${heightClass} ${dragActive && !dragging ? "opacity-70" : ""}`}
+        style={heightStyle}
+      >
+        {body}
+      </div>
     </div>
   );
 }
