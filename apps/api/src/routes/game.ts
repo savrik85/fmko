@@ -6642,6 +6642,55 @@ gameRouter.post("/admin/cup/create", async (c) => {
   return c.json(r);
 });
 
+// POST /api/admin/teams/:teamId/manager-attr — ruční korekce atributu trenéra.
+//
+// Legitimní admin nástroj (oprava po incidentu, vyvážení), ne jen testovací vrátka:
+// zápis jde stejnou cestou jako herní změny, takže se objeví v historii trenéra
+// se zdrojem "admin" a je vidět, že to nebyl výsledek hry.
+gameRouter.post("/admin/teams/:teamId/manager-attr", async (c) => {
+  const teamId = c.req.param("teamId");
+  type AttrBody = { attr?: string; delta?: number; description?: string };
+  const body: AttrBody = await c.req.json<AttrBody>()
+    .catch((e) => { logger.warn({ module: "game" }, "parse manager-attr body", e); return {} as AttrBody; });
+
+  const { MANAGER_ATTR_LABELS, applyManagerAttrDelta, attrBounds } = await import("../lib/manager-attrs");
+  const allowed = Object.keys(MANAGER_ATTR_LABELS);
+  if (!body.attr || !allowed.includes(body.attr)) {
+    return c.json({ error: `Neplatný atribut. Povolené: ${allowed.join(", ")}` }, 400);
+  }
+  const delta = Number(body.delta);
+  if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 50) {
+    return c.json({ error: "delta musí být celé nenulové číslo v rozsahu ±50" }, 400);
+  }
+
+  const attr = body.attr as keyof typeof MANAGER_ATTR_LABELS;
+  const gameDate = (await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: "game" }, "load game date for manager-attr", e); return null; })
+  )?.game_date ?? undefined;
+
+  const res = await applyManagerAttrDelta(
+    c.env.DB, teamId, attr, delta, "admin",
+    body.description?.trim() || `Ruční úprava (${MANAGER_ATTR_LABELS[attr]})`,
+    { gameDate },
+  );
+
+  if (res.skipped === "no_manager") return c.json({ error: "Tým nemá trenéra" }, 404);
+  if (res.skipped === "error") return c.json({ error: "Zápis selhal, viz logy" }, 500);
+
+  return c.json({
+    ok: true,
+    attr,
+    attrLabel: MANAGER_ATTR_LABELS[attr],
+    requested: delta,
+    applied: res.applied,
+    oldValue: res.oldValue,
+    newValue: res.newValue,
+    bounds: attrBounds(attr),
+    capped: res.skipped === "capped",
+  });
+});
+
 // POST /api/admin/cup/advance — odsimuluje aktuální kolo poháru.
 gameRouter.post("/admin/cup/advance", async (c) => {
   const cup = await c.env.DB.prepare("SELECT id FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1")

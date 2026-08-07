@@ -27,7 +27,8 @@ export type ManagerAttrSource =
   | "season_position"
   | "cup"
   | "party"
-  | "season_dev";
+  | "season_dev"
+  | "admin";
 
 /** České názvy do popisků a UI. */
 export const MANAGER_ATTR_LABELS: Record<ManagerAttr, string> = {
