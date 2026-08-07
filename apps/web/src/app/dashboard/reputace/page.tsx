@@ -75,26 +75,85 @@ function formatDate(iso: string): string {
 
 /** Odkud se dá reputace vzít — čísla odpovídají enginu. */
 const SOURCES_UP = [
-  { label: "Umístění v lize", detail: "Konec sezóny. Ve čtrnáctičlenné lize dá první místo +5, šesté +1, sedmé už nic.", href: "/dashboard/liga" },
-  { label: "Postup v poháru", detail: "Osmifinále +1, čtvrtfinále +2, semifinále +3, výhra ve finále +5. Vítěz poháru tak nasbírá +11.", href: "/dashboard/pohar" },
-  { label: "Sezónní akce", detail: "Ples, pouť, den obce… podle volby +1 až +10. Každý klub má vlastní sadu.", href: "/dashboard/events" },
-  { label: "Podpis hvězdy", detail: "Známé jméno z volných hráčů: +4 až +15 podle zvučnosti.", href: "/dashboard/transfers" },
-  { label: "Vyprodaný stadion", detail: "+1 za domácí zápas při 95 % zaplnění a aspoň 120 divácích. Nejvýš 6× za sezónu.", href: "/dashboard/fans" },
-  { label: "Série výher", detail: "+2 za 5, 10 a 15 výher v řadě.", href: null },
-  { label: "Rodáci v kádru", detail: "+1 měsíčně, když je aspoň 40 % kádru z vlastní obce.", href: "/dashboard/squad" },
-  { label: "Přízeň obce", detail: "+1 měsíčně při přízni 75 a výš.", href: "/dashboard/obec" },
+  {
+    label: "Umístění v lize",
+    detail: "Rozdá se jednou za sezónu podle konečné tabulky. Ve čtrnáctičlenné lize dostane vítěz +5, druhý +4, šesté místo +1. Od sedmého níž už nic.",
+    href: "/dashboard/liga",
+  },
+  {
+    label: "Postup v poháru",
+    detail: "Za každé vyhrané kolo od osmifinále výš: osmifinále +1, čtvrtfinále +2, semifinále +3, výhra ve finále +5. Sčítá se, takže cesta až k poháru dá dohromady +11 — nejvíc ze všech zdrojů.",
+    href: "/dashboard/pohar",
+  },
+  {
+    label: "Sezónní akce",
+    detail: "Ples, pouť, den obce, zabijačka… Objevují se během sezóny na stránce Události a čekají na tvoje rozhodnutí. Vstřícná volba (postavíte stánek, uspořádáte ukázkový trénink) dá +1 až +10. Každý klub má vlastní sadu, takže o ni nepřijdeš tím, že někdo klikne dřív.",
+    href: "/dashboard/events",
+  },
+  {
+    label: "Podpis hvězdy",
+    detail: "Mezi volnými hráči se občas objeví někdo se zvučným jménem — bývalý ligista, lokální legenda. Za jeho podpis dostaneš +4 až +15 podle toho, jak je známý.",
+    href: "/dashboard/transfers",
+  },
+  {
+    label: "Vyprodaný stadion",
+    detail: "Když na domácí zápas přijde aspoň 95 % kapacity a zároveň nejméně 120 lidí, dostaneš +1. Ta stovka diváků je tam schválně, aby se to nedalo farmit malinkým hřištěm. Nejvýš šestkrát za sezónu.",
+    href: "/dashboard/fans",
+  },
+  {
+    label: "Série výher",
+    detail: "+2 za pátou výhru v řadě, pak znovu za desátou a patnáctou. Remíza sérii ukončí stejně jako prohra.",
+    href: "/dashboard/liga",
+  },
+  {
+    label: "Rodáci v kádru",
+    detail: "Rodák je hráč, který bydlí ve stejné obci jako klub — poznáš ho podle bydliště v kádru. Když je jich aspoň 40 % kádru, lidi to ocení a klub dostane +1 každý měsíc.",
+    href: "/dashboard/squad",
+  },
+  {
+    label: "Přízeň obce",
+    detail: "Přízeň (0–100) je vztah klubu s radnicí. Roste, když plníš petice od občanů, bereš brigády a chodíš na setkání se zastupiteli. Při přízni 75 a výš dostaneš +1 měsíčně.",
+    href: "/dashboard/obec",
+  },
 ];
 
 const SOURCES_DOWN = [
-  { label: "Spodní polovina tabulky", detail: "Konec sezóny. Poslední místo ve čtrnácti týmech znamená −5." },
-  { label: "Špatná volba v sezónní akci", detail: "Odmítnutá pomoc obci nebo ušetření na nesprávném místě: −2 až −5." },
-  { label: "Přejmenování klubu", detail: "−3 za vlastní přejmenování i za přejmenování podle sponzora." },
-  { label: "Ukončení smlouvy se sponzorem", detail: "−2, když předčasně skončí hlavní sponzor." },
-  { label: "Série proher", detail: "−2 za pět porážek v řadě." },
-  { label: "Prázdné hlediště", detail: "−1, když na domácí zápas přijde nejvýš 35 % kapacity (a stadion má aspoň 200 míst)." },
-  { label: "Zapomenutí rodáci", detail: "−1 měsíčně, když je v kádru míň než 10 % místních." },
-  { label: "Mračící se obec", detail: "−1 měsíčně při přízni 25 a níž." },
-  { label: "Měsíc bez úspěchu", detail: "−1 týdně, když klub měsíc nic nedokázal. Nikdy ale pod tvůj práh." },
+  {
+    label: "Spodní polovina tabulky",
+    detail: "Stejný výpočet jako u odměny za umístění, jen obráceně. Ve čtrnáctičlenné lize začíná ztráta od osmého místa a poslední tým přijde o 5 bodů.",
+  },
+  {
+    label: "Špatná volba v sezónní akci",
+    detail: "Když obci odmítneš pomoct nebo se na akci vykašleš, lidi si toho všimnou: −2 až −5. U každé volby vidíš dopředu, co udělá.",
+  },
+  {
+    label: "Přejmenování klubu",
+    detail: "−3, ať už si klub přejmenuješ sám, nebo kvůli hlavnímu sponzorovi. Lidi mají rádi jméno, které znají.",
+  },
+  {
+    label: "Ukončení smlouvy se sponzorem",
+    detail: "−2, když předčasně rozvážeš smlouvu s hlavním sponzorem. Klub se vrátí k původnímu názvu a působí to nestabilně.",
+  },
+  {
+    label: "Série proher",
+    detail: "−2 za pátou porážku v řadě.",
+  },
+  {
+    label: "Prázdné hlediště",
+    detail: "−1, když na domácí zápas přijde nejvýš 35 % kapacity. Počítá se až od stadionu se dvěma sty místy a po pěti odehraných domácích zápasech, aby to netrestalo malé kluby a rozehrané sezóny.",
+  },
+  {
+    label: "Zapomenutí rodáci",
+    detail: "Opak rodáků v kádru: když jsou z obce míň než desetina hráčů, je to −1 měsíčně. Lidi pak klub berou jako cizí.",
+  },
+  {
+    label: "Mračící se obec",
+    detail: "Když přízeň obce spadne na 25 a níž, radnice ti přestane fandit: −1 měsíčně. Nejčastěji za to může ignorování petic a brigád.",
+  },
+  {
+    label: "Měsíc bez úspěchu",
+    detail: "Když klub celý měsíc nezíská ani bod reputace, začne se na něj zapomínat: −1 týdně. Stačí ale jediný zisk a útlum se zastaví.",
+  },
 ];
 
 export default function ReputacePage() {
@@ -224,7 +283,7 @@ export default function ReputacePage() {
           </div>
         )}
         <div className="space-y-1">
-          <EarnRow icon="🏪" label="Podpora místních podnikatelů"
+          <EarnRow icon="🏪" label="Podpora místních podnikatelů" note="vyplácí se týdně, zaměstnanci ji můžou zvýšit"
             now={CZK(data.earns.baseSponsorMonthly) + "/měs"}
             next={data.atNextUnlock ? CZK(data.atNextUnlock.baseSponsorMonthly) + "/měs" : null} />
           <EarnRow icon="💼" label="Nabídek sponzorů"
@@ -236,7 +295,7 @@ export default function ReputacePage() {
           <EarnRow icon="📣" label="Bonus k návštěvnosti"
             now={`+${data.earns.attendanceBonusPct} %`}
             next={data.atNextUnlock ? `+${data.atNextUnlock.attendanceBonusPct} %` : null} />
-          <EarnRow icon="🍺" label="Pronájem bufetu (externí)"
+          <EarnRow icon="🍺" label="Pronájem bufetu" note="jen v režimu externího provozovatele"
             now={CZK(data.earns.concessionWeeklyExternal) + "/týden"}
             next={data.atNextUnlock ? CZK(data.atNextUnlock.concessionWeeklyExternal) + "/týden" : null} />
           <EarnRow icon="🤝" label="Zájem hráčů o přestup k tobě"
@@ -249,6 +308,10 @@ export default function ReputacePage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="card p-4 sm:p-5">
           <SectionLabel>Jak ji zvednout</SectionLabel>
+          <p className="text-sm text-muted mb-3">
+            Většina zdrojů se vyhodnotí sama — po zápase, na konci sezóny nebo jednou měsíčně.
+            Ovlivnit můžeš hlavně výsledky, volby v akcích a vztah s obcí.
+          </p>
           <div className="space-y-2.5">
             {SOURCES_UP.map((s) => (
               <SourceRow key={s.label} label={s.label} detail={s.detail} href={s.href} positive />
@@ -258,6 +321,9 @@ export default function ReputacePage() {
 
         <div className="card p-4 sm:p-5">
           <SectionLabel>Co ji sráží</SectionLabel>
+          <p className="text-sm text-muted mb-3">
+            Ztráty se na rozdíl od zisků nekrátí — spadnout jde vždycky plnou rychlostí.
+          </p>
           <div className="space-y-2.5">
             {SOURCES_DOWN.map((s) => (
               <SourceRow key={s.label} label={s.label} detail={s.detail} href={null} positive={false} />
@@ -401,11 +467,14 @@ function ConditionTile({ label, need, have, missing }: { label: string; need: nu
   );
 }
 
-function EarnRow({ icon, label, now, next }: { icon: string; label: string; now: string; next: string | null }) {
+function EarnRow({ icon, label, now, next, note }: { icon: string; label: string; now: string; next: string | null; note?: string }) {
   return (
     <div className="flex items-baseline gap-3 py-2 border-b border-gray-50 last:border-b-0">
       <span className="shrink-0 text-base leading-none">{icon}</span>
-      <span className="flex-1 min-w-0 text-sm text-ink">{label}</span>
+      <span className="flex-1 min-w-0 text-sm text-ink">
+        {label}
+        {note && <span className="block text-sm text-muted leading-snug">{note}</span>}
+      </span>
       <span className="shrink-0 text-sm font-heading font-bold tabular-nums text-ink text-right whitespace-nowrap">
         {now}
       </span>

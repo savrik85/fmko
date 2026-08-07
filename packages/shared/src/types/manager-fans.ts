@@ -68,9 +68,9 @@ export interface ManagerFansEffect {
   nextBand: ManagerFansBand | null;
   /** Kolik bodů vlivu chybí do dalšího stupně (0 na vrcholu). */
   pointsToNext: number;
-  /** Kolik bodů reputace to znamená (0 na vrcholu). */
+  /** Kolik bodů reputace to znamená. 0 = na vrcholu nebo už na stropu reputace. */
   repPointsToNext: number;
-  /** Kolik bodů motivace to znamená (0 na vrcholu). */
+  /** Kolik bodů motivace to znamená. 0 = na vrcholu nebo už na stropu motivace. */
   motPointsToNext: number;
 }
 
@@ -105,6 +105,14 @@ export function managerFansEffect(reputation: number, motivation: number): Manag
   const nextBand = bandIndex > 0 ? MANAGER_FANS_BANDS[bandIndex - 1] : null;
   const pointsToNext = nextBand ? nextBand.min - influence : 0;
 
+  // Rada musí být splnitelná. Reputace i motivace mají strop, takže trenér na
+  // maximu reputace nesmí dostat "stačí +5 reputace" — 80 se dosáhnout nedá.
+  // 0 znamená "tudy cesta nevede", UI pak nabídne jen druhou možnost.
+  const repNeedRaw = nextBand ? Math.ceil(pointsToNext / MANAGER_FANS.REP_WEIGHT) : 0;
+  const motNeedRaw = nextBand ? Math.ceil(pointsToNext / MANAGER_FANS.MOT_WEIGHT) : 0;
+  const repPointsToNext = rep + repNeedRaw <= MANAGER_FANS.REP_MAX ? repNeedRaw : 0;
+  const motPointsToNext = mot + motNeedRaw <= MANAGER_FANS.MOT_MAX ? motNeedRaw : 0;
+
   return {
     influence,
     repPoints: Math.round(rep * MANAGER_FANS.REP_WEIGHT * 10) / 10,
@@ -116,7 +124,7 @@ export function managerFansEffect(reputation: number, motivation: number): Manag
     pointsToNext,
     // Ceil je bezpečný: influence vzniká zaokrouhlením, k překlopení do dalšího
     // pásma stačí zvednout surovou hodnotu o pointsToNext.
-    repPointsToNext: nextBand ? Math.ceil(pointsToNext / MANAGER_FANS.REP_WEIGHT) : 0,
-    motPointsToNext: nextBand ? Math.ceil(pointsToNext / MANAGER_FANS.MOT_WEIGHT) : 0,
+    repPointsToNext,
+    motPointsToNext,
   };
 }

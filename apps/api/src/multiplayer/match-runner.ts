@@ -891,9 +891,17 @@ export async function runScheduledMatches(
                     const seasonRow = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
                         .first<{ number: number }>();
                     const seasonNo = seasonRow?.number ?? 1;
-                    await applyAttendanceReputation(db, homeTeamId, matchId, attendanceWithOfficials, stadiumCapacity, seasonNo, gameDate);
-                    await applyStreakReputation(db, homeTeamId, seasonNo, gameDate);
-                    await applyStreakReputation(db, awayTeamId, seasonNo, gameDate);
+                    // HERNÍ datum, ne reálné. Útlum reputace porovnává game_date v okně
+                    // 28 herních dní; reálný timestamp (game_clock.offset_days posouvá herní
+                    // čas až o desítky dní) by do okna nikdy netrefil a decay by sebral bod
+                    // i týmu, který právě vyprodal stadion.
+                    const gdRow = await db.prepare("SELECT game_date FROM teams WHERE id = ?")
+                        .bind(homeTeamId).first<{ game_date: string | null }>()
+                        .catch((e) => { logger.warn({module: "match-runner"}, "load game date for reputation", e); return null; });
+                    const repGameDate = gdRow?.game_date ?? gameDate;
+                    await applyAttendanceReputation(db, homeTeamId, matchId, attendanceWithOfficials, stadiumCapacity, seasonNo, repGameDate);
+                    await applyStreakReputation(db, homeTeamId, seasonNo, repGameDate);
+                    await applyStreakReputation(db, awayTeamId, seasonNo, repGameDate);
                 } catch (e) {
                     logger.warn({module: "match-runner"}, "reputation sources", e);
                 }

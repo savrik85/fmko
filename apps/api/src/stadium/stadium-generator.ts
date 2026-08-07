@@ -116,13 +116,13 @@ const UPGRADE_EFFECTS: Record<string, string[]> = {
 };
 
 // Unlock requirements per level
-interface UnlockReq {
+export interface UnlockReq {
   reputation?: number;
   matchesPlayed?: number;
   season?: number;
 }
 
-const STADIUM_UNLOCK: Record<number, UnlockReq> = {
+export const STADIUM_UNLOCK: Record<number, UnlockReq> = {
   1: {},
   2: { reputation: 50, matchesPlayed: 15 },
   3: { reputation: 70, matchesPlayed: 35, season: 3 },

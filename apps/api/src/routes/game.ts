@@ -651,14 +651,20 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
   const seasonStr = String(seasonNum);
 
   // Batch: seasonal events (AKTUÁLNÍ sezóny) + current game week (AKTUÁLNÍ sezóny)
-  const [dbEventsRes, lastCalRes] = await c.env.DB.batch([
-    c.env.DB.prepare("SELECT * FROM seasonal_events WHERE team_id = ? AND season = ? ORDER BY game_week").bind(teamId, seasonStr),
+  const [dbEventsRes, lastCalRes, seededRes] = await c.env.DB.batch([
+    // hospoda_action je jen cooldown marker ve stejné tabulce — do Událostí nepatří.
+    c.env.DB.prepare("SELECT * FROM seasonal_events WHERE team_id = ? AND season = ? AND type != 'hospoda_action' ORDER BY game_week").bind(teamId, seasonStr),
     c.env.DB.prepare("SELECT MAX(game_week) as gw FROM season_calendar WHERE league_id = ? AND status = 'simulated' AND season_number = ?").bind(team.league_id, seasonNum),
+    // Má tým už vygenerovanou ŠABLONOVOU sadu? Pozná se podle deterministického id.
+    // Nestačí "existuje jakýkoli řádek": ad-hoc událost po simulaci kola nebo návštěva
+    // hospody by generaci navždy umlčely a tým by sezónní akce nikdy nedostal.
+    c.env.DB.prepare("SELECT 1 FROM seasonal_events WHERE team_id = ? AND season = ? AND id LIKE ? LIMIT 1").bind(teamId, seasonStr, `se-${teamId}-s${seasonStr}-%`),
   ]);
   const dbEvents = { results: dbEventsRes.results };
   const currentGameWeek = (lastCalRes.results[0] as { gw: number | null } | undefined)?.gw ?? 0;
+  const hasTemplateSet = (seededRes.results?.length ?? 0) > 0;
 
-  if (dbEvents.results.length > 0) {
+  if (hasTemplateSet) {
     const events = (dbEvents.results as Record<string, unknown>[]).map((row) => ({
       id: row.id,
       type: row.type,
@@ -675,35 +681,59 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
   // Tým ještě události nemá — vygenerovat mu VLASTNÍ sadu ze šablon.
   // Dřív byly vázané jen na ligu, takže je spotřeboval první tým, který klikl,
   // a zbylých 13 dostalo 400 "Already resolved".
-  const rng = createRng(teamId.charCodeAt(0));
+  // Šablony na týden nezávisí na rng (getSeasonalEventsForWeek jen filtruje podle týdne),
+  // takže tu žádný seed nepotřebujeme.
   const allEvents: Array<SeasonalEventDef & { id: string; status: string }> = [];
+  const seedStmts: D1PreparedStatement[] = [];
 
   for (let week = 0; week <= 30; week++) {
-    const weekEvents = getSeasonalEventsForWeek(rng, week, team.district);
+    const weekEvents = getSeasonalEventsForWeek(week, team.district);
     for (let idx = 0; idx < weekEvents.length; idx++) {
       const ev = weekEvents[idx];
       // Deterministické id (tým+sezóna+týden+index) + INSERT OR IGNORE → dvě souběžná první načtení
-      // (obě vidí prázdno) nevloží duplicity; seed rng je deterministický, takže id sedí napříč běhy.
+      // (obě vidí prázdno) nevloží duplicity.
       const id = `se-${teamId}-s${seasonStr}-w${week}-${idx}`;
       // Status je vždy 'pending'. Události bez voleb vyřeší automaticky denní tick — dřív
       // dostávaly 'active' a jejich efekty se nikdy neaplikovaly, přestože je UI slibovalo.
-      await c.env.DB.prepare(
+      seedStmts.push(c.env.DB.prepare(
         "INSERT OR IGNORE INTO seasonal_events (id, team_id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
       ).bind(id, teamId, team.league_id, ev.type, ev.title, ev.description,
         JSON.stringify(ev.effects), ev.choices ? JSON.stringify(ev.choices) : null,
         seasonStr, ev.gameWeek,
-      ).run().catch((e) => logger.warn({ module: "game" }, "insert seasonal event", e));
+      ));
 
       allEvents.push({ ...ev, id, status: "pending" });
     }
   }
 
+  // Jeden batch místo 30+ sekvenčních zápisů — po přechodu na per-tým generaci
+  // tímhle prochází každý tým zvlášť, ne jen jeden za ligu.
+  if (seedStmts.length > 0) {
+    await c.env.DB.batch(seedStmts)
+      .catch((e) => logger.warn({ module: "game" }, "seed seasonal events", e));
+  }
+
+  // K nově vygenerovaným přidat i to, co už tým měl (ad-hoc události po simulaci kola),
+  // ať se první otevření stránky neliší od dalších.
+  const existing = (dbEvents.results as Record<string, unknown>[]).map((row) => ({
+    id: row.id as string,
+    type: row.type as string,
+    title: row.title as string,
+    description: row.description as string,
+    effects: JSON.parse(row.effects as string),
+    choices: row.choices ? JSON.parse(row.choices as string) : null,
+    gameWeek: row.game_week as number,
+    status: row.status as string,
+  }));
+
+  const seeded = allEvents.map((ev) => ({
+    id: ev.id, type: ev.type, title: ev.title, description: ev.description,
+    effects: ev.effects, choices: ev.choices ?? null,
+    gameWeek: ev.gameWeek, status: ev.status,
+  }));
+
   return c.json({
-    events: allEvents.map((ev) => ({
-      id: ev.id, type: ev.type, title: ev.title, description: ev.description,
-      effects: ev.effects, choices: ev.choices ?? null,
-      gameWeek: ev.gameWeek, status: ev.status,
-    })),
+    events: [...existing, ...seeded].sort((a, b) => a.gameWeek - b.gameWeek),
     currentGameWeek,
   });
 });
@@ -735,7 +765,14 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
   // (události bez voleb) — viz season/event-effects.ts.
   const { applyEventEffects } = await import("../season/event-effects");
   const choiceLabel = String((choice as Record<string, unknown>).text ?? event.title ?? "efekt");
-  await applyEventEffects(c.env.DB, teamId, choice.effects, choiceLabel, new Date().toISOString(), `sev-${eventId}`);
+  // Herní datum — reputační log i transakce se porovnávají v herním čase.
+  const eventTeamDate = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: "game" }, "load game date for event effects", e); return null; });
+  await applyEventEffects(
+    c.env.DB, teamId, choice.effects, choiceLabel,
+    eventTeamDate?.game_date ?? new Date().toISOString(), `sev-${eventId}`,
+  );
 
   return c.json({ ok: true, appliedEffects: choice.effects });
 });
@@ -6833,13 +6870,23 @@ gameRouter.get("/teams/:teamId/reputation", async (c) => {
   const equipment = (equipRes.results[0] as Record<string, number> | undefined) ?? {};
   const favor = (favorRes.results[0] as { favor: number } | undefined)?.favor ?? 50;
 
-  // Zámky — stejné prahy jako v generátorech, ale tady jen pro přehled "co mi to odemkne".
+  // Prahy se IMPORTUJÍ z generátorů — kopie by se při ladění rozešla a stránka
+  // by lhala, aniž by cokoli spadlo při buildu.
+  const { STADIUM_UNLOCK } = await import("../stadium/stadium-generator");
+  const { UNLOCK_REQUIREMENTS } = await import("../equipment/equipment-generator");
   const unlockDefs = [
-    { kind: "equipment", level: 2, label: "Vybavení — 2. úroveň", reputation: 40, matches: 5, season: 1 },
-    { kind: "stadium", level: 2, label: "Stadion — 2. úroveň", reputation: 50, matches: 15, season: 1 },
-    { kind: "equipment", level: 3, label: "Vybavení — 3. úroveň", reputation: 60, matches: 15, season: 2 },
-    { kind: "stadium", level: 3, label: "Stadion — 3. úroveň", reputation: 70, matches: 35, season: 3 },
-  ];
+    { kind: "equipment", level: 2, label: "Vybavení — 2. úroveň", req: UNLOCK_REQUIREMENTS[2] },
+    { kind: "stadium", level: 2, label: "Stadion — 2. úroveň", req: STADIUM_UNLOCK[2] },
+    { kind: "equipment", level: 3, label: "Vybavení — 3. úroveň", req: UNLOCK_REQUIREMENTS[3] },
+    { kind: "stadium", level: 3, label: "Stadion — 3. úroveň", req: STADIUM_UNLOCK[3] },
+  ].map((u) => ({
+    kind: u.kind,
+    level: u.level,
+    label: u.label,
+    reputation: u.req?.reputation ?? 0,
+    matches: u.req?.matchesPlayed ?? 0,
+    season: u.req?.season ?? 1,
+  }));
   const unlocks = unlockDefs.map((u) => ({
     ...u,
     missingReputation: Math.max(0, u.reputation - rep),

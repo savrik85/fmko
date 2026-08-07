@@ -249,12 +249,6 @@ export function calculateMatchReward(
 }
 
 /**
- * Season-end rewards by league position. Same for all teams regardless of village size.
- */
-
-
-
-/**
  * Training cost per month based on sessions/week and village category.
  */
 export function calculateTrainingCost(sessionsPerWeek: number, villageCategory: string): number {

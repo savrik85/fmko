@@ -220,7 +220,7 @@ interface UnlockReq {
   season?: number;
 }
 
-const UNLOCK_REQUIREMENTS: Record<number, UnlockReq> = {
+export const UNLOCK_REQUIREMENTS: Record<number, UnlockReq> = {
   1: {},                                                   // Always available
   2: { reputation: 40, matchesPlayed: 5 },                 // Need some progress
   3: { reputation: 60, matchesPlayed: 15, season: 2 },     // Need serious progress + season 2

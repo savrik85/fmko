@@ -687,7 +687,6 @@ const EVENT_TEMPLATES_PRAHA: SeasonalEventDef[] = [
  * District-aware: Praha gets urban events, rest gets rural.
  */
 export function getSeasonalEventsForWeek(
-  rng: Rng,
   gameWeek: number,
   district?: string,
 ): SeasonalEventDef[] {

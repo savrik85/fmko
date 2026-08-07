@@ -29,15 +29,17 @@ export async function applyEventEffects(
 ): Promise<void> {
   const { recordTransaction } = await import("./finance-processor");
 
-  for (const effect of effects) {
+  for (const [i, effect] of effects.entries()) {
     if (effect.type === "budget") {
       await recordTransaction(db, teamId, "event", effect.value, `Událost: ${label}`, gameDate)
         .catch((e) => logger.warn({ module: "event-effects" }, "record event transaction", e));
     }
     if (effect.type === "reputation") {
       const { applyReputationDelta } = await import("../lib/reputation");
+      // Index v klíči — jedna volba může mít víc reputačních efektů a bez něj by
+      // druhý spadl na unikátní index jako duplicita a tiše se zahodil.
       await applyReputationDelta(db, teamId, effect.value, "event", `Událost: ${label}`, {
-        referenceId: referenceId ? `${referenceId}-rep` : undefined,
+        referenceId: referenceId ? `${referenceId}-rep-${i}` : undefined,
         gameDate,
       });
     }
@@ -137,6 +139,17 @@ export async function resolveDueAutoEvents(
   const resolved: Array<{ title: string; description: string; effects: EventEffect[] }> = [];
 
   for (const row of due.results ?? []) {
+    // Parsovat PŘED claimem — jinak by se událost s rozbitým JSONem označila jako
+    // vyřešená a nenávratně zmizela, aniž by hráč cokoli dostal.
+    let effects: EventEffect[] = [];
+    try {
+      effects = JSON.parse(row.effects) as EventEffect[];
+    } catch (e) {
+      logger.error({ module: "event-effects" }, `nevalidní effects u události ${row.id} — přeskočeno, zůstává pending`, e);
+      continue;
+    }
+    if (effects.length === 0) continue;
+
     const claimed = await db.prepare(
       "UPDATE seasonal_events SET status = 'resolved' WHERE id = ? AND status = 'pending'",
     ).bind(row.id).run().catch((e) => {
@@ -144,15 +157,6 @@ export async function resolveDueAutoEvents(
       return { meta: { changes: 0 } };
     });
     if (claimed.meta.changes === 0) continue;
-
-    let effects: EventEffect[] = [];
-    try {
-      effects = JSON.parse(row.effects) as EventEffect[];
-    } catch (e) {
-      logger.warn({ module: "event-effects" }, `parse effects for event ${row.id}`, e);
-      continue;
-    }
-    if (effects.length === 0) continue;
 
     await applyEventEffects(db, teamId, effects, row.title, gameDate, `sev-${row.id}`);
     resolved.push({ title: row.title, description: row.description, effects });

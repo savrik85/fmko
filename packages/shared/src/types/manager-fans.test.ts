@@ -84,20 +84,26 @@ describe("managerFansEffect", () => {
     expect(zero / total).toBeLessThan(0.2);
   });
 
-  it("rada 'chybí ti X bodů' opravdu překlopí do dalšího stupně", () => {
-    // UI tohle číslo hráči slibuje — musí sedět s enginem.
+  it("rada 'chybí ti X bodů' je vždy splnitelná a opravdu překlopí do dalšího stupně", () => {
+    // Dřív tenhle test případ na stropu PŘESKAKOVAL podmínkou rep + need <= REP_MAX,
+    // takže prošla rada "zvedni reputaci o 5" trenérovi s reputací 75. Teď se nepřeskakuje:
+    // nula znamená "tudy cesta nevede" a cokoli nenulového musí být dosažitelné i účinné.
     for (const { rep, mot } of everyManager()) {
       const fx = managerFansEffect(rep, mot);
       if (!fx.nextBand) continue;
 
-      if (rep + fx.repPointsToNext <= MANAGER_FANS.REP_MAX) {
+      if (fx.repPointsToNext > 0) {
+        expect(rep + fx.repPointsToNext).toBeLessThanOrEqual(MANAGER_FANS.REP_MAX);
         expect(managerFansEffect(rep + fx.repPointsToNext, mot).matchBoost)
           .toBeGreaterThan(fx.matchBoost);
       }
-      if (mot + fx.motPointsToNext <= MANAGER_FANS.MOT_MAX) {
+      if (fx.motPointsToNext > 0) {
+        expect(mot + fx.motPointsToNext).toBeLessThanOrEqual(MANAGER_FANS.MOT_MAX);
         expect(managerFansEffect(rep, mot + fx.motPointsToNext).matchBoost)
           .toBeGreaterThan(fx.matchBoost);
       }
+      // Aspoň jedna cesta musí existovat, jinak by karta ukázala stupeň bez návodu.
+      expect(fx.repPointsToNext + fx.motPointsToNext).toBeGreaterThan(0);
     }
   });
 

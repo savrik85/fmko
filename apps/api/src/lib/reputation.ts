@@ -57,7 +57,7 @@ export interface ReputationChange {
   applied: number;
   oldValue: number;
   newValue: number;
-  skipped: "duplicate" | "capped" | "no_team" | null;
+  skipped: "duplicate" | "capped" | "no_team" | "error" | null;
 }
 
 /**
@@ -117,12 +117,34 @@ export async function applyReputationDelta(
         `INSERT INTO reputation_log (team_id, old_value, new_value, delta, raw_delta, source, description, reference_id, game_date)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(teamId, oldValue, newValue, applied, rawDelta, source, description, referenceId, gameDate),
-      db.prepare("UPDATE teams SET reputation = ? WHERE id = ?").bind(newValue, teamId),
+      // Self-referenční UPDATE, ne zápis absolutní hodnoty. D1 nemá transakci napříč
+      // příkazy, takže mezi SELECTem výše a tímhle zápisem může jiná invokace
+      // (crony 0 16 a 5 16 běží minutu po sobě) reputaci změnit — absolutní hodnota
+      // by její změnu přepsala a audit log by pak nesouhlasil s teams.reputation.
+      db.prepare("UPDATE teams SET reputation = MAX(0, MIN(100, reputation + ?)) WHERE id = ?")
+        .bind(applied, teamId),
     ]);
   } catch (e) {
-    logger.warn({ module: "reputation" }, `apply reputation delta ${source} for ${teamId}`, e);
+    // Duplicitní reference_id shodí celý batch (unikátní index) — to je očekávaná
+    // idempotence. Cokoli jiného je skutečná chyba a nesmí vypadat stejně.
+    const message = e instanceof Error ? e.message : String(e);
+    const isDuplicate = /UNIQUE constraint failed: reputation_log\.reference_id/i.test(message);
+    if (!isDuplicate) {
+      logger.error({ module: "reputation" }, `apply reputation delta ${source} for ${teamId}`, e);
+      return { applied: 0, oldValue, newValue: oldValue, skipped: "error" };
+    }
     return { applied: 0, oldValue, newValue: oldValue, skipped: "duplicate" };
   }
 
-  return { applied, oldValue, newValue, skipped: cappedAway ? "capped" : null };
+  // Skutečnou novou hodnotu čteme zpátky — applied se mohl potkat se souběžnou změnou.
+  const after = await db.prepare("SELECT reputation FROM teams WHERE id = ?")
+    .bind(teamId).first<{ reputation: number }>()
+    .catch((e) => { logger.warn({ module: "reputation" }, "read back reputation", e); return null; });
+
+  return {
+    applied,
+    oldValue,
+    newValue: after?.reputation ?? newValue,
+    skipped: cappedAway ? "capped" : null,
+  };
 }

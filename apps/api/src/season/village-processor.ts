@@ -682,7 +682,6 @@ export async function generatePubEncounters(
   ).bind(gameDate).all<{ team_id: string; village_id: string }>();
 
   let generated = 0;
-  const now = new Date();
   // Herní čas — expirace se porovnává proti gameDate, ne proti reálnému datu.
   const expiresAt = gameExpiry(gameDate, 5); // 5 herních dní na rozhodnutí
 

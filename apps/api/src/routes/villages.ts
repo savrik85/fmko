@@ -506,7 +506,13 @@ villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
     logger.warn({ module: "villages" }, "load game date for brigade expiry", e);
     return null;
   });
-  if (brigadeTeamDate && isGameExpired(brigade.expires_at, brigadeTeamDate.game_date)) {
+  // Bez herního data se kontrola NESMÍ přeskočit — dávno vypršelá brigáda by prošla
+  // a strhla hráčům kondici. Radši odmítnout, než pustit neznámý stav.
+  if (!brigadeTeamDate?.game_date) {
+    logger.warn({ module: "villages" }, `brigade ${brigadeId}: chybí game_date týmu ${session.teamId}`);
+    return c.json({ error: "Nepodařilo se ověřit platnost brigády, zkus to znovu" }, 503);
+  }
+  if (isGameExpired(brigade.expires_at, brigadeTeamDate.game_date)) {
     return c.json({ error: "Brigáda již vypršela" }, 410);
   }
 

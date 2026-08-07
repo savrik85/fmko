@@ -1211,7 +1211,14 @@ export default function FansPage() {
               <div className="text-sm font-heading font-bold text-pitch-600 mb-3">
                 Do stupně {m.nextBandLabel} ({sign(m.nextBandBoost)} po zápase) ti chybí{" "}
                 {m.pointsToNext} {m.pointsToNext === 1 ? "bod" : m.pointsToNext < 5 ? "body" : "bodů"} vlivu
-                — to je {m.repPointsToNext} bodů reputace nebo {m.motPointsToNext} bodů motivace.
+                {/* Nula = tudy cesta nevede, protože atribut už je na stropu. */}
+                {m.repPointsToNext > 0 && m.motPointsToNext > 0
+                  ? ` — to je ${m.repPointsToNext} bodů reputace nebo ${m.motPointsToNext} bodů motivace.`
+                  : m.repPointsToNext > 0
+                    ? ` — to je ${m.repPointsToNext} bodů reputace. Motivaci už výš nedostaneš.`
+                    : m.motPointsToNext > 0
+                      ? ` — to je ${m.motPointsToNext} bodů motivace. Reputace už je na stropu.`
+                      : "."}
               </div>
             ) : (
               <div className="text-sm font-heading font-bold text-pitch-600 mb-3">
