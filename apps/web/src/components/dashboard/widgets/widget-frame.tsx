@@ -10,6 +10,7 @@
 
 import type { HTMLAttributes, ReactNode } from "react";
 import { SectionLabel } from "@/components/ui";
+import { WIDGET_COLORS, getWidgetColor } from "./widget-colors";
 import type { WidgetWidth } from "./types";
 
 export interface WidgetFrameProps {
@@ -24,6 +25,9 @@ export interface WidgetFrameProps {
   onMoveDown: () => void;
   onRemove: () => void;
   onWidth: (w: WidgetWidth) => void;
+  /** Klíč barvy karty; undefined = bílá. */
+  color?: string;
+  onColor: (color: string | undefined) => void;
   /** Právě se s tímhle widgetem táhne. */
   dragging?: boolean;
   /** Někde na dashboardu se táhne — lišta pak nemá reagovat na hover. */
@@ -37,13 +41,20 @@ const WIDTHS: WidgetWidth[] = [1, 2, 3];
 
 export function WidgetFrame({
   title, icon, bare, editing, width, isFirst, isLast,
-  onMoveUp, onMoveDown, onRemove, onWidth,
+  onMoveUp, onMoveDown, onRemove, onWidth, color, onColor,
   dragging, dragActive, dragHandleProps, children,
 }: WidgetFrameProps) {
+  const tint = getWidgetColor(color);
+
+  // Odsazení zůstává na vnitřním divu, aby barevný proužek sedl na horní hranu
+  // karty. Widgety, které roztahují tabulky zápornými okraji, tím nejsou dotčené.
   const body = bare ? children : (
-    <div className="card p-4 sm:p-5 h-full">
-      <SectionLabel>{title}</SectionLabel>
-      {children}
+    <div className="card h-full" style={tint ? { background: tint.bg } : undefined}>
+      {tint && <div style={{ height: 3, background: tint.accent }} aria-hidden="true" />}
+      <div className="p-4 sm:p-5">
+        <SectionLabel>{title}</SectionLabel>
+        {children}
+      </div>
     </div>
   );
 
@@ -125,6 +136,38 @@ export function WidgetFrame({
         >
           ✕
         </button>
+      </div>
+
+      {/* Barvy — jen světlé odstíny, takže se nemusí řešit překlápění textu */}
+      <div
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-pitch-50/60 border-b border-pitch-100"
+        role="group"
+        aria-label={`Barva widgetu ${title}`}
+      >
+        <button
+          type="button"
+          {...stopDrag}
+          onClick={() => onColor(undefined)}
+          aria-pressed={!tint}
+          title="Bez barvy"
+          className={`w-5 h-5 rounded-full bg-white transition-shadow ${
+            !tint ? "ring-2 ring-pitch-500 ring-offset-1" : "ring-1 ring-gray-300"
+          }`}
+        />
+        {WIDGET_COLORS.map((c) => (
+          <button
+            key={c.key}
+            type="button"
+            {...stopDrag}
+            onClick={() => onColor(c.key)}
+            aria-pressed={tint?.key === c.key}
+            title={c.label}
+            className={`w-5 h-5 rounded-full transition-shadow ${
+              tint?.key === c.key ? "ring-2 ring-pitch-500 ring-offset-1" : "ring-1 ring-black/10"
+            }`}
+            style={{ background: c.accent }}
+          />
+        ))}
       </div>
 
       {/* V editaci widget nereaguje na klikání — ovládá se jen lišta */}

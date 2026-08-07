@@ -9,6 +9,8 @@ export type WidgetWidth = 1 | 2 | 3;
 export interface LayoutItem {
   id: string;
   w: WidgetWidth;
+  /** Klíč barevného odlišení; chybí = bílá karta jako dosud. */
+  c?: string;
 }
 
 // ── Datové zdroje ───────────────────────────────────────────────────────────

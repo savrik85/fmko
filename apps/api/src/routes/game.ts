@@ -3661,7 +3661,7 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
 
 const MAX_DASHBOARD_WIDGETS = 60;
 
-interface DashboardLayoutItem { id: string; w: 1 | 2 | 3 }
+interface DashboardLayoutItem { id: string; w: 1 | 2 | 3; c?: string }
 
 /** Vrátí očištěný layout, nebo chybovou hlášku (česky) když je vstup nepoužitelný. */
 function parseDashboardWidgets(raw: unknown): { widgets: DashboardLayoutItem[] } | { error: string } {
@@ -3672,14 +3672,19 @@ function parseDashboardWidgets(raw: unknown): { widgets: DashboardLayoutItem[] }
   const widgets: DashboardLayoutItem[] = [];
   for (const item of raw) {
     if (typeof item !== "object" || item === null) return { error: "Widget musí být objekt" };
-    const { id, w } = item as { id?: unknown; w?: unknown };
+    const { id, w, c } = item as { id?: unknown; w?: unknown; c?: unknown };
     if (typeof id !== "string" || id.length === 0 || id.length > 40) {
       return { error: "Widget musí mít id (1–40 znaků)" };
     }
     if (w !== 1 && w !== 2 && w !== 3) return { error: `Neplatná šířka widgetu "${id}" (povoleno 1–3)` };
     if (seen.has(id)) return { error: `Widget "${id}" je v layoutu dvakrát` };
+    // Paleta barev žije jen na frontendu — tady hlídáme pouze tvar, aby přidání
+    // nového odstínu neznamenalo nasazovat API.
+    if (c != null && (typeof c !== "string" || c.length > 20)) {
+      return { error: `Neplatná barva widgetu "${id}"` };
+    }
     seen.add(id);
-    widgets.push({ id, w });
+    widgets.push(c ? { id, w, c: c as string } : { id, w });
   }
   return { widgets };
 }

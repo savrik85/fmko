@@ -99,6 +99,13 @@ export default function DashboardPage() {
   const remove = (index: number) => setDraft((prev) => prev.filter((_, i) => i !== index));
   const setWidth = (index: number, w: WidgetWidth) =>
     setDraft((prev) => prev.map((it, i) => (i === index ? { ...it, w } : it)));
+  const setColor = (index: number, c: string | undefined) =>
+    setDraft((prev) => prev.map((it, i) => {
+      if (i !== index) return it;
+      // Bez barvy se klíč z layoutu vypustí úplně, ať se do DB neukládá prázdno.
+      const { c: _drop, ...rest } = it;
+      return c ? { ...rest, c } : rest;
+    }));
   // Dialog zůstává otevřený — přidat si člověk chce obvykle víc widgetů naráz
   // a zavírat a znovu otevírat po každém by bylo otravné.
   const add = (id: string) => {
@@ -246,6 +253,8 @@ export default function DashboardPage() {
                     onMoveDown={() => move(index, 1)}
                     onRemove={() => remove(index)}
                     onWidth={(w) => setWidth(index, w)}
+                    color={item.c}
+                    onColor={(c) => setColor(index, c)}
                     dragging={isDragged}
                     dragActive={dragId != null}
                     dragHandleProps={dragHandlers(item.id)}
