@@ -1227,7 +1227,7 @@ export default function FansPage() {
                 <ul className="text-sm text-muted space-y-1 list-disc list-inside">
                   <li>Výhra <strong className="text-ink">+1</strong>, o tři a víc gólů <strong className="text-ink">+2</strong>. Projeví se zhruba v každém třetím zápase.</li>
                   <li>Prohra <strong className="text-ink">−1</strong>, debakl o tři a víc <strong className="text-ink">−2</strong>, taky asi v třetině případů.</li>
-                  <li>Konec sezóny je nejsilnější páka: ve čtrnáctičlenné lize dá první místo <strong className="text-ink">+11</strong>, poslední <strong className="text-ink">−11</strong>.</li>
+                  <li>Konec sezóny je nejsilnější páka: ve čtrnáctičlenné lize dá první místo <strong className="text-ink">+10</strong>, poslední <strong className="text-ink">−10</strong>.</li>
                   <li>Pohár: čtvrtfinále <strong className="text-ink">+3</strong>, semifinále <strong className="text-ink">+5</strong>, výhra ve finále <strong className="text-ink">+8</strong>.</li>
                   <li>Nad 75 to nejde, pod 15 taky ne.</li>
                 </ul>
