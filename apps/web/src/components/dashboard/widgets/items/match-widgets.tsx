@@ -39,7 +39,9 @@ export function TodayProgramWidget({ data }: WidgetProps) {
   const dayName = gameDate ? gameDate.toLocaleDateString("cs", { weekday: "long" }) : "";
 
   return (
-    <div className={`flex items-center gap-4 ${isMatchDay ? "-m-4 sm:-m-5 p-4 sm:p-5 rounded-xl ring-2 ring-pitch-400 bg-pitch-50/30" : ""}`}>
+    // Zvýraznění zápasového dne zůstává uvnitř karty — kdyby se roztáhlo přes
+    // celou kartu zápornými okraji, prošel by rámeček skrz nadpis widgetu.
+    <div className={`flex items-center gap-4 ${isMatchDay ? "rounded-xl ring-2 ring-pitch-400 bg-pitch-50/30 p-3 mt-1" : ""}`}>
       <div className="text-3xl">{isMatchDay ? "⚽" : isTrainingDay ? "🏋️" : "🌴"}</div>
       <div className="flex-1">
         <div className="font-heading font-bold text-lg">
