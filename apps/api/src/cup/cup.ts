@@ -713,6 +713,8 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
 
   // Chunk: max 12 zápasů na invokaci (plný engine je drahý — 64 zápasů kola by přeteklo limit workeru).
   const CUP_CHUNK = 12;
+  // Po kolika minutách se claim nedokončeného zápasu považuje za mrtvý (spadlá invokace).
+  const CLAIM_STALE_MIN = 15;
   const matchesRes = await db.prepare("SELECT id, bracket_pos, home_cup_team_id, away_cup_team_id FROM cup_matches WHERE cup_id = ? AND round = ? AND status = 'scheduled' ORDER BY bracket_pos LIMIT ?")
     .bind(cupId, round, CUP_CHUNK).all<{ id: string; bracket_pos: number; home_cup_team_id: string | null; away_cup_team_id: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "load round matches", e); return { results: [] as any[] }; });
@@ -735,6 +737,22 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
 
   for (const m of matchesRes.results) {
     if (!m.home_cup_team_id || !m.away_cup_team_id) continue;
+
+    // Claim — zápas smí odsimulovat jen jedna invokace. Bez toho dvě souběžné invokace
+    // (cron + advance-day + admin endpoint) odsimulují tentýž zápas s různými výsledky,
+    // druhá přepíše vítěze první, a do dalšího kola postoupí tým, který prohrál.
+    // Mrtvý claim (spadlá invokace) se po CLAIM_STALE_MIN minutách uvolní sám.
+    const claim = await db.prepare(
+      `UPDATE cup_matches SET claimed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+       WHERE id = ? AND status = 'scheduled'
+         AND (claimed_at IS NULL OR claimed_at < strftime('%Y-%m-%dT%H:%M:%SZ','now',?))`,
+    ).bind(m.id, `-${CLAIM_STALE_MIN} minutes`).run()
+      .catch((e) => { logger.warn({ module: M }, "claim cup match", e); return null; });
+    if ((claim?.meta?.changes ?? 0) !== 1) {
+      logger.info({ module: M }, `cup tie ${m.id}: zabrala jiná invokace, přeskakuji`);
+      continue;
+    }
+
     const cupWeathers: Weather[] = ["sunny", "cloudy", "cloudy", "rain", "wind", "snow"];
     const tieWeather = cupWeathers[rng.int(0, cupWeathers.length - 1)];
     const r = await simulateCupTie(db, rng, m.id, m.home_cup_team_id, m.away_cup_team_id, realTeamOf, strengthOf, tieWeather);
@@ -779,12 +797,24 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
     .catch((e) => { logger.warn({ module: M }, "gather winners", e); return { results: [] as { bracket_pos: number; winner_cup_team_id: string }[] }; });
   const winnersAll = winnersRes.results.map((w) => ({ pos: w.bracket_pos, teamId: w.winner_cup_team_id }));
 
-  // Finále hotové?
+  // Finále hotové? Guard na status — pohár smí ukončit jen jedna invokace.
   if (round >= cup.total_rounds) {
     const champ = winnersAll[0]?.teamId ?? null;
-    await db.prepare("UPDATE cup_competitions SET status='finished', winner_team_id=? WHERE id=?").bind(champ, cupId).run()
-      .catch((e) => logger.warn({ module: M }, "finish cup", e));
+    const fin = await db.prepare("UPDATE cup_competitions SET status='finished', winner_team_id=? WHERE id=? AND status='active'").bind(champ, cupId).run()
+      .catch((e) => { logger.warn({ module: M }, "finish cup", e); return null; });
+    if ((fin?.meta?.changes ?? 0) !== 1) return { ok: true, round };
     return { ok: true, round, finished: true, winner: champ ?? undefined };
+  }
+
+  // Zámek uzavření kola: další kolo smí vygenerovat jen ta invokace, které se povede
+  // posunout current_round. Souběžná invokace dostane changes=0 a nic negeneruje —
+  // bez toho obě uvidí remain=0 a vloží další kolo dvakrát.
+  const bump = await db.prepare("UPDATE cup_competitions SET current_round = ? WHERE id = ? AND current_round = ?")
+    .bind(round + 1, cupId, round).run()
+    .catch((e) => { logger.warn({ module: M }, "bump round", e); return null; });
+  if ((bump?.meta?.changes ?? 0) !== 1) {
+    logger.info({ module: M }, `cup ${cupId}: kolo ${round} uzavřela jiná invokace`);
+    return { ok: true, round };
   }
 
   // Vygeneruj další kolo: vítěz pozice i → další kolo pozice floor(i/2), home pokud i sudé
@@ -800,13 +830,26 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
   const nextDate = roundDates[round] ?? null; // datum kola round+1 (0-indexováno)
   const nextStmts: D1PreparedStatement[] = [];
   for (const [np, slot] of nextByPos) {
+    // OR IGNORE + unique index na (cup_id, round, bracket_pos): opakovaný pokus (po částečně
+    // selhaném batchi) doplní jen chybějící pozice místo aby spadl na duplicitě.
     nextStmts.push(db.prepare(
-      "INSERT INTO cup_matches (id, cup_id, round, bracket_pos, home_cup_team_id, away_cup_team_id, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled')",
+      "INSERT OR IGNORE INTO cup_matches (id, cup_id, round, bracket_pos, home_cup_team_id, away_cup_team_id, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled')",
     ).bind(crypto.randomUUID(), cupId, round + 1, np, slot.home ?? null, slot.away ?? null, nextDate));
   }
-  for (let i = 0; i < nextStmts.length; i += 40) await db.batch(nextStmts.slice(i, i + 40)).catch((e) => logger.error({ module: M }, "insert next round", e));
-  await db.prepare("UPDATE cup_competitions SET current_round = ? WHERE id = ?").bind(round + 1, cupId).run()
-    .catch((e) => logger.warn({ module: M }, "bump round", e));
+  let inserted = true;
+  for (let i = 0; i < nextStmts.length; i += 40) {
+    const ok = await db.batch(nextStmts.slice(i, i + 40)).then(() => true)
+      .catch((e) => { logger.error({ module: M }, "insert next round", e); return false; });
+    if (!ok) inserted = false;
+  }
+  // Insert selhal → vrátit current_round zpět, jinak by kolo zůstalo prázdné a pohár
+  // by se zasekl (maybeAdvanceCup nemá co simulovat a nikdy se k dogenerování nevrátí).
+  if (!inserted) {
+    await db.prepare("UPDATE cup_competitions SET current_round = ? WHERE id = ? AND current_round = ?")
+      .bind(round, cupId, round + 1).run()
+      .catch((e) => logger.error({ module: M }, "rollback bump round", e));
+    return { ok: false, round };
+  }
 
   return { ok: true, round };
 }
