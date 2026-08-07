@@ -15,8 +15,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/** Jemnost mřížky. Menší číslo = přesnější dosazení, ale víc řádků k rozpočítání. */
-export const MASONRY_ROW = 8;
+/**
+ * Jemnost mřížky.
+ *
+ * MUSÍ dělit beze zbytku (výška widgetu + MASONRY_GAP) u všech standardních
+ * výšek, jinak se span zaokrouhlí nahoru a sloupec se rozejde. Při osmi pixelech
+ * se to dělo: (200 + 20) / 8 = 27,5 → 28 řádků, tedy o 4 px navíc, a sloupec
+ * „nízký + střední" pak končil o kus níž než sousední „vysoký".
+ *
+ * Se čtyřmi to vychází přesně pro každou výšku, která je násobkem čtyř —
+ * a standardní výšky jsou násobky dvaceti.
+ */
+export const MASONRY_ROW = 4;
 /** Svislá mezera mezi widgety. Row-gap je nula, mezeru dělá právě tenhle přídavek. */
 export const MASONRY_GAP = 20;
 

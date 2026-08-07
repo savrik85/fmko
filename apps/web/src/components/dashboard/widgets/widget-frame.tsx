@@ -57,7 +57,7 @@ export function WidgetFrame({
   // Odsazení zůstává na vnitřním divu, aby barevný proužek sedl na horní hranu
   // karty. Widgety, které roztahují tabulky zápornými okraji, tím nejsou dotčené.
   const body = bare ? children : (
-    <div className="card h-full" style={tint ? { background: tint.bg } : undefined}>
+    <div className="card widget-card h-full" style={tint ? { background: tint.bg } : undefined}>
       {tint && <div className="shrink-0" style={{ height: 3, background: tint.accent }} aria-hidden="true" />}
       <div className="widget-body p-4 sm:p-5">
         <SectionLabel>{title}</SectionLabel>
@@ -71,15 +71,20 @@ export function WidgetFrame({
   // Tlačítka v liště nesmí spustit tažení — pointerdown se u nich zastaví.
   const stopDrag = { onPointerDown: (e: React.PointerEvent) => e.stopPropagation() };
 
+  // Ovládací lišty jsou uvnitř výšky widgetu, ne nad ní. Kdyby se přičítaly,
+  // narostl by každý widget o stejný kus a sloupec o dvou kartách by byl
+  // v editaci o celou lištu delší než sousední s jednou — rozložení by během
+  // úprav vypadalo úplně jinak než po uložení.
   return (
     <div
-      className={`relative rounded-[14px] ring-2 ring-offset-2 ring-offset-paper transition-shadow ${
+      className={`relative rounded-[14px] ring-2 ring-offset-2 ring-offset-paper transition-shadow flex flex-col ${heightClass} ${
         dragging ? "ring-pitch-500 shadow-lg" : "ring-pitch-300"
       }`}
+      style={heightStyle}
     >
       <div
         {...dragHandleProps}
-        className={`flex items-center gap-1 px-2 py-2 bg-pitch-50 rounded-t-[14px] border-b border-pitch-100 select-none ${
+        className={`shrink-0 flex items-center gap-1 px-2 py-1.5 bg-pitch-50 rounded-t-[14px] border-b border-pitch-100 select-none ${
           dragging ? "cursor-grabbing" : "cursor-grab"
         }`}
         style={{ touchAction: "none" }}
@@ -126,8 +131,9 @@ export function WidgetFrame({
         </button>
       </div>
 
-      {/* Rozměry — šířka ve sloupcích a výška ve třech standardních stupních */}
-      <div className="flex items-center gap-x-4 gap-y-1.5 flex-wrap px-3 py-1.5 bg-pitch-50/60 border-b border-pitch-100">
+      {/* Rozměry a barva na jednom řádku — lišty ukrajují z výšky widgetu,
+          takže každý ušetřený řádek je vidět jako kus náhledu navíc. */}
+      <div className="shrink-0 flex items-center gap-x-4 gap-y-1.5 flex-wrap px-3 py-1.5 bg-pitch-50/60 border-b border-pitch-100">
         <div className="flex items-center gap-1" role="group" aria-label={`Šířka widgetu ${title}`}>
           <span className="text-[11px] uppercase tracking-wide text-muted mr-0.5">Šířka</span>
           {WIDTHS.map((w) => (
@@ -165,14 +171,9 @@ export function WidgetFrame({
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Barvy — jen světlé odstíny, takže se nemusí řešit překlápění textu */}
-      <div
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-pitch-50/60 border-b border-pitch-100"
-        role="group"
-        aria-label={`Barva widgetu ${title}`}
-      >
+        {/* Barvy — jen světlé odstíny, takže se nemusí řešit překlápění textu */}
+        <div className="flex items-center gap-1.5" role="group" aria-label={`Barva widgetu ${title}`}>
         <button
           type="button"
           {...stopDrag}
@@ -197,14 +198,11 @@ export function WidgetFrame({
             style={{ background: c.accent }}
           />
         ))}
+        </div>
       </div>
 
-      {/* V editaci widget nereaguje na klikání — ovládá se jen lišta. Výška se
-          uplatní i tady, aby bylo hned vidět, jak karta doopravdy vypadá. */}
-      <div
-        className={`pointer-events-none select-none ${heightClass} ${dragActive && !dragging ? "opacity-70" : ""}`}
-        style={heightStyle}
-      >
+      {/* Náhled widgetu — vyplní zbytek výšky pod lištami a na klikání nereaguje */}
+      <div className={`flex-1 min-h-0 pointer-events-none select-none ${dragActive && !dragging ? "opacity-70" : ""}`}>
         {body}
       </div>
     </div>

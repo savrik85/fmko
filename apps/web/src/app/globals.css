@@ -239,7 +239,9 @@ body::before {
    Výšku nese proměnná --widget-h, kterou nastavuje WidgetFrame. */
 @media (min-width: 1024px) {
   .widget-h { height: var(--widget-h); }
-  .widget-h > .card { height: 100%; display: flex; flex-direction: column; }
+  /* Cílíme na vlastní třídu, ne na .card — widget si uvnitř může vykreslit
+     vlastní kartu (prázdný stav Hospody) a té výšku vnucovat nechceme. */
+  .widget-h .widget-card { height: 100%; display: flex; flex-direction: column; }
   .widget-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 }
 

@@ -13,6 +13,11 @@
 
 export type WidgetHeight = 1 | 2 | 3 | "auto";
 
+/**
+ * Základ rytmu. Každá výška musí být násobkem MASONRY_ROW, jinak se span
+ * v mřížce zaokrouhlí nahoru a sloupce se rozejdou o pár pixelů — viz komentář
+ * u MASONRY_ROW v use-masonry.ts.
+ */
 const BASE = 200;
 const GAP = 20;
 
