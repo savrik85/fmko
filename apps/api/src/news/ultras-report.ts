@@ -202,7 +202,12 @@ export async function generateUltrasReport(
   if (!article || article.trim().length < 10) article = fallbackArticle(gameWeek, homeMatches);
 
   const lines = article.trim().split("\n");
-  const headline = (lines.shift() ?? `Kotel hodnotí ${gameWeek}. kolo`).replace(/^#+\s*/, "").trim();
+  // Model občas vrátí titulek v markdownu — FE ho renderuje doslova, tak ho očistíme (vzor ai-reporter.ts).
+  const headline = (lines.shift() ?? `Kotel hodnotí ${gameWeek}. kolo`)
+    .replace(/^#+\s*/, "")
+    .replace(/^\*+/, "")
+    .replace(/\*+$/, "")
+    .trim();
   const body = lines.join("\n").trim() || headline;
 
   // 6. Zápis news + ultras_reports.
