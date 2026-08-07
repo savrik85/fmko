@@ -19,7 +19,7 @@ export function RivalsWidget({ data, height }: WidgetProps) {
 
   // Nahoru patří ti, s kým se něco děje — ať už dobrého, nebo špatného.
   const razeno = [...vsichni].sort((a, b) => (b.heat + Math.abs(b.respect)) - (a.heat + Math.abs(a.respect)))
-    .slice(0, rowsForHeight(height, ROW_PX.rich, 32));
+    .slice(0, rowsForHeight(height, ROW_PX.tall, 32));
 
   return (
     <div className="space-y-3">

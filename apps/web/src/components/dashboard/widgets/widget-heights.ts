@@ -71,6 +71,8 @@ export const ROW_PX = {
   tableBadge: 41,
   /** Řádek s ikonou a dvěma řádky textu. */
   rich: 55,
+  /** Řádek s vlastními ukazateli pod textem (Rivalové). */
+  tall: 81,
 } as const;
 
 /**

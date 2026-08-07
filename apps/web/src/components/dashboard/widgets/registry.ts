@@ -415,7 +415,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "season-heatmap", title: "Sezóna v kostce", icon: "🧮", category: "liga",
     description: "Celá sezóna jako mřížka barevných políček — série výher i propady na první pohled.",
-    defaultWidth: 1, defaultHeight: 1, needs: ["matchResults"], Component: SeasonHeatmapWidget,
+    defaultWidth: 1, defaultHeight: 2, needs: ["matchResults"], Component: SeasonHeatmapWidget,
   },
   {
     id: "position-progression", title: "Vývoj pozice", icon: "🪜", category: "liga",
