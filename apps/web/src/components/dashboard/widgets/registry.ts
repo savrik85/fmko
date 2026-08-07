@@ -116,7 +116,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "season-record", title: "Bilance", icon: "📊", category: "liga",
     description: "Umístění, body, výhry/remízy/prohry, skóre a forma.",
-    defaultWidth: 1, defaultHeight: 1, needs: ["standings", "matchResults", "team"], Component: SeasonRecordWidget,
+    defaultWidth: 1, defaultHeight: 2, needs: ["standings", "matchResults", "team"], Component: SeasonRecordWidget,
   },
   {
     id: "results-donut", title: "Výhry a prohry", icon: "🥧", category: "liga",
@@ -294,7 +294,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "fan-satisfaction", title: "Spokojenost fanoušků", icon: "😀", category: "fanousci",
     description: "Ciferníky spokojenosti a loajality včetně dopadu posledního zápasu.",
-    defaultWidth: 1, defaultHeight: 1, needs: ["fans"], Component: FanSatisfactionWidget,
+    defaultWidth: 1, defaultHeight: 2, needs: ["fans"], Component: FanSatisfactionWidget,
   },
   {
     id: "fan-satisfaction-history", title: "Vývoj spokojenosti", icon: "📉", category: "fanousci",

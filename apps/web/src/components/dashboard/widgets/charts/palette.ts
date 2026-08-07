@@ -61,11 +61,14 @@ export function magnitudeColor(ratio: number): string {
 
 /**
  * Odstín pro hodnotu 0–100, která znamená kvalitu (rating, kondice, docházka).
- * Škála je stavová, ne sekvenční — u těchhle čísel je podstatné, jestli jsou
- * dobrá nebo špatná, ne o kolik jsou větší než sousední.
+ *
+ * Škála MUSÍ jít monotónně od zelené k červené — lepší hodnota nesmí nikdy
+ * vypadat výstražněji než horší. Zlatá tu proto nemá co dělat, i když je to
+ * jinde v aplikaci barva prestiže: na pruhu čte jako varování, takže
+ * stoprocentní docházka vypadala hůř než osmdesátiprocentní.
  */
 export function qualityColor(value: number): string {
-  if (value >= 80) return "#C4A035";
+  if (value >= 80) return "#1E4A1E";
   if (value >= 60) return "#2E7D32";
   if (value >= 40) return "#7FA05A";
   if (value >= 20) return "#C4761A";
