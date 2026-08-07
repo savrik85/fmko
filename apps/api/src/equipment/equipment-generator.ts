@@ -1,3 +1,4 @@
+import { describeLock, type LockDetail } from "../stadium/stadium-generator";
 /**
  * Vybavení týmu v2 — kategorie, progression, reálné efekty.
  * Unlock podmínky: reputace, odehrané zápasy, sezóna.
@@ -291,8 +292,15 @@ export interface UpgradeOption {
   effect: string;
   description: string;
   locked: boolean;
+  /** Textové shrnutí — drží se kvůli starším klientům během deploye. */
   lockReason?: string;
+  /** Všechny nesplněné podmínky najednou. */
+  lockDetail?: LockDetail;
+  /** Co s tím — konkrétní návod, ne jen konstatování. */
+  lockHint?: string;
 }
+
+export type { LockDetail } from "../stadium/stadium-generator";
 
 export interface RepairOption {
   category: string;
@@ -318,19 +326,20 @@ export function getUpgradeOptions(
     const req = UNLOCK_REQUIREMENTS[next] ?? {};
 
     let locked = false;
-    let lockReason: string | undefined;
+    // Všechny nesplněné podmínky najednou — dřív poslední kontrola přepsala předchozí.
+    const lockDetail: LockDetail = {};
 
     if (req.reputation && teamReputation < req.reputation) {
       locked = true;
-      lockReason = `Potřeba reputace ${req.reputation}+ (máš ${teamReputation})`;
+      lockDetail.reputation = { need: req.reputation, have: teamReputation };
     }
     if (req.matchesPlayed && matchesPlayed < req.matchesPlayed) {
       locked = true;
-      lockReason = `Potřeba ${req.matchesPlayed}+ odehraných zápasů (máš ${matchesPlayed})`;
+      lockDetail.matchesPlayed = { need: req.matchesPlayed, have: matchesPlayed };
     }
     if (req.season && currentSeason < req.season) {
       locked = true;
-      lockReason = `Dostupné od sezóny ${req.season} (aktuální: ${currentSeason})`;
+      lockDetail.season = { need: req.season, have: currentSeason };
     }
 
     options.push({
@@ -342,7 +351,11 @@ export function getUpgradeOptions(
       effect: UPGRADE_EFFECT_LABELS[cat]?.[next] ?? "",
       description: LEVEL_DESCRIPTIONS[cat]?.[next] ?? "",
       locked,
-      lockReason,
+      lockReason: locked ? describeLock(lockDetail) : undefined,
+      lockDetail: locked ? lockDetail : undefined,
+      lockHint: locked && lockDetail.reputation
+        ? "Reputaci zvedneš umístěním v lize, postupem v poháru, vyprodaným stadionem nebo sezónními akcemi. Přehled najdeš v sekci Reputace."
+        : undefined,
     });
   }
 

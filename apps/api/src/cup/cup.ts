@@ -781,8 +781,12 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
           .catch((e) => logger.warn({ module: M }, "cup manager reputation", e));
       }
       if (repBonus.team > 0) {
-        await db.prepare("UPDATE teams SET reputation = MAX(0, MIN(100, reputation + ?)) WHERE id = ?").bind(repBonus.team, realWinner).run()
-          .catch((e) => logger.warn({ module: M }, "cup team reputation", e));
+        const { applyReputationDelta } = await import("../lib/reputation");
+        await applyReputationDelta(
+          db, realWinner, repBonus.team, "cup",
+          `Postup v poháru — ${roundLabel}`,
+          { referenceId: `${cupRefId}-rep`, gameDate },
+        );
       }
     }
   }

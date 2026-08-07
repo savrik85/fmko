@@ -25,7 +25,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Hlavni prehled klubu \u2014 rozpocet, dalsi zapas, forma, tabulka, stav kadru a trener." },
       { heading: "Forma", text: "V = vyhra (3 body), R = remiza (1 bod), P = prohra (0). Zobrazuje poslednich 5 vysledku." },
       { heading: "Stav kadru", text: "Prumerna kondice ovlivnuje vykon v zapase. Pod 60 % hrozi vyrazne oslabeni tymu. Zraneni hraci nemohou nastoupit." },
-      { heading: "Trener", text: "Koucink zvysuje sanci na zlepseni hracu (zaklad 4 %, pri koucink=80 az 5.6 %). Motivace a taktika ovlivnuji zapas. Vlastnosti rostou s kazdym odehranym zapasem (10 % sance na +1)." },
+      { heading: "Trener", text: "Koucink zvysuje sanci na zlepseni hracu pri treninku. Motivace a taktika ovlivnuji zapas. Vlastnosti se vyvijeji OBOUSMERNE: koucink a taktika rostou (castejii po vyhre), ale prohra obcas srazi motivaci nebo disciplinu. Reputace trenera roste za vyhry a klesa za prohry." },
       { text: "Sipky < > v headeru jsou historie prohlizece, NE posouvani dnu. Dny posouvej pres Administraci.", tip: true },
     ],
   },
@@ -81,9 +81,10 @@ const HELP: Record<string, HelpEntry> = {
     icon: "\u{1F4B0}",
     sections: [
       { text: "Rozpocet se meni tydne. Prijmy a vydaje se zpracovavaji kazde pondeli." },
-      { heading: "Prijmy", text: "Dotace obce: vesnice 6 000/mes, obec 10 000, mestys 15 000, mesto 25 000 Kc. Sponzori: 1 000\u20138 000/mes podle typu. Prispevky hracu: 100 Kc/hrac/mesic. Vstupne: 10\u201350 Kc/divak." },
+      { heading: "Prijmy", text: "Dotace obce: vesnice 6 000/mes, obec 10 000, mestys 15 000, mesto 25 000 Kc. Sponzori: 1 000\u20138 000/mes podle typu. Prispevky hracu: 100 Kc/hrac/mesic. Vstupne: 20\u201350 Kc/divak podle velikosti obce." },
       { heading: "Vydaje", text: "Treninky: 200\u20131 000 Kc/trenink (podle velikosti obce). Udrzba hriste: 500\u20133 000/mesic. Rozhodci: 800\u20131 500 Kc/zapas. Cestovne + obcerstveni: 400\u20131 200 Kc/zapas." },
       { heading: "Zapasove odmeny", text: "Vyhra: sponzorsky bonus + 500 Kc liga + fanouskovksy bonus (50\u2013200 Kc). Remiza: 30 % bonusu + 150 Kc. Prohra: nic." },
+      { heading: "Mistni podpora", text: "Reputace klubu \u00D7 100 Kc/mesic. Pri reputaci 50 je to 5 000 Kc/mes, pri 70 uz 7 000. Detail v sekci Reputace." },
       { text: "Zaporny rozpocet = nahodne negativni udalosti (kradez, vandalismus, odchod hracu). Udrzuj kladny zustatek!", tip: true },
     ],
   },
@@ -91,9 +92,24 @@ const HELP: Record<string, HelpEntry> = {
     title: "Sponzori",
     icon: "\u{1F3E2}",
     sections: [
-      { text: "Sponzori prinaseji mesicni prijem a bonus za vyhru. Pocet nabidek zavisi na velikosti obce (1\u20133)." },
-      { heading: "Typy sponzoru", text: "Hospoda: 1 000\u20133 000/mes. Reznictvi/Autoservis: 2 000\u20135 000. Potraviny: 2 500\u20136 000. Obec: 3 000\u20138 000. Kazdy ma jiny bonus za vyhru (150\u2013800 Kc)." },
-      { heading: "Reputace", text: "Ovlivnuje kvalitu nabidek. Roste vyhrami, klesa prohrami. Rozsah 0\u2013100." },
+      { text: "Sponzori prinaseji mesicni prijem a bonus za vyhru. Pocet nabidek zavisi na REPUTACI klubu: pod 40 tri nabidky, 40\u201359 ctyri, 60 a vic pet." },
+      { heading: "Typy sponzoru", text: "Hospoda, reznictvi, autoservis, potraviny, obec \u2014 kazdy ma jiny rozsah castky i jiny bonus za vyhru. Konkretni cisla vidis primo v nabidkach." },
+      { heading: "Vliv reputace na castku", text: "Nabidnuta castka se nasobi reputaci/50 a velikosti obce (vesnice 0,8\u00D7, obec 1,0\u00D7, mestys 1,1\u00D7, mesto 1,3\u00D7). Pri reputaci 70 dostanes o 40 % vic nez pri 50." },
+      { heading: "Reputace KLUBU", text: "Rozsah 0\u2013100, start 50. Roste umistenim v lize, postupem v poharu, sezonnimi akcemi, podpisem hvezdy a vyprodanym stadionem. Klesa prejmenovanim klubu, spodni polovinou tabulky a dlouhym obdobim bez uspechu. Samotna vyhra zapasu s ni NEHNE. Detail v sekci Reputace." },
+      { heading: "Reputace TRENERA", text: "Jine cislo, rozsah 15\u201375, start 30. TA roste vyhrami a klesa prohrami. Najdes ji v profilu trenera a na strance Fanousci." },
+    ],
+  },
+  "/dashboard/reputace": {
+    title: "Reputace klubu",
+    icon: "\u2B50",
+    sections: [
+      { text: "Jak moc se o klubu v okrese vi. Rozsah 0\u2013100, start 50. NEPLETE si ji s reputaci trenera \u2014 to je jine cislo (15\u201375) a to roste za vyhry." },
+      { heading: "Co odemyka", text: "Vybaveni 2. urovne: 40. Stadion 2. urovne: 50. Vybaveni 3. urovne: 60. Stadion 3. urovne: 70. Vzdy jeste plus pocet odehranych zapasu a cislo sezony." },
+      { heading: "Co vydelava", text: "Mistni podpora = reputace \u00D7 100 Kc/mesic. Pocet i velikost sponzorskych nabidek. Bonus k navstevnosti. Pronajem bufetu. Ochota hracu k tobe prestoupit." },
+      { heading: "Jak ji zvednout", text: "Umisteni v lize (prvni misto +5), pohar (vitez kumulativne +11), sezonni akce (+1 az +10), podpis hvezdy (+4 az +15), vyprodany stadion (+1, nejvys 6\u00D7 za sezonu), serie vyher (+2), rodaci v kadru a prizen obce (+1 mesicne)." },
+      { heading: "Co ji srazi", text: "Spodni polovina tabulky (posledni misto \u22125), prejmenovani klubu (\u22123), ukonceni smlouvy se sponzorem (\u22122), serie proher (\u22122), prazdne hlediste, malo rodaku, mracici se obec a mesic bez uspechu (\u22121 tydne)." },
+      { heading: "Klesajici vynosy", text: "Nad 55 se zisky krati na 75 %, nad 70 na polovinu, nad 85 na ctvrtinu. Ztraty se nekrati. Cim vys jsi, tim drazsi je stoupat." },
+      { text: "Sprchy, hriste, parkoviste a tribuny umi spolufinancovat obec \u2014 tam reputace nerozhoduje, jen prizen obce.", tip: true },
     ],
   },
   "/dashboard/fans": {
@@ -114,6 +130,7 @@ const HELP: Record<string, HelpEntry> = {
     icon: "\u{1F3BD}",
     sections: [
       { text: "Sprava vybaveni klubu. Amortizace vybaveni stoji ~500 Kc/mesic." },
+      { heading: "Zamky upgradu", text: "2. uroven: reputace 40+ a 5 odehranych zapasu. 3. uroven: reputace 60+, 15 zapasu a sezona 2+." },
     ],
   },
   "/dashboard/stadium": {
@@ -122,7 +139,8 @@ const HELP: Record<string, HelpEntry> = {
     sections: [
       { text: "Stav hriste ovlivnuje kvalitu hry a riziko zraneni." },
       { heading: "Pocasi", text: "Dest: technika 0.8x, zraneni 1.3x. Snih: technika 0.7x, zraneni 1.4x. Vitr: technika 0.9x. Pocasi se generuje nahodne." },
-      { heading: "Navstevnost", text: "Zavisi na velikosti obce, reputaci, pocasi a sile soupere. Vstupne: vesnice 10, obec 20, mestys 30, mesto 50 Kc/divak." },
+      { heading: "Navstevnost", text: "Zavisi na fanouskovske zakladne, reputaci klubu, forme, pocasi a kapacite. Zakladni vstupne: vesnice 20, obec 30, mestys 40, mesto 50 Kc/divak." },
+      { heading: "Zamky upgradu", text: "2. uroven: reputace 50+ a 15 odehranych zapasu. 3. uroven: reputace 70+, 35 zapasu a sezona 3+. Sprchy, hriste, parkoviste a tribuny umi spolufinancovat obec \u2014 tam reputace nerozhoduje, jen prizen." },
     ],
   },
   "/dashboard/events": {

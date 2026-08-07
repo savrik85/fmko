@@ -25,6 +25,7 @@ export async function applyEventEffects(
   effects: EventEffect[],
   label: string,
   gameDate: string,
+  referenceId?: string,
 ): Promise<void> {
   const { recordTransaction } = await import("./finance-processor");
 
@@ -34,9 +35,11 @@ export async function applyEventEffects(
         .catch((e) => logger.warn({ module: "event-effects" }, "record event transaction", e));
     }
     if (effect.type === "reputation") {
-      await db.prepare("UPDATE teams SET reputation = MIN(100, MAX(0, reputation + ?)) WHERE id = ?")
-        .bind(effect.value, teamId).run()
-        .catch((e) => logger.warn({ module: "event-effects" }, "update reputation from event", e));
+      const { applyReputationDelta } = await import("../lib/reputation");
+      await applyReputationDelta(db, teamId, effect.value, "event", `Událost: ${label}`, {
+        referenceId: referenceId ? `${referenceId}-rep` : undefined,
+        gameDate,
+      });
     }
     if (effect.type === "morale") {
       await db.prepare(
@@ -151,7 +154,7 @@ export async function resolveDueAutoEvents(
     }
     if (effects.length === 0) continue;
 
-    await applyEventEffects(db, teamId, effects, row.title, gameDate);
+    await applyEventEffects(db, teamId, effects, row.title, gameDate, `sev-${row.id}`);
     resolved.push({ title: row.title, description: row.description, effects });
   }
 

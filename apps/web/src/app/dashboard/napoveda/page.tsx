@@ -248,6 +248,46 @@ export default function NapovedaPage() {
         </div>
       </section>
 
+      {/* ═══ DVĚ REPUTACE ═══ */}
+      <section className="card p-4 space-y-3">
+        <h2 className="font-heading font-bold text-lg flex items-center gap-2">
+          ⭐ <span>Dvě reputace — nepleť si je</span>
+        </h2>
+
+        <div className="border border-gray-200 rounded-lg p-3">
+          <div className="font-heading font-bold text-base mb-1">Reputace klubu (0–100, start 50)</div>
+          <p className="text-sm text-muted leading-relaxed mb-2">
+            Jak moc se o klubu v okrese ví. Ovlivňuje návštěvnost, podporu místních podnikatelů
+            (reputace × 100 Kč měsíčně), počet i velikost sponzorských nabídek, výnos bufetu,
+            ochotu hráčů k tobě přestoupit — a <strong className="text-ink">odemyká vyšší úrovně
+            stadionu a vybavení</strong>.
+          </p>
+          <p className="text-sm text-muted leading-relaxed mb-2">
+            <strong className="text-ink">Roste:</strong> umístěním v lize (první místo +5), postupem
+            v poháru (vítěz kumulativně +11), sezónními akcemi, podpisem hvězdy (+4 až +15),
+            vyprodaným stadionem, sérií výher, rodáky v kádru a vysokou přízní obce.
+          </p>
+          <p className="text-sm text-muted leading-relaxed mb-2">
+            <strong className="text-ink">Klesá:</strong> spodní polovinou tabulky (poslední −5),
+            přejmenováním klubu (−3), ukončením smlouvy se sponzorem (−2), sérií proher, prázdným
+            hledištěm a měsícem bez úspěchu (−1 týdně).
+          </p>
+          <p className="text-sm text-muted leading-relaxed">
+            <strong className="text-ink">Samotná výhra zápasu ji nezvedne.</strong> Nad 55 bodů se
+            zisky krátí — čím jsi výš, tím dráž se stoupá. Kompletní rozpis i historii najdeš
+            v sekci <Link href="/dashboard/reputace" className="text-pitch-600 underline">Reputace</Link>.
+          </p>
+        </div>
+
+        <div className="border border-gray-200 rounded-lg p-3">
+          <div className="font-heading font-bold text-base mb-1">Reputace trenéra (15–75, start 30)</div>
+          <p className="text-sm text-muted leading-relaxed">
+            Tvoje osobní jméno v okrese, ne jméno klubu. <strong className="text-ink">Ta</strong> roste
+            výhrami (+1, výhra o tři a víc gólů +2) a klesá prohrami. Spolu s motivací určuje, jak
+            trenéra berou fanoušci — viz tabulka výš.
+          </p>
+        </div>
+      </section>
       {/* ═══ STADION ═══ */}
       <section className="card p-4 space-y-3">
         <h2 className="font-heading font-bold text-lg flex items-center gap-2">

@@ -66,7 +66,14 @@ export interface UpgradeOption {
   cost: number;
   effect: string;
   locked?: boolean;
+  /** Textové shrnutí — drží se kvůli starším klientům během deploye. */
   lockReason?: string;
+  /** Všechny nesplněné podmínky najednou. */
+  lockDetail?: LockDetail;
+  /** Co s tím — konkrétní návod, ne jen konstatování. */
+  lockHint?: string;
+  /** Umí tenhle upgrade spolufinancovat obec? */
+  villageCanFund?: boolean;
 }
 
 const FACILITY_LABELS: Record<string, string> = {
@@ -128,6 +135,26 @@ export const STADIUM_COOLDOWN_DAYS: Record<number, number> = {
   3: 112,   // L2→L3: 16 týdnů (celá sezóna)
 };
 
+export interface LockDetail {
+  reputation?: { need: number; have: number };
+  matchesPlayed?: { need: number; have: number };
+  season?: { need: number; have: number };
+  prerequisite?: string;
+}
+
+/** Zařízení, na která obec nabízí spolufinancování (village-processor INVESTMENT_TEMPLATES). */
+const VILLAGE_FUNDABLE = new Set(["showers", "stands", "parking"]);
+
+/** Textové shrnutí všech nesplněných podmínek — pro starší klienty a fallback. */
+export function describeLock(d: LockDetail): string {
+  const parts: string[] = [];
+  if (d.reputation) parts.push(`reputace ${d.reputation.need}+ (máš ${d.reputation.have})`);
+  if (d.matchesPlayed) parts.push(`${d.matchesPlayed.need}+ odehraných zápasů (máš ${d.matchesPlayed.have})`);
+  if (d.season) parts.push(`sezóna ${d.season.need}+ (aktuální ${d.season.have})`);
+  if (d.prerequisite) parts.push(d.prerequisite);
+  return parts.length > 0 ? `Potřeba: ${parts.join(", ")}` : "Zamčeno";
+}
+
 export function getUpgradeOptions(
   stadium: Record<string, number>,
   teamReputation: number = 0,
@@ -144,26 +171,39 @@ export function getUpgradeOptions(
     const req = STADIUM_UNLOCK[next] ?? {};
 
     let locked = false;
-    let lockReason: string | undefined;
+    // lockDetail nese VŠECHNY nesplněné podmínky. Dřív se lockReason přiřazoval
+    // sekvenčně, takže poslední kontrola přepsala předchozí — když chyběla reputace
+    // i sezóna, hráč viděl jen sezónu.
+    const lockDetail: LockDetail = {};
 
     if (req.reputation && teamReputation < req.reputation) {
       locked = true;
-      lockReason = `Potřeba reputace ${req.reputation}+ (máš ${teamReputation})`;
+      lockDetail.reputation = { need: req.reputation, have: teamReputation };
     }
     if (req.matchesPlayed && matchesPlayed < req.matchesPlayed) {
       locked = true;
-      lockReason = `Potřeba ${req.matchesPlayed}+ odehraných zápasů (máš ${matchesPlayed})`;
+      lockDetail.matchesPlayed = { need: req.matchesPlayed, have: matchesPlayed };
     }
     if (req.season && currentSeason < req.season) {
       locked = true;
-      lockReason = `Dostupné od sezóny ${req.season} (aktuální: ${currentSeason})`;
+      lockDetail.season = { need: req.season, have: currentSeason };
     }
 
     // Zastřešení tribun vyžaduje aspoň základní tribuny (co jinak zastřešit?).
     if (key === "roof" && (stadium.stands ?? 0) < 1) {
       locked = true;
-      lockReason = "Nejdřív postav aspoň základní tribuny";
+      lockDetail.prerequisite = "Nejdřív postav aspoň základní tribuny";
     }
+
+    // Obec spolufinancuje jen tyhle cíle (viz INVESTMENT_TEMPLATES) — u ostatních
+    // nesmíme slibovat, že se zámek dá obejít.
+    const villageCanFund = VILLAGE_FUNDABLE.has(key);
+    const lockReason = locked ? describeLock(lockDetail) : undefined;
+    const lockHint = locked && lockDetail.reputation
+      ? (villageCanFund
+        ? "Reputaci zvedneš umístěním v lize, postupem v poháru, vyprodaným stadionem nebo sezónními akcemi. Nebo to obejdi — při dost vysoké přízni ti tenhle upgrade spolufinancuje obec."
+        : "Reputaci zvedneš umístěním v lize, postupem v poháru, vyprodaným stadionem nebo sezónními akcemi. Přehled najdeš v sekci Reputace.")
+      : undefined;
 
     options.push({
       facility: key,
@@ -174,6 +214,9 @@ export function getUpgradeOptions(
       effect: effects[next] ?? "",
       locked,
       lockReason,
+      lockDetail: locked ? lockDetail : undefined,
+      lockHint,
+      villageCanFund,
     });
   }
   return options;

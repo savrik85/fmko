@@ -7,6 +7,7 @@ export { Input } from "./input";
 export { ErrorBox } from "./error-box";
 export { Modal } from "./modal";
 export { SectionLabel } from "./section-label";
+export { LockDetail, type LockDetailData } from "./lock-detail";
 export { PositionBadge, PositionDot } from "./position-badge";
 export { EntityLink } from "./entity-link";
 export { BadgePreview } from "./badge-preview";

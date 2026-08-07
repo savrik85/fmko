@@ -884,6 +884,19 @@ export async function runScheduledMatches(
                 // Cash loan repayments — po všech ostatních match-day financích (na čerstvém budgetu)
                 await processCashLoanRepayment(db, homeTeamId, matchId, gameDate);
                 await processCashLoanRepayment(db, awayTeamId, matchId, gameDate);
+
+                // Klubová reputace — vyprodáno / prázdné hlediště (jen doma) a série výsledků.
+                try {
+                    const {applyAttendanceReputation, applyStreakReputation} = await import("../season/reputation-sources");
+                    const seasonRow = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
+                        .first<{ number: number }>();
+                    const seasonNo = seasonRow?.number ?? 1;
+                    await applyAttendanceReputation(db, homeTeamId, matchId, attendanceWithOfficials, stadiumCapacity, seasonNo, gameDate);
+                    await applyStreakReputation(db, homeTeamId, seasonNo, gameDate);
+                    await applyStreakReputation(db, awayTeamId, seasonNo, gameDate);
+                } catch (e) {
+                    logger.warn({module: "match-runner"}, "reputation sources", e);
+                }
             } catch (e) {
                 logger.error({module: "match-runner"}, `Match finances failed for ${matchId}`, e);
             }

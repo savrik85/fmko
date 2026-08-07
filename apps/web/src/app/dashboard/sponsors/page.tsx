@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
 import { Card, CardBody, Spinner, SectionLabel, useConfirm } from "@/components/ui";
@@ -252,7 +253,8 @@ export default function SponsorsPage() {
       </Card>
 
       <p className="text-sm text-muted">
-        Nabídky závisí na reputaci tvého klubu ({team.reputation}). Lepší reputace = lepší nabídky.
+        Nabídky závisí na reputaci tvého klubu ({team.reputation}) — určuje jejich počet i částku.{" "}
+        <Link href="/dashboard/reputace" className="text-pitch-600 underline">Jak ji zvednout →</Link>
       </p>
 
       {/* ── Main sponsor ── */}

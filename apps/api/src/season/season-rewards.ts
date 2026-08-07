@@ -72,9 +72,12 @@ export async function applySeasonRewards(
         .catch((e) => logger.warn({ module: "season-rewards" }, "manager reputation update", e));
     }
     if (teamRepDelta !== 0) {
-      await db.prepare("UPDATE teams SET reputation = MAX(0, MIN(100, reputation + ?)) WHERE id = ?")
-        .bind(teamRepDelta, teamId).run()
-        .catch((e) => logger.warn({ module: "season-rewards" }, "team reputation update", e));
+      const { applyReputationDelta } = await import("../lib/reputation");
+      await applyReputationDelta(
+        db, teamId, teamRepDelta, "season_position",
+        `Konečné ${pos}. místo v ${seasonNumber}. sezóně`,
+        { referenceId: `season-${seasonNumber}-rep-${teamId}`, gameDate },
+      );
     }
 
     results.push({ teamId, pos, reward, managerRepDelta, teamRepDelta, skipped: false });

@@ -342,9 +342,14 @@ export default {
                       if (eff.type === "budget" && eff.value) {
                         await recordTransaction(env.DB, humanTeamId, "event", eff.value, ev.title, td?.game_date ?? new Date().toISOString()).catch((e) => log("warn", "budget effect failed", e));
                       }
+                      // Pozn.: žádné pravidlo v EVENT_RULES dnes reputační efekt negeneruje
+                      // (reputace je tam jen vstup). Větev držíme přepojenou na helper, aby
+                      // případné budoucí pravidlo rovnou zapsalo důvod do auditu.
                       if (eff.type === "reputation" && eff.value) {
-                        await env.DB.prepare("UPDATE teams SET reputation = MIN(100, MAX(0, reputation + ?)) WHERE id = ?")
-                          .bind(eff.value, humanTeamId).run().catch((e) => log("warn", "reputation effect failed", e));
+                        const { applyReputationDelta } = await import("./lib/reputation");
+                        await applyReputationDelta(env.DB, humanTeamId, eff.value, "event", `Událost mezi koly: ${ev.title}`, {
+                          gameDate: td?.game_date ?? undefined,
+                        });
                       }
                       if (eff.type === "player_leave" && eff.playerIndex != null) {
                         // Mark player as quit (wants to leave)

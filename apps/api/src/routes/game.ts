@@ -735,7 +735,7 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
   // (události bez voleb) — viz season/event-effects.ts.
   const { applyEventEffects } = await import("../season/event-effects");
   const choiceLabel = String((choice as Record<string, unknown>).text ?? event.title ?? "efekt");
-  await applyEventEffects(c.env.DB, teamId, choice.effects, choiceLabel, new Date().toISOString());
+  await applyEventEffects(c.env.DB, teamId, choice.effects, choiceLabel, new Date().toISOString(), `sev-${eventId}`);
 
   return c.json({ ok: true, appliedEffects: choice.effects });
 });
@@ -1898,9 +1898,16 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
     const newName = `FK ${body.sponsorName} ${village?.name ?? ""}`.trim();
     const season = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
       .first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for sponsor rename", e); return null; });
-    // Reputation penalty for name change (-3)
-    await c.env.DB.prepare("UPDATE teams SET name = ?, last_main_sponsor_change_season = ?, reputation = MAX(0, reputation - 3) WHERE id = ?")
+    // Přejmenování podle sponzora fanoušky nepotěší (-3).
+    await c.env.DB.prepare("UPDATE teams SET name = ?, last_main_sponsor_change_season = ? WHERE id = ?")
       .bind(newName, mustSeason(season?.number), teamId).run();
+    {
+      const { applyReputationDelta } = await import("../lib/reputation");
+      await applyReputationDelta(
+        c.env.DB, teamId, -3, "sponsor", "Přejmenování klubu podle sponzora",
+        { referenceId: `sponsor-rename-${teamId}-s${mustSeason(season?.number)}` },
+      );
+    }
 
     // Přejmenování promítnout i do poháru a do U21 týmu klubu (jinak drží starý název).
     await c.env.DB.prepare("UPDATE cup_teams SET name = ? WHERE team_id = ?")
@@ -2020,11 +2027,18 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
     .bind(team.village_id).first<{ name: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch village for termination", e); return null; });
 
   if (category === "main") {
-    // Revert to default name + reputation penalty (-2)
+    // Návrat k původnímu názvu — fanoušci z toho nadšení nejsou (-2).
     const oldName = (await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>())?.name ?? "";
     const defaultName = `SK ${village?.name ?? ""}`.trim();
-    await c.env.DB.prepare("UPDATE teams SET name = ?, reputation = MAX(0, reputation - 2) WHERE id = ?")
+    await c.env.DB.prepare("UPDATE teams SET name = ? WHERE id = ?")
       .bind(defaultName, teamId).run();
+    {
+      const { applyReputationDelta } = await import("../lib/reputation");
+      await applyReputationDelta(
+        c.env.DB, teamId, -2, "sponsor", "Ukončení smlouvy s hlavním sponzorem",
+        { referenceId: `sponsor-term-${contract.id}` },
+      );
+    }
 
     // News for entire league
     await c.env.DB.prepare(
@@ -2077,9 +2091,16 @@ gameRouter.post("/teams/:teamId/rename", async (c) => {
 
   const oldName = team.name;
   const newName = name.trim();
-  // Reputation penalty (-3)
-  await c.env.DB.prepare("UPDATE teams SET name = ?, last_main_sponsor_change_season = ?, reputation = MAX(0, reputation - 3) WHERE id = ?")
+  // Přejmenování klubu fanoušci neberou dobře (-3).
+  await c.env.DB.prepare("UPDATE teams SET name = ?, last_main_sponsor_change_season = ? WHERE id = ?")
     .bind(newName, sn, teamId).run();
+  {
+    const { applyReputationDelta } = await import("../lib/reputation");
+    await applyReputationDelta(
+      c.env.DB, teamId, -3, "rename", `Přejmenování klubu na ${newName}`,
+      { referenceId: `rename-${teamId}-s${sn}` },
+    );
+  }
 
   // News for entire league
   await c.env.DB.prepare(
@@ -3950,8 +3971,14 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
     }
     // Reputation + morale boost
     const repBonus = { S: 15, A: 10, B: 7, C: 4 }[celebTier ?? "C"] ?? 5;
-    await c.env.DB.prepare("UPDATE teams SET reputation = MIN(100, reputation + ?) WHERE id = ?")
-      .bind(repBonus, teamId).run().catch((e) => logger.warn({ module: "game" }, "celeb rep boost", e));
+    {
+      const { applyReputationDelta } = await import("../lib/reputation");
+      await applyReputationDelta(
+        c.env.DB, teamId, repBonus, "celebrity",
+        `Podpis hvězdy: ${fa.first_name} ${fa.last_name}`,
+        { referenceId: `celeb-${fa.id}` },
+      );
+    }
     await c.env.DB.prepare("UPDATE players SET life_context = json_set(life_context, '$.morale', MIN(100, json_extract(life_context, '$.morale') + 3)) WHERE team_id = ?")
       .bind(teamId).run().catch((e) => logger.warn({ module: "game" }, "celeb morale boost", e));
   } else {
@@ -6759,6 +6786,116 @@ gameRouter.put("/admin/seed-data/:table/:id", async (c) => {
   values.push(id);
   await c.env.DB.prepare(`UPDATE ${table} SET ${updates.join(", ")} WHERE ${idCol} = ?`).bind(...values).run();
   return c.json({ ok: true });
+});
+
+// ─────────────────────────────────────────────────────────────
+// Reputace klubu
+// ─────────────────────────────────────────────────────────────
+
+/** Stupně klubové reputace — jen popisné, engine je nepoužívá. */
+const REPUTATION_TIERS = [
+  { key: "legenda", min: 85, label: "Legenda okresu", note: "O klubu se mluví i za hranicemi okresu." },
+  { key: "respektovany", min: 70, label: "Respektovaný klub", note: "Hráči i sponzoři berou klub vážně." },
+  { key: "znamy", min: 55, label: "Známý klub", note: "V okrese se o klubu ví." },
+  { key: "prumerny", min: 40, label: "Průměrný klub", note: "Nikdo o klubu nemluví ani špatně, ani dobře." },
+  { key: "prehlizeny", min: 25, label: "Přehlížený klub", note: "Hráči zvenku o klub nestojí." },
+  { key: "neznamy", min: 0, label: "Neznámý klub", note: "Klub nikdo nezná — sponzoři i hráči chodí jinam." },
+] as const;
+
+// GET /api/teams/:id/reputation — co reputace odemyká, co vydělává a jak ji zvednout
+gameRouter.get("/teams/:teamId/reputation", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  const team = await c.env.DB.prepare(
+    `SELECT t.reputation, t.name, v.size AS village_size, v.name AS village_name
+       FROM teams t LEFT JOIN villages v ON v.id = t.village_id WHERE t.id = ?`,
+  ).bind(teamId).first<{ reputation: number; name: string; village_size: string | null; village_name: string | null }>()
+    .catch((e) => { logger.warn({ module: "game" }, "load team for reputation", e); return null; });
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+
+  const rep = team.reputation ?? 50;
+  const { gainFactor, reputationBaseline } = await import("../lib/reputation");
+  const { mapVillageSize, getBaseTicketPrice, computeExternalWeeklyConcession } = await import("../season/finance-processor");
+  const category = mapVillageSize(team.village_size ?? "village");
+
+  const [matchRes, seasonRes, stadiumRes, equipRes, favorRes, logRes] = await c.env.DB.batch([
+    c.env.DB.prepare("SELECT COUNT(*) AS c FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated'").bind(teamId, teamId),
+    c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"),
+    c.env.DB.prepare("SELECT * FROM stadiums WHERE team_id = ?").bind(teamId),
+    c.env.DB.prepare("SELECT * FROM equipment WHERE team_id = ?").bind(teamId),
+    c.env.DB.prepare("SELECT favor FROM village_team_favor WHERE team_id = ? AND official_id IS NULL").bind(teamId),
+    c.env.DB.prepare("SELECT delta, raw_delta, new_value, source, description, game_date, created_at FROM reputation_log WHERE team_id = ? ORDER BY id DESC LIMIT 20").bind(teamId),
+  ]);
+
+  const matchesPlayed = (matchRes.results[0] as { c: number } | undefined)?.c ?? 0;
+  const season = (seasonRes.results[0] as { number: number } | undefined)?.number ?? 1;
+  const stadium = (stadiumRes.results[0] as Record<string, number> | undefined) ?? {};
+  const equipment = (equipRes.results[0] as Record<string, number> | undefined) ?? {};
+  const favor = (favorRes.results[0] as { favor: number } | undefined)?.favor ?? 50;
+
+  // Zámky — stejné prahy jako v generátorech, ale tady jen pro přehled "co mi to odemkne".
+  const unlockDefs = [
+    { kind: "equipment", level: 2, label: "Vybavení — 2. úroveň", reputation: 40, matches: 5, season: 1 },
+    { kind: "stadium", level: 2, label: "Stadion — 2. úroveň", reputation: 50, matches: 15, season: 1 },
+    { kind: "equipment", level: 3, label: "Vybavení — 3. úroveň", reputation: 60, matches: 15, season: 2 },
+    { kind: "stadium", level: 3, label: "Stadion — 3. úroveň", reputation: 70, matches: 35, season: 3 },
+  ];
+  const unlocks = unlockDefs.map((u) => ({
+    ...u,
+    missingReputation: Math.max(0, u.reputation - rep),
+    missingMatches: Math.max(0, u.matches - matchesPlayed),
+    missingSeasons: Math.max(0, u.season - season),
+    unlocked: rep >= u.reputation && matchesPlayed >= u.matches && season >= u.season,
+  }));
+  const nextUnlock = unlocks.find((u) => !u.unlocked) ?? null;
+
+  // Co reputace vydělává — počítáno stejnými vzorci jako produkční logika.
+  const refreshments = stadium.refreshments ?? 0;
+  const earnsAt = (r: number) => ({
+    baseSponsorMonthly: r * 100,
+    baseSponsorWeekly: Math.round((r * 100) / 4.3),
+    sponsorOfferCount: r >= 60 ? 5 : r >= 40 ? 4 : 3,
+    sponsorOfferMultiplier: Math.round((r / 50) * 100) / 100,
+    concessionWeeklyExternal: computeExternalWeeklyConcession(refreshments, r),
+    attendanceBonusPct: Math.round((r / 100) * 0.3 * 100),
+    transferInterestScore: Math.round(Math.max(-15, Math.min(25, (r - 30) * 0.5))),
+  });
+
+  const tier = REPUTATION_TIERS.find((t) => rep >= t.min) ?? REPUTATION_TIERS[REPUTATION_TIERS.length - 1];
+
+  const history = (logRes.results as Array<Record<string, unknown>>).map((r) => ({
+    delta: r.delta as number,
+    rawDelta: r.raw_delta as number,
+    newValue: r.new_value as number,
+    source: r.source as string,
+    description: r.description as string,
+    gameDate: (r.game_date as string | null) ?? (r.created_at as string),
+  }));
+
+  return c.json({
+    reputation: rep,
+    tier: { key: tier.key, label: tier.label, note: tier.note, min: tier.min },
+    gainFactor: gainFactor(rep),
+    baseline: reputationBaseline(category),
+    matchesPlayed,
+    season,
+    villageCategory: category,
+    baseTicketPrice: getBaseTicketPrice(category),
+    unlocks: { next: nextUnlock, all: unlocks },
+    earns: earnsAt(rep),
+    atNextUnlock: nextUnlock ? { reputation: nextUnlock.reputation, ...earnsAt(nextUnlock.reputation) } : null,
+    history,
+    village: {
+      favor,
+      // Obec spolufinancuje jen tyhle čtyři cíle — nesmí to slibovat víc, než šablony umí.
+      facilities: [
+        { key: "pitch", label: "Hřiště", threshold: 55 },
+        { key: "showers", label: "Sprchy", threshold: 60 },
+        { key: "parking", label: "Parkoviště", threshold: 70 },
+        { key: "stands", label: "Tribuny", threshold: 80 },
+      ],
+    },
+  });
 });
 
 // ─────────────────────────────────────────────────────────────

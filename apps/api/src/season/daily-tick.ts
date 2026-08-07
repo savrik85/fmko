@@ -1002,6 +1002,19 @@ export async function executeDailyTick(
         }
       }
 
+      // ── Klubová reputace: komunita a útlum (pondělí) ──
+      // Rodáci v kádru a přízeň obce hýbou reputací obousměrně, útlum sráží kluby,
+      // které měsíc nic nedokázaly. Bez záporné složky reputace jen roste — proto
+      // dnes většina týmů sedí přesně na výchozí 50.
+      if (newDayOfWeek === 1 && team.user_id !== "ai") {
+        try {
+          const { applyMonthlyCommunityReputation, applyReputationDecay } = await import("./reputation-sources");
+          const { mapVillageSize } = await import("./finance-processor");
+          await applyMonthlyCommunityReputation(env.DB, teamId, newGameDate);
+          await applyReputationDecay(env.DB, teamId, mapVillageSize((team.village_size as string) ?? "village"), newGameDate);
+        } catch (e) { logger.warn({ module: "daily-tick" }, `reputation sources failed for team ${teamId}`, e); }
+      }
+
       // ── Kabina & frakce (pondělí) — tahoun/potížista + rivalové/parťáci upraví morálku kádru ──
       if (newDayOfWeek === 1) {
         try {

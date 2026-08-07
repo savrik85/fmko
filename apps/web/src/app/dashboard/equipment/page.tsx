@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
-import { Spinner, SectionLabel, useConfirm } from "@/components/ui";
+import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData } from "@/components/ui";
 
 interface CategoryInfo { key: string; label: string; level: number; condition: number; effectiveLevel: number; description: string }
-interface UpgradeOption { category: string; label: string; currentLevel: number; nextLevel: number; cost: number; effect: string; description: string; locked: boolean; lockReason?: string }
+interface UpgradeOption { category: string; label: string; currentLevel: number; nextLevel: number; cost: number; effect: string; description: string; locked: boolean; lockReason?: string; lockDetail?: LockDetailData; lockHint?: string }
 interface RepairOption { category: string; label: string; level: number; condition: number; cost: number }
 interface EquipmentEffects {
   trainingMultiplier: number; tacticsTrainingBonus: number; matchTechniqueMod: number; moraleMod: number;
@@ -196,7 +196,7 @@ export default function EquipmentPage() {
                 </div>
               )}
               {upgrade?.locked && (
-                <div className="text-xs text-muted mt-2">🔒 {upgrade.lockReason}</div>
+                <LockDetail detail={upgrade.lockDetail} hint={upgrade.lockHint} fallback={upgrade.lockReason} />
               )}
               {!upgrade && cat.level === 3 && (
                 <div className="text-xs text-pitch-600 font-heading font-bold mt-2">Maximální úroveň</div>
