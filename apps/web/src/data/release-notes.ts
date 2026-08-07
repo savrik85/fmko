@@ -12,6 +12,31 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-08-07",
+    emoji: "⭐",
+    title: "Reputace klubu má vlastní stránku — a nové způsoby, jak ji zvednout",
+    items: [
+      "V menu přibyla sekce Reputace. Na jedné stránce vidíš, kde tvůj klub stojí, co ti reputace odemyká, kolik ti vydělává v korunách a kolik by to bylo o stupeň výš.",
+      "Stupnice ukazuje prahy, na kterých se odemykají vyšší úrovně stadionu a vybavení — takže je na první pohled vidět, jestli ti chybí reputace, odehrané zápasy, nebo prostě jen čas.",
+      "Reputaci nově zvedne i vyprodaný stadion, série výher, kádr postavený na místních rodácích a dobrý vztah s obcí. Naopak poloprázdné hlediště, série proher nebo měsíc bez jediného úspěchu ji stáhnou dolů — klub, na kterém se nepracuje, se pomalu vytrácí z povědomí.",
+      "Čím výš jsi, tím dráž se stoupá: nad 55 bodů se zisky krátí. Ztráty ne.",
+      "U každé změny se pamatuje důvod, takže v historii přesně vidíš, odkud se každý bod vzal.",
+      "Zamčené upgrady na stadionu a ve vybavení teď vypíšou všechny chybějící podmínky naráz a poradí, co s tím. U sprch, hřiště, parkoviště a tribun navíc připomenou, že je umí spolufinancovat obec — tam reputace nerozhoduje.",
+    ],
+  },
+  {
+    date: "2026-08-07",
+    emoji: "🧑‍💼",
+    title: "Vliv trenéra na fanoušky je konečně čitelný",
+    items: [
+      "Karta na stránce Fanoušci ukazuje, jak se z reputace a motivace trenéra počítá jeho vliv, a celý žebříček stupňů — od Vyhlášeného po Odepsaného. Zvýrazněný je ten tvůj.",
+      "Vliv trenéra sahá od −3 do +3 spokojenosti po každém zápase a posouvá i dlouhodobou hladinu loajality. Dřív byl efekt výrazně slabší a u velké části trenérů se neprojevil vůbec.",
+      "U každého stupně je napsáno, co ti chybí do dalšího — v bodech reputace i motivace. A pod tím konkrétní návod, čím obojí hýbat.",
+      "Nápověda dostala novou sekci, která rozlišuje reputaci klubu a reputaci trenéra. Jsou to dvě různá čísla a pletlo se to.",
+      "Sezónní akce má nově každý klub vlastní, takže o ně nepřijdeš tím, že někdo v lize klikne dřív.",
+    ],
+  },
+  {
     date: "2026-07-30",
     emoji: "🎯",
     title: "V profilu hráče je vidět, co je pro jeho pozici klíčové",
