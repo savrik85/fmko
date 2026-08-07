@@ -9,7 +9,7 @@
  */
 
 import type { ReactNode } from "react";
-import { PRIMARY, GRID } from "./palette";
+import { GRID, magnitudeColor, qualityColor } from "./palette";
 
 export interface HBarDatum {
   label: string;
@@ -27,19 +27,28 @@ export function HBarChart({
   data,
   max,
   showTrack = true,
+  scale = "magnitude",
 }: {
   data: HBarDatum[];
   /** Horní mez škály. Bez ní se bere největší hodnota. */
   max?: number;
   showTrack?: boolean;
+  /**
+   * Čím se řídí odstín pruhu:
+   * `magnitude` — poměrem k nejdelšímu pruhu (počty, částky),
+   * `quality` — hodnotou 0–100 jako kvalitou (rating, kondice, procenta).
+   * Vlastní `color` u položky má vždy přednost.
+   */
+  scale?: "magnitude" | "quality";
 }) {
   const top = max ?? Math.max(...data.map((d) => d.value), 1);
 
   return (
     <ul className="space-y-2">
       {data.map((d) => {
-        const pct = top > 0 ? Math.max(0, Math.min(100, (d.value / top) * 100)) : 0;
-        const color = d.color ?? PRIMARY;
+        const ratio = top > 0 ? Math.max(0, Math.min(1, d.value / top)) : 0;
+        const pct = ratio * 100;
+        const color = d.color ?? (scale === "quality" ? qualityColor(d.value) : magnitudeColor(ratio));
         const label = (
           <span className="text-sm truncate">{d.label}</span>
         );

@@ -9,6 +9,7 @@ import {
   PRIMARY, DIVERGING, STATUS, seriesColor, compactCZK, fullCZK,
 } from "../charts";
 import type { WidgetProps } from "../types";
+import { rowsForHeight, ROW_PX } from "../widget-heights";
 import { conditionLabel, safeTeamColor, MoreLink } from "./shared";
 
 const POSITIONS = [
@@ -178,24 +179,24 @@ export function SquadSkillsWidget({ data }: WidgetProps) {
 
 // ── Kondice a morálka ───────────────────────────────────────────────────────
 
-export function ConditionRankingWidget({ data }: WidgetProps) {
-  return <LifeRanking data={data} field="condition" label="kondice" />;
+export function ConditionRankingWidget({ data, height }: WidgetProps) {
+  return <LifeRanking data={data} field="condition" label="kondice" height={height} />;
 }
-export function MoraleRankingWidget({ data }: WidgetProps) {
-  return <LifeRanking data={data} field="morale" label="morálka" />;
+export function MoraleRankingWidget({ data, height }: WidgetProps) {
+  return <LifeRanking data={data} field="morale" label="morálka" height={height} />;
 }
 
-function LifeRanking({ data, field, label }: { data: WidgetProps["data"]; field: "condition" | "morale"; label: string }) {
+function LifeRanking({ data, field, label, height }: {
+  data: WidgetProps["data"]; field: "condition" | "morale"; label: string; height: WidgetProps["height"];
+}) {
   if (data.players.loading) return <WidgetSkeleton />;
   if (data.players.error) return <WidgetError />;
   const players = data.players.data ?? [];
   if (players.length === 0) return <ChartEmpty>Kádr je prázdný.</ChartEmpty>;
 
   const sorted = [...players].sort((a, b) => (a.lifeContext?.[field] ?? 50) - (b.lifeContext?.[field] ?? 50));
-  const worst = sorted.slice(0, 6);
+  const worst = sorted.slice(0, rowsForHeight(height, ROW_PX.bar, 56));
   const mean = Math.round(avg(players.map((p) => p.lifeContext?.[field] ?? 50)));
-
-  const tone = (v: number) => (v >= 66 ? STATUS.good : v >= 33 ? STATUS.warning : STATUS.critical);
 
   return (
     <div className="space-y-3">
@@ -204,13 +205,13 @@ function LifeRanking({ data, field, label }: { data: WidgetProps["data"]; field:
       </div>
       <HBarChart
         max={100}
+        scale="quality"
         data={worst.map((p) => {
           const v = p.lifeContext?.[field] ?? 50;
           return {
             label: playerName(p),
             value: v,
             display: String(Math.round(v)),
-            color: tone(v),
             href: `/dashboard/player/${p.id}`,
           };
         })}
@@ -221,7 +222,7 @@ function LifeRanking({ data, field, label }: { data: WidgetProps["data"]; field:
 
 // ── Hodnota kádru ───────────────────────────────────────────────────────────
 
-export function SquadValueWidget({ data }: WidgetProps) {
+export function SquadValueWidget({ data, height }: WidgetProps) {
   if (data.players.loading) return <WidgetSkeleton rows={5} />;
   if (data.players.error) return <WidgetError />;
   const players = data.players.data ?? [];
@@ -236,7 +237,7 @@ export function SquadValueWidget({ data }: WidgetProps) {
     <div className="space-y-3">
       <ChartHero value={compactCZK(total)} note="odhadovaná hodnota kádru" color={safeTeamColor(data.team.data)} />
       <HBarChart
-        data={valued.slice(0, 6).map(({ p, value }) => ({
+        data={valued.slice(0, rowsForHeight(height, ROW_PX.bar, 130)).map(({ p, value }) => ({
           label: playerName(p),
           value,
           display: compactCZK(value),
@@ -282,41 +283,44 @@ export function WageStructureWidget({ data }: WidgetProps) {
 /** Věková hranice, do které se hráč ještě počítá jako mladík. */
 const YOUNG_MAX_AGE = 21;
 
-export function BestPlayersWidget({ data }: WidgetProps) {
-  return <RatingRanking players={data.players} empty="Kádr je prázdný." />;
+export function BestPlayersWidget({ data, height }: WidgetProps) {
+  return <RatingRanking players={data.players} empty="Kádr je prázdný." height={height} />;
 }
 
-export function YoungTalentsSeniorWidget({ data }: WidgetProps) {
+export function YoungTalentsSeniorWidget({ data, height }: WidgetProps) {
   return (
     <RatingRanking
       players={data.players}
       maxAge={YOUNG_MAX_AGE}
       empty={`V A-týmu nikdo do ${YOUNG_MAX_AGE} let není.`}
+      height={height}
     />
   );
 }
 
-export function YoungTalentsU21Widget({ data }: WidgetProps) {
-  return <RatingRanking players={data.u21} empty="Mládežnický tým zatím nemáš." />;
+export function YoungTalentsU21Widget({ data, height }: WidgetProps) {
+  return <RatingRanking players={data.u21} empty="Mládežnický tým zatím nemáš." height={height} />;
 }
 
 function RatingRanking({
-  players, maxAge, empty,
+  players, maxAge, empty, height,
 }: {
   players: WidgetProps["data"]["players"];
   maxAge?: number;
   empty: string;
+  height: WidgetProps["height"];
 }) {
   if (players.loading) return <WidgetSkeleton />;
   if (players.error) return <WidgetError />;
   const list = (players.data ?? []).filter((p) => (maxAge == null ? true : p.age <= maxAge));
   if (list.length === 0) return <ChartEmpty>{empty}</ChartEmpty>;
 
-  const top = [...list].sort((a, b) => b.overall_rating - a.overall_rating).slice(0, 6);
+  const top = [...list].sort((a, b) => b.overall_rating - a.overall_rating).slice(0, rowsForHeight(height, ROW_PX.bar));
 
   return (
     <HBarChart
       max={100}
+      scale="quality"
       data={top.map((p) => ({
         label: `${playerName(p)} · ${p.age} let`,
         value: p.overall_rating,
@@ -329,7 +333,7 @@ function RatingRanking({
 
 // ── Zranění ─────────────────────────────────────────────────────────────────
 
-export function InjuriesWidget({ data }: WidgetProps) {
+export function InjuriesWidget({ data, height }: WidgetProps) {
   if (data.injuries.loading) return <WidgetSkeleton />;
   if (data.injuries.error) return <WidgetError />;
   const injuries = (data.injuries.data ?? []).filter((i) => i.daysRemaining > 0);
@@ -345,7 +349,7 @@ export function InjuriesWidget({ data }: WidgetProps) {
       </div>
       <HBarChart
         max={Math.max(...injuries.map((i) => i.daysTotal), 1)}
-        data={injuries.slice(0, 8).map((i) => ({
+        data={injuries.slice(0, rowsForHeight(height, ROW_PX.bar, 88)).map((i) => ({
           label: `${i.firstName} ${i.lastName} · ${i.type}`,
           value: i.daysRemaining,
           display: `${i.daysRemaining} d`,

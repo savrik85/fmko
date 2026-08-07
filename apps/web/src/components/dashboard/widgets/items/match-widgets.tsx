@@ -8,6 +8,7 @@ import { apiFetch, showError } from "@/lib/api";
 import { BadgePreview, useConfirm, type BadgePattern } from "@/components/ui";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import type { WidgetProps, ScheduleMatch } from "../types";
+import { rowsForHeight, ROW_PX } from "../widget-heights";
 import { initials } from "./shared";
 
 // ── Dnešní program ──────────────────────────────────────────────────────────
@@ -288,10 +289,10 @@ function MiniForm({ f }: { f: string }) {
 
 // ── Rozpis ──────────────────────────────────────────────────────────────────
 
-export function FixturesWidget({ data }: WidgetProps) {
+export function FixturesWidget({ data, height }: WidgetProps) {
   if (data.schedule.loading) return <WidgetSkeleton />;
   if (data.schedule.error) return <WidgetError />;
-  const upcoming = (data.schedule.data?.matches ?? []).filter((m) => m.status !== "simulated").slice(0, 4);
+  const upcoming = (data.schedule.data?.matches ?? []).filter((m) => m.status !== "simulated").slice(0, rowsForHeight(height, ROW_PX.list, 32));
 
   return (
     <>
@@ -338,7 +339,7 @@ function LineupFlag({ m }: { m: ScheduleMatch }) {
 
 // ── Poslední zápasy ─────────────────────────────────────────────────────────
 
-export function RecentMatchesWidget({ data }: WidgetProps) {
+export function RecentMatchesWidget({ data, height }: WidgetProps) {
   if (data.matchResults.loading) return <WidgetSkeleton />;
   if (data.matchResults.error) return <WidgetError />;
   const matches = data.matchResults.data?.matches ?? [];
@@ -356,7 +357,7 @@ export function RecentMatchesWidget({ data }: WidgetProps) {
             </tr>
           </thead>
           <tbody>
-            {matches.slice(0, 5).map((m) => {
+            {matches.slice(0, rowsForHeight(height, ROW_PX.table, 60)).map((m) => {
               const resultBg = m.result === "W" ? "bg-pitch-50" : m.result === "L" ? "bg-red-50" : "bg-gray-50";
               const resultText = m.result === "W" ? "text-pitch-600" : m.result === "L" ? "text-card-red" : "text-muted";
               return (

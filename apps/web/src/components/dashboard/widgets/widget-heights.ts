@@ -45,3 +45,36 @@ export function isWidgetHeight(value: unknown): value is WidgetHeight {
 export function heightVar(height: WidgetHeight): string | null {
   return height === "auto" ? null : `${HEIGHT_PX[height]}px`;
 }
+
+// ── Kolik řádků seznamu se do widgetu vejde ─────────────────────────────────
+
+/** Odsazení karty a popisek widgetu — o tolik je vždycky míň místa na obsah. */
+const CHROME_PX = 64;
+/** Výška podle obsahu žádnou mez nemá; ať je aspoň v rozumné délce. */
+const AUTO_ROWS = 6;
+
+/** Přibližné výšky řádku podle toho, co seznam obsahuje. */
+export const ROW_PX = {
+  /** Jméno nad vodorovným pruhem (HBarChart). */
+  bar: 40,
+  /** Prostý řádek se jménem a hodnotou. */
+  list: 34,
+  /** Řádek tabulky. */
+  table: 30,
+  /** Řádek s ikonou a dvěma řádky textu. */
+  rich: 46,
+} as const;
+
+/**
+ * Kolik položek seznamu ukázat, aby zaplnily výšku widgetu a nepřetekly.
+ *
+ * Dřív měl každý widget natvrdo svoje číslo, takže vedle sebe stály karty se
+ * stejnou výškou a jiným počtem řádků — a u vysoké karty zbývalo prázdné místo.
+ *
+ * @param reservedPx místo na patičku s odkazem, úvodní větu a podobně
+ */
+export function rowsForHeight(height: WidgetHeight, rowPx: number, reservedPx = 0): number {
+  if (height === "auto") return AUTO_ROWS;
+  const usable = HEIGHT_PX[height] - CHROME_PX - reservedPx;
+  return Math.max(1, Math.floor(usable / rowPx));
+}

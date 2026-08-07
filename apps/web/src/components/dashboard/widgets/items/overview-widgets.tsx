@@ -6,14 +6,15 @@ import Link from "next/link";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import { ChartEmpty, ChartHero } from "../charts";
 import type { WidgetProps } from "../types";
+import { rowsForHeight, ROW_PX } from "../widget-heights";
 import { timeAgo, safeTeamColor, MoreLink } from "./shared";
 
 // ── Zpravodaj ───────────────────────────────────────────────────────────────
 
-export function NewsWidget({ data }: WidgetProps) {
+export function NewsWidget({ data, height }: WidgetProps) {
   if (data.news.loading) return <WidgetSkeleton />;
   if (data.news.error) return <WidgetError />;
-  const news = (data.news.data ?? []).slice(0, 5);
+  const news = (data.news.data ?? []).slice(0, rowsForHeight(height, ROW_PX.list, 32));
   if (news.length === 0) return <ChartEmpty>Zpravodaj zatím mlčí.</ChartEmpty>;
 
   return (
@@ -40,10 +41,10 @@ export function NewsWidget({ data }: WidgetProps) {
 
 // ── Naposledy odemčené úspěchy ──────────────────────────────────────────────
 
-export function AchievementsWidget({ data, teamId }: WidgetProps) {
+export function AchievementsWidget({ data, teamId, height }: WidgetProps) {
   if (data.achievements.loading) return <WidgetSkeleton />;
   if (data.achievements.error) return <WidgetError />;
-  const achievements = (data.achievements.data ?? []).slice(0, 3);
+  const achievements = (data.achievements.data ?? []).slice(0, rowsForHeight(height, ROW_PX.rich, 32));
   if (achievements.length === 0) return <ChartEmpty>Zatím žádný odemčený úspěch.</ChartEmpty>;
 
   return (
@@ -102,10 +103,10 @@ export function HallOfFameWidget({ data }: WidgetProps) {
 
 // ── Události ────────────────────────────────────────────────────────────────
 
-export function EventsWidget({ data }: WidgetProps) {
+export function EventsWidget({ data, height }: WidgetProps) {
   if (data.events.loading) return <WidgetSkeleton />;
   if (data.events.error) return <WidgetError />;
-  const events = (data.events.data ?? []).filter((e) => !e.resolved).slice(0, 5);
+  const events = (data.events.data ?? []).filter((e) => !e.resolved).slice(0, rowsForHeight(height, ROW_PX.list, 32));
   if (events.length === 0) return <ChartEmpty>Nic se nechystá.</ChartEmpty>;
 
   return (

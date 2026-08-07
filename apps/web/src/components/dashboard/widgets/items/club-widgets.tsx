@@ -10,6 +10,7 @@ import {
   ChartEmpty, ChartHero, PRIMARY, DIVERGING, STATUS, seriesColor, compactCZK, fullCZK,
 } from "../charts";
 import type { WidgetProps } from "../types";
+import { rowsForHeight, ROW_PX } from "../widget-heights";
 import { AttrPill, MoreLink, safeTeamColor } from "./shared";
 
 // ── Trenér ──────────────────────────────────────────────────────────────────
@@ -180,13 +181,13 @@ export function TopImproversWidget({ data }: WidgetProps) {
   );
 }
 
-export function TrainingAttendanceWidget({ data }: WidgetProps) {
+export function TrainingAttendanceWidget({ data, height }: WidgetProps) {
   if (data.attendance.loading) return <WidgetSkeleton />;
   if (data.attendance.error) return <WidgetError />;
   const players = (data.attendance.data?.players ?? []).filter((p) => p.trainingTotal > 0);
   if (players.length === 0) return <ChartEmpty>Zatím neproběhl žádný trénink.</ChartEmpty>;
 
-  const worst = [...players].sort((a, b) => a.trainingPct - b.trainingPct).slice(0, 6);
+  const worst = [...players].sort((a, b) => a.trainingPct - b.trainingPct).slice(0, rowsForHeight(height, ROW_PX.bar, 108));
   const teamPct = Math.round(
     players.reduce((s, p) => s + p.trainingAttended, 0) / Math.max(1, players.reduce((s, p) => s + p.trainingTotal, 0)) * 100,
   );
@@ -196,11 +197,11 @@ export function TrainingAttendanceWidget({ data }: WidgetProps) {
       <ChartHero value={`${teamPct} %`} note="docházka celého kádru" color={safeTeamColor(data.team.data)} />
       <HBarChart
         max={100}
+        scale="quality"
         data={worst.map((p) => ({
           label: `${p.firstName} ${p.lastName}`,
           value: p.trainingPct,
           display: `${p.trainingPct} %`,
-          color: p.trainingPct >= 80 ? STATUS.good : p.trainingPct >= 50 ? STATUS.warning : STATUS.critical,
           href: `/dashboard/player/${p.playerId}`,
         }))}
       />
@@ -209,18 +210,19 @@ export function TrainingAttendanceWidget({ data }: WidgetProps) {
   );
 }
 
-export function BestAttendanceWidget({ data }: WidgetProps) {
+export function BestAttendanceWidget({ data, height }: WidgetProps) {
   if (data.attendance.loading) return <WidgetSkeleton />;
   if (data.attendance.error) return <WidgetError />;
   const players = (data.attendance.data?.players ?? []).filter((p) => p.trainingTotal > 0);
   if (players.length === 0) return <ChartEmpty>Zatím neproběhl žádný trénink.</ChartEmpty>;
 
-  const best = [...players].sort((a, b) => b.trainingPct - a.trainingPct).slice(0, 6);
+  const best = [...players].sort((a, b) => b.trainingPct - a.trainingPct).slice(0, rowsForHeight(height, ROW_PX.bar, 28));
 
   return (
     <div className="space-y-3">
       <HBarChart
         max={100}
+        scale="quality"
         data={best.map((p) => ({
           label: `${p.firstName} ${p.lastName}`,
           value: p.trainingPct,
@@ -237,7 +239,7 @@ export function BestAttendanceWidget({ data }: WidgetProps) {
  * Kdo nejvíc chybí v zápasech — jiná věc než docházka na trénink.
  * Vedle počtu zmeškaných ukazuje i nejčastější důvod.
  */
-export function MostAbsentWidget({ data }: WidgetProps) {
+export function MostAbsentWidget({ data, height }: WidgetProps) {
   if (data.attendance.loading) return <WidgetSkeleton />;
   if (data.attendance.error) return <WidgetError />;
   const info = data.attendance.data;
@@ -253,7 +255,7 @@ export function MostAbsentWidget({ data }: WidgetProps) {
     return key && count ? `${REASON_LABELS[key] ?? key} ${count}×` : "";
   };
 
-  const worst = [...players].sort((a, b) => b.matchesMissed - a.matchesMissed).slice(0, 6);
+  const worst = [...players].sort((a, b) => b.matchesMissed - a.matchesMissed).slice(0, rowsForHeight(height, ROW_PX.bar, 28));
 
   return (
     <div className="space-y-3">
@@ -276,24 +278,24 @@ export function MostAbsentWidget({ data }: WidgetProps) {
 
 // ── Vybavení ────────────────────────────────────────────────────────────────
 
-export function EquipmentWidget({ data }: WidgetProps) {
+export function EquipmentWidget({ data, height }: WidgetProps) {
   if (data.equipment.loading) return <WidgetSkeleton rows={5} />;
   if (data.equipment.error) return <WidgetError />;
   const categories = data.equipment.data?.categories ?? [];
   if (categories.length === 0) return <ChartEmpty>Klub zatím nemá vybavení.</ChartEmpty>;
 
   // Nejopotřebovanější kusy — to je informace, kvůli které se sem člověk dívá.
-  const worst = [...categories].sort((a, b) => a.condition - b.condition).slice(0, 6);
+  const worst = [...categories].sort((a, b) => a.condition - b.condition).slice(0, rowsForHeight(height, ROW_PX.bar, 32));
 
   return (
     <div className="space-y-3">
       <HBarChart
         max={100}
+        scale="quality"
         data={worst.map((c) => ({
           label: `${c.label} · úroveň ${c.level}`,
           value: c.condition,
           display: `${Math.round(c.condition)} %`,
-          color: c.condition >= 70 ? STATUS.good : c.condition >= 40 ? STATUS.warning : STATUS.critical,
         }))}
       />
       <MoreLink href="/dashboard/equipment">Detail vybavení →</MoreLink>
@@ -310,7 +312,7 @@ const STAFF_ROLE_LABELS: Record<string, string> = {
   sef_fanklubu: "Šéf fanklubu", ekonom: "Ekonom",
 };
 
-export function StaffWidget({ data }: WidgetProps) {
+export function StaffWidget({ data, height }: WidgetProps) {
   if (data.staff.loading) return <WidgetSkeleton />;
   if (data.staff.error) return <WidgetError />;
   const staff = (data.staff.data ?? []).filter((s) => s.role);
@@ -321,7 +323,7 @@ export function StaffWidget({ data }: WidgetProps) {
   return (
     <div className="space-y-3">
       <ul className="space-y-1">
-        {staff.slice(0, 8).map((s) => (
+        {staff.slice(0, rowsForHeight(height, ROW_PX.list, 60)).map((s) => (
           <li key={s.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
             <span className="text-sm text-muted w-28 shrink-0 truncate">{STAFF_ROLE_LABELS[s.role ?? ""] ?? s.role}</span>
             <span className="text-sm font-heading font-bold flex-1 truncate">{s.firstName} {s.lastName}</span>
@@ -339,18 +341,19 @@ export function StaffWidget({ data }: WidgetProps) {
 
 // ── Mládež ──────────────────────────────────────────────────────────────────
 
-export function U21Widget({ data }: WidgetProps) {
+export function U21Widget({ data, height }: WidgetProps) {
   if (data.u21.loading) return <WidgetSkeleton />;
   if (data.u21.error) return <WidgetError />;
   const players = data.u21.data ?? [];
   if (players.length === 0) return <ChartEmpty>Mládežnický tým zatím nemáš.</ChartEmpty>;
 
-  const top = [...players].sort((a, b) => b.overall_rating - a.overall_rating).slice(0, 6);
+  const top = [...players].sort((a, b) => b.overall_rating - a.overall_rating).slice(0, rowsForHeight(height, ROW_PX.bar, 32));
 
   return (
     <div className="space-y-3">
       <HBarChart
         max={100}
+        scale="quality"
         data={top.map((p) => ({
           label: `${p.first_name} ${p.last_name} · ${p.age} let`,
           value: p.overall_rating,
@@ -365,7 +368,7 @@ export function U21Widget({ data }: WidgetProps) {
 
 // ── Trofeje ─────────────────────────────────────────────────────────────────
 
-export function TrophiesWidget({ data }: WidgetProps) {
+export function TrophiesWidget({ data, height }: WidgetProps) {
   if (data.trophies.loading) return <WidgetSkeleton rows={2} />;
   if (data.trophies.error) return <WidgetError />;
   const trophies = data.trophies.data ?? [];
@@ -373,7 +376,7 @@ export function TrophiesWidget({ data }: WidgetProps) {
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-      {trophies.slice(0, 9).map((t, i) => (
+      {trophies.slice(0, rowsForHeight(height, ROW_PX.rich) * 3).map((t, i) => (
         <div key={i} className="bg-gray-50 rounded-lg p-2.5 text-center">
           <div className="text-2xl leading-none">{t.icon ?? "🏆"}</div>
           <div className="font-heading font-bold text-sm mt-1 truncate">{t.title ?? t.name ?? t.label ?? "Trofej"}</div>
@@ -388,7 +391,7 @@ export function TrophiesWidget({ data }: WidgetProps) {
 
 // ── Přestupy ────────────────────────────────────────────────────────────────
 
-export function TransferOffersWidget({ data }: WidgetProps) {
+export function TransferOffersWidget({ data, height }: WidgetProps) {
   if (data.offers.loading) return <WidgetSkeleton />;
   if (data.offers.error) return <WidgetError />;
   const offers = (data.offers.data ?? []).filter((o) => o.status === "pending");
@@ -397,7 +400,7 @@ export function TransferOffersWidget({ data }: WidgetProps) {
   return (
     <div className="space-y-3">
       <ul className="space-y-1">
-        {offers.slice(0, 6).map((o) => (
+        {offers.slice(0, rowsForHeight(height, ROW_PX.list, 32)).map((o) => (
           <li key={o.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
             <span className="text-sm font-heading font-bold flex-1 truncate">{o.playerName ?? o.player_name ?? "Hráč"}</span>
             {o.from_team_name && <span className="text-sm text-muted truncate max-w-[40%]">{o.from_team_name}</span>}
@@ -412,7 +415,7 @@ export function TransferOffersWidget({ data }: WidgetProps) {
   );
 }
 
-export function WatchlistWidget({ data }: WidgetProps) {
+export function WatchlistWidget({ data, height }: WidgetProps) {
   if (data.watchlist.loading) return <WidgetSkeleton />;
   if (data.watchlist.error) return <WidgetError />;
   const players = data.watchlist.data ?? [];
@@ -421,7 +424,7 @@ export function WatchlistWidget({ data }: WidgetProps) {
   return (
     <div className="space-y-3">
       <ul className="space-y-1">
-        {players.slice(0, 6).map((p, i) => (
+        {players.slice(0, rowsForHeight(height, ROW_PX.list, 32)).map((p, i) => (
           <li key={p.playerId ?? p.id ?? i} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
             <a
               href={p.playerId ? `/dashboard/player/${p.playerId}` : "#"}

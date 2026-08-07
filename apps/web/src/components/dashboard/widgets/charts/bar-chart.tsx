@@ -32,7 +32,10 @@ export function BarChart({
 }) {
   const all = series.flatMap((s) => s.values);
   const max = Math.max(...all, 1);
-  const step = labelEvery ?? (categories.length > 12 ? Math.ceil(categories.length / 6) : 1);
+  // Popisky se ředí až když by se pod sloupci opravdu nedaly přečíst. Dřív se
+  // vynechával každý druhý i tam, kde bylo místa dost, a graf pak vypadal, že
+  // mu chybí popisky.
+  const step = labelEvery ?? (categories.length > 14 ? Math.ceil(categories.length / 7) : 1);
 
   return (
     <div>
@@ -62,7 +65,13 @@ export function BarChart({
       <div className="h-px w-full" style={{ background: GRID }} />
       <div className="flex gap-[2px] mt-1">
         {categories.map((cat, i) => (
-          <div key={`${cat}-lbl-${i}`} className="flex-1 min-w-0 text-center text-[11px] text-muted tabular-nums truncate">
+          <div
+            key={`${cat}-lbl-${i}`}
+            // Dlouhý název se ořízne třemi tečkami, ne natvrdo uprostřed slova;
+            // celý ho ukáže tooltip i tooltip samotného sloupce.
+            className="flex-1 min-w-0 text-center text-[11px] text-muted truncate"
+            title={cat}
+          >
             {i % step === 0 ? cat : ""}
           </div>
         ))}

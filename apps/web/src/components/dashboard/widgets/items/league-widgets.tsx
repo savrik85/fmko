@@ -9,11 +9,12 @@ import {
   DIVERGING, seriesColor, ChartEmpty, ChartHero,
 } from "../charts";
 import type { WidgetProps } from "../types";
+import { rowsForHeight, ROW_PX } from "../widget-heights";
 import { ScorerRow, MoreLink, FormChip, safeTeamColor } from "./shared";
 
 // ── Tabulka ─────────────────────────────────────────────────────────────────
 
-export function StandingsWidget({ data }: WidgetProps) {
+export function StandingsWidget({ data, height }: WidgetProps) {
   if (data.standings.loading) return <WidgetSkeleton rows={6} />;
   if (data.standings.error) return <WidgetError />;
   const standings = data.standings.data ?? [];
@@ -35,7 +36,7 @@ export function StandingsWidget({ data }: WidgetProps) {
             </tr>
           </thead>
           <tbody>
-            {standings.slice(0, 8).map((s) => (
+            {standings.slice(0, rowsForHeight(height, ROW_PX.table, 60)).map((s) => (
               <tr key={s.teamId ?? s.pos} className={`border-b border-gray-50 ${s.isPlayer ? "bg-pitch-50/50 font-bold" : ""}`}>
                 <td className="py-1 pl-3 sm:pl-5 pr-1 tabular-nums text-muted text-sm align-top pt-2">{s.pos}</td>
                 <td className="py-1 pr-1 align-top pt-2">
@@ -269,10 +270,10 @@ export function HomeAwaySplitWidget({ data }: WidgetProps) {
 
 // ── Nejlepší střelci ligy ───────────────────────────────────────────────────
 
-export function LeagueScorersWidget({ data, teamId }: WidgetProps) {
+export function LeagueScorersWidget({ data, teamId, height }: WidgetProps) {
   if (data.leagueStats.loading) return <WidgetSkeleton />;
   if (data.leagueStats.error) return <WidgetError />;
-  const rows = (data.leagueStats.data?.topScorers ?? []).filter((r) => r.goals > 0).slice(0, 8);
+  const rows = (data.leagueStats.data?.topScorers ?? []).filter((r) => r.goals > 0).slice(0, rowsForHeight(height, ROW_PX.bar));
   if (rows.length === 0) return <ChartEmpty>V lize zatím nepadl gól.</ChartEmpty>;
 
   return (
@@ -289,10 +290,10 @@ export function LeagueScorersWidget({ data, teamId }: WidgetProps) {
 
 // ── Karty v lize ────────────────────────────────────────────────────────────
 
-export function LeagueCardsWidget({ data }: WidgetProps) {
+export function LeagueCardsWidget({ data, height }: WidgetProps) {
   if (data.leagueStats.loading) return <WidgetSkeleton />;
   if (data.leagueStats.error) return <WidgetError />;
-  const rows = (data.leagueStats.data?.mostCards ?? []).filter((r) => r.yellowCards + r.redCards > 0).slice(0, 8);
+  const rows = (data.leagueStats.data?.mostCards ?? []).filter((r) => r.yellowCards + r.redCards > 0).slice(0, rowsForHeight(height, ROW_PX.bar));
   if (rows.length === 0) return <ChartEmpty>V lize zatím nepadla karta.</ChartEmpty>;
 
   const max = Math.max(...rows.map((r) => r.yellowCards + r.redCards), 1);

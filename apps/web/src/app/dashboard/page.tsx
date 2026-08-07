@@ -227,6 +227,7 @@ export default function DashboardPage() {
           {resolved.map(({ item, def }, index) => {
             const Widget = def.Component;
             const isDragged = dragId === item.id;
+            const height = item.h ?? def.defaultHeight ?? 2;
             return (
               <div
                 key={item.id}
@@ -257,13 +258,13 @@ export default function DashboardPage() {
                     onWidth={(w) => setWidth(index, w)}
                     color={item.c}
                     onColor={(c) => setColor(index, c)}
-                    height={item.h ?? def.defaultHeight ?? 2}
+                    height={height}
                     onHeight={(h) => setHeight(index, h)}
                     dragging={isDragged}
                     dragActive={dragId != null}
                     dragHandleProps={dragHandlers(item.id)}
                   >
-                    <Widget data={data} teamId={teamId ?? ""} editing={editing} />
+                    <Widget data={data} teamId={teamId ?? ""} editing={editing} height={height} />
                   </WidgetFrame>
                 </div>
               </div>

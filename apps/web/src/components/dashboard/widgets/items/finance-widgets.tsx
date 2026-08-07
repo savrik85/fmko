@@ -180,13 +180,12 @@ export function ConcessionRevenueWidget({ data }: WidgetProps) {
   return (
     <div className="space-y-3">
       <BarChart
-        categories={sales.map((m) => m.opponentName?.slice(0, 8) ?? "—")}
+        categories={sales.map((m) => m.opponentName ?? "—")}
         series={[
           { label: "Tržba", color: PRIMARY, values: sales.map((m) => m.totalRevenue ?? 0) },
           { label: "Zisk", color: seriesColor(1), values: sales.map((m) => m.totalProfit ?? 0) },
         ]}
         formatValue={compactCZK}
-        labelEvery={2}
       />
       <div className="text-sm text-muted text-center">
         Zisk za posledních {sales.length} zápasů{" "}

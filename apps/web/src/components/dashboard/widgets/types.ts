@@ -432,6 +432,8 @@ export interface WidgetProps {
   teamId: string;
   /** V editačním režimu widget nic nenačítá navíc a nesmí nikam navigovat. */
   editing: boolean;
+  /** Výška karty — seznamy podle ní volí, kolik položek vypsat. */
+  height: WidgetHeight;
 }
 
 export interface WidgetDef {

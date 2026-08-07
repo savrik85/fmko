@@ -6,6 +6,7 @@ import Link from "next/link";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import { ChartEmpty, compactCZK, fullCZK } from "../charts";
 import type { WidgetProps } from "../types";
+import { rowsForHeight, ROW_PX } from "../widget-heights";
 import { MoreLink } from "./shared";
 
 const POSITION_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
@@ -28,7 +29,7 @@ function Rating({ value }: { value: number }) {
 
 // ── Volní hráči ─────────────────────────────────────────────────────────────
 
-export function FreeAgentsWidget({ data }: WidgetProps) {
+export function FreeAgentsWidget({ data, height }: WidgetProps) {
   if (data.freeAgents.loading) return <WidgetSkeleton />;
   if (data.freeAgents.error) return <WidgetError />;
   const agents = [...(data.freeAgents.data ?? [])].sort((a, b) => b.overallRating - a.overallRating);
@@ -40,7 +41,7 @@ export function FreeAgentsWidget({ data }: WidgetProps) {
         Volných hráčů <span className="font-heading font-bold text-ink tabular-nums">{agents.length}</span> · zdarma, platíš jen mzdu
       </div>
       <ul className="space-y-1">
-        {agents.slice(0, 6).map((a) => (
+        {agents.slice(0, rowsForHeight(height, ROW_PX.rich, 56)).map((a) => (
           <li key={a.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
             <PosTag position={a.position} />
             <div className="min-w-0 flex-1">
@@ -62,7 +63,7 @@ export function FreeAgentsWidget({ data }: WidgetProps) {
 
 // ── Hráči na trhu ───────────────────────────────────────────────────────────
 
-export function MarketListingsWidget({ data }: WidgetProps) {
+export function MarketListingsWidget({ data, height }: WidgetProps) {
   if (data.market.loading) return <WidgetSkeleton />;
   if (data.market.error) return <WidgetError />;
   const listings = [...(data.market.data ?? [])].sort((a, b) => b.overallRating - a.overallRating);
@@ -74,7 +75,7 @@ export function MarketListingsWidget({ data }: WidgetProps) {
         Na prodej <span className="font-heading font-bold text-ink tabular-nums">{listings.length}</span> hráčů
       </div>
       <ul className="space-y-1">
-        {listings.slice(0, 6).map((l) => (
+        {listings.slice(0, rowsForHeight(height, ROW_PX.rich, 56)).map((l) => (
           <li key={l.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
             <PosTag position={l.position} />
             <div className="min-w-0 flex-1">
@@ -95,7 +96,7 @@ export function MarketListingsWidget({ data }: WidgetProps) {
 
 // ── Poslední přestupy v lize ────────────────────────────────────────────────
 
-export function LeagueTransfersWidget({ data, teamId }: WidgetProps) {
+export function LeagueTransfersWidget({ data, teamId, height }: WidgetProps) {
   if (data.leagueTransfers.loading) return <WidgetSkeleton />;
   if (data.leagueTransfers.error) return <WidgetError />;
   const transfers = data.leagueTransfers.data ?? [];
@@ -104,7 +105,7 @@ export function LeagueTransfersWidget({ data, teamId }: WidgetProps) {
   return (
     <div className="space-y-3">
       <ul className="space-y-1">
-        {transfers.slice(0, 6).map((t, i) => {
+        {transfers.slice(0, rowsForHeight(height, ROW_PX.rich, 56)).map((t, i) => {
           const mine = t.toTeamId === teamId || t.fromTeamId === teamId;
           return (
             <li key={`${t.playerId}-${i}`} className={`py-1.5 border-b border-gray-50 last:border-b-0 ${mine ? "bg-pitch-50/40 -mx-1 px-1 rounded" : ""}`}>

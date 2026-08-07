@@ -47,6 +47,31 @@ export function sequentialStep(ratio: number): string {
   return SEQUENTIAL[i];
 }
 
+/**
+ * Odstín pruhu podle poměru k nejvyšší hodnotě v žebříčku.
+ *
+ * Nejsvětlejší kroky škály se vynechávají — na světlé dráze by se ztratily.
+ * Barva tu nenese identitu, jen velikost: čím delší pruh, tím sytější.
+ */
+export function magnitudeColor(ratio: number): string {
+  const usable = SEQUENTIAL.slice(2);
+  const i = Math.min(usable.length - 1, Math.max(0, Math.round(ratio * (usable.length - 1))));
+  return usable[i];
+}
+
+/**
+ * Odstín pro hodnotu 0–100, která znamená kvalitu (rating, kondice, docházka).
+ * Škála je stavová, ne sekvenční — u těchhle čísel je podstatné, jestli jsou
+ * dobrá nebo špatná, ne o kolik jsou větší než sousední.
+ */
+export function qualityColor(value: number): string {
+  if (value >= 80) return "#C4A035";
+  if (value >= 60) return "#2E7D32";
+  if (value >= 40) return "#7FA05A";
+  if (value >= 20) return "#C4761A";
+  return "#B0554A";
+}
+
 /** Bílý nebo inkoustový text podle světlosti podkladu — pro popisky uvnitř výplně. */
 export function inkOn(hex: string): string {
   const c = hex.replace("#", "");
