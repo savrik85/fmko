@@ -23,6 +23,7 @@ const HELP: Record<string, HelpEntry> = {
     icon: "\u{1F3E0}",
     sections: [
       { text: "Hlavni prehled klubu \u2014 rozpocet, dalsi zapas, forma, tabulka, stav kadru a trener." },
+      { heading: "Skladani dashboardu", text: "Tlacitkem Upravit dashboard prepnes stranku do editace. U kazdeho widgetu pak muzes sipkami menit poradi, krizkem ho odebrat a cisly 1/2/3 nastavit sirku ve sloupcich (na mobilu je vzdy jeden sloupec). Tlacitko Pridat widget otevre katalog s grafy, kolaci, radary a zebricky. Hotovo ulozi rozlozeni na server, takze ti drzi i na jinem zarizeni. Obnovit vychozi vrati puvodni podobu." },
       { heading: "Forma", text: "V = vyhra (3 body), R = remiza (1 bod), P = prohra (0). Zobrazuje poslednich 5 vysledku." },
       { heading: "Stav kadru", text: "Prumerna kondice ovlivnuje vykon v zapase. Pod 60 % hrozi vyrazne oslabeni tymu. Zraneni hraci nemohou nastoupit." },
       { heading: "Trener", text: "Koucink nasobi sanci na zlepseni hracu pri treninku. Motivace pred zapasem zvedne moralku celemu kadru (pri 60 o tri body), taktika prida prihravky a obranu (od 60 o bod). Vlastnosti se vyvijeji obousmerne: koucink a taktika rostou castejii po vyhre, prohra obcas srazi motivaci. Reputace roste za vyhry a klesa za prohry." },

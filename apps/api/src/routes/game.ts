@@ -3652,6 +3652,106 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
   });
 });
 
+// ═══ DASHBOARD LAYOUT — konfigurovatelná stránka Domů ═══
+//
+// Layout je JSON pole { id, w } (w = šířka 1–3 sloupce). Neexistující řádek
+// znamená "uživatel nikdy needitoval" → BE vrátí widgets: null a frontend
+// dosadí svůj výchozí layout. Katalog widgetů je záměrně jen na frontendu:
+// nový widget je pak čistě FE změna a BE se nemusí nasazovat znovu.
+
+const MAX_DASHBOARD_WIDGETS = 60;
+
+interface DashboardLayoutItem { id: string; w: 1 | 2 | 3 }
+
+/** Vrátí očištěný layout, nebo chybovou hlášku (česky) když je vstup nepoužitelný. */
+function parseDashboardWidgets(raw: unknown): { widgets: DashboardLayoutItem[] } | { error: string } {
+  if (!Array.isArray(raw)) return { error: "Očekávám pole widgetů" };
+  if (raw.length > MAX_DASHBOARD_WIDGETS) return { error: `Maximálně ${MAX_DASHBOARD_WIDGETS} widgetů` };
+
+  const seen = new Set<string>();
+  const widgets: DashboardLayoutItem[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) return { error: "Widget musí být objekt" };
+    const { id, w } = item as { id?: unknown; w?: unknown };
+    if (typeof id !== "string" || id.length === 0 || id.length > 40) {
+      return { error: "Widget musí mít id (1–40 znaků)" };
+    }
+    if (w !== 1 && w !== 2 && w !== 3) return { error: `Neplatná šířka widgetu "${id}" (povoleno 1–3)` };
+    if (seen.has(id)) return { error: `Widget "${id}" je v layoutu dvakrát` };
+    seen.add(id);
+    widgets.push({ id, w });
+  }
+  return { widgets };
+}
+
+/**
+ * requireTeamOwnership propouští GET bez tokenu (middleware.ts), takže si
+ * vlastnictví u čtení layoutu musíme ohlídat sami — jinak by šel cizí layout
+ * přečíst pouhým uhodnutím team id.
+ */
+async function assertOwnsTeam(
+  c: import("hono").Context<{ Bindings: Bindings }>,
+  teamId: string,
+): Promise<{ error: string; status: 401 | 403 | 404 } | null> {
+  const token = getTokenFromRequest(c);
+  if (!token) return { error: "Nepřihlášen", status: 401 };
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return { error: "Neplatná session", status: 401 };
+  const team = await c.env.DB.prepare("SELECT user_id FROM teams WHERE id = ?")
+    .bind(teamId).first<{ user_id: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "dashboard layout ownership check", e); return null; });
+  if (!team) return { error: "Tým nenalezen", status: 404 };
+  if (team.user_id !== session.userId) return { error: "Přístup odepřen", status: 403 };
+  return null;
+}
+
+gameRouter.get("/teams/:teamId/dashboard-layout", async (c) => {
+  const teamId = c.req.param("teamId");
+  const denied = await assertOwnsTeam(c, teamId);
+  if (denied) return c.json({ error: denied.error }, denied.status);
+
+  const row = await c.env.DB.prepare("SELECT widgets, updated_at FROM dashboard_layouts WHERE team_id = ?")
+    .bind(teamId).first<{ widgets: string; updated_at: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "load dashboard layout", e); return null; });
+
+  if (!row) return c.json({ widgets: null, updatedAt: null });
+
+  const parsed = (() => {
+    try { return parseDashboardWidgets(JSON.parse(row.widgets)); }
+    catch (e) { logger.warn({ module: "game" }, "parse dashboard layout", e); return { error: "poškozený layout" }; }
+  })();
+
+  // Poškozený nebo neplatný uložený layout nesmí shodit Domů — spadneme na výchozí.
+  if ("error" in parsed) return c.json({ widgets: null, updatedAt: null });
+  return c.json({ widgets: parsed.widgets, updatedAt: row.updated_at });
+});
+
+gameRouter.put("/teams/:teamId/dashboard-layout", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ widgets?: unknown }>()
+    .catch((e) => { logger.warn({ module: "game" }, "parse dashboard layout body", e); return null; });
+  if (!body) return c.json({ error: "Neplatné tělo požadavku" }, 400);
+
+  const parsed = parseDashboardWidgets(body.widgets);
+  if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+
+  await c.env.DB.prepare(
+    `INSERT INTO dashboard_layouts (team_id, widgets, updated_at)
+     VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+     ON CONFLICT(team_id) DO UPDATE SET
+       widgets = excluded.widgets,
+       updated_at = excluded.updated_at`
+  ).bind(teamId, JSON.stringify(parsed.widgets)).run();
+
+  return c.json({ ok: true });
+});
+
+gameRouter.delete("/teams/:teamId/dashboard-layout", async (c) => {
+  const teamId = c.req.param("teamId");
+  await c.env.DB.prepare("DELETE FROM dashboard_layouts WHERE team_id = ?").bind(teamId).run();
+  return c.json({ ok: true });
+});
+
 // ═══ TACTIC FAMILIARITY (chemistry) ═══
 
 gameRouter.get("/teams/:teamId/tactic-chemistry", async (c) => {
