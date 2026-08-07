@@ -69,16 +69,17 @@ export function RivalsWidget({ data, height }: WidgetProps) {
 
 // ── Kabina ──────────────────────────────────────────────────────────────────
 
+/** Klíče odpovídají sloupci `relationships.type` — ověřeno dotazem do databáze. */
 const VZTAH_LABEL: Record<string, { text: string; icon: string; dobry: boolean }> = {
-  brothers: { text: "bratři", icon: "👬", dobry: true },
+  drinking_buddies: { text: "kumpáni od piva", icon: "🍻", dobry: true },
   classmates: { text: "spolužáci", icon: "🎓", dobry: true },
-  neighbours: { text: "sousedé", icon: "🏘", dobry: true },
-  mentor: { text: "mentor", icon: "🧭", dobry: true },
-  friends: { text: "kamarádi", icon: "🤝", dobry: true },
+  brothers: { text: "bratři", icon: "👬", dobry: true },
+  neighbors: { text: "sousedé", icon: "🏘", dobry: true },
+  father_son: { text: "otec a syn", icon: "👨‍👦", dobry: true },
+  mentor_pupil: { text: "mentor a učeň", icon: "🧭", dobry: true },
+  coworkers: { text: "kolegové z práce", icon: "🔧", dobry: true },
+  in_laws: { text: "příbuzní po přeslici", icon: "👪", dobry: true },
   rivals: { text: "rivalové", icon: "⚡", dobry: false },
-  exile: { text: "nemluví spolu", icon: "🧊", dobry: false },
-  cousins: { text: "bratranci", icon: "👪", dobry: true },
-  colleagues: { text: "kolegové z práce", icon: "🔧", dobry: true },
 };
 
 export function SquadChemistryWidget({ data, height }: WidgetProps) {
