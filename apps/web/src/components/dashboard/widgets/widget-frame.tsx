@@ -11,6 +11,7 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { SectionLabel } from "@/components/ui";
 import { WIDGET_COLORS, getWidgetColor } from "./widget-colors";
+import { HEIGHT_OPTIONS, heightVar, type WidgetHeight } from "./widget-heights";
 import type { WidgetWidth } from "./types";
 
 export interface WidgetFrameProps {
@@ -28,6 +29,8 @@ export interface WidgetFrameProps {
   /** Klíč barvy karty; undefined = bílá. */
   color?: string;
   onColor: (color: string | undefined) => void;
+  height: WidgetHeight;
+  onHeight: (height: WidgetHeight) => void;
   /** Právě se s tímhle widgetem táhne. */
   dragging?: boolean;
   /** Někde na dashboardu se táhne — lišta pak nemá reagovat na hover. */
@@ -41,24 +44,30 @@ const WIDTHS: WidgetWidth[] = [1, 2, 3];
 
 export function WidgetFrame({
   title, icon, bare, editing, width, isFirst, isLast,
-  onMoveUp, onMoveDown, onRemove, onWidth, color, onColor,
+  onMoveUp, onMoveDown, onRemove, onWidth, color, onColor, height, onHeight,
   dragging, dragActive, dragHandleProps, children,
 }: WidgetFrameProps) {
   const tint = getWidgetColor(color);
+
+  // Widget s vlastním obalem si výšku řídí sám — pevná výška by mu rozbila chrome.
+  const cssHeight = bare ? null : heightVar(height);
+  const heightProps = cssHeight
+    ? { className: "widget-h", style: { "--widget-h": cssHeight } as React.CSSProperties }
+    : {};
 
   // Odsazení zůstává na vnitřním divu, aby barevný proužek sedl na horní hranu
   // karty. Widgety, které roztahují tabulky zápornými okraji, tím nejsou dotčené.
   const body = bare ? children : (
     <div className="card h-full" style={tint ? { background: tint.bg } : undefined}>
-      {tint && <div style={{ height: 3, background: tint.accent }} aria-hidden="true" />}
-      <div className="p-4 sm:p-5">
+      {tint && <div className="shrink-0" style={{ height: 3, background: tint.accent }} aria-hidden="true" />}
+      <div className="widget-body p-4 sm:p-5">
         <SectionLabel>{title}</SectionLabel>
         {children}
       </div>
     </div>
   );
 
-  if (!editing) return <>{body}</>;
+  if (!editing) return <div {...heightProps}>{body}</div>;
 
   // Tlačítka v liště nesmí spustit tažení — pointerdown se u nich zastaví.
   const stopDrag = { onPointerDown: (e: React.PointerEvent) => e.stopPropagation() };
@@ -83,26 +92,6 @@ export function WidgetFrame({
         <span className="shrink-0 text-muted leading-none px-0.5" aria-hidden="true">⠿</span>
         <span className="text-base shrink-0" aria-hidden="true">{icon}</span>
         <span className="font-heading font-bold text-sm truncate flex-1 min-w-0">{title}</span>
-
-        <div className="flex items-center gap-0.5 shrink-0" role="group" aria-label={`Šířka widgetu ${title}`}>
-          {WIDTHS.map((w) => (
-            <button
-              key={w}
-              type="button"
-              {...stopDrag}
-              onClick={() => onWidth(w)}
-              aria-pressed={width === w}
-              title={`Šířka ${w} ze 3 sloupců`}
-              className={`w-7 h-7 rounded-md text-sm font-heading font-bold transition-colors ${
-                width === w ? "bg-pitch-500 text-white" : "bg-white text-muted hover:bg-gray-100"
-              }`}
-            >
-              {w}
-            </button>
-          ))}
-        </div>
-
-        <span className="w-px h-5 bg-pitch-100 mx-1 shrink-0" />
 
         <button
           type="button"
@@ -136,6 +125,47 @@ export function WidgetFrame({
         >
           ✕
         </button>
+      </div>
+
+      {/* Rozměry — šířka ve sloupcích a výška ve třech standardních stupních */}
+      <div className="flex items-center gap-x-4 gap-y-1.5 flex-wrap px-3 py-1.5 bg-pitch-50/60 border-b border-pitch-100">
+        <div className="flex items-center gap-1" role="group" aria-label={`Šířka widgetu ${title}`}>
+          <span className="text-[11px] uppercase tracking-wide text-muted mr-0.5">Šířka</span>
+          {WIDTHS.map((w) => (
+            <button
+              key={w}
+              type="button"
+              {...stopDrag}
+              onClick={() => onWidth(w)}
+              aria-pressed={width === w}
+              title={`${w} ze 3 sloupců`}
+              className={`w-7 h-7 rounded-md text-sm font-heading font-bold transition-colors ${
+                width === w ? "bg-pitch-500 text-white" : "bg-white text-muted hover:bg-gray-100"
+              }`}
+            >
+              {w}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-1" role="group" aria-label={`Výška widgetu ${title}`}>
+          <span className="text-[11px] uppercase tracking-wide text-muted mr-0.5">Výška</span>
+          {HEIGHT_OPTIONS.map((h) => (
+            <button
+              key={String(h.value)}
+              type="button"
+              {...stopDrag}
+              onClick={() => onHeight(h.value)}
+              aria-pressed={height === h.value}
+              title={h.title}
+              className={`w-7 h-7 rounded-md text-sm font-heading font-bold transition-colors ${
+                height === h.value ? "bg-pitch-500 text-white" : "bg-white text-muted hover:bg-gray-100"
+              }`}
+            >
+              {h.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Barvy — jen světlé odstíny, takže se nemusí řešit překlápění textu */}

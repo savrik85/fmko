@@ -19,7 +19,7 @@ import { useWidgetDrag } from "@/components/dashboard/widgets/use-widget-drag";
 import { useMasonry, MASONRY_ROW } from "@/components/dashboard/widgets/use-masonry";
 import { WidgetFrame } from "@/components/dashboard/widgets/widget-frame";
 import { WidgetPicker } from "@/components/dashboard/widgets/widget-picker";
-import type { DataKey, LayoutItem, WidgetDef, WidgetWidth } from "@/components/dashboard/widgets/types";
+import type { DataKey, LayoutItem, WidgetDef, WidgetHeight, WidgetWidth } from "@/components/dashboard/widgets/types";
 
 const COL_SPAN: Record<WidgetWidth, string> = {
   1: "lg:col-span-1",
@@ -99,6 +99,8 @@ export default function DashboardPage() {
   const remove = (index: number) => setDraft((prev) => prev.filter((_, i) => i !== index));
   const setWidth = (index: number, w: WidgetWidth) =>
     setDraft((prev) => prev.map((it, i) => (i === index ? { ...it, w } : it)));
+  const setHeight = (index: number, h: WidgetHeight) =>
+    setDraft((prev) => prev.map((it, i) => (i === index ? { ...it, h } : it)));
   const setColor = (index: number, c: string | undefined) =>
     setDraft((prev) => prev.map((it, i) => {
       if (i !== index) return it;
@@ -255,6 +257,8 @@ export default function DashboardPage() {
                     onWidth={(w) => setWidth(index, w)}
                     color={item.c}
                     onColor={(c) => setColor(index, c)}
+                    height={item.h ?? def.defaultHeight ?? 2}
+                    onHeight={(h) => setHeight(index, h)}
                     dragging={isDragged}
                     dragActive={dragId != null}
                     dragHandleProps={dragHandlers(item.id)}

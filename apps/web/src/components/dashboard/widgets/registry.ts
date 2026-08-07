@@ -57,7 +57,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "today-program", title: "Dnešní program", icon: "📆", category: "prehled",
     description: "Zápasový, tréninkový nebo volný den podle herního kalendáře.",
-    defaultWidth: 3, needs: ["team", "schedule"], Component: TodayProgramWidget,
+    defaultWidth: 3, defaultHeight: 1, needs: ["team", "schedule"], Component: TodayProgramWidget,
   },
   {
     id: "news", title: "Zpravodaj", icon: "📰", category: "prehled",
@@ -72,7 +72,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "hall-of-fame", title: "Síň slávy", icon: "👑", category: "prehled",
     description: "Tvoje pořadí mezi lidskými trenéry a počet medailí.",
-    defaultWidth: 1, needs: ["hallOfFame", "team"], Component: HallOfFameWidget,
+    defaultWidth: 1, defaultHeight: 1, needs: ["hallOfFame", "team"], Component: HallOfFameWidget,
   },
   {
     id: "events", title: "Události", icon: "🎪", category: "prehled",
@@ -82,14 +82,14 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "pub-session", title: "U nás v hospodě", icon: "🍺", category: "prehled",
     description: "Kdo včera seděl v hospodě a co se tam semlelo.",
-    defaultWidth: 3, needs: ["pubSession", "team"], bare: true, Component: PubSessionWidget,
+    defaultWidth: 3, defaultHeight: "auto", needs: ["pubSession", "team"], bare: true, Component: PubSessionWidget,
   },
 
   // ── Zápasy ────────────────────────────────────────────────────────────────
   {
     id: "next-match", title: "Další zápas", icon: "⚽", category: "zapasy",
     description: "Podrobný náhled nejbližšího zápasu — forma, srovnání kádrů, počasí.",
-    defaultWidth: 1, needs: ["team", "schedule", "preview"], Component: NextMatchWidget,
+    defaultWidth: 1, defaultHeight: 3, needs: ["team", "schedule", "preview"], Component: NextMatchWidget,
   },
   {
     id: "fixtures", title: "Rozpis", icon: "🗓", category: "zapasy",
@@ -111,17 +111,17 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "standings", title: "Tabulka", icon: "🏆", category: "liga",
     description: "Prvních osm týmů ligy, tvůj tým zvýrazněný.",
-    defaultWidth: 1, needs: ["standings"], Component: StandingsWidget,
+    defaultWidth: 1, defaultHeight: 3, needs: ["standings"], Component: StandingsWidget,
   },
   {
     id: "season-record", title: "Bilance", icon: "📊", category: "liga",
     description: "Umístění, body, výhry/remízy/prohry, skóre a forma.",
-    defaultWidth: 1, needs: ["standings", "matchResults", "team"], Component: SeasonRecordWidget,
+    defaultWidth: 1, defaultHeight: 1, needs: ["standings", "matchResults", "team"], Component: SeasonRecordWidget,
   },
   {
     id: "results-donut", title: "Výhry a prohry", icon: "🥧", category: "liga",
     description: "Prstencový graf poměru výher, remíz a proher.",
-    defaultWidth: 1, needs: ["matchResults"], Component: ResultsDonutWidget,
+    defaultWidth: 1, defaultHeight: 1, needs: ["matchResults"], Component: ResultsDonutWidget,
   },
   {
     id: "points-progression", title: "Vývoj bodů", icon: "📈", category: "liga",
@@ -136,7 +136,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "home-away-split", title: "Doma a venku", icon: "🏟", category: "liga",
     description: "Jak se týmu daří doma a jak na hřištích soupeřů.",
-    defaultWidth: 1, needs: ["matchResults"], Component: HomeAwaySplitWidget,
+    defaultWidth: 1, defaultHeight: 1, needs: ["matchResults"], Component: HomeAwaySplitWidget,
   },
   {
     id: "top-scorers", title: "Střelci", icon: "👟", category: "liga",
@@ -178,12 +178,12 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "squad-status", title: "Stav kádru", icon: "👥", category: "kadr",
     description: "Počet hráčů, kondice, rating, morálka a rozpad podle postů.",
-    defaultWidth: 1, needs: ["players", "team"], Component: SquadStatusWidget,
+    defaultWidth: 1, defaultHeight: 3, needs: ["players", "team"], Component: SquadStatusWidget,
   },
   {
     id: "squad-positions", title: "Složení kádru", icon: "🧩", category: "kadr",
     description: "Kolik máš brankářů, obránců, záložníků a útočníků a jak jsou dobří.",
-    defaultWidth: 1, needs: ["players"], Component: SquadPositionsWidget,
+    defaultWidth: 1, defaultHeight: 1, needs: ["players"], Component: SquadPositionsWidget,
   },
   {
     id: "squad-age", title: "Věková struktura", icon: "🎂", category: "kadr",
@@ -252,7 +252,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "budget-summary", title: "Rozpočet", icon: "💰", category: "finance",
     description: "Aktuální stav klubové pokladny.",
-    defaultWidth: 1, needs: ["team"], Component: BudgetSummaryWidget,
+    defaultWidth: 1, defaultHeight: 1, needs: ["team"], Component: BudgetSummaryWidget,
   },
   {
     id: "budget-forecast", title: "Prognóza rozpočtu", icon: "📉", category: "finance",
@@ -294,7 +294,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: "fan-satisfaction", title: "Spokojenost fanoušků", icon: "😀", category: "fanousci",
     description: "Ciferníky spokojenosti a loajality včetně dopadu posledního zápasu.",
-    defaultWidth: 1, needs: ["fans"], Component: FanSatisfactionWidget,
+    defaultWidth: 1, defaultHeight: 1, needs: ["fans"], Component: FanSatisfactionWidget,
   },
   {
     id: "fan-satisfaction-history", title: "Vývoj spokojenosti", icon: "📉", category: "fanousci",

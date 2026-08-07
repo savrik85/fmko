@@ -1,5 +1,8 @@
 import type { ComponentType } from "react";
 import type { Team, Player, ManagerProfile, TeamMatchResults } from "@/lib/api";
+import type { WidgetHeight } from "./widget-heights";
+
+export type { WidgetHeight };
 
 // ── Layout ──────────────────────────────────────────────────────────────────
 
@@ -11,6 +14,8 @@ export interface LayoutItem {
   w: WidgetWidth;
   /** Klíč barevného odlišení; chybí = bílá karta jako dosud. */
   c?: string;
+  /** Výška; chybí = použije se výchozí výška widgetu z katalogu. */
+  h?: WidgetHeight;
 }
 
 // ── Datové zdroje ───────────────────────────────────────────────────────────
@@ -437,6 +442,8 @@ export interface WidgetDef {
   /** Jedna věta do dialogu „Přidat widget". */
   description: string;
   defaultWidth: WidgetWidth;
+  /** Výchozí výška; bez ní platí střední (2). */
+  defaultHeight?: WidgetHeight;
   needs: DataKey[];
   /** Widget si kreslí vlastní obal místo standardní karty (např. Hospoda). */
   bare?: boolean;

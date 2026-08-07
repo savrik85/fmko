@@ -3661,7 +3661,8 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
 
 const MAX_DASHBOARD_WIDGETS = 60;
 
-interface DashboardLayoutItem { id: string; w: 1 | 2 | 3; c?: string }
+type DashboardHeight = 1 | 2 | 3 | "auto";
+interface DashboardLayoutItem { id: string; w: 1 | 2 | 3; c?: string; h?: DashboardHeight }
 
 /** Vrátí očištěný layout, nebo chybovou hlášku (česky) když je vstup nepoužitelný. */
 function parseDashboardWidgets(raw: unknown): { widgets: DashboardLayoutItem[] } | { error: string } {
@@ -3672,7 +3673,7 @@ function parseDashboardWidgets(raw: unknown): { widgets: DashboardLayoutItem[] }
   const widgets: DashboardLayoutItem[] = [];
   for (const item of raw) {
     if (typeof item !== "object" || item === null) return { error: "Widget musí být objekt" };
-    const { id, w, c } = item as { id?: unknown; w?: unknown; c?: unknown };
+    const { id, w, c, h } = item as { id?: unknown; w?: unknown; c?: unknown; h?: unknown };
     if (typeof id !== "string" || id.length === 0 || id.length > 40) {
       return { error: "Widget musí mít id (1–40 znaků)" };
     }
@@ -3683,8 +3684,14 @@ function parseDashboardWidgets(raw: unknown): { widgets: DashboardLayoutItem[] }
     if (c != null && (typeof c !== "string" || c.length > 20)) {
       return { error: `Neplatná barva widgetu "${id}"` };
     }
+    if (h != null && h !== 1 && h !== 2 && h !== 3 && h !== "auto") {
+      return { error: `Neplatná výška widgetu "${id}" (povoleno 1–3 nebo auto)` };
+    }
     seen.add(id);
-    widgets.push(c ? { id, w, c: c as string } : { id, w });
+    const entry: DashboardLayoutItem = { id, w };
+    if (c) entry.c = c as string;
+    if (h != null) entry.h = h as DashboardHeight;
+    widgets.push(entry);
   }
   return { widgets };
 }

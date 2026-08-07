@@ -233,6 +233,16 @@ body::before {
 .card-hover { transition: all 0.2s ease; cursor: pointer; }
 .card-hover:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
 
+/* Standardní výška widgetu na dashboardu.
+   Uplatní se až od velkého displeje — na mobilu je jeden sloupec, takže není
+   co srovnávat, a scrollování uvnitř karty i mimo ni by se na dotyku pralo.
+   Výšku nese proměnná --widget-h, kterou nastavuje WidgetFrame. */
+@media (min-width: 1024px) {
+  .widget-h { height: var(--widget-h); }
+  .widget-h > .card { height: 100%; display: flex; flex-direction: column; }
+  .widget-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+}
+
 /* ═══════════════════════════════════════════════
    BADGES
    ═══════════════════════════════════════════════ */
