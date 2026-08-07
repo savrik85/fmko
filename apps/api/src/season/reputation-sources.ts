@@ -41,7 +41,8 @@ export async function applyAttendanceReputation(
   gameDate: string,
 ): Promise<void> {
   if (capacity <= 0) return;
-  const refId = `rep-att-${matchId}-${teamId}`;
+  // Sezóna je součástí klíče, aby šel sezónní strop spočítat prefixem.
+  const refId = `rep-att-s${seasonNumber}-${matchId}-${teamId}`;
 
   const fill = attendance / capacity;
 
@@ -50,7 +51,7 @@ export async function applyAttendanceReputation(
     const already = await db.prepare(
       `SELECT COUNT(*) AS c FROM reputation_log
        WHERE team_id = ? AND source = 'sellout' AND reference_id LIKE ?`,
-    ).bind(teamId, `rep-att-%`).first<{ c: number }>()
+    ).bind(teamId, `rep-att-s${seasonNumber}-%`).first<{ c: number }>()
       .catch((e) => { logger.warn({ module: "reputation-sources" }, "count sellouts", e); return null; });
     if ((already?.c ?? 0) >= SELLOUT_MAX_PER_SEASON) return;
 
@@ -116,8 +117,9 @@ export async function applyStreakReputation(
     const milestone = [...WIN_STREAK_MILESTONES].reverse().find((m) => winStreak >= m);
     if (milestone) {
       const already = await db.prepare(
-        "SELECT COUNT(*) AS c FROM reputation_log WHERE team_id = ? AND source = 'streak_win'",
-      ).bind(teamId).first<{ c: number }>()
+        `SELECT COUNT(*) AS c FROM reputation_log
+         WHERE team_id = ? AND source = 'streak_win' AND reference_id LIKE ?`,
+      ).bind(teamId, `rep-streak-w%-${teamId}-s${seasonNumber}`).first<{ c: number }>()
         .catch((e) => { logger.warn({ module: "reputation-sources" }, "count win streaks", e); return null; });
       if ((already?.c ?? 0) * 2 < STREAK_MAX_PER_SEASON) {
         await applyReputationDelta(db, teamId, 2, "streak_win", `Série ${milestone} výher v řadě`, {
