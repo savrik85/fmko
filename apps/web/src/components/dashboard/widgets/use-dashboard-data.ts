@@ -19,6 +19,7 @@ import type {
   ManagerHistoryEntry, InjuryEntry, StadiumData, EquipmentData, StaffMember, CupData,
   SeasonalEvent, TransferOffer, WatchlistEntry, SeasonHistoryEntry,
   FreeAgent, MarketListing, LeagueTransfer,
+  TeamStatRow, ManagerRelation, SquadRelationship, SeasonInfo, LeagueResult,
 } from "./types";
 
 const IDLE: DataSlot<never> = { data: null, loading: false, error: false };
@@ -35,6 +36,7 @@ function emptyData(): DashboardData {
     "stadium", "equipment", "staff", "trophies", "cup", "u21",
     "events", "offers", "watchlist", "seasonHistory",
     "freeAgents", "market", "leagueTransfers",
+    "teamStats", "relations", "relationships", "seasonInfo", "leagueResults",
   ];
   const out = {} as Record<DataKey, DataSlot<unknown>>;
   for (const k of keys) out[k] = { ...IDLE };
@@ -113,6 +115,16 @@ const LOADERS: Record<Exclude<DataKey, "preview">, (teamId: string) => Promise<u
     if (!team.league_id) return [];
     return apiFetch<{ recent: LeagueTransfer[] }>(`/api/leagues/${team.league_id}/transfers-overview`)
       .then((d) => d.recent ?? []);
+  }),
+  teamStats: (t) => apiFetch<{ stats: TeamStatRow[] }>(`/api/teams/${t}/stats`).then((d) => d.stats ?? []),
+  relations: (t) => apiFetch<{ relations: ManagerRelation[] }>(`/api/teams/${t}/relations`).then((d) => d.relations ?? []),
+  relationships: (t) => apiFetch<SquadRelationship[]>(`/api/teams/${t}/relationships`),
+  seasonInfo: (t) => apiFetch<SeasonInfo>(`/api/teams/${t}/season-info`),
+  // Výsledky visí na lize, ne na týmu — ligu si musíme napřed zjistit.
+  leagueResults: (t) => apiFetch<Team>(`/api/teams/${t}`).then((team) => {
+    if (!team.league_id) return [];
+    return apiFetch<{ results: LeagueResult[] }>(`/api/leagues/${team.league_id}/results`)
+      .then((d) => d.results ?? []);
   }),
 };
 

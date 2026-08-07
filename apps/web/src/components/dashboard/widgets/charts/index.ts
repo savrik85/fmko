@@ -11,3 +11,6 @@ export * from "./radar-chart";
 export * from "./gauge";
 export * from "./sparkline";
 export * from "./stat-tile";
+export * from "./scatter-chart";
+export * from "./heatmap-grid";
+export * from "./waterfall";

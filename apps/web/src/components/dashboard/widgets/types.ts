@@ -33,7 +33,8 @@ export type DataKey =
   | "leagueStats" | "reputation" | "managerHistory" | "injuries"
   | "stadium" | "equipment" | "staff" | "trophies" | "cup" | "u21"
   | "events" | "offers" | "watchlist" | "seasonHistory"
-  | "freeAgents" | "market" | "leagueTransfers";
+  | "freeAgents" | "market" | "leagueTransfers"
+  | "teamStats" | "relations" | "relationships" | "seasonInfo" | "leagueResults";
 
 /** Stav jednoho zdroje. Widget si podle něj vybere skeleton / chybu / obsah. */
 export interface DataSlot<T> {
@@ -367,6 +368,45 @@ export interface LeagueTransfer {
   fee: number; date: string; joinType?: string;
 }
 
+export interface TeamStatRow {
+  playerId: string; firstName: string; lastName: string; nickname: string; position: string;
+  appearances: number; goals: number; assists: number;
+  yellowCards: number; redCards: number; minutesPlayed: number;
+  avgRating: number; cleanSheets: number; manOfMatch: number;
+}
+
+export interface ManagerRelation {
+  teamId: string; teamName: string; primaryColor: string;
+  managerName: string; isAi: boolean; archetypeLabel: string;
+  respect: number; heat: number; label: string; loyalAlly: boolean;
+}
+
+export interface SquadRelationship {
+  id: string; type: string; strength: number;
+  player_a_id: string; player_b_id: string;
+  player_a_name: string; player_b_name: string;
+}
+
+export interface SeasonInfo {
+  season: number;
+  currentDay: number;
+  totalDays: number;
+  gameDate: string;
+  upcoming: Array<{ type: string; date: string; title: string; subtitle?: string; status?: string; isHome?: boolean }>;
+}
+
+export interface LeagueResult {
+  id: string;
+  round: number | null;
+  game_week: number | null;
+  home_team_id: string;
+  away_team_id: string;
+  home_name: string;
+  away_name: string;
+  home_score: number;
+  away_score: number;
+}
+
 export interface WatchlistEntry {
   id?: string;
   playerId?: string;
@@ -425,6 +465,11 @@ export interface DashboardData {
   freeAgents: DataSlot<FreeAgent[]>;
   market: DataSlot<MarketListing[]>;
   leagueTransfers: DataSlot<LeagueTransfer[]>;
+  teamStats: DataSlot<TeamStatRow[]>;
+  relations: DataSlot<ManagerRelation[]>;
+  relationships: DataSlot<SquadRelationship[]>;
+  seasonInfo: DataSlot<SeasonInfo>;
+  leagueResults: DataSlot<LeagueResult[]>;
 }
 
 export interface WidgetProps {

@@ -35,6 +35,13 @@ import {
 } from "./items/club-widgets";
 import { NewsWidget, AchievementsWidget, HallOfFameWidget, EventsWidget } from "./items/overview-widgets";
 import { FreeAgentsWidget, MarketListingsWidget, LeagueTransfersWidget } from "./items/market-widgets";
+import {
+  SquadScatterWidget, SeasonHeatmapWidget, BudgetWaterfallWidget, PositionProgressionWidget,
+  SeasonNumbersWidget, PlayingTimeWidget, ManOfMatchWidget, CleanSheetsWidget, DisciplineWidget,
+} from "./items/analysis-widgets";
+import {
+  RivalsWidget, SquadChemistryWidget, FanVillagesWidget, SeasonProgressWidget,
+} from "./items/social-widgets";
 import { PubSessionWidget } from "./items/pub-session";
 
 export const CATEGORY_LABELS: Record<WidgetCategory, string> = {
@@ -387,6 +394,73 @@ export const WIDGETS: WidgetDef[] = [
     id: "watchlist", title: "Sledovaní hráči", icon: "👁", category: "klub",
     description: "Hráči, které máš na seznamu.",
     defaultWidth: 1, needs: ["watchlist"], Component: WatchlistWidget,
+  },
+
+  // ── Analýza ───────────────────────────────────────────────────────────────
+  {
+    id: "squad-scatter", title: "Věk a rating", icon: "🎯", category: "kadr",
+    description: "Bodový graf kádru se čtyřmi poli — kdo je opora, koho vychovat a kdo je na odchod.",
+    defaultWidth: 1, defaultHeight: 2, needs: ["players"], Component: SquadScatterWidget,
+  },
+  {
+    id: "playing-time", title: "Minuty na hřišti", icon: "⏱", category: "kadr",
+    description: "Kdo odehrál nejvíc minut a kdo sedí na lavičce.",
+    defaultWidth: 1, needs: ["teamStats"], Component: PlayingTimeWidget,
+  },
+  {
+    id: "discipline", title: "Disciplína", icon: "🟨", category: "kadr",
+    description: "Žluté a červené karty tvých hráčů.",
+    defaultWidth: 1, needs: ["teamStats"], Component: DisciplineWidget,
+  },
+  {
+    id: "season-heatmap", title: "Sezóna v kostce", icon: "🧮", category: "liga",
+    description: "Celá sezóna jako mřížka barevných políček — série výher i propady na první pohled.",
+    defaultWidth: 1, defaultHeight: 1, needs: ["matchResults"], Component: SeasonHeatmapWidget,
+  },
+  {
+    id: "position-progression", title: "Vývoj pozice", icon: "🪜", category: "liga",
+    description: "Jak se tvoje místo v tabulce měnilo kolo po kole.",
+    defaultWidth: 2, needs: ["leagueResults", "team"], Component: PositionProgressionWidget,
+  },
+  {
+    id: "man-of-match", title: "Muž zápasu", icon: "🎖", category: "liga",
+    description: "Kdo z týmu nejčastěji bral cenu pro nejlepšího hráče utkání.",
+    defaultWidth: 1, needs: ["teamStats"], Component: ManOfMatchWidget,
+  },
+  {
+    id: "clean-sheets", title: "Čistá konta", icon: "🧤", category: "liga",
+    description: "Kolikrát brankáři udrželi nulu.",
+    defaultWidth: 1, needs: ["teamStats"], Component: CleanSheetsWidget,
+  },
+  {
+    id: "season-numbers", title: "Sezóna v číslech", icon: "🔢", category: "liga",
+    description: "Góly, návštěvy, karty i vypitá piva za poslední dohranou sezónu.",
+    defaultWidth: 1, defaultHeight: 2, needs: ["seasonHistory"], Component: SeasonNumbersWidget,
+  },
+  {
+    id: "budget-waterfall", title: "Kam tečou peníze", icon: "💧", category: "finance",
+    description: "Od příjmů přes jednotlivé výdaje až k týdenní bilanci.",
+    defaultWidth: 1, defaultHeight: 2, needs: ["budget"], Component: BudgetWaterfallWidget,
+  },
+  {
+    id: "fan-villages", title: "Odkud jezdí fanoušci", icon: "🚌", category: "fanousci",
+    description: "Okolní obce a kolik odtud chodí lidí na zápasy.",
+    defaultWidth: 1, needs: ["fanbase"], Component: FanVillagesWidget,
+  },
+  {
+    id: "rivals", title: "Rivalové", icon: "🤨", category: "klub",
+    description: "Respekt a napětí mezi tebou a ostatními trenéry v lize.",
+    defaultWidth: 1, defaultHeight: 2, needs: ["relations"], Component: RivalsWidget,
+  },
+  {
+    id: "squad-chemistry", title: "Kabina", icon: "🫂", category: "klub",
+    description: "Vazby mezi hráči — bratři, spolužáci, ale i ti, co spolu nemluví.",
+    defaultWidth: 1, defaultHeight: 2, needs: ["relationships"], Component: SquadChemistryWidget,
+  },
+  {
+    id: "season-progress", title: "Průběh sezóny", icon: "📅", category: "prehled",
+    description: "Kolikátý je den sezóny a co tě čeká nejbližší dny.",
+    defaultWidth: 1, defaultHeight: 2, needs: ["seasonInfo", "team"], Component: SeasonProgressWidget,
   },
 ];
 

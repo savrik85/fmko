@@ -319,7 +319,9 @@ leagueRouter.get("/leagues/:leagueId/results", async (c) => {
   const leagueId = c.req.param("leagueId");
   const gameWeek = c.req.query("gameWeek");
 
-  let query = "SELECT m.id, m.round, m.home_score, m.away_score, m.status, m.attendance, m.weather, sc.game_week, sc.scheduled_at, t1.name as home_name, t1.primary_color as home_color, t2.name as away_name, t2.primary_color as away_color FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id JOIN season_calendar sc ON m.calendar_id = sc.id WHERE m.league_id = ? AND m.status = 'simulated' AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)";
+  // Id týmů jsou v odpovědi kvůli dashboardu — bez nich nejde z výsledků
+  // přehrát tabulku po kolech a poznat v ní vlastní tým jinak než podle jména.
+  let query = "SELECT m.id, m.round, m.home_score, m.away_score, m.status, m.attendance, m.weather, sc.game_week, sc.scheduled_at, m.home_team_id, m.away_team_id, t1.name as home_name, t1.primary_color as home_color, t2.name as away_name, t2.primary_color as away_color FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id JOIN season_calendar sc ON m.calendar_id = sc.id WHERE m.league_id = ? AND m.status = 'simulated' AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)";
   const binds: unknown[] = [leagueId, leagueId];
   if (gameWeek) { query += " AND sc.game_week = ?"; binds.push(parseInt(gameWeek)); }
   query += " ORDER BY sc.game_week DESC, m.round";
