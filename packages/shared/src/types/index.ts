@@ -33,3 +33,11 @@ export {
 } from "./staff";
 export type { RatingPosition, AttrImportance } from "./rating-weights";
 export { RATING_WEIGHTS, ratingWeightsFor, attributeImportance } from "./rating-weights";
+export type { ManagerFansBand, ManagerFansEffect } from "./manager-fans";
+export {
+  MANAGER_FANS,
+  MANAGER_FANS_BANDS,
+  managerInfluence,
+  managerFansBand,
+  managerFansEffect,
+} from "./manager-fans";

@@ -6853,18 +6853,14 @@ gameRouter.get("/teams/:teamId/fans", async (c) => {
   const villageBaseTicketPrice = getBaseTicketPrice(mapVillageSize(villageRow?.size ?? "village"));
 
   const mgr = await c.env.DB.prepare(
-    "SELECT reputation, motivation FROM managers WHERE team_id = ?",
-  ).bind(teamId).first<{ reputation: number; motivation: number }>().catch((e) => {
+    "SELECT name, reputation, motivation FROM managers WHERE team_id = ?",
+  ).bind(teamId).first<{ name: string; reputation: number; motivation: number }>().catch((e) => {
     logger.warn({ module: "game" }, "load manager for fans", e);
     return null;
   });
 
-  const mgrMatchBoost = mgr
-    ? Math.round((mgr.reputation - 50) * 0.03 + (mgr.motivation - 50) * 0.02)
-    : 0;
-  const mgrWeeklyLoyaltyBoost = mgr
-    ? Math.round((mgr.reputation - 50) * 0.02 + (mgr.motivation - 50) * 0.015)
-    : 0;
+  const { managerFansEffect, MANAGER_FANS } = await import("@okresni-masina/shared");
+  const mgrFx = mgr ? managerFansEffect(mgr.reputation, mgr.motivation) : null;
 
   let reasons: string[] = [];
   try {
@@ -6881,12 +6877,30 @@ gameRouter.get("/teams/:teamId/fans", async (c) => {
     villageBaseTicketPrice,
     lastMatchDelta: fans.last_match_delta,
     lastMatchReasons: reasons,
-    manager: mgr
+    manager: (mgr && mgrFx)
       ? {
+          name: mgr.name,
           reputation: mgr.reputation,
           motivation: mgr.motivation,
-          matchBoost: mgrMatchBoost,
-          weeklyLoyaltyBoost: mgrWeeklyLoyaltyBoost,
+          influence: mgrFx.influence,
+          neutral: MANAGER_FANS.NEUTRAL,
+          repWeight: MANAGER_FANS.REP_WEIGHT,
+          motWeight: MANAGER_FANS.MOT_WEIGHT,
+          repPoints: mgrFx.repPoints,
+          motPoints: mgrFx.motPoints,
+          bandKey: mgrFx.band.key,
+          bandLabel: mgrFx.band.label,
+          bandFanView: mgrFx.band.fanView,
+          matchBoost: mgrFx.matchBoost,
+          loyaltyOffset: mgrFx.loyaltyOffset,
+          pointsToNext: mgrFx.pointsToNext,
+          repPointsToNext: mgrFx.repPointsToNext,
+          motPointsToNext: mgrFx.motPointsToNext,
+          nextBandLabel: mgrFx.nextBand?.label ?? null,
+          nextBandBoost: mgrFx.nextBand?.matchBoost ?? null,
+          // DEPRECATED alias — API worker a Pages se deployují zvlášť, starý FE by jinak
+          // na jeden release ukázal undefined. Smazat v příštím releasu.
+          weeklyLoyaltyBoost: mgrFx.loyaltyOffset,
         }
       : null,
   });

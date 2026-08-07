@@ -3,6 +3,7 @@
  * Spouští trénink, recovery kondice, injury healing, pitch degradation, morale drift.
  */
 
+import { managerFansEffect } from "@okresni-masina/shared";
 import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
 import { simulateTraining } from "./training";
@@ -721,14 +722,36 @@ export async function executeDailyTick(
      END, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
   ).run().catch((e) => logger.warn({ module: "daily-tick" }, "fans satisfaction drift", e));
 
-  // Fans loyalty slowly tracks team reputation (1 bod denně)
-  await env.DB.prepare(
-    `UPDATE fans SET loyalty = CASE
-       WHEN (SELECT reputation FROM teams WHERE teams.id = fans.team_id) > loyalty THEN MIN(100, loyalty + 1)
-       WHEN (SELECT reputation FROM teams WHERE teams.id = fans.team_id) < loyalty THEN MAX(0, loyalty - 1)
-       ELSE loyalty
-     END`,
-  ).run().catch((e) => logger.warn({ module: "daily-tick" }, "fans loyalty drift", e));
+  // Loajalita míří k rovnovážné hladině = reputace týmu POSUNUTÁ o vliv trenéra (1 bod denně).
+  // Posouvá se cíl, ne hodnota — jednorázový bonus by tenhle drift druhý den smazal.
+  const loyaltyRows = await env.DB.prepare(
+    `SELECT f.team_id, f.loyalty, t.reputation AS team_rep,
+            m.reputation AS mgr_rep, m.motivation AS mgr_mot
+       FROM fans f
+       JOIN teams t ON t.id = f.team_id
+       LEFT JOIN managers m ON m.team_id = f.team_id`,
+  ).all<{ team_id: string; loyalty: number; team_rep: number | null; mgr_rep: number | null; mgr_mot: number | null }>()
+    .catch((e) => {
+      logger.warn({ module: "daily-tick" }, "load loyalty targets", e);
+      return { results: [] as Array<{ team_id: string; loyalty: number; team_rep: number | null; mgr_rep: number | null; mgr_mot: number | null }> };
+    });
+
+  const loyaltyStmts: D1PreparedStatement[] = [];
+  for (const row of loyaltyRows.results ?? []) {
+    const offset = (row.mgr_rep != null && row.mgr_mot != null)
+      ? managerFansEffect(row.mgr_rep, row.mgr_mot).loyaltyOffset
+      : 0;
+    const target = Math.max(0, Math.min(100, (row.team_rep ?? 50) + offset));
+    if (row.loyalty === target) continue;
+    loyaltyStmts.push(
+      env.DB.prepare("UPDATE fans SET loyalty = ? WHERE team_id = ?")
+        .bind(row.loyalty < target ? row.loyalty + 1 : row.loyalty - 1, row.team_id),
+    );
+  }
+  if (loyaltyStmts.length > 0) {
+    await env.DB.batch(loyaltyStmts)
+      .catch((e) => logger.warn({ module: "daily-tick" }, "fans loyalty drift batch", e));
+  }
 
   logger.info({ module: "daily-tick" }, "reached game date advancement section");
   // ── Advance game date for ALL teams (including AI) ──

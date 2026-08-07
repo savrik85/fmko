@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MANAGER_FANS, MANAGER_FANS_BANDS } from "@okresni-masina/shared";
 import { ATTRIBUTE_INFO, type AttrKey, type Pos } from "@/lib/attribute-info";
 import { TACTIC_INFO, FORMATION_INFO, type TacticKey } from "@/lib/tactic-info";
 
@@ -180,6 +181,69 @@ export default function NapovedaPage() {
           <div className="border border-gray-200 rounded-lg p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Rozvoj mládeže</div>
             <p className="text-xs text-muted">Bonus k tréninku pro hráče do 22 let. Při hodnotě 60 navíc +26 % k šanci na zlepšení.</p>
+          </div>
+          <div className="border border-gray-200 rounded-lg p-3">
+            <div className="font-heading font-bold text-sm mb-0.5">Reputace</div>
+            <p className="text-xs text-muted">Co má trenér za sebou (15–75). Roste výhrami a umístěním na konci sezóny, klesá prohrami. Spolu s motivací určuje, jak ho berou fanoušci.</p>
+          </div>
+        </div>
+
+        {/* Vliv trenéra na fanoušky */}
+        <div className="pt-3 border-t border-gray-100">
+          <h3 className="font-heading font-bold text-base mb-1">Vliv trenéra na fanoušky</h3>
+          <p className="text-sm text-muted mb-3">
+            Z reputace a motivace se počítá jedno číslo — <strong className="text-ink">vliv</strong>:{" "}
+            <span className="tabular-nums">0,6 × reputace + 0,4 × motivace</span>. Neutrál je {MANAGER_FANS.NEUTRAL}.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b-2 border-gray-200">
+                  <th className="text-left py-2 px-2 font-heading uppercase text-xs text-muted">Vliv</th>
+                  <th className="text-right py-2 px-2 font-heading uppercase text-xs text-muted">Po zápase</th>
+                  <th className="text-right py-2 px-2 font-heading uppercase text-xs text-muted">Loajalita</th>
+                  <th className="text-left py-2 px-2 font-heading uppercase text-xs text-muted">Jak to fanoušci berou</th>
+                </tr>
+              </thead>
+              <tbody>
+                {MANAGER_FANS_BANDS.map((band, i) => {
+                  const upper = i === 0 ? null : MANAGER_FANS_BANDS[i - 1].min - 1;
+                  const range = upper === null
+                    ? `${band.min} a víc`
+                    : band.min === 0 ? `${upper} a míň` : `${band.min}–${upper}`;
+                  const tone = band.matchBoost > 0 ? "text-pitch-500" : band.matchBoost < 0 ? "text-card-red" : "text-ink";
+                  return (
+                    <tr key={band.key} className="border-b border-gray-50">
+                      <td className="py-2 px-2 tabular-nums whitespace-nowrap">{range}</td>
+                      <td className={`py-2 px-2 text-right tabular-nums font-heading font-bold ${tone}`}>
+                        {band.matchBoost > 0 ? "+" : ""}{band.matchBoost}
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums text-muted">
+                        {band.loyaltyOffset > 0 ? "+" : ""}{band.loyaltyOffset}
+                      </td>
+                      <td className="py-2 px-2 text-xs text-muted">{band.fanView}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="text-sm text-muted mt-3 space-y-1">
+            <p>
+              <strong className="text-ink">Po zápase</strong> se hodnota přičte ke spokojenosti fanoušků
+              — pro srovnání: výhra je +6, prohra −5. <strong className="text-ink">Loajalita</strong> je
+              hladina, ke které se spokojenost každý den o bod vrací.
+            </p>
+            <p>
+              <strong className="text-ink">Jak reputaci hýbat:</strong> výhra +1 (o tři a víc gólů +2),
+              prohra −1 (debakl −2), projeví se asi v třetině zápasů. Konec sezóny: ve čtrnáctičlenné
+              lize první místo +11, poslední −11. Pohár: čtvrtfinále +3, semifinále +5, výhra ve finále +8.
+            </p>
+            <p>
+              <strong className="text-ink">Motivace</strong> roste jen umístěním v horní polovině tabulky
+              na konci sezóny (+1). Ve spodní polovině je poloviční šance na −1, a zhruba každá osmá
+              prohra sebere bod motivace nebo disciplíny.
+            </p>
           </div>
         </div>
       </section>

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import { MANAGER_FANS_BANDS } from "@okresni-masina/shared";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm } from "@/components/ui";
@@ -27,10 +29,25 @@ interface FansData {
   lastMatchDelta: number;
   lastMatchReasons: string[];
   manager: {
+    name: string;
     reputation: number;
     motivation: number;
+    influence: number;
+    neutral: number;
+    repWeight: number;
+    motWeight: number;
+    repPoints: number;
+    motPoints: number;
+    bandKey: string;
+    bandLabel: string;
+    bandFanView: string;
     matchBoost: number;
-    weeklyLoyaltyBoost: number;
+    loyaltyOffset: number;
+    pointsToNext: number;
+    repPointsToNext: number;
+    motPointsToNext: number;
+    nextBandLabel: string | null;
+    nextBandBoost: number | null;
   } | null;
 }
 
@@ -1062,88 +1079,175 @@ export default function FansPage() {
 
       {/* ═══ Trenér → Fanoušci ═══ */}
       {fans.manager && (() => {
-        const rep = fans.manager.reputation;
-        const mot = fans.manager.motivation;
-        const match = fans.manager.matchBoost;
-        const weekly = fans.manager.weeklyLoyaltyBoost;
-        const isPositive = match > 0;
-        const isNegative = match < 0;
-        const strong = rep >= 65 || mot >= 65;
-        const weak = rep < 40 || mot < 40;
-        const repLabel = rep >= 65 ? "Respektovaný" : rep >= 50 ? "Průměrný" : rep >= 35 ? "Slabší" : "Nezkušený";
-        const motLabel = mot >= 65 ? "Nadšený" : mot >= 50 ? "V pohodě" : mot >= 35 ? "Unavený" : "Vyhořelý";
-        const impactBg = isPositive ? "bg-pitch-50" : isNegative ? "bg-red-50" : "bg-gray-50";
-        const impactTint = isPositive ? "text-pitch-600" : isNegative ? "text-card-red" : "text-muted";
+        const m = fans.manager;
+        const tone = (v: number) => v > 0 ? "text-pitch-500" : v < 0 ? "text-card-red" : "text-ink";
+        const sign = (v: number) => `${v > 0 ? "+" : ""}${v}`;
         return (
         <div className="card p-4 sm:p-5">
           <SectionLabel>Vliv trenéra na fanoušky</SectionLabel>
+
+          {/* — Kdo a jak na tom je — */}
+          <div className="mb-4">
+            <Link
+              href={`/dashboard/manager/${teamId}`}
+              className="font-heading font-bold text-base text-ink hover:text-pitch-600 underline decoration-pitch-500/25 transition-colors"
+            >
+              {m.name}
+            </Link>
+            <div className="text-sm text-ink mt-0.5">
+              <span className="font-heading font-bold">{m.bandLabel}</span>
+              <span className="text-muted"> · vliv {m.influence} / 100</span>
+            </div>
+            <div className="text-sm text-muted mt-1">„{m.bandFanView}"</div>
+          </div>
+
           <div className="text-sm text-muted mb-4">
-            Trenér s reputací a motivací nad průměrem (50) pomáhá spokojenosti fanoušků.
-            Slabý nebo nemotivovaný trenér naopak fanoušky zklamává.
+            Fanoušci sledují, koho máš na lavičce. Z reputace a motivace trenéra počítáme jedno
+            číslo — <strong className="text-ink">vliv</strong>. Ten po každém zápase přidá nebo ubere
+            body spokojenosti a dlouhodobě posouvá hladinu loajality.
           </div>
 
-          {/* Stats s progress bary */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-            <div>
-              <div className="flex items-baseline justify-between mb-1.5">
-                <span className="text-xs font-heading font-bold text-muted uppercase tracking-widest">Reputace</span>
-                <span className="text-xs text-muted">{repLabel}</span>
-              </div>
-              <div className="flex items-baseline gap-2 mb-1.5">
-                <span className={`font-heading font-bold text-3xl tabular-nums leading-none ${rep >= 50 ? "text-pitch-500" : "text-card-red"}`}>
-                  {rep}
-                </span>
-                <span className="text-xs text-muted">/ 100</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-1.5">
-                <div
-                  className={`h-1.5 rounded-full transition-all ${rep >= 65 ? "bg-pitch-500" : rep >= 50 ? "bg-pitch-400" : rep >= 35 ? "bg-gold-500" : "bg-card-red"}`}
-                  style={{ width: `${rep}%` }}
-                />
-              </div>
+          {/* — Z čeho se vliv počítá — */}
+          <div className="bg-gray-50 rounded-lg p-4 mb-4">
+            <div className="text-sm font-heading font-bold text-ink mb-3">Z čeho se vliv počítá</div>
+            <div className="space-y-3">
+              {[
+                { label: "Reputace", value: m.reputation, weight: m.repWeight, points: m.repPoints },
+                { label: "Motivace", value: m.motivation, weight: m.motWeight, points: m.motPoints },
+              ].map((row) => (
+                <div key={row.label}>
+                  <div className="flex items-baseline justify-between text-sm mb-1">
+                    <span className="text-ink">
+                      {row.label} <span className="tabular-nums font-heading font-bold">{row.value}</span>
+                      <span className="text-muted"> / 100</span>
+                    </span>
+                    <span className="text-muted tabular-nums">
+                      × {row.weight.toString().replace(".", ",")} →{" "}
+                      <span className="text-ink font-heading font-bold">
+                        {row.points.toFixed(1).replace(".", ",")}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div
+                      className="h-1.5 rounded-full bg-pitch-500 transition-all"
+                      style={{ width: `${Math.max(0, Math.min(100, row.value))}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
-            <div>
-              <div className="flex items-baseline justify-between mb-1.5">
-                <span className="text-xs font-heading font-bold text-muted uppercase tracking-widest">Motivace</span>
-                <span className="text-xs text-muted">{motLabel}</span>
-              </div>
-              <div className="flex items-baseline gap-2 mb-1.5">
-                <span className={`font-heading font-bold text-3xl tabular-nums leading-none ${mot >= 50 ? "text-pitch-500" : "text-card-red"}`}>
-                  {mot}
-                </span>
-                <span className="text-xs text-muted">/ 100</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-1.5">
-                <div
-                  className={`h-1.5 rounded-full transition-all ${mot >= 65 ? "bg-pitch-500" : mot >= 50 ? "bg-pitch-400" : mot >= 35 ? "bg-gold-500" : "bg-card-red"}`}
-                  style={{ width: `${mot}%` }}
-                />
-              </div>
+            <div className="flex items-baseline justify-between text-sm mt-3 pt-3 border-t border-gray-200">
+              <span className="font-heading font-bold text-ink">Vliv trenéra</span>
+              <span className="tabular-nums">
+                <span className="font-heading font-bold text-lg text-ink">{m.influence}</span>
+                <span className="text-muted"> · neutrál je {m.neutral}</span>
+              </span>
+            </div>
+            <div className="text-sm text-muted mt-2">
+              Reputace váží víc — fanoušky zajímá hlavně to, co má trenér za sebou. Motivace je doplněk.
             </div>
           </div>
 
-          {/* Dopad - tinted panel */}
-          <div className={`${impactBg} rounded-lg p-4`}>
-            <div className={`text-sm font-heading font-bold mb-3 ${impactTint}`}>
-              {isPositive ? "✓ Pozitivní vliv na fanoušky" : isNegative ? "✗ Negativní vliv na fanoušky" : "◯ Neutrální vliv"}
-              {strong && " — fanoušci trenéra respektují"}
-              {weak && " — fanoušci jsou zklamaní"}
+          {/* — Žebříček stupňů — */}
+          <div className="mb-4">
+            <div className="text-sm font-heading font-bold text-ink mb-2">Stupně vlivu</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-1.5 pr-3 font-heading uppercase text-xs text-muted tracking-widest">Vliv</th>
+                    <th className="text-right py-1.5 px-2 font-heading uppercase text-xs text-muted tracking-widest whitespace-nowrap">Po zápase</th>
+                    <th className="text-right py-1.5 px-2 font-heading uppercase text-xs text-muted tracking-widest">Loajalita</th>
+                    <th className="text-left py-1.5 pl-3 font-heading uppercase text-xs text-muted tracking-widest">Jak to fanoušci berou</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {MANAGER_FANS_BANDS.map((band, i) => {
+                    const isCurrent = band.key === m.bandKey;
+                    const upper = i === 0 ? null : MANAGER_FANS_BANDS[i - 1].min - 1;
+                    const range = upper === null
+                      ? `${band.min} a víc`
+                      : band.min === 0 ? `${upper} a míň` : `${band.min}–${upper}`;
+                    return (
+                      <tr
+                        key={band.key}
+                        className={isCurrent
+                          ? "bg-pitch-50 border-l-2 border-pitch-500"
+                          : "border-b border-gray-50"}
+                      >
+                        <td className={`py-2 pr-3 tabular-nums whitespace-nowrap ${isCurrent ? "pl-2 font-heading font-bold text-ink" : "text-muted"}`}>
+                          {range}
+                        </td>
+                        <td className={`py-2 px-2 text-right tabular-nums font-heading font-bold ${tone(band.matchBoost)}`}>
+                          {sign(band.matchBoost)}
+                        </td>
+                        <td className={`py-2 px-2 text-right tabular-nums ${isCurrent ? "text-ink" : "text-muted"}`}>
+                          {sign(band.loyaltyOffset)}
+                        </td>
+                        <td className={`py-2 pl-3 ${isCurrent ? "text-ink" : "text-muted"}`}>{band.fanView}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white/70 rounded-lg p-3">
-                <div className="text-xs text-muted mb-1">Po každém zápase</div>
-                <div className={`font-heading font-bold text-2xl tabular-nums ${match > 0 ? "text-pitch-500" : match < 0 ? "text-card-red" : "text-ink"}`}>
-                  {match > 0 ? "+" : ""}{match}
-                </div>
-                <div className="text-xs text-muted mt-0.5">spokojenost</div>
+            <div className="text-sm text-muted mt-3 space-y-1">
+              <p>
+                <strong className="text-ink">Po zápase</strong> se hodnota přičte ke spokojenosti —
+                pro srovnání: výhra je +6, prohra −5, drahé vstupné −2.
+              </p>
+              <p>
+                <strong className="text-ink">Loajalita</strong> je hladina, ke které se spokojenost
+                každý den o bod vrací. Trenér tu hladinu posouvá proti reputaci klubu. Přes 100 se
+                ale nedostane — když má klub reputaci 100, kladný posun se ztratí ve stropu.
+              </p>
+            </div>
+          </div>
+
+          {/* — Co s tím — */}
+          <div className="pt-4 border-t border-gray-100">
+            {m.nextBandLabel !== null && m.nextBandBoost !== null ? (
+              <div className="text-sm font-heading font-bold text-pitch-600 mb-3">
+                Do stupně {m.nextBandLabel} ({sign(m.nextBandBoost)} po zápase) ti chybí{" "}
+                {m.pointsToNext} {m.pointsToNext === 1 ? "bod" : m.pointsToNext < 5 ? "body" : "bodů"} vlivu
+                — to je {m.repPointsToNext} bodů reputace nebo {m.motPointsToNext} bodů motivace.
               </div>
-              <div className="bg-white/70 rounded-lg p-3">
-                <div className="text-xs text-muted mb-1">Týdně</div>
-                <div className={`font-heading font-bold text-2xl tabular-nums ${weekly > 0 ? "text-pitch-500" : weekly < 0 ? "text-card-red" : "text-ink"}`}>
-                  {weekly > 0 ? "+" : ""}{weekly}
-                </div>
-                <div className="text-xs text-muted mt-0.5">loajalita</div>
+            ) : (
+              <div className="text-sm font-heading font-bold text-pitch-600 mb-3">
+                Jsi na nejvyšším stupni. Fanoušky víc nepotěšíš — soustřeď se na výsledky a vstupné.
               </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <div className="text-sm font-heading font-bold text-ink mb-1.5">
+                  Reputace trenéra <span className="text-muted font-normal">(15–75, teď {m.reputation})</span>
+                </div>
+                <ul className="text-sm text-muted space-y-1 list-disc list-inside">
+                  <li>Výhra <strong className="text-ink">+1</strong>, o tři a víc gólů <strong className="text-ink">+2</strong>. Projeví se zhruba v každém třetím zápase.</li>
+                  <li>Prohra <strong className="text-ink">−1</strong>, debakl o tři a víc <strong className="text-ink">−2</strong>, taky asi v třetině případů.</li>
+                  <li>Konec sezóny je nejsilnější páka: ve čtrnáctičlenné lize dá první místo <strong className="text-ink">+11</strong>, poslední <strong className="text-ink">−11</strong>.</li>
+                  <li>Pohár: čtvrtfinále <strong className="text-ink">+3</strong>, semifinále <strong className="text-ink">+5</strong>, výhra ve finále <strong className="text-ink">+8</strong>.</li>
+                  <li>Nad 75 to nejde, pod 15 taky ne.</li>
+                </ul>
+              </div>
+              <div>
+                <div className="text-sm font-heading font-bold text-ink mb-1.5">
+                  Motivace <span className="text-muted font-normal">(1–99, teď {m.motivation})</span>
+                </div>
+                <ul className="text-sm text-muted space-y-1 list-disc list-inside">
+                  <li>Konec sezóny v horní polovině tabulky: <strong className="text-ink">+1</strong>.</li>
+                  <li>Ve spodní polovině je padesátiprocentní šance na <strong className="text-ink">−1</strong>.</li>
+                  <li>Zhruba každá osmá prohra (debakl každá čtvrtá) sebere bod motivace nebo disciplíny.</li>
+                  <li>Motivace sama neroste. Jediná spolehlivá cesta je držet tým v horní polovině.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="text-sm text-muted mt-4 pt-3 border-t border-gray-100">
+              Spokojenost není kosmetika: násobí návštěvnost (0,75× až 1,25×), cenu vstupenky
+              (0,7× až 1,3×) i tržby v bufetu.
             </div>
           </div>
         </div>

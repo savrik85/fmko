@@ -262,23 +262,10 @@ export async function processWeeklyFinances(
     }
   }
 
-  // 9. Manager → fans loyalty boost (weekly drift)
-  const mgrRow = await db.prepare(
-    "SELECT reputation, motivation FROM managers WHERE team_id = ?",
-  ).bind(teamId).first<{ reputation: number; motivation: number }>().catch((e) => {
-    logger.warn({ module: "finance" }, "load manager for loyalty drift", e);
-    return null;
-  });
-  if (mgrRow) {
-    const loyaltyDelta = Math.round(
-      (mgrRow.reputation - 50) * 0.02 + (mgrRow.motivation - 50) * 0.015,
-    );
-    if (loyaltyDelta !== 0) {
-      await db.prepare(
-        "UPDATE fans SET loyalty = MAX(0, MIN(100, loyalty + ?)), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ?",
-      ).bind(loyaltyDelta, teamId).run().catch((e) => logger.warn({ module: "finance" }, "mgr loyalty drift", e));
-    }
-  }
+  // 9. Trenér → loajalita se tady NEDĚLÁ. Jednorázový ±1 v pondělí druhý den smazal denní
+  //    drift v daily-ticku (loajalita se táhne k reputaci týmu rychlostí 1 bod/den), takže
+  //    to byl no-op. Trenér místo toho posouvá CÍL toho driftu — viz daily-tick.ts
+  //    a MANAGER_FANS_BANDS.loyaltyOffset v packages/shared.
 }
 
 /**

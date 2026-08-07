@@ -17,6 +17,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx turbo typecheck
+      - run: npx turbo test
 
   deploy-api-prod:
     needs: typecheck

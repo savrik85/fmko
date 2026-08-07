@@ -1,3 +1,4 @@
+import { managerFansEffect } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { CONCESSION_CATALOG, CONCESSION_PRODUCT_KEYS, type ProductKey } from "./concession-catalog";
 import { weatherBeerFactor } from "./weather";
@@ -125,11 +126,9 @@ export function computeMatchSatisfactionDelta(input: MatchSatisfactionInput): Ma
     }
   }
 
-  // 5. Trenér
+  // 5. Trenér — pásma podle vlivu (0,6 × reputace + 0,4 × motivace), viz shared/manager-fans.
   if (input.manager) {
-    const mgrBoost = Math.round(
-      (input.manager.reputation - 50) * 0.03 + (input.manager.motivation - 50) * 0.02,
-    );
+    const mgrBoost = managerFansEffect(input.manager.reputation, input.manager.motivation).matchBoost;
     if (mgrBoost !== 0) {
       delta += mgrBoost;
       reasons.push(`Trenér ${mgrBoost > 0 ? "+" : ""}${mgrBoost}`);
