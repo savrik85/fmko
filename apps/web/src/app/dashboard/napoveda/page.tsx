@@ -180,7 +180,7 @@ export default function NapovedaPage() {
           </div>
           <div className="border border-gray-200 rounded-lg p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Disciplína</div>
-            <p className="text-sm text-muted">Zatím nemá žádný herní efekt — mění se, ale nikde se nepoužívá. Přísnost tréninku, která hráčům ubírá morálku, se nastavuje zvlášť na stránce Tréninky.</p>
+            <p className="text-sm text-muted">Trenér, který drží kázeň, dostane na trénink víc lidí — kolem hodnoty 40 je to neutrální, výš i níž to hýbe docházkou. Přísnost tréninku, která hráčům ubírá morálku, se nastavuje zvlášť na stránce Tréninky.</p>
           </div>
           <div className="border border-gray-200 rounded-lg p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Rozvoj mládeže</div>

@@ -58,7 +58,7 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Koucink trenera", text: "Vzorec: 0.8 + (koucink/100) \u00D7 0.8. Pri koucink 40 = 1.12x, pri 80 = 1.44x. Primo nasobi sanci na zlepseni." },
       { heading: "Vek hrace", text: "Pod 20 let: 1.3x bonus. 20\u201324: 1.15x. 25\u201329: zadny bonus. 30\u201333: 0.7x. 34\u201337: 0.4x. Nad 38: 0.15x. Starsi hraci se zlepsuj\u00ED mnohem pomaleji." },
       { heading: "Rozvoj mladeze", text: "Hraci do 22 let maji extra bonus z vlastnosti trenera: 0.9 + (rozvoj/100) \u00D7 0.6. Pri rozvoj=60 je to 1.26x navic." },
-      { heading: "Dochazka", text: "Zavisit na discipline hrace (zaklad: disciplina/100 \u00D7 0.6 + 0.3). Alkohol > 70 snizuje o 10 %. Moralka < 30 snizuje o 15 %. Kazdy km dojezdu snizuje o 0.8 %. Hrac co neprijde ztraci staminu (5 % sance na -1)." },
+      { heading: "Dochazka", text: "Zavisi na discipline HRACE (zaklad: disciplina/100 \u00D7 0,6 + 0,3) a na discipline TRENERA (kolem 40 neutralne, vys i niz to hybe dochazkou az o desetinu). Alkohol > 70 snizuje o 10 %. Moralka < 30 snizuje o 15 %. Kazdy km dojezdu snizuje o 0,8 %. Hrac co neprijde ztraci staminu (5 % sance na -1)." },
       { heading: "Pocet treninku/tyden", text: "1x = utery. 2x = ut+ct. 3x = po+st+pa. 4x = po+ut+ct+pa. 5x = vsechny pracovni dny. Vice treninku = vice sanci, ale vyssi naklady a unava hracu." },
       { heading: "Pristup", text: "Prisny: +10 % dochazka, ale hraci s nizkou disciplinou ztraci moralku. Volny: -10 % dochazka, ale +1 moralka (5 % sance). Vyvazeny: bez modifikatoru." },
       { text: "Veterani (37+) maji sanci na pokles fyzickych atributu: (vek-36) \u00D7 1 % na rychlost, staminu, silu.", tip: true },
