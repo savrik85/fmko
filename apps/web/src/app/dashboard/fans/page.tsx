@@ -13,6 +13,7 @@ interface ScheduleMatch {
   scheduledAt: string | null;
   isHome: boolean;
   isCup?: boolean;
+  roundName?: string | null;
   promoted?: boolean;
   promotionCost?: number | null;
 }
@@ -297,9 +298,8 @@ export default function FansPage() {
     setSalesHistory(s.matches ?? []);
     setFanbase(fb);
     setFanbaseHistory(fbh.history ?? []);
-    // Propagace i doprava fanoušků jsou vázané na ligové/přátelské zápasy (tabulka matches);
-    // pohár má oddělené tabulky a tyhle akce neumí → z „nejbližšího domácího" ho vyloučíme.
-    const home = sched.matches.find((m) => m.status !== "simulated" && m.isHome && !m.isCup) ?? null;
+    // Propagace i doprava fanoušků fungují pro ligové, přátelské i pohárové domácí zápasy.
+    const home = sched.matches.find((m) => m.status !== "simulated" && m.isHome) ?? null;
     setNextHomeMatch(home);
     setPromotionPrice((sched as { promotionPrice?: number }).promotionPrice ?? null);
     // Předvyplnit cenu vstupenky: user override, jinak automatická podle obce
@@ -637,6 +637,9 @@ export default function FansPage() {
             <SectionLabel>Před dalším domácím zápasem</SectionLabel>
             <div className="text-xs text-muted">
               vs <span className="font-heading font-bold text-ink">{nextHomeMatch.awayName}</span>
+              {nextHomeMatch.isCup && (
+                <> · <span className="font-heading font-bold text-gold-600">🏆 {nextHomeMatch.roundName ?? "Pohár"}</span></>
+              )}
               {nextHomeMatch.scheduledAt && (
                 <> · {new Date(nextHomeMatch.scheduledAt).toLocaleDateString("cs")}</>
               )}

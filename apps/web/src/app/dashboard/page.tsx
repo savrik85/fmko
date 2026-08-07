@@ -437,10 +437,10 @@ export default function DashboardPage() {
                 )}
                 <div className="text-center px-4 py-2">
                   <Link href="/dashboard/match" className="inline text-xs text-pitch-500 font-heading font-bold hover:underline">Sestava →</Link>
-                  {nextMatch.isHome && !nextMatch.isCup && nextMatch.promoted && (
+                  {nextMatch.isHome && nextMatch.promoted && (
                     <span className="inline ml-4 text-xs text-gold-600 font-heading font-bold">📢 Propagováno</span>
                   )}
-                  {nextMatch.isHome && !nextMatch.isCup && !nextMatch.promoted && (
+                  {nextMatch.isHome && !nextMatch.promoted && (
                     <button
                       onClick={() => promoteMatch(nextMatch)}
                       disabled={promoting}

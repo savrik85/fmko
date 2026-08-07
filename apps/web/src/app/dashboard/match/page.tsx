@@ -531,8 +531,8 @@ function MatchPage() {
         );
       })()}
 
-      {/* Bus z okolí — jen pro domácí ligové zápasy (ne přátelák, ne pohár) */}
-      {nextMatch?.isHome && !nextMatch.isFriendly && !nextMatch.isCup && teamId && (
+      {/* Bus z okolí — domácí ligové i pohárové zápasy (ne přátelák) */}
+      {nextMatch?.isHome && !nextMatch.isFriendly && teamId && (
         <BusSelector teamId={teamId} matchId={nextMatch.matchId} />
       )}
 

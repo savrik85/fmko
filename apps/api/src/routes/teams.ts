@@ -3292,7 +3292,9 @@ teamsRouter.post("/:id/match/:mid/bus", async (c) => {
     );
   }
 
-  const match = await c.env.DB.prepare(
+  // Zápas může být ligový/přátelský (matches) nebo pohárový (cup_matches) — u poháru je
+  // domácím tým navázaný přes cup_teams.team_id (velkoklub reálný tým nemá).
+  let match = await c.env.DB.prepare(
     `SELECT m.id, m.home_team_id, m.status, t.game_date
      FROM matches m JOIN teams t ON m.home_team_id = t.id
      WHERE m.id = ?`,
@@ -3308,6 +3310,27 @@ teamsRouter.post("/:id/match/:mid/bus", async (c) => {
       logger.warn({ module: "teams" }, "load match for bus order", e);
       return null;
     });
+
+  if (!match) {
+    match = await c.env.DB.prepare(
+      `SELECT cm.id, hc.team_id AS home_team_id, cm.status, t.game_date
+       FROM cup_matches cm
+       JOIN cup_teams hc ON hc.id = cm.home_cup_team_id
+       JOIN teams t ON t.id = hc.team_id
+       WHERE cm.id = ?`,
+    )
+      .bind(matchId)
+      .first<{
+        id: string;
+        home_team_id: string;
+        status: string;
+        game_date: string;
+      }>()
+      .catch((e) => {
+        logger.warn({ module: "teams" }, "load cup match for bus order", e);
+        return null;
+      });
+  }
 
   if (!match) {
     return c.json({ error: "Zápas nenalezen" }, 404);

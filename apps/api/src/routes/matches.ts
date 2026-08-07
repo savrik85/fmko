@@ -340,7 +340,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     const { roundName } = await import("../cup/cup");
     const cupRows = await c.env.DB.prepare(
       `SELECT cm.id, cm.round, cm.status, cm.scheduled_at, cm.home_score, cm.away_score, cm.home_pens, cm.away_pens,
-         cm.home_cup_team_id, cc.total_rounds,
+         cm.home_cup_team_id, cm.promoted, cm.promotion_cost, cm.promotion_boost, cc.total_rounds,
          ht.name AS home_name, ht.primary_color AS home_color, ht.team_id AS home_real_id,
          at.name AS away_name, at.primary_color AS away_color, at.team_id AS away_real_id,
          myct.id AS my_cup_team_id,
@@ -377,9 +377,9 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
         isCup: true,
         isHome,
         simulatedAt: null,
-        promoted: false,
-        promotionCost: null,
-        promotionBoost: 1.0,
+        promoted: (row.promoted as number | null) === 1,
+        promotionCost: (row.promotion_cost as number | null) ?? null,
+        promotionBoost: (row.promotion_boost as number | null) ?? 1.0,
         presetSlot: null,
         hasLineup: (row.has_lineup as number) > 0,
         isDefaultLineup: false,
@@ -420,6 +420,22 @@ const PROMO_BODIES: string[] = [
   "Před zápasem {team} vs {opp} proudí do {village} nezvyklé množství propagace. Reklamy visí u hřiště, na zastávkách i v hospodách. Očekává se znatelně vyšší návštěva než obvykle.",
 ];
 
+// Pohárová varianta — v poháru hraje vesnický klub o postup, propagace má jiný náboj.
+const CUP_PROMO_HEADLINES: string[] = [
+  "{team} zve na pohár: {round} proti {opp}",
+  "Pohárový svátek v {village} — {team} vs {opp}",
+  "{team} láká na {round} poháru s {opp}",
+  "Plakáty po celé {village}: {team} hraje {round} proti {opp}",
+  "{team}: „Pohár se hraje jednou, přijďte všichni!“",
+];
+const CUP_PROMO_BODIES: string[] = [
+  "V {village} visí plakáty na každém sloupu — {team} vyzývá k pohárovému zápasu proti {opp}. Vedení klubu ví, že pohár se nehraje každý týden: rozhlas hlásí od rána, stánek s pivem bude posílený a tribuna vydrhnutá. „Takový zápas si tady nezahrajeme každou sezónu,“ hlásí pořadatelé.",
+  "Pohár přivádí do {village} soupeře, který sem normálně nezavítá. {team} proto rozjel propagaci naplno — hlášení v rozhlase, plakáty v hospodě i u obchodu a pozvánka pro celou obec. Proti {opp} se čeká nabité hřiště.",
+  "„Na pohár se chodí,“ píše se na plakátech {team}. Klub zve celou {village} na duel s {opp} a slibuje atmosféru, jaká v lize nebývá. Grill bude roztopený, sud vychlazený a hřiště nachystané.",
+  "V {village} se mluví jen o poháru. {team} vyrukoval s kampaní před zápasem s {opp} — a nešetřil. Starosta prý přijde s rodinou, hasiči slíbili pomoct s pořadatelstvím a fanoušci se těší na vyprodáno.",
+  "Před pohárovým zápasem {team} vs {opp} zaplavila {village} propagace. Reklamy u hřiště, na zastávkách i v hospodách. Kdo v {village} ještě neví, že se hraje pohár, ten už asi nechodí ven.",
+];
+
 function promoCost(category: string): number {
   return category === "vesnice" ? 500
        : category === "obec" ? 1000
@@ -435,8 +451,11 @@ matchesRouter.post("/teams/:teamId/matches/:matchId/promote", async (c) => {
   const teamId = c.req.param("teamId");
   const matchId = c.req.param("matchId");
 
-  // Načíst zápas a ověřit validaci
-  const match = await c.env.DB.prepare(
+  // Načíst zápas a ověřit validaci. Zápas může být ligový/přátelský (matches) nebo
+  // pohárový (cup_matches) — u poháru se domácí tým dohledá přes cup_teams.team_id.
+  let isCupMatch = false;
+  let cupRoundLabel: string | null = null;
+  let match = await c.env.DB.prepare(
     `SELECT m.*, ht.name as home_name, at.name as away_name, ht.league_id as league_id,
             v.name as village_name, v.size as village_size, ht.game_date as game_date
      FROM matches m
@@ -448,6 +467,31 @@ matchesRouter.post("/teams/:teamId/matches/:matchId/promote", async (c) => {
     logger.warn({ module: "matches" }, "load match for promote", e);
     return null;
   });
+
+  if (!match) {
+    const cupRow = await c.env.DB.prepare(
+      `SELECT cm.id, cm.status, cm.promoted, cm.round, cc.total_rounds,
+              hc.name as home_name, ac.name as away_name,
+              t.league_id as league_id, t.game_date as game_date,
+              v.name as village_name, v.size as village_size
+       FROM cup_matches cm
+       JOIN cup_competitions cc ON cc.id = cm.cup_id
+       JOIN cup_teams hc ON hc.id = cm.home_cup_team_id
+       JOIN cup_teams ac ON ac.id = cm.away_cup_team_id
+       JOIN teams t ON t.id = hc.team_id
+       JOIN villages v ON v.id = t.village_id
+       WHERE cm.id = ? AND hc.team_id = ?`,
+    ).bind(matchId, teamId).first<Record<string, unknown>>().catch((e) => {
+      logger.warn({ module: "matches" }, "load cup match for promote", e);
+      return null;
+    });
+    if (cupRow) {
+      match = cupRow;
+      isCupMatch = true;
+      const { roundName } = await import("../cup/cup");
+      cupRoundLabel = roundName(cupRow.round as number, cupRow.total_rounds as number);
+    }
+  }
 
   if (!match) {
     return c.json({ error: "Zápas nenalezen nebo nejsi domácí tým" }, 404);
@@ -490,7 +534,9 @@ matchesRouter.post("/teams/:teamId/matches/:matchId/promote", async (c) => {
 
   // 2. Označit zápas
   await c.env.DB.prepare(
-    "UPDATE matches SET promoted = 1, promotion_cost = ?, promotion_boost = ? WHERE id = ?",
+    isCupMatch
+      ? "UPDATE cup_matches SET promoted = 1, promotion_cost = ?, promotion_boost = ? WHERE id = ?"
+      : "UPDATE matches SET promoted = 1, promotion_cost = ?, promotion_boost = ? WHERE id = ?",
   ).bind(cost, PROMO_BOOST, matchId).run();
 
   // 3. Pokusit se vygenerovat AI článek, fallback na statický pool
@@ -500,6 +546,7 @@ matchesRouter.post("/teams/:teamId/matches/:matchId/promote", async (c) => {
     c.env.GEMINI_API_KEY,
     matchId,
     teamId,
+    isCupMatch ? { isCup: true, roundName: cupRoundLabel } : undefined,
   ).catch((e) => {
     logger.warn({ module: "matches" }, "ai promo generation failed", e);
     return null;
@@ -510,6 +557,18 @@ matchesRouter.post("/teams/:teamId/matches/:matchId/promote", async (c) => {
   if (ai) {
     headline = ai.headline;
     body = ai.body;
+  } else if (isCupMatch) {
+    const round = cupRoundLabel ?? "pohár";
+    headline = pickOne(CUP_PROMO_HEADLINES)
+      .replace("{team}", homeName)
+      .replace("{opp}", awayName)
+      .replace("{round}", round)
+      .replace("{village}", villageName);
+    body = pickOne(CUP_PROMO_BODIES)
+      .replace(/\{team\}/g, homeName)
+      .replace(/\{opp\}/g, awayName)
+      .replace(/\{village\}/g, villageName)
+      .replace(/\{round\}/g, round);
   } else {
     headline = pickOne(PROMO_HEADLINES)
       .replace("{team}", homeName)

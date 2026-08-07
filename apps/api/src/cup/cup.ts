@@ -330,17 +330,19 @@ function buildCupLineupData(
 }
 
 /**
- * Domácí návštěva pohárového zápasu — zjednodušená obdoba ligy (fanbase + reputace + forma
- * + spokojenost + počasí, cap kapacitou stadionu). Bez pohár-neexistujících faktorů
- * (propagace, bus, derby, zastupitelé). Vrací null pokud domácí není reálný tým (velkoklub).
+ * Domácí návštěva pohárového zápasu — plná obdoba ligy (fanbase + reputace + forma + dovoz
+ * fanoušků autobusem + propagace + spokojenost + počasí, cap kapacitou stadionu). Bez faktorů,
+ * které v poháru nedávají smysl (derby dle vztahů manažerů — soupeřem bývá velkoklub).
+ * Vrací null pokud domácí není reálný tým (velkoklub).
  */
-async function cupHomeMatchContext(db: D1Database, homeRealTeamId: string | null, weather: Weather):
+async function cupHomeMatchContext(db: D1Database, homeRealTeamId: string | null, weather: Weather, cupMatchId: string):
   Promise<{ attendance: number; stadiumName: string | null; pitchCondition: number } | null> {
   if (!homeRealTeamId) return null;
   try {
     const { loadFanbaseAggregate, loadRegionalPopulation, expectedAttendance } = await import("../season/fanbase-helpers");
     const { weatherAttendanceFactor } = await import("../season/weather");
     const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
+    const { BUS_CONFIG } = await import("../season/fanbase-config");
 
     const team = await db.prepare(
       "SELECT t.reputation, v.population FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?"
@@ -367,14 +369,53 @@ async function cupHomeMatchContext(db: D1Database, homeRealTeamId: string | null
     const stadiumCapacity = ((stadiumRow?.capacity as number) ?? 200) + fx.capacityBonus;
     const stadiumName = (await db.prepare("SELECT stadium_name FROM teams WHERE id = ?").bind(homeRealTeamId).first<{ stadium_name: string | null }>().catch((e) => { logger.warn({ module: M }, "cup home stadium name", e); return null; }))?.stadium_name ?? null;
 
+    // Dovoz fanoušků — objednané autobusy z okolních obcí (stejně jako u ligy)
+    const busRows = await db.prepare(
+      "SELECT bus_size FROM bus_subsidies WHERE team_id = ? AND match_id = ?"
+    ).bind(homeRealTeamId, cupMatchId).all<{ bus_size: keyof typeof BUS_CONFIG.SIZES }>()
+      .catch((e) => { logger.warn({ module: M }, "cup bus subsidies for attendance", e); return { results: [] as Array<{ bus_size: keyof typeof BUS_CONFIG.SIZES }> }; });
+    let busDropIn = 0;
+    for (const b of busRows.results) {
+      const cfg = BUS_CONFIG.SIZES[b.bus_size];
+      if (cfg) busDropIn += Math.round(cfg.attendeesMin + Math.random() * (cfg.attendeesMax - cfg.attendeesMin));
+    }
+
+    // Propagace zápasu — klub zaplatil plakáty a rozhlas, přijde víc lidí
+    const promoRow = await db.prepare("SELECT promotion_boost FROM cup_matches WHERE id = ?")
+      .bind(cupMatchId).first<{ promotion_boost: number | null }>()
+      .catch((e) => { logger.warn({ module: M }, "cup promotion boost", e); return null; });
+    const promoBoost = promoRow?.promotion_boost ?? 1.0;
+
     const wf = weatherAttendanceFactor(weather);
     const shieldedWeather = wf + (1 - wf) * fx.weatherAttendanceShield;
-    const rawAttendance = Math.max(8, popBase + repBonus + formBonus + Math.round(rng2(homeRealTeamId) * 10 - 5));
-    const attendance = Math.min(Math.round(rawAttendance * (1 + fx.attendanceBonus) * satMul * shieldedWeather), stadiumCapacity);
+    const rawAttendance = Math.max(8, popBase + repBonus + formBonus + busDropIn + Math.round(rng2(homeRealTeamId) * 10 - 5));
+    const attendance = Math.min(Math.round(rawAttendance * (1 + fx.attendanceBonus) * satMul * shieldedWeather * promoBoost), stadiumCapacity);
     return { attendance, stadiumName, pitchCondition: (stadiumRow?.pitch_condition as number) ?? 50 };
   } catch (e) {
     logger.warn({ module: M }, "cup home match context", e);
     return null;
+  }
+}
+
+/**
+ * Pozápasový dopad domácího pohárového zápasu na fanouškovskou základnu — stejný balík
+ * jako u ligy (match-runner): konverze cestujících z autobusů na stálé fanoušky dané obce
+ * a konverze z propagace. Volá se jen pro domácí reálný tým.
+ */
+async function applyCupHomeFanbase(db: D1Database, homeRealTeamId: string, cupMatchId: string, attendance: number): Promise<void> {
+  try {
+    const { applyBusConversion, applyPromoConversion } = await import("../season/fanbase-helpers");
+    const busResult = await applyBusConversion(db, homeRealTeamId, cupMatchId);
+    const promoRow = await db.prepare("SELECT promotion_boost FROM cup_matches WHERE id = ?")
+      .bind(cupMatchId).first<{ promotion_boost: number | null }>()
+      .catch((e) => { logger.warn({ module: M }, "cup promo boost for conversion", e); return null; });
+    const promoResult = await applyPromoConversion(db, homeRealTeamId, (promoRow?.promotion_boost ?? 1.0) > 1.0, attendance);
+    logger.info(
+      { module: M, teamId: homeRealTeamId, matchId: cupMatchId },
+      `cup fanbase post-match: bus drop-in=${busResult.totalDropIn} converted=${busResult.totalConverted} promo+${promoResult.converted} -${promoResult.lost}`,
+    );
+  } catch (e) {
+    logger.warn({ module: M }, "cup fanbase post-match update", e);
   }
 }
 
@@ -430,7 +471,7 @@ async function simulateCupTie(
     // I silová simulace (slabý předkolový soupeř): domácí zápas → návštěva + tržby pro domácí
     // reálný tým. Průběh/sestavy nejsou (bez plného enginu), ale výsledek + návštěva se uloží.
     try {
-      const ctx = await cupHomeMatchContext(db, homeReal, weather);
+      const ctx = await cupHomeMatchContext(db, homeReal, weather, cupMatchId);
       await db.prepare(
         "UPDATE cup_matches SET attendance = ?, stadium_name = ?, pitch_condition = ?, weather = ?, simulated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?"
       ).bind(ctx?.attendance ?? null, ctx?.stadiumName ?? null, ctx?.pitchCondition ?? null, weather, cupMatchId).run()
@@ -441,6 +482,7 @@ async function simulateCupTie(
         const gd = (await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(homeReal).first<{ game_date: string | null }>().catch((e) => { logger.warn({ module: M }, "cup fallback game_date", e); return null; }))?.game_date ?? new Date().toISOString();
         await processMatchDayFinances(db, homeReal, cupMatchId, true, homeResult, ctx.attendance, gd, strengthOf.get(awayCupTeamId) ?? 50, false, weather)
           .catch((e) => logger.warn({ module: M }, "cup fallback finances", e));
+        await applyCupHomeFanbase(db, homeReal, cupMatchId, ctx.attendance);
       }
     } catch (e) { logger.warn({ module: M }, "cup fallback tržby", e); }
     // Paušální únava + morálka reálného týmu i u silové simulace (odehráli zápas, jen bez
@@ -589,7 +631,7 @@ async function simulateCupTie(
   try {
     const homeLineupData = buildCupLineupData(homePre, homeSubs, homeBuild.idMap, homeLR?.formation ?? "4-4-2", "balanced");
     const awayLineupData = buildCupLineupData(awayPre, awaySubs, awayBuild.idMap, awayLR?.formation ?? "4-4-2", "balanced");
-    const ctx = await cupHomeMatchContext(db, homeReal, weather);
+    const ctx = await cupHomeMatchContext(db, homeReal, weather, cupMatchId);
 
     // Komentář (dějiště = okres domácího reálného týmu; velkoklub bez okresu)
     const nameRows = await db.prepare("SELECT id, name FROM cup_teams WHERE id = ? OR id = ?").bind(homeCupTeamId, awayCupTeamId).all<{ id: string; name: string }>()
@@ -645,6 +687,7 @@ async function simulateCupTie(
       const gd = (await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(homeReal).first<{ game_date: string | null }>().catch((e) => { logger.warn({ module: M }, "cup home game_date", e); return null; }))?.game_date ?? new Date().toISOString();
       await processMatchDayFinances(db, homeReal, cupMatchId, true, homeResult, ctx.attendance, gd, strengthOf.get(awayCupTeamId) ?? 50, false, weather)
         .catch((e) => logger.warn({ module: M }, "cup home matchday finances", e));
+      await applyCupHomeFanbase(db, homeReal, cupMatchId, ctx.attendance);
     }
   } catch (e) {
     logger.warn({ module: M }, "cup match detail/finances", e);
@@ -831,7 +874,7 @@ export async function backfillCupFinances(db: D1Database): Promise<{ processed: 
   let processed = 0, skipped = 0;
   for (const m of rows.results) {
     const weather = (m.weather ?? "cloudy") as Weather;
-    const ctx = await cupHomeMatchContext(db, m.home_real, weather);
+    const ctx = await cupHomeMatchContext(db, m.home_real, weather, m.id);
     if (!ctx) { skipped++; continue; }
     // Návštěvu ulož PŘED financemi — attendance IS NULL guard tak brání dvojitému připsání.
     await db.prepare("UPDATE cup_matches SET attendance = ?, stadium_name = ?, pitch_condition = ? WHERE id = ? AND attendance IS NULL")

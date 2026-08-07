@@ -158,7 +158,7 @@ export default function SchedulePage() {
   const upcoming = matches.filter((m) => m.status !== "simulated");
   const upcomingIds = new Set(upcoming.map((m) => m.id));
 
-  const nextHome = upcoming.find((m) => m.isHome && !m.isCup); // pohár nemá propagaci
+  const nextHome = upcoming.find((m) => m.isHome); // ligový i pohárový domácí zápas lze propagovat
 
   return (
     <>
@@ -194,7 +194,7 @@ export default function SchedulePage() {
                     {nextHome.promoted ? "Zápas je propagovaný" : "Propagace dalšího zápasu"}
                   </div>
                   <div className="text-xs sm:text-sm text-muted mt-0.5 leading-tight">
-                    vs {nextHome.awayName} · {formatDate(nextHome.scheduledAt)}
+                    vs {nextHome.awayName} · {nextHome.isCup ? `🏆 ${nextHome.roundName ?? "Pohár"} · ` : ""}{formatDate(nextHome.scheduledAt)}
                     {nextHome.promoted && nextHome.promotionCost
                       ? <span className="hidden sm:inline"> — zaplaceno {nextHome.promotionCost.toLocaleString("cs")} Kč</span>
                       : null}

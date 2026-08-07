@@ -174,16 +174,63 @@ export async function generatePromotionalArticle(
   geminiApiKey: string | undefined,
   matchId: string,
   homeTeamId: string,
+  cupContext?: { isCup: true; roundName: string | null },
 ): Promise<{ headline: string; body: string } | null> {
   if (!geminiApiKey) {
     logger.warn({ module: "promo-generator" }, "no gemini key, skipping AI generation");
     return null;
   }
 
-  // 1. Match metadata — home/away teams, stadium, scheduled_at
-  const match = await db
-    .prepare(
-      `SELECT m.id, m.home_team_id, m.away_team_id, m.league_id, sc.scheduled_at,
+  interface PromoMatchRow {
+    home_team_id: string;
+    away_team_id: string | null;
+    league_id: string;
+    league_id2: string;
+    scheduled_at: string | null;
+    home_name: string;
+    stadium_name: string | null;
+    away_name: string;
+    home_village: string;
+    home_size: string;
+    home_pop: number;
+    home_district: string;
+    away_village: string | null;
+    away_size: string | null;
+    stadium_capacity: number | null;
+  }
+
+  // 1. Match metadata — home/away teams, stadium, scheduled_at.
+  //    Pohár má vlastní tabulky (cup_matches/cup_teams) a soupeř může být generovaný
+  //    velkoklub bez reálného týmu i obce → away_* pak zůstávají NULL.
+  const match = cupContext
+    ? await db
+        .prepare(
+          `SELECT cm.id, hc.team_id as home_team_id, ac.team_id as away_team_id,
+                  t.league_id as league_id, t.league_id as league_id2, cm.scheduled_at,
+                  hc.name as home_name, t.stadium_name,
+                  ac.name as away_name,
+                  hv.name as home_village, hv.size as home_size, hv.population as home_pop, hv.district as home_district,
+                  av.name as away_village, av.size as away_size,
+                  s.capacity as stadium_capacity
+           FROM cup_matches cm
+           JOIN cup_teams hc ON hc.id = cm.home_cup_team_id
+           JOIN cup_teams ac ON ac.id = cm.away_cup_team_id
+           JOIN teams t ON t.id = hc.team_id
+           LEFT JOIN villages hv ON hv.id = t.village_id
+           LEFT JOIN teams at ON at.id = ac.team_id
+           LEFT JOIN villages av ON av.id = at.village_id
+           LEFT JOIN stadiums s ON s.team_id = t.id
+           WHERE cm.id = ?`,
+        )
+        .bind(matchId)
+        .first<PromoMatchRow>()
+        .catch((e) => {
+          logger.warn({ module: "promo-generator" }, "load cup match for promo", e);
+          return null;
+        })
+    : await db
+        .prepare(
+          `SELECT m.id, m.home_team_id, m.away_team_id, m.league_id, sc.scheduled_at,
               ht.name as home_name, ht.stadium_name, ht.league_id as league_id2,
               at.name as away_name,
               hv.name as home_village, hv.size as home_size, hv.population as home_pop, hv.district as home_district,
@@ -197,38 +244,24 @@ export async function generatePromotionalArticle(
        LEFT JOIN season_calendar sc ON sc.id = m.calendar_id
        LEFT JOIN stadiums s ON s.team_id = ht.id
        WHERE m.id = ?`,
-    )
-    .bind(matchId)
-    .first<{
-      home_team_id: string;
-      away_team_id: string;
-      league_id: string;
-      league_id2: string;
-      scheduled_at: string | null;
-      home_name: string;
-      stadium_name: string | null;
-      away_name: string;
-      home_village: string;
-      home_size: string;
-      home_pop: number;
-      home_district: string;
-      away_village: string;
-      away_size: string;
-      stadium_capacity: number | null;
-    }>()
-    .catch((e) => {
-      logger.warn({ module: "promo-generator" }, "load match for promo", e);
-      return null;
-    });
+        )
+        .bind(matchId)
+        .first<PromoMatchRow>()
+        .catch((e) => {
+          logger.warn({ module: "promo-generator" }, "load match for promo", e);
+          return null;
+        });
 
   if (!match) return null;
 
-  // 2. Standings pro obě týmy
+  // 2. Standings pro obě týmy — pohár tabulku nemá, tam se pozice vynechá
   const leagueId = match.league_id ?? match.league_id2;
-  const standings = await calculateStandings(db, leagueId).catch((e) => {
-    logger.warn({ module: "promo-generator" }, "calculate standings", e);
-    return [];
-  });
+  const standings = cupContext
+    ? []
+    : await calculateStandings(db, leagueId).catch((e) => {
+        logger.warn({ module: "promo-generator" }, "calculate standings", e);
+        return [];
+      });
   const homeStand = standings.find((s) => s.teamId === match.home_team_id);
   const awayStand = standings.find((s) => s.teamId === match.away_team_id);
 
@@ -238,10 +271,10 @@ export async function generatePromotionalArticle(
   // 4. Zranění klíčových hráčů
   const injured = await loadInjuredKeyPlayers(db, match.home_team_id);
 
-  // 5. Forma obou týmů
+  // 5. Forma obou týmů (pohárový velkoklub reálný tým nemá → bez formy)
   const [homeForm, awayForm] = await Promise.all([
     loadForm(db, match.home_team_id),
-    loadForm(db, match.away_team_id),
+    match.away_team_id ? loadForm(db, match.away_team_id) : Promise.resolve([]),
   ]);
 
   // 5b. Jména trenérů (pro možnou zmínku v textu)
@@ -250,15 +283,17 @@ export async function generatePromotionalArticle(
     .bind(match.home_team_id)
     .first<{ name: string }>()
     .catch((e) => { logger.warn({ module: "promo-generator" }, "load home manager", e); return null; });
-  const awayManager = await db
-    .prepare("SELECT name FROM managers WHERE team_id = ?")
-    .bind(match.away_team_id)
-    .first<{ name: string }>()
-    .catch((e) => { logger.warn({ module: "promo-generator" }, "load away manager", e); return null; });
+  const awayManager = match.away_team_id
+    ? await db
+        .prepare("SELECT name FROM managers WHERE team_id = ?")
+        .bind(match.away_team_id)
+        .first<{ name: string }>()
+        .catch((e) => { logger.warn({ module: "promo-generator" }, "load away manager", e); return null; })
+    : null;
 
   // 6. Village flavor
   const homeFlavor = VILLAGE_FLAVOR[match.home_village] ?? "tradiční česká obec se smyslem pro fotbal";
-  const awayFlavor = VILLAGE_FLAVOR[match.away_village] ?? "";
+  const awayFlavor = match.away_village ? (VILLAGE_FLAVOR[match.away_village] ?? "") : "";
 
   const isPraha = match.home_district === "Praha";
   const localHint = isPraha
@@ -301,12 +336,18 @@ export async function generatePromotionalArticle(
     else relativeTime = `za ${Math.round(diffDays / 7)} týdny`;
   }
 
+  const cupRound = cupContext?.roundName ?? "pohárové kolo";
+  const competitionLine = cupContext
+    ? `na nadcházející POHÁROVÝ zápas (${cupRound} celorepublikového amatérského poháru) s ${match.away_name}. Pohár je svátek — soupeř nebývá z okresu a takový zápas se v obci nehraje každou sezónu. Má být lákavý a motivující, ale realistický pro úroveň okresního fotbalu — ne bombastický.`
+    : `na nadcházející zápas s ${match.away_name}. Má být lákavý, motivující a realistický pro
+úroveň okresního fotbalu — ne bombastický.`;
+
   const prompt = `Jsi sportovní komentátor ${isPraha ? "pražského" : "okresního"} fotbalu. Napiš krátký propagační článek
 (maximálně 150 slov) z pohledu domácího týmu ${match.home_name}, který zve fanoušky
-na nadcházející zápas s ${match.away_name}. Má být lákavý, motivující a realistický pro
-úroveň okresního fotbalu — ne bombastický.
+${competitionLine}
 
-STRIKTNĚ:
+STRIKTNĚ:${cupContext ? `
+- Jde o POHÁR, ne o ligu — nepiš o bodech, tabulce ani o ligovém kole. Zmiň, že se hraje ${cupRound}.` : ""}
 - Bez uvozovek kolem textu, bez markdown, bez "Titulek:" ani "Headline:"
 - První řádek = headline (max 90 znaků)
 - Od druhého řádku = body (max 150 slov)
@@ -326,7 +367,7 @@ DOMÁCÍ: ${match.home_name}
   Obec: ${match.home_village} (${match.home_pop} obyv.) — ${homeFlavor}
   Stadion: ${stadiumName}, kapacita ${capacity}
   Trenér: ${homeManager?.name ?? "neznámý"}
-  Pozice v tabulce: ${homeStand ? `${homeStand.pos}. místo, ${homeStand.points} bodů (${homeStand.wins}V ${homeStand.draws}R ${homeStand.losses}P, skóre ${homeStand.gf}:${homeStand.ga})` : "start sezóny"}
+${cupContext ? `  Soutěž: pohár — ${cupRound}` : `  Pozice v tabulce: ${homeStand ? `${homeStand.pos}. místo, ${homeStand.points} bodů (${homeStand.wins}V ${homeStand.draws}R ${homeStand.losses}P, skóre ${homeStand.gf}:${homeStand.ga})` : "start sezóny"}`}
   Forma (posledních 5): ${formStr(homeForm)}
   Klíčoví hráči:
 ${topStr || "  (nedostatek dat)"}
@@ -334,10 +375,10 @@ ${topStr || "  (nedostatek dat)"}
 ${injuredStr}
 
 HOSTÉ: ${match.away_name}
-  Obec: ${match.away_village}${awayFlavor ? ` — ${awayFlavor}` : ""}
+  Obec: ${match.away_village ?? "mimo okres (soupeř z jiné části republiky)"}${awayFlavor ? ` — ${awayFlavor}` : ""}
   Trenér: ${awayManager?.name ?? "neznámý"}
-  Pozice v tabulce: ${awayStand ? `${awayStand.pos}. místo, ${awayStand.points} bodů` : "start sezóny"}
-  Forma: ${formStr(awayForm)}
+${cupContext ? "" : `  Pozice v tabulce: ${awayStand ? `${awayStand.pos}. místo, ${awayStand.points} bodů` : "start sezóny"}
+`}  Forma: ${formStr(awayForm)}
 
 POZNÁMKA: Jména trenérů můžeš (ale nemusíš) zmínit pro koloritovost (např. „trenér Novák slibuje..."). Nepovinné.
 `;
