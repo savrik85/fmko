@@ -465,6 +465,13 @@ async function simulateCupTie(
 
   const homeLineup = homeBuild.players; const homeSubs = homeLineup.splice(11);
   const awayLineup = awayBuild.players; const awaySubs = awayLineup.splice(11);
+
+  // Bonus trenéra (taktika → přihrávky a obrana, motivace → morálka). Do teď ho uměla
+  // jen liga, takže stejný trenér byl v poháru k ničemu. Jen reálné týmy — pohárové
+  // kluby bez klubu v lize trenéra nemají.
+  const { applyManagerMatchBonus } = await import("../season/manager-match-bonus");
+  if (homeReal) await applyManagerMatchBonus(db, homeReal, [homeLineup, homeSubs]);
+  if (awayReal) await applyManagerMatchBonus(db, awayReal, [awayLineup, awaySubs]);
   if (homeLineup.length < 7 || awayLineup.length < 7) {
     logger.warn({ module: M }, `cup tie ${cupMatchId}: málo hráčů (home ${homeLineup.length}, away ${awayLineup.length}) → silová simulace bez statistik (kádr velkoklubu nebo tenký reálný kádr)`);
     const fb = simMatch(strengthOf.get(homeCupTeamId) ?? 30, strengthOf.get(awayCupTeamId) ?? 30, rng);

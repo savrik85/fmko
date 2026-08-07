@@ -17,7 +17,7 @@ interface TeamBasic {
 }
 interface ManagerData {
   id?: string; name: string; backstory?: string; age: number; bio?: string; birthplace?: string;
-  coaching?: number; motivation?: number; tactics?: number; youth_development?: number;
+  coaching?: number; motivation?: number; tactics?: number; youthDevelopment?: number;
   discipline?: number; reputation?: number; avatar?: Record<string, unknown> | null;
 }
 interface ClubData {
@@ -73,7 +73,7 @@ const ATTR_LABELS: Record<string, string> = {
   coaching: "Koučink",
   motivation: "Motivace",
   tactics: "Taktika",
-  youth_development: "Mládež",
+  youthDevelopment: "Mládež",
   discipline: "Disciplína",
   reputation: "Reputace",
 };
@@ -118,7 +118,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
   const chipBorder = light ? "border-black/5" : "border-white/10";
 
   const presentAttrs = manager
-    ? (["coaching", "motivation", "tactics", "youth_development", "discipline", "reputation"] as const)
+    ? (["coaching", "motivation", "tactics", "youthDevelopment", "discipline", "reputation"] as const)
         .map((k) => ({ key: k, value: (manager as unknown as Record<string, number | undefined>)[k] }))
         .filter((a) => a.value != null)
     : [];

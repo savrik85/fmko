@@ -51,8 +51,9 @@ export function TeamSide({
         <div className="w-[88px] h-[106px] bg-gray-100 rounded-lg flex items-center justify-center text-white/40 text-3xl">👤</div>
       )}
       <div className={`flex flex-col gap-1 ${isRight ? "items-end" : "items-start"} min-w-0 w-full`}>
+        {/* Stránka trenéra bere v URL ID TÝMU, ne trenéra — manager.id vedl na neexistující tým. */}
         {manager ? (
-          <Link href={`/dashboard/manager/${manager.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors truncate max-w-full">
+          <Link href={`/dashboard/manager/${team.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors truncate max-w-full">
             {manager.name}
           </Link>
         ) : (

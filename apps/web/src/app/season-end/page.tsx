@@ -542,11 +542,13 @@ function DevRow({ p }: { p: PlayerDev }) {
   );
 }
 
+// Dopady musí sedět s PARTY_TONE_FX v apps/api/src/routes/game.ts — včetně reputace
+// trenéra, kterou popisky dřív zamlčovaly.
 const SPEECH_TONES = [
-  { key: "pokorny", label: "Pokorně", desc: "o partě a dřině", outcome: "Mluvil jsi pokorně o partě a dřině. Vesnice zatleskala, kabina tě má radši. (morálka ↑, vesnice ↑)" },
+  { key: "pokorny", label: "Pokorně", desc: "o partě a dřině", outcome: "Mluvil jsi pokorně o partě a dřině. Vesnice zatleskala, kabina tě má radši. (morálka ↑, vesnice ↑, tvoje reputace ↑)" },
   { key: "chvastavy", label: "Chvástavě", desc: "je to celé moje zásluha", outcome: "Chvástal ses, jak je to celé tvoje zásluha. Hráči se culili, vesnice kroutila hlavou. (morálka ↑, vesnice ↓)" },
-  { key: "nemuzu", label: "Já za to nemůžu", desc: "rozhodčí, hřiště, smůla", outcome: "Svaloval jsi to na rozhodčí, hřiště a smůlu. Kabina protočila oči. (morálka ↓, vesnice ↓)" },
-  { key: "opily", label: "Už lehce opilý", desc: "cosi o titulu", outcome: "Po pátém pivu jsi blábolil cosi o titulu. Hospoda se řehtala, ráno si to pamatovat nebudeš. (vesnice ↑)" },
+  { key: "nemuzu", label: "Já za to nemůžu", desc: "rozhodčí, hřiště, smůla", outcome: "Svaloval jsi to na rozhodčí, hřiště a smůlu. Kabina protočila oči. (morálka ↓, vesnice ↓, tvoje reputace ↓)" },
+  { key: "opily", label: "Už lehce opilý", desc: "cosi o titulu", outcome: "Po pátém pivu jsi blábolil cosi o titulu. Hospoda se řehtala, ráno si to pamatovat nebudeš. (vesnice ↑, tvoje reputace ↓)" },
 ];
 
 function SpeechPicker({ teamId, initial }: { teamId?: string; initial?: string }) {

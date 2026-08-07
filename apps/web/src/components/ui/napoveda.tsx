@@ -120,7 +120,7 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Spokojenost (0–100)", text: "Meni se po kazdem zapase. Vyhra +6, prohra −5, drahe vstupne −2, levne +1, kvalitni obcerstveni +1 za produkt, dosle zasoby −2, cista socialky az +3, trener −3 az +3. Celkem nejvys ±15 za zapas." },
       { heading: "Loajalita", text: "Dlouhodoba hladina, ke ktere se spokojenost kazdy den o bod vraci. Sama miri k reputaci klubu, posunute o vliv trenera (−2 az +2). Pres 100 nejde." },
       { heading: "Vliv trenera", text: "Vliv = 0,6 × reputace + 0,4 × motivace, neutral je 44. Pasma po peti bodech: 47–51 dava +1, 52–56 dava +2, 57 a vic +3. Pasmo 42–46 je nula. Nize se jde do minusu: 37–41 je −1, 32–36 je −2, 31 a min −3." },
-      { heading: "Jak zvednout reputaci trenera", text: "Vyhra +1 (o tri a vic golu +2), prohra −1 (debakl −2) — projevi se asi v tretine zapasu. Konec sezony: prvni misto ve 14 tymech +10, posledni −10. Pohar: ctvrtfinale +3, semifinale +5, vyhra ve finale +8. Rozsah 15–75." },
+      { heading: "Jak zvednout reputaci trenera", text: "Vyhra +1 (o tri a vic golu +2), prohra −1 (debakl −2) — projevi se asi v tretine zapasu. Konec sezony: prvni misto ve 14 tymech +10, posledni −10. Pohar: osmifinale +2, ctvrtfinale +3, semifinale +5, vyhra ve finale +8. Proslov na zaverecne party +1 nebo −1 podle tonu. Rozsah 15–75." },
       { heading: "Motivace trenera", text: "Konec sezony v horni polovine +1, ve spodni polovicni sance na −1. Zhruba kazda osma prohra (debakl kazda ctvrta) sebere bod motivace nebo discipliny. Sama od sebe neroste." },
       { text: "Spokojenost nasobi navstevnost (0,75× az 1,25×), cenu vstupenky (0,7× az 1,3×) i trzby v bufetu. Vyplati se ji hlidat.", tip: true },
     ],

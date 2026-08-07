@@ -525,33 +525,10 @@ export async function runScheduledMatches(
                 homeEquipment.injurySeverityMod += facilityEffects.homeInjuryReduction;
             }
 
-            // Apply manager tactics bonus to team skills
-            const applyManagerBonus = async (teamId: string, lineup: typeof homeLineup, subs: typeof homeSubs) => {
-                const mgr = await db.prepare("SELECT tactics, motivation FROM managers WHERE team_id = ?")
-                    .bind(teamId).first<{ tactics: number; motivation: number }>().catch((e) => {
-                        logger.warn({module: "match-runner"}, "mgr query", e);
-                        return null;
-                    });
-                if (!mgr) return;
-                // Taktika: 40=+0, 60=+1, 80=+2 (strop atributu je 99, takže reálné maximum je +2)
-                // k přihrávkám a obraně všem hráčům v sestavě i na lavičce.
-                const tacticsBonus = Math.floor((mgr.tactics - 40) / 20);
-                if (tacticsBonus > 0) {
-                    for (const p of [...lineup, ...subs]) {
-                        p.passing = Math.min(100, p.passing + tacticsBonus);
-                        p.defense = Math.min(100, p.defense + tacticsBonus);
-                    }
-                }
-                // Motivace: 40=+1, 60=+3, 80=+5, 99=+6 morálky všem hráčům.
-                const moraleBonus = Math.floor((mgr.motivation - 30) / 10);
-                if (moraleBonus > 0) {
-                    for (const p of [...lineup, ...subs]) {
-                        p.morale = Math.min(100, p.morale + moraleBonus);
-                    }
-                }
-            };
-            await applyManagerBonus(homeTeamId, homeLineup, homeSubs);
-            await applyManagerBonus(awayTeamId, awayLineup, awaySubs);
+            // Bonus trenéra k sestavě — sdílené s pohárem, viz season/manager-match-bonus.ts
+            const {applyManagerMatchBonus} = await import("../season/manager-match-bonus");
+            await applyManagerMatchBonus(db, homeTeamId, [homeLineup, homeSubs]);
+            await applyManagerMatchBonus(db, awayTeamId, [awayLineup, awaySubs]);
 
             // Pozvaní zastupitelé domácího týmu zvyšují homeAdvantage a attendance
             const acceptedOfficials = await db.prepare(
@@ -920,19 +897,22 @@ export async function runScheduledMatches(
                     const won = margin > 0, lost = margin < 0;
                     const bigWin = margin >= 3, blowoutLoss = margin <= -3;
 
+                    // Meze atributů jsou sdílené se sezónním vývojem, ať se nerozejdou.
+                    const {MANAGER_FANS} = await import("@okresni-masina/shared");
+                    const AMIN = MANAGER_FANS.ATTR_MIN, AMAX = MANAGER_FANS.ATTR_MAX;
                     // Atributy: zkušenost (koučink/taktika) roste — víc při výhře.
                     if (Math.random() < (won ? 0.16 : 0.10)) {
                         const upAttr = ["coaching", "tactics"][Math.floor(Math.random() * 2)];
-                        await db.prepare(`UPDATE managers SET ${upAttr} = MIN(99, ${upAttr} + 1) WHERE team_id = ?`).bind(tid).run();
+                        await db.prepare(`UPDATE managers SET ${upAttr} = MAX(?, MIN(?, ${upAttr} + 1)) WHERE team_id = ?`).bind(AMIN, AMAX, tid).run();
                     }
                     // Prohra erozuje motivaci/disciplínu (blamáž víc).
                     if (lost && Math.random() < (blowoutLoss ? 0.25 : 0.12)) {
                         const downAttr = ["motivation", "discipline"][Math.floor(Math.random() * 2)];
-                        await db.prepare(`UPDATE managers SET ${downAttr} = MAX(10, ${downAttr} - 1) WHERE team_id = ?`).bind(tid).run();
+                        await db.prepare(`UPDATE managers SET ${downAttr} = MAX(?, MIN(?, ${downAttr} - 1)) WHERE team_id = ?`).bind(AMIN, AMAX, tid).run();
                     }
                     // Mládežnický rozvoj — pomalu roste.
                     if (Math.random() < 0.05) {
-                        await db.prepare("UPDATE managers SET youth_development = MIN(99, youth_development + 1) WHERE team_id = ?").bind(tid).run();
+                        await db.prepare("UPDATE managers SET youth_development = MAX(?, MIN(?, youth_development + 1)) WHERE team_id = ?").bind(AMIN, AMAX, tid).run();
                     }
                     // Reputace: OBOUSMĚRNĚ dle výsledku, strop 15–75 (sjednoceno se sezónou/pohárem).
                     let repDelta = 0;

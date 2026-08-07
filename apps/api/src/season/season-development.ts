@@ -6,6 +6,7 @@
  * Vrací top zlepšené/zhoršené hráče + změny trenéra pro recap.
  */
 
+import { MANAGER_FANS } from "@okresni-masina/shared";
 import { createRng } from "../generators/rng";
 import { getTeamPosition } from "../stats/standings";
 import { logger } from "../lib/logger";
@@ -97,16 +98,16 @@ export async function developSquadAndManager(
     const next = { coaching: mgr.coaching, motivation: mgr.motivation, tactics: mgr.tactics, youth_development: mgr.youth_development, discipline: mgr.discipline };
     // Zkušenost: +1 do trénování nebo taktiky
     const expAttr = rng.pick(["coaching", "tactics"]) as keyof typeof next;
-    next[expAttr] = clamp(next[expAttr] + 1, 1, 99);
+    next[expAttr] = clamp(next[expAttr] + 1, MANAGER_FANS.ATTR_MIN, MANAGER_FANS.ATTR_MAX);
     // Dle výsledku sezóny
     if (topHalf) {
-      next.motivation = clamp(next.motivation + 1, 1, 99);
+      next.motivation = clamp(next.motivation + 1, MANAGER_FANS.ATTR_MIN, MANAGER_FANS.ATTR_MAX);
     } else {
-      next.discipline = clamp(next.discipline + 1, 1, 99);
-      if (rng.random() < 0.5) next.motivation = clamp(next.motivation - 1, 1, 99);
+      next.discipline = clamp(next.discipline + 1, MANAGER_FANS.ATTR_MIN, MANAGER_FANS.ATTR_MAX);
+      if (rng.random() < 0.5) next.motivation = clamp(next.motivation - 1, MANAGER_FANS.ATTR_MIN, MANAGER_FANS.ATTR_MAX);
     }
     // Občas rozvoj mládeže
-    if (rng.random() < 0.35) next.youth_development = clamp(next.youth_development + 1, 1, 99);
+    if (rng.random() < 0.35) next.youth_development = clamp(next.youth_development + 1, MANAGER_FANS.ATTR_MIN, MANAGER_FANS.ATTR_MAX);
 
     const newAge = (mgr.age ?? 40) + 1;
     await db.prepare("UPDATE managers SET age = ?, coaching = ?, motivation = ?, tactics = ?, youth_development = ?, discipline = ? WHERE id = ?")

@@ -26,6 +26,9 @@ export const MANAGER_FANS = {
   MOT_MAX: 99,
   /** Vliv, při kterém trenér fanoušky ani netěší, ani nezlobí. */
   NEUTRAL: 44,
+  /** Meze ostatních atributů trenéra (koučink, taktika, disciplína, mládež). */
+  ATTR_MIN: 10,
+  ATTR_MAX: 99,
 } as const;
 
 export interface ManagerFansBand {

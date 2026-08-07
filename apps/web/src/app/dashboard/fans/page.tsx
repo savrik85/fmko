@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { MANAGER_FANS_BANDS } from "@okresni-masina/shared";
+import { MANAGER_FANS, MANAGER_FANS_BANDS } from "@okresni-masina/shared";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm } from "@/components/ui";
@@ -1112,14 +1112,16 @@ export default function FansPage() {
             <div className="text-sm font-heading font-bold text-ink mb-3">Z čeho se vliv počítá</div>
             <div className="space-y-3">
               {[
-                { label: "Reputace", value: m.reputation, weight: m.repWeight, points: m.repPoints },
-                { label: "Motivace", value: m.motivation, weight: m.motWeight, points: m.motPoints },
+                // Strop reputace je 75, ne 100 — bar i popisek to musí respektovat,
+                // jinak vypadá maxed trenér pořád jako nedodělaný.
+                { label: "Reputace", value: m.reputation, weight: m.repWeight, points: m.repPoints, max: MANAGER_FANS.REP_MAX },
+                { label: "Motivace", value: m.motivation, weight: m.motWeight, points: m.motPoints, max: MANAGER_FANS.MOT_MAX },
               ].map((row) => (
                 <div key={row.label}>
                   <div className="flex items-baseline justify-between text-sm mb-1">
                     <span className="text-ink">
                       {row.label} <span className="tabular-nums font-heading font-bold">{row.value}</span>
-                      <span className="text-muted"> / 100</span>
+                      <span className="text-muted"> / {row.max}</span>
                     </span>
                     <span className="text-muted tabular-nums">
                       × {row.weight.toString().replace(".", ",")} →{" "}
@@ -1131,7 +1133,7 @@ export default function FansPage() {
                   <div className="w-full bg-gray-200 rounded-full h-1.5">
                     <div
                       className="h-1.5 rounded-full bg-pitch-500 transition-all"
-                      style={{ width: `${Math.max(0, Math.min(100, row.value))}%` }}
+                      style={{ width: `${Math.max(0, Math.min(100, (row.value / row.max) * 100))}%` }}
                     />
                   </div>
                 </div>
@@ -1235,7 +1237,8 @@ export default function FansPage() {
                   <li>Výhra <strong className="text-ink">+1</strong>, o tři a víc gólů <strong className="text-ink">+2</strong>. Projeví se zhruba v každém třetím zápase.</li>
                   <li>Prohra <strong className="text-ink">−1</strong>, debakl o tři a víc <strong className="text-ink">−2</strong>, taky asi v třetině případů.</li>
                   <li>Konec sezóny je nejsilnější páka: ve čtrnáctičlenné lize dá první místo <strong className="text-ink">+10</strong>, poslední <strong className="text-ink">−10</strong>.</li>
-                  <li>Pohár: čtvrtfinále <strong className="text-ink">+3</strong>, semifinále <strong className="text-ink">+5</strong>, výhra ve finále <strong className="text-ink">+8</strong>.</li>
+                  <li>Pohár: osmifinále <strong className="text-ink">+2</strong>, čtvrtfinále <strong className="text-ink">+3</strong>, semifinále <strong className="text-ink">+5</strong>, výhra ve finále <strong className="text-ink">+8</strong>.</li>
+                  <li>Proslov na závěrečné párty: pokorný tón <strong className="text-ink">+1</strong>, výmluvy nebo opilecký projev <strong className="text-ink">−1</strong>.</li>
                   <li>Nad 75 to nejde, pod 15 taky ne.</li>
                 </ul>
               </div>

@@ -161,10 +161,15 @@ function simulateAttendance(
   approach: TrainingApproach,
   commuteKms?: number[],
   attendanceBonus: number = 0,
+  managerDiscipline: number = 40,
 ): TrainingAttendance[] {
+  // Trenér, který drží kázeň, dostane na trénink víc lidí. Kolem hodnoty 40 je to
+  // neutrální, nahoře i dole to hýbe docházkou nejvýš o deset procentních bodů.
+  const managerAttendanceMod = Math.max(-0.1, Math.min(0.1, (managerDiscipline - 40) / 100 * 0.2));
+
   return squad.map((player, i) => {
     // Base attendance from discipline (+ bonus z vybavení, např. klubová dodávka)
-    let attendProb = player.discipline / 100 * 0.6 + 0.3 + attendanceBonus;
+    let attendProb = player.discipline / 100 * 0.6 + 0.3 + attendanceBonus + managerAttendanceMod;
 
     const km = commuteKms?.[i] ?? 0;
 
@@ -235,7 +240,7 @@ export function simulateTraining(
 
   // Simulate each session
   for (let s = 0; s < plan.sessionsPerWeek; s++) {
-    const session = simulateAttendance(rng, squad, plan.approach, commuteKms, equipExtras.attendanceBonus ?? 0);
+    const session = simulateAttendance(rng, squad, plan.approach, commuteKms, equipExtras.attendanceBonus ?? 0, managerBonus.discipline);
     for (const a of session) {
       if (a.attended) {
         attendanceCounts.set(a.playerIndex, (attendanceCounts.get(a.playerIndex) ?? 0) + 1);

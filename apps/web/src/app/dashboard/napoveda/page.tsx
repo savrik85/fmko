@@ -241,7 +241,8 @@ export default function NapovedaPage() {
             <p>
               <strong className="text-ink">Jak reputaci hýbat:</strong> výhra +1 (o tři a víc gólů +2),
               prohra −1 (debakl −2), projeví se asi v třetině zápasů. Konec sezóny: ve čtrnáctičlenné
-              lize první místo +10, poslední −10. Pohár: čtvrtfinále +3, semifinále +5, výhra ve finále +8.
+              lize první místo +10, poslední −10. Pohár: osmifinále +2, čtvrtfinále +3, semifinále +5,
+              výhra ve finále +8. Proslov na závěrečné párty přidá nebo ubere bod podle tónu.
             </p>
             <p>
               <strong className="text-ink">Motivace</strong> roste jen umístěním v horní polovině tabulky
