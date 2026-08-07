@@ -48,8 +48,11 @@ export function heightVar(height: WidgetHeight): string | null {
 
 // ── Kolik řádků seznamu se do widgetu vejde ─────────────────────────────────
 
-/** Odsazení karty a popisek widgetu — o tolik je vždycky míň místa na obsah. */
-const CHROME_PX = 64;
+/**
+ * Odsazení karty, popisek widgetu a menší rezerva. Naměřeno na skutečné kartě —
+ * se šedesáti čtyřmi pixely zbýval poslední řádek pár pixelů pod hranou.
+ */
+const CHROME_PX = 76;
 /** Výška podle obsahu žádnou mez nemá; ať je aspoň v rozumné délce. */
 const AUTO_ROWS = 6;
 
