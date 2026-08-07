@@ -168,12 +168,21 @@ export function SquadSkillsWidget({ data }: WidgetProps) {
   if (players.length === 0) return <ChartEmpty>V kádru nejsou hráči do pole.</ChartEmpty>;
 
   const values = SKILL_AXES.map(({ key }) => avg(players.map((p) => p.skills?.[key] ?? 0)));
+  const nejlepsi = SKILL_AXES[values.indexOf(Math.max(...values))];
+  const nejhorsi = SKILL_AXES[values.indexOf(Math.min(...values))];
 
   return (
-    <RadarChart
-      axes={SKILL_AXES.map((a) => a.label)}
-      series={[{ label: "Průměr kádru", values, color: PRIMARY }]}
-    />
+    <div className="space-y-2">
+      <RadarChart
+        axes={SKILL_AXES.map((a) => a.label)}
+        series={[{ label: "Průměr kádru", values, color: PRIMARY }]}
+      />
+      <div className="text-sm text-muted text-center">
+        Průměr {players.length} hráčů do pole na škále 0–100.{" "}
+        Nejsilnější <span className="font-heading font-bold text-ink">{nejlepsi.label.toLowerCase()}</span>,
+        nejslabší <span className="font-heading font-bold text-ink">{nejhorsi.label.toLowerCase()}</span>.
+      </div>
+    </div>
   );
 }
 
