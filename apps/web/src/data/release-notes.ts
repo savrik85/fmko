@@ -13,6 +13,22 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-08-07",
+    emoji: "🧩",
+    title: "Domů si poskládáš sám",
+    items: [
+      "Domovská stránka byla pro všechny stejná a v pevném pořadí. Teď je to skládačka — tlačítkem Upravit dashboard přepneš stránku do editace a naskládáš si ji přesně tak, jak ti to vyhovuje.",
+      "Widget chytneš za jeho zelenou lištu a přetáhneš myší nebo prstem kam potřebuješ. Šipky ↑↓ ho posunou po jednom kroku, křížek ho odebere a čísla 1/2/3 nastaví, přes kolik sloupců se roztáhne. Na mobilu je vždycky jeden sloupec.",
+      "Na výběr je 64 widgetů v osmi kategoriích — Přehled, Zápasy, Liga, Kádr, Přestupy, Finance, Fanoušci a Klub. Kromě všeho, co na Domů bývalo, přibyla spousta grafů: vývoj bodů a rozpočtu, koláče příjmů a výdajů, radar dovedností kádru a trenéra, věková pyramida, návštěvnost proti kapacitě stadionu, spokojenost fanoušků na ciferníku, vývoj fanouškovské základny nebo pohárový postup.",
+      "Nové jsou i žebříčky, které dřív nikde nebyly pohromadě: volní hráči na trhu, kdo je na prodej, poslední přestupy v lize, nejlepší hráči a mladíci A týmu i U21, nejlepší docházka na trénink a největší absentéři včetně důvodu, proč chyběli.",
+      "Každý widget si můžeš obarvit jedním ze sedmi odstínů, ať se ti v tom lépe hledá. Všechny jsou světlé, takže zůstane čitelný.",
+      "Widgety se sesypávají nahoru — menší karta zaplní místo pod vyšším sousedem a nikde nezůstávají prázdná okna.",
+      "Rozložení se ukládá na server, takže tě následuje na mobil i na počítač. Tlačítkem Obnovit výchozí se kdykoliv vrátíš k původní podobě.",
+      "Kdo nic nemění, nepozná rozdíl: výchozí rozložení odpovídá tomu, jak Domů vypadala dosud.",
+      "Opraveno: karta Bilance nezobrazovala skóre — místo vstřelených a inkasovaných branek tam svítila prázdná dvojtečka a rozdíl vždycky nula.",
+    ],
+  },
+  {
+    date: "2026-08-07",
     emoji: "⭐",
     title: "Reputace klubu má vlastní stránku — a nové způsoby, jak ji zvednout",
     items: [
