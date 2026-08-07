@@ -168,23 +168,27 @@ export default function NapovedaPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
           <div className="border border-gray-200 rounded-lg p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Koučink</div>
-            <p className="text-xs text-muted">Zvyšuje šanci hráčů na zlepšení při tréninku. Při hodnotě 80 je bonus +44 %.</p>
+            <p className="text-sm text-muted">Násobí šanci hráčů na zlepšení při tréninku — při hodnotě 40 je to 1,12×, při 80 už 1,44×.</p>
           </div>
           <div className="border border-gray-200 rounded-lg p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Motivace</div>
-            <p className="text-xs text-muted">Bonus k morálce a výkonu hráčů v zápase. Cca +3 až +5 bodů k ratingu.</p>
+            <p className="text-sm text-muted">Před zápasem zvedne morálku všem hráčům v sestavě i na lavičce: při 40 o bod, při 60 o tři, při 80 o pět. Spolu s reputací určuje i to, jak trenéra berou fanoušci.</p>
+          </div>
+          <div className="border border-gray-200 rounded-lg p-3">
+            <div className="font-heading font-bold text-sm mb-0.5">Taktika</div>
+            <p className="text-sm text-muted">Přidává celému kádru přihrávky a obranu: od hodnoty 60 o bod, od 80 o dva.</p>
           </div>
           <div className="border border-gray-200 rounded-lg p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Disciplína</div>
-            <p className="text-xs text-muted">Reakce hráčů na přístup. Přísný trenér + nízká disciplína hráče = ztráta morálky.</p>
+            <p className="text-sm text-muted">Zatím nemá žádný herní efekt — mění se, ale nikde se nepoužívá. Přísnost tréninku, která hráčům ubírá morálku, se nastavuje zvlášť na stránce Tréninky.</p>
           </div>
           <div className="border border-gray-200 rounded-lg p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Rozvoj mládeže</div>
-            <p className="text-xs text-muted">Bonus k tréninku pro hráče do 22 let. Při hodnotě 60 navíc +26 % k šanci na zlepšení.</p>
+            <p className="text-sm text-muted">Bonus k tréninku pro hráče do 22 let. Při hodnotě 60 je to +26 % k šanci na zlepšení.</p>
           </div>
           <div className="border border-gray-200 rounded-lg p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Reputace</div>
-            <p className="text-xs text-muted">Co má trenér za sebou (15–75). Roste výhrami a umístěním na konci sezóny, klesá prohrami. Spolu s motivací určuje, jak ho berou fanoušci.</p>
+            <p className="text-sm text-muted">Co má trenér za sebou (15–75). Roste výhrami a umístěním na konci sezóny, klesá prohrami. Spolu s motivací určuje, jak ho berou fanoušci.</p>
           </div>
         </div>
 

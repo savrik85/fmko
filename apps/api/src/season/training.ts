@@ -265,7 +265,7 @@ export function simulateTraining(
       : player.age < 38 ? 0.4
       : 0.15;
 
-    // Manager coaching bonus: 40=1.0x, 60=1.2x, 80=1.4x, 100=1.6x
+    // Manager coaching bonus: 40=1.12x, 60=1.28x, 80=1.44x, 99=1.59x
     const coachMod = 0.8 + (managerBonus.coaching / 100) * 0.8;
     // Youth development bonus for players under 22
     const youthMod = player.age < 22

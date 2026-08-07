@@ -533,7 +533,8 @@ export async function runScheduledMatches(
                         return null;
                     });
                 if (!mgr) return;
-                // Tactics: 40=0, 60=+1, 80=+2, 100=+3 to passing/defense for all players
+                // Taktika: 40=+0, 60=+1, 80=+2 (strop atributu je 99, takže reálné maximum je +2)
+                // k přihrávkám a obraně všem hráčům v sestavě i na lavičce.
                 const tacticsBonus = Math.floor((mgr.tactics - 40) / 20);
                 if (tacticsBonus > 0) {
                     for (const p of [...lineup, ...subs]) {
@@ -541,7 +542,7 @@ export async function runScheduledMatches(
                         p.defense = Math.min(100, p.defense + tacticsBonus);
                     }
                 }
-                // Motivation: 40=0, 60=+2, 80=+4, 100=+6 morale
+                // Motivace: 40=+1, 60=+3, 80=+5, 99=+6 morálky všem hráčům.
                 const moraleBonus = Math.floor((mgr.motivation - 30) / 10);
                 if (moraleBonus > 0) {
                     for (const p of [...lineup, ...subs]) {

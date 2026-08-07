@@ -25,7 +25,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Hlavni prehled klubu \u2014 rozpocet, dalsi zapas, forma, tabulka, stav kadru a trener." },
       { heading: "Forma", text: "V = vyhra (3 body), R = remiza (1 bod), P = prohra (0). Zobrazuje poslednich 5 vysledku." },
       { heading: "Stav kadru", text: "Prumerna kondice ovlivnuje vykon v zapase. Pod 60 % hrozi vyrazne oslabeni tymu. Zraneni hraci nemohou nastoupit." },
-      { heading: "Trener", text: "Koucink zvysuje sanci na zlepseni hracu pri treninku. Motivace a taktika ovlivnuji zapas. Vlastnosti se vyvijeji OBOUSMERNE: koucink a taktika rostou (castejii po vyhre), ale prohra obcas srazi motivaci nebo disciplinu. Reputace trenera roste za vyhry a klesa za prohry." },
+      { heading: "Trener", text: "Koucink nasobi sanci na zlepseni hracu pri treninku. Motivace pred zapasem zvedne moralku celemu kadru (pri 60 o tri body), taktika prida prihravky a obranu (od 60 o bod). Vlastnosti se vyvijeji obousmerne: koucink a taktika rostou castejii po vyhre, prohra obcas srazi motivaci. Reputace roste za vyhry a klesa za prohry." },
       { text: "Sipky < > v headeru jsou historie prohlizece, NE posouvani dnu. Dny posouvej pres Administraci.", tip: true },
     ],
   },
@@ -54,7 +54,7 @@ const HELP: Record<string, HelpEntry> = {
     title: "Treninky",
     icon: "\u26BD",
     sections: [
-      { text: "Treninky zlepsuj\u00ED dovednosti hracu. Zakladni sance na zlepseni je 4 % za trenink." },
+      { text: "Treninky zlepsuj\u00ED dovednosti hracu. Zakladni sance na zlepseni je 10 % za jeden trenink \u2014 pak se nasobi vekem hrace, koucinkem trenera a vybavenim." },
       { heading: "Koucink trenera", text: "Vzorec: 0.8 + (koucink/100) \u00D7 0.8. Pri koucink 40 = 1.12x, pri 80 = 1.44x. Primo nasobi sanci na zlepseni." },
       { heading: "Vek hrace", text: "Pod 20 let: 1.3x bonus. 20\u201324: 1.15x. 25\u201329: zadny bonus. 30\u201333: 0.7x. 34\u201337: 0.4x. Nad 38: 0.15x. Starsi hraci se zlepsuj\u00ED mnohem pomaleji." },
       { heading: "Rozvoj mladeze", text: "Hraci do 22 let maji extra bonus z vlastnosti trenera: 0.9 + (rozvoj/100) \u00D7 0.6. Pri rozvoj=60 je to 1.26x navic." },
@@ -214,7 +214,7 @@ function findHelp(pathname: string): HelpEntry | null {
     icon: "\u{1F464}",
     sections: [
       { text: "Detailni statistiky, osobnost, zivotni kontext a historie zapasu." },
-      { heading: "Dovednosti", text: "7 atributu: rychlost, technika, strelba, prihravky, hlavicky, obrana, brankar. Zlepsuj\u00ED se treninkem (4 % zaklad, az 7 % s bonusy). Nad 50 bodu se zlepseni zpomaluje (diminishing returns)." },
+      { heading: "Dovednosti", text: "7 atributu: rychlost, technika, strelba, prihravky, hlavicky, obrana, brankar. Zlepsuj\u00ED se treninkem \u2014 zaklad je 10 % za trenink, nasobeny vekem, koucinkem a vybavenim. Nad 50 bodu se zlepsovani vyrazne zpomaluje." },
       { heading: "Osobnost", text: "Disciplina = dochazka na treninky. Patriotismus = loajalita ke klubu. Temperament = riziko karet. Alkohol > 70 = -10 % dochazka a vyssi unava v zapase (+0.15 kondice/min)." },
       { heading: "Zivotni kontext", text: "Zamestnani a rodina ovlivnuji dostupnost. Ridic kamionu nebo oteec malych deti muze casteji chybet. Dojezdova vzdalenost snizuje dochazku o 0.8 %/km." },
       { text: "Sipky v headeru posouvaji mezi hraci TOHO TYMU, kteremu hrac patri.", tip: true },
@@ -325,7 +325,7 @@ export function NapovedaOnboarding({ step }: { step: string }) {
       icon: "\u{1F9D1}\u200D\u{1F4BC}",
       sections: [
         { text: "Trenera pojmenuj a vyber mu pribeh. Pribeh urcuje startovni bonusy." },
-        { heading: "Koucink", text: "Zvysuje sanci na zlepseni hracu pri treninku. Zakladni sance je 4 %, pri koucink 80 az 5.6 %." },
+        { heading: "Koucink", text: "Nasobi sanci na zlepseni hracu pri treninku: 0,8 + koucink/100 \u00D7 0,8. Pri koucinku 40 je to 1,12\u00D7, pri 80 uz 1,44\u00D7." },
         { heading: "Motivace", text: "Ovlivnuje moralku tymu a vykon v zapase." },
         { heading: "Taktika", text: "Pridava bonus k dovednostem v zapase (+1\u20135 podle urovne)." },
         { heading: "Disciplina", text: "Ovlivnuje reakce hracu na prisny trenink." },
