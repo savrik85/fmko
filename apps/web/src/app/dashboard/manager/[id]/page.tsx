@@ -43,6 +43,7 @@ export default function ManagerDetailPage() {
 
   // Vlastnik muze editovat jen svuj profil (managerId == jeho teamId) a jen u non-AI manazeru
   const canEdit = !!manager && manager.userId !== "ai" && teamId === managerId;
+  const [attrHistory, setAttrHistory] = useState<AttrHistoryItem[]>([]);
 
   useEffect(() => {
     if (!teamId) return;
@@ -52,10 +53,12 @@ export default function ManagerDetailPage() {
       apiFetch<Team>(`/api/teams/${managerId}`).catch((e) => { console.error("manager team load:", e); return null; }),
       apiFetch<AchievementsPayload>(`/api/teams/${managerId}/achievements`).catch((e) => { console.error("achievements load:", e); return null; }),
       apiFetch<{ entries: Array<{ teamId: string; isHuman: boolean }> }>(`/api/hall-of-fame`).catch((e) => { console.error("hof load:", e); return null; }),
-    ]).then(([mgr, t, ach, hof]) => {
+      apiFetch<{ items: AttrHistoryItem[] }>(`/api/teams/${managerId}/manager/history?limit=25`).catch((e) => { console.error("manager history load:", e); return null; }),
+    ]).then(([mgr, t, ach, hof, hist]) => {
       setManager(mgr);
       setTeam(t);
       setAchievements(ach);
+      setAttrHistory(hist?.items ?? []);
       if (hof) {
         const humans = hof.entries.filter((e) => e.isHuman);
         const idx = humans.findIndex((e) => e.teamId === managerId);
@@ -214,12 +217,53 @@ export default function ManagerDetailPage() {
           <RelationsOverview teamId={teamId} />
         )}
 
+        {attrHistory.length > 0 && (
+          <div className="card p-4 sm:p-5">
+            <SectionLabel>Odkud se vzaly vlastnosti</SectionLabel>
+            <div className="space-y-1">
+              {attrHistory.map((h, i) => (
+                <div key={i} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-b-0">
+                  <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center font-heading font-bold text-sm tabular-nums ${
+                    h.delta > 0 ? "bg-pitch-50 text-pitch-600"
+                      : h.delta < 0 ? "bg-red-50 text-card-red"
+                      : "bg-gray-50 text-muted"
+                  }`}>
+                    {h.delta > 0 ? "+" : ""}{h.delta}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-heading font-bold text-ink">{h.attrLabel}</div>
+                    <div className="text-sm text-muted">{h.description}</div>
+                    {h.delta === 0 && h.rawDelta !== 0 && (
+                      <div className="text-sm text-muted">
+                        Mělo být {h.rawDelta > 0 ? "+" : ""}{h.rawDelta}, ale atribut je na hranici.
+                      </div>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-sm text-muted tabular-nums">{formatShortDate(h.date)}</div>
+                    <div className="text-sm font-heading font-bold text-ink tabular-nums">{h.newValue}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {achievements && achievements.achievements.length > 0 && (
           <AchievementsSection data={achievements} />
         )}
       </div>
     </>
   );
+}
+
+function formatShortDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
+  } catch (e) {
+    console.warn("format manager history date:", e);
+    return "";
+  }
 }
 
 interface AchievementItem {
@@ -229,6 +273,18 @@ interface AchievementItem {
   desc: string;
   tier: "bronze" | "silver" | "gold";
   earnedAt: string | null;
+}
+
+interface AttrHistoryItem {
+  attr: string;
+  attrLabel: string;
+  oldValue: number;
+  newValue: number;
+  delta: number;
+  rawDelta: number;
+  source: string;
+  description: string;
+  date: string;
 }
 
 interface AchievementsPayload {

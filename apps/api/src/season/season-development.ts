@@ -110,14 +110,37 @@ export async function developSquadAndManager(
     if (rng.random() < 0.35) next.youth_development = clamp(next.youth_development + 1, MANAGER_FANS.ATTR_MIN, MANAGER_FANS.ATTR_MAX);
 
     const newAge = (mgr.age ?? 40) + 1;
-    await db.prepare("UPDATE managers SET age = ?, coaching = ?, motivation = ?, tactics = ?, youth_development = ?, discipline = ? WHERE id = ?")
-      .bind(newAge, next.coaching, next.motivation, next.tactics, next.youth_development, next.discipline, mgr.id).run()
-      .catch((e) => logger.warn({ module: M }, "update manager dev", e));
+    // Věk zvlášť — není to atribut s auditem, jen se přičte rok.
+    await db.prepare("UPDATE managers SET age = ? WHERE id = ?")
+      .bind(newAge, mgr.id).run()
+      .catch((e) => logger.warn({ module: M }, "update manager age", e));
+
+    // Každá změna atributu jde přes audit, ať je v profilu vidět důvod.
+    const { applyManagerAttrDelta } = await import("../lib/manager-attrs");
+    // Herní datum týmu — audit se čte v herním čase.
+    const devGameDate = (await db.prepare("SELECT game_date FROM teams WHERE id = ?")
+      .bind(teamId).first<{ game_date: string | null }>()
+      .catch((e) => { logger.warn({ module: M }, "load game date for manager dev", e); return null; })
+    )?.game_date ?? undefined;
+    const seasonReason = topHalf
+      ? `Sezóna v horní polovině tabulky (${pos}. místo)`
+      : `Sezóna ve spodní polovině tabulky (${pos}. místo)`;
 
     const deltas: ManagerAttrDelta[] = [];
     for (const k of Object.keys(next) as (keyof typeof next)[]) {
-      const before = (mgr as any)[k] as number;
-      if (next[k] !== before) deltas.push({ attr: k, label: MGR_LABELS[k] ?? k, before, after: next[k] });
+      const before = (mgr as unknown as Record<string, number>)[k];
+      const delta = next[k] - before;
+      if (delta === 0) continue;
+      const res = await applyManagerAttrDelta(
+        db, teamId, k, delta, "season_dev",
+        k === "coaching" || k === "tactics" ? "Zkušenost z odehrané sezóny" : seasonReason,
+        { referenceId: `mgr-dev-s${seasonNumber}-${teamId}-${k}`, gameDate: devGameDate },
+      );
+      // Do recapu jde SKUTEČNÁ změna, ne zamýšlená — když atribut narazil na strop,
+      // hráč nesmí vidět posun, který se nestal.
+      if (res.applied !== 0) {
+        deltas.push({ attr: k, label: MGR_LABELS[k] ?? k, before: res.oldValue, after: res.newValue });
+      }
     }
     manager = { name: mgr.name, age: newAge, deltas };
   }

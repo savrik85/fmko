@@ -6408,9 +6408,18 @@ gameRouter.post("/teams/:teamId/season-recap/party", async (c) => {
     "UPDATE village_team_favor SET favor = MAX(0, MIN(100, favor + ?)) WHERE team_id = ? AND official_id IS NULL",
   ).bind(fx.favor, teamId).run().catch((e) => logger.warn({ module: "game.ts" }, "party favor", e));
   if (fx.rep !== 0) {
-    await c.env.DB.prepare(
-      "UPDATE managers SET reputation = MAX(15, MIN(75, reputation + ?)) WHERE team_id = ?",
-    ).bind(fx.rep, teamId).run().catch((e) => logger.warn({ module: "game.ts" }, "party rep", e));
+    const { applyManagerAttrDelta } = await import("../lib/manager-attrs");
+    const toneLabel: Record<string, string> = {
+      pokorny: "Pokorný proslov na závěrečné párty",
+      chvastavy: "Chvástavý proslov na závěrečné párty",
+      nemuzu: "Výmluvy na závěrečné párty",
+      opily: "Opilecký projev na závěrečné párty",
+    };
+    await applyManagerAttrDelta(
+      c.env.DB, teamId, "reputation", fx.rep, "party",
+      toneLabel[body!.tone] ?? "Proslov na závěrečné párty",
+      { referenceId: `mgr-party-s${row.season_number}-${teamId}` },
+    );
   }
 
   if (data.party) data.party.appliedTone = body!.tone;

@@ -67,9 +67,12 @@ export async function applySeasonRewards(
 
     // Reputace AŽ PO markeru — na retry gate (exists) přeskočí celý tým, takže se reputace nepřičte podruhé.
     if (managerRepDelta !== 0) {
-      await db.prepare("UPDATE managers SET reputation = MAX(15, MIN(75, reputation + ?)) WHERE team_id = ?")
-        .bind(managerRepDelta, teamId).run()
-        .catch((e) => logger.warn({ module: "season-rewards" }, "manager reputation update", e));
+      const { applyManagerAttrDelta } = await import("../lib/manager-attrs");
+      await applyManagerAttrDelta(
+        db, teamId, "reputation", managerRepDelta, "season_position",
+        `Konečné ${pos}. místo v ${seasonNumber}. sezóně`,
+        { referenceId: `mgr-season-${seasonNumber}-${teamId}-rep`, gameDate },
+      );
     }
     if (teamRepDelta !== 0) {
       const { applyReputationDelta } = await import("../lib/reputation");

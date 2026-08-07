@@ -888,6 +888,13 @@ export async function runScheduledMatches(
             }
 
             // Manager development po každém zápase — OBOUSMĚRNĚ podle výsledku.
+            // HERNÍ datum (game_clock posouvá herní čas o desítky dní) — audit se čte
+            // a filtruje v herním čase stejně jako u klubové reputace.
+            const mgrGameDate = (await db.prepare("SELECT game_date FROM teams WHERE id = ?")
+                .bind(homeTeamId).first<{ game_date: string | null }>()
+                .catch((e) => { logger.warn({module: "match-runner"}, "load game date for manager dev", e); return null; })
+            )?.game_date ?? new Date().toISOString();
+
             for (const tid of [homeTeamId, awayTeamId]) {
                 try {
                     const isHome = tid === homeTeamId;
@@ -897,29 +904,47 @@ export async function runScheduledMatches(
                     const won = margin > 0, lost = margin < 0;
                     const bigWin = margin >= 3, blowoutLoss = margin <= -3;
 
-                    // Meze atributů jsou sdílené se sezónním vývojem, ať se nerozejdou.
-                    const {MANAGER_FANS} = await import("@okresni-masina/shared");
-                    const AMIN = MANAGER_FANS.ATTR_MIN, AMAX = MANAGER_FANS.ATTR_MAX;
-                    // Atributy: zkušenost (koučink/taktika) roste — víc při výhře.
-                    if (Math.random() < (won ? 0.16 : 0.10)) {
-                        const upAttr = ["coaching", "tactics"][Math.floor(Math.random() * 2)];
-                        await db.prepare(`UPDATE managers SET ${upAttr} = MAX(?, MIN(?, ${upAttr} + 1)) WHERE team_id = ?`).bind(AMIN, AMAX, tid).run();
+                    // Deterministický RNG ze zápasu a týmu — Math.random() dělal z každého
+                    // přesimulování jiný výsledek. Spolu s reference_id v auditu to znamená,
+                    // že opakované zpracování zápasu nepřipíše nic podruhé.
+                    const {seedFromString} = await import("../lib/seed");
+                    const {createRng} = await import("../generators/rng");
+                    const mgrRng = createRng(seedFromString(`${matchId}:${tid}:mgrdev`));
+                    const {applyManagerAttrDelta} = await import("../lib/manager-attrs");
+                    const resultWord = won ? "výhra" : lost ? "prohra" : "remíza";
+                    const src = won ? "match_win" as const : lost ? "match_loss" as const : "match_draw" as const;
+
+                    // Zkušenost (koučink/taktika) roste — víc při výhře.
+                    if (mgrRng.random() < (won ? 0.16 : 0.10)) {
+                        const upAttr = mgrRng.random() < 0.5 ? "coaching" : "tactics";
+                        await applyManagerAttrDelta(db, tid, upAttr, 1, src,
+                            `Zkušenost z odehraného zápasu (${resultWord})`,
+                            {referenceId: `mgr-${matchId}-${tid}-up`, gameDate: mgrGameDate});
                     }
                     // Prohra erozuje motivaci/disciplínu (blamáž víc).
-                    if (lost && Math.random() < (blowoutLoss ? 0.25 : 0.12)) {
-                        const downAttr = ["motivation", "discipline"][Math.floor(Math.random() * 2)];
-                        await db.prepare(`UPDATE managers SET ${downAttr} = MAX(?, MIN(?, ${downAttr} - 1)) WHERE team_id = ?`).bind(AMIN, AMAX, tid).run();
+                    if (lost && mgrRng.random() < (blowoutLoss ? 0.25 : 0.12)) {
+                        const downAttr = mgrRng.random() < 0.5 ? "motivation" : "discipline";
+                        await applyManagerAttrDelta(db, tid, downAttr, -1, "match_loss",
+                            blowoutLoss ? "Debakl vzal vítr z plachet" : "Prohra sebrala chuť",
+                            {referenceId: `mgr-${matchId}-${tid}-down`, gameDate: mgrGameDate});
                     }
                     // Mládežnický rozvoj — pomalu roste.
-                    if (Math.random() < 0.05) {
-                        await db.prepare("UPDATE managers SET youth_development = MAX(?, MIN(?, youth_development + 1)) WHERE team_id = ?").bind(AMIN, AMAX, tid).run();
+                    if (mgrRng.random() < 0.05) {
+                        await applyManagerAttrDelta(db, tid, "youth_development", 1, src,
+                            "Práce s mladými se posunula",
+                            {referenceId: `mgr-${matchId}-${tid}-youth`, gameDate: mgrGameDate});
                     }
-                    // Reputace: OBOUSMĚRNĚ dle výsledku, strop 15–75 (sjednoceno se sezónou/pohárem).
+                    // Reputace: OBOUSMĚRNĚ dle výsledku.
                     let repDelta = 0;
                     if (won) repDelta = bigWin ? 2 : 1;
                     else if (lost) repDelta = blowoutLoss ? -2 : -1;
-                    if (repDelta !== 0 && Math.random() < 0.35) {
-                        await db.prepare("UPDATE managers SET reputation = MAX(15, MIN(75, reputation + ?)) WHERE team_id = ?").bind(repDelta, tid).run();
+                    if (repDelta !== 0 && mgrRng.random() < 0.35) {
+                        const desc = bigWin ? `Výhra o ${margin} góly`
+                            : won ? "Výhra v zápase"
+                            : blowoutLoss ? `Debakl o ${Math.abs(margin)} góly`
+                            : "Prohra v zápase";
+                        await applyManagerAttrDelta(db, tid, "reputation", repDelta, src, desc,
+                            {referenceId: `mgr-${matchId}-${tid}-rep`, gameDate: mgrGameDate});
                     }
                 } catch (e) {
                     logger.warn({module: "match-runner"}, "manager xp update", e);

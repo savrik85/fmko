@@ -1127,6 +1127,38 @@ teamsRouter.get("/:id/manager", async (c) => {
 
 // PATCH /api/teams/:id/manager — edit kosmeticke pole (name, bio, avatar)
 // Atributy a backstory jsou gameplay-locked, nedaji se editovat.
+// GET /api/teams/:id/manager/history — odkud se vzal každý bod atributů trenéra
+teamsRouter.get("/:id/manager/history", async (c) => {
+  const tId = c.req.param("id");
+  const limit = Math.min(50, Math.max(1, Number(c.req.query("limit") ?? 25) || 25));
+
+  const rows = await c.env.DB.prepare(
+    `SELECT attr, old_value, new_value, delta, raw_delta, source, description, game_date, created_at
+       FROM manager_attr_log WHERE team_id = ? ORDER BY id DESC LIMIT ?`,
+  ).bind(tId, limit).all<{
+    attr: string; old_value: number; new_value: number; delta: number; raw_delta: number;
+    source: string; description: string; game_date: string | null; created_at: string;
+  }>().catch((e) => {
+    logger.warn({ module: "teams" }, "load manager attr history", e);
+    return { results: [] as Array<Record<string, never>> };
+  });
+
+  const { MANAGER_ATTR_LABELS } = await import("../lib/manager-attrs");
+  return c.json({
+    items: (rows.results ?? []).map((r) => ({
+      attr: r.attr,
+      attrLabel: MANAGER_ATTR_LABELS[r.attr as keyof typeof MANAGER_ATTR_LABELS] ?? r.attr,
+      oldValue: r.old_value,
+      newValue: r.new_value,
+      delta: r.delta,
+      rawDelta: r.raw_delta,
+      source: r.source,
+      description: r.description,
+      date: r.game_date ?? r.created_at,
+    })),
+  });
+});
+
 teamsRouter.patch("/:id/manager", async (c) => {
   const tId = c.req.param("id");
 

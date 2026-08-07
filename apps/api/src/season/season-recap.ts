@@ -75,7 +75,14 @@ export async function buildTeamRecap(
     .bind(`season-${seasonNumber}-rwd-${teamId}`).first<{ amount: number }>()
     .catch((e) => { logger.warn({ module: M }, "load reward", e); return null; });
   const reward = rewardRow?.amount ?? 0;
-  const repDelta = pos ? Math.round((totalTeams / 2 - pos + 0.5) * 1.5) : 0;
+
+  // SKUTEČNÁ změna reputace z auditu, ne přepočet z pořadí. Přepočet ukazoval
+  // i změnu, která se nestala — když UPDATE selhal nebo atribut narazil na strop 75.
+  const repRow = await db.prepare(
+    "SELECT delta FROM manager_attr_log WHERE reference_id = ? LIMIT 1",
+  ).bind(`mgr-season-${seasonNumber}-${teamId}-rep`).first<{ delta: number }>()
+    .catch((e) => { logger.warn({ module: M }, "load manager rep delta", e); return null; });
+  const repDelta = repRow?.delta ?? 0;
 
   const trophies = parseJson<Array<Record<string, unknown>>>(team.trophies, []);
   const trophy = trophies.find((t) => t.seasonNumber === seasonNumber && t.leagueId === leagueId) ?? null;
