@@ -417,8 +417,8 @@ export default {
                   const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek, ht.district as string);
                   if (adhocEvent) {
                     await env.DB.prepare(
-                      "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
-                    ).bind(crypto.randomUUID(), ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
+                      "INSERT INTO seasonal_events (id, team_id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
+                    ).bind(crypto.randomUUID(), ht.id, ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
                       JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), String(adhocSeasonN), adhocEvent.gameWeek
                     ).run().catch((e) => log("warn", "adhoc event insert failed", e));
                     // event notifikace

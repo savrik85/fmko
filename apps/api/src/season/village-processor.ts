@@ -9,6 +9,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { gameExpiry } from "../lib/game-time";
 import { createRng } from "../generators/rng";
 
 export interface BrigadeTemplate {
@@ -400,7 +401,7 @@ export async function generateWeeklyBrigades(
     const rng = createRng(seed);
     const count = brigadesPerWeek(v.size);
 
-    const expiresAt = addDays(gameDate, 7);
+    const expiresAt = gameExpiry(gameDate, 7);
 
     for (let i = 0; i < count; i++) {
       const template = pickTemplateWeighted(rng, officials.results ?? []);
@@ -512,9 +513,8 @@ export async function generateMonthlyPetitions(
   ).bind(gameDate).all<{ team_id: string; village_id: string }>();
 
   let generated = 0;
-  const now = new Date();
-  const expiresAt = new Date(now);
-  expiresAt.setDate(now.getDate() + 14); // 14 dní na odpověď
+  // Herní čas — expirace se porovnává proti gameDate, ne proti reálnému datu.
+  const expiresAt = gameExpiry(gameDate, 14); // 14 herních dní na odpověď
 
   for (const t of eligibleTeams.results ?? []) {
     const seed = hashSeed(`${t.team_id}|${gameDate.slice(0, 7)}`);
@@ -530,7 +530,7 @@ export async function generateMonthlyPetitions(
       ).bind(
         id, t.village_id, t.team_id, template.topic, template.title, template.description,
         template.costMoney, template.rewardFavor, template.ignorePenalty,
-        expiresAt.toISOString(), gameDate,
+        expiresAt, gameDate,
       ).run();
       generated++;
     } catch (e) {
@@ -594,9 +594,8 @@ export async function generateMonthlyInvestments(
   ).all<{ id: string }>();
 
   let generated = 0;
-  const now = new Date();
-  const expiresAt = new Date(now);
-  expiresAt.setDate(now.getDate() + 21); // 3 týdny na rozmyšlenou
+  // Herní čas — expirace se porovnává proti gameDate, ne proti reálnému datu.
+  const expiresAt = gameExpiry(gameDate, 21); // 3 herní týdny na rozmyšlenou
 
   for (const v of villages.results ?? []) {
     // Top tým podle favor v této obci
@@ -638,7 +637,7 @@ export async function generateMonthlyInvestments(
       ).bind(
         id, v.id, topTeam.team_id, template.type, template.targetFacility,
         offeredAmount, requiredContribution, template.favorThreshold,
-        expiresAt.toISOString(), template.politicalCost, gameDate,
+        expiresAt, template.politicalCost, gameDate,
       ).run();
       generated++;
 
@@ -652,7 +651,7 @@ export async function generateMonthlyInvestments(
         crypto.randomUUID(), v.id, topTeam.team_id,
         `Obec nabídla ${teamName?.name ?? "týmu"} spolufinancování: „${template.title}" (${offeredAmount.toLocaleString("cs")} Kč).`,
         JSON.stringify({ offeredAmount, requiredContribution, favor: topTeam.favor }),
-        gameDate, now.toISOString(),
+        gameDate, new Date().toISOString(),
       ).run().catch((e) => logger.warn({ module: "village-processor" }, "investment audit", e));
     } catch (e) {
       logger.warn({ module: "village-processor" }, `insert investment for ${topTeam.team_id}`, e);
@@ -684,8 +683,8 @@ export async function generatePubEncounters(
 
   let generated = 0;
   const now = new Date();
-  const expiresAt = new Date(now);
-  expiresAt.setDate(now.getDate() + 5); // 5 dní na rozhodnutí
+  // Herní čas — expirace se porovnává proti gameDate, ne proti reálnému datu.
+  const expiresAt = gameExpiry(gameDate, 5); // 5 herních dní na rozhodnutí
 
   for (const t of teams.results ?? []) {
     const officials = await db.prepare(
@@ -714,7 +713,7 @@ export async function generatePubEncounters(
         `INSERT INTO village_pub_encounters
           (id, village_id, team_id, official_id, status, expires_at, created_at)
          VALUES (?, ?, ?, ?, 'active', ?, ?)`
-      ).bind(id, t.village_id, t.team_id, officialId, expiresAt.toISOString(), gameDate).run();
+      ).bind(id, t.village_id, t.team_id, officialId, expiresAt, gameDate).run();
       generated++;
     } catch (e) {
       logger.warn({ module: "village-processor" }, `insert pub encounter for team ${t.team_id}`, e);
@@ -903,12 +902,6 @@ function isoWeekKey(date: string): string {
   const monday = new Date(d);
   monday.setUTCDate(d.getUTCDate() - day + 1);
   return monday.toISOString().slice(0, 10);
-}
-
-function addDays(date: string, days: number): string {
-  const d = new Date(date);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString();
 }
 
 function hashSeed(input: string): number {

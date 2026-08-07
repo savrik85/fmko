@@ -3,6 +3,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { isGameExpired } from "../lib/game-time";
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 
@@ -497,7 +498,15 @@ villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
   }>();
   if (!brigade) return c.json({ error: "Brigáda už není dostupná" }, 409);
 
-  if (new Date(brigade.expires_at) < new Date()) {
+  // expires_at je HERNÍ čas — porovnávat s reálným datem znamená, že kontrola
+  // při posunutém game_clock.offset_days nikdy nesedí.
+  const brigadeTeamDate = await c.env.DB.prepare(
+    "SELECT game_date FROM teams WHERE id = ?"
+  ).bind(session.teamId).first<{ game_date: string }>().catch((e) => {
+    logger.warn({ module: "villages" }, "load game date for brigade expiry", e);
+    return null;
+  });
+  if (brigadeTeamDate && isGameExpired(brigade.expires_at, brigadeTeamDate.game_date)) {
     return c.json({ error: "Brigáda již vypršela" }, 410);
   }
 

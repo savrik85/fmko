@@ -172,9 +172,14 @@ export default function EventsPage() {
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
-  const pending = events.filter((e) => e.status === "pending" && e.gameWeek <= currentGameWeek);
+  // K rozhodnutí jsou jen události s volbami. Události bez voleb jsou taky "pending",
+  // ale vyřeší je denní tick sám — do sekce "čeká na tebe" nepatří.
+  const pending = events.filter((e) => e.status === "pending" && e.choices !== null && e.gameWeek <= currentGameWeek);
   const upcoming = events.filter((e) => e.status !== "resolved" && e.gameWeek > currentGameWeek);
-  const past = events.filter((e) => e.status === "resolved" || (e.status === "active" && e.gameWeek <= currentGameWeek));
+  const past = events.filter((e) =>
+    e.status === "resolved"
+    || (e.status === "active" && e.gameWeek <= currentGameWeek)
+    || (e.status === "pending" && e.choices === null && e.gameWeek <= currentGameWeek));
 
   return (
     <div className="page-container space-y-5">

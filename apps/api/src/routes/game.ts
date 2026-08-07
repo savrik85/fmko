@@ -652,7 +652,7 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
 
   // Batch: seasonal events (AKTUÁLNÍ sezóny) + current game week (AKTUÁLNÍ sezóny)
   const [dbEventsRes, lastCalRes] = await c.env.DB.batch([
-    c.env.DB.prepare("SELECT * FROM seasonal_events WHERE league_id = ? AND season = ? ORDER BY game_week").bind(team.league_id, seasonStr),
+    c.env.DB.prepare("SELECT * FROM seasonal_events WHERE team_id = ? AND season = ? ORDER BY game_week").bind(teamId, seasonStr),
     c.env.DB.prepare("SELECT MAX(game_week) as gw FROM season_calendar WHERE league_id = ? AND status = 'simulated' AND season_number = ?").bind(team.league_id, seasonNum),
   ]);
   const dbEvents = { results: dbEventsRes.results };
@@ -672,25 +672,29 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
     return c.json({ events, currentGameWeek });
   }
 
-  // No events in DB yet — generate from templates for all weeks and insert
-  const rng = createRng(team.league_id.charCodeAt(0));
+  // Tým ještě události nemá — vygenerovat mu VLASTNÍ sadu ze šablon.
+  // Dřív byly vázané jen na ligu, takže je spotřeboval první tým, který klikl,
+  // a zbylých 13 dostalo 400 "Already resolved".
+  const rng = createRng(teamId.charCodeAt(0));
   const allEvents: Array<SeasonalEventDef & { id: string; status: string }> = [];
 
   for (let week = 0; week <= 30; week++) {
     const weekEvents = getSeasonalEventsForWeek(rng, week, team.district);
     for (let idx = 0; idx < weekEvents.length; idx++) {
       const ev = weekEvents[idx];
-      // Deterministické id (league+sezóna+týden+index) + INSERT OR IGNORE → dvě souběžná první načtení
+      // Deterministické id (tým+sezóna+týden+index) + INSERT OR IGNORE → dvě souběžná první načtení
       // (obě vidí prázdno) nevloží duplicity; seed rng je deterministický, takže id sedí napříč běhy.
-      const id = `se-${team.league_id}-s${seasonStr}-w${week}-${idx}`;
+      const id = `se-${teamId}-s${seasonStr}-w${week}-${idx}`;
+      // Status je vždy 'pending'. Události bez voleb vyřeší automaticky denní tick — dřív
+      // dostávaly 'active' a jejich efekty se nikdy neaplikovaly, přestože je UI slibovalo.
       await c.env.DB.prepare(
-        "INSERT OR IGNORE INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      ).bind(id, team.league_id, ev.type, ev.title, ev.description,
+        "INSERT OR IGNORE INTO seasonal_events (id, team_id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
+      ).bind(id, teamId, team.league_id, ev.type, ev.title, ev.description,
         JSON.stringify(ev.effects), ev.choices ? JSON.stringify(ev.choices) : null,
-        seasonStr, ev.gameWeek, ev.choices ? "pending" : "active",
+        seasonStr, ev.gameWeek,
       ).run().catch((e) => logger.warn({ module: "game" }, "insert seasonal event", e));
 
-      allEvents.push({ ...ev, id, status: ev.choices ? "pending" : "active" });
+      allEvents.push({ ...ev, id, status: "pending" });
     }
   }
 
@@ -710,10 +714,11 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
   const eventId = c.req.param("eventId");
   const body = await c.req.json<{ choiceId: string }>();
 
-  const event = await c.env.DB.prepare("SELECT * FROM seasonal_events WHERE id = ?")
-    .bind(eventId).first<Record<string, unknown>>();
-  if (!event) return c.json({ error: "Event not found" }, 404);
-  if (event.status !== "pending") return c.json({ error: "Already resolved" }, 400);
+  // Filtr na team_id je druhý zámek vedle requireTeamOwnership — událost patří jednomu týmu.
+  const event = await c.env.DB.prepare("SELECT * FROM seasonal_events WHERE id = ? AND team_id = ?")
+    .bind(eventId, teamId).first<Record<string, unknown>>();
+  if (!event) return c.json({ error: "Událost nenalezena" }, 404);
+  if (event.status !== "pending") return c.json({ error: "Už je vyřešená" }, 400);
 
   const choices = JSON.parse(event.choices as string) as Array<{ id: string; effects: Array<{ type: string; value: number }> }>;
   const choice = choices.find((ch) => ch.id === body.choiceId);
@@ -722,79 +727,15 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
   // Atomický claim — zabraňuje double-apply při souběžných requestech.
   // WHERE status = 'pending' zajistí že jen první request proběhne.
   const claimed = await c.env.DB.prepare(
-    "UPDATE seasonal_events SET status = 'resolved' WHERE id = ? AND status = 'pending'"
-  ).bind(eventId).run().catch((e) => { logger.warn({ module: "game" }, "claim seasonal event", e); return { meta: { changes: 0 } }; });
-  if (claimed.meta.changes === 0) return c.json({ error: "Already resolved" }, 400);
+    "UPDATE seasonal_events SET status = 'resolved' WHERE id = ? AND team_id = ? AND status = 'pending'"
+  ).bind(eventId, teamId).run().catch((e) => { logger.warn({ module: "game" }, "claim seasonal event", e); return { meta: { changes: 0 } }; });
+  if (claimed.meta.changes === 0) return c.json({ error: "Už je vyřešená" }, 400);
 
-  // Apply effects
-  for (const effect of choice.effects) {
-    if (effect.type === "budget") {
-      await recordTransaction(c.env.DB, teamId, "event", effect.value as number,
-        `Událost: ${(choice as Record<string, unknown>).text ?? "efekt"}`, new Date().toISOString()).catch((e) => logger.warn({ module: "game" }, "record event transaction", e));
-    }
-    if (effect.type === "reputation") {
-      await c.env.DB.prepare("UPDATE teams SET reputation = MIN(100, MAX(0, reputation + ?)) WHERE id = ?")
-        .bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "update reputation from event", e));
-    }
-    if (effect.type === "morale") {
-      await c.env.DB.prepare(
-        `UPDATE players SET life_context = json_set(life_context, '$.morale',
-          MIN(100, MAX(0, json_extract(life_context, '$.morale') + ?)))
-        WHERE team_id = ?`
-      ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "update morale from event", e));
-    }
-    if (effect.type === "stamina_boost") {
-      await c.env.DB.prepare(
-        `UPDATE players SET skills = json_set(skills, '$.stamina', MIN(100, json_extract(skills, '$.stamina') + ?)) WHERE team_id = ?`
-      ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "apply stamina boost", e));
-    }
-    if (effect.type === "experience") {
-      await c.env.DB.prepare(
-        `UPDATE players SET skills = json_set(skills, '$.experience', MIN(100, COALESCE(json_extract(skills, '$.experience'), 0) + ?)) WHERE team_id = ?`
-      ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "apply experience event", e));
-    }
-    if (effect.type === "alcohol_event") {
-      // Increase alcohol-prone players' next absence chance by reducing condition
-      await c.env.DB.prepare(
-        `INSERT INTO condition_log (player_id, team_id, old_value, new_value, delta, source, description)
-         SELECT id, team_id,
-           json_extract(life_context, '$.condition'),
-           MAX(10, json_extract(life_context, '$.condition') - 20),
-           MAX(10, json_extract(life_context, '$.condition') - 20) - json_extract(life_context, '$.condition'),
-           'event', 'Alkoholová událost (pijani)'
-         FROM players
-         WHERE team_id = ? AND json_extract(personality, '$.alcohol') > 50
-           AND json_extract(life_context, '$.condition') IS NOT NULL`,
-      ).bind(teamId).run().catch((e) => logger.warn({ module: "game" }, "log alcohol event", e));
-      await c.env.DB.prepare(
-        `UPDATE players SET life_context = json_set(life_context, '$.condition', MAX(10, json_extract(life_context, '$.condition') - 20))
-        WHERE team_id = ? AND json_extract(personality, '$.alcohol') > 50`,
-      ).bind(teamId).run().catch((e) => logger.warn({ module: "game" }, "apply alcohol event", e));
-    }
-    if (effect.type === "condition") {
-      const desc = `Událost: ${(choice as Record<string, unknown>).text ?? "kondice"}`;
-      await c.env.DB.prepare(
-        `INSERT INTO condition_log (player_id, team_id, old_value, new_value, delta, source, description)
-         SELECT id, team_id,
-           json_extract(life_context, '$.condition'),
-           MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?)),
-           MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?)) - json_extract(life_context, '$.condition'),
-           'event', ?
-         FROM players
-         WHERE team_id = ? AND json_extract(life_context, '$.condition') IS NOT NULL`,
-      ).bind(effect.value, effect.value, desc, teamId).run().catch((e) => logger.warn({ module: "game" }, "log condition event", e));
-      await c.env.DB.prepare(
-        `UPDATE players SET life_context = json_set(life_context, '$.condition',
-          MIN(100, MAX(0, json_extract(life_context, '$.condition') + ?)))
-        WHERE team_id = ?`,
-      ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "update condition from event", e));
-    }
-    if (effect.type === "pitch_condition") {
-      await c.env.DB.prepare(
-        "UPDATE stadiums SET pitch_condition = MIN(100, MAX(0, pitch_condition + ?)) WHERE team_id = ?"
-      ).bind(effect.value, teamId).run().catch((e) => logger.warn({ module: "game" }, "update pitch condition from event", e));
-    }
-  }
+  // Aplikace efektů je sdílená s automatickým resolverem v denním ticku
+  // (události bez voleb) — viz season/event-effects.ts.
+  const { applyEventEffects } = await import("../season/event-effects");
+  const choiceLabel = String((choice as Record<string, unknown>).text ?? event.title ?? "efekt");
+  await applyEventEffects(c.env.DB, teamId, choice.effects, choiceLabel, new Date().toISOString());
 
   return c.json({ ok: true, appliedEffects: choice.effects });
 });
@@ -810,7 +751,7 @@ gameRouter.post("/teams/:teamId/pub-visit", async (c) => {
   if (!team) return c.json({ error: "Team not found" }, 404);
 
   const lastVisit = await c.env.DB.prepare(
-    "SELECT created_at FROM seasonal_events WHERE league_id = (SELECT league_id FROM teams WHERE id = ?) AND type = 'hospoda_action' ORDER BY created_at DESC LIMIT 1"
+    "SELECT created_at FROM seasonal_events WHERE team_id = ? AND type = 'hospoda_action' ORDER BY created_at DESC LIMIT 1"
   ).bind(teamId).first<{ created_at: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
 
   if (lastVisit) {
@@ -841,10 +782,11 @@ gameRouter.post("/teams/:teamId/pub-visit", async (c) => {
       .catch((e) => logger.warn({ module: "game" }, "record pub cost", e));
   }
 
-  // Cooldown event
+  // Cooldown event — vázaný na TÝM. Dřív se ukládal jen s league_id a četl se stejně,
+  // takže jeden tým v hospodě zablokoval celou ligu na dva herní dny.
   await c.env.DB.prepare(
-    "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, season, game_week, status, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'hospoda_action', 'Posezení v hospodě', ?, '[]', ?, 0, 'resolved', ?)",
-  ).bind(crypto.randomUUID(), teamId,
+    "INSERT INTO seasonal_events (id, team_id, league_id, type, title, description, effects, season, game_week, status, created_at) VALUES (?, ?, (SELECT league_id FROM teams WHERE id = ?), 'hospoda_action', 'Posezení v hospodě', ?, '[]', ?, 0, 'resolved', ?)",
+  ).bind(crypto.randomUUID(), teamId, teamId,
     body.choice === "all" ? "Celý tým šel do hospody" : body.choice === "one" ? "Jen jedno pivo" : "Trenér zakázal hospodu",
     String(await activeSeasonNumber(c.env.DB)),
     team.game_date,
@@ -861,7 +803,7 @@ gameRouter.get("/teams/:teamId/pub-status", async (c) => {
   if (!team) return c.json({ available: false });
 
   const lastVisit = await c.env.DB.prepare(
-    "SELECT created_at FROM seasonal_events WHERE league_id = (SELECT league_id FROM teams WHERE id = ?) AND type = 'hospoda_action' ORDER BY created_at DESC LIMIT 1"
+    "SELECT created_at FROM seasonal_events WHERE team_id = ? AND type = 'hospoda_action' ORDER BY created_at DESC LIMIT 1"
   ).bind(teamId).first<{ created_at: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
 
   if (!lastVisit) return c.json({ available: true });
@@ -2724,8 +2666,8 @@ gameRouter.post("/game/run-matches", async (c) => {
               const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek, ht.district as string);
               if (adhocEvent) {
                 await c.env.DB.prepare(
-                  "INSERT INTO seasonal_events (id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
-                ).bind(crypto.randomUUID(), ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
+                  "INSERT INTO seasonal_events (id, team_id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
+                ).bind(crypto.randomUUID(), ht.id, ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
                   JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), String(await activeSeasonNumber(c.env.DB)), adhocEvent.gameWeek
                 ).run().catch((e: any) => logger.warn({ module: "game" }, `ad-hoc event insert: ${e.message}`));
               }

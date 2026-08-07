@@ -958,6 +958,33 @@ export async function executeDailyTick(
         } catch (e) { logger.warn({ module: "daily-tick" }, "interview article retry failed", e); }
       }
 
+      // ── Sezónní události bez voleb (Obecní zpravodaj apod.) ──
+      // Dřív dostávaly status 'active' a jejich efekty se NIKDY neaplikovaly, přestože je
+      // UI hráči ukazovalo. Teď je vyřeší tick, jakmile jejich herní týden nastane.
+      if (team.user_id !== "ai" && team.league_id) {
+        try {
+          const { resolveDueAutoEvents } = await import("./event-effects");
+          const seasonRow = await env.DB.prepare(
+            "SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1",
+          ).first<{ number: number }>();
+          if (seasonRow) {
+            const weekRow = await env.DB.prepare(
+              "SELECT MAX(game_week) as gw FROM season_calendar WHERE league_id = ? AND status = 'simulated' AND season_number = ?",
+            ).bind(team.league_id, seasonRow.number).first<{ gw: number | null }>();
+            const resolvedEvents = await resolveDueAutoEvents(
+              env.DB, teamId, weekRow?.gw ?? 0, newGameDate, String(seasonRow.number),
+            );
+            for (const ev of resolvedEvents) {
+              const summary = ev.effects.map((e) => e.description).filter(Boolean).join(" · ");
+              const { createNotification } = await import("../community/notifications");
+              await createNotification(env.DB, teamId, "event", ev.title, summary || ev.description, "/dashboard/events",
+                { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB },
+              ).catch((e) => logger.warn({ module: "daily-tick" }, "auto event notification", e));
+            }
+          }
+        } catch (e) { logger.warn({ module: "daily-tick" }, `auto seasonal events failed for team ${teamId}`, e); }
+      }
+
       // ── Weekly finances (Monday) ──
       if (newDayOfWeek === 1) {
         try {
