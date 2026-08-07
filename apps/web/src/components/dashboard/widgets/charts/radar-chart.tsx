@@ -15,27 +15,29 @@ export interface RadarSeries {
   values: number[];
 }
 
-const SIZE = 180;
-const R = 62;
+// Plátno je širší než vysoké schválně — popisky os po stranách jsou nejdelší
+// a při čtvercovém viewBoxu se ořezávaly.
+const W = 260;
+const H = 190;
+const R = 58;
 
 export function RadarChart({
   axes,
   series,
   max = 100,
-  size = 190,
 }: {
   axes: string[];
   series: RadarSeries[];
   max?: number;
-  size?: number;
 }) {
-  const c = SIZE / 2;
+  const cx = W / 2;
+  const cy = H / 2;
   const n = axes.length;
   if (n < 3) return null;
 
   const point = (i: number, ratio: number) => {
     const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
-    return [c + Math.cos(angle) * R * ratio, c + Math.sin(angle) * R * ratio] as const;
+    return [cx + Math.cos(angle) * R * ratio, cy + Math.sin(angle) * R * ratio] as const;
   };
 
   const rings = [0.25, 0.5, 0.75, 1];
@@ -44,10 +46,9 @@ export function RadarChart({
   return (
     <div className="space-y-2">
       <svg
-        viewBox={`0 0 ${SIZE} ${SIZE}`}
+        viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="xMidYMid meet"
-        style={{ width: size, height: size }}
-        className="mx-auto"
+        className="w-full max-w-[280px] mx-auto block"
         role="img"
         aria-label={axes.join(", ")}
       >
@@ -63,7 +64,7 @@ export function RadarChart({
         ))}
         {axes.map((_, i) => {
           const [x, y] = point(i, 1);
-          return <line key={i} x1={c} y1={c} x2={x} y2={y} stroke={GRID} strokeWidth="1" />;
+          return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke={GRID} strokeWidth="1" />;
         })}
 
         {series.map((s, si) => {
@@ -86,14 +87,14 @@ export function RadarChart({
 
         {/* Popisky os — textovým tokenem, nikdy barvou série */}
         {axes.map((a, i) => {
-          const [x, y] = point(i, 1.22);
+          const [x, y] = point(i, 1.24);
           return (
             <text
               key={a}
               x={x}
               y={y + 3}
-              textAnchor={x > c + 4 ? "start" : x < c - 4 ? "end" : "middle"}
-              fontSize="9"
+              textAnchor={x > cx + 4 ? "start" : x < cx - 4 ? "end" : "middle"}
+              fontSize="10"
               fill="#8B8578"
             >
               {a}

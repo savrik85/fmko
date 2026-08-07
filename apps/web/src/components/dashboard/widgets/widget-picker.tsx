@@ -28,7 +28,7 @@ export function WidgetPicker({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} maxWidth="720px">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-1">
         <h2 className="font-heading font-[800] text-xl">Přidat widget</h2>
         <button
           type="button"
@@ -39,6 +39,9 @@ export function WidgetPicker({
           ✕
         </button>
       </div>
+      <p className="text-sm text-muted mb-3">
+        Můžeš jich přidat víc naráz — přidané se rovnou označí. Až budeš mít vybráno, zavři dialog.
+      </p>
 
       <div className="flex flex-wrap gap-1.5 mb-4">
         <CategoryChip active={category === "vse"} onClick={() => setCategory("vse")}>

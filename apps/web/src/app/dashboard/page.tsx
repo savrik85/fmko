@@ -82,11 +82,12 @@ export default function DashboardPage() {
   const remove = (index: number) => setDraft((prev) => prev.filter((_, i) => i !== index));
   const setWidth = (index: number, w: WidgetWidth) =>
     setDraft((prev) => prev.map((it, i) => (i === index ? { ...it, w } : it)));
+  // Dialog zůstává otevřený — přidat si člověk chce obvykle víc widgetů naráz
+  // a zavírat a znovu otevírat po každém by bylo otravné.
   const add = (id: string) => {
     const def = getWidget(id);
     if (!def) return;
-    setDraft((prev) => [...prev, { id, w: def.defaultWidth }]);
-    setPickerOpen(false);
+    setDraft((prev) => (prev.some((it) => it.id === id) ? prev : [...prev, { id, w: def.defaultWidth }]));
   };
 
   const save = async () => {
