@@ -8,7 +8,7 @@
  * ale zůstane jako prázdný rámeček — jinak by nešel odebrat.
  */
 
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { SectionLabel } from "@/components/ui";
 import type { WidgetWidth } from "./types";
 
@@ -24,6 +24,12 @@ export interface WidgetFrameProps {
   onMoveDown: () => void;
   onRemove: () => void;
   onWidth: (w: WidgetWidth) => void;
+  /** Právě se s tímhle widgetem táhne. */
+  dragging?: boolean;
+  /** Někde na dashboardu se táhne — lišta pak nemá reagovat na hover. */
+  dragActive?: boolean;
+  /** Pointer handlery pro úchyt; lišta widgetu slouží jako celá jako madlo. */
+  dragHandleProps?: HTMLAttributes<HTMLDivElement>;
   children: ReactNode;
 }
 
@@ -31,7 +37,8 @@ const WIDTHS: WidgetWidth[] = [1, 2, 3];
 
 export function WidgetFrame({
   title, icon, bare, editing, width, isFirst, isLast,
-  onMoveUp, onMoveDown, onRemove, onWidth, children,
+  onMoveUp, onMoveDown, onRemove, onWidth,
+  dragging, dragActive, dragHandleProps, children,
 }: WidgetFrameProps) {
   const body = bare ? children : (
     <div className="card p-4 sm:p-5 h-full">
@@ -42,9 +49,27 @@ export function WidgetFrame({
 
   if (!editing) return <>{body}</>;
 
+  // Tlačítka v liště nesmí spustit tažení — pointerdown se u nich zastaví.
+  const stopDrag = { onPointerDown: (e: React.PointerEvent) => e.stopPropagation() };
+
   return (
-    <div className="relative rounded-[14px] ring-2 ring-pitch-300 ring-offset-2 ring-offset-paper">
-      <div className="flex items-center gap-1 px-3 py-2 bg-pitch-50 rounded-t-[14px] border-b border-pitch-100">
+    <div
+      className={`relative rounded-[14px] ring-2 ring-offset-2 ring-offset-paper transition-shadow ${
+        dragging ? "ring-pitch-500 shadow-lg" : "ring-pitch-300"
+      }`}
+    >
+      <div
+        {...dragHandleProps}
+        className={`flex items-center gap-1 px-2 py-2 bg-pitch-50 rounded-t-[14px] border-b border-pitch-100 select-none ${
+          dragging ? "cursor-grabbing" : "cursor-grab"
+        }`}
+        style={{ touchAction: "none" }}
+        role="button"
+        tabIndex={-1}
+        aria-label={`Přetáhnout widget ${title}`}
+        title="Chyť a přetáhni na jiné místo"
+      >
+        <span className="shrink-0 text-muted leading-none px-0.5" aria-hidden="true">⠿</span>
         <span className="text-base shrink-0" aria-hidden="true">{icon}</span>
         <span className="font-heading font-bold text-sm truncate flex-1 min-w-0">{title}</span>
 
@@ -53,6 +78,7 @@ export function WidgetFrame({
             <button
               key={w}
               type="button"
+              {...stopDrag}
               onClick={() => onWidth(w)}
               aria-pressed={width === w}
               title={`Šířka ${w} ze 3 sloupců`}
@@ -69,6 +95,7 @@ export function WidgetFrame({
 
         <button
           type="button"
+          {...stopDrag}
           onClick={onMoveUp}
           disabled={isFirst}
           title="Posunout výš"
@@ -79,6 +106,7 @@ export function WidgetFrame({
         </button>
         <button
           type="button"
+          {...stopDrag}
           onClick={onMoveDown}
           disabled={isLast}
           title="Posunout níž"
@@ -89,6 +117,7 @@ export function WidgetFrame({
         </button>
         <button
           type="button"
+          {...stopDrag}
           onClick={onRemove}
           title="Odebrat z dashboardu"
           aria-label={`Odebrat ${title}`}
@@ -99,7 +128,7 @@ export function WidgetFrame({
       </div>
 
       {/* V editaci widget nereaguje na klikání — ovládá se jen lišta */}
-      <div className="pointer-events-none select-none">{body}</div>
+      <div className={`pointer-events-none select-none ${dragActive && !dragging ? "opacity-70" : ""}`}>{body}</div>
     </div>
   );
 }

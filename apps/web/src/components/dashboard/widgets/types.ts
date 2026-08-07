@@ -25,7 +25,8 @@ export type DataKey =
   | "trainingStats" | "trainingPlan" | "attendance"
   | "leagueStats" | "reputation" | "managerHistory" | "injuries"
   | "stadium" | "equipment" | "staff" | "trophies" | "cup" | "u21"
-  | "events" | "offers" | "watchlist" | "seasonHistory";
+  | "events" | "offers" | "watchlist" | "seasonHistory"
+  | "freeAgents" | "market" | "leagueTransfers";
 
 /** Stav jednoho zdroje. Widget si podle něj vybere skeleton / chybu / obsah. */
 export interface DataSlot<T> {
@@ -341,6 +342,24 @@ export interface TransferOffer {
   offer_type?: string;
 }
 
+export interface FreeAgent {
+  id: string; firstName: string; lastName: string; age: number;
+  position: string; overallRating: number; weeklyWage: number;
+  occupation: string; villageName: string | null; distanceKm: number | null;
+}
+
+export interface MarketListing {
+  id: string; playerId: string; playerName: string; playerAge: number;
+  position: string; overallRating: number; teamName: string; askingPrice: number;
+}
+
+export interface LeagueTransfer {
+  playerId: string; playerName: string; age?: number; position?: string;
+  fromTeamId: string | null; fromTeam: string | null;
+  toTeamId: string; toTeam: string;
+  fee: number; date: string; joinType?: string;
+}
+
 export interface WatchlistEntry {
   id?: string;
   playerId?: string;
@@ -355,7 +374,7 @@ export interface WatchlistEntry {
 // ── Registry ────────────────────────────────────────────────────────────────
 
 /** Kategorie v dialogu „Přidat widget". */
-export type WidgetCategory = "prehled" | "kadr" | "zapasy" | "liga" | "finance" | "fanousci" | "klub";
+export type WidgetCategory = "prehled" | "kadr" | "zapasy" | "liga" | "finance" | "fanousci" | "klub" | "prestupy";
 
 /** Data předaná widgetu — vždy celý balík, widget si sáhne na to, co deklaroval. */
 export interface DashboardData {
@@ -396,6 +415,9 @@ export interface DashboardData {
   offers: DataSlot<TransferOffer[]>;
   watchlist: DataSlot<WatchlistEntry[]>;
   seasonHistory: DataSlot<SeasonHistoryEntry[]>;
+  freeAgents: DataSlot<FreeAgent[]>;
+  market: DataSlot<MarketListing[]>;
+  leagueTransfers: DataSlot<LeagueTransfer[]>;
 }
 
 export interface WidgetProps {

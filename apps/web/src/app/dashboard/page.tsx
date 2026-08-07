@@ -8,13 +8,15 @@
  * Domů vypadala dřív, takže kdo needituje, nepozná rozdíl.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
 import { Spinner, useConfirm } from "@/components/ui";
 import { getWidget } from "@/components/dashboard/widgets/registry";
 import { DEFAULT_LAYOUT } from "@/components/dashboard/widgets/default-layout";
 import { useDashboardData } from "@/components/dashboard/widgets/use-dashboard-data";
+import { useWidgetDrag } from "@/components/dashboard/widgets/use-widget-drag";
+import { useMasonry, MASONRY_ROW } from "@/components/dashboard/widgets/use-masonry";
 import { WidgetFrame } from "@/components/dashboard/widgets/widget-frame";
 import { WidgetPicker } from "@/components/dashboard/widgets/widget-picker";
 import type { DataKey, LayoutItem, WidgetDef, WidgetWidth } from "@/components/dashboard/widgets/types";
@@ -79,6 +81,21 @@ export default function DashboardPage() {
       return next;
     });
   };
+
+  /** Přesun na jinou pozici — při tažení, kde se widget nevyměňuje, ale vsouvá. */
+  const relocate = useCallback((from: number, to: number) => {
+    setDraft((prev) => {
+      if (from < 0 || to < 0 || from >= prev.length || to >= prev.length || from === to) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }, []);
+
+  const order = useMemo(() => resolved.map(({ item }) => item.id), [resolved]);
+  const { registerNode, dragId, dragHandlers } = useWidgetDrag(order, relocate);
+  const { spans, contentRef } = useMasonry();
   const remove = (index: number) => setDraft((prev) => prev.filter((_, i) => i !== index));
   const setWidth = (index: number, w: WidgetWidth) =>
     setDraft((prev) => prev.map((it, i) => (i === index ? { ...it, w } : it)));
@@ -189,26 +206,53 @@ export default function DashboardPage() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+        // Mřížka běží po osmipixelových řádcích a každý widget zabere tolik,
+        // kolik je vysoký — jinak by řádek dorovnával všechny karty na výšku té
+        // nejvyšší a pod krátkými by zely díry. `dense` dosadí menší widgety do
+        // mezer pod vyššími sousedy. Svislou mezeru dělá přídavek ve výpočtu
+        // spanu, ne row-gap, aby bylo dosazení přesné na pár pixelů.
+        <div
+          className="grid grid-cols-1 lg:grid-cols-3 gap-x-5"
+          style={{ gridAutoRows: `${MASONRY_ROW}px`, gridAutoFlow: "row dense", rowGap: 0 }}
+        >
           {resolved.map(({ item, def }, index) => {
             const Widget = def.Component;
+            const isDragged = dragId === item.id;
             return (
-              <div key={`${item.id}-${index}`} className={COL_SPAN[item.w] ?? COL_SPAN[1]}>
-                <WidgetFrame
-                  title={def.title}
-                  icon={def.icon}
-                  bare={def.bare}
-                  editing={editing}
-                  width={item.w}
-                  isFirst={index === 0}
-                  isLast={index === resolved.length - 1}
-                  onMoveUp={() => move(index, -1)}
-                  onMoveDown={() => move(index, 1)}
-                  onRemove={() => remove(index)}
-                  onWidth={(w) => setWidth(index, w)}
+              <div
+                key={item.id}
+                ref={(el) => registerNode(item.id, el)}
+                className={COL_SPAN[item.w] ?? COL_SPAN[1]}
+                style={{ gridRowEnd: `span ${spans[item.id] ?? 30}` }}
+              >
+                <div
+                  ref={contentRef(item.id)}
+                  className={dragId ? "rounded-2xl transition-colors" : undefined}
+                  style={dragId ? {
+                    outline: `2px dashed ${isDragged ? "#3A7A3A" : "#D6CFC2"}`,
+                    outlineOffset: 6,
+                    background: isDragged ? "rgba(232,245,232,0.55)" : "rgba(255,255,255,0.35)",
+                  } : undefined}
                 >
-                  <Widget data={data} teamId={teamId ?? ""} editing={editing} />
-                </WidgetFrame>
+                  <WidgetFrame
+                    title={def.title}
+                    icon={def.icon}
+                    bare={def.bare}
+                    editing={editing}
+                    width={item.w}
+                    isFirst={index === 0}
+                    isLast={index === resolved.length - 1}
+                    onMoveUp={() => move(index, -1)}
+                    onMoveDown={() => move(index, 1)}
+                    onRemove={() => remove(index)}
+                    onWidth={(w) => setWidth(index, w)}
+                    dragging={isDragged}
+                    dragActive={dragId != null}
+                    dragHandleProps={dragHandlers(item.id)}
+                  >
+                    <Widget data={data} teamId={teamId ?? ""} editing={editing} />
+                  </WidgetFrame>
+                </div>
               </div>
             );
           })}

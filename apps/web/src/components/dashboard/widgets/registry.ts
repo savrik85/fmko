@@ -17,6 +17,7 @@ import {
 import {
   SquadStatusWidget, SquadPositionsWidget, SquadAgeWidget, SquadSkillsWidget,
   ConditionRankingWidget, MoraleRankingWidget, SquadValueWidget, WageStructureWidget, InjuriesWidget,
+  BestPlayersWidget, YoungTalentsSeniorWidget, YoungTalentsU21Widget,
 } from "./items/squad-widgets";
 import {
   BudgetSummaryWidget, BudgetForecastWidget, BudgetHistoryWidget,
@@ -29,9 +30,11 @@ import {
 import {
   ManagerCardWidget, ManagerRadarWidget, ManagerHistoryWidget, ReputationWidget,
   TrainingBreakdownWidget, TopImproversWidget, TrainingAttendanceWidget,
+  BestAttendanceWidget, MostAbsentWidget,
   EquipmentWidget, StaffWidget, U21Widget, TrophiesWidget, TransferOffersWidget, WatchlistWidget,
 } from "./items/club-widgets";
 import { NewsWidget, AchievementsWidget, HallOfFameWidget, EventsWidget } from "./items/overview-widgets";
+import { FreeAgentsWidget, MarketListingsWidget, LeagueTransfersWidget } from "./items/market-widgets";
 import { PubSessionWidget } from "./items/pub-session";
 
 export const CATEGORY_LABELS: Record<WidgetCategory, string> = {
@@ -42,9 +45,12 @@ export const CATEGORY_LABELS: Record<WidgetCategory, string> = {
   finance: "Finance",
   fanousci: "Fanoušci",
   klub: "Klub",
+  prestupy: "Přestupy",
 };
 
-export const CATEGORY_ORDER: WidgetCategory[] = ["prehled", "zapasy", "liga", "kadr", "finance", "fanousci", "klub"];
+export const CATEGORY_ORDER: WidgetCategory[] = [
+  "prehled", "zapasy", "liga", "kadr", "prestupy", "finance", "fanousci", "klub",
+];
 
 export const WIDGETS: WidgetDef[] = [
   // ── Přehled ───────────────────────────────────────────────────────────────
@@ -209,6 +215,38 @@ export const WIDGETS: WidgetDef[] = [
     description: "Kdo je mimo hru a na jak dlouho.",
     defaultWidth: 1, needs: ["injuries"], Component: InjuriesWidget,
   },
+  {
+    id: "best-players", title: "Nejlepší hráči A týmu", icon: "🏅", category: "kadr",
+    description: "Šest nejlépe hodnocených hráčů kádru.",
+    defaultWidth: 1, needs: ["players"], Component: BestPlayersWidget,
+  },
+  {
+    id: "young-talents", title: "Nejlepší mladíci A týmu", icon: "🌟", category: "kadr",
+    description: "Nejlepší hráči kádru do 21 let — na koho stavět.",
+    defaultWidth: 1, needs: ["players"], Component: YoungTalentsSeniorWidget,
+  },
+  {
+    id: "young-talents-u21", title: "Nejlepší mladíci U21", icon: "🌱", category: "kadr",
+    description: "Nejnadanější kluci z mládežnického týmu.",
+    defaultWidth: 1, needs: ["u21"], Component: YoungTalentsU21Widget,
+  },
+
+  // ── Přestupy ──────────────────────────────────────────────────────────────
+  {
+    id: "free-agents", title: "Volní hráči na trhu", icon: "🆓", category: "prestupy",
+    description: "Hráči bez klubu — bereš je zadarmo, platíš jen mzdu.",
+    defaultWidth: 1, needs: ["freeAgents"], Component: FreeAgentsWidget,
+  },
+  {
+    id: "market-listings", title: "Hráči na trhu", icon: "🏷", category: "prestupy",
+    description: "Kdo je na prodej a za kolik.",
+    defaultWidth: 1, needs: ["market"], Component: MarketListingsWidget,
+  },
+  {
+    id: "league-transfers", title: "Poslední přestupy", icon: "🔁", category: "prestupy",
+    description: "Dokončené přestupy v lize, tvoje zvýrazněné.",
+    defaultWidth: 1, needs: ["leagueTransfers", "team"], Component: LeagueTransfersWidget,
+  },
 
   // ── Finance ───────────────────────────────────────────────────────────────
   {
@@ -301,7 +339,7 @@ export const WIDGETS: WidgetDef[] = [
     defaultWidth: 2, needs: ["trainingStats"], Component: TrainingBreakdownWidget,
   },
   {
-    id: "top-improvers", title: "Kdo nejvíc roste", icon: "🚀", category: "klub",
+    id: "top-improvers", title: "Nejvíc se zlepšující", icon: "🚀", category: "klub",
     description: "Pět hráčů, kteří z tréninku vytěžili nejvíc.",
     defaultWidth: 1, needs: ["trainingStats"], Component: TopImproversWidget,
   },
@@ -309,6 +347,16 @@ export const WIDGETS: WidgetDef[] = [
     id: "training-attendance", title: "Docházka na trénink", icon: "✅", category: "klub",
     description: "Docházka celého kádru a kdo ji nejvíc kazí.",
     defaultWidth: 1, needs: ["attendance", "team"], Component: TrainingAttendanceWidget,
+  },
+  {
+    id: "best-attendance", title: "Nejlepší docházka", icon: "🥇", category: "klub",
+    description: "Kdo na trénink chodí nejpoctivěji.",
+    defaultWidth: 1, needs: ["attendance"], Component: BestAttendanceWidget,
+  },
+  {
+    id: "most-absent", title: "Největší absentéři", icon: "🚫", category: "klub",
+    description: "Kdo nejvíc chybí v zápasech a proč.",
+    defaultWidth: 1, needs: ["attendance"], Component: MostAbsentWidget,
   },
   {
     id: "equipment", title: "Vybavení", icon: "🧰", category: "klub",

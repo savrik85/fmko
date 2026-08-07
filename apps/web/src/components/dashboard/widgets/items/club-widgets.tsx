@@ -209,6 +209,71 @@ export function TrainingAttendanceWidget({ data }: WidgetProps) {
   );
 }
 
+export function BestAttendanceWidget({ data }: WidgetProps) {
+  if (data.attendance.loading) return <WidgetSkeleton />;
+  if (data.attendance.error) return <WidgetError />;
+  const players = (data.attendance.data?.players ?? []).filter((p) => p.trainingTotal > 0);
+  if (players.length === 0) return <ChartEmpty>Zatím neproběhl žádný trénink.</ChartEmpty>;
+
+  const best = [...players].sort((a, b) => b.trainingPct - a.trainingPct).slice(0, 6);
+
+  return (
+    <div className="space-y-3">
+      <HBarChart
+        max={100}
+        data={best.map((p) => ({
+          label: `${p.firstName} ${p.lastName}`,
+          value: p.trainingPct,
+          display: `${p.trainingPct} %`,
+          href: `/dashboard/player/${p.playerId}`,
+        }))}
+      />
+      <div className="text-[11px] text-muted text-center">Kdo na trénink chodí nejpoctivěji.</div>
+    </div>
+  );
+}
+
+/**
+ * Kdo nejvíc chybí v zápasech — jiná věc než docházka na trénink.
+ * Vedle počtu zmeškaných ukazuje i nejčastější důvod.
+ */
+export function MostAbsentWidget({ data }: WidgetProps) {
+  if (data.attendance.loading) return <WidgetSkeleton />;
+  if (data.attendance.error) return <WidgetError />;
+  const info = data.attendance.data;
+  const players = (info?.players ?? []).filter((p) => p.matchesMissed > 0);
+  if (players.length === 0) return <ChartEmpty>Nikdo zatím žádný zápas nevynechal.</ChartEmpty>;
+
+  const REASON_LABELS: Record<string, string> = {
+    injury: "zranění", suspension: "trest", excuse: "omluvenka",
+    bench: "lavička", notNominated: "mimo nominaci",
+  };
+  const topReason = (b: Record<string, number>) => {
+    const [key, count] = Object.entries(b).sort((a, z) => z[1] - a[1])[0] ?? [];
+    return key && count ? `${REASON_LABELS[key] ?? key} ${count}×` : "";
+  };
+
+  const worst = [...players].sort((a, b) => b.matchesMissed - a.matchesMissed).slice(0, 6);
+
+  return (
+    <div className="space-y-3">
+      <HBarChart
+        max={info?.matchesAvailable || Math.max(...worst.map((p) => p.matchesMissed), 1)}
+        data={worst.map((p) => ({
+          label: `${p.firstName} ${p.lastName}${topReason(p.breakdown) ? ` · ${topReason(p.breakdown)}` : ""}`,
+          value: p.matchesMissed,
+          display: `${p.matchesMissed}×`,
+          color: STATUS.critical,
+          href: `/dashboard/player/${p.playerId}`,
+        }))}
+      />
+      <div className="text-[11px] text-muted text-center">
+        Ze {info?.matchesAvailable ?? 0} zápasů sezóny.
+      </div>
+    </div>
+  );
+}
+
 // ── Vybavení ────────────────────────────────────────────────────────────────
 
 export function EquipmentWidget({ data }: WidgetProps) {

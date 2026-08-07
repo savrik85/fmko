@@ -277,6 +277,56 @@ export function WageStructureWidget({ data }: WidgetProps) {
   );
 }
 
+// ── Žebříčky hráčů podle ratingu ────────────────────────────────────────────
+
+/** Věková hranice, do které se hráč ještě počítá jako mladík. */
+const YOUNG_MAX_AGE = 21;
+
+export function BestPlayersWidget({ data }: WidgetProps) {
+  return <RatingRanking players={data.players} empty="Kádr je prázdný." />;
+}
+
+export function YoungTalentsSeniorWidget({ data }: WidgetProps) {
+  return (
+    <RatingRanking
+      players={data.players}
+      maxAge={YOUNG_MAX_AGE}
+      empty={`V A-týmu nikdo do ${YOUNG_MAX_AGE} let není.`}
+    />
+  );
+}
+
+export function YoungTalentsU21Widget({ data }: WidgetProps) {
+  return <RatingRanking players={data.u21} empty="Mládežnický tým zatím nemáš." />;
+}
+
+function RatingRanking({
+  players, maxAge, empty,
+}: {
+  players: WidgetProps["data"]["players"];
+  maxAge?: number;
+  empty: string;
+}) {
+  if (players.loading) return <WidgetSkeleton />;
+  if (players.error) return <WidgetError />;
+  const list = (players.data ?? []).filter((p) => (maxAge == null ? true : p.age <= maxAge));
+  if (list.length === 0) return <ChartEmpty>{empty}</ChartEmpty>;
+
+  const top = [...list].sort((a, b) => b.overall_rating - a.overall_rating).slice(0, 6);
+
+  return (
+    <HBarChart
+      max={100}
+      data={top.map((p) => ({
+        label: `${playerName(p)} · ${p.age} let`,
+        value: p.overall_rating,
+        display: String(p.overall_rating),
+        href: `/dashboard/player/${p.id}`,
+      }))}
+    />
+  );
+}
+
 // ── Zranění ─────────────────────────────────────────────────────────────────
 
 export function InjuriesWidget({ data }: WidgetProps) {
