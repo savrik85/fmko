@@ -30,10 +30,9 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     title: "Vliv trenéra na fanoušky je konečně čitelný",
     items: [
       "Karta na stránce Fanoušci ukazuje, jak se z reputace a motivace trenéra počítá jeho vliv, a celý žebříček stupňů — od Vyhlášeného po Odepsaného. Zvýrazněný je ten tvůj.",
-      "Vliv trenéra sahá od −3 do +3 spokojenosti po každém zápase a posouvá i dlouhodobou hladinu loajality. Dřív byl efekt výrazně slabší a u velké části trenérů se neprojevil vůbec.",
+      "Vliv trenéra sahá od −3 do +3 spokojenosti po každém zápase a posouvá i dlouhodobou hladinu loajality. Respektovaný a nabuzený kouč je na tribunách znát.",
       "U každého stupně je napsáno, co ti chybí do dalšího — v bodech reputace i motivace. A pod tím konkrétní návod, čím obojí hýbat.",
       "Nápověda dostala novou sekci, která rozlišuje reputaci klubu a reputaci trenéra. Jsou to dvě různá čísla a pletlo se to.",
-      "Sezónní akce má nově každý klub vlastní, takže o ně nepřijdeš tím, že někdo v lize klikne dřív.",
     ],
   },
   {

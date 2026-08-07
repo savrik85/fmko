@@ -87,7 +87,7 @@ const SOURCES_UP = [
   },
   {
     label: "Sezónní akce",
-    detail: "Ples, pouť, den obce, zabijačka… Objevují se během sezóny na stránce Události a čekají na tvoje rozhodnutí. Vstřícná volba (postavíte stánek, uspořádáte ukázkový trénink) dá +1 až +10. Každý klub má vlastní sadu, takže o ni nepřijdeš tím, že někdo klikne dřív.",
+    detail: "Ples, pouť, den obce, zabijačka… Objevují se během sezóny na stránce Události a čekají na tvoje rozhodnutí. Vstřícná volba — postavit stánek, uspořádat ukázkový trénink — dá +1 až +10.",
     href: "/dashboard/events",
   },
   {
@@ -97,7 +97,7 @@ const SOURCES_UP = [
   },
   {
     label: "Vyprodaný stadion",
-    detail: "Když na domácí zápas přijde aspoň 95 % kapacity a zároveň nejméně 120 lidí, dostaneš +1. Ta stovka diváků je tam schválně, aby se to nedalo farmit malinkým hřištěm. Nejvýš šestkrát za sezónu.",
+    detail: "Když se stadion zaplní aspoň z 95 % a přijde nejméně 120 lidí, dostaneš +1. Nejvýš šestkrát za sezónu.",
     href: "/dashboard/fans",
   },
   {
@@ -140,7 +140,7 @@ const SOURCES_DOWN = [
   },
   {
     label: "Prázdné hlediště",
-    detail: "−1, když na domácí zápas přijde nejvýš 35 % kapacity. Počítá se až od stadionu se dvěma sty místy a po pěti odehraných domácích zápasech, aby to netrestalo malé kluby a rozehrané sezóny.",
+    detail: "−1, když na domácí zápas přijde nejvýš třetina kapacity. Týká se stadionů od dvou set míst a začíná se počítat po pěti domácích zápasech v sezóně.",
   },
   {
     label: "Zapomenutí rodáci",
