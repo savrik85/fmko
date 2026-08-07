@@ -6883,7 +6883,12 @@ gameRouter.get("/teams/:teamId/reputation", async (c) => {
     baseTicketPrice: getBaseTicketPrice(category),
     unlocks: { next: nextUnlock, all: unlocks },
     earns: earnsAt(rep),
-    atNextUnlock: nextUnlock ? { reputation: nextUnlock.reputation, ...earnsAt(nextUnlock.reputation) } : null,
+    // Srovnání "teď vs. potom" má smysl jen když je další zámek reputačně VÝŠ.
+    // Zámek blokovaný jen počtem zápasů má nižší práh než aktuální reputace a
+    // sloupec by ukazoval pokles.
+    atNextUnlock: nextUnlock && nextUnlock.missingReputation > 0
+      ? { reputation: nextUnlock.reputation, ...earnsAt(nextUnlock.reputation) }
+      : null,
     history,
     village: {
       favor,

@@ -251,22 +251,8 @@ export function calculateMatchReward(
 /**
  * Season-end rewards by league position. Same for all teams regardless of village size.
  */
-export interface SeasonReward {
-  prize: number;
-  reputationBonus: number;
-  description: string;
-}
 
-export function calculateSeasonReward(
-  position: number,
-  totalTeams: number,
-): SeasonReward {
-  if (position === 1) return { prize: 15000, reputationBonus: 10, description: "Vítěz ligy!" };
-  if (position === 2) return { prize: 10000, reputationBonus: 5, description: "Stříbrná příčka" };
-  if (position === 3) return { prize: 5000, reputationBonus: 3, description: "Bronzová medaile" };
-  if (position <= Math.ceil(totalTeams / 2)) return { prize: 2000, reputationBonus: 1, description: "Horní polovina tabulky" };
-  return { prize: 0, reputationBonus: 0, description: "Dolní polovina tabulky" };
-}
+
 
 /**
  * Training cost per month based on sessions/week and village category.

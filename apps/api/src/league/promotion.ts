@@ -44,6 +44,14 @@ const LEVEL_NAMES: Record<LeagueLevel, string> = {
 
 /**
  * Determine promotions and relegations at end of season.
+ *
+ * TODO: ZATÍM NEZAPOJENO. Hra postupy ani sestupy nemá — existuje jediná úroveň
+ * soutěže (okresní přebor) a konec sezóny řeší `applySeasonRewards`, který to
+ * říká explicitně ("BEZ postupů/sestupů"). Tenhle modul i `getPromotionEffects`
+ * drží připravený design pro chvíli, kdy víc úrovní přibude.
+ *
+ * Pozor při zapojování: reputaci za postup/sestup je potřeba pouštět přes
+ * `applyReputationDelta` (lib/reputation.ts), ať se zapíše i důvod do auditu.
  */
 export function calculatePromotions(
   standings: StandingEntry[],

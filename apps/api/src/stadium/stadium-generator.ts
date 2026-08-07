@@ -128,7 +128,13 @@ const STADIUM_UNLOCK: Record<number, UnlockReq> = {
   3: { reputation: 70, matchesPlayed: 35, season: 3 },
 };
 
-/** Cooldown in days per upgrade target level */
+/**
+ * Cooldown in days per upgrade target level.
+ *
+ * TODO: zatím NEZAPOJENO — upgrade endpointy cooldown nekontrolují. Jsou to hotové
+ * brzdy proti "L3 hned v první sezóně"; zapojení vyžaduje sloupec last_upgrade_at.
+ * Zatím tu roli plní klesající výnosy reputace (lib/reputation.ts).
+ */
 export const STADIUM_COOLDOWN_DAYS: Record<number, number> = {
   1: 21,    // L0→L1: 3 týdny
   2: 56,    // L1→L2: 8 týdnů (půl sezóny)

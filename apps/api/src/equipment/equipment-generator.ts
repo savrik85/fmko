@@ -227,6 +227,10 @@ const UNLOCK_REQUIREMENTS: Record<number, UnlockReq> = {
 };
 
 /** Cooldown in days per upgrade target level */
+/**
+ * TODO: zatím NEZAPOJENO — upgrade endpointy cooldown nekontrolují.
+ * Viz poznámka u STADIUM_COOLDOWN_DAYS ve stadium-generator.ts.
+ */
 export const EQUIPMENT_COOLDOWN_DAYS: Record<number, number> = {
   1: 7,    // L0→L1: 1 week
   2: 21,   // L1→L2: 3 weeks
