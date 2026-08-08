@@ -255,7 +255,7 @@ export async function ensureBigClubSquads(db: D1Database, cupId: string, maxClub
   const filter = onlyTeamIds ? ` AND ct.id IN (${onlyTeamIds.map(() => "?").join(",")})` : "";
   const clubs = await db.prepare(
     `SELECT ct.id, ct.name, ct.strength FROM cup_teams ct
-     WHERE ct.cup_id = ? AND ct.team_id IS NULL${filter}
+     WHERE ct.cup_id = ? AND ct.team_id IS NULL AND ct.eliminated_round IS NULL${filter}
        AND NOT EXISTS (SELECT 1 FROM cup_club_players p WHERE p.cup_team_id = ct.id)
      ORDER BY ct.is_big_club DESC LIMIT ?`
   ).bind(cupId, ...(onlyTeamIds ?? []), maxClubs).all<{ id: string; name: string; strength: number }>()
@@ -280,14 +280,20 @@ export async function ensureBigClubSquads(db: D1Database, cupId: string, maxClub
     const avg = squad.reduce((s, p) => s + overallOf(p as unknown as Record<string, number>), 0) / Math.max(1, squad.length);
     const shift = club.strength - avg; // posun na sílu klubu
 
+    // Podlaha atributů: pro velkokluby (síla 42-70) drží původních 15/20, ale u předkolových
+    // amatérů (síla 4-10) by je vytáhla na trojnásobek. Los je dělá záměrně slabé, aby lidé
+    // předkola skoro jistě prošli — proto podlahu srazíme na jejich vlastní sílu.
+    const skFloor = Math.min(15, Math.max(4, club.strength));
+    const ovFloor = Math.min(20, Math.max(5, club.strength));
+
     const stmts: D1PreparedStatement[] = [];
     for (const p of squad) {
       const pr = p as unknown as Record<string, number>;
-      const sk = (k: string) => Math.max(15, Math.min(95, Math.round((pr[k] ?? 40) + shift)));
+      const sk = (k: string) => Math.max(skFloor, Math.min(95, Math.round((pr[k] ?? 40) + shift)));
       const skills = { speed: sk("speed"), technique: sk("technique"), shooting: sk("shooting"), passing: sk("passing"), heading: sk("heading"), defense: sk("defense"), goalkeeping: sk("goalkeeping"), vision: sk("technique"), creativity: sk("passing"), setPieces: rng.int(20, 70) };
       const physical = { stamina: sk("stamina"), strength: sk("strength"), injuryProneness: pr.injuryProneness ?? 50, height: rng.int(172, 191), weight: rng.int(68, 88), preferredFoot: "right", preferredSide: "center" };
       const personality = { discipline: pr.discipline ?? 50, patriotism: pr.patriotism ?? 50, alcohol: pr.alcohol ?? 30, temper: pr.temper ?? 40, leadership: pr.leadership ?? 40, workRate: pr.workRate ?? 55, aggression: pr.aggression ?? 45, consistency: pr.consistency ?? 55, clutch: pr.clutch ?? 50 };
-      const overall = Math.max(20, Math.min(90, overallOf(pr) + Math.round(shift)));
+      const overall = Math.max(ovFloor, Math.min(90, overallOf(pr) + Math.round(shift)));
       const pp = p as unknown as { firstName: string; lastName: string; position: string; age?: number };
       stmts.push(db.prepare(
         "INSERT INTO cup_club_players (id, cup_team_id, first_name, last_name, position, overall_rating, age, skills, physical, personality, condition, morale, avatar, suspended_matches) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?)"
