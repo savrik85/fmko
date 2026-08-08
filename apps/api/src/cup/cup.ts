@@ -242,13 +242,23 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
 }
 
 /**
- * Lazy generování kádrů velkoklubů (plné atributy, různá morálka/kondice) — chunkovaně,
- * ať se nenarazí na limit subrequestů. Vrátí počet klubů, jimž byl kádr vygenerován.
+ * Lazy generování kádrů generovaných pohárových týmů (velkokluby i slabé předkolové soupeře).
+ * Bez kádru spadne zápas do silové simulace — jen skóre, žádný průběh, komentář ani statistiky.
+ * Chunkovaně, ať se nenarazí na limit subrequestů.
+ *
+ * `onlyTeamIds` omezí generování na konkrétní týmy (soupeři právě simulovaného chunku) —
+ * díky tomu dostane kádr každý, na koho přijde řada, i když je pohárové pole velké.
+ * Vrátí počet klubů, jimž byl kádr vygenerován.
  */
-export async function ensureBigClubSquads(db: D1Database, cupId: string, maxClubs = 8): Promise<number> {
+export async function ensureBigClubSquads(db: D1Database, cupId: string, maxClubs = 8, onlyTeamIds?: string[]): Promise<number> {
+  if (onlyTeamIds && onlyTeamIds.length === 0) return 0;
+  const filter = onlyTeamIds ? ` AND ct.id IN (${onlyTeamIds.map(() => "?").join(",")})` : "";
   const clubs = await db.prepare(
-    "SELECT ct.id, ct.name, ct.strength FROM cup_teams ct WHERE ct.cup_id = ? AND ct.is_big_club = 1 AND NOT EXISTS (SELECT 1 FROM cup_club_players p WHERE p.cup_team_id = ct.id) LIMIT ?"
-  ).bind(cupId, maxClubs).all<{ id: string; name: string; strength: number }>()
+    `SELECT ct.id, ct.name, ct.strength FROM cup_teams ct
+     WHERE ct.cup_id = ? AND ct.team_id IS NULL${filter}
+       AND NOT EXISTS (SELECT 1 FROM cup_club_players p WHERE p.cup_team_id = ct.id)
+     ORDER BY ct.is_big_club DESC LIMIT ?`
+  ).bind(cupId, ...(onlyTeamIds ?? []), maxClubs).all<{ id: string; name: string; strength: number }>()
     .catch((e) => { logger.warn({ module: M }, "ensure squads: load clubs", e); return { results: [] as { id: string; name: string; strength: number }[] }; });
   if (!clubs.results.length) return 0;
 
@@ -739,10 +749,45 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
   const repBonus = cupRepBonus(round, cup.total_rounds);
   const roundLabel = roundName(round, cup.total_rounds);
 
+  // Kádry soupeřů TOHOTO chunku — bez kádru spadne zápas do silové simulace (holé skóre bez
+  // průběhu, komentáře i statistik). Generujeme cíleně pro ty, na které právě přišla řada,
+  // takže na kádr nikdo nečeká přes celé pohárové pole. Rozpočet drží invokaci pod limitem;
+  // zápas, na jehož soupeře rozpočet nezbyl, se v tomto chunku přeskočí a přijde na řadu příště.
+  // Rozpočet pokrývá celý chunk (12 zápasů = max 24 soupeřů), takže se běžně na nic nečeká.
+  const SQUAD_BUDGET = 24;
+  const chunkTeamIds = [...new Set(
+    matchesRes.results.flatMap((m) => [m.home_cup_team_id, m.away_cup_team_id]).filter((x): x is string => !!x),
+  )].filter((id) => realTeamOf.get(id) === null); // reálné týmy mají kádr v players
+  const stillMissing = new Set<string>();
+  if (chunkTeamIds.length > 0) {
+    const generated = await ensureBigClubSquads(db, cupId, SQUAD_BUDGET, chunkTeamIds)
+      .catch((e) => { logger.warn({ module: M }, "ensure squads for chunk", e); return 0; });
+    if (generated > 0) logger.info({ module: M }, `cup: dogenerováno ${generated} kádrů pro kolo ${round}`);
+
+    const miss = await db.prepare(
+      `SELECT ct.id FROM cup_teams ct WHERE ct.id IN (${chunkTeamIds.map(() => "?").join(",")})
+         AND NOT EXISTS (SELECT 1 FROM cup_club_players p WHERE p.cup_team_id = ct.id)`,
+    ).bind(...chunkTeamIds).all<{ id: string }>()
+      .catch((e) => { logger.warn({ module: M }, "recheck missing squads", e); return { results: [] as { id: string }[] }; });
+
+    // Odložit zápas smí jen ten, komu kádr teprve vzniká (rozpočet došel). Když se nevygeneroval
+    // ani jeden kádr, generování selhává — pak zápas NEODKLÁDÁME a pustíme ho do silové simulace.
+    // Jinak by kolo uvázlo a hráči by zase nevěděli, kdy hrají dál.
+    if (generated > 0) {
+      for (const r of miss.results) stillMissing.add(r.id);
+    } else if (miss.results.length > 0) {
+      logger.warn({ module: M }, `cup: ${miss.results.length} soupeřů bez kádru a generování nic nevrátilo → silová simulace (bez průběhu)`);
+    }
+  }
+
   const rng = createRng((cupId.charCodeAt(0) + round * 7919) >>> 0);
   const winners: { pos: number; teamId: string }[] = [];
 
   for (const m of matchesRes.results) {
+    if ((m.home_cup_team_id && stillMissing.has(m.home_cup_team_id)) || (m.away_cup_team_id && stillMissing.has(m.away_cup_team_id))) {
+      logger.info({ module: M }, `cup tie ${m.id}: čeká na dogenerování kádru soupeře, odloženo na další dávku`);
+      continue;
+    }
     if (!m.home_cup_team_id || !m.away_cup_team_id) continue;
 
     // Claim — zápas smí odsimulovat jen jedna invokace. Bez toho dvě souběžné invokace
