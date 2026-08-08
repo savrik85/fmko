@@ -252,10 +252,17 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
  */
 export async function ensureBigClubSquads(db: D1Database, cupId: string, maxClubs = 8, onlyTeamIds?: string[]): Promise<number> {
   if (onlyTeamIds && onlyTeamIds.length === 0) return 0;
-  const filter = onlyTeamIds ? ` AND ct.id IN (${onlyTeamIds.map(() => "?").join(",")})` : "";
+  // Cílené volání (onlyTeamIds = soupeři právě simulované dávky) NEfiltruje na eliminated_round:
+  // ty týmy mají zápas na programu, takže kádr potřebují bez ohledu na to, co je u nich zapsáno.
+  // Kdyby se eliminated_round rozešel s pavoukem (jako po staré chybě s duplicitními koly),
+  // filtr by tiše zablokoval generování a zápas by se odehrál bez průběhu.
+  // Warm-up (bez onlyTeamIds) naopak vyřazené přeskakuje, ať negeneruje kádry nadarmo.
+  const filter = onlyTeamIds
+    ? ` AND ct.id IN (${onlyTeamIds.map(() => "?").join(",")})`
+    : " AND ct.eliminated_round IS NULL";
   const clubs = await db.prepare(
     `SELECT ct.id, ct.name, ct.strength FROM cup_teams ct
-     WHERE ct.cup_id = ? AND ct.team_id IS NULL AND ct.eliminated_round IS NULL${filter}
+     WHERE ct.cup_id = ? AND ct.team_id IS NULL${filter}
        AND NOT EXISTS (SELECT 1 FROM cup_club_players p WHERE p.cup_team_id = ct.id)
      ORDER BY ct.is_big_club DESC LIMIT ?`
   ).bind(cupId, ...(onlyTeamIds ?? []), maxClubs).all<{ id: string; name: string; strength: number }>()
