@@ -12,6 +12,28 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-08-09",
+    emoji: "🏋️",
+    title: "Trénink se plánuje na celý týden — a hráči na něj reagují",
+    items: [
+      "Každému dni v týdnu můžeš dát vlastní typ tréninku. V pondělí kondice, ve středu taktika, v pátek technika — nebo den nechat volný. Za volný den se netrénuje ani neplatí. Kdo chce mít celý týden stejný, přepne zpátky jedním tlačítkem.",
+      "Ke každému tréninkovému dni si vybereš i intenzitu: lehký, normální nebo tvrdý. Lehký je regenerační a hodí se den před zápasem, tvrdý dá hráčům víc, ale pořádně je vysaje.",
+      "Hráči teď na nastavení reagují náladou. Dříč se při jednom tréninku týdně nudí, pohodář a unavený veterán reptá, když se dře pětkrát. Komu tempo sedne, chodí spokojený. Po každém tréninku je vidět, komu se co nelíbilo a proč.",
+      "Nová karta Co to přinese ukazuje ještě před uložením, co dané nastavení udělá: kolik zlepšení čekat za týden i za měsíc, kolik to bude stát a jak tempo sedne kádru — kolik hráčů je spokojených, kolik přetížených a kdo to nese nejhůř. Čísla se přepočítají hned, jak něco změníš.",
+      "Součástí je i rozpis, kdo hráčům k růstu pomáhá: hlavní trenér, asistent, trenér mládeže i brankářů a jednotlivé kusy vybavení od míčů po taktickou tabuli. U každého je vidět, kolik procent přidává — takže poznáš, do čeho se vyplatí investovat.",
+    ],
+  },
+  {
+    date: "2026-08-09",
+    emoji: "🏆",
+    title: "Pohárový zápas jako plnohodnotný zápasový den",
+    items: [
+      "Na domácí pohárový zápas můžeš objednat dovoz fanoušků z okolních obcí, stejně jako v lize. Tři zápasy po sobě ze stejné obce a čtvrtina cestujících se stane tvými stálými fanoušky.",
+      "Pohárový zápas jde taky propagovat — vyjde článek ve Zpravodaji a dorazí o čtvrtinu víc diváků. Plakáty i rozhlas mají u poháru vlastní znění.",
+      "Dopravu i propagaci nastavíš na stejných místech jako u ligy: na stránce Sestava, v Rozpisu i u Fanoušků.",
+    ],
+  },
+  {
     date: "2026-08-07",
     emoji: "🧩",
     title: "Domů si poskládáš sám",
