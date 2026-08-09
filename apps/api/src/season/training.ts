@@ -53,6 +53,8 @@ export interface TrainingResult {
   attendance: TrainingAttendance[];
   improvements: Array<{ playerIndex: number; attribute: string; change: number }>;
   teamChemistry: number; // Change to team chemistry
+  /** Jak hráči reagovali na nastavení tréninku (zátěž, přístup). Volající je ukládá do morálky. */
+  moraleChanges: Array<{ playerIndex: number; change: number; reason: string }>;
   description: string;
 }
 
@@ -338,19 +340,47 @@ export function simulateTraining(
     chemistryChange = Math.round(attendRate * 3);
   }
 
-  // Approach morale effects
+  // ── Jak hráčům sedí nastavený trénink ────────────────────────────────────────
+  // Zátěž = kolik dnů v týdnu se trénuje. Každý hráč má svoje ideální tempo podle
+  // pracovitosti, věku a aktuální kondice — dříč se při jednom tréninku týdně nudí,
+  // pohodář a unavený veterán naopak reptá, když se dře pětkrát.
+  const moraleChanges: TrainingResult["moraleChanges"] = [];
+  const bump = (playerIndex: number, change: number, reason: string) => {
+    const player = squad[playerIndex];
+    const before = player.morale;
+    player.morale = Math.max(0, Math.min(100, before + change));
+    if (player.morale !== before) moraleChanges.push({ playerIndex, change: player.morale - before, reason });
+  };
+
+  const load = Math.max(1, Math.min(5, plan.sessionsPerWeek));
+  for (let i = 0; i < squad.length; i++) {
+    const player = squad[i];
+    // Ideální tempo: 2 dny u lajdáka, ~4 u dříče; veterán ubírá, mladík přidává,
+    // vyčerpaný hráč chce volno.
+    let ideal = 2 + (player.workRate / 100) * 2;
+    if (player.age >= 33) ideal -= 0.5;
+    if (player.age <= 21) ideal += 0.5;
+    if (player.condition < 50) ideal -= 1;
+
+    const diff = load - ideal;
+    if (diff >= 1.5 && rng.random() < 0.25) {
+      bump(i, -2, "Dřina navíc mu nesedí");
+    } else if (diff <= -1.5 && rng.random() < 0.2) {
+      bump(i, -1, "Chtěl by trénovat víc");
+    } else if (Math.abs(diff) <= 0.75 && rng.random() < 0.15) {
+      bump(i, 1, "Tempo tréninku mu vyhovuje");
+    }
+  }
+
+  // Přístup trenéra — přísnost sedne disciplinovaným, pohoda zvedne náladu všem
   if (plan.approach === "strict") {
-    for (const player of squad) {
-      if (player.discipline < 50 && rng.random() < 0.1) {
-        player.morale = Math.max(0, player.morale - 2);
-      }
+    for (let i = 0; i < squad.length; i++) {
+      if (squad[i].discipline < 50 && rng.random() < 0.1) bump(i, -2, "Přísný dril ho otravuje");
     }
   }
   if (plan.approach === "relaxed") {
-    for (const player of squad) {
-      if (rng.random() < 0.05) {
-        player.morale = Math.min(100, player.morale + 1);
-      }
+    for (let i = 0; i < squad.length; i++) {
+      if (rng.random() < 0.05) bump(i, 1, "Pohodová atmosféra na tréninku");
     }
   }
 
@@ -364,6 +394,7 @@ export function simulateTraining(
     attendance: allAttendance,
     improvements,
     teamChemistry: chemistryChange,
+    moraleChanges,
     description: rng.pick(descriptions),
   };
 }

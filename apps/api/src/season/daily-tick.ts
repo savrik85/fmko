@@ -346,10 +346,31 @@ export async function executeDailyTick(
           change: imp.change,
         }));
 
+        // Reakce hráčů na nastavení tréninku (zátěž, přístup) — simulace je spočítala,
+        // ale bez tohohle zápisu by zůstaly jen v paměti a morálka by se nikdy nezměnila.
+        const moraleWithNames = result.moraleChanges.map((m) => ({
+          playerId: playersResult.results[m.playerIndex].id as string,
+          playerName: `${squad[m.playerIndex].firstName} ${squad[m.playerIndex].lastName}`,
+          change: m.change,
+          reason: m.reason,
+        }));
+        if (moraleWithNames.length > 0) {
+          const moraleStmts = result.moraleChanges.map((m) =>
+            env.DB.prepare(
+              "UPDATE players SET life_context = json_set(life_context, '$.morale', ?) WHERE id = ?",
+            ).bind(Math.round(squad[m.playerIndex].morale), playersResult.results[m.playerIndex].id as string),
+          );
+          for (let i = 0; i < moraleStmts.length; i += 40) {
+            await env.DB.batch(moraleStmts.slice(i, i + 40))
+              .catch((e) => logger.warn({ module: "daily-tick", teamId }, "save training morale", e));
+          }
+        }
+
         const summary = {
           attendance: attendanceWithNames,
           improvements: improvementsWithNames,
           teamChemistry: result.teamChemistry,
+          moraleChanges: moraleWithNames,
           attendedCount: attendanceWithNames.filter((a) => a.attended).length,
           totalCount: attendanceWithNames.length,
           rested: restedPlayers,

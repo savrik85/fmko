@@ -29,6 +29,7 @@ interface TrainingResult {
   attendedCount: number;
   totalCount: number;
   rested?: Array<{ playerId: string; playerName: string }>;
+  moraleChanges?: Array<{ playerId: string; playerName: string; change: number; reason: string }>;
 }
 
 const ATTR_LABELS: Record<string, string> = {
@@ -503,6 +504,32 @@ export default function TrainingPage() {
               <div className="mt-2.5 bg-gray-100 rounded-full h-1.5 overflow-hidden">
                 <div className="h-full bg-pitch-400 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
               </div>
+
+              {/* Jak hráčům sedí nastavená zátěž a přístup */}
+              {result.moraleChanges && result.moraleChanges.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Nálada po tréninku</div>
+                  <div className="space-y-1">
+                    {result.moraleChanges.map((m, i) => (
+                      <div key={`${m.playerId}-${i}`} className="flex items-center justify-between gap-3 text-sm">
+                        {m.playerId ? (
+                          <Link href={`/dashboard/player/${m.playerId}`} className="font-heading font-bold hover:text-pitch-600 truncate">
+                            {m.playerName}
+                          </Link>
+                        ) : (
+                          <span className="font-heading font-bold truncate">{m.playerName}</span>
+                        )}
+                        <span className="flex items-center gap-2 shrink-0">
+                          <span className="text-muted text-xs">{m.reason}</span>
+                          <span className={`font-heading font-bold text-xs ${m.change > 0 ? "text-pitch-600" : "text-card-red"}`}>
+                            {m.change > 0 ? "+" : ""}{m.change} nálada
+                          </span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* ── Improvements — own card, collapsible ── */}
