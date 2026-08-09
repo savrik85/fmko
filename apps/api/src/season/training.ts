@@ -31,6 +31,41 @@ const CELEB_TRAINING_EXCUSES = [
   "Soustředění reprezentace veteránů na Maledivách",
 ];
 
+/** Základní šance na zlepšení atributu za jeden odtrénovaný den (před modifikátory). */
+export const BASE_IMPROVE_CHANCE = 0.20;
+
+/** Věkový modifikátor růstu — mladí rostou rychle, veteráni skoro vůbec. */
+export function ageGrowthMod(age: number): number {
+  return age < 20 ? 1.3 : age < 25 ? 1.15 : age < 30 ? 1.0 : age < 34 ? 0.7 : age < 38 ? 0.4 : 0.15;
+}
+
+/** Klesající výnosy: každý bod nad 50 ubírá ze šance na další zlepšení. */
+export function diminishingMod(currentValue: number): number {
+  return currentValue >= 50 ? Math.max(0.15, 1.0 - (currentValue - 50) * 0.017) : 1.0;
+}
+
+/**
+ * Ideální počet tréninkových dnů v týdnu pro daného hráče. Dříč chce dřít, pohodář ne;
+ * veterán a vyčerpaný hráč potřebují ubrat, mladík naopak snese víc.
+ * Sdílené se simulací, aby predikce na stránce ukazovala totéž, co se pak stane.
+ */
+export function idealTrainingLoad(player: { workRate: number; age: number; condition: number }): number {
+  let ideal = 2 + (player.workRate / 100) * 2;
+  if (player.age >= 33) ideal -= 0.5;
+  if (player.age <= 21) ideal += 0.5;
+  if (player.condition < 50) ideal -= 1;
+  return ideal;
+}
+
+/** Jak hráč snáší zadanou zátěž: přetížený / nevytížený / spokojený. */
+export function loadVerdict(player: { workRate: number; age: number; condition: number }, load: number):
+  "pretizeny" | "nevytizeny" | "spokojeny" {
+  const diff = load - idealTrainingLoad(player);
+  if (diff >= 1.5) return "pretizeny";
+  if (diff <= -1.5) return "nevytizeny";
+  return Math.abs(diff) <= 0.75 ? "spokojeny" : "neutralni" as never;
+}
+
 export interface TrainingPlan {
   /**
    * Kolik tréninků týdně tým podle nastavení má. Slouží k ekonomice a zobrazení —
@@ -152,7 +187,7 @@ const COMMUTE_ABSENCE_REASONS = [
   "Diesel mu zamrzl, neumí ho rozjet",
 ];
 
-const TRAINING_EFFECTS: Record<TrainingType, string[]> = {
+export const TRAINING_EFFECTS: Record<TrainingType, string[]> = {
   conditioning: ["stamina", "speed", "strength"],
   technique: ["technique", "shooting", "creativity", "setPieces"],
   tactics: ["passing", "defense", "vision"],
@@ -264,13 +299,7 @@ export function simulateTraining(
 
     const player = squad[playerIndex];
 
-    // Age modifier
-    const ageMod = player.age < 20 ? 1.3
-      : player.age < 25 ? 1.15
-      : player.age < 30 ? 1.0
-      : player.age < 34 ? 0.7
-      : player.age < 38 ? 0.4
-      : 0.15;
+    const ageMod = ageGrowthMod(player.age);
 
     // Manager coaching bonus: 40=1.12x, 60=1.28x, 80=1.44x, 99=1.59x
     const coachMod = 0.8 + (managerBonus.coaching / 100) * 0.8;
@@ -291,12 +320,11 @@ export function simulateTraining(
       }
       const current = player[attr as keyof GeneratedPlayer] as number;
 
-      // Diminishing returns: each point above 50 reduces chance
-      const diminishing = current >= 50 ? Math.max(0.15, 1.0 - (current - 50) * 0.017) : 1.0;
+      const diminishing = diminishingMod(current);
 
       // Trenér brankářů: extra multiplikátor jen pro brankáře
       const gkMul = player.position === "GK" ? (equipExtras.gkTrainingMul ?? 1) : 1;
-      const improveChance = 0.20 * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul;
+      const improveChance = BASE_IMPROVE_CHANCE * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul;
       if (rng.random() < improveChance) {
         if (current < 100) {
           (player as unknown as Record<string, number>)[attr] = current + 1;
@@ -355,14 +383,7 @@ export function simulateTraining(
   const load = Math.max(1, Math.min(5, plan.sessionsPerWeek));
   for (let i = 0; i < squad.length; i++) {
     const player = squad[i];
-    // Ideální tempo: 2 dny u lajdáka, ~4 u dříče; veterán ubírá, mladík přidává,
-    // vyčerpaný hráč chce volno.
-    let ideal = 2 + (player.workRate / 100) * 2;
-    if (player.age >= 33) ideal -= 0.5;
-    if (player.age <= 21) ideal += 0.5;
-    if (player.condition < 50) ideal -= 1;
-
-    const diff = load - ideal;
+    const diff = load - idealTrainingLoad(player);
     if (diff >= 1.5 && rng.random() < 0.25) {
       bump(i, -2, "Dřina navíc mu nesedí");
     } else if (diff <= -1.5 && rng.random() < 0.2) {

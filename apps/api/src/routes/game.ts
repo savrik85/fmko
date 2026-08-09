@@ -284,6 +284,96 @@ gameRouter.get("/teams/:teamId/players/:playerId/profile-extras", async (c) => {
   return c.json({ personality, relationships });
 });
 
+// POST /api/teams/:id/training-preview — co dané nastavení tréninku přinese, PŘED uložením.
+// Počítá ze stejných funkcí jako simulace (training.ts), aby predikce nelhala.
+gameRouter.post("/teams/:teamId/training-preview", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ type: string; approach: string; trainingDays?: number[] | null; trainingPlan?: Record<string, string> | null }>()
+    .catch((e) => { logger.warn({ module: "game", teamId }, "parse training-preview body", e); return null; });
+  if (!body) return c.json({ error: "Neplatný požadavek" }, 400);
+
+  // Kolik dnů se týdně trénuje = zátěž. Plán má přednost, pak explicitní dny, pak default mapa.
+  const DEFAULT_DAY_MAP: Record<number, number[]> = { 1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5] };
+  const planDays = body.trainingPlan ? Object.keys(body.trainingPlan).map(Number).filter((d) => d >= 1 && d <= 5) : [];
+  const days = planDays.length > 0
+    ? planDays
+    : (Array.isArray(body.trainingDays) && body.trainingDays.length > 0 ? body.trainingDays : DEFAULT_DAY_MAP[2]);
+  const load = days.length;
+
+  const team = await c.env.DB.prepare(
+    "SELECT t.id, v.size AS village_size FROM teams t LEFT JOIN villages v ON v.id = t.village_id WHERE t.id = ?",
+  ).bind(teamId).first<{ village_size: string | null }>()
+    .catch((e) => { logger.warn({ module: "game", teamId }, "training-preview team", e); return null; });
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+
+  const playersRes = await c.env.DB.prepare(
+    `SELECT id, first_name, last_name, age, position, overall_rating, skills, personality, life_context
+       FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')
+         AND id NOT IN (SELECT player_id FROM injuries WHERE days_remaining > 0)`,
+  ).bind(teamId).all<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: "game", teamId }, "training-preview players", e); return { results: [] as Record<string, unknown>[] }; });
+
+  const mgr = await c.env.DB.prepare("SELECT coaching, youth_development, discipline FROM managers WHERE team_id = ?")
+    .bind(teamId).first<{ coaching: number; youth_development: number; discipline: number }>()
+    .catch((e) => { logger.warn({ module: "game", teamId }, "training-preview manager", e); return null; });
+
+  const { TRAINING_EFFECTS, BASE_IMPROVE_CHANCE, ageGrowthMod, diminishingMod, idealTrainingLoad, loadVerdict } =
+    await import("../season/training");
+
+  const coachMod = 0.8 + ((mgr?.coaching ?? 40) / 100) * 0.8;
+  const youthDev = mgr?.youth_development ?? 40;
+  const discipline = mgr?.discipline ?? 40;
+  // Docházka podle stejného vzorce jako simulace (disciplína hráče + přístup trenéra).
+  const approachAttend = body.approach === "strict" ? 0.08 : body.approach === "relaxed" ? -0.08 : 0;
+
+  let expectedPerWeek = 0;
+  let overloaded = 0, underused = 0, content = 0;
+  const strain: Array<{ playerId: string; name: string; verdict: string }> = [];
+
+  for (const row of playersRes.results) {
+    const skills = JSON.parse((row.skills as string) || "{}");
+    const personality = JSON.parse((row.personality as string) || "{}");
+    const life = JSON.parse((row.life_context as string) || "{}");
+    const age = row.age as number;
+    const condition = life.condition ?? 100;
+    const p = { workRate: personality.workRate ?? 50, age, condition };
+
+    // Průměrná úroveň atributů, které daný typ tréninku rozvíjí → klesající výnosy
+    const attrs = (TRAINING_EFFECTS as Record<string, string[]>)[body.type] ?? [];
+    const vals = attrs.map((a) => (skills[a] as number) ?? 40).filter((v) => typeof v === "number");
+    const avgAttr = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 40;
+
+    const youthMod = age < 22 ? 0.9 + (youthDev / 100) * 0.6 : 1.0;
+    const attendProb = Math.max(0.05, Math.min(0.98,
+      (personality.discipline ?? 50) / 100 * 0.6 + 0.3 + approachAttend + ((discipline - 40) / 100) * 0.2));
+
+    const chance = BASE_IMPROVE_CHANCE * diminishingMod(avgAttr) * ageGrowthMod(age) * coachMod * youthMod;
+    expectedPerWeek += chance * attendProb * load;
+
+    const verdict = loadVerdict(p, load) as string;
+    if (verdict === "pretizeny") { overloaded++; strain.push({ playerId: row.id as string, name: `${row.first_name} ${row.last_name}`, verdict }); }
+    else if (verdict === "nevytizeny") { underused++; strain.push({ playerId: row.id as string, name: `${row.first_name} ${row.last_name}`, verdict }); }
+    else if (verdict === "spokojeny") content++;
+  }
+
+  const { calculateTrainingCost, mapVillageSize } = await import("../season/economy").then(async (m) => ({
+    calculateTrainingCost: m.calculateTrainingCost,
+    mapVillageSize: (await import("../season/finance-processor")).mapVillageSize,
+  }));
+  const category = mapVillageSize(team.village_size ?? "village");
+  const monthlyCost = calculateTrainingCost(load, category);
+
+  return c.json({
+    daysPerWeek: load,
+    squadSize: playersRes.results.length,
+    expectedImprovementsPerWeek: Math.round(expectedPerWeek * 10) / 10,
+    expectedImprovementsPerMonth: Math.round(expectedPerWeek * 4.3 * 10) / 10,
+    monthlyCost,
+    load: { overloaded, underused, content },
+    strain: strain.slice(0, 6),
+  });
+});
+
 // GET /api/teams/:id/training-stats — aggregated training statistics
 gameRouter.get("/teams/:teamId/training-stats", async (c) => {
   const teamId = c.req.param("teamId");
