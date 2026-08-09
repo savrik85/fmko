@@ -169,7 +169,16 @@ export default function TrainingPage() {
         {/* Režim: jeden typ pro celý týden, nebo každý den vlastní */}
         <div className="flex gap-1 bg-surface rounded-xl p-1">
           <button
-            onClick={() => { setTrainingPlan(null); setDirty(true); }}
+            onClick={() => {
+              // Dny z plánu si ponecháme, ať se návratem k jednotnému tréninku nezmění,
+              // kdy tým trénuje — změní se jen to, že všechny dny mají stejný typ.
+              if (trainingPlan) {
+                const days = Object.keys(trainingPlan).map(Number).sort((a, b) => a - b);
+                if (days.length > 0) setTrainingDays(days);
+              }
+              setTrainingPlan(null);
+              setDirty(true);
+            }}
             className={`flex-1 py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
               !trainingPlan ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
             }`}
