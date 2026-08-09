@@ -604,20 +604,23 @@ export default function TrainingPage() {
                   onClick={(e) => e.stopPropagation()}
                   className="accent-pitch-500 w-4 h-4 shrink-0"
                 />
+                {/* Jméno bere zbylé místo, pozice i kondice mají pevnou šířku — jinak by
+                    pozice plavala podle délky jména a sloupce by se na mobilu rozjely. */}
                 <Link
                   href={`/dashboard/player/${p.id}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="font-heading font-bold text-base hover:text-pitch-500 transition-colors truncate"
+                  className="font-heading font-bold text-base hover:text-pitch-500 transition-colors truncate flex-1 min-w-0"
                 >
                   {p.first_name} {p.last_name}
                 </Link>
-                <span className="text-sm text-muted shrink-0">{p.position}</span>
-                <span className="flex-1" />
+                <span className="text-sm text-muted shrink-0 w-9">{p.position}</span>
                 {p.injury ? (
-                  <span className="text-sm text-card-red shrink-0">🤕 Zraněný — netrénuje</span>
+                  <span className="text-sm text-card-red shrink-0 text-right">
+                    🤕<span className="hidden sm:inline"> Zraněný — netrénuje</span>
+                  </span>
                 ) : (
-                  <span className="text-sm text-muted shrink-0">
-                    Kondice{" "}
+                  <span className="text-sm text-muted shrink-0 text-right w-20 sm:w-28">
+                    <span className="hidden sm:inline">Kondice </span>
                     <span className={`font-heading font-bold tabular-nums ${cond >= 70 ? "text-pitch-500" : cond >= 40 ? "text-gold-600" : "text-card-red"}`}>
                       {cond}
                     </span>
