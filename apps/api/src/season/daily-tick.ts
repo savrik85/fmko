@@ -535,7 +535,7 @@ export async function executeDailyTick(
               ).bind(condDrain, playerId),
             ];
             if (newCond !== oldCond) {
-              stmts.push(logConditionStmt(env.DB, playerId, teamId, oldCond, newCond, "training", `Trénink: ${todayTrainingType}`));
+              stmts.push(logConditionStmt(env.DB, playerId, teamId, oldCond, newCond, "training", `Trénink: ${todayTrainingType} (${INTENSITY[todayIntensity].label.toLowerCase()})`));
             }
             await env.DB.batch(stmts).catch((e) => logger.warn({ module: "daily-tick" }, "drain condition after training", e));
           } else if (a.reason) {
