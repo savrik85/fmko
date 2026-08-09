@@ -349,10 +349,25 @@ gameRouter.post("/teams/:teamId/training-preview", async (c) => {
     equipMul = eff.trainingMultiplier * (body.type === "tactics" ? 1 + eff.tacticsTrainingBonus : 1);
     equipAttend = eff.attendanceBonus;
     equipYouth = eff.youthTrainingMod;
-    if (eff.trainingMultiplier > 1) equipParts.push({ label: "Tréninkové vybavení", detail: `+${Math.round((eff.trainingMultiplier - 1) * 100)} % k růstu` });
-    if (body.type === "tactics" && eff.tacticsTrainingBonus > 0) equipParts.push({ label: "Rozlišováky a tabule", detail: `+${Math.round(eff.tacticsTrainingBonus * 100)} % k taktice` });
-    if (eff.attendanceBonus > 0) equipParts.push({ label: "Klubová dodávka", detail: `+${Math.round(eff.attendanceBonus * 100)} % docházka` });
-    if (eff.youthTrainingMod > 0) equipParts.push({ label: "Videotechnika", detail: `+${Math.round(eff.youthTrainingMod * 100)} % pro hráče do 22 let` });
+
+    // Rozepsat po konkrétních kusech vybavení, ne jedním souhrnem — ať je vidět, co přesně
+    // pomáhá a co si zaslouží investici. Váhy drží sync s calculateEffects.
+    const { CATEGORY_LABELS } = await import("../equipment/equipment-generator");
+    const itemEffect = (key: string, perLevel: number, suffix: string) => {
+      const lvl = levels[key] ?? 0;
+      if (lvl <= 0) return;
+      const cond = (conditions[`${key}_condition`] ?? 100) / 100;
+      const pct = Math.round(lvl * perLevel * cond * 100);
+      if (pct > 0) equipParts.push({ label: CATEGORY_LABELS[key] ?? key, detail: `+${pct} % ${suffix}` });
+    };
+    itemEffect("balls", 0.05, "k růstu");
+    itemEffect("training_cones", 0.07, "k růstu");
+    if (body.type === "tactics") {
+      itemEffect("bibs", 0.05, "k taktice");
+      itemEffect("tactics_board", 0.06, "k taktice");
+    }
+    itemEffect("team_van", 0.02, "docházka");
+    itemEffect("video_setup", 0.05, "pro hráče do 22 let");
   }
 
   // Kdo z personálu na trénink reálně působí (a jak)
@@ -430,8 +445,22 @@ gameRouter.post("/teams/:teamId/training-preview", async (c) => {
   const category = mapVillageSize(team.village_size ?? "village");
   const monthlyCost = calculateTrainingCost(load, category);
 
+  // Hlavní trenér — jeho koučink násobí růst (×0,8 až ×1,6), takže patří na první místo rozpisu.
+  const mgrRow = await c.env.DB.prepare("SELECT name, avatar FROM managers WHERE team_id = ?")
+    .bind(teamId).first<{ name: string; avatar: string | null }>()
+    .catch((e) => { logger.warn({ module: "game", teamId }, "training-preview manager row", e); return null; });
+  const coachPct = Math.round((coachMod - 1) * 100);
+  const managerImpact = mgrRow ? {
+    name: mgrRow.name,
+    avatar: mgrRow.avatar,
+    role: "Hlavní trenér",
+    detail: `${coachPct >= 0 ? "+" : ""}${coachPct} % k růstu (koučink ${mgr?.coaching ?? 40})`,
+    youthDetail: (mgr?.youth_development ?? 40) >= 55 ? `+ práce s mládeží ${mgr?.youth_development}` : null,
+  } : null;
+
   return c.json({
     daysPerWeek: load,
+    managerImpact,
     squadSize: playersRes.results.length,
     expectedImprovementsPerWeek: Math.round(expectedPerWeek * 10) / 10,
     expectedImprovementsPerMonth: Math.round(expectedPerWeek * 4.3 * 10) / 10,

@@ -55,6 +55,7 @@ interface TrainingForecast {
   monthlyCost: number;
   load: { overloaded: number; underused: number; content: number };
   strain: Array<{ playerId: string; name: string; verdict: string }>;
+  managerImpact?: { name: string; avatar: string | null; role: string; detail: string; youthDetail: string | null } | null;
   staffImpact?: Array<{ staffId: string; name: string; role: string; avatar: string | null; detail: string }>;
   equipmentImpact?: Array<{ label: string; detail: string }>;
 }
@@ -306,7 +307,8 @@ export default function TrainingPage() {
           <div>Trénuje se automaticky ve vybraných dnech Po–Pá — jeden den, jeden trénink. Víc tréninkových dnů = rychlejší růst, ale vyšší náklady a únava.</div>
         </div>
 
-        {/* Approach + Sessions — side by side */}
+        {/* Přístup + počet dnů. S týdenním plánem se dny berou z něj, tak ovladač schováme —
+            jinak by šel klikat, ale nic by nedělal. */}
         <div className="flex gap-3 items-end">
           <div className="flex-1 min-w-0">
             <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Přístup</div>
@@ -327,6 +329,7 @@ export default function TrainingPage() {
               ))}
             </div>
           </div>
+          {!trainingPlan && (
           <div className="shrink-0">
             <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Dnů týdně</div>
             <div className="flex rounded-xl bg-gray-50 p-0.5">
@@ -349,6 +352,7 @@ export default function TrainingPage() {
               })()}
             </div>
           </div>
+          )}
         </div>
 
         {/* Training days picker — checkboxes Po-Pá. S týdenním plánem se dny berou z něj. */}
@@ -481,10 +485,37 @@ export default function TrainingPage() {
             </div>
           )}
 
-          {/* Kdo a co k tomu růstu přispívá */}
-          {((forecast.staffImpact?.length ?? 0) > 0 || (forecast.equipmentImpact?.length ?? 0) > 0) && (
+          {/* Kdo a co k tomu růstu přispívá — trenér má největší páku, proto první */}
+          {(forecast.managerImpact || (forecast.staffImpact?.length ?? 0) > 0 || (forecast.equipmentImpact?.length ?? 0) > 0) && (
             <div className="mt-3 pt-3 border-t border-gray-100">
               <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-2">Kdo tomu pomáhá</div>
+
+              {forecast.managerImpact && (() => {
+                const mi = forecast.managerImpact;
+                let face: Record<string, unknown> | null = null;
+                try { face = mi.avatar ? JSON.parse(mi.avatar) : null; }
+                catch (e) { console.error("manager avatar parse:", e); }
+                const positive = !mi.detail.startsWith("-");
+                return (
+                  <Link
+                    href="/dashboard/manager"
+                    className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-lg px-1 -mx-1 transition-colors"
+                  >
+                    <div className="shrink-0 w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+                      {face ? <FaceAvatar faceConfig={face} size={34} /> : <span className="text-base">🧑‍🏫</span>}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-heading font-bold text-sm leading-tight truncate">{mi.name}</div>
+                      <div className="text-[11px] text-muted leading-tight">
+                        {mi.role}{mi.youthDetail ? ` · ${mi.youthDetail}` : ""}
+                      </div>
+                    </div>
+                    <span className={`shrink-0 text-xs font-heading font-bold ${positive ? "text-pitch-600" : "text-card-red"}`}>
+                      {mi.detail}
+                    </span>
+                  </Link>
+                );
+              })()}
 
               {(forecast.staffImpact ?? []).map((st) => {
                 let face: Record<string, unknown> | null = null;
