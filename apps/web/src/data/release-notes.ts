@@ -24,16 +24,6 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     ],
   },
   {
-    date: "2026-08-09",
-    emoji: "🏆",
-    title: "Pohárový zápas jako plnohodnotný zápasový den",
-    items: [
-      "Na domácí pohárový zápas můžeš objednat dovoz fanoušků z okolních obcí, stejně jako v lize. Tři zápasy po sobě ze stejné obce a čtvrtina cestujících se stane tvými stálými fanoušky.",
-      "Pohárový zápas jde taky propagovat — vyjde článek ve Zpravodaji a dorazí o čtvrtinu víc diváků. Plakáty i rozhlas mají u poháru vlastní znění.",
-      "Dopravu i propagaci nastavíš na stejných místech jako u ligy: na stránce Sestava, v Rozpisu i u Fanoušků.",
-    ],
-  },
-  {
     date: "2026-08-07",
     emoji: "🧩",
     title: "Domů si poskládáš sám",
