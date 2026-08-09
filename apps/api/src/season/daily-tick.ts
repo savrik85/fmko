@@ -24,6 +24,33 @@ export interface DailyTickResult {
   events: DailyTickEvent[];
 }
 
+/** Povolené typy tréninku — drží sync s TrainingType v season/training.ts. */
+const VALID_TRAINING_TYPES = new Set(["conditioning", "technique", "tactics", "match_practice"]);
+
+/**
+ * Týdenní plán tréninku: {"1":"conditioning","3":"tactics"} → den v týdnu (1=Po … 5=Pá) na typ.
+ * Vrací null, když plán není nastavený nebo je poškozený — volající pak použije jednotný
+ * training_type (původní chování).
+ */
+export function parseTrainingPlan(raw: string | null, teamId?: string): Record<number, string> | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const plan: Record<number, string> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      const day = Number(k);
+      if (Number.isInteger(day) && day >= 1 && day <= 5 && typeof v === "string" && VALID_TRAINING_TYPES.has(v)) {
+        plan[day] = v;
+      }
+    }
+    return Object.keys(plan).length > 0 ? plan : null;
+  } catch (e) {
+    logger.warn({ module: "daily-tick", teamId }, "parse training_plan", e);
+    return null;
+  }
+}
+
 /**
  * Execute one day's worth of game simulation.
  */
@@ -146,7 +173,8 @@ export async function executeDailyTick(
             COALESCE(t.training_type, parent.training_type) as training_type,
             COALESCE(t.training_approach, parent.training_approach) as training_approach,
             COALESCE(t.training_sessions, parent.training_sessions) as training_sessions,
-            COALESCE(t.training_days, parent.training_days) as training_days
+            COALESCE(t.training_days, parent.training_days) as training_days,
+            COALESCE(t.training_plan, parent.training_plan) as training_plan
        FROM teams t
        LEFT JOIN teams parent ON parent.id = t.parent_team_id
       WHERE t.user_id != 'ai'`
@@ -170,10 +198,20 @@ export async function executeDailyTick(
         }
       } catch (e) { logger.warn({ module: "daily-tick", teamId }, "parse training_days", e); }
     }
-    const teamTrainingDays = (customTrainingDays && customTrainingDays.length > 0)
-      ? customTrainingDays
-      : (trainingDayMap[sessionsForTeam] ?? trainingDayMap[2]);
+    // Týdenní plán {"1":"conditioning","3":"tactics"} — každý den může mít vlastní typ tréninku.
+    // Dny v plánu určují i to, KDY se trénuje (den bez záznamu = volno). Prázdný plán →
+    // původní chování: jeden training_type pro dny z training_days.
+    const dayPlan = parseTrainingPlan(team.training_plan as string | null, teamId);
+    const planDays = dayPlan ? Object.keys(dayPlan).map(Number).filter((d) => d >= 1 && d <= 5) : [];
+
+    const teamTrainingDays = planDays.length > 0
+      ? planDays
+      : (customTrainingDays && customTrainingDays.length > 0)
+        ? customTrainingDays
+        : (trainingDayMap[sessionsForTeam] ?? trainingDayMap[2]);
     const isTeamTrainingDay = teamTrainingDays.includes(dayOfWeek);
+    // Typ pro DNEŠNÍ den — z plánu, jinak jednotný týmový typ.
+    const todayTrainingType = dayPlan?.[dayOfWeek] ?? (team.training_type as string | null);
 
     let skipTrainingForMatch = false;
     if (isTrainingDay && isTeamTrainingDay && team.league_id) {
@@ -187,7 +225,7 @@ export async function executeDailyTick(
       }
     }
 
-    if (isTrainingDay && isTeamTrainingDay && !skipTrainingForMatch && team.training_type) {
+    if (isTrainingDay && isTeamTrainingDay && !skipTrainingForMatch && todayTrainingType) {
       try {
         // Volno od trenéra: hráči s life_context.$.trainingRest tento trénink vynechají
         // (žádný drain kondice, žádná zlepšení, žádné riziko absence). Zranění se nereportují
@@ -264,7 +302,7 @@ export async function executeDailyTick(
           const eff = calculateEffects(levels, conditions);
           equipMul = eff.trainingMultiplier;
           // Tactics training dostává navíc bonus z bibs + tactics_board (jinak by se nikde neaplikoval)
-          if ((team.training_type as string) === "tactics") {
+          if (todayTrainingType === "tactics") {
             equipMul *= 1.0 + eff.tacticsTrainingBonus;
           }
           equipAttendanceBonus = eff.attendanceBonus;
@@ -290,7 +328,7 @@ export async function executeDailyTick(
 
         const rng = createRng(now.getTime() + teamId.charCodeAt(0));
         const result = simulateTraining(rng, squad, {
-          type: (team.training_type as any) ?? "conditioning",
+          type: (todayTrainingType as any) ?? "conditioning",
           approach: (team.training_approach as any) ?? "balanced",
           sessionsPerWeek: (team.training_sessions as number) ?? 2,
         }, undefined, equipMul, mgrBonus, { attendanceBonus: equipAttendanceBonus, youthTrainingMod: equipYouthMod, gkTrainingMul: staffFx.gkTrainingMul });
@@ -323,7 +361,7 @@ export async function executeDailyTick(
         ).bind(now.toISOString(), JSON.stringify(summary), teamId).run();
 
         // Tactics training → +2 pro aktuálně preferovanou formaci (nejnovější uložená lineup)
-        if ((team.training_type as string) === "tactics") {
+        if (todayTrainingType === "tactics") {
           try {
             const lastLineup = await env.DB.prepare(
               "SELECT formation FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1"
@@ -419,7 +457,7 @@ export async function executeDailyTick(
           // Log to training_log
           await env.DB.prepare(
             "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-          ).bind(playerId, teamId, imp.attribute, oldValue, newValue, imp.change, (team.training_type as string) ?? "conditioning", now.toISOString()).run().catch((e) => logger.warn({ module: "daily-tick" }, "insert training log", e));
+          ).bind(playerId, teamId, imp.attribute, oldValue, newValue, imp.change, todayTrainingType ?? "conditioning", now.toISOString()).run().catch((e) => logger.warn({ module: "daily-tick" }, "insert training log", e));
         }
 
         // Training drains condition for attending players
@@ -433,7 +471,7 @@ export async function executeDailyTick(
           tactical: 3,
         };
         // Kondiční trenér snižuje úbytek kondice z tréninku (min 1 bod)
-        const baseDrain = drainMap[(team.training_type as string)] ?? 4;
+        const baseDrain = drainMap[todayTrainingType ?? ""] ?? 4;
         const condDrain = Math.max(1, Math.round(baseDrain * (1 - staffFx.conditionDrainReduction)));
         const { logConditionStmt } = await import("../lib/condition-log");
         for (const a of result.attendance) {
@@ -450,7 +488,7 @@ export async function executeDailyTick(
               ).bind(condDrain, playerId),
             ];
             if (newCond !== oldCond) {
-              stmts.push(logConditionStmt(env.DB, playerId, teamId, oldCond, newCond, "training", `Trénink: ${team.training_type}`));
+              stmts.push(logConditionStmt(env.DB, playerId, teamId, oldCond, newCond, "training", `Trénink: ${todayTrainingType}`));
             }
             await env.DB.batch(stmts).catch((e) => logger.warn({ module: "daily-tick" }, "drain condition after training", e));
           } else if (a.reason) {
@@ -756,7 +794,7 @@ export async function executeDailyTick(
   logger.info({ module: "daily-tick" }, "reached game date advancement section");
   // ── Advance game date for ALL teams (including AI) ──
   const allTeams = await env.DB.prepare(
-    "SELECT t.id, t.user_id, t.league_id, t.game_date, t.training_type, t.training_sessions, t.training_days, v.size as village_size, v.district as village_district, v.population as village_population FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
+    "SELECT t.id, t.user_id, t.league_id, t.game_date, t.training_type, t.training_sessions, t.training_days, t.training_plan, v.size as village_size, v.district as village_district, v.population as village_population FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
   ).all();
 
   // ── Globální herní den ── clock + effectiveDate jsou spočítané na začátku ticku (deterministicky
@@ -1036,7 +1074,8 @@ export async function executeDailyTick(
       // ── Training cost (only on actual training days that ran — custom training_days
       // override default mapping, smart-skip se kontroluje u top loop a tady musíme
       // replikovat stejné podmínky, aby se náklad netáhl při skipnutém tréninku) ──
-      if (team.training_type && newDayOfWeek >= 1 && newDayOfWeek <= 5) {
+      const costPlan = parseTrainingPlan(team.training_plan as string | null, teamId);
+      if ((team.training_type || costPlan) && newDayOfWeek >= 1 && newDayOfWeek <= 5) {
         const sessions = (team.training_sessions as number) ?? 2;
         const trainingDayMap: Record<number, number[]> = {
           1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5],
@@ -1050,7 +1089,12 @@ export async function executeDailyTick(
             }
           } catch (e) { logger.warn({ module: "daily-tick", teamId }, "parse training_days for cost", e); }
         }
-        const trainingDays = (customDays && customDays.length > 0) ? customDays : (trainingDayMap[sessions] ?? trainingDayMap[2]);
+        // Dny z týdenního plánu mají přednost — stejné pořadí jako u samotného tréninku výše,
+        // jinak by se náklad strhl v den, kdy se netrénovalo (nebo naopak chyběl).
+        const planDaysForCost = costPlan ? Object.keys(costPlan).map(Number).filter((d) => d >= 1 && d <= 5) : [];
+        const trainingDays = planDaysForCost.length > 0
+          ? planDaysForCost
+          : (customDays && customDays.length > 0) ? customDays : (trainingDayMap[sessions] ?? trainingDayMap[2]);
 
         if (trainingDays.includes(newDayOfWeek)) {
           // Smart skip — match within next ~24h → no training, no cost

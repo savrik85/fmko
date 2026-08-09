@@ -69,12 +69,15 @@ async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: 
   }
 }
 
+// Povolené typy tréninku — drží sync s TrainingType v season/training.ts.
+const VALID_TRAINING_TYPES: string[] = ["conditioning", "technique", "tactics", "match_practice"];
+
 // GET /api/teams/:id/training — get training plan + simulate a session preview
 gameRouter.get("/teams/:teamId/training", async (c) => {
   const teamId = c.req.param("teamId");
 
   const team = await c.env.DB.prepare(
-    "SELECT training_type, training_approach, training_sessions, training_days, last_training_at, last_training_result FROM teams WHERE id = ?"
+    "SELECT training_type, training_approach, training_sessions, training_days, training_plan, last_training_at, last_training_result FROM teams WHERE id = ?"
   ).bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "game" }, "fetch training plan", e); return null; });
 
   if (!team) return c.json({ error: "Team not found" }, 404);
@@ -100,11 +103,16 @@ gameRouter.get("/teams/:teamId/training", async (c) => {
   ).bind(teamId).all<{ id: string }>()
     .catch((e) => { logger.warn({ module: "game", teamId }, "load training rest players", e); return { results: [] as Array<{ id: string }> }; });
 
+  // Týdenní plán {"1":"conditioning",...} — každý den vlastní typ. null = jednotný typ pro všechny dny.
+  const { parseTrainingPlan } = await import("../season/daily-tick");
+  const trainingPlan = parseTrainingPlan(team.training_plan as string | null, teamId);
+
   return c.json({
     type: team.training_type ?? "conditioning",
     approach: team.training_approach ?? "balanced",
     sessionsPerWeek: team.training_sessions ?? 2,
     trainingDays,
+    trainingPlan,
     restPlayerIds: restRows.results.map((r) => r.id),
     lastTrainingAt: team.last_training_at,
     lastResult,
@@ -114,7 +122,7 @@ gameRouter.get("/teams/:teamId/training", async (c) => {
 // POST /api/teams/:id/training — set training plan
 gameRouter.post("/teams/:teamId/training", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ type: string; approach: string; sessionsPerWeek: number; trainingDays?: number[] | null }>();
+  const body = await c.req.json<{ type: string; approach: string; sessionsPerWeek: number; trainingDays?: number[] | null; trainingPlan?: Record<string, string> | null }>();
 
   // Validace trainingDays: pole 1-5, unikatni, max 5 polozek. null/undefined → default mapping podle sessionsPerWeek.
   let trainingDaysJson: string | null = null;
@@ -125,9 +133,25 @@ gameRouter.post("/teams/:teamId/training", async (c) => {
     }
   }
 
+  // Týdenní plán: den (1-5) → typ tréninku. Prázdný plán = null → platí jednotný type pro
+  // dny z trainingDays (původní chování). Neznámý typ nebo den se zahodí.
+  let trainingPlanJson: string | null = null;
+  if (body.trainingPlan && typeof body.trainingPlan === "object" && !Array.isArray(body.trainingPlan)) {
+    const plan: Record<number, string> = {};
+    for (const [k, v] of Object.entries(body.trainingPlan)) {
+      const day = Number(k);
+      if (Number.isInteger(day) && day >= 1 && day <= 5 && VALID_TRAINING_TYPES.includes(v)) plan[day] = v;
+    }
+    if (Object.keys(plan).length > 0) {
+      trainingPlanJson = JSON.stringify(plan);
+      // Dny plánu drží training_days v souladu — čte je řada dalších míst (náklady, U21, FE).
+      trainingDaysJson = JSON.stringify(Object.keys(plan).map(Number).sort((a, b) => a - b));
+    }
+  }
+
   await c.env.DB.prepare(
-    "UPDATE teams SET training_type = ?, training_approach = ?, training_sessions = ?, training_days = ? WHERE id = ?"
-  ).bind(body.type, body.approach, body.sessionsPerWeek, trainingDaysJson, teamId).run().catch((e) => logger.warn({ module: "game" }, "update training plan", e));
+    "UPDATE teams SET training_type = ?, training_approach = ?, training_sessions = ?, training_days = ?, training_plan = ? WHERE id = ?"
+  ).bind(body.type, body.approach, body.sessionsPerWeek, trainingDaysJson, trainingPlanJson, teamId).run().catch((e) => logger.warn({ module: "game" }, "update training plan", e));
 
   return c.json({ ok: true });
 });

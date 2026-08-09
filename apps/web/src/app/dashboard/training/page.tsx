@@ -62,6 +62,8 @@ export default function TrainingPage() {
   const [sessions, setSessions] = useState(2);
   // Custom training days (1=Po, 2=Út, 3=St, 4=Čt, 5=Pá). null = použít default podle sessions.
   const [trainingDays, setTrainingDays] = useState<number[] | null>(null);
+  // Týdenní plán: den (1=Po … 5=Pá) → typ tréninku. null = jednotný typ pro všechny dny.
+  const [trainingPlan, setTrainingPlan] = useState<Record<number, TrainingType> | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<TrainingResult | null>(null);
@@ -75,7 +77,7 @@ export default function TrainingPage() {
   useEffect(() => {
     if (!teamId) return;
     Promise.all([
-      apiFetch<{ type: TrainingType; approach: TrainingApproach; sessionsPerWeek: number; trainingDays: number[] | null; restPlayerIds?: string[]; lastResult: TrainingResult | null }>(
+      apiFetch<{ type: TrainingType; approach: TrainingApproach; sessionsPerWeek: number; trainingDays: number[] | null; trainingPlan: Record<number, TrainingType> | null; restPlayerIds?: string[]; lastResult: TrainingResult | null }>(
         `/api/teams/${teamId}/training`
       ),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
@@ -86,6 +88,7 @@ export default function TrainingPage() {
       setApproach(data.approach);
       setSessions(data.sessionsPerWeek);
       setTrainingDays(data.trainingDays ?? null);
+      setTrainingPlan(data.trainingPlan ?? null);
       setRestIds(new Set(data.restPlayerIds ?? []));
       setResult(data.lastResult);
       setStats(statsData);
@@ -114,7 +117,7 @@ export default function TrainingPage() {
         apiFetch(`/api/teams/${teamId}/training`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type, approach, sessionsPerWeek: sessions, trainingDays }),
+          body: JSON.stringify({ type, approach, sessionsPerWeek: sessions, trainingDays, trainingPlan }),
         }),
         apiFetch(`/api/teams/${teamId}/training-rest`, {
           method: "POST",
@@ -163,7 +166,76 @@ export default function TrainingPage() {
       <div className="card p-4 sm:p-5 space-y-4">
         <SectionLabel>Tréninkový plán</SectionLabel>
 
+        {/* Režim: jeden typ pro celý týden, nebo každý den vlastní */}
+        <div className="flex gap-1 bg-surface rounded-xl p-1">
+          <button
+            onClick={() => { setTrainingPlan(null); setDirty(true); }}
+            className={`flex-1 py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
+              !trainingPlan ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
+            }`}
+          >
+            Stejný každý den
+          </button>
+          <button
+            onClick={() => {
+              if (trainingPlan) return;
+              // Předvyplnit současným typem na dnech, které tým trénuje teď
+              const DEFAULT_DAY_MAP: Record<number, number[]> = { 1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5] };
+              const days = trainingDays && trainingDays.length > 0 ? trainingDays : (DEFAULT_DAY_MAP[sessions] ?? [2, 4]);
+              setTrainingPlan(Object.fromEntries(days.map((d) => [d, type])) as Record<number, TrainingType>);
+              setDirty(true);
+            }}
+            className={`flex-1 py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
+              trainingPlan ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
+            }`}
+          >
+            Plán na týden
+          </button>
+        </div>
+
+        {/* Týdenní plán — každému dni vlastní typ tréninku (nebo volno) */}
+        {trainingPlan && (
+          <div className="space-y-1.5">
+            {[
+              { num: 1, full: "Pondělí" }, { num: 2, full: "Úterý" }, { num: 3, full: "Středa" },
+              { num: 4, full: "Čtvrtek" }, { num: 5, full: "Pátek" },
+            ].map((d) => {
+              const val = trainingPlan[d.num] ?? "";
+              return (
+                <div key={d.num} className="flex items-center gap-2.5">
+                  <div className="w-20 shrink-0 font-heading font-bold text-sm">{d.full}</div>
+                  <select
+                    value={val}
+                    onChange={(e) => {
+                      const next = { ...trainingPlan };
+                      if (e.target.value === "") delete next[d.num];
+                      else next[d.num] = e.target.value as TrainingType;
+                      setTrainingPlan(next);
+                      setDirty(true);
+                    }}
+                    className={`flex-1 px-2.5 py-2 rounded-lg border-2 bg-white text-sm font-heading transition-colors ${
+                      val ? "border-pitch-500/40 text-ink" : "border-gray-200 text-muted"
+                    }`}
+                  >
+                    <option value="">— volno —</option>
+                    {TRAINING_TYPES.map((t) => (
+                      <option key={t.key} value={t.key}>{t.icon} {t.label}</option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+            <div className="text-xs text-muted bg-gray-50 rounded-lg px-3 py-2 mt-2">
+              Každý den se trénuje to, co mu nastavíš. Dny označené jako volno se netrénují a neplatí se za ně.
+              {Object.keys(trainingPlan).length === 0 && (
+                <span className="block mt-1 text-card-red font-heading font-bold">⚠ Celý týden volno — tým vůbec netrénuje.</span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Type — 2x2 mobile, 4 cols desktop */}
+        {!trainingPlan && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {TRAINING_TYPES.map((t) => (
             <button
@@ -183,10 +255,13 @@ export default function TrainingPage() {
             </button>
           ))}
         </div>
+        )}
 
         {/* Info about selected type + approach */}
         <div className="text-xs text-muted bg-gray-50 rounded-lg px-3 py-2 space-y-1">
-          <div><span className="font-heading font-bold text-ink">{TRAINING_TYPES.find((t) => t.key === type)?.label}:</span> {TRAINING_TYPES.find((t) => t.key === type)?.desc}. Zlepšuje {TRAINING_TYPES.find((t) => t.key === type)?.skills}.</div>
+          {!trainingPlan && (
+            <div><span className="font-heading font-bold text-ink">{TRAINING_TYPES.find((t) => t.key === type)?.label}:</span> {TRAINING_TYPES.find((t) => t.key === type)?.desc}. Zlepšuje {TRAINING_TYPES.find((t) => t.key === type)?.skills}.</div>
+          )}
           <div><span className="font-heading font-bold text-ink">{APPROACHES.find((a) => a.key === approach)?.label}:</span> {APPROACHES.find((a) => a.key === approach)?.desc}.</div>
           <div>Tréninky probíhají automaticky Po–Pá. Víc tréninků = rychlejší růst, ale horší docházka a únava.</div>
         </div>
@@ -232,8 +307,8 @@ export default function TrainingPage() {
           </div>
         </div>
 
-        {/* Training days picker — checkboxes Po-Pá */}
-        {(() => {
+        {/* Training days picker — checkboxes Po-Pá. S týdenním plánem se dny berou z něj. */}
+        {!trainingPlan && (() => {
           const DEFAULT_DAY_MAP: Record<number, number[]> = { 1: [2], 2: [2, 4], 3: [1, 3, 5] };
           const effectiveDays = trainingDays && trainingDays.length > 0 ? trainingDays : (DEFAULT_DAY_MAP[sessions] ?? [2, 4]);
           const DAY_LABELS = [
