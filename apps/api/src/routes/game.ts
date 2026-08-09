@@ -71,6 +71,7 @@ async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: 
 
 // Povolené typy tréninku — drží sync s TrainingType v season/training.ts.
 const VALID_TRAINING_TYPES: string[] = ["conditioning", "technique", "tactics", "match_practice"];
+const VALID_INTENSITIES: string[] = ["light", "normal", "hard"];
 
 // GET /api/teams/:id/training — get training plan + simulate a session preview
 gameRouter.get("/teams/:teamId/training", async (c) => {
@@ -137,10 +138,16 @@ gameRouter.post("/teams/:teamId/training", async (c) => {
   // dny z trainingDays (původní chování). Neznámý typ nebo den se zahodí.
   let trainingPlanJson: string | null = null;
   if (body.trainingPlan && typeof body.trainingPlan === "object" && !Array.isArray(body.trainingPlan)) {
-    const plan: Record<number, string> = {};
+    const plan: Record<number, { type: string; intensity: string }> = {};
     for (const [k, v] of Object.entries(body.trainingPlan)) {
       const day = Number(k);
-      if (Number.isInteger(day) && day >= 1 && day <= 5 && VALID_TRAINING_TYPES.includes(v)) plan[day] = v;
+      if (!Number.isInteger(day) || day < 1 || day > 5) continue;
+      // Přijímáme obojí: holý typ (starší klient) i {type, intensity}.
+      const type = typeof v === "string" ? v : (v as { type?: string })?.type;
+      const rawIntensity = typeof v === "string" ? "normal" : (v as { intensity?: string })?.intensity;
+      if (typeof type !== "string" || !VALID_TRAINING_TYPES.includes(type)) continue;
+      const intensity = VALID_INTENSITIES.includes(rawIntensity ?? "normal") ? (rawIntensity ?? "normal") : "normal";
+      plan[day] = { type, intensity };
     }
     if (Object.keys(plan).length > 0) {
       trainingPlanJson = JSON.stringify(plan);
@@ -298,7 +305,23 @@ gameRouter.post("/teams/:teamId/training-preview", async (c) => {
   const days = planDays.length > 0
     ? planDays
     : (Array.isArray(body.trainingDays) && body.trainingDays.length > 0 ? body.trainingDays : DEFAULT_DAY_MAP[2]);
-  const load = days.length;
+
+  const { INTENSITY } = await import("../season/training");
+  const intensityOf = (day: number): "light" | "normal" | "hard" => {
+    const v = body.trainingPlan?.[String(day)] as unknown;
+    if (v && typeof v === "object") {
+      const i = (v as { intensity?: string }).intensity;
+      if (i === "light" || i === "hard") return i;
+    }
+    return "normal";
+  };
+  // Zátěž pro spokojenost hráčů váží intenzitu; růst se násobí průměrnou intenzitou dnů.
+  const load = planDays.length > 0
+    ? planDays.reduce((sum, d) => sum + INTENSITY[intensityOf(d)].load, 0)
+    : days.length;
+  const growthMul = planDays.length > 0
+    ? planDays.reduce((sum, d) => sum + INTENSITY[intensityOf(d)].growth, 0) / planDays.length
+    : 1;
 
   const team = await c.env.DB.prepare(
     "SELECT t.id, v.size AS village_size FROM teams t LEFT JOIN villages v ON v.id = t.village_id WHERE t.id = ?",
@@ -430,7 +453,7 @@ gameRouter.post("/teams/:teamId/training-preview", async (c) => {
 
     const chance = BASE_IMPROVE_CHANCE * equipMul * staffFx.trainingMultiplier
       * diminishingMod(avgAttr) * ageGrowthMod(age) * coachMod * youthMod * gkMul;
-    expectedPerWeek += chance * attendProb * load;
+    expectedPerWeek += chance * growthMul * attendProb * days.length;
 
     const verdict = loadVerdict(p, load) as string;
     if (verdict === "pretizeny") { overloaded++; strain.push({ playerId: row.id as string, name: `${row.first_name} ${row.last_name}`, verdict }); }
@@ -443,7 +466,7 @@ gameRouter.post("/teams/:teamId/training-preview", async (c) => {
     mapVillageSize: (await import("../season/finance-processor")).mapVillageSize,
   }));
   const category = mapVillageSize(team.village_size ?? "village");
-  const monthlyCost = calculateTrainingCost(load, category);
+  const monthlyCost = calculateTrainingCost(days.length, category);
 
   // Hlavní trenér — jeho koučink násobí růst (×0,8 až ×1,6), takže patří na první místo rozpisu.
   const mgrRow = await c.env.DB.prepare("SELECT name, avatar FROM managers WHERE team_id = ?")
@@ -459,7 +482,8 @@ gameRouter.post("/teams/:teamId/training-preview", async (c) => {
   } : null;
 
   return c.json({
-    daysPerWeek: load,
+    daysPerWeek: days.length,
+    weeklyLoad: Math.round(load * 10) / 10,
     managerImpact,
     squadSize: playersRes.results.length,
     expectedImprovementsPerWeek: Math.round(expectedPerWeek * 10) / 10,

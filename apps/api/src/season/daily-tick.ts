@@ -27,21 +27,39 @@ export interface DailyTickResult {
 /** Povolené typy tréninku — drží sync s TrainingType v season/training.ts. */
 const VALID_TRAINING_TYPES = new Set(["conditioning", "technique", "tactics", "match_practice"]);
 
+const VALID_INTENSITIES = new Set(["light", "normal", "hard"]);
+
+export interface TrainingDaySetting { type: string; intensity: "light" | "normal" | "hard" }
+
 /**
- * Týdenní plán tréninku: {"1":"conditioning","3":"tactics"} → den v týdnu (1=Po … 5=Pá) na typ.
+ * Týdenní plán tréninku: den v týdnu (1=Po … 5=Pá) → typ a intenzita.
+ * Přijímá dva tvary:
+ *   {"1":"conditioning"}                              — starší plány bez intenzity
+ *   {"1":{"type":"conditioning","intensity":"hard"}}  — s intenzitou
  * Vrací null, když plán není nastavený nebo je poškozený — volající pak použije jednotný
  * training_type (původní chování).
  */
-export function parseTrainingPlan(raw: string | null, teamId?: string): Record<number, string> | null {
+export function parseTrainingPlan(raw: string | null, teamId?: string): Record<number, TrainingDaySetting> | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-    const plan: Record<number, string> = {};
+    const plan: Record<number, TrainingDaySetting> = {};
     for (const [k, v] of Object.entries(parsed)) {
       const day = Number(k);
-      if (Number.isInteger(day) && day >= 1 && day <= 5 && typeof v === "string" && VALID_TRAINING_TYPES.has(v)) {
-        plan[day] = v;
+      if (!Number.isInteger(day) || day < 1 || day > 5) continue;
+
+      if (typeof v === "string" && VALID_TRAINING_TYPES.has(v)) {
+        plan[day] = { type: v, intensity: "normal" };
+      } else if (v && typeof v === "object" && !Array.isArray(v)) {
+        const t = (v as Record<string, unknown>).type;
+        const i = (v as Record<string, unknown>).intensity;
+        if (typeof t === "string" && VALID_TRAINING_TYPES.has(t)) {
+          plan[day] = {
+            type: t,
+            intensity: (typeof i === "string" && VALID_INTENSITIES.has(i) ? i : "normal") as TrainingDaySetting["intensity"],
+          };
+        }
       }
     }
     return Object.keys(plan).length > 0 ? plan : null;
@@ -211,7 +229,13 @@ export async function executeDailyTick(
         : (trainingDayMap[sessionsForTeam] ?? trainingDayMap[2]);
     const isTeamTrainingDay = teamTrainingDays.includes(dayOfWeek);
     // Typ pro DNEŠNÍ den — z plánu, jinak jednotný týmový typ.
-    const todayTrainingType = dayPlan?.[dayOfWeek] ?? (team.training_type as string | null);
+    const todayTrainingType = dayPlan?.[dayOfWeek]?.type ?? (team.training_type as string | null);
+    const todayIntensity = dayPlan?.[dayOfWeek]?.intensity ?? "normal";
+    // Týdenní zátěž pro spokojenost hráčů — tvrdý trénink váží víc než lehký.
+    const { INTENSITY } = await import("./training");
+    const weeklyLoad = dayPlan
+      ? Object.values(dayPlan).reduce((sum, d) => sum + INTENSITY[d.intensity].load, 0)
+      : teamTrainingDays.length;
 
     let skipTrainingForMatch = false;
     if (isTrainingDay && isTeamTrainingDay && team.league_id) {
@@ -329,6 +353,8 @@ export async function executeDailyTick(
         const rng = createRng(now.getTime() + teamId.charCodeAt(0));
         const result = simulateTraining(rng, squad, {
           type: (todayTrainingType as any) ?? "conditioning",
+          intensity: todayIntensity,
+          weeklyLoad,
           approach: (team.training_approach as any) ?? "balanced",
           sessionsPerWeek: (team.training_sessions as number) ?? 2,
         }, undefined, equipMul, mgrBonus, { attendanceBonus: equipAttendanceBonus, youthTrainingMod: equipYouthMod, gkTrainingMul: staffFx.gkTrainingMul });
@@ -492,7 +518,7 @@ export async function executeDailyTick(
           tactical: 3,
         };
         // Kondiční trenér snižuje úbytek kondice z tréninku (min 1 bod)
-        const baseDrain = drainMap[todayTrainingType ?? ""] ?? 4;
+        const baseDrain = (drainMap[todayTrainingType ?? ""] ?? 4) * INTENSITY[todayIntensity].drain;
         const condDrain = Math.max(1, Math.round(baseDrain * (1 - staffFx.conditionDrainReduction)));
         const { logConditionStmt } = await import("../lib/condition-log");
         for (const a of result.attendance) {

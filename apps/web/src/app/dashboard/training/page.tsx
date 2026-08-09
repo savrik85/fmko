@@ -9,6 +9,14 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 
 type TrainingType = "conditioning" | "technique" | "tactics" | "match_practice";
 type TrainingApproach = "strict" | "balanced" | "relaxed";
+type TrainingIntensity = "light" | "normal" | "hard";
+type DayPlan = { type: TrainingType; intensity: TrainingIntensity };
+
+const INTENSITIES: Array<{ key: TrainingIntensity; short: string; title: string }> = [
+  { key: "light", short: "L", title: "Lehký — regenerace, málo únavy (hodí se před zápasem)" },
+  { key: "normal", short: "N", title: "Normální tempo" },
+  { key: "hard", short: "T", title: "Tvrdý — rychlejší růst, ale hodně sebere" },
+];
 
 const TRAINING_TYPES: Array<{ key: TrainingType; label: string; icon: string; desc: string; skills: string }> = [
   { key: "conditioning", label: "Kondice", icon: "🏃", desc: "Fyzická příprava", skills: "Výdrž, Rychlost, Síla" },
@@ -78,7 +86,7 @@ export default function TrainingPage() {
   // Custom training days (1=Po, 2=Út, 3=St, 4=Čt, 5=Pá). null = použít default podle sessions.
   const [trainingDays, setTrainingDays] = useState<number[] | null>(null);
   // Týdenní plán: den (1=Po … 5=Pá) → typ tréninku. null = jednotný typ pro všechny dny.
-  const [trainingPlan, setTrainingPlan] = useState<Record<number, TrainingType> | null>(null);
+  const [trainingPlan, setTrainingPlan] = useState<Record<number, DayPlan> | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<TrainingResult | null>(null);
@@ -93,7 +101,7 @@ export default function TrainingPage() {
   useEffect(() => {
     if (!teamId) return;
     Promise.all([
-      apiFetch<{ type: TrainingType; approach: TrainingApproach; sessionsPerWeek: number; trainingDays: number[] | null; trainingPlan: Record<number, TrainingType> | null; restPlayerIds?: string[]; lastResult: TrainingResult | null }>(
+      apiFetch<{ type: TrainingType; approach: TrainingApproach; sessionsPerWeek: number; trainingDays: number[] | null; trainingPlan: Record<number, DayPlan> | null; restPlayerIds?: string[]; lastResult: TrainingResult | null }>(
         `/api/teams/${teamId}/training`
       ),
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
@@ -223,7 +231,7 @@ export default function TrainingPage() {
               // Předvyplnit současným typem na dnech, které tým trénuje teď
               const DEFAULT_DAY_MAP: Record<number, number[]> = { 1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5] };
               const days = trainingDays && trainingDays.length > 0 ? trainingDays : (DEFAULT_DAY_MAP[sessions] ?? [2, 4]);
-              setTrainingPlan(Object.fromEntries(days.map((d) => [d, type])) as Record<number, TrainingType>);
+              setTrainingPlan(Object.fromEntries(days.map((d) => [d, { type, intensity: "normal" as TrainingIntensity }])));
               setDirty(true);
             }}
             className={`flex-1 py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
@@ -241,20 +249,21 @@ export default function TrainingPage() {
               { num: 1, full: "Pondělí" }, { num: 2, full: "Úterý" }, { num: 3, full: "Středa" },
               { num: 4, full: "Čtvrtek" }, { num: 5, full: "Pátek" },
             ].map((d) => {
-              const val = trainingPlan[d.num] ?? "";
+              const day = trainingPlan[d.num];
+              const val = day?.type ?? "";
               return (
-                <div key={d.num} className="flex items-center gap-2.5">
-                  <div className="w-20 shrink-0 font-heading font-bold text-sm">{d.full}</div>
+                <div key={d.num} className="flex items-center gap-2">
+                  <div className="w-16 sm:w-20 shrink-0 font-heading font-bold text-sm">{d.full}</div>
                   <select
                     value={val}
                     onChange={(e) => {
                       const next = { ...trainingPlan };
                       if (e.target.value === "") delete next[d.num];
-                      else next[d.num] = e.target.value as TrainingType;
+                      else next[d.num] = { type: e.target.value as TrainingType, intensity: day?.intensity ?? "normal" };
                       setTrainingPlan(next);
                       setDirty(true);
                     }}
-                    className={`flex-1 px-2.5 py-2 rounded-lg border-2 bg-white text-sm font-heading transition-colors ${
+                    className={`flex-1 min-w-0 px-2.5 py-2 rounded-lg border-2 bg-white text-sm font-heading transition-colors ${
                       val ? "border-pitch-500/40 text-ink" : "border-gray-200 text-muted"
                     }`}
                   >
@@ -263,11 +272,36 @@ export default function TrainingPage() {
                       <option key={t.key} value={t.key}>{t.icon} {t.label}</option>
                     ))}
                   </select>
+                  {/* Intenzita dne — u volna nedává smysl, tak je skrytá */}
+                  <div className={`flex rounded-lg bg-gray-50 p-0.5 shrink-0 ${day ? "" : "invisible"}`}>
+                    {INTENSITIES.map((it) => (
+                      <button
+                        key={it.key}
+                        title={it.title}
+                        onClick={() => {
+                          if (!day) return;
+                          setTrainingPlan({ ...trainingPlan, [d.num]: { ...day, intensity: it.key } });
+                          setDirty(true);
+                        }}
+                        className={`w-7 py-1.5 rounded-md text-center font-heading font-bold text-xs transition-all ${
+                          day?.intensity === it.key
+                            ? it.key === "hard" ? "bg-white shadow-sm text-card-red"
+                              : it.key === "light" ? "bg-white shadow-sm text-gold-600"
+                              : "bg-white shadow-sm text-pitch-600"
+                            : "text-muted hover:text-ink"
+                        }`}
+                      >
+                        {it.short}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               );
             })}
             <div className="text-xs text-muted bg-gray-50 rounded-lg px-3 py-2 mt-2">
               Každý den se trénuje to, co mu nastavíš. Dny označené jako volno se netrénují a neplatí se za ně.
+              {" "}Intenzita: <strong className="text-gold-600">L</strong>ehký šetří síly (dobrý před zápasem),{" "}
+              <strong className="text-pitch-600">N</strong>ormální, <strong className="text-card-red">T</strong>vrdý dá víc, ale hodně sebere.
               {Object.keys(trainingPlan).length === 0 && (
                 <span className="block mt-1 text-card-red font-heading font-bold">⚠ Celý týden volno — tým vůbec netrénuje.</span>
               )}

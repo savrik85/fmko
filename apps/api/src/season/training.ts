@@ -34,6 +34,19 @@ const CELEB_TRAINING_EXCUSES = [
 /** Základní šance na zlepšení atributu za jeden odtrénovaný den (před modifikátory). */
 export const BASE_IMPROVE_CHANCE = 0.20;
 
+export type TrainingIntensity = "light" | "normal" | "hard";
+
+/**
+ * Intenzita jednoho tréninku. Tvrdý dá víc, ale sebere víc sil a hráči ho hůř snášejí;
+ * lehký je regenerační — hodí se den před zápasem.
+ * `load` je váha do celkové týdenní zátěže, ze které se počítá spokojenost hráčů.
+ */
+export const INTENSITY: Record<TrainingIntensity, { growth: number; drain: number; load: number; label: string }> = {
+  light:  { growth: 0.6,  drain: 0.5, load: 0.6, label: "Lehký" },
+  normal: { growth: 1.0,  drain: 1.0, load: 1.0, label: "Normální" },
+  hard:   { growth: 1.45, drain: 1.6, load: 1.4, label: "Tvrdý" },
+};
+
 /** Věkový modifikátor růstu — mladí rostou rychle, veteráni skoro vůbec. */
 export function ageGrowthMod(age: number): number {
   return age < 20 ? 1.3 : age < 25 ? 1.15 : age < 30 ? 1.0 : age < 34 ? 0.7 : age < 38 ? 0.4 : 0.15;
@@ -76,6 +89,13 @@ export interface TrainingPlan {
   sessionsPerWeek: number;
   type: TrainingType;
   approach: TrainingApproach;
+  /** Intenzita dnešního tréninku. Chybí-li, bere se normální. */
+  intensity?: TrainingIntensity;
+  /**
+   * Týdenní zátěž pro spokojenost hráčů — součet vah intenzit všech tréninkových dnů.
+   * Chybí-li, použije se sessionsPerWeek (každý den se počítá za jeden).
+   */
+  weeklyLoad?: number;
 }
 
 export interface TrainingAttendance {
@@ -324,7 +344,8 @@ export function simulateTraining(
 
       // Trenér brankářů: extra multiplikátor jen pro brankáře
       const gkMul = player.position === "GK" ? (equipExtras.gkTrainingMul ?? 1) : 1;
-      const improveChance = BASE_IMPROVE_CHANCE * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul;
+      const intensityMod = INTENSITY[plan.intensity ?? "normal"].growth;
+      const improveChance = BASE_IMPROVE_CHANCE * intensityMod * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul;
       if (rng.random() < improveChance) {
         if (current < 100) {
           (player as unknown as Record<string, number>)[attr] = current + 1;
@@ -380,7 +401,7 @@ export function simulateTraining(
     if (player.morale !== before) moraleChanges.push({ playerIndex, change: player.morale - before, reason });
   };
 
-  const load = Math.max(1, Math.min(5, plan.sessionsPerWeek));
+  const load = Math.max(0.5, Math.min(7, plan.weeklyLoad ?? plan.sessionsPerWeek));
   for (let i = 0; i < squad.length; i++) {
     const player = squad[i];
     const diff = load - idealTrainingLoad(player);
