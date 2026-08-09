@@ -149,9 +149,16 @@ gameRouter.post("/teams/:teamId/training", async (c) => {
     }
   }
 
+  // Počet tréninků týdně = počet tréninkových dnů. Jedna pravda: dny určují, kolikrát se
+  // trénuje, kolik to stojí i jak rychle hráči rostou. Dřív šlo nastavit "2x týdně" a k tomu
+  // pět tréninkových dnů — tým pak platil za dva tréninky a odtrénoval deset.
+  // Bez explicitních dnů zůstává původní cesta: počet z těla → dny z default mapy.
+  const explicitDays = trainingDaysJson ? (JSON.parse(trainingDaysJson) as number[]).length : 0;
+  const sessionsPerWeek = explicitDays > 0 ? explicitDays : body.sessionsPerWeek;
+
   await c.env.DB.prepare(
     "UPDATE teams SET training_type = ?, training_approach = ?, training_sessions = ?, training_days = ?, training_plan = ? WHERE id = ?"
-  ).bind(body.type, body.approach, body.sessionsPerWeek, trainingDaysJson, trainingPlanJson, teamId).run().catch((e) => logger.warn({ module: "game" }, "update training plan", e));
+  ).bind(body.type, body.approach, sessionsPerWeek, trainingDaysJson, trainingPlanJson, teamId).run().catch((e) => logger.warn({ module: "game" }, "update training plan", e));
 
   return c.json({ ok: true });
 });

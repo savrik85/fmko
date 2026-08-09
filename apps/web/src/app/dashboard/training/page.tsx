@@ -272,7 +272,7 @@ export default function TrainingPage() {
             <div><span className="font-heading font-bold text-ink">{TRAINING_TYPES.find((t) => t.key === type)?.label}:</span> {TRAINING_TYPES.find((t) => t.key === type)?.desc}. Zlepšuje {TRAINING_TYPES.find((t) => t.key === type)?.skills}.</div>
           )}
           <div><span className="font-heading font-bold text-ink">{APPROACHES.find((a) => a.key === approach)?.label}:</span> {APPROACHES.find((a) => a.key === approach)?.desc}.</div>
-          <div>Tréninky probíhají automaticky Po–Pá. Víc tréninků = rychlejší růst, ale horší docházka a únava.</div>
+          <div>Trénuje se automaticky ve vybraných dnech Po–Pá — jeden den, jeden trénink. Víc tréninkových dnů = rychlejší růst, ale vyšší náklady a únava.</div>
         </div>
 
         {/* Approach + Sessions — side by side */}
@@ -297,21 +297,25 @@ export default function TrainingPage() {
             </div>
           </div>
           <div className="shrink-0">
-            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Týdně</div>
+            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Dnů týdně</div>
             <div className="flex rounded-xl bg-gray-50 p-0.5">
-              {[1, 2, 3].map((n) => (
-                <button
-                  key={n}
-                  onClick={() => { setSessions(n); setTrainingDays(null); setDirty(true); }}
-                  className={`w-10 py-2 rounded-lg text-center font-heading font-bold text-sm transition-all ${
-                    sessions === n
-                      ? "bg-white shadow-sm text-pitch-600"
-                      : "text-muted hover:text-ink"
-                  }`}
-                >
-                  {n}x
-                </button>
-              ))}
+              {(() => {
+                // Kolikrát tým trénuje = kolik má tréninkových dnů. Tlačítka jsou rychlý předvýběr
+                // dnů; zvýrazněné je to, které odpovídá skutečnému počtu vybraných dnů.
+                const DAY_PRESET: Record<number, number[]> = { 1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5] };
+                const current = (trainingDays && trainingDays.length > 0 ? trainingDays : (DAY_PRESET[sessions] ?? [2, 4])).length;
+                return [1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => { setTrainingDays(DAY_PRESET[n]); setSessions(n); setDirty(true); }}
+                    className={`w-8 py-2 rounded-lg text-center font-heading font-bold text-sm transition-all ${
+                      current === n ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ));
+              })()}
             </div>
           </div>
         </div>

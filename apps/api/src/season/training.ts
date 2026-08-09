@@ -32,7 +32,13 @@ const CELEB_TRAINING_EXCUSES = [
 ];
 
 export interface TrainingPlan {
-  sessionsPerWeek: number; // 1-3
+  /**
+   * Kolik tréninků týdně tým podle nastavení má. Slouží k ekonomice a zobrazení —
+   * simulace ho NEPOUŽÍVÁ: jedno volání simulateTraining = jeden trénink (jeden den).
+   * Dřív se jím násobil počet tréninků UVNITŘ jednoho dne, takže tým s "2x týdně"
+   * a dvěma tréninkovými dny reálně odtrénoval 4x a rostl dvojnásobně rychle.
+   */
+  sessionsPerWeek: number;
   type: TrainingType;
   approach: TrainingApproach;
 }
@@ -224,7 +230,8 @@ function simulateAttendance(
 }
 
 /**
- * Simulate a week of training (1-3 sessions).
+ * Odsimuluje JEDEN trénink (jeden tréninkový den). Kolikrát za týden se trénuje,
+ * určují výhradně tréninkové dny — volající zavolá tuhle funkci jednou za každý z nich.
  */
 export function simulateTraining(
   rng: Rng,
@@ -238,27 +245,20 @@ export function simulateTraining(
   const allAttendance: TrainingAttendance[] = [];
   const attendanceCounts = new Map<number, number>();
 
-  // Simulate each session
-  for (let s = 0; s < plan.sessionsPerWeek; s++) {
-    const session = simulateAttendance(rng, squad, plan.approach, commuteKms, equipExtras.attendanceBonus ?? 0, managerBonus.discipline);
-    for (const a of session) {
-      if (a.attended) {
-        attendanceCounts.set(a.playerIndex, (attendanceCounts.get(a.playerIndex) ?? 0) + 1);
-      }
-    }
-    // Keep last session's attendance for display
-    if (s === plan.sessionsPerWeek - 1) {
-      allAttendance.push(...session);
-    }
+  // Jeden trénink = jedna docházka. Kdo přišel, dostane jeden pokus o zlepšení.
+  const session = simulateAttendance(rng, squad, plan.approach, commuteKms, equipExtras.attendanceBonus ?? 0, managerBonus.discipline);
+  for (const a of session) {
+    if (a.attended) attendanceCounts.set(a.playerIndex, 1);
   }
+  allAttendance.push(...session);
 
   // Calculate improvements
   const improvements: TrainingResult["improvements"] = [];
   const affectedAttrs = TRAINING_EFFECTS[plan.type];
 
   for (const [playerIndex, sessions] of attendanceCounts) {
-    // Only improve if attended at least half the sessions
-    if (sessions < Math.ceil(plan.sessionsPerWeek / 2)) continue;
+    // Přišel na trénink → má nárok na pokus o zlepšení (dřív musel stihnout půlku z N sessions).
+    if (sessions < 1) continue;
 
     const player = squad[playerIndex];
 
@@ -294,7 +294,7 @@ export function simulateTraining(
 
       // Trenér brankářů: extra multiplikátor jen pro brankáře
       const gkMul = player.position === "GK" ? (equipExtras.gkTrainingMul ?? 1) : 1;
-      const improveChance = 0.10 * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul;
+      const improveChance = 0.20 * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul;
       if (rng.random() < improveChance) {
         if (current < 100) {
           (player as unknown as Record<string, number>)[attr] = current + 1;
