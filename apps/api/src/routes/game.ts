@@ -320,6 +320,68 @@ gameRouter.post("/teams/:teamId/training-preview", async (c) => {
   const { TRAINING_EFFECTS, BASE_IMPROVE_CHANCE, ageGrowthMod, diminishingMod, idealTrainingLoad, loadVerdict } =
     await import("../season/training");
 
+  // Zaměstnanci a vybavení do tréninku mluví — bez nich by predikce podstřelovala.
+  const staffRows = await c.env.DB.prepare(
+    `SELECT id, role, first_name, last_name, avatar, coaching, medicine, maintenance, judgement,
+            communication, work_rate, charm
+       FROM staff_members WHERE team_id = ?`,
+  ).bind(teamId).all<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: "game", teamId }, "training-preview staff", e); return { results: [] as Record<string, unknown>[] }; });
+
+  const equipRow = await c.env.DB.prepare("SELECT * FROM equipment WHERE team_id = ?")
+    .bind(teamId).first<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: "game", teamId }, "training-preview equipment", e); return null; });
+
+  const { calculateStaffEffects } = await import("../staff/staff-effects");
+  const staffFx = calculateStaffEffects(staffRows.results as never);
+
+  let equipMul = 1, equipAttend = 0, equipYouth = 0;
+  const equipParts: Array<{ label: string; detail: string }> = [];
+  if (equipRow) {
+    const { calculateEffects } = await import("../equipment/equipment-generator");
+    const levels: Record<string, number> = {};
+    const conditions: Record<string, number> = {};
+    for (const [k, v] of Object.entries(equipRow)) {
+      if (k.endsWith("_condition")) conditions[k] = v as number;
+      else if (typeof v === "number" && k !== "id") levels[k] = v;
+    }
+    const eff = calculateEffects(levels, conditions);
+    equipMul = eff.trainingMultiplier * (body.type === "tactics" ? 1 + eff.tacticsTrainingBonus : 1);
+    equipAttend = eff.attendanceBonus;
+    equipYouth = eff.youthTrainingMod;
+    if (eff.trainingMultiplier > 1) equipParts.push({ label: "Tréninkové vybavení", detail: `+${Math.round((eff.trainingMultiplier - 1) * 100)} % k růstu` });
+    if (body.type === "tactics" && eff.tacticsTrainingBonus > 0) equipParts.push({ label: "Rozlišováky a tabule", detail: `+${Math.round(eff.tacticsTrainingBonus * 100)} % k taktice` });
+    if (eff.attendanceBonus > 0) equipParts.push({ label: "Klubová dodávka", detail: `+${Math.round(eff.attendanceBonus * 100)} % docházka` });
+    if (eff.youthTrainingMod > 0) equipParts.push({ label: "Videotechnika", detail: `+${Math.round(eff.youthTrainingMod * 100)} % pro hráče do 22 let` });
+  }
+
+  // Kdo z personálu na trénink reálně působí (a jak)
+  const STAFF_TRAINING_ROLES: Record<string, (fx: typeof staffFx) => string | null> = {
+    asistent: (fx) => fx.trainingMultiplier > 1 ? `+${Math.round((fx.trainingMultiplier - 1) * 100)} % k růstu, +${Math.round(fx.trainingAttendanceBonus * 100)} % docházka` : null,
+    trener_mladeze: (fx) => fx.youthTrainingMod > 0 ? `+${Math.round(fx.youthTrainingMod * 100)} % pro hráče do 22 let` : null,
+    trener_brankaru: (fx) => fx.gkTrainingMul > 1 ? `+${Math.round((fx.gkTrainingMul - 1) * 100)} % pro brankáře` : null,
+    kondicni_trener: (fx) => fx.conditionDrainReduction > 0 ? `−${Math.round(fx.conditionDrainReduction * 100)} % únavy z tréninku` : null,
+  };
+  const staffImpact = staffRows.results
+    .map((r) => {
+      const role = r.role as string;
+      const describe = STAFF_TRAINING_ROLES[role];
+      const detail = describe ? describe(staffFx) : null;
+      if (!detail) return null;
+      const ROLE_LABELS: Record<string, string> = {
+        asistent: "Asistent trenéra", trener_mladeze: "Trenér mládeže",
+        trener_brankaru: "Trenér brankářů", kondicni_trener: "Kondiční trenér",
+      };
+      return {
+        staffId: r.id as string,
+        name: `${r.first_name} ${r.last_name}`,
+        role: ROLE_LABELS[role] ?? role,
+        avatar: (r.avatar as string) ?? null,
+        detail,
+      };
+    })
+    .filter(Boolean);
+
   const coachMod = 0.8 + ((mgr?.coaching ?? 40) / 100) * 0.8;
   const youthDev = mgr?.youth_development ?? 40;
   const discipline = mgr?.discipline ?? 40;
@@ -343,11 +405,16 @@ gameRouter.post("/teams/:teamId/training-preview", async (c) => {
     const vals = attrs.map((a) => (skills[a] as number) ?? 40).filter((v) => typeof v === "number");
     const avgAttr = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 40;
 
-    const youthMod = age < 22 ? 0.9 + (youthDev / 100) * 0.6 : 1.0;
+    const youthMod = age < 22
+      ? (0.9 + (youthDev / 100) * 0.6) * (1 + equipYouth + staffFx.youthTrainingMod)
+      : 1.0;
+    const gkMul = (row.position as string) === "GK" ? staffFx.gkTrainingMul : 1;
     const attendProb = Math.max(0.05, Math.min(0.98,
-      (personality.discipline ?? 50) / 100 * 0.6 + 0.3 + approachAttend + ((discipline - 40) / 100) * 0.2));
+      (personality.discipline ?? 50) / 100 * 0.6 + 0.3 + approachAttend + ((discipline - 40) / 100) * 0.2
+      + equipAttend + staffFx.trainingAttendanceBonus));
 
-    const chance = BASE_IMPROVE_CHANCE * diminishingMod(avgAttr) * ageGrowthMod(age) * coachMod * youthMod;
+    const chance = BASE_IMPROVE_CHANCE * equipMul * staffFx.trainingMultiplier
+      * diminishingMod(avgAttr) * ageGrowthMod(age) * coachMod * youthMod * gkMul;
     expectedPerWeek += chance * attendProb * load;
 
     const verdict = loadVerdict(p, load) as string;
@@ -371,6 +438,8 @@ gameRouter.post("/teams/:teamId/training-preview", async (c) => {
     monthlyCost,
     load: { overloaded, underused, content },
     strain: strain.slice(0, 6),
+    staffImpact,
+    equipmentImpact: equipParts,
   });
 });
 

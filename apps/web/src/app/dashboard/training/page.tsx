@@ -5,6 +5,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Player } from "@/lib/api";
 import Link from "next/link";
 import { Spinner, SectionLabel } from "@/components/ui";
+import { FaceAvatar } from "@/components/players/face-avatar";
 
 type TrainingType = "conditioning" | "technique" | "tactics" | "match_practice";
 type TrainingApproach = "strict" | "balanced" | "relaxed";
@@ -54,6 +55,8 @@ interface TrainingForecast {
   monthlyCost: number;
   load: { overloaded: number; underused: number; content: number };
   strain: Array<{ playerId: string; name: string; verdict: string }>;
+  staffImpact?: Array<{ staffId: string; name: string; role: string; avatar: string | null; detail: string }>;
+  equipmentImpact?: Array<{ label: string; detail: string }>;
 }
 
 interface TrainingStats {
@@ -475,6 +478,50 @@ export default function TrainingPage() {
               ) : (
                 <>Kádr má rezervu — přidáním tréninkového dne porostou rychleji.</>
               )}
+            </div>
+          )}
+
+          {/* Kdo a co k tomu růstu přispívá */}
+          {((forecast.staffImpact?.length ?? 0) > 0 || (forecast.equipmentImpact?.length ?? 0) > 0) && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-2">Kdo tomu pomáhá</div>
+
+              {(forecast.staffImpact ?? []).map((st) => {
+                let face: Record<string, unknown> | null = null;
+                try { face = st.avatar ? JSON.parse(st.avatar) : null; }
+                catch (e) { console.error("staff avatar parse:", e); }
+                return (
+                  <Link
+                    key={st.staffId}
+                    href="/dashboard/zamestnanci"
+                    className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-lg px-1 -mx-1 transition-colors"
+                  >
+                    <div className="shrink-0 w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+                      {face ? <FaceAvatar faceConfig={face} size={34} /> : <span className="text-base">👔</span>}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-heading font-bold text-sm leading-tight truncate">{st.name}</div>
+                      <div className="text-[11px] text-muted leading-tight">{st.role}</div>
+                    </div>
+                    <span className="shrink-0 text-xs font-heading font-bold text-pitch-600">{st.detail}</span>
+                  </Link>
+                );
+              })}
+
+              {(forecast.equipmentImpact ?? []).map((eq) => (
+                <Link
+                  key={eq.label}
+                  href="/dashboard/equipment"
+                  className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-lg px-1 -mx-1 transition-colors"
+                >
+                  <div className="shrink-0 w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-base">🎒</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-heading font-bold text-sm leading-tight truncate">{eq.label}</div>
+                    <div className="text-[11px] text-muted leading-tight">Vybavení</div>
+                  </div>
+                  <span className="shrink-0 text-xs font-heading font-bold text-pitch-600">{eq.detail}</span>
+                </Link>
+              ))}
             </div>
           )}
 
