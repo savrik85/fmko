@@ -374,7 +374,7 @@ export async function executeDailyTick(
           attendedCount: attendanceWithNames.filter((a) => a.attended).length,
           totalCount: attendanceWithNames.length,
           rested: restedPlayers,
-          day: now.toLocaleDateString("cs", { weekday: "long" }),
+          day: effectiveDate.toLocaleDateString("cs", { weekday: "long", timeZone: "UTC" }),
         };
 
         await env.DB.prepare(
@@ -478,7 +478,7 @@ export async function executeDailyTick(
           // Log to training_log
           await env.DB.prepare(
             "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-          ).bind(playerId, teamId, imp.attribute, oldValue, newValue, imp.change, todayTrainingType ?? "conditioning", now.toISOString()).run().catch((e) => logger.warn({ module: "daily-tick" }, "insert training log", e));
+          ).bind(playerId, teamId, imp.attribute, oldValue, newValue, imp.change, todayTrainingType ?? "conditioning", effectiveDate.toISOString()).run().catch((e) => logger.warn({ module: "daily-tick" }, "insert training log", e));
         }
 
         // Training drains condition for attending players
