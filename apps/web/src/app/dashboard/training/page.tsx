@@ -46,6 +46,16 @@ const ATTR_EMOJI: Record<string, string> = {
   vision: "\uD83D\uDC41\uFE0F", creativity: "\uD83C\uDFA8", setPieces: "\uD83C\uDFAA",
 };
 
+interface TrainingForecast {
+  daysPerWeek: number;
+  squadSize: number;
+  expectedImprovementsPerWeek: number;
+  expectedImprovementsPerMonth: number;
+  monthlyCost: number;
+  load: { overloaded: number; underused: number; content: number };
+  strain: Array<{ playerId: string; name: string; verdict: string }>;
+}
+
 interface TrainingStats {
   totalImprovements: number;
   totalDeclines: number;
@@ -74,6 +84,7 @@ export default function TrainingPage() {
   const [squad, setSquad] = useState<Player[]>([]);
   const [restIds, setRestIds] = useState<Set<string>>(new Set());
   const [absences, setAbsences] = useState<Array<{ playerId: string; firstName: string; lastName: string; position: string; absence: { reason?: string; category?: string } | null }>>([]);
+  const [forecast, setForecast] = useState<TrainingForecast | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -109,6 +120,22 @@ export default function TrainingPage() {
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [teamId]);
+
+  // Predikce dopadu — počítá ji server ze stejných funkcí jako simulace, takže ukazuje
+  // opravdu to, co se stane. Přepočítá se při každé změně nastavení, i než se uloží.
+  useEffect(() => {
+    if (!teamId || loading) return;
+    const timer = setTimeout(() => {
+      apiFetch<TrainingForecast>(`/api/teams/${teamId}/training-preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, approach, trainingDays, trainingPlan }),
+      })
+        .then(setForecast)
+        .catch((e) => console.error("training-preview:", e));
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [teamId, loading, type, approach, trainingDays, trainingPlan]);
 
   const savePlan = async () => {
     if (!teamId || saving) return;
@@ -383,6 +410,94 @@ export default function TrainingPage() {
           );
         })()}
       </div>
+
+      {/* ═══ Co dané nastavení přinese — predikce ze stejného výpočtu, jaký pak trénink použije ═══ */}
+      {forecast && (
+        <div className="card p-4 sm:p-5">
+          <div className="flex items-baseline justify-between">
+            <SectionLabel>Co to přinese</SectionLabel>
+            <span className="text-[10px] text-muted font-heading uppercase tracking-wide">
+              {forecast.daysPerWeek}× týdně · {forecast.squadSize} hráčů
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 mt-3">
+            <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
+              <div className="font-heading font-bold text-xl text-pitch-600">
+                +{forecast.expectedImprovementsPerWeek}
+              </div>
+              <div className="text-[10px] text-muted font-heading uppercase tracking-wide">zlepšení/týden</div>
+            </div>
+            <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
+              <div className="font-heading font-bold text-xl text-pitch-600">
+                +{forecast.expectedImprovementsPerMonth}
+              </div>
+              <div className="text-[10px] text-muted font-heading uppercase tracking-wide">za měsíc</div>
+            </div>
+            <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
+              <div className="font-heading font-bold text-xl text-ink">
+                {forecast.monthlyCost.toLocaleString("cs")}
+              </div>
+              <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Kč měsíčně</div>
+            </div>
+          </div>
+
+          {/* Jak kádru sedí zvolené tempo */}
+          <div className="mt-3">
+            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Jak to kádru sedí</div>
+            {(() => {
+              const { content, overloaded, underused } = forecast.load;
+              const total = Math.max(1, content + overloaded + underused);
+              const seg = (n: number, cls: string) => n > 0 ? <div className={cls} style={{ width: `${(n / total) * 100}%` }} /> : null;
+              return (
+                <>
+                  <div className="flex h-2 rounded-full overflow-hidden bg-gray-100">
+                    {seg(content, "bg-pitch-400")}
+                    {seg(underused, "bg-gold-400")}
+                    {seg(overloaded, "bg-card-red")}
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm">
+                    <span><span className="inline-block w-2 h-2 rounded-full bg-pitch-400 mr-1.5" />{content} spokojených</span>
+                    {underused > 0 && <span><span className="inline-block w-2 h-2 rounded-full bg-gold-400 mr-1.5" />{underused} by chtělo trénovat víc</span>}
+                    {overloaded > 0 && <span><span className="inline-block w-2 h-2 rounded-full bg-card-red mr-1.5" />{overloaded} přetížených</span>}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Doporučení — jen když je co říct */}
+          {(forecast.load.overloaded > forecast.load.content || forecast.load.underused > forecast.load.content) && (
+            <div className="mt-3 text-sm bg-gold-300/10 border border-gold-300/40 rounded-lg px-3 py-2">
+              {forecast.load.overloaded > forecast.load.content ? (
+                <>Tempo je na tenhle kádr moc ostré — hráčům bude klesat nálada. Zkus ubrat den, nebo dej{" "}
+                <span className="font-heading font-bold">volno</span> unaveným.</>
+              ) : (
+                <>Kádr má rezervu — přidáním tréninkového dne porostou rychleji.</>
+              )}
+            </div>
+          )}
+
+          {forecast.strain.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Koho to nejvíc trápí</div>
+              <div className="flex flex-wrap gap-1.5">
+                {forecast.strain.map((s) => (
+                  <Link
+                    key={s.playerId}
+                    href={`/dashboard/player/${s.playerId}`}
+                    className={`px-2 py-1 rounded text-sm font-heading font-bold hover:underline ${
+                      s.verdict === "pretizeny" ? "bg-red-50 text-card-red" : "bg-gold-300/20 text-gold-700"
+                    }`}
+                  >
+                    {s.name}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Volno z příštího tréninku */}
       <div className="card p-4 sm:p-5">
