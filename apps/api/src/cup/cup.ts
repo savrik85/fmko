@@ -741,8 +741,13 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
   if (!cup || cup.status !== "active") return { ok: false };
   const round = cup.current_round;
 
-  // Chunk: max 12 zápasů na invokaci (plný engine je drahý — 64 zápasů kola by přeteklo limit workeru).
-  const CUP_CHUNK = 12;
+  // Chunk: kolik zápasů se z kola vezme do jedné invokace. Drahý je jen plný engine, a ten
+  // potřebují pouze zápasy, kde hraje něčí tým — v předkolech je to menšina (na testu 27 %).
+  // Souboje dvou generovaných klubů se dopočítají silově za pár dotazů, takže jich zvládneme
+  // v jedné dávce mnohem víc a kolo se dohraje řádově rychleji.
+  const CUP_CHUNK = 48;
+  // Kolik zápasů z dávky smí projít plným enginem (sestavy, události, komentář, statistiky).
+  const FULL_ENGINE_BUDGET = 12;
   // Po kolika minutách se claim nedokončeného zápasu považuje za mrtvý (spadlá invokace).
   const CLAIM_STALE_MIN = 15;
   const matchesRes = await db.prepare("SELECT id, bracket_pos, home_cup_team_id, away_cup_team_id FROM cup_matches WHERE cup_id = ? AND round = ? AND status = 'scheduled' ORDER BY bracket_pos LIMIT ?")
@@ -768,8 +773,16 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
   // zápas, na jehož soupeře rozpočet nezbyl, se v tomto chunku přeskočí a přijde na řadu příště.
   // Rozpočet pokrývá celý chunk (12 zápasů = max 24 soupeřů), takže se běžně na nic nečeká.
   const SQUAD_BUDGET = 24;
+  // Kádr potřebují jen soupeři zápasů, které opravdu půjdou plným enginem — tedy ty, kde hraje
+  // něčí tým, a jen do výše rozpočtu enginu. Generovat ho pro souboje dvou AI klubů by byla
+  // čistá ztráta času i místa.
   const chunkTeamIds = [...new Set(
-    matchesRes.results.flatMap((m) => [m.home_cup_team_id, m.away_cup_team_id]).filter((x): x is string => !!x),
+    matchesRes.results
+      .filter((m) => !!m.home_cup_team_id && !!m.away_cup_team_id
+        && (!!realTeamOf.get(m.home_cup_team_id) || !!realTeamOf.get(m.away_cup_team_id)))
+      .slice(0, FULL_ENGINE_BUDGET)
+      .flatMap((m) => [m.home_cup_team_id, m.away_cup_team_id])
+      .filter((x): x is string => !!x),
   )].filter((id) => realTeamOf.get(id) === null); // reálné týmy mají kádr v players
   const stillMissing = new Set<string>();
   if (chunkTeamIds.length > 0) {
@@ -795,6 +808,7 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
 
   const rng = createRng((cupId.charCodeAt(0) + round * 7919) >>> 0);
   const winners: { pos: number; teamId: string }[] = [];
+  let fullUsed = 0; // kolik zápasů už v této invokaci prošlo plným enginem
 
   for (const m of matchesRes.results) {
     if ((m.home_cup_team_id && stillMissing.has(m.home_cup_team_id)) || (m.away_cup_team_id && stillMissing.has(m.away_cup_team_id))) {
@@ -802,6 +816,12 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
       continue;
     }
     if (!m.home_cup_team_id || !m.away_cup_team_id) continue;
+    // Rozpočet plného enginu je vyčerpán → zápas, který ho potřebuje, počká na další dávku.
+    // Radši ať se odehraje později se vším všudy, než hned jako holé skóre.
+    if (fullUsed >= FULL_ENGINE_BUDGET
+        && (!!realTeamOf.get(m.home_cup_team_id) || !!realTeamOf.get(m.away_cup_team_id))) {
+      continue;
+    }
 
     // Claim — zápas smí odsimulovat jen jedna invokace. Bez toho dvě souběžné invokace
     // (cron + advance-day + admin endpoint) odsimulují tentýž zápas s různými výsledky,
@@ -820,7 +840,13 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
 
     const cupWeathers: Weather[] = ["sunny", "cloudy", "cloudy", "rain", "wind", "snow"];
     const tieWeather = cupWeathers[rng.int(0, cupWeathers.length - 1)];
-    const r = await simulateCupTie(db, rng, m.id, m.home_cup_team_id, m.away_cup_team_id, realTeamOf, strengthOf, tieWeather);
+    // Zápas dvou generovaných klubů nemá reálné hráče, domácí tržby ani diváka mezi manažery —
+    // stačí silový výsledek. Plný engine si šetříme pro zápasy, kde hraje něčí tým.
+    const isWatched = !!realTeamOf.get(m.home_cup_team_id) || !!realTeamOf.get(m.away_cup_team_id);
+    const r = isWatched
+      ? await simulateCupTie(db, rng, m.id, m.home_cup_team_id, m.away_cup_team_id, realTeamOf, strengthOf, tieWeather)
+      : simMatch(strengthOf.get(m.home_cup_team_id) ?? 30, strengthOf.get(m.away_cup_team_id) ?? 30, rng);
+    if (isWatched) fullUsed++;
     const winnerId = r.homeWin ? m.home_cup_team_id : m.away_cup_team_id;
     const loserId = r.homeWin ? m.away_cup_team_id : m.home_cup_team_id;
     await db.prepare("UPDATE cup_matches SET home_score=?, away_score=?, home_pens=?, away_pens=?, winner_cup_team_id=?, status='simulated', upset=? WHERE id=?")
