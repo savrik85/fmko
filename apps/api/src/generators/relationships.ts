@@ -12,6 +12,9 @@ export interface GeneratedRelationship {
 /** Od jaké hodnoty `alcohol` (škála 0–100) se z dvojice stanou parťáci od piva. */
 export const DRINKING_BUDDY_ALCOHOL = 60;
 
+/** Kolik dvojic od piva smí v kádru nanejvýš vzniknout (mimo `targetCount`). */
+const MAX_DRINKING_BUDDY_PAIRS = 2;
+
 /**
  * FMK-29: Generátor příbuzenských a sociálních vazeb v kádru.
  *
@@ -145,19 +148,23 @@ export function generateRelationships(
   // This is handled after relationship generation in teams.ts where residences are known
 
   // Step 7: Drinking buddies (both high alcohol)
+  //
   // Práh 60 je na dnešní škále 0–100 (generátor dává rng.int(5, 100)). Dřív tu bylo 12 —
   // práh ze staré škály 0–20, kterým prošlo ~93 % hráčů. Spolu s `break` jen ve vnitřní
   // smyčce (tedy bez ohledu na targetCount) z toho vycházelo ~12 párů na kádr a parťáci
   // od piva tvořili 69 % všech vazeb v databázi.
-  if (created < targetCount) {
-    for (let a = 0; a < squad.length && created < targetCount; a++) {
-      for (let b = a + 1; b < squad.length && created < targetCount; b++) {
-        if (usedPairs.has(pairKey(a, b))) continue;
-        if (squad[a].alcohol >= DRINKING_BUDDY_ALCOHOL && squad[b].alcohol >= DRINKING_BUDDY_ALCOHOL && rng.random() < 0.25) {
-          addRelation(a, b, "drinking_buddies", rng.int(35, 65));
-          created++;
-          break; // max 1 pár na hráče
-        }
+  //
+  // Mají ale vlastní malý příděl mimo `targetCount`: kdyby se počítali do něj, vyčerpali
+  // by ho dřívější kroky a v kádru by nevznikla ani jedna dvojice — na vesnický fotbal
+  // opačný extrém.
+  let buddyPairs = 0;
+  for (let a = 0; a < squad.length && buddyPairs < MAX_DRINKING_BUDDY_PAIRS; a++) {
+    for (let b = a + 1; b < squad.length && buddyPairs < MAX_DRINKING_BUDDY_PAIRS; b++) {
+      if (usedPairs.has(pairKey(a, b))) continue;
+      if (squad[a].alcohol >= DRINKING_BUDDY_ALCOHOL && squad[b].alcohol >= DRINKING_BUDDY_ALCOHOL && rng.random() < 0.25) {
+        addRelation(a, b, "drinking_buddies", rng.int(35, 65));
+        buddyPairs++;
+        break; // max 1 pár na hráče
       }
     }
   }
@@ -214,14 +221,15 @@ export interface NewcomerRelationship {
  * příchodu (přestup, volný hráč, dorostenec, doplnění kádru, U21) a používá stejná
  * pravidla jako generátor celého kádru, jen proti stávající soupisce.
  *
- * Držíme to střídmé — nováček dostane nanejvýš `maxRelations` vazeb, ať se kabina
- * nezaplní hned prvním přestupem.
+ * Držíme to střídmé — nováček dostane nanejvýš `maxRelations` vazeb (výchozí jedna).
+ * Je to schválně málo: odchody hráčů vazby ubírají zhruba stejným tempem, takže se
+ * kabina drží v rovnováze místo aby sezónu od sezóny bobtnala.
  */
 export function generateRelationsForNewcomer(
   rng: Rng,
   newcomer: RelationCandidate,
   squad: RelationCandidate[],
-  maxRelations: number = 2,
+  maxRelations: number = 1,
 ): NewcomerRelationship[] {
   const out: NewcomerRelationship[] = [];
   const taken = new Set<string>();
@@ -249,7 +257,7 @@ export function generateRelationsForNewcomer(
   // 2) Soused — bydlí ve stejné obci (mimo tu domácí, tu má kdekdo).
   if (newcomer.residence) {
     for (const p of shuffled) {
-      if (p.residence && p.residence === newcomer.residence && rng.random() < 0.35) {
+      if (p.residence && p.residence === newcomer.residence && rng.random() < 0.18) {
         add(p.id, "neighbors", rng.int(35, 60));
       }
     }
@@ -259,13 +267,13 @@ export function generateRelationsForNewcomer(
   const occ = newcomer.occupation;
   if (occ && occ !== "Student" && occ !== "Nezaměstnaný" && occ !== "Důchodce") {
     for (const p of shuffled) {
-      if (p.occupation === occ && rng.random() < 0.4) add(p.id, "coworkers", rng.int(20, 50));
+      if (p.occupation === occ && rng.random() < 0.2) add(p.id, "coworkers", rng.int(20, 50));
     }
   }
 
   // 4) Spolužák — vrstevník do dvou let.
   for (const p of shuffled) {
-    if (Math.abs(p.age - newcomer.age) <= 2 && rng.random() < 0.2) {
+    if (Math.abs(p.age - newcomer.age) <= 2 && rng.random() < 0.1) {
       add(p.id, "classmates", rng.int(30, 60));
     }
   }
@@ -274,7 +282,7 @@ export function generateRelationsForNewcomer(
   for (const p of shuffled) {
     const older = p.age >= newcomer.age ? p : newcomer;
     const younger = p.age >= newcomer.age ? newcomer : p;
-    if (older.age >= 32 && younger.age <= 22 && (older.leadership ?? 30) >= 55 && rng.random() < 0.3) {
+    if (older.age >= 32 && younger.age <= 22 && (older.leadership ?? 30) >= 55 && rng.random() < 0.15) {
       add(p.id, "mentor_pupil", rng.int(40, 70));
     }
   }
@@ -282,14 +290,14 @@ export function generateRelationsForNewcomer(
   // 6) Parťáci od piva — oba to s pivem myslí vážně.
   if ((newcomer.alcohol ?? 0) >= DRINKING_BUDDY_ALCOHOL) {
     for (const p of shuffled) {
-      if ((p.alcohol ?? 0) >= DRINKING_BUDDY_ALCOHOL && rng.random() < 0.25) {
+      if ((p.alcohol ?? 0) >= DRINKING_BUDDY_ALCOHOL && rng.random() < 0.15) {
         add(p.id, "drinking_buddies", rng.int(35, 65));
       }
     }
   }
 
   // 7) Rivalita — vzácně, ať má kabina i jiskru.
-  if (out.length < maxRelations && rng.random() < 0.12) {
+  if (out.length < maxRelations && rng.random() < 0.06) {
     const p = shuffled[rng.int(0, shuffled.length - 1)];
     if (p) add(p.id, "rivals", rng.int(20, 50));
   }
