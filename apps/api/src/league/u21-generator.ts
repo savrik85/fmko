@@ -287,6 +287,11 @@ export async function createU21TeamAndSquad(
     logger.error({ module: "u21-generator" }, `batch insert contracts for U21 team ${u21TeamId}`, e);
   }
 
+  // Vazby v kabině — U21 soupisky je dřív nedostávaly vůbec, takže chemie
+  // juniorky byla napořád nulová.
+  const { attachSquadRelations } = await import("../transfers/attach-relations");
+  await attachSquadRelations(db, u21TeamId);
+
   return { teamId: u21TeamId, playerCount: positions.length };
 }
 

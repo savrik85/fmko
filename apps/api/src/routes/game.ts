@@ -66,6 +66,10 @@ async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: 
     await db.prepare("UPDATE players SET squad_number = NULL, life_context = json_remove(life_context, '$.trainingRest') WHERE id = ?")
       .bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   }
+
+  // Vazby na nové spoluhráče — projde tudy každý přestup i hostování.
+  const { attachNewcomerRelations } = await import("../transfers/attach-relations");
+  await attachNewcomerRelations(db, newTeamId, playerId);
 }
 
 // Povolené typy tréninku — drží sync s TrainingType v season/training.ts.
@@ -2587,6 +2591,8 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
           date: day.toISOString(),
           title: `Trénink — ${label}`,
           subtitle: [intensity, approach].filter(Boolean).join(" · ") || `${sessions}×/týden`,
+          // Samostatně, ať si kalendář nemusí intenzitu tahat z textu podtitulku
+          ...(planned ? { intensity: planned.intensity } : {}),
         });
       }
     }
@@ -4345,6 +4351,10 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'free_agent', 0, 1)")
     .bind(crypto.randomUUID(), playerId, teamId, season?.id ?? "unknown").run().catch((e) => logger.warn({ module: "game" }, "insert signing contract", e));
 
+  // Nováček si do kabiny přinese pár vazeb (soused, kolega z práce, vrstevník…)
+  const { attachNewcomerRelations } = await import("../transfers/attach-relations");
+  await attachNewcomerRelations(c.env.DB, teamId, playerId);
+
   // Atomický DELETE — pokud FA mezitím podepsal jiný tým, RETURNING vrátí 0 řádků.
   const deleted = await c.env.DB.prepare("DELETE FROM free_agents WHERE id = ? RETURNING id").bind(faId).first<{ id: string }>();
   if (!deleted) {
@@ -4886,6 +4896,10 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
       await c.env.DB.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
         .bind(res.residence, res.commuteKm, playerId).run().catch((e) => logger.warn({ module: "game" }, "set residence AI transfer", e));
     }
+
+    // Vazby na nové spoluhráče (až po bydlišti — sousedství se odvozuje z něj)
+    const { attachNewcomerRelations } = await import("../transfers/attach-relations");
+    await attachNewcomerRelations(c.env.DB, teamId, playerId);
 
     // Contract
     const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for AI transfer", e); return null; });
@@ -6214,6 +6228,10 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/accept", async (c) => {
     await c.env.DB.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
       .bind(res.residence, res.commuteKm, playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   }
+
+  // Vazby na spoluhráče — dorostenec z vesnice většinou někoho zná
+  const { attachNewcomerRelations } = await import("../transfers/attach-relations");
+  await attachNewcomerRelations(c.env.DB, teamId, playerId);
 
   // Contract
   const season = await c.env.DB.prepare("SELECT id FROM seasons ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
