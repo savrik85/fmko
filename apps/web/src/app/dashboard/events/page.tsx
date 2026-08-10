@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
 import { Card, CardBody, Spinner, SectionLabel, useConfirm } from "@/components/ui";
+import { FaceAvatar } from "@/components/players/face-avatar";
 
 interface EventEffect {
   type: string;
@@ -29,12 +30,37 @@ interface SeasonalEvent {
   status: "pending" | "active" | "resolved";
 }
 
+interface Tazatel {
+  id: string;
+  name: string;
+  style: string;
+  bio: string;
+  sentiment: number;
+  vztah: string;
+  avatar: Record<string, unknown> | null;
+}
+
 interface CoachInterview {
   id: string;
   gameWeek: number;
   questions: string[];
   expiresAt: string;
+  journalist?: Tazatel | null;
 }
+
+/** Jak vztah redaktora ke klubu obarvit — ať je na první pohled vidět, na čem jsi. */
+function vztahStyl(sentiment: number): string {
+  if (sentiment >= 25) return "text-pitch-600";
+  if (sentiment > -25) return "text-muted";
+  return "text-card-red";
+}
+
+const STYL_REDAKTORA: Record<string, string> = {
+  bulvar: "bulvární pero",
+  seriozni: "seriózní pero",
+  vycurany: "vyčůrané pero",
+  patriot: "srdcař okresu",
+};
 
 const EVENT_ICONS: Record<string, string> = {
   zabijacka: "\u{1F416}",
@@ -201,10 +227,40 @@ export default function EventsPage() {
               return (
                 <div key={iv.id} className="card border-2 p-5 bg-amber-50 border-amber-300">
                   <div className="flex items-start justify-between gap-3 mb-4">
-                    <div>
+                    <div className="min-w-0">
                       <h3 className="font-heading font-bold text-lg">🎙️ Rozhovor kola · Týden {iv.gameWeek}</h3>
-                      <p className="text-sm text-ink-light mt-1">Redaktor Okresního zpravodaje se chce zeptat před nadcházejícím zápasem.</p>
-                      <div className="text-xs text-muted mt-1">Vyprší: {expiryStr}</div>
+                      {iv.journalist ? (
+                        <div className="flex items-start gap-3 mt-2">
+                          {iv.journalist.avatar && (
+                            <FaceAvatar
+                              faceConfig={iv.journalist.avatar}
+                              size={52}
+                              className="border border-ink/30 bg-white shrink-0"
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-base font-heading font-bold">
+                              {iv.journalist.name}
+                              <span className="text-sm text-muted font-normal ml-2">
+                                {STYL_REDAKTORA[iv.journalist.style] ?? "redakce"}
+                              </span>
+                            </div>
+                            <div className="text-sm mt-0.5">
+                              Vztah k tobě:{" "}
+                              <span className={`font-heading font-bold ${vztahStyl(iv.journalist.sentiment)}`}>
+                                {iv.journalist.vztah}
+                              </span>
+                              <span className="text-xs text-muted ml-1 tabular-nums">
+                                ({iv.journalist.sentiment > 0 ? "+" : ""}{iv.journalist.sentiment})
+                              </span>
+                            </div>
+                            <p className="text-xs text-ink-light italic mt-0.5">{iv.journalist.bio}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-ink-light mt-1">Redaktor Okresního zpravodaje se chce zeptat před nadcházejícím zápasem.</p>
+                      )}
+                      <div className="text-xs text-muted mt-2">Vyprší: {expiryStr}</div>
                     </div>
                   </div>
                   <div className="space-y-4">

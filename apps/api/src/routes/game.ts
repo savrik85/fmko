@@ -6448,6 +6448,28 @@ gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
     return { results: [] };
   });
 
+  // Kdo se ptá — redaktor se určuje stejným seedem jako při psaní otázek,
+  // takže vyjde tentýž člověk i bez ukládání do rozhovoru.
+  const { redaktorProRubriku, sentimentKeKlubu, popisVztahu, jmenoRedaktora } = await import("../news/journalists");
+  const prvni = rows.results?.[0];
+  let tazatel: Record<string, unknown> | null = null;
+  if (prvni) {
+    const redaktor = await redaktorProRubriku(c.env.DB, prvni.league_id as string, "interview", teamId)
+      .catch((e) => { logger.warn({ module: "game.ts" }, "redaktor pro rozhovor", e); return null; });
+    if (redaktor) {
+      const sentiment = await sentimentKeKlubu(c.env.DB, redaktor.id, teamId);
+      tazatel = {
+        id: redaktor.id,
+        name: jmenoRedaktora(redaktor),
+        style: redaktor.style,
+        bio: redaktor.bio,
+        sentiment,
+        vztah: popisVztahu(sentiment),
+        avatar: (() => { try { return JSON.parse(redaktor.avatar); } catch { return null; } })(),
+      };
+    }
+  }
+
   const interviews = (rows.results ?? []).map((r) => ({
     id: r.id,
     leagueId: r.league_id,
@@ -6459,9 +6481,10 @@ gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
     status: r.status,
     expiresAt: r.expires_at,
     createdAt: r.created_at,
+    journalist: tazatel,
   }));
 
-  return c.json({ interviews });
+  return c.json({ interviews, journalist: tazatel });
 });
 
 // POST /api/teams/:teamId/coach-interviews/:interviewId/answer — submit answers + generate article
