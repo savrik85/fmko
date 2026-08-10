@@ -640,12 +640,12 @@ input[type="number"] { -moz-appearance: textfield; }
 }
 
 /* Portrét u rozhovoru — text ho obtéká, jako ve sportovní příloze.
-   shape-outside obtahuje kruh, takže řádky kopírují tvar fotky. */
+   Obdélník, ne kolečko: tištěná fotka má rám a text kolem ní běží pravoúhle
+   (kruhový shape-outside navíc na úzké obrazovce pouštěl řádky do rámu). */
 .np-portret {
   float: left;
-  margin: 0.2rem 0.9rem 0.5rem 0;
-  shape-outside: circle(50%);
-  -webkit-shape-outside: circle(50%);
+  margin: 0.25rem 0.85rem 0.4rem 0;
+  padding: 0;
 }
 /* Perex — první odstavec rozhovoru nese shrnutí, sází se výrazněji */
 .np-perex {
