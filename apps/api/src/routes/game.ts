@@ -2587,6 +2587,8 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
           date: day.toISOString(),
           title: `Trénink — ${label}`,
           subtitle: [intensity, approach].filter(Boolean).join(" · ") || `${sessions}×/týden`,
+          // Samostatně, ať si kalendář nemusí intenzitu tahat z textu podtitulku
+          ...(planned ? { intensity: planned.intensity } : {}),
         });
       }
     }
