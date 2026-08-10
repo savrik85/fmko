@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Team } from "@/lib/api";
@@ -293,8 +293,6 @@ export default function NewsPage() {
     (wrapArticles[0] && wrapArticles[0].id !== leadStory?.id ? wrapArticles[0] : null)
     ?? (roundSummaryArticles[0] && roundSummaryArticles[0].id !== leadStory?.id ? roundSummaryArticles[0] : null)
     ?? (aiReportArticles[0] && aiReportArticles[0].id !== leadStory?.id ? aiReportArticles[0] : null);
-  // Všechny match stories sjednocené (bez lead story pokud je match)
-  const matchStories = matchArticles.slice(leadStory?.type === "match" ? 1 : 0);
   // Ostatní drobnosti — bez typů z hlavních sekcí a bez duplicit s lead/secondary (podle id)
   const otherArticles = articles.filter(
     (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview", "ultras_report"].includes(a.type)
@@ -307,17 +305,21 @@ export default function NewsPage() {
   const district = isOtherLeague ? (selectedLeague?.district || "Praha") : (team.district || "");
   const newspaperName = district === "Praha" ? "Pražský Zpravodaj" : `Okresní Zpravodaj`;
 
+  // Číslo vydání = kolo, ke kterému se váže nejčerstvější článek z redakce.
+  const vydani = articles.find((a) => (a as any).gameWeek)?.gameWeek ?? null;
+  const rocnik = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"][season - 1] ?? String(season);
+
   return (
     <div className="page-container">
 
-      {/* League picker */}
+      {/* Výběr okresu — decentní, nad hlavičkou listu */}
       {allLeagues.length > 1 && (
-        <div className="flex items-center gap-3 mb-4">
-          <span className="text-sm text-muted font-medium">Zobrazit zpravodaj:</span>
+        <div className="flex items-center gap-2 mb-3 text-sm">
+          <span className="text-muted">Zobrazit zpravodaj:</span>
           <select
             value={selectedLeagueId ?? "own"}
             onChange={(e) => handleLeagueChange(e.target.value)}
-            className="text-sm bg-white border border-border rounded-lg px-3 py-2 font-medium"
+            className="bg-transparent border-b border-ink/30 px-1 py-0.5 font-heading font-bold focus:outline-none focus:border-ink"
           >
             <option value="own">Můj okres</option>
             {allLeagues.map((l) => (
@@ -327,102 +329,69 @@ export default function NewsPage() {
         </div>
       )}
 
-      {/* ═══ Newspaper Masthead ═══ */}
-      <div className="border-b-4 border-double border-ink pb-3 mb-1">
-        <div className="flex items-end justify-between">
-          <div className="text-[10px] uppercase tracking-widest text-muted">{district}</div>
-          <div className="text-[10px] uppercase tracking-widest text-muted">Sezóna {season}</div>
+      {/* ═══ Hlavička listu ═══ */}
+      <header className="np-dvojlinka pt-2">
+        <div className="flex items-end justify-between text-[10px] uppercase tracking-[0.2em] text-muted">
+          <span>{district}</span>
+          <span>Ročník {rocnik}{vydani ? ` · číslo ${vydani}` : ""}</span>
         </div>
-        <h1 className="font-heading font-[900] text-3xl sm:text-4xl text-center tracking-tight leading-none my-2" style={{ fontVariant: "small-caps" }}>
+        <h1
+          className="np-titulek text-center text-[2.1rem] sm:text-5xl my-1.5"
+          style={{ fontVariant: "small-caps" }}
+        >
           {newspaperName}
         </h1>
-        <div className="flex items-center justify-between">
-          <div className="text-[11px] text-muted">{today}</div>
-          <div className="text-[11px] text-muted italic">Nezávislé noviny {district === "Praha" ? "pražského" : "okresního"} fotbalu</div>
+        <div className="flex items-center justify-between text-[11px] text-muted border-t border-ink/20 pt-1">
+          <span>{today}</span>
+          <span className="italic hidden sm:inline">
+            Nezávislé noviny {district === "Praha" ? "pražského" : "okresního"} fotbalu
+          </span>
+          <span className="uppercase tracking-widest text-[10px]">Zdarma</span>
         </div>
-      </div>
-      <div className="border-b border-ink mb-5" />
+      </header>
+      <div className="np-dvojlinka mt-0.5 mb-6" />
 
       {articles.length === 0 ? (
-        <div className="text-center text-muted py-16 italic">
+        <div className="text-center text-muted py-16 italic np-text">
           Redakce zatím nemá žádné zprávy. Odehraj první zápas a noviny se rozjedou!
         </div>
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-8">
 
-          {/* ═══ Lead story + Placená propagace vedle sebe ═══ */}
+          {/* ═══ Úvodník + placená propagace ═══ */}
           {leadStory && (
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 border-b border-gray-200 pb-5">
-              {/* Lead story */}
-              <div id={`news-${leadStory.id}`}>
+            <section className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-7">
+              <article id={`news-${leadStory.id}`}>
                 <ArticleWrapper article={leadStory}>
-                  {leadStory.type === "ai_report" || leadStory.type === "matchday_preview" || leadStory.type === "round_summary" || leadStory.type === "season_opener" ? (
-                    <div>
-                      <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">
-                        {leadStory.type === "matchday_preview" ? "Předzápasové preview"
-                          : leadStory.type === "round_summary" ? "🏆 Hráč a trenér kola"
-                          : leadStory.type === "season_opener" ? "🎺 Otevírák sezóny"
-                          : "Komentář kola"}
-                      </div>
-                      <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
-                        {leadStory.headline}
-                      </h2>
-                      <div className="text-base text-ink-light leading-relaxed space-y-3 columns-1 sm:columns-2 gap-8">
-                        {leadStory.body.split("\n").filter(Boolean).map((p, i) => (
-                          <p key={i} className="break-inside-avoid">{renderMarkdown(p)}</p>
-                        ))}
-                      </div>
-                      <div className="flex items-center justify-center gap-3 mt-3">
-                        <div className="text-xs text-muted italic">{timeAgo(leadStory.date)}</div>
-                        <span className="text-muted/40">·</span>
-                        <ShareButton articleId={leadStory.id} />
-                      </div>
+                  <div>
+                    <Kicker>{rubrikaProTyp(leadStory.type)}</Kicker>
+                    <h2 className="np-titulek text-3xl sm:text-[2.6rem] text-center mb-3">
+                      {leadStory.headline}
+                    </h2>
+                    <Podpis clanek={leadStory} stred />
+                    <div className="np-text np-sloupce np-sloupce-3 np-iniciala text-[15px] mt-3">
+                      {leadStory.body.split("\n").filter(Boolean).map((p, i) => (
+                        <p key={i}>{renderMarkdown(p)}</p>
+                      ))}
                     </div>
-                  ) : (
-                    <div className="text-center max-w-3xl mx-auto">
-                      <div className="text-xs uppercase tracking-widest text-muted mb-2">
-                        {leadStory.type === "match" ? "Zápasová zpráva" : leadStory.type === "standing" ? "Tabulka" : "Aktualita"}
-                      </div>
-                      <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-3 hover:underline decoration-2 underline-offset-4">
-                        {leadStory.headline}
-                      </h2>
-                      <p className="text-base text-ink-light leading-relaxed max-w-xl mx-auto">
-                        {leadStory.body}
-                      </p>
-                      <div className="flex items-center justify-center gap-3 mt-3">
-                        <div className="text-xs text-muted italic">{timeAgo(leadStory.date)}</div>
-                        <span className="text-muted/40">·</span>
-                        <ShareButton articleId={leadStory.id} />
-                      </div>
-                    </div>
-                  )}
+                  </div>
                 </ArticleWrapper>
-              </div>
+              </article>
 
-              {/* Placená propagace sidebar */}
               {promotionArticles.length > 0 && (
-                <aside className="lg:border-l lg:border-gray-200 lg:pl-6">
+                <aside className="lg:border-l lg:border-ink/15 lg:pl-6">
                   <div className="sticky top-4">
-                    <div className="flex items-center justify-center gap-1.5 mb-3 pb-2 border-b-2 border-double border-gold-400">
-                      <span className="text-base">📢</span>
-                      <span className="font-heading font-[900] text-xs uppercase tracking-[0.15em] text-gold-700">
+                    <div className="text-center border-y border-ink/25 py-1 mb-3">
+                      <span className="font-heading font-[900] text-[10px] uppercase tracking-[0.2em]">
                         Placená propagace
                       </span>
                     </div>
-                    <div className="space-y-4">
+                    <div className="divide-y divide-ink/10">
                       {promotionArticles.slice(0, 3).map((p) => (
-                        <div
-                          key={p.id}
-                          id={`news-${p.id}`}
-                          className="bg-gradient-to-br from-gold-50/60 to-transparent rounded-lg p-3 border border-gold-100"
-                        >
-                          <h4 className="font-heading font-[800] text-sm leading-snug mb-2">
-                            {p.headline}
-                          </h4>
-                          <p className="text-xs text-ink-light leading-relaxed whitespace-pre-line">
-                            {p.body}
-                          </p>
-                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-gold-100">
+                        <div key={p.id} id={`news-${p.id}`} className="py-3 first:pt-0">
+                          <h4 className="np-titulek text-base mb-1.5">{p.headline}</h4>
+                          <p className="np-text text-[13px] whitespace-pre-line">{p.body}</p>
+                          <div className="flex items-center justify-between mt-2">
                             <span className="text-[10px] text-muted italic">{timeAgo(p.date)}</span>
                             <ShareButton articleId={p.id} />
                           </div>
@@ -432,206 +401,126 @@ export default function NewsPage() {
                   </div>
                 </aside>
               )}
-            </div>
+            </section>
           )}
 
-          {/* ═══ Druhý hlavní článek (Komentář kola) — když je lead round_summary nebo preview ═══ */}
+          {/* ═══ Druhý hlavní článek ═══ */}
           {secondaryStory && (
-            <div id={`news-${secondaryStory.id}`} className="border-b border-gray-200 pb-5">
-              <ArticleWrapper article={secondaryStory}>
-                <div>
-                  <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">
-                    {secondaryStory.type === "round_summary" ? "🏆 Hráč a trenér kola"
-                      : secondaryStory.type === "matchday_preview" ? "Předzápasové preview"
-                      : secondaryStory.type === "season_wrap" ? "📜 Ohlédnutí za sezónou"
-                      : "Komentář kola"}
-                  </div>
-                  <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
-                    {secondaryStory.headline}
-                  </h2>
-                  <div className="text-base text-ink-light leading-relaxed space-y-3 columns-1 sm:columns-2 gap-8">
-                    {secondaryStory.body.split("\n").filter(Boolean).map((p, i) => (
-                      <p key={i} className="break-inside-avoid">{renderMarkdown(p)}</p>
-                    ))}
-                  </div>
-                  <div className="flex items-center justify-center gap-3 mt-3">
-                    <div className="text-xs text-muted italic">{timeAgo(secondaryStory.date)}</div>
-                    <span className="text-muted/40">·</span>
-                    <ShareButton articleId={secondaryStory.id} />
-                  </div>
-                </div>
-              </ArticleWrapper>
-            </div>
+            <section id={`news-${secondaryStory.id}`} className="border-t border-ink/20 pt-6">
+              <Kicker>{rubrikaProTyp(secondaryStory.type)}</Kicker>
+              <h2 className="np-titulek text-2xl sm:text-3xl text-center mb-2">{secondaryStory.headline}</h2>
+              <Podpis clanek={secondaryStory} stred />
+              <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-3">
+                {secondaryStory.body.split("\n").filter(Boolean).map((p, i) => (
+                  <p key={i}>{renderMarkdown(p)}</p>
+                ))}
+              </div>
+            </section>
           )}
 
-          {/* ═══ Prales Ultras — hlavní blok(y), všechny reporty ═══ */}
+          {/* ═══ Prales Ultras ═══ */}
           {ultrasReports.map((ur) => (
-            <div key={ur.id} id={`news-${ur.id}`} className="border-b border-gray-200 pb-5">
-              <div className="text-xs uppercase tracking-widest text-muted mb-2 text-center">
-                🔥 Prales Ultras
-              </div>
-              <h2 className="font-heading font-[900] text-2xl sm:text-3xl leading-tight mb-4 text-center">
-                {ur.headline}
-              </h2>
-              <div className="text-base text-ink-light leading-relaxed space-y-3 columns-1 sm:columns-2 gap-8">
+            <section key={ur.id} id={`news-${ur.id}`} className="border-t border-ink/20 pt-6">
+              <Kicker>🔥 Prales Ultras</Kicker>
+              <h2 className="np-titulek text-2xl sm:text-3xl text-center mb-2">{ur.headline}</h2>
+              <Podpis clanek={ur} stred />
+              <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-3">
                 {ur.body.split("\n").filter(Boolean).map((p, i) => (
-                  <p key={i} className="break-inside-avoid">{renderMarkdown(p)}</p>
+                  <p key={i}>{renderMarkdown(p)}</p>
                 ))}
               </div>
               {ur.photos && ur.photos.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-5">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-4 mt-5">
                   {ur.photos.map((ph) => (
-                    <figure key={ph.teamId} className="overflow-hidden rounded-lg border border-sand-200 bg-sand-50">
+                    <figure key={ph.teamId}>
                       <img
                         src={`/kotel-foto?text=${encodeURIComponent(ph.ultrasText)}&bg=${encodeURIComponent(ph.bannerColor)}&fg=${encodeURIComponent(ph.textColor)}&p=${encodeURIComponent(ph.bannerColor)}&s=${encodeURIComponent(ph.textColor)}&lvl=${encodeURIComponent(String(ph.level))}&att=${encodeURIComponent(String(ph.attendance))}&team=${encodeURIComponent(ph.teamName)}&cap=${encodeURIComponent(ph.caption)}`}
                         alt={`Kotel ${ph.teamName}`}
                         width={1200}
                         height={630}
-                        className="w-full h-auto"
+                        className="w-full h-auto border border-ink/25"
                         loading="lazy"
                       />
-                      <figcaption className="px-3 py-2 text-sm">
-                        <EntityLink type="team" id={ph.teamId} className="font-heading font-bold text-base">
+                      {/* Popisek jen tady — jméno i počet diváků jsou už vypálené ve fotce */}
+                      <figcaption className="text-[11px] text-muted mt-1 leading-snug">
+                        <EntityLink type="team" id={ph.teamId} className="font-heading font-bold text-ink">
                           {ph.teamName}
                         </EntityLink>
-                        <span className="text-muted ml-2">· {ph.caption}</span>
+                        {" — "}{ph.caption}
                       </figcaption>
                     </figure>
                   ))}
                 </div>
               )}
-              <div className="flex items-center justify-center gap-3 mt-3">
-                <div className="text-xs text-muted italic">{timeAgo(ur.date)}</div>
-                <span className="text-muted/40">·</span>
+              <div className="flex items-center justify-center gap-3 mt-4">
+                <span className="text-[11px] text-muted italic">{timeAgo(ur.date)}</span>
                 <ShareButton articleId={ur.id} />
               </div>
-            </div>
+            </section>
           ))}
 
-          {/* ═══ Rozhovory kola ═══ */}
+          {/* ═══ Rozhovory s trenéry ═══ */}
           {currentWeekInterviews.length > 0 && (
-            <div className="border-b border-gray-200 pb-5">
-              <div className="flex items-center gap-2 mb-4 pb-2 border-b border-ink">
-                <span className="text-base">🎙️</span>
-                <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">
-                  {currentWeekInterviews.length === 1 ? "Rozhovor kola" : "Rozhovory kola"}
-                </h3>
-              </div>
-              <div className="space-y-6">
-                {currentWeekInterviews.map((iv, idx) => {
+            <section className="border-t border-ink/20 pt-6">
+              <Kicker>🎙️ {currentWeekInterviews.length === 1 ? "Rozhovor kola" : "Rozhovory kola"}</Kicker>
+              <div className="divide-y divide-ink/10">
+                {currentWeekInterviews.map((iv) => {
                   let meta: { managerName?: string; managerAvatar?: Record<string, unknown> | null; teamName?: string; article?: string } = {};
-                  try { meta = JSON.parse(iv.body); } catch { meta = {}; }
+                  try { meta = JSON.parse(iv.body); } catch (e) { console.error("parse rozhovoru trenéra:", e); meta = {}; }
                   return (
-                    <div key={iv.id} id={`news-${iv.id}`} className={idx > 0 ? "pt-5 border-t border-gray-100" : ""}>
-                      <div className="flex items-center gap-2 mb-2">
-                        {meta.managerAvatar && Object.keys(meta.managerAvatar).length > 0 && (
-                          <FaceAvatar faceConfig={meta.managerAvatar} size={40} className="rounded-full border-2 border-sand-200 shrink-0" />
-                        )}
-                        <div>
-                          <span className="font-heading font-bold text-base">{meta.managerName ?? "Trenér"}</span>
-                          {meta.teamName && <span className="text-sm text-muted ml-2">· {meta.teamName}</span>}
-                        </div>
-                      </div>
-                      <h4 className="font-heading font-[800] text-lg leading-snug mb-3">{iv.headline}</h4>
-                      <div className="text-sm text-ink-light leading-relaxed space-y-2">
-                        {(meta.article ?? iv.body).split("\n").filter(Boolean).map((p, i) => (
-                          <p key={i}>{p}</p>
-                        ))}
-                      </div>
-                      <div className="mt-3">
-                        <ShareButton articleId={iv.id} />
-                      </div>
-                    </div>
+                    <Rozhovor
+                      key={iv.id}
+                      clanek={iv}
+                      jmeno={meta.managerName ?? "Trenér"}
+                      role="Trenér"
+                      tym={meta.teamName}
+                      avatar={meta.managerAvatar}
+                      text={meta.article ?? iv.body}
+                    />
                   );
                 })}
               </div>
-            </div>
+            </section>
           )}
 
-          {/* ═══ Rozhovor s hráčem ═══ */}
+          {/* ═══ Rozhovory s hráči ═══ */}
           {currentPlayerInterviews.length > 0 && (
-            <div className="border-b border-gray-200 pb-5">
-              <div className="flex items-center gap-2 mb-4 pb-2 border-b border-ink">
-                <span className="text-base">🎤</span>
-                <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">
-                  {currentPlayerInterviews.length === 1 ? "Rozhovor s hráčem" : "Rozhovory s hráči"}
-                </h3>
-              </div>
-              <div className="space-y-6">
-                {currentPlayerInterviews.map((iv, idx) => {
+            <section className="border-t border-ink/20 pt-6">
+              <Kicker>🎤 {currentPlayerInterviews.length === 1 ? "Rozhovor s hráčem" : "Rozhovory s hráči"}</Kicker>
+              <div className="divide-y divide-ink/10">
+                {currentPlayerInterviews.map((iv) => {
                   let meta: {
                     playerId?: string; playerName?: string; playerAvatar?: Record<string, unknown> | null;
                     position?: string; teamName?: string; article?: string; mood?: string; effectNote?: string;
                   } = {};
-                  try { meta = JSON.parse(iv.body); } catch (e) { console.error("parse player interview body:", e); meta = {}; }
-                  const moodStyle = meta.mood === "boost"
-                    ? "bg-green-100 text-green-800 border-green-200"
-                    : meta.mood === "rivalry"
-                    ? "bg-red-100 text-red-800 border-red-200"
-                    : meta.mood === "kabina_drama"
-                    ? "bg-amber-100 text-amber-800 border-amber-200"
-                    : "bg-sand-100 text-muted border-sand-200";
+                  try { meta = JSON.parse(iv.body); } catch (e) { console.error("parse rozhovoru hráče:", e); meta = {}; }
                   return (
-                    <div key={iv.id} id={`news-${iv.id}`} className={idx > 0 ? "pt-5 border-t border-gray-100" : ""}>
-                      <div className="flex items-center gap-2 mb-2">
-                        {meta.playerAvatar && Object.keys(meta.playerAvatar).length > 0 && (
-                          <FaceAvatar faceConfig={meta.playerAvatar} size={40} className="rounded-full border-2 border-sand-200 shrink-0" />
-                        )}
-                        <div>
-                          {meta.playerId && meta.playerName ? (
-                            <EntityLink type="player" id={meta.playerId} className="font-heading font-bold text-base">
-                              {meta.playerName}
-                            </EntityLink>
-                          ) : (
-                            <span className="font-heading font-bold text-base">{meta.playerName ?? "Hráč"}</span>
-                          )}
-                          {meta.position && <span className="text-sm text-muted ml-2">{meta.position}</span>}
-                          {meta.teamName && <span className="text-sm text-muted ml-2">· {meta.teamName}</span>}
-                        </div>
-                      </div>
-                      <h4 className="font-heading font-[800] text-lg leading-snug mb-3">{iv.headline}</h4>
-                      <div className="text-sm text-ink-light leading-relaxed space-y-2">
-                        {(meta.article ?? iv.body).split("\n").filter(Boolean).map((p, i) => (
-                          <p key={i}>{p}</p>
-                        ))}
-                      </div>
-                      {meta.effectNote && (
-                        <div className="mt-3">
-                          <span className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full border ${moodStyle}`}>
-                            🧱 {meta.effectNote}
-                          </span>
-                        </div>
-                      )}
-                      <div className="mt-3">
-                        <ShareButton articleId={iv.id} />
-                      </div>
-                    </div>
+                    <Rozhovor
+                      key={iv.id}
+                      clanek={iv}
+                      jmeno={meta.playerName ?? "Hráč"}
+                      jmenoId={meta.playerId}
+                      role={meta.position}
+                      tym={meta.teamName}
+                      avatar={meta.playerAvatar}
+                      text={meta.article ?? iv.body}
+                      poznamka={meta.effectNote}
+                    />
                   );
                 })}
               </div>
-            </div>
+            </section>
           )}
 
-          {/* ═══ Přestupy a spekulace (dole pod Lead) ═══ */}
+          {/* ═══ Přestupy — krátké zprávy ve sloupcích ═══ */}
           {transferArticles.length > 0 && (
-            <div className="border-b border-gray-200 pb-5">
-              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-ink">
-                <span className="text-base">🤝</span>
-                <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">
-                  Přestupy a spekulace
-                </h3>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <section className="border-t border-ink/20 pt-6">
+              <Kicker>🤝 Přestupy a spekulace</Kicker>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6">
                 {transferArticles.slice(0, 9).map((t) => (
-                  <div
-                    key={t.id}
-                    id={`news-${t.id}`}
-                    className="border-l-2 border-gray-200 pl-3 hover:border-pitch-500 transition-colors"
-                  >
-                    <h4 className="font-heading font-bold text-sm leading-snug">
-                      {t.headline}
-                    </h4>
-                    <p className="text-xs text-ink-light mt-1 leading-relaxed line-clamp-3">{t.body}</p>
+                  <div key={t.id} id={`news-${t.id}`} className="py-3 border-b border-ink/10">
+                    <h4 className="np-titulek text-[15px] mb-1">{t.headline}</h4>
+                    <p className="np-text text-[13px] line-clamp-3">{t.body}</p>
                     <div className="flex items-center justify-between mt-1.5">
                       <span className="text-[10px] text-muted italic">{timeAgo(t.date)}</span>
                       <ShareButton articleId={t.id} />
@@ -639,180 +528,72 @@ export default function NewsPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
+          {/* ═══ Spodek listu — výsledky kola a drobné zprávy ═══ */}
+          {(roundArticles.length > 0 || miscArticles.length > 0) && (
+            <div className="border-t border-ink/20 pt-6">
 
-          {/* ═══ Hlavní sekce — Main + Sidebar (novinový layout) ═══ */}
-          {(roundArticles.length > 0 || matchStories.length > 0 || standingArticles.length > 0 || miscArticles.length > 0) && (
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-0 lg:gap-8">
-
-              {/* Main column */}
-              <div className="lg:pr-8 lg:border-r lg:border-gray-300 space-y-6">
-
-                {/* Round results — přehled výsledků */}
+              <div className="space-y-7 min-w-0">
+                {/* Výsledky kola */}
                 {roundArticles.map((article) => (
-                  <div key={article.id} className="border-b-2 border-double border-ink pb-5">
-                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-300">
-                      <span className="text-lg">{article.icon}</span>
-                      <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">{article.headline}</h3>
-                      <span className="text-[10px] text-muted italic ml-auto">{timeAgo(article.date)}</span>
-                    </div>
+                  <section key={article.id}>
+                    <Kicker>⚽ {article.headline}</Kicker>
                     <RoundResults body={article.body} />
-                  </div>
+                    <div className="text-[11px] text-muted italic mt-2">{timeAgo(article.date)}</div>
+                  </section>
                 ))}
 
-                {/* Zápasové zprávy — 2-col novinový styl */}
-                {matchStories.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-3 pb-2 border-b-2 border-double border-ink">
-                      <span className="text-base">⚽</span>
-                      <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">Zápasové zprávy</h3>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 sm:divide-x sm:divide-gray-200">
-                      {matchStories.map((article, idx) => {
-                        const isEven = idx % 2 === 0;
-                        return (
-                          <ArticleWrapper key={article.id} article={article}>
-                            <div
-                              id={`news-${article.id}`}
-                              className={`pb-3 border-b border-gray-100 h-full ${!isEven ? "sm:pl-6" : ""}`}
-                            >
-                              <div className="flex items-start gap-2">
-                                <span className="text-base shrink-0 leading-none mt-0.5">{article.icon}</span>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-[9px] uppercase tracking-widest text-muted mb-1">Zápasová zpráva</div>
-                                  <h4 className="font-heading font-[800] text-sm leading-snug mb-1 hover:underline">
-                                    {article.headline}
-                                  </h4>
-                                  <p className="text-xs text-ink-light leading-relaxed line-clamp-2">{article.body}</p>
-                                  <div className="flex items-center justify-between mt-1.5">
-                                    <span className="text-[10px] text-muted italic">{timeAgo(article.date)}</span>
-                                    <ShareButton articleId={article.id} />
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </ArticleWrapper>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Misc / ostatní články */}
+                {/* Drobné zprávy */}
                 {miscArticles.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-3 pb-2 border-b-2 border-double border-ink">
-                      <span className="text-base">📰</span>
-                      <h3 className="font-heading font-[900] text-sm uppercase tracking-[0.15em]">Další zprávy</h3>
-                    </div>
-                    <div className="space-y-3">
+                  <section>
+                    <Kicker>📰 Další zprávy</Kicker>
+                    <div className="np-sloupce np-sloupce-2">
                       {miscArticles.map((article) => (
                         <ArticleWrapper key={article.id} article={article}>
-                          <div id={`news-${article.id}`} className="border-b border-gray-100 pb-3 flex items-start gap-3">
-                            <span className="text-lg shrink-0">{article.icon}</span>
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-heading font-bold text-sm leading-snug hover:underline">{article.headline}</h4>
-                              <p className="text-xs text-ink-light mt-1 leading-relaxed">{article.body}</p>
-                              <div className="flex items-center justify-between mt-1">
-                                <span className="text-[10px] text-muted italic">{timeAgo(article.date)}</span>
-                                <ShareButton articleId={article.id} />
-                              </div>
+                          <div id={`news-${article.id}`} className="pb-3 mb-3 border-b border-ink/10 break-inside-avoid-column">
+                            <h4 className="np-titulek text-[15px] mb-1">
+                              <span className="mr-1">{article.icon}</span>{article.headline}
+                            </h4>
+                            <p className="np-text text-[13px]">{article.body}</p>
+                            <div className="flex items-center justify-between mt-1">
+                              <span className="text-[10px] text-muted italic">{timeAgo(article.date)}</span>
+                              <ShareButton articleId={article.id} />
                             </div>
                           </div>
                         </ArticleWrapper>
                       ))}
                     </div>
-                  </div>
+                  </section>
                 )}
               </div>
 
-              {/* Sidebar */}
-              <div className="space-y-5">
-                {/* League standing box */}
-                {standingArticles.length > 0 && standingArticles[0] !== leadStory && (
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <div className="font-heading font-[800] text-xs uppercase tracking-widest text-center mb-2 pb-2 border-b border-gray-300">
-                      Tabulka
-                    </div>
-                    <div className="text-center">
-                      <div className="font-heading font-[900] text-lg">{standingArticles[0].headline}</div>
-                      <p className="text-sm text-muted mt-1">{standingArticles[0].body}</p>
-                    </div>
-                    <Link href="/dashboard/liga" className="text-xs text-pitch-500 font-heading font-bold hover:underline block text-center mt-3">
-                      Celá tabulka →
-                    </Link>
-                  </div>
-                )}
-
-                {/* Quick scores box */}
-                {matchArticles.length > 0 && (
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <div className="font-heading font-[800] text-xs uppercase tracking-widest text-center mb-2 pb-2 border-b border-gray-300">
-                      Naše výsledky
-                    </div>
-                    <div className="space-y-2">
-                      {matchArticles.slice(0, 5).map((m) => {
-                        // Extract score from headline (e.g. "Team poráží Opponent 1:2!")
-                        const scoreMatch = m.headline.match(/(\d+:\d+)/);
-                        const score = scoreMatch ? scoreMatch[1] : "";
-                        const isWin = m.icon === "\u{1F3C6}";
-                        const isDraw = m.icon === "\u{1F91D}";
-                        const resultColor = isWin ? "text-pitch-600 bg-pitch-50" : isDraw ? "text-muted bg-gray-100" : "text-card-red bg-red-50";
-
-                        return (
-                          <ArticleWrapper key={m.id} article={m}>
-                            <div className="flex items-center justify-between py-1 hover:bg-white/50 -mx-1 px-1 rounded transition-colors">
-                              <span className="text-xs font-heading truncate flex-1">{m.headline.replace(/\d+:\d+!?/, "").replace("!", "").trim()}</span>
-                              {score && (
-                                <span className={`text-xs font-heading font-bold px-1.5 py-0.5 rounded ${resultColor} tabular-nums ml-2`}>{score}</span>
-                              )}
-                            </div>
-                          </ArticleWrapper>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Newspaper footer */}
-                <div className="text-center border-t border-gray-200 pt-3">
-                  <div className="font-heading font-[800] text-[10px] uppercase tracking-[0.15em] text-muted">
-                    Okresní Zpravodaj
-                  </div>
-                  <div className="text-[9px] text-muted mt-0.5 italic">
-                    Vychází každé kolo · Redakce {district}
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
-          {/* ═══ Placená inzerce — newspaper classifieds section (only own league) ═══ */}
-          {!isOtherLeague && <div className="border-t-2 border-ink pt-4">
-            <div className="font-heading font-[900] text-sm uppercase tracking-[0.2em] text-center mb-1" style={{ fontVariant: "small-caps" }}>
+          {/* ═══ Placená inzerce ═══ */}
+          {!isOtherLeague && <section className="np-dvojlinka pt-4">
+            <div className="np-titulek text-center text-lg tracking-[0.15em]" style={{ fontVariant: "small-caps" }}>
               Placená inzerce
             </div>
-            <div className="text-[10px] text-muted text-center mb-4 italic">Inzerát: {adCost} Kč · Platnost 14 dní</div>
+            <div className="text-[11px] text-muted text-center mb-4 italic">Inzerát: {adCost} Kč · Platnost 14 dní</div>
 
-            {/* Classifieds grid */}
             {classifieds.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 mb-4">
                 {classifieds.map((ad) => (
-                  <div key={ad.id} className="border border-gray-200 rounded p-3 bg-gray-50/50 relative group">
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <span className="text-sm">{ad.categoryIcon}</span>
-                      <span className="text-[10px] uppercase tracking-wide text-muted font-heading font-bold">{ad.categoryLabel}</span>
+                  <div key={ad.id} className="py-3 border-b border-ink/15 relative group">
+                    <div className="text-[10px] uppercase tracking-wider text-muted font-heading font-bold mb-1">
+                      {ad.categoryIcon} {ad.categoryLabel}
                     </div>
-                    <p className="text-sm leading-snug mb-2">{ad.message}</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-muted italic">{ad.teamName}</span>
-                      <span className="text-[10px] text-muted">{timeAgo(ad.createdAt)}</span>
+                    <p className="np-text text-[13px] mb-1.5">{ad.message}</p>
+                    <div className="flex items-center justify-between text-[10px] text-muted italic">
+                      <span>{ad.teamName}</span>
+                      <span>{timeAgo(ad.createdAt)}</span>
                     </div>
                     {ad.isOwn && (
                       <button onClick={() => deleteAd(ad.id)}
-                        className="absolute top-2 right-2 w-5 h-5 rounded-full bg-red-100 text-card-red text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute top-2 right-0 w-5 h-5 text-card-red text-xs opacity-0 group-hover:opacity-100 transition-opacity"
                         title="Smazat inzerát">&#10005;</button>
                     )}
                   </div>
@@ -824,36 +605,33 @@ export default function NewsPage() {
               </div>
             )}
 
-            {/* New ad form */}
             {!showAdForm ? (
               <div className="text-center">
                 <button onClick={() => setShowAdForm(true)}
-                  className="text-sm font-heading font-bold text-pitch-500 hover:underline border border-pitch-500 rounded-full px-4 py-1.5 hover:bg-pitch-50 transition-colors">
+                  className="text-sm font-heading font-bold border border-ink/40 px-4 py-1.5 hover:bg-ink hover:text-paper transition-colors">
                   + Podat inzerát ({adCost} Kč)
                 </button>
               </div>
             ) : (
-              <div className="max-w-lg mx-auto border border-gray-200 rounded-lg p-4 bg-white">
+              <div className="max-w-lg mx-auto border border-ink/25 p-4">
                 <div className="font-heading font-bold text-sm mb-3">Nový inzerát</div>
 
-                {/* Category select */}
                 <div className="flex gap-2 flex-wrap mb-3">
                   {categories.map((cat) => (
                     <button key={cat.key} onClick={() => setAdCategory(cat.key)}
-                      className={`text-xs px-2.5 py-1 rounded-full font-heading font-bold transition-colors ${
-                        adCategory === cat.key ? "bg-ink text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
+                      className={`text-xs px-2.5 py-1 font-heading font-bold border transition-colors ${
+                        adCategory === cat.key ? "bg-ink text-paper border-ink" : "border-ink/25 text-muted hover:border-ink/50"
                       }`}>
                       {cat.icon} {cat.label}
                     </button>
                   ))}
                 </div>
 
-                {/* Message */}
                 <textarea
                   value={adMessage}
                   onChange={(e) => setAdMessage(e.target.value)}
                   placeholder="Např.: Hledáme brankáře do okresního přeboru. Kontakt: 777 123 456"
-                  className="w-full border border-gray-200 rounded-lg p-3 text-sm resize-none focus:outline-none focus:border-pitch-500 transition-colors"
+                  className="w-full border border-ink/25 p-3 text-sm resize-none bg-transparent focus:outline-none focus:border-ink transition-colors"
                   rows={3}
                   maxLength={200}
                 />
@@ -870,13 +648,13 @@ export default function NewsPage() {
                     Zrušit
                   </button>
                   <button onClick={submitAd} disabled={adSubmitting || adMessage.trim().length < 5}
-                    className="flex-1 text-sm py-2 rounded-lg font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    className="flex-1 text-sm py-2 font-heading font-bold text-paper bg-ink hover:bg-ink-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                     {adSubmitting ? "Odesílám..." : `Zaplatit a zveřejnit (${adCost} Kč)`}
                   </button>
                 </div>
               </div>
             )}
-          </div>}
+          </section>}
 
         </div>
       )}
@@ -885,6 +663,131 @@ export default function NewsPage() {
 }
 
 /* ── Sub-components ── */
+
+/** Hlavička rubriky — název sevřený vlasovými linkami přes celou šířku sloupce. */
+function Kicker({ children }: { children: React.ReactNode }) {
+  return <div className="np-rubrika">{children}</div>;
+}
+
+/**
+ * Podpis pod článkem. Redakci zatím tvoří jeden anonymní pisatel — až budou
+ * redaktoři s vlastními povahami, doplní se sem jméno s odkazem na profil.
+ */
+function Podpis({ clanek, stred = false }: { clanek: Article; stred?: boolean }) {
+  return (
+    <div className={`flex items-center gap-2 text-[11px] text-muted ${stred ? "justify-center" : ""}`}>
+      <span className="uppercase tracking-[0.15em] font-heading font-bold">Redakce</span>
+      <span className="opacity-40">·</span>
+      <span className="italic">{timeAgo(clanek.date)}</span>
+      <span className="opacity-40">·</span>
+      <ShareButton articleId={clanek.id} />
+    </div>
+  );
+}
+
+/**
+ * Nejsilnější přímá řeč článku pro vytržený citát.
+ *
+ * Rovná uvozovka je zároveň otevírací i zavírací, takže se musí párovat podle
+ * pořadí — hledání "od uvozovky k uvozovce" jinak chytí text MEZI dvěma citáty,
+ * tedy autorskou větu, která obvykle končí dvojtečkou.
+ */
+function vytahnoutCitat(odstavce: string[]): string | undefined {
+  const kandidati: string[] = [];
+  for (const odst of odstavce) {
+    for (const m of odst.matchAll(/„([^„""]+)[""]/g)) kandidati.push(m[1]);
+    const casti = odst.split('"');
+    for (let i = 1; i < casti.length; i += 2) kandidati.push(casti[i]);
+  }
+  return kandidati
+    .map((c) => c.trim())
+    .filter((c) => c.length >= 45 && c.length <= 165 && !c.endsWith(":"))
+    .sort((a, b) => b.length - a.length)[0];
+}
+
+/**
+ * Rozhovor sázený jako ve sportovní příloze: velký portrét vlevo, který text
+ * obtéká, pod ním popiska se jménem, první odstavec jako perex a nejsilnější
+ * citát vytržený mezi linky. Společné pro trenéry i hráče.
+ */
+function Rozhovor({
+  clanek, jmeno, jmenoId, role, tym, avatar, text, poznamka,
+}: {
+  clanek: Article;
+  jmeno: string;
+  jmenoId?: string;
+  role?: string;
+  tym?: string;
+  avatar?: Record<string, unknown> | null;
+  text: string;
+  poznamka?: string;
+}) {
+  const odstavce = text.split("\n").filter(Boolean);
+  const maAvatar = avatar && Object.keys(avatar).length > 0;
+
+  // Perex tučně jen když je krátký; jinak by svítil tučně celý sloupec.
+  const maPerex = (odstavce[0]?.length ?? 0) < 260;
+  const citat = vytahnoutCitat(odstavce.slice(1));
+
+  return (
+    <article id={`news-${clanek.id}`} className="py-6 first:pt-0">
+      <h3 className="np-titulek text-2xl sm:text-[1.75rem] mb-2">{clanek.headline}</h3>
+      <div className="flex items-center gap-2 mb-4 pb-2 border-b border-ink/10">
+        <span className="text-[11px] uppercase tracking-[0.15em] font-heading font-bold text-muted">
+          Rozhovor
+        </span>
+        <div className="ml-auto"><Podpis clanek={clanek} /></div>
+      </div>
+
+      <div className="np-text np-sloupce np-sloupce-2 text-[15px]">
+        {maAvatar && (
+          <figure className="np-portret">
+            <FaceAvatar faceConfig={avatar} size={118} className="border border-ink/40 bg-white" />
+            <figcaption className="text-[11px] leading-tight mt-1 not-italic border-t border-ink/20 pt-1">
+              {jmenoId ? (
+                <EntityLink type="player" id={jmenoId} className="font-heading font-bold text-ink">{jmeno}</EntityLink>
+              ) : (
+                <span className="font-heading font-bold text-ink">{jmeno}</span>
+              )}
+              {(role || tym) && (
+                <span className="block text-muted">{[role, tym].filter(Boolean).join(" · ")}</span>
+              )}
+            </figcaption>
+          </figure>
+        )}
+
+        {odstavce.map((p, i) => (
+          <Fragment key={i}>
+            <p className={i === 0 && maPerex ? "np-perex" : undefined}>{p}</p>
+            {citat && i === 0 && <blockquote className="np-citat">„{citat}“</blockquote>}
+          </Fragment>
+        ))}
+      </div>
+
+      {poznamka && (
+        <div className="mt-3">
+          <span className="text-[11px] font-heading font-bold uppercase tracking-wider text-muted border-l-2 border-ink/30 pl-2">
+            🧱 {poznamka}
+          </span>
+        </div>
+      )}
+    </article>
+  );
+}
+
+/** Název rubriky podle typu článku — co je v novinách za škatulkou. */
+function rubrikaProTyp(type: string): string {
+  switch (type) {
+    case "matchday_preview": return "Před zápasem";
+    case "round_summary": return "🏆 Hráč a trenér kola";
+    case "season_opener": return "🎺 Otevírák sezóny";
+    case "season_wrap": return "📜 Ohlédnutí za sezónou";
+    case "ai_report": return "Komentář kola";
+    case "match": return "Zápasová zpráva";
+    case "standing": return "Tabulka";
+    default: return "Aktualita";
+  }
+}
 
 function ArticleWrapper({ article, children }: { article: Article; children: React.ReactNode }) {
   if (article.type === "match") {
@@ -903,21 +806,22 @@ function RoundResults({ body }: { body: string }) {
   }
 
   if (structured.length === 0) {
-    return <p className="text-sm text-ink-light leading-relaxed">{body}</p>;
+    return <p className="np-text text-sm">{body}</p>;
   }
 
+  // Výsledková listina jako v tisku: dvojice oddělené vlasovou linkou, vítěz tučně.
   return (
-    <div className="space-y-1">
+    <div className="sm:columns-2 sm:gap-x-8">
       {structured.map((r, i) => {
         const [h, a] = r.score.split(":").map(Number);
         const isDraw = h === a;
         const homeWin = h > a;
         return (
-          <div key={i} className="flex items-center text-sm py-1 border-b border-gray-50 last:border-b-0">
+          <div key={i} className="flex items-baseline text-sm py-1.5 border-b border-ink/10 break-inside-avoid-column">
             <span className={`flex-1 text-right truncate pr-2 ${homeWin ? "font-heading font-bold" : ""}`}>{r.home}</span>
-            <span className={`font-heading font-bold text-xs tabular-nums px-2 py-0.5 rounded min-w-[40px] text-center ${
-              isDraw ? "bg-gray-100 text-muted" : "bg-gray-50 text-ink"
-            }`}>{r.score}</span>
+            <span className={`font-heading font-bold text-[13px] tabular-nums min-w-[42px] text-center ${isDraw ? "text-muted" : "text-ink"}`}>
+              {r.score}
+            </span>
             <span className={`flex-1 truncate pl-2 ${!homeWin && !isDraw ? "font-heading font-bold" : ""}`}>{r.away}</span>
           </div>
         );
