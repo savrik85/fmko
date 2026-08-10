@@ -8,32 +8,16 @@
  */
 
 import type { RelationType } from "./types";
+// Váhy i texty žijí ve sdíleném balíku — používá je i web v sestavovači,
+// aby zobrazené číslo odpovídalo tomu, co počítá engine.
+import {
+  CHEMISTRY_WEIGHTS,
+  CHEMISTRY_EFFECT_TEXT,
+  computeLineupChemistry,
+  type RelationshipType,
+} from "@okresni-masina/shared";
 
-/** Kolik bodů chemie přidá jeden pár daného typu (základ je 50). */
-export const CHEMISTRY_WEIGHTS: Record<string, number> = {
-  brothers: 5,
-  father_son: 4,
-  mentor_pupil: 4,
-  classmates: 2,
-  coworkers: 2,
-  drinking_buddies: 2,
-  neighbors: 1,
-  in_laws: -1,
-  rivals: -3,
-};
-
-/** Co daný typ vztahu v zápase reálně dělá — text pro UI, ať číslo nic neslibuje naslepo. */
-export const CHEMISTRY_EFFECT_TEXT: Record<string, string> = {
-  brothers: "hledají se na hřišti — častější vzájemné asistence",
-  father_son: "hledají se na hřišti — častější vzájemné asistence",
-  mentor_pupil: "mentor dodává klid — jistější zakončení a víc asistencí",
-  classmates: "sehraní ze školy — častější vzájemné asistence",
-  coworkers: "znají se z práce — lepší nálada v kabině",
-  drinking_buddies: "parťáci od piva — lepší nálada, ale i společné výlety do hospody",
-  neighbors: "jezdí spolu na zápasy — lepší nálada v kabině",
-  in_laws: "rodinné tření — kabině to na náladě nepřidá",
-  rivals: "nemůžou se cítit — horší nálada a víc zbytečných faulů",
-};
+export { CHEMISTRY_WEIGHTS, CHEMISTRY_EFFECT_TEXT };
 
 export interface ChemistryPair {
   type: string;
@@ -67,7 +51,6 @@ interface ChemPlayer {
 export function lineupChemistry(lineup: ChemPlayer[]): ChemistryResult {
   const seen = new Set<string>();
   const pairs: ChemistryPair[] = [];
-  let score = 50;
 
   const nameOf = (p: ChemPlayer) => `${p.firstName} ${p.lastName}`;
   const byId = new Map(lineup.map((p) => [p.id, p]));
@@ -80,21 +63,20 @@ export function lineupChemistry(lineup: ChemPlayer[]): ChemistryResult {
       if (seen.has(key)) continue;
       seen.add(key);
 
-      const strength = rel.strength ?? 50;
-      const weight = (CHEMISTRY_WEIGHTS[rel.type] ?? 0) * (strength / 50);
-      score += weight;
-
       pairs.push({
         type: rel.type,
         aId: p.id, bId: other.id,
         aName: nameOf(p), bName: nameOf(other),
-        strength,
-        effect: CHEMISTRY_EFFECT_TEXT[rel.type] ?? "",
+        strength: rel.strength ?? 50,
+        effect: CHEMISTRY_EFFECT_TEXT[rel.type as RelationshipType] ?? "",
       });
     }
   }
 
-  return { score: Math.max(0, Math.min(100, Math.round(score))), pairs };
+  const score = computeLineupChemistry(
+    pairs.map((p) => ({ type: p.type as RelationshipType, strength: p.strength })),
+  );
+  return { score, pairs };
 }
 
 /**

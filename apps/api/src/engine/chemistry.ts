@@ -1,13 +1,18 @@
 /**
- * Sehranost taktik a formací — read/write/apply na úrovni týmu.
+ * Sehranost formací — read/write/apply na úrovni týmu.
  *
- * Storage: `teams.tactic_familiarity` a `teams.formation_familiarity` (JSON {key: 0-100}).
+ * Storage: `teams.formation_familiarity` (JSON {formace: 0-100}).
+ *
+ * Sehranost TAKTIKY se záměrně needviduje — taktiku tým adoptuje rychle, klíčové je
+ * rozestavění. Sloupec `teams.tactic_familiarity` z migrace 0065 se proto nikdy neplnil;
+ * `readFamiliarity` ho už nevrací, ať nikdo nestaví na prázdné mapě.
  */
 
 import type { D1Database } from "@cloudflare/workers-types";
 import { logger } from "../lib/logger";
 
 export interface FamiliaritySnapshot {
+  /** Vždy prázdné — sehranost taktiky se needviduje. Drží se kvůli starším klientům. */
   tactic: Record<string, number>;
   formation: Record<string, number>;
 }
@@ -34,12 +39,12 @@ function parseMap(raw: string | null | undefined): Record<string, number> {
 
 export async function readFamiliarity(db: D1Database, teamId: string): Promise<FamiliaritySnapshot> {
   const row = await db.prepare(
-    "SELECT tactic_familiarity, formation_familiarity FROM teams WHERE id = ?"
-  ).bind(teamId).first<{ tactic_familiarity: string | null; formation_familiarity: string | null }>()
+    "SELECT formation_familiarity FROM teams WHERE id = ?"
+  ).bind(teamId).first<{ formation_familiarity: string | null }>()
     .catch((e) => { logger.warn({ module: "chemistry" }, "read familiarity", e); return null; });
 
   return {
-    tactic: parseMap(row?.tactic_familiarity),
+    tactic: {},
     formation: parseMap(row?.formation_familiarity),
   };
 }

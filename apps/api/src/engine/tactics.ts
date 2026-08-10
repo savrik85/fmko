@@ -34,14 +34,14 @@ export const TACTIC_CATALOG: Record<Tactic, TacticDef> = {
       { skill: "shooting", positions: ["FWD"], threshold: 60, weight: 1.0 },
       { skill: "speed", positions: ["FWD"], threshold: 60, weight: 0.8 },
     ],
-    formationSynergy: { "4-3-3": 1.05, "3-4-3": 1.08, "5-4-1": 0.95, "5-3-2": 0.95 },
+    formationSynergy: { "4-3-3": 1.05, "3-4-3": 1.08, "4-5-1": 0.93, "3-5-2": 1.0, "5-3-2": 0.95 },
   },
   defensive: {
     requirements: [
       { skill: "defense", positions: ["DEF"], threshold: 60, weight: 1.0 },
       { skill: "strength", positions: ["DEF"], threshold: 55, weight: 0.6 },
     ],
-    formationSynergy: { "5-4-1": 1.08, "5-3-2": 1.05, "4-2-3-1": 1.02, "3-4-3": 0.92, "4-3-3": 0.95 },
+    formationSynergy: { "4-5-1": 1.06, "5-3-2": 1.05, "3-5-2": 0.98, "3-4-3": 0.92, "4-3-3": 0.95 },
   },
   long_ball: {
     requirements: [
@@ -49,7 +49,7 @@ export const TACTIC_CATALOG: Record<Tactic, TacticDef> = {
       { skill: "strength", positions: ["FWD"], threshold: 55, weight: 0.7 },
       { skill: "heading", positions: ["GK"], threshold: 50, weight: 0.3 },
     ],
-    formationSynergy: { "4-4-2": 1.05, "5-3-2": 1.05, "3-4-3": 0.92, "4-2-3-1": 0.95 },
+    formationSynergy: { "4-4-2": 1.05, "5-3-2": 1.05, "3-5-2": 1.03, "3-4-3": 0.92, "4-5-1": 0.95 },
   },
   possession: {
     requirements: [
@@ -57,7 +57,7 @@ export const TACTIC_CATALOG: Record<Tactic, TacticDef> = {
       { skill: "passing", positions: ["MID"], threshold: 65, weight: 1.0 },
       { skill: "vision", positions: ["MID"], threshold: 60, weight: 0.7 },
     ],
-    formationSynergy: { "4-3-3": 1.08, "4-2-3-1": 1.08, "3-4-3": 1.03, "5-3-2": 0.92, "5-4-1": 0.9 },
+    formationSynergy: { "4-3-3": 1.08, "3-5-2": 1.06, "4-5-1": 1.04, "3-4-3": 1.03, "5-3-2": 0.92 },
   },
   pressing: {
     requirements: [
@@ -65,7 +65,7 @@ export const TACTIC_CATALOG: Record<Tactic, TacticDef> = {
       { skill: "workRate", positions: OUTFIELD, threshold: 60, weight: 0.8 },
       { skill: "aggression", positions: OUTFIELD, threshold: 55, weight: 0.5 },
     ],
-    formationSynergy: { "4-3-3": 1.05, "4-2-3-1": 1.05, "5-4-1": 0.92, "5-3-2": 0.95 },
+    formationSynergy: { "4-3-3": 1.05, "3-5-2": 1.04, "4-5-1": 0.95, "5-3-2": 0.95 },
     drainMod: 1.3,
   },
 };

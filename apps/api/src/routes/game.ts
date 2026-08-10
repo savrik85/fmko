@@ -3434,18 +3434,23 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 
   // Load relationships for lineup visualization
   const playerIds = players.results.map((p) => p.id as string);
-  let relMap: Record<string, Array<{ otherPlayerId: string; type: string }>> = {};
+  // `strength` a `effect` jde do UI spolu s typem — sestavovač z toho počítá chemii
+  // stejnými vahami jako engine (packages/shared: CHEMISTRY_WEIGHTS).
+  let relMap: Record<string, Array<{ otherPlayerId: string; type: string; strength: number; effect: string }>> = {};
   if (playerIds.length > 1) {
     try {
+      const { CHEMISTRY_EFFECT_TEXT } = await import("@okresni-masina/shared");
       const placeholders = playerIds.map(() => "?").join(",");
       const relRows = await c.env.DB.prepare(
-        `SELECT player_a_id, player_b_id, type FROM relationships WHERE player_a_id IN (${placeholders}) OR player_b_id IN (${placeholders})`
+        `SELECT player_a_id, player_b_id, type, strength FROM relationships WHERE player_a_id IN (${placeholders}) OR player_b_id IN (${placeholders})`
       ).bind(...playerIds, ...playerIds).all();
-      for (const r of relRows.results as Array<{ player_a_id: string; player_b_id: string; type: string }>) {
+      for (const r of relRows.results as Array<{ player_a_id: string; player_b_id: string; type: string; strength: number | null }>) {
         if (!relMap[r.player_a_id]) relMap[r.player_a_id] = [];
         if (!relMap[r.player_b_id]) relMap[r.player_b_id] = [];
-        relMap[r.player_a_id].push({ otherPlayerId: r.player_b_id, type: r.type });
-        relMap[r.player_b_id].push({ otherPlayerId: r.player_a_id, type: r.type });
+        const strength = r.strength ?? 50;
+        const effect = CHEMISTRY_EFFECT_TEXT[r.type as keyof typeof CHEMISTRY_EFFECT_TEXT] ?? "";
+        relMap[r.player_a_id].push({ otherPlayerId: r.player_b_id, type: r.type, strength, effect });
+        relMap[r.player_b_id].push({ otherPlayerId: r.player_a_id, type: r.type, strength, effect });
       }
     } catch (e) {
       logger.warn({ module: "game" }, "relationships query for lineup", e);

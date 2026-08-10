@@ -10,6 +10,7 @@ import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview } from "@/c
 import type { BadgePattern } from "@/components/ui";
 import { BusSelector } from "./BusSelector";
 import { getTacticTooltip, getFormationTooltip, type TacticKey } from "@/lib/tactic-info";
+import { computeLineupChemistry, type RelationshipType } from "@okresni-masina/shared";
 import { LineupPreview } from "@/components/LineupPreview";
 
 type Pos = "GK" | "DEF" | "MID" | "FWD";
@@ -104,7 +105,7 @@ interface AvailablePlayer {
   speed?: number; technique?: number; shooting?: number; passing?: number;
   heading?: number; defense?: number; goalkeeping?: number; stamina?: number;
   absent?: boolean; absenceReason?: string | null; absenceSms?: string | null; absenceEmoji?: string | null;
-  relationships?: Array<{ otherPlayerId: string; type: string }>;
+  relationships?: Array<{ otherPlayerId: string; type: string; strength?: number; effect?: string }>;
 }
 
 const REL_EMOJI: Record<string, string> = {
@@ -398,31 +399,35 @@ function MatchPage() {
   const bench = players.filter((p) => !selected.includes(p.id));
   const absentPlayers = players.filter((p) => p.absent);
 
-  // Relationship summary + chemistry score for selected 11
-  const { relSummary, chemistry } = (() => {
+  // Chemie sestavy — počítá se STEJNÝMI vahami jako v enginu (packages/shared),
+  // takže zobrazené číslo odpovídá tomu, co se v zápase opravdu stane.
+  const { relSummary, chemistry, chemPairs } = (() => {
     const counts: Record<string, number> = {};
-    let chemScore = 50; // base
-    const CHEM_BONUS: Record<string, number> = {
-      brothers: 5, father_son: 4, mentor_pupil: 4, classmates: 2,
-      coworkers: 2, neighbors: 1, drinking_buddies: 2, rivals: -3, in_laws: -1,
-    };
+    const seen = new Set<string>();
+    const pairs: Array<{ type: RelationshipType; strength?: number; aName: string; bName: string; effect: string }> = [];
+
     for (const pid of selected) {
       if (!pid) continue;
       const p = players.find((pl) => pl.id === pid);
       if (!p?.relationships) continue;
       for (const r of p.relationships) {
-        if (selected.includes(r.otherPlayerId)) {
-          counts[r.type] = (counts[r.type] ?? 0) + 1;
-        }
+        if (!selected.includes(r.otherPlayerId)) continue;
+        const key = [pid, r.otherPlayerId].sort().join("|") + `|${r.type}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const other = players.find((pl) => pl.id === r.otherPlayerId);
+        counts[r.type] = (counts[r.type] ?? 0) + 1;
+        pairs.push({
+          type: r.type as RelationshipType,
+          strength: r.strength,
+          aName: `${p.firstName} ${p.lastName}`,
+          bName: other ? `${other.firstName} ${other.lastName}` : "?",
+          effect: r.effect ?? "",
+        });
       }
     }
-    // Each relationship counted twice (A→B + B→A), divide by 2
-    const summary = Object.entries(counts).map(([type, count]) => {
-      const pairs = Math.floor(count / 2);
-      chemScore += pairs * (CHEM_BONUS[type] ?? 0);
-      return { type, count: pairs };
-    }).filter((r) => r.count > 0);
-    return { relSummary: summary, chemistry: Math.max(0, Math.min(100, chemScore)) };
+    const summary = Object.entries(counts).map(([type, count]) => ({ type, count })).filter((r) => r.count > 0);
+    return { relSummary: summary, chemistry: computeLineupChemistry(pairs), chemPairs: pairs };
   })();
   const chemColor = chemistry >= 65 ? "text-pitch-500" : chemistry >= 45 ? "text-gold-600" : "text-card-red";
   const chemLabel = chemistry >= 70 ? "Skvělá" : chemistry >= 55 ? "Dobrá" : chemistry >= 40 ? "Průměrná" : "Špatná";
@@ -951,18 +956,34 @@ function MatchPage() {
               <span className={`text-xs font-heading font-bold ${chemColor} shrink-0`}>{chemLabel}</span>
             </div>
             {relSummary.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {relSummary.map((r) => (
-                  <span key={r.type} className={`text-[10px] font-heading font-bold px-1.5 py-0.5 rounded ${
-                    r.type === "rivals" ? "bg-red-50 text-card-red" : "bg-pitch-50 text-pitch-600"
-                  }`}>
-                    {REL_EMOJI[r.type]} {r.count}× {REL_LABEL[r.type]?.toLowerCase() ?? r.type}
-                  </span>
-                ))}
-              </div>
+              <>
+                <div className="flex flex-wrap gap-1">
+                  {relSummary.map((r) => (
+                    <span key={r.type} className={`text-[10px] font-heading font-bold px-1.5 py-0.5 rounded ${
+                      r.type === "rivals" || r.type === "in_laws" ? "bg-red-50 text-card-red" : "bg-pitch-50 text-pitch-600"
+                    }`}>
+                      {REL_EMOJI[r.type]} {r.count}× {REL_LABEL[r.type]?.toLowerCase() ?? r.type}
+                    </span>
+                  ))}
+                </div>
+                {/* Konkrétní páry a co dělají — číslo samo o sobě nic neříká */}
+                <div className="mt-1.5 space-y-0.5">
+                  {chemPairs.map((p, i) => (
+                    <div key={i} className="text-[11px] text-muted leading-snug">
+                      <span className="text-ink font-heading font-bold">{p.aName}</span>
+                      {" a "}
+                      <span className="text-ink font-heading font-bold">{p.bName}</span>
+                      {p.effect ? ` — ${p.effect}` : ""}
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
             {relSummary.length === 0 && (
-              <div className="text-[10px] text-muted">Žádné aktivní vztahy v sestavě</div>
+              <div className="text-[11px] text-muted leading-snug">
+                V téhle jedenáctce se zatím nikdo blíž nezná. Vazby vznikají samy, když do
+                kádru přijde někdo z okolí — soused, kolega z práce nebo vrstevník.
+              </div>
             )}
           </div>
         </div>

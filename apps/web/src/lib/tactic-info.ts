@@ -5,27 +5,27 @@ export type TacticKey = "offensive" | "balanced" | "defensive" | "long_ball" | "
 export const TACTIC_INFO: Record<TacticKey, { label: string; description: string }> = {
   offensive: {
     label: "Útočná",
-    description: "Posiluje útok (~1.3× šance na gól), oslabuje obranu (~0.8×). Vhodné když potřebuješ vyhrát a máš silnější útok.",
+    description: "Útok +15 %, obrana −15 %, o něco víc vytvořených šancí. Vhodné, když potřebuješ vyhrát a máš silnější útok. Naplno se projeví, jen když na ni máš hráče — rychlé a střelecky slušné útočníky.",
   },
   balanced: {
     label: "Vyrovnaná",
-    description: "Bez modifikátorů. Solidní volba při vyrovnaném souboji.",
+    description: "Bez modifikátorů — nic neposiluje ani neoslabuje. Solidní volba při vyrovnaném souboji.",
   },
   defensive: {
     label: "Defenzivní",
-    description: "Posiluje obranu (~1.3×), oslabuje útok (~0.8×). Snižuje šance soupeře o ~15 %. Vhodné proti silnějšímu týmu.",
+    description: "Obrana +15 %, útok −25 % a výrazně méně vlastních šancí. Umí ale chytit soupeře na protiútoku. Vhodné proti silnějšímu týmu.",
   },
   long_ball: {
     label: "Nakopávané",
-    description: "Bonusy pro hlavičky a sílu. Vhodné pro vysoké útočníky, na hrubém pažitu nebo v dešti.",
+    description: "Mírně posiluje útok. Odměňuje vysoké a silné útočníky s dobrou hlavou; v dešti a ve větru se vyplatí nejvíc.",
   },
   possession: {
     label: "Držení míče",
-    description: "Bonusy pro techniku a přihrávky. Vyžaduje technicky vyspělé záložníky.",
+    description: "Útok +5 % a nejvíc vytvořených šancí ze všech taktik. Vyžaduje technicky vyspělé záložníky s přehledem — bez nich je to spíš postih.",
   },
   pressing: {
     label: "Vysoký presink",
-    description: "Bonus pro obranu a získávání míče. Spotřebovává více kondice — vhodné jen pro tým s vysokou výdrží.",
+    description: "Útok i obrana +8 %. Spotřebovává o 30 % víc kondice — vhodné jen pro tým s vysokou výdrží a pracovitostí.",
   },
 };
 
