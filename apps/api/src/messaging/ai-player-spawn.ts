@@ -49,6 +49,9 @@ interface AiThreadStateData {
   awaiting: "coach" | "player" | "done";
   initiated_at: string;
   player_id: string;
+  /** Spoluhráč, o kterém konverzace je (konflikt / pochvala) — podle výsledku se upraví jejich vztah. */
+  subject_player_id?: string;
+  subject_player_name?: string;
   resolution?: {
     morale_delta: number;
     condition_delta: number;
@@ -75,7 +78,10 @@ function uuid(): string {
   return crypto.randomUUID();
 }
 
-export function loadPlayerSnapshot(row: Record<string, unknown>): PlayerSnapshot {
+export function loadPlayerSnapshot(
+  row: Record<string, unknown>,
+  matchCtx?: { lastOutcome: "win" | "loss" | "draw" | null; teamStreak: number },
+): PlayerSnapshot {
   const personality = (() => {
     try { return JSON.parse((row.personality as string) ?? "{}"); } catch { return {}; }
   })();
@@ -104,7 +110,61 @@ export function loadPlayerSnapshot(row: Record<string, unknown>): PlayerSnapshot
     transferUnrest: lifeContext.transferUnrest?.level ?? 0,
     occupation: lifeContext.occupation,
     injuredUntil: row.injured_until as string | null,
+    // Kontext posledního zápasu — hráč, který nenastoupil, má last_minutes NULL.
+    lastMatchOutcome: matchCtx?.lastOutcome ?? null,
+    playedLastMatch: row.last_minutes != null && (row.last_minutes as number) > 0,
+    lastMatchGoals: (row.last_goals as number) ?? 0,
+    lastMatchAssists: (row.last_assists as number) ?? 0,
+    lastMatchRedCard: ((row.last_red as number) ?? 0) > 0,
+    lastMatchYellow: ((row.last_yellow as number) ?? 0) > 0,
+    lastMatchRating: (row.last_rating as number) ?? undefined,
+    teamStreak: matchCtx?.teamStreak ?? 0,
   };
+}
+
+/**
+ * Vybere spoluhráče, o kterém bude konverzace.
+ *  - konflikt: přednostně někdo, s kým už hráč rivalitu má (spor se přiostřuje),
+ *    jinak náhodný spoluhráč
+ *  - pochvala za asistenci: střelec z posledního zápasu (komu asistoval)
+ */
+async function pickSubjectTeammate(
+  db: D1Database,
+  teamId: string,
+  playerId: string,
+  scenarioId: string,
+  lastMatchId: string | null,
+): Promise<{ id: string; name: string } | null> {
+  if (scenarioId === "assist_teamwork" && lastMatchId) {
+    const scorer = await db.prepare(
+      `SELECT p.id, p.first_name, p.last_name
+         FROM match_player_stats s JOIN players p ON p.id = s.player_id
+        WHERE s.match_id = ? AND s.team_id = ? AND s.goals > 0 AND p.id != ?
+        ORDER BY s.goals DESC LIMIT 1`,
+    ).bind(lastMatchId, teamId, playerId).first<{ id: string; first_name: string; last_name: string }>()
+      .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "pick scorer", e); return null; });
+    if (scorer) return { id: scorer.id, name: `${scorer.first_name} ${scorer.last_name}` };
+  }
+
+  if (scenarioId === "team_chemistry") {
+    const rival = await db.prepare(
+      `SELECT p.id, p.first_name, p.last_name
+         FROM relationships r
+         JOIN players p ON p.id = CASE WHEN r.player_a_id = ? THEN r.player_b_id ELSE r.player_a_id END
+        WHERE (r.player_a_id = ? OR r.player_b_id = ?) AND r.type = 'rivals' AND p.team_id = ?
+        ORDER BY r.strength DESC LIMIT 1`,
+    ).bind(playerId, playerId, playerId, teamId).first<{ id: string; first_name: string; last_name: string }>()
+      .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "pick rival", e); return null; });
+    if (rival) return { id: rival.id, name: `${rival.first_name} ${rival.last_name}` };
+  }
+
+  const any = await db.prepare(
+    `SELECT id, first_name, last_name FROM players
+      WHERE team_id = ? AND id != ? AND (status IS NULL OR status = 'active')
+      ORDER BY RANDOM() LIMIT 1`,
+  ).bind(teamId, playerId).first<{ id: string; first_name: string; last_name: string }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "pick teammate", e); return null; });
+  return any ? { id: any.id, name: `${any.first_name} ${any.last_name}` } : null;
 }
 
 async function loadTeamContext(db: D1Database, teamId: string): Promise<TeamContext> {
@@ -238,12 +298,51 @@ async function spawnForTeam(
   env: { GEMINI_API_KEY?: string },
   teamId: string,
 ): Promise<boolean> {
+  // 0. Poslední odehraný zápas + série výsledků — kontext pro scénáře (výhra/prohra,
+  //    góly, karty). Dřív scénáře o výhře padaly i po prohře, protože o zápase nevěděly.
+  const lastMatch = await db.prepare(
+    `SELECT m.id, m.home_team_id, m.home_score, m.away_score
+       FROM matches m
+      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
+      ORDER BY m.simulated_at DESC LIMIT 1`,
+  ).bind(teamId, teamId).first<{ id: string; home_team_id: string; home_score: number; away_score: number }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load last match", e); return null; });
+
+  const outcomeOf = (row: { home_team_id: string; home_score: number; away_score: number }): "win" | "loss" | "draw" => {
+    const isHome = row.home_team_id === teamId;
+    const my = isHome ? row.home_score : row.away_score;
+    const opp = isHome ? row.away_score : row.home_score;
+    return my > opp ? "win" : my < opp ? "loss" : "draw";
+  };
+  const lastOutcome = lastMatch && lastMatch.home_score != null ? outcomeOf(lastMatch) : null;
+
+  // Série: kolik zápasů po sobě tým vyhrál (+) nebo prohrál (−)
+  const recentMatches = await db.prepare(
+    `SELECT m.home_team_id, m.home_score, m.away_score
+       FROM matches m
+      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
+      ORDER BY m.simulated_at DESC LIMIT 5`,
+  ).bind(teamId, teamId).all<{ home_team_id: string; home_score: number; away_score: number }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load recent matches", e); return { results: [] as never[] }; });
+
+  let teamStreak = 0;
+  for (const r of recentMatches.results) {
+    const o = outcomeOf(r);
+    if (o === "draw") break;
+    if (teamStreak === 0) teamStreak = o === "win" ? 1 : -1;
+    else if ((teamStreak > 0) === (o === "win")) teamStreak += o === "win" ? 1 : -1;
+    else break;
+  }
+
   // 1. Načti aktivní hráče s recent stats (last 30 dní)
   const playersRow = await db.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.age, p.position,
             p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
             COALESCE(stats.recent_minutes, 0) as recent_minutes,
-            COALESCE(stats.recent_rating_avg, 6.5) as recent_rating_avg
+            COALESCE(stats.recent_rating_avg, 6.5) as recent_rating_avg,
+            last.minutes_played AS last_minutes, last.goals AS last_goals,
+            last.assists AS last_assists, last.yellow_cards AS last_yellow,
+            last.red_cards AS last_red, last.rating AS last_rating
      FROM players p
      LEFT JOIN (
        SELECT mps.player_id, SUM(mps.minutes_played) as recent_minutes, AVG(mps.rating) as recent_rating_avg
@@ -252,14 +351,19 @@ async function spawnForTeam(
        WHERE mps.team_id = ? AND m.status = 'simulated' AND m.simulated_at >= datetime('now', '-30 days')
        GROUP BY mps.player_id
      ) stats ON stats.player_id = p.id
+     -- Statistiky z POSLEDNÍHO odehraného zápasu — z nich se poznají góly, karty i to,
+     -- jestli hráč vůbec nastoupil. Bez toho scénáře reagovaly naslepo.
+     LEFT JOIN match_player_stats last
+            ON last.player_id = p.id AND last.match_id = ?
      WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')`,
-  ).bind(teamId, teamId).all<Record<string, unknown>>()
+  ).bind(teamId, lastMatch?.id ?? "", teamId).all<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load players for spawn", e); return { results: [] }; });
 
   if (playersRow.results.length === 0) return false;
 
   // 2. Vážený výběr hráče: 60 % "potřeba" (nízká morale, málo minut, vysoký temper), 40 % random
-  const snapshots = playersRow.results.map(loadPlayerSnapshot);
+  const snapshots = playersRow.results.map((r) =>
+    loadPlayerSnapshot(r, { lastOutcome, teamStreak }));
   const player = pickPlayerWeighted(snapshots, Math.random);
   if (!player) return false;
 
@@ -270,8 +374,16 @@ async function spawnForTeam(
     return false;
   }
 
+  // 3b. U scénářů o spoluhráči vybrat KONKRÉTNÍHO hráče předem — ať se model netrefuje
+  //     naslepo a ať víme, čí vztah po rozhovoru upravit.
+  let subject: { id: string; name: string } | null = null;
+  if (scenario.id === "team_chemistry" || scenario.id === "assist_teamwork") {
+    subject = await pickSubjectTeammate(db, teamId, player.id, scenario.id, lastMatch?.id ?? null);
+  }
+
   // 4. Načti team context
   const teamCtx = await loadTeamContext(db, teamId);
+  if (subject) teamCtx.subjectPlayerName = subject.name;
 
   // 5. Gemini call
   let initialBody: string;
@@ -303,6 +415,8 @@ async function spawnForTeam(
     awaiting: "coach",
     initiated_at: new Date().toISOString(),
     player_id: player.id,
+    subject_player_id: subject?.id,
+    subject_player_name: subject?.name,
     resolution: null,
   };
   const now = new Date().toISOString();
@@ -564,6 +678,53 @@ async function applyResolutionAndClose(
         "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, created_at) VALUES (?, ?, ?, 'obecne', ?, 'lehke', ?, ?, ?)",
       ).bind(uuid(), playerId, teamId, resolution.absence_reason || "Schválené osobní volno", absenceDays, absenceDays, now),
     );
+  }
+
+  // ── Dopad do kabiny ────────────────────────────────────────────────────────
+  // Konflikt a pochvala se propíšou do vztahu mezi oběma hráči, takže se hovor
+  // s trenérem promítne do chemie sestavy (rivalita ji táhne dolů, přátelské
+  // vazby nahoru). Bez tohohle zůstal spor jen v textu SMS.
+  if (state.subject_player_id && (scenarioId === "team_chemistry" || scenarioId === "assist_teamwork")) {
+    const subjectId = state.subject_player_id;
+    const [aId, bId] = playerId < subjectId ? [playerId, subjectId] : [subjectId, playerId];
+    const existing = await db.prepare(
+      "SELECT id, type, strength FROM relationships WHERE player_a_id = ? AND player_b_id = ?",
+    ).bind(aId, bId).first<{ id: number; type: string; strength: number }>()
+      .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load pair relation", e); return null; });
+
+    if (scenarioId === "team_chemistry") {
+      // Trenér spor urovnal → rivalita slábne (a při vyhasnutí mizí).
+      // Odbyl ho → rivalita vzniká nebo sílí.
+      if (resolution.tone === "positive") {
+        if (existing?.type === "rivals") {
+          const next = existing.strength - 25;
+          stmts.push(next <= 10
+            ? db.prepare("DELETE FROM relationships WHERE id = ?").bind(existing.id)
+            : db.prepare("UPDATE relationships SET strength = ? WHERE id = ?").bind(next, existing.id));
+          logger.info({ module: "ai-player-spawn", teamId }, `smír: rivalita ${playerId}×${subjectId} → ${next <= 10 ? "zrušena" : next}`);
+        }
+      } else if (resolution.tone === "negative") {
+        if (existing?.type === "rivals") {
+          stmts.push(db.prepare("UPDATE relationships SET strength = MIN(100, strength + 20) WHERE id = ?").bind(existing.id));
+        } else if (!existing) {
+          stmts.push(db.prepare(
+            "INSERT INTO relationships (id, player_a_id, player_b_id, type, strength) VALUES (?, ?, ?, 'rivals', 45)",
+          ).bind(uuid(), aId, bId));
+          logger.info({ module: "ai-player-spawn", teamId }, `nová rivalita ${playerId}×${subjectId}`);
+        }
+      }
+    } else if (scenarioId === "assist_teamwork" && resolution.tone !== "negative") {
+      // Vydařená spolupráce dvojici sbližuje — rivalita polevuje, jinak vzniká parta.
+      if (existing?.type === "rivals") {
+        stmts.push(db.prepare("UPDATE relationships SET strength = MAX(0, strength - 15) WHERE id = ?").bind(existing.id));
+      } else if (existing) {
+        stmts.push(db.prepare("UPDATE relationships SET strength = MIN(100, strength + 10) WHERE id = ?").bind(existing.id));
+      } else {
+        stmts.push(db.prepare(
+          "INSERT INTO relationships (id, player_a_id, player_b_id, type, strength) VALUES (?, ?, ?, 'drinking_buddies', 40)",
+        ).bind(uuid(), aId, bId));
+      }
+    }
   }
 
   // Konverzace po zatrhnutém přestupu hýbe i trucem (transferUnrest):
