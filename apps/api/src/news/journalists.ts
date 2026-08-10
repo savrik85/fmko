@@ -44,6 +44,7 @@ interface StyleDef {
   zlomyslnost: [number, number];
   odbornost: [number, number];
   prezdivky: string[];
+  prezdivkyF: string[];
   bio: string[];
   hlasky: string[];
   /** Rubriky, které tenhle typ obvykle dostane. */
@@ -57,8 +58,11 @@ const STYLY: Record<JournalistStyle, StyleDef> = {
     zlomyslnost: [60, 85],
     odbornost: [15, 35],
     prezdivky: ["Drb", "Slídil", "Šťoural", "Blesk", "Chobot"],
+    prezdivkyF: ["Drbna", "Slídilka", "Šťouralka", "Bleskovka", "Chobotnice"],
+    // Bio je schválně v přítomném čase — čeština v minulém rodí a redaktorem
+    // může být stejně tak žena; jedna sada textů tak sedí na obě pohlaví.
     bio: [
-      "Do redakce nastoupil z okresního plátku, kde proslul rubrikou o rozvodech zastupitelů.",
+      "Do redakce míří rovnou z okresního plátku, kde vede rubriku o rozvodech zastupitelů.",
       "Tvrdí, že nejlepší zprávy se rodí v hospodě po zápase, ne na tiskovce.",
       "Fotoaparát nosí i na pohřby. Prý nikdy nevíš.",
     ],
@@ -71,10 +75,11 @@ const STYLY: Record<JournalistStyle, StyleDef> = {
     zlomyslnost: [5, 20],
     odbornost: [80, 95],
     prezdivky: ["Doktor", "Profesor", "Taktik"],
+    prezdivkyF: ["Doktorka", "Profesorka", "Taktička"],
     bio: [
       "Třicet let si vede sešit s rozestavením každého zápasu v okrese.",
-      "Bývalý trenér dorostu, který se zápisníkem nikdy nerozloučil.",
-      "Nikdy nenapsal větu, kterou by nedoložil číslem.",
+      "Od dorostenecké lavičky k zápisníku — a se zápisníkem už napořád.",
+      "Každá věta musí stát na čísle, jinak do tisku nejde.",
     ],
     hlasky: ["Podívejme se na to střízlivě.", "Čísla mluví jasně.", "Bez emocí, prosím."],
     rubriky: ["ai_report", "round_summary", "matchday_preview"],
@@ -85,10 +90,11 @@ const STYLY: Record<JournalistStyle, StyleDef> = {
     zlomyslnost: [70, 90],
     odbornost: [45, 70],
     prezdivky: ["Liška", "Kliďas", "Pavouk", "Šibal"],
+    prezdivkyF: ["Liška", "Kliďaska", "Šibalka", "Sova"],
     bio: [
       "Ptá se přátelsky a mile. Odpověď pak otočí tak, že se divíte, co jste to řekli.",
       "Nikdy nezvýší hlas. Nemusí — otázku si připraví tak, že vás dostane sama.",
-      "Říká se o něm, že nejlepší citáty vyrobí z toho, co jste zamlčeli.",
+      "V redakci se říká, že nejlepší citáty vyrobí z toho, co jste zamlčeli.",
     ],
     hlasky: ["Jen abych rozuměl…", "To jste myslel vážně?", "A to říkáte po té prohře?"],
     rubriky: ["interview", "manager_feud"],
@@ -99,10 +105,11 @@ const STYLY: Record<JournalistStyle, StyleDef> = {
     zlomyslnost: [10, 30],
     odbornost: [30, 50],
     prezdivky: ["Kotel", "Bubeník", "Fanda", "Srdcař"],
+    prezdivkyF: ["Bubenice", "Fanynka", "Srdcařka", "Vlajka"],
     bio: [
       "Na zápasy chodí od šesti let a fandí okresu jako celku, ne jednomu klubu.",
       "Zná jménem každého člena kotle a půlku hospodských v okrese.",
-      "Píše srdcem. Redaktoři mu to vyčítají, čtenáři milují.",
+      "Píše srdcem. V redakci je to terč vtipů, u čtenářů trhák.",
     ],
     hlasky: ["To byla atmosféra!", "Klobouk dolů, lidi.", "Tohle je náš fotbal!"],
     rubriky: ["ultras_report", "season_opener", "season_wrap"],
@@ -203,7 +210,7 @@ export async function ensureRedakce(db: D1Database, leagueId: string): Promise<J
       league_id: leagueId,
       first_name: krestni,
       last_name: prijmeniFinal,
-      nickname: rng.int(0, 100) < 70 ? rng.pick(def.prezdivky) : null,
+      nickname: rng.int(0, 100) < 70 ? rng.pick(isFemale ? def.prezdivkyF : def.prezdivky) : null,
       gender: isFemale ? "f" : "m",
       age: rng.int(28, 64),
       avatar: JSON.stringify(tvar(rng, isFemale)),
