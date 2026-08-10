@@ -91,7 +91,7 @@ gameRouter.get("/teams/:teamId/training", async (c) => {
   if (team.training_days) {
     try {
       const parsed = JSON.parse(team.training_days as string);
-      if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 1 && d <= 5)) {
+      if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 0 && d <= 6)) {
         trainingDays = parsed;
       }
     } catch (e) { logger.warn({ module: "game", teamId }, "parse training_days", e); }
@@ -127,7 +127,7 @@ gameRouter.post("/teams/:teamId/training", async (c) => {
   // Validace trainingDays: pole 1-5, unikatni, max 5 polozek. null/undefined → default mapping podle sessionsPerWeek.
   let trainingDaysJson: string | null = null;
   if (Array.isArray(body.trainingDays)) {
-    const validated = Array.from(new Set(body.trainingDays.filter((d): d is number => typeof d === "number" && d >= 1 && d <= 5))).sort();
+    const validated = Array.from(new Set(body.trainingDays.filter((d): d is number => typeof d === "number" && d >= 0 && d <= 6))).sort();
     if (validated.length > 0) {
       trainingDaysJson = JSON.stringify(validated);
     }
@@ -140,7 +140,7 @@ gameRouter.post("/teams/:teamId/training", async (c) => {
     const plan: Record<number, { type: string; intensity: string }> = {};
     for (const [k, v] of Object.entries(body.trainingPlan)) {
       const day = Number(k);
-      if (!Number.isInteger(day) || day < 1 || day > 5) continue;
+      if (!Number.isInteger(day) || day < 0 || day > 6) continue;
       // Přijímáme obojí: holý typ (starší klient) i {type, intensity}.
       const type = typeof v === "string" ? v : (v as { type?: string })?.type;
       const rawIntensity = typeof v === "string" ? "normal" : (v as { intensity?: string })?.intensity;
@@ -302,7 +302,7 @@ gameRouter.post("/teams/:teamId/training-preview", async (c) => {
 
   // Kolik dnů se týdně trénuje = zátěž. Plán má přednost, pak explicitní dny, pak default mapa.
   const DEFAULT_DAY_MAP: Record<number, number[]> = { 1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5] };
-  const planDays = body.trainingPlan ? Object.keys(body.trainingPlan).map(Number).filter((d) => d >= 1 && d <= 5) : [];
+  const planDays = body.trainingPlan ? Object.keys(body.trainingPlan).map(Number).filter((d) => d >= 0 && d <= 6) : [];
   const days = planDays.length > 0
     ? planDays
     : (Array.isArray(body.trainingDays) && body.trainingDays.length > 0 ? body.trainingDays : DEFAULT_DAY_MAP[2]);
@@ -2553,7 +2553,7 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
     if (team.training_days) {
       try {
         const parsed = JSON.parse(team.training_days);
-        if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 1 && d <= 5)) {
+        if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 0 && d <= 6)) {
           customDays = parsed;
         }
       } catch (e) { logger.warn({ module: "game", teamId }, "parse training_days for calendar", e); }

@@ -47,7 +47,7 @@ export function parseTrainingPlan(raw: string | null, teamId?: string): Record<n
     const plan: Record<number, TrainingDaySetting> = {};
     for (const [k, v] of Object.entries(parsed)) {
       const day = Number(k);
-      if (!Number.isInteger(day) || day < 1 || day > 5) continue;
+      if (!Number.isInteger(day) || day < 0 || day > 6) continue;
 
       if (typeof v === "string" && VALID_TRAINING_TYPES.has(v)) {
         plan[day] = { type: v, intensity: "normal" };
@@ -107,7 +107,8 @@ export async function executeDailyTick(
   await env.CACHE_KV.put(`daily-tick:${todayKey}`, "1", { expirationTtl: 60 * 60 * 36 }).catch((e) => logger.warn({ module: "daily-tick" }, "set tick KV flag failed", e));
 
   const dayOfWeek = effectiveDate.getUTCDay();
-  const isTrainingDay = dayOfWeek >= 1 && dayOfWeek <= 5;
+  // Trénovat jde kterýkoli den v týdnu včetně víkendu — omezuje jen to, co si manažer nastaví.
+  const isTrainingDay = dayOfWeek >= 0 && dayOfWeek <= 6;
   const events: DailyTickEvent[] = [];
   const advancedLeagues = new Set<string>();
   const tickStart = Date.now();
@@ -211,7 +212,7 @@ export async function executeDailyTick(
     if (team.training_days) {
       try {
         const parsed = JSON.parse(team.training_days as string);
-        if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 1 && d <= 5)) {
+        if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 0 && d <= 6)) {
           customTrainingDays = parsed;
         }
       } catch (e) { logger.warn({ module: "daily-tick", teamId }, "parse training_days", e); }
@@ -220,7 +221,7 @@ export async function executeDailyTick(
     // Dny v plánu určují i to, KDY se trénuje (den bez záznamu = volno). Prázdný plán →
     // původní chování: jeden training_type pro dny z training_days.
     const dayPlan = parseTrainingPlan(team.training_plan as string | null, teamId);
-    const planDays = dayPlan ? Object.keys(dayPlan).map(Number).filter((d) => d >= 1 && d <= 5) : [];
+    const planDays = dayPlan ? Object.keys(dayPlan).map(Number).filter((d) => d >= 0 && d <= 6) : [];
 
     const teamTrainingDays = planDays.length > 0
       ? planDays
@@ -1137,14 +1138,14 @@ export async function executeDailyTick(
         if (team.training_days) {
           try {
             const parsed = JSON.parse(team.training_days as string);
-            if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 1 && d <= 5)) {
+            if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 0 && d <= 6)) {
               customDays = parsed;
             }
           } catch (e) { logger.warn({ module: "daily-tick", teamId }, "parse training_days for cost", e); }
         }
         // Dny z týdenního plánu mají přednost — stejné pořadí jako u samotného tréninku výše,
         // jinak by se náklad strhl v den, kdy se netrénovalo (nebo naopak chyběl).
-        const planDaysForCost = costPlan ? Object.keys(costPlan).map(Number).filter((d) => d >= 1 && d <= 5) : [];
+        const planDaysForCost = costPlan ? Object.keys(costPlan).map(Number).filter((d) => d >= 0 && d <= 6) : [];
         const trainingDays = planDaysForCost.length > 0
           ? planDaysForCost
           : (customDays && customDays.length > 0) ? customDays : (trainingDayMap[sessions] ?? trainingDayMap[2]);

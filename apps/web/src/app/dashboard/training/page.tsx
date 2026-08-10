@@ -248,6 +248,7 @@ export default function TrainingPage() {
             {[
               { num: 1, full: "Pondělí" }, { num: 2, full: "Úterý" }, { num: 3, full: "Středa" },
               { num: 4, full: "Čtvrtek" }, { num: 5, full: "Pátek" },
+              { num: 6, full: "Sobota" }, { num: 0, full: "Neděle" },
             ].map((d) => {
               const day = trainingPlan[d.num];
               const val = day?.type ?? "";
@@ -338,7 +339,7 @@ export default function TrainingPage() {
             <div><span className="font-heading font-bold text-ink">{TRAINING_TYPES.find((t) => t.key === type)?.label}:</span> {TRAINING_TYPES.find((t) => t.key === type)?.desc}. Zlepšuje {TRAINING_TYPES.find((t) => t.key === type)?.skills}.</div>
           )}
           <div><span className="font-heading font-bold text-ink">{APPROACHES.find((a) => a.key === approach)?.label}:</span> {APPROACHES.find((a) => a.key === approach)?.desc}.</div>
-          <div>Trénuje se automaticky ve vybraných dnech Po–Pá — jeden den, jeden trénink. Víc tréninkových dnů = rychlejší růst, ale vyšší náklady a únava.</div>
+          <div>Trénuje se automaticky ve vybraných dnech, klidně i o víkendu — jeden den, jeden trénink. Víc tréninkových dnů = rychlejší růst, ale vyšší náklady a únava.</div>
         </div>
 
         {/* Přístup + počet dnů. S týdenním plánem se dny berou z něj, tak ovladač schováme —
@@ -370,13 +371,13 @@ export default function TrainingPage() {
               {(() => {
                 // Kolikrát tým trénuje = kolik má tréninkových dnů. Tlačítka jsou rychlý předvýběr
                 // dnů; zvýrazněné je to, které odpovídá skutečnému počtu vybraných dnů.
-                const DAY_PRESET: Record<number, number[]> = { 1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5] };
+                const DAY_PRESET: Record<number, number[]> = { 1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5], 6: [1, 2, 3, 4, 5, 6], 7: [0, 1, 2, 3, 4, 5, 6] };
                 const current = (trainingDays && trainingDays.length > 0 ? trainingDays : (DAY_PRESET[sessions] ?? [2, 4])).length;
-                return [1, 2, 3, 4, 5].map((n) => (
+                return [1, 2, 3, 4, 5, 6, 7].map((n) => (
                   <button
                     key={n}
                     onClick={() => { setTrainingDays(DAY_PRESET[n]); setSessions(n); setDirty(true); }}
-                    className={`w-8 py-2 rounded-lg text-center font-heading font-bold text-sm transition-all ${
+                    className={`w-7 py-2 rounded-lg text-center font-heading font-bold text-sm transition-all ${
                       current === n ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"
                     }`}
                   >
@@ -399,6 +400,8 @@ export default function TrainingPage() {
             { num: 3, short: "St", full: "Středa" },
             { num: 4, short: "Čt", full: "Čtvrtek" },
             { num: 5, short: "Pá", full: "Pátek" },
+            { num: 6, short: "So", full: "Sobota" },
+            { num: 0, short: "Ne", full: "Neděle" },
           ];
           const isCustom = trainingDays && trainingDays.length > 0;
           const toggleDay = (n: number) => {
@@ -423,7 +426,7 @@ export default function TrainingPage() {
                   <span className="text-[10px] text-muted-light font-heading uppercase">Výchozí</span>
                 )}
               </div>
-              <div className="grid grid-cols-5 gap-1.5">
+              <div className="grid grid-cols-7 gap-1">
                 {DAY_LABELS.map((d) => {
                   const active = effectiveDays.includes(d.num);
                   return (
@@ -443,7 +446,7 @@ export default function TrainingPage() {
                 })}
               </div>
               <div className="mt-2 text-[11px] text-muted leading-relaxed">
-                💡 Trénuje se v každý vybraný den — nic se samo neruší.{" "}
+                💡 Trénuje se v každý vybraný den včetně soboty a neděle — nic se samo neruší.{" "}
                 <strong className="text-pitch-700">Před zápasem uber sám:</strong>{" "}
                 dej tomu dni lehkou intenzitu, nebo pošli unavené hráče na volno.
               </div>

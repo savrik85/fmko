@@ -21,7 +21,7 @@ export function TodayProgramWidget({ data }: WidgetProps) {
 
   const gameDate = team.game_date ? new Date(team.game_date) : null;
   const dayOfWeek = gameDate?.getUTCDay() ?? 0;
-  const isTrainingDay = dayOfWeek >= 1 && dayOfWeek <= 5;
+  const isTrainingDay = dayOfWeek >= 0 && dayOfWeek <= 6;
   const nextMatch = matches.find((m) => m.status !== "simulated");
 
   // Zápasový den = zápas má stejné kalendářní datum jako herní čas. Pending zápas,
