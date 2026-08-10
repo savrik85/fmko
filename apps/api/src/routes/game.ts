@@ -4103,6 +4103,45 @@ gameRouter.post("/admin/backfill-u21", async (c) => {
   return c.json({ ok: true, leagues: results.length, results });
 });
 
+// POST /api/admin/backfill-u21-relations — dogeneruje vazby v kabině U21 soupiskám,
+// které vznikly dřív, než je generátor uměl vytvářet (do 2026-08 žádná U21 soupiska
+// vazby nedostala, takže jim chemie ukazovala napořád plochou padesátku).
+//
+// Idempotentní: tým, který už nějakou vazbu má, se přeskočí. `?teamId=` omezí na jeden tým,
+// `?dryRun=1` jen spočítá, kolika týmů by se to týkalo, a nic nezapíše.
+gameRouter.post("/admin/backfill-u21-relations", async (c) => {
+  const onlyTeamId = c.req.query("teamId");
+  const dryRun = c.req.query("dryRun") === "1";
+
+  const targets = await c.env.DB.prepare(
+    `SELECT t.id, t.name FROM teams t
+      WHERE t.parent_team_id IS NOT NULL
+        ${onlyTeamId ? "AND t.id = ?" : ""}
+        AND NOT EXISTS (
+          SELECT 1 FROM relationships r
+            JOIN players p ON p.id = r.player_a_id
+           WHERE p.team_id = t.id
+        )`,
+  ).bind(...(onlyTeamId ? [onlyTeamId] : [])).all<{ id: string; name: string }>()
+    .catch((e) => { logger.error({ module: "game" }, "load U21 teams for backfill", e); return { results: [] as Array<{ id: string; name: string }> }; });
+
+  if (dryRun) {
+    return c.json({ ok: true, dryRun: true, teams: targets.results.length, names: targets.results.map((t) => t.name) });
+  }
+
+  const { attachSquadRelations } = await import("../transfers/attach-relations");
+  const results: Array<{ team: string; created: number }> = [];
+  let totalCreated = 0;
+  for (const t of targets.results) {
+    const created = await attachSquadRelations(c.env.DB, t.id);
+    totalCreated += created;
+    results.push({ team: t.name, created });
+  }
+
+  logger.info({ module: "game" }, `U21 backfill vazeb: ${results.length} týmů, ${totalCreated} vazeb`);
+  return c.json({ ok: true, teams: results.length, totalCreated, results });
+});
+
 // POST /api/admin/backfill-pub?date=YYYY-MM-DD — vygenerovat pub session pro daný den pro všechny lidské týmy.
 // Pokud date neuvedeno, použije se včerejšek.
 gameRouter.post("/admin/backfill-pub", async (c) => {
