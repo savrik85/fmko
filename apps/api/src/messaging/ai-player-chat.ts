@@ -25,6 +25,8 @@ export interface TeamContext {
   managerName?: string;
   /** Jména spoluhráčů — bez nich si model vymýšlí neexistující hráče. */
   squadNames?: string[];
+  /** Spoluhráč, o kterého v konverzaci jde (konflikt / pochvala za asistenci). */
+  subjectPlayerName?: string;
 }
 
 export interface ResolutionResult {
@@ -117,6 +119,9 @@ function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext): string {
       : "- Jména spoluhráčů neznáš — NIKOHO nejmenuj.",
     `- Trenér se jmenuje ${team.managerName ?? "trenér"}.`,
     buildLastMatchFacts(player),
+    team.subjectPlayerName
+      ? `- Konverzace je o konkrétním spoluhráči: ${team.subjectPlayerName}. Mluv VÝHRADNĚ o něm, nikoho jiného nejmenuj.`
+      : "",
   ].filter(Boolean).join("\n");
 }
 

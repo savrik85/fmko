@@ -49,6 +49,9 @@ interface AiThreadStateData {
   awaiting: "coach" | "player" | "done";
   initiated_at: string;
   player_id: string;
+  /** Spoluhráč, o kterém konverzace je (konflikt / pochvala) — podle výsledku se upraví jejich vztah. */
+  subject_player_id?: string;
+  subject_player_name?: string;
   resolution?: {
     morale_delta: number;
     condition_delta: number;
@@ -117,6 +120,51 @@ export function loadPlayerSnapshot(
     lastMatchRating: (row.last_rating as number) ?? undefined,
     teamStreak: matchCtx?.teamStreak ?? 0,
   };
+}
+
+/**
+ * Vybere spoluhráče, o kterém bude konverzace.
+ *  - konflikt: přednostně někdo, s kým už hráč rivalitu má (spor se přiostřuje),
+ *    jinak náhodný spoluhráč
+ *  - pochvala za asistenci: střelec z posledního zápasu (komu asistoval)
+ */
+async function pickSubjectTeammate(
+  db: D1Database,
+  teamId: string,
+  playerId: string,
+  scenarioId: string,
+  lastMatchId: string | null,
+): Promise<{ id: string; name: string } | null> {
+  if (scenarioId === "assist_teamwork" && lastMatchId) {
+    const scorer = await db.prepare(
+      `SELECT p.id, p.first_name, p.last_name
+         FROM match_player_stats s JOIN players p ON p.id = s.player_id
+        WHERE s.match_id = ? AND s.team_id = ? AND s.goals > 0 AND p.id != ?
+        ORDER BY s.goals DESC LIMIT 1`,
+    ).bind(lastMatchId, teamId, playerId).first<{ id: string; first_name: string; last_name: string }>()
+      .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "pick scorer", e); return null; });
+    if (scorer) return { id: scorer.id, name: `${scorer.first_name} ${scorer.last_name}` };
+  }
+
+  if (scenarioId === "team_chemistry") {
+    const rival = await db.prepare(
+      `SELECT p.id, p.first_name, p.last_name
+         FROM relationships r
+         JOIN players p ON p.id = CASE WHEN r.player_a_id = ? THEN r.player_b_id ELSE r.player_a_id END
+        WHERE (r.player_a_id = ? OR r.player_b_id = ?) AND r.type = 'rivals' AND p.team_id = ?
+        ORDER BY r.strength DESC LIMIT 1`,
+    ).bind(playerId, playerId, playerId, teamId).first<{ id: string; first_name: string; last_name: string }>()
+      .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "pick rival", e); return null; });
+    if (rival) return { id: rival.id, name: `${rival.first_name} ${rival.last_name}` };
+  }
+
+  const any = await db.prepare(
+    `SELECT id, first_name, last_name FROM players
+      WHERE team_id = ? AND id != ? AND (status IS NULL OR status = 'active')
+      ORDER BY RANDOM() LIMIT 1`,
+  ).bind(teamId, playerId).first<{ id: string; first_name: string; last_name: string }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "pick teammate", e); return null; });
+  return any ? { id: any.id, name: `${any.first_name} ${any.last_name}` } : null;
 }
 
 async function loadTeamContext(db: D1Database, teamId: string): Promise<TeamContext> {
@@ -326,8 +374,16 @@ async function spawnForTeam(
     return false;
   }
 
+  // 3b. U scénářů o spoluhráči vybrat KONKRÉTNÍHO hráče předem — ať se model netrefuje
+  //     naslepo a ať víme, čí vztah po rozhovoru upravit.
+  let subject: { id: string; name: string } | null = null;
+  if (scenario.id === "team_chemistry" || scenario.id === "assist_teamwork") {
+    subject = await pickSubjectTeammate(db, teamId, player.id, scenario.id, lastMatch?.id ?? null);
+  }
+
   // 4. Načti team context
   const teamCtx = await loadTeamContext(db, teamId);
+  if (subject) teamCtx.subjectPlayerName = subject.name;
 
   // 5. Gemini call
   let initialBody: string;
@@ -359,6 +415,8 @@ async function spawnForTeam(
     awaiting: "coach",
     initiated_at: new Date().toISOString(),
     player_id: player.id,
+    subject_player_id: subject?.id,
+    subject_player_name: subject?.name,
     resolution: null,
   };
   const now = new Date().toISOString();
@@ -620,6 +678,53 @@ async function applyResolutionAndClose(
         "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, created_at) VALUES (?, ?, ?, 'obecne', ?, 'lehke', ?, ?, ?)",
       ).bind(uuid(), playerId, teamId, resolution.absence_reason || "Schválené osobní volno", absenceDays, absenceDays, now),
     );
+  }
+
+  // ── Dopad do kabiny ────────────────────────────────────────────────────────
+  // Konflikt a pochvala se propíšou do vztahu mezi oběma hráči, takže se hovor
+  // s trenérem promítne do chemie sestavy (rivalita ji táhne dolů, přátelské
+  // vazby nahoru). Bez tohohle zůstal spor jen v textu SMS.
+  if (state.subject_player_id && (scenarioId === "team_chemistry" || scenarioId === "assist_teamwork")) {
+    const subjectId = state.subject_player_id;
+    const [aId, bId] = playerId < subjectId ? [playerId, subjectId] : [subjectId, playerId];
+    const existing = await db.prepare(
+      "SELECT id, type, strength FROM relationships WHERE player_a_id = ? AND player_b_id = ?",
+    ).bind(aId, bId).first<{ id: number; type: string; strength: number }>()
+      .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load pair relation", e); return null; });
+
+    if (scenarioId === "team_chemistry") {
+      // Trenér spor urovnal → rivalita slábne (a při vyhasnutí mizí).
+      // Odbyl ho → rivalita vzniká nebo sílí.
+      if (resolution.tone === "positive") {
+        if (existing?.type === "rivals") {
+          const next = existing.strength - 25;
+          stmts.push(next <= 10
+            ? db.prepare("DELETE FROM relationships WHERE id = ?").bind(existing.id)
+            : db.prepare("UPDATE relationships SET strength = ? WHERE id = ?").bind(next, existing.id));
+          logger.info({ module: "ai-player-spawn", teamId }, `smír: rivalita ${playerId}×${subjectId} → ${next <= 10 ? "zrušena" : next}`);
+        }
+      } else if (resolution.tone === "negative") {
+        if (existing?.type === "rivals") {
+          stmts.push(db.prepare("UPDATE relationships SET strength = MIN(100, strength + 20) WHERE id = ?").bind(existing.id));
+        } else if (!existing) {
+          stmts.push(db.prepare(
+            "INSERT INTO relationships (id, player_a_id, player_b_id, type, strength) VALUES (?, ?, ?, 'rivals', 45)",
+          ).bind(uuid(), aId, bId));
+          logger.info({ module: "ai-player-spawn", teamId }, `nová rivalita ${playerId}×${subjectId}`);
+        }
+      }
+    } else if (scenarioId === "assist_teamwork" && resolution.tone !== "negative") {
+      // Vydařená spolupráce dvojici sbližuje — rivalita polevuje, jinak vzniká parta.
+      if (existing?.type === "rivals") {
+        stmts.push(db.prepare("UPDATE relationships SET strength = MAX(0, strength - 15) WHERE id = ?").bind(existing.id));
+      } else if (existing) {
+        stmts.push(db.prepare("UPDATE relationships SET strength = MIN(100, strength + 10) WHERE id = ?").bind(existing.id));
+      } else {
+        stmts.push(db.prepare(
+          "INSERT INTO relationships (id, player_a_id, player_b_id, type, strength) VALUES (?, ?, ?, 'drinking_buddies', 40)",
+        ).bind(uuid(), aId, bId));
+      }
+    }
   }
 
   // Konverzace po zatrhnutém přestupu hýbe i trucem (transferUnrest):
