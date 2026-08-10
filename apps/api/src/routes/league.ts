@@ -346,6 +346,13 @@ leagueRouter.get("/leagues/:leagueId/news", async (c) => {
     id: n.id, type: n.type,
     headline: n.headline ?? n.type, body: n.body ?? "",
     icon: newsIcon(n.type),
+        journalist: n.journalist_id ? {
+          id: n.journalist_id,
+          name: n.journalist_nick
+            ? `${n.journalist_first} „${n.journalist_nick}" ${n.journalist_last}`
+            : `${n.journalist_first} ${n.journalist_last}`,
+          style: n.journalist_style,
+        } : undefined,
     date: n.created_at, gameWeek: n.game_week,
     photos: n.photos_json ? JSON.parse(n.photos_json) : undefined,
   }));
@@ -355,6 +362,74 @@ leagueRouter.get("/leagues/:leagueId/news", async (c) => {
     .catch((e) => { logger.error({ module: "league" }, "fetch season for news", e); return null; });
 
   return c.json({ articles, season: seasonRow?.s ?? 1 });
+});
+
+// GET /api/leagues/:leagueId/journalists — redakce okresního zpravodaje
+leagueRouter.get("/leagues/:leagueId/journalists", async (c) => {
+  const leagueId = c.req.param("leagueId");
+  const { ensureRedakce } = await import("../news/journalists");
+  const redakce = await ensureRedakce(c.env.DB, leagueId)
+    .catch((e) => { logger.error({ module: "league" }, "load redakce", e); return []; });
+
+  return c.json({
+    journalists: redakce.map((j) => ({
+      id: j.id,
+      firstName: j.first_name,
+      lastName: j.last_name,
+      nickname: j.nickname,
+      age: j.age,
+      style: j.style,
+      bulvarnost: j.bulvarnost,
+      zlomyslnost: j.zlomyslnost,
+      odbornost: j.odbornost,
+      bio: j.bio,
+      hlaska: j.hlaska,
+      avatar: (() => { try { return JSON.parse(j.avatar); } catch { return null; } })(),
+    })),
+  });
+});
+
+// GET /api/journalists/:id — profil redaktora včetně vztahů ke klubům a jeho článků
+leagueRouter.get("/journalists/:journalistId", async (c) => {
+  const id = c.req.param("journalistId");
+
+  const j = await c.env.DB.prepare("SELECT * FROM journalists WHERE id = ?")
+    .bind(id).first<Record<string, unknown>>()
+    .catch((e) => { logger.error({ module: "league" }, "load journalist", e); return null; });
+  if (!j) return c.json({ error: "Redaktor nenalezen" }, 404);
+
+  const vztahy = await c.env.DB.prepare(
+    `SELECT jr.team_id, jr.sentiment, jr.duvod, t.name AS team_name
+     FROM journalist_relations jr JOIN teams t ON t.id = jr.team_id
+     WHERE jr.journalist_id = ? ORDER BY ABS(jr.sentiment) DESC LIMIT 12`
+  ).bind(id).all().catch((e) => { logger.warn({ module: "league" }, "load vztahy", e); return { results: [] }; });
+
+  const clanky = await c.env.DB.prepare(
+    `SELECT id, type, headline, game_week, created_at FROM news
+     WHERE journalist_id = ? ORDER BY created_at DESC LIMIT 12`
+  ).bind(id).all().catch((e) => { logger.warn({ module: "league" }, "load clanky", e); return { results: [] }; });
+
+  return c.json({
+    journalist: {
+      id: j.id,
+      firstName: j.first_name,
+      lastName: j.last_name,
+      nickname: j.nickname,
+      age: j.age,
+      style: j.style,
+      bulvarnost: j.bulvarnost,
+      zlomyslnost: j.zlomyslnost,
+      odbornost: j.odbornost,
+      bio: j.bio,
+      hlaska: j.hlaska,
+      leagueId: j.league_id,
+      avatar: (() => { try { return JSON.parse(j.avatar as string); } catch { return null; } })(),
+    },
+    relations: vztahy.results.map((r: Record<string, unknown>) => ({
+      teamId: r.team_id, teamName: r.team_name, sentiment: r.sentiment, duvod: r.duvod,
+    })),
+    articles: clanky.results,
+  });
 });
 
 // GET /api/leagues/:leagueId/transfers-overview — přehled přestupů v lize

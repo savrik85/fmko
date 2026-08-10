@@ -41,6 +41,12 @@ interface UltrasPhoto {
   caption: string;
 }
 
+interface Journalist {
+  id: string;
+  name: string;
+  style: string;
+}
+
 interface Article {
   id: string;
   type: string;
@@ -50,6 +56,7 @@ interface Article {
   date: string;
   gameWeek?: number | null;
   photos?: UltrasPhoto[];
+  journalist?: Journalist;
 }
 
 /** Parse **bold** markdown in text */
@@ -465,7 +472,10 @@ export default function NewsPage() {
               <Kicker>🎙️ {currentWeekInterviews.length === 1 ? "Rozhovor kola" : "Rozhovory kola"}</Kicker>
               <div className="divide-y divide-ink/10">
                 {currentWeekInterviews.map((iv) => {
-                  let meta: { managerName?: string; managerAvatar?: Record<string, unknown> | null; teamName?: string; article?: string } = {};
+                  let meta: {
+                    managerName?: string; managerAvatar?: Record<string, unknown> | null; teamName?: string;
+                    article?: string; vztah?: { popis: string; sentiment: number; dopad?: string };
+                  } = {};
                   try { meta = JSON.parse(iv.body); } catch (e) { console.error("parse rozhovoru trenéra:", e); meta = {}; }
                   return (
                     <Rozhovor
@@ -476,6 +486,7 @@ export default function NewsPage() {
                       tym={meta.teamName}
                       avatar={meta.managerAvatar}
                       text={meta.article ?? iv.body}
+                      poznamka={meta.vztah ? `${meta.vztah.popis}${meta.vztah.dopad ? ` — ${meta.vztah.dopad}` : ""}` : undefined}
                     />
                   );
                 })}
@@ -674,9 +685,20 @@ function Kicker({ children }: { children: React.ReactNode }) {
  * redaktoři s vlastními povahami, doplní se sem jméno s odkazem na profil.
  */
 function Podpis({ clanek, stred = false }: { clanek: Article; stred?: boolean }) {
+  const autor = clanek.journalist;
   return (
     <div className={`flex items-center gap-2 text-[11px] text-muted ${stred ? "justify-center" : ""}`}>
-      <span className="uppercase tracking-[0.15em] font-heading font-bold">Redakce</span>
+      {autor ? (
+        <Link
+          href={`/dashboard/redakce/${autor.id}`}
+          className="uppercase tracking-[0.12em] font-heading font-bold text-ink hover:underline underline-offset-2"
+          title={`Profil redaktora — ${STYL_POPIS[autor.style] ?? "redakce"}`}
+        >
+          {autor.name}
+        </Link>
+      ) : (
+        <span className="uppercase tracking-[0.15em] font-heading font-bold">Redakce</span>
+      )}
       <span className="opacity-40">·</span>
       <span className="italic">{timeAgo(clanek.date)}</span>
       <span className="opacity-40">·</span>
@@ -774,6 +796,14 @@ function Rozhovor({
     </article>
   );
 }
+
+/** Jak se který styl redaktora popisuje čtenáři. */
+const STYL_POPIS: Record<string, string> = {
+  bulvar: "bulvární pero redakce",
+  seriozni: "seriózní pero redakce",
+  vycurany: "vyčůrané pero redakce",
+  patriot: "srdcař okresního fotbalu",
+};
 
 /** Název rubriky podle typu článku — co je v novinách za škatulkou. */
 function rubrikaProTyp(type: string): string {

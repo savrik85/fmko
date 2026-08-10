@@ -362,7 +362,12 @@ async function generateOne(
       ? ` Kluby se respektují (${relation.label}) — špičkování ať je kamarádské, ne jedovaté.`
       : "";
 
-  const prompt = `Jsi bulvárnější redaktor Okresního zpravodaje — regionálního plátku, který žije vesnickým fotbalem.
+  // Rozhovor vede konkrétní redaktor — jeho povaha určuje, na co se ptá a jak píše.
+  const { redaktorProRubriku, pokynyProRedaktora, sentimentKeKlubu } = await import("./journalists");
+  const redaktor = await redaktorProRubriku(db, leagueId, "player_interview", teamRow.id);
+  const vztah = redaktor ? await sentimentKeKlubu(db, redaktor.id, teamRow.id) : 0;
+
+  const prompt = `${redaktor ? pokynyProRedaktora(redaktor, vztah) : "Jsi bulvárnější redaktor Okresního zpravodaje — regionálního plátku, který žije vesnickým fotbalem."}
 Udělej krátký rozhovor s hráčem ${playerName} z týmu ${teamRow.name} po ${gameWeek}. kole a sestav z něj novinový článek.
 
 🚨 ABSOLUTNÍ ZÁKAZ HALUCINACÍ — DŮLEŽITĚJŠÍ NEŽ COKOLI JINÉHO:
@@ -470,10 +475,10 @@ Odpověz POUZE valid JSON:
 
   await db
     .prepare(
-      `INSERT INTO news (id, league_id, team_id, type, headline, body, game_week, season_number, created_at)
-       VALUES (?, ?, ?, 'player_interview', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
+      `INSERT INTO news (id, league_id, team_id, type, headline, body, game_week, season_number, journalist_id, created_at)
+       VALUES (?, ?, ?, 'player_interview', ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
     )
-    .bind(newsId, leagueId, teamRow.id, headline, body, gameWeek, seasonNumber)
+    .bind(newsId, leagueId, teamRow.id, headline, body, gameWeek, seasonNumber, redaktor?.id ?? null)
     .run()
     .catch((e) => {
       logger.warn({ module: "player-interview" }, "insert news", e);

@@ -1229,6 +1229,13 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
         headline: n.headline,
         body: n.body,
         icon: newsIcon(n.type),
+        journalist: n.journalist_id ? {
+          id: n.journalist_id,
+          name: n.journalist_nick
+            ? `${n.journalist_first} „${n.journalist_nick}" ${n.journalist_last}`
+            : `${n.journalist_first} ${n.journalist_last}`,
+          style: n.journalist_style,
+        } : undefined,
         date: n.created_at,
         gameWeek: n.game_week,
         photos: n.photos_json ? JSON.parse(n.photos_json) : undefined,
@@ -6441,6 +6448,28 @@ gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
     return { results: [] };
   });
 
+  // Kdo se ptá — redaktor se určuje stejným seedem jako při psaní otázek,
+  // takže vyjde tentýž člověk i bez ukládání do rozhovoru.
+  const { redaktorProRubriku, sentimentKeKlubu, popisVztahu, jmenoRedaktora } = await import("../news/journalists");
+  const prvni = rows.results?.[0];
+  let tazatel: Record<string, unknown> | null = null;
+  if (prvni) {
+    const redaktor = await redaktorProRubriku(c.env.DB, prvni.league_id as string, "interview", teamId)
+      .catch((e) => { logger.warn({ module: "game.ts" }, "redaktor pro rozhovor", e); return null; });
+    if (redaktor) {
+      const sentiment = await sentimentKeKlubu(c.env.DB, redaktor.id, teamId);
+      tazatel = {
+        id: redaktor.id,
+        name: jmenoRedaktora(redaktor),
+        style: redaktor.style,
+        bio: redaktor.bio,
+        sentiment,
+        vztah: popisVztahu(sentiment),
+        avatar: (() => { try { return JSON.parse(redaktor.avatar); } catch { return null; } })(),
+      };
+    }
+  }
+
   const interviews = (rows.results ?? []).map((r) => ({
     id: r.id,
     leagueId: r.league_id,
@@ -6452,9 +6481,10 @@ gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
     status: r.status,
     expiresAt: r.expires_at,
     createdAt: r.created_at,
+    journalist: tazatel,
   }));
 
-  return c.json({ interviews });
+  return c.json({ interviews, journalist: tazatel });
 });
 
 // POST /api/teams/:teamId/coach-interviews/:interviewId/answer — submit answers + generate article
@@ -6521,7 +6551,11 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
   const qa = questions.map((q, i) => ({ q, a: answers[i] ?? "" }));
   // Season-wrap rozhovor (match_calendar_id = 'season-{n}-wrap') → sezónní bilanční článek, ne pregame
   const isSeasonWrap = String(interview.match_calendar_id ?? "").includes("-wrap");
-  let article: { headline: string; body: string } | null;
+  let article: { headline: string; body: string; reakce?: { posun: number; duvod: string } } | null;
+  const { redaktorProRubriku, pokynyProRedaktora, sentimentKeKlubu } = await import("../news/journalists");
+  const redaktor = await redaktorProRubriku(c.env.DB, managerRow.league_id as string, "interview", teamId);
+  const vztahKeKlubu = redaktor ? await sentimentKeKlubu(c.env.DB, redaktor.id, teamId) : 0;
+
   if (isSeasonWrap) {
     const seasonNumber = Math.max(1, Math.round(Number(interview.game_week ?? 100) / 100));
     const { generateSeasonInterviewArticle } = await import("../news/season-interview");
@@ -6532,6 +6566,7 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
     const { generateInterviewArticle } = await import("../news/interview-generator");
     article = await generateInterviewArticle(
       (c.env as any).GEMINI_API_KEY, qa, managerRow.manager_name, managerRow.team_name, opponentName,
+      redaktor ? pokynyProRedaktora(redaktor, vztahKeKlubu) : undefined,
     );
   }
 
@@ -6546,17 +6581,34 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
     try { return managerRow.manager_avatar ? JSON.parse(managerRow.manager_avatar) : null; } catch { return null; }
   })();
 
+  // Jak trenér odpovídal, tak si ho redaktor zařadí — a podle výsledného
+  // vztahu o klubu píše, což se propíše do reputace i do zájmu lidí.
+  let vztahInfo: { popis: string; sentiment: number; dopad?: string } | undefined;
+  if (redaktor && article.reakce && article.reakce.posun !== 0) {
+    const { posunSentiment, popisVztahu, dopadTisku } = await import("../news/journalists");
+    const novy = await posunSentiment(
+      c.env.DB, redaktor.id, teamId, article.reakce.posun, article.reakce.duvod,
+    );
+    const dopad = await dopadTisku(c.env.DB, teamId, novy, `press-${newsId}`);
+    vztahInfo = {
+      popis: `${redaktor.first_name} ${redaktor.last_name}: ${popisVztahu(novy)}`,
+      sentiment: novy,
+      dopad: dopad?.popis,
+    };
+  }
+
   const newsBody = JSON.stringify({
     managerName: managerRow.manager_name,
     managerAvatar,
     teamName: managerRow.team_name,
     article: article.body,
     qa,
+    vztah: vztahInfo,
   });
 
   await c.env.DB.prepare(
-    "INSERT INTO news (id, league_id, team_id, type, headline, body, game_week, created_at) VALUES (?, ?, ?, 'interview', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
-  ).bind(newsId, managerRow.league_id, teamId, article.headline, newsBody, interview.game_week as number)
+    "INSERT INTO news (id, league_id, team_id, type, headline, body, game_week, journalist_id, created_at) VALUES (?, ?, ?, 'interview', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+  ).bind(newsId, managerRow.league_id, teamId, article.headline, newsBody, interview.game_week as number, redaktor?.id ?? null)
     .run()
     .catch((e) => { logger.warn({ module: "game.ts" }, "insert interview news", e); });
 
@@ -6619,13 +6671,16 @@ gameRouter.post("/admin/teams/:teamId/generate-interview", async (c) => {
   if (!nextMatch) return c.json({ error: "Zadny nadchazejici zapas" }, 404);
 
   const { tryCreateInterviewRequest } = await import("../news/interview-generator");
+  // Dev trigger cílí na tým z cesty — jinak round-robin vybere kohokoli
+  // a nejde otestovat, jak se rozhovor liší podle vztahu ke konkrétnímu klubu.
   await tryCreateInterviewRequest(c.env.DB, (c.env as any).GEMINI_API_KEY, {
     leagueId: nextMatch.league_id,
     calendarId: nextMatch.calendar_id,
     gameWeek: nextMatch.game_week,
+    forceTeamId: teamId,
   });
 
-  return c.json({ ok: true, calendarId: nextMatch.calendar_id, gameWeek: nextMatch.game_week });
+  return c.json({ ok: true, calendarId: nextMatch.calendar_id, gameWeek: nextMatch.game_week, teamId });
 });
 
 // POST /api/admin/leagues/:leagueId/generate-matchday-preview — dev trigger

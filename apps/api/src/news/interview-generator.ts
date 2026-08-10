@@ -206,6 +206,8 @@ async function callGemini(
 export async function generateInterviewQuestions(
   apiKey: string,
   ctx: MatchContext,
+  pokynyRedaktora?: string,
+  vztahPokyn?: string,
 ): Promise<string[] | null> {
   const topStr = ctx.topPlayers
     .map((p) => `${p.name} (${p.position}${p.goals ? `, ${p.goals} gólů` : ""})`)
@@ -244,7 +246,7 @@ export async function generateInterviewQuestions(
     : `Otázka může zmínit jen název soupeře "${ctx.opponentName}" a fakta z kontextu (pozice v tabulce, forma, vztah trenérů). NEPOUŽÍVEJ žádné jméno trenéra soupeře — žádné nemáme. NEVYMÝŠLEJ si žádná jména.`)
     + relationHint;
 
-  const prompt = `Jsi bulvárnější redaktor Okresního zpravodaje v Čechách. Napiš přesně 3 otázky pro trenéra
+  const prompt = `${pokynyRedaktora ?? "Jsi bulvárnější redaktor Okresního zpravodaje v Čechách."} Napiš přesně 3 otázky pro trenéra
 fotbalového týmu ${ctx.teamName} před zápasem ${ctx.isHome ? "doma" : "venku"} s ${ctx.opponentName} (kolo ${ctx.gameWeek}).
 
 🚨 ABSOLUTNÍ ZÁKAZ HALUCINACÍ — DŮLEŽITĚJŠÍ NEŽ COKOLI JINÉHO:
@@ -262,13 +264,18 @@ INSTRUKCE:
 - KAŽDÁ otázka musí být konkrétní — používej JEN fakta z kontextu níže (jména hráčů ze seznamu, skutečný poslední výsledek, formu)
 - Nepokládej obecné otázky jako "jak hodnotíte formu" nebo "co od zápasu čekáte" — to je nuda. Ale když nemáš konkrétní data, raději obecná otázka než vymyšlená fakta.
 - Otázky piš jednu per řádek, bez číslování, bez odrážek, bez markdown
-- Jazyk: hovorová čeština, bulvárnější novinářský tón, vykání trenéru
+- ⛔ KAŽDÁ otázka MUSÍ končit otazníkem a mít NEJVÝŠ 2 věty. Žádné dlouhé úvody ani rozbory před otázkou — to je rozhovor, ne komentář.
+- ⛔ NIKDY nepiš o tom, co v zadání máš nebo nemáš. Zakázané formulace: „nemáme informace o…", „když nejsou známa jména…", „vzhledem k tomu, že chybí data…". Když fakt nemáš, prostě se zeptej obecně, bez vysvětlování proč.
+- Jazyk: hovorová čeština, vykání trenéru. TÓN a ostrost otázek se řídí tvojí povahou a vztahem ke klubu z úvodu — ne tímhle seznamem.
 - Délka každé otázky: 1–2 věty max
 - PŘESNĚ 3 otázky, v tomto pořadí:
 
-OTÁZKA 1 — o vlastním týmu / nadcházejícím zápase: použij JEN fakt z "Forma" nebo "Poslední výsledek" nebo jméno hráče ze seznamu povolených
-OTÁZKA 2 — taktika, sestava, zranění nebo klíčový hráč: použij JEN jméno ze seznamu povolených hráčů (nebo ze "Zranění", pokud jsou). Pokud žádné jméno nemáš, ptej se na taktiku obecně bez jmen.
-OTÁZKA 3 — BULVÁRNÍ, MÍŘENÁ NA SOUPEŘE. ${soupereOtazka}
+🎯 TVŮJ VZTAH KE KLUBU (řídí ostrost VŠECH tří otázek):
+${vztahPokyn ?? "Vztah neutrální — ptej se věcně."}
+
+OTÁZKA 1 (1–2 věty, ZAKONČI OTAZNÍKEM — ptáš se, nekomentuješ) — o vlastním týmu / nadcházejícím zápase: použij JEN fakt z "Forma" nebo "Poslední výsledek" nebo jméno hráče ze seznamu povolených
+OTÁZKA 2 (1–2 věty, ZAKONČI OTAZNÍKEM) — taktika, sestava, zranění nebo klíčový hráč: použij JEN jméno ze seznamu povolených hráčů (nebo ze "Zranění", pokud jsou). Pokud žádné jméno nemáš, ptej se na taktiku obecně bez jmen.
+OTÁZKA 3 (1–2 věty, ZAKONČI OTAZNÍKEM) — MÍŘENÁ NA SOUPEŘE. ${soupereOtazka}
 
 KONTEXT (tým trenéra):
 - Tým: ${ctx.teamName} (${ctx.villageFlavor}), ${ctx.isHome ? "hraje doma" : "hraje venku"}
@@ -305,12 +312,13 @@ export async function generateInterviewArticle(
   managerName: string,
   teamName: string,
   opponentName: string,
-): Promise<{ headline: string; body: string } | null> {
+  pokynyRedaktora?: string,
+): Promise<{ headline: string; body: string; reakce?: { posun: number; duvod: string } } | null> {
   const qaPairs = qa
     .map((pair, i) => `Otázka ${i + 1}: ${pair.q}\nOdpověď: ${pair.a}`)
     .join("\n\n");
 
-  const prompt = `Jsi bulvárnější redaktor Okresního zpravodaje — regionálního plátku, který žije vesnickým fotbalem. Dostal jsi přepis rozhovoru s trenérem
+  const prompt = `${pokynyRedaktora ?? "Jsi bulvárnější redaktor Okresního zpravodaje — regionálního plátku, který žije vesnickým fotbalem."} Dostal jsi přepis rozhovoru s trenérem
 ${managerName} z týmu ${teamName} před zápasem s ${opponentName}. Sestav z toho novinový článek.
 
 KONTEXT — důležité pochopit:
@@ -332,6 +340,7 @@ PRAVIDLA:
 - Bez uvozovek kolem celého textu
 - STRIKTNĚ: první řádek = titulek (max 80 znaků, bez "Titulek:" prefixu). Titulek má být chytlavý, klidně s klíčovou hláškou trenéra nebo narážkou na nejpikantnější část rozhovoru
 - Od druhého řádku = body článku
+- ÚPLNĚ POSLEDNÍ řádek (a jen ten) = "VZTAH: <číslo -25 až 25> | <důvod, max 8 slov>". Není součástí článku — hodnotíš v něm SÁM ZA SEBE, jak na tebe trenér svými odpověďmi zapůsobil: vstřícnost, ochota, respekt k tobě = plus; arogance, odbytí, urážky novinářů = mínus; nijak zvlášť = číslo blízko nule
 
 PŘEPIS ROZHOVORU:
 ${qaPairs}`;
@@ -342,6 +351,15 @@ ${qaPairs}`;
   const lines = text.split("\n").filter((l) => l.trim().length > 0);
   if (lines.length < 2) return null;
 
+  // Poslední řádek nese hodnocení redaktora, do článku nepatří.
+  let reakce: { posun: number; duvod: string } | undefined;
+  const posledni = lines[lines.length - 1];
+  const m = posledni.match(/^\s*VZTAH\s*:\s*([+-]?\d+)\s*\|?\s*(.*)$/i);
+  if (m) {
+    lines.pop();
+    reakce = { posun: Math.max(-25, Math.min(25, parseInt(m[1], 10) || 0)), duvod: m[2].trim() };
+  }
+
   const headline = lines[0]
     .replace(/^(titulek|headline|nadpis)\s*:?\s*/i, "")
     .replace(/[*#]/g, "")
@@ -349,7 +367,7 @@ ${qaPairs}`;
   const body = lines.slice(1).join("\n").trim();
 
   if (!headline || !body) return null;
-  return { headline, body };
+  return { headline, body, reakce };
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
@@ -362,7 +380,7 @@ ${qaPairs}`;
 export async function tryCreateInterviewRequest(
   db: D1Database,
   geminiApiKey: string | undefined,
-  ctx: { leagueId: string; calendarId: string; gameWeek: number },
+  ctx: { leagueId: string; calendarId: string; gameWeek: number; forceTeamId?: string },
 ): Promise<void> {
   if (!geminiApiKey) {
     logger.warn({ module: "interview-generator" }, "no gemini key, skipping");
@@ -382,12 +400,13 @@ export async function tryCreateInterviewRequest(
            SELECT 1 FROM coach_interviews ci
            WHERE ci.team_id = t.id AND ci.match_calendar_id = ?
          )
+         AND (?3 IS NULL OR t.id = ?3)
        ORDER BY (
          SELECT MAX(ci.created_at) FROM coach_interviews ci WHERE ci.team_id = t.id
        ) ASC NULLS FIRST
        LIMIT 1`,
     )
-    .bind(ctx.leagueId, ctx.calendarId)
+    .bind(ctx.leagueId, ctx.calendarId, ctx.forceTeamId ?? null)
     .first<{
       team_id: string;
       user_id: string;
@@ -514,8 +533,15 @@ export async function tryCreateInterviewRequest(
     relation,
   };
 
-  // 7. Generuj otázky přes Gemini
-  const questions = await generateInterviewQuestions(geminiApiKey, matchCtx);
+  // 7. Generuj otázky přes Gemini — ptá se konkrétní redaktor
+  const { redaktorProRubriku, pokynyProRedaktora, sentimentKeKlubu, vztahKeKlubuText } = await import("./journalists");
+  const redaktor = await redaktorProRubriku(db, ctx.leagueId, "interview", teamRow.team_id as string);
+  const vztah = redaktor ? await sentimentKeKlubu(db, redaktor.id, teamRow.team_id as string) : 0;
+  const questions = await generateInterviewQuestions(
+    geminiApiKey, matchCtx,
+    redaktor ? pokynyProRedaktora(redaktor, vztah) : undefined,
+    redaktor ? vztahKeKlubuText(vztah) : undefined,
+  );
   if (!questions || questions.length === 0) {
     logger.warn({ module: "interview-generator" }, "failed to generate questions", teamRow.team_id);
     return;

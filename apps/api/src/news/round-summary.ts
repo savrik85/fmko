@@ -189,7 +189,12 @@ export async function generateRoundSummary(
     `${s.pos}. ${teamNameMap.get(s.teamId) ?? s.teamId} — ${s.points} bodů (${s.gf}:${s.ga})`
   );
 
-  const prompt = `Jsi sportovní redaktor. Po ${gameWeek}. kole ${leagueName} vyhlásíš Hráče a Trenéra kola — STRUČNĚ, žádný obsáhlý článek o celém kole (ten má zpravodaj už jinde).
+  const { redaktorProRubriku, pokynyProRedaktora } = await import("./journalists");
+  const redaktor = await redaktorProRubriku(db, leagueId, "round_summary", calendarId);
+
+  const prompt = `${redaktor ? pokynyProRedaktora(redaktor) : "Jsi sportovní redaktor."}
+
+Po ${gameWeek}. kole ${leagueName} vyhlásíš Hráče a Trenéra kola — STRUČNĚ, žádný obsáhlý článek o celém kole (ten má zpravodaj už jinde).
 
 KANDIDÁTI NA HRÁČE KOLA (TOP 10 dle ratingu):
 ${playerLines.join("\n")}
@@ -213,6 +218,7 @@ Odpověz POUZE valid JSON:
 PRAVIDLA:
 - playerOfRoundId a managerOfRoundTeamId MUSÍ být doslova z uvedených seznamů
 - body je KRÁTKÝ (60-100 slov) — vyhlášení, ne článek o kole
+- body = 2 souvislé odstavce běžného textu oddělené \n, BEZ číslování, odrážek a nadpisů
 - Žádné jiné hráče než oceněného
 - Česky, přirozený tón`;
 
@@ -281,8 +287,8 @@ PRAVIDLA:
   const awardId = crypto.randomUUID();
 
   await db.prepare(
-    "INSERT INTO news (id, league_id, type, headline, body, game_week, season_number, created_at) VALUES (?, ?, 'round_summary', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
-  ).bind(newsId, leagueId, parsed.headline.trim(), parsed.body.trim(), gameWeek, seasonNumber).run()
+    "INSERT INTO news (id, league_id, type, headline, body, game_week, season_number, journalist_id, created_at) VALUES (?, ?, 'round_summary', ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+  ).bind(newsId, leagueId, parsed.headline.trim(), parsed.body.trim(), gameWeek, seasonNumber, redaktor?.id ?? null).run()
     .catch((e) => { logger.warn({ module: "round-summary" }, "insert news", e); });
 
   await db.prepare(

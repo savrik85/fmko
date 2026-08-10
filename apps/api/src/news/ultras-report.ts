@@ -145,6 +145,10 @@ export async function generateUltrasReport(
     .first();
   if (existing) return { newsId: null, photos: 0, skipped: true };
 
+  // Kdo kotel popisuje — patriot, pokud ho redakce má.
+  const { redaktorProRubriku, pokynyProRedaktora } = await import("./journalists");
+  const redaktor = await redaktorProRubriku(db, leagueId, "ultras_report", calendarId);
+
   // 3. Načíst domácí zápasy kola + stadion + barvy klubu.
   const rows = await db
     .prepare(
@@ -195,7 +199,8 @@ export async function generateUltrasReport(
   // 5. Článek přes Gemini (fallback při selhání).
   let article = "";
   try {
-    article = await callGeminiUltras(geminiApiKey, gameWeek, homeMatches, photos);
+    article = await callGeminiUltras(geminiApiKey, gameWeek, homeMatches, photos,
+      redaktor ? pokynyProRedaktora(redaktor) : undefined);
   } catch (e) {
     logger.warn({ module: "ultras-report" }, "gemini failed, using fallback", e);
   }
@@ -214,9 +219,9 @@ export async function generateUltrasReport(
   const newsId = crypto.randomUUID();
   await db
     .prepare(
-      "INSERT INTO news (id, league_id, type, headline, body, game_week, season_number, created_at) VALUES (?, ?, 'ultras_report', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))",
+      "INSERT INTO news (id, league_id, type, headline, body, game_week, season_number, journalist_id, created_at) VALUES (?, ?, 'ultras_report', ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))",
     )
-    .bind(newsId, leagueId, headline, body, gameWeek, seasonNumber ?? 1)
+    .bind(newsId, leagueId, headline, body, gameWeek, seasonNumber ?? 1, redaktor?.id ?? null)
     .run();
   await db
     .prepare(
@@ -251,6 +256,7 @@ async function callGeminiUltras(
   gameWeek: number,
   homeMatches: HomeMatch[],
   photos: UltrasPhoto[],
+  pokynyRedaktora?: string,
 ): Promise<string> {
   const facts = homeMatches
     .map((m) => `- ${m.homeName} (doma) vs ${m.awayName} ${m.homeScore}:${m.awayScore}: dorazilo ${m.attendance} diváků (${fullnessDesc(m.fillPct)}), ${kotelDesc(m.ultrasStand)}${m.ultrasText ? `, na plachtě „${m.ultrasText}"` : ""}${m.weather ? `, ${m.weather}` : ""}`)
@@ -263,7 +269,7 @@ async function callGeminiUltras(
     ? `PLACHTY, které MUSÍŠ všechny zmínit i s doslovným nápisem: ${banners.map((m) => `${m.homeName} — „${m.ultrasText}"`).join("; ")}.`
     : "V tomto kole nikdo nevyvěsil plachtu s nápisem.";
 
-  const prompt = `Jsi pisatel fanouškovského zpravodaje "Prales Ultras" v amatérské fotbalové lize. Píšeš z pohledu lidí na kotli, zaujatě pro atmosféru, s vtipem a nadsázkou, ale VÝHRADNĚ z dodaných dat — NIKDY nevymýšlej jména ani čísla.
+  const prompt = `${pokynyRedaktora ? pokynyRedaktora + "\n\n" : ""}Píšeš fanouškovský zpravodaj "Prales Ultras" v amatérské fotbalové lize. Píšeš z pohledu lidí na kotli, zaujatě pro atmosféru, s vtipem a nadsázkou, ale VÝHRADNĚ z dodaných dat — NIKDY nevymýšlej jména ani čísla.
 
 Napiš článek (150–250 slov) hodnotící ATMOSFÉRU ${gameWeek}. kola. Páteří je žebříček:
 - kam přišlo NEJVÍC lidí a kam NEJMÍŇ,
