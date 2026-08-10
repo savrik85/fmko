@@ -320,6 +320,18 @@ equipmentMarketRouter.post("/teams/:teamId/equipment/pawn", async (c) => {
   if (level <= 0) return c.json({ error: `${CATEGORY_LABELS[category]} nemáš, není co prodávat` }, 400);
   const condition = (equip[`${category}_condition`] as number) ?? 50;
 
+  // Vystavené vybavení se nezastavuje potichu — zastavárna dá vždycky míň než
+  // spodní mez bazaru, takže by hráč nepozorovaně prodělal. Ať to nejdřív stáhne.
+  const listed = await c.env.DB.prepare(
+    "SELECT price FROM equipment_listings WHERE team_id = ? AND category = ? AND status = 'active'"
+  ).bind(teamId, category).first<{ price: number }>()
+    .catch((e) => { logger.warn({ module: MODULE }, "check active listing before pawn", e); return null; });
+  if (listed) {
+    return c.json({
+      error: `${CATEGORY_LABELS[category]} máš v bazaru za ${listed.price.toLocaleString("cs")} Kč. Zastavárna dá jen ${getPawnQuote(category, level, condition).toLocaleString("cs")} Kč — nejdřív stáhni inzerát.`,
+    }, 400);
+  }
+
   const team = await c.env.DB.prepare("SELECT league_id, game_date FROM teams WHERE id = ?")
     .bind(teamId).first<{ league_id: string | null; game_date: string | null }>()
     .catch((e) => { logger.warn({ module: MODULE }, "fetch team for pawn", e); return null; });
