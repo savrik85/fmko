@@ -34,6 +34,21 @@ export interface PlayerSnapshot {
   isCelebrity: boolean;
   /** 0-100 — aktivní transferový truc (vynechává AI transfer scénáře, řeší unrest-talk) */
   transferUnrest?: number;
+  // ── kontext posledního odehraného zápasu týmu ────────────────────────────
+  /** Jak zápas dopadl pro TÝM. null = tým ještě nehrál. */
+  lastMatchOutcome?: "win" | "loss" | "draw" | null;
+  /** Nastoupil do něj tenhle hráč? Kdo nehrál, nemá co hodnotit svůj výkon. */
+  playedLastMatch?: boolean;
+  lastMatchGoals?: number;
+  lastMatchAssists?: number;
+  lastMatchRedCard?: boolean;
+  lastMatchYellow?: boolean;
+  lastMatchRating?: number;
+  /** Kolik zápasů po sobě tým vyhrál (kladné) nebo prohrál (záporné). 0 = smíšené. */
+  teamStreak?: number;
+  /** Kolik zápasů po sobě hráč nastoupil a nedal gól (jen útočníci/záložníci). */
+  scorelessRun?: number;
+
   // optional context
   occupation?: string;
   injuredUntil?: string | null;
@@ -111,10 +126,14 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     expectedTurns: 2,
     description:
       "Hráč je nadšený z poslední výhry, děkuje trenérovi za důvěru a taktiku. Pozitivní, energický.",
+    // Jen po skutečné výhře — dřív se scénář spouštěl podle nálady a hráč pak
+    // gratuloval k vítězství, které se nekonalo.
     weight: (p) =>
+      p.lastMatchOutcome !== "win" ? 0 :
       w(p.morale > 65, 4) +
       w(p.recentRatingAvg > 7.0, 3) +
       w(p.leadership > 55, 2) +
+      w(p.playedLastMatch !== false, 2) +
       w(p.coachRelationship > 60, 2),
   },
   {
@@ -227,6 +246,85 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
       w(p.coachRelationship > 65, 3) +
       w(p.age >= 28, 2),
   },
+  // ───── REAKCE NA KONKRÉTNÍ ZÁPAS ─────
+  {
+    id: "goal_pride",
+    label: "Radost z gólu",
+    category: "positive",
+    expectedTurns: 2,
+    description:
+      "Hráč se v posledním zápase trefil a má z toho radost. Zmíní gól, poděkuje za šanci nebo za nahrávku. Sebevědomý, ale ne namyšlený — je to vesnický fotbal, ne liga mistrů.",
+    weight: (p) =>
+      (p.lastMatchGoals ?? 0) < 1 ? 0 :
+      w(true, 6) + w((p.lastMatchGoals ?? 0) >= 2, 4) + w(p.morale > 50, 2),
+  },
+  {
+    id: "red_card_apology",
+    label: "Omluva za červenou",
+    category: "personal",
+    expectedTurns: 2,
+    description:
+      "Hráč dostal v posledním zápase červenou kartu a ví, že nechal tým v deseti. Omlouvá se — podle povahy buď upřímně a zkroušeně, nebo se vymlouvá na rozhodčího a soupeře.",
+    weight: (p) =>
+      !p.lastMatchRedCard ? 0 :
+      w(true, 9) + w(p.discipline > 55, 2) + w(p.temper > 65, 2),
+  },
+  {
+    id: "losing_streak_frustration",
+    label: "Frustrace ze série proher",
+    category: "complaint",
+    expectedTurns: 3,
+    description:
+      "Tým prohrává zápas za zápasem a hráč to už nemůže vydýchat. Ptá se, co s tím trenér udělá — chce změnu tréninku, sestavy nebo taktiky. Frustrovaný, ale ne urážlivý.",
+    weight: (p) =>
+      (p.teamStreak ?? 0) > -2 ? 0 :
+      w(true, 5) + w(Math.abs(p.teamStreak ?? 0) >= 3, 4) + w(p.leadership > 55, 3) + w(p.morale < 55, 2),
+  },
+  {
+    id: "winning_streak_hype",
+    label: "Jedeme šňůru",
+    category: "positive",
+    expectedTurns: 2,
+    description:
+      "Tým vyhrává zápas za zápasem a hráč je nabuzený. Věří, že se dá pomýšlet výš, chválí partu v kabině. Nadšený, ale nohama na zemi.",
+    weight: (p) =>
+      (p.teamStreak ?? 0) < 2 ? 0 :
+      w(true, 5) + w((p.teamStreak ?? 0) >= 3, 4) + w(p.morale > 55, 2),
+  },
+  {
+    id: "loss_self_blame",
+    label: "Vyčítá si prohru",
+    category: "personal",
+    expectedTurns: 2,
+    description:
+      "Tým prohrál a hráč má pocit, že za to může on — špatný výkon, zkažená šance, chyba u gólu. Hledá u trenéra buď povzbuzení, nebo si chce sypat popel na hlavu.",
+    weight: (p) =>
+      p.lastMatchOutcome !== "loss" || p.playedLastMatch === false ? 0 :
+      w(true, 4) + w((p.lastMatchRating ?? 7) < 6.0, 5) + w(p.workRate > 60, 2),
+  },
+  {
+    id: "watched_from_bench",
+    label: "Koukal na to z lavičky",
+    category: "complaint",
+    expectedTurns: 2,
+    description:
+      "Hráč zápas prosedel na lavičce a tým prohrál. Je přesvědčený, že kdyby dostal šanci, bylo by to jinak. Naléhá, ale drží se v mezích slušnosti.",
+    weight: (p) =>
+      p.lastMatchOutcome !== "loss" || p.playedLastMatch !== false ? 0 :
+      w(true, 5) + w(p.recentMinutes < 90, 3) + w(p.temper > 55, 2),
+  },
+  {
+    id: "assist_teamwork",
+    label: "Pochvala spoluhráči",
+    category: "positive",
+    expectedTurns: 2,
+    description:
+      "Hráč v posledním zápase asistoval u gólu a chce vyzdvihnout spolupráci s konkrétním spoluhráčem. Jmenuj VÝHRADNĚ hráče ze seznamu spoluhráčů v kontextu.",
+    weight: (p) =>
+      (p.lastMatchAssists ?? 0) < 1 ? 0 :
+      w(true, 5) + w(p.leadership > 50, 2),
+  },
+
   {
     // Spouští se VÝHRADNĚ z offer-rejection-impact (odmítnutá nabídka, o kterou hráč stál).
     // weight 0 → nikdy se nevylosuje náhodně.

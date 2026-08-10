@@ -62,6 +62,26 @@ function buildPersonalityHints(p: PlayerSnapshot): string {
   return hints.length > 0 ? hints.join(", ") : "průměrná povaha";
 }
 
+/**
+ * Co se hráči stalo v posledním zápase. Bez toho by scénář o gólu nebo červené kartě
+ * psal naslepo a model si počty i vlastní výkon domyslel.
+ */
+function buildLastMatchFacts(p: PlayerSnapshot): string {
+  if (!p.lastMatchOutcome) return "";
+  const verdict = p.lastMatchOutcome === "win" ? "vyhráli jsme" : p.lastMatchOutcome === "loss" ? "prohráli jsme" : "remizovali jsme";
+  if (p.playedLastMatch === false) {
+    return `- V posledním zápase (${verdict}) jsi NEHRÁL — seděl jsi na lavičce. Nemluv o svém výkonu, góly ani karty jsi mít nemohl.`;
+  }
+  const bits: string[] = [];
+  if ((p.lastMatchGoals ?? 0) > 0) bits.push(`dal jsi ${p.lastMatchGoals} ${p.lastMatchGoals === 1 ? "gól" : (p.lastMatchGoals ?? 0) < 5 ? "góly" : "gólů"}`);
+  if ((p.lastMatchAssists ?? 0) > 0) bits.push(`${p.lastMatchAssists}× jsi asistoval`);
+  if (p.lastMatchRedCard) bits.push("dostal jsi ČERVENOU kartu");
+  else if (p.lastMatchYellow) bits.push("dostal jsi žlutou kartu");
+  if (p.lastMatchRating != null) bits.push(`známka za výkon ${p.lastMatchRating.toFixed(1)}/10`);
+  const detail = bits.length > 0 ? ` Tvoje bilance: ${bits.join(", ")}.` : " Gól jsi nedal a kartu nedostal.";
+  return `- V posledním zápase jsi nastoupil, ${verdict}.${detail} Jiné góly, karty ani statistiky si NEVYMÝŠLEJ.`;
+}
+
 function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext): string {
   const positionLabel: Record<string, string> = {
     GK: "brankář",
@@ -96,6 +116,7 @@ function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext): string {
       ? `- Spoluhráči (JEDINÁ povolená jména, o kterých smíš mluvit): ${team.squadNames.join(", ")}. NIKOHO jiného nejmenuj — žádná vymyšlená jména.`
       : "- Jména spoluhráčů neznáš — NIKOHO nejmenuj.",
     `- Trenér se jmenuje ${team.managerName ?? "trenér"}.`,
+    buildLastMatchFacts(player),
   ].filter(Boolean).join("\n");
 }
 
