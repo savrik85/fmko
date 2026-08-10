@@ -282,7 +282,21 @@ export async function executeDailyTick(
           const personality = JSON.parse(row.personality as string);
           const lifeContext = JSON.parse(row.life_context as string);
           const physical = row.physical ? JSON.parse(row.physical as string) : {};
+          // Stropy růstu z skills_max ({attr: {current, maxPotential}}) — trénink
+          // nesmí atribut přetáhnout přes vygenerovaný potenciál hráče.
+          let skillCaps: Record<string, number> | undefined;
+          if (row.skills_max) {
+            try {
+              const sm = JSON.parse(row.skills_max as string) as Record<string, { maxPotential?: number }>;
+              skillCaps = {};
+              for (const [attr, v] of Object.entries(sm)) {
+                if (v && typeof v.maxPotential === "number") skillCaps[attr] = v.maxPotential;
+              }
+            } catch (e) { logger.warn({ module: "daily-tick", teamId }, "parse skills_max", e); }
+          }
           return {
+            skillCaps,
+            hiddenTalent: (row.hidden_talent as number) ?? 0,
             firstName: row.first_name as string, lastName: row.last_name as string,
             age: row.age as number, position: row.position as "GK" | "DEF" | "MID" | "FWD",
             speed: skills.speed, technique: skills.technique, shooting: skills.shooting,

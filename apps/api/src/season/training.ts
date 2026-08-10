@@ -5,6 +5,16 @@
 import type { Rng } from "../generators/rng";
 import type { GeneratedPlayer } from "../generators/player";
 
+/**
+ * Hráč v tréninku: GeneratedPlayer + volitelné stropy atributů (maxPotential ze
+ * sloupce skills_max) a skrytý talent. Bez stropů se atribut smí vyšplhat až na 100
+ * (fallback pro staré/neúplné záznamy).
+ */
+export type TrainingPlayer = GeneratedPlayer & {
+  skillCaps?: Record<string, number>;
+  hiddenTalent?: number;
+};
+
 export type TrainingType = "conditioning" | "technique" | "tactics" | "match_practice";
 export type TrainingApproach = "strict" | "balanced" | "relaxed";
 
@@ -292,7 +302,7 @@ function simulateAttendance(
  */
 export function simulateTraining(
   rng: Rng,
-  squad: GeneratedPlayer[],
+  squad: TrainingPlayer[],
   plan: TrainingPlan,
   commuteKms?: number[],
   equipmentMultiplier: number = 1.0,
@@ -347,7 +357,10 @@ export function simulateTraining(
       const intensityMod = INTENSITY[plan.intensity ?? "normal"].growth;
       const improveChance = BASE_IMPROVE_CHANCE * intensityMod * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul;
       if (rng.random() < improveChance) {
-        if (current < 100) {
+        // Strop atributu = vygenerovaný potenciál (skills_max), ne paušálních 100.
+        // Hráč, který je na svém stropu, se v daném atributu dál nezlepší.
+        const cap = Math.min(100, player.skillCaps?.[attr] ?? 100);
+        if (current < cap) {
           (player as unknown as Record<string, number>)[attr] = current + 1;
           improvements.push({ playerIndex, attribute: attr, change: 1 });
         }
