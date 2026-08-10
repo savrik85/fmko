@@ -644,8 +644,19 @@ input[type="number"] { -moz-appearance: textfield; }
    (kruhový shape-outside navíc na úzké obrazovce pouštěl řádky do rámu). */
 .np-portret {
   float: left;
-  margin: 0.25rem 0.85rem 0.4rem 0;
+  margin: 0.25rem 1rem 0.5rem 0;
   padding: 0;
+}
+/* Popiska fotky nesmí dědit dělení slov ani zarovnání do bloku z okolního
+   sloupce — jinak se název klubu láme na slabiky („Pep-pers"). */
+.np-portret figcaption {
+  hyphens: none;
+  -webkit-hyphens: none;
+  text-align: left;
+  text-indent: 0;
+  font-family: var(--font-body);
+  overflow-wrap: normal;
+  word-break: keep-all;
 }
 /* Perex — první odstavec rozhovoru nese shrnutí, sází se výrazněji */
 .np-perex {
