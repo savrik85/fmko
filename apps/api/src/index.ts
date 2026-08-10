@@ -14,6 +14,7 @@ import { cashLoansRouter } from "./routes/cash-loans";
 import { relationsRouter } from "./routes/relations";
 import u21Router from "./routes/u21";
 import { staffRouter } from "./routes/staff";
+import { equipmentMarketRouter } from "./routes/equipment-market";
 // transfers endpoints are in gameRouter
 import { runScheduledMatches, recoverStuckRounds } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -74,6 +75,7 @@ app.route("/api", cashLoansRouter);
 app.route("/api", relationsRouter);
 app.route("/api", u21Router);
 app.route("/api", staffRouter);
+app.route("/api", equipmentMarketRouter);
 
 export default {
   fetch: app.fetch,

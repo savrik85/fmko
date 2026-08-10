@@ -1383,6 +1383,36 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "transfer expiry failed", e);
   }
 
+  // ── Expirace inzerátů v bazaru vybavení ──
+  // Reálný čas jako u transfer_listings — expires_at zapisuje equipment-market.ts
+  // reálným Date. Vybavení se NEVRACÍ: prodávající ho celou dobu měl a používal,
+  // inzerát byl jen nabídka. Stačí tedy zavřít status a dát vědět.
+  try {
+    const expiring = await env.DB.prepare(
+      `SELECT el.id, el.team_id, el.category, el.level, el.price
+         FROM equipment_listings el JOIN teams t ON el.team_id = t.id
+        WHERE el.status = 'active' AND el.expires_at < ? AND t.user_id != 'ai'
+        LIMIT 50`
+    ).bind(now.toISOString()).all<{ id: string; team_id: string; category: string; level: number; price: number }>()
+      .catch((e) => { logger.warn({ module: "daily-tick" }, "fetch expiring equipment listings", e); return { results: [] }; });
+
+    await env.DB.prepare("UPDATE equipment_listings SET status = 'expired', resolved_at = ? WHERE status = 'active' AND expires_at < ?")
+      .bind(now.toISOString(), now.toISOString()).run();
+
+    if (expiring.results.length > 0) {
+      const { CATEGORY_LABELS } = await import("../equipment/equipment-generator");
+      const { sendSystemSMS } = await import("../messaging/system-sms");
+      for (const listing of expiring.results) {
+        const label = CATEGORY_LABELS[listing.category] ?? listing.category;
+        await sendSystemSMS(env.DB, listing.team_id, "Kustod",
+          `📦 Inzerát na ${label} (úroveň ${listing.level}) vypršel — za ${listing.price.toLocaleString("cs")} Kč se nikdo neozval. Zkus jít s cenou dolů, nebo to vem do zastavárny.`)
+          .catch((e) => logger.warn({ module: "daily-tick" }, "sms expired equipment listing", e));
+      }
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "equipment listing expiry failed", e);
+  }
+
   // ── Normalize all leagues to max game_date ──
   // Prevents permanent date offset if leagues were initialized at different times.
   try {

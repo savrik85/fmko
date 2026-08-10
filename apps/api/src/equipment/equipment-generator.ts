@@ -15,6 +15,8 @@ export const CATEGORIES = [
 ] as const;
 export type EquipmentCategory = typeof CATEGORIES[number];
 
+export const MAX_LEVEL = 3;
+
 export const CATEGORY_LABELS: Record<string, string> = {
   balls: "Míče",
   jerseys: "Dresy",
@@ -212,6 +214,106 @@ const UPGRADE_COSTS: Record<string, number[]> = {
   video_setup:     [0, 5000, 25000, 75000],
 };
 
+// ── Bazar a zastavárna — ceny ──
+
+/**
+ * Sazby pro druhotný trh s vybavením.
+ *
+ * ⚠️ INVARIANT: spodní mez bazaru se MUSÍ rovnat výkupu zastavárny při stavu 100 %.
+ * Proto se getBazarPriceBand().min počítá doslova jako getPawnQuote(cat, level, 100),
+ * ne druhým nezávislým vzorcem — jinak by zaokrouhlení otevřelo škvíru.
+ *
+ * Kdyby spodní mez klesala se stavem, vznikne tiskárna peněz: koupím v bazaru ojetou
+ * Lv3 levně, opravím za level×500 a zastavím za plnou cenu. U míčů Lv3 to dělá
+ * +3 720 Kč na kolo, u dodávky přes 28 000 Kč. S plochou mezí je bilance po opravě
+ * vždycky záporná, a to nezávisle na cenách oprav.
+ */
+export const PAWN_RATE = 0.30;
+export const BAZAR_SUGGESTED_RATE = 0.65;
+
+/** Kumulativní investice do kategorie na daný level (co mě to celkem stálo v obchodě). */
+export function cumulativeInvestment(category: string, level: number): number {
+  const costs = UPGRADE_COSTS[category];
+  if (!costs) return 0;
+  let total = 0;
+  for (let lv = 1; lv <= Math.min(level, MAX_LEVEL); lv++) total += costs[lv] ?? 0;
+  return total;
+}
+
+/** Kolik by mě v obchodě stála cesta z fromLevel na toLevel — pro srovnání „v obchodě máš za". */
+export function shopCostFromLevel(category: string, fromLevel: number, toLevel: number): number {
+  return Math.max(0, cumulativeInvestment(category, toLevel) - cumulativeInvestment(category, fromLevel));
+}
+
+/**
+ * Opotřebení netrestá lineárně (0.50 … 1.00). Kdyby ano, šrot by byl skoro zadarmo
+ * a nikdo by ho neprodával — rovnou by se vyhazoval.
+ */
+export function equipmentConditionFactor(condition: number): number {
+  const c = Math.max(0, Math.min(100, condition));
+  return 0.5 + 0.5 * (c / 100);
+}
+
+/** Ceny zaokrouhlujeme, ať v UI nesvítí „17 399 Kč". */
+function roundPrice(value: number): number {
+  return value >= 10000 ? Math.round(value / 100) * 100 : Math.round(value / 10) * 10;
+}
+
+/** Výkup zastavárny — nejméně výhodná cesta ven, stav rozhoduje. */
+export function getPawnQuote(category: string, level: number, condition: number): number {
+  if (level <= 0) return 0;
+  return roundPrice(cumulativeInvestment(category, level) * PAWN_RATE * equipmentConditionFactor(condition));
+}
+
+export interface BazarPriceBand {
+  min: number;
+  suggested: number;
+  max: number;
+}
+
+export function getBazarPriceBand(category: string, level: number, condition: number): BazarPriceBand {
+  const invested = cumulativeInvestment(category, level);
+  // min = výkup zastavárny při stavu 100 %. Viz invariant výše — NEPŘEPISOVAT na vlastní vzorec.
+  const min = getPawnQuote(category, level, 100);
+  const suggested = Math.max(min, roundPrice(invested * BAZAR_SUGGESTED_RATE * equipmentConditionFactor(condition)));
+  return { min, suggested, max: Math.max(min, invested) };
+}
+
+export interface SellOption {
+  category: string;
+  label: string;
+  level: number;
+  condition: number;
+  invested: number;
+  pawnQuote: number;
+  bazarMin: number;
+  bazarSuggested: number;
+  bazarMax: number;
+}
+
+/** Co všechno můžu prodat — počítá se z už načtených levelů a stavů, nula dotazů navíc. */
+export function getSellOptions(levels: Record<string, number>, conditions: Record<string, number>): SellOption[] {
+  const options: SellOption[] = [];
+  for (const cat of CATEGORIES) {
+    const level = levels[cat] ?? 0;
+    if (level <= 0) continue;
+    const condition = conditions[`${cat}_condition`] ?? 50;
+    const band = getBazarPriceBand(cat, level, condition);
+    options.push({
+      category: cat,
+      label: CATEGORY_LABELS[cat],
+      level,
+      condition,
+      invested: cumulativeInvestment(cat, level),
+      pawnQuote: getPawnQuote(cat, level, condition),
+      bazarMin: band.min,
+      bazarSuggested: band.suggested,
+      bazarMax: band.max,
+    });
+  }
+  return options;
+}
+
 // ── Unlock requirements per level ──
 
 interface UnlockReq {
@@ -314,6 +416,57 @@ export interface RepairOption {
   cost: number;
 }
 
+export interface LevelUnlock {
+  locked: boolean;
+  detail?: LockDetail;
+  reason?: string;
+  hint?: string;
+}
+
+/**
+ * Nárok na konkrétní úroveň vybavení.
+ *
+ * Vytaženo z getUpgradeOptions, protože bazar potřebuje zámek pro LIBOVOLNÝ cílový
+ * level (koupím rovnou Lv3), zatímco obchod řeší vždycky jen current+1. Musí to být
+ * jedna funkce — kdyby se logika rozdvojila, bazar by časem začal pouštět dál než obchod.
+ */
+export function checkLevelUnlock(
+  targetLevel: number,
+  teamReputation: number,
+  matchesPlayed: number,
+  currentSeason: number,
+): LevelUnlock {
+  const req = UNLOCK_REQUIREMENTS[targetLevel] ?? {};
+
+  let locked = false;
+  // Všechny nesplněné podmínky najednou — dřív poslední kontrola přepsala předchozí.
+  const detail: LockDetail = {};
+
+  if (req.reputation && teamReputation < req.reputation) {
+    locked = true;
+    detail.reputation = { need: req.reputation, have: teamReputation };
+  }
+  if (req.matchesPlayed && matchesPlayed < req.matchesPlayed) {
+    locked = true;
+    detail.matchesPlayed = { need: req.matchesPlayed, have: matchesPlayed };
+  }
+  if (req.season && currentSeason < req.season) {
+    locked = true;
+    detail.season = { need: req.season, have: currentSeason };
+  }
+
+  if (!locked) return { locked: false };
+
+  return {
+    locked: true,
+    detail,
+    reason: describeLock(detail),
+    hint: detail.reputation
+      ? "Reputaci zvedneš umístěním v lize, postupem v poháru, vyprodaným stadionem nebo sezónními akcemi. Přehled najdeš v sekci Reputace."
+      : undefined,
+  };
+}
+
 export function getUpgradeOptions(
   levels: Record<string, number>,
   teamReputation: number,
@@ -324,27 +477,10 @@ export function getUpgradeOptions(
 
   for (const cat of CATEGORIES) {
     const current = levels[cat] ?? 0;
-    if (current >= 3) continue;
+    if (current >= MAX_LEVEL) continue;
     const next = current + 1;
     const costs = UPGRADE_COSTS[cat];
-    const req = UNLOCK_REQUIREMENTS[next] ?? {};
-
-    let locked = false;
-    // Všechny nesplněné podmínky najednou — dřív poslední kontrola přepsala předchozí.
-    const lockDetail: LockDetail = {};
-
-    if (req.reputation && teamReputation < req.reputation) {
-      locked = true;
-      lockDetail.reputation = { need: req.reputation, have: teamReputation };
-    }
-    if (req.matchesPlayed && matchesPlayed < req.matchesPlayed) {
-      locked = true;
-      lockDetail.matchesPlayed = { need: req.matchesPlayed, have: matchesPlayed };
-    }
-    if (req.season && currentSeason < req.season) {
-      locked = true;
-      lockDetail.season = { need: req.season, have: currentSeason };
-    }
+    const unlock = checkLevelUnlock(next, teamReputation, matchesPlayed, currentSeason);
 
     options.push({
       category: cat,
@@ -354,12 +490,10 @@ export function getUpgradeOptions(
       cost: costs[next] ?? 99999,
       effect: UPGRADE_EFFECT_LABELS[cat]?.[next] ?? "",
       description: LEVEL_DESCRIPTIONS[cat]?.[next] ?? "",
-      locked,
-      lockReason: locked ? describeLock(lockDetail) : undefined,
-      lockDetail: locked ? lockDetail : undefined,
-      lockHint: locked && lockDetail.reputation
-        ? "Reputaci zvedneš umístěním v lize, postupem v poháru, vyprodaným stadionem nebo sezónními akcemi. Přehled najdeš v sekci Reputace."
-        : undefined,
+      locked: unlock.locked,
+      lockReason: unlock.reason,
+      lockDetail: unlock.detail,
+      lockHint: unlock.hint,
     });
   }
 
@@ -385,4 +519,9 @@ export function getRepairOptions(levels: Record<string, number>, conditions: Rec
 
 export function getLevelDescription(category: string, level: number): string {
   return LEVEL_DESCRIPTIONS[category]?.[level] ?? "";
+}
+
+/** Textový popis bonusu na dané úrovni — bazar ho ukazuje na kartě nabídky. */
+export function getUpgradeEffectLabel(category: string, level: number): string {
+  return UPGRADE_EFFECT_LABELS[category]?.[level] ?? "";
 }

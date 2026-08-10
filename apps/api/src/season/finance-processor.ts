@@ -15,6 +15,9 @@ export type TransactionType =
   | "pitch_maintenance"
   | "equipment_expense"
   | "equipment_upgrade"
+  | "equipment_purchase"   // nákup vybavení z bazaru od jiného klubu
+  | "equipment_sale"       // příjem z prodeje vybavení v bazaru
+  | "equipment_pawn"       // výkup v zastavárně
   | "stadium_upgrade"
   | "stadium_visual"
   | "pitch_repair"
@@ -79,7 +82,7 @@ export function mapVillageSize(dbSize: string): string {
 /** Typy transakcí, které jsou diskrétním uživatelským nákupem — blokovány při záporném rozpočtu. */
 const PURCHASE_TYPES = new Set<TransactionType>([
   "transfer_fee", "signing_fee", "classified_ad",
-  "equipment_upgrade", "stadium_upgrade", "stadium_visual",
+  "equipment_upgrade", "equipment_purchase", "stadium_upgrade", "stadium_visual",
   "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
   "manager_social", "staff_signing", "course_fee",
