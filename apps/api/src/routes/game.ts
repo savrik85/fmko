@@ -4152,6 +4152,18 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
     playerPosition: player.position as string, teamName: player.team_name as string,
   }).catch((e) => logger.warn({ module: "game" }, "create release news", e));
 
+  // Push týmům, které hráče sledují ve watchlistu — je volný!
+  try {
+    const { sendWebPushToPlayerWatchers } = await import("../community/web-push");
+    await sendWebPushToPlayerWatchers(
+      { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB },
+      playerId, teamId,
+      `⭐ ${player.first_name} ${player.last_name} je volný!`,
+      `${player.team_name} ho uvolnil — teď je k mání jako volný hráč.`,
+      "/dashboard/transfers",
+    );
+  } catch (e) { logger.warn({ module: "game" }, "watcher push on release", e); }
+
   return c.json({ ok: true });
   } catch (e) { logger.error({ module: "game" }, "release player failed", e); return c.json({ error: String(e) }, 500); }
 });
@@ -5053,6 +5065,12 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
       `✅ Prodej ${playerName} dokončen`,
       `${buyer.name} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.`,
       "/dashboard/transfers", pushEnv);
+    // Push týmům sledujícím hráče ve watchlistu (kromě obou stran přestupu)
+    const { sendWebPushToPlayerWatchers } = await import("../community/web-push");
+    await sendWebPushToPlayerWatchers(pushEnv, playerId, buyerTeamId,
+      `⭐ ${playerName} přestoupil`,
+      `${seller?.name ?? "Klub"} → ${buyer.name} za ${amount.toLocaleString("cs-CZ")} Kč.`,
+      `/dashboard/player/${playerId}`);
   } catch (e) { logger.warn({ module: "game" }, "bid accept notifications", e); }
 
   return c.json({ ok: true });
@@ -5873,6 +5891,12 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     const acceptNote = acceptMessage ? ` „${acceptMessage}"` : "";
     await createNotification(c.env.DB, buyerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `Koupili jste od ${seller?.name ?? "prodávajícího"} za ${amount.toLocaleString("cs-CZ")} Kč.${acceptNote}`, `/dashboard/transfers/offer/${offerId}`, pushEnv);
     await createNotification(c.env.DB, sellerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `${buyer.name} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.${acceptNote}`, `/dashboard/transfers/offer/${offerId}`, pushEnv);
+    // Push týmům sledujícím hráče ve watchlistu (kromě obou stran)
+    const { sendWebPushToPlayerWatchers } = await import("../community/web-push");
+    await sendWebPushToPlayerWatchers(pushEnv, offer.player_id as string, buyerTeamId,
+      `⭐ ${playerName} ${offerType === "loan" ? "jde na hostování" : "přestoupil"}`,
+      `${seller?.name ?? "Klub"} → ${buyer.name} za ${amount.toLocaleString("cs-CZ")} Kč.`,
+      `/dashboard/player/${offer.player_id}`);
   } catch (e) { logger.warn({ module: "game" }, "offer accept notifications", e); }
 
   return c.json({ ok: true });
