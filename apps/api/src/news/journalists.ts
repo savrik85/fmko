@@ -295,11 +295,7 @@ export function pokynyProRedaktora(j: Journalist, sentiment = 0): string {
   if (j.style === "patriot") radky.push("Fandíš okresnímu fotbalu jako celku — atmosféra, kotel a lidi kolem tě zajímají víc než tabulka.");
   if (j.style === "vycurany") radky.push("Působíš přátelsky, ale otázky i formulace mají druhé dno.");
 
-  if (sentiment >= 40) {
-    radky.push("K tomuhle klubu máš slabost — píšeš o něm s pochopením a chyby omlouváš.");
-  } else if (sentiment <= -40) {
-    radky.push("S tímhle klubem máš spory. Píšeš o něm kriticky a nic mu neodpustíš (ale nevymýšlíš si fakta).");
-  }
+  radky.push(vztahKeKlubuText(sentiment));
 
   radky.push(`Tvoje oblíbená hláška: „${j.hlaska}" — použij ji nanejvýš jednou a jen když sedne.`);
   radky.push("Článek NEPODEPISUJ — podpis doplní sazba.");
@@ -307,6 +303,28 @@ export function pokynyProRedaktora(j: Journalist, sentiment = 0): string {
   // blok, začal odrážkami odpovídat a místo článku vyplivl číslovaný seznam.
   radky.push("Piš souvislý text v odstavcích. Nikdy nečísluj věty ani odstavce a nepoužívej odrážky či nadpisy.");
   return radky.join(" ");
+}
+
+/**
+ * Jak se vztah ke klubu propisuje do práce redaktora — do otázek i do článku.
+ *
+ * Odstupňované schválně jemně: dřív se pod ±40 nedělo vůbec nic, takže hráč
+ * viděl pořád stejné neutrální otázky, i když si redaktora už znepřátelil.
+ */
+export function vztahKeKlubuText(sentiment: number): string {
+  if (sentiment >= 70) {
+    return "Tenhle klub je tvůj oblíbenec. V otázkách trenérovi nahráváš, dáváš mu prostor se pochlubit, nepříjemná témata obcházíš a v článku chyby omlouváš.";
+  }
+  if (sentiment >= 30) {
+    return "K tomuhle klubu máš slabost. Otázky jsou vstřícné — spíš příležitost se předvést než past — a v článku píšeš s pochopením.";
+  }
+  if (sentiment <= -70) {
+    return "Tenhle klub nesnášíš a je to znát. Otázky jsou ostré až provokativní: připomínáš prohry a trapné momenty, rýpeš do slabin, hledáš, kde se trenér chytne. V článku mu nic neodpustíš. Fakta si ale nevymýšlíš.";
+  }
+  if (sentiment <= -30) {
+    return "S tímhle klubem máš spory. Otázky jsou nepříjemné — jdeš po slabinách a připomínáš, co se nepovedlo. V článku jsi kritický. Fakta si ale nevymýšlíš.";
+  }
+  return "K tomuhle klubu nemáš zvláštní vztah — ptáš se věcně.";
 }
 
 /** Slovní popis vztahu pro UI i pro log. */

@@ -207,6 +207,7 @@ export async function generateInterviewQuestions(
   apiKey: string,
   ctx: MatchContext,
   pokynyRedaktora?: string,
+  vztahPokyn?: string,
 ): Promise<string[] | null> {
   const topStr = ctx.topPlayers
     .map((p) => `${p.name} (${p.position}${p.goals ? `, ${p.goals} gólů` : ""})`)
@@ -263,9 +264,12 @@ INSTRUKCE:
 - KAŽDÁ otázka musí být konkrétní — používej JEN fakta z kontextu níže (jména hráčů ze seznamu, skutečný poslední výsledek, formu)
 - Nepokládej obecné otázky jako "jak hodnotíte formu" nebo "co od zápasu čekáte" — to je nuda. Ale když nemáš konkrétní data, raději obecná otázka než vymyšlená fakta.
 - Otázky piš jednu per řádek, bez číslování, bez odrážek, bez markdown
-- Jazyk: hovorová čeština, bulvárnější novinářský tón, vykání trenéru
+- Jazyk: hovorová čeština, vykání trenéru. TÓN a ostrost otázek se řídí tvojí povahou a vztahem ke klubu z úvodu — ne tímhle seznamem.
 - Délka každé otázky: 1–2 věty max
 - PŘESNĚ 3 otázky, v tomto pořadí:
+
+🎯 TVŮJ VZTAH KE KLUBU (řídí ostrost VŠECH tří otázek):
+${vztahPokyn ?? "Vztah neutrální — ptej se věcně."}
 
 OTÁZKA 1 — o vlastním týmu / nadcházejícím zápase: použij JEN fakt z "Forma" nebo "Poslední výsledek" nebo jméno hráče ze seznamu povolených
 OTÁZKA 2 — taktika, sestava, zranění nebo klíčový hráč: použij JEN jméno ze seznamu povolených hráčů (nebo ze "Zranění", pokud jsou). Pokud žádné jméno nemáš, ptej se na taktiku obecně bez jmen.
@@ -527,11 +531,13 @@ export async function tryCreateInterviewRequest(
   };
 
   // 7. Generuj otázky přes Gemini — ptá se konkrétní redaktor
-  const { redaktorProRubriku, pokynyProRedaktora, sentimentKeKlubu } = await import("./journalists");
+  const { redaktorProRubriku, pokynyProRedaktora, sentimentKeKlubu, vztahKeKlubuText } = await import("./journalists");
   const redaktor = await redaktorProRubriku(db, ctx.leagueId, "interview", teamRow.team_id as string);
   const vztah = redaktor ? await sentimentKeKlubu(db, redaktor.id, teamRow.team_id as string) : 0;
   const questions = await generateInterviewQuestions(
-    geminiApiKey, matchCtx, redaktor ? pokynyProRedaktora(redaktor, vztah) : undefined,
+    geminiApiKey, matchCtx,
+    redaktor ? pokynyProRedaktora(redaktor, vztah) : undefined,
+    redaktor ? vztahKeKlubuText(vztah) : undefined,
   );
   if (!questions || questions.length === 0) {
     logger.warn({ module: "interview-generator" }, "failed to generate questions", teamRow.team_id);
