@@ -917,12 +917,13 @@ teamsRouter.get("/:id", async (c) => {
   // team.* už obsahuje badge_primary_color, badge_secondary_color, badge_initials, badge_symbol
 
   const stadium = await c.env.DB.prepare(
-    "SELECT capacity, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1"
-  ).bind(c.req.param("id")).first().catch((e) => { logger.warn({ module: "teams" }, "db op failed", e); return null; });
+    "SELECT capacity, stands, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1"
+  ).bind(c.req.param("id")).first<{ capacity: number; stands: number | null; pitch_condition: number; pitch_type: string }>().catch((e) => { logger.warn({ module: "teams" }, "db op failed", e); return null; });
+  const { calculateFacilityEffects: calcFxTeam } = await import("../stadium/stadium-generator");
 
   return c.json({
     ...team,
-    stadium: stadium ? { name: team.stadium_name, capacity: stadium.capacity, pitchCondition: stadium.pitch_condition, pitchType: stadium.pitch_type } : null,
+    stadium: stadium ? { name: team.stadium_name, capacity: stadium.capacity + calcFxTeam({ stands: stadium.stands ?? 0 }).capacityBonus, pitchCondition: stadium.pitch_condition, pitchType: stadium.pitch_type } : null,
   });
 });
 
@@ -1401,9 +1402,11 @@ teamsRouter.get("/:id/club", async (c) => {
   if (!team) return c.json({ error: "Team not found" }, 404);
 
   const stadium = await c.env.DB.prepare(
-    "SELECT capacity, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1"
-  ).bind(teamId).first<{ capacity: number; pitch_condition: number; pitch_type: string }>()
+    "SELECT capacity, stands, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1"
+  ).bind(teamId).first<{ capacity: number; stands: number | null; pitch_condition: number; pitch_type: string }>()
     .catch((e) => { logger.warn({ module: "teams" }, "fetch stadium for /club", e); return null; });
+  const { calculateFacilityEffects: calcFxClub } = await import("../stadium/stadium-generator");
+  const clubCapacity = stadium ? stadium.capacity + calcFxClub({ stands: stadium.stands ?? 0 }).capacityBonus : null;
 
   // Hlavní sponzor — spravuje se přes /dashboard/sponsors, ne v /klub/dres
   const mainSponsor = await c.env.DB.prepare(
@@ -1434,7 +1437,7 @@ teamsRouter.get("/:id/club", async (c) => {
     },
     stadium: {
       name: team.stadium_name,
-      capacity: stadium?.capacity ?? null,
+      capacity: clubCapacity,
       pitchCondition: stadium?.pitch_condition ?? null,
       pitchType: stadium?.pitch_type ?? null,
       nickname: team.stadium_nickname,
@@ -3083,16 +3086,21 @@ teamsRouter.get("/:id/fanbase", async (c) => {
     return c.json({ error: "Tým nenalezen" }, 404);
   }
 
+  // Tabulka je `stadiums` (dřívější překlep `stadium` → dotaz vždy spadl do .catch
+  // a kapacita byla věčných 200). Efektivní kapacita = základ + bonus tribun,
+  // stejně jako v match-runneru.
   const stadiumRow = await c.env.DB.prepare(
-    "SELECT capacity FROM stadium WHERE team_id = ?",
+    "SELECT capacity, stands FROM stadiums WHERE team_id = ?",
   )
     .bind(teamId)
-    .first<{ capacity: number }>()
+    .first<{ capacity: number; stands: number | null }>()
     .catch((e) => {
       logger.warn({ module: "teams" }, "load stadium capacity", e);
       return null;
     });
-  const capacity = stadiumRow?.capacity ?? 200;
+  const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
+  const capacity = (stadiumRow?.capacity ?? 200)
+    + calculateFacilityEffects({ stands: stadiumRow?.stands ?? 0 }).capacityBonus;
 
   const satelliteRows = await c.env.DB.prepare(
     `SELECT bsf.village_id, v.name, v.population, v.lat, v.lng,

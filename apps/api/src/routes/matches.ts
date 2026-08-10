@@ -127,10 +127,12 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
     };
   };
 
-  // Stadium of home team (where the match is played)
+  // Stadium of home team (where the match is played) — efektivní kapacita včetně tribun
   const stadium = await c.env.DB.prepare(
-    "SELECT capacity, pitch_condition, pitch_type FROM stadiums WHERE team_id = ?"
-  ).bind(homeId).first<{ capacity: number; pitch_condition: number; pitch_type: string }>().catch((e) => { logger.warn({ module: "matches" }, "fetch stadium for preview", e); return null; });
+    "SELECT capacity, stands, pitch_condition, pitch_type FROM stadiums WHERE team_id = ?"
+  ).bind(homeId).first<{ capacity: number; stands: number | null; pitch_condition: number; pitch_type: string }>().catch((e) => { logger.warn({ module: "matches" }, "fetch stadium for preview", e); return null; });
+  const { calculateFacilityEffects: calcFxPreview } = await import("../stadium/stadium-generator");
+  const previewCapacity = stadium ? stadium.capacity + calcFxPreview({ stands: stadium.stands ?? 0 }).capacityBonus : 0;
 
   // Weather forecast
   const { generateForecast } = await import("../season/weather");
@@ -147,7 +149,7 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
     away: mapTeam(awayTeam, awayPlayers, awayManager),
     venue: {
       name: (homeTeam.stadium_name as string) || `Hřiště ${homeTeam.name}`,
-      capacity: stadium?.capacity ?? 0,
+      capacity: previewCapacity,
       pitchCondition: stadium?.pitch_condition ?? 50,
       pitchType: stadium?.pitch_type ?? "natural",
     },

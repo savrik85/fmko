@@ -1620,9 +1620,14 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     });
   }
 
+  // Efektivní kapacita = základ + bonus tribun. Stejný výpočet používá zápasový
+  // engine (match-runner) i pohár — zobrazené číslo musí sedět s limitem v zápase.
+  const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
+  const effectiveCapacity = ((stadium.capacity as number) ?? 200) + calculateFacilityEffects(facilities).capacityBonus;
+
   return c.json({
     stadiumName: teamInfo?.stadium_name ?? null,
-    capacity: stadium.capacity,
+    capacity: effectiveCapacity,
     pitchCondition: stadium.pitch_condition,
     pitchType: stadium.pitch_type,
     facilities,
@@ -1685,13 +1690,11 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
     `UPDATE stadiums SET ${body.facility} = ? WHERE team_id = ?`
   ).bind(upgrade.nextLevel, teamId).run();
 
-  // Stands upgrade: increase capacity
-  if (body.facility === "stands") {
-    const capacityBonus = [0, 50, 150, 300][upgrade.nextLevel] ?? 0;
-    await c.env.DB.prepare(
-      "UPDATE stadiums SET capacity = capacity + ? WHERE team_id = ?"
-    ).bind(capacityBonus, teamId).run();
-  }
+  // Kapacita se do sloupce capacity NEZAPISUJE — sloupec drží základ stadionu a bonus
+  // tribun se přičítá při čtení (match-runner, cup, GET /stadium) z úrovně stands.
+  // Dřívější `capacity += [50,150,300][level]` počítal bonus dvakrát (a kumulativně
+  // absolutně: L0→L3 přičetl 500 místo 300), zatímco obecní spolufinancování
+  // nepřičítalo nic — tři různé kapacity podle cesty upgradu.
 
   return c.json({ ok: true, cost: upgrade.cost, newLevel: upgrade.nextLevel });
 });
