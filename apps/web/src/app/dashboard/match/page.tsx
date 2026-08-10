@@ -429,6 +429,29 @@ function MatchPage() {
     const summary = Object.entries(counts).map(([type, count]) => ({ type, count })).filter((r) => r.count > 0);
     return { relSummary: summary, chemistry: computeLineupChemistry(pairs), chemPairs: pairs };
   })();
+
+  // Dvojice, které se znají, ale nejsou spolu v základní jedenáctce — z nich se dá poradit
+  // konkrétně („postav je vedle sebe") místo obecného „vazby časem vzniknou". Rivaly a švagry
+  // sem schválně nedáváme: ty do sestavy nikdo přidávat nechce.
+  const NEGATIVE_TYPES = new Set(["rivals", "in_laws"]);
+  const availablePairs = (() => {
+    const seen = new Set<string>();
+    const out: Array<{ aName: string; bName: string; type: string }> = [];
+    for (const p of players) {
+      if (p.absent) continue;
+      for (const r of p.relationships ?? []) {
+        if (NEGATIVE_TYPES.has(r.type)) continue;
+        if (selected.includes(p.id) && selected.includes(r.otherPlayerId)) continue;
+        const other = players.find((pl) => pl.id === r.otherPlayerId);
+        if (!other || other.absent) continue;
+        const key = [p.id, r.otherPlayerId].sort().join("|");
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ aName: `${p.firstName} ${p.lastName}`, bName: `${other.firstName} ${other.lastName}`, type: r.type });
+      }
+    }
+    return out;
+  })();
   const chemColor = chemistry >= 65 ? "text-pitch-500" : chemistry >= 45 ? "text-gold-600" : "text-card-red";
   const chemLabel = chemistry >= 70 ? "Skvělá" : chemistry >= 55 ? "Dobrá" : chemistry >= 40 ? "Průměrná" : "Špatná";
 
@@ -979,10 +1002,30 @@ function MatchPage() {
                 </div>
               </>
             )}
-            {relSummary.length === 0 && (
+            {relSummary.length === 0 && availablePairs.length > 0 && (
               <div className="text-[11px] text-muted leading-snug">
-                V téhle jedenáctce se zatím nikdo blíž nezná. Vazby vznikají samy, když do
-                kádru přijde někdo z okolí — soused, kolega z práce nebo vrstevník.
+                V základní jedenáctce se zatím nikdo blíž nezná — v kádru ale ano.
+                Postav je vedle sebe a chemie naskočí:
+                <span className="block mt-1">
+                  {availablePairs.slice(0, 3).map((p, i) => (
+                    <span key={i} className="block">
+                      <span className="text-ink font-heading font-bold">{p.aName}</span>
+                      {" a "}
+                      <span className="text-ink font-heading font-bold">{p.bName}</span>
+                      {" — "}{REL_LABEL[p.type]?.toLowerCase() ?? p.type}
+                    </span>
+                  ))}
+                  {availablePairs.length > 3 && (
+                    <span className="block">a další {availablePairs.length - 3}…</span>
+                  )}
+                </span>
+              </div>
+            )}
+            {relSummary.length === 0 && availablePairs.length === 0 && (
+              <div className="text-[11px] text-muted leading-snug">
+                V kádru se zatím nikdo blíž nezná. Vazby vznikají samy, jak se soupiska mění —
+                nováček z vesnice si najde souseda, vrstevníka ze školy, kolegu z práce nebo
+                parťáka na pivo. Bratři a mentorské dvojice se objeví taky, jen vzácněji.
               </div>
             )}
           </div>
