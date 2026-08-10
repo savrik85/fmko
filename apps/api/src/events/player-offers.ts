@@ -9,6 +9,7 @@ import { generatePlayer, type VillageInfo } from "../generators/player";
 import { generateHeightWeight } from "../generators/physicals";
 import { getDistrictDataFromDB } from "../data/districts";
 import { generatePlayerFace } from "../routes/teams";
+import { overallRatingFromFlat } from "../skills/generator";
 import { logger } from "../lib/logger";
 
 const SOURCES = [
@@ -101,8 +102,9 @@ export async function generatePlayerOffer(
   // Youth players are local kids — higher patriotism
   if (isYouth) player.patriotism = Math.min(20, (player.patriotism ?? 10) + rng.int(3, 6));
 
-  // Calculate rating — fallback if generatePlayer returns undefined props
-  // Youth players have lower base skills (0-30) but hidden talent potential
+  // Dovednosti. MUSÍ jich být kompletní sada — dřív se generovalo jen 9 z 13 a hráčům
+  // z nabídek pak v profilu svítily nuly u přehledu, kreativity a standardek, protože
+  // je nikdo nikdy nedoplnil. Zkušenost chyběla taky.
   const fb = () => isYouth ? rng.int(3, 30) : rng.int(15, 45);
   const skills = {
     speed: isYouth ? rng.int(3, 30) : (player.speed ?? fb()),
@@ -114,20 +116,31 @@ export async function generatePlayerOffer(
     goalkeeping: isYouth ? (pos === "GK" ? rng.int(10, 35) : 0) : (player.goalkeeping ?? (pos === "GK" ? rng.int(30, 60) : 0)),
     stamina: isYouth ? rng.int(15, 45) : (player.stamina ?? fb()),
     strength: isYouth ? rng.int(5, 25) : (player.strength ?? fb()),
+    vision: isYouth ? rng.int(3, 30) : fb(),
+    creativity: isYouth ? rng.int(3, 28) : fb(),
+    setPieces: isYouth ? rng.int(2, 26) : fb(),
+    // Zkušenost roste s věkem stejně jako v hlavním generátoru (skills/generator.ts)
+    experience: Math.min(100, Math.max(0, (age - 16) * rng.int(3, 6))),
   };
-  const posWeights: Record<string, Record<string, number>> = {
-    GK: { goalkeeping: 4, strength: 2, stamina: 1 },
-    DEF: { defense: 3, heading: 2, strength: 2, speed: 1, stamina: 2, passing: 1 },
-    MID: { passing: 3, technique: 2, stamina: 3, speed: 1, shooting: 1 },
-    FWD: { shooting: 3, speed: 3, technique: 2, heading: 1, stamina: 1 },
+
+  // Výdrž a síla se ukládají do skills i do physical — MUSÍ tam být stejné číslo.
+  // Dřív se do physical psaly hodnoty z generátoru a do skills jiné náhodné, takže
+  // hodnocení počítalo s jednou a zápasový engine s druhou (u dorostenců rozdíl i 37 bodů).
+  const physical = {
+    stamina: skills.stamina,
+    strength: skills.strength,
+    injuryProneness: player.injuryProneness ?? 50,
+    ...generateHeightWeight(rng, pos, player.bodyType ?? "normal"),
+    preferredFoot: player.preferredFoot,
+    preferredSide: player.preferredSide,
   };
-  const w = posWeights[pos] ?? posWeights.MID;
-  let wSum = 0, wTotal = 0;
-  for (const [k, wt] of Object.entries(w)) {
-    wSum += ((skills as Record<string, number>)[k] ?? 30) * wt;
-    wTotal += wt;
-  }
-  const overallRating = Math.round(wTotal > 0 ? wSum / wTotal : 30);
+
+  const hiddenTalent = isYouth ? rng.int(20, 65) : 0;
+
+  // Hodnocení počítá TÁŽ funkce jako zbytek hry (včetně bonusu za skrytý talent).
+  // Vlastní zjednodušený vzorec tu dřív dával jiné číslo, než jaké hráči vyšlo hned
+  // po prvním tréninku — v UI to vypadalo, že mu rating bez důvodu skočil.
+  const overallRating = overallRatingFromFlat(pos, skills, physical, hiddenTalent) ?? 30;
   const weeklyWage = Math.round(10 + (overallRating / 100) * 400);
 
   const expiresAt = new Date(gameDate);
@@ -141,11 +154,11 @@ export async function generatePlayerOffer(
     offerId, teamId, sourceType.source, sourceType.senderName, message,
     player.firstName, player.lastName, null, age, pos, overallRating,
     JSON.stringify(skills),
-    JSON.stringify({ stamina: player.stamina, strength: player.strength, injuryProneness: player.injuryProneness ?? 50, ...generateHeightWeight(rng, pos, player.bodyType ?? "normal"), preferredFoot: player.preferredFoot, preferredSide: player.preferredSide }),
+    JSON.stringify(physical),
     JSON.stringify({
       discipline: player.discipline, patriotism: player.patriotism,
       alcohol: player.alcohol, temper: player.temper,
-      ...(isYouth ? { hiddenTalent: rng.int(20, 65) } : {}),
+      ...(isYouth ? { hiddenTalent } : {}),
     }),
     JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
     JSON.stringify(generatePlayerFace({ age: player.age ?? age, bodyType: player.bodyType ?? "normal", ethnicity: player.ethnicity })),
