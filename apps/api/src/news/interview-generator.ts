@@ -259,6 +259,7 @@ fotbalového týmu ${ctx.teamName} před zápasem ${ctx.isHome ? "doma" : "venku
 - NIKDY si nevymýšlej jména trenérů. ${ctx.opponentManagerName ? `Jediný povolený trenér soupeře: "${ctx.opponentManagerName}".` : "Jméno trenéra soupeře NEMÁŠ — nesmíš žádné použít."}
 - NIKDY si nevymýšlej zranění, citáty, ani události, které nejsou v kontextu níže.
 - Pokud pro nějakou otázku nemáš dost konkrétních dat z kontextu, napiš obecnější otázku BEZ vymyšlených faktů — to je VŽDY lepší než si něco vycucat z prstu.
+- NIKDY nezmiňuj, co v zadání máš nebo nemáš k dispozici. Formulace typu „když nemáme jména hráčů" nebo „bez konkrétních dat" do otázky nepatří — trenér ani čtenář o tvém zadání nevědí.
 
 INSTRUKCE:
 - KAŽDÁ otázka musí být konkrétní — používej JEN fakta z kontextu níže (jména hráčů ze seznamu, skutečný poslední výsledek, formu)
@@ -378,7 +379,7 @@ ${qaPairs}`;
 export async function tryCreateInterviewRequest(
   db: D1Database,
   geminiApiKey: string | undefined,
-  ctx: { leagueId: string; calendarId: string; gameWeek: number },
+  ctx: { leagueId: string; calendarId: string; gameWeek: number; forceTeamId?: string },
 ): Promise<void> {
   if (!geminiApiKey) {
     logger.warn({ module: "interview-generator" }, "no gemini key, skipping");
@@ -398,12 +399,13 @@ export async function tryCreateInterviewRequest(
            SELECT 1 FROM coach_interviews ci
            WHERE ci.team_id = t.id AND ci.match_calendar_id = ?
          )
+         AND (?3 IS NULL OR t.id = ?3)
        ORDER BY (
          SELECT MAX(ci.created_at) FROM coach_interviews ci WHERE ci.team_id = t.id
        ) ASC NULLS FIRST
        LIMIT 1`,
     )
-    .bind(ctx.leagueId, ctx.calendarId)
+    .bind(ctx.leagueId, ctx.calendarId, ctx.forceTeamId ?? null)
     .first<{
       team_id: string;
       user_id: string;

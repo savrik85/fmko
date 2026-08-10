@@ -6671,13 +6671,16 @@ gameRouter.post("/admin/teams/:teamId/generate-interview", async (c) => {
   if (!nextMatch) return c.json({ error: "Zadny nadchazejici zapas" }, 404);
 
   const { tryCreateInterviewRequest } = await import("../news/interview-generator");
+  // Dev trigger cílí na tým z cesty — jinak round-robin vybere kohokoli
+  // a nejde otestovat, jak se rozhovor liší podle vztahu ke konkrétnímu klubu.
   await tryCreateInterviewRequest(c.env.DB, (c.env as any).GEMINI_API_KEY, {
     leagueId: nextMatch.league_id,
     calendarId: nextMatch.calendar_id,
     gameWeek: nextMatch.game_week,
+    forceTeamId: teamId,
   });
 
-  return c.json({ ok: true, calendarId: nextMatch.calendar_id, gameWeek: nextMatch.game_week });
+  return c.json({ ok: true, calendarId: nextMatch.calendar_id, gameWeek: nextMatch.game_week, teamId });
 });
 
 // POST /api/admin/leagues/:leagueId/generate-matchday-preview — dev trigger
