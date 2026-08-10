@@ -139,18 +139,21 @@ export async function generateMatchdayPreview(
 ): Promise<void> {
   // Info o lize + game_week (nejdřív, pro idempotency check)
   const calInfoEarly = await db.prepare(
-    "SELECT game_week FROM season_calendar WHERE id = ?"
-  ).bind(calendarId).first<{ game_week: number }>()
+    "SELECT game_week, season_number FROM season_calendar WHERE id = ?"
+  ).bind(calendarId).first<{ game_week: number; season_number: number }>()
     .catch((e) => { logger.warn({ module: "matchday-preview" }, "load calendar early", e); return null; });
   const gameWeekEarly = calInfoEarly?.game_week ?? 0;
+  const seasonNumber = calInfoEarly?.season_number ?? 1;
 
-  // Idempotency: pokud už preview pro tuto ligu + kolo existuje, skip
+  // Idempotency: pokud už preview pro tuto ligu + sezónu + kolo existuje, skip.
+  // Sezóna v podmínce být musí — jinak druhá sezóna narazí na loňské preview
+  // téhož kola a žádné další se nevygeneruje.
   const existing = await db.prepare(
-    "SELECT id FROM news WHERE league_id = ? AND type = 'matchday_preview' AND game_week = ?"
-  ).bind(leagueId, gameWeekEarly).first<{ id: string }>()
+    "SELECT id FROM news WHERE league_id = ? AND type = 'matchday_preview' AND game_week = ? AND season_number = ?"
+  ).bind(leagueId, gameWeekEarly, seasonNumber).first<{ id: string }>()
     .catch((e) => { logger.warn({ module: "matchday-preview" }, "idempotency check", e); return null; });
   if (existing) {
-    logger.info({ module: "matchday-preview" }, `skip — preview already exists for league ${leagueId} week ${gameWeekEarly}`);
+    logger.info({ module: "matchday-preview" }, `skip — preview already exists for league ${leagueId} season ${seasonNumber} week ${gameWeekEarly}`);
     return;
   }
 
@@ -383,8 +386,8 @@ Styl:
   }
 
   await db.prepare(
-    "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'matchday_preview', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
-  ).bind(crypto.randomUUID(), leagueId, headline, article, gameWeek).run()
+    "INSERT INTO news (id, league_id, type, headline, body, game_week, season_number, created_at) VALUES (?, ?, 'matchday_preview', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+  ).bind(crypto.randomUUID(), leagueId, headline, article, gameWeek, seasonNumber).run()
     .catch((e) => { logger.warn({ module: "matchday-preview" }, "insert news", e); });
 
   logger.info({ module: "matchday-preview" }, `preview generated for league ${leagueId} week ${gameWeek}: "${headline}"`);

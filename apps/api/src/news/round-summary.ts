@@ -57,17 +57,18 @@ export async function generateRoundSummary(
 ): Promise<{ awarded: boolean; reason?: string }> {
   // 1. Load calendar info
   const cal = await db.prepare(
-    "SELECT league_id, game_week FROM season_calendar WHERE id = ?"
-  ).bind(calendarId).first<{ league_id: string; game_week: number }>()
+    "SELECT league_id, game_week, season_number FROM season_calendar WHERE id = ?"
+  ).bind(calendarId).first<{ league_id: string; game_week: number; season_number: number }>()
     .catch((e) => { logger.warn({ module: "round-summary" }, "load calendar", e); return null; });
   if (!cal) return { awarded: false, reason: "calendar not found" };
 
-  const { league_id: leagueId, game_week: gameWeek } = cal;
+  const { league_id: leagueId, game_week: gameWeek, season_number: seasonNumber } = cal;
 
-  // 2. Idempotency
+  // 2. Idempotency — vždy včetně sezóny. Bez ní by druhá sezóna od 8. kola
+  // narazila na loňský záznam a ocenění by se přestala udělovat nadobro.
   const existing = await db.prepare(
-    "SELECT id FROM round_awards WHERE league_id = ? AND game_week = ?"
-  ).bind(leagueId, gameWeek).first<{ id: string }>()
+    "SELECT id FROM round_awards WHERE league_id = ? AND season_number = ? AND game_week = ?"
+  ).bind(leagueId, seasonNumber, gameWeek).first<{ id: string }>()
     .catch((e) => { logger.warn({ module: "round-summary" }, "idempotency check", e); return null; });
   if (existing) {
     logger.info({ module: "round-summary" }, `skip — already generated for league ${leagueId} week ${gameWeek}`);
@@ -280,17 +281,17 @@ PRAVIDLA:
   const awardId = crypto.randomUUID();
 
   await db.prepare(
-    "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_summary', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
-  ).bind(newsId, leagueId, parsed.headline.trim(), parsed.body.trim(), gameWeek).run()
+    "INSERT INTO news (id, league_id, type, headline, body, game_week, season_number, created_at) VALUES (?, ?, 'round_summary', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+  ).bind(newsId, leagueId, parsed.headline.trim(), parsed.body.trim(), gameWeek, seasonNumber).run()
     .catch((e) => { logger.warn({ module: "round-summary" }, "insert news", e); });
 
   await db.prepare(
-    `INSERT INTO round_awards (id, league_id, calendar_id, game_week,
+    `INSERT INTO round_awards (id, league_id, calendar_id, game_week, season_number,
        player_of_round_id, manager_of_round_team_id,
        player_reason, manager_reason, news_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
   ).bind(
-    awardId, leagueId, calendarId, gameWeek,
+    awardId, leagueId, calendarId, gameWeek, seasonNumber,
     parsed.playerOfRoundId, parsed.managerOfRoundTeamId,
     parsed.playerReason ?? "", parsed.managerReason ?? "", newsId,
   ).run()
