@@ -91,8 +91,8 @@ PRAVIDLA:
   }
 
   await db.prepare(
-    "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'season_wrap', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",
-  ).bind(crypto.randomUUID(), leagueId, headline, body, gameWeek).run()
+    "INSERT INTO news (id, league_id, type, headline, body, game_week, season_number, created_at) VALUES (?, ?, 'season_wrap', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",
+  ).bind(crypto.randomUUID(), leagueId, headline, body, gameWeek, seasonNumber).run()
     .catch((e) => logger.warn({ module: "season-wrap" }, "insert news", e));
 
   logger.info({ module: "season-wrap" }, `wrap article league=${leagueId} s=${seasonNumber}`);

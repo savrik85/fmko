@@ -1218,61 +1218,20 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
 
   // 3. Persistent news articles (zpravodaj, round results, manager arrival)
   if (team.league_id) {
-    const newsRows = await c.env.DB.prepare(
-      `SELECT n.id, n.type, n.headline, n.body, n.game_week, n.created_at, ur.photos_json FROM news n
-       LEFT JOIN matches m ON n.match_id = m.id AND n.type = 'promotion'
-       LEFT JOIN ultras_reports ur ON ur.news_id = n.id
-       WHERE (n.league_id = ? OR n.team_id = ?)
-         AND (n.type != 'promotion' OR COALESCE(m.status, 'upcoming') != 'simulated')
-       ORDER BY n.created_at DESC LIMIT 20`
-    ).bind(team.league_id, teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch news articles", e); return { results: [] }; });
+    const { loadFeedArticles, newsIcon } = await import("../news/feed");
+    const newsRows = await loadFeedArticles(c.env.DB, team.league_id, teamId)
+      .catch((e) => { logger.warn({ module: "game" }, "fetch news articles", e); return []; });
 
-    // Jednorázové sezónní články (otevírák, ohlédnutí) nesmí vytlačit smršť přestupových
-    // zpráv z AI trhu — čerstvé (do 7 dní) se přišpendlí i mimo LIMIT okno výše.
-    const pinnedRows = await c.env.DB.prepare(
-      `SELECT id, type, headline, body, game_week, created_at FROM news
-       WHERE league_id = ? AND type IN ('season_opener', 'season_wrap')
-         AND created_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-7 days')
-       ORDER BY created_at DESC LIMIT 2`
-    ).bind(team.league_id).all().catch((e) => { logger.warn({ module: "game" }, "fetch pinned season news", e); return { results: [] }; });
-
-    const seenNewsIds = new Set<string>();
-    const combinedRows = [...newsRows.results, ...pinnedRows.results].filter((n) => {
-      const id = n.id as string;
-      if (seenNewsIds.has(id)) return false;
-      seenNewsIds.add(id);
-      return true;
-    });
-
-    for (const n of combinedRows) {
-      const iconMap: Record<string, string> = {
-        manager_arrival: "\u{1F4CB}",
-        round_results: "\u26BD",
-        seasonal: "\u{1F389}",
-        municipal_elections: "\u{1F5F3}\uFE0F",
-        transfer: "\u{1F91D}",
-        celebrity_arrival: "\u{1F31F}",
-        celebrity_signing: "\u{1F4DD}",
-        ai_report: "\u270D\uFE0F",
-        promotion: "\u{1F4E2}",
-        interview: "\u{1F399}\uFE0F",
-        player_interview: "\u{1F3A4}",
-        manager_feud: "\u{1F5E3}\uFE0F",
-        season_wrap: "\u{1F3C1}",
-        season_opener: "\u{1F3BA}",
-        season_awards: "\u{1F3C6}",
-        legend_farewell: "\u{1F396}\uFE0F",
-        ultras_report: "\u{1F525}",
-      };
+    for (const n of newsRows) {
       articles.push({
-        id: n.id as string,
-        type: n.type as string,
-        headline: n.headline as string,
-        body: n.body as string,
-        icon: iconMap[n.type as string] ?? "\u{1F4F0}",
-        date: n.created_at as string,
-        gameWeek: n.game_week as number | null,
-        photos: n.photos_json ? JSON.parse(n.photos_json as string) : undefined,
+        id: n.id,
+        type: n.type,
+        headline: n.headline,
+        body: n.body,
+        icon: newsIcon(n.type),
+        date: n.created_at,
+        gameWeek: n.game_week,
+        photos: n.photos_json ? JSON.parse(n.photos_json) : undefined,
       } as any);
     }
   }
@@ -1280,7 +1239,14 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
   // Sort by date
   articles.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  return c.json({ articles });
+  // Hlavička novin uvádí sezónu — bez toho by tam navždy svítila „Sezóna 1".
+  const seasonRow = team.league_id
+    ? await c.env.DB.prepare("SELECT MAX(season_number) as s FROM season_calendar WHERE league_id = ?")
+        .bind(team.league_id).first<{ s: number | null }>()
+        .catch((e) => { logger.warn({ module: "game" }, "fetch season for news", e); return null; })
+    : null;
+
+  return c.json({ articles, season: seasonRow?.s ?? 1 });
 });
 
 // GET /api/teams/:id/transfers — generate transfer offers + departure risks

@@ -138,10 +138,10 @@ export async function generateUltrasReport(
   }
   const { league_id: leagueId, game_week: gameWeek, season_number: seasonNumber } = cal;
 
-  // 2. Idempotence — existuje už report pro tuto ligu+kolo?
+  // 2. Idempotence — existuje už report pro tuhle ligu, sezónu a kolo?
   const existing = await db
-    .prepare("SELECT 1 FROM ultras_reports WHERE league_id = ? AND game_week = ?")
-    .bind(leagueId, gameWeek)
+    .prepare("SELECT 1 FROM ultras_reports WHERE league_id = ? AND season_number = ? AND game_week = ?")
+    .bind(leagueId, seasonNumber, gameWeek)
     .first();
   if (existing) return { newsId: null, photos: 0, skipped: true };
 
@@ -214,15 +214,15 @@ export async function generateUltrasReport(
   const newsId = crypto.randomUUID();
   await db
     .prepare(
-      "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'ultras_report', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))",
+      "INSERT INTO news (id, league_id, type, headline, body, game_week, season_number, created_at) VALUES (?, ?, 'ultras_report', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))",
     )
-    .bind(newsId, leagueId, headline, body, gameWeek)
+    .bind(newsId, leagueId, headline, body, gameWeek, seasonNumber ?? 1)
     .run();
   await db
     .prepare(
       "INSERT OR IGNORE INTO ultras_reports (id, league_id, calendar_id, game_week, season_number, news_id, photos_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(crypto.randomUUID(), leagueId, calendarId, gameWeek, seasonNumber ?? 0, newsId, JSON.stringify(photos))
+    .bind(crypto.randomUUID(), leagueId, calendarId, gameWeek, seasonNumber ?? 1, newsId, JSON.stringify(photos))
     .run();
 
   return { newsId, photos: photos.length, skipped: false };

@@ -143,23 +143,23 @@ export async function generatePlayerInterview(
 
   // Load kolo
   const cal = await db
-    .prepare("SELECT league_id, game_week FROM season_calendar WHERE id = ?")
+    .prepare("SELECT league_id, game_week, season_number FROM season_calendar WHERE id = ?")
     .bind(calendarId)
-    .first<{ league_id: string; game_week: number }>()
+    .first<{ league_id: string; game_week: number; season_number: number }>()
     .catch((e) => {
       logger.warn({ module: "player-interview" }, "load calendar", e);
       return null;
     });
   if (!cal) return { created: 0, reason: "calendar not found" };
-  const { league_id: leagueId, game_week: gameWeek } = cal;
+  const { league_id: leagueId, game_week: gameWeek, season_number: seasonNumber } = cal;
 
   // Generuj až N rozhovorů na kolo, každý z jiného týmu. Počítadlo drží idempotenci
   // i při opakovaném spuštění (re-run match-runneru nepřekročí maxPerRound).
   let created = 0;
   for (let i = 0; i < maxPerRound; i++) {
     const existing = await db
-      .prepare("SELECT COUNT(*) AS c FROM news WHERE league_id = ? AND game_week = ? AND type = 'player_interview'")
-      .bind(leagueId, gameWeek)
+      .prepare("SELECT COUNT(*) AS c FROM news WHERE league_id = ? AND season_number = ? AND game_week = ? AND type = 'player_interview'")
+      .bind(leagueId, seasonNumber, gameWeek)
       .first<{ c: number }>()
       .catch((e) => {
         logger.warn({ module: "player-interview" }, "idempotency count", e);
@@ -170,7 +170,7 @@ export async function generatePlayerInterview(
       logger.info({ module: "player-interview" }, `skip — ${existing.c}/${maxPerRound} exist league ${leagueId} week ${gameWeek}`);
       break;
     }
-    const r = await generateOne(db, geminiApiKey, calendarId, leagueId, gameWeek);
+    const r = await generateOne(db, geminiApiKey, calendarId, leagueId, gameWeek, seasonNumber);
     if (!r.created) {
       logger.info({ module: "player-interview" }, `stop after ${created} — ${r.reason}`);
       break;
@@ -187,6 +187,7 @@ async function generateOne(
   calendarId: string,
   leagueId: string,
   gameWeek: number,
+  seasonNumber: number,
 ): Promise<{ created: boolean; reason?: string }> {
   // Round-robin tým: tým z tohoto kola nejdéle bez rozhovoru hráče (NULLS FIRST = nikdy),
   // který v TOMTO kole ještě rozhovor nemá → dva rozhovory za kolo jsou z různých týmů.
@@ -469,10 +470,10 @@ Odpověz POUZE valid JSON:
 
   await db
     .prepare(
-      `INSERT INTO news (id, league_id, team_id, type, headline, body, game_week, created_at)
-       VALUES (?, ?, ?, 'player_interview', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
+      `INSERT INTO news (id, league_id, team_id, type, headline, body, game_week, season_number, created_at)
+       VALUES (?, ?, ?, 'player_interview', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
     )
-    .bind(newsId, leagueId, teamRow.id, headline, body, gameWeek)
+    .bind(newsId, leagueId, teamRow.id, headline, body, gameWeek, seasonNumber)
     .run()
     .catch((e) => {
       logger.warn({ module: "player-interview" }, "insert news", e);

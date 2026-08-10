@@ -336,27 +336,25 @@ leagueRouter.get("/leagues/:leagueId/results", async (c) => {
 leagueRouter.get("/leagues/:leagueId/news", async (c) => {
   const leagueId = c.req.param("leagueId");
 
-  const newsRows = await c.env.DB.prepare(
-    "SELECT n.id, n.type, n.headline, n.body, n.game_week, n.created_at, ur.photos_json FROM news n LEFT JOIN ultras_reports ur ON ur.news_id = n.id WHERE n.league_id = ? ORDER BY n.created_at DESC LIMIT 30"
-  ).bind(leagueId).all().catch((e) => { logger.error({ module: "league" }, "fetch league news", e); return { results: [] }; });
+  // Stejný výběr po rubrikách jako u vlastního okresu — jinak by i tady
+  // přestupy vytlačily Hráče kola, Kotel a rozhovory mimo výpis.
+  const { loadFeedArticles, newsIcon } = await import("../news/feed");
+  const newsRows = await loadFeedArticles(c.env.DB, leagueId)
+    .catch((e) => { logger.error({ module: "league" }, "fetch league news", e); return []; });
 
-  const iconMap: Record<string, string> = {
-    round_results: "\u26BD", ai_report: "\u270D\uFE0F", transfer: "\u{1F91D}",
-    seasonal: "\u{1F389}", manager_arrival: "\u{1F4CB}",
-    interview: "\u{1F399}\uFE0F", round_summary: "\u{1F3C6}", player_interview: "\u{1F3A4}",
-    season_wrap: "\u{1F3C1}", season_awards: "\u{1F3C6}", legend_farewell: "\u{1F396}\uFE0F",
-    ultras_report: "\u{1F525}",
-  };
-
-  const articles = newsRows.results.map((n) => ({
-    id: n.id as string, type: n.type as string,
-    headline: (n.headline ?? n.type) as string, body: (n.body ?? "") as string,
-    icon: iconMap[n.type as string] ?? "\u{1F4F0}",
-    date: n.created_at as string, gameWeek: n.game_week as number | null,
-    photos: n.photos_json ? JSON.parse(n.photos_json as string) : undefined,
+  const articles = newsRows.map((n) => ({
+    id: n.id, type: n.type,
+    headline: n.headline ?? n.type, body: n.body ?? "",
+    icon: newsIcon(n.type),
+    date: n.created_at, gameWeek: n.game_week,
+    photos: n.photos_json ? JSON.parse(n.photos_json) : undefined,
   }));
 
-  return c.json({ articles });
+  const seasonRow = await c.env.DB.prepare("SELECT MAX(season_number) as s FROM season_calendar WHERE league_id = ?")
+    .bind(leagueId).first<{ s: number | null }>()
+    .catch((e) => { logger.error({ module: "league" }, "fetch season for news", e); return null; });
+
+  return c.json({ articles, season: seasonRow?.s ?? 1 });
 });
 
 // GET /api/leagues/:leagueId/transfers-overview — přehled přestupů v lize
