@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Team } from "@/lib/api";
@@ -293,8 +293,6 @@ export default function NewsPage() {
     (wrapArticles[0] && wrapArticles[0].id !== leadStory?.id ? wrapArticles[0] : null)
     ?? (roundSummaryArticles[0] && roundSummaryArticles[0].id !== leadStory?.id ? roundSummaryArticles[0] : null)
     ?? (aiReportArticles[0] && aiReportArticles[0].id !== leadStory?.id ? aiReportArticles[0] : null);
-  // Všechny match stories sjednocené (bez lead story pokud je match)
-  const matchStories = matchArticles.slice(leadStory?.type === "match" ? 1 : 0);
   // Ostatní drobnosti — bez typů z hlavních sekcí a bez duplicit s lead/secondary (podle id)
   const otherArticles = articles.filter(
     (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview", "ultras_report"].includes(a.type)
@@ -373,7 +371,7 @@ export default function NewsPage() {
                     <Podpis clanek={leadStory} stred />
                     <div className="np-text np-sloupce np-sloupce-3 np-iniciala text-[15px] mt-3">
                       {leadStory.body.split("\n").filter(Boolean).map((p, i) => (
-                        <p key={i} className="break-inside-avoid-column">{renderMarkdown(p)}</p>
+                        <p key={i}>{renderMarkdown(p)}</p>
                       ))}
                     </div>
                   </div>
@@ -414,7 +412,7 @@ export default function NewsPage() {
               <Podpis clanek={secondaryStory} stred />
               <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-3">
                 {secondaryStory.body.split("\n").filter(Boolean).map((p, i) => (
-                  <p key={i} className="break-inside-avoid-column">{renderMarkdown(p)}</p>
+                  <p key={i}>{renderMarkdown(p)}</p>
                 ))}
               </div>
             </section>
@@ -428,7 +426,7 @@ export default function NewsPage() {
               <Podpis clanek={ur} stred />
               <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-3">
                 {ur.body.split("\n").filter(Boolean).map((p, i) => (
-                  <p key={i} className="break-inside-avoid-column">{renderMarkdown(p)}</p>
+                  <p key={i}>{renderMarkdown(p)}</p>
                 ))}
               </div>
               {ur.photos && ur.photos.length > 0 && (
@@ -470,25 +468,15 @@ export default function NewsPage() {
                   let meta: { managerName?: string; managerAvatar?: Record<string, unknown> | null; teamName?: string; article?: string } = {};
                   try { meta = JSON.parse(iv.body); } catch (e) { console.error("parse rozhovoru trenéra:", e); meta = {}; }
                   return (
-                    <div key={iv.id} id={`news-${iv.id}`} className="py-5 first:pt-0">
-                      <h3 className="np-titulek text-xl sm:text-2xl mb-2">{iv.headline}</h3>
-                      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-ink/10">
-                        {meta.managerAvatar && Object.keys(meta.managerAvatar).length > 0 && (
-                          <FaceAvatar faceConfig={meta.managerAvatar} size={38} className="rounded-full border border-ink/20 shrink-0" />
-                        )}
-                        <div className="text-sm">
-                          <span className="font-heading font-bold">{meta.managerName ?? "Trenér"}</span>
-                          {meta.teamName && <span className="text-muted"> · {meta.teamName}</span>}
-                        </div>
-                        <div className="ml-auto"><Podpis clanek={iv} /></div>
-                      </div>
-                      <div className="np-text np-sloupce np-sloupce-2 text-[15px]">
-                        {(meta.article ?? iv.body).split("\n").filter(Boolean).map((p, i) => (
-                          <p key={i} className="break-inside-avoid-column">{p}</p>
-                        ))}
-                      </div>
-                      <div className="mt-2"><ShareButton articleId={iv.id} /></div>
-                    </div>
+                    <Rozhovor
+                      key={iv.id}
+                      clanek={iv}
+                      jmeno={meta.managerName ?? "Trenér"}
+                      role="Trenér"
+                      tym={meta.teamName}
+                      avatar={meta.managerAvatar}
+                      text={meta.article ?? iv.body}
+                    />
                   );
                 })}
               </div>
@@ -507,39 +495,17 @@ export default function NewsPage() {
                   } = {};
                   try { meta = JSON.parse(iv.body); } catch (e) { console.error("parse rozhovoru hráče:", e); meta = {}; }
                   return (
-                    <div key={iv.id} id={`news-${iv.id}`} className="py-5 first:pt-0">
-                      <h3 className="np-titulek text-xl sm:text-2xl mb-2">{iv.headline}</h3>
-                      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-ink/10">
-                        {meta.playerAvatar && Object.keys(meta.playerAvatar).length > 0 && (
-                          <FaceAvatar faceConfig={meta.playerAvatar} size={38} className="rounded-full border border-ink/20 shrink-0" />
-                        )}
-                        <div className="text-sm">
-                          {meta.playerId && meta.playerName ? (
-                            <EntityLink type="player" id={meta.playerId} className="font-heading font-bold">
-                              {meta.playerName}
-                            </EntityLink>
-                          ) : (
-                            <span className="font-heading font-bold">{meta.playerName ?? "Hráč"}</span>
-                          )}
-                          {meta.position && <span className="text-muted"> {meta.position}</span>}
-                          {meta.teamName && <span className="text-muted"> · {meta.teamName}</span>}
-                        </div>
-                        <div className="ml-auto"><Podpis clanek={iv} /></div>
-                      </div>
-                      <div className="np-text np-sloupce np-sloupce-2 text-[15px]">
-                        {(meta.article ?? iv.body).split("\n").filter(Boolean).map((p, i) => (
-                          <p key={i} className="break-inside-avoid-column">{p}</p>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-3 mt-2">
-                        {meta.effectNote && (
-                          <span className="text-[11px] font-heading font-bold uppercase tracking-wider text-muted border-l-2 border-ink/30 pl-2">
-                            🧱 {meta.effectNote}
-                          </span>
-                        )}
-                        <div className="ml-auto"><ShareButton articleId={iv.id} /></div>
-                      </div>
-                    </div>
+                    <Rozhovor
+                      key={iv.id}
+                      clanek={iv}
+                      jmeno={meta.playerName ?? "Hráč"}
+                      jmenoId={meta.playerId}
+                      role={meta.position}
+                      tym={meta.teamName}
+                      avatar={meta.playerAvatar}
+                      text={meta.article ?? iv.body}
+                      poznamka={meta.effectNote}
+                    />
                   );
                 })}
               </div>
@@ -565,9 +531,9 @@ export default function NewsPage() {
             </section>
           )}
 
-          {/* ═══ Spodek listu — výsledky, zápasy, drobnosti + postranní sloupec ═══ */}
-          {(roundArticles.length > 0 || matchStories.length > 0 || standingArticles.length > 0 || miscArticles.length > 0) && (
-            <div className="border-t border-ink/20 pt-6 grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-7">
+          {/* ═══ Spodek listu — výsledky kola a drobné zprávy ═══ */}
+          {(roundArticles.length > 0 || miscArticles.length > 0) && (
+            <div className="border-t border-ink/20 pt-6">
 
               <div className="space-y-7 min-w-0">
                 {/* Výsledky kola */}
@@ -578,29 +544,6 @@ export default function NewsPage() {
                     <div className="text-[11px] text-muted italic mt-2">{timeAgo(article.date)}</div>
                   </section>
                 ))}
-
-                {/* Zápasové zprávy */}
-                {matchStories.length > 0 && (
-                  <section>
-                    <Kicker>⚽ Zápasové zprávy</Kicker>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
-                      {matchStories.map((article) => (
-                        <ArticleWrapper key={article.id} article={article}>
-                          <div id={`news-${article.id}`} className="py-2.5 border-b border-ink/10">
-                            <h4 className="np-titulek text-[15px] mb-0.5">
-                              <span className="mr-1">{article.icon}</span>{article.headline}
-                            </h4>
-                            <p className="np-text text-[13px]">{article.body}</p>
-                            <div className="flex items-center justify-between mt-1">
-                              <span className="text-[10px] text-muted italic">{timeAgo(article.date)}</span>
-                              <ShareButton articleId={article.id} />
-                            </div>
-                          </div>
-                        </ArticleWrapper>
-                      ))}
-                    </div>
-                  </section>
-                )}
 
                 {/* Drobné zprávy */}
                 {miscArticles.length > 0 && (
@@ -626,57 +569,6 @@ export default function NewsPage() {
                 )}
               </div>
 
-              {/* Postranní sloupec */}
-              <aside className="space-y-6 lg:border-l lg:border-ink/15 lg:pl-6">
-                {standingArticles.length > 0 && standingArticles[0] !== leadStory && (
-                  <div>
-                    <div className="text-center border-y border-ink/25 py-1 mb-2">
-                      <span className="font-heading font-[900] text-[10px] uppercase tracking-[0.2em]">Tabulka</span>
-                    </div>
-                    <div className="text-center">
-                      <div className="np-titulek text-lg">{standingArticles[0].headline}</div>
-                      <p className="np-text text-[13px] text-center mt-1">{standingArticles[0].body}</p>
-                    </div>
-                    <Link href="/dashboard/liga" className="block text-center text-xs font-heading font-bold mt-2 underline underline-offset-2 hover:text-pitch-500">
-                      Celá tabulka →
-                    </Link>
-                  </div>
-                )}
-
-                {matchArticles.length > 0 && (
-                  <div>
-                    <div className="text-center border-y border-ink/25 py-1 mb-2">
-                      <span className="font-heading font-[900] text-[10px] uppercase tracking-[0.2em]">Naše výsledky</span>
-                    </div>
-                    <div className="divide-y divide-ink/10">
-                      {matchArticles.slice(0, 5).map((m) => {
-                        const scoreMatch = m.headline.match(/(\d+:\d+)/);
-                        const score = scoreMatch ? scoreMatch[1] : "";
-                        return (
-                          <ArticleWrapper key={m.id} article={m}>
-                            <div className="flex items-center justify-between gap-2 py-1.5">
-                              <span className="text-[13px] font-heading truncate flex-1">
-                                {m.headline.replace(/\d+:\d+!?/, "").replace("!", "").trim()}
-                              </span>
-                              {score && <span className="text-[13px] font-heading font-bold tabular-nums">{score}</span>}
-                            </div>
-                          </ArticleWrapper>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Tiráž */}
-                <div className="text-center border-t border-ink/20 pt-3">
-                  <div className="font-heading font-[900] text-[10px] uppercase tracking-[0.2em] text-muted">
-                    {newspaperName}
-                  </div>
-                  <div className="text-[10px] text-muted mt-0.5 italic">
-                    Vychází každé kolo · Redakce {district}
-                  </div>
-                </div>
-              </aside>
             </div>
           )}
 
@@ -790,6 +682,76 @@ function Podpis({ clanek, stred = false }: { clanek: Article; stred?: boolean })
       <span className="opacity-40">·</span>
       <ShareButton articleId={clanek.id} />
     </div>
+  );
+}
+
+/**
+ * Rozhovor sázený jako ve sportovní příloze: velký portrét vlevo, který text
+ * obtéká, pod ním popiska se jménem, první odstavec jako perex a nejsilnější
+ * citát vytržený mezi linky. Společné pro trenéry i hráče.
+ */
+function Rozhovor({
+  clanek, jmeno, jmenoId, role, tym, avatar, text, poznamka,
+}: {
+  clanek: Article;
+  jmeno: string;
+  jmenoId?: string;
+  role?: string;
+  tym?: string;
+  avatar?: Record<string, unknown> | null;
+  text: string;
+  poznamka?: string;
+}) {
+  const odstavce = text.split("\n").filter(Boolean);
+  const maAvatar = avatar && Object.keys(avatar).length > 0;
+
+  // Vytržený citát: nejdelší přímá řeč z článku, ale ne z perexu — ten už je vidět.
+  const citaty = odstavce.slice(1).flatMap((p) => p.match(/[„"]([^"“”„]{45,150})[""“]/g) ?? []);
+  const citat = citaty.sort((a, b) => b.length - a.length)[0]?.replace(/^[„"]|[""“]$/g, "");
+
+  return (
+    <article id={`news-${clanek.id}`} className="py-6 first:pt-0">
+      <h3 className="np-titulek text-2xl sm:text-[1.75rem] mb-2">{clanek.headline}</h3>
+      <div className="flex items-center gap-2 mb-4 pb-2 border-b border-ink/10">
+        <span className="text-[11px] uppercase tracking-[0.15em] font-heading font-bold text-muted">
+          Rozhovor
+        </span>
+        <div className="ml-auto"><Podpis clanek={clanek} /></div>
+      </div>
+
+      <div className="np-text np-sloupce np-sloupce-2 text-[15px]">
+        {maAvatar && (
+          <figure className="np-portret w-[104px] sm:w-[128px]">
+            <FaceAvatar faceConfig={avatar} size={128} className="w-full h-auto rounded-full border border-ink/25" />
+            <figcaption className="text-[11px] leading-tight text-center mt-1 not-italic">
+              {jmenoId ? (
+                <EntityLink type="player" id={jmenoId} className="font-heading font-bold text-ink">{jmeno}</EntityLink>
+              ) : (
+                <span className="font-heading font-bold text-ink">{jmeno}</span>
+              )}
+              {(role || tym) && (
+                <span className="block text-muted">{[role, tym].filter(Boolean).join(" · ")}</span>
+              )}
+            </figcaption>
+          </figure>
+        )}
+
+        {odstavce.map((p, i) => (
+          <Fragment key={i}>
+            <p className={i === 0 ? "np-perex" : undefined}>{p}</p>
+            {citat && i === 0 && <blockquote className="np-citat">„{citat}“</blockquote>}
+          </Fragment>
+        ))}
+      </div>
+
+      {poznamka && (
+        <div className="mt-3">
+          <span className="text-[11px] font-heading font-bold uppercase tracking-wider text-muted border-l-2 border-ink/30 pl-2">
+            🧱 {poznamka}
+          </span>
+        </div>
+      )}
+    </article>
   );
 }
 

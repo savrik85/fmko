@@ -638,3 +638,33 @@ input[type="number"] { -moz-appearance: textfield; }
   color: var(--color-ink);
   text-wrap: balance;
 }
+
+/* Portrét u rozhovoru — text ho obtéká, jako ve sportovní příloze.
+   shape-outside obtahuje kruh, takže řádky kopírují tvar fotky. */
+.np-portret {
+  float: left;
+  margin: 0.2rem 0.9rem 0.5rem 0;
+  shape-outside: circle(50%);
+  -webkit-shape-outside: circle(50%);
+}
+/* Perex — první odstavec rozhovoru nese shrnutí, sází se výrazněji */
+.np-perex {
+  font-weight: 600;
+  color: var(--color-ink);
+  text-indent: 0 !important;
+}
+/* Vytržený citát */
+.np-citat {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.15rem;
+  line-height: 1.25;
+  color: var(--color-ink);
+  text-align: left;
+  hyphens: none;
+  border-top: 1px solid rgba(26, 23, 20, 0.25);
+  border-bottom: 1px solid rgba(26, 23, 20, 0.25);
+  padding: 0.5rem 0;
+  margin: 0.7rem 0;
+  break-inside: avoid-column;
+}
