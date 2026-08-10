@@ -12,6 +12,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-08-10",
+    emoji: "📰",
+    title: "Zpravodaj má vlastní redakci — a redaktoři si tě zapamatují",
+    items: [
+      "Každý okres má svoji redakci: čtyři redaktory s tváří, jménem a povahou. Bulvární pero jde po drbech z kabiny, seriózní rozebírá rozestavení a čísla, vyčůraný se ptá mile a odpověď ti pak otočí, srdcař žije atmosférou v kotli. Pod každým článkem je podepsaný ten, kdo ho psal, a jeho jméno vede na profil.",
+      "Rozhovory teď vede konkrétní člověk. Ještě než začneš odpovídat, vidíš, kdo se ptá a jaký k tobě má vztah — od „drží palce\" po „jde po nich\".",
+      "A ten vztah se hýbe podle tebe. Kdo je na novináře vstřícný, dočká se přátelských otázek a shovívavých článků. Kdo je odbývá, dostane otázky s háčkem a v novinách se s ním nikdo mazlit nebude.",
+      "Vztah není jen do počtu: nakloněná redakce dělá klubu dobré jméno a přivádí lidi na stadion, znepřátelená ho sráží. Na reputaci i návštěvnosti je to poznat.",
+      "Celý zpravodaj dostal podobu skutečných novin — sloupcová sazba, hlavička s ročníkem a číslem vydání, rubriky oddělené linkami a rozhovory s velkým portrétem, kolem kterého text obtéká.",
+    ],
+  },
+  {
     date: "2026-08-09",
     emoji: "🏋️",
     title: "Trénink se plánuje na celý týden — a hráči na něj reagují",
