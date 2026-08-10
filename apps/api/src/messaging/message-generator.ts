@@ -34,7 +34,7 @@ const ATTENDANCE_NO = [
   "Bohužel musím na svatbu",
   "Nemůžu, jedu s rodinou pryč",
   "Mám problém se záda, radši vynechám",
-  "Odpustíš, šéfe? Mám raut v práci",
+  "Odpustíš, trenére? Mám raut v práci",
   "Nejde to, mám noční",
   "Promiň, slíbil jsem ženě že pomůžu s přestavbou",
   "Dneska fakt nejde, příště určitě",
@@ -73,7 +73,7 @@ export function generateAttendanceMessage(
 // ── Zprávy od hráčů 1:1 ──
 
 const PLAYER_MORALE_LOW = [
-  "Šéfe, nějak mě to nebaví. Pořád sedím na lavičce.",
+  "Trenére, nějak mě to nebaví. Pořád sedím na lavičce.",
   "Chtěl bych hrát víc, cítím se připravenej.",
   "Dneska jsem měl špatnej den. Snad to bude lepší.",
   "Přemýšlím, jestli mám vůbec chodit na tréninky...",
@@ -81,14 +81,14 @@ const PLAYER_MORALE_LOW = [
 ];
 
 const PLAYER_MORALE_HIGH = [
-  "Šéfe, cítím se skvěle! Těším se na zápas! 🔥",
+  "Trenére, cítím se skvěle! Těším se na zápas! 🔥",
   "Dneska na tréninku jsem dal všechno. Forma je dobrá.",
   "Myslím že jsme silnější než loni. Dáme to!",
   "Díky za šanci, nezklamů!",
 ];
 
 const PLAYER_INJURY = [
-  "Šéfe, zranil jsem se na tréninku. Doktor říká {days} dní pauza.",
+  "Trenére, zranil jsem se na tréninku. Doktor říká {days} dní pauza.",
   "Mám natažený sval, asi {days} dní budu mimo.",
   "Podvrtl jsem si kotník, {days} dní to potrvá.",
   "Potáhlo mě v zádech, doktor doporučil {days} dní klid.",
@@ -99,7 +99,7 @@ const POST_WIN = [
   "To byla pecka! Kluci makali jako šílený.",
   "Konečně výhra! Takhle dál!",
   "Porazili jsme je! Musíme slavit.",
-  "Šéfe, dneska to klaplo na jedničku 👏",
+  "Trenére, dneska to klaplo na jedničku 👏",
 ];
 
 const POST_LOSS = [

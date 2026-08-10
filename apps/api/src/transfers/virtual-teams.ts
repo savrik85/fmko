@@ -196,20 +196,20 @@ export async function generateAiListings(
 
 const OFFER_MESSAGES_NORMAL = [
   "Trenére, volali mi z {team}. Říkali, že mě chtějí. Co na to říkáte?",
-  "Šéfe, ozval se mi {team} z {city}. Nabízejí {price} Kč. Rozhodnutí je na vás.",
+  "Trenére, ozval se mi {team} z {city}. Nabízejí {price} Kč. Rozhodnutí je na vás.",
   "Trenére, přišla nabídka z {team}. Prej mě sledovali na posledním zápase.",
-  "Šéfe, {team} se ozval. Říkali že hledají hráče na moji pozici. Co vy na to?",
+  "Trenére, {team} se ozval. Říkali že hledají hráče na moji pozici. Co vy na to?",
 ];
 
 const OFFER_MESSAGES_LOW_MORALE = [
   "Trenére, přišla nabídka z {team}. Upřímně, zvažuju to...",
-  "Šéfe, {team} nabízí {price} Kč. Nebudu lhát, láká mě to.",
+  "Trenére, {team} nabízí {price} Kč. Nebudu lhát, láká mě to.",
   "Trenére, ozval se mi {team}. Vzhledem k tomu jak to tu jde... asi bych šel.",
 ];
 
 const OFFER_MESSAGES_LOYAL = [
   "Trenére, volali z {team}. Řekl jsem jim, že jsem tady doma. Ale ať víte.",
-  "Šéfe, {team} se na mě ptal. Mě to nezajímá, ale nabídka vám asi přijde.",
+  "Trenére, {team} se na mě ptal. Mě to nezajímá, ale nabídka vám asi přijde.",
   "Trenére, {team} nabízí {price} Kč. Já nikam nechci, jen hlásím.",
 ];
 

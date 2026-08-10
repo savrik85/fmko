@@ -43,7 +43,7 @@ export function parseUnrest(lifeContext: string | null | undefined): TransferUnr
 // ── SMS šablony hráče po odmítnuté nabídce (deterministické, bez AI) ──
 const REJECTED_SMS_WANTS: string[] = [
   "Trenére, slyšel jsem, že {team} o mě stál. A vy jste to smetl ze stolu? Tohle si budu pamatovat.",
-  "Šéfe, proč jste mi neřekl o té nabídce od {team}? Chtěl jsem to aspoň probrat. Zklamání.",
+  "Trenére, proč jste mi neřekl o té nabídce od {team}? Chtěl jsem to aspoň probrat. Zklamání.",
   "Trenére, {team} mě chtěl a vy jste to zařízl. Nevím, jestli tu ještě vidím budoucnost.",
 ];
 const REJECTED_SMS_WANTS_HOT: string[] = [
@@ -52,13 +52,13 @@ const REJECTED_SMS_WANTS_HOT: string[] = [
 ];
 const REJECTED_SMS_LOYAL: string[] = [
   "Trenére, díky že jste tu nabídku odmítl. Jsem tady doma a jinam nechci.",
-  "Šéfe, slyšel jsem o té nabídce. Dobře, že jste ji poslal k šípku. Já svůj dres nevyměním.",
+  "Trenére, slyšel jsem o té nabídce. Dobře, že jste ji poslal k šípku. Já svůj dres nevyměním.",
 ];
 
 // ── Fake injury katalog (vypadá jako běžné zranění, smsText je výmluva hráče) ──
 const FAKE_INJURIES: { type: string; description: string; smsText: string }[] = [
   { type: "zada", description: "Bolesti zad", smsText: "Trenére, chytly mě záda. Doktor říká, že to bude na pár týdnů. Nemůžu se ani ohnout." },
-  { type: "sval", description: "Natažený sval", smsText: "Šéfe, cítím ten sval už od tréninku. Radši to nebudu pokoušet, nechci si to utrhnout." },
+  { type: "sval", description: "Natažený sval", smsText: "Trenére, cítím ten sval už od tréninku. Radši to nebudu pokoušet, nechci si to utrhnout." },
   { type: "koleno", description: "Bolest v koleni", smsText: "Trenére, to koleno prostě nejde. Píchá v něm při každém kroku, musím pauzírovat." },
 ];
 

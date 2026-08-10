@@ -16,21 +16,21 @@ export interface InjuryDef {
 
 const INJURIES: InjuryDef[] = [
   // Lehká (3-10 dní)
-  { type: "sval", description: "Natažený sval", severity: "lehke", daysMin: 3, daysMax: 7, smsText: "Šéfe, natáhl jsem si sval. Doktor říká {days} dní klid." },
+  { type: "sval", description: "Natažený sval", severity: "lehke", daysMin: 3, daysMax: 7, smsText: "Trenére, natáhl jsem si sval. Doktor říká {days} dní klid." },
   { type: "kotnік", description: "Podvrtnutý kotník", severity: "lehke", daysMin: 4, daysMax: 10, smsText: "Podvrtl jsem si kotník, {days} dní to potrvá." },
   { type: "zada", description: "Bolest zad", severity: "lehke", daysMin: 3, daysMax: 8, smsText: "Záda mě zase chytily, doktor říká {days} dní pauza." },
   { type: "obecne", description: "Modřina", severity: "lehke", daysMin: 2, daysMax: 5, smsText: "Mám pořádnou modřinu, ale za {days} dní bych měl být OK." },
   { type: "hlava", description: "Lehký otřes mozku", severity: "lehke", daysMin: 5, daysMax: 10, smsText: "Dostal jsem ránu do hlavy, musím {days} dní odpočívat." },
 
   // Střední (10-28 dní)
-  { type: "sval", description: "Natržený sval", severity: "stredni", daysMin: 10, daysMax: 21, smsText: "Natrhl jsem si sval, {days} dní budu mimo. Sorry šéfe." },
+  { type: "sval", description: "Natržený sval", severity: "stredni", daysMin: 10, daysMax: 21, smsText: "Natrhl jsem si sval, {days} dní budu mimo. Sorry, trenére." },
   { type: "kotnік", description: "Výron kotníku", severity: "stredni", daysMin: 14, daysMax: 28, smsText: "Kotník je v háji, doktor říká {days} dní minimálně." },
   { type: "koleno", description: "Natažené vazy v koleni", severity: "stredni", daysMin: 14, daysMax: 28, smsText: "Koleno je oteklý, {days} dní klid. Snad to bude OK." },
   { type: "zebra", description: "Naražená žebra", severity: "stredni", daysMin: 10, daysMax: 21, smsText: "Narazil jsem si žebra, bolí to jak čert. {days} dní pauza." },
   { type: "tříselný", description: "Tříselný problém", severity: "stredni", daysMin: 14, daysMax: 28, smsText: "Třísla mi nedají pokoj, musím {days} dní stát." },
 
   // Těžká (28-90 dní)
-  { type: "koleno", description: "Poranění menisku", severity: "tezke", daysMin: 30, daysMax: 60, smsText: "Šéfe, je to horší. Meniskus. Minimálně {days} dní mimo." },
+  { type: "koleno", description: "Poranění menisku", severity: "tezke", daysMin: 30, daysMax: 60, smsText: "Trenére, je to horší. Meniskus. Minimálně {days} dní mimo." },
   { type: "achilovka", description: "Natržená Achillova šlacha", severity: "tezke", daysMin: 45, daysMax: 90, smsText: "Achilovka praskla. {days} dní, možná víc. Mrzí mě to." },
   { type: "rameno", description: "Vykloubené rameno", severity: "tezke", daysMin: 28, daysMax: 45, smsText: "Vyhodil jsem si rameno, {days} dní budu mimo." },
   { type: "koleno", description: "Poranění zkřížených vazů", severity: "tezke", daysMin: 60, daysMax: 90, smsText: "Doktor říká zkřížený vazy. Minimálně {days} dní. To je katastrofa." },
