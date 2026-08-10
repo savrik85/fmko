@@ -355,7 +355,9 @@ export function simulateTraining(
       // Trenér brankářů: extra multiplikátor jen pro brankáře
       const gkMul = player.position === "GK" ? (equipExtras.gkTrainingMul ?? 1) : 1;
       const intensityMod = INTENSITY[plan.intensity ?? "normal"].growth;
-      const improveChance = BASE_IMPROVE_CHANCE * intensityMod * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul;
+      // Skrytý talent zrychluje růst (0 → 1.0×, 65 → ~1.33×) — "odhalí se postupně tréninkem"
+      const talentMod = 1 + Math.max(0, player.hiddenTalent ?? 0) / 200;
+      const improveChance = BASE_IMPROVE_CHANCE * intensityMod * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul * talentMod;
       if (rng.random() < improveChance) {
         // Strop atributu = vygenerovaný potenciál (skills_max), ne paušálních 100.
         // Hráč, který je na svém stropu, se v daném atributu dál nezlepší.

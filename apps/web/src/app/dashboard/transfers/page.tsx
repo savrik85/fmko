@@ -1773,7 +1773,7 @@ export default function TransfersPage() {
                               ));
                             })()}
                             {isYouth && hiddenTalent !== undefined && (
-                              <span className="text-xs text-amber-600 font-heading font-bold" title="Skrytý talent — odhalí se postupně tréninkem">
+                              <span className="text-xs text-amber-600 font-heading font-bold" title="Skrytý talent — talentovaný hráč roste na tréninku rychleji a má vyšší strop rozvoje">
                                 ✨ Talent {hiddenTalent >= 30 ? "vysoký" : hiddenTalent >= 18 ? "střední" : "nízký"}
                               </span>
                             )}

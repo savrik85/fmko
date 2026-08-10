@@ -6147,12 +6147,24 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/accept", async (c) => {
   }
 
   const playerId = crypto.randomUUID();
+  // Skrytý talent z nabídky se musí propsat do sloupce hidden_talent — jinak by
+  // zobrazený badge "✨ Talent" byl fikce (dřívější bug: INSERT ho zahazoval → default 0).
+  const offerPersonality = (() => { try { return JSON.parse((offer.personality as string) ?? "{}"); } catch (e) { logger.warn({ module: "game" }, "parse offer personality", e); return {}; } })();
+  const hiddenTalent = Math.max(0, Math.round(offerPersonality.hiddenTalent ?? 0));
+  // Strop rozvoje (skills_max): talentovaný mladík má velký prostor růstu, netalentovaný malý.
+  const offerSkills = (() => { try { return JSON.parse((offer.skills as string) ?? "{}"); } catch (e) { logger.warn({ module: "game" }, "parse offer skills", e); return {}; } })();
+  const headroom = 10 + Math.round(hiddenTalent * 0.6); // talent 0 → +10, talent 65 → +49
+  const skillsMax: Record<string, { current: number; maxPotential: number }> = {};
+  for (const [attr, val] of Object.entries(offerSkills)) {
+    if (typeof val !== "number") continue;
+    skillsMax[attr] = { current: val, maxPotential: Math.min(100, val + headroom) };
+  }
   await c.env.DB.prepare(
-    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality)
-     VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
+    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality, hidden_talent, skills_max)
+     VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`
   ).bind(playerId, teamId, offer.first_name, offer.last_name, offer.age, offer.position, offer.overall_rating,
     offer.skills, offer.physical, offer.personality, offer.life_context, offer.avatar, offer.weekly_wage,
-    (offer.nationality as string) ?? "CZ").run();
+    (offer.nationality as string) ?? "CZ", hiddenTalent, JSON.stringify(skillsMax)).run();
 
   // Set residence
   const { generateResidence } = await import("../generators/residence");
