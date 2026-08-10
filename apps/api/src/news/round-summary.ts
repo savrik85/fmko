@@ -218,6 +218,7 @@ Odpověz POUZE valid JSON:
 PRAVIDLA:
 - playerOfRoundId a managerOfRoundTeamId MUSÍ být doslova z uvedených seznamů
 - body je KRÁTKÝ (60-100 slov) — vyhlášení, ne článek o kole
+- body = 2 souvislé odstavce běžného textu oddělené \n, BEZ číslování, odrážek a nadpisů
 - Žádné jiné hráče než oceněného
 - Česky, přirozený tón`;
 

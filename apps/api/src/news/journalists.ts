@@ -303,5 +303,8 @@ export function pokynyProRedaktora(j: Journalist, sentiment = 0): string {
 
   radky.push(`Tvoje oblíbená hláška: „${j.hlaska}" — použij ji nanejvýš jednou a jen když sedne.`);
   radky.push("Článek NEPODEPISUJ — podpis doplní sazba.");
-  return radky.join("\n");
+  // Pokyny jsou psané po větách, ne po bodech: když dostal model odrážkový
+  // blok, začal odrážkami odpovídat a místo článku vyplivl číslovaný seznam.
+  radky.push("Piš souvislý text v odstavcích. NIKDY nepoužívej číslované seznamy, odrážky ani nadpisy.");
+  return radky.join(" ");
 }
