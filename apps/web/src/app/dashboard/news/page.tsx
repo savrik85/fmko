@@ -686,6 +686,26 @@ function Podpis({ clanek, stred = false }: { clanek: Article; stred?: boolean })
 }
 
 /**
+ * Nejsilnější přímá řeč článku pro vytržený citát.
+ *
+ * Rovná uvozovka je zároveň otevírací i zavírací, takže se musí párovat podle
+ * pořadí — hledání "od uvozovky k uvozovce" jinak chytí text MEZI dvěma citáty,
+ * tedy autorskou větu, která obvykle končí dvojtečkou.
+ */
+function vytahnoutCitat(odstavce: string[]): string | undefined {
+  const kandidati: string[] = [];
+  for (const odst of odstavce) {
+    for (const m of odst.matchAll(/„([^„""]+)[""]/g)) kandidati.push(m[1]);
+    const casti = odst.split('"');
+    for (let i = 1; i < casti.length; i += 2) kandidati.push(casti[i]);
+  }
+  return kandidati
+    .map((c) => c.trim())
+    .filter((c) => c.length >= 45 && c.length <= 165 && !c.endsWith(":"))
+    .sort((a, b) => b.length - a.length)[0];
+}
+
+/**
  * Rozhovor sázený jako ve sportovní příloze: velký portrét vlevo, který text
  * obtéká, pod ním popiska se jménem, první odstavec jako perex a nejsilnější
  * citát vytržený mezi linky. Společné pro trenéry i hráče.
@@ -705,9 +725,9 @@ function Rozhovor({
   const odstavce = text.split("\n").filter(Boolean);
   const maAvatar = avatar && Object.keys(avatar).length > 0;
 
-  // Vytržený citát: nejdelší přímá řeč z článku, ale ne z perexu — ten už je vidět.
-  const citaty = odstavce.slice(1).flatMap((p) => p.match(/[„"]([^"“”„]{45,150})[""“]/g) ?? []);
-  const citat = citaty.sort((a, b) => b.length - a.length)[0]?.replace(/^[„"]|[""“]$/g, "");
+  // Perex tučně jen když je krátký; jinak by svítil tučně celý sloupec.
+  const maPerex = (odstavce[0]?.length ?? 0) < 260;
+  const citat = vytahnoutCitat(odstavce.slice(1));
 
   return (
     <article id={`news-${clanek.id}`} className="py-6 first:pt-0">
@@ -738,7 +758,7 @@ function Rozhovor({
 
         {odstavce.map((p, i) => (
           <Fragment key={i}>
-            <p className={i === 0 ? "np-perex" : undefined}>{p}</p>
+            <p className={i === 0 && maPerex ? "np-perex" : undefined}>{p}</p>
             {citat && i === 0 && <blockquote className="np-citat">„{citat}“</blockquote>}
           </Fragment>
         ))}
