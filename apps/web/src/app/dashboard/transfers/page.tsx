@@ -507,7 +507,7 @@ const SORT_OPTIONS: Array<{ value: FASortKey; label: string }> = [
 ];
 
 export default function TransfersPage() {
-  const { teamId, primaryColor } = useTeam();
+  const { teamId, primaryColor, gameDate } = useTeam();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
   const [overview, setOverview] = useState<TransfersOverview | null>(null);
@@ -1737,7 +1737,11 @@ export default function TransfersPage() {
                   };
                   const isYouth = o.source === "youth";
                   const hiddenTalent = (o.personality as any)?.hiddenTalent as number | undefined;
-                  const daysLeft = Math.max(0, Math.ceil((new Date(o.expiresAt).getTime() - Date.now()) / 86400000));
+                  // expiresAt je v HERNÍM čase (player-offers.ts ho počítá z game_date),
+                  // takže odpočet musí běžet proti hernímu datu. Proti reálnému času
+                  // ukazoval při posunutých hodinách nesmysly (např. „vyprší za 78 dní").
+                  const nowMs = gameDate ? new Date(gameDate).getTime() : Date.now();
+                  const daysLeft = Math.max(0, Math.ceil((new Date(o.expiresAt).getTime() - nowMs) / 86400000));
                   return (
                     <div key={o.id} className="card p-4">
                       <div className="flex items-start gap-3">
