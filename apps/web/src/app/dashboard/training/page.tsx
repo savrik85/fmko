@@ -443,9 +443,9 @@ export default function TrainingPage() {
                 })}
               </div>
               <div className="mt-2 text-[11px] text-muted leading-relaxed">
-                💡 Trénink den před zápasem oslabí hráče (kondice −3 až −5).{" "}
-                <strong className="text-pitch-700">Pokud máš zápas dnes nebo zítra, trénink se automaticky přeskočí.</strong>{" "}
-                Doporučení: trénovat brzy v týdnu (Po–St), pokud hraješ o víkendu.
+                💡 Trénuje se v každý vybraný den — nic se samo neruší.{" "}
+                <strong className="text-pitch-700">Před zápasem uber sám:</strong>{" "}
+                dej tomu dni lehkou intenzitu, nebo pošli unavené hráče na volno.
               </div>
             </div>
           );

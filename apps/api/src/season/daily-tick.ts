@@ -237,22 +237,11 @@ export async function executeDailyTick(
       ? Object.values(dayPlan).reduce((sum, d) => sum + INTENSITY[d.intensity].load, 0)
       : teamTrainingDays.length;
 
-    let skipTrainingForMatch = false;
-    if (isTrainingDay && isTeamTrainingDay && team.league_id) {
-      // scheduled_at je v HERNÍM čase → okno "zápas do 24h" počítat z herního data
-      // (effectiveDate), stejně jako kontrola nákladu za trénink níže. Dřív tu bylo
-      // reálné now — při offsetu tým trénoval "zdarma" nebo platil bez tréninku.
-      const tomorrowEnd = new Date(effectiveDate); tomorrowEnd.setUTCDate(tomorrowEnd.getUTCDate() + 1); tomorrowEnd.setUTCHours(23, 59, 59, 999);
-      const upcomingMatch = await env.DB.prepare(
-        "SELECT sc.id FROM season_calendar sc JOIN matches m ON m.calendar_id = sc.id WHERE sc.league_id = ? AND sc.scheduled_at >= ? AND sc.scheduled_at <= ? AND sc.status = 'scheduled' AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1"
-      ).bind(team.league_id, effectiveDate.toISOString(), tomorrowEnd.toISOString(), teamId, teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "daily-tick", teamId }, "check tomorrow match", e); return null; });
-      if (upcomingMatch) {
-        skipTrainingForMatch = true;
-        logger.info({ module: "daily-tick", teamId }, `SKIP training (zápas <=24h) day=${dayOfWeek}`);
-      }
-    }
-
-    if (isTrainingDay && isTeamTrainingDay && !skipTrainingForMatch && todayTrainingType) {
+    // Trénuje se v každý nastavený den — jediné omezení je, že jde o herní den Po–Pá.
+    // Dřív se trénink rušil sám, když měl tým zápas dnes nebo zítra; při zápasech dvakrát
+    // týdně tím padly dvě třetiny tréninků. Šetření sil před zápasem si teď manažer řídí
+    // sám: lehkou intenzitou u daného dne, nebo volnem pro konkrétní hráče.
+    if (isTrainingDay && isTeamTrainingDay && todayTrainingType) {
       try {
         // Volno od trenéra: hráči s life_context.$.trainingRest tento trénink vynechají
         // (žádný drain kondice, žádná zlepšení, žádné riziko absence). Zranění se nereportují
@@ -1161,17 +1150,9 @@ export async function executeDailyTick(
           : (customDays && customDays.length > 0) ? customDays : (trainingDayMap[sessions] ?? trainingDayMap[2]);
 
         if (trainingDays.includes(newDayOfWeek)) {
-          // Smart skip — match within next ~24h → no training, no cost
-          let skipForMatch = false;
-          if (team.league_id) {
-            const nowDate = new Date(newGameDate as string);
-            const tomorrowEnd = new Date(nowDate); tomorrowEnd.setUTCDate(tomorrowEnd.getUTCDate() + 1); tomorrowEnd.setUTCHours(23, 59, 59, 999);
-            const upcomingMatch = await env.DB.prepare(
-              "SELECT sc.id FROM season_calendar sc JOIN matches m ON m.calendar_id = sc.id WHERE sc.league_id = ? AND sc.scheduled_at >= ? AND sc.scheduled_at <= ? AND sc.status = 'scheduled' AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1"
-            ).bind(team.league_id, nowDate.toISOString(), tomorrowEnd.toISOString(), teamId, teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "daily-tick", teamId }, "training cost match check", e); return null; });
-            if (upcomingMatch) skipForMatch = true;
-          }
-          if (!skipForMatch) {
+          // Trénuje se každý nastavený den, takže se za každý i platí (dřív odpadalo
+          // spolu s automatickým volnem před zápasem).
+          {
             try {
               const { processTrainingCost } = await import("./finance-processor");
               await processTrainingCost(env.DB, teamId, newGameDate, (team.village_size as string) ?? "village");

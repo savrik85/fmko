@@ -2463,8 +2463,8 @@ gameRouter.post("/leagues/:leagueId/generate-schedule", async (c) => {
 gameRouter.get("/teams/:teamId/season-info", async (c) => {
   const teamId = c.req.param("teamId");
 
-  const team = await c.env.DB.prepare("SELECT league_id, training_type, training_sessions, training_approach, training_days, season_start, season_end, game_date FROM teams WHERE id = ?")
-    .bind(teamId).first<{ league_id: string | null; training_type: string | null; training_sessions: number | null; training_approach: string | null; training_days: string | null; season_start: string | null; season_end: string | null; game_date: string | null }>();
+  const team = await c.env.DB.prepare("SELECT league_id, training_type, training_sessions, training_approach, training_days, training_plan, season_start, season_end, game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ league_id: string | null; training_type: string | null; training_sessions: number | null; training_approach: string | null; training_days: string | null; training_plan: string | null; season_start: string | null; season_end: string | null; game_date: string | null }>();
   if (!team?.league_id) return c.json({ season: 1, currentDay: 1, totalDays: 1, upcoming: [] });
 
   // Batch: league info + calendar entries
@@ -2560,15 +2560,15 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
     }
     const trainingDays: number[] = (customDays && customDays.length > 0) ? customDays : (defaultDayMap[sessions] ?? defaultDayMap[2]);
 
-    // Match dates v okolí dne d — pro smart-skip indikaci v kalendáři
-    const matchDatesSet = new Set<string>(
-      upcoming.filter((e) => e.type === "match").map((e) => (e.date as string).slice(0, 10))
-    );
-
     const typeLabels: Record<string, string> = { conditioning: "Kondice", technique: "Technika", tactics: "Taktika", match_practice: "Zápasový" };
     const approachLabels: Record<string, string> = { strict: "přísný", balanced: "vyrovnaný", relaxed: "volný" };
-    const label = typeLabels[team.training_type] ?? team.training_type;
+    const intensityLabels: Record<string, string> = { light: "lehký", normal: "normální", hard: "tvrdý" };
     const approach = team.training_approach ? approachLabels[team.training_approach] ?? "" : "";
+
+    // Týdenní plán má u každého dne vlastní typ i intenzitu — kalendář musí ukazovat je,
+    // ne jednotný typ týmu (jinak svítí u všech dnů totéž, i když se trénuje něco jiného).
+    const { parseTrainingPlan } = await import("../season/daily-tick");
+    const dayPlan = parseTrainingPlan((team.training_plan as string | null) ?? null, teamId);
 
     const today = new Date(now);
     const daysToGenerate = Math.max(14, totalDays - currentDay + 1);
@@ -2577,18 +2577,16 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
       day.setDate(today.getDate() + d);
       const dow = day.getDay();
       if (trainingDays.includes(dow)) {
-        // Smart-skip indikace: pokud má tým zápas dnes nebo zítra → trénink se přeskočí
-        const dayKey = day.toISOString().slice(0, 10);
-        const tomorrow = new Date(day); tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowKey = tomorrow.toISOString().slice(0, 10);
-        const skipped = matchDatesSet.has(dayKey) || matchDatesSet.has(tomorrowKey);
+        const planned = dayPlan?.[dow];
+        const dayType = planned?.type ?? team.training_type;
+        const label = typeLabels[dayType] ?? dayType;
+        const intensity = planned ? intensityLabels[planned.intensity] : null;
 
         upcoming.push({
           type: "training",
           date: day.toISOString(),
-          title: skipped ? `Volno — zápas v dohledu` : `Trénink — ${label}`,
-          subtitle: approach ? `${sessions}×/týden · ${approach}` : `${sessions}×/týden`,
-          ...(skipped ? { status: "Přeskočeno" } : {}),
+          title: `Trénink — ${label}`,
+          subtitle: [intensity, approach].filter(Boolean).join(" · ") || `${sessions}×/týden`,
         });
       }
     }
