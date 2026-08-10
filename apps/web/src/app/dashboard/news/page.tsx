@@ -741,8 +741,8 @@ function Rozhovor({
 
       <div className="np-text np-sloupce np-sloupce-2 text-[15px]">
         {maAvatar && (
-          <figure className="np-portret w-[132px] sm:w-[150px]">
-            <FaceAvatar faceConfig={avatar} size={150} className="block w-full h-auto border border-ink/40 bg-white" />
+          <figure className="np-portret">
+            <FaceAvatar faceConfig={avatar} size={118} className="border border-ink/40 bg-white" />
             <figcaption className="text-[11px] leading-tight mt-1 not-italic border-t border-ink/20 pt-1">
               {jmenoId ? (
                 <EntityLink type="player" id={jmenoId} className="font-heading font-bold text-ink">{jmeno}</EntityLink>

@@ -646,7 +646,11 @@ input[type="number"] { -moz-appearance: textfield; }
   float: left;
   margin: 0.25rem 1rem 0.5rem 0;
   padding: 0;
+  /* Šířku určuje avatar sám (inline stylem), rám se tedy nesmí roztahovat.
+     max-width je pojistka, aby na úzkém displeji nikdy nepřetekl přes text. */
+  max-width: 45%;
 }
+.np-portret > div { max-width: 100%; }
 /* Popiska fotky nesmí dědit dělení slov ani zarovnání do bloku z okolního
    sloupce — jinak se název klubu láme na slabiky („Pep-pers"). */
 .np-portret figcaption {
