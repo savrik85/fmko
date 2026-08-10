@@ -7,6 +7,7 @@ import { Spinner } from "@/components/ui";
 
 interface UpcomingEvent {
   type: "match" | "training" | "seasonal";
+  intensity?: "light" | "normal" | "hard";
   date: string;
   title: string;
   subtitle?: string;
@@ -128,6 +129,15 @@ export default function CalendarPage() {
               isFriendly ? "bg-amber-500 text-white" : "bg-pitch-500 text-white";
             const tr = events.find((e) => e.type === "training");
             const trainingLabel = tr?.title?.replace("Trénink — ", "") ?? "Trénink";
+            // Intenzita dne — lehký šetří, tvrdý sebere. V buňce se vejde jen písmeno,
+            // celý název je v tooltipu.
+            const intensityMeta: Record<string, { short: string; label: string; cls: string; dot: string }> = {
+              light:  { short: "L", label: "lehký",    cls: "text-gold-600",  dot: "bg-gold-400" },
+              normal: { short: "N", label: "normální", cls: "text-pitch-600", dot: "bg-pitch-400" },
+              hard:   { short: "T", label: "tvrdý",    cls: "text-card-red",  dot: "bg-card-red" },
+            };
+            const intens = tr?.intensity ? intensityMeta[tr.intensity] : null;
+            const trainingTitle = intens ? `${trainingLabel} — ${intens.label}` : trainingLabel;
 
             return (
               <div key={i} className={`min-h-[60px] sm:min-h-[80px] border-b border-r border-gray-50 px-0.5 sm:px-1.5 py-1 ${isToday ? "bg-pitch-50 ring-2 ring-inset ring-pitch-400" : isWeekend ? "bg-gray-50/40" : ""}`}>
@@ -143,8 +153,11 @@ export default function CalendarPage() {
                     </span>
                   )}
                   {hasTraining && (
-                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] bg-amber-50 text-amber-700" title={trainingLabel}>
+                    <span className="relative w-5 h-5 rounded-full flex items-center justify-center text-[11px] bg-amber-50 text-amber-700" title={trainingTitle}>
                       🏋️
+                      {intens && (
+                        <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ring-1 ring-white ${intens.dot}`} />
+                      )}
                     </span>
                   )}
                 </div>
@@ -159,8 +172,11 @@ export default function CalendarPage() {
                     </div>
                   )}
                   {hasTraining && (
-                    <div className="text-[11px] font-heading leading-tight px-1.5 py-1 rounded bg-amber-50 text-amber-700 truncate">
-                      🏋️ {trainingLabel}
+                    <div className="text-[11px] font-heading leading-tight px-1.5 py-1 rounded bg-amber-50 text-amber-700 flex items-center gap-1" title={trainingTitle}>
+                      <span className="truncate">🏋️ {trainingLabel}</span>
+                      {intens && (
+                        <span className={`ml-auto shrink-0 font-bold ${intens.cls}`}>{intens.short}</span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -171,11 +187,17 @@ export default function CalendarPage() {
       </div>
 
       {/* Legend */}
-      <div className="flex gap-4 text-xs text-muted px-1">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted px-1">
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-pitch-500" /> Zápas</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-pitch-100" /> Odehráno</span>
         <span className="flex items-center gap-1">🏋️ Trénink</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded ring-1 ring-pitch-400 bg-pitch-50" /> Dnes</span>
+        <span className="flex items-center gap-1">
+          Intenzita:
+          <span className="font-heading font-bold text-gold-600">L</span>ehký
+          <span className="font-heading font-bold text-pitch-600 ml-1">N</span>ormální
+          <span className="font-heading font-bold text-card-red ml-1">T</span>vrdý
+        </span>
       </div>
     </div>
   );
