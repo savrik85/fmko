@@ -23,6 +23,8 @@ const TARGET_AI_LISTINGS_PER_LEAGUE = 4;
 const MAX_NEW_PER_LEAGUE_PER_DAY = 1;
 /** Inzerát AI klubu vydrží déle než lidský — nikdo ho nestahuje. */
 const AI_LISTING_DAYS = 10;
+/** Kolik AI klubů zkusit, než to vzdáme — vesnické kluby často nemají co prodat. */
+const CANDIDATE_DRAWS = 6;
 
 interface LeagueNeed {
   league_id: string;
@@ -56,31 +58,46 @@ export async function generateAiEquipmentListings(db: D1Database, now: Date): Pr
     if (league.active >= TARGET_AI_LISTINGS_PER_LEAGUE) continue;
 
     for (let i = 0; i < MAX_NEW_PER_LEAGUE_PER_DAY; i++) {
-      // Náhodný AI klub v lize, který už má řádek vybavení. Řádek vzniká líně,
-      // takže kluby, na které se nikdo nepodíval, prostě přeskočíme.
-      const candidate = await db.prepare(
-        `SELECT e.* FROM equipment e
-           JOIN teams t ON t.id = e.team_id
-          WHERE t.league_id = ? AND t.user_id = 'ai'
-          ORDER BY RANDOM() LIMIT 1`
-      ).bind(league.league_id).first<Record<string, unknown>>()
-        .catch((e) => { logger.warn({ module: MODULE }, "pick ai seller", e); return null; });
+      // Náhodný AI klub v lize. Řádek vybavení mu musíme založit sami — vzniká líně
+      // až při zobrazení stránky a na AI kluby se nikdo nedívá, takže bez tohohle
+      // by v celé DB nebyl jediný kandidát.
+      //
+      // Losujeme opakovaně: vesnické kluby začínají s většinou kategorií na nule,
+      // takže první tah často nemá co nabídnout.
+      const { ensureEquipmentRow } = await import("./equipment-service");
+      let teamId = "";
+      let candidate: Record<string, unknown> | null = null;
+      let options: string[] = [];
 
-      if (!candidate) break;
-      const teamId = candidate.team_id as string;
+      for (let attempt = 0; attempt < CANDIDATE_DRAWS && options.length === 0; attempt++) {
+        const seller = await db.prepare(
+          "SELECT id FROM teams WHERE league_id = ? AND user_id = 'ai' ORDER BY RANDOM() LIMIT 1"
+        ).bind(league.league_id).first<{ id: string }>()
+          .catch((e) => { logger.warn({ module: MODULE }, "pick ai seller", e); return null; });
+        if (!seller) break;
 
-      // Co už tenhle klub nabízí, znovu nabízet nesmíme — brání tomu unique index.
-      const listedRows = await db.prepare(
-        "SELECT category FROM equipment_listings WHERE team_id = ? AND status = 'active'"
-      ).bind(teamId).all<{ category: string }>()
-        .catch((e) => { logger.warn({ module: MODULE }, "fetch ai team listings", e); return null; });
-      const alreadyListed = new Set((listedRows?.results ?? []).map((r) => r.category));
+        const row = await ensureEquipmentRow(db, seller.id);
+        if (!row) continue;
 
-      const options = CATEGORIES.filter((cat) => {
-        const level = (candidate[cat] as number) ?? 0;
-        return level >= 1 && !alreadyListed.has(cat);
-      });
-      if (options.length === 0) break;
+        // Co už tenhle klub nabízí, znovu nabízet nesmíme — brání tomu unique index.
+        const listedRows = await db.prepare(
+          "SELECT category FROM equipment_listings WHERE team_id = ? AND status = 'active'"
+        ).bind(seller.id).all<{ category: string }>()
+          .catch((e) => { logger.warn({ module: MODULE }, "fetch ai team listings", e); return null; });
+        const alreadyListed = new Set((listedRows?.results ?? []).map((r) => r.category));
+
+        const usable = CATEGORIES.filter((cat) => {
+          const level = (row[cat] as number) ?? 0;
+          return level >= 1 && !alreadyListed.has(cat);
+        });
+        if (usable.length === 0) continue;
+
+        teamId = seller.id;
+        candidate = row;
+        options = [...usable];
+      }
+
+      if (!candidate || options.length === 0) break;
 
       const category = options[Math.floor(Math.random() * options.length)];
       const level = candidate[category] as number;
