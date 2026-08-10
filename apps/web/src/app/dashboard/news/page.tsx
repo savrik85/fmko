@@ -125,6 +125,7 @@ interface LeagueOption { id: string; name: string; district: string; team_count:
 export default function NewsPage() {
   const { teamId } = useTeam();
   const [articles, setArticles] = useState<Article[]>([]);
+  const [season, setSeason] = useState(1);
   const [team, setTeam] = useState<Team | null>(null);
   const [classifieds, setClassifieds] = useState<Classified[]>([]);
   const [categories, setCategories] = useState<ClassifiedCategory[]>([]);
@@ -160,13 +161,14 @@ export default function NewsPage() {
   useEffect(() => {
     if (!teamId) return;
     Promise.all([
-      apiFetch<{ articles: Article[] }>(`/api/teams/${teamId}/news`),
+      apiFetch<{ articles: Article[]; season: number }>(`/api/teams/${teamId}/news`),
       apiFetch<Team>(`/api/teams/${teamId}`),
     ]).then(([data, t]) => {
       setArticles(data.articles);
+      setSeason(data.season ?? 1);
       setTeam(t);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((e) => { console.error("načtení zpravodaje:", e); setLoading(false); });
     loadClassifieds();
   }, [teamId]);
 
@@ -190,11 +192,12 @@ export default function NewsPage() {
   useEffect(() => {
     if (!selectedLeagueId) return;
     setLoading(true);
-    apiFetch<{ articles: Article[] }>(`/api/leagues/${selectedLeagueId}/news`)
+    apiFetch<{ articles: Article[]; season: number }>(`/api/leagues/${selectedLeagueId}/news`)
       .then((data) => {
         setArticles(data.articles);
+        setSeason(data.season ?? 1);
         setLoading(false);
-      }).catch(() => setLoading(false));
+      }).catch((e) => { console.error("načtení zpravodaje ligy:", e); setLoading(false); });
   }, [selectedLeagueId]);
 
   const handleLeagueChange = (leagueId: string) => {
@@ -202,9 +205,9 @@ export default function NewsPage() {
       setSelectedLeagueId(null);
       if (teamId) {
         setLoading(true);
-        apiFetch<{ articles: Article[] }>(`/api/teams/${teamId}/news`)
-          .then((data) => { setArticles(data.articles); setLoading(false); })
-          .catch(() => setLoading(false));
+        apiFetch<{ articles: Article[]; season: number }>(`/api/teams/${teamId}/news`)
+          .then((data) => { setArticles(data.articles); setSeason(data.season ?? 1); setLoading(false); })
+          .catch((e) => { console.error("načtení zpravodaje:", e); setLoading(false); });
       }
     } else {
       setSelectedLeagueId(leagueId);
@@ -328,7 +331,7 @@ export default function NewsPage() {
       <div className="border-b-4 border-double border-ink pb-3 mb-1">
         <div className="flex items-end justify-between">
           <div className="text-[10px] uppercase tracking-widest text-muted">{district}</div>
-          <div className="text-[10px] uppercase tracking-widest text-muted">Sezóna 1</div>
+          <div className="text-[10px] uppercase tracking-widest text-muted">Sezóna {season}</div>
         </div>
         <h1 className="font-heading font-[900] text-3xl sm:text-4xl text-center tracking-tight leading-none my-2" style={{ fontVariant: "small-caps" }}>
           {newspaperName}
