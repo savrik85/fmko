@@ -568,3 +568,73 @@ input[type="number"] { -moz-appearance: textfield; }
   color: var(--color-pitch-400);
   text-decoration-thickness: 2px;
 }
+
+/* ═══ Zpravodaj — novinová sazba ═══════════════════════════════════════
+   Stránka má vypadat jako okresní plátek, ne jako web s kartami: patkové
+   písmo, sloupce s vlasovou linkou, zarovnání do bloku, iniciála. */
+
+.np-text {
+  font-family: Georgia, "Times New Roman", "Liberation Serif", serif;
+  text-align: justify;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  line-height: 1.6;
+  color: var(--color-ink-light);
+}
+/* Odstavcová zarážka místo mezer mezi odstavci — jako v tištěném sloupci */
+.np-text p + p { margin-top: 0.4rem; text-indent: 1.15em; }
+
+.np-sloupce { column-gap: 1.75rem; column-rule: 1px solid rgba(26, 23, 20, 0.1); }
+@media (min-width: 640px) {
+  .np-sloupce-2, .np-sloupce-3 { column-count: 2; }
+}
+@media (min-width: 1024px) {
+  .np-sloupce-3 { column-count: 3; }
+}
+
+/* Iniciála prvního odstavce hlavního článku */
+.np-iniciala > p:first-of-type::first-letter {
+  float: left;
+  font-family: var(--font-heading);
+  font-weight: 900;
+  font-size: 3.2em;
+  line-height: 0.76;
+  padding: 0.03em 0.09em 0 0;
+  color: var(--color-ink);
+}
+.np-iniciala > p:first-of-type { text-indent: 0; }
+
+/* Hlavička rubriky: název obklopený vlasovými linkami přes celou šířku */
+.np-rubrika {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.9rem;
+  font-family: var(--font-heading);
+  font-weight: 900;
+  font-size: 0.78rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-ink);
+}
+.np-rubrika::before,
+.np-rubrika::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid rgba(26, 23, 20, 0.22);
+}
+/* Varianta pro vedlejší rubriky — název vlevo, linka doprava */
+.np-rubrika-l::before { display: none; }
+
+.np-dvojlinka { border-top: 3px double var(--color-ink); }
+.np-linka { border-top: 1px solid rgba(26, 23, 20, 0.18); }
+
+/* Titulky článků — kondenzované, těsné, jako v tisku */
+.np-titulek {
+  font-family: var(--font-heading);
+  font-weight: 900;
+  line-height: 1.04;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  text-wrap: balance;
+}
