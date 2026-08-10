@@ -38,6 +38,15 @@ function toCandidate(row: SquadRow): RelationCandidate {
   return { id: row.id, lastName: row.last_name, age: row.age, residence: row.residence, occupation, alcohol, leadership };
 }
 
+/** Domovská obec klubu — bydliště v ní se nepočítá jako sousedství. */
+async function homeVillageOf(db: D1Database, teamId: string): Promise<string | null> {
+  const row = await db.prepare(
+    "SELECT v.name FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?",
+  ).bind(teamId).first<{ name: string }>()
+    .catch((e) => { logger.warn({ module: M }, "load home village", e); return null; });
+  return row?.name ?? null;
+}
+
 /**
  * Dogeneruje a uloží vazby hráče `playerId` na jeho nové spoluhráče v `teamId`.
  * Bezpečné volat opakovaně — duplicitní pár se nevytvoří (kontroluje se obousměrně).
@@ -67,6 +76,7 @@ export async function attachNewcomerRelations(
       toCandidate(newcomerRow),
       squad.map(toCandidate),
       maxRelations,
+      await homeVillageOf(db, teamId),
     );
     if (relations.length === 0) return 0;
 
@@ -119,13 +129,14 @@ export async function attachSquadRelations(
     if (squad.length < 3) return 0;
 
     const rng = createRng(cryptoSeed());
+    const homeVillage = await homeVillageOf(db, teamId);
     const stmts: D1PreparedStatement[] = [];
     const paired = new Set<string>();
     const seen: RelationCandidate[] = [];
 
     for (const p of squad) {
       if (seen.length > 0) {
-        for (const r of generateRelationsForNewcomer(rng, p, seen, maxPerPlayer)) {
+        for (const r of generateRelationsForNewcomer(rng, p, seen, maxPerPlayer, homeVillage)) {
           const key = [p.id, r.otherPlayerId].sort().join("|");
           if (paired.has(key)) continue;
           paired.add(key);

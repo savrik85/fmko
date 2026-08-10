@@ -230,6 +230,8 @@ export function generateRelationsForNewcomer(
   newcomer: RelationCandidate,
   squad: RelationCandidate[],
   maxRelations: number = 1,
+  /** Domovská obec klubu — bydliště v ní se pro sousedství nepočítá (bydlí tam kdekdo). */
+  homeVillage?: string | null,
 ): NewcomerRelationship[] {
   const out: NewcomerRelationship[] = [];
   const taken = new Set<string>();
@@ -254,8 +256,11 @@ export function generateRelationsForNewcomer(
     else if (diff <= 5) add(p.id, "brothers", rng.int(70, 95));
   }
 
-  // 2) Soused — bydlí ve stejné obci (mimo tu domácí, tu má kdekdo).
-  if (newcomer.residence) {
+  // 2) Soused — bydlí ve stejné PŘESPOLNÍ obci. Domovskou obec klubu vynecháváme
+  //    schválně: bydlí v ní většina kádru, takže by z ní byli sousedi skoro všichni
+  //    (na produkci by takhle vzniklo 42 % všech vazeb). Stejně to dělá i generátor
+  //    celého kádru v routes/teams.ts.
+  if (newcomer.residence && newcomer.residence !== homeVillage) {
     for (const p of shuffled) {
       if (p.residence && p.residence === newcomer.residence && rng.random() < 0.18) {
         add(p.id, "neighbors", rng.int(35, 60));
