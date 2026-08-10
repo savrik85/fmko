@@ -259,12 +259,13 @@ fotbalového týmu ${ctx.teamName} před zápasem ${ctx.isHome ? "doma" : "venku
 - NIKDY si nevymýšlej jména trenérů. ${ctx.opponentManagerName ? `Jediný povolený trenér soupeře: "${ctx.opponentManagerName}".` : "Jméno trenéra soupeře NEMÁŠ — nesmíš žádné použít."}
 - NIKDY si nevymýšlej zranění, citáty, ani události, které nejsou v kontextu níže.
 - Pokud pro nějakou otázku nemáš dost konkrétních dat z kontextu, napiš obecnější otázku BEZ vymyšlených faktů — to je VŽDY lepší než si něco vycucat z prstu.
-- NIKDY nezmiňuj, co v zadání máš nebo nemáš k dispozici. Formulace typu „když nemáme jména hráčů" nebo „bez konkrétních dat" do otázky nepatří — trenér ani čtenář o tvém zadání nevědí.
 
 INSTRUKCE:
 - KAŽDÁ otázka musí být konkrétní — používej JEN fakta z kontextu níže (jména hráčů ze seznamu, skutečný poslední výsledek, formu)
 - Nepokládej obecné otázky jako "jak hodnotíte formu" nebo "co od zápasu čekáte" — to je nuda. Ale když nemáš konkrétní data, raději obecná otázka než vymyšlená fakta.
 - Otázky piš jednu per řádek, bez číslování, bez odrážek, bez markdown
+- ⛔ KAŽDÁ otázka MUSÍ končit otazníkem a mít NEJVÝŠ 2 věty. Žádné dlouhé úvody ani rozbory před otázkou — to je rozhovor, ne komentář.
+- ⛔ NIKDY nepiš o tom, co v zadání máš nebo nemáš. Zakázané formulace: „nemáme informace o…", „když nejsou známa jména…", „vzhledem k tomu, že chybí data…". Když fakt nemáš, prostě se zeptej obecně, bez vysvětlování proč.
 - Jazyk: hovorová čeština, vykání trenéru. TÓN a ostrost otázek se řídí tvojí povahou a vztahem ke klubu z úvodu — ne tímhle seznamem.
 - Délka každé otázky: 1–2 věty max
 - PŘESNĚ 3 otázky, v tomto pořadí:
