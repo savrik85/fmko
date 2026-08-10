@@ -57,6 +57,23 @@ export const INTENSITY: Record<TrainingIntensity, { growth: number; drain: numbe
   hard:   { growth: 1.45, drain: 1.6, load: 1.4, label: "Tvrdý" },
 };
 
+/**
+ * České názvy typů tréninku pro cokoliv, co uvidí hráč (záznam o kondici, kalendář…).
+ * Do textů nikdy nedávat holý klíč — v UI se pak objeví „Trénink: tactics".
+ */
+export const TRAINING_TYPE_LABELS: Record<TrainingType, string> = {
+  conditioning: "Kondice",
+  technique: "Technika",
+  tactics: "Taktika",
+  match_practice: "Zápasová praxe",
+};
+
+/** Bezpečný převod na český název — neznámý klíč vrátí sám sebe. */
+export function trainingTypeLabel(type: string | null | undefined): string {
+  if (!type) return "Trénink";
+  return TRAINING_TYPE_LABELS[type as TrainingType] ?? type;
+}
+
 /** Věkový modifikátor růstu — mladí rostou rychle, veteráni skoro vůbec. */
 export function ageGrowthMod(age: number): number {
   return age < 20 ? 1.3 : age < 25 ? 1.15 : age < 30 ? 1.0 : age < 34 ? 0.7 : age < 38 ? 0.4 : 0.15;

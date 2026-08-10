@@ -6,7 +6,7 @@
 import { managerFansEffect } from "@okresni-masina/shared";
 import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
-import { simulateTraining } from "./training";
+import { simulateTraining, trainingTypeLabel } from "./training";
 import { trainingExperienceChance } from "../skills/training";
 import { logger } from "../lib/logger";
 import { overallRatingFromFlat } from "../skills/generator";
@@ -542,7 +542,7 @@ export async function executeDailyTick(
               ).bind(condDrain, playerId),
             ];
             if (newCond !== oldCond) {
-              stmts.push(logConditionStmt(env.DB, playerId, teamId, oldCond, newCond, "training", `Trénink: ${todayTrainingType} (${INTENSITY[todayIntensity].label.toLowerCase()})`));
+              stmts.push(logConditionStmt(env.DB, playerId, teamId, oldCond, newCond, "training", `Trénink: ${trainingTypeLabel(todayTrainingType)} (${INTENSITY[todayIntensity].label.toLowerCase()})`));
             }
             await env.DB.batch(stmts).catch((e) => logger.warn({ module: "daily-tick" }, "drain condition after training", e));
           } else if (a.reason) {

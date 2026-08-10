@@ -1860,10 +1860,13 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
   );
 }
 
+// Musí pokrývat všechny hodnoty ConditionSource z API (apps/api/src/lib/condition-log.ts).
+// Chybějící klíč se vypíše natvrdo anglicky — přesně tak se do UI dostalo „staff".
 const CONDITION_SOURCE_META: Record<string, { icon: string; label: string }> = {
   training: { icon: "🏃", label: "Trénink" },
   recovery: { icon: "💤", label: "Regenerace" },
   facility: { icon: "🚿", label: "Sprchy" },
+  staff: { icon: "🧑‍⚕️", label: "Zaměstnanci" },
   match: { icon: "⚽", label: "Zápas" },
   friendly: { icon: "🤝", label: "Přátelák" },
   hangover: { icon: "🍺", label: "Kocovina" },

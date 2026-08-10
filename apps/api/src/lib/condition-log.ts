@@ -3,10 +3,15 @@
  * Tabulka condition_log (migrace 0082).
  */
 
+/**
+ * Zdroj změny kondice. Každá hodnota MUSÍ mít český popisek v `CONDITION_SOURCE_META`
+ * na stránce hráče — jinak se v timeline ukáže holý anglický klíč (stalo se u "staff").
+ */
 export type ConditionSource =
   | "training"   // 🏃 Tréninkový drain
   | "recovery"   // 💤 Denní regenerace
   | "facility"   // 🚿 Bonus z vybavení (sprchy)
+  | "staff"      // 🧑‍⚕️ Zaměstnanci (masér, lékař)
   | "match"      // ⚽ Zápas
   | "friendly"   // 🤝 Přátelák
   | "hangover"   // 🍺 Ranní kocovina po výhře
