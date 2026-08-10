@@ -206,6 +206,7 @@ async function callGemini(
 export async function generateInterviewQuestions(
   apiKey: string,
   ctx: MatchContext,
+  pokynyRedaktora?: string,
 ): Promise<string[] | null> {
   const topStr = ctx.topPlayers
     .map((p) => `${p.name} (${p.position}${p.goals ? `, ${p.goals} gólů` : ""})`)
@@ -244,7 +245,7 @@ export async function generateInterviewQuestions(
     : `Otázka může zmínit jen název soupeře "${ctx.opponentName}" a fakta z kontextu (pozice v tabulce, forma, vztah trenérů). NEPOUŽÍVEJ žádné jméno trenéra soupeře — žádné nemáme. NEVYMÝŠLEJ si žádná jména.`)
     + relationHint;
 
-  const prompt = `Jsi bulvárnější redaktor Okresního zpravodaje v Čechách. Napiš přesně 3 otázky pro trenéra
+  const prompt = `${pokynyRedaktora ?? "Jsi bulvárnější redaktor Okresního zpravodaje v Čechách."} Napiš přesně 3 otázky pro trenéra
 fotbalového týmu ${ctx.teamName} před zápasem ${ctx.isHome ? "doma" : "venku"} s ${ctx.opponentName} (kolo ${ctx.gameWeek}).
 
 🚨 ABSOLUTNÍ ZÁKAZ HALUCINACÍ — DŮLEŽITĚJŠÍ NEŽ COKOLI JINÉHO:
@@ -305,12 +306,13 @@ export async function generateInterviewArticle(
   managerName: string,
   teamName: string,
   opponentName: string,
+  pokynyRedaktora?: string,
 ): Promise<{ headline: string; body: string } | null> {
   const qaPairs = qa
     .map((pair, i) => `Otázka ${i + 1}: ${pair.q}\nOdpověď: ${pair.a}`)
     .join("\n\n");
 
-  const prompt = `Jsi bulvárnější redaktor Okresního zpravodaje — regionálního plátku, který žije vesnickým fotbalem. Dostal jsi přepis rozhovoru s trenérem
+  const prompt = `${pokynyRedaktora ?? "Jsi bulvárnější redaktor Okresního zpravodaje — regionálního plátku, který žije vesnickým fotbalem."} Dostal jsi přepis rozhovoru s trenérem
 ${managerName} z týmu ${teamName} před zápasem s ${opponentName}. Sestav z toho novinový článek.
 
 KONTEXT — důležité pochopit:
@@ -514,8 +516,13 @@ export async function tryCreateInterviewRequest(
     relation,
   };
 
-  // 7. Generuj otázky přes Gemini
-  const questions = await generateInterviewQuestions(geminiApiKey, matchCtx);
+  // 7. Generuj otázky přes Gemini — ptá se konkrétní redaktor
+  const { redaktorProRubriku, pokynyProRedaktora, sentimentKeKlubu } = await import("./journalists");
+  const redaktor = await redaktorProRubriku(db, ctx.leagueId, "interview", teamRow.team_id as string);
+  const vztah = redaktor ? await sentimentKeKlubu(db, redaktor.id, teamRow.team_id as string) : 0;
+  const questions = await generateInterviewQuestions(
+    geminiApiKey, matchCtx, redaktor ? pokynyProRedaktora(redaktor, vztah) : undefined,
+  );
   if (!questions || questions.length === 0) {
     logger.warn({ module: "interview-generator" }, "failed to generate questions", teamRow.team_id);
     return;

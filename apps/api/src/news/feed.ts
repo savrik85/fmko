@@ -67,6 +67,12 @@ export interface FeedRow {
   game_week: number | null;
   created_at: string;
   photos_json: string | null;
+  /** Podpis pod článkem — kdo ho v redakci psal. */
+  journalist_id: string | null;
+  journalist_first: string | null;
+  journalist_last: string | null;
+  journalist_nick: string | null;
+  journalist_style: string | null;
 }
 
 /**
@@ -80,7 +86,7 @@ export async function loadFeedArticles(
 ): Promise<FeedRow[]> {
   const res = await db.prepare(
     `WITH kandidati AS (
-       SELECT n.id, n.type, n.headline, n.body, n.game_week, n.created_at,
+       SELECT n.id, n.type, n.headline, n.body, n.game_week, n.created_at, n.journalist_id,
               ROW_NUMBER() OVER (PARTITION BY n.type ORDER BY n.created_at DESC) AS poradi
        FROM news n
        LEFT JOIN matches m ON n.match_id = m.id AND n.type = 'promotion'
@@ -93,9 +99,12 @@ export async function loadFeedArticles(
          AND (n.type != 'matchday_preview'
               OR n.created_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-7 days'))
      )
-     SELECT k.id, k.type, k.headline, k.body, k.game_week, k.created_at, ur.photos_json
+     SELECT k.id, k.type, k.headline, k.body, k.game_week, k.created_at, ur.photos_json,
+            k.journalist_id, j.first_name AS journalist_first, j.last_name AS journalist_last,
+            j.nickname AS journalist_nick, j.style AS journalist_style
      FROM kandidati k
      LEFT JOIN ultras_reports ur ON ur.news_id = k.id
+     LEFT JOIN journalists j ON j.id = k.journalist_id
      WHERE k.poradi <= CASE k.type ${CASE_KVOTY} ELSE ${KVOTA_OSTATNI} END
      ORDER BY k.created_at DESC`
   ).bind(leagueId, teamId ?? null).all<FeedRow>();

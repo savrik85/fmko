@@ -317,7 +317,10 @@ export async function generateMatchdayPreview(
     ? "Používej pražský městský kolorit — zmiňuj městské části, tramvaje, hospody."
     : "Používej místní kolorit — obce, charakter, okresní atmosféru.";
 
-  const prompt = `Jsi sportovní redaktor ${isPraha ? "pražského" : "okresního"} zpravodaje${isPraha ? "" : ` v ${district}ích`}. Napiš předzápasové preview ${gameWeek}. kola ${leagueName}.
+  const { redaktorProRubriku, pokynyProRedaktora } = await import("./journalists");
+  const redaktor = await redaktorProRubriku(db, leagueId, "matchday_preview", calendarId);
+
+  const prompt = `${redaktor ? pokynyProRedaktora(redaktor) : `Jsi sportovní redaktor ${isPraha ? "pražského" : "okresního"} zpravodaje`}. Napiš předzápasové preview ${gameWeek}. kola ${leagueName}.
 
 ZÁPASY KOLA:
 ${matchLines.join("\n\n")}
@@ -386,8 +389,8 @@ Styl:
   }
 
   await db.prepare(
-    "INSERT INTO news (id, league_id, type, headline, body, game_week, season_number, created_at) VALUES (?, ?, 'matchday_preview', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
-  ).bind(crypto.randomUUID(), leagueId, headline, article, gameWeek, seasonNumber).run()
+    "INSERT INTO news (id, league_id, type, headline, body, game_week, season_number, journalist_id, created_at) VALUES (?, ?, 'matchday_preview', ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+  ).bind(crypto.randomUUID(), leagueId, headline, article, gameWeek, seasonNumber, redaktor?.id ?? null).run()
     .catch((e) => { logger.warn({ module: "matchday-preview" }, "insert news", e); });
 
   logger.info({ module: "matchday-preview" }, `preview generated for league ${leagueId} week ${gameWeek}: "${headline}"`);
