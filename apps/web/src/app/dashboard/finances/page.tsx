@@ -31,7 +31,7 @@ interface BudgetData {
   wageBill: { weekly: number; topPlayers: WagePlayer[] };
   weekly: {
     income: { sponsors: number; baseSponsor: number; subsidy: number; playerContributions: number; total: number };
-    expenses: { wages: number; maintenance: number; equipment: number; training: number; loanRepayment: number; total: number };
+    expenses: { wages: number; staffWages?: number; maintenance: number; equipment: number; training: number; loanRepayment: number; total: number };
     net: number;
     netWithLoan: number;
   };
@@ -326,6 +326,7 @@ function topIncomeItems(d: BudgetData) {
 function topExpenseItems(d: BudgetData) {
   const items = [
     { label: "Mzdy hráčů", amount: d.weekly.expenses.wages },
+    ...((d.weekly.expenses.staffWages ?? 0) > 0 ? [{ label: "Mzdy zaměstnanců", amount: d.weekly.expenses.staffWages ?? 0 }] : []),
     { label: "Údržba hřiště", amount: d.weekly.expenses.maintenance },
     { label: "Tréninky", amount: d.weekly.expenses.training },
     { label: "Vybavení", amount: d.weekly.expenses.equipment },

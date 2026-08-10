@@ -749,7 +749,7 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
         total: weeklyIncome,
       },
       expenses: {
-        wages: weeklyWages, maintenance: weeklyMaintenance,
+        wages: weeklyWages, staffWages: weeklyStaffWages, maintenance: weeklyMaintenance,
         equipment: weeklyEquipment, training: weeklyTraining,
         loanRepayment: weeklyLoanRepayment,
         total: weeklyExpenses,
