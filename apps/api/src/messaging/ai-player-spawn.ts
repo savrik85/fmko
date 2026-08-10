@@ -109,17 +109,61 @@ export function loadPlayerSnapshot(row: Record<string, unknown>): PlayerSnapshot
 
 async function loadTeamContext(db: D1Database, teamId: string): Promise<TeamContext> {
   const row = await db.prepare(
-    `SELECT t.name, v.name as village_name, m.name as manager_name
+    `SELECT t.name, v.name as village_name, m.name as manager_name, t.league_id
      FROM teams t
      LEFT JOIN villages v ON t.village_id = v.id
      LEFT JOIN managers m ON m.team_id = t.id
      WHERE t.id = ?`,
-  ).bind(teamId).first<{ name: string; village_name: string | null; manager_name: string | null }>()
+  ).bind(teamId).first<{ name: string; village_name: string | null; manager_name: string | null; league_id: string | null }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "loadTeamContext", e); return null; });
+
+  // Poslední odehraný zápas — bez něj si model výsledek vymyslí a gratuluje k prohře,
+  // kterou tým vyhrál. Formát stejný jako v rozhovorech pro Zpravodaj.
+  const lm = await db.prepare(
+    `SELECT m.home_team_id, m.away_team_id, m.home_score, m.away_score,
+            ht.name AS home_name, at.name AS away_name
+       FROM matches m
+       JOIN teams ht ON ht.id = m.home_team_id
+       JOIN teams at ON at.id = m.away_team_id
+      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
+      ORDER BY m.simulated_at DESC LIMIT 1`,
+  ).bind(teamId, teamId).first<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "loadTeamContext last match", e); return null; });
+
+  let lastMatchResult: string | undefined;
+  if (lm && lm.home_score != null && lm.away_score != null) {
+    const isHome = lm.home_team_id === teamId;
+    const my = (isHome ? lm.home_score : lm.away_score) as number;
+    const opp = (isHome ? lm.away_score : lm.home_score) as number;
+    const oppName = (isHome ? lm.away_name : lm.home_name) as string;
+    const verdict = my > opp ? "výhra" : my < opp ? "prohra" : "remíza";
+    lastMatchResult = `${verdict} ${my}:${opp} ${isHome ? "doma s" : "venku s"} ${oppName}`;
+  }
+
+  // Pozice v tabulce
+  let leaguePosition: number | undefined;
+  if (row?.league_id) {
+    const { calculateStandings } = await import("../stats/standings");
+    const standings = await calculateStandings(db, row.league_id)
+      .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "loadTeamContext standings", e); return []; });
+    leaguePosition = standings.find((st) => st.teamId === teamId)?.pos;
+  }
+
+  // Soupiska — whitelist jmen, o kterých smí model mluvit
+  const squad = await db.prepare(
+    `SELECT first_name, last_name FROM players
+      WHERE team_id = ? AND (status IS NULL OR status = 'active')
+      ORDER BY overall_rating DESC LIMIT 24`,
+  ).bind(teamId).all<{ first_name: string; last_name: string }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "loadTeamContext squad", e); return { results: [] as Array<{ first_name: string; last_name: string }> }; });
+
   return {
     teamName: row?.name ?? "tým",
     villageName: row?.village_name ?? undefined,
     managerName: row?.manager_name ?? undefined,
+    lastMatchResult,
+    leaguePosition,
+    squadNames: squad.results.map((r) => `${r.first_name} ${r.last_name}`),
   };
 }
 

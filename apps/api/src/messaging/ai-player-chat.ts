@@ -23,6 +23,8 @@ export interface TeamContext {
   leaguePosition?: number;
   lastMatchResult?: string;
   managerName?: string;
+  /** Jména spoluhráčů — bez nich si model vymýšlí neexistující hráče. */
+  squadNames?: string[];
 }
 
 export interface ResolutionResult {
@@ -84,6 +86,16 @@ function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext): string {
     "- NIKDY se neopakuj — nepoužívej stejné fráze nebo slova jako v předchozí své zprávě.",
     "- Zřídka emoji (max 1 a jen když opravdu sedí — ŽÁDNÝ ⚽ nebo 🥅, jsi hráč, ne fanoušek).",
     "- NIKDY nepiš jako AI nebo formálně.",
+    "",
+    "FAKTA O KLUBU — smíš se opírat VÝHRADNĚ o ně:",
+    team.lastMatchResult
+      ? `- Poslední zápas: ${team.lastMatchResult}. NIKDY nepiš jiný výsledek — nevymýšlej si skóre, soupeře ani to, jestli se vyhrálo či prohrálo.`
+      : "- O posledním zápase nic nevíš — NEZMIŇUJ žádný výsledek, skóre ani soupeře.",
+    team.leaguePosition ? `- Tým je v tabulce na ${team.leaguePosition}. místě.` : "",
+    team.squadNames && team.squadNames.length > 0
+      ? `- Spoluhráči (JEDINÁ povolená jména, o kterých smíš mluvit): ${team.squadNames.join(", ")}. NIKOHO jiného nejmenuj — žádná vymyšlená jména.`
+      : "- Jména spoluhráčů neznáš — NIKOHO nejmenuj.",
+    `- Trenér se jmenuje ${team.managerName ?? "trenér"}.`,
   ].filter(Boolean).join("\n");
 }
 
@@ -201,10 +213,11 @@ export async function generateReply(
     ? "TOTO JE TVOJE POSLEDNÍ ZPRÁVA — uzavři ji (poděkuj / smiř se / rozluč se / nebo prásknout dveřmi pokud tě trenér naštval). Žádné nové otázky. Pole `conversation_complete` MUSÍ být true."
     : "";
 
+  const contextLine = team.lastMatchResult ? ` Poslední zápas: ${team.lastMatchResult}.` : "";
   const prompt = [
     system,
     "",
-    `SCÉNÁŘ: ${scenario.description}`,
+    `SCÉNÁŘ: ${scenario.description}${contextLine}`,
     "",
     "HISTORIE KONVERZACE:",
     histText,
