@@ -499,7 +499,7 @@ export default function ObecPage() {
 
           <p className="pt-1"><strong>Místní hrdost</strong> 🏡 — kolik rodáků z obce máš v kádru a jak hrají. Když místní zaboduje (hat-trick / hráč zápasu), přízeň skočí nahoru a celý kádr dostane +5 morálku. Pokud místní hráče prodáš, sportovec a tradicionalista to neodpustí.</p>
 
-          <p><strong>Volby</strong> 🗳️ — každé 4 sezóny. Zastupitelé s vysokou přízní mandát obhájí, ostatní vystřídá nový. Pak začínáš znovu na 50.</p>
+          <p><strong>Volby</strong> 🗳️ — mandát trvá 4 sezóny (herní kalendář). Zastupitelé s vysokou přízní mandát obhájí, ostatní vystřídá nový. Pak začínáš znovu na 50.</p>
 
           <p><strong>Krize</strong> ⚠️ — když přízeň klesne pod 20, obec se otočí proti klubu. Vandalismus, sponzor exit, kontrola. Cesta zpět je dlouhá — brigády, petice, charity.</p>
 

@@ -119,9 +119,14 @@ export async function createSeasonWrapInterviews(
   ).bind(leagueId).all<{ team_id: string; team_name: string; manager_id: string; manager_name: string }>()
     .catch((e) => { logger.warn({ module: "season-interview" }, "load human teams", e); return { results: [] as { team_id: string; team_name: string; manager_id: string; manager_name: string }[] }; });
 
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
-  const expiresIso = expiresAt.toISOString();
+  // Expirace v HERNÍM čase — daily-tick ji porovnává s herním datem. Reálné new Date()
+  // by při kladném offsetu znamenalo okamžitou expiraci rozhovoru.
+  const { gameExpiry } = await import("../lib/game-time");
+  const gameDateRow = await db.prepare(
+    "SELECT game_date FROM teams WHERE league_id = ? AND game_date IS NOT NULL LIMIT 1"
+  ).bind(leagueId).first<{ game_date: string }>()
+    .catch((e) => { logger.warn({ module: "season-interview" }, "load game_date", e); return null; });
+  const expiresIso = gameExpiry(gameDateRow?.game_date ?? new Date().toISOString(), 7);
 
   // Jen týmy bez existujícího season-wrap rozhovoru (idempotence)
   const pending: typeof humanRes.results = [];

@@ -196,17 +196,20 @@ export async function processElections(
   gameDate: string,
 ): Promise<{ replaced: number; renewed: number }> {
   const now = new Date();
+  // Mandát běží v HERNÍM čase (gameDate), ne reálném — jinak by při posunutých
+  // herních hodinách volby nikdy nepřišly (stejný vzor jako petice/brigády).
+  const { TERM_LENGTH_GAME_DAYS } = await import("../villages/officials-store");
   const expired = await db.prepare(
     `SELECT id, village_id, role, first_name, last_name FROM village_officials
      WHERE term_end_at < ?`
-  ).bind(now.toISOString()).all<{
+  ).bind(new Date(gameDate).toISOString()).all<{
     id: string; village_id: string; role: string; first_name: string; last_name: string;
   }>();
 
   let replaced = 0;
   let renewed = 0;
-  const newTermEnd = new Date(now);
-  newTermEnd.setFullYear(newTermEnd.getFullYear() + 4);
+  const newTermEnd = new Date(gameDate);
+  newTermEnd.setUTCDate(newTermEnd.getUTCDate() + TERM_LENGTH_GAME_DAYS);
 
   // Import generator deferred (avoid circular)
   const { generateOfficial } = await import("../villages/officials-generator");
@@ -239,7 +242,7 @@ export async function processElections(
         newId, o.village_id, newPersona.role, newPersona.firstName, newPersona.lastName,
         newPersona.age, newPersona.occupation, JSON.stringify(newPersona.faceConfig),
         newPersona.personality, JSON.stringify(newPersona.portfolio),
-        JSON.stringify(newPersona.preferences), now.toISOString(), newTermEnd.toISOString(),
+        JSON.stringify(newPersona.preferences), new Date(gameDate).toISOString(), newTermEnd.toISOString(),
       ).run();
 
       await db.prepare(
@@ -253,10 +256,10 @@ export async function processElections(
       ).run().catch((e) => logger.warn({ module: "village-processor" }, "election history", e));
       replaced++;
     } else {
-      // Renewed — prodloužit term o 4 roky
+      // Renewed — prodloužit mandát o další 4 sezóny (herní čas)
       await db.prepare(
         `UPDATE village_officials SET term_start_at = ?, term_end_at = ? WHERE id = ?`
-      ).bind(now.toISOString(), newTermEnd.toISOString(), o.id).run();
+      ).bind(new Date(gameDate).toISOString(), newTermEnd.toISOString(), o.id).run();
       await db.prepare(
         `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)
          VALUES (?, ?, NULL, ?, 'election_renewed', ?, ?, ?, ?)`

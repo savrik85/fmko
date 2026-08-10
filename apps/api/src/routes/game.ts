@@ -6147,9 +6147,14 @@ gameRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
 // GET /api/teams/:teamId/player-offers — pending offers
 gameRouter.get("/teams/:teamId/player-offers", async (c) => {
   const teamId = c.req.param("teamId");
+  // expires_at je v HERNÍM čase (player-offers.ts počítá z game_date) → filtrovat
+  // proti hernímu datu týmu, ne reálnému 'now' (při offsetu nabídky mizely/přežívaly).
+  const teamClock = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ game_date: string | null }>().catch((e) => { logger.warn({ module: "game" }, "load game_date for offers", e); return null; });
+  const offerCutoff = teamClock?.game_date ?? new Date().toISOString();
   const offers = await c.env.DB.prepare(
-    "SELECT * FROM player_offers WHERE team_id = ? AND status = 'pending' AND expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now') ORDER BY created_at DESC"
-  ).bind(teamId).all().catch(() => ({ results: [] }));
+    "SELECT * FROM player_offers WHERE team_id = ? AND status = 'pending' AND expires_at > ? ORDER BY created_at DESC"
+  ).bind(teamId, offerCutoff).all().catch(() => ({ results: [] }));
   return c.json(offers.results.map((o) => ({
     id: o.id, source: o.source, sourceName: o.source_name, message: o.message,
     firstName: o.first_name, lastName: o.last_name, age: o.age, position: o.position,

@@ -27,7 +27,13 @@ export interface OfficialRow {
   created_at: string;
 }
 
-const TERM_LENGTH_YEARS = 4;
+/**
+ * Délka mandátu v HERNÍCH dnech: 4 sezóny × 16 týdnů = 448 dní. Dřívější 4 reálné
+ * roky znamenaly, že slibované volby "každé 4 sezóny" hráč prakticky nikdy neviděl.
+ * Porovnání běží v herním čase (viz processElections), zápis z reálného `now` je
+ * jen výchozí bod čerstvého mandátu.
+ */
+export const TERM_LENGTH_GAME_DAYS = 448;
 
 /** Vrací 4 představitele obce, případně lazy nageneruje. */
 export async function ensureVillageOfficials(
@@ -55,7 +61,7 @@ export async function ensureVillageOfficials(
 
   const now = new Date();
   const termEnd = new Date(now);
-  termEnd.setFullYear(termEnd.getFullYear() + TERM_LENGTH_YEARS);
+  termEnd.setUTCDate(termEnd.getUTCDate() + TERM_LENGTH_GAME_DAYS);
 
   const inserts = generated.filter((g) => !haveRoles.has(g.role));
   for (const g of inserts) {

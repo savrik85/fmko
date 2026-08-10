@@ -239,10 +239,13 @@ export async function executeDailyTick(
 
     let skipTrainingForMatch = false;
     if (isTrainingDay && isTeamTrainingDay && team.league_id) {
-      const tomorrowEnd = new Date(now); tomorrowEnd.setUTCDate(tomorrowEnd.getUTCDate() + 1); tomorrowEnd.setUTCHours(23, 59, 59, 999);
+      // scheduled_at je v HERNÍM čase → okno "zápas do 24h" počítat z herního data
+      // (effectiveDate), stejně jako kontrola nákladu za trénink níže. Dřív tu bylo
+      // reálné now — při offsetu tým trénoval "zdarma" nebo platil bez tréninku.
+      const tomorrowEnd = new Date(effectiveDate); tomorrowEnd.setUTCDate(tomorrowEnd.getUTCDate() + 1); tomorrowEnd.setUTCHours(23, 59, 59, 999);
       const upcomingMatch = await env.DB.prepare(
         "SELECT sc.id FROM season_calendar sc JOIN matches m ON m.calendar_id = sc.id WHERE sc.league_id = ? AND sc.scheduled_at >= ? AND sc.scheduled_at <= ? AND sc.status = 'scheduled' AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1"
-      ).bind(team.league_id, now.toISOString(), tomorrowEnd.toISOString(), teamId, teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "daily-tick", teamId }, "check tomorrow match", e); return null; });
+      ).bind(team.league_id, effectiveDate.toISOString(), tomorrowEnd.toISOString(), teamId, teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "daily-tick", teamId }, "check tomorrow match", e); return null; });
       if (upcomingMatch) {
         skipTrainingForMatch = true;
         logger.info({ module: "daily-tick", teamId }, `SKIP training (zápas <=24h) day=${dayOfWeek}`);
@@ -1340,10 +1343,12 @@ export async function executeDailyTick(
   }
 
   // ── Loan returns — hráči vracející se z hostování ──
+  // loan_until se zapisuje v HERNÍM čase (game.ts loan accept) → porovnávat proti
+  // hernímu datu, ne reálnému. Při offsetu se jinak hráči vraceli špatně (dřív/nikdy).
   try {
     const expiredLoans = await env.DB.prepare(
       "SELECT id, first_name, last_name, team_id, loan_from_team_id FROM players WHERE loan_from_team_id IS NOT NULL AND loan_until <= ?"
-    ).bind(now.toISOString()).all();
+    ).bind(effectiveDate.toISOString()).all();
     for (const p of expiredLoans.results) {
       const originalTeamId = p.loan_from_team_id as string;
       const playerId = p.id as string;
@@ -1380,12 +1385,15 @@ export async function executeDailyTick(
   // transfer_offers expirují v transfer pressure ticku (transfers/transfer-pressure-tick.ts),
   // kde se řeší i dopad na morálku hráče, který o přestup stál.
   try {
+    // transfer_listings mají expiraci zapsanou v reálném čase (game.ts) → reálné now.
     await env.DB.prepare("UPDATE transfer_listings SET status = 'expired' WHERE status = 'active' AND expires_at < ?")
       .bind(now.toISOString()).run();
+    // player_offers + coach_interviews mají expiraci v HERNÍM čase → herní datum,
+    // jinak při offsetu nabídky expirují okamžitě/nikdy (stejný vzor jako petice).
     await env.DB.prepare("UPDATE player_offers SET status = 'expired' WHERE status = 'pending' AND expires_at < ?")
-      .bind(now.toISOString()).run();
+      .bind(effectiveDate.toISOString()).run();
     await env.DB.prepare("UPDATE coach_interviews SET status = 'expired' WHERE status = 'pending' AND expires_at < ?")
-      .bind(now.toISOString()).run()
+      .bind(effectiveDate.toISOString()).run()
       .catch((e) => logger.warn({ module: "daily-tick" }, "expire coach_interviews", e));
     await env.DB.prepare("UPDATE transfer_bids SET status = 'withdrawn' WHERE status = 'pending' AND listing_id IN (SELECT id FROM transfer_listings WHERE status != 'active')")
       .run().catch((e) => logger.warn({ module: "daily-tick" }, "withdraw bids for expired listings", e));
