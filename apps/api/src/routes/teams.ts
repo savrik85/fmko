@@ -372,9 +372,11 @@ teamsRouter.post("/", async (c) => {
     }
   }
   for (const rel of rels) {
+    // strength z generátoru se MUSÍ zapsat — dřív INSERT sloupec vynechával
+    // a všechny vztahy padaly na DB default 50 (řazení "nejsilnější" pak nefungovalo).
     await c.env.DB.prepare(
-      "INSERT INTO relationships (id, player_a_id, player_b_id, type) VALUES (?, ?, ?, ?)"
-    ).bind(uuid(), playerIds[rel.playerAIndex], playerIds[rel.playerBIndex], rel.type).run();
+      "INSERT INTO relationships (id, player_a_id, player_b_id, type, strength) VALUES (?, ?, ?, ?, ?)"
+    ).bind(uuid(), playerIds[rel.playerAIndex], playerIds[rel.playerBIndex], rel.type, rel.strength ?? 50).run();
   }
 
   // Assign squad numbers (1 = GK, 2-5 DEF, 6-8 MID, 9-11 FWD, rest 12+)
@@ -774,8 +776,8 @@ teamsRouter.post("/", async (c) => {
         for (const rel of lt.aiTeam.relationships) {
           if (rel.playerAIndex < aiPlayerIds.length && rel.playerBIndex < aiPlayerIds.length) {
             await c.env.DB.prepare(
-              "INSERT INTO relationships (id, player_a_id, player_b_id, type) VALUES (?, ?, ?, ?)"
-            ).bind(uuid(), aiPlayerIds[rel.playerAIndex], aiPlayerIds[rel.playerBIndex], rel.type).run();
+              "INSERT INTO relationships (id, player_a_id, player_b_id, type, strength) VALUES (?, ?, ?, ?, ?)"
+            ).bind(uuid(), aiPlayerIds[rel.playerAIndex], aiPlayerIds[rel.playerBIndex], rel.type, rel.strength ?? 50).run();
           }
         }
       }

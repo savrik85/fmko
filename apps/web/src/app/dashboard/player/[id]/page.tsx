@@ -832,7 +832,7 @@ export default function PlayerDetailPage() {
             <div className="grid grid-cols-2 gap-x-4 gap-y-0">
               <AttrRow label="Výdrž" value={player.physical?.stamina ?? 0} importance={imp("stamina")} />
               <AttrRow label="Síla" value={player.physical?.strength ?? 0} importance={imp("strength")} />
-              <AttrRow label="Náchylnost" value={player.physical?.injuryProneness ?? 0} inverted />
+              <AttrRow label="Náchylnost" value={player.physical?.injuryProneness ?? player.personality?.injuryProneness ?? 50} inverted />
             </div>
           </div>
 
@@ -855,7 +855,6 @@ export default function PlayerDetailPage() {
             <TraitRow label="Agresivita" value={player.personality?.aggression ?? 40} />
             <TraitRow label="Alkoholismus" value={player.personality?.alcohol ?? 30} inverted />
             <TraitRow label="Temperament" value={player.personality?.temper ?? 40} inverted />
-            <TraitRow label="Náchylnost" value={player.personality?.injuryProneness ?? 30} inverted />
           </div>
         </div>
       </div>

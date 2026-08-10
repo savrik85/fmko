@@ -217,10 +217,13 @@ function pickAssister(rng: Rng, lineup: MatchPlayer[], scorer: MatchPlayer): Mat
     const posW = p.position === "MID" ? 2.0 : p.position === "FWD" ? 1.5 : 0.8;
     const rawSkill = (p.passing * 0.4 + p.vision * 0.35 + p.creativity * 0.25);
     const skillFactor = (rawSkill / 50) ** 1.5; // exponential — star playmakers dominate
-    // Relationship bonus: brothers/mentor-pupil assist each other more
+    // Relationship bonus: bratři/otec-syn/mentor si nahrávají častěji (+15 %),
+    // spolužáci jsou sehraní ze školy (+10 %)
     const relBonus = scorer.relationshipsInLineup?.some(
       (r) => r.withId === p.id && (r.type === "brothers" || r.type === "father_son" || r.type === "mentor_pupil")
-    ) ? 1.15 : 1.0;
+    ) ? 1.15
+      : scorer.relationshipsInLineup?.some((r) => r.withId === p.id && r.type === "classmates")
+        ? 1.10 : 1.0;
     return posW * skillFactor * relBonus;
   });
 
@@ -631,7 +634,17 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     const injuryProb = 0.01 * WEATHER_MODS[weather].injuryMod * pitchMod;
     if (rng.random() < injuryProb) {
       const allPlayers = [...home.lineup, ...away.lineup];
-      const unlucky = rng.pick(allPlayers);
+      // Koho zranění potká, váží náchylnost (injuryProneness 0-100, default 50) —
+      // křehký hráč (100) má ~3× vyšší riziko než železný (0). Dřív čistá náhoda,
+      // přestože UI atribut "Náchylnost" zobrazuje.
+      const proneWeights = allPlayers.map((p) => 0.5 + ((p.injuryProneness ?? 50) / 100));
+      const totalProne = proneWeights.reduce((a, b) => a + b, 0);
+      let proneRoll = rng.random() * totalProne;
+      let unlucky = allPlayers[allPlayers.length - 1];
+      for (let i = 0; i < allPlayers.length; i++) {
+        proneRoll -= proneWeights[i];
+        if (proneRoll <= 0) { unlucky = allPlayers[i]; break; }
+      }
       // Equipment first-aid kit reduces injury chance for the affected team
       const teamInjMod = home.lineup.includes(unlucky) ? homeInjuryMod : awayInjuryMod;
       // Zimní výbava tlumí NAVÝŠENÍ rizika zranění z počasí (základní 1% riziko nechává)

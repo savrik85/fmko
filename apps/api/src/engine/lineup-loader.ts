@@ -54,6 +54,8 @@ export function mapRowToMatchPlayer(row: PlayerRow, matchPosition?: string): Mat
     aggression: (personality.aggression as number) ?? 40,
     consistency: (personality.consistency as number) ?? 50,
     clutch: (personality.clutch as number) ?? 50,
+    // Náchylnost bývá ve physical (nové) i personality (starší záznamy)
+    injuryProneness: ((physical.injuryProneness as number) ?? (personality.injuryProneness as number)) ?? 50,
     preferredFoot: ((physical.preferredFoot as string) ?? "right") as MatchPlayer["preferredFoot"],
     preferredSide: ((physical.preferredSide as string) ?? "center") as MatchPlayer["preferredSide"],
     condition: (lifeContext.condition as number) ?? 100,

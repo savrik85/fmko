@@ -37,6 +37,7 @@ export interface MatchPlayer {
   aggression: number;
   consistency: number;  // hidden from UI
   clutch: number;       // hidden from UI
+  injuryProneness?: number; // 0-100, váží výběr zraněného v simulaci (default 50)
   // Positioning
   preferredFoot: PreferredFoot;
   preferredSide: PreferredSide;

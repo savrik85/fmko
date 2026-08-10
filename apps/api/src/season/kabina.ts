@@ -43,11 +43,13 @@ export async function processKabina(db: D1Database, teamId: string): Promise<Kab
   const troublemakers = players.filter((p) => p.discipline < 35 && p.temper > 60);
   const potizista = [...troublemakers].sort((a, b) => (b.temper - b.discipline) - (a.temper - a.discipline))[0] ?? null;
 
-  // Vztahy v kádru — rivalové (friction) a parťáci od piva (camaraderie).
+  // Vztahy v kádru — rivalové a švagři dělají dusno, parťáci od piva, kolegové
+  // a sousedi drží partu. (Kolegové/sousedi/švagři byly dřív fantomové typy —
+  // UI jim slibovalo efekt, který nikde neexistoval.)
   const ids = players.map((p) => p.id);
   const ph = ids.map(() => "?").join(",");
   const rels = await db.prepare(
-    `SELECT player_a_id, player_b_id, type FROM relationships WHERE type IN ('rivals','drinking_buddies') AND player_a_id IN (${ph}) AND player_b_id IN (${ph})`
+    `SELECT player_a_id, player_b_id, type FROM relationships WHERE type IN ('rivals','drinking_buddies','coworkers','neighbors','in_laws') AND player_a_id IN (${ph}) AND player_b_id IN (${ph})`
   ).bind(...ids, ...ids).all<{ player_a_id: string; player_b_id: string; type: string }>()
     .catch((e) => { logger.warn({ module: M }, "load relationships", e); return { results: [] as never[] }; });
 
@@ -56,9 +58,12 @@ export async function processKabina(db: D1Database, teamId: string): Promise<Kab
 
   if (tahoun) for (const p of players) add(p.id, p.id === tahoun.id ? 1 : 2);
   for (const tm of troublemakers) for (const p of players) if (p.id !== tm.id) add(p.id, -2);
+  const REL_WEEKLY: Record<string, number> = {
+    rivals: -3, drinking_buddies: 2, coworkers: 1, neighbors: 1, in_laws: -1,
+  };
   for (const r of rels.results) {
-    if (r.type === "rivals") { add(r.player_a_id, -3); add(r.player_b_id, -3); }
-    else { add(r.player_a_id, 2); add(r.player_b_id, 2); }
+    const d = REL_WEEKLY[r.type] ?? 0;
+    if (d !== 0) { add(r.player_a_id, d); add(r.player_b_id, d); }
   }
 
   // Aplikuj (clamp týdenní delta na [-6,6], morálka 0-100).

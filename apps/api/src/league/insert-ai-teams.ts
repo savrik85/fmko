@@ -109,8 +109,8 @@ export async function insertAITeamsIntoDB(
         for (const rel of lt.aiTeam.relationships) {
           if (rel.playerAIndex < aiPlayerIds.length && rel.playerBIndex < aiPlayerIds.length) {
             relStmts.push(
-              db.prepare("INSERT INTO relationships (id, player_a_id, player_b_id, type) VALUES (?, ?, ?, ?)")
-                .bind(crypto.randomUUID(), aiPlayerIds[rel.playerAIndex], aiPlayerIds[rel.playerBIndex], rel.type)
+              db.prepare("INSERT INTO relationships (id, player_a_id, player_b_id, type, strength) VALUES (?, ?, ?, ?, ?)")
+                .bind(crypto.randomUUID(), aiPlayerIds[rel.playerAIndex], aiPlayerIds[rel.playerBIndex], rel.type, rel.strength ?? 50)
             );
           }
         }

@@ -1363,6 +1363,7 @@ export async function buildMatchPlayers(
             aggression: personality.aggression ?? 40,
             consistency: personality.consistency ?? 50,
             clutch: personality.clutch ?? 50,
+            injuryProneness: physical.injuryProneness ?? personality.injuryProneness ?? 50,
             preferredFoot: physical.preferredFoot ?? "right",
             preferredSide: physical.preferredSide ?? "center",
             condition: lifeContext.condition ?? 100,

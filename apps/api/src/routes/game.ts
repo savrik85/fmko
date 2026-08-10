@@ -250,16 +250,18 @@ gameRouter.get("/teams/:teamId/players/:playerId/profile-extras", async (c) => {
     }
   }
 
+  // Popisy odpovídají SKUTEČNÝM efektům v enginu (simulation.ts + kabina.ts).
+  // Neslibovat nic, co kód nedělá — dřív tu byly 4 fantomové efekty.
   const EFFECT_MAP: Record<string, string> = {
-    brothers: "+5 morálka když hrají spolu",
-    father_son: "+3 morálka, mentoring efekt",
-    in_laws: "Neutrální, občas třecí plochy",
-    classmates: "+2 chemie na tréninku",
-    coworkers: "+1 morálka, znají se z práce",
-    neighbors: "+1 morálka, společná cesta",
-    drinking_buddies: "+3 morálka, riziko absence po výhře",
-    rivals: "-2 morálka v sestavě, motivace k překonání",
-    mentor_pupil: "+5 vývoj mladšího hráče",
+    brothers: "Častější asistence mezi sebou, +morálka při gólu bratra",
+    father_son: "Častější asistence mezi sebou, +morálka při gólu",
+    in_laws: "Třecí plochy — −1 morálka týdně, když jsou oba v kádru",
+    classmates: "Sehraní ze školy — častější asistence mezi sebou",
+    coworkers: "+1 morálka týdně, znají se z práce",
+    neighbors: "+1 morálka týdně, společná cesta na zápasy",
+    drinking_buddies: "+2 morálka týdně, +morálka při gólu parťáka",
+    rivals: "−3 morálka týdně, častější fauly v zápase",
+    mentor_pupil: "Žák má s mentorem na hřišti jistější zakončení a víc asistencí",
   };
 
   const TYPE_LABELS: Record<string, string> = {
