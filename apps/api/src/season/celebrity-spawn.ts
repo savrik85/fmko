@@ -176,17 +176,17 @@ export async function spawnCelebrity(
   const playerReactions: Record<CelebrityType, string[]> = {
     legend: [
       `Trenére, četl jste noviny?! ${fullName} se přistěhoval sem do okresu! To je přece ${tierDesc}! To by bylo něco, kdyby hrál za nás!`,
-      `Šéfe! Slyšel jsem v hospodě, že ${fullName} je tady v okrese! Prej hledá tým! Musíme ho mít!`,
+      `Trenére! Slyšel jsem v hospodě, že ${fullName} je tady v okrese! Prej hledá tým! Musíme ho mít!`,
       `Trenére, nevěřím vlastním očím — ${fullName} je na trhu volných hráčů! Ten hrál přece za repre! Můžem ho podepsat?`,
     ],
     fallen_star: [
       `Trenére, víte co se povídá? ${fullName} je zpátky v kraji. Prej to s ním šlo z kopce, ale talent tam prej furt je. Co říkáte?`,
-      `Šéfe, ${fullName} je na trhu. Znám ho ze školy — byl to bůh na hřišti. Teď prej pije, ale třeba by se dal dohromady u nás?`,
+      `Trenére, ${fullName} je na trhu. Znám ho ze školy — byl to bůh na hřišti. Teď prej pije, ale třeba by se dal dohromady u nás?`,
       `Trenére, četl jsem v novinách o ${fullName}. Ten mladej co hrál za ligu a pak to zabalil. Prej je v okrese, nechceme ho zkusit?`,
     ],
     glass_man: [
       `Trenére, ${fullName} je volnej! Ten hrál přece profi fotbal, akorát ho zradily nohy. Ale když hraje, je to jiná třída. Stojí to za to?`,
-      `Šéfe, slyšel jsem že ${fullName} hledá tým. Prej odešel z profíků kvůli zraněním, ale jinak je to bombarďák. Co říkáte?`,
+      `Trenére, slyšel jsem že ${fullName} hledá tým. Prej odešel z profíků kvůli zraněním, ale jinak je to bombarďák. Co říkáte?`,
       `Trenére, víte o ${fullName}? Prej seknul s ligou kvůli kolenům, ale je mu teprv ${celeb.age}. Kdyby vydržel zdravej...`,
     ],
   };

@@ -402,12 +402,12 @@ export async function initTeamConversations(
 }
 
 const GREETINGS = [
-  "Ahoj šéfe! Těším se na sezónu! 💪",
+  "Ahoj trenére! Těším se na sezónu! 💪",
   "Čau trenére! Kdy je první trénink?",
   "Ahoj! Jsem připravenej makat.",
   "Zdravím! Doufám že budu hrát víc než minule.",
   "Čau! Co budeme trénovat jako první?",
-  "Ahoj šéfe, počítej se mnou na všechno!",
+  "Ahoj trenére, počítej se mnou na všechno!",
   "Nazdar! Jsem fit a připravenej.",
   "Ahoj! Těším se na novou sezónu.",
   "Čau trenére, snad to letos vyjde!",

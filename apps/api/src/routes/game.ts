@@ -7158,6 +7158,16 @@ gameRouter.post("/admin/teams/:teamId/manager-attr", async (c) => {
   });
 });
 
+// POST /api/admin/spawn-ai-chats — ruční spuštění SMS od hráčů (jinak jen cron 0 14).
+// Umožňuje ověřit obsah zpráv bez čekání na noční běh.
+gameRouter.post("/admin/spawn-ai-chats", async (c) => {
+  const { applyAiPlayerThreads } = await import("../messaging/ai-player-spawn");
+  const r = await applyAiPlayerThreads(c.env.DB, c.env)
+    .catch((e) => { logger.error({ module: "game.ts" }, "manual ai chat spawn", e); return null; });
+  if (!r) return c.json({ error: "spawn selhal" }, 500);
+  return c.json({ ok: true, ...r });
+});
+
 // POST /api/admin/cup/advance — odsimuluje aktuální kolo poháru.
 gameRouter.post("/admin/cup/advance", async (c) => {
   const cup = await c.env.DB.prepare("SELECT id FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1")
