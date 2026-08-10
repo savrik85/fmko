@@ -56,6 +56,9 @@ const SOURCES = [
   },
 ];
 
+/** Zdroj nabídky — kdo hráče přivedl. */
+export type OfferSource = (typeof SOURCES)[number]["source"];
+
 
 /**
  * Generate a player offer for a team. Returns null if conditions not met.
@@ -68,6 +71,8 @@ export async function generatePlayerOffer(
   district: string,
   villageInfo: VillageInfo,
   gameDate: string,
+  /** Vynutit konkrétní zdroj nabídky (jinak se losuje). Používá admin hromadné generování. */
+  forceSource?: OfferSource,
 ): Promise<{ offerId: string; source: string; senderName: string; senderTitle: string; message: string; playerName: string } | null> {
   // Check pending offers — max 2 at a time
   const pending = await db.prepare("SELECT COUNT(*) as cnt FROM player_offers WHERE team_id = ? AND status = 'pending'")
@@ -75,7 +80,7 @@ export async function generatePlayerOffer(
   if ((pending?.cnt ?? 0) >= 2) return null;
 
   // Pick source type
-  const sourceType = rng.pick(SOURCES);
+  const sourceType = (forceSource ? SOURCES.find((s) => s.source === forceSource) : undefined) ?? rng.pick(SOURCES);
   const ageRange = sourceType.ageRange ?? [18, 38];
   const message = rng.pick(sourceType.messages);
 

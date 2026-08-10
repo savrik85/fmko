@@ -6325,9 +6325,62 @@ gameRouter.post("/admin/generate-player-offer/:teamId", async (c) => {
     district: team.district,
   };
   const rng = createRng(cryptoSeed());
-  const gameDate = new Date().toISOString();
+  // Expirace nabídky se počítá z HERNÍHO data — s reálným by při posunutých hodinách
+  // nabídka vypršela dřív, než by ji hráč vůbec uviděl.
+  const gameDate = (await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId)
+    .first<{ game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: "game" }, "load game_date for admin offer", e); return null; }))?.game_date
+    ?? new Date().toISOString();
   const result = await generatePlayerOffer(c.env.DB, rng, teamId, team.district, villageInfo, gameDate);
   return c.json({ ok: true, result });
+});
+
+// POST /api/admin/generate-youth-offer-all — pošle KAŽDÉMU lidskému A-týmu jednu nabídku
+// dorostence přes standardní mechanismus (stejná funkce, jakou používá daily-tick).
+//
+// Respektuje běžná pravidla: tým, který už má 2 čekající nabídky, se přeskočí.
+// `?dryRun=1` jen spočítá, koho by se to týkalo. `?source=` umí i jiný zdroj (pub, friend,
+// recommendation), výchozí je dorost.
+gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
+  const dryRun = c.req.query("dryRun") === "1";
+  const source = (c.req.query("source") ?? "youth") as "pub" | "youth" | "friend" | "recommendation";
+
+  const teams = await c.env.DB.prepare(
+    `SELECT t.id, t.name, t.game_date, v.district, v.population, v.size,
+            (SELECT COUNT(*) FROM player_offers po WHERE po.team_id = t.id AND po.status = 'pending') AS pending
+       FROM teams t JOIN villages v ON v.id = t.village_id
+      WHERE t.user_id != 'ai' AND t.parent_team_id IS NULL AND t.game_date IS NOT NULL`,
+  ).all<{ id: string; name: string; game_date: string; district: string; population: number; size: string; pending: number }>()
+    .catch((e) => { logger.error({ module: "game" }, "load teams for youth offers", e); return { results: [] as never[] }; });
+
+  const eligible = teams.results.filter((t) => t.pending < 2);
+  if (dryRun) {
+    return c.json({
+      ok: true, dryRun: true, source,
+      teams: eligible.length,
+      skipped: teams.results.length - eligible.length,
+      names: eligible.map((t) => t.name),
+    });
+  }
+
+  const { generatePlayerOffer } = await import("../events/player-offers");
+  const sizeMap: Record<string, string> = { hamlet: "vesnice", village: "obec", town: "mestys", small_city: "mesto", city: "mesto" };
+  const results: Array<{ team: string; player?: string; ok: boolean }> = [];
+  for (const t of eligible) {
+    const villageInfo = {
+      region_code: t.district,
+      category: (sizeMap[t.size] ?? "obec") as "vesnice" | "obec" | "mestys" | "mesto",
+      population: t.population ?? 500,
+      district: t.district,
+    };
+    const r = await generatePlayerOffer(c.env.DB, createRng(cryptoSeed()), t.id, t.district, villageInfo, t.game_date, source)
+      .catch((e) => { logger.warn({ module: "game" }, `youth offer for ${t.id}`, e); return null; });
+    results.push({ team: t.name, player: r?.playerName, ok: !!r });
+  }
+
+  const created = results.filter((r) => r.ok).length;
+  logger.info({ module: "game" }, `hromadné nabídky (${source}): ${created}/${eligible.length} týmů`);
+  return c.json({ ok: true, source, created, skipped: teams.results.length - eligible.length, results });
 });
 
 // ── Coach interviews (Rozhovor kola) ──
