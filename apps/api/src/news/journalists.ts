@@ -79,7 +79,7 @@ const STYLY: Record<JournalistStyle, StyleDef> = {
     bio: [
       "Třicet let si vede sešit s rozestavením každého zápasu v okrese.",
       "Od dorostenecké lavičky k zápisníku — a se zápisníkem už napořád.",
-      "Každá věta musí stát na čísle, jinak do tisku nejde.",
+      "Tvrzení bez opory v datech se do článku nedostane.",
     ],
     hlasky: ["Podívejme se na to střízlivě.", "Čísla mluví jasně.", "Bez emocí, prosím."],
     rubriky: ["ai_report", "round_summary", "matchday_preview"],
@@ -305,6 +305,6 @@ export function pokynyProRedaktora(j: Journalist, sentiment = 0): string {
   radky.push("Článek NEPODEPISUJ — podpis doplní sazba.");
   // Pokyny jsou psané po větách, ne po bodech: když dostal model odrážkový
   // blok, začal odrážkami odpovídat a místo článku vyplivl číslovaný seznam.
-  radky.push("Piš souvislý text v odstavcích. NIKDY nepoužívej číslované seznamy, odrážky ani nadpisy.");
+  radky.push("Piš souvislý text v odstavcích. Nikdy nečísluj věty ani odstavce a nepoužívej odrážky či nadpisy.");
   return radky.join(" ");
 }
