@@ -14,7 +14,9 @@ const KVOTY: Record<string, number> = {
   interview: 8,
   player_interview: 6,
   promotion: 3,
-  ultras_report: 2,
+  // Kotel se vykresluje jako plnohodnotný blok s fotkami a rubrika renderuje
+  // všechno, co dostane — víc než jeden report by znamenal dva vedle sebe.
+  ultras_report: 1,
   round_summary: 2,
   ai_report: 2,
   round_results: 2,
