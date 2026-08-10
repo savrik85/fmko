@@ -378,6 +378,15 @@ function FlowsTab({ data }: { data: BudgetData }) {
             </div>
           </div>
 
+          {data.sponsors.length === 0 && (
+            <div className="card p-4 sm:p-5">
+              <SectionLabel>Sponzorské smlouvy</SectionLabel>
+              <p className="mt-2 text-sm text-muted">
+                Žádná podepsaná smlouva — ze sponzorů teď nekape nic. Nabídky najdeš na stránce{" "}
+                <a href="/dashboard/sponsors" className="font-heading font-bold text-ink underline">Sponzoři</a>.
+              </p>
+            </div>
+          )}
           {data.sponsors.length > 0 && (
             <div className="card p-4 sm:p-5">
               <SectionLabel>Sponzorské smlouvy ({data.sponsors.length})</SectionLabel>

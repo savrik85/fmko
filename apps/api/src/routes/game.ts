@@ -5,7 +5,6 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { createRng, cryptoSeed } from "../generators/rng";
-import { generateSponsors } from "../season/economy";
 import { executeDailyTick } from "../season/daily-tick";
 import { recordTransaction } from "../season/finance-processor";
 import { generateBetweenRoundEvents } from "../events/between-rounds";
@@ -615,6 +614,9 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
   const playerCount = wageRow?.cnt ?? 0;
   const weeklyWages = wageRow?.weekly_total ?? 0;
 
+  // Jen REÁLNÉ smlouvy — dřív se bez podepsané smlouvy fabrikovali sponzoři přes
+  // generateSponsors() a jejich fiktivní příjem šel do celé prognózy, i když finance
+  // processor nikdy nic nepřipsal. Bez smlouvy = 0 Kč, ať přehled nelže.
   const sponsors = (sponsorContracts.results as Record<string, unknown>[]).map((s) => ({
     name: s.sponsor_name as string,
     type: s.sponsor_type as string,
@@ -622,22 +624,21 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
     winBonus: s.win_bonus as number,
   }));
 
-  // Also get generated sponsors if no contracts
-  if (sponsors.length === 0) {
-    const rng = createRng(teamId.charCodeAt(0));
-    const generated = await generateSponsors(rng, team.size as string, team.reputation as number, team.district as string, c.env.DB);
-    sponsors.push(...generated);
-  }
-
   const reputation = (team.reputation as number) ?? 50;
   const WEEKS_PER_SEASON = 16;
 
-  // All amounts calculated as WEEKLY (= per 7 game days)
+  // All amounts calculated as WEEKLY (= per 7 game days) — zrcadlí processWeeklyFinances
   // Income sources (weekly)
   const weeklySponsorIncome = Math.round(sponsors.reduce((sum, s) => sum + s.monthlyAmount, 0) / 4.3) * 2;
   const weeklyBaseSponsor = Math.round((reputation * 100) / 4.3);
-  const weeklySubsidies: Record<string, number> = { vesnice: 1400, obec: 2300, mestys: 3500, mesto: 5800 };
-  const weeklySubsidy = weeklySubsidies[category] ?? 2300;
+  // Dotace od obce: stejný vzorec jako finance-processor — měsíční základ × přízeň obce (0.5–1.5×)
+  const monthlySubsidyBase: Record<string, number> = { vesnice: 6000, obec: 10000, mestys: 15000, mesto: 25000 };
+  const favorRow = await c.env.DB.prepare(
+    "SELECT favor FROM village_team_favor WHERE team_id = ? AND official_id IS NULL"
+  ).bind(teamId).first<{ favor: number }>().catch((e) => { logger.warn({ module: "game" }, "load favor for budget", e); return null; });
+  const villageFavor = favorRow?.favor ?? 50;
+  const favorMultiplier = 0.5 + villageFavor / 100;
+  const weeklySubsidy = Math.round(((monthlySubsidyBase[category] ?? 8000) * favorMultiplier) / 4.3);
   const weeklyContributions = Math.round((playerCount * 100) / 4.3); // členské příspěvky (100 Kč/hráč/měs)
 
   const weeklyIncome = weeklySponsorIncome + weeklyBaseSponsor + weeklySubsidy + weeklyContributions;
@@ -649,8 +650,13 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
   const trainingPerSession: Record<string, number> = { vesnice: 200, obec: 400, mestys: 600, mesto: 1000 };
   const sessionsPerWeek = (team.training_sessions as number) ?? 2;
   const weeklyTraining = (trainingPerSession[category] ?? 400) * sessionsPerWeek;
+  // Mzdy zaměstnanců — reálný týdenní výdaj (finance-processor je strhává), dřív v prognóze chyběly
+  const staffWageRow = await c.env.DB.prepare(
+    "SELECT COALESCE(SUM(weekly_wage), 0) as total FROM staff_members WHERE team_id = ?"
+  ).bind(teamId).first<{ total: number }>().catch((e) => { logger.warn({ module: "game" }, "load staff wages for budget", e); return null; });
+  const weeklyStaffWages = staffWageRow?.total ?? 0;
 
-  const weeklyExpenses = weeklyWages + weeklyMaintenance + weeklyEquipment + weeklyTraining;
+  const weeklyExpenses = weeklyWages + weeklyStaffWages + weeklyMaintenance + weeklyEquipment + weeklyTraining;
   const weeklyNet = weeklyIncome - weeklyExpenses;
 
   // Active cash loan + remaining match days
