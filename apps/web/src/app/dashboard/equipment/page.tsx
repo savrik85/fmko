@@ -100,6 +100,18 @@ function EquipmentPage() {
     setActing(null);
   };
 
+  /** Samotné provedení opravy. Bez potvrzení — to si řeší volající. */
+  const repairNow = async (category: string) => {
+    if (!teamId || acting) return;
+    setActing("r-" + category);
+    if (await apiAction(apiFetch(`/api/teams/${teamId}/equipment/repair`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category }),
+    }), "Oprava se nezdařila")) await refreshAll();
+    setActing(null);
+    setSelling(null);
+  };
+
   const handleRepair = async (category: string, label: string, condition: number, cost: number) => {
     if (!teamId || acting) return;
     const ok = await confirm({
@@ -109,13 +121,7 @@ function EquipmentPage() {
       confirmLabel: `Opravit za ${formatCZK(cost)}`,
     });
     if (!ok) return;
-    setActing("r-" + category);
-    if (await apiAction(apiFetch(`/api/teams/${teamId}/equipment/repair`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ category }),
-    }), "Oprava se nezdařila")) await refreshAll();
-    setActing(null);
-    setSelling(null);
+    await repairNow(category);
   };
 
   const handleList = async (category: string, price: number) => {
@@ -131,19 +137,10 @@ function EquipmentPage() {
     setActing(null);
   };
 
+  // Bez useConfirm — dialog prodeje je otevřený a druhý modal nad ním by se schoval
+  // za něj. Potvrzení řeší SellDialog dvoukrokovým tlačítkem.
   const handlePawn = async (category: string) => {
     if (!teamId || acting || !selling) return;
-    const ok = await confirm({
-      title: `Zastavit ${selling.label}?`,
-      description: "Vybavení zmizí natrvalo a v bazaru se už neobjeví.",
-      details: [
-        { label: "Dostaneš", value: `+${formatCZK(selling.pawnQuote)}`, color: "text-pitch-500" },
-        { label: "Investoval jsi", value: formatCZK(selling.invested), color: "text-muted" },
-        { label: "Úroveň po prodeji", value: "0", color: "text-card-red" },
-      ],
-      confirmLabel: `Zastavit za ${formatCZK(selling.pawnQuote)}`,
-    });
-    if (!ok) return;
     setActing("pawn-" + category);
     if (await apiAction(apiFetch(`/api/teams/${teamId}/equipment/pawn`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -230,10 +227,7 @@ function EquipmentPage() {
         onClose={() => setSelling(null)}
         onList={handleList}
         onPawn={handlePawn}
-        onRepair={(cat) => {
-          const s = sellByCategory.get(cat);
-          if (s) handleRepair(cat, s.label, s.condition, s.level * 500);
-        }}
+        onRepair={repairNow}
       />
 
       {/* Tab bar */}

@@ -4015,6 +4015,14 @@ gameRouter.post("/admin/backfill-chemistry", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+// Doplní bazar vybavení o nabídky AI klubů. Běží samo v daily-ticku, tohle je
+// ruční spuštění — po nasazení nebo když je bazar prázdný a nechce se čekat na noc.
+gameRouter.post("/admin/generate-equipment-listings", async (c) => {
+  const { generateAiEquipmentListings } = await import("../equipment/ai-listings");
+  const created = await generateAiEquipmentListings(c.env.DB, new Date());
+  return c.json({ ok: true, created });
+});
+
 // Backfill: do pub_sessions z historických posezení doplnit avatary trenérů
 gameRouter.post("/admin/backfill-stammtisch-coaches", async (c) => {
   const { backfillStammtischCoaches } = await import("../community/manager-relations");

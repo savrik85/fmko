@@ -43,8 +43,10 @@ export function ConfirmDialog({
   const isLoading = loading || confirming;
 
   return (
-    // z-60: nad spodní navigací (z-50), aby tlačítka dialogu šla na mobilu zmáčknout
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={onCancel}>
+    // z-70: nad spodní navigací (z-50) i nad .modal-backdrop (z-60). Při shodném
+    // z-indexu rozhodovalo pořadí v DOM a potvrzení otevřené nad modalem se schovalo
+    // za něj — klikání pak nemělo žádný efekt a čekající promise se nikdy nedokončil.
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={onCancel}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
 

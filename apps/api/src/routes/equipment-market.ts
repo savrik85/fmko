@@ -505,9 +505,10 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
   }
 
   // ── P5: nepodmíněné dopisy. Nemůžou half-failnout, jdou v jednom batchi. ──
-  const sellerRow = await c.env.DB.prepare("SELECT name, budget, game_date FROM teams WHERE id = ?")
-    .bind(listing.team_id).first<{ name: string; budget: number; game_date: string | null }>()
+  const sellerRow = await c.env.DB.prepare("SELECT name, budget, game_date, user_id FROM teams WHERE id = ?")
+    .bind(listing.team_id).first<{ name: string; budget: number; game_date: string | null; user_id: string }>()
     .catch((e) => { logger.warn({ module: MODULE }, "fetch seller team for bookkeeping", e); return null; });
+  const sellerIsAi = sellerRow?.user_id === "ai";
   const buyerRow = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
     .bind(teamId).first<{ name: string }>()
     .catch((e) => { logger.warn({ module: MODULE }, "fetch buyer team name", e); return null; });
@@ -527,17 +528,20 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
 
   // ── P6: notifikace, fire-and-forget ──────────────────────────────────────
   const priceCz = listing.price.toLocaleString("cs");
+  // AI klubu se nic neposílá — nikdo to nečte a jen by to plodilo konverzace a notifikace.
   await Promise.all([
-    sendSystemSMS(c.env.DB, listing.team_id, "Kustod",
-      `💰 Prodáno! ${desc} si odvezli z ${buyerRow?.name ?? "jiného klubu"}. Na účtu máš o ${priceCz} Kč víc.`)
-      .catch((e) => logger.warn({ module: MODULE }, "sms seller", e)),
     sendSystemSMS(c.env.DB, teamId, "Kustod",
       `🚚 Dovezli to z ${sellerRow?.name ?? "jiného klubu"}: ${desc}.` +
       (sellerCondition < 60 ? ` Chce to opravit — ${(listing.level * 500).toLocaleString("cs")} Kč.` : ""))
       .catch((e) => logger.warn({ module: MODULE }, "sms buyer", e)),
-    createNotification(c.env.DB, listing.team_id, "event", "Vybavení prodáno",
-      `${label} za ${priceCz} Kč`, "/dashboard/equipment?tab=bazar", c.env)
-      .catch((e) => logger.warn({ module: MODULE }, "notify seller", e)),
+    ...(sellerIsAi ? [] : [
+      sendSystemSMS(c.env.DB, listing.team_id, "Kustod",
+        `💰 Prodáno! ${desc} si odvezli z ${buyerRow?.name ?? "jiného klubu"}. Na účtu máš o ${priceCz} Kč víc.`)
+        .catch((e) => logger.warn({ module: MODULE }, "sms seller", e)),
+      createNotification(c.env.DB, listing.team_id, "event", "Vybavení prodáno",
+        `${label} za ${priceCz} Kč`, "/dashboard/equipment?tab=bazar", c.env)
+        .catch((e) => logger.warn({ module: MODULE }, "notify seller", e)),
+    ]),
   ]);
 
   return c.json({

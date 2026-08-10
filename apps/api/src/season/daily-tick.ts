@@ -1413,6 +1413,16 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "equipment listing expiry failed", e);
   }
 
+  // ── Nabídky vybavení od AI klubů ──
+  // Až po expiraci, ať se doplňuje podle skutečného počtu živých nabídek.
+  try {
+    const { generateAiEquipmentListings } = await import("../equipment/ai-listings");
+    const created = await generateAiEquipmentListings(env.DB, now);
+    if (created > 0) logger.info({ module: "daily-tick" }, `bazar vybavení: ${created} nových AI nabídek`);
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "ai equipment listings failed", e);
+  }
+
   // ── Normalize all leagues to max game_date ──
   // Prevents permanent date offset if leagues were initialized at different times.
   try {

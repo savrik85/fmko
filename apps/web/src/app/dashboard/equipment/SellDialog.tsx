@@ -19,9 +19,16 @@ interface Props {
  */
 export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: Props) {
   const [price, setPrice] = useState(0);
+  // Zastavárna je nevratná, takže chce potvrzení — ale JEN uvnitř tohohle dialogu.
+  // useConfirm() se tu použít nesmí: jeho dialog by se otevřel nad modalem a hráč
+  // by klikal do prázdna (viz komentář u z-indexu v confirm-dialog.tsx).
+  const [pawnArmed, setPawnArmed] = useState(false);
 
   useEffect(() => {
-    if (option) setPrice(option.bazarSuggested);
+    if (option) {
+      setPrice(option.bazarSuggested);
+      setPawnArmed(false);
+    }
   }, [option]);
 
   if (!option) return null;
@@ -126,13 +133,38 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
             Investoval jsi <span className="tabular-nums">{formatCZK(option.invested)}</span>. Vybavení zmizí natrvalo,
             v bazaru se už neobjeví.
           </div>
-          <button
-            onClick={() => onPawn(option.category)}
-            disabled={busy}
-            className="w-full py-2.5 rounded-lg text-base font-heading font-bold border-2 border-card-red text-card-red hover:bg-card-red hover:text-white disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent transition-colors"
-          >
-            {busy ? "..." : "Do zastavárny"}
-          </button>
+
+          {pawnArmed ? (
+            <div className="space-y-2">
+              <div className="text-sm text-card-red font-heading font-bold">
+                Určitě? {option.label} zmizí a zpátky už je nekoupíš.
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPawnArmed(false)}
+                  disabled={busy}
+                  className="flex-1 py-2.5 rounded-lg text-base font-heading font-bold border border-gray-300 text-muted hover:text-ink transition-colors"
+                >
+                  Radši ne
+                </button>
+                <button
+                  onClick={() => onPawn(option.category)}
+                  disabled={busy}
+                  className="flex-1 py-2.5 rounded-lg text-base font-heading font-bold bg-card-red text-white hover:opacity-90 disabled:bg-gray-100 disabled:text-gray-400 transition-opacity"
+                >
+                  {busy ? "..." : `Zastavit za ${formatCZK(option.pawnQuote)}`}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setPawnArmed(true)}
+              disabled={busy}
+              className="w-full py-2.5 rounded-lg text-base font-heading font-bold border-2 border-card-red text-card-red hover:bg-card-red hover:text-white disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent transition-colors"
+            >
+              Do zastavárny
+            </button>
+          )}
         </div>
 
         <div className="text-sm text-card-red">
