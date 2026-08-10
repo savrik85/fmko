@@ -108,28 +108,34 @@ export function calcFormationSynergy(tactic: Tactic, formation?: string): number
 }
 
 /**
- * Sehranost faktor pro formaci — 15 (default/floor) = ~0.83, 100 = 1.0.
- * Žádná formace nikdy plně netlumená k 0.8 — i neznámou tým trochu umí.
+ * Sehranost formace jako SAMOSTATNÝ multiplikátor útočné síly — 15 (floor) = 0,975, 100 = 1,025.
+ *
+ * Dřív se sehranost míchala do `calcTacticEffectiveness` a odtud do `effMod`, které škáluje
+ * jen ODCHYLKU modifikátoru taktiky od 1,0. Vyrovnaná taktika má všechny modifikátory přesně
+ * 1,0, takže odchylka byla nulová a sehranost u ní neměla žádný efekt — měřeno 400 ze 400
+ * zápasů bit-identických. A vyrovnanou hraje ~68 % sestav. Proto se teď aplikuje přímo na
+ * útočnou sílu, nezávisle na zvolené taktice.
+ *
+ * Rozsah ±2,5 % na útočné síle odpovídá zhruba ±7 % vytvořených šancí (~±0,2 gólu na zápas).
  */
 export function formationChemistryFactor(familiarity: number | undefined): number {
   const f = Math.max(15, Math.min(100, familiarity ?? 15));
-  return 0.8 + 0.2 * (f / 100);
+  return 0.975 + 0.05 * ((f - 15) / 85);
 }
 
 /**
- * Celkový multiplikátor efektivity taktiky — skill-fit × formation synergy × formation chemistry.
- * Sehranost se počítá jen na formaci (taktika se v reálu adoptuje rychle, sehranost rozestavění je klíčová).
+ * Celkový multiplikátor efektivity taktiky — skill-fit × formation synergy.
+ * Sehranost sem záměrně NEPATŘÍ, aplikuje se zvlášť (viz formationChemistryFactor).
  */
 export function calcTacticEffectiveness(
   lineup: MatchPlayer[],
   tactic: Tactic,
   formation: string | undefined,
-  formationFamiliarity: number | undefined,
+  _formationFamiliarity?: number,
 ): number {
   const fit = calcTacticFit(lineup, tactic);
   const formSyn = calcFormationSynergy(tactic, formation);
-  const formChem = formationChemistryFactor(formationFamiliarity);
-  return fit * formSyn * formChem;
+  return fit * formSyn;
 }
 
 export function tacticDrainMod(tactic: Tactic): number {

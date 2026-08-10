@@ -44,8 +44,9 @@ export interface MatchPlayer {
   // Mutable state
   condition: number;
   morale: number;
-  // Relationships with other players in lineup (injected by match-runner)
-  relationshipsInLineup?: Array<{ withId: number; type: RelationType }>;
+  // Relationships with other players in lineup (injected by match-runner).
+  // `strength` (20–95) škáluje sílu efektu — chybí-li, počítá se neutrální 50.
+  relationshipsInLineup?: Array<{ withId: number; type: RelationType; strength?: number }>;
 }
 
 export interface TeamSetup {

@@ -14,7 +14,8 @@ import type {
   Tactic,
   Weather,
 } from "./types";
-import { calcTacticEffectiveness, tacticDrainMod } from "./tactics";
+import { calcTacticEffectiveness, tacticDrainMod, formationChemistryFactor } from "./tactics";
+import { squadChemistryFactor } from "./squad-chemistry";
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -110,6 +111,10 @@ function calcChanceProb(
   const attMoraleMod = 0.94 + (teamAvg(attacking.lineup, "morale") / 100) * 0.12;
   const defMoraleMod = 0.94 + (teamAvg(defending.lineup, "morale") / 100) * 0.12;
 
+  // Sehranost formace a chemie kabiny — obojí přímo na útočnou sílu, nezávisle na taktice.
+  const famMod = formationChemistryFactor(attacking.formationFamiliarity);
+  const chemMod = squadChemistryFactor(attacking.lineup);
+
   const attackPower = (
     teamAvg(outfield, "technique") * weatherMod.techniqueMod * 0.8 +
     teamAvg(outfield, "passing") * 1.0 +
@@ -117,7 +122,7 @@ function calcChanceProb(
     (mids.length > 0 ? teamAvg(mids, "vision") * 0.6 : 0) +
     (midAndFwd.length > 0 ? teamAvg(midAndFwd, "creativity") * 0.5 : 0) +
     teamAvg(outfield, "workRate") * 0.3
-  ) / 5 * effMod(tacticMod.attackMod, attEff) * formFactor * attMoraleMod;
+  ) / 5 * effMod(tacticMod.attackMod, attEff) * formFactor * attMoraleMod * famMod * chemMod;
 
   const defensePower = (
     teamAvg(defOutfield, "defense") * 1.0 +
@@ -173,11 +178,9 @@ function calcGoalProb(
     ratio *= 0.9 + (attacker.clutch / 100) * 0.2;
   }
 
-  // Relationship bonuses: mentor confidence (+3%), rival grit (+2%)
-  if (attacker.relationshipsInLineup) {
-    const hasMentor = attacker.relationshipsInLineup.some((r) => r.type === "mentor_pupil");
-    if (hasMentor) ratio *= 1.03;
-  }
+  // Mentorská dvojice na hřišti dodá klid oběma — bonus škáluje síla vztahu.
+  const mentorRel = attacker.relationshipsInLineup?.find((r) => r.type === "mentor_pupil");
+  if (mentorRel) ratio *= 1 + 0.03 * ((mentorRel.strength ?? 50) / 50);
 
   // Okresní level: víc gólů (slabší brankáři, horší obrana)
   return Math.min(0.70, Math.max(0.15, ratio * 0.90));
@@ -217,13 +220,12 @@ function pickAssister(rng: Rng, lineup: MatchPlayer[], scorer: MatchPlayer): Mat
     const posW = p.position === "MID" ? 2.0 : p.position === "FWD" ? 1.5 : 0.8;
     const rawSkill = (p.passing * 0.4 + p.vision * 0.35 + p.creativity * 0.25);
     const skillFactor = (rawSkill / 50) ** 1.5; // exponential — star playmakers dominate
-    // Relationship bonus: bratři/otec-syn/mentor si nahrávají častěji (+15 %),
-    // spolužáci jsou sehraní ze školy (+10 %)
-    const relBonus = scorer.relationshipsInLineup?.some(
-      (r) => r.withId === p.id && (r.type === "brothers" || r.type === "father_son" || r.type === "mentor_pupil")
-    ) ? 1.15
-      : scorer.relationshipsInLineup?.some((r) => r.withId === p.id && r.type === "classmates")
-        ? 1.10 : 1.0;
+    // Bratři/otec-syn/mentor si nahrávají častěji (+15 %), spolužáci jsou sehraní
+    // ze školy (+10 %). Bonus škáluje síla vztahu — blízká dvojice se hledá víc.
+    const rel = scorer.relationshipsInLineup?.find((r) => r.withId === p.id
+      && (r.type === "brothers" || r.type === "father_son" || r.type === "mentor_pupil" || r.type === "classmates"));
+    const relBase = rel ? (rel.type === "classmates" ? 0.10 : 0.15) : 0;
+    const relBonus = rel ? 1 + relBase * ((rel.strength ?? 50) / 50) : 1.0;
     return posW * skillFactor * relBonus;
   });
 
@@ -551,10 +553,13 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     if (rng.random() < 0.08) {
       const defenders = defending.lineup.filter((p) => p.position !== "GK");
       if (defenders.length > 0) {
-        // Weighted pick by aggression + rival bonus
+        // Weighted pick by aggression + rival bonus.
+        // Rival musí být pořád na hřišti — po červené kartě už dusno nedělá.
+        const onPitch = new Set(defending.lineup.map((p) => p.id).filter((id) => !redCards.has(id)));
         const weights = defenders.map((p) => {
           const base = 1 + (p.aggression / 100) * 2;
-          const rivalBonus = p.relationshipsInLineup?.some((r) => r.type === "rivals") ? 1.15 : 1.0;
+          const rival = p.relationshipsInLineup?.find((r) => r.type === "rivals" && onPitch.has(r.withId));
+          const rivalBonus = rival ? 1 + 0.15 * ((rival.strength ?? 50) / 50) : 1.0;
           return base * rivalBonus;
         });
         const totalWeight = weights.reduce((a, b) => a + b, 0);

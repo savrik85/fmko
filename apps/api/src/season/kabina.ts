@@ -49,8 +49,8 @@ export async function processKabina(db: D1Database, teamId: string): Promise<Kab
   const ids = players.map((p) => p.id);
   const ph = ids.map(() => "?").join(",");
   const rels = await db.prepare(
-    `SELECT player_a_id, player_b_id, type FROM relationships WHERE type IN ('rivals','drinking_buddies','coworkers','neighbors','in_laws') AND player_a_id IN (${ph}) AND player_b_id IN (${ph})`
-  ).bind(...ids, ...ids).all<{ player_a_id: string; player_b_id: string; type: string }>()
+    `SELECT player_a_id, player_b_id, type, strength FROM relationships WHERE type IN ('rivals','drinking_buddies','coworkers','neighbors','in_laws') AND player_a_id IN (${ph}) AND player_b_id IN (${ph})`
+  ).bind(...ids, ...ids).all<{ player_a_id: string; player_b_id: string; type: string; strength: number | null }>()
     .catch((e) => { logger.warn({ module: M }, "load relationships", e); return { results: [] as never[] }; });
 
   const delta = new Map<string, number>(players.map((p) => [p.id, 0]));
@@ -58,11 +58,15 @@ export async function processKabina(db: D1Database, teamId: string): Promise<Kab
 
   if (tahoun) for (const p of players) add(p.id, p.id === tahoun.id ? 1 : 2);
   for (const tm of troublemakers) for (const p of players) if (p.id !== tm.id) add(p.id, -2);
+  // Dopad škáluje síla vztahu (strength/50) — nerozluční parťáci drží partu víc
+  // než náhodná známost, zapšklá rivalita otráví kabinu víc než drobná řevnivost.
   const REL_WEEKLY: Record<string, number> = {
     rivals: -3, drinking_buddies: 2, coworkers: 1, neighbors: 1, in_laws: -1,
   };
   for (const r of rels.results) {
-    const d = REL_WEEKLY[r.type] ?? 0;
+    const base = REL_WEEKLY[r.type] ?? 0;
+    if (base === 0) continue;
+    const d = Math.round(base * ((r.strength ?? 50) / 50));
     if (d !== 0) { add(r.player_a_id, d); add(r.player_b_id, d); }
   }
 
