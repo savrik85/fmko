@@ -104,6 +104,12 @@ function calcChanceProb(
   const defOutfield = defending.lineup.filter((p) => p.position !== "GK");
   const defs = defending.lineup.filter((p) => p.position === "DEF");
 
+  // Morálka týmu: 0.94–1.06 (neutrální při 50) — sebevědomý tým hraje odvážněji,
+  // zlomený tým se bojí. Díky tomu má reálný efekt i kapitán, vůdcovství a motivace
+  // trenéra (vše se propisuje do morálky před/během zápasu).
+  const attMoraleMod = 0.94 + (teamAvg(attacking.lineup, "morale") / 100) * 0.12;
+  const defMoraleMod = 0.94 + (teamAvg(defending.lineup, "morale") / 100) * 0.12;
+
   const attackPower = (
     teamAvg(outfield, "technique") * weatherMod.techniqueMod * 0.8 +
     teamAvg(outfield, "passing") * 1.0 +
@@ -111,14 +117,14 @@ function calcChanceProb(
     (mids.length > 0 ? teamAvg(mids, "vision") * 0.6 : 0) +
     (midAndFwd.length > 0 ? teamAvg(midAndFwd, "creativity") * 0.5 : 0) +
     teamAvg(outfield, "workRate") * 0.3
-  ) / 5 * effMod(tacticMod.attackMod, attEff) * formFactor;
+  ) / 5 * effMod(tacticMod.attackMod, attEff) * formFactor * attMoraleMod;
 
   const defensePower = (
     teamAvg(defOutfield, "defense") * 1.0 +
     teamAvg(defOutfield, "strength") * 0.7 +
     (defs.length > 0 ? teamAvg(defs, "aggression") * 0.2 : 0) +
     teamAvg(defOutfield, "workRate") * 0.2
-  ) / 3 * effMod((TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced).defenseMod, defEff);
+  ) / 3 * effMod((TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced).defenseMod, defEff) * defMoraleMod;
 
   // Use DIFFERENCE not ratio — so stronger teams create more chances
   // attackPower ~20 (weak) to ~35 (strong), defensePower ~18 to ~25
@@ -158,6 +164,9 @@ function calcGoalProb(
 
   // Consistency modifier: 0.85-1.15
   ratio *= 0.85 + (attacker.consistency / 100) * 0.30;
+
+  // Morálka střelce: 0.95-1.05 (neutrální při 50) — hráč v pohodě zakončuje líp
+  ratio *= 0.95 + (attacker.morale / 100) * 0.10;
 
   // Clutch: po 75' při těsném skóre (≤1 gól)
   if (minute >= 75 && Math.abs(scoreDiff) <= 1) {

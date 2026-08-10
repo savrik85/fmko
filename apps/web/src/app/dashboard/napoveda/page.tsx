@@ -146,15 +146,16 @@ export default function NapovedaPage() {
           <div>
             <div className="font-heading font-bold text-sm">Morálka (0–100)</div>
             <p className="text-muted text-xs leading-relaxed">
-              Ovlivňuje výkon v zápase. Výhra dá +3 až +7, prohra −2 až −5. Denně se táhne k 50 (nad 55 klesá,
-              pod 45 roste). Příliš nízká morálka + nízký patriotismus = riziko odchodu hráče.
+              Ovlivňuje výkon v zápase — sebevědomý tým si vytváří víc šancí a líp zakončuje. Každý vstřelený
+              gól zvedne morálku týmu o +2 až +4 (dle vůdcovství), inkasovaný ji sebere o −1 až −3. Denně se
+              táhne k 50 (nad 55 klesá, pod 45 roste). Příliš nízká morálka + nízký patriotismus = riziko odchodu hráče.
             </p>
           </div>
           <div>
             <div className="font-heading font-bold text-sm">Hra mimo pozici</div>
             <p className="text-muted text-xs leading-relaxed">
-              Hráč mimo svou přirozenou pozici ztrácí ~30 % relevantních atributů. Útočník v obraně bude mít
-              defense efektivně sníženou — drž hráče na jejich pozici, pokud nemusíš.
+              Hráč mimo svou přirozenou pozici ztrácí 10–40 % klíčových atributů podle toho, jak daleko od své
+              role hraje (nejhorší je pole ↔ branka, −40 % ze všeho). Drž hráče na jejich pozici, pokud nemusíš.
             </p>
           </div>
         </div>

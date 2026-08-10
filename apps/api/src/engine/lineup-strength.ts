@@ -181,7 +181,7 @@ export function calcLineupStrength(setup: TeamSetup): LineupStrength {
   // Out-of-position penalty (matchPosition ≠ position)
   const oop = setup.lineup.filter((p) => p.matchPosition && p.matchPosition !== p.position);
   if (oop.length > 0) {
-    notes.push(`${oop.length} ${oop.length === 1 ? "hráč hraje" : "hráči hrají"} mimo svou pozici — ztrácí ~30 % atributů.`);
+    notes.push(`${oop.length} ${oop.length === 1 ? "hráč hraje" : "hráči hrají"} mimo svou pozici — ztrácí 10–40 % klíčových atributů.`);
   }
 
   return {

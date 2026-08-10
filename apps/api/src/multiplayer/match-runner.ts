@@ -542,8 +542,10 @@ export async function runScheduledMatches(
                 return null;
             });
             const officialCount = acceptedOfficials?.cnt ?? 0;
-            // Domácí výhoda: základ + pozvaní zastupitelé + sektor kotle (atmosféra). Strop zvednut na 0.15.
-            const homeAdvantage = Math.min(0.15, 0.05 + officialCount * 0.015 + facilityEffects.homeAdvantageBonus);
+            // Domácí výhoda: základ + pozvaní zastupitelé + sektor kotle (atmosféra)
+            // + fanoušci (tvrdé jádro, vyprodáno/prázdno z haInfo). Strop zvednut na 0.15.
+            const fanbaseAdvantage = Math.max(-0.01, Math.min(0.03, haInfo.total * 0.01));
+            const homeAdvantage = Math.min(0.15, Math.max(0.02, 0.05 + officialCount * 0.015 + facilityEffects.homeAdvantageBonus + fanbaseAdvantage));
             // Kotel (bubny a vlajky) domácích zvedá návštěvu; strop kapacity stadionu platí dál
             const crowdBoost = 1 + (homeEquipment?.crowdMod ?? 0);
             const attendanceWithOfficials = Math.min(
