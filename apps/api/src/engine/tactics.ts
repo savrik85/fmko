@@ -34,14 +34,14 @@ export const TACTIC_CATALOG: Record<Tactic, TacticDef> = {
       { skill: "shooting", positions: ["FWD"], threshold: 60, weight: 1.0 },
       { skill: "speed", positions: ["FWD"], threshold: 60, weight: 0.8 },
     ],
-    formationSynergy: { "4-3-3": 1.05, "3-4-3": 1.08, "5-4-1": 0.95, "5-3-2": 0.95 },
+    formationSynergy: { "4-3-3": 1.05, "3-4-3": 1.08, "4-5-1": 0.93, "3-5-2": 1.0, "5-3-2": 0.95 },
   },
   defensive: {
     requirements: [
       { skill: "defense", positions: ["DEF"], threshold: 60, weight: 1.0 },
       { skill: "strength", positions: ["DEF"], threshold: 55, weight: 0.6 },
     ],
-    formationSynergy: { "5-4-1": 1.08, "5-3-2": 1.05, "4-2-3-1": 1.02, "3-4-3": 0.92, "4-3-3": 0.95 },
+    formationSynergy: { "4-5-1": 1.06, "5-3-2": 1.05, "3-5-2": 0.98, "3-4-3": 0.92, "4-3-3": 0.95 },
   },
   long_ball: {
     requirements: [
@@ -49,7 +49,7 @@ export const TACTIC_CATALOG: Record<Tactic, TacticDef> = {
       { skill: "strength", positions: ["FWD"], threshold: 55, weight: 0.7 },
       { skill: "heading", positions: ["GK"], threshold: 50, weight: 0.3 },
     ],
-    formationSynergy: { "4-4-2": 1.05, "5-3-2": 1.05, "3-4-3": 0.92, "4-2-3-1": 0.95 },
+    formationSynergy: { "4-4-2": 1.05, "5-3-2": 1.05, "3-5-2": 1.03, "3-4-3": 0.92, "4-5-1": 0.95 },
   },
   possession: {
     requirements: [
@@ -57,7 +57,7 @@ export const TACTIC_CATALOG: Record<Tactic, TacticDef> = {
       { skill: "passing", positions: ["MID"], threshold: 65, weight: 1.0 },
       { skill: "vision", positions: ["MID"], threshold: 60, weight: 0.7 },
     ],
-    formationSynergy: { "4-3-3": 1.08, "4-2-3-1": 1.08, "3-4-3": 1.03, "5-3-2": 0.92, "5-4-1": 0.9 },
+    formationSynergy: { "4-3-3": 1.08, "3-5-2": 1.06, "4-5-1": 1.04, "3-4-3": 1.03, "5-3-2": 0.92 },
   },
   pressing: {
     requirements: [
@@ -65,7 +65,7 @@ export const TACTIC_CATALOG: Record<Tactic, TacticDef> = {
       { skill: "workRate", positions: OUTFIELD, threshold: 60, weight: 0.8 },
       { skill: "aggression", positions: OUTFIELD, threshold: 55, weight: 0.5 },
     ],
-    formationSynergy: { "4-3-3": 1.05, "4-2-3-1": 1.05, "5-4-1": 0.92, "5-3-2": 0.95 },
+    formationSynergy: { "4-3-3": 1.05, "3-5-2": 1.04, "4-5-1": 0.95, "5-3-2": 0.95 },
     drainMod: 1.3,
   },
 };
@@ -108,28 +108,34 @@ export function calcFormationSynergy(tactic: Tactic, formation?: string): number
 }
 
 /**
- * Sehranost faktor pro formaci — 15 (default/floor) = ~0.83, 100 = 1.0.
- * Žádná formace nikdy plně netlumená k 0.8 — i neznámou tým trochu umí.
+ * Sehranost formace jako SAMOSTATNÝ multiplikátor útočné síly — 15 (floor) = 0,975, 100 = 1,025.
+ *
+ * Dřív se sehranost míchala do `calcTacticEffectiveness` a odtud do `effMod`, které škáluje
+ * jen ODCHYLKU modifikátoru taktiky od 1,0. Vyrovnaná taktika má všechny modifikátory přesně
+ * 1,0, takže odchylka byla nulová a sehranost u ní neměla žádný efekt — měřeno 400 ze 400
+ * zápasů bit-identických. A vyrovnanou hraje ~68 % sestav. Proto se teď aplikuje přímo na
+ * útočnou sílu, nezávisle na zvolené taktice.
+ *
+ * Rozsah ±2,5 % na útočné síle odpovídá zhruba ±7 % vytvořených šancí (~±0,2 gólu na zápas).
  */
 export function formationChemistryFactor(familiarity: number | undefined): number {
   const f = Math.max(15, Math.min(100, familiarity ?? 15));
-  return 0.8 + 0.2 * (f / 100);
+  return 0.975 + 0.05 * ((f - 15) / 85);
 }
 
 /**
- * Celkový multiplikátor efektivity taktiky — skill-fit × formation synergy × formation chemistry.
- * Sehranost se počítá jen na formaci (taktika se v reálu adoptuje rychle, sehranost rozestavění je klíčová).
+ * Celkový multiplikátor efektivity taktiky — skill-fit × formation synergy.
+ * Sehranost sem záměrně NEPATŘÍ, aplikuje se zvlášť (viz formationChemistryFactor).
  */
 export function calcTacticEffectiveness(
   lineup: MatchPlayer[],
   tactic: Tactic,
   formation: string | undefined,
-  formationFamiliarity: number | undefined,
+  _formationFamiliarity?: number,
 ): number {
   const fit = calcTacticFit(lineup, tactic);
   const formSyn = calcFormationSynergy(tactic, formation);
-  const formChem = formationChemistryFactor(formationFamiliarity);
-  return fit * formSyn * formChem;
+  return fit * formSyn;
 }
 
 export function tacticDrainMod(tactic: Tactic): number {

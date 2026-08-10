@@ -470,10 +470,10 @@ async function simulateCupTie(
   // — kdo si pohár explicitně nenastaví, hraje v poslední použité sestavě).
   const savedLineup = async (rid: string | null) => {
     if (!rid) return null;
-    const perMatch = await db.prepare("SELECT players_data, formation FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(rid, cupMatchId).first<{ players_data: string; formation: string }>()
+    const perMatch = await db.prepare("SELECT players_data, formation, tactic FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(rid, cupMatchId).first<{ players_data: string; formation: string; tactic: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "cup per-match lineup", e); return null; });
     if (perMatch) return perMatch;
-    return await db.prepare("SELECT players_data, formation FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC LIMIT 1").bind(rid).first<{ players_data: string; formation: string }>()
+    return await db.prepare("SELECT players_data, formation, tactic FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC LIMIT 1").bind(rid).first<{ players_data: string; formation: string; tactic: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "cup saved lineup", e); return null; });
   };
   const homeLR = await savedLineup(homeReal);
@@ -540,9 +540,29 @@ async function simulateCupTie(
   const homePre = homeLineup.map((p) => ({ ...p }));
   const awayPre = awayLineup.map((p) => ({ ...p }));
 
-  const homeSetup: TeamSetup = { teamId: 1, teamName: "Domácí", lineup: homeLineup, subs: homeSubs, tactic: "balanced", formation: homeLR?.formation ?? "4-4-2", formationFamiliarity: 0 };
-  const awaySetup: TeamSetup = { teamId: 2, teamName: "Hosté", lineup: awayLineup, subs: awaySubs, tactic: "balanced", formation: awayLR?.formation ?? "4-4-2", formationFamiliarity: 0 };
+  // Pohár dřív jel natvrdo na "balanced" a nulovou sehranost a vztahy v něm neexistovaly
+  // vůbec — z pohledu chemie i taktiky byl neviditelný. Teď se chová jako ligový zápas.
+  const { injectRelationships } = await import("../multiplayer/inject-relations");
+  await injectRelationships(db, [
+    { players: [...homeLineup, ...homeSubs], idMap: homeBuild.idMap },
+    { players: [...awayLineup, ...awaySubs], idMap: awayBuild.idMap },
+  ]);
+
+  const { readFamiliarity, applyMatchResult } = await import("../engine/chemistry");
+  const homeFormation = homeLR?.formation ?? "4-4-2";
+  const awayFormation = awayLR?.formation ?? "4-4-2";
+  const homeTactic = (homeLR?.tactic as TeamSetup["tactic"]) ?? "balanced";
+  const awayTactic = (awayLR?.tactic as TeamSetup["tactic"]) ?? "balanced";
+  const homeFam = homeReal ? await readFamiliarity(db, homeReal) : { tactic: {}, formation: {} };
+  const awayFam = awayReal ? await readFamiliarity(db, awayReal) : { tactic: {}, formation: {} };
+
+  const homeSetup: TeamSetup = { teamId: 1, teamName: "Domácí", lineup: homeLineup, subs: homeSubs, tactic: homeTactic, formation: homeFormation, formationFamiliarity: homeFam.formation[homeFormation] ?? 0 };
+  const awaySetup: TeamSetup = { teamId: 2, teamName: "Hosté", lineup: awayLineup, subs: awaySubs, tactic: awayTactic, formation: awayFormation, formationFamiliarity: awayFam.formation[awayFormation] ?? 0 };
   const result = simulateMatch(rng, { home: homeSetup, away: awaySetup, weather, isHomeAdvantage: false });
+
+  // Odehraný pohár se počítá do sehranosti stejně jako liga
+  if (homeReal) await applyMatchResult(db, homeReal, homeTactic, homeFormation).catch((e) => logger.warn({ module: M }, "cup familiarity home", e));
+  if (awayReal) await applyMatchResult(db, awayReal, awayTactic, awayFormation).catch((e) => logger.warn({ module: M }, "cup familiarity away", e));
 
   const fullIdMap = new Map<number, string>();
   for (const [e, d] of homeBuild.idMap) fullIdMap.set(e, d);
@@ -659,8 +679,8 @@ async function simulateCupTie(
 
   // ── Detail zápasu (průběh, sestavy, ratingy, počasí) + domácí tržby — parita s ligovým zápasem ──
   try {
-    const homeLineupData = buildCupLineupData(homePre, homeSubs, homeBuild.idMap, homeLR?.formation ?? "4-4-2", "balanced");
-    const awayLineupData = buildCupLineupData(awayPre, awaySubs, awayBuild.idMap, awayLR?.formation ?? "4-4-2", "balanced");
+    const homeLineupData = buildCupLineupData(homePre, homeSubs, homeBuild.idMap, homeFormation, homeTactic);
+    const awayLineupData = buildCupLineupData(awayPre, awaySubs, awayBuild.idMap, awayFormation, awayTactic);
     const ctx = await cupHomeMatchContext(db, homeReal, weather, cupMatchId);
 
     // Komentář (dějiště = okres domácího reálného týmu; velkoklub bez okresu)

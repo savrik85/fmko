@@ -1,6 +1,6 @@
 import type { Rng } from "./rng";
 import type { GeneratedPlayer } from "./player";
-import type { GeneratedRelationship } from "./relationships";
+import { DRINKING_BUDDY_ALCOHOL, type GeneratedRelationship } from "./relationships";
 import type { ManagerBackstory } from "@okresni-masina/shared";
 
 interface ManagerModifiers {
@@ -117,9 +117,10 @@ export function applyManagerModifiers(
     }
 
     case "hospodsky": {
-      // Oblíbený, extra bonus pro piváky
+      // Oblíbený, extra bonus pro piváky. Práh je na škále 0–100 — dřív tu bylo 12
+      // ze staré škály 0–20, takže "extra bonus pro piváky" dostal skoro celý kádr.
       for (let i = 0; i < squad.length; i++) {
-        moraleMods[i] = squad[i].alcohol > 12 ? 5 : 2;
+        moraleMods[i] = squad[i].alcohol >= DRINKING_BUDDY_ALCOHOL ? 5 : 2;
       }
       // Extra coworkers vazba
       const nonStudents = squad

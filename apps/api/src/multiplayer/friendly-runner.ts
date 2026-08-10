@@ -66,6 +66,13 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       const homeSubs = homeLineup.splice(11);
       const awaySubs = awayLineup.splice(11);
 
+      // Vztahy v kabině platí i v příprávě (dřív je uměl jen ligový match-runner)
+      const { injectRelationships } = await import("./inject-relations");
+      await injectRelationships(db, [
+        { players: [...homeLineup, ...homeSubs], idMap: homeBuild.idMap },
+        { players: [...awayLineup, ...awaySubs], idMap: awayBuild.idMap },
+      ]);
+
       // Save pre-simulation copies (simulation mutates arrays via substitutions)
       const homeLineupPreSim = homeLineup.map(p => ({ ...p }));
       const awayLineupPreSim = awayLineup.map(p => ({ ...p }));

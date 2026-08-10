@@ -8,6 +8,11 @@ export type {
   AvatarConfig,
 } from "./player";
 export type { Relationship, RelationshipType } from "./relationship";
+export {
+  CHEMISTRY_WEIGHTS,
+  CHEMISTRY_EFFECT_TEXT,
+  computeLineupChemistry,
+} from "./relationship";
 export type { League, LeagueStatus } from "./league";
 export type { LeagueStanding } from "./league-standing";
 export type { Match, MatchStatus, MatchEvent, EventType } from "./match";

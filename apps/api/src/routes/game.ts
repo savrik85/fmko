@@ -66,6 +66,10 @@ async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: 
     await db.prepare("UPDATE players SET squad_number = NULL, life_context = json_remove(life_context, '$.trainingRest') WHERE id = ?")
       .bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   }
+
+  // Vazby na nové spoluhráče — projde tudy každý přestup i hostování.
+  const { attachNewcomerRelations } = await import("../transfers/attach-relations");
+  await attachNewcomerRelations(db, newTeamId, playerId);
 }
 
 // Povolené typy tréninku — drží sync s TrainingType v season/training.ts.
@@ -3430,18 +3434,23 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 
   // Load relationships for lineup visualization
   const playerIds = players.results.map((p) => p.id as string);
-  let relMap: Record<string, Array<{ otherPlayerId: string; type: string }>> = {};
+  // `strength` a `effect` jde do UI spolu s typem — sestavovač z toho počítá chemii
+  // stejnými vahami jako engine (packages/shared: CHEMISTRY_WEIGHTS).
+  let relMap: Record<string, Array<{ otherPlayerId: string; type: string; strength: number; effect: string }>> = {};
   if (playerIds.length > 1) {
     try {
+      const { CHEMISTRY_EFFECT_TEXT } = await import("@okresni-masina/shared");
       const placeholders = playerIds.map(() => "?").join(",");
       const relRows = await c.env.DB.prepare(
-        `SELECT player_a_id, player_b_id, type FROM relationships WHERE player_a_id IN (${placeholders}) OR player_b_id IN (${placeholders})`
+        `SELECT player_a_id, player_b_id, type, strength FROM relationships WHERE player_a_id IN (${placeholders}) OR player_b_id IN (${placeholders})`
       ).bind(...playerIds, ...playerIds).all();
-      for (const r of relRows.results as Array<{ player_a_id: string; player_b_id: string; type: string }>) {
+      for (const r of relRows.results as Array<{ player_a_id: string; player_b_id: string; type: string; strength: number | null }>) {
         if (!relMap[r.player_a_id]) relMap[r.player_a_id] = [];
         if (!relMap[r.player_b_id]) relMap[r.player_b_id] = [];
-        relMap[r.player_a_id].push({ otherPlayerId: r.player_b_id, type: r.type });
-        relMap[r.player_b_id].push({ otherPlayerId: r.player_a_id, type: r.type });
+        const strength = r.strength ?? 50;
+        const effect = CHEMISTRY_EFFECT_TEXT[r.type as keyof typeof CHEMISTRY_EFFECT_TEXT] ?? "";
+        relMap[r.player_a_id].push({ otherPlayerId: r.player_b_id, type: r.type, strength, effect });
+        relMap[r.player_b_id].push({ otherPlayerId: r.player_a_id, type: r.type, strength, effect });
       }
     } catch (e) {
       logger.warn({ module: "game" }, "relationships query for lineup", e);
@@ -4347,6 +4356,10 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'free_agent', 0, 1)")
     .bind(crypto.randomUUID(), playerId, teamId, season?.id ?? "unknown").run().catch((e) => logger.warn({ module: "game" }, "insert signing contract", e));
 
+  // Nováček si do kabiny přinese pár vazeb (soused, kolega z práce, vrstevník…)
+  const { attachNewcomerRelations } = await import("../transfers/attach-relations");
+  await attachNewcomerRelations(c.env.DB, teamId, playerId);
+
   // Atomický DELETE — pokud FA mezitím podepsal jiný tým, RETURNING vrátí 0 řádků.
   const deleted = await c.env.DB.prepare("DELETE FROM free_agents WHERE id = ? RETURNING id").bind(faId).first<{ id: string }>();
   if (!deleted) {
@@ -4888,6 +4901,10 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
       await c.env.DB.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
         .bind(res.residence, res.commuteKm, playerId).run().catch((e) => logger.warn({ module: "game" }, "set residence AI transfer", e));
     }
+
+    // Vazby na nové spoluhráče (až po bydlišti — sousedství se odvozuje z něj)
+    const { attachNewcomerRelations } = await import("../transfers/attach-relations");
+    await attachNewcomerRelations(c.env.DB, teamId, playerId);
 
     // Contract
     const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for AI transfer", e); return null; });
@@ -6216,6 +6233,10 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/accept", async (c) => {
     await c.env.DB.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
       .bind(res.residence, res.commuteKm, playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   }
+
+  // Vazby na spoluhráče — dorostenec z vesnice většinou někoho zná
+  const { attachNewcomerRelations } = await import("../transfers/attach-relations");
+  await attachNewcomerRelations(c.env.DB, teamId, playerId);
 
   // Contract
   const season = await c.env.DB.prepare("SELECT id FROM seasons ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
