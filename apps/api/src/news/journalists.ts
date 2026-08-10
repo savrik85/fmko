@@ -308,3 +308,95 @@ export function pokynyProRedaktora(j: Journalist, sentiment = 0): string {
   radky.push("Piš souvislý text v odstavcích. Nikdy nečísluj věty ani odstavce a nepoužívej odrážky či nadpisy.");
   return radky.join(" ");
 }
+
+/** Slovní popis vztahu pro UI i pro log. */
+export function popisVztahu(sentiment: number): string {
+  if (sentiment >= 60) return "drží palce";
+  if (sentiment >= 25) return "nakloněn";
+  if (sentiment > -25) return "neutrální";
+  if (sentiment > -60) return "kritický";
+  return "jde po nich";
+}
+
+/**
+ * Posune vztah redaktora ke klubu a vrátí novou hodnotu.
+ *
+ * Vztah se hýbe hlavně po rozhovorech — jak trenér odpoví, tak si ho redaktor
+ * zařadí. Hodnota se drží v rozsahu -100..100.
+ */
+export async function posunSentiment(
+  db: D1Database,
+  journalistId: string,
+  teamId: string,
+  posun: number,
+  duvod: string,
+): Promise<number> {
+  const stary = await sentimentKeKlubu(db, journalistId, teamId);
+  const novy = Math.max(-100, Math.min(100, stary + Math.round(posun)));
+
+  await db.prepare(
+    `INSERT INTO journalist_relations (id, journalist_id, team_id, sentiment, duvod, updated_at)
+     VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+     ON CONFLICT(journalist_id, team_id) DO UPDATE
+       SET sentiment = excluded.sentiment, duvod = excluded.duvod, updated_at = excluded.updated_at`
+  ).bind(crypto.randomUUID(), journalistId, teamId, novy, duvod.slice(0, 160)).run()
+    .catch((e) => logger.warn({ module: "journalists" }, "posun sentimentu", e));
+
+  logger.info({ module: "journalists" }, `sentiment ${journalistId}→${teamId}: ${stary} → ${novy} (${duvod.slice(0, 60)})`);
+  return novy;
+}
+
+export interface DopadTisku {
+  reputace: number;
+  fanousci: number;
+  popis: string;
+}
+
+/**
+ * Co pro klub znamená, jak o něm redakce píše.
+ *
+ * Vztah sám o sobě je jen číslo — teprve tady se překlápí do hry: nakloněný
+ * redaktor klubu dělá dobré jméno a přivádí lidi na stadion, nepřátelský ho
+ * sráží. Drží se to schválně nízko (±1 reputace, jednotky diváků), protože
+ * článek vychází po každém kole a nemá přebít výsledky na hřišti.
+ *
+ * `referenceId` je klíč idempotence — opakované zpracování téhož článku
+ * reputaci nepřipíše podruhé.
+ */
+export async function dopadTisku(
+  db: D1Database,
+  teamId: string,
+  sentiment: number,
+  referenceId: string,
+): Promise<DopadTisku | null> {
+  if (Math.abs(sentiment) < 40) return null;
+
+  const kladny = sentiment > 0;
+  const reputaceDelta = kladny ? 1 : -1;
+  const fanousciDelta = kladny ? 3 : -3;
+
+  const { applyReputationDelta } = await import("../lib/reputation");
+  const popis = kladny
+    ? "Příznivé články v okresním zpravodaji"
+    : "Kritika v okresním zpravodaji";
+
+  const zmena = await applyReputationDelta(db, teamId, reputaceDelta, "press", popis, { referenceId })
+    .catch((e) => { logger.warn({ module: "journalists" }, "dopad na reputaci", e); return null; });
+
+  // Duplicitní zpracování pozná reputační log; fanoušky pak taky nesaháme.
+  if (!zmena || zmena.skipped === "duplicate") return null;
+
+  await db.prepare(
+    `UPDATE team_fanbase SET casual_count = MAX(0, casual_count + ?), updated_at = datetime('now')
+     WHERE team_id = ?`
+  ).bind(fanousciDelta, teamId).run()
+    .catch((e) => logger.warn({ module: "journalists" }, "dopad na fanoušky", e));
+
+  return {
+    reputace: zmena.applied,
+    fanousci: fanousciDelta,
+    popis: kladny
+      ? "Redakce o klubu píše hezky — reputace i zájem lidí rostou."
+      : "Redakce klub nešetří — reputace i zájem lidí klesají.",
+  };
+}

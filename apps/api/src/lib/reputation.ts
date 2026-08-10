@@ -25,6 +25,7 @@ export type ReputationSource =
   | "locals"            // rodáci v kádru
   | "village_favor"     // přízeň obce
   | "decay"             // útlum za dlouhou nečinnost
+  | "press"             // jak o klubu píše okresní zpravodaj
   | "admin";
 
 /**

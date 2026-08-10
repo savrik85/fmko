@@ -472,7 +472,10 @@ export default function NewsPage() {
               <Kicker>🎙️ {currentWeekInterviews.length === 1 ? "Rozhovor kola" : "Rozhovory kola"}</Kicker>
               <div className="divide-y divide-ink/10">
                 {currentWeekInterviews.map((iv) => {
-                  let meta: { managerName?: string; managerAvatar?: Record<string, unknown> | null; teamName?: string; article?: string } = {};
+                  let meta: {
+                    managerName?: string; managerAvatar?: Record<string, unknown> | null; teamName?: string;
+                    article?: string; vztah?: { popis: string; sentiment: number; dopad?: string };
+                  } = {};
                   try { meta = JSON.parse(iv.body); } catch (e) { console.error("parse rozhovoru trenéra:", e); meta = {}; }
                   return (
                     <Rozhovor
@@ -483,6 +486,7 @@ export default function NewsPage() {
                       tym={meta.teamName}
                       avatar={meta.managerAvatar}
                       text={meta.article ?? iv.body}
+                      poznamka={meta.vztah ? `${meta.vztah.popis}${meta.vztah.dopad ? ` — ${meta.vztah.dopad}` : ""}` : undefined}
                     />
                   );
                 })}

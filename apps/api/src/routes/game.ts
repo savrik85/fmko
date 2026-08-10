@@ -6528,7 +6528,7 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
   const qa = questions.map((q, i) => ({ q, a: answers[i] ?? "" }));
   // Season-wrap rozhovor (match_calendar_id = 'season-{n}-wrap') → sezónní bilanční článek, ne pregame
   const isSeasonWrap = String(interview.match_calendar_id ?? "").includes("-wrap");
-  let article: { headline: string; body: string } | null;
+  let article: { headline: string; body: string; reakce?: { posun: number; duvod: string } } | null;
   const { redaktorProRubriku, pokynyProRedaktora, sentimentKeKlubu } = await import("../news/journalists");
   const redaktor = await redaktorProRubriku(c.env.DB, managerRow.league_id as string, "interview", teamId);
   const vztahKeKlubu = redaktor ? await sentimentKeKlubu(c.env.DB, redaktor.id, teamId) : 0;
@@ -6558,12 +6558,29 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
     try { return managerRow.manager_avatar ? JSON.parse(managerRow.manager_avatar) : null; } catch { return null; }
   })();
 
+  // Jak trenér odpovídal, tak si ho redaktor zařadí — a podle výsledného
+  // vztahu o klubu píše, což se propíše do reputace i do zájmu lidí.
+  let vztahInfo: { popis: string; sentiment: number; dopad?: string } | undefined;
+  if (redaktor && article.reakce && article.reakce.posun !== 0) {
+    const { posunSentiment, popisVztahu, dopadTisku } = await import("../news/journalists");
+    const novy = await posunSentiment(
+      c.env.DB, redaktor.id, teamId, article.reakce.posun, article.reakce.duvod,
+    );
+    const dopad = await dopadTisku(c.env.DB, teamId, novy, `press-${newsId}`);
+    vztahInfo = {
+      popis: `${redaktor.first_name} ${redaktor.last_name}: ${popisVztahu(novy)}`,
+      sentiment: novy,
+      dopad: dopad?.popis,
+    };
+  }
+
   const newsBody = JSON.stringify({
     managerName: managerRow.manager_name,
     managerAvatar,
     teamName: managerRow.team_name,
     article: article.body,
     qa,
+    vztah: vztahInfo,
   });
 
   await c.env.DB.prepare(

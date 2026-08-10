@@ -307,7 +307,7 @@ export async function generateInterviewArticle(
   teamName: string,
   opponentName: string,
   pokynyRedaktora?: string,
-): Promise<{ headline: string; body: string } | null> {
+): Promise<{ headline: string; body: string; reakce?: { posun: number; duvod: string } } | null> {
   const qaPairs = qa
     .map((pair, i) => `Otázka ${i + 1}: ${pair.q}\nOdpověď: ${pair.a}`)
     .join("\n\n");
@@ -334,6 +334,7 @@ PRAVIDLA:
 - Bez uvozovek kolem celého textu
 - STRIKTNĚ: první řádek = titulek (max 80 znaků, bez "Titulek:" prefixu). Titulek má být chytlavý, klidně s klíčovou hláškou trenéra nebo narážkou na nejpikantnější část rozhovoru
 - Od druhého řádku = body článku
+- ÚPLNĚ POSLEDNÍ řádek (a jen ten) = "VZTAH: <číslo -25 až 25> | <důvod, max 8 slov>". Není součástí článku — hodnotíš v něm SÁM ZA SEBE, jak na tebe trenér svými odpověďmi zapůsobil: vstřícnost, ochota, respekt k tobě = plus; arogance, odbytí, urážky novinářů = mínus; nijak zvlášť = číslo blízko nule
 
 PŘEPIS ROZHOVORU:
 ${qaPairs}`;
@@ -344,6 +345,15 @@ ${qaPairs}`;
   const lines = text.split("\n").filter((l) => l.trim().length > 0);
   if (lines.length < 2) return null;
 
+  // Poslední řádek nese hodnocení redaktora, do článku nepatří.
+  let reakce: { posun: number; duvod: string } | undefined;
+  const posledni = lines[lines.length - 1];
+  const m = posledni.match(/^\s*VZTAH\s*:\s*([+-]?\d+)\s*\|?\s*(.*)$/i);
+  if (m) {
+    lines.pop();
+    reakce = { posun: Math.max(-25, Math.min(25, parseInt(m[1], 10) || 0)), duvod: m[2].trim() };
+  }
+
   const headline = lines[0]
     .replace(/^(titulek|headline|nadpis)\s*:?\s*/i, "")
     .replace(/[*#]/g, "")
@@ -351,7 +361,7 @@ ${qaPairs}`;
   const body = lines.slice(1).join("\n").trim();
 
   if (!headline || !body) return null;
-  return { headline, body };
+  return { headline, body, reakce };
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
