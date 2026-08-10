@@ -273,9 +273,9 @@ INSTRUKCE:
 🎯 TVŮJ VZTAH KE KLUBU (řídí ostrost VŠECH tří otázek):
 ${vztahPokyn ?? "Vztah neutrální — ptej se věcně."}
 
-OTÁZKA 1 — o vlastním týmu / nadcházejícím zápase: použij JEN fakt z "Forma" nebo "Poslední výsledek" nebo jméno hráče ze seznamu povolených
-OTÁZKA 2 — taktika, sestava, zranění nebo klíčový hráč: použij JEN jméno ze seznamu povolených hráčů (nebo ze "Zranění", pokud jsou). Pokud žádné jméno nemáš, ptej se na taktiku obecně bez jmen.
-OTÁZKA 3 — BULVÁRNÍ, MÍŘENÁ NA SOUPEŘE. ${soupereOtazka}
+OTÁZKA 1 (1–2 věty, ZAKONČI OTAZNÍKEM — ptáš se, nekomentuješ) — o vlastním týmu / nadcházejícím zápase: použij JEN fakt z "Forma" nebo "Poslední výsledek" nebo jméno hráče ze seznamu povolených
+OTÁZKA 2 (1–2 věty, ZAKONČI OTAZNÍKEM) — taktika, sestava, zranění nebo klíčový hráč: použij JEN jméno ze seznamu povolených hráčů (nebo ze "Zranění", pokud jsou). Pokud žádné jméno nemáš, ptej se na taktiku obecně bez jmen.
+OTÁZKA 3 (1–2 věty, ZAKONČI OTAZNÍKEM) — MÍŘENÁ NA SOUPEŘE. ${soupereOtazka}
 
 KONTEXT (tým trenéra):
 - Tým: ${ctx.teamName} (${ctx.villageFlavor}), ${ctx.isHome ? "hraje doma" : "hraje venku"}
