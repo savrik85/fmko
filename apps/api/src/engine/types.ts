@@ -69,6 +69,7 @@ export interface EquipmentMods {
   moraleMod: number;        // bonus morale at start
   setPiecesMod?: number;    // tréninková zeď: bonus ke standardkám
   weatherResistMod?: number; // zimní výbava: postih počasí ×(1 - mod)
+  lateFatigueMod?: number;   // iontové nápoje: propad kondice po 70. minutě ×(1 - mod)
 }
 
 export interface MatchConfig {

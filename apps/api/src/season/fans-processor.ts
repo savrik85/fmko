@@ -43,6 +43,8 @@ export interface MatchSatisfactionInput {
   concessionMode: "external" | "self";
   soldProducts: SoldProductInput[];
   manager?: ManagerInput;
+  /** Ozvučení a hlasatel — body navíc za atmosféru. Jen doma. */
+  paSystemBonus?: number;
 }
 
 export interface MatchSatisfactionResult {
@@ -97,7 +99,13 @@ export function computeMatchSatisfactionDelta(input: MatchSatisfactionInput): Ma
     }
   }
 
-  // 4. Občerstvení — jen self mode má dopad na satisfaction
+  // 4. Ozvučení a hlasatel — hymna před derby, sestavy nahlas, dechovka o poločase
+  if ((input.paSystemBonus ?? 0) > 0) {
+    delta += input.paSystemBonus as number;
+    reasons.push(`Ozvučení a hlasatel +${input.paSystemBonus}`);
+  }
+
+  // 5. Občerstvení — jen self mode má dopad na satisfaction
   if (input.concessionMode === "self") {
     for (const p of input.soldProducts) {
       const catalog = CONCESSION_CATALOG[p.key];

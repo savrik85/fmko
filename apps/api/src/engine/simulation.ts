@@ -248,12 +248,13 @@ function getGK(lineup: MatchPlayer[]): MatchPlayer {
 /**
  * Update condition for all players after a minute.
  */
-function updateCondition(lineup: MatchPlayer[], minute: number, drainMod: number = 1): void {
+function updateCondition(lineup: MatchPlayer[], minute: number, drainMod: number = 1, lateFatigueMod: number = 0): void {
   for (const p of lineup) {
     // Base decay: depends on stamina (0-100 škála)
     const staminaFactor = (100 - p.stamina) / 100; // Low stamina = faster decay
     const alcoholPenalty = p.alcohol > 75 ? 0.15 : p.alcohol > 50 ? 0.08 : 0;
-    const lateFatigue = minute > 70 ? 0.15 : 0;
+    // Závěr zápasu bere všem stejně; iontové nápoje a gely na lavičce to tlumí.
+    const lateFatigue = minute > 70 ? 0.15 * (1 - lateFatigueMod) : 0;
 
     const decay = (0.3 + staminaFactor * 0.5 + alcoholPenalty + lateFatigue) * drainMod;
     p.condition = round2(Math.max(0, p.condition - decay));
@@ -352,6 +353,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   // Equipment condition drain modifiers
   const homeCondDrainMod = 1 - (homeEq?.conditionDrainMod ?? 0);
   const awayCondDrainMod = 1 - (awayEq?.conditionDrainMod ?? 0);
+  const homeLateFatigueMod = homeEq?.lateFatigueMod ?? 0;
+  const awayLateFatigueMod = awayEq?.lateFatigueMod ?? 0;
 
   // Equipment injury modifiers
   const homeInjuryMod = 1 - (homeEq?.injurySeverityMod ?? 0);
@@ -825,8 +828,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     }
 
     // Update condition (equipment drain reduction × tactic drain — pressing = +30 %)
-    updateCondition(home.lineup, minute, homeCondDrainMod * tacticDrainMod(home.tactic));
-    updateCondition(away.lineup, minute, awayCondDrainMod * tacticDrainMod(away.tactic));
+    updateCondition(home.lineup, minute, homeCondDrainMod * tacticDrainMod(home.tactic), homeLateFatigueMod);
+    updateCondition(away.lineup, minute, awayCondDrainMod * tacticDrainMod(away.tactic), awayLateFatigueMod);
   }
 
   // Full-time event

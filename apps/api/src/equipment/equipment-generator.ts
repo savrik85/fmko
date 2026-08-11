@@ -13,6 +13,7 @@ export const CATEGORIES = [
   "boots_stock", "bibs", "goalkeeper_gear", "water_bottles", "tactics_board",
   "team_van", "gym_corner", "training_wall", "club_grill", "fan_drums", "winter_gear", "video_setup",
   "laundry", "mower", "coffee_maker",
+  "sports_drinks", "raffle", "pa_system", "trophy_case",
 ] as const;
 export type EquipmentCategory = typeof CATEGORIES[number];
 
@@ -38,6 +39,10 @@ export const CATEGORY_LABELS: Record<string, string> = {
   laundry: "Pračka a sušárna dresů",
   mower: "Sekačka a traktůrek",
   coffee_maker: "Kávovar do kabiny",
+  sports_drinks: "Iontové nápoje a gely",
+  raffle: "Tombola a losy",
+  pa_system: "Ozvučení a hlasatel",
+  trophy_case: "Klubová kronika a vitrína",
 };
 
 // ── Level descriptions (Czech village humor) ──
@@ -157,6 +162,30 @@ const LEVEL_DESCRIPTIONS: Record<string, string[]> = {
     "Překapávač a bylinkový čaj od Pepovy ženy",
     "Pákový kávovar, Pepa dělá i cappuccino",
   ],
+  sports_drinks: [
+    "V poločase se dopije, co zbylo",
+    "Kanystr se šťávou a pár banánů",
+    "Iontové nápoje a energetické gely",
+    "Míchaná iontovka na míru, gely po kapsách",
+  ],
+  raffle: [
+    "Tombola? Leda kdo zaplatí rundu",
+    "Krabice od bot a natrhané lístky",
+    "Bubínek s losy, hlavní cena kýta",
+    "Tombola o prase, chodí se kvůli ní",
+  ],
+  pa_system: [
+    "Sestavu čte předseda přes ruce",
+    "Megafon a kazeťák z auta",
+    "Ozvučení s reprákem, hymna před derby",
+    "Profi aparatura, hlasatel a dechovka o poločase",
+  ],
+  trophy_case: [
+    "Poháry jsou u předsedy ve stodole",
+    "Polička s poháry v kabině",
+    "Prosklená vitrína a kronika od roku 1963",
+    "Síň slávy v klubovně, fotky všech mistrů okresu",
+  ],
 };
 
 // ── Upgrade effects (actual game modifiers) ──
@@ -182,6 +211,10 @@ export interface EquipmentEffects {
   equipCareMod: number;         // pračka: šance na denní opotřebení OSTATNÍHO vybavení ×(1 - mod)
   pitchCareMod: number;         // sekačka: šance, že trávník ten den nechátrá
   hangoverMod: number;          // kávovar: šance na ranní kocovinu po hospodě ×(1 - mod)
+  lateFatigueMod: number;       // iontové nápoje: propad kondice po 70. minutě ×(1 - mod)
+  raffleIncomePerFan: number;   // tombola: Kč z každého diváka na domácím zápase
+  fanSatisfactionMod: number;   // ozvučení: body spokojenosti fanoušků po zápase
+  loyaltyMod: number;           // kronika: růst trucu po odmítnuté nabídce ×(1 - mod)
 }
 
 /** Calculate actual game effects from equipment levels + conditions */
@@ -218,6 +251,10 @@ export function calculateEffects(levels: Record<string, number>, conditions: Rec
     equipCareMod: eff("laundry") * 0.15,
     pitchCareMod: eff("mower") * 0.30,
     hangoverMod: eff("coffee_maker") * 0.15,
+    lateFatigueMod: eff("sports_drinks") * 0.20,
+    raffleIncomePerFan: Math.round(eff("raffle") * 3),
+    fanSatisfactionMod: Math.round(eff("pa_system") * 2),
+    loyaltyMod: eff("trophy_case") * 0.12,
   };
 }
 
@@ -245,6 +282,10 @@ const UPGRADE_COSTS: Record<string, number[]> = {
   laundry:         [0, 5000, 20000, 60000],
   mower:           [0, 8000, 30000, 90000],
   coffee_maker:    [0, 1500, 6000, 18000],
+  sports_drinks:   [0, 3000, 12000, 35000],
+  raffle:          [0, 2000, 8000, 25000],
+  pa_system:       [0, 6000, 22000, 65000],
+  trophy_case:     [0, 3000, 12000, 35000],
 };
 
 // ── Bazar a zastavárna — ceny ──
@@ -402,6 +443,10 @@ const UPGRADE_EFFECT_LABELS: Record<string, string[]> = {
   laundry:         ["", "Vybavení chátrá o 15 % pomaleji", "Vybavení chátrá o 30 % pomaleji", "Vybavení chátrá o 45 % pomaleji"],
   mower:           ["", "Trávník vydrží 30 % dní bez opotřebení", "Trávník vydrží 60 % dní bez opotřebení", "Trávník vydrží 90 % dní bez opotřebení"],
   coffee_maker:    ["", "Kocovina o 15 % míň častá", "Kocovina o 30 % míň častá", "Kocovina o 45 % míň častá"],
+  sports_drinks:   ["", "Únava v závěru -20 %", "Únava v závěru -40 %", "Únava v závěru -60 %"],
+  raffle:          ["", "+3 Kč z diváka na domácím zápase", "+6 Kč z diváka na domácím zápase", "+9 Kč z diváka na domácím zápase"],
+  pa_system:       ["", "+2 spokojenost fanoušků za zápas", "+4 spokojenost fanoušků za zápas", "+6 spokojenost fanoušků za zápas"],
+  trophy_case:     ["", "Truc hráčů roste o 12 % pomaleji", "Truc hráčů roste o 24 % pomaleji", "Truc hráčů roste o 36 % pomaleji"],
 };
 
 // ── Starting equipment by village size ──

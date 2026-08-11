@@ -224,6 +224,10 @@ function EquipmentPage() {
     (fx.equipCareMod ?? 0) > 0.01 && { label: "Údržba vybavení", value: `-${Math.round((fx.equipCareMod ?? 0) * 100)}% chátrání`, icon: "🧺" },
     (fx.pitchCareMod ?? 0) > 0.01 && { label: "Trávník", value: `${Math.round((fx.pitchCareMod ?? 0) * 100)}% dní bez opotřebení`, icon: "🚜" },
     (fx.hangoverMod ?? 0) > 0.01 && { label: "Kocovina", value: `-${Math.round((fx.hangoverMod ?? 0) * 100)}%`, icon: "☕" },
+    (fx.lateFatigueMod ?? 0) > 0.01 && { label: "Únava v závěru", value: `-${Math.round((fx.lateFatigueMod ?? 0) * 100)}%`, icon: "🥤" },
+    (fx.raffleIncomePerFan ?? 0) > 0 && { label: "Tombola", value: `+${fx.raffleIncomePerFan} Kč z diváka`, icon: "🎟" },
+    (fx.fanSatisfactionMod ?? 0) > 0 && { label: "Atmosféra", value: `+${fx.fanSatisfactionMod} spokojenost`, icon: "🎙" },
+    (fx.loyaltyMod ?? 0) > 0.01 && { label: "Věrnost", value: `truc -${Math.round((fx.loyaltyMod ?? 0) * 100)}%`, icon: "🏆" },
   ].filter(Boolean) as { label: string; value: string; icon: string }[];
 
   const sellByCategory = new Map((data.sellOptions ?? []).map((s) => [s.category, s]));

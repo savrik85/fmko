@@ -152,7 +152,19 @@ export async function applyOfferRejectionImpact(
 
   let moraleDelta = Math.round((interest.level === 3 ? -10 : -6) * temperScale * loanFactor * stackFactor);
   let coachRelDelta = Math.round((interest.level === 3 ? -6 : -3) * loanFactor * stackFactor);
-  let unrestAdd = Math.round((interest.level === 3 ? 55 : 35) * loanFactor * stackFactor);
+  // Klubová kronika a vitrína — hráč, kterému klub něco znamená, odchází neradi.
+  // U rodáků (vysoký patriotism) váží dvojnásob: ty fotky v klubovně jsou jejich.
+  const trophyFx = await (async () => {
+    const row = await db.prepare("SELECT trophy_case, trophy_case_condition FROM equipment WHERE team_id = ?")
+      .bind(sellerTeamId).first<{ trophy_case: number; trophy_case_condition: number }>()
+      .catch((e) => { logger.warn({ module: "rejection-impact" }, "load trophy case", e); return null; });
+    if (!row?.trophy_case) return 0;
+    return row.trophy_case * ((row.trophy_case_condition ?? 50) / 100) * 0.12;
+  })();
+  const patriotism: number = pers.patriotism ?? 50;
+  const loyaltyMod = Math.min(0.6, trophyFx * (patriotism >= 70 ? 2 : 1));
+
+  let unrestAdd = Math.round((interest.level === 3 ? 55 : 35) * loanFactor * stackFactor * (1 - loyaltyMod));
   let newLevel = clamp(Math.round(unrest.level + unrestAdd), 0, 100);
 
   if (brokenTransferPledge) {

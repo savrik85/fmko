@@ -35,6 +35,7 @@ export type TransactionType =
   | "concession_wholesale"
   | "concession_income_external"
   | "concession_income_self"
+  | "raffle_income"
   | "promotional_campaign"
   | "bus_subsidy"
   | "cash_loan_disbursement"
@@ -307,6 +308,22 @@ export async function processMatchDayFinances(
   }
   const facilityFx = calculateFacilityEffects(facilities);
 
+  // Efekty vybavení pro tenhle zápas — potřebuje je tombola i ozvučení, tak jen jednou.
+  const matchEquipmentFx = await (async () => {
+    const row = await db.prepare("SELECT * FROM equipment WHERE team_id = ?")
+      .bind(teamId).first<Record<string, unknown>>()
+      .catch((e) => { logger.warn({ module: "finance" }, "query equipment for matchday", e); return null; });
+    if (!row) return null;
+    const { calculateEffects } = await import("../equipment/equipment-generator");
+    const lv: Record<string, number> = {}; const cond: Record<string, number> = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (k === "id" || k === "team_id") continue;
+      if (k.endsWith("_condition")) cond[k] = v as number;
+      else if (typeof v === "number") lv[k] = v;
+    }
+    return calculateEffects(lv, cond);
+  })();
+
   // Load fans context (may not exist for older teams — ensure row exists)
   const { ensureFansRow, loadFansContext, computeMatchSatisfactionDelta, computeSelfConcessionMatch, applyFansMatchDelta } = await import("./fans-processor");
   await ensureFansRow(db, teamId);
@@ -343,6 +360,18 @@ export async function processMatchDayFinances(
       : "";
     await recordTransaction(db, teamId, "match_income", ticketIncome,
       `Vstupné: ${payingAttendance} × ${ticketPrice} Kč${fenceNote}`, gameDate, matchId);
+
+    // Tombola — jediné vybavení, které vydělává. Jede uvnitř stejné větve jako
+    // vstupné (jen doma a jen když někdo přišel). Losy se ale prodávají všem, kdo
+    // dorazili, ne jen platícím: kdo proleze dírou v plotě, si los stejně koupí.
+    const rafflePerFan = matchEquipmentFx?.raffleIncomePerFan ?? 0;
+    if (rafflePerFan > 0) {
+      const raffleIncome = Math.round(attendance * rafflePerFan);
+      if (raffleIncome > 0) {
+        await recordTransaction(db, teamId, "raffle_income", raffleIncome,
+          `Tombola: ${attendance} diváků × ${rafflePerFan} Kč`, gameDate, matchId);
+      }
+    }
 
     // Concession income — podle módu
     if (fansCtx?.concessionMode === "self") {
@@ -461,6 +490,8 @@ export async function processMatchDayFinances(
       concessionMode: fansCtx.concessionMode,
       soldProducts: isHome ? soldProducts : [],
       manager: mgrRow ?? undefined,
+      // Ozvučení hraje jen na domácím hřišti — venku si atmosféru dělá soupeř.
+      paSystemBonus: isHome ? matchEquipmentFx?.fanSatisfactionMod ?? 0 : 0,
     });
 
     // Obsluha občerstvení: usměvavá obsluha zvedá spokojenost (jen doma, self mode)

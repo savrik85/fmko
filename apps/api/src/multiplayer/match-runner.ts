@@ -454,6 +454,7 @@ export async function runScheduledMatches(
                     weatherResistMod: eff.weatherResistMod,
                     crowdMod: eff.crowdMod,
                     injuryDaysReduction: eff.injuryDaysReduction,
+                    lateFatigueMod: eff.lateFatigueMod,
                 };
             };
             let [homeEquipment, awayEquipment] = await Promise.all([
@@ -474,6 +475,7 @@ export async function runScheduledMatches(
             const zeroEquipMods = () => ({
                 techniqueMod: 0, gkBonus: 0, injurySeverityMod: 0, conditionDrainMod: 0, moraleMod: 0,
                 setPiecesMod: 0, weatherResistMod: 0, crowdMod: 0, injuryDaysReduction: 0,
+                lateFatigueMod: 0,
             });
             const mergeStaff = (eq: ReturnType<typeof zeroEquipMods> | undefined, fx: typeof homeStaffFx, isHome: boolean) => {
                 const merged = eq ?? zeroEquipMods();
