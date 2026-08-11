@@ -879,10 +879,10 @@ function MatchPage() {
                                 <span className="font-heading font-bold text-sm leading-tight">{player.lastName}</span>
                                 <div className="text-xs text-muted">{player.firstName} · {player.age} let</div>
                               </div>
-                              <button onClick={(e) => { e.stopPropagation(); setCaptainId(captainId === player.id ? null : player.id); setSaved(false); }}
-                                className={`shrink-0 w-6 h-6 rounded-full text-[10px] font-heading font-[800] flex items-center justify-center transition-all ${
-                                  captainId === player.id ? "bg-gold-500 text-white shadow-sm" : "bg-gray-100 text-muted hover:bg-gold-100 hover:text-gold-600"
-                                }`} title="Kapitán">C</button>
+                              {captainId === player.id && (
+                                <span className="shrink-0 w-6 h-6 rounded-full text-[10px] font-heading font-[800] flex items-center justify-center bg-gold-500 text-white shadow-sm"
+                                  title="Kapitán — mění se níž v Rolích v týmu">C</span>
+                              )}
                             </div>
                           </td>
                           <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${player.overallRating}`}>{player.overallRating}</td>
