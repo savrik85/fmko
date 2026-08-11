@@ -44,6 +44,7 @@ function EquipmentPage() {
   const [bazarLoading, setBazarLoading] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
   const [selling, setSelling] = useState<SellOption | null>(null);
+  const [bonusesOpen, setBonusesOpen] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   // Deep-link z SMS a notifikací míří rovnou na bazar.
@@ -264,19 +265,32 @@ function EquipmentPage() {
       ) : (
         <>
           {/* ═══ Active effects ═══ */}
+          {/* Na mobilu se sbaluje — s 19 kategoriemi vytlačí seznam bonusů karty
+              vybavení pod okraj obrazovky. Na širokém displeji je pořád rozbalené. */}
           {activeEffects.length > 0 && (
             <div className="card p-4 sm:p-5">
-              <SectionLabel>Aktivní bonusy</SectionLabel>
-              <div className="flex gap-3 flex-wrap">
-                {activeEffects.map((e) => (
-                  <div key={e.label} className="flex items-center gap-1.5 bg-pitch-50 text-pitch-700 px-3 py-1.5 rounded-lg">
-                    <span className="text-sm">{e.icon}</span>
-                    <span className="text-sm font-heading font-bold">{e.value}</span>
-                    <span className="text-xs text-pitch-600">{e.label}</span>
-                  </div>
-                ))}
+              <button
+                type="button"
+                onClick={() => setBonusesOpen((v) => !v)}
+                aria-expanded={bonusesOpen}
+                className="w-full flex items-center justify-between gap-2 sm:pointer-events-none"
+              >
+                <SectionLabel>Aktivní bonusy ({activeEffects.length})</SectionLabel>
+                <span className={`sm:hidden text-muted text-sm transition-transform ${bonusesOpen ? "rotate-180" : ""}`}>▾</span>
+              </button>
+
+              <div className={bonusesOpen ? "block" : "hidden sm:block"}>
+                <div className="flex gap-3 flex-wrap">
+                  {activeEffects.map((e) => (
+                    <div key={e.label} className="flex items-center gap-1.5 bg-pitch-50 text-pitch-700 px-3 py-1.5 rounded-lg">
+                      <span className="text-sm">{e.icon}</span>
+                      <span className="text-sm font-heading font-bold">{e.value}</span>
+                      <span className="text-xs text-pitch-600">{e.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-xs text-muted mt-2 italic">Bonusy závisí na úrovni a stavu vybavení. Aplikují se na tréninky i zápasy.</div>
               </div>
-              <div className="text-xs text-muted mt-2 italic">Bonusy závisí na úrovni a stavu vybavení. Aplikují se na tréninky i zápasy.</div>
             </div>
           )}
 
