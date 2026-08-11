@@ -30,6 +30,16 @@ function conditionLabel(condition: number): { text: string; color: string } {
   return { text: "Vyčerpaný", color: "text-card-red" };
 }
 
+/**
+ * „11. 8. 2026" — u odchodu z klubu má rok smysl, historie sahá přes sezóny.
+ * Nečitelnou hodnotu radši vrátíme, jak přišla, než abychom ukázali „Invalid Date".
+ */
+function formatLeaveDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("cs", { day: "numeric", month: "numeric", year: "numeric" });
+}
+
 function attrColor(value: number): string {
   if (value >= 70) return "text-pitch-400 font-bold";
   if (value >= 50) return "text-pitch-600";
@@ -890,7 +900,7 @@ export default function PlayerDetailPage() {
                       {c.isActive ? (
                         <span>Od sezóny {c.seasonNumber} &middot; <span className="text-pitch-500 font-bold">Aktivní</span></span>
                       ) : (
-                        <span>Sezóna {c.seasonNumber}{c.leftAt ? ` — ${c.leftAt}` : ""}</span>
+                        <span>Sezóna {c.seasonNumber}{c.leftAt ? ` — odešel ${formatLeaveDate(c.leftAt)}` : ""}</span>
                       )}
                     </div>
                   </div>
