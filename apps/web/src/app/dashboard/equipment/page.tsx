@@ -15,6 +15,13 @@ import {
 
 type Tab = "mine" | "bazar";
 
+/**
+ * Akční tlačítka na kartě vybavení (Koupit / Opravit / Prodat / Stáhnout).
+ * Jsou pod sebou ve sloupci, takže musí mít stejný tvar i šířku — jinak to
+ * vypadá jako tři náhodná tlačítka místo jedné sady.
+ */
+const CARD_BTN = "shrink-0 w-24 py-1.5 rounded-lg text-xs font-heading font-bold transition-colors text-center";
+
 // useSearchParams (deep-link ?tab=bazar) musí být pod Suspense, jinak build padá
 // na prerenderu — stejný vzor jako liga/page.tsx:90.
 export default function EquipmentPageWrapper() {
@@ -316,7 +323,7 @@ function EquipmentPage() {
                         <div className="text-xs text-pitch-600">{upgrade.effect}</div>
                       </div>
                       <button onClick={() => handleUpgrade(upgrade)} disabled={!canUpgrade || !!acting}
-                        className={`shrink-0 py-1.5 px-4 rounded-lg text-xs font-heading font-bold transition-colors ${
+                        className={`${CARD_BTN} ${
                           canUpgrade ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
                         }`}>
                         {acting === cat.key ? "..." : "Koupit"}
@@ -335,7 +342,7 @@ function EquipmentPage() {
                     <div className="flex items-center justify-between gap-3 mt-2 pt-2 border-t border-gray-100">
                       <div className="text-sm text-muted">Oprava na 100% — <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(repair.cost)}</span></div>
                       <button onClick={() => handleRepair(repair.category, repair.label, repair.condition, repair.cost)} disabled={!canRepair || !!acting}
-                        className={`shrink-0 py-1 px-3 rounded text-xs font-heading font-bold transition-colors ${
+                        className={`${CARD_BTN} ${
                           canRepair ? "bg-gold-500 text-white hover:bg-gold-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
                         }`}>
                         {acting === "r-" + cat.key ? "..." : "Opravit"}
@@ -355,7 +362,7 @@ function EquipmentPage() {
                           <button
                             onClick={() => handleWithdraw({ id: sell.listingId as string, category: sell.category, categoryLabel: sell.label, level: sell.level, price: sell.listedPrice ?? 0, condition: sell.condition, conditionAtListing: sell.condition, expiresAt: sell.listedUntil ?? "" })}
                             disabled={!!acting}
-                            className="shrink-0 py-1 px-3 rounded text-xs font-heading font-bold border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50 transition-colors">
+                            className={`${CARD_BTN} border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50`}>
                             {acting === "w-" + sell.listingId ? "..." : "Stáhnout"}
                           </button>
                         </div>
@@ -363,7 +370,7 @@ function EquipmentPage() {
                         <div className="flex items-center justify-between gap-3">
                           <div className="text-sm text-muted">Prodej — bazar od <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(sell.bazarMin)}</span>, zastavárna <span className="tabular-nums">{formatCZK(sell.pawnQuote)}</span></div>
                           <button onClick={() => setSelling(sell)} disabled={!!acting}
-                            className="shrink-0 py-1 px-3 rounded text-xs font-heading font-bold border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50 transition-colors">
+                            className={`${CARD_BTN} border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50`}>
                             Prodat
                           </button>
                         </div>
