@@ -13,6 +13,20 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-08-11",
+    emoji: "🧺",
+    title: "Sedm nových věcí do kůlny",
+    items: [
+      "Pračka a sušárna dresů je z nové sedmičky nejzvláštnější — sama o sobě nedělá nic, ale zpomaluje chátrání všeho ostatního vybavení až o 45 %. Vyplatí se až ve chvíli, kdy už něco máš.",
+      "Sekačka a traktůrek drží trávník v kondici. Stav hřiště ovlivňuje zranění i techniku v zápase, takže je to znát v sobotu.",
+      "Kávovar do kabiny tlumí ranní kocovinu po posezení v hospodě. Ráno se to s kafem prostě dá.",
+      "Iontové nápoje a gely na lavičku zabírají tam, kde se zápasy rozhodují. Po sedmdesáté minutě padá kondice všem rychleji — s gely v kapse ten závěr ustojíš líp než soupeř.",
+      "Tombola a losy jsou první vybavení ve hře, které vydělává. Za každého diváka na domácím zápase přiteče pár korun navíc, a los si koupí i ten, kdo prolezl dírou v plotě. Při plné výbavě a slušné návštěvě se zaplatí zhruba za devatenáct domácích zápasů.",
+      "Ozvučení a hlasatel zvedá spokojenost fanoušků — hymna před derby, sestavy nahlas, dechovka o poločase. Spokojení lidi chodí ve větším počtu, takže je to znát na vstupném i na bufetu.",
+      "Klubová kronika a vitrína drží hráče doma. Kdo vidí v klubovně fotky z roku 1963, odchází nerad. U rodáků to platí dvojnásob.",
+    ],
+  },
+  {
+    date: "2026-08-11",
     emoji: "🏷️",
     title: "Vybavení se dá prodat — bazar a zastavárna",
     items: [
