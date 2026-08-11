@@ -104,7 +104,7 @@ export default function MatchReplayPage() {
   const [htPause, setHtPause] = useState(false);
   const [htDone, setHtDone] = useState(false);
   const [kickoff, setKickoff] = useState<"1st" | "2nd" | null>(null);
-  const [flash, setFlash] = useState<"goal" | "card" | "chance" | "attacking" | "injury" | null>(null);
+  const [flash, setFlash] = useState<"goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | null>(null);
   const [flashEvent, setFlashEvent] = useState<MatchEvent | null>(null);
   const animating = useRef(false);
   const [tick, setTick] = useState(0);
@@ -200,11 +200,25 @@ export default function MatchReplayPage() {
     if (next.type === "special" && next.description.includes("Poločas")) { setIdx((i) => i + 1); return; }
     const prev = idx > 0 ? match.events[idx - 1]?.minute ?? 0 : 0;
     if (!htDone && !htPause && prev <= 45 && next.minute > 45) { setHtPause(true); return; }
+    // Penalta drží dech: nejdřív se dlouho bliká PENALTA a míč leží na puntíku,
+    // teprve pak přijde další událost s výsledkem (gól / zahozeno).
+    if (next.type === "penalty") {
+      animating.current = true;
+      setFlashEvent(next);
+      setFlash("penalty");
+      setIdx((i) => i + 1);
+      const dur = speed === "fast" ? 4000 : 7000;
+      setTimeout(() => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
+      return;
+    }
+
     // Chances and goals: show "attacking" phase first for drama
     // Use ref-based timeout to avoid cleanup issues
-    const isShot = next.type === "goal" || next.type === "chance";
-    // Penalta se v přenosu odehraje s napětím jako karta — divák má chvíli čekat
-    const isDramatic = next.type === "card" || next.type === "injury" || next.type === "penalty";
+    // Zahozená penalta má napětí za sebou (bylo u nařízení) — jde rovnou k výsledku
+    const isPenaltyOutcome = next.type === "chance"
+      && (next.detail === "penalty_missed" || next.detail === "penalty_saved");
+    const isShot = (next.type === "goal" || next.type === "chance") && !isPenaltyOutcome;
+    const isDramatic = next.type === "card" || next.type === "injury" || isPenaltyOutcome;
 
     if (isShot || isDramatic) {
       animating.current = true;
@@ -227,7 +241,7 @@ export default function MatchReplayPage() {
         }, atkDur);
       } else {
         setFlashEvent(next);
-        setFlash(next.type === "card" ? "card" : "injury");
+        setFlash(next.type === "card" ? "card" : isPenaltyOutcome ? "chance" : "injury");
         setIdx((i) => i + 1);
         const dur = speed === "fast" ? 2500 : 4000;
         setTimeout(() => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
@@ -397,6 +411,35 @@ export default function MatchReplayPage() {
                   GÓÓÓL!
                   <animate attributeName="opacity" values="1;0.4;1;0.4;1;0" dur="3.5s" fill="freeze" />
                   <animate attributeName="fontSize" values="10;14;10" dur="0.8s" repeatCount="2" />
+                </text>
+              </g>
+            )}
+
+            {/* PENALTA: ztmavené hřiště, míč na puntíku a blikající nápis */}
+            {flash === "penalty" && (
+              <g>
+                <rect width="100" height="45" rx="1" fill="#000" opacity="0.45">
+                  <animate attributeName="opacity" values="0;0.45" dur="0.5s" fill="freeze" />
+                </rect>
+                {/* Puntík a míč na něm — na straně bránícího týmu */}
+                <circle cx={flashEvent?.teamId === 1 ? 88 : 12} cy="22.5" r="0.6" fill="#fff" opacity="0.8" />
+                <circle cx={flashEvent?.teamId === 1 ? 88 : 12} cy="22.5" r="1.4" fill="#fff">
+                  <animate attributeName="r" values="1.4;1.8;1.4" dur="1.2s" repeatCount="indefinite" />
+                </circle>
+                {/* Rozšiřující se kruhy = tlukot srdce */}
+                <circle cx={flashEvent?.teamId === 1 ? 88 : 12} cy="22.5" r="4" fill="none"
+                  stroke="#F5C542" strokeWidth="0.4" opacity="0.6">
+                  <animate attributeName="r" values="3;9;3" dur="1.6s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.7;0;0.7" dur="1.6s" repeatCount="indefinite" />
+                </circle>
+                <text x="50" y="21" textAnchor="middle" fill="#F5C542" fontSize="11" fontWeight="900"
+                  fontFamily="var(--font-heading)" letterSpacing="4">
+                  PENALTA!
+                  <animate attributeName="opacity" values="1;0.15;1" dur="0.7s" repeatCount="indefinite" />
+                </text>
+                <text x="50" y="28" textAnchor="middle" fill="#fff" fontSize="3.4"
+                  fontFamily="var(--font-heading)" opacity="0.75">
+                  {flashEvent?.playerName ?? ""} si staví míč na puntík
                 </text>
               </g>
             )}
@@ -588,6 +631,7 @@ export default function MatchReplayPage() {
         : flash === "card" ? "ring-2 ring-yellow-400 shadow-[0_0_15px_rgba(245,197,66,0.2)]"
         : flash === "injury" ? "ring-2 ring-red-400 shadow-[0_0_15px_rgba(220,80,40,0.2)]"
         : flash === "chance" ? "ring-1 ring-red-400/50"
+        : flash === "penalty" ? "ring-2 ring-gold-400 shadow-[0_0_25px_rgba(245,197,66,0.35)]"
         : ""
       }`}>
         <div className={`flex items-stretch min-h-[56px] transition-colors duration-300 ${
@@ -596,9 +640,10 @@ export default function MatchReplayPage() {
           : flash === "card" ? "bg-yellow-50"
           : flash === "injury" ? "bg-red-50"
           : flash === "chance" ? "bg-red-50/50"
+          : flash === "penalty" ? "bg-gold-50"
           : "bg-white"
         }`}>
-          {cur && <div className="w-1.5 shrink-0 transition-colors duration-300" style={{ backgroundColor: flash === "attacking" ? "#f97316" : flash === "goal" ? "#4ade80" : cur.teamId === 1 ? hc : ac }} />}
+          {cur && <div className="w-1.5 shrink-0 transition-colors duration-300" style={{ backgroundColor: flash === "attacking" ? "#f97316" : flash === "goal" ? "#4ade80" : flash === "penalty" ? "#F5C542" : cur.teamId === 1 ? hc : ac }} />}
           <div className="flex items-center gap-3 px-4 py-3 flex-1 min-w-0" key={flash === "attacking" ? `atk-${idx}` : idx}>
             {flash === "attacking" && cur ? (
               <div className="flex-1 min-w-0 animate-slide-up">
@@ -610,7 +655,9 @@ export default function MatchReplayPage() {
                 <span className="font-commentary text-lg text-muted/50 shrink-0 tabular-nums w-10 text-right">{cur.minute}&apos;</span>
                 <div className="flex-1 min-w-0 animate-slide-up">
                   {cur.type === "goal" && <span className="font-heading font-[800] text-green-600 text-xl mr-2">GÓÓÓL! </span>}
-                  {cur.type === "chance" && <span className="font-heading font-bold text-red-400 mr-1">Mimo! </span>}
+                  {cur.type === "chance" && (cur.detail === "penalty_missed" || cur.detail === "penalty_saved")
+                    ? <span className="font-heading font-[800] text-red-500 text-xl mr-2">NEPROMĚNIL! </span>
+                    : cur.type === "chance" && <span className="font-heading font-bold text-red-400 mr-1">Mimo! </span>}
                   {cur.type === "card" && <span className="font-heading font-bold text-yellow-500 mr-1">{cur.detail === "red" ? "Červená karta!" : "Žlutá karta!"} </span>}
                   {cur.type === "injury" && <span className="font-heading font-bold text-red-500 mr-1">Zranění! </span>}
                   {cur.type === "penalty" && <span className="font-heading font-[800] text-gold-600 text-xl mr-2">PENALTA! </span>}
