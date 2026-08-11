@@ -1186,14 +1186,13 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
   selectedId: string | null;
   onChange: (id: string | null) => void;
 }) {
+  const [rozbaleno, setRozbaleno] = useState(false);
   const cfg = TAKER_ROLES[role];
   const hodnota = (p: AvailablePlayer, a: typeof cfg.attrs[number]) => (p[a.key] as number) ?? a.vychozi;
   const skore = (p: AvailablePlayer) => cfg.attrs.reduce((s, a) => s + hodnota(p, a) * a.vaha, 0);
-  /** "Std 50 Tch 67 Stř 67" — u každého hráče rovnou to, co o roli rozhoduje. */
-  const rozpad = (p: AvailablePlayer) => cfg.attrs.map((a) => `${a.zkratka} ${hodnota(p, a)}`).join(" ");
 
-  // Brankář standardky nekope. Zbytek kádru řadíme od nejlepšího, hráči
-  // v sestavě mají přednost — kdo zrovna nehraje, kope až když se do XI vrátí.
+  // Brankář standardky nekope. Hráči ze sestavy jsou nahoře — kdo zrovna
+  // nehraje, přijde na řadu až se do XI vrátí.
   const ranked = players
     .filter((p) => cfg.gkAllowed || p.position !== "GK")
     .map((p) => ({ p, score: skore(p), hraje: lineupIds.has(p.id) }))
@@ -1201,6 +1200,10 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
 
   const best = ranked.find((r) => r.hraje);
   const chosen = ranked.find((r) => r.p.id === selectedId);
+  // Bez rozbalení stačí špička sestavy plus zvolený hráč, ať je vidět i když je horší
+  const zkraceno = ranked.slice(0, 5);
+  if (chosen && !zkraceno.includes(chosen)) zkraceno.push(chosen);
+  const videt = rozbaleno ? ranked : zkraceno;
 
   return (
     <div className="border-b border-gray-100 last:border-b-0 py-3 first:pt-0 last:pb-0">
@@ -1208,56 +1211,75 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
         <span className="text-base">{cfg.icon}</span>
         <span className="font-heading font-bold text-sm uppercase">{cfg.label}</span>
       </div>
-      <p className="text-sm text-muted mb-1.5 leading-snug">{cfg.hint}</p>
-      <p className="text-sm mb-2">
-        <span className="text-muted">Rozhoduje: </span>
-        {cfg.attrs.map((a, i) => (
-          <span key={String(a.key)}>
-            {i > 0 && <span className="text-muted"> · </span>}
-            <span className="font-heading font-bold">{a.nazev}</span>
-            {cfg.attrs.length > 1 && <span className="text-muted"> {Math.round(a.vaha * 100)} %</span>}
-          </span>
-        ))}
-      </p>
+      <p className="text-sm text-muted mb-2 leading-snug">{cfg.hint}</p>
 
-      <select
-        value={selectedId ?? ""}
-        onChange={(e) => onChange(e.target.value || null)}
-        className="w-full text-base border border-gray-200 rounded-lg px-3 py-2.5 bg-white font-heading"
-      >
-        <option value="">
-          {role === "captain"
-            ? `Bez kapitána${best ? ` — nabízí se ${best.p.lastName}` : ""}`
-            : `Automaticky${best ? ` — teď ${best.p.lastName}` : ""}`}
-        </option>
-        {ranked.map(({ p, hraje }) => (
-          <option key={p.id} value={p.id}>
-            {p.lastName} {p.firstName} · {rozpad(p)}{hraje ? "" : " · mimo sestavu"}
-          </option>
-        ))}
-      </select>
-
-      {/* Rozpad atributů zvoleného (nebo automaticky nasazeného) hráče */}
-      {(chosen ?? best) && (
-        <div className="flex items-center gap-3 mt-2 text-sm">
-          <span className="text-muted">
-            {role === "captain"
-              ? (chosen ? (chosen.hraje ? "Pásku nosí" : "Nehraje — tým bude bez kapitána") : "Nikdo — přijdeš o bonus")
-              : (chosen ? (chosen.hraje ? "Kope" : "Nehraje, zaskočí") : "Automaticky kope")}
-          </span>
-          <span className="font-heading font-bold">{(chosen?.hraje ? chosen : best ?? chosen)!.p.lastName}</span>
-          <span className="flex gap-2 text-muted tabular-nums">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-muted border-b border-gray-100">
+            <th className="text-left font-heading text-xs font-bold py-1">Kdo rozhoduje</th>
             {cfg.attrs.map((a) => (
-              <span key={String(a.key)}>
-                {a.zkratka}{" "}
-                <span className="font-bold text-ink">
-                  {hodnota((chosen?.hraje ? chosen : best ?? chosen)!.p, a)}
-                </span>
-              </span>
+              <th key={String(a.key)} className="text-center font-heading text-xs font-bold py-1 w-11"
+                title={`${a.nazev} — váha ${Math.round(a.vaha * 100)} %`}>
+                {a.zkratka}
+                {cfg.attrs.length > 1 && (
+                  <div className="text-[10px] font-normal leading-none">{Math.round(a.vaha * 100)}%</div>
+                )}
+              </th>
             ))}
-          </span>
-        </div>
-      )}
+          </tr>
+        </thead>
+        <tbody>
+          {videt.map(({ p, hraje }, i) => {
+            const vybrany = p.id === selectedId;
+            return (
+              <tr key={p.id}
+                onClick={() => onChange(vybrany ? null : p.id)}
+                className={`cursor-pointer border-b border-gray-50 last:border-b-0 ${
+                  vybrany ? "bg-pitch-50" : "hover:bg-gray-50"
+                } ${hraje ? "" : "opacity-55"}`}>
+                <td className="py-2 pr-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 ${
+                      vybrany ? "border-pitch-600 bg-pitch-600" : "border-gray-300"
+                    }`} />
+                    <span className="font-heading font-bold">{p.lastName}</span>
+                    <span className="text-muted text-xs truncate">{p.firstName}</span>
+                    {i === 0 && hraje && !rozbaleno && (
+                      <span className="text-xs text-pitch-600 font-heading font-bold shrink-0">nej</span>
+                    )}
+                    {!hraje && <span className="text-xs text-muted shrink-0">lavička</span>}
+                  </div>
+                </td>
+                {cfg.attrs.map((a) => (
+                  <td key={String(a.key)} className={`py-2 text-center tabular-nums ${attrC(hodnota(p, a))}`}>
+                    {hodnota(p, a)}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      <div className="flex items-center justify-between mt-2 gap-2">
+        <span className="text-sm text-muted">
+          {chosen
+            ? (chosen.hraje
+                ? (role === "captain" ? "Pásku nosí " : "Kope ") + chosen.p.lastName
+                : `${chosen.p.lastName} nehraje — ` + (role === "captain"
+                    ? "tým bude bez kapitána"
+                    : `zaskočí ${best?.p.lastName ?? "nejlepší zbylý"}`))
+            : (role === "captain"
+                ? "Nikdo — přijdeš o bonus k morálce"
+                : `Automaticky kope ${best?.p.lastName ?? "nejlepší"}`)}
+        </span>
+        {ranked.length > zkraceno.length && (
+          <button type="button" onClick={() => setRozbaleno(!rozbaleno)}
+            className="text-sm font-heading font-bold text-pitch-700 shrink-0">
+            {rozbaleno ? "Méně" : `Celý kádr (${ranked.length})`}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
