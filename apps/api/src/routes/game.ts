@@ -3443,6 +3443,8 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   const available = players.results.map((p) => {
     const skills = (() => { try { return JSON.parse(p.skills as string); } catch (e) { logger.warn({ module: "game" }, "parse player skills for lineup", e); return {}; } })();
     const lc = (() => { try { return JSON.parse(p.life_context as string); } catch (e) { logger.warn({ module: "game" }, "parse player life_context for lineup", e); return {}; } })();
+    // Vůdcovství potřebuje výběr kapitána — bez něj se kapitán vybíral naslepo
+    const pers = (() => { try { return JSON.parse(p.personality as string); } catch (e) { logger.warn({ module: "game" }, "parse player personality for lineup", e); return {}; } })();
     const injured = (p.injury_days as number) > 0;
     const suspended = ((p.suspended_matches as number) ?? 0) > 0;
     const absent = absentPlayerIds.has(p.id as string) || injured || suspended;
@@ -3454,6 +3456,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       passing: skills.passing ?? 50, heading: skills.heading ?? 50, defense: skills.defense ?? 50,
       goalkeeping: skills.goalkeeping ?? 50, stamina: skills.stamina ?? 50,
       setPieces: skills.setPieces ?? 50,
+      leadership: pers.leadership ?? 30,
       avgRating: p.avg_rating ?? null,
       hangover: !!lc.hangover,
       absent,

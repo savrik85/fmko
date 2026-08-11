@@ -104,6 +104,7 @@ interface AvailablePlayer {
   squadNumber?: number;
   speed?: number; technique?: number; shooting?: number; passing?: number;
   heading?: number; defense?: number; goalkeeping?: number; stamina?: number; setPieces?: number;
+  leadership?: number;
   absent?: boolean; absenceReason?: string | null; absenceSms?: string | null; absenceEmoji?: string | null;
   relationships?: Array<{ otherPlayerId: string; type: string; strength?: number; effect?: string }>;
 }
@@ -1064,8 +1065,10 @@ function MatchPage() {
       <SetPieceTakers
         players={players}
         lineupIds={new Set(selected.filter(Boolean) as string[])}
+        captainId={captainId}
         penaltyTakerId={penaltyTakerId}
         freekickTakerId={freekickTakerId}
+        onCaptain={(id) => { setCaptainId(id); setSaved(false); }}
         onPenalty={(id) => { setPenaltyTakerId(id); setSaved(false); }}
         onFreekick={(id) => { setFreekickTakerId(id); setSaved(false); }}
       />
@@ -1136,7 +1139,7 @@ function MatchPage() {
    podle čeho se rozhoduje simulace — ne jen holý atribut.
    ═══════════════════════════════════════════════════════════════════════ */
 
-type TakerRole = "penalty" | "freekick";
+type TakerRole = "captain" | "penalty" | "freekick";
 
 const TAKER_ROLES: Record<TakerRole, {
   icon: string; label: string; hint: string;
@@ -1144,7 +1147,18 @@ const TAKER_ROLES: Record<TakerRole, {
   score: (p: AvailablePlayer) => number;
   /** Atributy, které do vhodnosti mluví — zobrazí se u hráče. */
   attrs: Array<{ key: keyof AvailablePlayer; label: string }>;
+  /** Brankář kapitánem být může, standardky kopat ne. */
+  gkAllowed?: boolean;
 }> = {
+  captain: {
+    icon: "🎖️",
+    label: "Kapitán",
+    hint: "Vůdce zvedne po vstřeleném gólu morálku celému týmu — od vůdcovství 65 o bod, od 80 o dva. Slaboch pod 35 ji naopak srazí, když inkasujete.",
+    // Engine se u kapitána dívá výhradně na vůdcovství
+    score: (p) => p.leadership ?? 30,
+    attrs: [{ key: "leadership", label: "Vůd" }],
+    gkAllowed: true,
+  },
   penalty: {
     icon: "🥅",
     label: "Penalty",
@@ -1172,7 +1186,7 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
   // Brankář standardky nekope. Zbytek kádru řadíme od nejvhodnějšího, hráči
   // v sestavě mají přednost — kdo zrovna nehraje, kope až když se do XI vrátí.
   const ranked = players
-    .filter((p) => p.position !== "GK")
+    .filter((p) => cfg.gkAllowed || p.position !== "GK")
     .map((p) => ({ p, score: Math.round(cfg.score(p)), hraje: lineupIds.has(p.id) }))
     .sort((a, b) => (a.hraje === b.hraje ? b.score - a.score : a.hraje ? -1 : 1));
 
@@ -1193,7 +1207,9 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
         className="w-full text-base border border-gray-200 rounded-lg px-3 py-2.5 bg-white font-heading"
       >
         <option value="">
-          Automaticky{best ? ` — teď ${best.p.lastName} (${best.score})` : ""}
+          {role === "captain"
+            ? `Bez kapitána${best ? ` — nabízí se ${best.p.lastName} (${best.score})` : ""}`
+            : `Automaticky${best ? ` — teď ${best.p.lastName} (${best.score})` : ""}`}
         </option>
         {ranked.map(({ p, score, hraje }) => (
           <option key={p.id} value={p.id}>
@@ -1206,7 +1222,9 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
       {(chosen ?? best) && (
         <div className="flex items-center gap-3 mt-2 text-sm">
           <span className="text-muted">
-            {chosen ? (chosen.hraje ? "Kope" : "Nehraje, zaskočí") : "Automaticky kope"}
+            {role === "captain"
+              ? (chosen ? (chosen.hraje ? "Pásku nosí" : "Nehraje — tým bude bez kapitána") : "Nikdo — přijdeš o bonus")
+              : (chosen ? (chosen.hraje ? "Kope" : "Nehraje, zaskočí") : "Automaticky kope")}
           </span>
           <span className="font-heading font-bold">{(chosen?.hraje ? chosen : best ?? chosen)!.p.lastName}</span>
           <span className="flex gap-2 text-muted tabular-nums">
@@ -1222,11 +1240,13 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
   );
 }
 
-function SetPieceTakers({ players, lineupIds, penaltyTakerId, freekickTakerId, onPenalty, onFreekick }: {
+function SetPieceTakers({ players, lineupIds, captainId, penaltyTakerId, freekickTakerId, onCaptain, onPenalty, onFreekick }: {
   players: AvailablePlayer[];
   lineupIds: Set<string>;
+  captainId: string | null;
   penaltyTakerId: string | null;
   freekickTakerId: string | null;
+  onCaptain: (id: string | null) => void;
   onPenalty: (id: string | null) => void;
   onFreekick: (id: string | null) => void;
 }) {
@@ -1234,12 +1254,13 @@ function SetPieceTakers({ players, lineupIds, penaltyTakerId, freekickTakerId, o
   return (
     <div className="card p-4">
       <div className="mb-2">
-        <span className="font-heading font-bold text-sm uppercase text-muted">Exekutoři standardek</span>
+        <span className="font-heading font-bold text-sm uppercase text-muted">Role v týmu</span>
         <p className="text-sm text-muted mt-0.5 leading-snug">
-          Platí pro ligu, pohár i přátelák. Když zvolený hráč zrovna nehraje nebo ho stáhneš,
-          převezme standardky nejvhodnější zbylý.
+          Kapitána nosí tahle sestava, exekutoři platí pro celý tým — v lize, poháru i přáteláku.
+          Když zvolený hráč zrovna nehraje, zaskočí za něj nejvhodnější zbylý.
         </p>
       </div>
+      <TakerPicker role="captain" players={players} lineupIds={lineupIds} selectedId={captainId} onChange={onCaptain} />
       <TakerPicker role="penalty" players={players} lineupIds={lineupIds} selectedId={penaltyTakerId} onChange={onPenalty} />
       <TakerPicker role="freekick" players={players} lineupIds={lineupIds} selectedId={freekickTakerId} onChange={onFreekick} />
     </div>
