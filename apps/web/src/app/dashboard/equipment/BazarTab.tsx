@@ -130,7 +130,14 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw }: Pro
               </div>
 
               <div className="text-sm text-muted mb-3">
-                od <Link href={`/dashboard/team/${l.teamId}`} className="font-heading font-bold text-ink hover:text-pitch-600 transition-colors">{l.teamName}</Link>
+                od{" "}
+                {l.teamId ? (
+                  <Link href={`/dashboard/team/${l.teamId}`} className="font-heading font-bold text-ink hover:text-pitch-600 transition-colors">{l.teamName}</Link>
+                ) : (
+                  // Virtuální klub ze sousedního okresu — nemá stránku, na kterou odkázat.
+                  <span className="font-heading font-bold text-ink">{l.teamName}</span>
+                )}
+                {l.isAiListing && <span className="text-xs"> · z okolí</span>}
               </div>
 
               {/* Stav je hlavní rozhodovací informace — proto nahoře a velký. */}

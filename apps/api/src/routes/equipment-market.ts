@@ -51,7 +51,8 @@ function isKnownCategory(value: unknown): value is EquipmentCategory {
 
 interface ListingRow {
   id: string;
-  team_id: string;
+  /** NULL = virtuální prodejce z okolního okresu, jméno je v seller_name. */
+  team_id: string | null;
   league_id: string;
   category: string;
   level: number;
@@ -59,6 +60,8 @@ interface ListingRow {
   price: number;
   status: string;
   expires_at: string | null;
+  is_ai_listing: number;
+  seller_name: string | null;
 }
 
 interface BuyerContext {
@@ -129,11 +132,13 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
 
   const [offersRes, mineRes, historyRes] = await c.env.DB.batch([
     c.env.DB.prepare(
+      // LEFT JOIN — virtuální prodejci z okolních okresů nemají řádek v teams.
       `SELECT el.id, el.team_id, el.category, el.level, el.price, el.expires_at, el.created_at,
-              el.condition_at_listing, t.name AS team_name
+              el.condition_at_listing, el.is_ai_listing, el.seller_name, t.name AS team_name
          FROM equipment_listings el
-         JOIN teams t ON el.team_id = t.id
-        WHERE el.league_id = ? AND el.status = 'active' AND el.team_id != ?
+         LEFT JOIN teams t ON el.team_id = t.id
+        WHERE el.league_id = ? AND el.status = 'active'
+          AND (el.team_id IS NULL OR el.team_id != ?)
         ORDER BY el.created_at DESC`
     ).bind(me.league_id ?? "", teamId),
     c.env.DB.prepare(
@@ -150,7 +155,8 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
 
   // Živé stavy prodávajících jedním dotazem — JOIN výš vrací jen rowid, hodnoty musíme
   // vytáhnout z široké tabulky podle názvu sloupce, což se v SQL dělá blbě.
-  const sellerIds = [...new Set((offersRes.results as Array<{ team_id: string }>).map((r) => r.team_id))];
+  const sellerIds = [...new Set((offersRes.results as Array<{ team_id: string | null }>)
+    .map((r) => r.team_id).filter((id): id is string => !!id))];
   const sellerConditions = new Map<string, Record<string, unknown>>();
   if (sellerIds.length > 0) {
     const rows = await c.env.DB.prepare(
@@ -166,7 +172,10 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
       const category = row.category as string;
       const level = row.level as number;
       const myLevel = levels[category] ?? 0;
-      const sellerRow = sellerConditions.get(row.team_id as string);
+      const isAi = !!(row.is_ai_listing as number);
+      // Virtuální prodejce nemá řádek vybavení, takže stav zůstává na hodnotě
+      // z inzerátu. U reálného klubu se čte živý — vybavení mu mezitím chátrá.
+      const sellerRow = row.team_id ? sellerConditions.get(row.team_id as string) : undefined;
       const liveCondition = (sellerRow?.[`${category}_condition`] as number) ?? (row.condition_at_listing as number);
       const unlock = checkLevelUnlock(level, me.reputation, matchesPlayed, season);
       const shopPrice = shopCostFromLevel(category, myLevel, level);
@@ -177,8 +186,9 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
 
       return {
         id: row.id as string,
-        teamId: row.team_id as string,
-        teamName: row.team_name as string,
+        teamId: (row.team_id as string | null) ?? null,
+        teamName: (row.team_name as string | null) ?? (row.seller_name as string | null) ?? "Klub z okolí",
+        isAiListing: isAi,
         category,
         categoryLabel: CATEGORY_LABELS[category],
         level,
@@ -383,7 +393,7 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
   const now = new Date().toISOString();
 
   const listing = await c.env.DB.prepare(
-    "SELECT id, team_id, league_id, category, level, condition_at_listing, price, status, expires_at FROM equipment_listings WHERE id = ?"
+    "SELECT id, team_id, league_id, category, level, condition_at_listing, price, status, expires_at, is_ai_listing, seller_name FROM equipment_listings WHERE id = ?"
   ).bind(listingId).first<ListingRow>()
     .catch((e) => { logger.warn({ module: MODULE }, "fetch listing for buy", e); return null; });
 
@@ -425,16 +435,24 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
     }
   }
 
-  const seller = await c.env.DB.prepare("SELECT * FROM equipment WHERE team_id = ?")
-    .bind(listing.team_id).first<Record<string, unknown>>()
-    .catch((e) => { logger.warn({ module: MODULE }, "fetch seller equipment", e); return null; });
-  const sellerLevel = (seller?.[category] as number) ?? 0;
-  const sellerCondition = (seller?.[`${category}_condition`] as number) ?? listing.condition_at_listing;
+  // Virtuální prodejce z okolního okresu nemá řádek v teams ani v equipment —
+  // nemá se komu co odebírat a nemá kdo dostat peníze. Ty ze hry prostě odejdou,
+  // stejně jako při nákupu virtuálního hráče na přestupovém trhu.
+  const isVirtualSeller = !listing.team_id;
+  let sellerCondition = listing.condition_at_listing;
 
-  if (sellerLevel !== listing.level) {
-    await c.env.DB.prepare("UPDATE equipment_listings SET status = 'withdrawn', resolved_at = ? WHERE id = ? AND status = 'active'")
-      .bind(now, listingId).run().catch((e) => logger.warn({ module: MODULE }, "auto-withdraw stale listing", e));
-    return c.json({ error: "Prodávající vybavení mezitím změnil, nabídka byla stažena" }, 409);
+  if (!isVirtualSeller) {
+    const seller = await c.env.DB.prepare("SELECT * FROM equipment WHERE team_id = ?")
+      .bind(listing.team_id).first<Record<string, unknown>>()
+      .catch((e) => { logger.warn({ module: MODULE }, "fetch seller equipment", e); return null; });
+    const sellerLevel = (seller?.[category] as number) ?? 0;
+    sellerCondition = (seller?.[`${category}_condition`] as number) ?? listing.condition_at_listing;
+
+    if (sellerLevel !== listing.level) {
+      await c.env.DB.prepare("UPDATE equipment_listings SET status = 'withdrawn', resolved_at = ? WHERE id = ? AND status = 'active'")
+        .bind(now, listingId).run().catch((e) => logger.warn({ module: MODULE }, "auto-withdraw stale listing", e));
+      return c.json({ error: "Prodávající vybavení mezitím změnil, nabídka byla stažena" }, 409);
+    }
   }
 
   if (buyer.budget < listing.price) return c.json({ error: "Nedostatek peněz" }, 400);
@@ -456,16 +474,20 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
   };
 
   // ── P2: odebrat prodávajícímu. Prohraje proti zastavárně i upgradu. ───────
-  const removed = await c.env.DB.prepare(
-    `UPDATE equipment SET ${category} = 0, ${category}_condition = 50 WHERE team_id = ? AND ${category} = ?`
-  ).bind(listing.team_id, listing.level).run()
-    .catch((e) => { logger.error({ module: MODULE }, `P2 remove failed listing=${listingId}`, e); return null; });
+  // U virtuálního prodejce se přeskakuje — žádné vybavení v databázi nemá.
+  if (!isVirtualSeller) {
+    const removed = await c.env.DB.prepare(
+      `UPDATE equipment SET ${category} = 0, ${category}_condition = 50 WHERE team_id = ? AND ${category} = ?`
+    ).bind(listing.team_id, listing.level).run()
+      .catch((e) => { logger.error({ module: MODULE }, `P2 remove failed listing=${listingId}`, e); return null; });
 
-  if (!removed || removed.meta.changes === 0) {
-    await rollbackListing();
-    return c.json({ error: "Prodávající vybavení mezitím prodal jinam" }, 409);
+    if (!removed || removed.meta.changes === 0) {
+      await rollbackListing();
+      return c.json({ error: "Prodávající vybavení mezitím prodal jinam" }, 409);
+    }
   }
   const rollbackSeller = async () => {
+    if (isVirtualSeller) return;
     await c.env.DB.prepare(
       `UPDATE equipment SET ${category} = ?, ${category}_condition = ? WHERE team_id = ? AND ${category} = 0`
     ).bind(listing.level, sellerCondition, listing.team_id).run()
@@ -505,43 +527,48 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
   }
 
   // ── P5: nepodmíněné dopisy. Nemůžou half-failnout, jdou v jednom batchi. ──
-  const sellerRow = await c.env.DB.prepare("SELECT name, budget, game_date, user_id FROM teams WHERE id = ?")
+  const sellerRow = isVirtualSeller ? null : await c.env.DB.prepare("SELECT name, budget, game_date, user_id FROM teams WHERE id = ?")
     .bind(listing.team_id).first<{ name: string; budget: number; game_date: string | null; user_id: string }>()
     .catch((e) => { logger.warn({ module: MODULE }, "fetch seller team for bookkeeping", e); return null; });
-  const sellerIsAi = sellerRow?.user_id === "ai";
+  // Virtuální klub ani AI klub zprávy nečte a virtuální navíc nemá kam dostat peníze.
+  const notifySeller = !isVirtualSeller && sellerRow?.user_id !== "ai";
   const buyerRow = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
     .bind(teamId).first<{ name: string }>()
     .catch((e) => { logger.warn({ module: MODULE }, "fetch buyer team name", e); return null; });
 
   const label = CATEGORY_LABELS[category];
   const desc = `${label} (úroveň ${listing.level}, stav ${sellerCondition} %)`;
+  const sellerName = sellerRow?.name ?? listing.seller_name ?? "klubu z okolí";
 
   await c.env.DB.batch([
-    c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(listing.price, listing.team_id),
     c.env.DB.prepare(
       "INSERT INTO transactions (id, team_id, type, amount, balance_after, description, reference_id, game_date) VALUES (?, ?, 'equipment_purchase', ?, ?, ?, ?, ?)"
     ).bind(crypto.randomUUID(), teamId, -listing.price, debited.budget, `Bazar — nákup: ${desc}`, listingId, buyer.game_date ?? now),
-    c.env.DB.prepare(
-      "INSERT INTO transactions (id, team_id, type, amount, balance_after, description, reference_id, game_date) VALUES (?, ?, 'equipment_sale', ?, ?, ?, ?, ?)"
-    ).bind(crypto.randomUUID(), listing.team_id, listing.price, (sellerRow?.budget ?? 0) + listing.price, `Bazar — prodej: ${desc}`, listingId, sellerRow?.game_date ?? now),
-  ]).catch((e) => logger.error({ module: MODULE }, `P5 bookkeeping failed listing=${listingId} buyer=${teamId} seller=${listing.team_id}`, e));
+    // Peníze dostane jen reálný klub. U virtuálního odejdou ze hry — stejně jako
+    // při nákupu virtuálního hráče na přestupovém trhu.
+    ...(isVirtualSeller ? [] : [
+      c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(listing.price, listing.team_id),
+      c.env.DB.prepare(
+        "INSERT INTO transactions (id, team_id, type, amount, balance_after, description, reference_id, game_date) VALUES (?, ?, 'equipment_sale', ?, ?, ?, ?, ?)"
+      ).bind(crypto.randomUUID(), listing.team_id, listing.price, (sellerRow?.budget ?? 0) + listing.price, `Bazar — prodej: ${desc}`, listingId, sellerRow?.game_date ?? now),
+    ]),
+  ]).catch((e) => logger.error({ module: MODULE }, `P5 bookkeeping failed listing=${listingId} buyer=${teamId} seller=${listing.team_id ?? "virtual"}`, e));
 
   // ── P6: notifikace, fire-and-forget ──────────────────────────────────────
   const priceCz = listing.price.toLocaleString("cs");
-  // AI klubu se nic neposílá — nikdo to nečte a jen by to plodilo konverzace a notifikace.
   await Promise.all([
     sendSystemSMS(c.env.DB, teamId, "Kustod",
-      `🚚 Dovezli to z ${sellerRow?.name ?? "jiného klubu"}: ${desc}.` +
+      `🚚 Dovezli to z ${sellerName}: ${desc}.` +
       (sellerCondition < 60 ? ` Chce to opravit — ${(listing.level * 500).toLocaleString("cs")} Kč.` : ""))
       .catch((e) => logger.warn({ module: MODULE }, "sms buyer", e)),
-    ...(sellerIsAi ? [] : [
+    ...(notifySeller && listing.team_id ? [
       sendSystemSMS(c.env.DB, listing.team_id, "Kustod",
         `💰 Prodáno! ${desc} si odvezli z ${buyerRow?.name ?? "jiného klubu"}. Na účtu máš o ${priceCz} Kč víc.`)
         .catch((e) => logger.warn({ module: MODULE }, "sms seller", e)),
       createNotification(c.env.DB, listing.team_id, "event", "Vybavení prodáno",
         `${label} za ${priceCz} Kč`, "/dashboard/equipment?tab=bazar", c.env)
         .catch((e) => logger.warn({ module: MODULE }, "notify seller", e)),
-    ]),
+    ] : []),
   ]);
 
   return c.json({

@@ -40,7 +40,11 @@ export interface EquipmentData {
 }
 
 export interface BazarListing {
-  id: string; teamId: string; teamName: string;
+  id: string;
+  /** null = virtuální klub ze sousedního okresu, nemá stránku týmu. */
+  teamId: string | null;
+  teamName: string;
+  isAiListing: boolean;
   category: string; categoryLabel: string;
   level: number; levelDescription: string; effect: string;
   /** Živý stav prodávajícího — vybavení mu chátrá dál, dokud se neprodá. */

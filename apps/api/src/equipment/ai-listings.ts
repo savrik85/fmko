@@ -1,14 +1,21 @@
 /**
- * Nabídky vybavení od AI klubů.
+ * Nabídky vybavení od klubů ze sousedních okresů.
  *
- * V lize se dvěma lidskými manažery by byl bazar prázdný a celá funkce k ničemu.
- * AI kluby proto občas vyklidí kůlnu — nabídnou vybavení, které jim zbylo.
+ * Bazar se původně plnil z AI klubů ve vlastní lize. To ale selhalo přesně tam, kde
+ * na tom nejvíc záleží: v lize, kde jsou všichni manažeři lidi (Okresní přebor
+ * Prachatice — 14 týmů, 14 lidí), nebyl žádný AI klub a bazar zůstal prázdný.
  *
- * Prodej je pak úplně normální: kupující zaplatí, AI klub o vybavení opravdu přijde
- * a peníze dostane. Žádná zvláštní větev v nákupu, jen další inzerát v tabulce.
+ * Řeší se to stejně jako u přestupového trhu (transfers/virtual-teams.ts): prodávají
+ * VIRTUÁLNÍ kluby ze sousedních okresů. Nemají řádek v databázi, jen jméno — inzerát
+ * má `team_id = NULL`, `is_ai_listing = 1` a `seller_name`. Funguje to v každé lize
+ * bez ohledu na to, kdo v ní hraje.
+ *
+ * Nákup od virtuálního klubu peníze ze hry odčerpá (nikdo je nedostane), stejně jako
+ * u nákupu virtuálního hráče na přestupovém trhu.
  */
 
 import { logger } from "../lib/logger";
+import { VIRTUAL_TEAMS } from "../transfers/virtual-teams";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -17,34 +24,73 @@ import {
 
 const MODULE = "equipment-ai-listings";
 
-/** Kolik aktivních AI nabídek chceme v lize držet. Nad tím se nedoplňuje. */
-const TARGET_AI_LISTINGS_PER_LEAGUE = 4;
-/** Kolik jich smí vzniknout za jeden den v jedné lize — ať se bazar plní postupně. */
-const MAX_NEW_PER_LEAGUE_PER_DAY = 1;
-/** Inzerát AI klubu vydrží déle než lidský — nikdo ho nestahuje. */
+/** Kolik nabídek od okolních klubů držet v lize. Nad tím se nedoplňuje. */
+const TARGET_LISTINGS_PER_LEAGUE = 5;
+/** Kolik jich smí přibýt za den — ať se bazar plní postupně a je proč se dívat. */
+const MAX_NEW_PER_LEAGUE_PER_DAY = 2;
+/** Inzerát okolního klubu vydrží déle než lidský — nikdo ho nestahuje. */
 const AI_LISTING_DAYS = 10;
-/** Kolik AI klubů zkusit, než to vzdáme — vesnické kluby často nemají co prodat. */
-const CANDIDATE_DRAWS = 6;
 
-interface LeagueNeed {
+/**
+ * Kluby pro okresy, které nemají vlastní záznam ve VIRTUAL_TEAMS.
+ * Bez tohohle by v takové lize bazar zůstal prázdný — což je přesně ta chyba,
+ * kterou tenhle modul opravuje.
+ */
+const FALLBACK_SELLERS = [
+  "TJ Sokol Zálesí", "FK Nová Ves", "SK Podhoří", "TJ Baník Doubrava",
+  "Slavoj Kamenice", "FK Střední Lhota", "TJ Dolní Újezd", "SK Vysoká",
+];
+
+/**
+ * Rozdělení úrovní. Lv1 je běžné zboží, Lv3 se objeví jen občas — jinak by bazar
+ * hned na začátku rozdal nejlepší vybavení ve hře a nákup v obchodě ztratil smysl.
+ */
+const LEVEL_WEIGHTS: Array<{ level: number; weight: number }> = [
+  { level: 1, weight: 60 },
+  { level: 2, weight: 30 },
+  { level: 3, weight: 10 },
+];
+
+function pickLevel(): number {
+  const total = LEVEL_WEIGHTS.reduce((s, l) => s + l.weight, 0);
+  let roll = Math.random() * total;
+  for (const entry of LEVEL_WEIGHTS) {
+    roll -= entry.weight;
+    if (roll <= 0) return entry.level;
+  }
+  return 1;
+}
+
+function pick<T>(items: readonly T[]): T {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+/** Okres ligy — U21 ligy ho mají s příponou, kterou VIRTUAL_TEAMS nezná. */
+function baseDistrict(district: string): string {
+  return district.replace(/\s+U21$/, "").trim();
+}
+
+function pickSellerName(district: string): string {
+  const teams = VIRTUAL_TEAMS[baseDistrict(district)];
+  if (teams && teams.length > 0) return pick(teams).name;
+  return pick(FALLBACK_SELLERS);
+}
+
+interface LeagueRow {
   league_id: string;
+  district: string;
   active: number;
 }
 
-/**
- * Doplní bazar o nabídky AI klubů. Volá se z daily-ticku.
- *
- * Držíme se nízko s počtem dotazů: jeden na ligy, které mají málo nabídek, a pak
- * jeden na kandidáta a jeden insert na ligu. Daily-tick je na D1 limity citlivý.
- */
+/** Doplní bazar o nabídky okolních klubů. Volá se z daily-ticku. */
 export async function generateAiEquipmentListings(db: D1Database, now: Date): Promise<number> {
   const leagues = await db.prepare(
-    `SELECT l.id AS league_id,
+    `SELECT l.id AS league_id, l.district AS district,
             (SELECT COUNT(*) FROM equipment_listings el
-               JOIN teams t2 ON t2.id = el.team_id
-              WHERE el.league_id = l.id AND el.status = 'active' AND t2.user_id = 'ai') AS active
-       FROM leagues l`
-  ).all<LeagueNeed>()
+              WHERE el.league_id = l.id AND el.status = 'active' AND el.is_ai_listing = 1) AS active
+       FROM leagues l
+      WHERE l.status = 'active'`
+  ).all<LeagueRow>()
     .catch((e) => { logger.warn({ module: MODULE }, "fetch leagues for ai listings", e); return null; });
 
   if (!leagues?.results?.length) return 0;
@@ -52,73 +98,44 @@ export async function generateAiEquipmentListings(db: D1Database, now: Date): Pr
   // Reálný čas, shodně s lidskými inzeráty i s expirací v daily-ticku.
   const expiresAt = new Date(now);
   expiresAt.setDate(expiresAt.getDate() + AI_LISTING_DAYS);
+
   let created = 0;
 
   for (const league of leagues.results) {
-    if (league.active >= TARGET_AI_LISTINGS_PER_LEAGUE) continue;
+    const missing = TARGET_LISTINGS_PER_LEAGUE - league.active;
+    if (missing <= 0) continue;
 
-    for (let i = 0; i < MAX_NEW_PER_LEAGUE_PER_DAY; i++) {
-      // Náhodný AI klub v lize. Řádek vybavení mu musíme založit sami — vzniká líně
-      // až při zobrazení stránky a na AI kluby se nikdo nedívá, takže bez tohohle
-      // by v celé DB nebyl jediný kandidát.
-      //
-      // Losujeme opakovaně: vesnické kluby začínají s většinou kategorií na nule,
-      // takže první tah často nemá co nabídnout.
-      const { ensureEquipmentRow } = await import("./equipment-service");
-      let teamId = "";
-      let candidate: Record<string, unknown> | null = null;
-      let options: string[] = [];
+    const toCreate = Math.min(missing, MAX_NEW_PER_LEAGUE_PER_DAY);
+    const statements = [];
 
-      for (let attempt = 0; attempt < CANDIDATE_DRAWS && options.length === 0; attempt++) {
-        const seller = await db.prepare(
-          "SELECT id FROM teams WHERE league_id = ? AND user_id = 'ai' ORDER BY RANDOM() LIMIT 1"
-        ).bind(league.league_id).first<{ id: string }>()
-          .catch((e) => { logger.warn({ module: MODULE }, "pick ai seller", e); return null; });
-        if (!seller) break;
+    for (let i = 0; i < toCreate; i++) {
+      const category = pick(CATEGORIES);
+      const level = pickLevel();
+      // Ojeté, ale ne šrot — okolní kluby prodávají to, co jim doslouží.
+      const condition = 25 + Math.floor(Math.random() * 61);
 
-        const row = await ensureEquipmentRow(db, seller.id);
-        if (!row) continue;
-
-        // Co už tenhle klub nabízí, znovu nabízet nesmíme — brání tomu unique index.
-        const listedRows = await db.prepare(
-          "SELECT category FROM equipment_listings WHERE team_id = ? AND status = 'active'"
-        ).bind(seller.id).all<{ category: string }>()
-          .catch((e) => { logger.warn({ module: MODULE }, "fetch ai team listings", e); return null; });
-        const alreadyListed = new Set((listedRows?.results ?? []).map((r) => r.category));
-
-        const usable = CATEGORIES.filter((cat) => {
-          const level = (row[cat] as number) ?? 0;
-          return level >= 1 && !alreadyListed.has(cat);
-        });
-        if (usable.length === 0) continue;
-
-        teamId = seller.id;
-        candidate = row;
-        options = [...usable];
-      }
-
-      if (!candidate || options.length === 0) break;
-
-      const category = options[Math.floor(Math.random() * options.length)];
-      const level = candidate[category] as number;
-      const condition = (candidate[`${category}_condition`] as number) ?? 50;
-
-      // AI nesmlouvá, ale ani nestřílí od boku — drží se doporučené ceny s rozptylem,
-      // ať se v bazaru objeví i výhodné kusy a hráč má co vybírat.
       const band = getBazarPriceBand(category, level, condition);
       const jitter = 0.85 + Math.random() * 0.3;
       const price = Math.max(band.min, Math.min(band.max, Math.round(band.suggested * jitter)));
 
-      try {
-        await db.prepare(
-          "INSERT INTO equipment_listings (id, team_id, league_id, category, level, condition_at_listing, price, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        ).bind(crypto.randomUUID(), teamId, league.league_id, category, level, condition, price, expiresAt.toISOString()).run();
-        created++;
-        logger.info({ module: MODULE }, `AI nabídka: ${CATEGORY_LABELS[category]} lv${level} za ${price} Kč (${teamId})`);
-      } catch (e) {
-        // Souběh s unique indexem není chyba, jen se ten den nic nepřidalo.
-        logger.warn({ module: MODULE }, `insert ai listing ${category} for ${teamId}`, e);
-      }
+      statements.push(
+        db.prepare(
+          `INSERT INTO equipment_listings
+             (id, team_id, league_id, category, level, condition_at_listing, price, expires_at, is_ai_listing, seller_name)
+           VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 1, ?)`
+        ).bind(
+          crypto.randomUUID(), league.league_id, category, level, condition, price,
+          expiresAt.toISOString(), pickSellerName(league.district),
+        )
+      );
+      logger.info({ module: MODULE }, `bazar ${league.district}: ${CATEGORY_LABELS[category]} lv${level} stav ${condition} % za ${price} Kč`);
+    }
+
+    try {
+      await db.batch(statements);
+      created += statements.length;
+    } catch (e) {
+      logger.warn({ module: MODULE }, `insert ai listings for league ${league.league_id}`, e);
     }
   }
 
