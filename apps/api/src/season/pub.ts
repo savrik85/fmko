@@ -639,7 +639,10 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<string>>, _buddiesMap: Map<string, Set<string>>, coachName: string = "Trenér", district?: string): PubIncident[] {
+/**
+ * @param hangoverMod 0–0.45 podle kávovaru v kabině — snižuje šanci na ranní kocovinu.
+ */
+function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<string>>, _buddiesMap: Map<string, Set<string>>, coachName: string = "Trenér", district?: string, hangoverMod: number = 0): PubIncident[] {
   const incidents: PubIncident[] = [];
 
   if (attendees.length === 0) {
@@ -707,7 +710,8 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
   const hangoverVictims: PubAttendee[] = [];
   for (const a of locals) {
     if (a.alcohol < 50) continue;
-    const prob = 0.10 + ((a.alcohol - 50) / 50) * 0.20; // alcohol 50→10%, 75→20%, 100→30%
+    // Kávovar v kabině ubere až 45 % — ráno se to s kafem prostě dá.
+    const prob = (0.10 + ((a.alcohol - 50) / 50) * 0.20) * (1 - hangoverMod); // alcohol 50→10%, 75→20%, 100→30%
     if (Math.random() < prob) hangoverVictims.push(a);
   }
 
@@ -1448,8 +1452,14 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
       }
     }
 
+    // Kávovar v kabině — tlumí ranní kocovinu po posezení.
+    const coffee = await db.prepare("SELECT coffee_maker, coffee_maker_condition FROM equipment WHERE team_id = ?")
+      .bind(team.id).first<{ coffee_maker: number; coffee_maker_condition: number }>()
+      .catch((e) => { logger.warn({ module: "pub" }, "load coffee maker", e); return null; });
+    const hangoverMod = (coffee?.coffee_maker ?? 0) * ((coffee?.coffee_maker_condition ?? 50) / 100) * 0.15;
+
     // Generate incidents
-    const incidents = generateIncidents(attendees, rivalsMap, buddiesMap, coachName, team.district ?? undefined);
+    const incidents = generateIncidents(attendees, rivalsMap, buddiesMap, coachName, team.district ?? undefined, hangoverMod);
 
     // Pokud incidents obsahují coach_*, přidej trenéra mezi attendees s avatarem
     const hasCoach = incidents.some((inc) => inc.type.startsWith("coach_"));

@@ -220,6 +220,9 @@ function EquipmentPage() {
     (fx.crowdMod ?? 0) > 0.01 && { label: "Návštěva", value: `+${Math.round((fx.crowdMod ?? 0) * 100)}%`, icon: "📣" },
     (fx.weatherResistMod ?? 0) > 0.01 && { label: "Počasí", value: `-${Math.round((fx.weatherResistMod ?? 0) * 100)}% postih`, icon: "🧥" },
     (fx.youthTrainingMod ?? 0) > 0.01 && { label: "Mladíci", value: `+${Math.round((fx.youthTrainingMod ?? 0) * 100)}%`, icon: "📹" },
+    (fx.equipCareMod ?? 0) > 0.01 && { label: "Údržba vybavení", value: `-${Math.round((fx.equipCareMod ?? 0) * 100)}% chátrání`, icon: "🧺" },
+    (fx.pitchCareMod ?? 0) > 0.01 && { label: "Trávník", value: `${Math.round((fx.pitchCareMod ?? 0) * 100)}% dní bez opotřebení`, icon: "🚜" },
+    (fx.hangoverMod ?? 0) > 0.01 && { label: "Kocovina", value: `-${Math.round((fx.hangoverMod ?? 0) * 100)}%`, icon: "☕" },
   ].filter(Boolean) as { label: string; value: string; icon: string }[];
 
   const sellByCategory = new Map((data.sellOptions ?? []).map((s) => [s.category, s]));

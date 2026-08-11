@@ -588,23 +588,63 @@ export async function executeDailyTick(
   // ── Global ticks ──
 
   // Pitch degradation
+  // Kluby se sekačkou (mower) jedou vlastním průchodem níž — tady se vynechají,
+  // stejný idiom jako u grilu. Bez toho by jim trávník klesal dvakrát.
   await env.DB.prepare(
-    "UPDATE stadiums SET pitch_condition = MAX(5, pitch_condition - 1) WHERE pitch_type = 'natural'"
+    "UPDATE stadiums SET pitch_condition = MAX(5, pitch_condition - 1) WHERE pitch_type = 'natural' AND team_id NOT IN (SELECT team_id FROM equipment WHERE mower > 0)"
   ).run();
   await env.DB.prepare(
-    "UPDATE stadiums SET pitch_condition = MAX(10, pitch_condition - 1) WHERE pitch_type = 'hybrid' AND (ABS(RANDOM()) % 2 = 0)"
+    "UPDATE stadiums SET pitch_condition = MAX(10, pitch_condition - 1) WHERE pitch_type = 'hybrid' AND (ABS(RANDOM()) % 2 = 0) AND team_id NOT IN (SELECT team_id FROM equipment WHERE mower > 0)"
   ).run();
+
+  // Sekačka: trávník některé dny nechátrá vůbec. Šance = pitchCareMod (0–90 %),
+  // takže Lv3 v dobrém stavu udrží hřiště skoro pořád.
+  try {
+    const mowers = await env.DB.prepare(
+      "SELECT team_id, mower, mower_condition FROM equipment WHERE mower > 0"
+    ).all<{ team_id: string; mower: number; mower_condition: number }>();
+    for (const row of mowers.results ?? []) {
+      const skipPct = Math.round(row.mower * (row.mower_condition / 100) * 30);
+      await env.DB.prepare(
+        `UPDATE stadiums SET pitch_condition = MAX(5, pitch_condition - 1)
+          WHERE team_id = ? AND pitch_type IN ('natural','hybrid') AND (ABS(RANDOM()) % 100) >= ?`
+      ).bind(row.team_id, skipPct).run();
+    }
+  } catch (e) {
+    logger.warn({ module: "daily-tick" }, "mower pitch care", e);
+  }
 
   // Equipment condition degradation (slow — 1-2 points per day for used items).
   // team_van ZÁMĚRNĚ vynechán: jeho kondice ovlivňuje commuteMod, který musí zůstat stejný
   // mezi day_before SMS a match_day simulací (jinak divergence absencí). Dodávku „opotřebí" jen zápas/nákup.
   const equipCategories = ["balls", "jerseys", "training_cones", "first_aid", "boots_stock", "bibs", "goalkeeper_gear", "water_bottles", "tactics_board",
-    "gym_corner", "training_wall", "club_grill", "fan_drums", "winter_gear", "video_setup"];
+    "gym_corner", "training_wall", "club_grill", "fan_drums", "winter_gear", "video_setup", "laundry", "mower", "coffee_maker"];
+
+  // Pračka snižuje šanci na opotřebení všeho ostatního, takže kluby, co ji mají,
+  // se z globálního průchodu vyjmou a dojedou zvlášť nižší pravděpodobností.
+  const laundryTeams = await env.DB.prepare(
+    "SELECT team_id, laundry, laundry_condition FROM equipment WHERE laundry > 0"
+  ).all<{ team_id: string; laundry: number; laundry_condition: number }>()
+    .catch((e) => { logger.warn({ module: "daily-tick" }, "fetch laundry teams", e); return { results: [] }; });
+
   for (const cat of equipCategories) {
     // Only degrade items with level > 0, by 1 point/day (50% chance)
     await env.DB.prepare(
-      `UPDATE equipment SET ${cat}_condition = MAX(5, ${cat}_condition - 1) WHERE ${cat} > 0 AND (ABS(RANDOM()) % 2 = 0)`
+      `UPDATE equipment SET ${cat}_condition = MAX(5, ${cat}_condition - 1)
+        WHERE ${cat} > 0 AND (ABS(RANDOM()) % 2 = 0)
+          AND team_id NOT IN (SELECT team_id FROM equipment WHERE laundry > 0)`
     ).run().catch((e) => logger.warn({ module: "daily-tick" }, "equipment condition degradation", e));
+  }
+
+  for (const row of laundryTeams.results ?? []) {
+    const chance = Math.round(50 * (1 - row.laundry * (row.laundry_condition / 100) * 0.15));
+    for (const cat of equipCategories) {
+      await env.DB.prepare(
+        `UPDATE equipment SET ${cat}_condition = MAX(5, ${cat}_condition - 1)
+          WHERE team_id = ? AND ${cat} > 0 AND (ABS(RANDOM()) % 100) < ?`
+      ).bind(row.team_id, chance).run()
+        .catch((e) => logger.warn({ module: "daily-tick" }, "equipment degradation with laundry", e));
+    }
   }
 
   // Injury recovery

@@ -38,7 +38,7 @@ export interface StaffTickResult {
 const EQUIP_CATEGORIES = [
   "balls", "jerseys", "training_cones", "first_aid", "boots_stock", "bibs", "goalkeeper_gear",
   "water_bottles", "tactics_board", "gym_corner", "training_wall", "club_grill", "fan_drums",
-  "winter_gear", "video_setup",
+  "winter_gear", "video_setup", "laundry", "mower", "coffee_maker",
 ];
 
 interface StaffDbRow {

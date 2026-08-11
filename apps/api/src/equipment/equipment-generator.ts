@@ -12,6 +12,7 @@ export const CATEGORIES = [
   "balls", "jerseys", "training_cones", "first_aid",
   "boots_stock", "bibs", "goalkeeper_gear", "water_bottles", "tactics_board",
   "team_van", "gym_corner", "training_wall", "club_grill", "fan_drums", "winter_gear", "video_setup",
+  "laundry", "mower", "coffee_maker",
 ] as const;
 export type EquipmentCategory = typeof CATEGORIES[number];
 
@@ -34,6 +35,9 @@ export const CATEGORY_LABELS: Record<string, string> = {
   fan_drums: "Kotel — bubny a vlajky",
   winter_gear: "Zimní výbava lavičky",
   video_setup: "Kamera a rozbory",
+  laundry: "Pračka a sušárna dresů",
+  mower: "Sekačka a traktůrek",
+  coffee_maker: "Kávovar do kabiny",
 };
 
 // ── Level descriptions (Czech village humor) ──
@@ -135,6 +139,24 @@ const LEVEL_DESCRIPTIONS: Record<string, string[]> = {
     "GoPro + notebook",
     "Kamera + střižna, rozbory na plátně",
   ],
+  laundry: [
+    "Dresy pere každý doma, někdo nikdy",
+    "Stará automatická pračka v kabině",
+    "Pračka a sušička, do soboty je sucho",
+    "Prádelna se sušárnou, dresy voní až na hřiště",
+  ],
+  mower: [
+    "Trávu spase sousedovic koza",
+    "Ojetá sekačka po Pepovi",
+    "Zahradní traktůrek",
+    "Profi sekačka, válec a značkovač lajn",
+  ],
+  coffee_maker: [
+    "Ráno se to nějak rozchodí",
+    "Rychlovarná konvice a Jacobs 3v1",
+    "Překapávač a bylinkový čaj od Pepovy ženy",
+    "Pákový kávovar, Pepa dělá i cappuccino",
+  ],
 };
 
 // ── Upgrade effects (actual game modifiers) ──
@@ -157,6 +179,9 @@ export interface EquipmentEffects {
   crowdMod: number;             // kotel: domácí návštěva ×(1 + mod)
   weatherResistMod: number;     // zimní výbava: postih počasí ×(1 - mod)
   youthTrainingMod: number;     // kamera: růst hráčů do 22 let ×(1 + mod)
+  equipCareMod: number;         // pračka: šance na denní opotřebení OSTATNÍHO vybavení ×(1 - mod)
+  pitchCareMod: number;         // sekačka: šance, že trávník ten den nechátrá
+  hangoverMod: number;          // kávovar: šance na ranní kocovinu po hospodě ×(1 - mod)
 }
 
 /** Calculate actual game effects from equipment levels + conditions */
@@ -188,6 +213,11 @@ export function calculateEffects(levels: Record<string, number>, conditions: Rec
     crowdMod: eff("fan_drums") * 0.04,
     weatherResistMod: eff("winter_gear") * 0.15,
     youthTrainingMod: eff("video_setup") * 0.05,
+    // Pračka je jediný meta-upgrade v katalogu — nezlepšuje hru přímo, ale drží
+    // v kondici všechno ostatní. Dává smysl kupovat až po zbytku.
+    equipCareMod: eff("laundry") * 0.15,
+    pitchCareMod: eff("mower") * 0.30,
+    hangoverMod: eff("coffee_maker") * 0.15,
   };
 }
 
@@ -212,6 +242,9 @@ const UPGRADE_COSTS: Record<string, number[]> = {
   fan_drums:       [0, 5000, 20000, 60000],
   winter_gear:     [0, 2500, 12000, 70000],
   video_setup:     [0, 5000, 25000, 75000],
+  laundry:         [0, 5000, 20000, 60000],
+  mower:           [0, 8000, 30000, 90000],
+  coffee_maker:    [0, 1500, 6000, 18000],
 };
 
 // ── Bazar a zastavárna — ceny ──
@@ -356,6 +389,9 @@ const UPGRADE_EFFECT_LABELS: Record<string, string[]> = {
   fan_drums:       ["", "+4 % domácí návštěva", "+8 % návštěva", "+12 % návštěva"],
   winter_gear:     ["", "-15 % postih počasí", "-30 % postih počasí", "-45 % postih počasí"],
   video_setup:     ["", "Hráči do 22 let +5 % trénink", "+10 % trénink mladíků", "+15 % trénink mladíků"],
+  laundry:         ["", "Vybavení chátrá o 15 % pomaleji", "o 30 % pomaleji", "o 45 % pomaleji"],
+  mower:           ["", "Trávník vydrží 30 % dní bez opotřebení", "60 % dní", "90 % dní"],
+  coffee_maker:    ["", "Kocovina o 15 % míň častá", "o 30 % míň častá", "o 45 % míň častá"],
 };
 
 // ── Starting equipment by village size ──
