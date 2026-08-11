@@ -372,26 +372,33 @@ export const EQUIPMENT_COOLDOWN_DAYS: Record<number, number> = {
   3: 42,   // L2→L3: 6 weeks
 };
 
+/**
+ * Popis bonusu pro danou úroveň.
+ *
+ * Každá položka musí dávat smysl SAMA O SOBĚ — na kartě i v bazaru se zobrazuje
+ * vždycky jen jedna, ne celý sloupec. Zkratky typu „+10 %, +2 chemie" nebo
+ * „o 30 % pomaleji" vypadaly jako oříznutý text, protože jim chyběl podmět.
+ */
 const UPGRADE_EFFECT_LABELS: Record<string, string[]> = {
-  balls:           ["", "+5% trénink", "+10% trénink, +1 technika v zápase", "+20% trénink, +4 technika"],
-  jerseys:         ["", "+2 morálka", "+5 morálka", "+8 morálka, zájem sponzorů"],
-  training_cones:  ["", "+7% trénink efektivita", "+14% trénink", "+21% trénink"],
-  first_aid:       ["", "Šance na zranění -10 %", "-20 % šance, nová zranění o den kratší", "-30 % šance, o 2 dny kratší"],
-  boots_stock:     ["", "-5% kondice ztráta", "-10% kondice", "-15% kondice"],
-  bibs:            ["", "+5% taktický trénink, +1 chemie", "+10%, +2 chemie", "+15%, +3 chemie"],
-  goalkeeper_gear: ["", "+1 brankář bonus", "+3 brankář", "+5 brankář výkon"],
-  water_bottles:   ["", "-3% kondice ztráta", "-6% kondice", "-9% kondice"],
-  tactics_board:   ["", "+6% taktický trénink, +1 chemie", "+12%, +3 chemie", "+18%, +5 chemie"],
-  team_van:        ["", "Míň absencí z dojíždění, +2 % docházka", "-30 % absence z dojíždění, +4 % docházka", "-45 % absence, +6 % docházka"],
+  balls:           ["", "+5 % trénink", "+10 % trénink, +1 technika v zápase", "+20 % trénink, +4 technika v zápase"],
+  jerseys:         ["", "+2 morálka", "+5 morálka", "+8 morálka a zájem sponzorů"],
+  training_cones:  ["", "+7 % efektivita tréninku", "+14 % efektivita tréninku", "+21 % efektivita tréninku"],
+  first_aid:       ["", "Šance na zranění -10 %", "Šance na zranění -20 %, nová o den kratší", "Šance na zranění -30 %, nová o 2 dny kratší"],
+  boots_stock:     ["", "Ztráta kondice -5 %", "Ztráta kondice -10 %", "Ztráta kondice -15 %"],
+  bibs:            ["", "+5 % taktický trénink, +1 chemie", "+10 % taktický trénink, +2 chemie", "+15 % taktický trénink, +3 chemie"],
+  goalkeeper_gear: ["", "+1 výkon brankáře", "+3 výkon brankáře", "+5 výkon brankáře"],
+  water_bottles:   ["", "Ztráta kondice -3 %", "Ztráta kondice -6 %", "Ztráta kondice -9 %"],
+  tactics_board:   ["", "+6 % taktický trénink, +1 chemie", "+12 % taktický trénink, +3 chemie", "+18 % taktický trénink, +5 chemie"],
+  team_van:        ["", "Absence z dojíždění -15 %, +2 % docházka", "Absence z dojíždění -30 %, +4 % docházka", "Absence z dojíždění -45 %, +6 % docházka"],
   gym_corner:      ["", "+1 kondice denně", "+2 kondice denně", "+3 kondice denně"],
-  training_wall:   ["", "+1 standardky v zápase", "+3 standardky", "+5 standardky"],
-  club_grill:      ["", "Nálada kabiny drží na 52", "Nálada drží na 54", "Nálada drží na 56"],
-  fan_drums:       ["", "+4 % domácí návštěva", "+8 % návštěva", "+12 % návštěva"],
-  winter_gear:     ["", "-15 % postih počasí", "-30 % postih počasí", "-45 % postih počasí"],
-  video_setup:     ["", "Hráči do 22 let +5 % trénink", "+10 % trénink mladíků", "+15 % trénink mladíků"],
-  laundry:         ["", "Vybavení chátrá o 15 % pomaleji", "o 30 % pomaleji", "o 45 % pomaleji"],
-  mower:           ["", "Trávník vydrží 30 % dní bez opotřebení", "60 % dní", "90 % dní"],
-  coffee_maker:    ["", "Kocovina o 15 % míň častá", "o 30 % míň častá", "o 45 % míň častá"],
+  training_wall:   ["", "+1 standardky v zápase", "+3 standardky v zápase", "+5 standardky v zápase"],
+  club_grill:      ["", "Nálada kabiny drží na 52", "Nálada kabiny drží na 54", "Nálada kabiny drží na 56"],
+  fan_drums:       ["", "+4 % domácí návštěva", "+8 % domácí návštěva", "+12 % domácí návštěva"],
+  winter_gear:     ["", "Postih počasí -15 %", "Postih počasí -30 %", "Postih počasí -45 %"],
+  video_setup:     ["", "Hráči do 22 let +5 % trénink", "Hráči do 22 let +10 % trénink", "Hráči do 22 let +15 % trénink"],
+  laundry:         ["", "Vybavení chátrá o 15 % pomaleji", "Vybavení chátrá o 30 % pomaleji", "Vybavení chátrá o 45 % pomaleji"],
+  mower:           ["", "Trávník vydrží 30 % dní bez opotřebení", "Trávník vydrží 60 % dní bez opotřebení", "Trávník vydrží 90 % dní bez opotřebení"],
+  coffee_maker:    ["", "Kocovina o 15 % míň častá", "Kocovina o 30 % míň častá", "Kocovina o 45 % míň častá"],
 };
 
 // ── Starting equipment by village size ──
