@@ -1455,7 +1455,7 @@ gameRouter.post("/teams/:teamId/equipment/upgrade", async (c) => {
 gameRouter.post("/teams/:teamId/equipment/repair", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ category: string }>();
-  const { CATEGORIES } = await import("../equipment/equipment-generator");
+  const { CATEGORIES, CATEGORY_LABELS, getRepairCost, REPAIR_THRESHOLD } = await import("../equipment/equipment-generator");
 
   if (!CATEGORIES.includes(body.category as any)) return c.json({ error: "Invalid category" }, 400);
 
@@ -1465,15 +1465,27 @@ gameRouter.post("/teams/:teamId/equipment/repair", async (c) => {
   const level = (equip[body.category] as number) ?? 0;
   if (level === 0) return c.json({ error: "Nothing to repair" }, 400);
 
-  const cost = level * 500;
+  const condition = (equip[`${body.category}_condition`] as number) ?? 50;
+  // Práh hlídal jen getRepairOptions, endpoint ne — přes API šlo „opravit" stav 99 %.
+  if (condition >= REPAIR_THRESHOLD) {
+    return c.json({ error: `${CATEGORY_LABELS[body.category]} je ve stavu ${condition} %, opravovat není co` }, 400);
+  }
+
+  // Cena podle hodnoty kusu a toho, jak je sešlý — ne plochých level × 500.
+  const cost = getRepairCost(body.category, level, condition);
   const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
   if (!team || team.budget < cost) return c.json({ error: "Nedostatek peněz" }, 400);
 
+  // Guard na stav: mezi zobrazenou cenou a zápisem mohla zasáhnout noční degradace.
+  const repaired = await c.env.DB.prepare(
+    `UPDATE equipment SET ${body.category}_condition = 100 WHERE team_id = ? AND ${body.category}_condition = ?`
+  ).bind(teamId, condition).run();
+  if (repaired.meta.changes === 0) {
+    return c.json({ error: "Stav vybavení se mezitím změnil, načti stránku znovu" }, 409);
+  }
+
   await recordTransaction(c.env.DB, teamId, "equipment_expense", -cost,
-    `Oprava vybavení: ${body.category}`, new Date().toISOString());
-  await c.env.DB.prepare(
-    `UPDATE equipment SET ${body.category}_condition = 100 WHERE team_id = ?`
-  ).bind(teamId).run();
+    `Oprava vybavení: ${CATEGORY_LABELS[body.category]} (ze stavu ${condition} %)`, new Date().toISOString());
 
   return c.json({ ok: true, cost });
 });

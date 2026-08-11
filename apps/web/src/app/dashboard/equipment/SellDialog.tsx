@@ -35,8 +35,9 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
 
   // Jen spodní mez — nahoru si řekni, co chceš, buď to někdo koupí, nebo ne.
   const priceValid = price >= option.bazarMin;
-  const repairCost = option.level * 500;
-  const worn = option.condition < 60;
+  // Cenu opravy počítá server (úměrná hodnotě kusu a tomu, jak je sešlý).
+  const repairCost = option.repairCost;
+  const worn = repairCost > 0;
 
   return (
     <Modal isOpen={!!option} onClose={onClose} maxWidth="34rem">

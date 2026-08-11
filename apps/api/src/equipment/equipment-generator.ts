@@ -322,6 +322,8 @@ export interface SellOption {
   bazarMin: number;
   bazarSuggested: number;
   bazarMax: number;
+  /** 0 = stav je dost dobrý, opravovat není co. */
+  repairCost: number;
 }
 
 /** Co všechno můžu prodat — počítá se z už načtených levelů a stavů, nula dotazů navíc. */
@@ -342,6 +344,7 @@ export function getSellOptions(levels: Record<string, number>, conditions: Recor
       bazarMin: band.min,
       bazarSuggested: band.suggested,
       bazarMax: band.max,
+      repairCost: condition < REPAIR_THRESHOLD ? getRepairCost(cat, level, condition) : 0,
     });
   }
   return options;
@@ -543,18 +546,50 @@ export function getUpgradeOptions(
   return options;
 }
 
+/** Pod tímhle stavem se oprava nabízí. Výš je cena stejně pár korun a řádek jen zabírá. */
+export const REPAIR_THRESHOLD = 90;
+/**
+ * Podíl z hodnoty vybavení za obnovu celého stavu.
+ *
+ * Referenční bod je 0.15 — přesně tolik přidá obnovený stav k výkupu zastavárny
+ * (PAWN_RATE 0.30 × rozpětí faktoru stavu 0.5). Na téhle hodnotě ale vychází
+ * „oprav a hned zastav" na nulu a o znaménku rozhoduje zaokrouhlení, takže sazba
+ * je schválně o kus výš: zastavit opravené je vždycky ztráta.
+ *
+ * Nahoru je strop 0.2275 (BAZAR_SUGGESTED_RATE 0.65 × 0.35 při stavu 30 %) —
+ * nad ním by se nevyplatilo opravit ani před prodejem v bazaru. „Umyj auto,
+ * než ho prodáš" má zůstat výhodné.
+ */
+const REPAIR_RATE = 0.18;
+/** Ať drobnosti nevycházejí na pár korun. */
+const MIN_REPAIR_COST = 200;
+
+/**
+ * Cena opravy na 100 % — úměrná tomu, co v kusu vězí, a tomu, jak je sešlý.
+ *
+ * Dřív to bylo `level * 500`, takže oprava dodávky za 335 000 Kč stála 1 500 Kč,
+ * úplně stejně jako oprava láhví za 16 800 Kč. Údržba tím pádem nebyla rozhodnutí.
+ */
+export function getRepairCost(category: string, level: number, condition: number): number {
+  if (level <= 0) return 0;
+  const missing = Math.max(0, 100 - Math.max(0, Math.min(100, condition))) / 100;
+  if (missing === 0) return 0;
+  const raw = cumulativeInvestment(category, level) * missing * REPAIR_RATE;
+  return Math.max(MIN_REPAIR_COST, Math.round(raw / 10) * 10);
+}
+
 export function getRepairOptions(levels: Record<string, number>, conditions: Record<string, number>): RepairOption[] {
   const options: RepairOption[] = [];
   for (const cat of CATEGORIES) {
     const level = levels[cat] ?? 0;
     const cond = conditions[`${cat}_condition`] ?? 50;
-    if (level === 0 || cond >= 60) continue;
+    if (level === 0 || cond >= REPAIR_THRESHOLD) continue;
     options.push({
       category: cat,
       label: CATEGORY_LABELS[cat],
       level,
       condition: cond,
-      cost: level * 500, // Slightly higher repair cost
+      cost: getRepairCost(cat, level, cond),
     });
   }
   return options;

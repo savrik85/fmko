@@ -6,6 +6,7 @@ import {
   cumulativeInvestment,
   getBazarPriceBand,
   getPawnQuote,
+  getRepairCost,
   getSellOptions,
   shopCostFromLevel,
 } from "./equipment-generator";
@@ -46,7 +47,7 @@ describe("bazar a zastavárna — ochrana proti tvorbě peněz", () => {
     for (const cat of CATEGORIES) {
       for (const lv of LEVELS) {
         const buyAtMin = getBazarPriceBand(cat, lv, 5).min;
-        const repairCost = lv * 500; // getRepairOptions: level * 500
+        const repairCost = getRepairCost(cat, lv, 5);
         const payoutAfterRepair = getPawnQuote(cat, lv, 100);
         expect(payoutAfterRepair - buyAtMin - repairCost, `${cat} Lv${lv}`).toBeLessThan(0);
       }
@@ -70,6 +71,48 @@ describe("bazar a zastavárna — ochrana proti tvorbě peněz", () => {
           expect(getPawnQuote(cat, lv, c), `${cat} Lv${lv} @${c}`).toBeLessThanOrEqual(getBazarPriceBand(cat, lv, c).min);
         }
       }
+    }
+  });
+});
+
+describe("cena opravy", () => {
+  it("roste s hodnotou vybavení, ne jen s úrovní", () => {
+    // Dřív stála oprava level × 500, takže dodávka za 335 000 Kč vyšla stejně
+    // jako láhve za 16 800 Kč. To je celý smysl téhle změny.
+    const van = getRepairCost("team_van", 3, 40);
+    const bottles = getRepairCost("water_bottles", 3, 40);
+    expect(van).toBeGreaterThan(bottles * 5);
+  });
+
+  it("roste s tím, jak je kus sešlý", () => {
+    const costs = [90, 70, 40, 10].map((c) => getRepairCost("balls", 3, c));
+    for (let i = 1; i < costs.length; i++) expect(costs[i]).toBeGreaterThan(costs[i - 1]);
+  });
+
+  it("plný stav se neopravuje a nulová úroveň nic nestojí", () => {
+    expect(getRepairCost("balls", 3, 100)).toBe(0);
+    expect(getRepairCost("balls", 0, 10)).toBe(0);
+  });
+
+  it("opravit a zastavit vyjde nanejvýš na nulu", () => {
+    // Sazba opravy je schválně rovná tomu, co obnovený stav přidá k výkupu.
+    // Kdyby byla nižší, dalo by se donekonečna opravovat a zastavovat se ziskem.
+    for (const cat of CATEGORIES) {
+      for (const lv of LEVELS) {
+        for (const c of [5, 20, 50, 80]) {
+          const gain = getPawnQuote(cat, lv, 100) - getPawnQuote(cat, lv, c);
+          expect(gain - getRepairCost(cat, lv, c), `${cat} Lv${lv} @${c}`).toBeLessThanOrEqual(0);
+        }
+      }
+    }
+  });
+
+  it("opravit a prodat v bazaru se naopak vyplatí", () => {
+    // „Umyj auto, než ho prodáš" — u dražších kusů musí oprava dávat smysl.
+    for (const cat of CATEGORIES) {
+      const lv = 3;
+      const gain = getBazarPriceBand(cat, lv, 100).suggested - getBazarPriceBand(cat, lv, 30).suggested;
+      expect(gain, `${cat}`).toBeGreaterThan(getRepairCost(cat, lv, 30));
     }
   });
 });

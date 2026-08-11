@@ -20,6 +20,8 @@ export interface SellOption {
   invested: number;
   pawnQuote: number;
   bazarMin: number; bazarSuggested: number; bazarMax: number;
+  /** 0 = stav je dost dobrý, opravovat není co. */
+  repairCost: number;
   /** Vyplněné, jen když kategorie zrovna visí v bazaru. */
   listingId: string | null; listedPrice: number | null; listedUntil: string | null;
 }

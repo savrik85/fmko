@@ -27,7 +27,9 @@ import {
   getBazarPriceBand,
   getLevelDescription,
   getPawnQuote,
+  getRepairCost,
   getUpgradeEffectLabel,
+  REPAIR_THRESHOLD,
   shopCostFromLevel,
   type EquipmentCategory,
 } from "../equipment/equipment-generator";
@@ -201,7 +203,7 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
         myLevel,
         shopPrice,
         savings: shopPrice - (row.price as number),
-        repairCostAfterBuy: liveCondition < 60 ? level * 500 : 0,
+        repairCostAfterBuy: liveCondition < REPAIR_THRESHOLD ? getRepairCost(category, level, liveCondition) : 0,
         canBuy: blockReason === null,
         blockReason,
         lockDetail: unlock.locked ? unlock.detail : null,
@@ -565,7 +567,7 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
   await Promise.all([
     sendSystemSMS(c.env.DB, teamId, "Kustod",
       `🚚 Dovezli to z ${sellerName}: ${desc}.` +
-      (sellerCondition < 60 ? ` Chce to opravit — ${(listing.level * 500).toLocaleString("cs")} Kč.` : ""))
+      (sellerCondition < REPAIR_THRESHOLD ? ` Chce to opravit — ${getRepairCost(category, listing.level, sellerCondition).toLocaleString("cs")} Kč.` : ""))
       .catch((e) => logger.warn({ module: MODULE }, "sms buyer", e)),
     ...(notifySeller && listing.team_id ? [
       sendSystemSMS(c.env.DB, listing.team_id, "Kustod",
@@ -585,6 +587,6 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
     condition: sellerCondition,
     price: listing.price,
     balanceAfter: debited.budget,
-    repairCost: sellerCondition < 60 ? listing.level * 500 : 0,
+    repairCost: sellerCondition < REPAIR_THRESHOLD ? getRepairCost(category, listing.level, sellerCondition) : 0,
   });
 });
