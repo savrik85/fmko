@@ -110,9 +110,12 @@ export default function MatchDetailPage() {
   const goals = match.events.filter((e) => e.type === "goal");
   const homeGoals = goals.filter((e) => e.teamId === 1);
   const awayGoals = goals.filter((e) => e.teamId === 2);
-  // Penalta patří mezi klíčové momenty i když skončí zahozením — jinak by
-  // zahozená penalta v přehledu zápasu úplně zmizela.
-  const keyEvents = match.events.filter((e) => ["goal", "card", "injury", "substitution", "penalty"].includes(e.type));
+  // Penalta patří do průběhu i když skončí zahozením — jinak by z timeline
+  // zmizelo, jak dopadla, a divák by u nařízené penalty zůstal viset.
+  const keyEvents = match.events.filter((e) =>
+    ["goal", "card", "injury", "substitution", "penalty"].includes(e.type)
+    || (e.type === "chance" && (e.detail === "penalty_missed" || e.detail === "penalty_saved"))
+  );
   const firstHalf = keyEvents.filter((e) => e.minute <= 45);
   const secondHalf = keyEvents.filter((e) => e.minute > 45);
 
@@ -222,7 +225,11 @@ export default function MatchDetailPage() {
   const bigChances = match.events.filter((e) =>
     e.type === "chance" && (e.detail === "břevno" || e.detail === "tyč")
   );
-  const keyMoments = [...goalEvents, ...redEvents, ...bigChances]
+  // Zahozená penalta je moment zápasu jako gól — jen opačným směrem
+  const missedPenalties = match.events.filter((e) =>
+    e.type === "chance" && (e.detail === "penalty_missed" || e.detail === "penalty_saved")
+  );
+  const keyMoments = [...goalEvents, ...redEvents, ...bigChances, ...missedPenalties]
     .sort((a, b) => a.minute - b.minute)
     .slice(0, 6);
 
@@ -807,6 +814,9 @@ function EventRow({ event: e, hc, ac }: { event: MatchEvent; hc: string; ac: str
     case "penalty": icon = "🥅"; bgColor = "bg-gold-50"; break;
     case "corner": icon = "🚩"; bgColor = ""; break;
     case "freekick": icon = "🎯"; bgColor = ""; break;
+    case "chance":
+      // V průběhu zápasu se ze šancí objeví jen zahozená penalta
+      icon = "❌"; bgColor = "bg-red-50"; break;
     default: icon = ""; bgColor = "";
   }
 

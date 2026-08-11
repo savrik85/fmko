@@ -833,7 +833,9 @@ export default function PlayerDetailPage() {
             <AttrRow label="Přehled" value={attrValue(player, "vision")} importance={imp("vision")} />
             <AttrRow label="Zkušenost" value={attrValue(player, "experience")} importance={imp("experience")} />
             <AttrRow label="Kreativita" value={player.skills?.creativity ?? 0} importance={imp("creativity")} />
-            <AttrRow label="Standardky" value={player.skills?.setPieces ?? 0} importance={imp("setPieces")} />
+            {/* Fallback 50 stejně jako v enginu — hráči vygenerovaní před zavedením
+                atributu ho v datech nemají a nula by lhala o tom, jak reálně kopou. */}
+            <AttrRow label="Standardky" value={player.skills?.setPieces ?? 50} importance={imp("setPieces")} />
             {player.position === "GK" && <AttrRow label="Brankář" value={player.skills?.goalkeeping ?? 0} importance="key" />}
           </div>
 
