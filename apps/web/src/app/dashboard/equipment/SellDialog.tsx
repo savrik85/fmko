@@ -33,7 +33,8 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
 
   if (!option) return null;
 
-  const priceValid = price >= option.bazarMin && price <= option.bazarMax;
+  // Jen spodní mez — nahoru si řekni, co chceš, buď to někdo koupí, nebo ne.
+  const priceValid = price >= option.bazarMin;
   const repairCost = option.level * 500;
   const worn = option.condition < 60;
 
@@ -81,7 +82,6 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
               type="number"
               value={price}
               min={option.bazarMin}
-              max={option.bazarMax}
               step={100}
               onChange={(e) => setPrice(Number(e.target.value))}
               className="w-40 border border-gray-300 rounded-lg px-3 py-2 text-base font-heading font-bold tabular-nums focus:outline-none focus:border-pitch-400"
@@ -100,10 +100,15 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
           />
 
           <div className="text-sm text-muted">
-            Rozsah {formatCZK(option.bazarMin)} – {formatCZK(option.bazarMax)} · doporučeno{" "}
+            Doporučeno{" "}
             <button onClick={() => setPrice(option.bazarSuggested)} className="font-heading font-bold text-pitch-600 hover:underline">
               {formatCZK(option.bazarSuggested)}
             </button>
+            {" "}· nové vyjde na {formatCZK(option.invested)}. Nahoru se drž, jak chceš — buď to někdo koupí, nebo ne.
+          </div>
+
+          <div className="text-sm text-muted">
+            Míň než {formatCZK(option.bazarMin)} nedávej, tolik za to dá zastavárna bez čekání.
           </div>
 
           <div className="text-sm text-muted">
@@ -112,7 +117,7 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
 
           {!priceValid && (
             <div className="text-sm text-card-red">
-              Cena musí být mezi {formatCZK(option.bazarMin)} a {formatCZK(option.bazarMax)}.
+              Nejmíň {formatCZK(option.bazarMin)} — pod tím se to vyplatí rovnou zastavit.
             </div>
           )}
 

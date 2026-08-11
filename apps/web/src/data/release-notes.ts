@@ -12,6 +12,20 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-08-11",
+    emoji: "🏷️",
+    title: "Vybavení se dá konečně prodat — bazar a zastavárna",
+    items: [
+      "Vybavení bylo dosud jednosměrka: koupíš, opotřebuje se, opravíš, koupíš vyšší. Zbavit se ho nešlo. Teď u každého kusu, který vlastníš, najdeš tlačítko Prodat a dvě cesty ven.",
+      "V bazaru vystavíš vybavení za svoji cenu a kluby z tvé ligy si ho můžou koupit. Inzerát platí týden a vybavení mezitím používáš dál — dokud se neprodá, bonusy ti běží. Cenu si řekni jakou chceš; jediné, co nejde, je jít pod to, co za věc dá zastavárna.",
+      "Zastavárna vykoupí cokoliv na počkání, ale za nejhorší cenu ve hře. Rozhoduje stav: za ojetou sadu dostaneš zlomek toho, cos do ní vrazil. Co jde do zastavárny, mizí ze hry natrvalo.",
+      "Na kartě nabídky je vidět stav prodávaného kusu, popis úrovně a srovnání s cenou v obchodě — takže hned poznáš, kolik ušetříš. Koupit jde jen to, co ještě nemáš a na co máš nárok; u zamčené úrovně se rovnou dozvíš, co ti chybí.",
+      "Pozor na opotřebení: vyšší úroveň v mizerném stavu může být slabší než to, co máš teď. Potvrzení nákupu ti spočítá efektivní úroveň před a po, ať tě to nepřekvapí.",
+      "V bazaru nabízejí i kluby ze sousedních okresů — Strakonice, Blatná, Český Krumlov a další vyklízejí kůlny. Nabídka se každou noc doplňuje, takže je se na co dívat i v lize, kde jsou samí lidé.",
+      "Dodávku nejde prodat ani koupit v den zápasu. Kluci s ní počítají a sestava je už rozeslaná.",
+    ],
+  },
+  {
     date: "2026-08-10",
     emoji: "📰",
     title: "Zpravodaj má vlastní redakci — a redaktoři si tě zapamatují",

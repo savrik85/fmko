@@ -271,10 +271,16 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/list", async (c) => 
     }
   }
 
+  // Kontroluje se JEN spodní mez. Horní strop je paternalismus — chce-li někdo za
+  // ojeté míče nesmysl, je to jeho věc, nikdo to nekoupí (přestupový trh ho taky nemá).
+  //
+  // Spodní mez ale musí zůstat: zastavárna je jediné místo, kde peníze vznikají.
+  // Kdyby šlo vystavit pod její výkup, dá se levně koupit, hned zastavit a vyrobit
+  // peníze z ničeho. Proto se mez rovná právě tomu, co zastavárna dá při stavu 100 %.
   const band = getBazarPriceBand(category, level, condition);
-  if (price < band.min || price > band.max) {
+  if (price < band.min) {
     return c.json({
-      error: `Cena musí být mezi ${band.min.toLocaleString("cs")} a ${band.max.toLocaleString("cs")} Kč`,
+      error: `Míň než ${band.min.toLocaleString("cs")} Kč nedává smysl — tolik za to dá zastavárna.`,
       band,
     }, 400);
   }
