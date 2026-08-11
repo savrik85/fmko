@@ -14,7 +14,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-08-11",
     emoji: "🏷️",
-    title: "Vybavení se dá konečně prodat — bazar a zastavárna",
+    title: "Vybavení se dá prodat — bazar a zastavárna",
     items: [
       "Vybavení bylo dosud jednosměrka: koupíš, opotřebuje se, opravíš, koupíš vyšší. Zbavit se ho nešlo. Teď u každého kusu, který vlastníš, najdeš tlačítko Prodat a dvě cesty ven.",
       "V bazaru vystavíš vybavení za svoji cenu a kluby z tvé ligy si ho můžou koupit. Inzerát platí týden a vybavení mezitím používáš dál — dokud se neprodá, bonusy ti běží. Cenu si řekni jakou chceš; jediné, co nejde, je jít pod to, co za věc dá zastavárna.",
