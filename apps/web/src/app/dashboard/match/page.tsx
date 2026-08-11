@@ -853,7 +853,6 @@ function MatchPage() {
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Technika">Tch</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Střelba">Stř</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Obrana">Obr</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Standardky — podle toho vybírej exekutory P a S">Std</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Kondice">Kon</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Morálka">Mor</th>
                       <th className="py-1.5 pr-3 text-center text-xs font-heading w-8" title="Průměrné hodnocení">Hod</th>
@@ -883,14 +882,6 @@ function MatchPage() {
                                 className={`shrink-0 w-6 h-6 rounded-full text-[10px] font-heading font-[800] flex items-center justify-center transition-all ${
                                   captainId === player.id ? "bg-gold-500 text-white shadow-sm" : "bg-gray-100 text-muted hover:bg-gold-100 hover:text-gold-600"
                                 }`} title="Kapitán">C</button>
-                              <button onClick={(e) => { e.stopPropagation(); setPenaltyTakerId(penaltyTakerId === player.id ? null : player.id); setSaved(false); }}
-                                className={`shrink-0 w-6 h-6 rounded-full text-[10px] font-heading font-[800] flex items-center justify-center transition-all ${
-                                  penaltyTakerId === player.id ? "bg-pitch-600 text-white shadow-sm" : "bg-gray-100 text-muted hover:bg-pitch-100 hover:text-pitch-700"
-                                }`} title={`Exekutor penalt — standardky ${s.setPieces ?? "?"}`}>P</button>
-                              <button onClick={(e) => { e.stopPropagation(); setFreekickTakerId(freekickTakerId === player.id ? null : player.id); setSaved(false); }}
-                                className={`shrink-0 w-6 h-6 rounded-full text-[10px] font-heading font-[800] flex items-center justify-center transition-all ${
-                                  freekickTakerId === player.id ? "bg-pitch-600 text-white shadow-sm" : "bg-gray-100 text-muted hover:bg-pitch-100 hover:text-pitch-700"
-                                }`} title={`Exekutor přímých kopů a rohů — standardky ${s.setPieces ?? "?"}`}>S</button>
                             </div>
                           </td>
                           <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${player.overallRating}`}>{player.overallRating}</td>
@@ -898,7 +889,6 @@ function MatchPage() {
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.technique)}`} title={`Technika: ${s.technique}`}>{s.technique}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.shooting)}`} title={`Střelba: ${s.shooting}`}>{s.shooting}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.defense)}`} title={`Obrana: ${s.defense}`}>{s.defense}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.setPieces)}`} title={`Standardky: ${s.setPieces}`}>{s.setPieces}</td>
                           <td className={`py-1.5 text-center tabular-nums ${condC(player.condition)}`} title={`Kondice: ${player.condition}%`}>{player.condition}%</td>
                           <td className="py-1.5 text-center" title={`Morálka: ${player.morale}%`}>{moraleIcon(player.morale)}</td>
                           <td className="py-1.5 pr-3 text-center tabular-nums font-heading font-bold text-muted" title={`Průměrné hodnocení: ${s.avgRating ? Number(s.avgRating).toFixed(1) : "žádné"}`}>{s.avgRating ? Number(s.avgRating).toFixed(1) : "—"}</td>
@@ -924,7 +914,6 @@ function MatchPage() {
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Technika">Tch</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Střelba">Stř</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Obrana">Obr</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Standardky — podle toho vybírej exekutory P a S">Std</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Kondice">Kon</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Morálka">Mor</th>
                       <th className="py-1.5 pr-3 text-center text-xs font-heading w-8" title="Průměrné hodnocení">Hod</th>
@@ -974,7 +963,6 @@ function MatchPage() {
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.technique)}`} title={`Technika: ${s.technique}`}>{s.technique}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.shooting)}`} title={`Střelba: ${s.shooting}`}>{s.shooting}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.defense)}`} title={`Obrana: ${s.defense}`}>{s.defense}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.setPieces)}`} title={`Standardky: ${s.setPieces}`}>{s.setPieces}</td>
                           <td className={`py-1.5 text-center tabular-nums ${condC(p.condition)}`} title={`Kondice: ${p.condition}%`}>{p.condition}%</td>
                           <td className="py-1.5 text-center" title={`Morálka: ${p.morale}%`}>{moraleIcon(p.morale)}</td>
                           <td className="py-1.5 pr-3 text-center tabular-nums font-heading font-bold text-muted" title={`Průměrné hodnocení: ${s.avgRating ? Number(s.avgRating).toFixed(1) : "žádné"}`}>{s.avgRating ? Number(s.avgRating).toFixed(1) : "—"}</td>
@@ -1072,6 +1060,15 @@ function MatchPage() {
         />
       )}
 
+      {/* ═══ Exekutoři standardek ═══ */}
+      <SetPieceTakers
+        players={selected.map((pid) => (pid ? players.find((p) => p.id === pid) : null)).filter(Boolean) as AvailablePlayer[]}
+        penaltyTakerId={penaltyTakerId}
+        freekickTakerId={freekickTakerId}
+        onPenalty={(id) => { setPenaltyTakerId(id); setSaved(false); }}
+        onFreekick={(id) => { setFreekickTakerId(id); setSaved(false); }}
+      />
+
       {/* ═══ Save ═══ */}
       <div>
         <button onClick={saveLineup} disabled={saving || selected.some((s) => !s)}
@@ -1126,6 +1123,119 @@ function MatchPage() {
         </div>,
         document.body
       )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EXEKUTOŘI STANDARDEK
+
+   Role jsou týmové (platí i v poháru a přáteláku), ukládají se spolu se
+   sestavou. Vzorce vhodnosti kopírují engine, aby hráč viděl to samé,
+   podle čeho se rozhoduje simulace — ne jen holý atribut.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+type TakerRole = "penalty" | "freekick";
+
+const TAKER_ROLES: Record<TakerRole, {
+  icon: string; label: string; hint: string;
+  /** Vhodnost 0–100 podle stejných vah, jaké používá engine při zakončení. */
+  score: (p: AvailablePlayer) => number;
+  /** Atributy, které do vhodnosti mluví — zobrazí se u hráče. */
+  attrs: Array<{ key: keyof AvailablePlayer; label: string }>;
+}> = {
+  penalty: {
+    icon: "🥅",
+    label: "Penalty",
+    hint: "Rozhoduje klid na míči a přesnost. V závěru těsného zápasu se navíc pozná povaha — nervák penaltu zahodí.",
+    score: (p) => (p.setPieces ?? 50) * 0.5 + (p.technique ?? 50) * 0.3 + (p.shooting ?? 50) * 0.2,
+    attrs: [{ key: "setPieces", label: "Std" }, { key: "technique", label: "Tch" }, { key: "shooting", label: "Stř" }],
+  },
+  freekick: {
+    icon: "🎯",
+    label: "Přímé kopy a rohy",
+    hint: "Přímák jde přes techniku, u rohů rozhoduje kvalita centru — hlavičkáře si engine vybere sám podle důrazu.",
+    score: (p) => (p.setPieces ?? 50) * 0.6 + (p.technique ?? 50) * 0.25 + (p.passing ?? 50) * 0.15,
+    attrs: [{ key: "setPieces", label: "Std" }, { key: "technique", label: "Tch" }, { key: "passing", label: "Přh" }],
+  },
+};
+
+function TakerPicker({ role, players, selectedId, onChange }: {
+  role: TakerRole;
+  players: AvailablePlayer[];
+  selectedId: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  const cfg = TAKER_ROLES[role];
+  // Brankář standardky nekope, zbytek seřadíme od nejvhodnějšího
+  const ranked = players
+    .filter((p) => p.position !== "GK")
+    .map((p) => ({ p, score: Math.round(cfg.score(p)) }))
+    .sort((a, b) => b.score - a.score);
+
+  const best = ranked[0];
+  const chosen = ranked.find((r) => r.p.id === selectedId);
+
+  return (
+    <div className="border-b border-gray-100 last:border-b-0 py-3 first:pt-0 last:pb-0">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-base">{cfg.icon}</span>
+        <span className="font-heading font-bold text-sm uppercase">{cfg.label}</span>
+      </div>
+      <p className="text-sm text-muted mb-2 leading-snug">{cfg.hint}</p>
+
+      <select
+        value={selectedId ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        className="w-full text-base border border-gray-200 rounded-lg px-3 py-2.5 bg-white font-heading"
+      >
+        <option value="">
+          Automaticky{best ? ` — teď ${best.p.lastName} (${best.score})` : ""}
+        </option>
+        {ranked.map(({ p, score }) => (
+          <option key={p.id} value={p.id}>
+            {p.lastName} {p.firstName} · vhodnost {score}
+          </option>
+        ))}
+      </select>
+
+      {/* Rozpad atributů zvoleného (nebo automaticky nasazeného) hráče */}
+      {(chosen ?? best) && (
+        <div className="flex items-center gap-3 mt-2 text-sm">
+          <span className="text-muted">{chosen ? "Kope" : "Automaticky kope"}</span>
+          <span className="font-heading font-bold">{(chosen ?? best)!.p.lastName}</span>
+          <span className="flex gap-2 text-muted tabular-nums">
+            {cfg.attrs.map((a) => (
+              <span key={String(a.key)}>
+                {a.label} <span className="font-bold text-ink">{(chosen ?? best)!.p[a.key] as number ?? 50}</span>
+              </span>
+            ))}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SetPieceTakers({ players, penaltyTakerId, freekickTakerId, onPenalty, onFreekick }: {
+  players: AvailablePlayer[];
+  penaltyTakerId: string | null;
+  freekickTakerId: string | null;
+  onPenalty: (id: string | null) => void;
+  onFreekick: (id: string | null) => void;
+}) {
+  if (players.length === 0) return null;
+  return (
+    <div className="card p-4">
+      <div className="mb-2">
+        <span className="font-heading font-bold text-sm uppercase text-muted">Exekutoři standardek</span>
+        <p className="text-sm text-muted mt-0.5 leading-snug">
+          Platí pro ligu, pohár i přátelák. Když zvolený hráč zrovna nehraje nebo ho stáhneš,
+          převezme standardky nejvhodnější zbylý.
+        </p>
+      </div>
+      <TakerPicker role="penalty" players={players} selectedId={penaltyTakerId} onChange={onPenalty} />
+      <TakerPicker role="freekick" players={players} selectedId={freekickTakerId} onChange={onFreekick} />
     </div>
   );
 }
