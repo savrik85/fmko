@@ -31,6 +31,7 @@ DELETE FROM lineups;
 DELETE FROM matches;
 DELETE FROM season_calendar;
 DELETE FROM seasonal_events;
+DELETE FROM equipment_listings;
 DELETE FROM equipment;
 DELETE FROM stadiums;
 DELETE FROM managers;

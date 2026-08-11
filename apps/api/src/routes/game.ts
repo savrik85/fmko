@@ -1343,45 +1343,24 @@ gameRouter.get("/teams/:teamId/transfers", async (c) => {
 // GET /api/teams/:id/equipment — get equipment (auto-create if missing)
 gameRouter.get("/teams/:teamId/equipment", async (c) => {
   const teamId = c.req.param("teamId");
-  const { generateEquipment, getUpgradeOptions, getRepairOptions, getLevelDescription, calculateEffects, CATEGORIES, CATEGORY_LABELS } = await import("../equipment/equipment-generator");
+  const { getUpgradeOptions, getRepairOptions, getLevelDescription, calculateEffects, getSellOptions, CATEGORIES, CATEGORY_LABELS } = await import("../equipment/equipment-generator");
+  const { ensureEquipmentRow } = await import("../equipment/equipment-service");
 
-  let equip = await c.env.DB.prepare(
-    "SELECT * FROM equipment WHERE team_id = ?"
-  ).bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "game" }, "fetch equipment", e); return null; });
+  const equip = await ensureEquipmentRow(c.env.DB, teamId);
+  if (!equip) return c.json({ error: "Failed to create equipment" }, 500);
 
-  if (!equip) {
-    const team = await c.env.DB.prepare(
-      "SELECT v.size FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
-    ).bind(teamId).first<{ size: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch team size for equipment", e); return null; });
-
-    let seed = 0;
-    for (let i = 0; i < teamId.length; i++) seed = ((seed << 5) - seed + teamId.charCodeAt(i)) | 0;
-    const rng = createRng(Math.abs(seed) + 99);
-    const config = generateEquipment(rng, team?.size ?? "obec");
-
-    const cols = CATEGORIES.map((c) => c).join(", ");
-    const condCols = CATEGORIES.map((c) => `${c}_condition`).join(", ");
-    const vals = CATEGORIES.map((c) => config[c] ?? 0);
-    const condVals = CATEGORIES.map((c) => config[`${c}_condition`] ?? 50);
-    const placeholders = [...vals, ...condVals].map(() => "?").join(", ");
-
-    await c.env.DB.prepare(
-      `INSERT INTO equipment (id, team_id, ${cols}, ${condCols}) VALUES (?, ?, ${placeholders})`
-    ).bind(crypto.randomUUID(), teamId, ...vals, ...condVals).run().catch((e) => logger.warn({ module: "game" }, "insert equipment", e));
-
-    equip = await c.env.DB.prepare("SELECT * FROM equipment WHERE team_id = ?").bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "game" }, "re-fetch equipment after insert", e); return null; });
-    if (!equip) return c.json({ error: "Failed to create equipment" }, 500);
-  }
-
-  // Batch: team reputation + matches played + active season
-  const [teamRes, matchCountRes, seasonRes] = await c.env.DB.batch([
+  // Batch: team reputation + matches played + active season + moje inzeráty v bazaru
+  const [teamRes, matchCountRes, seasonRes, listingsRes] = await c.env.DB.batch([
     c.env.DB.prepare("SELECT reputation FROM teams WHERE id = ?").bind(teamId),
     c.env.DB.prepare("SELECT COUNT(*) as cnt FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated'").bind(teamId, teamId),
     c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' LIMIT 1"),
+    c.env.DB.prepare("SELECT id, category, level, price, expires_at FROM equipment_listings WHERE team_id = ? AND status = 'active'").bind(teamId),
   ]);
   const team = teamRes.results[0] as { reputation: number } | undefined;
   const matchCount = matchCountRes.results[0] as { cnt: number } | undefined;
   const seasonNum = mustSeason((seasonRes.results[0] as { number: number } | undefined)?.number);
+  const activeListings = (listingsRes.results ?? []) as Array<{ id: string; category: string; level: number; price: number; expires_at: string }>;
+  const listingByCategory = new Map(activeListings.map((l) => [l.category, l]));
 
   const levels: Record<string, number> = {};
   const conditions: Record<string, number> = {};
@@ -1404,11 +1383,23 @@ gameRouter.get("/teams/:teamId/equipment", async (c) => {
 
   const effects = calculateEffects(levels, conditions);
 
+  // Co můžu prodat — čistý výpočet z už načtených hodnot, žádný dotaz navíc.
+  const sellOptions = getSellOptions(levels, conditions).map((opt) => {
+    const listing = listingByCategory.get(opt.category);
+    return {
+      ...opt,
+      listingId: listing?.id ?? null,
+      listedPrice: listing?.price ?? null,
+      listedUntil: listing?.expires_at ?? null,
+    };
+  });
+
   return c.json({
     categories,
     upgrades: getUpgradeOptions(levels, team?.reputation ?? 0, matchCount?.cnt ?? 0, seasonNum),
     repairs: getRepairOptions(levels, conditions),
     effects,
+    sellOptions,
   });
 });
 
@@ -1417,6 +1408,9 @@ gameRouter.post("/teams/:teamId/equipment/upgrade", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ category: string }>();
   const { getUpgradeOptions, CATEGORIES } = await import("../equipment/equipment-generator");
+
+  // Whitelist PŘED jakýmkoli SQL — název kategorie se níž interpoluje do stringu.
+  if (!CATEGORIES.includes(body.category as any)) return c.json({ error: "Invalid category" }, 400);
 
   const equip = await c.env.DB.prepare("SELECT * FROM equipment WHERE team_id = ?").bind(teamId).first<Record<string, unknown>>();
   if (!equip) return c.json({ error: "Equipment not found" }, 404);
@@ -1441,14 +1435,18 @@ gameRouter.post("/teams/:teamId/equipment/upgrade", async (c) => {
   if (upgrade.locked) return c.json({ error: upgrade.lockReason ?? "Zamčeno" }, 400);
   if (team.budget < upgrade.cost) return c.json({ error: "Nedostatek peněz" }, 400);
 
-  // Validate category name to prevent SQL injection
-  if (!CATEGORIES.includes(body.category as any)) return c.json({ error: "Invalid category" }, 400);
-
   await recordTransaction(c.env.DB, teamId, "equipment_upgrade", -upgrade.cost,
     `Vylepšení vybavení: ${body.category} → úroveň ${upgrade.nextLevel}`, new Date().toISOString());
   await c.env.DB.prepare(
     `UPDATE equipment SET ${body.category} = ?, ${body.category}_condition = 100 WHERE team_id = ?`
   ).bind(upgrade.nextLevel, teamId).run();
+
+  // Inzerát v bazaru se váže na konkrétní level — po upgradu už nesedí, takže padá.
+  // Kupující by jinak zaplatil za starou úroveň a guard v nákupu by ho stejně odmítl.
+  await c.env.DB.prepare(
+    "UPDATE equipment_listings SET status = 'withdrawn', resolved_at = ? WHERE team_id = ? AND category = ? AND status = 'active'"
+  ).bind(new Date().toISOString(), teamId, body.category).run()
+    .catch((e) => logger.warn({ module: "game" }, "withdraw equipment listing after upgrade", e));
 
   return c.json({ ok: true, cost: upgrade.cost, newLevel: upgrade.nextLevel });
 });
@@ -4015,6 +4013,14 @@ gameRouter.post("/admin/backfill-chemistry", async (c) => {
   const { backfillFromHistory } = await import("../engine/chemistry");
   const result = await backfillFromHistory(c.env.DB);
   return c.json({ ok: true, ...result });
+});
+
+// Doplní bazar vybavení o nabídky AI klubů. Běží samo v daily-ticku, tohle je
+// ruční spuštění — po nasazení nebo když je bazar prázdný a nechce se čekat na noc.
+gameRouter.post("/admin/generate-equipment-listings", async (c) => {
+  const { generateAiEquipmentListings } = await import("../equipment/ai-listings");
+  const created = await generateAiEquipmentListings(c.env.DB, new Date());
+  return c.json({ ok: true, created });
 });
 
 // Backfill: do pub_sessions z historických posezení doplnit avatary trenérů
