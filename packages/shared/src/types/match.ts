@@ -8,7 +8,16 @@ export type EventType =
   | "card"
   | "injury"
   | "substitution"
-  | "special";
+  | "special"
+  | "penalty"
+  | "corner"
+  | "freekick";
+
+/**
+ * Odkud gól přišel. Chybí-li (starší zápasy), jde o gól ze hry.
+ * Nese ho událost typu "goal" — `detail` u gólu je obsazený skóre.
+ */
+export type GoalSource = "open_play" | "counter" | "penalty" | "freekick" | "corner" | "cross";
 
 export interface MatchEvent {
   minute: number;
@@ -18,6 +27,7 @@ export interface MatchEvent {
   teamId: number;
   description: string;
   detail?: string;
+  source?: GoalSource;
 }
 
 export interface Match {

@@ -103,7 +103,7 @@ interface AvailablePlayer {
   overallRating: number; age: number; condition: number; morale: number;
   squadNumber?: number;
   speed?: number; technique?: number; shooting?: number; passing?: number;
-  heading?: number; defense?: number; goalkeeping?: number; stamina?: number;
+  heading?: number; defense?: number; goalkeeping?: number; stamina?: number; setPieces?: number;
   absent?: boolean; absenceReason?: string | null; absenceSms?: string | null; absenceEmoji?: string | null;
   relationships?: Array<{ otherPlayerId: string; type: string; strength?: number; effect?: string }>;
 }
@@ -155,6 +155,9 @@ function MatchPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [captainId, setCaptainId] = useState<string | null>(null);
+  // Exekutoři standardek jsou týmová role — platí napříč zápasy, ne jen pro tuhle sestavu
+  const [penaltyTakerId, setPenaltyTakerId] = useState<string | null>(null);
+  const [freekickTakerId, setFreekickTakerId] = useState<string | null>(null);
   const [formationFam, setFormationFam] = useState<Record<string, number>>({});
   const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; updatedAt: string } | null>>({ A: null, B: null, C: null });
   const [activePreset, setActivePreset] = useState<"A" | "B" | "C" | null>(null);
@@ -170,6 +173,10 @@ function MatchPage() {
     apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`)
       .then((d) => setPresets(d.presets ?? { A: null, B: null, C: null }))
       .catch((e) => console.warn("load presets:", e));
+    // Načti exekutory standardek
+    apiFetch<{ penaltyTakerId: string | null; freekickTakerId: string | null }>(`/api/teams/${teamId}/roles`)
+      .then((d) => { setPenaltyTakerId(d.penaltyTakerId); setFreekickTakerId(d.freekickTakerId); })
+      .catch((e) => console.warn("load roles:", e));
   }, [teamId]);
 
   useEffect(() => {
@@ -370,6 +377,11 @@ function MatchPage() {
       if (res.ok) {
         setSaved(true);
         setLineupSource("explicit");
+        // Exekutoři se ukládají zvlášť — jsou vázaní na tým, ne na tuhle sestavu
+        apiFetch(`/api/teams/${teamId}/roles`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ penaltyTakerId: penaltyTakerId ?? "", freekickTakerId: freekickTakerId ?? "" }),
+        }).catch((e) => console.error("uložení exekutorů standardek selhalo:", e));
         // Backend při save s presetSlot auto-upsertuje do lineup_presets —
         // reload lokálního presets state aby tab "Sestava A prázdná" přešel na "Sestava A 4-4-2"
         if (activePreset) {
@@ -841,6 +853,7 @@ function MatchPage() {
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Technika">Tch</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Střelba">Stř</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Obrana">Obr</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Standardky — podle toho vybírej exekutory P a S">Std</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Kondice">Kon</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Morálka">Mor</th>
                       <th className="py-1.5 pr-3 text-center text-xs font-heading w-8" title="Průměrné hodnocení">Hod</th>
@@ -870,6 +883,14 @@ function MatchPage() {
                                 className={`shrink-0 w-6 h-6 rounded-full text-[10px] font-heading font-[800] flex items-center justify-center transition-all ${
                                   captainId === player.id ? "bg-gold-500 text-white shadow-sm" : "bg-gray-100 text-muted hover:bg-gold-100 hover:text-gold-600"
                                 }`} title="Kapitán">C</button>
+                              <button onClick={(e) => { e.stopPropagation(); setPenaltyTakerId(penaltyTakerId === player.id ? null : player.id); setSaved(false); }}
+                                className={`shrink-0 w-6 h-6 rounded-full text-[10px] font-heading font-[800] flex items-center justify-center transition-all ${
+                                  penaltyTakerId === player.id ? "bg-pitch-600 text-white shadow-sm" : "bg-gray-100 text-muted hover:bg-pitch-100 hover:text-pitch-700"
+                                }`} title={`Exekutor penalt — standardky ${s.setPieces ?? "?"}`}>P</button>
+                              <button onClick={(e) => { e.stopPropagation(); setFreekickTakerId(freekickTakerId === player.id ? null : player.id); setSaved(false); }}
+                                className={`shrink-0 w-6 h-6 rounded-full text-[10px] font-heading font-[800] flex items-center justify-center transition-all ${
+                                  freekickTakerId === player.id ? "bg-pitch-600 text-white shadow-sm" : "bg-gray-100 text-muted hover:bg-pitch-100 hover:text-pitch-700"
+                                }`} title={`Exekutor přímých kopů a rohů — standardky ${s.setPieces ?? "?"}`}>S</button>
                             </div>
                           </td>
                           <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${player.overallRating}`}>{player.overallRating}</td>
@@ -877,6 +898,7 @@ function MatchPage() {
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.technique)}`} title={`Technika: ${s.technique}`}>{s.technique}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.shooting)}`} title={`Střelba: ${s.shooting}`}>{s.shooting}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.defense)}`} title={`Obrana: ${s.defense}`}>{s.defense}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.setPieces)}`} title={`Standardky: ${s.setPieces}`}>{s.setPieces}</td>
                           <td className={`py-1.5 text-center tabular-nums ${condC(player.condition)}`} title={`Kondice: ${player.condition}%`}>{player.condition}%</td>
                           <td className="py-1.5 text-center" title={`Morálka: ${player.morale}%`}>{moraleIcon(player.morale)}</td>
                           <td className="py-1.5 pr-3 text-center tabular-nums font-heading font-bold text-muted" title={`Průměrné hodnocení: ${s.avgRating ? Number(s.avgRating).toFixed(1) : "žádné"}`}>{s.avgRating ? Number(s.avgRating).toFixed(1) : "—"}</td>
@@ -902,6 +924,7 @@ function MatchPage() {
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Technika">Tch</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Střelba">Stř</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Obrana">Obr</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Standardky — podle toho vybírej exekutory P a S">Std</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Kondice">Kon</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Morálka">Mor</th>
                       <th className="py-1.5 pr-3 text-center text-xs font-heading w-8" title="Průměrné hodnocení">Hod</th>
@@ -951,6 +974,7 @@ function MatchPage() {
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.technique)}`} title={`Technika: ${s.technique}`}>{s.technique}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.shooting)}`} title={`Střelba: ${s.shooting}`}>{s.shooting}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.defense)}`} title={`Obrana: ${s.defense}`}>{s.defense}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.setPieces)}`} title={`Standardky: ${s.setPieces}`}>{s.setPieces}</td>
                           <td className={`py-1.5 text-center tabular-nums ${condC(p.condition)}`} title={`Kondice: ${p.condition}%`}>{p.condition}%</td>
                           <td className="py-1.5 text-center" title={`Morálka: ${p.morale}%`}>{moraleIcon(p.morale)}</td>
                           <td className="py-1.5 pr-3 text-center tabular-nums font-heading font-bold text-muted" title={`Průměrné hodnocení: ${s.avgRating ? Number(s.avgRating).toFixed(1) : "žádné"}`}>{s.avgRating ? Number(s.avgRating).toFixed(1) : "—"}</td>

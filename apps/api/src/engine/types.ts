@@ -1,4 +1,4 @@
-import type { MatchEvent, EventType } from "@okresni-masina/shared";
+import type { MatchEvent, EventType, GoalSource } from "@okresni-masina/shared";
 
 export type Tactic = "offensive" | "balanced" | "defensive" | "long_ball" | "possession" | "pressing";
 export type Weather = "sunny" | "cloudy" | "rain" | "wind" | "snow";
@@ -57,6 +57,10 @@ export interface TeamSetup {
   tactic: Tactic;
   formation?: string;      // např. "4-4-2", "3-4-3" — pro formationSynergy
   captainId?: number;      // engine ID kapitána (ovlivňuje morale)
+  /** Engine ID exekutora penalt. Není-li na hřišti, kope nejlepší setPieces. */
+  penaltyTakerId?: number;
+  /** Engine ID exekutora přímých kopů a rohů. Fallback stejný jako u penalt. */
+  freekickTakerId?: number;
   formationFamiliarity?: number;  // 0-100, sehranost zvolené formace
   weatherResist?: number;  // 0-0.45 ze zimní výbavy — tlumí postih počasí (nastavuje simulateMatch)
 }
@@ -109,4 +113,4 @@ export interface MatchResult {
   possessionHome: number; // 0-100, average možnost domácích za zápas
 }
 
-export { MatchEvent, EventType };
+export { MatchEvent, EventType, GoalSource };

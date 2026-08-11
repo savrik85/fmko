@@ -142,8 +142,8 @@ export async function runScheduledMatches(
             const rng = createRng(seedFromString(calendarId) + Date.now());
 
             // Determine match type
-            const homeTeam = await db.prepare("SELECT name, user_id FROM teams WHERE id = ?").bind(homeTeamId).first<Record<string, unknown>>();
-            const awayTeam = await db.prepare("SELECT name, user_id FROM teams WHERE id = ?").bind(awayTeamId).first<Record<string, unknown>>();
+            const homeTeam = await db.prepare("SELECT name, user_id, penalty_taker_id, freekick_taker_id FROM teams WHERE id = ?").bind(homeTeamId).first<Record<string, unknown>>();
+            const awayTeam = await db.prepare("SELECT name, user_id, penalty_taker_id, freekick_taker_id FROM teams WHERE id = ?").bind(awayTeamId).first<Record<string, unknown>>();
             const homeIsHuman = !!homeTeam && homeTeam.user_id !== "ai";
             const awayIsHuman = !!awayTeam && awayTeam.user_id !== "ai";
             const matchType: MatchRunResult["matchType"] = homeIsHuman && awayIsHuman ? "pvp"
@@ -226,6 +226,17 @@ export async function runScheduledMatches(
             const homeCaptainEngineId = homeLineupRow?.captain_id ? [...homeBuild.idMap.entries()].find(([, dbId]) => dbId === homeLineupRow.captain_id)?.[0] : undefined;
             const awayCaptainEngineId = awayLineupRow?.captain_id ? [...awayBuild.idMap.entries()].find(([, dbId]) => dbId === awayLineupRow.captain_id)?.[0] : undefined;
 
+            // Exekutoři standardek — týmová role, engine si poradí když hráč nehraje
+            const { toEngineId } = await import("../engine/set-piece-takers");
+            const homeTakers = {
+                penaltyTakerId: toEngineId(homeBuild.idMap, homeTeam?.penalty_taker_id as string | null),
+                freekickTakerId: toEngineId(homeBuild.idMap, homeTeam?.freekick_taker_id as string | null),
+            };
+            const awayTakers = {
+                penaltyTakerId: toEngineId(awayBuild.idMap, awayTeam?.penalty_taker_id as string | null),
+                freekickTakerId: toEngineId(awayBuild.idMap, awayTeam?.freekick_taker_id as string | null),
+            };
+
             // Načti sehranost taktik a formací — vstup pro tactic effectiveness v simulaci
             const {readFamiliarity} = await import("../engine/chemistry");
             const homeFam = await readFamiliarity(db, homeTeamId);
@@ -239,6 +250,7 @@ export async function runScheduledMatches(
                 tactic: homeTactic,
                 formation: homeFormation,
                 captainId: homeCaptainEngineId,
+                ...homeTakers,
                 formationFamiliarity: homeFam.formation[homeFormation] ?? 0,
             };
             const awaySetup: TeamSetup = {
@@ -249,6 +261,7 @@ export async function runScheduledMatches(
                 tactic: awayTactic,
                 formation: awayFormation,
                 captainId: awayCaptainEngineId,
+                ...awayTakers,
                 formationFamiliarity: awayFam.formation[awayFormation] ?? 0,
             };
 

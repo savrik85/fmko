@@ -95,6 +95,13 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       const homeFam = await readFamiliarity(db, homeTeamId);
       const awayFam = await readFamiliarity(db, awayTeamId);
 
+      // Exekutoři standardek platí i v přáteláku
+      const { loadSetPieceTakers } = await import("../engine/set-piece-takers");
+      const [homeTakers, awayTakers] = await Promise.all([
+        loadSetPieceTakers(db, homeTeamId, homeBuild.idMap),
+        loadSetPieceTakers(db, awayTeamId, awayBuild.idMap),
+      ]);
+
       const homeSetup: TeamSetup = {
         teamId: 1,
         teamName: homeTeam?.name ?? "Domácí",
@@ -103,6 +110,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         tactic: homeTactic,
         formation: homeFormation,
         captainId: homeCaptainEngineId,
+        ...homeTakers,
         formationFamiliarity: homeFam.formation[homeFormation] ?? 0,
       };
       const awaySetup: TeamSetup = {
@@ -113,6 +121,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         tactic: awayTactic,
         formation: awayFormation,
         captainId: awayCaptainEngineId,
+        ...awayTakers,
         formationFamiliarity: awayFam.formation[awayFormation] ?? 0,
       };
 

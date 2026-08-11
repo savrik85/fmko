@@ -69,14 +69,18 @@ export function calculatePlayerRatings(
     switch (event.type) {
       case "goal":
         goals[dbId] = (goals[dbId] ?? 0) + 1;
-        ratings[dbId] += 1.0;
+        // Gól z penalty je zásluha menší než trefa ze hry
+        ratings[dbId] += event.source === "penalty" ? 0.8 : 1.0;
         break;
       case "assist":
         ratings[dbId] += 0.5;
         break;
       case "chance":
         chances[dbId] = (chances[dbId] ?? 0) + 1;
-        ratings[dbId] += 0.1;
+        // Zahozená penalta je nejdražší chyba zápasu, ne "šance navíc"
+        if (event.detail === "penalty_missed") ratings[dbId] -= 0.8;
+        else if (event.detail === "penalty_saved") ratings[dbId] -= 0.6;
+        else ratings[dbId] += 0.1;
         break;
       case "card":
         if (event.detail === "red") {
@@ -95,7 +99,8 @@ export function calculatePlayerRatings(
         ratings[dbId] -= 0.3;
         break;
       case "special":
-        if (event.detail === "save") ratings[dbId] += 0.4;
+        if (event.detail === "penalty_save") ratings[dbId] += 1.0;
+        else if (event.detail === "save") ratings[dbId] += 0.4;
         else if (event.detail === "block") ratings[dbId] += 0.25;
         break;
     }

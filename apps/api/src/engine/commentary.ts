@@ -39,6 +39,9 @@ const FALLBACK_TEMPLATES = [
   { event_type: 'injury', template: '{player} je zraněný.', tags: [], district: null },
   { event_type: 'substitution', template: 'Střídání: {player}.', tags: [], district: null },
   { event_type: 'special', template: '{player} na míči.', tags: ['possession'], district: null },
+  { event_type: 'penalty', template: 'Penalta! Míč si bere {player}.', tags: [], district: null },
+  { event_type: 'corner', template: 'Roh zahrává {player}.', tags: [], district: null },
+  { event_type: 'freekick', template: 'Přímý kop pro {team}, u míče {player}.', tags: [], district: null },
 ];
 
 /**

@@ -37,6 +37,9 @@ function getZone(event: MatchEvent | null): number {
   switch (event.type) {
     case "goal": return isHome ? 2 : 0;
     case "chance": return isHome ? 2 : 0;
+    case "penalty": return isHome ? 2 : 0;
+    case "corner": return isHome ? 2 : 0;
+    case "freekick": return isHome ? 2 : 0;
     case "foul": return 1;
     case "card": return 1;
     case "injury": return 1;
@@ -56,6 +59,9 @@ function getBallX(event: MatchEvent | null): number {
   switch (event.type) {
     case "goal": return isHome ? 88 + jitter % 5 : 7 + jitter % 5;
     case "chance": return isHome ? 72 + jitter : 13 + jitter;
+    case "penalty": return isHome ? 84 : 11;
+    case "corner": return isHome ? 96 : 3;
+    case "freekick": return isHome ? 74 + jitter % 8 : 18 + jitter % 8;
     case "foul": return isHome ? 55 + jitter : 30 + jitter;
     case "card": return isHome ? 55 + jitter : 30 + jitter;
     case "special":
@@ -197,7 +203,8 @@ export default function MatchReplayPage() {
     // Chances and goals: show "attacking" phase first for drama
     // Use ref-based timeout to avoid cleanup issues
     const isShot = next.type === "goal" || next.type === "chance";
-    const isDramatic = next.type === "card" || next.type === "injury";
+    // Penalta se v přenosu odehraje s napětím jako karta — divák má chvíli čekat
+    const isDramatic = next.type === "card" || next.type === "injury" || next.type === "penalty";
 
     if (isShot || isDramatic) {
       animating.current = true;
@@ -606,6 +613,9 @@ export default function MatchReplayPage() {
                   {cur.type === "chance" && <span className="font-heading font-bold text-red-400 mr-1">Mimo! </span>}
                   {cur.type === "card" && <span className="font-heading font-bold text-yellow-500 mr-1">{cur.detail === "red" ? "Červená karta!" : "Žlutá karta!"} </span>}
                   {cur.type === "injury" && <span className="font-heading font-bold text-red-500 mr-1">Zranění! </span>}
+                  {cur.type === "penalty" && <span className="font-heading font-[800] text-gold-600 text-xl mr-2">PENALTA! </span>}
+                  {cur.type === "corner" && <span className="font-heading font-bold text-pitch-600 mr-1">Roh. </span>}
+                  {cur.type === "freekick" && <span className="font-heading font-bold text-pitch-600 mr-1">Standardka. </span>}
                   <span className={`text-lg ${cur.type === "goal" ? "font-bold" : cur.type === "chance" ? "font-medium" : ""}`}>{curText}</span>
                 </div>
               </>

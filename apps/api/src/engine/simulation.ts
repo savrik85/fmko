@@ -5,7 +5,7 @@
  */
 
 import type { Rng } from "../generators/rng";
-import type { MatchEvent, EventType } from "@okresni-masina/shared";
+import type { MatchEvent, EventType, GoalSource } from "@okresni-masina/shared";
 import type {
   MatchConfig,
   MatchResult,
@@ -144,7 +144,14 @@ function calcChanceProb(
 }
 
 /**
- * Calculate goal probability from a chance.
+ * Otevřená hra dává o něco méně gólů než dřív — rozdíl přebraly standardky
+ * (penalty, přímáky, rohy), aby celková gólovost zápasu zůstala stejná.
+ */
+const OPEN_PLAY_GOAL_SCALE = 0.855;
+
+/**
+ * Calculate goal probability from an open-play chance.
+ * Standardky mají vlastní matematiku (calcPenaltyProb / calcFreekickProb / calcAerialProb).
  */
 function calcGoalProb(
   rng: Rng,
@@ -153,15 +160,12 @@ function calcGoalProb(
   defenseAvg: number,
   minute: number,
   scoreDiff: number,
-  isSetPiece: boolean,
 ): number {
-  // 30% šancí = hlavičky
+  // 30% šancí = hlavičky (centr ze hry)
   const isHeader = rng.random() < 0.3;
   const attackVal = isHeader
     ? (attacker.heading * 2 + attacker.strength) / 3
-    : isSetPiece
-      ? (attacker.setPieces * 2 + attacker.technique) / 3
-      : (attacker.shooting * 2 + attacker.technique) / 3;
+    : (attacker.shooting * 2 + attacker.technique) / 3;
 
   const defenseVal = (gk.goalkeeping * 2 + defenseAvg) / 3;
 
@@ -183,7 +187,7 @@ function calcGoalProb(
   if (mentorRel) ratio *= 1 + 0.03 * ((mentorRel.strength ?? 50) / 50);
 
   // Okresní level: víc gólů (slabší brankáři, horší obrana)
-  return Math.min(0.70, Math.max(0.15, ratio * 0.90));
+  return Math.min(0.70, Math.max(0.15, ratio * 0.90)) * OPEN_PLAY_GOAL_SCALE;
 }
 
 /**
@@ -243,6 +247,115 @@ function pickAssister(rng: Rng, lineup: MatchPlayer[], scorer: MatchPlayer): Mat
  */
 function getGK(lineup: MatchPlayer[]): MatchPlayer {
   return lineup.find((p) => p.position === "GK") ?? lineup[0];
+}
+
+/**
+ * Exekutor standardky. Preferuje roli nastavenou manažerem, ale jen když je
+ * hráč pořád na hřišti — po vystřídání nebo červené kope nejlepší zbylý.
+ * Proto se volá při KAŽDÉ standardce znovu, ne jednou na začátku zápasu.
+ */
+function pickTaker(lineup: MatchPlayer[], preferredId?: number): MatchPlayer | null {
+  const outfield = lineup.filter((p) => p.position !== "GK");
+  if (outfield.length === 0) return null;
+  if (preferredId != null) {
+    const preferred = outfield.find((p) => p.id === preferredId);
+    if (preferred) return preferred;
+  }
+  return outfield.reduce((best, p) => (p.setPieces > best.setPieces ? p : best), outfield[0]);
+}
+
+/**
+ * Kdo naskočí na centr. Do vápna chodí útočníci a stopeři, záložníci míň,
+ * brankář nikdy. Váha roste s hlavičkami a důrazem — malý technik se nahoru
+ * neprosadí ani ve slabé lize.
+ */
+function pickHeader(rng: Rng, lineup: MatchPlayer[], exclude: MatchPlayer): MatchPlayer | null {
+  const candidates = lineup.filter((p) => p !== exclude && p.position !== "GK");
+  if (candidates.length === 0) return null;
+
+  const weights = candidates.map((p) => {
+    const pos = p.matchPosition ?? p.position;
+    const posW = pos === "FWD" ? 2.2 : pos === "DEF" ? 1.6 : 0.8;
+    return posW * (((p.heading * 0.65 + p.strength * 0.35) / 50) ** 1.6);
+  });
+
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  let roll = rng.random() * totalWeight;
+  for (let i = 0; i < candidates.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return candidates[i];
+  }
+  return candidates[candidates.length - 1];
+}
+
+/**
+ * Proměnění penalty — čistý souboj střelce s brankářem, obrana do toho nemluví.
+ * Při průměrných hodnotách vychází ~0,74, což sedí na reálnou úspěšnost.
+ * V závěru těsného zápasu rozhoduje clutch: nervák ji zahodí, chladnokrevný dá.
+ */
+function calcPenaltyProb(
+  kicker: MatchPlayer,
+  gk: MatchPlayer,
+  minute: number,
+  scoreDiff: number,
+): number {
+  const skill = kicker.setPieces * 0.5 + kicker.technique * 0.3 + kicker.shooting * 0.2;
+  let prob = 0.60 + (skill / 100) * 0.28;
+  prob -= ((gk.goalkeeping - 50) / 100) * 0.12;
+  prob *= 0.92 + (kicker.consistency / 100) * 0.16;
+  prob *= 0.96 + (kicker.morale / 100) * 0.08;
+  if (minute >= 75 && Math.abs(scoreDiff) <= 1) {
+    prob *= 0.85 + (kicker.clutch / 100) * 0.30;
+  }
+  return Math.max(0.35, Math.min(0.93, prob));
+}
+
+/**
+ * Přímý kop napřímo na branku. Schválně vzácný — v okresu padne přímák
+ * málokdy a od toho se odvíjí i cena dobrého exekutora.
+ */
+function calcFreekickProb(
+  kicker: MatchPlayer,
+  gk: MatchPlayer,
+  defenseAvg: number,
+  weather: Weather,
+): number {
+  const skill = kicker.setPieces * 0.6 + kicker.technique * 0.4;
+  let prob = 0.02 + (skill / 100) * 0.14;
+  prob -= ((gk.goalkeeping - 50) / 100) * 0.05;
+  prob -= ((defenseAvg - 50) / 100) * 0.02;  // zeď
+  // Mokrý a rozfoukaný míč se hůř zvedá přes zeď
+  prob *= WEATHER_MODS[weather].techniqueMod;
+  return Math.max(0.01, Math.min(0.22, prob));
+}
+
+/**
+ * Hlavička po centru ze standardky. Kvalita centru (setPieces kopajícího)
+ * se potkává s důrazem hlavičkáře proti obraně a brankáři. Při samých
+ * padesátkách vyjde přesně base — od toho se ladí gólovost standardek.
+ */
+function calcAerialProb(
+  kicker: MatchPlayer,
+  header: MatchPlayer,
+  gk: MatchPlayer,
+  defending: TeamSetup,
+  isCorner: boolean,
+  weather: Weather,
+): number {
+  const delivery = (kicker.setPieces * 0.7 + kicker.passing * 0.3) / 100;
+  const attack = (header.heading * 0.65 + header.strength * 0.35) / 100;
+  const defenders = defending.lineup.filter((p) => p.position === "DEF");
+  const cover = defenders.length > 0
+    ? (teamAvg(defenders, "heading") * 0.5 + teamAvg(defenders, "strength") * 0.3 + gk.goalkeeping * 0.2) / 100
+    : gk.goalkeeping / 100;
+
+  // Těžký míč nahrává hlavičkářům — brankáři se centry drží hůř. Vítr naopak
+  // centr rozhodí dřív, než doletí.
+  const weatherMod = weather === "rain" ? 1.08 : weather === "snow" ? 1.12 : weather === "wind" ? 0.92 : 1.0;
+
+  const base = isCorner ? 0.065 : 0.12;
+  const ratio = (delivery * 0.45 + attack * 0.55) / Math.max(0.2, cover);
+  return Math.max(0.01, Math.min(isCorner ? 0.16 : 0.26, base * ratio * weatherMod));
 }
 
 /**
@@ -403,6 +516,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     teamId: number,
     description: string,
     detail?: string,
+    source?: GoalSource,
   ) {
     events.push({
       minute,
@@ -412,7 +526,115 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       teamId,
       description,
       detail,
+      source,
     });
+  }
+
+  /**
+   * Zapíše gól: skóre, událost a rozhoupání morálky na obou stranách.
+   * Vůdcovské typy zvednou svůj tým víc a soupeřův srazí míň.
+   */
+  function scoreGoal(
+    minute: number,
+    scorer: MatchPlayer,
+    attacking: TeamSetup,
+    defending: TeamSetup,
+    description: string,
+    source: GoalSource,
+  ) {
+    if (attacking === home) homeScore++; else awayScore++;
+    addEvent(minute, "goal", scorer, attacking.teamId, description,
+      `${homeScore}:${awayScore}`, source);
+    const attLead = teamAvg(attacking.lineup, "leadership") / 100;
+    const defLead = teamAvg(defending.lineup, "leadership") / 100;
+    for (const p of attacking.lineup) p.morale = Math.min(100, p.morale + Math.round(2 + attLead * 2));
+    for (const p of defending.lineup) p.morale = Math.max(0, p.morale - Math.round(1 + (1 - defLead) * 2));
+  }
+
+  /**
+   * Odehraje standardní situaci od rozehrání po zakončení.
+   * `cross` je centr ze standardky z boku, `corner` roh — obojí končí hlavičkou
+   * někoho jiného než kopajícího, ten dostane asistenci.
+   */
+  function playSetPiece(
+    minute: number,
+    kind: "penalty" | "freekick" | "cross" | "corner",
+    attacking: TeamSetup,
+    defending: TeamSetup,
+  ) {
+    const gk = getGK(defending.lineup);
+    const defAvg = teamAvg(defending.lineup.filter((p) => p.position === "DEF"), "defense");
+    const scoreDiff = attacking === home ? homeScore - awayScore : awayScore - homeScore;
+
+    if (kind === "penalty") {
+      const kicker = pickTaker(attacking.lineup, attacking.penaltyTakerId);
+      if (!kicker) return;
+      addEvent(minute, "penalty", kicker, attacking.teamId,
+        `Penalta! Na puntík si to staví ${playerName(kicker)}`, "awarded");
+
+      if (rng.random() < calcPenaltyProb(kicker, gk, minute, scoreDiff)) {
+        scoreGoal(minute, kicker, attacking, defending,
+          `Proměněno! ${playerName(kicker)} z penalty`, "penalty");
+      } else {
+        // Zahozená penalta bolí dvakrát: střelce na hlavě, soupeře nakopne
+        const saved = rng.random() < 0.55;
+        addEvent(minute, "chance", kicker, attacking.teamId,
+          saved
+            ? `Penalta! ${playerName(kicker)} — a brankář ji chytá!`
+            : `Penalta! ${playerName(kicker)} — a mimo!`,
+          saved ? "penalty_saved" : "penalty_missed");
+        if (saved) {
+          addEvent(minute, "special", gk, defending.teamId,
+            `${playerName(gk)} chytil penaltu!`, "penalty_save");
+        }
+        kicker.morale = Math.max(0, kicker.morale - 8);
+        for (const p of defending.lineup) p.morale = Math.min(100, p.morale + 2);
+      }
+      return;
+    }
+
+    const kicker = pickTaker(attacking.lineup, attacking.freekickTakerId);
+    if (!kicker) return;
+
+    if (kind === "freekick") {
+      addEvent(minute, "freekick", kicker, attacking.teamId,
+        `Přímý kop z dobré pozice, míč si bere ${playerName(kicker)}`, "direct");
+      if (rng.random() < calcFreekickProb(kicker, gk, defAvg, weather)) {
+        scoreGoal(minute, kicker, attacking, defending,
+          `Přímý kop přesně k tyči! ${playerName(kicker)}`, "freekick");
+      } else {
+        addEvent(minute, "chance", kicker, attacking.teamId,
+          `${playerName(kicker)} pálí přímák — ${rng.pick(["do zdi", "nad břevno", "těsně vedle", "brankář vyráží"])}`,
+          "freekick_missed");
+      }
+      return;
+    }
+
+    // Centr do vápna — kope jeden, hlavičkuje druhý
+    const header = pickHeader(rng, attacking.lineup, kicker);
+    if (!header) return;
+    const isCorner = kind === "corner";
+
+    addEvent(minute, isCorner ? "corner" : "freekick", kicker, attacking.teamId,
+      isCorner
+        ? `Roh zahrává ${playerName(kicker)}`
+        : `Standardka z boku, centruje ${playerName(kicker)}`,
+      isCorner ? "taken" : "cross");
+
+    if (rng.random() < calcAerialProb(kicker, header, gk, defending, isCorner, weather)) {
+      scoreGoal(minute, header, attacking, defending,
+        isCorner
+          ? `Gól po rohu! Hlavou ${playerName(header)}`
+          : `Gól ze standardky! ${playerName(header)}`,
+        isCorner ? "corner" : "cross");
+      // U centru asistuje vždycky ten, kdo kopal — nikdo jiný se míče nedotkl
+      addEvent(minute, "assist", kicker, attacking.teamId,
+        `Asistence: ${playerName(kicker)}`, "");
+    } else if (rng.random() < 0.45) {
+      addEvent(minute, "chance", header, attacking.teamId,
+        `${playerName(header)} hlavičkuje — ${rng.pick(["nad břevno", "vedle", "chytil brankář", "zblokováno"])}`,
+        "header_missed");
+    }
   }
 
   // Check for late arrivals (low discipline)
@@ -448,14 +670,14 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       const gk = getGK(defending.lineup);
       const defAvg = teamAvg(defending.lineup.filter((p) => p.position === "DEF"), "defense");
       const scoreDiff = isHomePossession ? homeScore - awayScore : awayScore - homeScore;
-      const goalProb = calcGoalProb(rng, attacker, gk, defAvg, minute, scoreDiff, false);
+      const goalProb = calcGoalProb(rng, attacker, gk, defAvg, minute, scoreDiff);
 
       if (rng.random() < goalProb) {
         // GOAL!
         if (isHomePossession) homeScore++; else awayScore++;
         addEvent(minute, "goal", attacker, attacking.teamId,
           `Gól! ${playerName(attacker)} skóruje`,
-          `${homeScore}:${awayScore}`);
+          `${homeScore}:${awayScore}`, "open_play");
 
         // Assist — 65% chance, weighted by passing/vision/creativity
         if (rng.random() < 0.65) {
@@ -519,7 +741,16 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
               `${playerName(blocker)} zblokoval šanci`, "block");
           }
         }
+
+        // Vyražená nebo zblokovaná střela často skončí za lajnou → roh
+        if (rng.random() < 0.62) playSetPiece(minute, "corner", attacking, defending);
       }
+    }
+
+    // Rohy nevznikají jen po vyložených šancích — tlak na obranu jich vyrobí víc.
+    // Váha kopíruje šance, takže silnější tým rohů vykope víc.
+    if (rng.random() < adjustedChanceProb * 0.62) {
+      playSetPiece(minute, "corner", attacking, defending);
     }
 
     // Counter-attack: defensive tactic team can break on opponent's possession
@@ -531,13 +762,11 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       const counterGk = getGK(attacking.lineup);
       const counterDefAvg = teamAvg(attacking.lineup.filter((p) => p.position === "DEF"), "defense");
       const counterScoreDiff = isHomePossession ? awayScore - homeScore : homeScore - awayScore;
-      const counterGoalProb = calcGoalProb(rng, counterAttacker, counterGk, counterDefAvg, minute, counterScoreDiff, false) * 0.85;
+      const counterGoalProb = calcGoalProb(rng, counterAttacker, counterGk, counterDefAvg, minute, counterScoreDiff) * 0.85;
 
       if (rng.random() < counterGoalProb) {
-        if (isHomePossession) awayScore++; else homeScore++;
-        addEvent(minute, "goal", counterAttacker, defending.teamId,
-          `Protiútok! ${playerName(counterAttacker)} skóruje po brejku`,
-          `${homeScore}:${awayScore}`);
+        scoreGoal(minute, counterAttacker, defending, attacking,
+          `Protiútok! ${playerName(counterAttacker)} skóruje po brejku`, "counter");
         if (rng.random() < 0.50) {
           const counterAssister = pickAssister(rng, defending.lineup, counterAttacker);
           if (counterAssister) {
@@ -545,10 +774,6 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
               `Asistence: ${playerName(counterAssister)}`, "");
           }
         }
-        const cAttLead = teamAvg(defending.lineup, "leadership") / 100;
-        const cDefLead = teamAvg(attacking.lineup, "leadership") / 100;
-        for (const p of defending.lineup) p.morale = Math.min(100, p.morale + Math.round(2 + cAttLead * 2));
-        for (const p of attacking.lineup) p.morale = Math.max(0, p.morale - Math.round(1 + (1 - cDefLead) * 2));
       }
     }
 
@@ -605,35 +830,16 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         }
       }
 
-      // Set piece chance from foul (25%)
-      if (rng.random() < 0.25) {
-        const kicker = attacking.lineup
-          .filter((p) => p.position !== "GK")
-          .sort((a, b) => b.setPieces - a.setPieces)[0];
-        if (kicker) {
-          const spGk = getGK(defending.lineup);
-          const spDefAvg = teamAvg(defending.lineup.filter((p) => p.position === "DEF"), "defense");
-          const spScoreDiff = isHomePossession ? homeScore - awayScore : awayScore - homeScore;
-          const spGoalProb = calcGoalProb(rng, kicker, spGk, spDefAvg, minute, spScoreDiff, true) * 0.7;
-          if (rng.random() < spGoalProb) {
-            if (isHomePossession) homeScore++; else awayScore++;
-            addEvent(minute, "goal", kicker, attacking.teamId,
-              `Gól ze standardní situace! ${playerName(kicker)}`,
-              `${homeScore}:${awayScore}`);
-            // Set piece assist (40% chance — weighted by passing/vision/creativity)
-            if (rng.random() < 0.40) {
-              const spAssister = pickAssister(rng, attacking.lineup, kicker);
-              if (spAssister) {
-                addEvent(minute, "assist", spAssister, attacking.teamId,
-                  `Asistence: ${playerName(spAssister)}`, "");
-              }
-            }
-            const attLead = teamAvg(attacking.lineup, "leadership") / 100;
-            const defLead = teamAvg(defending.lineup, "leadership") / 100;
-            for (const p of attacking.lineup) p.morale = Math.min(100, p.morale + Math.round(2 + attLead * 2));
-            for (const p of defending.lineup) p.morale = Math.max(0, p.morale - Math.round(1 + (1 - defLead) * 2));
-          }
-        }
+      // Kde se faulovalo, z toho plyne co z faulu bude. Zóny jsou vážené tak,
+      // aby na zápas vyšla ~0,25 penalty a ~1,4 přímáku — zbytek faulů se
+      // odehraje bez následku (rozehrání na půlce nikoho nezajímá).
+      const zone = rng.random();
+      if (zone < 0.040) {
+        playSetPiece(minute, "penalty", attacking, defending);
+      } else if (zone < 0.260) {
+        playSetPiece(minute, "freekick", attacking, defending);
+      } else if (zone < 0.580) {
+        playSetPiece(minute, "cross", attacking, defending);
       }
     }
 

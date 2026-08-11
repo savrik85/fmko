@@ -14,6 +14,8 @@ import { isLightColor } from "@/lib/team-color";
 interface MatchEvent {
   minute: number; type: string; playerId: number; playerName: string;
   teamId: number; description: string; detail?: string;
+  /** Odkud gól padl. Starší zápasy zdroj nemají. */
+  source?: string;
 }
 
 interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number; squadNumber?: number | null }
@@ -108,7 +110,9 @@ export default function MatchDetailPage() {
   const goals = match.events.filter((e) => e.type === "goal");
   const homeGoals = goals.filter((e) => e.teamId === 1);
   const awayGoals = goals.filter((e) => e.teamId === 2);
-  const keyEvents = match.events.filter((e) => ["goal", "card", "injury", "substitution"].includes(e.type));
+  // Penalta patří mezi klíčové momenty i když skončí zahozením — jinak by
+  // zahozená penalta v přehledu zápasu úplně zmizela.
+  const keyEvents = match.events.filter((e) => ["goal", "card", "injury", "substitution", "penalty"].includes(e.type));
   const firstHalf = keyEvents.filter((e) => e.minute <= 45);
   const secondHalf = keyEvents.filter((e) => e.minute > 45);
 
@@ -137,7 +141,14 @@ export default function MatchDetailPage() {
       match.events.filter((e) => e.teamId === 1 && e.type === "special" && e.detail === "save").length,
       match.events.filter((e) => e.teamId === 2 && e.type === "special" && e.detail === "save").length,
     ] as [number, number],
+    corners: [eventCount(1, "corner"), eventCount(2, "corner")] as [number, number],
+    // Přímé kopy i centry ze standardek dohromady — manažera zajímá objem, ne dělení
+    freekicks: [eventCount(1, "freekick"), eventCount(2, "freekick")] as [number, number],
+    penalties: [eventCount(1, "penalty"), eventCount(2, "penalty")] as [number, number],
   };
+
+  // Starší zápasy standardky jako události nemají — nezobrazovat prázdné nuly
+  const hasSetPieceData = st.corners[0] + st.corners[1] + st.freekicks[0] + st.freekicks[1] + st.penalties[0] + st.penalties[1] > 0;
 
   // Possession from DB; fallback na 50/50 pokud chybí (staré zápasy)
   const possHome = match.possession_home ?? 50;
@@ -281,6 +292,15 @@ export default function MatchDetailPage() {
           <StatBar label="Držení" home={possHome} away={possAway} hc={hc} ac={ac} />
           <StatBar label="Střely" home={st.shots[0]} away={st.shots[1]} hc={hc} ac={ac} />
           <StatBar label="Šance" home={st.chances[0]} away={st.chances[1]} hc={hc} ac={ac} />
+          {hasSetPieceData && (
+            <>
+              <StatBar label="Rohy" home={st.corners[0]} away={st.corners[1]} hc={hc} ac={ac} />
+              <StatBar label="Standardky" home={st.freekicks[0]} away={st.freekicks[1]} hc={hc} ac={ac} />
+              {(st.penalties[0] > 0 || st.penalties[1] > 0) && (
+                <StatBar label="Penalty" home={st.penalties[0]} away={st.penalties[1]} hc={hc} ac={ac} />
+              )}
+            </>
+          )}
           <StatBar label="Fauly" home={st.fouls[0]} away={st.fouls[1]} hc={hc} ac={ac} />
           <StatBar label="ŽK" home={st.yellow[0]} away={st.yellow[1]} hc={hc} ac={ac} />
           {(st.red[0] > 0 || st.red[1] > 0) && (
@@ -594,22 +614,10 @@ export default function MatchDetailPage() {
           <SectionLabel>Góly</SectionLabel>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              {homeGoals.map((g, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="text-xs text-muted tabular-nums w-6 text-right">{g.minute}&apos;</span>
-                  <span className="text-sm">⚽</span>
-                  <span className="text-sm font-heading font-bold">{g.playerName}</span>
-                </div>
-              ))}
+              {homeGoals.map((g, i) => <GoalRow key={i} goal={g} />)}
             </div>
             <div className="space-y-1.5">
-              {awayGoals.map((g, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="text-xs text-muted tabular-nums w-6 text-right">{g.minute}&apos;</span>
-                  <span className="text-sm">⚽</span>
-                  <span className="text-sm font-heading font-bold">{g.playerName}</span>
-                </div>
-              ))}
+              {awayGoals.map((g, i) => <GoalRow key={i} goal={g} />)}
             </div>
           </div>
         </div>
@@ -764,6 +772,27 @@ export default function MatchDetailPage() {
   );
 }
 
+/** Odkud gól padl — u starších zápasů zdroj chybí a řádek zůstane bez popisku. */
+const GOAL_SOURCE_LABEL: Record<string, string> = {
+  penalty: "z penalty",
+  freekick: "z přímého kopu",
+  corner: "po rohu",
+  cross: "ze standardky",
+  counter: "z protiútoku",
+};
+
+function GoalRow({ goal }: { goal: MatchEvent }) {
+  const label = goal.source ? GOAL_SOURCE_LABEL[goal.source] : null;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-muted tabular-nums w-6 text-right">{goal.minute}&apos;</span>
+      <span className="text-sm">{goal.source === "penalty" ? "🥅" : "⚽"}</span>
+      <span className="text-sm font-heading font-bold">{goal.playerName}</span>
+      {label && <span className="text-xs text-muted">{label}</span>}
+    </div>
+  );
+}
+
 function EventRow({ event: e, hc, ac }: { event: MatchEvent; hc: string; ac: string }) {
   const isHome = e.teamId === 1;
   const teamColor = isHome ? hc : ac;
@@ -771,10 +800,13 @@ function EventRow({ event: e, hc, ac }: { event: MatchEvent; hc: string; ac: str
   let icon: string;
   let bgColor: string;
   switch (e.type) {
-    case "goal": icon = "⚽"; bgColor = "bg-pitch-50"; break;
+    case "goal": icon = e.source === "penalty" ? "🥅" : "⚽"; bgColor = "bg-pitch-50"; break;
     case "card": icon = e.detail === "red" ? "🟥" : "🟨"; bgColor = e.detail === "red" ? "bg-red-50" : "bg-yellow-50"; break;
     case "injury": icon = "🩹"; bgColor = "bg-orange-50"; break;
     case "substitution": icon = "🔄"; bgColor = "bg-blue-50"; break;
+    case "penalty": icon = "🥅"; bgColor = "bg-gold-50"; break;
+    case "corner": icon = "🚩"; bgColor = ""; break;
+    case "freekick": icon = "🎯"; bgColor = ""; break;
     default: icon = ""; bgColor = "";
   }
 

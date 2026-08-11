@@ -3453,6 +3453,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       speed: skills.speed ?? 50, technique: skills.technique ?? 50, shooting: skills.shooting ?? 50,
       passing: skills.passing ?? 50, heading: skills.heading ?? 50, defense: skills.defense ?? 50,
       goalkeeping: skills.goalkeeping ?? 50, stamina: skills.stamina ?? 50,
+      setPieces: skills.setPieces ?? 50,
       avgRating: p.avg_rating ?? null,
       hangover: !!lc.hangover,
       absent,

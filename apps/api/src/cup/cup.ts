@@ -556,8 +556,15 @@ async function simulateCupTie(
   const homeFam = homeReal ? await readFamiliarity(db, homeReal) : { tactic: {}, formation: {} };
   const awayFam = awayReal ? await readFamiliarity(db, awayReal) : { tactic: {}, formation: {} };
 
-  const homeSetup: TeamSetup = { teamId: 1, teamName: "Domácí", lineup: homeLineup, subs: homeSubs, tactic: homeTactic, formation: homeFormation, formationFamiliarity: homeFam.formation[homeFormation] ?? 0 };
-  const awaySetup: TeamSetup = { teamId: 2, teamName: "Hosté", lineup: awayLineup, subs: awaySubs, tactic: awayTactic, formation: awayFormation, formationFamiliarity: awayFam.formation[awayFormation] ?? 0 };
+  // Exekutoři standardek platí i v poháru
+  const { loadSetPieceTakers } = await import("../engine/set-piece-takers");
+  const [homeTakers, awayTakers] = await Promise.all([
+    loadSetPieceTakers(db, homeReal, homeBuild.idMap),
+    loadSetPieceTakers(db, awayReal, awayBuild.idMap),
+  ]);
+
+  const homeSetup: TeamSetup = { teamId: 1, teamName: "Domácí", lineup: homeLineup, subs: homeSubs, tactic: homeTactic, formation: homeFormation, ...homeTakers, formationFamiliarity: homeFam.formation[homeFormation] ?? 0 };
+  const awaySetup: TeamSetup = { teamId: 2, teamName: "Hosté", lineup: awayLineup, subs: awaySubs, tactic: awayTactic, formation: awayFormation, ...awayTakers, formationFamiliarity: awayFam.formation[awayFormation] ?? 0 };
   // Vybavení a zaměstnanci platí i v poháru — dřív se sem nepředávaly vůbec,
   // takže hráč nastupoval bez bonusů, které si zaplatil.
   const { loadMatchMods } = await import("../equipment/match-mods");
