@@ -1206,12 +1206,12 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
   const videt = rozbaleno ? ranked : zkraceno;
 
   return (
-    <div className="border-b border-gray-100 last:border-b-0 py-3 first:pt-0 last:pb-0">
+    <div className="border-b border-gray-100 last:border-b-0 py-3 first:pt-0 last:pb-0 lg:border-b-0 lg:py-0 lg:flex lg:flex-col">
       <div className="flex items-center gap-2 mb-1">
         <span className="text-base">{cfg.icon}</span>
         <span className="font-heading font-bold text-sm uppercase">{cfg.label}</span>
       </div>
-      <p className="text-sm text-muted mb-2 leading-snug">{cfg.hint}</p>
+      <p className="text-sm text-muted mb-2 leading-snug lg:min-h-[3.75rem]">{cfg.hint}</p>
 
       <table className="w-full text-sm">
         <thead>
@@ -1261,7 +1261,7 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
         </tbody>
       </table>
 
-      <div className="flex items-center justify-between mt-2 gap-2">
+      <div className="flex items-center justify-between mt-2 gap-2 lg:mt-auto lg:pt-2">
         <span className="text-sm text-muted">
           {chosen
             ? (chosen.hraje
@@ -1304,9 +1304,11 @@ function SetPieceTakers({ players, lineupIds, captainId, penaltyTakerId, freekic
           Když zvolený hráč zrovna nehraje, zaskočí za něj nejvhodnější zbylý.
         </p>
       </div>
-      <TakerPicker role="captain" players={players} lineupIds={lineupIds} selectedId={captainId} onChange={onCaptain} />
-      <TakerPicker role="penalty" players={players} lineupIds={lineupIds} selectedId={penaltyTakerId} onChange={onPenalty} />
-      <TakerPicker role="freekick" players={players} lineupIds={lineupIds} selectedId={freekickTakerId} onChange={onFreekick} />
+      <div className="grid lg:grid-cols-3 lg:gap-x-6">
+        <TakerPicker role="captain" players={players} lineupIds={lineupIds} selectedId={captainId} onChange={onCaptain} />
+        <TakerPicker role="penalty" players={players} lineupIds={lineupIds} selectedId={penaltyTakerId} onChange={onPenalty} />
+        <TakerPicker role="freekick" players={players} lineupIds={lineupIds} selectedId={freekickTakerId} onChange={onFreekick} />
+      </div>
     </div>
   );
 }
