@@ -977,6 +977,18 @@ function MatchPage() {
         </div>
       </div>
 
+      {/* ═══ Role v týmu — kapitán a exekutoři ═══ */}
+      <SetPieceTakers
+        players={players}
+        lineupIds={new Set(selected.filter(Boolean) as string[])}
+        captainId={captainId}
+        penaltyTakerId={penaltyTakerId}
+        freekickTakerId={freekickTakerId}
+        onCaptain={(id) => { setCaptainId(id); setSaved(false); }}
+        onPenalty={(id) => { setPenaltyTakerId(id); setSaved(false); }}
+        onFreekick={(id) => { setFreekickTakerId(id); setSaved(false); }}
+      />
+
       {/* ═══ Chemistry + Relationship summary ═══ */}
       <div className="card p-3">
         <div className="flex items-center gap-3">
@@ -1060,18 +1072,6 @@ function MatchPage() {
           }, [])}
         />
       )}
-
-      {/* ═══ Exekutoři standardek ═══ */}
-      <SetPieceTakers
-        players={players}
-        lineupIds={new Set(selected.filter(Boolean) as string[])}
-        captainId={captainId}
-        penaltyTakerId={penaltyTakerId}
-        freekickTakerId={freekickTakerId}
-        onCaptain={(id) => { setCaptainId(id); setSaved(false); }}
-        onPenalty={(id) => { setPenaltyTakerId(id); setSaved(false); }}
-        onFreekick={(id) => { setFreekickTakerId(id); setSaved(false); }}
-      />
 
       {/* ═══ Save ═══ */}
       <div>
@@ -1206,7 +1206,7 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
   const videt = rozbaleno ? ranked : zkraceno;
 
   return (
-    <div className="border-b border-gray-100 last:border-b-0 py-3 first:pt-0 last:pb-0 lg:border-b-0 lg:py-0 lg:flex lg:flex-col">
+    <div className="border-b border-gray-100 last:border-b-0 py-3 first:pt-0 last:pb-0 lg:border-b-0 lg:py-0 lg:pl-6 lg:first:pl-0 lg:flex lg:flex-col">
       <div className="flex items-center gap-2 mb-1">
         <span className="text-base">{cfg.icon}</span>
         <span className="font-heading font-bold text-sm uppercase">{cfg.label}</span>
@@ -1304,7 +1304,7 @@ function SetPieceTakers({ players, lineupIds, captainId, penaltyTakerId, freekic
           Když zvolený hráč zrovna nehraje, zaskočí za něj nejvhodnější zbylý.
         </p>
       </div>
-      <div className="grid lg:grid-cols-3 lg:gap-x-6">
+      <div className="grid lg:grid-cols-3 lg:gap-x-10 lg:divide-x lg:divide-gray-100">
         <TakerPicker role="captain" players={players} lineupIds={lineupIds} selectedId={captainId} onChange={onCaptain} />
         <TakerPicker role="penalty" players={players} lineupIds={lineupIds} selectedId={penaltyTakerId} onChange={onPenalty} />
         <TakerPicker role="freekick" players={players} lineupIds={lineupIds} selectedId={freekickTakerId} onChange={onFreekick} />
