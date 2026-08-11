@@ -122,6 +122,12 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       const stadiumNameRow = await db.prepare("SELECT stadium_name FROM teams WHERE id = ?")
         .bind(homeTeamId).first<{ stadium_name: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load stadium name", e); return null; });
 
+      // Vybavení a zaměstnanci platí i v přáteláku — dřív se sem nepředávaly vůbec.
+      const { loadMatchMods } = await import("../equipment/match-mods");
+      const [homeEquipment, awayEquipment] = await Promise.all([
+        loadMatchMods(db, homeTeamId, true), loadMatchMods(db, awayTeamId, false),
+      ]);
+
       // Simulate — vypočítej attendance JEDNOU a použij ji všude (jinak by simulace + DB měly různá čísla)
       const friendlyAttendance = Math.round(20 + Math.random() * 50);
       const result = simulateMatch(rng, {
@@ -132,6 +138,8 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         pitchCondition: stadiumRow?.pitch_condition ?? 50,
         stadiumName: stadiumNameRow?.stadium_name ?? undefined,
         attendance: friendlyAttendance,
+        homeEquipment,
+        awayEquipment,
       });
 
       // Commentary (okresově dle domácího = dějiště)

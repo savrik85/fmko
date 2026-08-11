@@ -558,7 +558,15 @@ async function simulateCupTie(
 
   const homeSetup: TeamSetup = { teamId: 1, teamName: "Domácí", lineup: homeLineup, subs: homeSubs, tactic: homeTactic, formation: homeFormation, formationFamiliarity: homeFam.formation[homeFormation] ?? 0 };
   const awaySetup: TeamSetup = { teamId: 2, teamName: "Hosté", lineup: awayLineup, subs: awaySubs, tactic: awayTactic, formation: awayFormation, formationFamiliarity: awayFam.formation[awayFormation] ?? 0 };
-  const result = simulateMatch(rng, { home: homeSetup, away: awaySetup, weather, isHomeAdvantage: false });
+  // Vybavení a zaměstnanci platí i v poháru — dřív se sem nepředávaly vůbec,
+  // takže hráč nastupoval bez bonusů, které si zaplatil.
+  const { loadMatchMods } = await import("../equipment/match-mods");
+  const [homeEquipment, awayEquipment] = await Promise.all([
+    homeReal ? loadMatchMods(db, homeReal, true) : Promise.resolve(undefined),
+    awayReal ? loadMatchMods(db, awayReal, false) : Promise.resolve(undefined),
+  ]);
+
+  const result = simulateMatch(rng, { home: homeSetup, away: awaySetup, weather, isHomeAdvantage: false, homeEquipment, awayEquipment });
 
   // Odehraný pohár se počítá do sehranosti stejně jako liga
   if (homeReal) await applyMatchResult(db, homeReal, homeTactic, homeFormation).catch((e) => logger.warn({ module: M }, "cup familiarity home", e));

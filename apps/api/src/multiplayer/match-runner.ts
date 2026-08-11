@@ -428,65 +428,11 @@ export async function runScheduledMatches(
                 );
             }
 
-            // Load equipment effects for both teams
-            const {calculateEffects} = await import("../equipment/equipment-generator");
-            const loadEquipMods = async (tid: string) => {
-                const eq = await db.prepare("SELECT * FROM equipment WHERE team_id = ?").bind(tid).first<Record<string, unknown>>().catch((e) => {
-                    logger.warn({module: "match-runner"}, "Failed to load equipment", e);
-                    return null;
-                });
-                if (!eq) return undefined;
-                const levels: Record<string, number> = {};
-                const conditions: Record<string, number> = {};
-                for (const [k, v] of Object.entries(eq)) {
-                    if (k === "id" || k === "team_id") continue;
-                    if (k.endsWith("_condition")) conditions[k] = v as number;
-                    else if (typeof v === "number") levels[k] = v;
-                }
-                const eff = calculateEffects(levels, conditions);
-                return {
-                    techniqueMod: eff.matchTechniqueMod,
-                    gkBonus: eff.gkBonus,
-                    injurySeverityMod: eff.injurySeverityMod,
-                    conditionDrainMod: eff.conditionDrainMod,
-                    moraleMod: eff.moraleMod,
-                    setPiecesMod: eff.setPiecesMod,
-                    weatherResistMod: eff.weatherResistMod,
-                    crowdMod: eff.crowdMod,
-                    injuryDaysReduction: eff.injuryDaysReduction,
-                    lateFatigueMod: eff.lateFatigueMod,
-                };
-            };
+            // Vybavení + zaměstnanci — sdílené s pohárem a přáteláky (equipment/match-mods.ts)
+            const {loadMatchMods} = await import("../equipment/match-mods");
             let [homeEquipment, awayEquipment] = await Promise.all([
-                loadEquipMods(homeTeamId), loadEquipMods(awayTeamId),
+                loadMatchMods(db, homeTeamId, true), loadMatchMods(db, awayTeamId, false),
             ]);
-
-            // Load + merge staff effects (trenér brankářů gkBonus, kondiční trenér conditionDrain,
-            // lékař injurySeverity, šéf fanklubu crowd). Vzor: přičíst k equipment modům.
-            const loadStaffMods = async (tid: string) => {
-                const {calculateStaffEffects} = await import("../staff/staff-effects");
-                const rows = await db.prepare(
-                    "SELECT role, coaching, medicine, maintenance, judgement, communication, work_rate, charm FROM staff_members WHERE team_id = ?"
-                ).bind(tid).all<{ role: string; coaching: number; medicine: number; maintenance: number; judgement: number; communication: number; work_rate: number; charm: number }>()
-                    .catch((e) => { logger.warn({module: "match-runner"}, "load staff mods", e); return {results: [] as never[]}; });
-                return calculateStaffEffects(rows.results);
-            };
-            const [homeStaffFx, awayStaffFx] = await Promise.all([loadStaffMods(homeTeamId), loadStaffMods(awayTeamId)]);
-            const zeroEquipMods = () => ({
-                techniqueMod: 0, gkBonus: 0, injurySeverityMod: 0, conditionDrainMod: 0, moraleMod: 0,
-                setPiecesMod: 0, weatherResistMod: 0, crowdMod: 0, injuryDaysReduction: 0,
-                lateFatigueMod: 0,
-            });
-            const mergeStaff = (eq: ReturnType<typeof zeroEquipMods> | undefined, fx: typeof homeStaffFx, isHome: boolean) => {
-                const merged = eq ?? zeroEquipMods();
-                merged.gkBonus += fx.gkBonus;
-                merged.conditionDrainMod += fx.conditionDrainReduction;
-                merged.injurySeverityMod += fx.injurySeverityReduction;
-                if (isHome) merged.crowdMod += fx.crowdMod + fx.crowdAttendanceBonus; // šéf fanklubu jen doma
-                return merged;
-            };
-            homeEquipment = mergeStaff(homeEquipment, homeStaffFx, true);
-            awayEquipment = mergeStaff(awayEquipment, awayStaffFx, false);
 
             // Add changing room injury reduction to home equipment
             if (facilityEffects.homeInjuryReduction > 0 && homeEquipment) {

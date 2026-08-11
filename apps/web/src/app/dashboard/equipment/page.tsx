@@ -389,11 +389,10 @@ function EquipmentPage() {
                         </div>
                       ) : (
                         <div className="flex items-center justify-between gap-3">
-                          {/* Při stavu 100 % se obě čísla rovnají a „od X, zastavárna X" mate. */}
+                          {/* Cenu v bazaru si určuje hráč, žádné číslo mu tu nepodsouváme.
+                              Výkup zastavárny je naopak pevně daný, ten smysl má. */}
                           <div className="text-sm text-muted">
-                            {sell.bazarSuggested > sell.pawnQuote
-                              ? <>Prodej — v bazaru kolem <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(sell.bazarSuggested)}</span>, zastavárna hned <span className="tabular-nums">{formatCZK(sell.pawnQuote)}</span></>
-                              : <>Prodej — zastavárna dá <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(sell.pawnQuote)}</span></>}
+                            Prodej — zastavárna dá hned <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(sell.pawnQuote)}</span>
                           </div>
                           <button onClick={() => setSelling(sell)} disabled={!!acting}
                             className={`${CARD_BTN} border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50`}>

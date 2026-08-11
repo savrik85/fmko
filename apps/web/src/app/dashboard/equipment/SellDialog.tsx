@@ -101,15 +101,9 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
           />
 
           <div className="text-sm text-muted">
-            Doporučeno{" "}
-            <button onClick={() => setPrice(option.bazarSuggested)} className="font-heading font-bold text-pitch-600 hover:underline">
-              {formatCZK(option.bazarSuggested)}
-            </button>
-            {" "}· nové vyjde na {formatCZK(option.invested)}. Nahoru se drž, jak chceš — buď to někdo koupí, nebo ne.
-          </div>
-
-          <div className="text-sm text-muted">
-            Míň než {formatCZK(option.bazarMin)} nedávej, tolik za to dá zastavárna bez čekání.
+            Cenu si řekni jakou chceš — buď to někdo koupí, nebo ne. Nové vyjde na{" "}
+            <span className="tabular-nums">{formatCZK(option.invested)}</span>, spodní hranice je{" "}
+            <span className="tabular-nums">{formatCZK(option.bazarMin)}</span> (tolik dá zastavárna bez čekání).
           </div>
 
           <div className="text-sm text-muted">
