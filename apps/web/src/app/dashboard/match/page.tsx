@@ -1062,7 +1062,8 @@ function MatchPage() {
 
       {/* ═══ Exekutoři standardek ═══ */}
       <SetPieceTakers
-        players={selected.map((pid) => (pid ? players.find((p) => p.id === pid) : null)).filter(Boolean) as AvailablePlayer[]}
+        players={players}
+        lineupIds={new Set(selected.filter(Boolean) as string[])}
         penaltyTakerId={penaltyTakerId}
         freekickTakerId={freekickTakerId}
         onPenalty={(id) => { setPenaltyTakerId(id); setSaved(false); }}
@@ -1160,20 +1161,22 @@ const TAKER_ROLES: Record<TakerRole, {
   },
 };
 
-function TakerPicker({ role, players, selectedId, onChange }: {
+function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
   role: TakerRole;
   players: AvailablePlayer[];
+  lineupIds: Set<string>;
   selectedId: string | null;
   onChange: (id: string | null) => void;
 }) {
   const cfg = TAKER_ROLES[role];
-  // Brankář standardky nekope, zbytek seřadíme od nejvhodnějšího
+  // Brankář standardky nekope. Zbytek kádru řadíme od nejvhodnějšího, hráči
+  // v sestavě mají přednost — kdo zrovna nehraje, kope až když se do XI vrátí.
   const ranked = players
     .filter((p) => p.position !== "GK")
-    .map((p) => ({ p, score: Math.round(cfg.score(p)) }))
-    .sort((a, b) => b.score - a.score);
+    .map((p) => ({ p, score: Math.round(cfg.score(p)), hraje: lineupIds.has(p.id) }))
+    .sort((a, b) => (a.hraje === b.hraje ? b.score - a.score : a.hraje ? -1 : 1));
 
-  const best = ranked[0];
+  const best = ranked.find((r) => r.hraje);
   const chosen = ranked.find((r) => r.p.id === selectedId);
 
   return (
@@ -1192,9 +1195,9 @@ function TakerPicker({ role, players, selectedId, onChange }: {
         <option value="">
           Automaticky{best ? ` — teď ${best.p.lastName} (${best.score})` : ""}
         </option>
-        {ranked.map(({ p, score }) => (
+        {ranked.map(({ p, score, hraje }) => (
           <option key={p.id} value={p.id}>
-            {p.lastName} {p.firstName} · vhodnost {score}
+            {p.lastName} {p.firstName} · vhodnost {score}{hraje ? "" : " · mimo sestavu"}
           </option>
         ))}
       </select>
@@ -1202,12 +1205,14 @@ function TakerPicker({ role, players, selectedId, onChange }: {
       {/* Rozpad atributů zvoleného (nebo automaticky nasazeného) hráče */}
       {(chosen ?? best) && (
         <div className="flex items-center gap-3 mt-2 text-sm">
-          <span className="text-muted">{chosen ? "Kope" : "Automaticky kope"}</span>
-          <span className="font-heading font-bold">{(chosen ?? best)!.p.lastName}</span>
+          <span className="text-muted">
+            {chosen ? (chosen.hraje ? "Kope" : "Nehraje, zaskočí") : "Automaticky kope"}
+          </span>
+          <span className="font-heading font-bold">{(chosen?.hraje ? chosen : best ?? chosen)!.p.lastName}</span>
           <span className="flex gap-2 text-muted tabular-nums">
             {cfg.attrs.map((a) => (
               <span key={String(a.key)}>
-                {a.label} <span className="font-bold text-ink">{(chosen ?? best)!.p[a.key] as number ?? 50}</span>
+                {a.label} <span className="font-bold text-ink">{(chosen?.hraje ? chosen : best ?? chosen)!.p[a.key] as number ?? 50}</span>
               </span>
             ))}
           </span>
@@ -1217,8 +1222,9 @@ function TakerPicker({ role, players, selectedId, onChange }: {
   );
 }
 
-function SetPieceTakers({ players, penaltyTakerId, freekickTakerId, onPenalty, onFreekick }: {
+function SetPieceTakers({ players, lineupIds, penaltyTakerId, freekickTakerId, onPenalty, onFreekick }: {
   players: AvailablePlayer[];
+  lineupIds: Set<string>;
   penaltyTakerId: string | null;
   freekickTakerId: string | null;
   onPenalty: (id: string | null) => void;
@@ -1234,8 +1240,8 @@ function SetPieceTakers({ players, penaltyTakerId, freekickTakerId, onPenalty, o
           převezme standardky nejvhodnější zbylý.
         </p>
       </div>
-      <TakerPicker role="penalty" players={players} selectedId={penaltyTakerId} onChange={onPenalty} />
-      <TakerPicker role="freekick" players={players} selectedId={freekickTakerId} onChange={onFreekick} />
+      <TakerPicker role="penalty" players={players} lineupIds={lineupIds} selectedId={penaltyTakerId} onChange={onPenalty} />
+      <TakerPicker role="freekick" players={players} lineupIds={lineupIds} selectedId={freekickTakerId} onChange={onFreekick} />
     </div>
   );
 }
