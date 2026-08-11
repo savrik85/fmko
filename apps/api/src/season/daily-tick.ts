@@ -627,17 +627,21 @@ export async function executeDailyTick(
   ).all<{ team_id: string; laundry: number; laundry_condition: number }>()
     .catch((e) => { logger.warn({ module: "daily-tick" }, "fetch laundry teams", e); return { results: [] }; });
 
+  // Šance na -1 bod za den. Při 50 % trvala cesta ze 100 na dno 190 dní, což je
+  // půl roku reálného času — vybavení fakticky nechátralo. Na 100 % je to 95 dní
+  // a údržba se stává rozhodnutím: buď platíš správce hřiště a pračku, nebo opravy.
+  const DAILY_WEAR_CHANCE = 100;
+
   for (const cat of equipCategories) {
-    // Only degrade items with level > 0, by 1 point/day (50% chance)
     await env.DB.prepare(
       `UPDATE equipment SET ${cat}_condition = MAX(5, ${cat}_condition - 1)
-        WHERE ${cat} > 0 AND (ABS(RANDOM()) % 2 = 0)
+        WHERE ${cat} > 0 AND (ABS(RANDOM()) % 100) < ${DAILY_WEAR_CHANCE}
           AND team_id NOT IN (SELECT team_id FROM equipment WHERE laundry > 0)`
     ).run().catch((e) => logger.warn({ module: "daily-tick" }, "equipment condition degradation", e));
   }
 
   for (const row of laundryTeams.results ?? []) {
-    const chance = Math.round(50 * (1 - row.laundry * (row.laundry_condition / 100) * 0.15));
+    const chance = Math.round(DAILY_WEAR_CHANCE * (1 - row.laundry * (row.laundry_condition / 100) * 0.15));
     for (const cat of equipCategories) {
       await env.DB.prepare(
         `UPDATE equipment SET ${cat}_condition = MAX(5, ${cat}_condition - 1)

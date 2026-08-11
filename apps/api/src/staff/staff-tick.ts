@@ -158,18 +158,39 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
       result.healedExtra += r?.meta?.changes ?? 0;
     }
 
-    // Správce hřiště — údržba trávníku + vybavení (přičti kondici zpět)
-    const pitchRepair = Math.round(fx.pitchDegradationReduction * 3); // 0..1 bod/den
-    if (pitchRepair > 0) {
-      await db.prepare("UPDATE stadiums SET pitch_condition = MIN(100, pitch_condition + ?) WHERE team_id = ?")
-        .bind(pitchRepair, tid).run().catch((e) => logger.warn({ module: "staff-tick" }, "spravce pitch", e));
+    // Správce hřiště — údržba trávníku + vybavení (přičti kondici zpět).
+    //
+    // Dřív to bylo Math.round(...), takže výsledek byl vždycky 0 nebo 1 bod za den:
+    // pod určitou kvalitou správce nedělal vůbec nic, nad ní rovnou přebil celou
+    // degradaci. Mezi tím nebylo nic a na kvalitě tak skoro nezáleželo.
+    //
+    // Teď se zlomek bodu doplácí pravděpodobností — přes měsíc to vyjde na tolik,
+    // kolik správce reálně umí, a lepší člověk je znát okamžitě.
+    const applyRepair = (rate: number) => {
+      const whole = Math.floor(rate);
+      const pct = Math.round((rate - whole) * 100);
+      return { whole, pct };
+    };
+
+    const pitch = applyRepair(fx.pitchDegradationReduction * 3); // 0..1,2 bodu/den
+    if (pitch.whole > 0 || pitch.pct > 0) {
+      await db.prepare(
+        `UPDATE stadiums SET pitch_condition = MIN(100, pitch_condition + ?
+           + (CASE WHEN (ABS(RANDOM()) % 100) < ? THEN 1 ELSE 0 END))
+          WHERE team_id = ?`
+      ).bind(pitch.whole, pitch.pct, tid).run()
+        .catch((e) => logger.warn({ module: "staff-tick" }, "spravce pitch", e));
     }
-    const equipRepair = Math.round(fx.equipDegradationReduction * 2); // 0..1 bod/den
-    if (equipRepair > 0) {
+
+    const equip = applyRepair(fx.equipDegradationReduction * 2); // 0..0,8 bodu/den
+    if (equip.whole > 0 || equip.pct > 0) {
       for (const cat of EQUIP_CATEGORIES) {
         await db.prepare(
-          `UPDATE equipment SET ${cat}_condition = MIN(100, ${cat}_condition + ?) WHERE team_id = ? AND ${cat} > 0`
-        ).bind(equipRepair, tid).run().catch((e) => logger.warn({ module: "staff-tick" }, "spravce equip", e));
+          `UPDATE equipment SET ${cat}_condition = MIN(100, ${cat}_condition + ?
+             + (CASE WHEN (ABS(RANDOM()) % 100) < ? THEN 1 ELSE 0 END))
+            WHERE team_id = ? AND ${cat} > 0`
+        ).bind(equip.whole, equip.pct, tid).run()
+          .catch((e) => logger.warn({ module: "staff-tick" }, "spravce equip", e));
       }
     }
 
