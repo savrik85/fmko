@@ -1135,8 +1135,8 @@ function MatchPage() {
    EXEKUTOŘI STANDARDEK
 
    Role jsou týmové (platí i v poháru a přáteláku), ukládají se spolu se
-   sestavou. Vzorce vhodnosti kopírují engine, aby hráč viděl to samé,
-   podle čeho se rozhoduje simulace — ne jen holý atribut.
+   sestavou. Váhy atributů kopírují engine a jsou vypsané u role, aby manažer
+   viděl to samé, podle čeho se rozhoduje simulace.
    ═══════════════════════════════════════════════════════════════════════ */
 
 type TakerRole = "captain" | "penalty" | "freekick";
@@ -1144,9 +1144,8 @@ type TakerRole = "captain" | "penalty" | "freekick";
 const TAKER_ROLES: Record<TakerRole, {
   icon: string; label: string; hint: string;
   /** Vhodnost 0–100 podle stejných vah, jaké používá engine při zakončení. */
-  score: (p: AvailablePlayer) => number;
-  /** Atributy, které do vhodnosti mluví — zobrazí se u hráče. */
-  attrs: Array<{ key: keyof AvailablePlayer; label: string }>;
+  /** Atributy, které o roli rozhodují, i s vahou — z nich se počítá pořadí. */
+  attrs: Array<{ key: keyof AvailablePlayer; zkratka: string; nazev: string; vaha: number; vychozi: number }>;
   /** Brankář kapitánem být může, standardky kopat ne. */
   gkAllowed?: boolean;
 }> = {
@@ -1155,23 +1154,28 @@ const TAKER_ROLES: Record<TakerRole, {
     label: "Kapitán",
     hint: "Vůdce zvedne po vstřeleném gólu morálku celému týmu — od vůdcovství 65 o bod, od 80 o dva. Slaboch pod 35 ji naopak srazí, když inkasujete.",
     // Engine se u kapitána dívá výhradně na vůdcovství
-    score: (p) => p.leadership ?? 30,
-    attrs: [{ key: "leadership", label: "Vůd" }],
+    attrs: [{ key: "leadership", zkratka: "Vůd", nazev: "Vůdcovství", vaha: 1, vychozi: 30 }],
     gkAllowed: true,
   },
   penalty: {
     icon: "🥅",
     label: "Penalty",
     hint: "Rozhoduje klid na míči a přesnost. V závěru těsného zápasu se navíc pozná povaha — nervák penaltu zahodí.",
-    score: (p) => (p.setPieces ?? 50) * 0.5 + (p.technique ?? 50) * 0.3 + (p.shooting ?? 50) * 0.2,
-    attrs: [{ key: "setPieces", label: "Std" }, { key: "technique", label: "Tch" }, { key: "shooting", label: "Stř" }],
+    attrs: [
+      { key: "setPieces", zkratka: "Std", nazev: "Standardky", vaha: 0.5, vychozi: 50 },
+      { key: "technique", zkratka: "Tch", nazev: "Technika", vaha: 0.3, vychozi: 50 },
+      { key: "shooting", zkratka: "Stř", nazev: "Střelba", vaha: 0.2, vychozi: 50 },
+    ],
   },
   freekick: {
     icon: "🎯",
     label: "Přímé kopy a rohy",
     hint: "Přímák jde přes techniku, u rohů rozhoduje kvalita centru — hlavičkáře si engine vybere sám podle důrazu.",
-    score: (p) => (p.setPieces ?? 50) * 0.6 + (p.technique ?? 50) * 0.25 + (p.passing ?? 50) * 0.15,
-    attrs: [{ key: "setPieces", label: "Std" }, { key: "technique", label: "Tch" }, { key: "passing", label: "Přh" }],
+    attrs: [
+      { key: "setPieces", zkratka: "Std", nazev: "Standardky", vaha: 0.6, vychozi: 50 },
+      { key: "technique", zkratka: "Tch", nazev: "Technika", vaha: 0.25, vychozi: 50 },
+      { key: "passing", zkratka: "Přh", nazev: "Přihrávka", vaha: 0.15, vychozi: 50 },
+    ],
   },
 };
 
@@ -1183,11 +1187,16 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
   onChange: (id: string | null) => void;
 }) {
   const cfg = TAKER_ROLES[role];
-  // Brankář standardky nekope. Zbytek kádru řadíme od nejvhodnějšího, hráči
+  const hodnota = (p: AvailablePlayer, a: typeof cfg.attrs[number]) => (p[a.key] as number) ?? a.vychozi;
+  const skore = (p: AvailablePlayer) => cfg.attrs.reduce((s, a) => s + hodnota(p, a) * a.vaha, 0);
+  /** "Std 50 Tch 67 Stř 67" — u každého hráče rovnou to, co o roli rozhoduje. */
+  const rozpad = (p: AvailablePlayer) => cfg.attrs.map((a) => `${a.zkratka} ${hodnota(p, a)}`).join(" ");
+
+  // Brankář standardky nekope. Zbytek kádru řadíme od nejlepšího, hráči
   // v sestavě mají přednost — kdo zrovna nehraje, kope až když se do XI vrátí.
   const ranked = players
     .filter((p) => cfg.gkAllowed || p.position !== "GK")
-    .map((p) => ({ p, score: Math.round(cfg.score(p)), hraje: lineupIds.has(p.id) }))
+    .map((p) => ({ p, score: skore(p), hraje: lineupIds.has(p.id) }))
     .sort((a, b) => (a.hraje === b.hraje ? b.score - a.score : a.hraje ? -1 : 1));
 
   const best = ranked.find((r) => r.hraje);
@@ -1199,7 +1208,17 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
         <span className="text-base">{cfg.icon}</span>
         <span className="font-heading font-bold text-sm uppercase">{cfg.label}</span>
       </div>
-      <p className="text-sm text-muted mb-2 leading-snug">{cfg.hint}</p>
+      <p className="text-sm text-muted mb-1.5 leading-snug">{cfg.hint}</p>
+      <p className="text-sm mb-2">
+        <span className="text-muted">Rozhoduje: </span>
+        {cfg.attrs.map((a, i) => (
+          <span key={String(a.key)}>
+            {i > 0 && <span className="text-muted"> · </span>}
+            <span className="font-heading font-bold">{a.nazev}</span>
+            {cfg.attrs.length > 1 && <span className="text-muted"> {Math.round(a.vaha * 100)} %</span>}
+          </span>
+        ))}
+      </p>
 
       <select
         value={selectedId ?? ""}
@@ -1208,12 +1227,12 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
       >
         <option value="">
           {role === "captain"
-            ? `Bez kapitána${best ? ` — nabízí se ${best.p.lastName} (${best.score})` : ""}`
-            : `Automaticky${best ? ` — teď ${best.p.lastName} (${best.score})` : ""}`}
+            ? `Bez kapitána${best ? ` — nabízí se ${best.p.lastName}` : ""}`
+            : `Automaticky${best ? ` — teď ${best.p.lastName}` : ""}`}
         </option>
-        {ranked.map(({ p, score, hraje }) => (
+        {ranked.map(({ p, hraje }) => (
           <option key={p.id} value={p.id}>
-            {p.lastName} {p.firstName} · vhodnost {score}{hraje ? "" : " · mimo sestavu"}
+            {p.lastName} {p.firstName} · {rozpad(p)}{hraje ? "" : " · mimo sestavu"}
           </option>
         ))}
       </select>
@@ -1230,7 +1249,10 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
           <span className="flex gap-2 text-muted tabular-nums">
             {cfg.attrs.map((a) => (
               <span key={String(a.key)}>
-                {a.label} <span className="font-bold text-ink">{(chosen?.hraje ? chosen : best ?? chosen)!.p[a.key] as number ?? 50}</span>
+                {a.zkratka}{" "}
+                <span className="font-bold text-ink">
+                  {hodnota((chosen?.hraje ? chosen : best ?? chosen)!.p, a)}
+                </span>
               </span>
             ))}
           </span>
