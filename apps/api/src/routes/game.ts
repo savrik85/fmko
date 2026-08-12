@@ -2552,9 +2552,12 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
       const isHome = cm.home_cup_team_id === cm.my_cup_team_id;
       const opponent = (isHome ? cm.away_name : cm.home_name) as string;
       const done = cm.status === "simulated";
-      // Rozstřel se do skóre nevejde, ale bez něj by u remízy nebylo vidět, kdo prošel
-      const pens = cm.home_pens != null && cm.away_pens != null
-        ? ` (pen. ${cm.home_pens}:${cm.away_pens})` : "";
+      // Rozstřel dopisujeme jen když opravdu byl — u nerozstřelovaných zápasů
+      // nejsou sloupce prázdné, ale nulové, takže nestačí kontrola na null.
+      const hp = (cm.home_pens as number) ?? 0;
+      const ap = (cm.away_pens as number) ?? 0;
+      const pens = cm.home_score === cm.away_score && (hp > 0 || ap > 0)
+        ? ` (pen. ${hp}:${ap})` : "";
       upcoming.push({
         type: "match",
         date: cm.scheduled_at as string,
