@@ -17,6 +17,7 @@ const outfit = localFont({
   ],
   variable: "--font-body",
   display: "swap",
+  fallback: ["ui-sans-serif", "sans-serif"],
 });
 
 const barlowCondensed = localFont({
@@ -32,6 +33,7 @@ const barlowCondensed = localFont({
   ],
   variable: "--font-heading",
   display: "swap",
+  fallback: ["Impact", "ui-sans-serif", "sans-serif"],
 });
 
 const jetbrainsMono = localFont({
@@ -41,6 +43,7 @@ const jetbrainsMono = localFont({
   ],
   variable: "--font-commentary",
   display: "swap",
+  fallback: ["ui-monospace", "monospace"],
 });
 
 export const metadata: Metadata = {

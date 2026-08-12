@@ -39,10 +39,10 @@
   --color-rating-avg: #8B8578;
   --color-rating-poor: #D94032;
 
-  /* ── Typography ── */
-  --font-heading: "Barlow Condensed", "Impact", ui-sans-serif, sans-serif;
-  --font-body: "Outfit", ui-sans-serif, sans-serif;
-  --font-commentary: "JetBrains Mono", ui-monospace, monospace;
+  /* ── Typography ──
+     --font-heading/-body/-commentary nastavuje next/font v layout.tsx (včetně
+     fallback stacku). Natvrdo psané názvy tu být nesmí: lokální fonty se
+     registrují pod vlastním jménem rodiny a "Outfit" by je minul. */
 
   /* ── Radius ── */
   --radius-sm: 6px;
