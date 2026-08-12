@@ -67,15 +67,17 @@ export function FMTopBar() {
         </button>
       </div>
 
-      <div className="w-px h-5 bg-white/10" />
+      <div className="w-px h-5 bg-white/10 hidden sm:block" />
 
-      {/* Page title */}
-      <div className="flex-1 min-w-0 flex items-baseline gap-3">
+      {/* Page title — na mobilu skryté, ořezané "D…" nikomu nepomůže */}
+      <div className="flex-1 min-w-0 items-baseline gap-3 hidden sm:flex">
         <span className="text-white font-heading font-bold text-lg sm:text-xl truncate">{title}</span>
         {teamName && (
           <span className="text-white/30 text-sm font-heading truncate hidden sm:inline">{teamName}</span>
         )}
       </div>
+      {/* Mobil: prázdná výplň, ať zbytek lišty drží zarovnání vpravo */}
+      <div className="flex-1 sm:hidden" />
 
       {/* Right side info */}
       <div className="flex items-center gap-3 sm:gap-6 shrink-0 text-xs sm:text-sm font-heading overflow-hidden">
