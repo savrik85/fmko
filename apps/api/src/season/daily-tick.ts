@@ -12,7 +12,7 @@ import { logger } from "../lib/logger";
 import { overallRatingFromFlat } from "../skills/generator";
 
 export interface DailyTickEvent {
-  type: "training" | "recovery" | "injury_healed" | "pitch" | "morale" | "match" | "day" | "loan_return";
+  type: "training" | "training_skipped" | "recovery" | "injury_healed" | "pitch" | "morale" | "match" | "day" | "loan_return";
   description: string;
   data?: unknown;
 }
@@ -199,6 +199,32 @@ export async function executeDailyTick(
       WHERE t.user_id != 'ai'`
   ).all();
 
+  // Týmy, které dnes hrají — v den zápasu se netrénuje. Jedním dotazem přes
+  // všechny soutěže, ať to není per tým: liga a přátelák žijí v matches,
+  // pohár v cup_matches přes cup_teams.
+  const matchDayTeams = new Set<string>();
+  {
+    const den = effectiveDate.toISOString().slice(0, 10);
+    const rows = await env.DB.prepare(
+      `SELECT m.home_team_id AS team_id FROM matches m
+         LEFT JOIN season_calendar sc ON sc.id = m.calendar_id
+        WHERE substr(COALESCE(sc.scheduled_at, m.created_at), 1, 10) = ?
+       UNION
+       SELECT m.away_team_id FROM matches m
+         LEFT JOIN season_calendar sc ON sc.id = m.calendar_id
+        WHERE substr(COALESCE(sc.scheduled_at, m.created_at), 1, 10) = ?
+       UNION
+       SELECT ct.team_id FROM cup_matches cm
+         JOIN cup_teams ct ON ct.id IN (cm.home_cup_team_id, cm.away_cup_team_id)
+        WHERE ct.team_id IS NOT NULL AND substr(cm.scheduled_at, 1, 10) = ?`
+    ).bind(den, den, den).all<{ team_id: string | null }>()
+      .catch((e) => { logger.warn({ module: "daily-tick" }, "load match-day teams", e); return { results: [] }; });
+    for (const r of rows.results) if (r.team_id) matchDayTeams.add(r.team_id);
+    if (matchDayTeams.size > 0) {
+      logger.info({ module: "daily-tick" }, `match day: ${matchDayTeams.size} týmů dnes hraje, trénink jim odpadá`);
+    }
+  }
+
   for (const team of teams.results) {
     const teamId = team.id as string;
 
@@ -238,11 +264,15 @@ export async function executeDailyTick(
       ? Object.values(dayPlan).reduce((sum, d) => sum + INTENSITY[d.intensity].load, 0)
       : teamTrainingDays.length;
 
-    // Trénuje se v každý nastavený den — jediné omezení je, že jde o herní den Po–Pá.
-    // Dřív se trénink rušil sám, když měl tým zápas dnes nebo zítra; při zápasech dvakrát
-    // týdně tím padly dvě třetiny tréninků. Šetření sil před zápasem si teď manažer řídí
-    // sám: lehkou intenzitou u daného dne, nebo volnem pro konkrétní hráče.
-    if (isTrainingDay && isTeamTrainingDay && todayTrainingType) {
+    // V den zápasu se netrénuje — kluci jdou rovnou na hřiště. Dřív odpadal trénink
+    // i den PŘED zápasem a při dvou zápasech týdně tím padly dvě třetiny tréninků;
+    // proto se ruší jen samotný zápasový den. Šetření sil před zápasem si manažer
+    // pořád řídí sám: lehkou intenzitou nebo volnem pro konkrétní hráče.
+    const hraseDnesZapas = matchDayTeams.has(teamId);
+    if (hraseDnesZapas && isTeamTrainingDay && todayTrainingType) {
+      events.push({ type: "training_skipped", description: "Zápasový den — trénink odpadá" });
+    }
+    if (isTrainingDay && isTeamTrainingDay && todayTrainingType && !hraseDnesZapas) {
       try {
         // Volno od trenéra: hráči s life_context.$.trainingRest tento trénink vynechají
         // (žádný drain kondice, žádná zlepšení, žádné riziko absence). Zranění se nereportují

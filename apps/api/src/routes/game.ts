@@ -2597,12 +2597,18 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
     const { parseTrainingPlan } = await import("../season/daily-tick");
     const dayPlan = parseTrainingPlan((team.training_plan as string | null) ?? null, teamId);
 
+    // Dny, kdy se hraje — v ten den trénink odpadá, stejně jako to udělá denní tick
+    const zapasoveDny = new Set(
+      upcoming.filter((e) => e.type === "match").map((e) => e.date.slice(0, 10)),
+    );
+
     const today = new Date(now);
     const daysToGenerate = Math.max(14, totalDays - currentDay + 1);
     for (let d = 0; d < daysToGenerate; d++) {
       const day = new Date(today);
       day.setDate(today.getDate() + d);
       const dow = day.getDay();
+      if (zapasoveDny.has(day.toISOString().slice(0, 10))) continue;
       if (trainingDays.includes(dow)) {
         const planned = dayPlan?.[dow];
         const dayType = planned?.type ?? team.training_type;
