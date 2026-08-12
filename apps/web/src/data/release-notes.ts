@@ -16,7 +16,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     emoji: "🎯",
     title: "Standardky — penalty, rohy a přímáky",
     items: [
-      "Do dneška se ve hře nekopaly rohy ani penalty. Byla tam jen mlhavá „standardní situace po faulu\" a tím to haslo. Teď v každém zápase uvidíš rohy, penalty i přímé kopy — a padne z nich zhruba každý čtvrtý gól.",
+      "V zápasech se konečně kopou rohy, penalty a přímé kopy. Dřív nebyly a všechny góly padaly ze hry — teď ze standardek padne zhruba každý čtvrtý.",
       "Penalta je souboj střelce s gólmanem, obrana do toho nemluví. Rozhoduje klid na míči, technika a střelba. V závěru vyrovnaného zápasu se navíc pozná povaha: nervák ji zahodí, chladnokrevný dá. Nařídí se asi jedna za čtyři zápasy a tři ze čtyř skončí gólem.",
       "Rohů je kolem devíti za zápas. Centruje jeden, hlavičkuje druhý — do vápna naskakují útočníci a stopeři podle hlaviček a důrazu, takže vysoký stoper má konečně důvod chodit nahoru. Asistenci si připíše ten, kdo kopal.",
       "Přímák napřímo na branku padne málokdy, ale padne. Dobrý exekutor se vyplatí.",
@@ -27,7 +27,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "U kapitána konečně vidíš vůdcovství. Doteď se schovávalo, přitom je to jediné, podle čeho kapitán funguje: od 65 zvedne po gólu náladu celému mužstvu, od 80 dvojnásobně. Slaboch pod 35 ji po inkasovaném gólu naopak srazí.",
       "V zápase přibyly statistiky rohů, standardek a penalt. U každého gólu je vidět, odkud padl — po rohu, z penalty, z přímáku nebo z brejku.",
       "Přenos zápasu penaltu náležitě natáhne: hřiště ztmavne, míč pulzuje na puntíku a přes celé hřiště bliká PENALTA se jménem exekutora. Teprve pak se dozvíš, jak to dopadlo.",
-      "Rozhlas dostal 84 nových hlášek — ke gólům, šancím, faulům, kartám, zraněním, střídání i k hluchým místům zápasu. A zahozená penalta má konečně vlastní komentář místo obecného „pálí těsně vedle\".",
+      "Rozhlas dostal 84 nových hlášek — ke gólům, šancím, faulům, kartám, zraněním, střídání i k hluchým místům zápasu. Zahozenou penaltu okomentuje tak, jak si zaslouží.",
     ],
   },
   {
