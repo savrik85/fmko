@@ -7776,12 +7776,14 @@ gameRouter.get("/teams/:teamId/concession/sales", async (c) => {
                 WHEN m.home_score = m.away_score THEN 'draw'
                 WHEN m.id IS NOT NULL THEN 'loss'
               END,
+              -- V poháru se remízou nekončí: když skóre nerozhodlo, rozhodly penalty
               CASE
                 WHEN cm.home_score IS NULL THEN NULL
                 WHEN cm.home_score > cm.away_score THEN 'win'
-                WHEN cm.home_score = cm.away_score AND cm.home_pens > cm.away_pens THEN 'win'
-                WHEN cm.home_score = cm.away_score THEN 'draw'
-                ELSE 'loss'
+                WHEN cm.home_score < cm.away_score THEN 'loss'
+                WHEN cm.home_pens > cm.away_pens THEN 'win'
+                WHEN cm.home_pens < cm.away_pens THEN 'loss'
+                ELSE 'draw'
               END
             ) as result,
             CASE WHEN cm.id IS NOT NULL THEN 1 ELSE 0 END as is_cup
