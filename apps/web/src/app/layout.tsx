@@ -7,13 +7,21 @@ import "./globals.css";
 
 // Fonty leží v repozitáři, ne na Google Fonts. Build na CI dvakrát spadl na tom,
 // že si je next/font/google nestihl stáhnout — teď na síti nezávisí.
-// Soubory jsou přímo ty z Google Fonts (latin + latin-ext), Outfit a JetBrains Mono
-// ve variabilní podobě, Barlow Condensed po řezech (variabilní verzi nemá).
+// Soubory jsou přímo ty z Google Fonts (latin + latin-ext), a to po statických
+// řezech — ne variabilní. Stránka na spoustě míst používá font-weight 450;
+// statické řezy ho zaokrouhlí na 400 stejně jako dřív, kdežto variabilní font
+// by 450 vykreslil doopravdy a všechen text by ztloustl.
 
 const outfit = localFont({
   src: [
-    { path: "../fonts/outfit-latin-400700.woff2", weight: "400 700", style: "normal" },
-    { path: "../fonts/outfit-latin-ext-400700.woff2", weight: "400 700", style: "normal" },
+    { path: "../fonts/outfit-latin-400.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/outfit-latin-ext-400.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/outfit-latin-500.woff2", weight: "500", style: "normal" },
+    { path: "../fonts/outfit-latin-ext-500.woff2", weight: "500", style: "normal" },
+    { path: "../fonts/outfit-latin-600.woff2", weight: "600", style: "normal" },
+    { path: "../fonts/outfit-latin-ext-600.woff2", weight: "600", style: "normal" },
+    { path: "../fonts/outfit-latin-700.woff2", weight: "700", style: "normal" },
+    { path: "../fonts/outfit-latin-ext-700.woff2", weight: "700", style: "normal" },
   ],
   variable: "--font-body",
   display: "block",
@@ -38,8 +46,10 @@ const barlowCondensed = localFont({
 
 const jetbrainsMono = localFont({
   src: [
-    { path: "../fonts/jetbrains-mono-latin-400500.woff2", weight: "400 500", style: "normal" },
-    { path: "../fonts/jetbrains-mono-latin-ext-400500.woff2", weight: "400 500", style: "normal" },
+    { path: "../fonts/jetbrains-mono-latin-400.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/jetbrains-mono-latin-ext-400.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/jetbrains-mono-latin-500.woff2", weight: "500", style: "normal" },
+    { path: "../fonts/jetbrains-mono-latin-ext-500.woff2", weight: "500", style: "normal" },
   ],
   variable: "--font-commentary",
   display: "block",
