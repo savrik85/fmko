@@ -159,6 +159,9 @@ function MatchPage() {
   // Exekutoři standardek jsou týmová role — platí napříč zápasy, ne jen pro tuhle sestavu
   const [penaltyTakerId, setPenaltyTakerId] = useState<string | null>(null);
   const [freekickTakerId, setFreekickTakerId] = useState<string | null>(null);
+  const [rolesSaving, setRolesSaving] = useState(false);
+  const [rolesSavedAt, setRolesSavedAt] = useState<number | null>(null);
+  const [rolesError, setRolesError] = useState<string | null>(null);
   const [formationFam, setFormationFam] = useState<Record<string, number>>({});
   const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; updatedAt: string } | null>>({ A: null, B: null, C: null });
   const [activePreset, setActivePreset] = useState<"A" | "B" | "C" | null>(null);
@@ -365,6 +368,25 @@ function MatchPage() {
     }
   };
 
+  /** Exekutory ukládáme hned — jsou to týmové role, ne součást sestavy. */
+  const ulozRole = async (zmena: { penaltyTakerId?: string | null; freekickTakerId?: string | null }) => {
+    if (!teamId) return;
+    setRolesSaving(true);
+    try {
+      await apiFetch(`/api/teams/${teamId}/roles`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        // Prázdný řetězec = zrušit roli; undefined by backend nechal beze změny
+        body: JSON.stringify(Object.fromEntries(Object.entries(zmena).map(([k, v]) => [k, v ?? ""]))),
+      });
+      setRolesSavedAt(Date.now());
+    } catch (e) {
+      console.error("uložení exekutorů standardek selhalo:", e);
+      setRolesError("Nepodařilo se uložit, zkus to znovu");
+    } finally {
+      setRolesSaving(false);
+    }
+  };
+
   const saveLineup = async () => {
     if (!teamId || !nextMatch || saving) return;
     setSaving(true);
@@ -378,11 +400,6 @@ function MatchPage() {
       if (res.ok) {
         setSaved(true);
         setLineupSource("explicit");
-        // Exekutoři se ukládají zvlášť — jsou vázaní na tým, ne na tuhle sestavu
-        apiFetch(`/api/teams/${teamId}/roles`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ penaltyTakerId: penaltyTakerId ?? "", freekickTakerId: freekickTakerId ?? "" }),
-        }).catch((e) => console.error("uložení exekutorů standardek selhalo:", e));
         // Backend při save s presetSlot auto-upsertuje do lineup_presets —
         // reload lokálního presets state aby tab "Sestava A prázdná" přešel na "Sestava A 4-4-2"
         if (activePreset) {
@@ -981,12 +998,15 @@ function MatchPage() {
       <SetPieceTakers
         players={players}
         lineupIds={new Set(selected.filter(Boolean) as string[])}
+        rolesSaving={rolesSaving}
+        rolesSavedAt={rolesSavedAt}
+        rolesError={rolesError}
         captainId={captainId}
         penaltyTakerId={penaltyTakerId}
         freekickTakerId={freekickTakerId}
         onCaptain={(id) => { setCaptainId(id); setSaved(false); }}
-        onPenalty={(id) => { setPenaltyTakerId(id); setSaved(false); }}
-        onFreekick={(id) => { setFreekickTakerId(id); setSaved(false); }}
+        onPenalty={(id) => { setPenaltyTakerId(id); ulozRole({ penaltyTakerId: id }); }}
+        onFreekick={(id) => { setFreekickTakerId(id); ulozRole({ freekickTakerId: id }); }}
       />
 
       {/* ═══ Chemistry + Relationship summary ═══ */}
@@ -1284,9 +1304,12 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
   );
 }
 
-function SetPieceTakers({ players, lineupIds, captainId, penaltyTakerId, freekickTakerId, onCaptain, onPenalty, onFreekick }: {
+function SetPieceTakers({ players, lineupIds, rolesSaving, rolesSavedAt, rolesError, captainId, penaltyTakerId, freekickTakerId, onCaptain, onPenalty, onFreekick }: {
   players: AvailablePlayer[];
   lineupIds: Set<string>;
+  rolesSaving: boolean;
+  rolesSavedAt: number | null;
+  rolesError: string | null;
   captainId: string | null;
   penaltyTakerId: string | null;
   freekickTakerId: string | null;
@@ -1298,10 +1321,18 @@ function SetPieceTakers({ players, lineupIds, captainId, penaltyTakerId, freekic
   return (
     <div className="card p-4">
       <div className="mb-2">
-        <span className="font-heading font-bold text-sm uppercase text-muted">Role v týmu</span>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="font-heading font-bold text-sm uppercase text-muted">Role v týmu</span>
+          {rolesError
+            ? <span className="text-sm text-card-red">{rolesError}</span>
+            : rolesSaving
+              ? <span className="text-sm text-muted">Ukládám…</span>
+              : rolesSavedAt && <span className="text-sm text-pitch-600">Exekutoři uloženi ✓</span>}
+        </div>
         <p className="text-sm text-muted mt-0.5 leading-snug">
-          Kapitána nosí tahle sestava, exekutoři platí pro celý tým — v lize, poháru i přáteláku.
-          Když zvolený hráč zrovna nehraje, zaskočí za něj nejvhodnější zbylý.
+          Exekutoři platí pro celý tým — v lize, poháru i přáteláku — a ukládají se rovnou při volbě.
+          Kapitán patří k téhle sestavě, ten se uloží s ní. Když zvolený hráč zrovna nehraje,
+          zaskočí za něj nejvhodnější zbylý.
         </p>
       </div>
       <div className="grid lg:grid-cols-3 lg:gap-x-10 lg:divide-x lg:divide-gray-100">
