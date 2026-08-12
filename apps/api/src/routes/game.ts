@@ -7765,17 +7765,33 @@ gameRouter.get("/teams/:teamId/concession/sales", async (c) => {
     `SELECT s.id, s.match_id, s.gamedate, s.product_key, s.quality_level, s.sell_price,
             s.wholesale_price, s.sold_count, s.revenue, s.profit, s.stockout, s.attendance,
             s.created_at,
-            CASE WHEN m.home_team_id = ? THEN at.name ELSE ht.name END as opponent_name,
-            CASE
-              WHEN m.home_team_id = ? AND m.home_score > m.away_score THEN 'win'
-              WHEN m.away_team_id = ? AND m.away_score > m.home_score THEN 'win'
-              WHEN m.home_score = m.away_score THEN 'draw'
-              ELSE 'loss'
-            END as result
+            COALESCE(
+              CASE WHEN m.home_team_id = ? THEN at.name ELSE ht.name END,
+              cat.name
+            ) as opponent_name,
+            COALESCE(
+              CASE
+                WHEN m.home_team_id = ? AND m.home_score > m.away_score THEN 'win'
+                WHEN m.away_team_id = ? AND m.away_score > m.home_score THEN 'win'
+                WHEN m.home_score = m.away_score THEN 'draw'
+                WHEN m.id IS NOT NULL THEN 'loss'
+              END,
+              CASE
+                WHEN cm.home_score IS NULL THEN NULL
+                WHEN cm.home_score > cm.away_score THEN 'win'
+                WHEN cm.home_score = cm.away_score AND cm.home_pens > cm.away_pens THEN 'win'
+                WHEN cm.home_score = cm.away_score THEN 'draw'
+                ELSE 'loss'
+              END
+            ) as result,
+            CASE WHEN cm.id IS NOT NULL THEN 1 ELSE 0 END as is_cup
      FROM concession_match_sales s
      LEFT JOIN matches m ON m.id = s.match_id
      LEFT JOIN teams ht ON ht.id = m.home_team_id
      LEFT JOIN teams at ON at.id = m.away_team_id
+     -- Občerstvení se prodává jen doma, takže u poháru je soupeř vždy ten hostující
+     LEFT JOIN cup_matches cm ON cm.id = s.match_id
+     LEFT JOIN cup_teams cat ON cat.id = cm.away_cup_team_id
      WHERE s.team_id = ?
      ORDER BY s.created_at DESC, s.product_key
      LIMIT ?`,
@@ -7797,6 +7813,7 @@ gameRouter.get("/teams/:teamId/concession/sales", async (c) => {
       created_at: string;
       opponent_name: string | null;
       result: string | null;
+      is_cup: number;
     }>()
     .catch((e) => {
       logger.warn({ module: "game" }, "load concession sales", e);
@@ -7811,6 +7828,7 @@ gameRouter.get("/teams/:teamId/concession/sales", async (c) => {
       gamedate: string;
       opponentName: string | null;
       result: string | null;
+      isCup: boolean;
       attendance: number;
       products: {
         productKey: string;
@@ -7835,6 +7853,7 @@ gameRouter.get("/teams/:teamId/concession/sales", async (c) => {
         gamedate: r.gamedate,
         opponentName: r.opponent_name,
         result: r.result,
+        isCup: r.is_cup === 1,
         attendance: r.attendance,
         products: [],
         totalRevenue: 0,

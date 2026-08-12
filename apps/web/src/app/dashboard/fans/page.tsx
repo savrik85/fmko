@@ -106,6 +106,8 @@ interface SalesMatch {
   gamedate: string;
   opponentName: string | null;
   result: "win" | "draw" | "loss" | null;
+  /** Pohárový zápas — soupeř se dohledává v jiných tabulkách než liga. */
+  isCup?: boolean;
   attendance: number;
   products: SalesProduct[];
   totalRevenue: number;
@@ -207,6 +209,14 @@ function resultBadge(r: string | null): { label: string; cls: string } {
   if (r === "draw") return { label: "R", cls: "bg-gold-500 text-white" };
   if (r === "loss") return { label: "P", cls: "bg-card-red text-white" };
   return { label: "?", cls: "bg-gray-200 text-gray-500" };
+}
+
+/** Výsledek slovem — písmeno V se plete s „venku". */
+function resultLabel(r: string | null): { text: string; cls: string } {
+  if (r === "win") return { text: "Výhra", cls: "text-pitch-600" };
+  if (r === "draw") return { text: "Remíza", cls: "text-gold-600" };
+  if (r === "loss") return { text: "Prohra", cls: "text-card-red" };
+  return { text: "", cls: "" };
 }
 
 /** SVG sparkline graf pro satisfaction history. Body jsou chronologicky od nejstaršího vlevo. */
@@ -1477,19 +1487,20 @@ export default function FansPage() {
             {/* Per match list */}
             <div className="space-y-3">
               {salesHistory.map((m, idx) => {
-                const badge = resultBadge(m.result);
+                const vysledek = resultLabel(m.result);
                 return (
                   <div key={(m.matchId ?? "") + idx} className="border border-gray-100 rounded-lg p-3">
                     <div className="flex items-center gap-2.5 mb-2">
-                      <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-heading font-bold ${badge.cls}`}>
-                        {badge.label}
-                      </div>
+                      <span className="shrink-0 text-lg" title={m.isCup ? "Pohárový zápas" : "Ligový zápas"}>
+                        {m.isCup ? "🏆" : "⚽"}
+                      </span>
                       <div className="flex-1 min-w-0">
                         <div className="font-heading font-bold text-sm text-ink">
                           {m.opponentName ?? "Neznámý soupeř"}
                         </div>
                         <div className="text-xs text-muted">
-                          {formatGamedate(m.gamedate)} · {m.attendance} diváků
+                          Doma · {formatGamedate(m.gamedate)} · {m.attendance} diváků
+                          {vysledek.text && <span className={`ml-1 font-bold ${vysledek.cls}`}>{vysledek.text}</span>}
                         </div>
                       </div>
                       <div className="text-right">
