@@ -2481,6 +2481,7 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
     subtitle?: string;
     status?: string;
     isHome?: boolean;
+    isCup?: boolean;
   }> = [];
 
   // My matches
@@ -2528,6 +2529,42 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
         : fmStatus === "lineups_open" ? "Nastav sestavu!" : "Naplánováno",
       isHome,
     });
+  }
+
+  // Pohárové zápasy — vlastní tabulky (cup_matches/cup_teams), takže je kalendář
+  // dosud neviděl vůbec. Na rozdíl od stripu na Sestavě bereme i odehraná kola,
+  // aby v kalendáři zpětně zůstal záznam s výsledkem.
+  const cupMatches = await c.env.DB.prepare(
+    `SELECT cm.id, cm.round, cm.scheduled_at, cm.status, cm.home_score, cm.away_score,
+       cm.home_pens, cm.away_pens, cm.home_cup_team_id, cc.total_rounds,
+       ht.name AS home_name, at.name AS away_name, myct.id AS my_cup_team_id
+     FROM cup_matches cm
+     JOIN cup_competitions cc ON cc.id = cm.cup_id AND cc.season_number = (SELECT MAX(season_number) FROM cup_competitions)
+     JOIN cup_teams myct ON myct.cup_id = cm.cup_id AND myct.team_id = ? AND (myct.id = cm.home_cup_team_id OR myct.id = cm.away_cup_team_id)
+     JOIN cup_teams ht ON ht.id = cm.home_cup_team_id
+     JOIN cup_teams at ON at.id = cm.away_cup_team_id
+     ORDER BY cm.scheduled_at ASC`
+  ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "load cup matches for calendar", e); return { results: [] }; });
+
+  if (cupMatches.results.length > 0) {
+    const { roundName } = await import("../cup/cup");
+    for (const cm of cupMatches.results as Record<string, unknown>[]) {
+      const isHome = cm.home_cup_team_id === cm.my_cup_team_id;
+      const opponent = (isHome ? cm.away_name : cm.home_name) as string;
+      const done = cm.status === "simulated";
+      // Rozstřel se do skóre nevejde, ale bez něj by u remízy nebylo vidět, kdo prošel
+      const pens = cm.home_pens != null && cm.away_pens != null
+        ? ` (pen. ${cm.home_pens}:${cm.away_pens})` : "";
+      upcoming.push({
+        type: "match",
+        date: cm.scheduled_at as string,
+        title: `Pohár — ${opponent}`,
+        subtitle: `${roundName(cm.round as number, cm.total_rounds as number)} · ${isHome ? "Doma" : "Venku"}`,
+        status: done ? `${cm.home_score}:${cm.away_score}${pens}` : "Naplánováno",
+        isHome,
+        isCup: true,
+      });
+    }
   }
 
   // Training days — custom training_days override default mapping podle sessions

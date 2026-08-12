@@ -13,6 +13,7 @@ interface UpcomingEvent {
   subtitle?: string;
   status?: string;
   isHome?: boolean;
+  isCup?: boolean;
 }
 
 interface SeasonInfo {
@@ -121,12 +122,19 @@ export default function CalendarPage() {
             const isWeekend = dow >= 5;
 
             const isFriendly = match?.title.startsWith("Přátelák");
-            const matchLabel = match ? (isFriendly ? match.title.replace("Přátelák — ", "") : match.title.replace(/^\d+\. kolo — /, "")) : null;
+            const isCup = !!match?.isCup;
+            const matchLabel = match
+              ? match.title.replace("Přátelák — ", "").replace("Pohár — ", "").replace(/^\d+\. kolo — /, "")
+              : null;
             const isLineupNeeded = match?.status === "Nastav sestavu!";
             const matchBg = !match ? "" :
               isLineupNeeded ? "bg-amber-100 text-amber-700 ring-1 ring-amber-300" :
               match.status && match.status !== "Naplánováno" ? "bg-pitch-100 text-pitch-700" :
+              isCup ? "bg-gold-500 text-white" :
               isFriendly ? "bg-amber-500 text-white" : "bg-pitch-500 text-white";
+            const matchIcon = isCup ? "🏆" : isFriendly ? "🤝" : "⚽";
+            // U poháru je kolo důležitější než soupeř — ať je v tooltipu vidět
+            const matchTitle = match ? [matchLabel, match.subtitle].filter(Boolean).join(" · ") : "";
             const tr = events.find((e) => e.type === "training");
             const trainingLabel = tr?.title?.replace("Trénink — ", "") ?? "Trénink";
             // Intenzita dne — lehký šetří, tvrdý sebere. V buňce se vejde jen písmeno,
@@ -148,8 +156,8 @@ export default function CalendarPage() {
                 {/* Mobile: icons only centered */}
                 <div className="sm:hidden flex flex-col items-center gap-0.5">
                   {match && (
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${matchBg}`} title={matchLabel ?? ""}>
-                      {isFriendly ? "🤝" : "⚽"}
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${matchBg}`} title={matchTitle}>
+                      {matchIcon}
                     </span>
                   )}
                   {hasTraining && (
@@ -164,8 +172,8 @@ export default function CalendarPage() {
                 {/* Desktop: full label pills */}
                 <div className="hidden sm:block">
                   {match && (
-                    <div className={`text-[11px] font-heading font-bold leading-tight px-1.5 py-1 rounded truncate ${matchBg}`}>
-                      {isFriendly ? "🤝" : "⚽"} {matchLabel}
+                    <div className={`text-[11px] font-heading font-bold leading-tight px-1.5 py-1 rounded truncate ${matchBg}`} title={matchTitle}>
+                      {matchIcon} {matchLabel}
                       {match.status && match.status !== "Naplánováno" && (
                         <span className="ml-1 font-[800]">{match.status}</span>
                       )}
