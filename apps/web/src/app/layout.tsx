@@ -16,7 +16,7 @@ const outfit = localFont({
     { path: "../fonts/outfit-latin-ext-400700.woff2", weight: "400 700", style: "normal" },
   ],
   variable: "--font-body",
-  display: "swap",
+  display: "block",
   fallback: ["ui-sans-serif", "sans-serif"],
 });
 
@@ -32,7 +32,7 @@ const barlowCondensed = localFont({
     { path: "../fonts/barlow-condensed-latin-ext-800.woff2", weight: "800", style: "normal" },
   ],
   variable: "--font-heading",
-  display: "swap",
+  display: "block",
   fallback: ["Impact", "ui-sans-serif", "sans-serif"],
 });
 
@@ -42,7 +42,7 @@ const jetbrainsMono = localFont({
     { path: "../fonts/jetbrains-mono-latin-ext-400500.woff2", weight: "400 500", style: "normal" },
   ],
   variable: "--font-commentary",
-  display: "swap",
+  display: "block",
   fallback: ["ui-monospace", "monospace"],
 });
 
