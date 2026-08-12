@@ -12,6 +12,25 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-08-12",
+    emoji: "🎯",
+    title: "Standardky — penalty, rohy a přímáky konečně existují",
+    items: [
+      "Engine do dneška znal jedinou generickou „standardní situaci po faulu\". Rohy ani penalty v zápase neexistovaly vůbec a atribut Standardky se skoro neuplatnil. Teď má každý typ vlastní pravidla a padne z nich zhruba čtvrtina všech gólů.",
+      "Penalta je souboj střelce s brankářem — obrana do toho nemluví. Rozhoduje klid na míči, technika a střelba, ale v závěru těsného zápasu se navíc pozná povaha: nervák ji zahodí, chladnokrevný dá. Padne asi jedna za čtyři zápasy a promění se zhruba tři ze čtyř.",
+      "Rohů je kolem devíti na zápas a kope je tvůj exekutor. Klíčové je, že centruje jeden a hlavičkuje druhý — do vápna naskakují útočníci a stopeři podle hlaviček a důrazu, takže vysoký stoper má konečně důvod chodit nahoru. Asistenci dostává ten, kdo kopal.",
+      "Přímý kop napřímo na branku je vzácný gól, ale existuje. Jde přes standardky a techniku proti brankáři a zdi, takže dobrý exekutor má cenu.",
+      "Počasí do toho mluví: ve větru se centry rozhodí, v dešti a sněhu naopak brankáři míč po centru neudrží.",
+      "Celková gólovost zápasů zůstává stejná jako dřív — góly se jen přerozdělily. Ligové tabulky se tím nerozhodí.",
+      "Na stránce Sestava přibyla karta Role v týmu. Vybereš v ní kapitána, exekutora penalt a exekutora přímých kopů a rohů. U každé role je vypsané, co o ní rozhoduje, a hráči jsou seřazení podle svých hodnot, takže je vidět, proč je jeden nad druhým.",
+      "Exekutoři platí pro celý tým — v lize, poháru i přáteláku. Když zvolený hráč zrovna nehraje nebo ho stáhneš, standardky převezme nejvhodnější zbylý.",
+      "U kapitána teď konečně vidíš vůdcovství. Dosud se schovávalo, přitom je to jediný atribut, podle kterého kapitán funguje: od 65 zvedne po gólu morálku celému týmu, od 80 o dvojnásobek, a slaboch pod 35 ji po inkasovaném gólu naopak srazí.",
+      "V detailu zápasu přibyly statistiky rohů, standardek a penalt a u každého gólu je vidět, odkud padl — po rohu, z penalty, z přímého kopu nebo z protiútoku.",
+      "V přenosu má penalta vlastní chvíli napětí: hřiště ztmavne, míč pulzuje na puntíku a přes celé hřiště bliká PENALTA se jménem exekutora. Teprve pak přijde rozuzlení.",
+      "Rozhlas dostal 84 nových hlášek napříč vším — góly, šance, fauly, karty, zranění, střídání i mrtvá místa zápasu. Zahozená penalta má konečně vlastní komentář místo obecného „pálí těsně vedle\".",
+    ],
+  },
+  {
     date: "2026-08-11",
     emoji: "🧺",
     title: "Sedm nových věcí do kůlny",
