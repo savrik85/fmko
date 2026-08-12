@@ -198,6 +198,8 @@ export default function CalendarPage() {
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted px-1">
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-pitch-500" /> Zápas</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-pitch-100" /> Odehráno</span>
+        <span className="flex items-center gap-1">🏆 Pohár</span>
+        <span className="flex items-center gap-1">🤝 Přátelák</span>
         <span className="flex items-center gap-1">🏋️ Trénink</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded ring-1 ring-pitch-400 bg-pitch-50" /> Dnes</span>
         <span className="flex items-center gap-1">
