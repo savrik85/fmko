@@ -813,7 +813,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
         <StatTable title="⏱ Góly na 90 minut" rows={topGoalsPer90} valueKey="goalsPer90" label="Na 90" renderValue={(p) => (
           <span className="flex items-baseline gap-1 justify-end">
             <span>{p.goalsPer90.toFixed(2)}</span>
-            <span className="text-muted text-xs font-heading">{p.goals} g / {p.minutesPlayed} min</span>
+            <span className="hidden sm:inline text-muted text-xs font-heading">{p.goals} g / {p.minutesPlayed} min</span>
           </span>
         )} />
       )}
@@ -821,7 +821,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
         <StatTable title="🎯 Úspěšnost zakončení" rows={topAccuracy} valueKey="shotAccuracy" label="Úspěšnost" renderValue={(p) => (
           <span className="flex items-baseline gap-1 justify-end">
             <span>{p.shotAccuracy}%</span>
-            <span className="text-muted text-xs font-heading">{p.goals} z {p.goals + p.chances}</span>
+            <span className="hidden sm:inline text-muted text-xs font-heading">{p.goals} z {p.goals + p.chances}</span>
           </span>
         )} />
       )}
@@ -829,7 +829,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
         <StatTable title="🕐 Nejvíc odehraných minut" rows={mostMinutes} valueKey="minutesPlayed" label="Minuty" renderValue={(p) => (
           <span className="flex items-baseline gap-1 justify-end">
             <span>{p.minutesPlayed}</span>
-            <span className="text-muted text-xs font-heading">min</span>
+            <span className="hidden sm:inline text-muted text-xs font-heading">min</span>
           </span>
         )} />
       )}
@@ -848,7 +848,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
             <StatTable title="🧤 Nejmíň inkasovaných" rows={topKeepers} valueKey="concededPerMatch" label="Na zápas" renderValue={(p) => (
               <span className="flex items-baseline gap-1 justify-end">
                 <span>{p.concededPerMatch.toFixed(1)}</span>
-                <span className="text-muted text-xs font-heading">z {p.keeperMatches} záp.</span>
+                <span className="hidden sm:inline text-muted text-xs font-heading">z {p.keeperMatches} záp.</span>
               </span>
             )} />
           )}
@@ -859,7 +859,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
             <StatTable title="✋ Nejvíc zákroků" rows={topSaves} valueKey="saves" label="Zákroky" renderValue={(p) => (
               <span className="flex items-baseline gap-1 justify-end">
                 <span>{p.saves + p.penaltySaves}</span>
-                {p.penaltySaves > 0 && <span className="text-muted text-xs font-heading">z toho {p.penaltySaves} pen.</span>}
+                {p.penaltySaves > 0 && <span className="hidden sm:inline text-muted text-xs font-heading">z toho {p.penaltySaves} pen.</span>}
               </span>
             )} />
           )}
@@ -893,7 +893,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
             <TeamTable title="⚔️ Nejlepší útok" rows={teamAttack} renderValue={(t) => (
               <span className="flex items-baseline gap-1 justify-end">
                 <span>{t.goalsFor}</span>
-                <span className="text-muted text-xs font-heading">{(t.goalsFor / Math.max(1, t.played)).toFixed(1)} / záp.</span>
+                <span className="hidden sm:inline text-muted text-xs font-heading">{(t.goalsFor / Math.max(1, t.played)).toFixed(1)} / záp.</span>
               </span>
             )} />
           )}
@@ -901,7 +901,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
             <TeamTable title="🛡 Nejlepší obrana" rows={teamDefense} renderValue={(t) => (
               <span className="flex items-baseline gap-1 justify-end">
                 <span>{t.goalsAgainst}</span>
-                <span className="text-muted text-xs font-heading">{(t.goalsAgainst / Math.max(1, t.played)).toFixed(1)} / záp.</span>
+                <span className="hidden sm:inline text-muted text-xs font-heading">{(t.goalsAgainst / Math.max(1, t.played)).toFixed(1)} / záp.</span>
               </span>
             )} />
           )}
@@ -909,7 +909,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
             <TeamTable title="👥 Průměrná návštěva doma" rows={teamAttendance} renderValue={(t) => (
               <span className="flex items-baseline gap-1 justify-end">
                 <span>{t.avgAttendance}</span>
-                <span className="text-muted text-xs font-heading">diváků</span>
+                <span className="hidden sm:inline text-muted text-xs font-heading">diváků</span>
               </span>
             )} />
           )}
@@ -920,7 +920,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
             <TeamTable title="😇 Nejčistší tým" rows={teamCleanest} renderValue={(t) => (
               <span className="flex items-baseline gap-1 justify-end">
                 <span>{t.fouls}</span>
-                <span className="text-muted text-xs font-heading">faulů · {t.yellowCards + t.redCards} karet</span>
+                <span className="hidden sm:inline text-muted text-xs font-heading">faulů · {t.yellowCards + t.redCards} karet</span>
               </span>
             )} />
           )}
@@ -928,7 +928,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
             <TeamTable title="🔥 Nejdelší neporazitelnost" rows={teamUnbeaten} renderValue={(t) => (
               <span className="flex items-baseline gap-1 justify-end">
                 <span>{t.longestUnbeaten}</span>
-                <span className="text-muted text-xs font-heading">zápasů</span>
+                <span className="hidden sm:inline text-muted text-xs font-heading">zápasů</span>
               </span>
             )} />
           )}
@@ -936,16 +936,15 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
             <TeamTable title="🏆 Nejvíc výher v řadě" rows={teamWinStreak} renderValue={(t) => (
               <span className="flex items-baseline gap-1 justify-end">
                 <span>{t.longestWinStreak}</span>
-                <span className="text-muted text-xs font-heading">výher</span>
+                <span className="hidden sm:inline text-muted text-xs font-heading">výher</span>
               </span>
             )} />
           )}
           {teamHomeAway.length > 0 && (
             <TeamTable title="🏠 Doma vs. venku" rows={teamHomeAway} renderValue={(t) => (
-              <span className="flex items-baseline gap-2 justify-end text-sm">
-                <span className="text-pitch-600">{t.homeWins}-{t.homeDraws}-{t.homeLosses}</span>
-                <span className="text-muted text-xs font-heading">venku</span>
-                <span>{t.awayWins}-{t.awayDraws}-{t.awayLosses}</span>
+              <span className="flex flex-col items-end text-sm leading-tight">
+                <span className="text-pitch-600">D {t.homeWins}-{t.homeDraws}-{t.homeLosses}</span>
+                <span className="text-muted">V {t.awayWins}-{t.awayDraws}-{t.awayLosses}</span>
               </span>
             )} />
           )}
@@ -1001,18 +1000,18 @@ function TeamTable({ title, rows, renderValue }: {
       <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
         <span className="text-xs font-heading font-bold uppercase text-muted">{title}</span>
       </div>
-      <table className="w-full text-sm">
+      <table className="w-full text-sm table-fixed">
         <tbody>
           {rows.map((t, i) => (
             <tr key={t.teamId} className={`border-b border-gray-50 last:border-b-0 ${t.isMyTeam ? "bg-pitch-50/40" : ""}`}>
-              <td className="py-2 pl-4 w-8 text-center font-heading font-bold tabular-nums text-muted">{i + 1}</td>
+              <td className="py-2 pl-3 w-8 text-center font-heading font-bold tabular-nums text-muted">{i + 1}</td>
               <td className="py-2 px-2 min-w-0">
                 <Link href={`/dashboard/team/${t.teamId}`} className="flex items-center gap-2 min-w-0 hover:text-pitch-500 transition-colors">
                   <BadgePreview primary={t.teamColor} secondary={t.teamSecondary} pattern={t.teamBadge as BadgePattern} initials={ini(t.teamName)} size={18} />
                   <span className={`font-heading font-bold truncate ${t.isMyTeam ? "text-pitch-600" : ""}`}>{t.teamName}</span>
                 </Link>
               </td>
-              <td className="py-2 pr-4 text-right font-heading font-[800] text-lg tabular-nums whitespace-nowrap">{renderValue(t)}</td>
+              <td className="py-2 pr-4 w-24 sm:w-32 text-right font-heading font-[800] text-lg tabular-nums whitespace-nowrap">{renderValue(t)}</td>
             </tr>
           ))}
         </tbody>
@@ -1030,11 +1029,11 @@ function StatTable({ title, rows, valueKey, label, decimal, renderValue }: {
       <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
         <span className="text-xs font-heading font-bold uppercase text-muted">{title}</span>
       </div>
-      <table className="w-full text-sm">
+      <table className="w-full text-sm table-fixed">
         <tbody>
           {rows.map((p, i) => (
             <tr key={i} className={`border-b border-gray-50 last:border-b-0 ${p.isMyTeam ? "bg-pitch-50/40" : ""}`}>
-              <td className="py-2 pl-4 w-8 text-center font-heading font-bold tabular-nums text-muted">{i + 1}</td>
+              <td className="py-2 pl-3 w-8 text-center font-heading font-bold tabular-nums text-muted">{i + 1}</td>
               {/* Mobil: tým pod jménem, aby se vešel celý název. Od sm výš vedle sebe jako dřív. */}
               <td className="py-2 px-2 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
@@ -1052,7 +1051,7 @@ function StatTable({ title, rows, valueKey, label, decimal, renderValue }: {
                   </Link>
                 </div>
               </td>
-              <td className="py-2 pr-4 text-right font-heading font-[800] text-lg tabular-nums whitespace-nowrap">
+              <td className="py-2 pr-4 w-24 sm:w-36 text-right font-heading font-[800] text-lg tabular-nums whitespace-nowrap">
                 {renderValue ? renderValue(p) : decimal ? ((p as any)[valueKey] as number).toFixed(1) : (p as any)[valueKey]}
               </td>
             </tr>
