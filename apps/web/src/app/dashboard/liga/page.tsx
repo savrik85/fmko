@@ -32,6 +32,7 @@ interface PlayerStat {
   teamSecondary: string; teamBadge: string;
   goals: number; assists: number; appearances: number; motm: number;
   yellowCards: number; redCards: number; avgRating: number; cleanSheets: number;
+  penaltyGoals: number; penaltyMisses: number; penaltyAttempts: number; setPieceGoals: number;
   isMyTeam: boolean;
 }
 
@@ -41,6 +42,8 @@ interface StatsData {
   topRated: PlayerStat[];
   mostCards: PlayerStat[];
   mostAppearances: PlayerStat[];
+  topPenalties: PlayerStat[];
+  topSetPieces: PlayerStat[];
 }
 
 // ═══ Helpers ═══
@@ -683,7 +686,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
   if (!loaded) return <div className="flex items-center justify-center py-12"><Spinner /></div>;
   if (!data) return <div className="card p-8 text-center text-muted">Zatím žádné statistiky.</div>;
 
-  const { topScorers, topAssists, topRated, mostCards, mostAppearances } = data;
+  const { topScorers, topAssists, topRated, mostCards, mostAppearances, topPenalties = [], topSetPieces = [] } = data;
   const hasAny = topScorers.length > 0 || topAssists.length > 0 || topRated.length > 0 || mostCards.length > 0;
   if (!hasAny) return <div className="card p-8 text-center text-muted">Zatím žádné statistiky.</div>;
 
@@ -708,6 +711,17 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
             {p.redCards > 0 && <span className="text-card-red font-heading font-bold">{p.redCards}🟥</span>}
           </span>
         )} />
+      )}
+      {topPenalties.length > 0 && (
+        <StatTable title="🎯 Exekutoři penalt" rows={topPenalties} valueKey="penaltyGoals" label="Penalty" renderValue={(p) => (
+          <span className="flex items-baseline gap-1 justify-end">
+            <span>{p.penaltyGoals}</span>
+            <span className="text-muted text-sm font-heading font-bold">/{p.penaltyAttempts}</span>
+          </span>
+        )} />
+      )}
+      {topSetPieces.length > 0 && (
+        <StatTable title="🥅 Góly ze standardek" rows={topSetPieces} valueKey="setPieceGoals" label="Standardky" />
       )}
     </div>
   );

@@ -157,6 +157,7 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
   const stats = await c.env.DB.prepare(
     `SELECT ps.goals, ps.assists, ps.appearances, ps.man_of_match as motm,
        ps.yellow_cards, ps.red_cards, ps.avg_rating, ps.clean_sheets,
+       ps.penalty_goals, ps.penalty_misses, ps.setpiece_goals,
        p.id as player_id, p.first_name, p.last_name, p.position, ps.team_id,
        t.name as team_name, t.primary_color, t.secondary_color, t.badge_pattern
      FROM player_stats ps
@@ -183,6 +184,10 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
     redCards: (r.red_cards as number) ?? 0,
     avgRating: (r.avg_rating as number) ?? 0,
     cleanSheets: (r.clean_sheets as number) ?? 0,
+    penaltyGoals: (r.penalty_goals as number) ?? 0,
+    penaltyMisses: (r.penalty_misses as number) ?? 0,
+    penaltyAttempts: ((r.penalty_goals as number) ?? 0) + ((r.penalty_misses as number) ?? 0),
+    setPieceGoals: (r.setpiece_goals as number) ?? 0,
     isMyTeam: r.team_id === teamId,
   }));
 
@@ -192,6 +197,11 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
     topRated: [...rows].filter((r) => r.appearances >= 3 && r.avgRating > 0).sort((a, b) => b.avgRating - a.avgRating).slice(0, 10),
     mostCards: [...rows].filter((r) => r.yellowCards + r.redCards > 0).sort((a, b) => (b.yellowCards + b.redCards * 3) - (a.yellowCards + a.redCards * 3)).slice(0, 10),
     mostAppearances: [...rows].sort((a, b) => b.appearances - a.appearances).filter((r) => r.appearances > 0).slice(0, 10),
+    // Exekutoři penalt: řadí proměněné, při shodě míň zahozených (lepší úspěšnost napřed).
+    topPenalties: [...rows].filter((r) => r.penaltyAttempts > 0)
+      .sort((a, b) => b.penaltyGoals - a.penaltyGoals || a.penaltyMisses - b.penaltyMisses).slice(0, 10),
+    topSetPieces: [...rows].filter((r) => r.setPieceGoals > 0)
+      .sort((a, b) => b.setPieceGoals - a.setPieceGoals || b.goals - a.goals).slice(0, 10),
   });
 });
 

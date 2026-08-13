@@ -15,6 +15,12 @@ interface StatsUpdate {
   appeared: boolean;
   minutesPlayed: number;
   rating: number;
+  /** Góly z penalty (podmnožina goals) — pro žebříček exekutorů. */
+  penaltyGoals: number;
+  /** Nedaná penalta: vedle nebo chycená brankářem. */
+  penaltyMisses: number;
+  /** Góly ze standardky — přímý kop nebo po rohu (podmnožina goals). */
+  setPieceGoals: number;
 }
 
 export interface MatchPlayerStatsEntry {
@@ -188,6 +194,7 @@ export function extractStatsFromEvents(
     }
     stats.set(pid, {
       playerId: pid, goals: 0, assists: 0, yellowCards: 0, redCards: 0,
+      penaltyGoals: 0, penaltyMisses: 0, setPieceGoals: 0,
       appeared: true, minutesPlayed: Math.max(0, minutes),
       rating: playerRatings[pid] ?? 6.0,
     });
@@ -200,6 +207,7 @@ export function extractStatsFromEvents(
       if (dbId && !stats.has(dbId) && pm.entered > 0) {
         stats.set(dbId, {
           playerId: dbId, goals: 0, assists: 0, yellowCards: 0, redCards: 0,
+          penaltyGoals: 0, penaltyMisses: 0, setPieceGoals: 0,
           appeared: true, minutesPlayed: Math.max(0, ((pm as any).left ?? 90) - (pm as any).entered),
           rating: playerRatings[dbId] ?? 6.0,
         });
@@ -221,9 +229,33 @@ export function extractStatsFromEvents(
         else s.yellowCards++;
         break;
     }
+
+    const sp = setPieceDelta(event);
+    s.penaltyGoals += sp.penaltyGoals;
+    s.penaltyMisses += sp.penaltyMisses;
+    s.setPieceGoals += sp.setPieceGoals;
   }
 
   return [...stats.values()];
+}
+
+/**
+ * Standardkový příspěvek jedné události. Sdílí ho živý zápis statistik i zpětný dopočet
+ * z uložených záznamů zápasů, aby obě cesty počítaly stejně.
+ * Gól bez `source` je starší záznam z doby před standardkami → bere se jako gól ze hry.
+ */
+export function setPieceDelta(event: MatchEvent): { penaltyGoals: number; penaltyMisses: number; setPieceGoals: number } {
+  const none = { penaltyGoals: 0, penaltyMisses: 0, setPieceGoals: 0 };
+  if (event.type === "goal") {
+    if (event.source === "penalty") return { ...none, penaltyGoals: 1 };
+    if (event.source === "freekick" || event.source === "corner") return { ...none, setPieceGoals: 1 };
+    return none;
+  }
+  // Nedaná penalta je v enginu zahozená šance s příznakem — vedle i chycená brankářem.
+  if (event.type === "chance" && (event.detail === "penalty_missed" || event.detail === "penalty_saved")) {
+    return { ...none, penaltyMisses: 1 };
+  }
+  return none;
 }
 
 /**
@@ -268,8 +300,8 @@ export async function updatePlayerStats(
   const stmts = updates.map((u) => {
     const isMom = momPlayerId != null && u.playerId === momPlayerId;
     return db.prepare(
-      `INSERT INTO player_stats (id, player_id, team_id, season_id, appearances, goals, assists, yellow_cards, red_cards, minutes_played, avg_rating, clean_sheets, man_of_match)
-       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO player_stats (id, player_id, team_id, season_id, appearances, goals, assists, yellow_cards, red_cards, minutes_played, avg_rating, clean_sheets, man_of_match, penalty_goals, penalty_misses, setpiece_goals)
+       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(player_id, team_id, season_id) DO UPDATE SET
          appearances = appearances + 1,
          goals = goals + ?,
@@ -279,11 +311,16 @@ export async function updatePlayerStats(
          minutes_played = minutes_played + ?,
          avg_rating = (avg_rating * appearances + ?) / (appearances + 1),
          clean_sheets = clean_sheets + ?,
-         man_of_match = man_of_match + ?`
+         man_of_match = man_of_match + ?,
+         penalty_goals = penalty_goals + ?,
+         penalty_misses = penalty_misses + ?,
+         setpiece_goals = setpiece_goals + ?`
     ).bind(
       crypto.randomUUID(), u.playerId, teamId, seasonId,
       u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0, isMom ? 1 : 0,
+      u.penaltyGoals, u.penaltyMisses, u.setPieceGoals,
       u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0, isMom ? 1 : 0,
+      u.penaltyGoals, u.penaltyMisses, u.setPieceGoals,
     );
   });
   await db.batch(stmts).catch((e) => logger.warn({ module: "stats" }, "batch upsert stats", e));

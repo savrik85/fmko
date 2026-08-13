@@ -4077,6 +4077,15 @@ gameRouter.post("/admin/backfill-chemistry", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+// Dopočet standardkových statistik (penalty, góly ze standardek) z uložených záznamů zápasů
+// aktivní sezóny. Zápis je absolutní, takže opakované spuštění nic nezdvojí.
+// ?leagueId=... zpracuje jen jednu ligu (bez parametru všechny).
+gameRouter.post("/admin/backfill-set-pieces", async (c) => {
+  const { backfillSetPieces } = await import("../stats/backfill-set-pieces");
+  const result = await backfillSetPieces(c.env.DB, { leagueId: c.req.query("leagueId") || undefined });
+  return c.json({ ok: true, ...result });
+});
+
 // Doplní bazar vybavení o nabídky AI klubů. Běží samo v daily-ticku, tohle je
 // ruční spuštění — po nasazení nebo když je bazar prázdný a nechce se čekat na noc.
 gameRouter.post("/admin/generate-equipment-listings", async (c) => {
