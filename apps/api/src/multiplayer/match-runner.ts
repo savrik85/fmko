@@ -671,12 +671,14 @@ export async function runScheduledMatches(
                 // ne z idMap.values() která má insertion order. Při substituci by jinak střídající
                 // dostali started=true a starters started=false.
                 const homeStarterIds = homeLineupPreSim.map((p) => homeBuild.idMap.get(p.id) ?? "").filter(Boolean);
-                const homeUpdates = extractStatsFromEvents(result.events, homeBuild.idMap, homeStarterIds, ratings, result.playerMinutes);
+                const homeUpdates = extractStatsFromEvents(result.events, homeBuild.idMap, homeStarterIds, ratings, result.playerMinutes,
+                    { concededGoals: result.awayScore, positions: fullPosMap });
                 await updatePlayerStats(db, season.id, homeTeamId, homeUpdates, result.awayScore === 0, momPlayerId).catch((e) => logger.warn({module: "match-runner"}, "Failed to update home player stats", e));
 
                 // Away team stats
                 const awayStarterIds = awayLineupPreSim.map((p) => awayBuild.idMap.get(p.id) ?? "").filter(Boolean);
-                const awayUpdates = extractStatsFromEvents(result.events, awayBuild.idMap, awayStarterIds, ratings, result.playerMinutes);
+                const awayUpdates = extractStatsFromEvents(result.events, awayBuild.idMap, awayStarterIds, ratings, result.playerMinutes,
+                    { concededGoals: result.homeScore, positions: fullPosMap });
                 await updatePlayerStats(db, season.id, awayTeamId, awayUpdates, result.homeScore === 0, momPlayerId).catch((e) => logger.warn({module: "match-runner"}, "Failed to update away player stats", e));
 
                 // Save per-match player stats for both teams

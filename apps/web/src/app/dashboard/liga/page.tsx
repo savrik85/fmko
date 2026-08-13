@@ -33,7 +33,14 @@ interface PlayerStat {
   goals: number; assists: number; appearances: number; motm: number;
   yellowCards: number; redCards: number; avgRating: number; cleanSheets: number;
   penaltyGoals: number; penaltyMisses: number; penaltyAttempts: number; setPieceGoals: number;
+  saves: number; penaltySaves: number; goalsConceded: number; concededPerMatch: number;
   isMyTeam: boolean;
+}
+
+interface TeamStat {
+  teamId: string; teamName: string; teamColor: string; teamSecondary: string; teamBadge: string;
+  penaltyGoals: number; penaltyAttempts: number; setPieceGoals: number;
+  yellowCards: number; redCards: number; isMyTeam: boolean;
 }
 
 interface StatsData {
@@ -44,6 +51,12 @@ interface StatsData {
   mostAppearances: PlayerStat[];
   topPenalties: PlayerStat[];
   topSetPieces: PlayerStat[];
+  topKeepers: PlayerStat[];
+  topCleanSheets: PlayerStat[];
+  topSaves: PlayerStat[];
+  teamPenalties: TeamStat[];
+  teamSetPieces: TeamStat[];
+  teamCards: TeamStat[];
 }
 
 // ═══ Helpers ═══
@@ -686,11 +699,19 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
   if (!loaded) return <div className="flex items-center justify-center py-12"><Spinner /></div>;
   if (!data) return <div className="card p-8 text-center text-muted">Zatím žádné statistiky.</div>;
 
-  const { topScorers, topAssists, topRated, mostCards, mostAppearances, topPenalties = [], topSetPieces = [] } = data;
+  const {
+    topScorers, topAssists, topRated, mostCards, mostAppearances,
+    topPenalties = [], topSetPieces = [], topKeepers = [], topCleanSheets = [], topSaves = [],
+    teamPenalties = [], teamSetPieces = [], teamCards = [],
+  } = data;
   const hasAny = topScorers.length > 0 || topAssists.length > 0 || topRated.length > 0 || mostCards.length > 0;
   if (!hasAny) return <div className="card p-8 text-center text-muted">Zatím žádné statistiky.</div>;
 
+  const hasKeepers = topKeepers.length > 0 || topCleanSheets.length > 0 || topSaves.length > 0;
+  const hasTeams = teamPenalties.length > 0 || teamSetPieces.length > 0 || teamCards.length > 0;
+
   return (
+    <div className="space-y-5">
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {topScorers.length > 0 && (
         <StatTable title="⚽ Nejlepší střelci" rows={topScorers} valueKey="goals" label="Góly" />
@@ -723,6 +744,90 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
       {topSetPieces.length > 0 && (
         <StatTable title="🥅 Góly ze standardek" rows={topSetPieces} valueKey="setPieceGoals" label="Standardky" />
       )}
+    </div>
+
+    {hasKeepers && (
+      <div className="space-y-3">
+        <div className="text-xs font-heading font-bold uppercase tracking-wider text-muted px-1">🧤 Brankáři</div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {topKeepers.length > 0 && (
+            <StatTable title="🧤 Nejmíň inkasovaných" rows={topKeepers} valueKey="concededPerMatch" label="Na zápas" renderValue={(p) => (
+              <span className="flex items-baseline gap-1 justify-end">
+                <span>{p.concededPerMatch.toFixed(1)}</span>
+                <span className="text-muted text-xs font-heading">na zápas</span>
+              </span>
+            )} />
+          )}
+          {topCleanSheets.length > 0 && (
+            <StatTable title="🛡 Čistá konta" rows={topCleanSheets} valueKey="cleanSheets" label="Nuly" />
+          )}
+          {topSaves.length > 0 && (
+            <StatTable title="✋ Nejvíc zákroků" rows={topSaves} valueKey="saves" label="Zákroky" renderValue={(p) => (
+              <span className="flex items-baseline gap-1 justify-end">
+                <span>{p.saves + p.penaltySaves}</span>
+                {p.penaltySaves > 0 && <span className="text-muted text-xs font-heading">z toho {p.penaltySaves} pen.</span>}
+              </span>
+            )} />
+          )}
+        </div>
+      </div>
+    )}
+
+    {hasTeams && (
+      <div className="space-y-3">
+        <div className="text-xs font-heading font-bold uppercase tracking-wider text-muted px-1">🏟 Týmy</div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {teamPenalties.length > 0 && (
+            <TeamTable title="🎯 Nejvíc kopaných penalt" rows={teamPenalties} renderValue={(t) => (
+              <span className="flex items-baseline gap-1 justify-end">
+                <span>{t.penaltyAttempts}</span>
+                <span className="text-muted text-sm font-heading font-bold">({t.penaltyGoals} gólů)</span>
+              </span>
+            )} />
+          )}
+          {teamSetPieces.length > 0 && (
+            <TeamTable title="🥅 Góly ze standardek" rows={teamSetPieces} renderValue={(t) => <span>{t.setPieceGoals}</span>} />
+          )}
+          {teamCards.length > 0 && (
+            <TeamTable title="🟨 Nejvíc karet" rows={teamCards} renderValue={(t) => (
+              <span className="flex items-center gap-1 justify-end">
+                {t.yellowCards > 0 && <span className="text-gold-500 font-heading font-bold">{t.yellowCards}🟨</span>}
+                {t.redCards > 0 && <span className="text-card-red font-heading font-bold">{t.redCards}🟥</span>}
+              </span>
+            )} />
+          )}
+        </div>
+      </div>
+    )}
+    </div>
+  );
+}
+
+/** Žebříček týmů — stejný rytmus jako StatTable, jen bez hráče a pozice. */
+function TeamTable({ title, rows, renderValue }: {
+  title: string; rows: TeamStat[]; renderValue: (t: TeamStat) => React.ReactNode;
+}) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+        <span className="text-xs font-heading font-bold uppercase text-muted">{title}</span>
+      </div>
+      <table className="w-full text-sm">
+        <tbody>
+          {rows.map((t, i) => (
+            <tr key={t.teamId} className={`border-b border-gray-50 last:border-b-0 ${t.isMyTeam ? "bg-pitch-50/40" : ""}`}>
+              <td className="py-2 pl-4 w-8 text-center font-heading font-bold tabular-nums text-muted">{i + 1}</td>
+              <td className="py-2 px-2">
+                <Link href={`/dashboard/team/${t.teamId}`} className="flex items-center gap-2 hover:text-pitch-500 transition-colors">
+                  <BadgePreview primary={t.teamColor} secondary={t.teamSecondary} pattern={t.teamBadge as BadgePattern} initials={ini(t.teamName)} size={18} />
+                  <span className={`font-heading font-bold ${t.isMyTeam ? "text-pitch-600" : ""}`}>{t.teamName}</span>
+                </Link>
+              </td>
+              <td className="py-2 pr-4 text-right font-heading font-[800] text-lg tabular-nums">{renderValue(t)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

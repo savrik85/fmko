@@ -158,6 +158,7 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
     `SELECT ps.goals, ps.assists, ps.appearances, ps.man_of_match as motm,
        ps.yellow_cards, ps.red_cards, ps.avg_rating, ps.clean_sheets,
        ps.penalty_goals, ps.penalty_misses, ps.setpiece_goals,
+       ps.saves, ps.penalty_saves, ps.goals_conceded,
        p.id as player_id, p.first_name, p.last_name, p.position, ps.team_id,
        t.name as team_name, t.primary_color, t.secondary_color, t.badge_pattern
      FROM player_stats ps
@@ -188,8 +189,36 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
     penaltyMisses: (r.penalty_misses as number) ?? 0,
     penaltyAttempts: ((r.penalty_goals as number) ?? 0) + ((r.penalty_misses as number) ?? 0),
     setPieceGoals: (r.setpiece_goals as number) ?? 0,
+    saves: (r.saves as number) ?? 0,
+    penaltySaves: (r.penalty_saves as number) ?? 0,
+    goalsConceded: (r.goals_conceded as number) ?? 0,
+    // Gólmanský průměr — obdržené góly na zápas; méně je lépe.
+    concededPerMatch: ((r.appearances as number) ?? 0) > 0
+      ? Math.round((((r.goals_conceded as number) ?? 0) / (r.appearances as number)) * 100) / 100 : 0,
     isMyTeam: r.team_id === teamId,
   }));
+
+  // ── Týmové součty ─────────────────────────────────────────────────────────
+  // Skládají se z hráčských řádků, takže sedí na to, co je vidět v žebříčcích výš.
+  const teams = new Map<string, {
+    teamId: string; teamName: string; teamColor: string; teamSecondary: string; teamBadge: string;
+    penaltyGoals: number; penaltyAttempts: number; setPieceGoals: number;
+    yellowCards: number; redCards: number; isMyTeam: boolean;
+  }>();
+  for (const r of rows) {
+    const t = teams.get(r.teamId) ?? {
+      teamId: r.teamId, teamName: r.teamName, teamColor: r.teamColor, teamSecondary: r.teamSecondary,
+      teamBadge: r.teamBadge, penaltyGoals: 0, penaltyAttempts: 0, setPieceGoals: 0,
+      yellowCards: 0, redCards: 0, isMyTeam: r.isMyTeam,
+    };
+    t.penaltyGoals += r.penaltyGoals;
+    t.penaltyAttempts += r.penaltyAttempts;
+    t.setPieceGoals += r.setPieceGoals;
+    t.yellowCards += r.yellowCards;
+    t.redCards += r.redCards;
+    teams.set(r.teamId, t);
+  }
+  const teamRows = [...teams.values()];
 
   return c.json({
     topScorers: [...rows].sort((a, b) => b.goals - a.goals || b.assists - a.assists).filter((r) => r.goals > 0).slice(0, 15),
@@ -202,6 +231,19 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
       .sort((a, b) => b.penaltyGoals - a.penaltyGoals || a.penaltyMisses - b.penaltyMisses).slice(0, 10),
     topSetPieces: [...rows].filter((r) => r.setPieceGoals > 0)
       .sort((a, b) => b.setPieceGoals - a.setPieceGoals || b.goals - a.goals).slice(0, 10),
+    // Gólmanský průměr — od tří odchytaných zápasů, aby jedno čisté konto nevyhrálo tabulku.
+    topKeepers: [...rows].filter((r) => r.position === "GK" && r.appearances >= 3)
+      .sort((a, b) => a.concededPerMatch - b.concededPerMatch || b.cleanSheets - a.cleanSheets).slice(0, 10),
+    topCleanSheets: [...rows].filter((r) => r.position === "GK" && r.cleanSheets > 0)
+      .sort((a, b) => b.cleanSheets - a.cleanSheets || a.concededPerMatch - b.concededPerMatch).slice(0, 10),
+    topSaves: [...rows].filter((r) => r.saves + r.penaltySaves > 0)
+      .sort((a, b) => (b.saves + b.penaltySaves * 3) - (a.saves + a.penaltySaves * 3)).slice(0, 10),
+    teamPenalties: teamRows.filter((t) => t.penaltyAttempts > 0)
+      .sort((a, b) => b.penaltyAttempts - a.penaltyAttempts || b.penaltyGoals - a.penaltyGoals).slice(0, 14),
+    teamSetPieces: teamRows.filter((t) => t.setPieceGoals > 0)
+      .sort((a, b) => b.setPieceGoals - a.setPieceGoals).slice(0, 14),
+    teamCards: teamRows.filter((t) => t.yellowCards + t.redCards > 0)
+      .sort((a, b) => (b.yellowCards + b.redCards * 3) - (a.yellowCards + a.redCards * 3)).slice(0, 14),
   });
 });
 

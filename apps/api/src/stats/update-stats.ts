@@ -21,6 +21,12 @@ interface StatsUpdate {
   penaltyMisses: number;
   /** Góly ze standardky — přímý kop nebo po rohu (podmnožina goals). */
   setPieceGoals: number;
+  /** Brankářské zákroky (bez chycených penalt, ty mají vlastní počítadlo). */
+  saves: number;
+  /** Chycené penalty. */
+  penaltySaves: number;
+  /** Obdržené góly — připisují se gólmanovi, který zápas odchytal. */
+  goalsConceded: number;
 }
 
 export interface MatchPlayerStatsEntry {
@@ -177,6 +183,8 @@ export function extractStatsFromEvents(
   allPlayerIds: string[],
   playerRatings: Record<string, number>,
   playerMinutes?: Record<number, { entered: number; left: number | null }>,
+  /** Obdržené góly týmu + pozice hráčů — bez nich se gólmanovi nepřipíše nic. */
+  keeperCtx?: { concededGoals: number; positions: Map<string, string> },
 ): StatsUpdate[] {
   const stats = new Map<string, StatsUpdate>();
 
@@ -195,6 +203,7 @@ export function extractStatsFromEvents(
     stats.set(pid, {
       playerId: pid, goals: 0, assists: 0, yellowCards: 0, redCards: 0,
       penaltyGoals: 0, penaltyMisses: 0, setPieceGoals: 0,
+      saves: 0, penaltySaves: 0, goalsConceded: 0,
       appeared: true, minutesPlayed: Math.max(0, minutes),
       rating: playerRatings[pid] ?? 6.0,
     });
@@ -208,6 +217,7 @@ export function extractStatsFromEvents(
         stats.set(dbId, {
           playerId: dbId, goals: 0, assists: 0, yellowCards: 0, redCards: 0,
           penaltyGoals: 0, penaltyMisses: 0, setPieceGoals: 0,
+          saves: 0, penaltySaves: 0, goalsConceded: 0,
           appeared: true, minutesPlayed: Math.max(0, ((pm as any).left ?? 90) - (pm as any).entered),
           rating: playerRatings[dbId] ?? 6.0,
         });
@@ -234,9 +244,34 @@ export function extractStatsFromEvents(
     s.penaltyGoals += sp.penaltyGoals;
     s.penaltyMisses += sp.penaltyMisses;
     s.setPieceGoals += sp.setPieceGoals;
+
+    const k = keeperDelta(event);
+    s.saves += k.saves;
+    s.penaltySaves += k.penaltySaves;
+  }
+
+  // Obdržené góly patří gólmanovi, který zápas odchytal — při střídání tomu s víc minutami.
+  if (keeperCtx && keeperCtx.concededGoals > 0) {
+    let keeper: StatsUpdate | null = null;
+    for (const s of stats.values()) {
+      if (keeperCtx.positions.get(s.playerId) !== "GK") continue;
+      if (!keeper || s.minutesPlayed > keeper.minutesPlayed) keeper = s;
+    }
+    if (keeper) keeper.goalsConceded += keeperCtx.concededGoals;
   }
 
   return [...stats.values()];
+}
+
+/**
+ * Brankářský příspěvek jedné události. Chycená penalta se počítá zvlášť od běžného zákroku,
+ * aby šlo mít oba žebříčky.
+ */
+export function keeperDelta(event: MatchEvent): { saves: number; penaltySaves: number } {
+  if (event.type !== "special") return { saves: 0, penaltySaves: 0 };
+  if (event.detail === "penalty_save") return { saves: 0, penaltySaves: 1 };
+  if (event.detail === "save") return { saves: 1, penaltySaves: 0 };
+  return { saves: 0, penaltySaves: 0 };
 }
 
 /**
@@ -300,8 +335,8 @@ export async function updatePlayerStats(
   const stmts = updates.map((u) => {
     const isMom = momPlayerId != null && u.playerId === momPlayerId;
     return db.prepare(
-      `INSERT INTO player_stats (id, player_id, team_id, season_id, appearances, goals, assists, yellow_cards, red_cards, minutes_played, avg_rating, clean_sheets, man_of_match, penalty_goals, penalty_misses, setpiece_goals)
-       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO player_stats (id, player_id, team_id, season_id, appearances, goals, assists, yellow_cards, red_cards, minutes_played, avg_rating, clean_sheets, man_of_match, penalty_goals, penalty_misses, setpiece_goals, saves, penalty_saves, goals_conceded)
+       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(player_id, team_id, season_id) DO UPDATE SET
          appearances = appearances + 1,
          goals = goals + ?,
@@ -314,13 +349,16 @@ export async function updatePlayerStats(
          man_of_match = man_of_match + ?,
          penalty_goals = penalty_goals + ?,
          penalty_misses = penalty_misses + ?,
-         setpiece_goals = setpiece_goals + ?`
+         setpiece_goals = setpiece_goals + ?,
+         saves = saves + ?,
+         penalty_saves = penalty_saves + ?,
+         goals_conceded = goals_conceded + ?`
     ).bind(
       crypto.randomUUID(), u.playerId, teamId, seasonId,
       u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0, isMom ? 1 : 0,
-      u.penaltyGoals, u.penaltyMisses, u.setPieceGoals,
+      u.penaltyGoals, u.penaltyMisses, u.setPieceGoals, u.saves, u.penaltySaves, u.goalsConceded,
       u.goals, u.assists, u.yellowCards, u.redCards, u.minutesPlayed, u.rating, isCleanSheet ? 1 : 0, isMom ? 1 : 0,
-      u.penaltyGoals, u.penaltyMisses, u.setPieceGoals,
+      u.penaltyGoals, u.penaltyMisses, u.setPieceGoals, u.saves, u.penaltySaves, u.goalsConceded,
     );
   });
   await db.batch(stmts).catch((e) => logger.warn({ module: "stats" }, "batch upsert stats", e));

@@ -1,10 +1,10 @@
 import { logger } from "../lib/logger";
-import { setPieceDelta } from "./update-stats";
+import { setPieceDelta, keeperDelta } from "./update-stats";
 import type { MatchEvent } from "@okresni-masina/shared";
 
 const M = "backfill-set-pieces";
 
-interface LineupPlayer { id: string; name: string }
+interface LineupPlayer { id: string; name: string; position?: string }
 interface LineupData { starters?: LineupPlayer[]; subs?: LineupPlayer[] }
 
 /** Kolik zápasů se načte jedním dotazem — events jsou velké JSONy, celá sezóna najednou by se nevešla. */
@@ -50,13 +50,20 @@ async function backfillLeague(
   db: D1Database, seasonId: string, seasonNumber: number, leagueId: string,
 ): Promise<{ matches: number; players: number; skippedNames: number }> {
   // (playerId, teamId) → součty za celou ligu
-  const acc = new Map<string, { playerId: string; teamId: string; pg: number; pm: number; sp: number }>();
+  const acc = new Map<string, { playerId: string; teamId: string; pg: number; pm: number; sp: number; sv: number; ps: number; gc: number }>();
+  const bump = (playerId: string, teamId: string) => {
+    const key = `${playerId}|${teamId}`;
+    const cur = acc.get(key) ?? { playerId, teamId, pg: 0, pm: 0, sp: 0, sv: 0, ps: 0, gc: 0 };
+    acc.set(key, cur);
+    return cur;
+  };
   let matches = 0, skippedNames = 0;
 
   for (let offset = 0; ; offset += PAGE) {
     // Jen ligové zápasy — pohár do sezónních statistik nepřispívá (zapisuje jen per-zápas stats).
     const rows = await db.prepare(
-      `SELECT m.id, m.home_team_id, m.away_team_id, m.events, m.home_lineup_data, m.away_lineup_data
+      `SELECT m.id, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
+              m.events, m.home_lineup_data, m.away_lineup_data
        FROM matches m
        JOIN season_calendar sc ON sc.id = m.calendar_id
        WHERE sc.league_id = ? AND sc.season_number = ?
@@ -69,34 +76,43 @@ async function backfillLeague(
     for (const row of rows.results) {
       matches++;
       const events = parseJson<MatchEvent[]>(row.events, []);
-      const homeIdx = nameIndex(parseJson<LineupData | null>(row.home_lineup_data, null));
-      const awayIdx = nameIndex(parseJson<LineupData | null>(row.away_lineup_data, null));
+      const homeLineup = parseJson<LineupData | null>(row.home_lineup_data, null);
+      const awayLineup = parseJson<LineupData | null>(row.away_lineup_data, null);
+      const homeIdx = nameIndex(homeLineup);
+      const awayIdx = nameIndex(awayLineup);
 
       for (const event of events) {
         const d = setPieceDelta(event);
-        if (!d.penaltyGoals && !d.penaltyMisses && !d.setPieceGoals) continue;
+        const k = keeperDelta(event);
+        if (!d.penaltyGoals && !d.penaltyMisses && !d.setPieceGoals && !k.saves && !k.penaltySaves) continue;
 
         // teamId v události je engine číslo: 1 = domácí, 2 = hosté.
         const isHome = event.teamId === 1;
         const playerId = (isHome ? homeIdx : awayIdx).get(event.playerName);
         if (!playerId) { skippedNames++; continue; }
 
-        const teamId = (isHome ? row.home_team_id : row.away_team_id) as string;
-        const key = `${playerId}|${teamId}`;
-        const cur = acc.get(key) ?? { playerId, teamId, pg: 0, pm: 0, sp: 0 };
+        const cur = bump(playerId, (isHome ? row.home_team_id : row.away_team_id) as string);
         cur.pg += d.penaltyGoals;
         cur.pm += d.penaltyMisses;
         cur.sp += d.setPieceGoals;
-        acc.set(key, cur);
+        cur.sv += k.saves;
+        cur.ps += k.penaltySaves;
       }
+
+      // Obdržené góly gólmanovi ze základní sestavy (střídání gólmana ze záznamu nevyčteme).
+      const homeGk = startingKeeper(homeLineup);
+      if (homeGk) bump(homeGk, row.home_team_id as string).gc += (row.away_score as number) ?? 0;
+      const awayGk = startingKeeper(awayLineup);
+      if (awayGk) bump(awayGk, row.away_team_id as string).gc += (row.home_score as number) ?? 0;
     }
     if (rows.results.length < PAGE) break;
   }
 
   const stmts = [...acc.values()].map((a) => db.prepare(
-    `UPDATE player_stats SET penalty_goals = ?, penalty_misses = ?, setpiece_goals = ?
+    `UPDATE player_stats SET penalty_goals = ?, penalty_misses = ?, setpiece_goals = ?,
+       saves = ?, penalty_saves = ?, goals_conceded = ?
      WHERE player_id = ? AND team_id = ? AND season_id = ?`
-  ).bind(a.pg, a.pm, a.sp, a.playerId, a.teamId, seasonId));
+  ).bind(a.pg, a.pm, a.sp, a.sv, a.ps, a.gc, a.playerId, a.teamId, seasonId));
   for (let i = 0; i < stmts.length; i += 40) {
     await db.batch(stmts.slice(i, i + 40)).catch((e) => logger.error({ module: M }, "batch update", e));
   }
@@ -108,6 +124,11 @@ function parseJson<T>(v: unknown, fallback: T): T {
   if (v == null) return fallback;
   if (typeof v !== "string") return v as T;
   try { return JSON.parse(v) as T; } catch (e) { logger.warn({ module: M }, "parse json", e); return fallback; }
+}
+
+/** ID gólmana ze základní sestavy; bez pozic v záznamu (starší zápasy) vrací null. */
+function startingKeeper(ld: LineupData | null): string | null {
+  return (ld?.starters ?? []).find((p) => p?.position === "GK")?.id ?? null;
 }
 
 /** Jméno → ID hráče; jmenovci se z mapy vyřadí, nejde je rozlišit. */
