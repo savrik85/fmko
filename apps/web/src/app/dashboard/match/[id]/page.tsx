@@ -243,7 +243,9 @@ export default function MatchDetailPage() {
           <button onClick={() => router.back()} className="text-white/40 hover:text-white/70 text-sm flex items-center gap-1 transition-colors">
             &#8592; Zpět
           </button>
-          {match.status === "simulated" && (
+          {/* Bez uloženého průběhu (pohár proti týmu bez kádru = silová simulace) by přehrávka
+              skončila na "Zápas nemá záznam průběhu" — tlačítko v tom případě nenabízíme. */}
+          {match.status === "simulated" && match.events.length > 0 && (
             <button onClick={() => router.push(`/dashboard/match/${matchId}/replay`)}
               className="ml-auto px-3 py-1.5 rounded-lg text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-400 transition-colors shadow-md flex items-center gap-1.5">
               <span className="text-base">▶</span> Přehrát zápas

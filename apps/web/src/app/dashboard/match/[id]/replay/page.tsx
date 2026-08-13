@@ -14,6 +14,7 @@ interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[]; formation
 
 interface MatchData {
   id: string; home_team_id: string; away_team_id: string; home_score: number; away_score: number; round: number | null;
+  roundName: string | null; isCup: boolean;
   events: MatchEvent[]; commentary: string[];
   home_name: string; away_name: string; home_color: string; away_color: string;
   home_secondary: string; away_secondary: string; home_badge: string; away_badge: string;
@@ -113,12 +114,13 @@ export default function MatchReplayPage() {
   const [stadiumInfo, setStadiumInfo] = useState<{ name: string; pitchCondition: number } | null>(null);
 
   useEffect(() => {
-    apiFetch<Record<string, unknown>>(`/api/matches/${matchId}`).then((r) => {
+    const hydrate = (r: Record<string, unknown>) => {
       const ev = typeof r.events === "string" ? JSON.parse(r.events as string) : (r.events ?? []);
       const co = typeof r.commentary === "string" ? JSON.parse(r.commentary as string) : (r.commentary ?? []);
       setMatch({
         id: r.id as string, home_team_id: r.home_team_id as string, away_team_id: r.away_team_id as string,
         home_score: r.home_score as number, away_score: r.away_score as number, round: r.round as number | null,
+        roundName: (r.roundName as string) ?? null, isCup: r.isCup === true,
         events: ev, commentary: co,
         home_name: (r.home_name as string) ?? "Domácí", away_name: (r.away_name as string) ?? "Hosté",
         home_color: (r.home_color as string) ?? "#2D5F2D", away_color: (r.away_color as string) ?? "#D94032",
@@ -130,20 +132,29 @@ export default function MatchReplayPage() {
         away_lineup_data: (r.away_lineup_data && (r.away_lineup_data as LineupData).starters) ? r.away_lineup_data as LineupData : null,
       });
       setLoading(false);
-      // Fetch stadium info from home team
-      const homeId = (r.home_team_id as string);
+      // Stadion domácího týmu — u poháru může být domácí velkoklub, který reálný tým nemá.
+      const homeId = (r.home_team_id as string) ?? null;
+      if (!homeId) return;
       apiFetch<Record<string, unknown>>(`/api/teams/${homeId}`).then((team) => {
         setStadiumInfo({
           name: (team.stadium_name as string) ?? (team.name as string) + " stadion",
           pitchCondition: (r.pitch_condition as number) ?? 50,
         });
       }).catch((e) => console.error("Failed to load stadium:", e));
-    }).catch((e) => { console.error("Failed to load replay:", e); setLoading(false); });
+    };
+    // Pohár má oddělené tabulky → vlastní endpoint. Ligové ID tam není → 404 → fallback na pohár
+    // (stejný postup jako detail zápasu, viz ../page.tsx).
+    apiFetch<Record<string, unknown>>(`/api/matches/${matchId}`)
+      .then(hydrate)
+      .catch(() => apiFetch<Record<string, unknown>>(`/api/cup-matches/${matchId}`)
+        .then(hydrate)
+        .catch((e) => { console.error("Failed to load replay:", e); setLoading(false); }));
   }, [matchId]);
 
   const markSeen = useCallback(() => {
-    if (teamId) apiFetch(`/api/matches/${matchId}/mark-seen`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ teamId }) }).catch((e) => console.error("Failed to mark seen:", e));
-  }, [matchId, teamId]);
+    // Pohárové zápasy se nepřečítají — cup_matches nemá seen sloupce a endpoint by vrátil 404.
+    if (teamId && !match?.isCup) apiFetch(`/api/matches/${matchId}/mark-seen`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ teamId }) }).catch((e) => console.error("Failed to mark seen:", e));
+  }, [matchId, teamId, match?.isCup]);
 
   const vis = match ? match.events.slice(0, idx) : [];
   const st = {
@@ -285,7 +296,8 @@ export default function MatchReplayPage() {
             <div className="flex items-center justify-center gap-1.5 mt-1">
               {!finished && !htPause && <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
               <span className="text-white/50 text-xs sm:text-base font-heading font-bold">{finished ? "Konec" : htPause ? "Poločas" : `${curMin}'`}</span>
-              {match.round && <span className="text-white/25 text-xs sm:text-base font-heading">· {match.round}. kolo</span>}
+              {match.round ? <span className="text-white/25 text-xs sm:text-base font-heading">· {match.round}. kolo</span>
+                : match.roundName ? <span className="text-white/25 text-xs sm:text-base font-heading">· 🏆 {match.roundName}</span> : null}
             </div>
           </div>
           <div className="flex flex-col sm:flex-row items-center sm:gap-2 gap-2 flex-1 min-w-0 sm:justify-end">
