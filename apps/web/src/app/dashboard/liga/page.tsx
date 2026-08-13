@@ -1035,14 +1035,20 @@ function StatTable({ title, rows, valueKey, label, decimal, renderValue }: {
           {rows.map((p, i) => (
             <tr key={i} className={`border-b border-gray-50 last:border-b-0 ${p.isMyTeam ? "bg-pitch-50/40" : ""}`}>
               <td className="py-2 pl-4 w-8 text-center font-heading font-bold tabular-nums text-muted">{i + 1}</td>
-              {/* Jméno i tým v jedné buňce: na mobilu se dva sloupce nevešly a obojí se lámalo na dva řádky. */}
+              {/* Mobil: tým pod jménem, aby se vešel celý název. Od sm výš vedle sebe jako dřív. */}
               <td className="py-2 px-2 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
-                  <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                  <Link href={`/dashboard/player/${p.playerId}`} className={`font-heading font-bold truncate hover:text-pitch-500 transition-colors ${p.isMyTeam ? "text-pitch-600" : ""}`}>{p.name}</Link>
-                  <Link href={`/dashboard/team/${p.teamId}`} className="flex items-center gap-1.5 shrink-0 hover:text-pitch-500 transition-colors" title={p.teamName}>
+                  <span className="shrink-0 w-10 flex justify-center"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></span>
+                  <div className="min-w-0 flex-1">
+                    <Link href={`/dashboard/player/${p.playerId}`} className={`block font-heading font-bold truncate leading-tight hover:text-pitch-500 transition-colors ${p.isMyTeam ? "text-pitch-600" : ""}`}>{p.name}</Link>
+                    <Link href={`/dashboard/team/${p.teamId}`} className="sm:hidden flex items-center gap-1 min-w-0 leading-tight hover:text-pitch-500 transition-colors">
+                      <BadgePreview primary={p.teamColor} secondary={p.teamSecondary} pattern={p.teamBadge as BadgePattern} initials={ini(p.teamName)} size={13} />
+                      <span className="text-sm text-muted truncate">{p.teamName}</span>
+                    </Link>
+                  </div>
+                  <Link href={`/dashboard/team/${p.teamId}`} className="hidden sm:flex items-center gap-1.5 shrink-0 max-w-[45%] hover:text-pitch-500 transition-colors">
                     <BadgePreview primary={p.teamColor} secondary={p.teamSecondary} pattern={p.teamBadge as BadgePattern} initials={ini(p.teamName)} size={16} />
-                    <span className="hidden lg:inline text-xs text-muted">{p.teamName}</span>
+                    <span className="text-xs text-muted truncate">{p.teamName}</span>
                   </Link>
                 </div>
               </td>
