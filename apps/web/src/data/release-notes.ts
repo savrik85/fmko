@@ -12,6 +12,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-08-13",
+    emoji: "📊",
+    title: "Statistiky ligy — 22 žebříčků místo pěti",
+    items: [
+      "Ve statistikách ligy bylo pět tabulek, teď je jich dvaadvacet a k tomu tři nové sekce: brankáři, týmy a kuriozity sezóny.",
+      "U hráčů přibyli exekutoři penalt (4/5 = čtyři góly z pěti pokusů), góly ze standardek, góly na 90 minut, úspěšnost zakončení, odehrané minuty, fauly a zranění.",
+      "Brankáři mají vlastní sekci: nejmíň inkasovaných na odchytaný zápas, čistá konta a zákroky. Chycené penalty se počítají zvlášť.",
+      "U týmů najdeš útok a obranu, průměrnou návštěvu doma, držení míče, nejčistší mužstvo, nejdelší neporazitelnost, výhry v řadě a bilanci doma vs. venku.",
+      "Kuriozity sezóny: nejrychlejší gól, nejdivočejší zápas, největší výhra, nejvíc gólů v zápase a rekordní návštěva. Každá vede na ten zápas.",
+    ],
+  },
+  {
     date: "2026-08-12",
     emoji: "🎯",
     title: "Standardky — penalty, rohy a přímáky",
