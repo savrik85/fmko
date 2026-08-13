@@ -101,13 +101,15 @@ export default {
       }
     }
 
-    // ── CUP TICK: pohár se posouvá při KAŽDÉM cronu, ne jen v nočním ticku ──
-    // Jedna dávka zvládne ~33 zápasů, guard v maybeAdvanceCup pouští 3 dávky. Dokud se pohár
-    // hýbal jen jednou denně, kolo o 128 zápasech se dohrávalo čtyři dny a hráči po výhře
-    // dlouho nevěděli, s kým hrají dál. Rozložením do všech cronů je kolo hotové během hodin.
+    // ── CUP TICK: pohár se hraje od poledne, pak při každém dalším cronu ──
+    // Ranní crony (3:00 posun dne, 5:00 zaměstnanci, 6:00 preview) pohár míjejí, aby se
+    // nedohrával v 7 ráno — první pohárový tick je 10:00 UTC = 12:00 SELČ.
+    // Zbylé čtyři ticky (10, 14, 16, 16:05) dají 12 dávek po 48 zápasech denně, takže i
+    // největší kolo (128 zápasů v 1. předkole) je hotové hned tím poledním.
     // Předčasně se nic neodehraje — maybeAdvanceCup simuluje jen kola, jejichž termín už nastal,
     // a herní datum se posouvá výhradně v nočním ticku.
-    if (cron && cron !== "0 3 * * *") {
+    const isCupTick = !!cron && !["0 3 * * *", "0 5 * * *", "0 6 * * *"].includes(cron);
+    if (isCupTick) {
       try {
         const { maybeAdvanceCup } = await import("./cup/cup");
         const batches = await maybeAdvanceCup(env.DB);
