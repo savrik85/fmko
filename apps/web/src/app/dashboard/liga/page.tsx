@@ -952,13 +952,18 @@ function CuriosityCard({ icon, title, item, unit }: {
   if (!item) return null;
   return (
     <Link href={`/dashboard/match/${item.matchId}`} className="card p-3 hover:bg-gray-50 transition-colors block">
-      <div className="flex items-center gap-2">
+      <div className="flex items-start gap-2">
         <span className="text-xl shrink-0">{icon}</span>
         <div className="min-w-0 flex-1">
-          <div className="text-xs font-heading font-bold uppercase text-muted">{title}</div>
-          <div className="font-heading font-bold truncate">{item.homeName} {item.homeScore}:{item.awayScore} {item.awayName}</div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-xs font-heading font-bold uppercase text-muted">{title}</span>
+            <span className="shrink-0 font-heading font-[800] text-sm text-pitch-600">{unit(item.value)}</span>
+          </div>
+          {/* Název zápasu na vlastním řádku — vedle hodnoty se na mobilu ořezával po pár znacích. */}
+          <div className="font-heading font-bold text-base leading-tight">
+            {item.homeName} <span className="tabular-nums">{item.homeScore}:{item.awayScore}</span> {item.awayName}
+          </div>
         </div>
-        <span className="shrink-0 font-heading font-[800] text-sm text-pitch-600">{unit(item.value)}</span>
       </div>
     </Link>
   );

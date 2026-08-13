@@ -185,8 +185,8 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
 
   // Get active season
   const season = await c.env.DB.prepare(
-    "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
-  ).first<{ id: string }>().catch((e) => { logger.warn({ module: "league" }, "fetch active season for stats", e); return null; });
+    "SELECT id, number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+  ).first<{ id: string; number: number }>().catch((e) => { logger.warn({ module: "league" }, "fetch active season for stats", e); return null; });
   const seasonId = mustSeason(season?.id);
 
   const stats = await c.env.DB.prepare(
@@ -287,10 +287,9 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
      JOIN season_calendar sc ON sc.id = m.calendar_id
      JOIN teams ht ON ht.id = m.home_team_id
      JOIN teams at ON at.id = m.away_team_id
-     WHERE sc.league_id = ? AND m.status = 'simulated'
-       AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)
+     WHERE sc.league_id = ? AND m.status = 'simulated' AND sc.season_number = ?
      ORDER BY m.simulated_at`
-  ).bind(team.league_id, team.league_id).all<Record<string, unknown>>()
+  ).bind(team.league_id, season?.number ?? 0).all<Record<string, unknown>>()
     .catch((e) => { logger.error({ module: "league" }, "fetch league matches for stats", e); return { results: [] as Record<string, unknown>[] }; });
 
   // Série se počítají per tým v chronologickém pořadí, proto zvlášť od součtů výš.
