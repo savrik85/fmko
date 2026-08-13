@@ -1000,7 +1000,7 @@ function TeamTable({ title, rows, renderValue }: {
       <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
         <span className="text-xs font-heading font-bold uppercase text-muted">{title}</span>
       </div>
-      <table className="w-full text-sm table-fixed">
+      <table className="stat-table w-full text-sm table-fixed">
         <tbody>
           {rows.map((t, i) => (
             <tr key={t.teamId} className={`border-b border-gray-50 last:border-b-0 ${t.isMyTeam ? "bg-pitch-50/40" : ""}`}>
@@ -1029,7 +1029,7 @@ function StatTable({ title, rows, valueKey, label, decimal, renderValue }: {
       <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
         <span className="text-xs font-heading font-bold uppercase text-muted">{title}</span>
       </div>
-      <table className="w-full text-sm table-fixed">
+      <table className="stat-table w-full text-sm table-fixed">
         <tbody>
           {rows.map((p, i) => (
             <tr key={i} className={`border-b border-gray-50 last:border-b-0 ${p.isMyTeam ? "bg-pitch-50/40" : ""}`}>

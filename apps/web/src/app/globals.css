@@ -408,6 +408,9 @@ body::before {
 
 .tabular-nums { font-variant-numeric: tabular-nums; }
 @media (pointer: coarse) { button, a, [role="button"] { min-height: 44px; } }
+/* Žebříčky statistik: dotykový cíl je celý řádek tabulky, ne jednotlivý odkaz. Bez tohohle
+   dostane jméno hráče i název týmu po 44 px a řádek naroste na trojnásobek. */
+@media (pointer: coarse) { .stat-table a { min-height: 0; } }
 
 /* Hide browser default number input spinners */
 input[type="number"]::-webkit-inner-spin-button,
