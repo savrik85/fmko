@@ -1033,16 +1033,17 @@ function StatTable({ title, rows, valueKey, label, decimal, renderValue }: {
         <tbody>
           {rows.map((p, i) => (
             <tr key={i} className={`border-b border-gray-50 last:border-b-0 ${p.isMyTeam ? "bg-pitch-50/40" : ""}`}>
-              <td className="py-2 pl-3 w-8 text-center font-heading font-bold tabular-nums text-muted">{i + 1}</td>
+              <td className="py-1.5 pl-3 w-8 text-center align-top font-heading font-bold tabular-nums text-muted leading-snug">{i + 1}</td>
               {/* Mobil: tým pod jménem, aby se vešel celý název. Od sm výš vedle sebe jako dřív. */}
-              <td className="py-2 px-2 min-w-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="shrink-0 w-10 flex justify-center"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></span>
+              <td className="py-1.5 px-2 min-w-0 align-top">
+                {/* Mobil: první řádek odznak + jméno, druhý řádek tým odsazený pod jménem. */}
+                <div className="flex items-start gap-2 min-w-0">
+                  <span className="shrink-0 w-10 flex justify-center pt-px"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></span>
                   <div className="min-w-0 flex-1">
-                    <Link href={`/dashboard/player/${p.playerId}`} className={`block font-heading font-bold truncate leading-tight hover:text-pitch-500 transition-colors ${p.isMyTeam ? "text-pitch-600" : ""}`}>{p.name}</Link>
-                    <Link href={`/dashboard/team/${p.teamId}`} className="sm:hidden flex items-center gap-1 min-w-0 leading-tight hover:text-pitch-500 transition-colors">
-                      <BadgePreview primary={p.teamColor} secondary={p.teamSecondary} pattern={p.teamBadge as BadgePattern} initials={ini(p.teamName)} size={13} />
-                      <span className="text-sm text-muted truncate">{p.teamName}</span>
+                    <Link href={`/dashboard/player/${p.playerId}`} className={`block font-heading font-bold truncate leading-snug hover:text-pitch-500 transition-colors ${p.isMyTeam ? "text-pitch-600" : ""}`}>{p.name}</Link>
+                    <Link href={`/dashboard/team/${p.teamId}`} className="sm:hidden flex items-center gap-1 min-w-0 leading-snug hover:text-pitch-500 transition-colors">
+                      <BadgePreview primary={p.teamColor} secondary={p.teamSecondary} pattern={p.teamBadge as BadgePattern} initials={ini(p.teamName)} size={12} />
+                      <span className="text-xs text-muted truncate">{p.teamName}</span>
                     </Link>
                   </div>
                   <Link href={`/dashboard/team/${p.teamId}`} className="hidden sm:flex items-center gap-1.5 shrink-0 max-w-[45%] hover:text-pitch-500 transition-colors">
@@ -1051,7 +1052,7 @@ function StatTable({ title, rows, valueKey, label, decimal, renderValue }: {
                   </Link>
                 </div>
               </td>
-              <td className="py-2 pr-4 w-24 sm:w-36 text-right font-heading font-[800] text-lg tabular-nums whitespace-nowrap">
+              <td className="py-1.5 pr-4 w-24 sm:w-36 text-right align-top font-heading font-[800] text-lg leading-snug tabular-nums whitespace-nowrap">
                 {renderValue ? renderValue(p) : decimal ? ((p as any)[valueKey] as number).toFixed(1) : (p as any)[valueKey]}
               </td>
             </tr>
