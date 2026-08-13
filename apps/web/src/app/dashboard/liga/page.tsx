@@ -71,6 +71,9 @@ function formatDate(iso: string | null): string {
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
 
+/** 1 gól, 2–4 góly, jinak gólů. */
+function golPlural(n: number): string { return n === 1 ? "gól" : n >= 2 && n <= 4 ? "góly" : "gólů"; }
+
 type Tab = "tabulka" | "rozpis" | "vysledky" | "statistiky" | "zpravodaj";
 
 interface NewsArticle { id: string; type: string; headline: string; body: string; icon: string; date: string; gameWeek?: number | null }
@@ -781,7 +784,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
             <TeamTable title="🎯 Nejvíc kopaných penalt" rows={teamPenalties} renderValue={(t) => (
               <span className="flex items-baseline gap-1 justify-end">
                 <span>{t.penaltyAttempts}</span>
-                <span className="text-muted text-sm font-heading font-bold">({t.penaltyGoals} gólů)</span>
+                <span className="text-muted text-sm font-heading font-bold">({t.penaltyGoals} {golPlural(t.penaltyGoals)})</span>
               </span>
             )} />
           )}
