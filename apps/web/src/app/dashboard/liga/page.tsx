@@ -728,10 +728,7 @@ function ScheduleTab({ rounds, loaded, teamId, showAll }: { rounds: LeagueRound[
 
 // ═══ Statistiky ═══
 
-type StatSection = "hraci" | "brankari" | "tymy" | "zajimavosti";
-
 function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean }) {
-  const [section, setSection] = useState<StatSection>("hraci");
   if (!loaded) return <div className="flex items-center justify-center py-12"><Spinner /></div>;
   if (!data) return <div className="card p-8 text-center text-muted">Zatím žádné statistiky.</div>;
 
@@ -752,32 +749,9 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
   const cur = curiosities;
   const hasCuriosities = !!(cur && (cur.fastestGoal || cur.wildestMatch || cur.biggestWin || cur.mostGoals || cur.biggestAttendance));
 
-  // Sekce se přepínají místo skládání pod sebe — na mobilu by 22 tabulek znamenalo
-  // desítky obrazovek scrollování, než se člověk dostane ke kuriozitám.
-  const sections: Array<{ key: StatSection; label: string; show: boolean }> = [
-    { key: "hraci", label: "Hráči", show: true },
-    { key: "brankari", label: "Brankáři", show: hasKeepers },
-    { key: "tymy", label: "Týmy", show: hasTeams },
-    { key: "zajimavosti", label: "Zajímavosti", show: hasCuriosities },
-  ];
-  const visible = sections.filter((s) => s.show);
-  const active = visible.some((s) => s.key === section) ? section : "hraci";
-
   return (
-    <div className="space-y-4">
-    {visible.length > 1 && (
-      <div className="flex gap-1 bg-surface rounded-xl p-1 overflow-x-auto">
-        {visible.map((s) => (
-          <button key={s.key} onClick={() => setSection(s.key)}
-            className={`flex-1 whitespace-nowrap px-3 py-2 rounded-lg text-sm font-heading font-bold transition-colors ${
-              active === s.key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
-            }`}
-          >{s.label}</button>
-        ))}
-      </div>
-    )}
-
-    <div className={`grid grid-cols-1 lg:grid-cols-2 gap-4 ${active === "hraci" ? "" : "hidden"}`}>
+    <div className="space-y-5">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {topScorers.length > 0 && (
         <StatTable title="⚽ Nejlepší střelci" rows={topScorers} valueKey="goals" label="Góly" />
       )}
@@ -792,7 +766,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
       )}
       {mostCards.length > 0 && (
         <StatTable title="🟨 Nejvíc karet" rows={mostCards} valueKey="cards" label="Karty" renderValue={(p) => (
-          <span className="flex items-center gap-1.5 justify-end whitespace-nowrap">
+          <span className="flex items-center gap-1 justify-end">
             {p.yellowCards > 0 && <span className="text-gold-500 font-heading font-bold">{p.yellowCards}🟨</span>}
             {p.redCards > 0 && <span className="text-card-red font-heading font-bold">{p.redCards}🟥</span>}
           </span>
@@ -841,8 +815,9 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
       )}
     </div>
 
-    {hasKeepers && active === "brankari" && (
+    {hasKeepers && (
       <div className="space-y-3">
+        <div className="text-xs font-heading font-bold uppercase tracking-wider text-muted px-1">🧤 Brankáři</div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {topKeepers.length > 0 && (
             <StatTable title="🧤 Nejmíň inkasovaných" rows={topKeepers} valueKey="concededPerMatch" label="Na zápas" renderValue={(p) => (
@@ -867,8 +842,9 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
       </div>
     )}
 
-    {hasTeams && active === "tymy" && (
+    {hasTeams && (
       <div className="space-y-3">
+        <div className="text-xs font-heading font-bold uppercase tracking-wider text-muted px-1">🏟 Týmy</div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {teamPenalties.length > 0 && (
             <TeamTable title="🎯 Nejvíc kopaných penalt" rows={teamPenalties} renderValue={(t) => (
@@ -883,7 +859,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
           )}
           {teamCards.length > 0 && (
             <TeamTable title="🟨 Nejvíc karet" rows={teamCards} renderValue={(t) => (
-              <span className="flex items-center gap-1.5 justify-end whitespace-nowrap">
+              <span className="flex items-center gap-1 justify-end">
                 {t.yellowCards > 0 && <span className="text-gold-500 font-heading font-bold">{t.yellowCards}🟨</span>}
                 {t.redCards > 0 && <span className="text-card-red font-heading font-bold">{t.redCards}🟥</span>}
               </span>
@@ -953,8 +929,9 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
       </div>
     )}
 
-    {hasCuriosities && cur && active === "zajimavosti" && (
+    {hasCuriosities && cur && (
       <div className="space-y-3">
+        <div className="text-xs font-heading font-bold uppercase tracking-wider text-muted px-1">🎪 Kuriozity sezóny</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <CuriosityCard icon="⚡" title="Nejrychlejší gól" item={cur.fastestGoal} unit={(v) => `${v}. minuta`} />
           <CuriosityCard icon="🟥" title="Nejdivočejší zápas" item={cur.wildestMatch} unit={(v) => `${v} karet`} />
@@ -1006,13 +983,13 @@ function TeamTable({ title, rows, renderValue }: {
           {rows.map((t, i) => (
             <tr key={t.teamId} className={`border-b border-gray-50 last:border-b-0 ${t.isMyTeam ? "bg-pitch-50/40" : ""}`}>
               <td className="py-2 pl-4 w-8 text-center font-heading font-bold tabular-nums text-muted">{i + 1}</td>
-              <td className="py-2 px-2 min-w-0">
-                <Link href={`/dashboard/team/${t.teamId}`} className="flex items-center gap-2 min-w-0 hover:text-pitch-500 transition-colors">
+              <td className="py-2 px-2">
+                <Link href={`/dashboard/team/${t.teamId}`} className="flex items-center gap-2 hover:text-pitch-500 transition-colors">
                   <BadgePreview primary={t.teamColor} secondary={t.teamSecondary} pattern={t.teamBadge as BadgePattern} initials={ini(t.teamName)} size={18} />
-                  <span className={`font-heading font-bold truncate ${t.isMyTeam ? "text-pitch-600" : ""}`}>{t.teamName}</span>
+                  <span className={`font-heading font-bold ${t.isMyTeam ? "text-pitch-600" : ""}`}>{t.teamName}</span>
                 </Link>
               </td>
-              <td className="py-2 pr-4 text-right font-heading font-[800] text-lg tabular-nums whitespace-nowrap">{renderValue(t)}</td>
+              <td className="py-2 pr-4 text-right font-heading font-[800] text-lg tabular-nums">{renderValue(t)}</td>
             </tr>
           ))}
         </tbody>
@@ -1035,18 +1012,19 @@ function StatTable({ title, rows, valueKey, label, decimal, renderValue }: {
           {rows.map((p, i) => (
             <tr key={i} className={`border-b border-gray-50 last:border-b-0 ${p.isMyTeam ? "bg-pitch-50/40" : ""}`}>
               <td className="py-2 pl-4 w-8 text-center font-heading font-bold tabular-nums text-muted">{i + 1}</td>
-              {/* Jméno i tým v jedné buňce: na mobilu se dva sloupce nevešly a obojí se lámalo na dva řádky. */}
-              <td className="py-2 px-2 min-w-0">
-                <div className="flex items-center gap-2 min-w-0">
+              <td className="py-2 px-2">
+                <div className="flex items-center gap-2">
                   <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                  <Link href={`/dashboard/player/${p.playerId}`} className={`font-heading font-bold truncate hover:text-pitch-500 transition-colors ${p.isMyTeam ? "text-pitch-600" : ""}`}>{p.name}</Link>
-                  <Link href={`/dashboard/team/${p.teamId}`} className="flex items-center gap-1.5 shrink-0 hover:text-pitch-500 transition-colors" title={p.teamName}>
-                    <BadgePreview primary={p.teamColor} secondary={p.teamSecondary} pattern={p.teamBadge as BadgePattern} initials={ini(p.teamName)} size={16} />
-                    <span className="hidden lg:inline text-xs text-muted">{p.teamName}</span>
-                  </Link>
+                  <Link href={`/dashboard/player/${p.playerId}`} className={`font-heading font-bold hover:text-pitch-500 transition-colors ${p.isMyTeam ? "text-pitch-600" : ""}`}>{p.name}</Link>
                 </div>
               </td>
-              <td className="py-2 pr-4 text-right font-heading font-[800] text-lg tabular-nums whitespace-nowrap">
+              <td className="py-2 px-2">
+                <Link href={`/dashboard/team/${p.teamId}`} className="flex items-center gap-1.5 hover:text-pitch-500 transition-colors">
+                  <BadgePreview primary={p.teamColor} secondary={p.teamSecondary} pattern={p.teamBadge as BadgePattern} initials={ini(p.teamName)} size={16} />
+                  <span className="text-xs text-muted">{p.teamName}</span>
+                </Link>
+              </td>
+              <td className="py-2 pr-4 text-right font-heading font-[800] text-lg tabular-nums">
                 {renderValue ? renderValue(p) : decimal ? ((p as any)[valueKey] as number).toFixed(1) : (p as any)[valueKey]}
               </td>
             </tr>
