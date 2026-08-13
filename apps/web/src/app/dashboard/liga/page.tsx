@@ -33,7 +33,7 @@ interface PlayerStat {
   goals: number; assists: number; appearances: number; motm: number;
   yellowCards: number; redCards: number; avgRating: number; cleanSheets: number;
   penaltyGoals: number; penaltyMisses: number; penaltyAttempts: number; setPieceGoals: number;
-  saves: number; penaltySaves: number; goalsConceded: number; concededPerMatch: number;
+  saves: number; penaltySaves: number; goalsConceded: number; keeperMatches: number; concededPerMatch: number;
   isMyTeam: boolean;
 }
 
@@ -754,7 +754,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
             <StatTable title="🧤 Nejmíň inkasovaných" rows={topKeepers} valueKey="concededPerMatch" label="Na zápas" renderValue={(p) => (
               <span className="flex items-baseline gap-1 justify-end">
                 <span>{p.concededPerMatch.toFixed(1)}</span>
-                <span className="text-muted text-xs font-heading">na zápas</span>
+                <span className="text-muted text-xs font-heading">z {p.keeperMatches} záp.</span>
               </span>
             )} />
           )}

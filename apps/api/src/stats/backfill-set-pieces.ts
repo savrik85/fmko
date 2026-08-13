@@ -50,10 +50,10 @@ async function backfillLeague(
   db: D1Database, seasonId: string, seasonNumber: number, leagueId: string,
 ): Promise<{ matches: number; players: number; skippedNames: number }> {
   // (playerId, teamId) → součty za celou ligu
-  const acc = new Map<string, { playerId: string; teamId: string; pg: number; pm: number; sp: number; sv: number; ps: number; gc: number }>();
+  const acc = new Map<string, { playerId: string; teamId: string; pg: number; pm: number; sp: number; sv: number; ps: number; gc: number; km: number }>();
   const bump = (playerId: string, teamId: string) => {
     const key = `${playerId}|${teamId}`;
-    const cur = acc.get(key) ?? { playerId, teamId, pg: 0, pm: 0, sp: 0, sv: 0, ps: 0, gc: 0 };
+    const cur = acc.get(key) ?? { playerId, teamId, pg: 0, pm: 0, sp: 0, sv: 0, ps: 0, gc: 0, km: 0 };
     acc.set(key, cur);
     return cur;
   };
@@ -101,18 +101,26 @@ async function backfillLeague(
 
       // Obdržené góly gólmanovi ze základní sestavy (střídání gólmana ze záznamu nevyčteme).
       const homeGk = startingKeeper(homeLineup);
-      if (homeGk) bump(homeGk, row.home_team_id as string).gc += (row.away_score as number) ?? 0;
+      if (homeGk) {
+        const a = bump(homeGk, row.home_team_id as string);
+        a.gc += (row.away_score as number) ?? 0;
+        a.km += 1;
+      }
       const awayGk = startingKeeper(awayLineup);
-      if (awayGk) bump(awayGk, row.away_team_id as string).gc += (row.home_score as number) ?? 0;
+      if (awayGk) {
+        const a = bump(awayGk, row.away_team_id as string);
+        a.gc += (row.home_score as number) ?? 0;
+        a.km += 1;
+      }
     }
     if (rows.results.length < PAGE) break;
   }
 
   const stmts = [...acc.values()].map((a) => db.prepare(
     `UPDATE player_stats SET penalty_goals = ?, penalty_misses = ?, setpiece_goals = ?,
-       saves = ?, penalty_saves = ?, goals_conceded = ?
+       saves = ?, penalty_saves = ?, goals_conceded = ?, keeper_matches = ?
      WHERE player_id = ? AND team_id = ? AND season_id = ?`
-  ).bind(a.pg, a.pm, a.sp, a.sv, a.ps, a.gc, a.playerId, a.teamId, seasonId));
+  ).bind(a.pg, a.pm, a.sp, a.sv, a.ps, a.gc, a.km, a.playerId, a.teamId, seasonId));
   for (let i = 0; i < stmts.length; i += 40) {
     await db.batch(stmts.slice(i, i + 40)).catch((e) => logger.error({ module: M }, "batch update", e));
   }

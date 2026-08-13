@@ -158,7 +158,7 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
     `SELECT ps.goals, ps.assists, ps.appearances, ps.man_of_match as motm,
        ps.yellow_cards, ps.red_cards, ps.avg_rating, ps.clean_sheets,
        ps.penalty_goals, ps.penalty_misses, ps.setpiece_goals,
-       ps.saves, ps.penalty_saves, ps.goals_conceded,
+       ps.saves, ps.penalty_saves, ps.goals_conceded, ps.keeper_matches,
        p.id as player_id, p.first_name, p.last_name, p.position, ps.team_id,
        t.name as team_name, t.primary_color, t.secondary_color, t.badge_pattern
      FROM player_stats ps
@@ -192,9 +192,10 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
     saves: (r.saves as number) ?? 0,
     penaltySaves: (r.penalty_saves as number) ?? 0,
     goalsConceded: (r.goals_conceded as number) ?? 0,
-    // Gólmanský průměr — obdržené góly na zápas; méně je lépe.
-    concededPerMatch: ((r.appearances as number) ?? 0) > 0
-      ? Math.round((((r.goals_conceded as number) ?? 0) / (r.appearances as number)) * 100) / 100 : 0,
+    keeperMatches: (r.keeper_matches as number) ?? 0,
+    // Gólmanský průměr — obdržené góly na ODCHYTANÝ zápas, ne na start v sestavě.
+    concededPerMatch: ((r.keeper_matches as number) ?? 0) > 0
+      ? Math.round((((r.goals_conceded as number) ?? 0) / (r.keeper_matches as number)) * 100) / 100 : 0,
     isMyTeam: r.team_id === teamId,
   }));
 
@@ -232,7 +233,7 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
     topSetPieces: [...rows].filter((r) => r.setPieceGoals > 0)
       .sort((a, b) => b.setPieceGoals - a.setPieceGoals || b.goals - a.goals).slice(0, 10),
     // Gólmanský průměr — od tří odchytaných zápasů, aby jedno čisté konto nevyhrálo tabulku.
-    topKeepers: [...rows].filter((r) => r.position === "GK" && r.appearances >= 3)
+    topKeepers: [...rows].filter((r) => r.position === "GK" && r.keeperMatches >= 3)
       .sort((a, b) => a.concededPerMatch - b.concededPerMatch || b.cleanSheets - a.cleanSheets).slice(0, 10),
     topCleanSheets: [...rows].filter((r) => r.position === "GK" && r.cleanSheets > 0)
       .sort((a, b) => b.cleanSheets - a.cleanSheets || a.concededPerMatch - b.concededPerMatch).slice(0, 10),
