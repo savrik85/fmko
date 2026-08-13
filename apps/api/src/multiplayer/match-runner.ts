@@ -558,6 +558,8 @@ export async function runScheduledMatches(
                      away_lineup_data = ?,
                      absences = ?,
                      possession_home = ?,
+                     fastest_goal_minute = ?,
+                     total_cards = ?,
                      simulated_at     = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
                  WHERE id = ?`
             ).bind(
@@ -568,6 +570,9 @@ export async function runScheduledMatches(
                 JSON.stringify(buildLineupData(awayLineupPreSim, awaySubsPreSim, awayBuild.idMap, awayFormation, awayTactic, awayCaptainEngineId)),
                 matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null,
                 result.possessionHome,
+                // Minuta prvního gólu — pro žebříček nejrychlejšího gólu sezóny.
+                result.events.filter((e) => e.type === "goal").reduce<number | null>((min, e) => min == null || e.minute < min ? e.minute : min, null),
+                result.events.filter((e) => e.type === "card").length,
                 matchId,
             ).run();
 

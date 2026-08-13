@@ -140,6 +140,41 @@ leagueRouter.get("/teams/:teamId/standings", async (c) => {
   });
 });
 
+/**
+ * Kuriozity sezóny z odehraných zápasů ligy. Počítá se z uložených sloupců (minuta prvního
+ * gólu, karty), ne z událostí — ty by se musely parsovat u všech zápasů při každém načtení.
+ */
+function buildCuriosities(matches: Record<string, unknown>[]) {
+  const label = (m: Record<string, unknown>) => ({
+    matchId: m.id as string,
+    homeName: m.home_name as string, awayName: m.away_name as string,
+    homeScore: (m.home_score as number) ?? 0, awayScore: (m.away_score as number) ?? 0,
+  });
+  const best = <T,>(pick: (m: Record<string, unknown>) => T | null, better: (a: T, b: T) => boolean) => {
+    let bestMatch: Record<string, unknown> | null = null, bestVal: T | null = null;
+    for (const m of matches) {
+      const v = pick(m);
+      if (v == null) continue;
+      if (bestVal == null || better(v, bestVal)) { bestVal = v; bestMatch = m; }
+    }
+    return bestMatch && bestVal != null ? { ...label(bestMatch), value: bestVal } : null;
+  };
+
+  return {
+    fastestGoal: best((m) => m.fastest_goal_minute as number | null, (a, b) => a < b),
+    wildestMatch: best((m) => (m.total_cards as number | null) || null, (a, b) => a > b),
+    biggestWin: best(
+      (m) => Math.abs(((m.home_score as number) ?? 0) - ((m.away_score as number) ?? 0)) || null,
+      (a, b) => a > b,
+    ),
+    mostGoals: best(
+      (m) => (((m.home_score as number) ?? 0) + ((m.away_score as number) ?? 0)) || null,
+      (a, b) => a > b,
+    ),
+    biggestAttendance: best((m) => (m.attendance as number | null) || null, (a, b) => a > b),
+  };
+}
+
 // GET /api/teams/:teamId/league-stats — top scorers + assists across the league
 leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
   const teamId = c.req.param("teamId");
@@ -159,6 +194,7 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
        ps.yellow_cards, ps.red_cards, ps.avg_rating, ps.clean_sheets,
        ps.penalty_goals, ps.penalty_misses, ps.setpiece_goals,
        ps.saves, ps.penalty_saves, ps.goals_conceded, ps.keeper_matches,
+       ps.fouls, ps.chances, ps.injuries, ps.minutes_played,
        p.id as player_id, p.first_name, p.last_name, p.position, ps.team_id,
        t.name as team_name, t.primary_color, t.secondary_color, t.badge_pattern
      FROM player_stats ps
@@ -193,6 +229,16 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
     penaltySaves: (r.penalty_saves as number) ?? 0,
     goalsConceded: (r.goals_conceded as number) ?? 0,
     keeperMatches: (r.keeper_matches as number) ?? 0,
+    fouls: (r.fouls as number) ?? 0,
+    chances: (r.chances as number) ?? 0,
+    injuries: (r.injuries as number) ?? 0,
+    minutesPlayed: (r.minutes_played as number) ?? 0,
+    // Úspěšnost zakončení: gól z každé zahozené šance + gólu. Šance bez gólu = 0 %.
+    shotAccuracy: (((r.goals as number) ?? 0) + ((r.chances as number) ?? 0)) > 0
+      ? Math.round((((r.goals as number) ?? 0) / (((r.goals as number) ?? 0) + ((r.chances as number) ?? 0))) * 100) : 0,
+    // Góly na 90 minut — férovější k náhradníkům než absolutní počet.
+    goalsPer90: ((r.minutes_played as number) ?? 0) > 0
+      ? Math.round((((r.goals as number) ?? 0) / (r.minutes_played as number)) * 90 * 100) / 100 : 0,
     // Gólmanský průměr — obdržené góly na ODCHYTANÝ zápas, ne na start v sestavě.
     concededPerMatch: ((r.keeper_matches as number) ?? 0) > 0
       ? Math.round((((r.goals_conceded as number) ?? 0) / (r.keeper_matches as number)) * 100) / 100 : 0,
@@ -204,22 +250,83 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
   const teams = new Map<string, {
     teamId: string; teamName: string; teamColor: string; teamSecondary: string; teamBadge: string;
     penaltyGoals: number; penaltyAttempts: number; setPieceGoals: number;
-    yellowCards: number; redCards: number; isMyTeam: boolean;
+    yellowCards: number; redCards: number; fouls: number; isMyTeam: boolean;
+    goalsFor: number; goalsAgainst: number; played: number;
+    homeWins: number; homeDraws: number; homeLosses: number;
+    awayWins: number; awayDraws: number; awayLosses: number;
+    attendanceSum: number; attendanceCount: number; possessionSum: number; possessionCount: number;
+    longestUnbeaten: number; longestWinStreak: number;
   }>();
   for (const r of rows) {
     const t = teams.get(r.teamId) ?? {
       teamId: r.teamId, teamName: r.teamName, teamColor: r.teamColor, teamSecondary: r.teamSecondary,
       teamBadge: r.teamBadge, penaltyGoals: 0, penaltyAttempts: 0, setPieceGoals: 0,
-      yellowCards: 0, redCards: 0, isMyTeam: r.isMyTeam,
+      yellowCards: 0, redCards: 0, fouls: 0, isMyTeam: r.isMyTeam,
+      goalsFor: 0, goalsAgainst: 0, played: 0,
+      homeWins: 0, homeDraws: 0, homeLosses: 0, awayWins: 0, awayDraws: 0, awayLosses: 0,
+      attendanceSum: 0, attendanceCount: 0, possessionSum: 0, possessionCount: 0,
+      longestUnbeaten: 0, longestWinStreak: 0,
     };
     t.penaltyGoals += r.penaltyGoals;
     t.penaltyAttempts += r.penaltyAttempts;
     t.setPieceGoals += r.setPieceGoals;
     t.yellowCards += r.yellowCards;
     t.redCards += r.redCards;
+    t.fouls += r.fouls;
     teams.set(r.teamId, t);
   }
-  const teamRows = [...teams.values()];
+
+  // ── Zápasy ligy ───────────────────────────────────────────────────────────
+  // Bez sloupce events — ten je velký a nic z něj tady není potřeba, minuta prvního gólu
+  // se ukládá zvlášť při simulaci.
+  const matchesRes = await c.env.DB.prepare(
+    `SELECT m.id, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
+            m.attendance, m.possession_home, m.fastest_goal_minute, m.simulated_at,
+            ht.name AS home_name, at.name AS away_name
+     FROM matches m
+     JOIN season_calendar sc ON sc.id = m.calendar_id
+     JOIN teams ht ON ht.id = m.home_team_id
+     JOIN teams at ON at.id = m.away_team_id
+     WHERE sc.league_id = ? AND m.status = 'simulated'
+       AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)
+     ORDER BY m.simulated_at`
+  ).bind(team.league_id, team.league_id).all<Record<string, unknown>>()
+    .catch((e) => { logger.error({ module: "league" }, "fetch league matches for stats", e); return { results: [] as Record<string, unknown>[] }; });
+
+  // Série se počítají per tým v chronologickém pořadí, proto zvlášť od součtů výš.
+  const streaks = new Map<string, { unbeaten: number; wins: number }>();
+  for (const m of matchesRes.results) {
+    const hs = (m.home_score as number) ?? 0, as = (m.away_score as number) ?? 0;
+    for (const isHome of [true, false]) {
+      const id = (isHome ? m.home_team_id : m.away_team_id) as string;
+      const t = teams.get(id);
+      if (!t) continue;
+      const mine = isHome ? hs : as, opp = isHome ? as : hs;
+      t.played++;
+      t.goalsFor += mine;
+      t.goalsAgainst += opp;
+      if (isHome) {
+        if (mine > opp) t.homeWins++; else if (mine === opp) t.homeDraws++; else t.homeLosses++;
+        if (m.attendance != null) { t.attendanceSum += m.attendance as number; t.attendanceCount++; }
+        if (m.possession_home != null) { t.possessionSum += m.possession_home as number; t.possessionCount++; }
+      } else {
+        if (mine > opp) t.awayWins++; else if (mine === opp) t.awayDraws++; else t.awayLosses++;
+        if (m.possession_home != null) { t.possessionSum += 100 - (m.possession_home as number); t.possessionCount++; }
+      }
+      const s = streaks.get(id) ?? { unbeaten: 0, wins: 0 };
+      s.unbeaten = mine >= opp ? s.unbeaten + 1 : 0;
+      s.wins = mine > opp ? s.wins + 1 : 0;
+      streaks.set(id, s);
+      if (s.unbeaten > t.longestUnbeaten) t.longestUnbeaten = s.unbeaten;
+      if (s.wins > t.longestWinStreak) t.longestWinStreak = s.wins;
+    }
+  }
+
+  const teamRows = [...teams.values()].map((t) => ({
+    ...t,
+    avgAttendance: t.attendanceCount > 0 ? Math.round(t.attendanceSum / t.attendanceCount) : 0,
+    avgPossession: t.possessionCount > 0 ? Math.round(t.possessionSum / t.possessionCount) : 0,
+  }));
 
   return c.json({
     topScorers: [...rows].sort((a, b) => b.goals - a.goals || b.assists - a.assists).filter((r) => r.goals > 0).slice(0, 15),
@@ -245,6 +352,26 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
       .sort((a, b) => b.setPieceGoals - a.setPieceGoals).slice(0, 14),
     teamCards: teamRows.filter((t) => t.yellowCards + t.redCards > 0)
       .sort((a, b) => (b.yellowCards + b.redCards * 3) - (a.yellowCards + a.redCards * 3)).slice(0, 14),
+    mostFouls: [...rows].filter((r) => r.fouls > 0).sort((a, b) => b.fouls - a.fouls).slice(0, 10),
+    mostMinutes: [...rows].filter((r) => r.minutesPlayed > 0).sort((a, b) => b.minutesPlayed - a.minutesPlayed).slice(0, 10),
+    mostInjuries: [...rows].filter((r) => r.injuries > 0).sort((a, b) => b.injuries - a.injuries).slice(0, 10),
+    // Zakončení a góly/90 mají práh, jinak by vedl někdo s jedinou trefou z jediné šance.
+    topAccuracy: [...rows].filter((r) => r.goals + r.chances >= 5 && r.goals > 0)
+      .sort((a, b) => b.shotAccuracy - a.shotAccuracy || b.goals - a.goals).slice(0, 10),
+    topGoalsPer90: [...rows].filter((r) => r.minutesPlayed >= 270 && r.goals > 0)
+      .sort((a, b) => b.goalsPer90 - a.goalsPer90).slice(0, 10),
+    teamAttack: [...teamRows].filter((t) => t.played > 0).sort((a, b) => b.goalsFor - a.goalsFor).slice(0, 14),
+    teamDefense: [...teamRows].filter((t) => t.played > 0).sort((a, b) => a.goalsAgainst - b.goalsAgainst).slice(0, 14),
+    teamAttendance: [...teamRows].filter((t) => t.avgAttendance > 0).sort((a, b) => b.avgAttendance - a.avgAttendance).slice(0, 14),
+    teamPossession: [...teamRows].filter((t) => t.avgPossession > 0).sort((a, b) => b.avgPossession - a.avgPossession).slice(0, 14),
+    // Nejčistší tým — nejmíň faulů; karty rozhodují při shodě.
+    teamCleanest: [...teamRows].filter((t) => t.played > 0)
+      .sort((a, b) => a.fouls - b.fouls || (a.yellowCards + a.redCards * 3) - (b.yellowCards + b.redCards * 3)).slice(0, 14),
+    teamUnbeaten: [...teamRows].filter((t) => t.longestUnbeaten > 1).sort((a, b) => b.longestUnbeaten - a.longestUnbeaten).slice(0, 14),
+    teamWinStreak: [...teamRows].filter((t) => t.longestWinStreak > 1).sort((a, b) => b.longestWinStreak - a.longestWinStreak).slice(0, 14),
+    teamHomeAway: [...teamRows].filter((t) => t.played > 0)
+      .sort((a, b) => (b.homeWins * 3 + b.homeDraws) - (a.homeWins * 3 + a.homeDraws)).slice(0, 14),
+    curiosities: buildCuriosities(matchesRes.results),
   });
 });
 

@@ -34,13 +34,29 @@ interface PlayerStat {
   yellowCards: number; redCards: number; avgRating: number; cleanSheets: number;
   penaltyGoals: number; penaltyMisses: number; penaltyAttempts: number; setPieceGoals: number;
   saves: number; penaltySaves: number; goalsConceded: number; keeperMatches: number; concededPerMatch: number;
+  fouls: number; chances: number; injuries: number; minutesPlayed: number;
+  shotAccuracy: number; goalsPer90: number;
   isMyTeam: boolean;
 }
 
 interface TeamStat {
   teamId: string; teamName: string; teamColor: string; teamSecondary: string; teamBadge: string;
   penaltyGoals: number; penaltyAttempts: number; setPieceGoals: number;
-  yellowCards: number; redCards: number; isMyTeam: boolean;
+  yellowCards: number; redCards: number; fouls: number; isMyTeam: boolean;
+  goalsFor: number; goalsAgainst: number; played: number;
+  homeWins: number; homeDraws: number; homeLosses: number;
+  awayWins: number; awayDraws: number; awayLosses: number;
+  avgAttendance: number; avgPossession: number;
+  longestUnbeaten: number; longestWinStreak: number;
+}
+
+interface Curiosity {
+  matchId: string; homeName: string; awayName: string; homeScore: number; awayScore: number; value: number;
+}
+
+interface Curiosities {
+  fastestGoal: Curiosity | null; wildestMatch: Curiosity | null; biggestWin: Curiosity | null;
+  mostGoals: Curiosity | null; biggestAttendance: Curiosity | null;
 }
 
 interface StatsData {
@@ -57,6 +73,20 @@ interface StatsData {
   teamPenalties: TeamStat[];
   teamSetPieces: TeamStat[];
   teamCards: TeamStat[];
+  mostFouls: PlayerStat[];
+  mostMinutes: PlayerStat[];
+  mostInjuries: PlayerStat[];
+  topAccuracy: PlayerStat[];
+  topGoalsPer90: PlayerStat[];
+  teamAttack: TeamStat[];
+  teamDefense: TeamStat[];
+  teamAttendance: TeamStat[];
+  teamPossession: TeamStat[];
+  teamCleanest: TeamStat[];
+  teamUnbeaten: TeamStat[];
+  teamWinStreak: TeamStat[];
+  teamHomeAway: TeamStat[];
+  curiosities: Curiosities | null;
 }
 
 // ═══ Helpers ═══
@@ -706,12 +736,18 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
     topScorers, topAssists, topRated, mostCards, mostAppearances,
     topPenalties = [], topSetPieces = [], topKeepers = [], topCleanSheets = [], topSaves = [],
     teamPenalties = [], teamSetPieces = [], teamCards = [],
+    mostFouls = [], mostMinutes = [], mostInjuries = [], topAccuracy = [], topGoalsPer90 = [],
+    teamAttack = [], teamDefense = [], teamAttendance = [], teamPossession = [], teamCleanest = [],
+    teamUnbeaten = [], teamWinStreak = [], teamHomeAway = [], curiosities = null,
   } = data;
   const hasAny = topScorers.length > 0 || topAssists.length > 0 || topRated.length > 0 || mostCards.length > 0;
   if (!hasAny) return <div className="card p-8 text-center text-muted">Zatím žádné statistiky.</div>;
 
   const hasKeepers = topKeepers.length > 0 || topCleanSheets.length > 0 || topSaves.length > 0;
-  const hasTeams = teamPenalties.length > 0 || teamSetPieces.length > 0 || teamCards.length > 0;
+  const hasTeams = teamPenalties.length > 0 || teamSetPieces.length > 0 || teamCards.length > 0
+    || teamAttack.length > 0 || teamAttendance.length > 0;
+  const cur = curiosities;
+  const hasCuriosities = !!(cur && (cur.fastestGoal || cur.wildestMatch || cur.biggestWin || cur.mostGoals || cur.biggestAttendance));
 
   return (
     <div className="space-y-5">
@@ -746,6 +782,36 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
       )}
       {topSetPieces.length > 0 && (
         <StatTable title="🥅 Góly ze standardek" rows={topSetPieces} valueKey="setPieceGoals" label="Standardky" />
+      )}
+      {topGoalsPer90.length > 0 && (
+        <StatTable title="⏱ Góly na 90 minut" rows={topGoalsPer90} valueKey="goalsPer90" label="Na 90" renderValue={(p) => (
+          <span className="flex items-baseline gap-1 justify-end">
+            <span>{p.goalsPer90.toFixed(2)}</span>
+            <span className="text-muted text-xs font-heading">{p.goals} g / {p.minutesPlayed} min</span>
+          </span>
+        )} />
+      )}
+      {topAccuracy.length > 0 && (
+        <StatTable title="🎯 Úspěšnost zakončení" rows={topAccuracy} valueKey="shotAccuracy" label="Úspěšnost" renderValue={(p) => (
+          <span className="flex items-baseline gap-1 justify-end">
+            <span>{p.shotAccuracy}%</span>
+            <span className="text-muted text-xs font-heading">{p.goals} z {p.goals + p.chances}</span>
+          </span>
+        )} />
+      )}
+      {mostMinutes.length > 0 && (
+        <StatTable title="🕐 Nejvíc odehraných minut" rows={mostMinutes} valueKey="minutesPlayed" label="Minuty" renderValue={(p) => (
+          <span className="flex items-baseline gap-1 justify-end">
+            <span>{p.minutesPlayed}</span>
+            <span className="text-muted text-xs font-heading">min</span>
+          </span>
+        )} />
+      )}
+      {mostFouls.length > 0 && (
+        <StatTable title="🦵 Nejvíc faulů" rows={mostFouls} valueKey="fouls" label="Fauly" />
+      )}
+      {mostInjuries.length > 0 && (
+        <StatTable title="🩹 Nejvíc zranění" rows={mostInjuries} valueKey="injuries" label="Zranění" />
       )}
     </div>
 
@@ -799,10 +865,102 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
               </span>
             )} />
           )}
+          {teamAttack.length > 0 && (
+            <TeamTable title="⚔️ Nejlepší útok" rows={teamAttack} renderValue={(t) => (
+              <span className="flex items-baseline gap-1 justify-end">
+                <span>{t.goalsFor}</span>
+                <span className="text-muted text-xs font-heading">{(t.goalsFor / Math.max(1, t.played)).toFixed(1)} / záp.</span>
+              </span>
+            )} />
+          )}
+          {teamDefense.length > 0 && (
+            <TeamTable title="🛡 Nejlepší obrana" rows={teamDefense} renderValue={(t) => (
+              <span className="flex items-baseline gap-1 justify-end">
+                <span>{t.goalsAgainst}</span>
+                <span className="text-muted text-xs font-heading">{(t.goalsAgainst / Math.max(1, t.played)).toFixed(1)} / záp.</span>
+              </span>
+            )} />
+          )}
+          {teamAttendance.length > 0 && (
+            <TeamTable title="👥 Průměrná návštěva doma" rows={teamAttendance} renderValue={(t) => (
+              <span className="flex items-baseline gap-1 justify-end">
+                <span>{t.avgAttendance}</span>
+                <span className="text-muted text-xs font-heading">diváků</span>
+              </span>
+            )} />
+          )}
+          {teamPossession.length > 0 && (
+            <TeamTable title="🔵 Průměrné držení míče" rows={teamPossession} renderValue={(t) => <span>{t.avgPossession}%</span>} />
+          )}
+          {teamCleanest.length > 0 && (
+            <TeamTable title="😇 Nejčistší tým" rows={teamCleanest} renderValue={(t) => (
+              <span className="flex items-baseline gap-1 justify-end">
+                <span>{t.fouls}</span>
+                <span className="text-muted text-xs font-heading">faulů · {t.yellowCards + t.redCards} karet</span>
+              </span>
+            )} />
+          )}
+          {teamUnbeaten.length > 0 && (
+            <TeamTable title="🔥 Nejdelší neporazitelnost" rows={teamUnbeaten} renderValue={(t) => (
+              <span className="flex items-baseline gap-1 justify-end">
+                <span>{t.longestUnbeaten}</span>
+                <span className="text-muted text-xs font-heading">zápasů</span>
+              </span>
+            )} />
+          )}
+          {teamWinStreak.length > 0 && (
+            <TeamTable title="🏆 Nejvíc výher v řadě" rows={teamWinStreak} renderValue={(t) => (
+              <span className="flex items-baseline gap-1 justify-end">
+                <span>{t.longestWinStreak}</span>
+                <span className="text-muted text-xs font-heading">výher</span>
+              </span>
+            )} />
+          )}
+          {teamHomeAway.length > 0 && (
+            <TeamTable title="🏠 Doma vs. venku" rows={teamHomeAway} renderValue={(t) => (
+              <span className="flex items-baseline gap-2 justify-end text-sm">
+                <span className="text-pitch-600">{t.homeWins}-{t.homeDraws}-{t.homeLosses}</span>
+                <span className="text-muted text-xs font-heading">venku</span>
+                <span>{t.awayWins}-{t.awayDraws}-{t.awayLosses}</span>
+              </span>
+            )} />
+          )}
+        </div>
+      </div>
+    )}
+
+    {hasCuriosities && cur && (
+      <div className="space-y-3">
+        <div className="text-xs font-heading font-bold uppercase tracking-wider text-muted px-1">🎪 Kuriozity sezóny</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <CuriosityCard icon="⚡" title="Nejrychlejší gól" item={cur.fastestGoal} unit={(v) => `${v}. minuta`} />
+          <CuriosityCard icon="🟥" title="Nejdivočejší zápas" item={cur.wildestMatch} unit={(v) => `${v} karet`} />
+          <CuriosityCard icon="💥" title="Největší výhra" item={cur.biggestWin} unit={(v) => `rozdíl ${v}`} />
+          <CuriosityCard icon="⚽" title="Nejvíc gólů v zápase" item={cur.mostGoals} unit={(v) => golPlural(v) === "gól" ? `${v} gól` : `${v} ${golPlural(v)}`} />
+          <CuriosityCard icon="👥" title="Rekordní návštěva" item={cur.biggestAttendance} unit={(v) => `${v} diváků`} />
         </div>
       </div>
     )}
     </div>
+  );
+}
+
+/** Jedna kuriozita — zápas a čím vyčnívá. Klik vede na detail zápasu. */
+function CuriosityCard({ icon, title, item, unit }: {
+  icon: string; title: string; item: Curiosity | null; unit: (v: number) => string;
+}) {
+  if (!item) return null;
+  return (
+    <Link href={`/dashboard/match/${item.matchId}`} className="card p-3 hover:bg-gray-50 transition-colors block">
+      <div className="flex items-center gap-2">
+        <span className="text-xl shrink-0">{icon}</span>
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-heading font-bold uppercase text-muted">{title}</div>
+          <div className="font-heading font-bold truncate">{item.homeName} {item.homeScore}:{item.awayScore} {item.awayName}</div>
+        </div>
+        <span className="shrink-0 font-heading font-[800] text-sm text-pitch-600">{unit(item.value)}</span>
+      </div>
+    </Link>
   );
 }
 

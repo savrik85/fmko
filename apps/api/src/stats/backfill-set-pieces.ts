@@ -50,19 +50,20 @@ async function backfillLeague(
   db: D1Database, seasonId: string, seasonNumber: number, leagueId: string,
 ): Promise<{ matches: number; players: number; skippedNames: number }> {
   // (playerId, teamId) → součty za celou ligu
-  const acc = new Map<string, { playerId: string; teamId: string; pg: number; pm: number; sp: number; sv: number; ps: number; gc: number; km: number }>();
+  const acc = new Map<string, { playerId: string; teamId: string; pg: number; pm: number; sp: number; sv: number; ps: number; gc: number; km: number; fl: number; ch: number; inj: number }>();
   const bump = (playerId: string, teamId: string) => {
     const key = `${playerId}|${teamId}`;
-    const cur = acc.get(key) ?? { playerId, teamId, pg: 0, pm: 0, sp: 0, sv: 0, ps: 0, gc: 0, km: 0 };
+    const cur = acc.get(key) ?? { playerId, teamId, pg: 0, pm: 0, sp: 0, sv: 0, ps: 0, gc: 0, km: 0, fl: 0, ch: 0, inj: 0 };
     acc.set(key, cur);
     return cur;
   };
   let matches = 0, skippedNames = 0;
+  const matchStmts: D1PreparedStatement[] = [];
 
   for (let offset = 0; ; offset += PAGE) {
     // Jen ligové zápasy — pohár do sezónních statistik nepřispívá (zapisuje jen per-zápas stats).
     const rows = await db.prepare(
-      `SELECT m.id, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
+      `SELECT m.id, m.home_team_id, m.away_team_id, m.home_score, m.away_score, m.fastest_goal_minute, m.total_cards,
               m.events, m.home_lineup_data, m.away_lineup_data
        FROM matches m
        JOIN season_calendar sc ON sc.id = m.calendar_id
@@ -81,10 +82,15 @@ async function backfillLeague(
       const homeIdx = nameIndex(homeLineup);
       const awayIdx = nameIndex(awayLineup);
 
+      let fastestGoal: number | null = null, cardCount = 0;
       for (const event of events) {
+        if (event.type === "card") cardCount++;
+        if (event.type === "goal" && (fastestGoal == null || event.minute < fastestGoal)) fastestGoal = event.minute;
+
         const d = setPieceDelta(event);
         const k = keeperDelta(event);
-        if (!d.penaltyGoals && !d.penaltyMisses && !d.setPieceGoals && !k.saves && !k.penaltySaves) continue;
+        const counted = event.type === "foul" || event.type === "chance" || event.type === "injury";
+        if (!d.penaltyGoals && !d.penaltyMisses && !d.setPieceGoals && !k.saves && !k.penaltySaves && !counted) continue;
 
         // teamId v události je engine číslo: 1 = domácí, 2 = hosté.
         const isHome = event.teamId === 1;
@@ -97,6 +103,13 @@ async function backfillLeague(
         cur.sp += d.setPieceGoals;
         cur.sv += k.saves;
         cur.ps += k.penaltySaves;
+        if (event.type === "foul") cur.fl++;
+        else if (event.type === "chance") cur.ch++;
+        else if (event.type === "injury") cur.inj++;
+      }
+      if (row.fastest_goal_minute == null || row.total_cards == null) {
+        matchStmts.push(db.prepare("UPDATE matches SET fastest_goal_minute = ?, total_cards = ? WHERE id = ?")
+          .bind(fastestGoal, cardCount, row.id as string));
       }
 
       // Obdržené góly gólmanovi ze základní sestavy (střídání gólmana ze záznamu nevyčteme).
@@ -118,11 +131,15 @@ async function backfillLeague(
 
   const stmts = [...acc.values()].map((a) => db.prepare(
     `UPDATE player_stats SET penalty_goals = ?, penalty_misses = ?, setpiece_goals = ?,
-       saves = ?, penalty_saves = ?, goals_conceded = ?, keeper_matches = ?
+       saves = ?, penalty_saves = ?, goals_conceded = ?, keeper_matches = ?,
+       fouls = ?, chances = ?, injuries = ?
      WHERE player_id = ? AND team_id = ? AND season_id = ?`
-  ).bind(a.pg, a.pm, a.sp, a.sv, a.ps, a.gc, a.km, a.playerId, a.teamId, seasonId));
+  ).bind(a.pg, a.pm, a.sp, a.sv, a.ps, a.gc, a.km, a.fl, a.ch, a.inj, a.playerId, a.teamId, seasonId));
   for (let i = 0; i < stmts.length; i += 40) {
     await db.batch(stmts.slice(i, i + 40)).catch((e) => logger.error({ module: M }, "batch update", e));
+  }
+  for (let i = 0; i < matchStmts.length; i += 40) {
+    await db.batch(matchStmts.slice(i, i + 40)).catch((e) => logger.error({ module: M }, "batch match update", e));
   }
 
   return { matches, players: acc.size, skippedNames };
