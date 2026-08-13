@@ -621,7 +621,7 @@ export default function MatchReplayPage() {
           >{s === "live" ? "\u25B6 Živě" : s === "fast" ? "\u25B6\u25B6 Rychle" : "\u25B6\u25B6\u25B6 Konec"}</button>
         ))}
         {htPause && <button onClick={() => { setHtPause(false); setHtDone(true); setKickoff("2nd"); }} className="px-8 py-3 rounded-xl text-base font-heading font-bold uppercase text-white shadow-lg" style={{ backgroundColor: hc }}>2. poločas {"\u25B6"}</button>}
-        {finished && <button onClick={() => router.push("/dashboard")} className="px-10 py-3 rounded-xl text-lg font-heading font-bold uppercase text-white shadow-lg" style={{ backgroundColor: hc }}>Pokračovat</button>}
+        {finished && <button onClick={() => router.push(`/dashboard/match/${matchId}`)} className="px-10 py-3 rounded-xl text-lg font-heading font-bold uppercase text-white shadow-lg" style={{ backgroundColor: hc }}>Pokračovat na přehled</button>}
       </div>
 
       {/* ═══ TICKER ═══ */}
