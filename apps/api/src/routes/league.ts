@@ -281,7 +281,7 @@ leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
   // se ukládá zvlášť při simulaci.
   const matchesRes = await c.env.DB.prepare(
     `SELECT m.id, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
-            m.attendance, m.possession_home, m.fastest_goal_minute, m.simulated_at,
+            m.attendance, m.possession_home, m.fastest_goal_minute, m.total_cards, m.simulated_at,
             ht.name AS home_name, at.name AS away_name
      FROM matches m
      JOIN season_calendar sc ON sc.id = m.calendar_id
