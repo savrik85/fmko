@@ -16,15 +16,19 @@ import type {
 } from "./types";
 import { calcTacticEffectiveness, tacticDrainMod, formationChemistryFactor, TACTIC_MODS, effMod } from "./tactics";
 import { squadChemistryFactor } from "./squad-chemistry";
+import { hardnessMods, hardEff, intimidationPenalty, type Hardness } from "./hardness";
 import {
   NEUTRAL_REFEREE, PETTY_CARD_MUL,
   severeFoulProb, pettyFoulProb, advantageProb, cardMultiplier,
   penaltyZone, freekickZone, crossZone, directRedProb, protestYellowProb,
   refFatigue, planRefereeError, incidentText, gradeReferee,
-  type RefereeIncident,
+  type RefereeIncident, type RefereeProfile,
 } from "./referee";
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
+
+/** Prázdná sada karet — pro volání calcChanceProb mimo běžící zápas (náhled). */
+const EMPTY_BOOKED: ReadonlySet<number> = new Set<number>();
 
 /** Average of a stat across lineup */
 function teamAvg(lineup: MatchPlayer[], stat: keyof MatchPlayer): number {
@@ -68,6 +72,10 @@ function calcChanceProb(
   defending: TeamSetup,
   weather: Weather,
   formFactor: number = 1.0,
+  /** Delegovaný rozhodčí — přísnost škáluje výplatu tvrdé hry. */
+  referee?: RefereeProfile,
+  /** Kdo už má žlutou. Pokartovaný tým z tvrdosti postupně nic nemá. */
+  booked?: { attacking: ReadonlySet<number>; defending: ReadonlySet<number> },
 ): number {
   // Defensive — pokud se neznámá tactic prolomi (data corruption), použij balanced
   const tacticMod = TACTIC_MODS[attacking.tactic] ?? TACTIC_MODS.balanced;
@@ -100,6 +108,15 @@ function calcChanceProb(
   const famMod = formationChemistryFactor(attacking.formationFamiliarity);
   const chemMod = squadChemistryFactor(attacking.lineup);
 
+  // Tvrdost hry. Benefit se škáluje kádrem, sudím a počtem karet na kontě;
+  // riziko (fauly, karty, zranění) se neškáluje nikde — v tom je celý balanc.
+  const defHard = defending.hardness ?? "normal";
+  const defHardMods = hardnessMods(defHard);
+  const defHardEff = hardEff(defending.lineup, defHard, referee, booked?.defending ?? EMPTY_BOOKED);
+  const hardDefenseMod = effMod(defHardMods.defenseMod, defHardEff);
+  // Zastrašení: tvrdá hra srazí útok soupeře podle toho, jak měkký má kádr.
+  const intimidation = intimidationPenalty(defHard, defHardEff, attacking.lineup);
+
   const attackPower = (
     teamAvg(outfield, "technique") * weatherMod.techniqueMod * 0.8 +
     teamAvg(outfield, "passing") * 1.0 +
@@ -108,7 +125,7 @@ function calcChanceProb(
     (midAndFwd.length > 0 ? teamAvg(midAndFwd, "creativity") * 0.5 : 0) +
     teamAvg(outfield, "workRate") * 0.3
   ) / 5 * effMod(tacticMod.attackMod, attEff) * formFactor * attMoraleMod * famMod * chemMod
-    * manpowerFactor(attacking.lineup).attack;
+    * manpowerFactor(attacking.lineup).attack * (1 - intimidation);
 
   const defensePower = (
     teamAvg(defOutfield, "defense") * 1.0 +
@@ -116,7 +133,7 @@ function calcChanceProb(
     (defs.length > 0 ? teamAvg(defs, "aggression") * 0.2 : 0) +
     teamAvg(defOutfield, "workRate") * 0.2
   ) / 3 * effMod((TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced).defenseMod, defEff) * defMoraleMod
-    * manpowerFactor(defending.lineup).defense;
+    * manpowerFactor(defending.lineup).defense * hardDefenseMod;
 
   // Use DIFFERENCE not ratio — so stronger teams create more chances
   // attackPower ~20 (weak) to ~35 (strong), defensePower ~18 to ~25
@@ -906,7 +923,9 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
 
     // Check for chance
     const attackForm = isHomePossession ? homeForm : awayForm;
-    const chanceProb = calcChanceProb(attacking, defending, weather, attackForm);
+    const chanceProb = calcChanceProb(attacking, defending, weather, attackForm, ref, {
+      attacking: yellowCards, defending: yellowCards,
+    });
     // Reduce chance probability when condition is low
     // Low condition has significant impact — floor at 0.45
     const conditionMod = Math.max(0.45, teamAvg(attacking.lineup, "condition") / 100);
@@ -1009,7 +1028,10 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     const defTacticMods = TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced;
     const defEffForCounter = calcTacticEffectiveness(defending.lineup, defending.tactic, defending.formation, defending.formationFamiliarity);
     // Oslabený tým se dostane do brejku hůř — dopředu už nemá kdo běhat.
-    const effectiveCounterMod = defTacticMods.counterMod * defEffForCounter
+    // Tvrdá hra naopak vyrábí zisky míče, ze kterých brejk vzniká.
+    const counterHardBonus = hardnessMods(defending.hardness).counterBonus
+      * hardEff(defending.lineup, defending.hardness ?? "normal", ref, yellowCards);
+    const effectiveCounterMod = (defTacticMods.counterMod * defEffForCounter + counterHardBonus)
       * manpowerFactor(defending.lineup).attack;
     if (effectiveCounterMod > 0 && rng.random() < effectiveCounterMod * conditionMod) {
       const counterAttacker = pickAttacker(rng, defending.lineup);
@@ -1034,7 +1056,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     // ── Ostrý souboj ──
     // Frekvence i následky určuje delegovaný rozhodčí. Benevolentní sudí spoustu
     // soubojů pustí (výhoda), přísný odpíská skoro všechno.
-    if (rng.random() < refSevere) {
+    const defHardMods = hardnessMods(defending.hardness);
+    if (rng.random() < refSevere * defHardMods.foulMod) {
       const fouler = pickFouler(defending);
       if (fouler) {
         if (rng.random() < refAdv) {
@@ -1049,10 +1072,10 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           const fatigue = refFatigue(ref, minute);
           const baseCard = (fouler.temper / 100 + (100 - fouler.discipline) / 100) / 2 * 0.4;
 
-          if (rng.random() < directRedProb(ref, fouler.aggression)) {
+          if (rng.random() < directRedProb(ref, fouler.aggression) * defHardMods.redMod) {
             giveDirectRed(fouler, defending, minute,
               `Červená karta pro ${playerName(fouler)}! Zezadu do kotníku a sudí nezaváhal`);
-          } else if (rng.random() < Math.min(0.55, baseCard * refCardMul * fatigue)) {
+          } else if (rng.random() < Math.min(0.55, baseCard * refCardMul * fatigue * defHardMods.cardMod)) {
             giveYellow(fouler, defending, minute, `Žlutá karta pro ${playerName(fouler)}`);
           }
 
@@ -1076,7 +1099,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     // ── Malichernost ──
     // Faul, který by benevolentní sudí vůbec neodpískal. Nikdy z něj není penalta —
     // jinak by přísný rozhodčí ztrojnásobil počet penalt a rozbil gólovost zápasu.
-    if (refPetty > 0 && rng.random() < refPetty) {
+    if (refPetty > 0 && rng.random() < refPetty * defHardMods.foulMod) {
       const fouler = pickFouler(defending);
       if (fouler) {
         refFouls++;
@@ -1084,7 +1107,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         addEvent(minute, "foul", fouler, defending.teamId,
           `${playerName(fouler)} — a sudí píská i tohle`, "petty");
         const baseCard = (fouler.temper / 100 + (100 - fouler.discipline) / 100) / 2 * 0.4;
-        if (rng.random() < baseCard * refCardMul * PETTY_CARD_MUL * refFatigue(ref, minute)) {
+        if (rng.random() < baseCard * refCardMul * PETTY_CARD_MUL * refFatigue(ref, minute) * defHardMods.cardMod) {
           giveYellow(fouler, defending, minute, `Žlutá karta pro ${playerName(fouler)}`);
         }
         // Žádná standardka — malichernost se z definice píská tam, kde to nikomu nepomůže.
@@ -1093,13 +1116,24 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
 
     // Check for injury (~1% per minute, modified by weather, pitch, equipment)
     const pitchMod = config.pitchCondition != null ? (1 + (100 - config.pitchCondition) / 50) : 1;
-    const injuryProb = 0.01 * WEATHER_MODS[weather].injuryMod * pitchMod;
+    // Tvrdá hra bolí obě strany: vlastní hráči chodí do soubojů naostro a soupeř
+    // schytává fauly. Násobí se globální pravděpodobnost i váhy — bez toho by se
+    // zranění jen přerozdělila mezi týmy a celkem by jich nepřibylo.
+    const injFactor = (own: TeamSetup, opp: TeamSetup) =>
+      hardnessMods(own.hardness).selfInjuryMod * hardnessMods(opp.hardness).oppInjuryMod;
+    const homeInjFactor = injFactor(home, away);
+    const awayInjFactor = injFactor(away, home);
+    const meanInjFactor = (homeInjFactor + awayInjFactor) / 2;
+
+    const injuryProb = 0.01 * WEATHER_MODS[weather].injuryMod * pitchMod * meanInjFactor;
     if (rng.random() < injuryProb) {
       const allPlayers = [...home.lineup, ...away.lineup];
       // Koho zranění potká, váží náchylnost (injuryProneness 0-100, default 50) —
       // křehký hráč (100) má ~3× vyšší riziko než železný (0). Dřív čistá náhoda,
       // přestože UI atribut "Náchylnost" zobrazuje.
-      const proneWeights = allPlayers.map((p) => 0.5 + ((p.injuryProneness ?? 50) / 100));
+      const homeCount = home.lineup.length;
+      const proneWeights = allPlayers.map((p, i) =>
+        (0.5 + ((p.injuryProneness ?? 50) / 100)) * (i < homeCount ? homeInjFactor : awayInjFactor));
       const totalProne = proneWeights.reduce((a, b) => a + b, 0);
       let proneRoll = rng.random() * totalProne;
       let unlucky = allPlayers[allPlayers.length - 1];
@@ -1282,8 +1316,10 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     }
 
     // Update condition (equipment drain reduction × tactic drain — pressing = +30 %)
-    updateCondition(home.lineup, minute, homeCondDrainMod * tacticDrainMod(home.tactic), homeLateFatigueMod);
-    updateCondition(away.lineup, minute, awayCondDrainMod * tacticDrainMod(away.tactic), awayLateFatigueMod);
+    updateCondition(home.lineup, minute,
+      homeCondDrainMod * tacticDrainMod(home.tactic) * hardnessMods(home.hardness).drainMod, homeLateFatigueMod);
+    updateCondition(away.lineup, minute,
+      awayCondDrainMod * tacticDrainMod(away.tactic) * hardnessMods(away.hardness).drainMod, awayLateFatigueMod);
   }
 
   // Full-time event

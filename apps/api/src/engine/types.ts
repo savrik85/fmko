@@ -1,5 +1,6 @@
 import type { MatchEvent, EventType, GoalSource } from "@okresni-masina/shared";
 import type { RefereeProfile, RefereeIncident } from "./referee";
+import type { Hardness } from "./hardness";
 
 export type Tactic = "offensive" | "balanced" | "defensive" | "long_ball" | "possession" | "pressing";
 export type Weather = "sunny" | "cloudy" | "rain" | "wind" | "snow";
@@ -62,6 +63,8 @@ export interface TeamSetup {
   penaltyTakerId?: number;
   /** Engine ID exekutora přímých kopů a rohů. Fallback stejný jako u penalt. */
   freekickTakerId?: number;
+  /** Jak tvrdě tým hraje. Chybí-li, počítá se "normal". */
+  hardness?: Hardness;
   formationFamiliarity?: number;  // 0-100, sehranost zvolené formace
   weatherResist?: number;  // 0-0.45 ze zimní výbavy — tlumí postih počasí (nastavuje simulateMatch)
 }
@@ -121,4 +124,4 @@ export interface MatchResult {
 }
 
 export { MatchEvent, EventType, GoalSource };
-export type { RefereeProfile, RefereeIncident };
+export type { RefereeProfile, RefereeIncident, Hardness };
