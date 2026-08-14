@@ -66,6 +66,8 @@ interface Article {
   icon: string;
   date: string;
   gameWeek?: number | null;
+  /** Klub článku — z něj vede jméno trenéra na jeho profil. */
+  teamId?: string | null;
   photos?: UltrasPhoto[];
   journalist?: Journalist;
 }
@@ -510,7 +512,7 @@ export default function NewsPage() {
                       role="Trenér"
                       tym={meta.teamName}
                       avatar={meta.managerAvatar}
-                      jmenoHref={meta.teamId ? `/dashboard/manager/${meta.teamId}` : undefined}
+                      jmenoHref={(meta.teamId ?? iv.teamId) ? `/dashboard/manager/${meta.teamId ?? iv.teamId}` : undefined}
                       text={meta.article ?? iv.body}
                       poznamka={meta.refereeName ? `Rozhodčí ${meta.refereeName}${meta.incidentText ? " — sporná situace v zápase" : ""}` : undefined}
                       poznamkaHref={meta.refereeId ? `/dashboard/rozhodci/${meta.refereeId}` : undefined}
@@ -540,6 +542,7 @@ export default function NewsPage() {
                       role="Trenér"
                       tym={meta.teamName}
                       avatar={meta.managerAvatar}
+                      jmenoHref={iv.teamId ? `/dashboard/manager/${iv.teamId}` : undefined}
                       text={meta.article ?? iv.body}
                       poznamka={meta.vztah ? `${meta.vztah.popis}${meta.vztah.dopad ? ` — ${meta.vztah.dopad}` : ""}` : undefined}
                     />

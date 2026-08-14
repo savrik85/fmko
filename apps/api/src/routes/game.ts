@@ -1238,6 +1238,7 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
         } : undefined,
         date: n.created_at,
         gameWeek: n.game_week,
+        teamId: n.team_id,
         photos: n.photos_json ? JSON.parse(n.photos_json) : undefined,
       } as any);
     }

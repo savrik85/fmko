@@ -533,6 +533,7 @@ leagueRouter.get("/leagues/:leagueId/news", async (c) => {
           style: n.journalist_style,
         } : undefined,
     date: n.created_at, gameWeek: n.game_week,
+    teamId: n.team_id,
     photos: n.photos_json ? JSON.parse(n.photos_json) : undefined,
   }));
 
