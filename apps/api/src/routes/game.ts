@@ -6685,7 +6685,13 @@ gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
     gameWeek: r.game_week,
     questions: (() => { try { return JSON.parse(r.questions as string); } catch { return []; } })(),
     kind: (r.kind as string) ?? "pre_match",
-    topics: (() => { try { return JSON.parse((r.topics as string) ?? "[]"); } catch { return []; } })(),
+    // Do FE jdou jen klíče témat — podle nich se u správné otázky zobrazí citát soupeře.
+    topics: (() => {
+      try {
+        const raw = JSON.parse((r.topics as string) ?? "[]") as Array<{ key: string } | string>;
+        return raw.map((t) => (typeof t === "string" ? t : t.key));
+      } catch (e) { logger.warn({ module: "game" }, "parse témat rozhovoru", e); return []; }
+    })(),
     // Fakta ze zápasu — formulář z nich ukáže skóre, sudího a spornou situaci,
     // aby hráč nemusel odpovídat po paměti.
     context: (() => { try { return JSON.parse((r.context as string) ?? "null"); } catch { return null; } })(),
