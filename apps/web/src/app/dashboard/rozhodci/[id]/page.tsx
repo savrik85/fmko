@@ -9,6 +9,7 @@ import { Spinner, SectionLabel } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import {
   REFEREE_AXES, axisWord, axisColor, formatGrade, gradeColor, gradeWord, incidentLabel,
+  memoryWord, memoryColor,
   type RefereeProfileView, type RefereeStatsView, type RefereeIncidentView,
 } from "@/lib/referee-info";
 
@@ -28,6 +29,7 @@ interface VsTeam {
   yellowCards: number; redCards: number;
   penaltiesFor: number; penaltiesAgainst: number;
   incidentsFor: number; incidentsAgainst: number;
+  sentiment: number; duvod: string | null; biasPct: number;
 }
 
 type Detail = RefereeProfileView & {
@@ -113,19 +115,35 @@ export default function RozhodciDetailPage() {
         })}
       </div>
 
-      {ref.vsTeam && ref.vsTeam.matches > 0 && (
+      {ref.vsTeam && (
         <>
           <SectionLabel>Vůči tvému týmu</SectionLabel>
           <div className="card p-4">
-            <p className="text-sm">
-              Pískal vám <span className="font-heading font-bold">{ref.vsTeam.matches}×</span> —{" "}
-              {ref.vsTeam.wins} výher, {ref.vsTeam.draws} remíz, {ref.vsTeam.losses} proher.
-            </p>
-            <p className="text-sm text-muted mt-1">
-              Rozdal vám {ref.vsTeam.yellowCards} žlutých a {ref.vsTeam.redCards} červených ·
-              penalty {ref.vsTeam.penaltiesFor}:{ref.vsTeam.penaltiesAgainst} pro vás
-              {ref.vsTeam.incidentsAgainst > 0 && ` · ${ref.vsTeam.incidentsAgainst}× sporná situace proti vám`}
-            </p>
+            {ref.vsTeam.matches > 0 && (
+              <>
+                <p className="text-sm">
+                  Pískal vám <span className="font-heading font-bold">{ref.vsTeam.matches}×</span> —{" "}
+                  {ref.vsTeam.wins} výher, {ref.vsTeam.draws} remíz, {ref.vsTeam.losses} proher.
+                </p>
+                <p className="text-sm text-muted mt-1">
+                  Rozdal vám {ref.vsTeam.yellowCards} žlutých a {ref.vsTeam.redCards} červených ·
+                  penalty {ref.vsTeam.penaltiesFor}:{ref.vsTeam.penaltiesAgainst} pro vás
+                  {ref.vsTeam.incidentsAgainst > 0 && ` · ${ref.vsTeam.incidentsAgainst}× sporná situace proti vám`}
+                </p>
+              </>
+            )}
+            {ref.vsTeam.sentiment !== 0 && (
+              <p className={`text-sm mt-2 ${ref.vsTeam.matches > 0 ? "pt-2 border-t border-ink/10" : ""}`}>
+                Co si o vás myslí:{" "}
+                <span className={`font-heading font-bold ${memoryColor(ref.vsTeam.sentiment)}`}>
+                  {memoryWord(ref.vsTeam.sentiment)}
+                </span>
+                <span className="text-muted tabular-nums"> ({ref.vsTeam.sentiment > 0 ? "+" : ""}{ref.vsTeam.sentiment})</span>
+                {" — "}hraniční verdikty rozhodne o {ref.vsTeam.biasPct.toFixed(1).replace(".", ",")} % častěji{" "}
+                {ref.vsTeam.sentiment < 0 ? "proti vám" : "ve váš prospěch"}.
+                {ref.vsTeam.duvod ? ` Důvod: ${ref.vsTeam.duvod}` : ""}
+              </p>
+            )}
           </div>
         </>
       )}

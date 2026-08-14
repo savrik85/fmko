@@ -184,12 +184,17 @@ refereesRouter.get("/referees/:refereeId", async (c) => {
       "SELECT * FROM referee_team_relations WHERE referee_id = ? AND team_id = ?"
     ).bind(refereeId, teamId).first<Record<string, number>>()
       .catch((e) => { logger.warn({ module: "referees" }, "načtení vztahu k týmu", e); return null; });
-    if (rel && (rel.matches as number) > 0) {
+    if (rel && ((rel.matches as number) > 0 || (rel.sentiment as number) !== 0)) {
+      const { refereeBias } = await import("../engine/referee");
       vsTeam = {
         matches: rel.matches, wins: rel.wins, draws: rel.draws, losses: rel.losses,
         yellowCards: rel.yellow_cards, redCards: rel.red_cards,
         penaltiesFor: rel.penalties_for, penaltiesAgainst: rel.penalties_against,
         incidentsFor: rel.incidents_for, incidentsAgainst: rel.incidents_against,
+        // Co si o klubu myslí — a o kolik to posune hraniční verdikty.
+        sentiment: rel.sentiment ?? 0,
+        duvod: (rel.duvod as unknown as string) || null,
+        biasPct: Math.round(Math.abs(refereeBias((rel.sentiment as number) ?? 0)) * 1000) / 10,
       };
     }
   }
