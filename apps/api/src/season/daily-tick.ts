@@ -1097,12 +1097,59 @@ export async function executeDailyTick(
           } catch (e) { logger.warn({ module: "daily-tick" }, "interview creation failed", e); }
         }
 
+        // ── Retry pozápasového článku ──
+        // Vlastní větev, protože pozápasový rozhovor má jiný prompt i jiný typ článku.
+        // Efekty už jsou zaúčtované z answer endpointu, tady dopisujeme jen text.
+        try {
+          const pm = await env.DB.prepare(
+            `SELECT id, answers, questions, context, league_id, game_week
+             FROM coach_interviews
+             WHERE team_id = ? AND kind = 'post_match' AND status = 'answered' AND article_news_id IS NULL
+             ORDER BY created_at DESC LIMIT 1`
+          ).bind(teamId).first<{ id: string; answers: string; questions: string; context: string | null; league_id: string; game_week: number }>()
+            .catch((e) => { logger.warn({ module: "daily-tick" }, "post-match článek retry lookup", e); return null; });
+
+          const apiKeyPm = (env as { GEMINI_API_KEY?: string }).GEMINI_API_KEY;
+          if (pm?.answers && pm.context && apiKeyPm) {
+            const answers: string[] = JSON.parse(pm.answers);
+            const questions: string[] = JSON.parse(pm.questions);
+            const ctx = JSON.parse(pm.context);
+            const { generatePostMatchArticle } = await import("../news/post-match-interview");
+            const { redaktorProRubriku, pokynyProRedaktora, sentimentKeKlubu } = await import("../news/journalists");
+            const red = await redaktorProRubriku(env.DB, pm.league_id, "interview", teamId)
+              .catch((e) => { logger.warn({ module: "daily-tick" }, "redaktor pro retry", e); return null; });
+            const sent = red ? await sentimentKeKlubu(env.DB, red.id, teamId) : 0;
+            const art = await generatePostMatchArticle(apiKeyPm, ctx, questions, answers,
+              red ? pokynyProRedaktora(red, sent) : "");
+            if (art) {
+              const mgr = await env.DB.prepare(
+                "SELECT m.name AS manager_name, m.avatar AS manager_avatar, t.name AS team_name FROM managers m JOIN teams t ON t.id = m.team_id WHERE m.team_id = ?"
+              ).bind(teamId).first<{ manager_name: string; manager_avatar: string | null; team_name: string }>();
+              const nid = crypto.randomUUID();
+              await env.DB.prepare(
+                "INSERT INTO news (id, league_id, team_id, type, headline, body, game_week, journalist_id, created_at) VALUES (?, ?, ?, 'post_match_interview', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))"
+              ).bind(nid, pm.league_id, teamId, art.headline, JSON.stringify({
+                managerName: mgr?.manager_name ?? "", teamName: mgr?.team_name ?? "",
+                managerAvatar: (() => { try { return mgr?.manager_avatar ? JSON.parse(mgr.manager_avatar) : null; } catch { return null; } })(),
+                article: art.article,
+                qa: questions.map((q, i) => ({ q, a: answers[i] ?? "" })),
+                refereeName: ctx.refereeName ?? null,
+                incidentText: ctx.incident?.text ?? null,
+              }), pm.game_week, red?.id ?? null).run();
+              await env.DB.prepare("UPDATE coach_interviews SET article_news_id = ? WHERE id = ?")
+                .bind(nid, pm.id).run();
+              logger.info({ module: "daily-tick", teamId }, "pozápasový článek dopsán při retry");
+            }
+          }
+        } catch (e) { logger.warn({ module: "daily-tick" }, "retry pozápasového článku", e); }
+
         // ── Retry generování článku pro answered rozhovory bez article_news_id ──
         try {
           const pendingArticle = await env.DB.prepare(
             `SELECT ci.id, ci.answers, ci.questions, ci.match_calendar_id, ci.game_week, ci.league_id
              FROM coach_interviews ci
              WHERE ci.team_id = ? AND ci.status = 'answered' AND ci.article_news_id IS NULL
+               AND ci.kind != 'post_match'
              ORDER BY ci.created_at DESC LIMIT 1`
           ).bind(teamId).first<{ id: string; answers: string; questions: string; match_calendar_id: string; game_week: number; league_id: string }>()
             .catch((e) => { logger.warn({ module: "daily-tick" }, "interview retry lookup", e); return null; });

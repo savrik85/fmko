@@ -92,6 +92,46 @@ export async function loadRefereeForMatch(
 }
 
 /**
+ * Doplní do profilu, co si sudí pamatuje o obou klubech.
+ *
+ * Bez toho by paměť z pozápasových rozhovorů byla jen číslo v tabulce — teprve
+ * tímhle se propíše do hraničních verdiktů příštího vzájemného zápasu.
+ */
+export async function withRefereeMemory(
+  db: D1Database,
+  profile: RefereeProfile,
+  homeTeamId: string,
+  awayTeamId: string,
+): Promise<RefereeProfile> {
+  if (!profile.id) return profile;
+  const rows = await db.prepare(
+    "SELECT team_id, sentiment FROM referee_team_relations WHERE referee_id = ? AND team_id IN (?, ?)"
+  ).bind(profile.id, homeTeamId, awayTeamId).all<{ team_id: string; sentiment: number }>()
+    .catch((e) => { logger.warn({ module: "referees" }, "paměť rozhodčího k týmům", e); return null; });
+
+  const byTeam = new Map((rows?.results ?? []).map((r) => [r.team_id, r.sentiment]));
+  return {
+    ...profile,
+    homeRespect: byTeam.get(homeTeamId) ?? 0,
+    awayRespect: byTeam.get(awayTeamId) ?? 0,
+  };
+}
+
+/**
+ * Zášť i přízeň vyprchávají — jeden bod k nule za odehrané kolo, takže ostrá
+ * kritika (−16) zmizí zhruba za sezónu. Jeden UPDATE na ligu a kolo.
+ */
+export async function decayRefereeMemory(db: D1Database, leagueId: string): Promise<void> {
+  await db.prepare(
+    `UPDATE referee_team_relations
+     SET sentiment = sentiment - CASE WHEN sentiment > 0 THEN 1 WHEN sentiment < 0 THEN -1 ELSE 0 END,
+         updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+     WHERE sentiment != 0 AND team_id IN (SELECT id FROM teams WHERE league_id = ?)`
+  ).bind(leagueId).run()
+    .catch((e) => logger.warn({ module: "referees" }, "decay paměti rozhodčích", e));
+}
+
+/**
  * Rozhodčí pro pohárový zápas.
  *
  * Pohár nedeleguje dva dny předem — pavouk se plní až po dohrání předchozího kola.

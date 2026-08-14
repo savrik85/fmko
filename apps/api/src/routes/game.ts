@@ -6676,6 +6676,11 @@ gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
     matchCalendarId: r.match_calendar_id,
     gameWeek: r.game_week,
     questions: (() => { try { return JSON.parse(r.questions as string); } catch { return []; } })(),
+    kind: (r.kind as string) ?? "pre_match",
+    topics: (() => { try { return JSON.parse((r.topics as string) ?? "[]"); } catch { return []; } })(),
+    // Fakta ze zápasu — formulář z nich ukáže skóre, sudího a spornou situaci,
+    // aby hráč nemusel odpovídat po paměti.
+    context: (() => { try { return JSON.parse((r.context as string) ?? "null"); } catch { return null; } })(),
     status: r.status,
     expiresAt: r.expires_at,
     createdAt: r.created_at,
@@ -6718,6 +6723,97 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
   ).bind(JSON.stringify(answers), interviewId)
     .run()
     .catch((e) => { logger.warn({ module: "game.ts" }, "save interview answers", e); });
+
+  // ── Pozápasový rozhovor má vlastní cestu ──
+  // Efekty se zaúčtují VŽDY, i když Gemini selže — jinak by si rozhodčí nic
+  // nezapamatoval a hráč by nedostal pokutu, kterou článek popisuje.
+  if (interview.kind === "post_match") {
+    const {
+      classifyRefereeStance, mergeStance, generatePostMatchArticle, applyPostMatchInterviewEffects,
+    } = await import("../news/post-match-interview");
+
+    const topics = (() => {
+      try { return JSON.parse((interview.topics as string) ?? "[]") as Array<{ key: string }>; } catch { return []; }
+    })();
+    const ctx = (() => {
+      try { return JSON.parse((interview.context as string) ?? "null"); } catch { return null; }
+    })();
+    if (!ctx) return c.json({ ok: true, articlePending: true });
+
+    const refIdx = topics.findIndex((t) => t.key === "rozhodci");
+    const lexicon = classifyRefereeStance(refIdx >= 0 ? answers[refIdx] : null);
+
+    const mgr = await c.env.DB.prepare(
+      "SELECT m.name AS manager_name, m.avatar AS manager_avatar, t.name AS team_name, t.league_id FROM managers m JOIN teams t ON t.id = m.team_id WHERE m.team_id = ?"
+    ).bind(teamId).first<{ manager_name: string; manager_avatar: string | null; team_name: string; league_id: string }>()
+      .catch((e) => { logger.warn({ module: "game.ts" }, "manažer pro pozápasový článek", e); return null; });
+
+    const { redaktorProRubriku: redakce, pokynyProRedaktora: pokyny, sentimentKeKlubu: sentimentPM } =
+      await import("../news/journalists");
+    const redaktorPM = mgr ? await redakce(c.env.DB, mgr.league_id, "interview", teamId)
+      .catch((e) => { logger.warn({ module: "game.ts" }, "redaktor pozápasového rozhovoru", e); return null; }) : null;
+    const sentPM = redaktorPM ? await sentimentPM(c.env.DB, redaktorPM.id, teamId) : 0;
+
+    const apiKey = (c.env as any).GEMINI_API_KEY as string | undefined;
+    const generated = apiKey
+      ? await generatePostMatchArticle(apiKey, ctx, questions, answers,
+          redaktorPM ? pokyny(redaktorPM, sentPM) : "")
+          .catch((e) => { logger.warn({ module: "game.ts" }, "pozápasový článek", e); return null; })
+      : null;
+
+    const stance = mergeStance(generated?.rozhodci ?? null, lexicon);
+    const applied = await applyPostMatchInterviewEffects(
+      c.env.DB,
+      {
+        id: interviewId, team_id: teamId,
+        league_id: (interview.league_id as string),
+        match_id: (interview.match_id as string | null) ?? null,
+        referee_id: (interview.referee_id as string | null) ?? null,
+      },
+      ctx, stance, generated?.tonKSoupsri ?? "nic",
+    );
+
+    if (!generated || !mgr) {
+      // Odpovědi i efekty jsou uložené, článek dopíše retry v denním ticku.
+      return c.json({ ok: true, articlePending: true, effects: applied });
+    }
+
+    const pmNewsId = crypto.randomUUID();
+    let vztahPM: { popis: string; sentiment: number; dopad?: string } | undefined;
+    if (redaktorPM && generated.vztahRedaktor && generated.vztahRedaktor.posun !== 0) {
+      const { posunSentiment, popisVztahu, dopadTisku } = await import("../news/journalists");
+      const novy = await posunSentiment(c.env.DB, redaktorPM.id, teamId,
+        generated.vztahRedaktor.posun, generated.vztahRedaktor.duvod);
+      const dopad = await dopadTisku(c.env.DB, teamId, novy, `press-${pmNewsId}`);
+      vztahPM = {
+        popis: `${redaktorPM.first_name} ${redaktorPM.last_name}: ${popisVztahu(novy)}`,
+        sentiment: novy, dopad: dopad?.popis,
+      };
+    }
+
+    await c.env.DB.prepare(
+      "INSERT INTO news (id, league_id, team_id, type, headline, body, game_week, journalist_id, created_at) VALUES (?, ?, ?, 'post_match_interview', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))"
+    ).bind(
+      pmNewsId, mgr.league_id, teamId, generated.headline,
+      JSON.stringify({
+        managerName: mgr.manager_name,
+        managerAvatar: (() => { try { return mgr.manager_avatar ? JSON.parse(mgr.manager_avatar) : null; } catch { return null; } })(),
+        teamName: mgr.team_name,
+        article: generated.article,
+        qa: questions.map((q, i) => ({ q, a: answers[i] ?? "" })),
+        vztah: vztahPM,
+        refereeName: ctx.refereeName ?? null,
+        incidentText: ctx.incident?.text ?? null,
+      }),
+      interview.game_week as number, redaktorPM?.id ?? null,
+    ).run().catch((e) => logger.warn({ module: "game.ts" }, "insert pozápasového článku", e));
+
+    await c.env.DB.prepare("UPDATE coach_interviews SET article_news_id = ? WHERE id = ?")
+      .bind(pmNewsId, interviewId).run()
+      .catch((e) => logger.warn({ module: "game.ts" }, "odkaz na pozápasový článek", e));
+
+    return c.json({ ok: true, newsId: pmNewsId, effects: applied });
+  }
 
   // KROK 2: Načti kontext pro generování článku
   const [managerRow, calRow] = await Promise.all([

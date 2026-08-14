@@ -48,6 +48,9 @@ export type TransactionType =
   | "staff_wage"
   | "staff_signing"
   | "course_fee"
+  // Pokuta disciplinární komise za výroky o rozhodčím. ZÁMĚRNĚ není v PURCHASE_TYPES —
+  // musí se strhnout i při záporném rozpočtu, jinak by BUDGET_BLOCKED shodil uložení rozhovoru.
+  | "disciplinary_fine"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */

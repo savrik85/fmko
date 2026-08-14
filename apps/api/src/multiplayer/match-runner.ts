@@ -494,8 +494,13 @@ export async function runScheduledMatches(
             // Rozhodčí — delegovaný dva herní dny předem. Když delegace chybí (tick kolo
             // minul, recovery zaseknutého kola), doplní se se stejným seedem; v krajním
             // případě píská neutrální sudí, zápas se nikdy nezastaví.
-            const { loadRefereeForMatch } = await import("../referees/load");
-            const referee = await loadRefereeForMatch(db, matchId, calendarId);
+            const { loadRefereeForMatch, withRefereeMemory } = await import("../referees/load");
+            const loaded = await loadRefereeForMatch(db, matchId, calendarId);
+            // Co si sudí o obou klubech pamatuje z pozápasových rozhovorů.
+            const referee = {
+                ...loaded,
+                profile: await withRefereeMemory(db, loaded.profile, homeTeamId, awayTeamId),
+            };
 
             // ── Tvrdost hry u AI týmů ──
             // Až tady, protože rozhodnutí zohledňuje přísnost delegovaného sudího.
@@ -1116,6 +1121,24 @@ export async function runScheduledMatches(
             });
         } catch (e) {
             logger.error({module: "match-runner"}, `Failed to simulate match ${matchId}`, e);
+        }
+    }
+
+    // Paměť rozhodčích vyprchává o bod za kolo — jinak by jedna urážka platila navždy.
+    if (results.length > 0 && calRow?.league_id) {
+        const {decayRefereeMemory} = await import("../referees/load");
+        await decayRefereeMemory(db, calRow.league_id);
+    }
+
+    // Pozápasový rozhovor — první v řadě, protože je časově citlivý: hráč musí stihnout
+    // odpovědět, než se odehraje další kolo. Nevyžaduje Gemini (má šablonový fallback),
+    // proto stojí mimo blok podmíněný klíčem.
+    if (results.length > 0) {
+        try {
+            const {tryCreatePostMatchInterviews} = await import("../news/post-match-interview");
+            await tryCreatePostMatchInterviews(db, geminiApiKey, calendarId);
+        } catch (e) {
+            logger.warn({module: "match-runner"}, "post-match interview failed", e);
         }
     }
 
