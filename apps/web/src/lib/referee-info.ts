@@ -36,7 +36,7 @@ export interface RefereeStatsView {
 export const REFEREE_AXES = [
   { key: "strictness", label: "Přísnost", low: "nechá hrát", high: "píská všechno",
     popis: "Kolik toho odpíská. Čím vyšší, tím víc faulů — i drobných." },
-  { key: "cardHappiness", label: "Ochota kartovat", low: "šetří kapsu", high: "sáhne hned",
+  { key: "cardHappiness", label: "Karty", low: "šetří kapsu", high: "sáhne hned",
     popis: "Jak rychle sáhne do kapsy. Vysoká znamená karty i za to, co jiný přejde." },
   { key: "experience", label: "Zkušenost", low: "zelenáč", high: "veterán",
     popis: "Kolik toho odřídil. Nízká zkušenost = větší šance na spornou situaci." },
