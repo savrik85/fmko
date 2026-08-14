@@ -37,6 +37,7 @@ interface MatchDetail {
   events: MatchEvent[]; commentary: string[]; simulated_at: string | null;
   attendance: number | null; stadium_name: string | null;
   pitch_condition: number | null; weather: string | null;
+  home_cup_team_id?: string | null; away_cup_team_id?: string | null;
   possession_home?: number | null;
   mom_player_id?: string | null;
   home_lineup_data: LineupData | null; away_lineup_data: LineupData | null;
@@ -130,6 +131,10 @@ export default function MatchDetailPage() {
   const teamNameById: Record<string, string> = {
     [match.home_team_id]: match.home_name,
     [match.away_team_id]: match.away_name,
+    // Pohár váže sporné situace na cup_teams.id — soupeřem může být velkoklub,
+    // který v `teams` vůbec není. Bez těchhle klíčů by u nich chybělo jméno.
+    ...(match.home_cup_team_id ? { [match.home_cup_team_id]: match.home_name } : {}),
+    ...(match.away_cup_team_id ? { [match.away_cup_team_id]: match.away_name } : {}),
   };
   const goals = match.events.filter((e) => e.type === "goal");
   const homeGoals = goals.filter((e) => e.teamId === 1);
