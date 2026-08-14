@@ -350,7 +350,9 @@ export default function ConversationPage() {
 
                   return (
                     <div key={msg.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-                      <div className="max-w-[75%]">
+                      {/* Oznámení z redakce a od svazu jsou jednosměrná — bublina na 75 %
+                          by tam nechala mrtvý pruh a dlouhé titulky lámala do sloupce. */}
+                      <div className={isSystem ? "w-full" : "max-w-[75%]"}>
                         {!isUser && (conv?.type === "squad_group") && (
                           <div className="text-xs text-pitch-600 font-medium mb-0.5 ml-2">{msg.senderName}</div>
                         )}
