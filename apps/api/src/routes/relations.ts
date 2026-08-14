@@ -12,7 +12,7 @@ import { logger } from "../lib/logger";
 import {
   getRelation, applyRelationEvent, relationStatus, relationLabel, isLoyalAlly, aiArchetype, AI_ARCHETYPE_LABELS,
   isAiTeam, aiGestureResponse, aiAcceptsBet, aiStatementResponse, shiftSquadMorale, insertRelationNews,
-  getManagerName, getTeamName, getTeamGameDate,
+  getManagerName, getTeamName, getTeamGameDate, insertInteraction,
   type GestureChoice, type StatementTone,
 } from "../community/manager-relations";
 import { recordTransaction, assertPurchaseAllowed } from "../season/finance-processor";
@@ -115,17 +115,6 @@ async function lastInteractionAt(
 function daysSince(iso: string | null): number {
   if (!iso) return Infinity;
   return (Date.now() - new Date(iso).getTime()) / 86_400_000;
-}
-
-async function insertInteraction(
-  db: D1Database, type: string, actorId: string, targetId: string,
-  matchId: string | null, payload: Record<string, unknown>, status = "resolved",
-): Promise<string> {
-  const id = crypto.randomUUID();
-  await db.prepare(
-    "INSERT INTO manager_interactions (id, type, actor_team_id, target_team_id, match_id, payload, status) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).bind(id, type, actorId, targetId, matchId, JSON.stringify(payload), status).run();
-  return id;
 }
 
 const STAMMTISCH_COOLDOWN_DAYS = 14;

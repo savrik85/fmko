@@ -948,6 +948,19 @@ export async function executeDailyTick(
       const delegated = await delegateReferees(env.DB, globalGameDate);
       if (delegated > 0) logger.info({ module: "referees" }, `delegováno ${delegated} zápasů`);
     } catch (e) { logger.error({ module: "referees" }, "delegace rozhodčích selhala", e); }
+
+    // ── Předzápasové výroky AI trenérů ──
+    // Stejné okno jako delegace: výrok musí vyjít před zápasem, jinak na něj
+    // pozápasový rozhovor nemá jak navázat.
+    try {
+      const { gameExpiry } = await import("../lib/game-time");
+      const { publishAiPreMatchStatements } = await import("../news/ai-prematch-statement");
+      const target = new Date(gameExpiry(globalGameDate, 2));
+      const from = new Date(target); from.setUTCHours(0, 0, 0, 0);
+      const to = new Date(target); to.setUTCHours(23, 59, 59, 999);
+      const said = await publishAiPreMatchStatements(env.DB, from.toISOString(), to.toISOString());
+      if (said > 0) logger.info({ module: "ai-statement" }, `${said} předzápasových výroků`);
+    } catch (e) { logger.warn({ module: "ai-statement" }, "předzápasové výroky selhaly", e); }
   }
   // (Chybějící game_clock už je zalogováno jako error na začátku ticku.)
 

@@ -6637,7 +6637,9 @@ gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
     `SELECT ci.* FROM coach_interviews ci
      LEFT JOIN season_calendar sc ON ci.match_calendar_id = sc.id
      WHERE ci.team_id = ? AND ci.status = 'pending'
-       AND (ci.match_calendar_id LIKE 'season-%-wrap' OR (sc.id IS NOT NULL AND sc.status NOT IN ('simulated','cancelled')))
+       AND (ci.kind = 'post_match'
+            OR ci.match_calendar_id LIKE 'season-%-wrap'
+            OR (sc.id IS NOT NULL AND sc.status NOT IN ('simulated','cancelled')))
      ORDER BY ci.created_at DESC`
   ).bind(teamId).all<Record<string, unknown>>().catch((e) => {
     logger.warn({ module: "game.ts" }, "get coach_interviews", e);

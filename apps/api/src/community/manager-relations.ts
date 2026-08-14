@@ -250,6 +250,21 @@ export async function shiftSquadMorale(db: D1Database, teamId: string, delta: nu
 }
 
 /** Krátká zpráva do ligových novin (typ manager_feud — rivalita a vztahy manažerů). */
+/**
+ * Zápis interakce mezi trenéry. Žije tady, ne v route souboru, protože ji
+ * potřebuje i denní tick při publikování předzápasových výroků AI trenérů.
+ */
+export async function insertInteraction(
+  db: D1Database, type: string, actorId: string, targetId: string,
+  matchId: string | null, payload: Record<string, unknown>, status = "resolved",
+): Promise<string> {
+  const id = crypto.randomUUID();
+  await db.prepare(
+    "INSERT INTO manager_interactions (id, type, actor_team_id, target_team_id, match_id, payload, status) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).bind(id, type, actorId, targetId, matchId, JSON.stringify(payload), status).run();
+  return id;
+}
+
 export async function insertRelationNews(
   db: D1Database,
   leagueId: string | null,
@@ -542,6 +557,34 @@ export function aiStatementResponse(
         counterQuote: tone === "provoke" ? counterQuote : null,
         historyText: `${aiManager} to vzal s úsměvem`,
       };
+  }
+}
+
+/**
+ * Vydá AI trenér před zápasem výrok do novin? A jaký?
+ *
+ * Bez RNG — `roll` si volající odvodí ze seedu zápasu, takže opakovaný běh cronu
+ * nedá jinou odpověď. AI trenér byl dosud čistě reaktivní: sám od sebe neřekl nic.
+ * Bez toho by ale pozápasová otázka „co říkáte na výrok soupeře" neměla o co opřít.
+ */
+export function aiPreMatchStatement(
+  archetype: AiArchetype,
+  ctx: { heat: number; respect: number; roll: number; weAreFavourite: boolean },
+): { tone: StatementTone } | null {
+  switch (archetype) {
+    case "provokater":
+      // Rýpe rád, a když je dusno, tak skoro vždycky.
+      return ctx.heat >= 20 || ctx.roll < 0.50 ? { tone: "provoke" } : null;
+    case "urazeny":
+      // Sám od sebe mlčí. Promluví, až když ho něco štve.
+      if (ctx.heat >= 40) return { tone: "provoke" };
+      return ctx.roll < 0.20 ? { tone: "humble" } : null;
+    case "ferovka":
+      return ctx.respect >= 30 || ctx.roll < 0.25 ? { tone: "respect" } : null;
+    case "pohodar":
+      if (ctx.roll >= 0.35) return null;
+      // Favorit se shazuje, outsider smeká — obojí je v okrese k vidění.
+      return { tone: ctx.weAreFavourite ? "humble" : "respect" };
   }
 }
 

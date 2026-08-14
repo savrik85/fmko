@@ -21,7 +21,7 @@ import {
   NEUTRAL_REFEREE, PETTY_CARD_MUL,
   severeFoulProb, pettyFoulProb, advantageProb, cardMultiplier,
   penaltyZone, freekickZone, crossZone, directRedProb, protestYellowProb,
-  refFatigue, planRefereeError, incidentText, gradeReferee,
+  refFatigue, planRefereeError, incidentText, gradeReferee, cardMemoryMod,
   type RefereeIncident, type RefereeProfile,
 } from "./referee";
 
@@ -1075,7 +1075,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           if (rng.random() < directRedProb(ref, fouler.aggression) * defHardMods.redMod) {
             giveDirectRed(fouler, defending, minute,
               `Červená karta pro ${playerName(fouler)}! Zezadu do kotníku a sudí nezaváhal`);
-          } else if (rng.random() < Math.min(0.55, baseCard * refCardMul * fatigue * defHardMods.cardMod)) {
+          } else if (rng.random() < Math.min(0.55,
+            baseCard * refCardMul * fatigue * defHardMods.cardMod * cardMemoryMod(ref, defending === home))) {
             giveYellow(fouler, defending, minute, `Žlutá karta pro ${playerName(fouler)}`);
           }
 
@@ -1107,7 +1108,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         addEvent(minute, "foul", fouler, defending.teamId,
           `${playerName(fouler)} — a sudí píská i tohle`, "petty");
         const baseCard = (fouler.temper / 100 + (100 - fouler.discipline) / 100) / 2 * 0.4;
-        if (rng.random() < baseCard * refCardMul * PETTY_CARD_MUL * refFatigue(ref, minute) * defHardMods.cardMod) {
+        if (rng.random() < baseCard * refCardMul * PETTY_CARD_MUL * refFatigue(ref, minute)
+            * defHardMods.cardMod * cardMemoryMod(ref, defending === home)) {
           giveYellow(fouler, defending, minute, `Žlutá karta pro ${playerName(fouler)}`);
         }
         // Žádná standardka — malichernost se z definice píská tam, kde to nikomu nepomůže.

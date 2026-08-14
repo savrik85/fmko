@@ -238,11 +238,13 @@ export default {
               }
             } catch (e) { log("warn", "u21 return hook", e); }
 
-            // Po zápase: smaž všechny zbývající pending pre-match interview žádosti
-            // (po zápase už nemají smysl — articles se píšou jen z odpovězených).
+            // Po zápase: smaž všechny zbývající pending PŘEDZÁPASOVÉ interview žádosti
+            // (po zápase už nemají smysl — články se píšou jen z odpovězených).
+            // Filtr na kind je nutný: pozápasový rozhovor vzniká uvnitř runScheduledMatches
+            // pro TENTÝŽ calendar_id, takže bez něj by ho tenhle úklid zabil pár řádků po vzniku.
             try {
               const expired = await env.DB.prepare(
-                "SELECT id FROM coach_interviews WHERE match_calendar_id = ? AND status = 'pending'"
+                "SELECT id FROM coach_interviews WHERE match_calendar_id = ? AND status = 'pending' AND kind = 'pre_match'"
               ).bind(matchCal.id).all<{ id: string }>();
               for (const ci of expired.results) {
                 await env.DB.prepare("DELETE FROM messages WHERE metadata LIKE ?")
@@ -250,7 +252,7 @@ export default {
                   .catch((e) => log("warn", `cleanup interview msg ${ci.id}`, e));
               }
               await env.DB.prepare(
-                "UPDATE coach_interviews SET status = 'expired' WHERE match_calendar_id = ? AND status = 'pending'"
+                "UPDATE coach_interviews SET status = 'expired' WHERE match_calendar_id = ? AND status = 'pending' AND kind = 'pre_match'"
               ).bind(matchCal.id).run();
               if (expired.results.length > 0) log("info", `expired ${expired.results.length} unanswered interviews after match`);
             } catch (e) { log("warn", "post-match interview cleanup", e); }

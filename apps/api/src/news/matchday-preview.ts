@@ -7,6 +7,7 @@
 import { calculateStandings, type StandingEntry } from "../stats/standings";
 import { logger } from "../lib/logger";
 import { VILLAGE_FLAVOR } from "./ai-reporter";
+import { loadPreMatchStatement } from "./ai-prematch-statement";
 
 interface MatchPreview {
   matchId: string;
@@ -30,6 +31,9 @@ interface MatchPreview {
   awayInjured: string[];
   homeManager: string | null;
   awayManager: string | null;
+  /** Veřejný výrok trenéra k tomuhle zápasu (i od AI). */
+  homeStatement: { quote: string; tone: string } | null;
+  awayStatement: { quote: string; tone: string } | null;
   homeInterviewQuote: string | null;
   awayInterviewQuote: string | null;
   h2hSummary: string | null;
@@ -94,9 +98,11 @@ async function loadManagerName(db: D1Database, teamId: string): Promise<string |
 /** Krátký citát z posledního rozhovoru trenéra (první odpověď, useknutá na 120 znaků). */
 async function loadLastInterviewQuote(db: D1Database, teamId: string): Promise<string | null> {
   const row = await db.prepare(
+    // Předzápasové rozhovory mají přednost — z pozápasového by se do náhledu příštího
+    // kola dostala nadávka na rozhodčího, která s ním nemá co dělat.
     `SELECT answers FROM coach_interviews
      WHERE team_id = ? AND status = 'answered' AND answers IS NOT NULL
-     ORDER BY created_at DESC LIMIT 1`
+     ORDER BY CASE kind WHEN 'pre_match' THEN 0 ELSE 1 END, created_at DESC LIMIT 1`
   ).bind(teamId).first<{ answers: string }>()
     .catch((e) => { logger.warn({ module: "matchday-preview" }, "load last interview", e); return null; });
   if (!row?.answers) return null;
@@ -203,6 +209,7 @@ export async function generateMatchdayPreview(
       homeQuote, awayQuote,
       h2h,
       relation,
+      homeStatement, awayStatement,
     ] = await Promise.all([
       loadForm(db, homeTeamId),
       loadForm(db, awayTeamId),
@@ -216,6 +223,10 @@ export async function generateMatchdayPreview(
       loadLastInterviewQuote(db, awayTeamId),
       loadH2H(db, homeTeamId, awayTeamId),
       getRelationPromptContext(db, homeTeamId, awayTeamId),
+      // Veřejný výrok k tomuhle zápasu — nově i od AI trenérů. Dřív visel jen jako
+      // samostatný článek a do náhledu kola se nedostal ani od lidských trenérů.
+      loadPreMatchStatement(db, homeTeamId, m.id as string),
+      loadPreMatchStatement(db, awayTeamId, m.id as string),
     ]);
     const isHeatDerby = (relation?.heat ?? 0) >= DERBY_HEAT_THRESHOLD;
 
@@ -240,6 +251,7 @@ export async function generateMatchdayPreview(
       awayInjured: awayInj,
       homeManager: homeMng,
       awayManager: awayMng,
+      homeStatement, awayStatement,
       homeInterviewQuote: homeQuote,
       awayInterviewQuote: awayQuote,
       h2hSummary: h2h,
@@ -294,6 +306,8 @@ export async function generateMatchdayPreview(
     if (p.awayManager) lines.push(`  Trenér ${p.awayName}: ${p.awayManager}`);
     if (p.homeInterviewQuote) lines.push(`  Citát trenéra ${p.homeManager ?? "domácích"}: „${p.homeInterviewQuote}"`);
     if (p.awayInterviewQuote) lines.push(`  Citát trenéra ${p.awayManager ?? "hostů"}: „${p.awayInterviewQuote}"`);
+    if (p.homeStatement) lines.push(`  Výrok trenéra ${p.homeManager ?? "domácích"} do novin: „${p.homeStatement.quote}"`);
+    if (p.awayStatement) lines.push(`  Výrok trenéra ${p.awayManager ?? "hostů"} do novin: „${p.awayStatement.quote}"`);
     if (p.h2hSummary) lines.push(`  Vzájemné: ${p.homeName} ${p.h2hSummary} proti ${p.awayName}`);
     matchLines.push(lines.join("\n"));
   }

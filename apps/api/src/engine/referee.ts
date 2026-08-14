@@ -33,6 +33,10 @@ export interface RefereeProfile {
   advantage: number;
   /** Nízká = po 70. minutě víc karet a chyb. */
   fitness: number;
+  /** Co si sudí pamatuje o domácím klubu, −100..100. Plní fáze pozápasových rozhovorů. */
+  homeRespect?: number;
+  /** Totéž o hostech. */
+  awayRespect?: number;
 }
 
 export const NEUTRAL_REFEREE: RefereeProfile = {
@@ -45,6 +49,8 @@ export const NEUTRAL_REFEREE: RefereeProfile = {
   homeBias: 50,
   advantage: 50,
   fitness: 50,
+  homeRespect: 0,
+  awayRespect: 0,
 };
 
 // ── Archetypy ────────────────────────────────────────────────────────────────
@@ -226,7 +232,22 @@ export function penaltyZone(r: RefereeProfile, isHomeAttacking: boolean, crowdFa
   // sporných situací (vymyšlená penalta), takže by se jinak celkový počet přestřelil.
   const base = 0.019 + 0.019 * (r.strictness / 100);
   const tilt = (isHomeAttacking ? 1 : -1) * 0.35 * ((r.homeBias - 50) / 50) * clamp(crowdFactor, 0.6, 1.4);
-  return clamp(base * (1 + tilt), 0.012, 0.075);
+  // Komu sudí přeje, tomu spíš ukáže na puntík.
+  const memory = refereeBias(respectFor(r, isHomeAttacking));
+  return clamp(base * (1 + tilt) * (1 + memory), 0.012, 0.075);
+}
+
+/** Co si sudí pamatuje o daném týmu. */
+export function respectFor(r: RefereeProfile, isHome: boolean): number {
+  return (isHome ? r.homeRespect : r.awayRespect) ?? 0;
+}
+
+/**
+ * Násobič karetní pravděpodobnosti podle paměti. Kdo si sudího znepřátelil,
+ * dostane kartu o něco snáz — v mezích, které zápas nerozhodnou.
+ */
+export function cardMemoryMod(r: RefereeProfile, isHome: boolean): number {
+  return 1 - refereeBias(respectFor(r, isHome)) * 5;
 }
 
 /** Práh zóny přímého kopu (roll < práh a zároveň >= penaltyZone). */
@@ -344,6 +365,18 @@ export function planRefereeError(rng: Rng, r: RefereeProfile): PlannedRefereeErr
     severity: picked.severity,
     favourHome,
   };
+}
+
+/**
+ * Posun hraničních verdiktů podle toho, co si o klubu sudí pamatuje.
+ *
+ * Strop je ±3 % při plném respektu ±100. Jedna ostrá kritika v pozápasovém
+ * rozhovoru dá −16, tedy −0,48 % — má se to cítit jako „sudí si to pamatuje",
+ * ne jako trest. Nedotýká se gólů, střel ani kondice, jen verdiktů, a NEZVYŠUJE
+ * strop jedné sporné situace na zápas — jen posouvá, komu padne.
+ */
+export function refereeBias(respect: number): number {
+  return clamp(respect / 100, -1, 1) * 0.03;
 }
 
 /** Česká věta popisující spornou situaci. Nesmí projít šablonou komentáře. */
