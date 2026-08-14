@@ -59,12 +59,11 @@ export function axisWord(value: number): string {
   return "velmi nízká";
 }
 
-/**
- * Barva pruhu osy. Vysoká hodnota není sama o sobě dobrá ani špatná — červená
- * u vysoké zkušenosti proto mátla. Pruh je jednobarevný, sytost dělá jen délka.
- */
-export function axisColor(_value: number): string {
-  return "bg-ink/60";
+/** Barva pruhu osy. Vysoká hodnota není sama o sobě dobrá ani špatná. */
+export function axisColor(value: number): string {
+  if (value >= 75) return "bg-card-red";
+  if (value >= 55) return "bg-gold-500";
+  return "bg-pitch-500";
 }
 
 /**

@@ -81,13 +81,12 @@ export default function RozhodciDetailPage() {
       <div className="card p-4">
         {s.matches > 0 ? (
           <>
-            <div className="grid grid-cols-3 gap-2">
+            {/* Jedna mřížka pro všechno — dvě různé (3 a 4 sloupce) dělaly cikcak. */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <Stat label="Průměrná známka" value={formatGrade(s.avgGrade)} className={gradeColor(s.avgGrade)}
                 hint={s.avgGrade != null ? gradeWord(s.avgGrade) : undefined} />
               <Stat label="Odpískal" value={`${s.matches}×`} />
               <Stat label="Faulů/zápas" value={formatGrade(s.foulsPerMatch, 1)} />
-            </div>
-            <div className="grid grid-cols-4 gap-2 mt-2">
               <Stat label="Žluté" value={`${s.yellowCards ?? 0}`} />
               <Stat label="Červené" value={`${s.redCards ?? 0}`} />
               <Stat label="Penalty" value={`${s.penalties ?? 0}`} />
