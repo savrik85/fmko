@@ -73,3 +73,31 @@ export function getFormationTooltip(key: string): string {
   if (!info) return key;
   return `${info.label} — ${info.description}`;
 }
+
+// ── Tvrdost hry ──
+
+export type HardnessKey = "fair" | "normal" | "hard";
+
+export const HARDNESS_INFO: Record<HardnessKey, { label: string; icon: string; description: string }> = {
+  fair: {
+    label: "Na férovku",
+    icon: "🤝",
+    description: "Nikdo se nepere, hraje se na míč. O třetinu míň faulů a skoro polovina karet — soupeř za to má víc prostoru. Volba, když máš půl kádru na kartách nebo tenkou lavičku.",
+  },
+  normal: {
+    label: "Normálně",
+    icon: "⚽",
+    description: "Jak to přijde. Žádný modifikátor — výchozí nastavení.",
+  },
+  hard: {
+    label: "Do těla",
+    icon: "💪",
+    description: "Souboje se hrají naostro. Zpevní obranu, vyrobí protiútoky a technickému soupeři podlomí koleno — zaplatíš to fauly, kartami a zraněními. Proti přísnému sudímu sebevražda, proti benevolentnímu zlato. Funguje jen s agresivním a silným kádrem.",
+  },
+};
+
+export function getHardnessTooltip(key: HardnessKey): string {
+  const info = HARDNESS_INFO[key];
+  if (!info) return "";
+  return `${info.label} — ${info.description}`;
+}

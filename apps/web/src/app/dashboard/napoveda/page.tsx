@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { MANAGER_FANS, MANAGER_FANS_BANDS } from "@okresni-masina/shared";
 import { ATTRIBUTE_INFO, type AttrKey, type Pos } from "@/lib/attribute-info";
-import { TACTIC_INFO, FORMATION_INFO, type TacticKey } from "@/lib/tactic-info";
+import { TACTIC_INFO, FORMATION_INFO, HARDNESS_INFO, type TacticKey, type HardnessKey } from "@/lib/tactic-info";
 
 const POS_LABEL: Record<Pos, string> = {
   GK: "Brankář",
@@ -98,6 +98,39 @@ export default function NapovedaPage() {
               </div>
             );
           })}
+        </div>
+      </section>
+
+      {/* ═══ TVRDOST HRY ═══ */}
+      <section className="card p-4 space-y-3">
+        <h2 className="font-heading font-bold text-lg flex items-center gap-2">
+          💪 <span>Tvrdost hry</span>
+        </h2>
+        <p className="text-sm text-muted">
+          Třetí osa vedle formace a taktiky. Vyplatí se ji volit podle toho, kdo bude zápas
+          pískat — rozhodčí se deleguje dva herní dny předem, takže to stihneš.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {(Object.keys(HARDNESS_INFO) as HardnessKey[]).map((key) => {
+            const h = HARDNESS_INFO[key];
+            return (
+              <div key={key} className="border border-gray-200 rounded-lg p-3">
+                <div className="font-heading font-bold text-sm mb-1">{h.icon} {h.label}</div>
+                <p className="text-xs text-muted leading-relaxed">{h.description}</p>
+              </div>
+            );
+          })}
+        </div>
+        <div className="text-sm space-y-1.5 border-t border-gray-100 pt-3">
+          <p><span className="font-heading font-bold">Zisk z tvrdé hry není pevný.</span> Škálují ho tři věci:
+            jestli na ni máš kádr (agresivita, síla, pracovitost), jak přísný je sudí, a kolik hráčů už má
+            žlutou. Riziko se naproti tomu neškáluje — fauly a karty přijdou v plné výši, i když tvrdou
+            hru neumíš. Technický kádr si tím tedy spíš uškodí.</p>
+          <p><span className="font-heading font-bold">Červená karta nově opravdu oslabuje.</span> Dřív se
+            síla týmu počítala průměrem, takže vyloučení nebylo znát. Teď každý chybějící hráč ubere z útoku
+            i z obrany, a útok padá víc — deset lidí ubrání skoro totéž, ale dopředu už nemá kdo běhat.</p>
+          <p><span className="font-heading font-bold">Tvrdá hra zraňuje.</span> Víc soupeře než vlastní
+            hráče, ale obě strany na to doplácejí.</p>
         </div>
       </section>
 

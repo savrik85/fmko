@@ -3383,22 +3383,22 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 
   // For friendlies, lookup lineup by match_id; for league by calendar_id
   const lineupQuery = isFriendly
-    ? c.env.DB.prepare("SELECT formation, tactic, players_data, is_auto, captain_id, preset_slot FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(teamId, match.id as string)
-    : c.env.DB.prepare("SELECT formation, tactic, players_data, is_auto, captain_id, preset_slot FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(teamId, calendarId!);
+    ? c.env.DB.prepare("SELECT formation, tactic, hardness, players_data, is_auto, captain_id, preset_slot FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(teamId, match.id as string)
+    : c.env.DB.prepare("SELECT formation, tactic, hardness, players_data, is_auto, captain_id, preset_slot FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(teamId, calendarId!);
 
   // Batch: existing lineup + all players (including injured)
   const [lineupRes, playersRes] = await c.env.DB.batch([
     lineupQuery,
     c.env.DB.prepare("SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.weekly_wage, p.skills, p.life_context, p.personality, p.physical, p.squad_number, p.commute_km, p.suspended_matches, p.is_celebrity, ps.avg_rating, i.days_remaining as injury_days, i.type as injury_type FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.team_id = p.team_id AND ps.season_id = (SELECT id FROM seasons WHERE status = 'active' LIMIT 1) WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') ORDER BY p.overall_rating DESC").bind(teamId),
   ]);
-  let lineup = (lineupRes.results[0] as { formation: string; tactic: string; players_data: string; is_auto: number; captain_id: string | null; preset_slot: string | null } | undefined) ?? null;
+  let lineup = (lineupRes.results[0] as { formation: string; tactic: string; hardness: string | null; players_data: string; is_auto: number; captain_id: string | null; preset_slot: string | null } | undefined) ?? null;
   let lineupSource: "explicit" | "default" | null = lineup ? "explicit" : null;
 
   // If no lineup for this specific match, use the last saved lineup as default
   if (!lineup) {
     lineup = await c.env.DB.prepare(
-      "SELECT formation, tactic, players_data, is_auto, captain_id, preset_slot FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1"
-    ).bind(teamId).first<{ formation: string; tactic: string; players_data: string; is_auto: number; captain_id: string | null; preset_slot: string | null }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
+      "SELECT formation, tactic, hardness, players_data, is_auto, captain_id, preset_slot FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1"
+    ).bind(teamId).first<{ formation: string; tactic: string; hardness: string | null; players_data: string; is_auto: number; captain_id: string | null; preset_slot: string | null }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
     if (lineup) lineupSource = "default";
   }
   const players = { results: playersRes.results as Record<string, unknown>[] };
@@ -3675,7 +3675,9 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       isLocalDerby,
     },
     lineup: lineup ? {
-      formation: lineup.formation, tactic: lineup.tactic, isAuto: lineup.is_auto === 1,
+      formation: lineup.formation, tactic: lineup.tactic,
+      hardness: lineup.hardness ?? "normal",
+      isAuto: lineup.is_auto === 1,
       captainId: lineup.captain_id ?? null,
       presetSlot: lineup.preset_slot ?? null,
       source: lineupSource, // "explicit" = pro tento zápas, "default" = fallback z poslední uložené
@@ -3695,6 +3697,7 @@ gameRouter.post("/teams/:teamId/lineup-preview", async (c) => {
     matchId?: string;
     formation?: string;
     tactic?: string;
+    hardness?: string;
     captainId?: string | null;
     players?: Array<{ playerId: string; matchPosition: string }>;
   };
@@ -3760,7 +3763,54 @@ gameRouter.post("/teams/:teamId/lineup-preview", async (c) => {
   }
 
   const preview = calcLineupPreview(ownSetup, opponentSetup);
-  return c.json(preview);
+
+  // Predikce kartové bilance — počítá se tady, ne na frontendu, aby vzorce enginu
+  // nežily podruhé v UI. Bere v úvahu zvolenou tvrdost i povahu delegovaného sudího.
+  let cardRisk = null;
+  try {
+    const { predictDiscipline } = await import("../engine/hardness");
+    const {
+      NEUTRAL_REFEREE, severeFoulProb, pettyFoulProb, advantageProb, cardMultiplier, directRedProb,
+    } = await import("../engine/referee");
+
+    let refProfile = NEUTRAL_REFEREE;
+    if (body.matchId) {
+      const refRow = await c.env.DB.prepare(
+        "SELECT r.* FROM matches m JOIN referees r ON r.id = m.referee_id WHERE m.id = ?"
+      ).bind(body.matchId).first<Record<string, unknown>>()
+        .catch((e) => { logger.warn({ module: "game" }, "referee pro predikci karet", e); return null; });
+      if (refRow) {
+        const { rowToProfile } = await import("../referees/referee-generator");
+        refProfile = rowToProfile(refRow as never);
+      }
+    }
+
+    const hardnessKey = (body.hardness ?? "normal") as "fair" | "normal" | "hard";
+    const pred = predictDiscipline(ownLineup, hardnessKey, refProfile, {
+      severeFoul: severeFoulProb(refProfile),
+      petty: pettyFoulProb(refProfile),
+      advantage: advantageProb(refProfile),
+      cardMul: cardMultiplier(refProfile),
+      // Průměrná agresivita sestavy rozhoduje, jak často z faulu bude rovnou červená.
+      redBase: directRedProb(refProfile, ownLineup.reduce((a, p) => a + p.aggression, 0) / ownLineup.length),
+    });
+
+    // Kdo je jednu žlutou od stopky — nejkonkrétnější důvod, proč hrát na férovku.
+    const seasonRow = await c.env.DB.prepare(
+      "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+    ).first<{ id: string }>().catch(() => null);
+    const edgeRow = seasonRow ? await c.env.DB.prepare(
+      `SELECT COUNT(*) AS c FROM player_stats
+       WHERE team_id = ? AND season_id = ? AND yellow_cards % 4 = 3 AND player_id IN (${placeholders})`
+    ).bind(teamId, seasonRow.id, ...players.map((p) => p.playerId)).first<{ c: number }>()
+      .catch((e) => { logger.warn({ module: "game" }, "hráči na hraně stopky", e); return null; }) : null;
+
+    cardRisk = { ...pred, onEdge: edgeRow?.c ?? 0 };
+  } catch (e) {
+    logger.warn({ module: "game" }, "predikce kartové bilance", e);
+  }
+
+  return c.json({ ...preview, cardRisk });
 });
 
 // GET lineup for specific calendar entry
@@ -3768,12 +3818,12 @@ gameRouter.get("/teams/:teamId/lineup/:calendarId", async (c) => {
   const teamId = c.req.param("teamId");
   const calendarId = c.req.param("calendarId");
   const row = await c.env.DB.prepare(
-    "SELECT formation, tactic, players_data, captain_id, preset_slot FROM lineups WHERE team_id = ? AND calendar_id = ?"
-  ).bind(teamId, calendarId).first<{ formation: string; tactic: string; players_data: string; captain_id: string | null; preset_slot: string | null }>();
+    "SELECT formation, tactic, hardness, players_data, captain_id, preset_slot FROM lineups WHERE team_id = ? AND calendar_id = ?"
+  ).bind(teamId, calendarId).first<{ formation: string; tactic: string; hardness: string | null; players_data: string; captain_id: string | null; preset_slot: string | null }>();
   if (!row) return c.json({ lineup: null });
   return c.json({
     lineup: {
-      formation: row.formation, tactic: row.tactic,
+      formation: row.formation, tactic: row.tactic, hardness: row.hardness ?? "normal",
       captainId: row.captain_id ?? null,
       presetSlot: row.preset_slot ?? null,
       players: (() => { try { return JSON.parse(row.players_data); } catch { return []; } })(),
@@ -3783,18 +3833,24 @@ gameRouter.get("/teams/:teamId/lineup/:calendarId", async (c) => {
 
 // Whitelist taktik a formací — drží sync se shared/engine. Neplatné hodnoty by jinak crashly engine.
 const VALID_TACTICS = ["offensive", "balanced", "defensive", "long_ball", "possession", "pressing"] as const;
+// Tvrdost hry — whitelist stejně jako u taktiky, DB CHECK constraint na ni nemá.
+const VALID_HARDNESS = ["fair", "normal", "hard"] as const;
 const VALID_FORMATIONS = ["4-4-2", "4-3-3", "3-5-2", "4-5-1", "5-3-2", "3-4-3"] as const;
 
 // POST save lineup for next match
 gameRouter.post("/teams/:teamId/lineup", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ calendarId: string; formation: string; tactic: string; captainId?: string; presetSlot?: "A" | "B" | "C" | null; players: Array<{ playerId: string; matchPosition: string }> }>();
+  const body = await c.req.json<{ calendarId: string; formation: string; tactic: string; hardness?: string; captainId?: string; presetSlot?: "A" | "B" | "C" | null; players: Array<{ playerId: string; matchPosition: string }> }>();
 
   if (!body.players || body.players.length !== 11) return c.json({ error: "Sestava musí mít přesně 11 hráčů" }, 400);
   const gkCount = body.players.filter((p) => p.matchPosition === "GK").length;
   if (gkCount !== 1) return c.json({ error: "Sestava musí mít přesně 1 brankáře" }, 400);
   if (!VALID_TACTICS.includes(body.tactic as typeof VALID_TACTICS[number])) {
     return c.json({ error: `Neplatná taktika "${body.tactic}"` }, 400);
+  }
+  const hardness = body.hardness ?? "normal";
+  if (!VALID_HARDNESS.includes(hardness as typeof VALID_HARDNESS[number])) {
+    return c.json({ error: `Neplatná tvrdost hry "${body.hardness}"` }, 400);
   }
   if (!VALID_FORMATIONS.includes(body.formation as typeof VALID_FORMATIONS[number])) {
     return c.json({ error: `Neplatná formace "${body.formation}"` }, 400);
@@ -3836,12 +3892,12 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
   const presetSlot: string | null = body.presetSlot && ["A","B","C"].includes(body.presetSlot)
     ? body.presetSlot : null;
   if (existing) {
-    await c.env.DB.prepare("UPDATE lineups SET formation = ?, tactic = ?, players_data = ?, captain_id = ?, preset_slot = ?, is_auto = 0, submitted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
-      .bind(body.formation, body.tactic, JSON.stringify(body.players), captainId, presetSlot, existing.id).run();
+    await c.env.DB.prepare("UPDATE lineups SET formation = ?, tactic = ?, hardness = ?, players_data = ?, captain_id = ?, preset_slot = ?, is_auto = 0, submitted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
+      .bind(body.formation, body.tactic, hardness, JSON.stringify(body.players), captainId, presetSlot, existing.id).run();
   } else {
     const id = crypto.randomUUID();
-    await c.env.DB.prepare("INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, captain_id, preset_slot, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
-      .bind(id, teamId, body.calendarId, body.formation, body.tactic, JSON.stringify(body.players), captainId, presetSlot).run();
+    await c.env.DB.prepare("INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, hardness, players_data, captain_id, preset_slot, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
+      .bind(id, teamId, body.calendarId, body.formation, body.tactic, hardness, JSON.stringify(body.players), captainId, presetSlot).run();
   }
 
   // Auto-upsert do lineup_presets když user ukládá sestavu s presetSlot A/B/C.
@@ -3850,15 +3906,16 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
   // že jedna akce "Uložit Sestavu A" naplní slot i zápas naráz — to je teď skutečné chování.
   if (presetSlot) {
     await c.env.DB.prepare(
-      `INSERT INTO lineup_presets (team_id, slot, formation, tactic, captain_id, players_data, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+      `INSERT INTO lineup_presets (team_id, slot, formation, tactic, hardness, captain_id, players_data, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
        ON CONFLICT(team_id, slot) DO UPDATE SET
          formation = excluded.formation,
          tactic = excluded.tactic,
+         hardness = excluded.hardness,
          captain_id = excluded.captain_id,
          players_data = excluded.players_data,
          updated_at = excluded.updated_at`
-    ).bind(teamId, presetSlot, body.formation, body.tactic, captainId, JSON.stringify(body.players))
+    ).bind(teamId, presetSlot, body.formation, body.tactic, hardness, captainId, JSON.stringify(body.players))
       .run().catch((e) => logger.warn({ module: "game" }, "auto-upsert preset", e));
   }
 
@@ -3873,15 +3930,16 @@ type PresetSlot = typeof PRESET_SLOTS[number];
 gameRouter.get("/teams/:teamId/lineup-presets", async (c) => {
   const teamId = c.req.param("teamId");
   const rows = await c.env.DB.prepare(
-    "SELECT slot, formation, tactic, captain_id, players_data, updated_at FROM lineup_presets WHERE team_id = ?"
-  ).bind(teamId).all<{ slot: string; formation: string; tactic: string; captain_id: string | null; players_data: string; updated_at: string }>()
+    "SELECT slot, formation, tactic, hardness, captain_id, players_data, updated_at FROM lineup_presets WHERE team_id = ?"
+  ).bind(teamId).all<{ slot: string; formation: string; tactic: string; hardness: string | null; captain_id: string | null; players_data: string; updated_at: string }>()
     .catch((e) => { logger.warn({ module: "game" }, "load presets", e); return { results: [] }; });
 
-  const presets: Record<string, { formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; updatedAt: string } | null> = { A: null, B: null, C: null };
+  const presets: Record<string, { formation: string; tactic: string; hardness: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; updatedAt: string } | null> = { A: null, B: null, C: null };
   for (const r of rows.results) {
     presets[r.slot] = {
       formation: r.formation,
       tactic: r.tactic,
+      hardness: r.hardness ?? "normal",
       captainId: r.captain_id,
       players: (() => { try { return JSON.parse(r.players_data); } catch { return []; } })(),
       updatedAt: r.updated_at,
@@ -3895,10 +3953,14 @@ gameRouter.put("/teams/:teamId/lineup-presets/:slot", async (c) => {
   const slot = c.req.param("slot") as PresetSlot;
   if (!PRESET_SLOTS.includes(slot)) return c.json({ error: "Neplatný slot (A/B/C)" }, 400);
 
-  const body = await c.req.json<{ formation: string; tactic: string; captainId?: string; players: Array<{ playerId: string; matchPosition: string }> }>();
+  const body = await c.req.json<{ formation: string; tactic: string; hardness?: string; captainId?: string; players: Array<{ playerId: string; matchPosition: string }> }>();
   if (!body.players || body.players.length !== 11) return c.json({ error: "Sestava musí mít 11 hráčů" }, 400);
   if (!VALID_TACTICS.includes(body.tactic as typeof VALID_TACTICS[number])) {
     return c.json({ error: `Neplatná taktika "${body.tactic}"` }, 400);
+  }
+  const hardness = body.hardness ?? "normal";
+  if (!VALID_HARDNESS.includes(hardness as typeof VALID_HARDNESS[number])) {
+    return c.json({ error: `Neplatná tvrdost hry "${body.hardness}"` }, 400);
   }
   if (!VALID_FORMATIONS.includes(body.formation as typeof VALID_FORMATIONS[number])) {
     return c.json({ error: `Neplatná formace "${body.formation}"` }, 400);
@@ -3908,15 +3970,16 @@ gameRouter.put("/teams/:teamId/lineup-presets/:slot", async (c) => {
   const captainId = body.captainId && playerIds.includes(body.captainId) ? body.captainId : null;
 
   await c.env.DB.prepare(
-    `INSERT INTO lineup_presets (team_id, slot, formation, tactic, captain_id, players_data, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+    `INSERT INTO lineup_presets (team_id, slot, formation, tactic, hardness, captain_id, players_data, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
      ON CONFLICT(team_id, slot) DO UPDATE SET
        formation = excluded.formation,
        tactic = excluded.tactic,
+       hardness = excluded.hardness,
        captain_id = excluded.captain_id,
        players_data = excluded.players_data,
        updated_at = excluded.updated_at`
-  ).bind(teamId, slot, body.formation, body.tactic, captainId, JSON.stringify(body.players)).run();
+  ).bind(teamId, slot, body.formation, body.tactic, hardness, captainId, JSON.stringify(body.players)).run();
 
   return c.json({ ok: true });
 });
@@ -3937,8 +4000,8 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
   await c.req.json<{ calendarId?: string }>().catch(() => ({}));
 
   const preset = await c.env.DB.prepare(
-    "SELECT formation, tactic, captain_id, players_data FROM lineup_presets WHERE team_id = ? AND slot = ?"
-  ).bind(teamId, slot).first<{ formation: string; tactic: string; captain_id: string | null; players_data: string }>();
+    "SELECT formation, tactic, hardness, captain_id, players_data FROM lineup_presets WHERE team_id = ? AND slot = ?"
+  ).bind(teamId, slot).first<{ formation: string; tactic: string; hardness: string | null; captain_id: string | null; players_data: string }>();
   if (!preset) return c.json({ error: "Preset je prázdný" }, 404);
 
   const presetPlayers: Array<{ playerId: string; matchPosition: string }> = (() => { try { return JSON.parse(preset.players_data); } catch { return []; } })();
@@ -3997,6 +4060,7 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
   return c.json({
     formation: preset.formation,
     tactic: preset.tactic,
+    hardness: preset.hardness ?? "normal",
     captainId: captainStillIn ? preset.captain_id : null,
     players: finalPlayers,
     warnings,

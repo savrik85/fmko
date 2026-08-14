@@ -22,6 +22,8 @@ interface LineupData {
   subs: LineupPlayer[];
   formation: string;
   tactic: string;
+  /** Zvolená tvrdost hry. Chybí u zápasů odehraných před jejím zavedením. */
+  hardness?: string;
   captainId: string | null;
 }
 
@@ -183,6 +185,32 @@ export function buildMatchSummary(input: BuildInput): MatchSummary | null {
         label: "Taktika",
         description: `${TACTIC_LABEL[ownTactic]} vs ${TACTIC_LABEL[oppTactic]} — ${note}`,
         impact,
+      });
+    }
+  }
+
+  // 2b. Tvrdost hry — dává smysl zmínit jen když se od normálu odchýlila,
+  // a hlavně tehdy, když ji sudí trestal nebo naopak toleroval.
+  if (ownLineup.hardness && ownLineup.hardness !== "normal") {
+    const ownCards = events.filter((e) => e.type === "card" && playerIsInLineup(e, ownLineup)).length;
+    if (ownLineup.hardness === "hard") {
+      const impact: Impact = ownCards >= 3 ? "MEDIUM_NEGATIVE" : outcome === "WIN" ? "MEDIUM_POSITIVE" : "LOW_NEGATIVE";
+      candidates.push({
+        type: "tactic",
+        label: "Tvrdost hry",
+        description: ownCards >= 3
+          ? `Šli jste do těla a sudí to trestal — ${ownCards} karet je daň, kterou jste zaplatili.`
+          : "Šli jste do těla. Souboje jste vyhrávali a soupeř se do vápna dostával hůř.",
+        impact,
+      });
+    } else {
+      candidates.push({
+        type: "tactic",
+        label: "Tvrdost hry",
+        description: ownCards === 0
+          ? "Hráli jste na férovku — bez karet, ale soupeř měl v soubojích víc prostoru."
+          : "Hráli jste na férovku. Kádr jste ušetřili, soupeř toho ale dostal víc.",
+        impact: outcome === "LOSS" ? "LOW_NEGATIVE" : "NEUTRAL",
       });
     }
   }

@@ -28,6 +28,17 @@ interface LineupPreviewData {
     overallDelta: number;
   };
   recommendation?: string;
+  cardRisk?: CardRisk | null;
+}
+
+/** Odhad kartové bilance ze zvolené tvrdosti a povahy delegovaného sudího. */
+export interface CardRisk {
+  fouls: number;
+  cards: number;
+  reds: number;
+  level: "nízké" | "střední" | "vysoké";
+  /** Kolik hráčů v sestavě je jednu žlutou od stopky. */
+  onEdge: number;
 }
 
 interface Props {
@@ -35,8 +46,11 @@ interface Props {
   matchId?: string;
   formation: string;
   tactic: string;
+  hardness: string;
   captainId: string | null;
   players: Array<{ playerId: string; matchPosition: string }>;
+  /** Predikci karet zobrazuje sestavovač u volby tvrdosti, ne tady — proto ji posíláme nahoru. */
+  onCardRisk?: (risk: CardRisk | null) => void;
 }
 
 const LINE_LABELS: Record<keyof LineStrengths, string> = {
@@ -69,7 +83,7 @@ function barColor(value: number): string {
   return "bg-card-red";
 }
 
-export function LineupPreview({ teamId, matchId, formation, tactic, captainId, players }: Props) {
+export function LineupPreview({ teamId, matchId, formation, tactic, hardness, captainId, players, onCardRisk }: Props) {
   const [data, setData] = useState<LineupPreviewData | null>(null);
   const [loading, setLoading] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -80,6 +94,7 @@ export function LineupPreview({ teamId, matchId, formation, tactic, captainId, p
     const valid = players.filter((p) => p.playerId).length;
     if (valid !== 11) {
       setData(null);
+      onCardRisk?.(null);
       return;
     }
 
@@ -90,12 +105,13 @@ export function LineupPreview({ teamId, matchId, formation, tactic, captainId, p
       apiFetch<LineupPreviewData>(`/api/teams/${teamId}/lineup-preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matchId, formation, tactic, captainId, players }),
+        body: JSON.stringify({ matchId, formation, tactic, hardness, captainId, players }),
       })
-        .then((d) => setData(d))
+        .then((d) => { setData(d); onCardRisk?.(d.cardRisk ?? null); })
         .catch((e) => {
           console.error("lineup-preview failed:", e);
           setData(null);
+          onCardRisk?.(null);
         })
         .finally(() => setLoading(false));
     }, 400);
@@ -103,7 +119,7 @@ export function LineupPreview({ teamId, matchId, formation, tactic, captainId, p
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [teamId, matchId, formation, tactic, captainId, players]);
+  }, [teamId, matchId, formation, tactic, hardness, captainId, players]);
 
   if (!data && !loading) return null;
 

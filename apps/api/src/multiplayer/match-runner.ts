@@ -8,7 +8,7 @@ import {weatherAttendanceFactor} from "../season/weather";
 import {generateMatchCommentary, loadCommentaryFromDB} from "../engine/commentary";
 import {createRng} from "../generators/rng";
 import {experienceGainChance} from "../skills/training";
-import type {MatchPlayer, TeamSetup, Weather} from "../engine/types";
+import type {MatchPlayer, TeamSetup, Weather, Hardness} from "../engine/types";
 import {
     calculatePlayerRatings,
     extractStatsFromEvents,
@@ -162,18 +162,19 @@ export async function runScheduledMatches(
                 tactic: string;
                 players_data: string;
                 is_auto: number;
-                captain_id: string | null
+                captain_id: string | null;
+                hardness: string | null;
             };
             const loadLineup = async (tid: string): Promise<LineupRow | null> => {
                 // Pokud je víc rows pro stejný (team, calendar) — kopie + user-saved — vyber nejnovější user-saved
-                const exact = await db.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC, submitted_at DESC, id ASC LIMIT 1")
+                const exact = await db.prepare("SELECT formation, tactic, hardness, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC, submitted_at DESC, id ASC LIMIT 1")
                     .bind(tid, calendarId).first<LineupRow>().catch((e) => {
                         logger.warn({module: "match-runner"}, "Failed to load lineup exact", e);
                         return null;
                     });
                 if (exact) return exact;
                 // Fallback: poslední user-saved sestava (jakýkoliv calendar, ne auto)
-                return db.prepare("SELECT formation, tactic, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1")
+                return db.prepare("SELECT formation, tactic, hardness, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1")
                     .bind(tid).first<LineupRow>().catch((e) => {
                         logger.warn({module: "match-runner"}, "Failed to load lineup fallback", e);
                         return null;
@@ -227,6 +228,8 @@ export async function runScheduledMatches(
             const awayTactic = (awayLineupRow?.tactic as any) ?? "balanced";
             const homeFormation = homeLineupRow?.formation ?? "4-4-2";
             const awayFormation = awayLineupRow?.formation ?? "4-4-2";
+            const homeHardness = (homeLineupRow?.hardness as Hardness | null) ?? "normal";
+            const awayHardness = (awayLineupRow?.hardness as Hardness | null) ?? "normal";
 
             // Map captain DB IDs to engine IDs
             const homeCaptainEngineId = homeLineupRow?.captain_id ? [...homeBuild.idMap.entries()].find(([, dbId]) => dbId === homeLineupRow.captain_id)?.[0] : undefined;
@@ -256,6 +259,7 @@ export async function runScheduledMatches(
                 tactic: homeTactic,
                 formation: homeFormation,
                 captainId: homeCaptainEngineId,
+                hardness: homeHardness,
                 ...homeTakers,
                 formationFamiliarity: homeFam.formation[homeFormation] ?? 0,
             };
@@ -267,6 +271,7 @@ export async function runScheduledMatches(
                 tactic: awayTactic,
                 formation: awayFormation,
                 captainId: awayCaptainEngineId,
+                hardness: awayHardness,
                 ...awayTakers,
                 formationFamiliarity: awayFam.formation[awayFormation] ?? 0,
             };
@@ -492,6 +497,56 @@ export async function runScheduledMatches(
             const { loadRefereeForMatch } = await import("../referees/load");
             const referee = await loadRefereeForMatch(db, matchId, calendarId);
 
+            // ── Tvrdost hry u AI týmů ──
+            // Až tady, protože rozhodnutí zohledňuje přísnost delegovaného sudího.
+            // Lidský trenér si tvrdost nastavuje sám, tomu se nesahá.
+            try {
+                const { decideAiHardness } = await import("../engine/hardness");
+                const avg = (l: MatchPlayer[], k: keyof MatchPlayer) =>
+                    l.length ? l.reduce((a, p) => a + (p[k] as number), 0) / l.length : 50;
+                const power = (l: MatchPlayer[]) =>
+                    (avg(l, "technique") + avg(l, "passing") + avg(l, "shooting") + avg(l, "defense") + avg(l, "speed")) / 5;
+                const homePower = power(homeLineup);
+                const awayPower = power(awayLineup);
+
+                // Hráči jednu žlutou od stopky (stopka padá po každé čtvrté).
+                const bookedRow = await db.prepare(
+                    `SELECT team_id, COUNT(*) AS c FROM player_stats
+                     WHERE team_id IN (?, ?) AND yellow_cards % 4 = 3 GROUP BY team_id`
+                ).bind(homeTeamId, awayTeamId).all<{ team_id: string; c: number }>()
+                    .catch((e) => { logger.warn({module: "match-runner"}, "load booked players", e); return null; });
+                const bookedOf = new Map((bookedRow?.results ?? []).map((r) => [r.team_id, r.c]));
+
+                const teamTypes = await db.prepare("SELECT id, team_type FROM teams WHERE id IN (?, ?)")
+                    .bind(homeTeamId, awayTeamId).all<{ id: string; team_type: string | null }>()
+                    .catch((e) => { logger.warn({module: "match-runner"}, "load team types", e); return null; });
+                const typeOf = new Map((teamTypes?.results ?? []).map((r) => [r.id, r.team_type]));
+
+                const sides: Array<[TeamSetup, string, boolean, MatchPlayer[], number, number]> = [
+                    [homeSetup, homeTeamId, homeIsHuman, homeLineup, homePower, awayPower],
+                    [awaySetup, awayTeamId, awayIsHuman, awayLineup, awayPower, homePower],
+                ];
+                for (const [setup, tid, isHuman, lineup, myPower, oppPower] of sides) {
+                    if (isHuman) continue;
+                    setup.hardness = decideAiHardness({
+                        squadAggression: avg(lineup, "aggression"),
+                        refStrictness: referee.profile.strictness,
+                        strengthGap: oppPower - myPower,
+                        playersOneYellowFromBan: bookedOf.get(tid) ?? 0,
+                        // Derby se sem zatím nepromítá — vyžadovalo by další dotaz na
+                        // manager_relations a match tick jede všechny ligy v jednom běhu.
+                        isDerby: false,
+                        isU21: typeOf.get(tid) === "u21",
+                    });
+                    // Zapsat zpátky, aby v detailu zápasu bylo vidět, jak soupeř hrál.
+                    await db.prepare("UPDATE lineups SET hardness = ? WHERE team_id = ? AND calendar_id = ?")
+                        .bind(setup.hardness, tid, calendarId).run()
+                        .catch((e) => logger.warn({module: "match-runner"}, "persist AI hardness", e));
+                }
+            } catch (e) {
+                logger.warn({module: "match-runner"}, "AI hardness decision", e);
+            }
+
             // Simulate
             const result = simulateMatch(rng, {
                 home: homeSetup,
@@ -533,7 +588,7 @@ export async function runScheduledMatches(
             );
 
             // Build lineup data for storage (name, position, number, rating)
-            const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>, formation: string, tactic: string, captainEngineId?: number) => {
+            const buildLineupData = (lineup: typeof homeLineup, subs: typeof homeSubs, idMap: Map<number, string>, formation: string, tactic: string, hardness: Hardness, captainEngineId?: number) => {
                 const mapPlayer = (p: typeof homeLineup[0]) => ({
                     id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`,
                     position: p.matchPosition ?? p.position, naturalPosition: p.position,
@@ -545,6 +600,7 @@ export async function runScheduledMatches(
                     subs: subs.map(mapPlayer),
                     formation,
                     tactic,
+                    hardness,
                     captainId: captainDbId
                 };
             };
@@ -587,8 +643,8 @@ export async function runScheduledMatches(
                 result.homeScore, result.awayScore,
                 JSON.stringify(result.events), JSON.stringify(commentary),
                 attendanceWithOfficials, stadiumName, pitchCondition, weather,
-                JSON.stringify(buildLineupData(homeLineupPreSim, homeSubsPreSim, homeBuild.idMap, homeFormation, homeTactic, homeCaptainEngineId)),
-                JSON.stringify(buildLineupData(awayLineupPreSim, awaySubsPreSim, awayBuild.idMap, awayFormation, awayTactic, awayCaptainEngineId)),
+                JSON.stringify(buildLineupData(homeLineupPreSim, homeSubsPreSim, homeBuild.idMap, homeFormation, homeTactic, homeSetup.hardness ?? "normal", homeCaptainEngineId)),
+                JSON.stringify(buildLineupData(awayLineupPreSim, awaySubsPreSim, awayBuild.idMap, awayFormation, awayTactic, awaySetup.hardness ?? "normal", awayCaptainEngineId)),
                 matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null,
                 result.possessionHome,
                 // Minuta prvního gólu — pro žebříček nejrychlejšího gólu sezóny.
@@ -1449,7 +1505,7 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
     // chybí, použiji heuristiku: nejnovější lineup z calendar_id co MÁ taky kopii v
     // lineup_presets (= byl ručně uložen jako preset). Pokud není, nejnovější vůbec.
     const lastLineup = await db.prepare(
-        `SELECT l.formation, l.tactic, l.players_data, l.captain_id, l.preset_slot, l.submitted_at
+        `SELECT l.formation, l.tactic, l.hardness, l.players_data, l.captain_id, l.preset_slot, l.submitted_at
          FROM lineups l
          WHERE l.team_id = ?
            AND l.is_auto = 0
@@ -1461,6 +1517,7 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
         captain_id: string | null;
         preset_slot: string | null;
         submitted_at: string
+        hardness: string | null;
     }>().catch((e) => {
         logger.error({module: "match-runner"}, "copyOrCreateLineup: query failed", e);
         return null;
@@ -1481,8 +1538,8 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
                 // pro budoucí copyOrCreateLineup volání. Bez toho by se každou simulací posouval
                 // "poslední lineup" na auto-kopii a metadata se postupně ztrácela.
                 await db.prepare(
-                    "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, captain_id, preset_slot, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)"
-                ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, JSON.stringify(validPicks.slice(0, 11)), captainStillActive, lastLineup.preset_slot, lastLineup.submitted_at).run();
+                    "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, hardness, players_data, captain_id, preset_slot, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)"
+                ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, lastLineup.hardness ?? "normal", JSON.stringify(validPicks.slice(0, 11)), captainStillActive, lastLineup.preset_slot, lastLineup.submitted_at).run();
                 return;
             } catch (e) {
                 logger.error({module: "match-runner"}, `copyOrCreateLineup INSERT failed for ${teamId} cal=${calendarId}`, e);
@@ -1546,17 +1603,19 @@ export async function createAutoLineup(
         usedIds.add(remaining.id as string);
     }
 
-    // Zachovat poslední user-uložený tactic — nejen formation. Bez toho fallback vždy resetuje
-    // na "balanced" i když user dlouhodobě hrál třeba "possession".
-    const savedTactic = await db.prepare("SELECT tactic FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1")
-        .bind(teamId).first<{ tactic: string }>().catch((e) => {
+    // Zachovat poslední user-uložený tactic a tvrdost — nejen formation. Bez toho fallback
+    // vždy resetuje na "balanced"/"normal", i když user dlouhodobě hrál třeba "possession"
+    // a do těla.
+    const savedTactic = await db.prepare("SELECT tactic, hardness FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1")
+        .bind(teamId).first<{ tactic: string; hardness: string | null }>().catch((e) => {
             logger.warn({module: "match-runner"}, "load saved tactic", e);
             return null;
         });
     const tactic = savedTactic?.tactic ?? "balanced";
+    const hardness = savedTactic?.hardness ?? "normal";
 
     const lineupId = crypto.randomUUID();
     await db.prepare(
-        "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, players_data, is_auto) VALUES (?, ?, ?, ?, ?, ?, 1)"
-    ).bind(lineupId, teamId, calendarId, formation, tactic, JSON.stringify(picked)).run();
+        "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, hardness, players_data, is_auto) VALUES (?, ?, ?, ?, ?, ?, ?, 1)"
+    ).bind(lineupId, teamId, calendarId, formation, tactic, hardness, JSON.stringify(picked)).run();
 }

@@ -11,9 +11,9 @@ import type { BadgePattern } from "@/components/ui";
 import { BusSelector } from "./BusSelector";
 import { RefereeCard } from "@/components/match/referee-card";
 import type { RefereeProfileView, RefereeStatsView } from "@/lib/referee-info";
-import { getTacticTooltip, getFormationTooltip, type TacticKey } from "@/lib/tactic-info";
+import { getTacticTooltip, getFormationTooltip, getHardnessTooltip, type TacticKey, type HardnessKey } from "@/lib/tactic-info";
 import { computeLineupChemistry, type RelationshipType } from "@okresni-masina/shared";
-import { LineupPreview } from "@/components/LineupPreview";
+import { LineupPreview, type CardRisk } from "@/components/LineupPreview";
 
 type Pos = "GK" | "DEF" | "MID" | "FWD";
 
@@ -25,6 +25,11 @@ const TACTICS = [
   { key: "long_ball", label: "Nakopávané", icon: "🏈" },
   { key: "possession", label: "Držení míče", icon: "🎯" },
   { key: "pressing", label: "Vysoký presink", icon: "🔥" },
+] as const;
+const HARDNESS = [
+  { key: "fair", label: "Na férovku", icon: "🤝" },
+  { key: "normal", label: "Normálně", icon: "⚽" },
+  { key: "hard", label: "Do těla", icon: "💪" },
 ] as const;
 
 // Sehranost (familiarity) UI — barva podle úrovně 0-100
@@ -155,6 +160,8 @@ function MatchPage() {
   const [upcomingMatches, setUpcomingMatches] = useState<UpcomingMatch[]>([]);
   const [players, setPlayers] = useState<AvailablePlayer[]>([]);
   const [referee, setReferee] = useState<DelegatedReferee | null>(null);
+  const [hardness, setHardness] = useState<HardnessKey>("normal");
+  const [cardRisk, setCardRisk] = useState<CardRisk | null>(null);
   const [formation, setFormation] = useState("4-4-2");
   const [tactic, setTactic] = useState("balanced");
   const [selected, setSelected] = useState<(string | null)[]>(Array(11).fill(null));
@@ -171,7 +178,7 @@ function MatchPage() {
   const [rolesSavedAt, setRolesSavedAt] = useState<number | null>(null);
   const [rolesError, setRolesError] = useState<string | null>(null);
   const [formationFam, setFormationFam] = useState<Record<string, number>>({});
-  const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; updatedAt: string } | null>>({ A: null, B: null, C: null });
+  const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; updatedAt: string } | null>>({ A: null, B: null, C: null });
   const [activePreset, setActivePreset] = useState<"A" | "B" | "C" | null>(null);
   const [lineupSource, setLineupSource] = useState<"explicit" | "default" | null>(null);
 
@@ -196,7 +203,7 @@ function MatchPage() {
     // Pokud URL má ?calendarId=X, načti přímo ten zápas. Jinak default = nejbližší.
     const urlCalIdInit = searchParams.get("calendarId");
     const url = urlCalIdInit ? `/api/teams/${teamId}/next-match?calendarId=${urlCalIdInit}` : `/api/teams/${teamId}/next-match`;
-    apiFetch<{ nextMatch: NextMatchInfo | null; referee?: DelegatedReferee | null; lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
+    apiFetch<{ nextMatch: NextMatchInfo | null; referee?: DelegatedReferee | null; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
       url
     ).then((data) => {
       setNextMatch(data.nextMatch);
@@ -206,6 +213,7 @@ function MatchPage() {
       if (data.lineup && data.lineup.players.length === 11) {
         setFormation(data.lineup.formation);
         setTactic(data.lineup.tactic);
+        setHardness((data.lineup.hardness ?? "normal") as HardnessKey);
         // Auto-replace any stored player who is now unavailable (injury/suspension)
         // with the best available player for that slot's position
         const pool = data.availablePlayers ?? [];
@@ -266,7 +274,7 @@ function MatchPage() {
             homeName: target.isHome ? myName : target.opponentName,
             awayName: target.isHome ? target.opponentName : myName,
           } : prev);
-          apiFetch<{ lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
+          apiFetch<{ lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
             .then((ld) => {
               if (ld.lineup?.players.length === 11) {
                 setFormation(ld.lineup.formation);
@@ -324,7 +332,7 @@ function MatchPage() {
     try {
       await apiFetch(`/api/teams/${teamId}/lineup-presets/${slot}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formation, tactic, captainId, players }),
+        body: JSON.stringify({ formation, tactic, hardness, captainId, players }),
       });
       const d = await apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`);
       setPresets(d.presets ?? presets);
@@ -338,7 +346,7 @@ function MatchPage() {
     const myReqId = ++loadPresetReqId.current;
     try {
       const matchCalId = nextMatch?.calendarId ?? nextMatch?.matchId ?? null;
-      const data = await apiFetch<{ formation: string; tactic: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; warnings: string[] }>(
+      const data = await apiFetch<{ formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; warnings: string[] }>(
         `/api/teams/${teamId}/lineup-presets/${slot}/apply`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(matchCalId ? { calendarId: matchCalId } : {}) }
       );
@@ -346,6 +354,7 @@ function MatchPage() {
       if (myReqId !== loadPresetReqId.current) return;
       setFormation(data.formation);
       setTactic(data.tactic);
+      setHardness((data.hardness ?? "normal") as HardnessKey);
       const newSel = data.players.map((p) => p.playerId);
       while (newSel.length < 11) newSel.push(null as any);
       setSelected(newSel);
@@ -404,7 +413,7 @@ function MatchPage() {
       const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
       const res = await apiFetch<{ ok?: boolean; error?: string }>(`/api/teams/${teamId}/lineup`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, captainId, presetSlot: activePreset, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
+        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, hardness, captainId, presetSlot: activePreset, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
       });
       if (res.ok) {
         setSaved(true);
@@ -524,13 +533,14 @@ function MatchPage() {
           } : prev);
           if (teamId) {
             // Použij next-match endpoint s calendarId — vrací lineup+source (explicit/default) + availablePlayers
-            apiFetch<{ referee?: DelegatedReferee | null; lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
+            apiFetch<{ referee?: DelegatedReferee | null; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
               .then((data) => {
                 setReferee(data.referee ?? null);
                 if (data.availablePlayers) setPlayers(data.availablePlayers);
                 if (data.lineup && data.lineup.players.length === 11) {
                   setFormation(data.lineup.formation);
                   setTactic(data.lineup.tactic);
+                  setHardness((data.lineup.hardness ?? "normal") as HardnessKey);
                   setSelected(data.lineup.players.map((p) => p.playerId));
                   // Captain reset — explicit setter i pro null aby se neudržoval starý captain z předchozího zápasu
                   if (data.lineup.captainId) {
@@ -685,8 +695,48 @@ function MatchPage() {
             </div>
           </div>
         </div>
+        {/* Tvrdost hry — vlastní řádek, aby se třetí osa na desktopu nervala s formací a taktikou */}
+        <div className="mt-2 pt-2 border-t border-gray-100">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className="text-[10px] text-muted font-heading uppercase tracking-wide">Tvrdost hry</span>
+            {cardRisk && (
+              <span className="text-[11px] text-muted">
+                Riziko karet:{" "}
+                <span className={`font-heading font-bold ${
+                  cardRisk.level === "vysoké" ? "text-card-red" : cardRisk.level === "střední" ? "text-gold-600" : "text-pitch-600"
+                }`}>{cardRisk.level}</span>
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-3 rounded-xl bg-gray-50 p-0.5 gap-0.5">
+            {HARDNESS.map((h) => (
+              <button key={h.key} onClick={() => { setHardness(h.key); setSaved(false); }}
+                title={getHardnessTooltip(h.key)}
+                className={`py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all cursor-help ${hardness === h.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                <span className="hidden sm:inline">{h.icon} </span>{h.label}
+              </button>
+            ))}
+          </div>
+          {/* Varování jen když má smysl — u benevolentního sudího by jen šumělo */}
+          {hardness === "hard" && referee && referee.strictness >= 65 && (
+            <p className="text-[11px] text-card-red mt-1.5">
+              {referee.name} píská skoro každý souboj — do těla u něj znamená hlavně fauly, ne zisky míče.
+            </p>
+          )}
+          {cardRisk && (
+            <p className="text-[11px] text-muted mt-1.5">
+              Odhad: ~{cardRisk.cards.toFixed(1).replace(".", ",")} žluté a ~{cardRisk.reds.toFixed(2).replace(".", ",")} červené na zápas.
+              {cardRisk.onEdge > 0 && (
+                <span className="text-gold-600">
+                  {" "}{cardRisk.onEdge === 1 ? "Jeden hráč je" : `${cardRisk.onEdge} hráči jsou`} jednu žlutou od stopky.
+                </span>
+              )}
+            </p>
+          )}
+        </div>
+
         {/* Hint popisující aktuálně vybranou formaci + taktiku — viditelné hlavně na mobilu (kde nefunguje hover) */}
-        <div className="mt-2 pt-2 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] leading-relaxed text-muted">
+        <div className="mt-2 pt-2 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-[11px] leading-relaxed text-muted">
           <div>
             <span className="font-heading uppercase text-[10px] tracking-wide text-muted-light">Formace: </span>
             {getFormationTooltip(formation).replace(/^[^—]+— /, "")}
@@ -694,6 +744,10 @@ function MatchPage() {
           <div>
             <span className="font-heading uppercase text-[10px] tracking-wide text-muted-light">Taktika: </span>
             {getTacticTooltip(tactic as TacticKey).replace(/^[^—]+— /, "")}
+          </div>
+          <div>
+            <span className="font-heading uppercase text-[10px] tracking-wide text-muted-light">Tvrdost: </span>
+            {getHardnessTooltip(hardness).replace(/^[^—]+— /, "")}
           </div>
         </div>
       </div>
@@ -1100,7 +1154,9 @@ function MatchPage() {
           matchId={nextMatch.isCup ? undefined : nextMatch.matchId}
           formation={formation}
           tactic={tactic}
+          hardness={hardness}
           captainId={captainId}
+          onCardRisk={setCardRisk}
           players={selected.reduce<Array<{ playerId: string; matchPosition: string }>>((acc, id, i) => {
             if (id) acc.push({ playerId: id, matchPosition: slots[i].pos });
             return acc;
