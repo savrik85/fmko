@@ -105,9 +105,7 @@ export async function runScheduledMatches(
         "SELECT * FROM matches WHERE calendar_id = ? AND status = 'lineups_open'"
     ).bind(calendarId).all();
 
-    // Sezónní bilance rozhodčích se sbírá a posílá jednou dávkou po celém kole —
-    // per zápas by to bylo 7× víc round-tripů a match tick jede všechny ligy najednou.
-    const refereeStatStmts: D1PreparedStatement[] = [];
+    // Kalendář kola — season_number a league_id pro bilanci rozhodčího.
     const calRow = await db.prepare(
         "SELECT season_number, league_id FROM season_calendar WHERE id = ?"
     ).bind(calendarId).first<{ season_number: number; league_id: string }>()
@@ -612,7 +610,11 @@ export async function runScheduledMatches(
                     const pensOf = (engineTeamId: number) => result.events.filter(
                         (e) => e.type === "penalty" && e.teamId === engineTeamId,
                     ).length;
-                    refereeStatStmts.push(...refereeStatsStatements(db, {
+                    // Zapsat hned po uložení zápasu, ne až na konci kola. Kdyby se
+                    // invokace ukončila dřív (ruční trigger, kterému vyprší request),
+                    // odehraný zápas by měl známku, ale do sezónního průměru by se
+                    // nezapočítal a žebříček by tiše lhal.
+                    await db.batch(refereeStatsStatements(db, {
                         refereeId: referee.profile.id,
                         seasonNumber: calRow.season_number,
                         leagueId: calRow.league_id,
@@ -626,7 +628,7 @@ export async function runScheduledMatches(
                         incidents: storedIncidents,
                     }));
                 } catch (e) {
-                    logger.warn({module: "match-runner"}, "referee stats prepare", e);
+                    logger.warn({module: "referees"}, "zápis bilance rozhodčího", e);
                 }
             }
 
@@ -1059,12 +1061,6 @@ export async function runScheduledMatches(
         } catch (e) {
             logger.error({module: "match-runner"}, `Failed to simulate match ${matchId}`, e);
         }
-    }
-
-    // Bilance rozhodčích za celé kolo — jedna dávka místo dvou zápisů na zápas.
-    if (refereeStatStmts.length > 0) {
-        await db.batch(refereeStatStmts)
-            .catch((e) => logger.warn({module: "referees"}, "zápis bilance rozhodčích", e));
     }
 
     // Round summary — AI vybere Hráče a Trenéra kola + napíše článek
