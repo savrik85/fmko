@@ -23,6 +23,8 @@ export interface PostMatchContext {
   teamName: string;
   opponentName: string;
   opponentManagerName: string | null;
+  /** Trenér, se kterým se mluví — bez něj si model plete redaktora s trenérem. */
+  ownManagerName: string | null;
   ownScore: number;
   oppScore: number;
   outcome: "win" | "draw" | "loss";

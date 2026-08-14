@@ -156,7 +156,7 @@ describe("dopady odpovědí", () => {
 
 const baseCtx: PostMatchContext = {
   matchId: "m1", teamId: "t1", teamName: "Sokol Vrbno", opponentName: "Slavoj Lišov",
-  opponentManagerName: "Karel Novák",
+  opponentManagerName: "Karel Novák", ownManagerName: "Josef Vopička",
   ownScore: 1, oppScore: 2, outcome: "loss",
   ownCards: 2, oppCards: 1, ownReds: 0, oppReds: 0, ownPenalties: 0, oppPenalties: 1,
   hardness: "normal",
