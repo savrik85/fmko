@@ -56,11 +56,11 @@ export async function generateMetadata({ params }: { params: Promise<{ teamId: s
   const [team, manager] = await Promise.all([fetchTeam(teamId), fetchManager(teamId)]);
 
   if (!team) {
-    return { title: "Prales FM" };
+    return { title: "Prales" };
   }
 
   const managerName = manager?.name ?? "Trenér";
-  const title = `${team.name} tě vyzývá! | Prales FM`;
+  const title = `${team.name} tě vyzývá! | Prales`;
   const description = `${managerName} z ${team.village_name} tě zve do okresního přeboru ${team.district}. Přijmi výzvu a založ si svůj tým!`;
 
   return {
@@ -70,7 +70,7 @@ export async function generateMetadata({ params }: { params: Promise<{ teamId: s
       title,
       description,
       type: "website",
-      siteName: "Prales FM",
+      siteName: "Prales",
       locale: "cs_CZ",
     },
     twitter: {

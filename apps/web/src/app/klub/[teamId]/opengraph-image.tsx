@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "Profil klubu — Prales FM";
+export const alt = "Profil klubu — Prales";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -22,7 +22,7 @@ function initials(name: string): string {
 export default async function Image({ params }: { params: Promise<{ teamId: string }> }) {
   const { teamId } = await params;
 
-  let name = "Prales FM";
+  let name = "Prales";
   let nickname = "";
   let motto = "";
   let village = "";
@@ -116,7 +116,7 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
             </div>
           )}
           <div style={{ fontSize: 20, color: mutedColor, marginTop: "auto", letterSpacing: 3, textTransform: "uppercase" }}>
-            Prales FM
+            Prales
           </div>
         </div>
       </div>

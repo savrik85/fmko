@@ -29,7 +29,7 @@ export default function InvitePage() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `${teamName} te vyzyva! | Prales FM`,
+          title: `${teamName} te vyzyva! | Prales`,
           text: `Pridej se do okresniho preboru ${district} a ukaz mi, kdo je tu lepsi trener!`,
           url: inviteUrl,
         });

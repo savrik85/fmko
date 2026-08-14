@@ -61,7 +61,7 @@ export const metadata: Metadata = {
   description: "Online fotbalový manažer z českého okresu. Postav si tým, vyhraj okresní přebor.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   openGraph: {
-    siteName: "Prales FM",
+    siteName: "Prales",
     locale: "cs_CZ",
     type: "website",
   },
@@ -84,7 +84,7 @@ export default function RootLayout({
       <head>
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Prales FM" />
+        <meta name="apple-mobile-web-app-title" content="Prales" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>

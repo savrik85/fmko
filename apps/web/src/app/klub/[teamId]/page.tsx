@@ -56,15 +56,15 @@ function initials(name: string): string {
 export async function generateMetadata({ params }: { params: Promise<{ teamId: string }> }): Promise<Metadata> {
   const { teamId } = await params;
   const club = await fetchSafe<ClubData>(`/api/teams/${teamId}/club`);
-  if (!club) return { title: "Profil klubu — Prales FM" };
+  if (!club) return { title: "Profil klubu — Prales" };
   const baseName = club.identity.nickname ? `${club.name} — ${club.identity.nickname}` : club.name;
   const desc = club.identity.motto
     || (club.identity.foundingStory ? club.identity.foundingStory.slice(0, 180) : null)
     || `${club.village.name}, okres ${club.village.district}`;
   return {
-    title: `${baseName} | Prales FM`,
+    title: `${baseName} | Prales`,
     description: desc,
-    openGraph: { title: baseName, description: desc, type: "website", siteName: "Prales FM", locale: "cs_CZ" },
+    openGraph: { title: baseName, description: desc, type: "website", siteName: "Prales", locale: "cs_CZ" },
     twitter: { card: "summary_large_image", title: baseName, description: desc },
   };
 }
@@ -147,7 +147,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
         <div className="relative max-w-[1200px] mx-auto px-5 sm:px-10 pt-16 sm:pt-24 pb-24 sm:pb-32">
           <div className="flex items-center justify-between mb-10 sm:mb-16">
             <div className={`text-[11px] sm:text-xs font-heading font-bold uppercase tracking-[0.3em] ${heroSoft}`}>
-              Profil klubu · Prales FM
+              Profil klubu · Prales
             </div>
             <ShareButton url={shareUrl} title={club.name} textClass={heroText} bgClass={`${chipBg} border ${chipBorder}`} />
           </div>
@@ -491,7 +491,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
       <footer className="py-12 border-t border-white/5">
         <div className="max-w-[1200px] mx-auto px-5 sm:px-10 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-white/40">
           <div>
-            Hráno v <Link href="/" className="font-heading font-bold text-white hover:text-white/80">Prales FM</Link>
+            Hráno v <Link href="/" className="font-heading font-bold text-white hover:text-white/80">Prales</Link>
           </div>
           <Link href={`/dashboard/team/${teamId}`} className="hover:text-white/80">
             Otevřít v aplikaci {"\u{2192}"}

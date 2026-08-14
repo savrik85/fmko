@@ -1,4 +1,4 @@
-// Prales FM — Service Worker
+// Prales — Service Worker
 // Handles push notifications and basic offline support.
 
 const CACHE_NAME = "prales-v1";
@@ -14,7 +14,7 @@ self.addEventListener("activate", (event) => {
 
 // Push notifikace
 self.addEventListener("push", (event) => {
-  let data = { title: "Prales FM", body: "Máš novou zprávu.", url: "/dashboard" };
+  let data = { title: "Prales", body: "Máš novou zprávu.", url: "/dashboard" };
   try {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch {

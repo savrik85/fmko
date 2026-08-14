@@ -120,7 +120,7 @@ export function FMSidebar() {
           </button>
           {expanded && (
             <span className="ml-3 text-white/80 font-heading font-bold text-sm tracking-wider uppercase whitespace-nowrap">
-              Prales FM
+              Prales
             </span>
           )}
         </div>

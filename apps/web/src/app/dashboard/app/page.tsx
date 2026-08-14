@@ -48,22 +48,22 @@ const INSTRUCTIONS: Record<DeviceType, { title: string; browser: string; steps: 
     title: "iPhone / iPad — Safari",
     browser: "Safari",
     steps: [
-      { icon: "🌐", text: "Otevři Prales FM v Safari (jsi tam teď)" },
+      { icon: "🌐", text: "Otevři Prales v Safari (jsi tam teď)" },
       { icon: "⬆️", text: 'Klepni na tlačítko Sdílet — ikona čtverce se šipkou nahoru, dole uprostřed obrazovky' },
       { icon: "➕", text: 'Přejeď dolů a vyber „Přidat na plochu"' },
       { icon: "✏️", text: 'Název ponech nebo uprav, pak klepni „Přidat" vpravo nahoře' },
-      { icon: "🏟", text: "Hotovo — ikona Prales FM se objeví na ploše jako normální appka" },
+      { icon: "🏟", text: "Hotovo — ikona Prales se objeví na ploše jako normální appka" },
     ],
   },
   "ios-chrome": {
     title: "iPhone / iPad — Chrome",
     browser: "Chrome",
     steps: [
-      { icon: "🌐", text: "Otevři Prales FM v Chrome (jsi tam teď)" },
+      { icon: "🌐", text: "Otevři Prales v Chrome (jsi tam teď)" },
       { icon: "⬆️", text: "Klepni na tlačítko Sdílet — ikona čtverce se šipkou, vlevo od adresního řádku" },
       { icon: "➕", text: 'Vyber „Přidat na plochu"' },
       { icon: "✏️", text: 'Klepni „Přidat" pro potvrzení' },
-      { icon: "🏟", text: "Hotovo — Prales FM je na ploše" },
+      { icon: "🏟", text: "Hotovo — Prales je na ploše" },
     ],
   },
   "ios-other": {
@@ -74,40 +74,40 @@ const INSTRUCTIONS: Record<DeviceType, { title: string; browser: string; steps: 
       { icon: "⬆️", text: 'Klepni na tlačítko Sdílet (čtverec se šipkou)' },
       { icon: "➕", text: 'Vyber „Přidat na plochu"' },
       { icon: "✏️", text: 'Potvrď „Přidat"' },
-      { icon: "🏟", text: "Prales FM se objeví na ploše" },
+      { icon: "🏟", text: "Prales se objeví na ploše" },
     ],
   },
   "android-chrome": {
     title: "Android — Chrome",
     browser: "Chrome",
     steps: [
-      { icon: "🌐", text: "Otevři Prales FM v Chrome (jsi tam teď)" },
+      { icon: "🌐", text: "Otevři Prales v Chrome (jsi tam teď)" },
       { icon: "⋮", text: "Klepni na tři tečky vpravo nahoře (menu prohlížeče)" },
       { icon: "➕", text: 'Vyber „Přidat na plochu" nebo „Nainstalovat aplikaci"' },
       { icon: "✅", text: 'Klepni „Nainstalovat" / „Přidat"' },
-      { icon: "🏟", text: "Prales FM se nainstaluje jako plnohodnotná appka" },
+      { icon: "🏟", text: "Prales se nainstaluje jako plnohodnotná appka" },
     ],
   },
   "android-samsung": {
     title: "Android — Samsung Internet",
     browser: "Samsung Internet",
     steps: [
-      { icon: "🌐", text: "Otevři Prales FM v Samsung Internet (jsi tam teď)" },
+      { icon: "🌐", text: "Otevři Prales v Samsung Internet (jsi tam teď)" },
       { icon: "⬇️", text: "V adresním řádku najdi ikonu pro přidání / instalaci (nebo menu)" },
       { icon: "➕", text: 'Vyber „Přidat stránku do" → „Plocha"' },
       { icon: "✅", text: 'Klepni „Přidat"' },
-      { icon: "🏟", text: "Prales FM je na ploše" },
+      { icon: "🏟", text: "Prales je na ploše" },
     ],
   },
   "android-firefox": {
     title: "Android — Firefox",
     browser: "Firefox",
     steps: [
-      { icon: "🌐", text: "Otevři Prales FM ve Firefoxu (jsi tam teď)" },
+      { icon: "🌐", text: "Otevři Prales ve Firefoxu (jsi tam teď)" },
       { icon: "⋮", text: "Klepni na tři tečky (menu) vpravo dole nebo nahoře" },
       { icon: "➕", text: 'Vyber „Nainstalovat"' },
       { icon: "✅", text: 'Potvrď instalaci' },
-      { icon: "🏟", text: "Prales FM se nainstaluje jako appka" },
+      { icon: "🏟", text: "Prales se nainstaluje jako appka" },
     ],
   },
   "android-other": {
@@ -118,7 +118,7 @@ const INSTRUCTIONS: Record<DeviceType, { title: string; browser: string; steps: 
       { icon: "⋮", text: "Otevři menu prohlížeče (tři tečky)" },
       { icon: "➕", text: 'Vyber „Přidat na plochu" nebo „Nainstalovat"' },
       { icon: "✅", text: 'Potvrď' },
-      { icon: "🏟", text: "Prales FM je na ploše" },
+      { icon: "🏟", text: "Prales je na ploše" },
     ],
   },
   desktop: null,
@@ -142,7 +142,7 @@ export default function AppInstallPage() {
       <div className="page-container">
         <div className="card p-6 text-center">
           <div className="text-5xl mb-3">🏟</div>
-          <h2 className="font-heading font-bold text-lg mb-1">Prales FM je nainstalovaný</h2>
+          <h2 className="font-heading font-bold text-lg mb-1">Prales je nainstalovaný</h2>
           <p className="text-sm text-muted">Používáš appku v plnohodnotném režimu. Paráda!</p>
         </div>
       </div>
@@ -158,7 +158,7 @@ export default function AppInstallPage() {
             P
           </div>
           <div>
-            <h2 className="font-heading font-bold text-base">Nainstaluj Prales FM</h2>
+            <h2 className="font-heading font-bold text-base">Nainstaluj Prales</h2>
             <p className="text-sm text-muted">Funguje jako normální appka, bez App Store</p>
           </div>
         </div>
@@ -177,7 +177,7 @@ export default function AppInstallPage() {
           <p className="text-4xl mb-3">💻</p>
           <p className="font-heading font-bold text-base mb-1">Jsi na počítači</p>
           <p className="text-sm text-muted">
-            Otevři Prales FM na svém mobilu a nainstaluj ho na plochu. Nebo v Chrome na Windows klikni na ikonu
+            Otevři Prales na svém mobilu a nainstaluj ho na plochu. Nebo v Chrome na Windows klikni na ikonu
             instalace v adresním řádku vpravo.
           </p>
         </div>

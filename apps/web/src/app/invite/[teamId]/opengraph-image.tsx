@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "Prales FM - Pozvanka";
+export const alt = "Prales - Pozvanka";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -10,7 +10,7 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 export default async function Image({ params }: { params: Promise<{ teamId: string }> }) {
   const { teamId } = await params;
 
-  let teamName = "Prales FM";
+  let teamName = "Prales";
   let villageName = "";
   let district = "";
   let managerName = "";
@@ -48,7 +48,7 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
       >
         {/* Logo */}
         <div style={{ display: "flex", fontSize: 24, color: "rgba(255,255,255,0.3)", letterSpacing: 4, marginBottom: 24 }}>
-          PRALES FM
+          PRALES
         </div>
 
         {/* Badge */}
