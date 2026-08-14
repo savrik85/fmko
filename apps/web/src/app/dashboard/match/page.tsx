@@ -9,6 +9,8 @@ import { apiFetch, apiAction, type Player } from "@/lib/api";
 import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { BusSelector } from "./BusSelector";
+import { RefereeCard } from "@/components/match/referee-card";
+import type { RefereeProfileView, RefereeStatsView } from "@/lib/referee-info";
 import { getTacticTooltip, getFormationTooltip, type TacticKey } from "@/lib/tactic-info";
 import { computeLineupChemistry, type RelationshipType } from "@okresni-masina/shared";
 import { LineupPreview } from "@/components/LineupPreview";
@@ -127,6 +129,11 @@ interface NextMatchInfo {
   isLocalDerby?: boolean;
 }
 
+type DelegatedReferee = RefereeProfileView & {
+  stats: RefereeStatsView | null;
+  vsTeam?: { matches: number; wins: number; draws: number; losses: number; yellow_cards?: number; red_cards?: number } | null;
+};
+
 interface UpcomingMatch {
   calendarId: string; gameWeek: number | null; scheduledAt: string;
   opponentName: string; isHome: boolean; hasLineup: boolean; isFriendly: boolean;
@@ -147,6 +154,7 @@ function MatchPage() {
   const [nextMatch, setNextMatch] = useState<NextMatchInfo | null>(null);
   const [upcomingMatches, setUpcomingMatches] = useState<UpcomingMatch[]>([]);
   const [players, setPlayers] = useState<AvailablePlayer[]>([]);
+  const [referee, setReferee] = useState<DelegatedReferee | null>(null);
   const [formation, setFormation] = useState("4-4-2");
   const [tactic, setTactic] = useState("balanced");
   const [selected, setSelected] = useState<(string | null)[]>(Array(11).fill(null));
@@ -188,10 +196,11 @@ function MatchPage() {
     // Pokud URL má ?calendarId=X, načti přímo ten zápas. Jinak default = nejbližší.
     const urlCalIdInit = searchParams.get("calendarId");
     const url = urlCalIdInit ? `/api/teams/${teamId}/next-match?calendarId=${urlCalIdInit}` : `/api/teams/${teamId}/next-match`;
-    apiFetch<{ nextMatch: NextMatchInfo | null; lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
+    apiFetch<{ nextMatch: NextMatchInfo | null; referee?: DelegatedReferee | null; lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
       url
     ).then((data) => {
       setNextMatch(data.nextMatch);
+      setReferee(data.referee ?? null);
       setPlayers(data.availablePlayers ?? []);
       setUpcomingMatches(data.upcomingMatches ?? []);
       if (data.lineup && data.lineup.players.length === 11) {
@@ -515,8 +524,9 @@ function MatchPage() {
           } : prev);
           if (teamId) {
             // Použij next-match endpoint s calendarId — vrací lineup+source (explicit/default) + availablePlayers
-            apiFetch<{ lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
+            apiFetch<{ referee?: DelegatedReferee | null; lineup: { formation: string; tactic: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
               .then((data) => {
+                setReferee(data.referee ?? null);
                 if (data.availablePlayers) setPlayers(data.availablePlayers);
                 if (data.lineup && data.lineup.players.length === 11) {
                   setFormation(data.lineup.formation);
@@ -588,6 +598,11 @@ function MatchPage() {
           </>
         );
       })()}
+
+      {/* Rozhodčí — delegace dva herní dny předem, aby se dala přizpůsobit sestava */}
+      {nextMatch && !nextMatch.isFriendly && (
+        <RefereeCard referee={referee} isHome={nextMatch.isHome} />
+      )}
 
       {/* Bus z okolí — domácí ligové i pohárové zápasy (ne přátelák) */}
       {nextMatch?.isHome && !nextMatch.isFriendly && teamId && (

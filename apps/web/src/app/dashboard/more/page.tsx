@@ -32,6 +32,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
     { href: "/dashboard/friendly", icon: "\u{1F91C}", label: "Přáteláky", color: "#4A7A5C" },
     { href: "/dashboard/calendar", icon: "\u{1F5D3}️", label: "Kalendář", color: "#6B7B3D" },
     { href: "/dashboard/news", icon: "\u{1F4F0}", label: "Zpravodaj", color: "#556B2F" },
+    { href: "/dashboard/rozhodci", icon: "\u{1F9D1}\u200D\u2696\uFE0F", label: "Rozhodčí", color: "#4E4E4E" },
     // Sněm dočasně skryt z menu — dostupný přes přímou URL /dashboard/hlasovani.
   ]},
   { title: "Ostatní", items: [

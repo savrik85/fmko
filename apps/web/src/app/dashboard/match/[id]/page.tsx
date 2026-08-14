@@ -10,6 +10,7 @@ import { useTeam } from "@/context/team-context";
 import { MatchBreakdown } from "@/components/MatchBreakdown";
 import { PostMatchGestureCard } from "@/components/relations/RelationSection";
 import { isLightColor } from "@/lib/team-color";
+import { formatGrade, gradeColor, gradeWord, incidentLabel, type RefereeIncidentView } from "@/lib/referee-info";
 
 interface MatchEvent {
   minute: number; type: string; playerId: number; playerName: string;
@@ -42,6 +43,15 @@ interface MatchDetail {
   player_ratings?: Record<string, number>;
   absences?: MatchAbsence[];
   isLocalDerby?: boolean;
+  referee_snapshot?: string | RefereeSnapshotJson | null;
+  referee_incidents?: string | RefereeIncidentView[] | null;
+  referee_grade?: number | null;
+}
+
+interface RefereeSnapshotJson {
+  id: string | null;
+  name: string;
+  archetype: string;
 }
 
 // Light/dark color detection — pro adaptivní kontrast u team-color pozadí
@@ -107,6 +117,20 @@ export default function MatchDetailPage() {
 
   const hc = match.home_color || "#2D5F2D";
   const ac = match.away_color || "#D94032";
+
+  // Rozhodčí — snapshot i sporné situace přicházejí z API jako JSON string (m.* select),
+  // ale pohárový endpoint je může vrátit už rozparsované.
+  const parseJson = <T,>(raw: unknown): T | null => {
+    if (raw == null) return null;
+    if (typeof raw !== "string") return raw as T;
+    try { return JSON.parse(raw) as T; } catch (e) { console.warn("parse referee JSON:", e); return null; }
+  };
+  const refereeInfo = parseJson<RefereeSnapshotJson>(match.referee_snapshot);
+  const incidents = parseJson<RefereeIncidentView[]>(match.referee_incidents) ?? [];
+  const teamNameById: Record<string, string> = {
+    [match.home_team_id]: match.home_name,
+    [match.away_team_id]: match.away_name,
+  };
   const goals = match.events.filter((e) => e.type === "goal");
   const homeGoals = goals.filter((e) => e.teamId === 1);
   const awayGoals = goals.filter((e) => e.teamId === 2);
@@ -115,6 +139,9 @@ export default function MatchDetailPage() {
   const keyEvents = match.events.filter((e) =>
     ["goal", "card", "injury", "substitution", "penalty"].includes(e.type)
     || (e.type === "chance" && (e.detail === "penalty_missed" || e.detail === "penalty_saved"))
+    // Sporný verdikt patří do průběhu — bez něj by v timeline chyběl důvod, proč
+    // gól neplatil nebo odkud se vzala penalta.
+    || (e.type === "special" && !!e.detail?.startsWith("ref_error:"))
   );
   const firstHalf = keyEvents.filter((e) => e.minute <= 45);
   const secondHalf = keyEvents.filter((e) => e.minute > 45);
@@ -291,6 +318,17 @@ export default function MatchDetailPage() {
             <span>Hřiště: {match.pitch_condition >= 70 ? "výborné" : match.pitch_condition >= 40 ? "průměrné" : "špatné"}</span>
           )}
           {match.weather && <span>{WEATHER_LABEL[match.weather] ?? match.weather}</span>}
+          {refereeInfo && (
+            <span>
+              Rozhodčí:{" "}
+              {refereeInfo.id ? (
+                <Link href={`/dashboard/rozhodci/${refereeInfo.id}`} className="text-white/80 hover:underline">{refereeInfo.name}</Link>
+              ) : (
+                <span className="text-white/80">{refereeInfo.name}</span>
+              )}
+              {match.referee_grade != null && ` (${formatGrade(match.referee_grade, 1)})`}
+            </span>
+          )}
           {match.simulated_at && (
             <span>{new Date(match.simulated_at).toLocaleDateString("cs", { day: "numeric", month: "long", year: "numeric" })}</span>
           )}
@@ -318,6 +356,59 @@ export default function MatchDetailPage() {
           <StatBar label="Zákroky" home={st.saves[0]} away={st.saves[1]} hc={hc} ac={ac} />
         </div>
       </div>
+
+      {/* ═══ ROZHODČÍ — známka a sporné situace ═══ */}
+      {refereeInfo && (
+        <div className="mt-4">
+          <SectionLabel>Rozhodčí</SectionLabel>
+          <div className="card p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                {refereeInfo.id ? (
+                  <Link href={`/dashboard/rozhodci/${refereeInfo.id}`} className="font-heading font-bold text-base hover:underline">
+                    {refereeInfo.name}
+                  </Link>
+                ) : (
+                  <span className="font-heading font-bold text-base">{refereeInfo.name}</span>
+                )}
+              </div>
+              {match.referee_grade != null && (
+                <div className="text-right">
+                  <div className={`font-heading font-bold text-lg tabular-nums ${gradeColor(match.referee_grade)}`}>
+                    {formatGrade(match.referee_grade, 1)}
+                  </div>
+                  <div className="text-[11px] text-muted leading-tight">{gradeWord(match.referee_grade)} výkon</div>
+                </div>
+              )}
+            </div>
+
+            {incidents.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                {incidents.map((inc, i) => (
+                  <div
+                    key={i}
+                    className="rounded-r-xl border-l-4 px-3 py-2"
+                    style={{
+                      borderColor: inc.severity === "high" ? "var(--color-card-red)" : "var(--color-gold-500)",
+                      background: inc.severity === "high" ? "rgba(217,64,50,0.07)" : "rgba(196,160,53,0.07)",
+                    }}
+                  >
+                    <div className="font-heading font-bold text-sm">
+                      {inc.minute}&apos; · {incidentLabel(inc.kind)}
+                      {teamNameById[inc.againstTeamId] && (
+                        <span className="font-normal text-muted"> — proti {teamNameById[inc.againstTeamId]}</span>
+                      )}
+                    </div>
+                    <p className="text-sm mt-0.5">{inc.text}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted mt-2">Zápas zvládl bez sporných momentů.</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ═══ CO ROZHODLO — breakdown faktorů ═══ */}
       {ownTeamId && (ownTeamId === match.home_team_id || ownTeamId === match.away_team_id) && (
@@ -819,6 +910,11 @@ function EventRow({ event: e, hc, ac }: { event: MatchEvent; hc: string; ac: str
     case "chance":
       // V průběhu zápasu se ze šancí objeví jen zahozená penalta
       icon = "❌"; bgColor = "bg-red-50"; break;
+    case "special":
+      // Sporné verdikty rozhodčího mají vlastní ikonu, ať se v timeline neztratí
+      if (e.detail?.startsWith("ref_error:")) { icon = "🧑‍⚖️"; bgColor = "bg-amber-50"; }
+      else { icon = ""; bgColor = ""; }
+      break;
     default: icon = ""; bgColor = "";
   }
 

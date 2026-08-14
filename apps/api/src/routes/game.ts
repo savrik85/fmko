@@ -3605,7 +3605,62 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     upcomingMatches.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
   } catch (e) { logger.warn({ module: "game" }, "fetch upcoming matches", e); }
 
+  // Delegovaný rozhodčí. Vyplní se dva herní dny před výkopem — do té doby null
+  // a frontend řekne, že se sudí teprve losuje. Přátelák rozhodčího nemá.
+  let refereeInfo: Record<string, unknown> | null = null;
+  if (!isFriendly) {
+    try {
+      const refRow = await c.env.DB.prepare(
+        `SELECT r.*, m.referee_id AS assigned
+         FROM matches m JOIN referees r ON r.id = m.referee_id
+         WHERE m.id = ?`
+      ).bind(match.id as string).first<Record<string, unknown>>();
+      if (refRow) {
+        const { archetypeLabel } = await import("../engine/referee");
+        const { refereeFullName } = await import("../referees/referee-generator");
+        const seasonRow = await c.env.DB.prepare(
+          "SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+        ).first<{ number: number }>();
+        const st = await c.env.DB.prepare(
+          `SELECT SUM(matches) m, SUM(yellow_cards) y, SUM(red_cards) rc,
+                  SUM(fouls) f, SUM(grade_sum) gs
+           FROM referee_stats WHERE referee_id = ? AND season_number = ?`
+        ).bind(refRow.id as string, seasonRow?.number ?? 1).first<Record<string, number | null>>();
+        const rel = await c.env.DB.prepare(
+          "SELECT matches, wins, draws, losses, yellow_cards, red_cards FROM referee_team_relations WHERE referee_id = ? AND team_id = ?"
+        ).bind(refRow.id as string, teamId).first<Record<string, number>>();
+        const played = st?.m ?? 0;
+        refereeInfo = {
+          id: refRow.id,
+          name: refereeFullName(refRow as never),
+          nickname: refRow.nickname,
+          age: refRow.age,
+          occupation: refRow.occupation,
+          archetype: refRow.archetype,
+          archetypeLabel: archetypeLabel(refRow.archetype as string),
+          bio: refRow.bio,
+          hlaska: refRow.hlaska,
+          strictness: refRow.strictness,
+          cardHappiness: refRow.card_happiness,
+          experience: refRow.experience,
+          homeBias: refRow.home_bias,
+          advantage: refRow.advantage,
+          fitness: refRow.fitness,
+          avatar: (() => { try { return refRow.avatar ? JSON.parse(refRow.avatar as string) : null; } catch { return null; } })(),
+          stats: played > 0 ? {
+            matches: played,
+            avgGrade: Math.round(((st!.gs ?? 0) / played) * 100) / 100,
+            cardsPerMatch: Math.round((((st!.y ?? 0) + (st!.rc ?? 0)) / played) * 100) / 100,
+            foulsPerMatch: Math.round(((st!.f ?? 0) / played) * 10) / 10,
+          } : null,
+          vsTeam: rel && rel.matches > 0 ? rel : null,
+        };
+      }
+    } catch (e) { logger.warn({ module: "game" }, "načtení delegovaného rozhodčího", e); }
+  }
+
   return c.json({
+    referee: refereeInfo,
     nextMatch: {
       matchId: match.id,
       calendarId: (isFriendly || isCup) ? (match.id as string) : calendarId,
