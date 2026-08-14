@@ -12,6 +12,49 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-08-14",
+    emoji: "🧑‍⚖️",
+    title: "Okresní rozhodčí — každý má svůj metr",
+    items: [
+      "Okres má patnáct rozhodčích a každý píská jinak. Delegace přijde dva herní dny před výkopem, takže se stihneš přizpůsobit.",
+      "V sestavovači je karta sudího: povaha, hláška, sezónní čísla a rada k zápasu. Pískavý kohout rozdá skoro tři karty na zápas, pohodář ani jednu — s vysokým presinkem u prvního si koleduješ.",
+      "Vlastnosti jsou v lidské řeči a u každé stojí, co znamená: přísnost, karty, zkušenost, domácí prostředí, pouštění výhody, kondice. Sudí s mizernou kondicí se v posledních dvaceti minutách rozsype.",
+      "Rozhodčí chybují. Neuznaný gól, vymyšlená penalta, přehlédnutá červená — nanejvýš jednou za zápas a vždycky je v detailu vidět, co se stalo a komu to nahrálo. Zelenáč se splete čtyřikrát častěji než veterán.",
+      "Za každý zápas dostane sudí známku jako ve škole. V žebříčku okresu (menu Soutěž → Rozhodčí) je vidět, kdo je nejlepší a kdo katastrofa. Na jeho profilu najdeš známky ze všech zápasů i bilanci vůči tvému klubu.",
+      "Rozhodčí píská i pohár. Je to tentýž člověk, včetně toho, co si o tobě pamatuje.",
+    ],
+  },
+  {
+    date: "2026-08-14",
+    emoji: "💪",
+    title: "Tvrdost hry — třetí volba vedle formace a taktiky",
+    items: [
+      "V sestavě si vybíráš, jak se bude hrát: Na férovku, Normálně, nebo Do těla. Volba se ukládá k sestavě i k presetu.",
+      "Do těla znamená pevnější obranu, víc získaných míčů a zastrašení soupeřů, kteří na to nemají povahu. Technický kádr plný jemných hráčů z toho vytěží zlomek toho, co dřevorubci — riziko ale nese stejné.",
+      "Za tvrdou hru se platí kartami, stopkami a zraněními. A hlavně sudím: přísný pískne dřív, než souboj dohraješ, takže tvrdost nevyrobí zisk míče, jen faul. Proti němu se Do těla nevyplatí, proti benevolentnímu ano.",
+      "Na férovku je gólově skoro neutrální — platíš za pojistku. Míň karet, míň stopek, míň zranění.",
+      "Predikce rizika ti před zápasem řekne, kolik karet čekat a kdo je jednu žlutou od stopky.",
+      "Červená karta konečně opravdu oslabuje. Deset hráčů od poločasu stojí zhruba tři čtvrtě gólu. Vyloučenému gólmanovi se hledá náhrada mezi hráči v poli — a je to znát.",
+      "Přibyla přímá červená za brutální faul. Vzácná, ale existuje.",
+    ],
+  },
+  {
+    date: "2026-08-14",
+    emoji: "🗣️",
+    title: "Pozápasové rozhovory — a sudí si to pamatuje",
+    items: [
+      "Když je po zápase o čem mluvit — sporná situace, červená, penalta, karetní žně nebo výprask — ozve se redaktor. Ptá se na výsledek, na rozhodčího a na to, co před zápasem řekl soupeřův trenér.",
+      "Nechodí po každém utkání a nejvýš dva čekající najednou, aby to nebyla povinnost.",
+      "V otázce máš rovnou fakta ze zápasu: skóre, sudího, karty, penalty a zvýrazněnou spornou situaci. Nemusíš odpovídat po paměti.",
+      "Píšeš vlastními slovy. Hra si přečte, jestli jsi sudího sepsul, vzal v ochranu, nebo se mu vyhnul.",
+      "Kritika má cenu. Rozhodčí si ji pamatuje do příštího vzájemného zápasu a hraniční verdikty pak padnou spíš proti tobě — nanejvýš o tři procenta, zápas ti to nevezme, ale nakřiví. Zášť vyprchává zhruba za sezónu.",
+      "Za ostrá slova může přijít pokuta od disciplinární komise. Na druhé straně stojí kabina a fanoušci — když se trenér postaví za mužstvo, morálka jde nahoru.",
+      "Nic z toho není skryté. Karta rozhodčího ukazuje spočítané číslo i důvod: „Sudí Vopička si tě pamatuje: jde po tobě.\"",
+      "AI trenéři nově mluví do novin sami od sebe. Provokatér si rýpne, férovka smeká, pohodář se shazuje — a ty na to po zápase odpovíš.",
+      "Z rozhovoru vyjde článek ve Zpravodaji v rubrice Ohlasy po zápase, i s tím, co jsi řekl.",
+    ],
+  },
+  {
     date: "2026-08-13",
     emoji: "📊",
     title: "Statistiky ligy — 22 žebříčků místo pěti",
