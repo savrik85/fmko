@@ -105,6 +105,14 @@ export async function runScheduledMatches(
         "SELECT * FROM matches WHERE calendar_id = ? AND status = 'lineups_open'"
     ).bind(calendarId).all();
 
+    // Sezónní bilance rozhodčích se sbírá a posílá jednou dávkou po celém kole —
+    // per zápas by to bylo 7× víc round-tripů a match tick jede všechny ligy najednou.
+    const refereeStatStmts: D1PreparedStatement[] = [];
+    const calRow = await db.prepare(
+        "SELECT season_number, league_id FROM season_calendar WHERE id = ?"
+    ).bind(calendarId).first<{ season_number: number; league_id: string }>()
+        .catch((e) => { logger.warn({module: "match-runner"}, "load calendar for referee stats", e); return null; });
+
     // Pick weather for the whole round
     const weathers: Weather[] = ["sunny", "cloudy", "rain", "wind", "snow"];
     const weatherWeights = [30, 30, 20, 15, 5];
@@ -480,6 +488,12 @@ export async function runScheduledMatches(
                 Math.round((attendance ?? 0) * crowdBoost) + officialCount * 50,
             );
 
+            // Rozhodčí — delegovaný dva herní dny předem. Když delegace chybí (tick kolo
+            // minul, recovery zaseknutého kola), doplní se se stejným seedem; v krajním
+            // případě píská neutrální sudí, zápas se nikdy nezastaví.
+            const { loadRefereeForMatch } = await import("../referees/load");
+            const referee = await loadRefereeForMatch(db, matchId, calendarId);
+
             // Simulate
             const result = simulateMatch(rng, {
                 home: homeSetup,
@@ -492,6 +506,7 @@ export async function runScheduledMatches(
                 attendance: attendanceWithOfficials,
                 homeEquipment,
                 awayEquipment,
+                referee: referee.profile,
             });
 
             // Označit pozvánky jako attended
@@ -542,6 +557,11 @@ export async function runScheduledMatches(
                 ...(awayBuild.absentNames ?? []).map((a) => ({...a, teamId: awayTeamId})),
             ];
 
+            // Sporné situace nesou engine ID týmů (1/2) — přemapovat na DB UUID, aby je
+            // frontend i pozdější pozápasový rozhovor nemusely dolovat z událostí.
+            const { mapIncidentsToDb } = await import("../referees/load");
+            const storedIncidents = mapIncidentsToDb(result.refereeIncidents, homeTeamId, awayTeamId);
+
             // Save results with events + commentary + match context + lineups + absences + possession
             await db.prepare(
                 `UPDATE matches
@@ -560,6 +580,9 @@ export async function runScheduledMatches(
                      possession_home = ?,
                      fastest_goal_minute = ?,
                      total_cards = ?,
+                     referee_snapshot = ?,
+                     referee_incidents = ?,
+                     referee_grade = ?,
                      simulated_at     = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
                  WHERE id = ?`
             ).bind(
@@ -573,8 +596,39 @@ export async function runScheduledMatches(
                 // Minuta prvního gólu — pro žebříček nejrychlejšího gólu sezóny.
                 result.events.filter((e) => e.type === "goal").reduce<number | null>((min, e) => min == null || e.minute < min ? e.minute : min, null),
                 result.events.filter((e) => e.type === "card").length,
+                JSON.stringify(referee.snapshot),
+                storedIncidents.length > 0 ? JSON.stringify(storedIncidents) : null,
+                result.refereeGrade,
                 matchId,
             ).run();
+
+            // Bilance rozhodčího — sezónní statistika + historie vůči oběma klubům.
+            if (referee.profile.id && calRow) {
+                try {
+                    const {refereeStatsStatements} = await import("../referees/load");
+                    const cardsOf = (engineTeamId: number, red: boolean) => result.events.filter(
+                        (e) => e.type === "card" && e.teamId === engineTeamId && (e.detail === "red") === red,
+                    ).length;
+                    const pensOf = (engineTeamId: number) => result.events.filter(
+                        (e) => e.type === "penalty" && e.teamId === engineTeamId,
+                    ).length;
+                    refereeStatStmts.push(...refereeStatsStatements(db, {
+                        refereeId: referee.profile.id,
+                        seasonNumber: calRow.season_number,
+                        leagueId: calRow.league_id,
+                        homeTeamId, awayTeamId,
+                        homeScore: result.homeScore, awayScore: result.awayScore,
+                        grade: result.refereeGrade,
+                        fouls: result.events.filter((e) => e.type === "foul").length,
+                        homeYellow: cardsOf(1, false), awayYellow: cardsOf(2, false),
+                        homeRed: cardsOf(1, true), awayRed: cardsOf(2, true),
+                        homePenalties: pensOf(1), awayPenalties: pensOf(2),
+                        incidents: storedIncidents,
+                    }));
+                } catch (e) {
+                    logger.warn({module: "match-runner"}, "referee stats prepare", e);
+                }
+            }
 
             // Aktualizuj sehranost — hraná taktika+formace +3, ostatní -0.4
             try {
@@ -1005,6 +1059,12 @@ export async function runScheduledMatches(
         } catch (e) {
             logger.error({module: "match-runner"}, `Failed to simulate match ${matchId}`, e);
         }
+    }
+
+    // Bilance rozhodčích za celé kolo — jedna dávka místo dvou zápisů na zápas.
+    if (refereeStatStmts.length > 0) {
+        await db.batch(refereeStatStmts)
+            .catch((e) => logger.warn({module: "referees"}, "zápis bilance rozhodčích", e));
     }
 
     // Round summary — AI vybere Hráče a Trenéra kola + napíše článek

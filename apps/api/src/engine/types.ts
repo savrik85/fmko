@@ -1,4 +1,5 @@
 import type { MatchEvent, EventType, GoalSource } from "@okresni-masina/shared";
+import type { RefereeProfile, RefereeIncident } from "./referee";
 
 export type Tactic = "offensive" | "balanced" | "defensive" | "long_ball" | "possession" | "pressing";
 export type Weather = "sunny" | "cloudy" | "rain" | "wind" | "snow";
@@ -89,6 +90,8 @@ export interface MatchConfig {
   attendance?: number;
   homeEquipment?: EquipmentMods;
   awayEquipment?: EquipmentMods;
+  /** Delegovaný rozhodčí. Chybí-li (nedelegováno, přátelák), použije se NEUTRAL_REFEREE. */
+  referee?: RefereeProfile;
 }
 
 export interface MatchMinuteState {
@@ -111,6 +114,11 @@ export interface MatchResult {
   awayLineup: MatchPlayer[];
   playerMinutes: Record<number, PlayerMinuteTrack>; // engineId → minuty
   possessionHome: number; // 0-100, average možnost domácích za zápas
+  /** Sporné situace rozhodčího — nejvýš jedna na zápas. */
+  refereeIncidents: RefereeIncident[];
+  /** Známka rozhodčího za zápas, 1,0–5,0. */
+  refereeGrade: number;
 }
 
 export { MatchEvent, EventType, GoalSource };
+export type { RefereeProfile, RefereeIncident };

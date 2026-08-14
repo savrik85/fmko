@@ -56,6 +56,13 @@ export function generateCommentary(
   awayScore: number,
   district?: string,
 ): string {
+  // Sporné situace a pouštění výhody nesou celou větu už v description. Filtr níž
+  // při nenalezeném tagu spadne zpět na VŠECHNY special šablony (fallback je
+  // „{player} na míči."), takže by z vymyšlené penalty udělal hlášku z kotle.
+  if (event.detail?.startsWith("ref_error:") || event.detail === "advantage") {
+    return event.description;
+  }
+
   const templates = cachedTemplates ?? FALLBACK_TEMPLATES;
   const reactions = cachedReactions ?? FALLBACK_REACTIONS;
 

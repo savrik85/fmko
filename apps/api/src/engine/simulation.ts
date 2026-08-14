@@ -16,6 +16,13 @@ import type {
 } from "./types";
 import { calcTacticEffectiveness, tacticDrainMod, formationChemistryFactor } from "./tactics";
 import { squadChemistryFactor } from "./squad-chemistry";
+import {
+  NEUTRAL_REFEREE, PETTY_CARD_MUL,
+  severeFoulProb, pettyFoulProb, advantageProb, cardMultiplier,
+  penaltyZone, freekickZone, crossZone, directRedProb, protestYellowProb,
+  refFatigue, planRefereeError, incidentText, gradeReferee,
+  type RefereeIncident,
+} from "./referee";
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -431,6 +438,27 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   let homeScore = 0;
   let awayScore = 0;
 
+  // ── Rozhodčí ──
+  // Multiplikátory se předpočítají MIMO minutovou smyčku — volaly by se 90× a match tick
+  // zpracovává všechny ligy v jedné invokaci, takže CPU workeru je reálné omezení.
+  const ref = config.referee ?? NEUTRAL_REFEREE;
+  const refSevere = severeFoulProb(ref);
+  const refPetty = pettyFoulProb(ref);
+  const refAdv = advantageProb(ref);
+  const refCardMul = cardMultiplier(ref);
+  // Tlak kotle: prázdné hlediště sudím netřese, vyprodáno ano. Bez návštěvy neutrální 1,0.
+  const crowdFactor = config.attendance != null
+    ? Math.min(1.4, Math.max(0.6, 0.7 + config.attendance / 500))
+    : 1.0;
+  const refereeIncidents: RefereeIncident[] = [];
+  // Naplánovaná sporná situace — nejvýš jedna na zápas, strukturálně.
+  let plannedError = planRefereeError(rng, ref);
+  // Když sudí neuznal gól, škrtne se PRVNÍ gól poškozeného týmu, který po tom padne.
+  let disallowGoalFor: number | null = null;
+  let refFouls = 0;
+  let refCards = 0;
+  let refLateEvents = 0;
+
   // Apply equipment bonuses to players
   const homeEq = config.homeEquipment;
   const awayEq = config.awayEquipment;
@@ -530,6 +558,37 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     });
   }
 
+  /** Tým na hřišti podle engine ID — pro převod naplánované chyby na konkrétní sestavu. */
+  function teamById(id: number): TeamSetup {
+    return home.teamId === id ? home : away;
+  }
+
+  function teamName(id: number): string {
+    return teamById(id).teamName;
+  }
+
+  /**
+   * Sudí gól neuznal. Vrací true, když se gól nemá započítat.
+   *
+   * Volá se ze `scoreGoal` i z inline gólu v otevřené hře — ten má navíc kapitánský
+   * a vztahový morálkový blok, takže se obě cesty sjednotit nedají bez rizika.
+   */
+  function goalDisallowed(minute: number, scorer: MatchPlayer, attacking: TeamSetup): boolean {
+    if (disallowGoalFor !== attacking.teamId) return false;
+    disallowGoalFor = null;
+    const opponent = attacking === home ? away : home;
+    const text = incidentText("neuznany_gol", playerName(scorer), attacking.teamName);
+    addEvent(minute, "special", scorer, attacking.teamId, text, "ref_error:neuznany_gol");
+    refereeIncidents.push({
+      minute, kind: "neuznany_gol", severity: "high",
+      againstTeamId: attacking.teamId, favourTeamId: opponent.teamId,
+      playerName: playerName(scorer), text,
+    });
+    for (const p of attacking.lineup) p.morale = Math.max(0, p.morale - 4);
+    for (const p of opponent.lineup) p.morale = Math.min(100, p.morale + 2);
+    return true;
+  }
+
   /**
    * Zapíše gól: skóre, událost a rozhoupání morálky na obou stranách.
    * Vůdcovské typy zvednou svůj tým víc a soupeřův srazí míň.
@@ -542,6 +601,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     description: string,
     source: GoalSource,
   ) {
+    if (goalDisallowed(minute, scorer, attacking)) return;
     if (attacking === home) homeScore++; else awayScore++;
     addEvent(minute, "goal", scorer, attacking.teamId, description,
       `${homeScore}:${awayScore}`, source);
@@ -549,6 +609,68 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     const defLead = teamAvg(defending.lineup, "leadership") / 100;
     for (const p of attacking.lineup) p.morale = Math.min(100, p.morale + Math.round(2 + attLead * 2));
     for (const p of defending.lineup) p.morale = Math.max(0, p.morale - Math.round(1 + (1 - defLead) * 2));
+  }
+
+  /** Vyloučení: odebere hráče ze hřiště a uzavře mu odehrané minuty. */
+  function sendOff(player: MatchPlayer, team: TeamSetup, minute: number) {
+    redCards.add(player.id);
+    const idx = team.lineup.indexOf(player);
+    if (idx >= 0) {
+      team.lineup.splice(idx, 1);
+      if (playerMinutes[player.id]) playerMinutes[player.id].left = minute;
+    }
+  }
+
+  /**
+   * Žlutá karta se správnou eskalací na druhou žlutou.
+   *
+   * Dřív eskalaci uměla jen cesta přes faul; protesty přidávaly žlutou přes holé
+   * `yellowCards.add()` bez kontroly, takže hráč mohl nasbírat dvě žluté a dohrát.
+   */
+  function giveYellow(player: MatchPlayer, team: TeamSetup, minute: number, description: string) {
+    refCards++;
+    if (minute > 70) refLateEvents++;
+    if (yellowCards.has(player.id)) {
+      yellowCards.delete(player.id);
+      addEvent(minute, "card", player, team.teamId,
+        `Druhá žlutá a červená pro ${playerName(player)}!`, "red");
+      sendOff(player, team, minute);
+    } else {
+      yellowCards.add(player.id);
+      addEvent(minute, "card", player, team.teamId, description, "yellow");
+    }
+  }
+
+  /**
+   * Přímá červená. `detail` zůstává "red" — nový detail by se ve statistikách tiše
+   * počítal jako žlutá a ve frontendu vykreslil žlutě. Rozlišení nese popis události.
+   */
+  function giveDirectRed(player: MatchPlayer, team: TeamSetup, minute: number, description: string) {
+    refCards++;
+    if (minute > 70) refLateEvents++;
+    addEvent(minute, "card", player, team.teamId, description, "red");
+    sendOff(player, team, minute);
+  }
+
+  /** Kdo faul spáchal — váží agresivita a přítomnost rivala na hřišti. */
+  function pickFouler(defending: TeamSetup): MatchPlayer | null {
+    const defenders = defending.lineup.filter((p) => p.position !== "GK");
+    if (defenders.length === 0) return null;
+    // Rival musí být pořád na hřišti — po červené kartě už dusno nedělá.
+    const onPitch = new Set(defending.lineup.map((p) => p.id).filter((id) => !redCards.has(id)));
+    const weights = defenders.map((p) => {
+      const base = 1 + (p.aggression / 100) * 2;
+      const rival = p.relationshipsInLineup?.find((r) => r.type === "rivals" && onPitch.has(r.withId));
+      const rivalBonus = rival ? 1 + 0.15 * ((rival.strength ?? 50) / 50) : 1.0;
+      return base * rivalBonus;
+    });
+    const total = weights.reduce((a, b) => a + b, 0);
+    let roll = rng.random() * total;
+    for (let i = 0; i < weights.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) return defenders[i];
+    }
+    return defenders[0];
   }
 
   /**
@@ -648,8 +770,92 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     }
   }
 
+  /**
+   * Provede naplánovanou spornou situaci. Volá se nejvýš jednou za zápas.
+   * Neuznaný gól se jen „nabije" — projeví se až u prvního gólu poškozeného týmu,
+   * a když žádný nepadne, tiše se neprojeví vůbec (což je realistické).
+   */
+  function applyPlannedError(minute: number, plan: NonNullable<typeof plannedError>) {
+    const favour = plan.favourHome ? home : away;
+    const victim = plan.favourHome ? away : home;
+
+    const push = (player: MatchPlayer, text: string) => {
+      refereeIncidents.push({
+        minute, kind: plan.kind, severity: plan.severity,
+        againstTeamId: victim.teamId, favourTeamId: favour.teamId,
+        playerName: playerName(player), text,
+      });
+      for (const p of victim.lineup) p.morale = Math.max(0, p.morale - 4);
+      for (const p of favour.lineup) p.morale = Math.min(100, p.morale + 2);
+    };
+
+    switch (plan.kind) {
+      case "neuznany_gol":
+        // Nabít — škrtne se první gól poškozeného, který po téhle minutě padne.
+        disallowGoalFor = victim.teamId;
+        return;
+
+      case "vymyslena_penalta": {
+        const player = pickFouler(victim) ?? victim.lineup[0];
+        if (!player) return;
+        const text = incidentText(plan.kind, playerName(player), victim.teamName);
+        addEvent(minute, "special", player, victim.teamId, text, "ref_error:vymyslena_penalta");
+        push(player, text);
+        playSetPiece(minute, "penalty", favour, victim);
+        return;
+      }
+
+      case "sporny_primak": {
+        const player = pickFouler(victim) ?? victim.lineup[0];
+        if (!player) return;
+        const text = incidentText(plan.kind, playerName(player), victim.teamName);
+        addEvent(minute, "special", player, victim.teamId, text, "ref_error:sporny_primak");
+        push(player, text);
+        playSetPiece(minute, "freekick", favour, victim);
+        return;
+      }
+
+      case "neodpiskana_penalta": {
+        const player = pickAttacker(rng, victim.lineup);
+        const text = incidentText(plan.kind, playerName(player), victim.teamName);
+        addEvent(minute, "special", player, victim.teamId, text, "ref_error:neodpiskana_penalta");
+        push(player, text);
+        return;
+      }
+
+      case "chybna_cervena": {
+        const player = pickFouler(victim);
+        if (!player) return;
+        const text = incidentText(plan.kind, playerName(player), victim.teamName);
+        addEvent(minute, "special", player, victim.teamId, text, "ref_error:chybna_cervena");
+        push(player, text);
+        // Emituje i skutečnou červenou událost — jinak by se rozpadly stopky,
+        // ratingy a matches.total_cards.
+        giveDirectRed(player, victim, minute, `Červená karta pro ${playerName(player)} — a nikdo neví za co!`);
+        return;
+      }
+
+      case "prehlednuta_cervena": {
+        const player = pickFouler(favour);
+        const hurt = pickAttacker(rng, victim.lineup);
+        if (!player) return;
+        const text = incidentText(plan.kind, playerName(hurt), victim.teamName);
+        addEvent(minute, "special", player, favour.teamId, text, "ref_error:prehlednuta_cervena");
+        push(hurt, text);
+        giveYellow(player, favour, minute, `Jen žlutá pro ${playerName(player)} — a lavička nevěří vlastním očím`);
+        return;
+      }
+    }
+  }
+
   // Minute-by-minute simulation
   for (let minute = 1; minute <= 90; minute++) {
+    // Sporná situace — strop „nejvýš jedna na zápas" je strukturální: po použití se plán zahodí.
+    if (plannedError && minute === plannedError.minute) {
+      applyPlannedError(minute, plannedError);
+      plannedError = null;
+    }
+
     // Determine possession
     const homePoss = calcPossession(home, away, homeAdvantage);
     homePossSum += homePoss;
@@ -672,7 +878,12 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       const scoreDiff = isHomePossession ? homeScore - awayScore : awayScore - homeScore;
       const goalProb = calcGoalProb(rng, attacker, gk, defAvg, minute, scoreDiff);
 
-      if (rng.random() < goalProb) {
+      const scored = rng.random() < goalProb;
+
+      if (scored && goalDisallowed(minute, attacker, attacking)) {
+        // Gól neuznán — událost i morálka jsou zapsané v goalDisallowed.
+        // Záměrně nenásleduje ani asistence, ani „zahozená šance".
+      } else if (scored) {
         // GOAL!
         if (isHomePossession) homeScore++; else awayScore++;
         addEvent(minute, "goal", attacker, attacking.teamId,
@@ -777,69 +988,63 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       }
     }
 
-    // Check for foul (~8% per minute)
-    if (rng.random() < 0.08) {
-      const defenders = defending.lineup.filter((p) => p.position !== "GK");
-      if (defenders.length > 0) {
-        // Weighted pick by aggression + rival bonus.
-        // Rival musí být pořád na hřišti — po červené kartě už dusno nedělá.
-        const onPitch = new Set(defending.lineup.map((p) => p.id).filter((id) => !redCards.has(id)));
-        const weights = defenders.map((p) => {
-          const base = 1 + (p.aggression / 100) * 2;
-          const rival = p.relationshipsInLineup?.find((r) => r.type === "rivals" && onPitch.has(r.withId));
-          const rivalBonus = rival ? 1 + 0.15 * ((rival.strength ?? 50) / 50) : 1.0;
-          return base * rivalBonus;
-        });
-        const totalWeight = weights.reduce((a, b) => a + b, 0);
-        let roll = rng.random() * totalWeight;
-        let foulerIdx = 0;
-        for (let fi = 0; fi < weights.length; fi++) {
-          roll -= weights[fi];
-          if (roll <= 0) { foulerIdx = fi; break; }
-        }
-        const fouler = defenders[foulerIdx];
-        const temperFactor = fouler.temper / 100;
-        const disciplineFactor = (100 - fouler.discipline) / 100;
+    // ── Ostrý souboj ──
+    // Frekvence i následky určuje delegovaný rozhodčí. Benevolentní sudí spoustu
+    // soubojů pustí (výhoda), přísný odpíská skoro všechno.
+    if (rng.random() < refSevere) {
+      const fouler = pickFouler(defending);
+      if (fouler) {
+        if (rng.random() < refAdv) {
+          // Sudí nechává hrát — z faulu není standardka ani karta.
+          addEvent(minute, "special", fouler, defending.teamId,
+            `Faul ${playerName(fouler)}, ale sudí nechává hrát — výhoda!`, "advantage");
+        } else {
+          refFouls++;
+          if (minute > 70) refLateEvents++;
+          addEvent(minute, "foul", fouler, defending.teamId, `Faul ${playerName(fouler)}`);
 
-        addEvent(minute, "foul", fouler, defending.teamId,
-          `Faul ${playerName(fouler)}`,
-        );
+          const fatigue = refFatigue(ref, minute);
+          const baseCard = (fouler.temper / 100 + (100 - fouler.discipline) / 100) / 2 * 0.4;
 
-        // Card probability based on temper and discipline
-        const cardProb = (temperFactor + disciplineFactor) / 2 * 0.4;
-        if (rng.random() < cardProb) {
-          if (yellowCards.has(fouler.id)) {
-            // Second yellow → red
-            yellowCards.delete(fouler.id);
-            redCards.add(fouler.id);
-            addEvent(minute, "card", fouler, defending.teamId,
-              `Druhá žlutá a červená pro ${playerName(fouler)}!`,
-              "red");
-            // Remove from lineup + track minutes
-            const idx = defending.lineup.indexOf(fouler);
-            if (idx >= 0) {
-              defending.lineup.splice(idx, 1);
-              if (playerMinutes[fouler.id]) playerMinutes[fouler.id].left = minute;
-            }
-          } else {
-            yellowCards.add(fouler.id);
-            addEvent(minute, "card", fouler, defending.teamId,
-              `Žlutá karta pro ${playerName(fouler)}`,
-              "yellow");
+          if (rng.random() < directRedProb(ref, fouler.aggression)) {
+            giveDirectRed(fouler, defending, minute,
+              `Červená karta pro ${playerName(fouler)}! Zezadu do kotníku a sudí nezaváhal`);
+          } else if (rng.random() < Math.min(0.55, baseCard * refCardMul * fatigue)) {
+            giveYellow(fouler, defending, minute, `Žlutá karta pro ${playerName(fouler)}`);
+          }
+
+          // Kde se faulovalo, z toho plyne co z faulu bude. Šířku zóny penalty určuje
+          // přísnost sudího a jeho náchylnost k domácímu prostředí (crowdFactor je tlak kotle).
+          const pz = penaltyZone(ref, attacking === home, crowdFactor);
+          const fz = freekickZone(pz);
+          const cz = crossZone(fz);
+          const zone = rng.random();
+          if (zone < pz) {
+            playSetPiece(minute, "penalty", attacking, defending);
+          } else if (zone < fz) {
+            playSetPiece(minute, "freekick", attacking, defending);
+          } else if (zone < cz) {
+            playSetPiece(minute, "cross", attacking, defending);
           }
         }
       }
+    }
 
-      // Kde se faulovalo, z toho plyne co z faulu bude. Zóny jsou vážené tak,
-      // aby na zápas vyšla ~0,25 penalty a ~1,4 přímáku — zbytek faulů se
-      // odehraje bez následku (rozehrání na půlce nikoho nezajímá).
-      const zone = rng.random();
-      if (zone < 0.040) {
-        playSetPiece(minute, "penalty", attacking, defending);
-      } else if (zone < 0.260) {
-        playSetPiece(minute, "freekick", attacking, defending);
-      } else if (zone < 0.580) {
-        playSetPiece(minute, "cross", attacking, defending);
+    // ── Malichernost ──
+    // Faul, který by benevolentní sudí vůbec neodpískal. Nikdy z něj není penalta —
+    // jinak by přísný rozhodčí ztrojnásobil počet penalt a rozbil gólovost zápasu.
+    if (refPetty > 0 && rng.random() < refPetty) {
+      const fouler = pickFouler(defending);
+      if (fouler) {
+        refFouls++;
+        if (minute > 70) refLateEvents++;
+        addEvent(minute, "foul", fouler, defending.teamId,
+          `${playerName(fouler)} — a sudí píská i tohle`, "petty");
+        const baseCard = (fouler.temper / 100 + (100 - fouler.discipline) / 100) / 2 * 0.4;
+        if (rng.random() < baseCard * refCardMul * PETTY_CARD_MUL * refFatigue(ref, minute)) {
+          giveYellow(fouler, defending, minute, `Žlutá karta pro ${playerName(fouler)}`);
+        }
+        // Žádná standardka — malichernost se z definice píská tam, kde to nikomu nepomůže.
       }
     }
 
@@ -967,15 +1172,15 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           `${playerName(player)} se drží za kolena a nemůže dál`,
           "exhausted");
       } else if (specialRoll < 0.45 && player.temper >= 70) {
-        // Argument with referee
+        // Hádka s rozhodčím. Jak snadno z toho bude karta, závisí na jeho karetní ruce.
         addEvent(minute, "special", player, teamId,
           `${playerName(player)} se hádá s rozhodčím`,
           "argument");
-        if (rng.random() < 0.3) {
-          yellowCards.add(player.id);
-          addEvent(minute, "card", player, teamId,
-            `Žlutá karta za protesty pro ${playerName(player)}`,
-            "yellow");
+        if (rng.random() < protestYellowProb(ref)) {
+          // Přes giveYellow, aby druhá žlutá eskalovala na červenou — dřív se tady
+          // volalo holé yellowCards.add() a hráč mohl mít dvě žluté a dohrát.
+          giveYellow(player, teamById(teamId), minute,
+            `Žlutá karta za protesty pro ${playerName(player)}`);
         }
       } else if (specialRoll < 0.55 && player.alcohol >= 75) {
         // Hangover effect
@@ -1049,6 +1254,19 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
 
   const possessionHome = Math.max(30, Math.min(70, Math.round((homePossSum / 90) * 100)));
 
+  // Známka rozhodčího za celý zápas — jako by ji dal delegát okresní komise.
+  const worstIncident = refereeIncidents.reduce<RefereeIncident["severity"] | null>((acc, i) => {
+    if (acc === "high" || i.severity === "high") return "high";
+    if (acc === "medium" || i.severity === "medium") return "medium";
+    return i.severity;
+  }, null);
+  const refereeGrade = gradeReferee(ref, {
+    fouls: refFouls,
+    cards: refCards,
+    incidentSeverity: worstIncident,
+    lateEventShare: refFouls + refCards > 0 ? refLateEvents / (refFouls + refCards) : 0,
+  });
+
   return {
     homeScore,
     awayScore,
@@ -1057,5 +1275,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     awayLineup: away.lineup,
     playerMinutes,
     possessionHome,
+    refereeIncidents,
+    refereeGrade,
   };
 }

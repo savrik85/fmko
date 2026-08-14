@@ -573,7 +573,20 @@ async function simulateCupTie(
     awayReal ? loadMatchMods(db, awayReal, false) : Promise.resolve(undefined),
   ]);
 
-  const result = simulateMatch(rng, { home: homeSetup, away: awaySetup, weather, isHomeAdvantage: false, homeEquipment, awayEquipment });
+  // Rozhodčí v poháru se nedeleguje dva dny předem (pavouk se plní až po předchozím
+  // kole) — vybírá se deterministicky z komise okresu domácího klubu. U velkoklubu
+  // bez reálného týmu píská neutrální sudí.
+  const { loadCupReferee, mapIncidentsToDb } = await import("../referees/load");
+  const referee = await loadCupReferee(db, cupMatchId, homeReal);
+
+  const result = simulateMatch(rng, {
+    home: homeSetup, away: awaySetup, weather, isHomeAdvantage: false,
+    homeEquipment, awayEquipment, referee: referee.profile,
+  });
+
+  // Sporné situace: v poháru se mapují na cup_teams.id, protože soupeřem může být
+  // velkoklub bez řádku v `teams`.
+  const cupIncidents = mapIncidentsToDb(result.refereeIncidents, homeCupTeamId, awayCupTeamId);
 
   // Odehraný pohár se počítá do sehranosti stejně jako liga
   if (homeReal) await applyMatchResult(db, homeReal, homeTactic, homeFormation).catch((e) => logger.warn({ module: M }, "cup familiarity home", e));
@@ -715,11 +728,16 @@ async function simulateCupTie(
 
     await db.prepare(
       `UPDATE cup_matches SET events = ?, commentary = ?, attendance = ?, stadium_name = ?, pitch_condition = ?, weather = ?,
-         home_lineup_data = ?, away_lineup_data = ?, absences = ?, player_ratings = ?, simulated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+         home_lineup_data = ?, away_lineup_data = ?, absences = ?, player_ratings = ?,
+         referee_id = ?, referee_snapshot = ?, referee_incidents = ?, referee_grade = ?,
+         simulated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
        WHERE id = ?`
     ).bind(
       JSON.stringify(result.events), JSON.stringify(commentary), ctx?.attendance ?? null, ctx?.stadiumName ?? null, ctx?.pitchCondition ?? null, weather,
-      JSON.stringify(homeLineupData), JSON.stringify(awayLineupData), matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null, JSON.stringify(ratings), cupMatchId,
+      JSON.stringify(homeLineupData), JSON.stringify(awayLineupData), matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null, JSON.stringify(ratings),
+      referee.profile.id, JSON.stringify(referee.snapshot),
+      cupIncidents.length > 0 ? JSON.stringify(cupIncidents) : null, result.refereeGrade,
+      cupMatchId,
     ).run().catch((e) => logger.warn({ module: M }, "save cup match detail", e));
 
     // Zranění ze zápasu — jen pro reálné týmy (velkoklubové kádry nejsou v players, FK by spadl)

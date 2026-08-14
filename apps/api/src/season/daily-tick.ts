@@ -939,6 +939,15 @@ export async function executeDailyTick(
       const { maybeAdvanceCup } = await import("../cup/cup");
       await maybeAdvanceCup(env.DB);
     } catch (e) { logger.warn({ module: "daily-tick" }, "cup auto-advance failed", e); }
+
+    // ── Delegace rozhodčích na zápasy za dva herní dny ──
+    // Záměrně PŘED per-tým smyčkou: delegace je per liga a musí proběhnout i pro
+    // zápasy dvou AI týmů, zatímco smyčka níž běží per tým a lidské trenéry filtruje.
+    try {
+      const { delegateReferees } = await import("../referees/delegation");
+      const delegated = await delegateReferees(env.DB, globalGameDate);
+      if (delegated > 0) logger.info({ module: "referees" }, `delegováno ${delegated} zápasů`);
+    } catch (e) { logger.error({ module: "referees" }, "delegace rozhodčích selhala", e); }
   }
   // (Chybějící game_clock už je zalogováno jako error na začátku ticku.)
 
