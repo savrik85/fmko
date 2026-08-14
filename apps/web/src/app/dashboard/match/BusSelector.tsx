@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { CollapsibleCard } from "@/components/ui";
 
 const BUS_TIERS_VESNICE = [
   {
@@ -181,14 +182,15 @@ export function BusSelector({
   };
 
   return (
-    <div className="card p-3 space-y-3">
-      <div className="flex items-baseline justify-between">
-        <div className="font-heading font-bold text-sm">
-          🚌 Doprava fanoušků z okolí
-        </div>
-        <div className="text-[10px] text-muted">
-          3 zápasy v řadě = stálí fanoušci
-        </div>
+    <CollapsibleCard
+      title="🚌 Doprava fanoušků z okolí"
+      summary={ordered.length > 0
+        ? `Objednáno: ${ordered.length}× autobus`
+        : "Neobjednáno · 3 zápasy v řadě = stálí fanoušci"}
+      className="space-y-3"
+    >
+      <div className="text-[10px] text-muted text-right -mt-1 mb-2">
+        3 zápasy v řadě = stálí fanoušci
       </div>
 
       {ordered.length > 0 && (
@@ -294,6 +296,6 @@ export function BusSelector({
           </button>
         </>
       )}
-    </div>
+    </CollapsibleCard>
   );
 }

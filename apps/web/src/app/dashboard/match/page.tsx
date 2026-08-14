@@ -720,12 +720,14 @@ function MatchPage() {
           {/* Varování jen když má smysl — u benevolentního sudího by jen šumělo */}
           {hardness === "hard" && referee && referee.strictness >= 65 && (
             <p className="text-[11px] text-card-red mt-1.5">
-              {referee.name} píská skoro každý souboj — do těla u něj znamená hlavně fauly, ne zisky míče.
+              {referee.name} pískne i to, co jinde projde. Do těla u něj neznamená odebrané míče,
+              ale přímáky pro soupeře a plný zápis.
             </p>
           )}
           {cardRisk && (
             <p className="text-[11px] text-muted mt-1.5">
-              Odhad: ~{cardRisk.cards.toFixed(1).replace(".", ",")} žluté a ~{cardRisk.reds.toFixed(2).replace(".", ",")} červené na zápas.
+              Podle jeho metru a téhle sestavy čekej ~{cardRisk.cards.toFixed(1).replace(".", ",")} žluté
+              a ~{cardRisk.reds.toFixed(2).replace(".", ",")} červené.
               {cardRisk.onEdge > 0 && (
                 <span className="text-gold-600">
                   {" "}{cardRisk.onEdge === 1 ? "Jeden hráč je" : `${cardRisk.onEdge} hráči jsou`} jednu žlutou od stopky.

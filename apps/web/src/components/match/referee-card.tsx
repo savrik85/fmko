@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { CollapsibleCard } from "@/components/ui";
 import {
   REFEREE_AXES, axisWord, axisColor, refereeAdviceCz, formatGrade, gradeColor, gradeWord,
   type RefereeProfileView, type RefereeStatsView,
@@ -24,13 +25,12 @@ interface Props {
 export function RefereeCard({ referee, isHome }: Props) {
   if (!referee) {
     return (
-      <div className="card p-4">
-        <div className="font-heading font-bold text-base mb-1">🧑‍⚖️ Rozhodčí</div>
+      <CollapsibleCard title="🧑‍⚖️ Rozhodčí" summary="Zatím nedelegován">
         <p className="text-sm text-muted">
           Delegace přijde dva herní dny před výkopem. Pak bude podle povahy sudího vidět,
           jestli se vyplatí hrát opatrně, nebo do toho jít naplno.
         </p>
-      </div>
+      </CollapsibleCard>
     );
   }
 
@@ -38,13 +38,15 @@ export function RefereeCard({ referee, isHome }: Props) {
   const s = referee.stats;
 
   return (
-    <div className="card p-4">
+    <CollapsibleCard
+      title="🧑‍⚖️ Rozhodčí utkání"
+      summary={`${referee.name} · ${referee.archetypeLabel}`}
+    >
       <div className="flex items-start gap-3">
         {referee.avatar && (
           <FaceAvatar faceConfig={referee.avatar} size={56} className="border border-ink/20 bg-white shrink-0 rounded-lg" />
         )}
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] uppercase tracking-wide text-muted font-heading">Rozhodčí utkání</div>
           <Link href={`/dashboard/rozhodci/${referee.id}`} className="font-heading font-bold text-base hover:underline block truncate">
             {referee.name}
           </Link>
@@ -103,7 +105,7 @@ export function RefereeCard({ referee, isHome }: Props) {
           ))}
         </ul>
       )}
-    </div>
+    </CollapsibleCard>
   );
 }
 

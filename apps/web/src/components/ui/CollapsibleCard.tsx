@@ -1,0 +1,47 @@
+"use client";
+
+import { useEffect, useState, type ReactNode } from "react";
+
+interface Props {
+  title: ReactNode;
+  /** Jednořádkové shrnutí, které je vidět i ve sbaleném stavu. */
+  summary?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}
+
+/**
+ * Karta, která je na mobilu sbalená a na širší obrazovce rozbalená.
+ *
+ * Sestavovač má nad hřištěm několik informačních bloků a na telefonu se kvůli nim
+ * ke skutečné práci — postavit jedenáctku — musí dlouho rolovat. Shrnutí zůstává
+ * viditelné i ve sbaleném stavu, aby se kvůli základní informaci nemuselo klikat.
+ */
+export function CollapsibleCard({ title, summary, children, className = "" }: Props) {
+  // Výchozí stav se dopočítá po mountu — na serveru viewport neznáme.
+  const [open, setOpen] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setOpen(window.matchMedia("(min-width: 640px)").matches);
+  }, []);
+
+  return (
+    <div className={`card p-3 ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-2 text-left"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="font-heading font-bold text-sm">{title}</div>
+          {!open && summary && <div className="text-sm text-muted truncate mt-0.5">{summary}</div>}
+        </div>
+        <span className={`text-muted shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden>▾</span>
+      </button>
+
+      {open && <div className="mt-3">{children}</div>}
+    </div>
+  );
+}

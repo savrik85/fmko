@@ -3,6 +3,7 @@ export { Card, CardHeader, CardBody } from "./card";
 export { Badge } from "./badge";
 export { StatBar } from "./stat-bar";
 export { Spinner } from "./spinner";
+export { CollapsibleCard } from "./CollapsibleCard";
 export { Input } from "./input";
 export { ErrorBox } from "./error-box";
 export { Modal } from "./modal";
