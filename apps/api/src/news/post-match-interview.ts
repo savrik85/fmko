@@ -77,6 +77,7 @@ async function buildContext(db: D1Database, m: MatchRow, teamId: string): Promis
   const events = safeParse<Array<Record<string, unknown>>>(m.events, []);
   const cardsOf = (t: number) => events.filter((e) => e.type === "card" && e.teamId === t).length;
   const pensOf = (t: number) => events.filter((e) => e.type === "penalty" && e.teamId === t).length;
+  const redsOf = (t: number) => events.filter((e) => e.type === "card" && e.detail === "red" && e.teamId === t).length;
 
   const [ownTeam, oppTeam] = await Promise.all([
     db.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>(),
@@ -112,6 +113,8 @@ async function buildContext(db: D1Database, m: MatchRow, teamId: string): Promis
     outcome: ownScore > oppScore ? "win" : ownScore < oppScore ? "loss" : "draw",
     ownCards: cardsOf(engineOwn),
     oppCards: cardsOf(engineOwn === 1 ? 2 : 1),
+    ownReds: redsOf(engineOwn),
+    oppReds: redsOf(engineOwn === 1 ? 2 : 1),
     ownPenalties: pensOf(engineOwn),
     oppPenalties: pensOf(engineOwn === 1 ? 2 : 1),
     hardness: lineup?.hardness ?? "normal",
@@ -132,6 +135,7 @@ async function buildContext(db: D1Database, m: MatchRow, teamId: string): Promis
 /** Je o čem mluvit? Bez háku rozhovor nevzniká. */
 function hasHook(c: PostMatchContext): boolean {
   return !!c.incident
+    || c.ownReds + c.oppReds > 0
     || c.ownCards + c.oppCards >= 5
     || c.ownPenalties + c.oppPenalties > 0
     || !!c.opponentStatement

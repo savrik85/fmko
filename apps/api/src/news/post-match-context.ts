@@ -28,6 +28,9 @@ export interface PostMatchContext {
   outcome: "win" | "draw" | "loss";
   ownCards: number;
   oppCards: number;
+  /** Vyloučení zvlášť — jedna červená je téma sama o sobě, i když karet bylo málo. */
+  ownReds: number;
+  oppReds: number;
   ownPenalties: number;
   oppPenalties: number;
   hardness: string;

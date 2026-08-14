@@ -50,6 +50,8 @@ interface PostMatchContext {
   outcome: "win" | "draw" | "loss";
   ownCards: number;
   oppCards: number;
+  ownReds: number;
+  oppReds: number;
   ownPenalties: number;
   oppPenalties: number;
   refereeName: string | null;
@@ -317,6 +319,9 @@ export default function EventsPage() {
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-light">
                         {ctx.refereeName && <span>Rozhodčí: <span className="font-heading font-bold text-ink">{ctx.refereeName}</span></span>}
                         <span>Karty: <span className="font-heading font-bold text-ink tabular-nums">{ctx.ownCards}:{ctx.oppCards}</span></span>
+                        {(ctx.ownReds > 0 || ctx.oppReds > 0) && (
+                          <span>Červené: <span className="font-heading font-bold text-card-red tabular-nums">{ctx.ownReds}:{ctx.oppReds}</span></span>
+                        )}
                         {(ctx.ownPenalties > 0 || ctx.oppPenalties > 0) && (
                           <span>Penalty: <span className="font-heading font-bold text-ink tabular-nums">{ctx.ownPenalties}:{ctx.oppPenalties}</span></span>
                         )}
