@@ -355,6 +355,16 @@ export default function ConversationPage() {
                             : "bg-white shadow-sm rounded-bl-sm"
                         }`}>
                           <p className="whitespace-pre-wrap">{emoticonize(msg.body)}</p>
+                          {/* Žádost o rozhovor chodí SMS, ale formulář je na Událostech —
+                              bez prokliku ji hráč musel hledat ručně. */}
+                          {msg.metadata?.type === "interview_request" && (
+                            <Link
+                              href={`/dashboard/events#rozhovor-${String(msg.metadata.interviewId ?? "")}`}
+                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-xs font-heading font-bold"
+                            >
+                              Otevřít rozhovor
+                            </Link>
+                          )}
                           <div className={`text-[9px] mt-0.5 ${isUser ? "text-white/50" : "text-muted"} text-right`}>
                             {formatTime(msg.sentAt)}
                           </div>

@@ -53,6 +53,7 @@ const RUBRIKA: Record<string, string> = {
   ultras_report: "Prales Ultras",
   interview: "Rozhovor s trenérem",
   player_interview: "Rozhovor s hráčem",
+  post_match_interview: "Po zápase",
   season_opener: "Otevírák sezóny",
   season_wrap: "Ohlédnutí za sezónou",
 };

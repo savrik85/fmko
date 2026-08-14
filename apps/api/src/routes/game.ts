@@ -3616,7 +3616,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
          WHERE m.id = ?`
       ).bind(match.id as string).first<Record<string, unknown>>();
       if (refRow) {
-        const { archetypeLabel } = await import("../engine/referee");
+        const { archetypeLabel, refereeBias } = await import("../engine/referee");
         const { refereeFullName } = await import("../referees/referee-generator");
         const seasonRow = await c.env.DB.prepare(
           "SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
@@ -3627,8 +3627,9 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
            FROM referee_stats WHERE referee_id = ? AND season_number = ?`
         ).bind(refRow.id as string, seasonRow?.number ?? 1).first<Record<string, number | null>>();
         const rel = await c.env.DB.prepare(
-          "SELECT matches, wins, draws, losses, yellow_cards, red_cards FROM referee_team_relations WHERE referee_id = ? AND team_id = ?"
-        ).bind(refRow.id as string, teamId).first<Record<string, number>>();
+          `SELECT matches, wins, draws, losses, yellow_cards, red_cards, sentiment, duvod
+           FROM referee_team_relations WHERE referee_id = ? AND team_id = ?`
+        ).bind(refRow.id as string, teamId).first<Record<string, number | string>>();
         const played = st?.m ?? 0;
         refereeInfo = {
           id: refRow.id,
@@ -3653,7 +3654,14 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
             cardsPerMatch: Math.round((((st!.y ?? 0) + (st!.rc ?? 0)) / played) * 100) / 100,
             foulsPerMatch: Math.round(((st!.f ?? 0) / played) * 10) / 10,
           } : null,
-          vsTeam: rel && rel.matches > 0 ? rel : null,
+          vsTeam: rel && (rel.matches as number) > 0 ? rel : null,
+          // Paměť sudího vůči klubu — žádný skrytý modifikátor, karta ukazuje
+          // spočítané procento i důvod.
+          memory: rel && (rel.sentiment as number) !== 0 ? {
+            sentiment: rel.sentiment as number,
+            duvod: (rel.duvod as string) || null,
+            biasPct: Math.round(Math.abs(refereeBias(rel.sentiment as number)) * 1000) / 10,
+          } : null,
         };
       }
     } catch (e) { logger.warn({ module: "game" }, "načtení delegovaného rozhodčího", e); }

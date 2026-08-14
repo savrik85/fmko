@@ -5,7 +5,8 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { CollapsibleCard } from "@/components/ui";
 import {
   REFEREE_AXES, axisWord, axisColor, refereeAdviceCz, formatGrade, gradeColor, gradeWord,
-  type RefereeProfileView, type RefereeStatsView,
+  memoryWord, memoryColor,
+  type RefereeProfileView, type RefereeStatsView, type RefereeMemoryView,
 } from "@/lib/referee-info";
 
 interface VsTeam {
@@ -18,7 +19,11 @@ interface VsTeam {
 }
 
 interface Props {
-  referee: (RefereeProfileView & { stats: RefereeStatsView | null; vsTeam?: VsTeam | null }) | null;
+  referee: (RefereeProfileView & {
+    stats: RefereeStatsView | null;
+    vsTeam?: VsTeam | null;
+    memory?: RefereeMemoryView | null;
+  }) | null;
   isHome: boolean;
 }
 
@@ -93,6 +98,25 @@ export function RefereeCard({ referee, isHome }: Props) {
           {referee.vsTeam.wins} výher, {referee.vsTeam.draws} remíz, {referee.vsTeam.losses} proher
           {referee.vsTeam.red_cards ? ` · ${referee.vsTeam.red_cards}× červená` : ""}
         </p>
+      )}
+
+      {/* Paměť z pozápasových rozhovorů — ukazuje se spočítané číslo i důvod,
+          aby to nebyl skrytý modifikátor. */}
+      {referee.memory && (
+        <div className="mt-3 pt-3 border-t border-ink/10">
+          <p className="text-sm">
+            <span className="font-heading font-bold">Sudí {referee.name.split(" ").slice(-1)[0]} si tě pamatuje:</span>{" "}
+            <span className={`font-heading font-bold ${memoryColor(referee.memory.sentiment)}`}>
+              {memoryWord(referee.memory.sentiment)}
+            </span>
+            <span className="text-muted tabular-nums"> ({referee.memory.sentiment > 0 ? "+" : ""}{referee.memory.sentiment})</span>
+          </p>
+          <p className="text-sm text-ink-light mt-0.5">
+            Hraniční verdikty rozhodne o {referee.memory.biasPct.toFixed(1).replace(".", ",")} % častěji{" "}
+            {referee.memory.sentiment < 0 ? "proti tobě" : "ve tvůj prospěch"}.
+            {referee.memory.duvod ? ` Důvod: ${referee.memory.duvod}` : ""}
+          </p>
+        </div>
       )}
 
       {advice.length > 0 && (

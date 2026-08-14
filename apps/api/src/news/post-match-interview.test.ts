@@ -11,6 +11,8 @@ import {
   type PostMatchContext,
 } from "./post-match-context";
 import { buildFallbackQuestions } from "./post-match-questions";
+import { refereeBias } from "../engine/referee";
+import { aiPreMatchStatement } from "../community/manager-relations";
 
 describe("klasifikace postoje k rozhodčímu", () => {
   const kritika = [
@@ -208,5 +210,74 @@ describe("šablonové otázky", () => {
     const a = buildFallbackQuestions(baseCtx);
     const b = buildFallbackQuestions(baseCtx);
     expect(a).toEqual(b);
+  });
+});
+
+describe("paměť rozhodčího v zápase", () => {
+  it("nikdy nepřekročí ±3 %", () => {
+    for (let r = -200; r <= 200; r += 1) {
+      expect(Math.abs(refereeBias(r)), String(r)).toBeLessThanOrEqual(0.03 + 1e-9);
+    }
+  });
+
+  it("nulová paměť nic nemění", () => {
+    expect(refereeBias(0)).toBe(0);
+  });
+
+  it("jedna ostrá kritika je znát, ale nerozhoduje zápas", () => {
+    // −16 je nejtvrdší jednorázový postih z rozhovoru.
+    expect(Math.abs(refereeBias(-16))).toBeGreaterThan(0.001);
+    expect(Math.abs(refereeBias(-16))).toBeLessThan(0.006);
+  });
+
+  it("znaménko sedí — zášť jde proti týmu", () => {
+    expect(refereeBias(-40)).toBeLessThan(0);
+    expect(refereeBias(40)).toBeGreaterThan(0);
+  });
+});
+
+describe("předzápasové výroky AI trenérů", () => {
+  const ARCHETYPY = ["provokater", "urazeny", "ferovka", "pohodar"] as const;
+
+  it("stejný vstup dá vždy stejný výrok", () => {
+    for (const a of ARCHETYPY) {
+      for (let i = 0; i <= 20; i++) {
+        const ctx = { heat: i * 3, respect: i * 2, roll: i / 20, weAreFavourite: i % 2 === 0 };
+        expect(aiPreMatchStatement(a, ctx)).toEqual(aiPreMatchStatement(a, ctx));
+      }
+    }
+  });
+
+  it("uražený sám od sebe neprovokuje, dokud není dusno", () => {
+    expect(aiPreMatchStatement("urazeny", { heat: 0, respect: 0, roll: 0.9, weAreFavourite: false })).toBeNull();
+    expect(aiPreMatchStatement("urazeny", { heat: 45, respect: 0, roll: 0.9, weAreFavourite: false }))
+      .toEqual({ tone: "provoke" });
+  });
+
+  it("provokatér při dusnu mluví vždy", () => {
+    for (let r = 0; r < 1; r += 0.1) {
+      expect(aiPreMatchStatement("provokater", { heat: 30, respect: 0, roll: r, weAreFavourite: false }))
+        .toEqual({ tone: "provoke" });
+    }
+  });
+
+  it("férovka se soupeře nikdy nedotkne", () => {
+    for (let r = 0; r < 1; r += 0.05) {
+      const s = aiPreMatchStatement("ferovka", { heat: 80, respect: 50, roll: r, weAreFavourite: true });
+      expect(s === null || s.tone === "respect").toBe(true);
+    }
+  });
+
+  it("většina zápasů zůstane bez výroku", () => {
+    let vyroku = 0, celkem = 0;
+    for (const a of ARCHETYPY) {
+      for (let i = 0; i < 100; i++) {
+        celkem++;
+        if (aiPreMatchStatement(a, { heat: 5, respect: 5, roll: i / 100, weAreFavourite: i % 2 === 0 })) vyroku++;
+      }
+    }
+    // Kdyby mluvili pořád, přestalo by to být zajímavé a otázka na výrok
+    // by byla v každém rozhovoru.
+    expect(vyroku / celkem).toBeLessThan(0.45);
   });
 });

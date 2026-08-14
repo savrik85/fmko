@@ -164,3 +164,27 @@ export interface RefereeIncidentView {
 export function incidentLabel(kind: string): string {
   return INCIDENT_LABELS[kind] ?? "Sporná situace";
 }
+
+// ── Paměť rozhodčího vůči klubu ──────────────────────────────────────────────
+
+export interface RefereeMemoryView {
+  sentiment: number;
+  duvod: string | null;
+  /** O kolik procent se posunou hraniční verdikty. Nikdy víc než 3. */
+  biasPct: number;
+}
+
+/** Slovní škála, aby paměť nebyla jen číslo. */
+export function memoryWord(sentiment: number): string {
+  if (sentiment >= 12) return "drží ti palce";
+  if (sentiment >= 4) return "má tě rád";
+  if (sentiment > -4) return "neutrální";
+  if (sentiment > -12) return "má tě v merku";
+  return "jde po tobě";
+}
+
+export function memoryColor(sentiment: number): string {
+  if (sentiment >= 4) return "text-pitch-600";
+  if (sentiment > -4) return "text-muted";
+  return "text-card-red";
+}

@@ -278,6 +278,8 @@ export default function NewsPage() {
     ? interviewArticles.filter((a) => (a as any).gameWeek === latestInterviewWeek)
     : interviewArticles;
   const ultrasReports = articles.filter((a) => a.type === "ultras_report");
+  // Pozápasové rozhovory — vlastní rubrika, jinak by splynuly s předzápasovými.
+  const postMatchArticles = articles.filter((a) => a.type === "post_match_interview");
   // Rozhovory s hráči — nejnovější kolo (stejná logika jako u rozhovorů s trenéry)
   const playerInterviewArticles = articles.filter((a) => a.type === "player_interview");
   const latestPlayerIvWeek = playerInterviewArticles.length > 0
@@ -302,7 +304,7 @@ export default function NewsPage() {
     ?? (aiReportArticles[0] && aiReportArticles[0].id !== leadStory?.id ? aiReportArticles[0] : null);
   // Ostatní drobnosti — bez typů z hlavních sekcí a bez duplicit s lead/secondary (podle id)
   const otherArticles = articles.filter(
-    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview", "ultras_report"].includes(a.type)
+    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview", "post_match_interview", "ultras_report"].includes(a.type)
       && a.id !== leadStory?.id && a.id !== secondaryStory?.id,
   );
   const miscArticles = otherArticles;
@@ -487,6 +489,34 @@ export default function NewsPage() {
                       avatar={meta.managerAvatar}
                       text={meta.article ?? iv.body}
                       poznamka={meta.vztah ? `${meta.vztah.popis}${meta.vztah.dopad ? ` — ${meta.vztah.dopad}` : ""}` : undefined}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ═══ Po zápase ═══ */}
+          {postMatchArticles.length > 0 && (
+            <section className="border-t border-ink/20 pt-6">
+              <Kicker>🗣️ {postMatchArticles.length === 1 ? "Po zápase" : "Ohlasy po zápase"}</Kicker>
+              <div className="divide-y divide-ink/10">
+                {postMatchArticles.map((iv) => {
+                  let meta: {
+                    managerName?: string; managerAvatar?: Record<string, unknown> | null; teamName?: string;
+                    article?: string; refereeName?: string; incidentText?: string;
+                  } = {};
+                  try { meta = JSON.parse(iv.body); } catch (e) { console.error("parse pozápasového rozhovoru:", e); meta = {}; }
+                  return (
+                    <Rozhovor
+                      key={iv.id}
+                      clanek={iv}
+                      jmeno={meta.managerName ?? "Trenér"}
+                      role="Trenér"
+                      tym={meta.teamName}
+                      avatar={meta.managerAvatar}
+                      text={meta.article ?? iv.body}
+                      poznamka={meta.refereeName ? `Rozhodčí ${meta.refereeName}${meta.incidentText ? " — sporná situace v zápase" : ""}` : undefined}
                     />
                   );
                 })}

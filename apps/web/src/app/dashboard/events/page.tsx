@@ -40,12 +40,32 @@ interface Tazatel {
   avatar: Record<string, unknown> | null;
 }
 
+/** Fakta ze zápasu — hráč nemá odpovídat po paměti. */
+interface PostMatchContext {
+  teamName: string;
+  opponentName: string;
+  opponentManagerName: string | null;
+  ownScore: number;
+  oppScore: number;
+  outcome: "win" | "draw" | "loss";
+  ownCards: number;
+  oppCards: number;
+  ownPenalties: number;
+  oppPenalties: number;
+  refereeName: string | null;
+  incident: { minute: number; kind: string; severity: string; text: string } | null;
+  opponentStatement: { quote: string; tone: string } | null;
+}
+
 interface CoachInterview {
   id: string;
   gameWeek: number;
   questions: string[];
   expiresAt: string;
   journalist?: Tazatel | null;
+  kind?: "pre_match" | "post_match" | "season_wrap";
+  topics?: string[];
+  context?: PostMatchContext | null;
 }
 
 /** Jak vztah redaktora ke klubu obarvit — ať je na první pohled vidět, na čem jsi. */
@@ -224,11 +244,17 @@ export default function EventsPage() {
               const allFilled = iv.questions.every((_, i) => answers[i]?.trim());
               const expiryDate = new Date(iv.expiresAt);
               const expiryStr = expiryDate.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" });
+              const jePo = iv.kind === "post_match";
+              const ctx = iv.context ?? null;
               return (
-                <div key={iv.id} className="card border-2 p-5 bg-amber-50 border-amber-300">
+                <div key={iv.id} id={`rozhovor-${iv.id}`} className={`card border-2 p-5 ${jePo ? "bg-sky-50 border-sky-300" : "bg-amber-50 border-amber-300"}`}>
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div className="min-w-0">
-                      <h3 className="font-heading font-bold text-lg">🎙️ Rozhovor kola · Týden {iv.gameWeek}</h3>
+                      <h3 className="font-heading font-bold text-lg">
+                        {jePo && ctx
+                          ? `🎙️ Po zápase · ${ctx.teamName} ${ctx.ownScore}:${ctx.oppScore} ${ctx.opponentName}`
+                          : `🎙️ Rozhovor kola · Týden ${iv.gameWeek}`}
+                      </h3>
                       {iv.journalist ? (
                         <div className="flex items-start gap-3 mt-2">
                           {iv.journalist.avatar && (
@@ -258,14 +284,44 @@ export default function EventsPage() {
                           </div>
                         </div>
                       ) : (
-                        <p className="text-sm text-ink-light mt-1">Redaktor Okresního zpravodaje se chce zeptat před nadcházejícím zápasem.</p>
+                        <p className="text-sm text-ink-light mt-1">
+                          {jePo
+                            ? "Redaktor Okresního zpravodaje se chce zeptat na odehraný zápas."
+                            : "Redaktor Okresního zpravodaje se chce zeptat před nadcházejícím zápasem."}
+                        </p>
                       )}
                       <div className="text-xs text-muted mt-2">Vyprší: {expiryStr}</div>
                     </div>
                   </div>
+                  {jePo && ctx && (
+                    <div className="mb-4 space-y-3">
+                      {/* Faktový pruh — ať se nikdo nemusí vracet do detailu zápasu. */}
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-light">
+                        {ctx.refereeName && <span>Rozhodčí: <span className="font-heading font-bold text-ink">{ctx.refereeName}</span></span>}
+                        <span>Karty: <span className="font-heading font-bold text-ink tabular-nums">{ctx.ownCards}:{ctx.oppCards}</span></span>
+                        {(ctx.ownPenalties > 0 || ctx.oppPenalties > 0) && (
+                          <span>Penalty: <span className="font-heading font-bold text-ink tabular-nums">{ctx.ownPenalties}:{ctx.oppPenalties}</span></span>
+                        )}
+                      </div>
+                      {ctx.incident && (
+                        <div className="rounded-xl border border-card-red/40 bg-card-red/5 px-3 py-2">
+                          <div className="text-sm font-heading font-bold">⚠️ Sporná situace · {ctx.incident.minute}. minuta</div>
+                          <p className="text-sm mt-0.5">{ctx.incident.text}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="space-y-4">
                     {iv.questions.map((q, i) => (
                       <div key={i}>
+                        {jePo && ctx?.opponentStatement && iv.topics?.[i] === "vyrok_soupere" && (
+                          <blockquote className="mb-2 border-l-4 border-sand-300 pl-3 text-sm italic text-ink-light">
+                            „{ctx.opponentStatement.quote}"
+                            {ctx.opponentManagerName && (
+                              <span className="not-italic text-xs text-muted block mt-0.5">— {ctx.opponentManagerName}, před zápasem</span>
+                            )}
+                          </blockquote>
+                        )}
                         <label className="block text-sm font-heading font-bold mb-1">{q}</label>
                         <textarea
                           value={answers[i] ?? ""}
@@ -279,6 +335,11 @@ export default function EventsPage() {
                       </div>
                     ))}
                   </div>
+                  {jePo && ctx?.refereeName && (
+                    <p className="text-xs text-ink-light mt-3">
+                      Co tady řekneš o rozhodčím, si {ctx.refereeName} zapamatuje do příštího vzájemného zápasu.
+                    </p>
+                  )}
                   <div className="flex items-center justify-between mt-4">
                     <button
                       onClick={() => handleInterviewDecline(iv.id)}
