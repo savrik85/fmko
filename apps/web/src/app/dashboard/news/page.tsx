@@ -47,6 +47,17 @@ interface Journalist {
   style: string;
 }
 
+interface Redaktor {
+  id: string;
+  firstName: string;
+  lastName: string;
+  nickname: string | null;
+  age: number;
+  style: string;
+  bio: string;
+  avatar: Record<string, unknown> | null;
+}
+
 interface Article {
   id: string;
   type: string;
@@ -143,6 +154,8 @@ export default function NewsPage() {
   const [adSubmitting, setAdSubmitting] = useState(false);
   const [adError, setAdError] = useState("");
   const [loading, setLoading] = useState(true);
+  // Tiráž na konci listu — kdo ty články vlastně píše.
+  const [redakce, setRedakce] = useState<Redaktor[]>([]);
 
   // League picker for viewing other league's news
   const [allLeagues, setAllLeagues] = useState<LeagueOption[]>([]);
@@ -194,6 +207,15 @@ export default function NewsPage() {
       }, 100);
     }
   }, [loading, articles]);
+
+  // Redakce se řídí tím, čí zpravodaj zrovna čteš.
+  useEffect(() => {
+    const ligaId = selectedLeagueId ?? team?.league_id;
+    if (!ligaId) return;
+    apiFetch<{ journalists: Redaktor[] }>(`/api/leagues/${ligaId}/journalists`)
+      .then((d) => setRedakce(d.journalists ?? []))
+      .catch((e) => { console.error("načtení redakce:", e); });
+  }, [selectedLeagueId, team?.league_id]);
 
   // Load other league news when selected
   useEffect(() => {
@@ -699,6 +721,33 @@ export default function NewsPage() {
               </div>
             )}
           </section>}
+
+          {/* ═══ Tiráž — kdo ten list píše ═══ */}
+          {redakce.length > 0 && (
+            <section className="border-t border-ink/20 pt-6 mt-6">
+              <Kicker>✒️ Redakce {newspaperName}u</Kicker>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                {redakce.map((r) => (
+                  <Link
+                    key={r.id}
+                    href={`/dashboard/redakce/${r.id}`}
+                    className="flex items-start gap-2 group"
+                  >
+                    {r.avatar && (
+                      <FaceAvatar faceConfig={r.avatar} size={44} className="border border-ink/30 bg-white shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-sm font-heading font-bold text-ink group-hover:underline underline-offset-2">
+                        {r.firstName} {r.lastName}
+                      </div>
+                      <div className="text-xs text-muted">{STYL_POPIS[r.style] ?? "redakce"}</div>
+                      {r.nickname && <div className="text-xs text-muted italic">„{r.nickname}"</div>}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
 
         </div>
       )}
