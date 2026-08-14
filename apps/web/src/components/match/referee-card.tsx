@@ -5,7 +5,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { CollapsibleCard } from "@/components/ui";
 import {
   REFEREE_AXES, axisWord, axisColor, refereeAdviceCz, formatGrade, gradeColor, gradeWord,
-  memoryWord, memoryColor,
+  memoryWord, memoryColor, pocet,
   type RefereeProfileView, type RefereeStatsView, type RefereeMemoryView,
 } from "@/lib/referee-info";
 
@@ -95,7 +95,9 @@ export function RefereeCard({ referee, isHome }: Props) {
         <p className="text-sm mt-3 pt-3 border-t border-ink/10">
           <span className="font-heading font-bold">Vám už pískal {referee.vsTeam.matches}×</span>
           {" — "}
-          {referee.vsTeam.wins} výher, {referee.vsTeam.draws} remíz, {referee.vsTeam.losses} proher
+          {pocet(referee.vsTeam.wins, "výhra", "výhry", "výher")},{" "}
+          {pocet(referee.vsTeam.draws, "remíza", "remízy", "remíz")},{" "}
+          {pocet(referee.vsTeam.losses, "prohra", "prohry", "proher")}
           {referee.vsTeam.red_cards ? ` · ${referee.vsTeam.red_cards}× červená` : ""}
         </p>
       )}

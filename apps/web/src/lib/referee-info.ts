@@ -174,13 +174,25 @@ export interface RefereeMemoryView {
   biasPct: number;
 }
 
-/** Slovní škála, aby paměť nebyla jen číslo. */
-export function memoryWord(sentiment: number): string {
-  if (sentiment >= 12) return "drží ti palce";
-  if (sentiment >= 4) return "má tě rád";
+/**
+ * Slovní škála, aby paměť nebyla jen číslo.
+ *
+ * Karta zápasu tyká, profil sudího vyká — bez volby tvaru by v jedné větě
+ * stálo „jde po tobě … proti vám".
+ */
+export function memoryWord(sentiment: number, tvar: "ty" | "vy" = "ty"): string {
+  const vy = tvar === "vy";
+  if (sentiment >= 12) return vy ? "drží vám palce" : "drží ti palce";
+  if (sentiment >= 4) return vy ? "má vás rád" : "má tě rád";
   if (sentiment > -4) return "neutrální";
-  if (sentiment > -12) return "má tě v merku";
-  return "jde po tobě";
+  if (sentiment > -12) return vy ? "má vás v merku" : "má tě v merku";
+  return vy ? "jde po vás" : "jde po tobě";
+}
+
+/** České skloňování počtu — „1 výhra", ne „1 výher". */
+export function pocet(n: number, jedna: string, dva: string, pet: string): string {
+  const slovo = n === 1 ? jedna : n >= 2 && n <= 4 ? dva : pet;
+  return `${n} ${slovo}`;
 }
 
 export function memoryColor(sentiment: number): string {

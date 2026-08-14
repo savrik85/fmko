@@ -9,7 +9,7 @@ import { Spinner, SectionLabel } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import {
   REFEREE_AXES, axisWord, axisColor, formatGrade, gradeColor, gradeWord, incidentLabel,
-  memoryWord, memoryColor,
+  memoryWord, memoryColor, pocet,
   type RefereeProfileView, type RefereeStatsView, type RefereeIncidentView,
 } from "@/lib/referee-info";
 
@@ -123,10 +123,13 @@ export default function RozhodciDetailPage() {
               <>
                 <p className="text-sm">
                   Pískal vám <span className="font-heading font-bold">{ref.vsTeam.matches}×</span> —{" "}
-                  {ref.vsTeam.wins} výher, {ref.vsTeam.draws} remíz, {ref.vsTeam.losses} proher.
+                  {pocet(ref.vsTeam.wins, "výhra", "výhry", "výher")},{" "}
+                  {pocet(ref.vsTeam.draws, "remíza", "remízy", "remíz")},{" "}
+                  {pocet(ref.vsTeam.losses, "prohra", "prohry", "proher")}.
                 </p>
                 <p className="text-sm text-muted mt-1">
-                  Rozdal vám {ref.vsTeam.yellowCards} žlutých a {ref.vsTeam.redCards} červených ·
+                  Rozdal vám {pocet(ref.vsTeam.yellowCards, "žlutou", "žluté", "žlutých")} a{" "}
+                  {pocet(ref.vsTeam.redCards, "červenou", "červené", "červených")} ·
                   penalty {ref.vsTeam.penaltiesFor}:{ref.vsTeam.penaltiesAgainst} pro vás
                   {ref.vsTeam.incidentsAgainst > 0 && ` · ${ref.vsTeam.incidentsAgainst}× sporná situace proti vám`}
                 </p>
@@ -136,7 +139,7 @@ export default function RozhodciDetailPage() {
               <p className={`text-sm mt-2 ${ref.vsTeam.matches > 0 ? "pt-2 border-t border-ink/10" : ""}`}>
                 Co si o vás myslí:{" "}
                 <span className={`font-heading font-bold ${memoryColor(ref.vsTeam.sentiment)}`}>
-                  {memoryWord(ref.vsTeam.sentiment)}
+                  {memoryWord(ref.vsTeam.sentiment, "vy")}
                 </span>
                 <span className="text-muted tabular-nums"> ({ref.vsTeam.sentiment > 0 ? "+" : ""}{ref.vsTeam.sentiment})</span>
                 {" — "}hraniční verdikty rozhodne o {ref.vsTeam.biasPct.toFixed(1).replace(".", ",")} % častěji{" "}
