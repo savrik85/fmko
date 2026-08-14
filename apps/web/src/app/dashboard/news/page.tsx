@@ -468,34 +468,6 @@ export default function NewsPage() {
             </section>
           ))}
 
-          {/* ═══ Rozhovory s trenéry ═══ */}
-          {currentWeekInterviews.length > 0 && (
-            <section className="border-t border-ink/20 pt-6">
-              <Kicker>🎙️ {currentWeekInterviews.length === 1 ? "Rozhovor kola" : "Rozhovory kola"}</Kicker>
-              <div className="divide-y divide-ink/10">
-                {currentWeekInterviews.map((iv) => {
-                  let meta: {
-                    managerName?: string; managerAvatar?: Record<string, unknown> | null; teamName?: string;
-                    article?: string; vztah?: { popis: string; sentiment: number; dopad?: string };
-                  } = {};
-                  try { meta = JSON.parse(iv.body); } catch (e) { console.error("parse rozhovoru trenéra:", e); meta = {}; }
-                  return (
-                    <Rozhovor
-                      key={iv.id}
-                      clanek={iv}
-                      jmeno={meta.managerName ?? "Trenér"}
-                      role="Trenér"
-                      tym={meta.teamName}
-                      avatar={meta.managerAvatar}
-                      text={meta.article ?? iv.body}
-                      poznamka={meta.vztah ? `${meta.vztah.popis}${meta.vztah.dopad ? ` — ${meta.vztah.dopad}` : ""}` : undefined}
-                    />
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
           {/* ═══ Po zápase ═══ */}
           {postMatchArticles.length > 0 && (
             <section className="border-t border-ink/20 pt-6">
@@ -517,6 +489,34 @@ export default function NewsPage() {
                       avatar={meta.managerAvatar}
                       text={meta.article ?? iv.body}
                       poznamka={meta.refereeName ? `Rozhodčí ${meta.refereeName}${meta.incidentText ? " — sporná situace v zápase" : ""}` : undefined}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ═══ Rozhovory s trenéry ═══ */}
+          {currentWeekInterviews.length > 0 && (
+            <section className="border-t border-ink/20 pt-6">
+              <Kicker>🎙️ {currentWeekInterviews.length === 1 ? "Rozhovor kola" : "Rozhovory kola"}</Kicker>
+              <div className="divide-y divide-ink/10">
+                {currentWeekInterviews.map((iv) => {
+                  let meta: {
+                    managerName?: string; managerAvatar?: Record<string, unknown> | null; teamName?: string;
+                    article?: string; vztah?: { popis: string; sentiment: number; dopad?: string };
+                  } = {};
+                  try { meta = JSON.parse(iv.body); } catch (e) { console.error("parse rozhovoru trenéra:", e); meta = {}; }
+                  return (
+                    <Rozhovor
+                      key={iv.id}
+                      clanek={iv}
+                      jmeno={meta.managerName ?? "Trenér"}
+                      role="Trenér"
+                      tym={meta.teamName}
+                      avatar={meta.managerAvatar}
+                      text={meta.article ?? iv.body}
+                      poznamka={meta.vztah ? `${meta.vztah.popis}${meta.vztah.dopad ? ` — ${meta.vztah.dopad}` : ""}` : undefined}
                     />
                   );
                 })}
