@@ -1102,11 +1102,11 @@ export async function executeDailyTick(
         // Efekty už jsou zaúčtované z answer endpointu, tady dopisujeme jen text.
         try {
           const pm = await env.DB.prepare(
-            `SELECT id, answers, questions, context, league_id, game_week
+            `SELECT id, answers, questions, context, league_id, game_week, referee_id
              FROM coach_interviews
              WHERE team_id = ? AND kind = 'post_match' AND status = 'answered' AND article_news_id IS NULL
              ORDER BY created_at DESC LIMIT 1`
-          ).bind(teamId).first<{ id: string; answers: string; questions: string; context: string | null; league_id: string; game_week: number }>()
+          ).bind(teamId).first<{ id: string; answers: string; questions: string; context: string | null; league_id: string; game_week: number; referee_id: string | null }>()
             .catch((e) => { logger.warn({ module: "daily-tick" }, "post-match článek retry lookup", e); return null; });
 
           const apiKeyPm = (env as { GEMINI_API_KEY?: string }).GEMINI_API_KEY;
@@ -1133,7 +1133,9 @@ export async function executeDailyTick(
                 managerAvatar: (() => { try { return mgr?.manager_avatar ? JSON.parse(mgr.manager_avatar) : null; } catch { return null; } })(),
                 article: art.article,
                 qa: questions.map((q, i) => ({ q, a: answers[i] ?? "" })),
+                teamId,
                 refereeName: ctx.refereeName ?? null,
+                refereeId: pm.referee_id ?? null,
                 incidentText: ctx.incident?.text ?? null,
               }), pm.game_week, red?.id ?? null).run();
               await env.DB.prepare("UPDATE coach_interviews SET article_news_id = ? WHERE id = ?")

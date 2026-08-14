@@ -476,7 +476,8 @@ export default function NewsPage() {
                 {postMatchArticles.map((iv) => {
                   let meta: {
                     managerName?: string; managerAvatar?: Record<string, unknown> | null; teamName?: string;
-                    article?: string; refereeName?: string; incidentText?: string;
+                    article?: string; refereeName?: string; refereeId?: string; teamId?: string;
+                    incidentText?: string;
                   } = {};
                   try { meta = JSON.parse(iv.body); } catch (e) { console.error("parse pozápasového rozhovoru:", e); meta = {}; }
                   return (
@@ -487,8 +488,10 @@ export default function NewsPage() {
                       role="Trenér"
                       tym={meta.teamName}
                       avatar={meta.managerAvatar}
+                      jmenoHref={meta.teamId ? `/dashboard/manager/${meta.teamId}` : undefined}
                       text={meta.article ?? iv.body}
                       poznamka={meta.refereeName ? `Rozhodčí ${meta.refereeName}${meta.incidentText ? " — sporná situace v zápase" : ""}` : undefined}
+                      poznamkaHref={meta.refereeId ? `/dashboard/rozhodci/${meta.refereeId}` : undefined}
                     />
                   );
                 })}
@@ -763,16 +766,19 @@ function vytahnoutCitat(odstavce: string[]): string | undefined {
  * citát vytržený mezi linky. Společné pro trenéry i hráče.
  */
 function Rozhovor({
-  clanek, jmeno, jmenoId, role, tym, avatar, text, poznamka,
+  clanek, jmeno, jmenoId, jmenoHref, role, tym, avatar, text, poznamka, poznamkaHref,
 }: {
   clanek: Article;
   jmeno: string;
   jmenoId?: string;
+  /** Vlastní cíl odkazu pod jménem — trenér vede na svůj tým, hráč na profil. */
+  jmenoHref?: string;
   role?: string;
   tym?: string;
   avatar?: Record<string, unknown> | null;
   text: string;
   poznamka?: string;
+  poznamkaHref?: string;
 }) {
   const odstavce = text.split("\n").filter(Boolean);
   const maAvatar = avatar && Object.keys(avatar).length > 0;
@@ -798,6 +804,8 @@ function Rozhovor({
             <figcaption className="text-[11px] leading-tight mt-1 not-italic border-t border-ink/20 pt-1">
               {jmenoId ? (
                 <EntityLink type="player" id={jmenoId} className="font-heading font-bold text-ink">{jmeno}</EntityLink>
+              ) : jmenoHref ? (
+                <Link href={jmenoHref} className="entity-link font-heading font-bold text-ink">{jmeno}</Link>
               ) : (
                 <span className="font-heading font-bold text-ink">{jmeno}</span>
               )}
@@ -819,7 +827,9 @@ function Rozhovor({
       {poznamka && (
         <div className="mt-3">
           <span className="text-[11px] font-heading font-bold uppercase tracking-wider text-muted border-l-2 border-ink/30 pl-2">
-            🧱 {poznamka}
+            🧱 {poznamkaHref ? (
+              <Link href={poznamkaHref} className="entity-link">{poznamka}</Link>
+            ) : poznamka}
           </span>
         </div>
       )}

@@ -6816,7 +6816,10 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
         article: generated.article,
         qa: questions.map((q, i) => ({ q, a: answers[i] ?? "" })),
         vztah: vztahPM,
+        // ID kvůli proklikům ve Zpravodaji — jméno trenéra i sudího je odkaz.
+        teamId,
         refereeName: ctx.refereeName ?? null,
+        refereeId: (interview.referee_id as string | null) ?? null,
         incidentText: ctx.incident?.text ?? null,
       }),
       interview.game_week as number, redaktorPM?.id ?? null,
