@@ -14,7 +14,7 @@ import type {
   Tactic,
   Weather,
 } from "./types";
-import { calcTacticEffectiveness, tacticDrainMod, formationChemistryFactor } from "./tactics";
+import { calcTacticEffectiveness, tacticDrainMod, formationChemistryFactor, TACTIC_MODS, effMod } from "./tactics";
 import { squadChemistryFactor } from "./squad-chemistry";
 import {
   NEUTRAL_REFEREE, PETTY_CARD_MUL,
@@ -32,31 +32,9 @@ function teamAvg(lineup: MatchPlayer[], stat: keyof MatchPlayer): number {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-/** Sum of a stat for a subset of lineup by position */
-function positionSum(lineup: MatchPlayer[], pos: string, stat: keyof MatchPlayer): number {
-  return lineup
-    .filter((p) => p.position === pos)
-    .reduce((sum, p) => sum + (p[stat] as number), 0);
-}
-
 /** Get player display name */
 function playerName(p: MatchPlayer): string {
   return `${p.firstName} ${p.lastName}`;
-}
-
-/** Tactic modifiers — base values (will be scaled by tacticEffectiveness in engine) */
-const TACTIC_MODS: Record<Tactic, { attackMod: number; defenseMod: number; chanceMod: number; counterMod: number }> = {
-  offensive:  { attackMod: 1.15, defenseMod: 0.85, chanceMod: 1.05, counterMod: 0.0 },
-  balanced:   { attackMod: 1.0,  defenseMod: 1.0,  chanceMod: 1.0,  counterMod: 0.0 },
-  defensive:  { attackMod: 0.75, defenseMod: 1.15, chanceMod: 0.75, counterMod: 0.03 },
-  long_ball:  { attackMod: 1.05, defenseMod: 0.95, chanceMod: 0.95, counterMod: 0.0 },
-  possession: { attackMod: 1.05, defenseMod: 1.0,  chanceMod: 1.10, counterMod: 0.0 },
-  pressing:   { attackMod: 1.08, defenseMod: 1.08, chanceMod: 1.05, counterMod: 0.0 },
-};
-
-/** Scale a base modifier by team effectiveness — netrenovaná taktika klesá k 1.0 (baseline). */
-function effMod(baseMod: number, effectiveness: number): number {
-  return 1 + (baseMod - 1) * effectiveness;
 }
 
 /** Weather effects */
@@ -129,14 +107,16 @@ function calcChanceProb(
     (mids.length > 0 ? teamAvg(mids, "vision") * 0.6 : 0) +
     (midAndFwd.length > 0 ? teamAvg(midAndFwd, "creativity") * 0.5 : 0) +
     teamAvg(outfield, "workRate") * 0.3
-  ) / 5 * effMod(tacticMod.attackMod, attEff) * formFactor * attMoraleMod * famMod * chemMod;
+  ) / 5 * effMod(tacticMod.attackMod, attEff) * formFactor * attMoraleMod * famMod * chemMod
+    * manpowerFactor(attacking.lineup).attack;
 
   const defensePower = (
     teamAvg(defOutfield, "defense") * 1.0 +
     teamAvg(defOutfield, "strength") * 0.7 +
     (defs.length > 0 ? teamAvg(defs, "aggression") * 0.2 : 0) +
     teamAvg(defOutfield, "workRate") * 0.2
-  ) / 3 * effMod((TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced).defenseMod, defEff) * defMoraleMod;
+  ) / 3 * effMod((TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced).defenseMod, defEff) * defMoraleMod
+    * manpowerFactor(defending.lineup).defense;
 
   // Use DIFFERENCE not ratio — so stronger teams create more chances
   // attackPower ~20 (weak) to ~35 (strong), defensePower ~18 to ~25
@@ -252,8 +232,36 @@ function pickAssister(rng: Rng, lineup: MatchPlayer[], scorer: MatchPlayer): Mat
 /**
  * Pick goalkeeper.
  */
+/**
+ * Kdo chytá. Nejdřív hráč postavený do brány, pak přirozený gólman, a teprve
+ * když ani jeden není (vyloučený brankář bez náhrady), ten s nejlepším
+ * gólmanským uměním — dřív se v takovém případě vracel prostě `lineup[0]`,
+ * tedy náhodný hráč v poli, a postih byl brutální a nekontrolovaný.
+ */
 function getGK(lineup: MatchPlayer[]): MatchPlayer {
-  return lineup.find((p) => p.position === "GK") ?? lineup[0];
+  const inGoal = lineup.find((p) => (p.matchPosition ?? p.position) === "GK");
+  if (inGoal) return inGoal;
+  const natural = lineup.find((p) => p.position === "GK");
+  if (natural) return natural;
+  return lineup.reduce((best, p) => (p.goalkeeping > best.goalkeeping ? p : best), lineup[0]);
+}
+
+/**
+ * Hra v oslabení.
+ *
+ * Bez tohohle faktoru je červená karta kosmetika: `attackPower` i `defensePower`
+ * počítají `teamAvg`, takže odebrání vyloučeného z jedenáctky sílu týmu nezmění.
+ * Útok padá víc než obrana — deset lidí ubrání skoro totéž, ale dopředu už nemá
+ * kdo běhat. Deset hráčů od poločasu vyjde zhruba na −0,7 gólu rozdílu za zápas,
+ * což odpovídá reálné ceně vyloučení.
+ *
+ * Při jedenácti hráčích je faktor přesně 1,0, takže zápasy bez vyloučení
+ * zůstávají identické s dřívějškem.
+ */
+function manpowerFactor(lineup: MatchPlayer[]): { attack: number; defense: number } {
+  // Pod sedm hráčů se zápas v reálu kontumuje; engine tam nedojde, clamp jen drží vzorec konečný.
+  const missing = Math.max(0, Math.min(4, 11 - lineup.length));
+  return { attack: 1 - 0.075 * missing, defense: 1 - 0.055 * missing };
 }
 
 /**
@@ -611,7 +619,13 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     for (const p of defending.lineup) p.morale = Math.max(0, p.morale - Math.round(1 + (1 - defLead) * 2));
   }
 
-  /** Vyloučení: odebere hráče ze hřiště a uzavře mu odehrané minuty. */
+  /**
+   * Vyloučení: odebere hráče ze hřiště a uzavře mu odehrané minuty.
+   *
+   * Když jde o brankáře, tým musí něco udělat s prázdnou brankou: buď obětuje
+   * střídání a pošle náhradního gólmana, nebo mezi tyče postaví toho, kdo z pole
+   * chytá nejlíp. Postih pak vznikne sám nízkým `goalkeeping` v `calcGoalProb`.
+   */
   function sendOff(player: MatchPlayer, team: TeamSetup, minute: number) {
     redCards.add(player.id);
     const idx = team.lineup.indexOf(player);
@@ -619,6 +633,33 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       team.lineup.splice(idx, 1);
       if (playerMinutes[player.id]) playerMinutes[player.id].left = minute;
     }
+
+    const wasKeeper = (player.matchPosition ?? player.position) === "GK";
+    if (!wasKeeper || team.lineup.length === 0) return;
+
+    const subsUsed = team === home ? homeSubsUsed : awaySubsUsed;
+    const benchKeeperIdx = team.subs.findIndex((p) => p.position === "GK");
+
+    if (benchKeeperIdx >= 0 && subsUsed < MAX_SUBS) {
+      // Náhradní gólman dovnitř za nejvyčerpanějšího hráče v poli — tým dohraje
+      // v deseti, ale aspoň s někým, kdo chytat umí.
+      const keeper = team.subs.splice(benchKeeperIdx, 1)[0];
+      const sacrificed = team.lineup.reduce((worst, p) => (p.condition < worst.condition ? p : worst), team.lineup[0]);
+      const sIdx = team.lineup.indexOf(sacrificed);
+      keeper.matchPosition = "GK";
+      team.lineup[sIdx] = keeper;
+      playerMinutes[sacrificed.id] = { ...playerMinutes[sacrificed.id], left: minute };
+      playerMinutes[keeper.id] = { entered: minute, left: null };
+      if (team === home) homeSubsUsed++; else awaySubsUsed++;
+      addEvent(minute, "substitution", keeper, team.teamId,
+        `Střídání: ${playerName(keeper)} jde do brány za vyloučeného gólmana, ven jde ${playerName(sacrificed)}`);
+      return;
+    }
+
+    const standIn = team.lineup.reduce((best, p) => (p.goalkeeping > best.goalkeeping ? p : best), team.lineup[0]);
+    standIn.matchPosition = "GK";
+    addEvent(minute, "special", standIn, team.teamId,
+      `Rukavice bere ${playerName(standIn)} — náhradní gólman není k dispozici`, "emergency_gk");
   }
 
   /**
@@ -967,7 +1008,9 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     // Counter-attack: defensive tactic team can break on opponent's possession
     const defTacticMods = TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced;
     const defEffForCounter = calcTacticEffectiveness(defending.lineup, defending.tactic, defending.formation, defending.formationFamiliarity);
-    const effectiveCounterMod = defTacticMods.counterMod * defEffForCounter;
+    // Oslabený tým se dostane do brejku hůř — dopředu už nemá kdo běhat.
+    const effectiveCounterMod = defTacticMods.counterMod * defEffForCounter
+      * manpowerFactor(defending.lineup).attack;
     if (effectiveCounterMod > 0 && rng.random() < effectiveCounterMod * conditionMod) {
       const counterAttacker = pickAttacker(rng, defending.lineup);
       const counterGk = getGK(attacking.lineup);

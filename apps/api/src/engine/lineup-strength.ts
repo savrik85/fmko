@@ -8,20 +8,10 @@
  * Pure functions only — žádné DB volání ani side effects.
  */
 
-import type { MatchPlayer, TeamSetup, Tactic } from "./types";
-
-// ── Identické konstanty s simulation.ts ─────────────────────────────────────
-// (Pokud se simulation.ts změní, je třeba synchronizovat zde — nebo refaktorovat
-//  TACTIC_MODS do shared místa. Pro Fázi 2 stačí duplicita, je to malé.)
-
-const TACTIC_MODS: Record<Tactic, { attackMod: number; defenseMod: number; chanceMod: number }> = {
-  offensive:  { attackMod: 1.15, defenseMod: 0.85, chanceMod: 1.05 },
-  balanced:   { attackMod: 1.0,  defenseMod: 1.0,  chanceMod: 1.0 },
-  defensive:  { attackMod: 0.75, defenseMod: 1.15, chanceMod: 0.75 },
-  long_ball:  { attackMod: 1.05, defenseMod: 0.95, chanceMod: 0.95 },
-  possession: { attackMod: 1.05, defenseMod: 1.0,  chanceMod: 1.10 },
-  pressing:   { attackMod: 1.08, defenseMod: 1.08, chanceMod: 1.05 },
-};
+import type { MatchPlayer, TeamSetup } from "./types";
+// Modifikátory taktiky se berou z jednoho místa. Dřív tu byla kopie, kterou
+// bylo nutné ručně synchronizovat — a s příchodem tvrdosti hry by se rozjela.
+import { TACTIC_MODS } from "./tactics";
 
 function teamAvg(lineup: MatchPlayer[], stat: keyof MatchPlayer): number {
   if (lineup.length === 0) return 0;

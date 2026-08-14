@@ -9,7 +9,29 @@ import type { MatchPlayer, Tactic } from "./types";
 
 type Pos = "GK" | "DEF" | "MID" | "FWD";
 
-interface SkillRequirement {
+/**
+ * Základní modifikátory taktiky. Engine je škáluje přes `effMod` podle toho,
+ * jak dobře tým taktiku zvládá — netrénovaná taktika klesá k neutrální 1,0.
+ *
+ * Žije tady, ne v simulation.ts, protože je čte i `lineup-strength.ts` (náhled
+ * síly sestavy). Dřív existovala kopie na obou místech a komentář u ní přiznával,
+ * že se to musí ručně synchronizovat.
+ */
+export const TACTIC_MODS: Record<Tactic, { attackMod: number; defenseMod: number; chanceMod: number; counterMod: number }> = {
+  offensive:  { attackMod: 1.15, defenseMod: 0.85, chanceMod: 1.05, counterMod: 0.0 },
+  balanced:   { attackMod: 1.0,  defenseMod: 1.0,  chanceMod: 1.0,  counterMod: 0.0 },
+  defensive:  { attackMod: 0.75, defenseMod: 1.15, chanceMod: 0.75, counterMod: 0.03 },
+  long_ball:  { attackMod: 1.05, defenseMod: 0.95, chanceMod: 0.95, counterMod: 0.0 },
+  possession: { attackMod: 1.05, defenseMod: 1.0,  chanceMod: 1.10, counterMod: 0.0 },
+  pressing:   { attackMod: 1.08, defenseMod: 1.08, chanceMod: 1.05, counterMod: 0.0 },
+};
+
+/** Škáluje modifikátor podle toho, jak tým taktiku zvládá. */
+export function effMod(baseMod: number, effectiveness: number): number {
+  return 1 + (baseMod - 1) * effectiveness;
+}
+
+export interface SkillRequirement {
   skill: keyof MatchPlayer; // numerický skill
   positions: Pos[];         // odkud brát průměr (prázdné = všichni outfield)
   threshold: number;        // ideální úroveň
@@ -74,14 +96,13 @@ export const TACTIC_CATALOG: Record<Tactic, TacticDef> = {
  * Spočítá jak dobře tým zvládá taktiku — porovná skill týmu s požadavky.
  * Návratová hodnota: 0.7 (vůbec neumí) – 1.15 (velmi dobře).
  */
-export function calcTacticFit(lineup: MatchPlayer[], tactic: Tactic): number {
-  const def = TACTIC_CATALOG[tactic];
-  if (!def || def.requirements.length === 0) return 1.0;
+export function fitFromRequirements(lineup: MatchPlayer[], requirements: readonly SkillRequirement[]): number {
+  if (requirements.length === 0) return 1.0;
 
   let weightedSum = 0;
   let totalWeight = 0;
 
-  for (const req of def.requirements) {
+  for (const req of requirements) {
     const players = req.positions.length > 0
       ? lineup.filter((p) => req.positions.includes((p.matchPosition ?? p.position) as Pos))
       : lineup.filter((p) => p.position !== "GK");
@@ -94,8 +115,13 @@ export function calcTacticFit(lineup: MatchPlayer[], tactic: Tactic): number {
   }
 
   if (totalWeight === 0) return 1.0;
-  const fit = weightedSum / totalWeight;
-  return Math.min(1.15, Math.max(0.7, fit));
+  return Math.min(1.15, Math.max(0.7, weightedSum / totalWeight));
+}
+
+export function calcTacticFit(lineup: MatchPlayer[], tactic: Tactic): number {
+  const def = TACTIC_CATALOG[tactic];
+  if (!def) return 1.0;
+  return fitFromRequirements(lineup, def.requirements);
 }
 
 /**
