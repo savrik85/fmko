@@ -17,8 +17,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     title: "Okresní rozhodčí — každý má svůj metr",
     items: [
       "Okres má patnáct rozhodčích a každý píská jinak. Delegace přijde dva herní dny před výkopem, takže se stihneš přizpůsobit.",
-      "V sestavovači je karta sudího: povaha, hláška, sezónní čísla a rada k zápasu. Pískavý kohout rozdá skoro tři karty na zápas, pohodář ani jednu — s vysokým presinkem u prvního si koleduješ.",
-      "Vlastnosti jsou v lidské řeči a u každé stojí, co znamená: přísnost, karty, zkušenost, domácí prostředí, pouštění výhody, kondice. Sudí s mizernou kondicí se v posledních dvaceti minutách rozsype.",
+      "Pískavý kohout rozdá skoro tři karty na zápas, pohodář ani jednu. S vysokým presinkem a agresivními stopery si u prvního koleduješ o oslabení.",
+      "Sudí s mizernou kondicí se v posledních dvaceti minutách rozsype — přibývají karty i chyby. Kdo drží metr celý zápas, ten ho drží i v závěru.",
       "Rozhodčí chybují. Neuznaný gól, vymyšlená penalta, přehlédnutá červená — nanejvýš jednou za zápas a vždycky je v detailu vidět, co se stalo a komu to nahrálo. Zelenáč se splete čtyřikrát častěji než veterán.",
       "Za každý zápas dostane sudí známku jako ve škole. V žebříčku okresu (menu Soutěž → Rozhodčí) je vidět, kdo je nejlepší a kdo katastrofa. Na jeho profilu najdeš známky ze všech zápasů i bilanci vůči tvému klubu.",
       "Rozhodčí píská i pohár. Je to tentýž člověk, včetně toho, co si o tobě pamatuje.",
