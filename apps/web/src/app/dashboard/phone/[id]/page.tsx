@@ -112,6 +112,9 @@ export default function ConversationPage() {
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [unrestBusy, setUnrestBusy] = useState(false);
   const [unrestEffects, setUnrestEffects] = useState<string[] | null>(null);
+  // Rozhovory, které ještě čekají na odpověď — jen u nich má proklik smysl.
+  // Bez toho by tlačítko viselo i u dávno vypršelých žádostí z minulých sezón.
+  const [otevreneRozhovory, setOtevreneRozhovory] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [newMsg, setNewMsg] = useState("");
   const [sending, setSending] = useState(false);
@@ -120,6 +123,13 @@ export default function ConversationPage() {
   const messagesUrl = isGroup
     ? `/api/teams/${teamId}/group-chats/${encodeURIComponent(convId)}/messages`
     : `/api/teams/${teamId}/conversations/${convId}`;
+
+  useEffect(() => {
+    if (!teamId) return;
+    apiFetch<{ interviews: Array<{ id: string }> }>(`/api/teams/${teamId}/coach-interviews`)
+      .then((d) => setOtevreneRozhovory(new Set((d.interviews ?? []).map((iv) => iv.id))))
+      .catch((e) => { console.error("otevřené rozhovory:", e); });
+  }, [teamId]);
 
   useEffect(() => {
     if (!teamId) return;
@@ -357,6 +367,16 @@ export default function ConversationPage() {
                             : "bg-white shadow-sm rounded-bl-sm"
                         }`}>
                           <p className="whitespace-pre-wrap">{emoticonize(msg.body)}</p>
+                          {/* Žádost o rozhovor chodí SMS, ale formulář je na Událostech. */}
+                          {msg.metadata?.type === "interview_request"
+                            && otevreneRozhovory.has(String(msg.metadata.interviewId ?? "")) && (
+                            <Link
+                              href={`/dashboard/events#rozhovor-${String(msg.metadata.interviewId ?? "")}`}
+                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-xs font-heading font-bold"
+                            >
+                              Otevřít rozhovor
+                            </Link>
+                          )}
                           <div className={`text-[9px] mt-0.5 ${isUser ? "text-white/50" : "text-muted"} text-right`}>
                             {formatTime(msg.sentAt)}
                           </div>
