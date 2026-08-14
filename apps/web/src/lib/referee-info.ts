@@ -34,12 +34,18 @@ export interface RefereeStatsView {
 
 /** Osy profilu tak, jak se ukazují v kartě sudího. */
 export const REFEREE_AXES = [
-  { key: "strictness", label: "Přísnost", low: "nechá hrát", high: "píská všechno" },
-  { key: "cardHappiness", label: "Karetní ruka", low: "šetří kapsu", high: "sáhne hned" },
-  { key: "experience", label: "Zkušenost", low: "zelenáč", high: "veterán" },
-  { key: "homeBias", label: "Domácí prostředí", low: "nedá se ovlivnit", high: "podléhá kotli" },
-  { key: "advantage", label: "Pouštění výhody", low: "přeruší hru", high: "nechá hrát" },
-  { key: "fitness", label: "Kondice", low: "v závěru stojí", high: "běhá do konce" },
+  { key: "strictness", label: "Přísnost", low: "nechá hrát", high: "píská všechno",
+    popis: "Kolik toho odpíská. Čím vyšší, tím víc faulů — i drobných." },
+  { key: "cardHappiness", label: "Ochota kartovat", low: "šetří kapsu", high: "sáhne hned",
+    popis: "Jak rychle sáhne do kapsy. Vysoká znamená karty i za to, co jiný přejde." },
+  { key: "experience", label: "Zkušenost", low: "zelenáč", high: "veterán",
+    popis: "Kolik toho odřídil. Nízká zkušenost = větší šance na spornou situaci." },
+  { key: "homeBias", label: "Domácí prostředí", low: "nedá se ovlivnit", high: "podléhá kotli",
+    popis: "Jak na něj působí domácí kotel. Vysoká znamená, že hraniční verdikty padnou spíš domácím." },
+  { key: "advantage", label: "Pouštění výhody", low: "přeruší hru", high: "nechá hrát",
+    popis: "Jak často nechá hrát místo odpískání faulu. Vysoká = plynulejší zápas a míň standardek." },
+  { key: "fitness", label: "Kondice", low: "v závěru stojí", high: "běhá do konce",
+    popis: "Jak vydrží. Při nízké mu v posledních dvaceti minutách přibývají chyby a karty." },
 ] as const;
 
 export type RefereeAxisKey = (typeof REFEREE_AXES)[number]["key"];
@@ -53,11 +59,12 @@ export function axisWord(value: number): string {
   return "velmi nízká";
 }
 
-/** Barva pruhu osy. Vysoká hodnota není sama o sobě dobrá ani špatná. */
-export function axisColor(value: number): string {
-  if (value >= 75) return "bg-card-red";
-  if (value >= 55) return "bg-gold-500";
-  return "bg-pitch-500";
+/**
+ * Barva pruhu osy. Vysoká hodnota není sama o sobě dobrá ani špatná — červená
+ * u vysoké zkušenosti proto mátla. Pruh je jednobarevný, sytost dělá jen délka.
+ */
+export function axisColor(_value: number): string {
+  return "bg-ink/60";
 }
 
 /**

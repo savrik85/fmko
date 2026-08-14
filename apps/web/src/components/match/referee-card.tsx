@@ -80,12 +80,15 @@ export function RefereeCard({ referee, isHome }: Props) {
         {REFEREE_AXES.map((axis) => {
           const value = referee[axis.key] as number;
           return (
-            <div key={axis.key} className="flex items-center gap-2">
-              <span className="text-sm w-36 shrink-0">{axis.label}</span>
-              <div className="flex-1 h-2 rounded-full bg-ink/10 overflow-hidden">
-                <div className={`h-full rounded-full ${axisColor(value)}`} style={{ width: `${value}%` }} />
+            <div key={axis.key}>
+              <div className="flex items-center gap-2">
+                <span className="text-sm w-36 shrink-0">{axis.label}</span>
+                <div className="flex-1 h-2 rounded-full bg-ink/10 overflow-hidden">
+                  <div className={`h-full rounded-full ${axisColor(value)}`} style={{ width: `${value}%` }} />
+                </div>
+                <span className="text-sm text-muted w-28 shrink-0 text-right">{axisWord(value)}</span>
               </div>
-              <span className="text-sm text-muted w-28 shrink-0 text-right">{axisWord(value)}</span>
+              <p className="text-sm text-ink-light mt-0.5 mb-2">{axis.popis}</p>
             </div>
           );
         })}
