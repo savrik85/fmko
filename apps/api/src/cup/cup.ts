@@ -342,14 +342,16 @@ function cupShootout(rng: Rng, sHome: number, sAway: number): { hp: number; ap: 
 /** Sestaví lineup_data JSON pro detail zápasu (obdoba buildLineupData v match-runner). */
 function buildCupLineupData(
   lineup: Array<Record<string, any>>, subs: Array<Record<string, any>>,
-  idMap: Map<number, string>, formation: string, tactic: string,
-): { starters: any[]; subs: any[]; formation: string; tactic: string; captainId: string | null } {
+  idMap: Map<number, string>, formation: string, tactic: string, hardness: string,
+): { starters: any[]; subs: any[]; formation: string; tactic: string; hardness: string; captainId: string | null } {
   const mapPlayer = (p: Record<string, any>) => ({
     id: idMap.get(p.id) ?? "", name: `${p.firstName} ${p.lastName}`,
     position: p.matchPosition ?? p.position, naturalPosition: p.position,
     rating: Math.round((p.speed + p.technique + p.shooting + p.passing + p.defense) / 5),
   });
-  return { starters: lineup.map(mapPlayer), subs: subs.map(mapPlayer), formation, tactic, captainId: null };
+  // Tvrdost patří do uloženého záznamu stejně jako v lize — jinak detail zápasu
+  // neukáže, jak se hrálo, a pozápasový kontext ji nemá odkud vzít.
+  return { starters: lineup.map(mapPlayer), subs: subs.map(mapPlayer), formation, tactic, hardness, captainId: null };
 }
 
 /**
@@ -458,6 +460,7 @@ async function simulateCupTie(
   db: D1Database, rng: Rng, cupMatchId: string,
   homeCupTeamId: string, awayCupTeamId: string,
   realTeamOf: Map<string, string | null>, strengthOf: Map<string, number>, weather: Weather,
+  seasonNumber: number,
 ): Promise<{ hg: number; ag: number; hp: number; ap: number; homeWin: boolean; upset: boolean }> {
   const { buildMatchPlayers } = await import("../multiplayer/match-runner");
   const { simulateMatch } = await import("../engine/simulation");
@@ -578,8 +581,15 @@ async function simulateCupTie(
   // Rozhodčí v poháru se nedeleguje dva dny předem (pavouk se plní až po předchozím
   // kole) — vybírá se deterministicky z komise okresu domácího klubu. U velkoklubu
   // bez reálného týmu píská neutrální sudí.
-  const { loadCupReferee, mapIncidentsToDb } = await import("../referees/load");
-  const referee = await loadCupReferee(db, cupMatchId, homeReal);
+  const { loadCupReferee, mapIncidentsToDb, withRefereeMemory, refereeStatsStatements } = await import("../referees/load");
+  const nactenySudi = await loadCupReferee(db, cupMatchId, homeReal);
+  // Paměť z pozápasových rozhovorů platí i v poháru — je to tentýž člověk.
+  const referee = {
+    ...nactenySudi,
+    profile: nactenySudi.profile.id
+      ? await withRefereeMemory(db, nactenySudi.profile, homeReal ?? "", awayReal ?? "")
+      : nactenySudi.profile,
+  };
 
   const result = simulateMatch(rng, {
     home: homeSetup, away: awaySetup, weather, isHomeAdvantage: false,
@@ -709,8 +719,8 @@ async function simulateCupTie(
 
   // ── Detail zápasu (průběh, sestavy, ratingy, počasí) + domácí tržby — parita s ligovým zápasem ──
   try {
-    const homeLineupData = buildCupLineupData(homePre, homeSubs, homeBuild.idMap, homeFormation, homeTactic);
-    const awayLineupData = buildCupLineupData(awayPre, awaySubs, awayBuild.idMap, awayFormation, awayTactic);
+    const homeLineupData = buildCupLineupData(homePre, homeSubs, homeBuild.idMap, homeFormation, homeTactic, homeHardness);
+    const awayLineupData = buildCupLineupData(awayPre, awaySubs, awayBuild.idMap, awayFormation, awayTactic, awayHardness);
     const ctx = await cupHomeMatchContext(db, homeReal, weather, cupMatchId);
 
     // Komentář (dějiště = okres domácího reálného týmu; velkoklub bez okresu)
@@ -741,6 +751,31 @@ async function simulateCupTie(
       cupIncidents.length > 0 ? JSON.stringify(cupIncidents) : null, result.refereeGrade,
       cupMatchId,
     ).run().catch((e) => logger.warn({ module: M }, "save cup match detail", e));
+
+    // Bilance sudího — bez tohohle by pohárové zápasy v jeho profilu i v žebříčku
+    // chyběly, přestože je odpískal. Incidenty se sem posílají navázané na reálná
+    // teams.id, ne na cup_teams.id, jinak by je profil „vůči tvému týmu" nenašel.
+    if (referee.profile.id && (homeReal || awayReal)) {
+      const pocet = (typ: string, tym: number, detail?: string) => result.events.filter(
+        (e) => e.type === typ && e.teamId === tym && (detail === undefined || e.detail === detail),
+      ).length;
+      const realIncidents = mapIncidentsToDb(result.refereeIncidents, homeReal ?? "", awayReal ?? "");
+      const statStmts = refereeStatsStatements(db, {
+        refereeId: referee.profile.id,
+        seasonNumber,
+        leagueId: null,
+        homeTeamId: homeReal, awayTeamId: awayReal,
+        homeScore: result.homeScore, awayScore: result.awayScore,
+        grade: result.refereeGrade,
+        fouls: result.events.filter((e) => e.type === "foul").length,
+        homeYellow: pocet("card", 1, "yellow"), awayYellow: pocet("card", 2, "yellow"),
+        homeRed: pocet("card", 1, "red"), awayRed: pocet("card", 2, "red"),
+        homePenalties: pocet("penalty", 1), awayPenalties: pocet("penalty", 2),
+        incidents: realIncidents,
+      });
+      await db.batch(statStmts)
+        .catch((e) => logger.warn({ module: M }, "bilance rozhodčího v poháru", e));
+    }
 
     // Zranění ze zápasu — jen pro reálné týmy (velkoklubové kádry nejsou v players, FK by spadl)
     const injuryTypeMap: Record<string, string> = {
@@ -899,7 +934,7 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
     // stačí silový výsledek. Plný engine si šetříme pro zápasy, kde hraje něčí tým.
     const isWatched = !!realTeamOf.get(m.home_cup_team_id) || !!realTeamOf.get(m.away_cup_team_id);
     const r = isWatched
-      ? await simulateCupTie(db, rng, m.id, m.home_cup_team_id, m.away_cup_team_id, realTeamOf, strengthOf, tieWeather)
+      ? await simulateCupTie(db, rng, m.id, m.home_cup_team_id, m.away_cup_team_id, realTeamOf, strengthOf, tieWeather, cup.season_number)
       : simMatch(strengthOf.get(m.home_cup_team_id) ?? 30, strengthOf.get(m.away_cup_team_id) ?? 30, rng);
     if (isWatched) fullUsed++;
     const winnerId = r.homeWin ? m.home_cup_team_id : m.away_cup_team_id;

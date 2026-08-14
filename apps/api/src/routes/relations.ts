@@ -629,16 +629,21 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
 
         const roundLabel = match.round != null ? `${match.round}. kolo` : "nadcházející zápas";
         let message: string;
+        // Text výroku se ukládá i do interakce — pozápasový rozhovor se soupeře ptá
+        // na to, co řekl, a z novinového článku by ho už nevydoloval.
+        let quote: string;
 
         if (tone === "respect") {
-          await insertRelationNews(db, match.league_id, `Před zápasem: ${myName} smeká`, statementRespectQuote(names, await districtOfTeam(db, teamId)), teamId);
+          quote = statementRespectQuote(names, await districtOfTeam(db, teamId));
+          await insertRelationNews(db, match.league_id, `Před zápasem: ${myName} smeká`, quote, teamId);
           await applyRelationEvent(db, teamId, otherId, {
             respect: 5, icon: "🫡", text: `${myManager} před ${roundLabel} veřejně uznal kvality soupeře`,
           });
           await shiftSquadMorale(db, teamId, 1);
           message = "Uznání vyšlo v novinách. Kabina hraje bez tlaku.";
         } else if (tone === "provoke") {
-          await insertRelationNews(db, match.league_id, `PŘESTŘELKA: ${myManager} provokuje před ${roundLabel}`, statementProvokeQuote(names, await districtOfTeam(db, teamId)), teamId);
+          quote = statementProvokeQuote(names, await districtOfTeam(db, teamId));
+          await insertRelationNews(db, match.league_id, `PŘESTŘELKA: ${myManager} provokuje před ${roundLabel}`, quote, teamId);
           await applyRelationEvent(db, teamId, otherId, {
             heat: 10, icon: "😏", text: `${myManager} před ${roundLabel} provokoval v novinách`,
           });
@@ -646,7 +651,8 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           await shiftSquadMorale(db, otherId, 2); // provokace soupeře nabudí — má to cenu
           message = "Provokace vyšla v novinách. Kabina hoří — jenže soupeř taky.";
         } else {
-          await insertRelationNews(db, match.league_id, `${myName} hraje chudáčka`, statementHumbleQuote(names), teamId);
+          quote = statementHumbleQuote(names);
+          await insertRelationNews(db, match.league_id, `${myName} hraje chudáčka`, quote, teamId);
           message = "Skromnost vyšla v novinách. Teď nesmíš vyhrát moc vysoko… nebo vlastně smíš?";
         }
 
@@ -670,7 +676,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
             .catch((e) => logger.warn({ module: "relations" }, "statement notification", e));
         }
 
-        await insertInteraction(db, "statement", teamId, otherId, match.id, { tone }, tone === "humble" ? "pending" : "resolved");
+        await insertInteraction(db, "statement", teamId, otherId, match.id, { tone, quote }, tone === "humble" ? "pending" : "resolved");
         return c.json({ ok: true, message, aiResponse: aiResponseText });
       }
 

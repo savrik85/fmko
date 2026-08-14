@@ -190,8 +190,9 @@ export interface RefereeMatchFacts {
   refereeId: string;
   seasonNumber: number;
   leagueId: string | null;
-  homeTeamId: string;
-  awayTeamId: string;
+  /** Pohár nemá ligu — bilance obou stran musí jít na reálná teams.id, nebo nikam. */
+  homeTeamId: string | null;
+  awayTeamId: string | null;
   homeScore: number;
   awayScore: number;
   grade: number;
@@ -217,7 +218,10 @@ export function refereeStatsStatements(db: D1Database, f: RefereeMatchFacts): D1
   const awayWin = f.awayScore > f.homeScore ? 1 : 0;
   const draw = f.homeScore === f.awayScore ? 1 : 0;
 
-  const statsId = `rs-${f.refereeId}-${f.seasonNumber}-${f.leagueId ?? "cup"}`;
+  // Pohár nemá league_id. NULL by tu nešel použít — UNIQUE bere NULLy jako různé,
+  // takže by se druhý pohárový zápas rozbil o primární klíč místo aby se přičetl.
+  const leagueKey = f.leagueId ?? "cup";
+  const statsId = `rs-${f.refereeId}-${f.seasonNumber}-${leagueKey}`;
   const stmts: D1PreparedStatement[] = [
     db.prepare(
       `INSERT INTO referee_stats
@@ -237,7 +241,7 @@ export function refereeStatsStatements(db: D1Database, f: RefereeMatchFacts): D1
          draws = draws + excluded.draws,
          updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')`
     ).bind(
-      statsId, f.refereeId, f.seasonNumber, f.leagueId,
+      statsId, f.refereeId, f.seasonNumber, leagueKey,
       f.fouls, yellow, red, penalties, f.incidents.length, f.grade,
       homeWin, awayWin, draw,
     ),
@@ -276,8 +280,9 @@ export function refereeStatsStatements(db: D1Database, f: RefereeMatchFacts): D1
     );
   };
 
-  stmts.push(side(f.homeTeamId, true));
-  stmts.push(side(f.awayTeamId, false));
+  // Velkoklub v poháru nemá řádek v `teams` — jeho bilanci není kam zapsat.
+  if (f.homeTeamId) stmts.push(side(f.homeTeamId, true));
+  if (f.awayTeamId) stmts.push(side(f.awayTeamId, false));
   return stmts;
 }
 

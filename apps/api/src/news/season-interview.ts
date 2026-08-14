@@ -155,11 +155,15 @@ export async function createSeasonWrapInterviews(
     }
 
     const id = crypto.randomUUID();
-    await db.prepare(
-      `INSERT INTO coach_interviews (id, league_id, team_id, manager_id, match_calendar_id, game_week, questions, status, expires_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
+    // Druh se musí uvést výslovně — bez něj padne default 'pre_match' a sezónní
+    // ohlédnutí se pak plete s předzápasovým rozhovorem ve sweepu i v náhledu kola.
+    const vlozeno = await db.prepare(
+      `INSERT INTO coach_interviews (id, league_id, team_id, manager_id, match_calendar_id, game_week, kind, questions, status, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'season_wrap', ?, 'pending', ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
     ).bind(id, leagueId, t.team_id, t.manager_id, calId, seasonNumber * 100, JSON.stringify(questions), expiresIso).run()
-      .catch((e) => logger.warn({ module: "season-interview" }, "insert coach_interview", e));
+      .catch((e) => { logger.warn({ module: "season-interview" }, "insert coach_interview", e); return null; });
+    // Bez kontroly by neúspěšný zápis hlásil pokrok a fáze by se točila dokola.
+    if (!vlozeno || vlozeno.meta.changes !== 1) continue;
 
     await notifyManager(db, t.team_id, id, seasonNumber).catch((e) => logger.warn({ module: "season-interview" }, "notify", e));
     created++;

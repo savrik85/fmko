@@ -233,7 +233,9 @@ async function buildRecapExtras(db: D1Database, teamId: string) {
 
   // 5) Výrok sezóny (z odpovězeného trenérského rozhovoru)
   let quote: { question: string; text: string } | null = null;
-  const qi = await db.prepare("SELECT questions, answers FROM coach_interviews WHERE team_id = ? AND status = 'answered' AND answers IS NOT NULL ORDER BY created_at DESC LIMIT 1")
+  // Jen předzápasový rozhovor — bez filtru by se do ohlédnutí dostala odpověď
+  // z pozápasového nebo z loňského sezónního.
+  const qi = await db.prepare("SELECT questions, answers FROM coach_interviews WHERE team_id = ? AND kind = 'pre_match' AND status = 'answered' AND answers IS NOT NULL ORDER BY created_at DESC LIMIT 1")
     .bind(teamId).first<{ questions: string; answers: string }>()
     .catch((e) => { logger.warn({ module: M }, "load quote", e); return null; });
   if (qi) {

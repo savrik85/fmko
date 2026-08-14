@@ -122,7 +122,9 @@ async function buildContext(db: D1Database, m: MatchRow, teamId: string): Promis
     ownPenalties: pensOf(engineOwn),
     oppPenalties: pensOf(engineOwn === 1 ? 2 : 1),
     hardness: lineup?.hardness ?? "normal",
-    refereeName: typeof snapshot?.name === "string" ? snapshot.name : null,
+    // Neutrální náhrada (zápas bez delegace) nemá id — ptát se na „Delegovaného
+    // rozhodčího" nedává smysl a paměť by stejně neměla kam zapsat.
+    refereeName: typeof snapshot?.name === "string" && snapshot?.id ? snapshot.name : null,
     refereeTrait: refereeTrait(snapshot),
     incident: incident ? {
       minute: incident.minute, kind: incident.kind,
@@ -278,7 +280,7 @@ export async function tryCreatePostMatchInterviews(
       // takže článek stihne vyjít před náhledem dalšího kola.
       const expiresAt = gameExpiry(gameDate?.game_date ?? new Date().toISOString(), 2);
 
-      await db.prepare(
+      const vlozeno = await db.prepare(
         `INSERT OR IGNORE INTO coach_interviews
            (id, league_id, team_id, manager_id, match_calendar_id, game_week, kind,
             match_id, referee_id, questions, topics, context, expires_at)
@@ -291,6 +293,9 @@ export async function tryCreatePostMatchInterviews(
         JSON.stringify(ctx),
         expiresAt,
       ).run();
+      // OR IGNORE mlčí — bez kontroly by opakovaný běh poslal druhou SMS
+      // a snědl slot z limitu na kolo, aniž by rozhovor vznikl.
+      if (vlozeno.meta.changes !== 1) continue;
 
       await notifyPostMatchInterview(db, teamId, ctx);
       created++;
@@ -469,9 +474,12 @@ export async function applyPostMatchInterviewEffects(
     ? eff.fineBase + rng.int(0, 400)
     : 0;
 
+  // Bez delegovaného sudího není kam paměť zapsat — pak ji ani nehlásit,
+  // jinak by potvrzovací pruh sliboval efekt, který nikde nevznikl.
+  const pametZapsana = !!interview.referee_id;
   const applied: AppliedEffects = {
-    refereeRespect: eff.refereeRespect,
-    refereeName: ctx.refereeName,
+    refereeRespect: pametZapsana ? eff.refereeRespect : 0,
+    refereeName: pametZapsana ? ctx.refereeName : null,
     fine,
     squadMorale: eff.squadMorale,
     fans: eff.fans,

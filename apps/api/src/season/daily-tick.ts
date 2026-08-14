@@ -1126,6 +1126,19 @@ export async function executeDailyTick(
                 "SELECT m.name AS manager_name, m.avatar AS manager_avatar, t.name AS team_name FROM managers m JOIN teams t ON t.id = m.team_id WHERE m.team_id = ?"
               ).bind(teamId).first<{ manager_name: string; manager_avatar: string | null; team_name: string }>();
               const nid = crypto.randomUUID();
+              // Vztah redaktora se musí posunout i tady. Bez toho by měl tentýž
+              // rozhovor jiné důsledky podle toho, jestli článek vyšel hned,
+              // nebo až při retry.
+              let vztahPM: { popis: string; sentiment: number; dopad?: string } | undefined;
+              if (red && art.vztahRedaktor && art.vztahRedaktor.posun !== 0) {
+                try {
+                  const { posunSentiment, popisVztahu, dopadTisku } = await import("../news/journalists");
+                  const novy = await posunSentiment(env.DB, red.id, teamId,
+                    art.vztahRedaktor.posun, art.vztahRedaktor.duvod);
+                  const dopad = await dopadTisku(env.DB, teamId, novy, `press-${nid}`);
+                  vztahPM = { popis: `${red.first_name} ${red.last_name}: ${popisVztahu(novy)}`, sentiment: novy, dopad: dopad?.popis };
+                } catch (e) { logger.warn({ module: "daily-tick" }, "vztah redaktora při retry", e); }
+              }
               await env.DB.prepare(
                 "INSERT INTO news (id, league_id, team_id, type, headline, body, game_week, journalist_id, created_at) VALUES (?, ?, ?, 'post_match_interview', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))"
               ).bind(nid, pm.league_id, teamId, art.headline, JSON.stringify({
@@ -1133,6 +1146,7 @@ export async function executeDailyTick(
                 managerAvatar: (() => { try { return mgr?.manager_avatar ? JSON.parse(mgr.manager_avatar) : null; } catch { return null; } })(),
                 article: art.article,
                 qa: questions.map((q, i) => ({ q, a: answers[i] ?? "" })),
+                vztah: vztahPM,
                 teamId,
                 refereeName: ctx.refereeName ?? null,
                 refereeId: pm.referee_id ?? null,
@@ -1151,7 +1165,7 @@ export async function executeDailyTick(
             `SELECT ci.id, ci.answers, ci.questions, ci.match_calendar_id, ci.game_week, ci.league_id
              FROM coach_interviews ci
              WHERE ci.team_id = ? AND ci.status = 'answered' AND ci.article_news_id IS NULL
-               AND ci.kind != 'post_match'
+               AND ci.kind = 'pre_match' AND ci.match_calendar_id NOT LIKE 'season-%-wrap'
              ORDER BY ci.created_at DESC LIMIT 1`
           ).bind(teamId).first<{ id: string; answers: string; questions: string; match_calendar_id: string; game_week: number; league_id: string }>()
             .catch((e) => { logger.warn({ module: "daily-tick" }, "interview retry lookup", e); return null; });

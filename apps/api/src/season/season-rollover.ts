@@ -42,6 +42,19 @@ export async function rolloverAllLeagues(
   await db.prepare("INSERT INTO game_clock (id, offset_days) VALUES (1, 0) ON CONFLICT(id) DO UPDATE SET offset_days = 0").run()
     .catch((e) => logger.warn({ module: "season-rollover" }, "reset game clock offset", e));
 
+  // Vynulování offsetu vrací herní čas o desítky dní zpět. Rozhovory rozdané ve staré ose
+  // mají expires_at v budoucnosti, kterou nový herní čas nikdy nedožene — expirace v denním
+  // ticku porovnává s herním datem, takže by zůstaly věčně pending. Strop dvou čekajících
+  // rozhovorů na tým by se tím trvale ucpal a nové pozápasové by už nikdy nevznikly.
+  const { gameExpiry } = await import("../lib/game-time");
+  const startIso = startDate.toISOString();
+  await db.prepare(
+    `UPDATE coach_interviews
+        SET expires_at = CASE WHEN match_calendar_id LIKE 'season-%-wrap' THEN ? ELSE ? END
+      WHERE status = 'pending' AND expires_at > ?`
+  ).bind(gameExpiry(startIso, 7), gameExpiry(startIso, 2), startIso).run()
+    .catch((e) => logger.warn({ module: "season-rollover" }, "přerazítkování expirace rozhovorů", e));
+
   // 3. Roll každou senior ligu se SDÍLENÝM startem
   const leagues = await db.prepare("SELECT id FROM leagues WHERE league_type = 'senior'").all<{ id: string }>()
     .catch((e) => { logger.warn({ module: "season-rollover" }, "load leagues", e); return { results: [] as { id: string }[] }; });

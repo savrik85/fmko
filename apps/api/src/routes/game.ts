@@ -3611,11 +3611,26 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   let refereeInfo: Record<string, unknown> | null = null;
   if (!isFriendly) {
     try {
-      const refRow = await c.env.DB.prepare(
-        `SELECT r.*, m.referee_id AS assigned
-         FROM matches m JOIN referees r ON r.id = m.referee_id
-         WHERE m.id = ?`
-      ).bind(match.id as string).first<Record<string, unknown>>();
+      // Pohár se nedeleguje dva dny předem — sudí je deterministický z id zápasu,
+      // takže ho jde ukázat rovnou. Dotaz do `matches` by u pohárového id nevrátil nic,
+      // protože pohár žije v `cup_matches`; karta by pak byla vždycky prázdná.
+      let refRow: Record<string, unknown> | null = null;
+      if (isCup) {
+        const { loadCupReferee } = await import("../referees/load");
+        const { profile } = await loadCupReferee(
+          c.env.DB, match.id as string, (match.home_team_id as string | null) ?? null,
+        );
+        if (profile.id) {
+          refRow = await c.env.DB.prepare("SELECT * FROM referees WHERE id = ?")
+            .bind(profile.id).first<Record<string, unknown>>();
+        }
+      } else {
+        refRow = await c.env.DB.prepare(
+          `SELECT r.*, m.referee_id AS assigned
+           FROM matches m JOIN referees r ON r.id = m.referee_id
+           WHERE m.id = ?`
+        ).bind(match.id as string).first<Record<string, unknown>>();
+      }
       if (refRow) {
         const { archetypeLabel, refereeBias } = await import("../engine/referee");
         const { refereeFullName } = await import("../referees/referee-generator");

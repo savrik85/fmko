@@ -121,10 +121,13 @@ async function loadState(
        GROUP BY m.referee_id`
     ).bind(cal.season_number),
     // Kdo už má ten den zápas — i v jiné soutěži okresu (senior vs. U21).
+    // Jen běžící sezóna: po přechodu se herní čas vrací zpět, takže neodehraná kola
+    // té staré leží v budoucnosti nové osy a jejich sudí by falešně blokovali dny.
     db.prepare(
       `SELECT DISTINCT m.referee_id AS rid
        FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
-       WHERE m.referee_id IS NOT NULL AND sc.scheduled_at BETWEEN ? AND ?`
+       WHERE m.referee_id IS NOT NULL AND sc.scheduled_at BETWEEN ? AND ?
+         AND sc.season_number = (SELECT MAX(x.season_number) FROM season_calendar x WHERE x.league_id = sc.league_id)`
     ).bind(dayStart.toISOString(), dayEnd.toISOString()),
     // Kdo naposledy pískal kterému týmu v této lize.
     db.prepare(
@@ -208,6 +211,7 @@ export async function delegateReferees(db: D1Database, gameDate: string): Promis
             l.district AS district
      FROM season_calendar sc JOIN leagues l ON l.id = sc.league_id
      WHERE sc.scheduled_at BETWEEN ? AND ? AND sc.status = 'scheduled'
+       AND sc.season_number = (SELECT MAX(x.season_number) FROM season_calendar x WHERE x.league_id = sc.league_id)
        AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id AND m.referee_id IS NULL)`
   ).bind(from.toISOString(), to.toISOString()).all<CalendarRow>()
     .catch((e) => { logger.warn({ module: "referees" }, "hledání kol k delegaci", e); return null; });

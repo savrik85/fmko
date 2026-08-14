@@ -75,6 +75,7 @@ export async function publishAiPreMatchStatements(
      JOIN teams ht ON ht.id = m.home_team_id
      JOIN teams at ON at.id = m.away_team_id
      WHERE sc.scheduled_at BETWEEN ? AND ? AND sc.status = 'scheduled'
+       AND sc.season_number = (SELECT MAX(x.season_number) FROM season_calendar x WHERE x.league_id = sc.league_id)
        AND ((ht.user_id = 'ai') != (at.user_id = 'ai'))`
   ).bind(from, to).all<UpcomingMatch & { game_week: number }>()
     .catch((e) => { logger.warn({ module: M }, "hledání zápasů pro výroky", e); return null; });
