@@ -172,19 +172,26 @@ describe("tvrdost hry — na čem záleží", () => {
   }, SLOW);
 
   it("KÁDR ROZHODUJE: agresivní tým z tvrdé hry vytěží víc než technický", () => {
-    // Liší se jen agresivitou. Kdyby se lišily i silou, měřil by test saturaci
-    // spodního stropu šancí (silná obrana drží soupeře na podlaze, takže další
-    // zlepšení obrany už nic neudělá), ne užitek z tvrdé hry.
-    const drevorubci: PlayerOverrides = { aggression: 85 };
-    const technici: PlayerOverrides = { aggression: 20 };
+    // Měří se RELATIVNÍ pokles inkasovaných gólů, ne rozdíl skóre. Dřevorubci mají
+    // díky síle a agresivitě lepší obranu už na startu, takže v absolutních číslech
+    // by test porovnával výchozí úroveň, ne užitek z tvrdé hry — a u velmi silné
+    // obrany navíc naráží šance soupeře na spodní strop.
+    // Pozor na škály: strength je skill (reálný průměr ~20), agrese povaha 0–100.
+    const drevorubci: PlayerOverrides = { aggression: 85, strength: 40 };
+    const technici: PlayerOverrides = { aggression: 20, strength: 10 };
 
-    const ziskD = gd(run(N, "hard", REF.benevolentni, 44000, { homeAttrs: drevorubci }))
-      - gd(run(N, "normal", REF.benevolentni, 44000, { homeAttrs: drevorubci }));
-    const ziskT = gd(run(N, "hard", REF.benevolentni, 44000, { homeAttrs: technici }))
-      - gd(run(N, "normal", REF.benevolentni, 44000, { homeAttrs: technici }));
+    const relativniZisk = (attrs: PlayerOverrides, seed: number) => {
+      const normal = per(run(N, "normal", REF.benevolentni, seed, { homeAttrs: attrs }).awayGoals, { matches: N } as Totals);
+      const hard = per(run(N, "hard", REF.benevolentni, seed, { homeAttrs: attrs }).awayGoals, { matches: N } as Totals);
+      return (normal - hard) / normal;
+    };
 
-    console.log(`\nzisk z tvrdé hry: dřevorubci ${ziskD.toFixed(3)} · technici ${ziskT.toFixed(3)}`);
+    const ziskD = relativniZisk(drevorubci, 44000);
+    const ziskT = relativniZisk(technici, 44000);
+
+    console.log(`\nrelativní pokles inkasovaných: dřevorubci ${(ziskD * 100).toFixed(1)} % · technici ${(ziskT * 100).toFixed(1)} %`);
     expect(ziskD).toBeGreaterThan(ziskT);
+    expect(ziskD).toBeGreaterThan(0.05);
   }, SLOW);
 
   it("RIZIKO SE NEŠKÁLUJE: technický kádr dostane za tvrdou hru stejně karet", () => {
@@ -198,8 +205,9 @@ describe("tvrdost hry — na čem záleží", () => {
   }, SLOW);
 
   it("ZASTRAŠENÍ: měkký soupeř ztratí víc než otrlý", () => {
-    const mekky: PlayerOverrides = { strength: 25, aggression: 20, consistency: 30, leadership: 20 };
-    const otrly: PlayerOverrides = { strength: 85, aggression: 80, consistency: 80, leadership: 75 };
+    // strength je skill (reálný průměr ~20, max ~80), zbytek povaha 0–100.
+    const mekky: PlayerOverrides = { strength: 8, aggression: 20, consistency: 30, leadership: 20 };
+    const otrly: PlayerOverrides = { strength: 45, aggression: 85, consistency: 85, leadership: 80 };
 
     const ztrataMekkeho = per(run(N, "normal", REF.benevolentni, 46000, { awayAttrs: mekky }).awayGoals, { matches: N } as Totals)
       - per(run(N, "hard", REF.benevolentni, 46000, { awayAttrs: mekky }).awayGoals, { matches: N } as Totals);
@@ -233,8 +241,8 @@ describe("tvrdost hry — vzorce", () => {
   });
 
   it("fit odměňuje agresivní a silný kádr", () => {
-    const drevorubci = mkTeam(1, 1, 50, "hard", { aggression: 85, strength: 85 }).lineup;
-    const technici = mkTeam(1, 1, 50, "hard", { aggression: 20, strength: 20 }).lineup;
+    const drevorubci = mkTeam(1, 1, 50, "hard", { aggression: 85, strength: 40 }).lineup;
+    const technici = mkTeam(1, 1, 50, "hard", { aggression: 20, strength: 8 }).lineup;
     expect(calcHardnessFit(drevorubci, "hard")).toBeGreaterThan(calcHardnessFit(technici, "hard"));
     // Opatrnou hru zvládne každý.
     expect(calcHardnessFit(technici, "fair")).toBe(1.0);
@@ -256,15 +264,15 @@ describe("tvrdost hry — vzorce", () => {
   });
 
   it("hardEff se drží v mezích i v extrémech", () => {
-    const lineup = mkTeam(1, 1, 50, "hard", { aggression: 100, strength: 100 }).lineup;
+    const lineup = mkTeam(1, 1, 50, "hard", { aggression: 100, strength: 60 }).lineup;
     const all = new Set(lineup.map((p) => p.id));
     expect(hardEff(lineup, "hard", { ...NEUTRAL_REFEREE, strictness: 0 }, new Set())).toBeLessThanOrEqual(1.45);
     expect(hardEff(lineup, "hard", { ...NEUTRAL_REFEREE, strictness: 100 }, all)).toBeGreaterThanOrEqual(0.15);
   });
 
   it("otrlost a náchylnost jdou proti sobě", () => {
-    const mekky = mkTeam(1, 1, 50, "normal", { strength: 20, aggression: 20, consistency: 20, leadership: 20 }).lineup;
-    const otrly = mkTeam(1, 1, 50, "normal", { strength: 90, aggression: 90, consistency: 90, leadership: 90 }).lineup;
+    const mekky = mkTeam(1, 1, 50, "normal", { strength: 8, aggression: 20, consistency: 20, leadership: 20 }).lineup;
+    const otrly = mkTeam(1, 1, 50, "normal", { strength: 45, aggression: 90, consistency: 90, leadership: 90 }).lineup;
     expect(grit(mekky[1])).toBeLessThan(grit(otrly[1]));
     expect(susceptibility(mekky)).toBeGreaterThan(0.8);
     expect(susceptibility(otrly)).toBeLessThan(0.1);

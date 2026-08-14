@@ -84,10 +84,23 @@ const OUTFIELD = ["DEF", "MID", "FWD"] as const;
  * zvlášť, takže by disciplinovaný kádr dostal bezrizikovou řezničinu.
  */
 const HARD_REQUIREMENTS: readonly SkillRequirement[] = [
+  // POZOR NA ŠKÁLY: `aggression` a `workRate` jsou z personality a jedou 0–100
+  // (reálné průměry 57 a 48), zatímco `strength` je skill s reálným průměrem 20
+  // a maximem kolem 80. Práh 55 by u síly nikdy nikdo nesplnil a fit by byl
+  // trvale přiražený na spodní hranici.
   { skill: "aggression", positions: [...OUTFIELD], threshold: 55, weight: 1.0 },
-  { skill: "strength", positions: [...OUTFIELD], threshold: 55, weight: 0.8 },
-  { skill: "workRate", positions: [...OUTFIELD], threshold: 55, weight: 0.4 },
+  { skill: "strength", positions: [...OUTFIELD], threshold: 26, weight: 0.8 },
+  { skill: "workRate", positions: [...OUTFIELD], threshold: 50, weight: 0.4 },
 ];
+
+/**
+ * Síla na stupnici 0–100. Skill má reálný průměr kolem 20 a maximum kolem 80,
+ * kdežto povahové atributy jedou plných 0–100 — bez převodu by síla otrlost
+ * prakticky neovlivňovala.
+ */
+function strengthOn100(strength: number): number {
+  return Math.min(100, strength * 2.5);
+}
 
 /** Umí to ten kádr? 0,70 (technický) – 1,15 (dřevorubci). */
 export function calcHardnessFit(lineup: MatchPlayer[], h: Hardness): number {
@@ -136,7 +149,7 @@ export function hardEff(
  * `morale` (ta už působí vlastním kanálem, bylo by to dvojí započtení).
  */
 export function grit(p: MatchPlayer): number {
-  return p.strength * 0.30 + p.aggression * 0.25 + p.consistency * 0.25 + p.leadership * 0.20;
+  return strengthOn100(p.strength) * 0.30 + p.aggression * 0.25 + p.consistency * 0.25 + p.leadership * 0.20;
 }
 
 /** Náchylnost sestavy na zastrašení 0–1. Otrlost 75+ neotřese nic, 25− plná srážka. */
