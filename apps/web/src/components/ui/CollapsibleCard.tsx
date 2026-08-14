@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 
 interface Props {
   title: ReactNode;
@@ -11,6 +11,23 @@ interface Props {
 }
 
 /**
+ * Otevřeno na širší obrazovce, sbaleno na telefonu.
+ *
+ * Výchozí stav se dopočítá až po mountu — na serveru viewport neznáme. Po první
+ * ruční změně už se nic nepřepočítává, aby volba uživatele vydržela.
+ */
+export function useOpenOnDesktop(): [boolean, Dispatch<SetStateAction<boolean>>] {
+  const [open, setOpen] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setOpen(window.matchMedia("(min-width: 640px)").matches);
+  }, []);
+
+  return [open, setOpen];
+}
+
+/**
  * Karta, která je na mobilu sbalená a na širší obrazovce rozbalená.
  *
  * Sestavovač má nad hřištěm několik informačních bloků a na telefonu se kvůli nim
@@ -18,13 +35,7 @@ interface Props {
  * viditelné i ve sbaleném stavu, aby se kvůli základní informaci nemuselo klikat.
  */
 export function CollapsibleCard({ title, summary, children, className = "" }: Props) {
-  // Výchozí stav se dopočítá po mountu — na serveru viewport neznáme.
-  const [open, setOpen] = useState(true);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setOpen(window.matchMedia("(min-width: 640px)").matches);
-  }, []);
+  const [open, setOpen] = useOpenOnDesktop();
 
   return (
     <div className={`card p-3 ${className}`}>

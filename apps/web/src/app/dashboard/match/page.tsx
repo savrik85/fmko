@@ -14,6 +14,7 @@ import type { RefereeProfileView, RefereeStatsView } from "@/lib/referee-info";
 import { getTacticTooltip, getFormationTooltip, getHardnessTooltip, type TacticKey, type HardnessKey } from "@/lib/tactic-info";
 import { computeLineupChemistry, type RelationshipType } from "@okresni-masina/shared";
 import { LineupPreview, type CardRisk } from "@/components/LineupPreview";
+import { useOpenOnDesktop } from "@/components/ui";
 
 type Pos = "GK" | "DEF" | "MID" | "FWD";
 
@@ -162,6 +163,7 @@ function MatchPage() {
   const [referee, setReferee] = useState<DelegatedReferee | null>(null);
   const [hardness, setHardness] = useState<HardnessKey>("normal");
   const [cardRisk, setCardRisk] = useState<CardRisk | null>(null);
+  const [hintsOpen, setHintsOpen] = useOpenOnDesktop();
   const [formation, setFormation] = useState("4-4-2");
   const [tactic, setTactic] = useState("balanced");
   const [selected, setSelected] = useState<(string | null)[]>(Array(11).fill(null));
@@ -737,8 +739,21 @@ function MatchPage() {
           )}
         </div>
 
-        {/* Hint popisující aktuálně vybranou formaci + taktiku — viditelné hlavně na mobilu (kde nefunguje hover) */}
-        <div className="mt-2 pt-2 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-[11px] leading-relaxed text-muted">
+        {/* Popisy zvolené trojice. Na desktopu je má i hover tooltip, na mobilu jinak
+            nejsou k dispozici — proto se nezahazují, jen se sbalí. */}
+        <div className="mt-2 pt-2 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={() => setHintsOpen((v) => !v)}
+            aria-expanded={hintsOpen}
+            className="w-full flex items-center justify-between gap-2 text-[11px] font-heading uppercase tracking-wide text-muted-light"
+          >
+            <span>Co která volba znamená</span>
+            <span className={`transition-transform ${hintsOpen ? "rotate-180" : ""}`} aria-hidden>▾</span>
+          </button>
+        </div>
+        {hintsOpen && (
+        <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-[11px] leading-relaxed text-muted">
           <div>
             <span className="font-heading uppercase text-[10px] tracking-wide text-muted-light">Formace: </span>
             {getFormationTooltip(formation).replace(/^[^—]+— /, "")}
@@ -752,6 +767,7 @@ function MatchPage() {
             {getHardnessTooltip(hardness).replace(/^[^—]+— /, "")}
           </div>
         </div>
+        )}
       </div>
 
       {/* Main layout: pitch left, player list right */}
