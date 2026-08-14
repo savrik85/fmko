@@ -40,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/schedule", label: "Rozpis", icon: "\u{1F4C5}", group: "league" },
   { href: "/dashboard/friendly", label: "Přáteláky", icon: "\u{1F91C}", group: "league" },
   { href: "/dashboard/liga", label: "Liga", icon: "\u{1F3C6}", group: "league" },
+  { href: "/dashboard/rozhodci", label: "Rozhodčí", icon: "\u{1F9D1}\u200D\u2696\uFE0F", group: "league" },
   { href: "/dashboard/pohar", label: "Pohár", icon: "\u{1F3C5}", group: "league" },
   { href: "/dashboard/calendar", label: "Kalendář", icon: "\u{1F5D3}", group: "league" },
   { href: "/dashboard/napoveda", label: "Nápověda", icon: "\u{1F4D6}", group: "league" },
