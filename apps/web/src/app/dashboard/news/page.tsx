@@ -728,7 +728,8 @@ export default function NewsPage() {
           {/* ═══ Tiráž — kdo ten list píše ═══ */}
           {redakce.length > 0 && (
             <section className="border-t border-ink/20 pt-6 mt-6">
-              <Kicker>✒️ Redakce {newspaperName}u</Kicker>
+              {/* Bez skloňování názvu listu — „Redakce Pražský Zpravodaju" nedopadlo dobře. */}
+              <Kicker>✒️ Redakce</Kicker>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {redakce.map((r) => (
                   <Link
