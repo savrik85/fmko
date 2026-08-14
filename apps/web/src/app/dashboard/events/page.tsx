@@ -57,6 +57,17 @@ interface PostMatchContext {
   opponentStatement: { quote: string; tone: string } | null;
 }
 
+interface AppliedEffects {
+  refereeRespect: number;
+  refereeName: string | null;
+  fine: number;
+  squadMorale: number;
+  fans: number;
+  reputation: number;
+  postoj: "kritika" | "neutral" | "obhajoba";
+  sila: number;
+}
+
 interface CoachInterview {
   id: string;
   gameWeek: number;
@@ -145,6 +156,8 @@ export default function EventsPage() {
   const [interviewAnswers, setInterviewAnswers] = useState<Record<string, string[]>>({});
   const [interviewSubmitting, setInterviewSubmitting] = useState<string | null>(null);
   const [interviewDone, setInterviewDone] = useState<string | null>(null);
+  // Skutečné dopady pozápasové odpovědi — hráč má vidět, co si koupil.
+  const [interviewEffects, setInterviewEffects] = useState<AppliedEffects | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -170,14 +183,19 @@ export default function EventsPage() {
     const answers = interviewAnswers[interview.id] ?? [];
     if (answers.filter((a) => a?.trim()).length < interview.questions.length) return;
     setInterviewSubmitting(interview.id);
-    const ok = await apiAction(apiFetch(`/api/teams/${teamId}/coach-interviews/${interview.id}/answer`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers }),
-    }), "Odeslání odpovědí se nezdařilo");
+    // Odpověď endpointu nese zaúčtované efekty — apiAction je zahazuje, proto holder.
+    const vysledek: { effects: AppliedEffects | null } = { effects: null };
+    const ok = await apiAction(
+      apiFetch<{ effects?: AppliedEffects | null }>(`/api/teams/${teamId}/coach-interviews/${interview.id}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers }),
+      }).then((r) => { vysledek.effects = r?.effects ?? null; }),
+      "Odeslání odpovědí se nezdařilo");
     if (ok) {
       setInterviews((prev) => prev.filter((iv) => iv.id !== interview.id));
       setInterviewDone(interview.id);
+      setInterviewEffects(vysledek.effects);
     }
     setInterviewSubmitting(null);
   };
@@ -362,9 +380,36 @@ export default function EventsPage() {
         </div>
       )}
       {interviewDone && interviews.length === 0 && (
-        <div className="card p-4 bg-pitch-50 border border-pitch-200 text-sm text-pitch-700 font-heading font-medium">
-          ✅ Odpovědi odeslány — článek vyjde ve{" "}
-          <Link href="/dashboard/news" className="underline hover:text-pitch-900">Zpravodaji</Link>.
+        <div className="card p-4 bg-pitch-50 border border-pitch-200 text-sm text-pitch-700">
+          <div className="font-heading font-medium">
+            ✅ Odpovědi odeslány — článek vyjde ve{" "}
+            <Link href="/dashboard/news" className="underline hover:text-pitch-900">Zpravodaji</Link>.
+          </div>
+          {interviewEffects && (
+            <ul className="mt-2 space-y-0.5 text-ink">
+              {interviewEffects.refereeRespect !== 0 && (
+                <li>
+                  {interviewEffects.refereeRespect < 0 ? "🧑‍⚖️ " : "🤝 "}
+                  {interviewEffects.refereeName ?? "Rozhodčí"} si to zapamatoval{" "}
+                  <span className="tabular-nums font-heading font-bold">
+                    ({interviewEffects.refereeRespect > 0 ? "+" : ""}{interviewEffects.refereeRespect})
+                  </span>
+                </li>
+              )}
+              {interviewEffects.fine > 0 && (
+                <li>💸 Pokuta disciplinární komise: <span className="tabular-nums font-heading font-bold">{interviewEffects.fine.toLocaleString("cs")} Kč</span></li>
+              )}
+              {interviewEffects.squadMorale !== 0 && (
+                <li>💪 Morálka kabiny <span className="tabular-nums font-heading font-bold">{interviewEffects.squadMorale > 0 ? "+" : ""}{interviewEffects.squadMorale}</span></li>
+              )}
+              {interviewEffects.fans !== 0 && (
+                <li>📣 Fanoušci <span className="tabular-nums font-heading font-bold">{interviewEffects.fans > 0 ? "+" : ""}{interviewEffects.fans}</span></li>
+              )}
+              {interviewEffects.reputation !== 0 && (
+                <li>⭐ Reputace klubu <span className="tabular-nums font-heading font-bold">{interviewEffects.reputation > 0 ? "+" : ""}{interviewEffects.reputation}</span></li>
+              )}
+            </ul>
+          )}
         </div>
       )}
 
