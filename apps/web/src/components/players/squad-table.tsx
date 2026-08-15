@@ -76,7 +76,7 @@ export function SquadTable({ rows, compact, teamColor }: {
           <button
             key={col.key}
             onClick={() => handleSort(col.key)}
-            className={`${col.width} ${col.align} text-[10px] uppercase tracking-wider font-heading font-bold text-muted hover:text-ink transition-colors select-none ${
+            className={`${col.width} ${col.align} text-micro uppercase tracking-wider font-heading font-bold text-muted hover:text-ink transition-colors select-none ${
               sortKey === col.key ? "text-pitch-600" : ""
             }`}
           >

@@ -345,21 +345,21 @@ export default function HospodaPage() {
                   <div className="font-heading font-bold text-sm capitalize">
                     {new Date(s.gameDate).toLocaleDateString("cs", { weekday: "long" })} večer
                   </div>
-                  <div className="text-[11px] text-muted uppercase font-heading">
+                  <div className="text-micro text-muted uppercase font-heading">
                     {localCount} {localCount === 1 ? "místní" : localCount < 5 ? "místní" : "místních"}
                     {visitorCount > 0 && <span className="text-amber-600">, {visitorCount} {visitorCount === 1 ? "host" : "hosté"}</span>}
                   </div>
                 </div>
 
                 {s.dailySpecial && (
-                  <div className="mb-3 -mx-4 sm:-mx-5 px-4 sm:px-5 py-2 text-[11px] uppercase font-heading tracking-wider text-amber-800 bg-amber-50 border-y border-amber-100">
+                  <div className="mb-3 -mx-4 sm:-mx-5 px-4 sm:px-5 py-2 text-micro uppercase font-heading tracking-wider text-amber-800 bg-amber-50 border-y border-amber-100">
                     📋 {s.dailySpecial}
                   </div>
                 )}
 
                 {s.attendees.length > 0 && (
                   <div className="mb-3">
-                    <div className="text-[11px] uppercase text-muted font-heading mb-1.5">V hospodě</div>
+                    <div className="text-micro uppercase text-muted font-heading mb-1.5">V hospodě</div>
                     <div className="flex flex-wrap gap-2">
                       {s.attendees.map((a) => {
                         const avatar = avatarsById[a.playerId] ?? a.avatar;
@@ -373,12 +373,12 @@ export default function HospodaPage() {
                           <>
                             {avatar
                               ? <FaceAvatar faceConfig={avatar} size={28} className="rounded-full bg-white ring-1 ring-black/5" />
-                              : <span className="rounded-full bg-gray-200 ring-1 ring-black/5 flex items-center justify-center text-[10px] font-heading font-bold text-muted shrink-0" style={{ width: 28, height: 28 }}>{initials}</span>}
+                              : <span className="rounded-full bg-gray-200 ring-1 ring-black/5 flex items-center justify-center text-micro font-heading font-bold text-muted shrink-0" style={{ width: 28, height: 28 }}>{initials}</span>}
                             <span className="font-heading font-bold whitespace-nowrap">
                               {a.firstName} {a.lastName}
                             </span>
-                            {a.isCoach && <span className="text-[9px] text-pitch-700">(trenér)</span>}
-                            {a.isVisitor && <span className="text-[9px] text-amber-700">({a.fromTeamName})</span>}
+                            {a.isCoach && <span className="text-micro text-pitch-700">(trenér)</span>}
+                            {a.isVisitor && <span className="text-micro text-amber-700">({a.fromTeamName})</span>}
                           </>
                         );
                         // Bývalý vlastní hráč (prodán/uvolněn) → není v current squadu,
@@ -433,7 +433,7 @@ export default function HospodaPage() {
                             <span className="text-ink leading-snug">{colorizeIncidentText(inc.text)}</span>
                           </div>
                           {inc.effects && inc.effects.length > 0 && (
-                            <div className="ml-7 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+                            <div className="ml-7 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-micro">
                               {inc.effects.map((ef, ei) => (
                                 <span key={ei} className={effectColor(ef)}>
                                   <span className="text-muted">{playerNameById(ef.playerId)}:</span> <span className="font-heading font-bold">{ef.label}</span>

@@ -78,7 +78,7 @@ export default function RozhodciPage() {
               <div className={`font-heading font-bold text-lg tabular-nums ${gradeColor(r.stats.avgGrade)}`}>
                 {formatGrade(r.stats.avgGrade)}
               </div>
-              <div className="text-[11px] text-muted leading-tight">
+              <div className="text-micro text-muted leading-tight">
                 {r.stats.avgGrade != null ? gradeWord(r.stats.avgGrade) : "nepískal"}
               </div>
             </div>

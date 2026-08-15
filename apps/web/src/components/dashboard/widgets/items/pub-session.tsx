@@ -67,7 +67,7 @@ export function PubSessionWidget({ data }: WidgetProps) {
           <ClubScarf {...scarfProps} width={260} height={80} className="hidden sm:block" />
           <div>
             <h2 className="font-heading font-[800] text-xl leading-none text-ink">U nás v hospodě</h2>
-            <div className="text-[11px] uppercase text-muted mt-1">
+            <div className="text-micro uppercase text-muted mt-1">
               {new Date(session.gameDate).toLocaleDateString("cs", { weekday: "long" })} večer
             </div>
           </div>
@@ -78,7 +78,7 @@ export function PubSessionWidget({ data }: WidgetProps) {
 
         <div className="lg:col-span-2 bg-white p-4 sm:p-5">
           {session.dailySpecial && (
-            <div className="mb-3 -mx-4 -mt-4 sm:-mx-5 sm:-mt-5 px-4 sm:px-5 py-2 text-[11px] uppercase font-heading tracking-wider text-amber-800 bg-amber-50 border-b border-amber-100">
+            <div className="mb-3 -mx-4 -mt-4 sm:-mx-5 sm:-mt-5 px-4 sm:px-5 py-2 text-micro uppercase font-heading tracking-wider text-amber-800 bg-amber-50 border-b border-amber-100">
               📋 {session.dailySpecial}
             </div>
           )}
@@ -95,7 +95,7 @@ export function PubSessionWidget({ data }: WidgetProps) {
                   >
                     {a.firstName} {a.lastName}
                   </Link>
-                  {a.isVisitor && <span className="text-[11px] text-amber-600 ml-1">({a.fromTeamName})</span>}
+                  {a.isVisitor && <span className="text-micro text-amber-600 ml-1">({a.fromTeamName})</span>}
                 </span>
               ))}
             </div>
@@ -110,7 +110,7 @@ export function PubSessionWidget({ data }: WidgetProps) {
                     <span className="text-ink leading-snug">{inc.text}</span>
                   </div>
                   {inc.effects && inc.effects.length > 0 && (
-                    <div className="ml-7 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+                    <div className="ml-7 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-micro">
                       {inc.effects.map((ef, ei) => {
                         const efColor = ef.type === "injury" || ef.type === "hangover" || (ef.delta != null && ef.delta < 0)
                           ? "text-card-red"

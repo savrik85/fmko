@@ -119,7 +119,7 @@ export function StepClubName({ village, initialTeamName, onBack, onSubmit }: Pro
                 className={`p-4 rounded-xl text-center transition-all border-2 ${namingChoice === opt.key ? "border-pitch-500 bg-pitch-500/5" : "border-transparent bg-surface hover:border-pitch-500/20"}`}>
                 <div className="text-2xl mb-1">{opt.icon}</div>
                 <div className="font-heading font-bold text-sm">{opt.label}</div>
-                <div className="text-[11px] text-muted mt-0.5">{opt.desc}</div>
+                <div className="text-micro text-muted mt-0.5">{opt.desc}</div>
               </button>
             ))}
           </div>
@@ -152,13 +152,13 @@ export function StepClubName({ village, initialTeamName, onBack, onSubmit }: Pro
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-sm font-heading font-bold text-gold-600">+{formatMoney(s.seasonBonus)}/sez</div>
-                    <div className="text-[11px] text-muted">{s.seasons} {s.seasons === 1 ? "sezóna" : s.seasons <= 4 ? "sezóny" : "sezón"}</div>
+                    <div className="text-micro text-muted">{s.seasons} {s.seasons === 1 ? "sezóna" : s.seasons <= 4 ? "sezóny" : "sezón"}</div>
                   </div>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5">
-                  {s.tradeoffs?.benefits.map((b, bi) => <div key={bi} className="text-[11px] text-pitch-500">+ {b}</div>)}
-                  {s.tradeoffs?.negatives.map((n, ni) => <div key={ni} className="text-[11px] text-card-red">- {n}</div>)}
-                  <div className="text-[11px] text-card-red">- Sankce za zrušení: {formatMoney(s.terminationFee)}</div>
+                  {s.tradeoffs?.benefits.map((b, bi) => <div key={bi} className="text-micro text-pitch-500">+ {b}</div>)}
+                  {s.tradeoffs?.negatives.map((n, ni) => <div key={ni} className="text-micro text-card-red">- {n}</div>)}
+                  <div className="text-micro text-card-red">- Sankce za zrušení: {formatMoney(s.terminationFee)}</div>
                 </div>
               </button>
             ))}
@@ -195,12 +195,12 @@ export function StepClubName({ village, initialTeamName, onBack, onSubmit }: Pro
                   <div className="font-semibold text-sm">{s.name}</div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-heading font-bold text-gold-600">+{formatMoney(s.seasonBonus)}/sez.</span>
-                    <span className="text-[11px] text-muted">{s.seasons} {s.seasons === 1 ? "sezóna" : s.seasons <= 4 ? "sezóny" : "sezón"}</span>
+                    <span className="text-micro text-muted">{s.seasons} {s.seasons === 1 ? "sezóna" : s.seasons <= 4 ? "sezóny" : "sezón"}</span>
                   </div>
                   <div className="mt-1 space-y-0.5">
-                    <div className="text-[11px] text-pitch-500">+ Lepší zázemí stadionu (šatny Lv.1)</div>
-                    <div className="text-[11px] text-card-red">- -2 morálka (tradice vs peníze)</div>
-                    <div className="text-[11px] text-card-red">- Sankce za zrušení: {formatMoney(s.terminationFee)}</div>
+                    <div className="text-micro text-pitch-500">+ Lepší zázemí stadionu (šatny Lv.1)</div>
+                    <div className="text-micro text-card-red">- -2 morálka (tradice vs peníze)</div>
+                    <div className="text-micro text-card-red">- Sankce za zrušení: {formatMoney(s.terminationFee)}</div>
                   </div>
                 </button>
               ))}

@@ -82,7 +82,7 @@ function AttrGrid({ m }: { m: StaffMember }) {
         return (
           <div key={a} className="text-center">
             <div className={`text-sm font-heading font-bold tabular-nums ${attrColor(v)}`}>{v}</div>
-            <div className="text-[9px] text-muted font-heading uppercase" title={STAFF_ATTRIBUTE_LABELS[a]}>{ATTR_SHORT[a]}</div>
+            <div className="text-micro text-muted font-heading uppercase" title={STAFF_ATTRIBUTE_LABELS[a]}>{ATTR_SHORT[a]}</div>
           </div>
         );
       })}
@@ -223,7 +223,7 @@ export default function ZamestnanciPage() {
               const rolesInGroup = STAFF_ROLE_ORDER.filter((r) => ROLE_DEFS[r].group === group);
               return (
                 <div key={group} className="space-y-2">
-                  <div className="text-[11px] uppercase font-heading font-bold text-muted tracking-wide">{STAFF_GROUP_LABELS[group]}</div>
+                  <div className="text-micro uppercase font-heading font-bold text-muted tracking-wide">{STAFF_GROUP_LABELS[group]}</div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {rolesInGroup.map((role) => {
                       const m = byRole.get(role);
@@ -254,7 +254,7 @@ export default function ZamestnanciPage() {
                             </div>
                             <div className="shrink-0 text-right">
                               <div className={`text-lg font-heading font-bold tabular-nums ${effClass(eff)}`}>{eff}<span className="text-xs text-muted">/20</span></div>
-                              <div className="text-[9px] uppercase text-muted font-heading">efektivita</div>
+                              <div className="text-micro uppercase text-muted font-heading">efektivita</div>
                             </div>
                           </div>
 
@@ -321,7 +321,7 @@ export default function ZamestnanciPage() {
               <>
                 {/* Filtr podle role (zaměření kandidáta) */}
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] uppercase font-heading font-bold text-muted tracking-wide shrink-0">Filtr role</span>
+                  <span className="text-micro uppercase font-heading font-bold text-muted tracking-wide shrink-0">Filtr role</span>
                   <select
                     value={marketRoleFilter}
                     onChange={(e) => setMarketRoleFilter(e.target.value as StaffRole | "all")}

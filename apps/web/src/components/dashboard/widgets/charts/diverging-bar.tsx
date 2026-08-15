@@ -32,7 +32,7 @@ export function DivergingBar({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center text-[11px] text-muted uppercase tracking-wide">
+      <div className="flex items-center text-micro text-muted uppercase tracking-wide">
         <span className={`${VALUE_COL} shrink-0`} />
         <span className="flex-1 text-right pr-1">{negativeLabel}</span>
         <span className={`${LABEL_COL} shrink-0`} />

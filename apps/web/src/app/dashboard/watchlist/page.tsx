@@ -147,7 +147,7 @@ export default function WatchlistPage() {
                           {p.firstName} {p.lastName}
                         </Link>
                         {p.injury && (
-                          <span className="inline-flex items-center gap-1 bg-red-50 text-card-red rounded px-1.5 py-0.5 text-[10px] font-heading font-bold">
+                          <span className="inline-flex items-center gap-1 bg-red-50 text-card-red rounded px-1.5 py-0.5 text-micro font-heading font-bold">
                             🩹 {p.injury.daysRemaining}d
                           </span>
                         )}
@@ -192,7 +192,7 @@ export default function WatchlistPage() {
                       </span>
                       <button
                         onClick={() => removeFromWatchlist(p.id)}
-                        className="text-[10px] text-muted hover:text-card-red transition-colors font-heading uppercase"
+                        className="text-micro text-muted hover:text-card-red transition-colors font-heading uppercase"
                         title="Odebrat ze sledovaných"
                       >
                         ✕ odebrat
@@ -204,14 +204,14 @@ export default function WatchlistPage() {
                   <div className="flex flex-col sm:flex-row border-t border-gray-50">
                     {/* Attributes (rounded, position-specific) */}
                     <div className="flex-1 px-3 sm:px-4 py-2.5 border-b sm:border-b-0 sm:border-r border-gray-50">
-                      <div className="text-[10px] uppercase font-heading font-bold text-muted mb-1.5">Známé atributy</div>
+                      <div className="text-micro uppercase font-heading font-bold text-muted mb-1.5">Známé atributy</div>
                       <div className="grid grid-cols-4 gap-1.5">
                         {attrSpec.map((a) => {
                           const val = p.skills[a.key] ?? 0;
                           return (
                             <div key={a.key} className="text-center">
                               <div className={`text-sm font-heading font-bold tabular-nums ${attrColor(val)}`}>{val}</div>
-                              <div className="text-[9px] text-muted font-heading uppercase">{a.label}</div>
+                              <div className="text-micro text-muted font-heading uppercase">{a.label}</div>
                             </div>
                           );
                         })}
@@ -220,20 +220,20 @@ export default function WatchlistPage() {
 
                     {/* Recent stats */}
                     <div className="flex-1 px-3 sm:px-4 py-2.5">
-                      <div className="text-[10px] uppercase font-heading font-bold text-muted mb-1.5">Poslední zápasy</div>
+                      <div className="text-micro uppercase font-heading font-bold text-muted mb-1.5">Poslední zápasy</div>
                       {p.recentStats.matches > 0 ? (
                         <div className="grid grid-cols-4 gap-1.5">
                           <div className="text-center">
                             <div className="text-sm font-heading font-bold tabular-nums">{p.recentStats.matches}</div>
-                            <div className="text-[9px] text-muted font-heading uppercase">Záp</div>
+                            <div className="text-micro text-muted font-heading uppercase">Záp</div>
                           </div>
                           <div className="text-center">
                             <div className="text-sm font-heading font-bold tabular-nums text-pitch-500">{p.recentStats.goals}</div>
-                            <div className="text-[9px] text-muted font-heading uppercase">Gól</div>
+                            <div className="text-micro text-muted font-heading uppercase">Gól</div>
                           </div>
                           <div className="text-center">
                             <div className="text-sm font-heading font-bold tabular-nums text-gold-600">{p.recentStats.assists}</div>
-                            <div className="text-[9px] text-muted font-heading uppercase">Asist</div>
+                            <div className="text-micro text-muted font-heading uppercase">Asist</div>
                           </div>
                           <div className="text-center">
                             <div className={`text-sm font-heading font-bold tabular-nums ${
@@ -242,7 +242,7 @@ export default function WatchlistPage() {
                             }`}>
                               {p.recentStats.avgRating > 0 ? p.recentStats.avgRating.toFixed(1) : "—"}
                             </div>
-                            <div className="text-[9px] text-muted font-heading uppercase">Hod</div>
+                            <div className="text-micro text-muted font-heading uppercase">Hod</div>
                           </div>
                         </div>
                       ) : (
@@ -254,7 +254,7 @@ export default function WatchlistPage() {
                   {/* Transfer history */}
                   {p.transfers.length > 0 && (
                     <div className="border-t border-gray-50 px-3 sm:px-4 py-2.5 bg-gray-50/50">
-                      <div className="text-[10px] uppercase font-heading font-bold text-muted mb-1.5">Přestupy</div>
+                      <div className="text-micro uppercase font-heading font-bold text-muted mb-1.5">Přestupy</div>
                       <div className="flex flex-col gap-1">
                         {p.transfers.map((t, i) => (
                           <div key={i} className="flex items-center gap-2 text-xs">

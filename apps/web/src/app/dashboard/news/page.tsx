@@ -111,7 +111,7 @@ function ShareButton({ articleId }: { articleId: string }) {
   return (
     <button
       onClick={handleShare}
-      className="inline-flex items-center gap-1 text-[10px] text-muted hover:text-pitch-500 font-heading font-bold transition-colors"
+      className="inline-flex items-center gap-1 text-micro text-muted hover:text-pitch-500 font-heading font-bold transition-colors"
       title="Sdílet odkaz"
       type="button"
     >
@@ -364,7 +364,7 @@ export default function NewsPage() {
 
       {/* ═══ Hlavička listu ═══ */}
       <header className="np-dvojlinka pt-2">
-        <div className="flex items-end justify-between text-[10px] uppercase tracking-[0.2em] text-muted">
+        <div className="flex items-end justify-between text-micro uppercase tracking-[0.2em] text-muted">
           <span>{district}</span>
           <span>Ročník {rocnik}{vydani ? ` · číslo ${vydani}` : ""}</span>
         </div>
@@ -374,12 +374,12 @@ export default function NewsPage() {
         >
           {newspaperName}
         </h1>
-        <div className="flex items-center justify-between text-[11px] text-muted border-t border-ink/20 pt-1">
+        <div className="flex items-center justify-between text-micro text-muted border-t border-ink/20 pt-1">
           <span>{today}</span>
           <span className="italic hidden sm:inline">
             Nezávislé noviny {district === "Praha" ? "pražského" : "okresního"} fotbalu
           </span>
-          <span className="uppercase tracking-widest text-[10px]">Zdarma</span>
+          <span className="uppercase tracking-widest text-micro">Zdarma</span>
         </div>
       </header>
       <div className="np-dvojlinka mt-0.5 mb-6" />
@@ -415,7 +415,7 @@ export default function NewsPage() {
                 <aside className="lg:border-l lg:border-ink/15 lg:pl-6">
                   <div className="sticky top-4">
                     <div className="text-center border-y border-ink/25 py-1 mb-3">
-                      <span className="font-heading font-[900] text-[10px] uppercase tracking-[0.2em]">
+                      <span className="font-heading font-[900] text-micro uppercase tracking-[0.2em]">
                         Placená propagace
                       </span>
                     </div>
@@ -425,7 +425,7 @@ export default function NewsPage() {
                           <h4 className="np-titulek text-base mb-1.5">{p.headline}</h4>
                           <p className="np-text text-[13px] whitespace-pre-line">{p.body}</p>
                           <div className="flex items-center justify-between mt-2">
-                            <span className="text-[10px] text-muted italic">{timeAgo(p.date)}</span>
+                            <span className="text-micro text-muted italic">{timeAgo(p.date)}</span>
                             <ShareButton articleId={p.id} />
                           </div>
                         </div>
@@ -475,7 +475,7 @@ export default function NewsPage() {
                         loading="lazy"
                       />
                       {/* Popisek jen tady — jméno i počet diváků jsou už vypálené ve fotce */}
-                      <figcaption className="text-[11px] text-muted mt-1 leading-snug">
+                      <figcaption className="text-micro text-muted mt-1 leading-snug">
                         <EntityLink type="team" id={ph.teamId} className="font-heading font-bold text-ink">
                           {ph.teamName}
                         </EntityLink>
@@ -486,7 +486,7 @@ export default function NewsPage() {
                 </div>
               )}
               <div className="flex items-center justify-center gap-3 mt-4">
-                <span className="text-[11px] text-muted italic">{timeAgo(ur.date)}</span>
+                <span className="text-micro text-muted italic">{timeAgo(ur.date)}</span>
                 <ShareButton articleId={ur.id} />
               </div>
             </section>
@@ -591,7 +591,7 @@ export default function NewsPage() {
                     <h4 className="np-titulek text-[15px] mb-1">{t.headline}</h4>
                     <p className="np-text text-[13px] line-clamp-3">{t.body}</p>
                     <div className="flex items-center justify-between mt-1.5">
-                      <span className="text-[10px] text-muted italic">{timeAgo(t.date)}</span>
+                      <span className="text-micro text-muted italic">{timeAgo(t.date)}</span>
                       <ShareButton articleId={t.id} />
                     </div>
                   </div>
@@ -610,7 +610,7 @@ export default function NewsPage() {
                   <section key={article.id}>
                     <Kicker>⚽ {article.headline}</Kicker>
                     <RoundResults body={article.body} />
-                    <div className="text-[11px] text-muted italic mt-2">{timeAgo(article.date)}</div>
+                    <div className="text-micro text-muted italic mt-2">{timeAgo(article.date)}</div>
                   </section>
                 ))}
 
@@ -627,7 +627,7 @@ export default function NewsPage() {
                             </h4>
                             <p className="np-text text-[13px]">{article.body}</p>
                             <div className="flex items-center justify-between mt-1">
-                              <span className="text-[10px] text-muted italic">{timeAgo(article.date)}</span>
+                              <span className="text-micro text-muted italic">{timeAgo(article.date)}</span>
                               <ShareButton articleId={article.id} />
                             </div>
                           </div>
@@ -646,17 +646,17 @@ export default function NewsPage() {
             <div className="np-titulek text-center text-lg tracking-[0.15em]" style={{ fontVariant: "small-caps" }}>
               Placená inzerce
             </div>
-            <div className="text-[11px] text-muted text-center mb-4 italic">Inzerát: {adCost} Kč · Platnost 14 dní</div>
+            <div className="text-micro text-muted text-center mb-4 italic">Inzerát: {adCost} Kč · Platnost 14 dní</div>
 
             {classifieds.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 mb-4">
                 {classifieds.map((ad) => (
                   <div key={ad.id} className="py-3 border-b border-ink/15 relative group">
-                    <div className="text-[10px] uppercase tracking-wider text-muted font-heading font-bold mb-1">
+                    <div className="text-micro uppercase tracking-wider text-muted font-heading font-bold mb-1">
                       {ad.categoryIcon} {ad.categoryLabel}
                     </div>
                     <p className="np-text text-[13px] mb-1.5">{ad.message}</p>
-                    <div className="flex items-center justify-between text-[10px] text-muted italic">
+                    <div className="flex items-center justify-between text-micro text-muted italic">
                       <span>{ad.teamName}</span>
                       <span>{timeAgo(ad.createdAt)}</span>
                     </div>
@@ -705,8 +705,8 @@ export default function NewsPage() {
                   maxLength={200}
                 />
                 <div className="flex items-center justify-between mt-2">
-                  <span className="text-[10px] text-muted">{adMessage.length}/200 znaků</span>
-                  <span className="text-[10px] text-muted">Cena: <span className="font-heading font-bold">{adCost} Kč</span> z rozpočtu</span>
+                  <span className="text-micro text-muted">{adMessage.length}/200 znaků</span>
+                  <span className="text-micro text-muted">Cena: <span className="font-heading font-bold">{adCost} Kč</span> z rozpočtu</span>
                 </div>
 
                 {adError && <div className="text-xs text-card-red mt-2">{adError}</div>}
@@ -773,7 +773,7 @@ function Kicker({ children }: { children: React.ReactNode }) {
 function Podpis({ clanek, stred = false }: { clanek: Article; stred?: boolean }) {
   const autor = clanek.journalist;
   return (
-    <div className={`flex items-center gap-2 text-[11px] text-muted ${stred ? "justify-center" : ""}`}>
+    <div className={`flex items-center gap-2 text-micro text-muted ${stred ? "justify-center" : ""}`}>
       {autor ? (
         <Link
           href={`/dashboard/redakce/${autor.id}`}
@@ -844,7 +844,7 @@ function Rozhovor({
     <article id={`news-${clanek.id}`} className="py-6 first:pt-0">
       <h3 className="np-titulek text-2xl sm:text-[1.75rem] mb-2">{clanek.headline}</h3>
       <div className="flex items-center gap-2 mb-4 pb-2 border-b border-ink/10">
-        <span className="text-[11px] uppercase tracking-[0.15em] font-heading font-bold text-muted">
+        <span className="text-micro uppercase tracking-[0.15em] font-heading font-bold text-muted">
           Rozhovor
         </span>
         <div className="ml-auto"><Podpis clanek={clanek} /></div>
@@ -854,7 +854,7 @@ function Rozhovor({
         {maAvatar && (
           <figure className="np-portret">
             <FaceAvatar faceConfig={avatar} size={118} className="border border-ink/40 bg-white" />
-            <figcaption className="text-[11px] leading-tight mt-1 not-italic border-t border-ink/20 pt-1">
+            <figcaption className="text-micro leading-tight mt-1 not-italic border-t border-ink/20 pt-1">
               {jmenoId ? (
                 <EntityLink type="player" id={jmenoId} className="font-heading font-bold text-ink">{jmeno}</EntityLink>
               ) : jmenoHref ? (
@@ -879,7 +879,7 @@ function Rozhovor({
 
       {poznamka && (
         <div className="mt-3">
-          <span className="text-[11px] font-heading font-bold uppercase tracking-wider text-muted border-l-2 border-ink/30 pl-2">
+          <span className="text-micro font-heading font-bold uppercase tracking-wider text-muted border-l-2 border-ink/30 pl-2">
             🧱 {poznamkaHref ? (
               <Link href={poznamkaHref} className="entity-link">{poznamka}</Link>
             ) : poznamka}

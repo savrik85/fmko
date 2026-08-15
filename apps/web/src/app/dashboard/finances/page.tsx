@@ -188,7 +188,7 @@ export default function FinancesPage() {
       <div className="card p-4 sm:p-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <div className="text-[11px] text-muted uppercase tracking-wide">Aktuální rozpočet</div>
+            <div className="text-micro text-muted uppercase tracking-wide">Aktuální rozpočet</div>
             <div className={`font-heading font-[800] text-3xl sm:text-4xl tabular-nums ${data.budget < 0 ? "text-card-red" : "text-ink"}`}>
               {formatCZK(data.budget)}
             </div>
@@ -399,12 +399,12 @@ function FlowsTab({ data }: { data: BudgetData }) {
                       <span className="text-base">{SPONSOR_ICONS[s.type] ?? "💰"}</span>
                       <div>
                         <div className="text-sm font-heading font-bold">{s.name}</div>
-                        <div className="text-[11px] text-muted">Typ: {s.type}{s.winBonus > 0 ? ` • bonus za výhru ${formatCZK(s.winBonus)}` : ""}</div>
+                        <div className="text-micro text-muted">Typ: {s.type}{s.winBonus > 0 ? ` • bonus za výhru ${formatCZK(s.winBonus)}` : ""}</div>
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="text-sm tabular-nums text-pitch-500 font-heading font-bold">{formatCZK(s.weeklyAmount)}/týd</div>
-                      <div className="text-[10px] text-muted">{formatCZK(s.monthlyAmount)}/měs</div>
+                      <div className="text-micro text-muted">{formatCZK(s.monthlyAmount)}/měs</div>
                     </div>
                   </div>
                 ))}
@@ -444,11 +444,11 @@ function FlowsTab({ data }: { data: BudgetData }) {
             <SectionLabel>Mzdový rozpočet ({data.playerCount} hráčů)</SectionLabel>
             <div className="bg-gray-50 rounded-soft py-3 text-center my-3">
               <div className="font-heading font-bold text-2xl tabular-nums">{formatCZK(data.wageBill.weekly)}</div>
-              <div className="text-[11px] text-muted uppercase tracking-wide">týdně</div>
+              <div className="text-micro text-muted uppercase tracking-wide">týdně</div>
             </div>
             {data.wageBill.topPlayers.length > 0 && (
               <>
-                <div className="text-[10px] text-muted uppercase mb-2">Nejlépe placení</div>
+                <div className="text-micro text-muted uppercase mb-2">Nejlépe placení</div>
                 {data.wageBill.topPlayers.map((p) => (
                   <a key={p.id} href={`/dashboard/player/${p.id}`}
                     className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 transition-colors -mx-2 px-2 rounded">
@@ -554,13 +554,13 @@ function ForecastTab({ data }: { data: BudgetData }) {
             );
           })()}
           <span
-            className="absolute right-1 text-[10px] text-muted tabular-nums bg-white/80 px-1 pointer-events-none"
+            className="absolute right-1 text-micro text-muted tabular-nums bg-white/80 px-1 pointer-events-none"
             style={{ bottom: `${zeroRatio * 100}%`, transform: "translateY(50%)" }}
           >
             0
           </span>
         </div>
-        <div className="flex justify-between text-[10px] text-muted mt-1 px-2">
+        <div className="flex justify-between text-micro text-muted mt-1 px-2">
           <span>dnes</span>
           <span>4 týd</span>
           <span>8 týd</span>
@@ -672,7 +672,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
           </div>
           {/* Progress bar */}
           <div className="mt-4">
-            <div className="flex justify-between text-[11px] text-muted mb-1">
+            <div className="flex justify-between text-micro text-muted mb-1">
               <span>Splaceno {formatCZK(data.loan.totalToRepay - data.loan.remaining)}</span>
               <span>{Math.round(((data.loan.totalToRepay - data.loan.remaining) / data.loan.totalToRepay) * 100)} %</span>
             </div>
@@ -705,7 +705,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
                 onChange={(e) => setAmount(Number(e.target.value))}
                 className="w-full accent-pitch-500"
               />
-              <div className="flex justify-between text-[11px] text-muted mt-1">
+              <div className="flex justify-between text-micro text-muted mt-1">
                 <span>{formatCZK(info.rules.minPrincipal)}</span>
                 <span>{formatCZK(info.rules.maxPrincipal)}</span>
               </div>
@@ -746,7 +746,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
               <div key={h.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0">
                 <div>
                   <div className="text-sm font-heading font-bold">{formatCZK(h.principal)} → {formatCZK(h.totalToRepay)}</div>
-                  <div className="text-[11px] text-muted">
+                  <div className="text-micro text-muted">
                     Vzato: {h.takenGameDate.slice(0, 10)} • {h.status === "active" ? "Aktivní" : h.status === "paid" ? `Splaceno ${h.paidOffAt?.slice(0, 10) ?? ""}` : h.status}
                   </div>
                 </div>
@@ -796,7 +796,7 @@ function HistorySection({ transactions, total, filter, onFilter }: {
         <div className="overflow-x-auto -mx-4 sm:-mx-5">
           <table className="w-full text-sm min-w-[500px]">
             <thead>
-              <tr className="text-left text-label border-b border-gray-200 text-[11px] uppercase tracking-wide">
+              <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
                 <th className="pb-2 pl-4 sm:pl-5 pr-2 w-8"></th>
                 <th className="pb-2 pr-2">Popis</th>
                 <th className="pb-2 pr-2 text-right w-28">Částka</th>
@@ -810,7 +810,7 @@ function HistorySection({ transactions, total, filter, onFilter }: {
                   <td className="py-2 pl-4 sm:pl-5 pr-2 text-center text-sm">{TXN_ICONS[t.type] ?? "📋"}</td>
                   <td className="py-2 pr-2">
                     <div className="font-heading font-bold text-sm">{t.description}</div>
-                    <div className="text-[11px] text-muted">{TXN_LABELS[t.type] ?? t.type}</div>
+                    <div className="text-micro text-muted">{TXN_LABELS[t.type] ?? t.type}</div>
                   </td>
                   <td className={`py-2 pr-2 text-right tabular-nums font-heading font-bold text-sm ${t.amount >= 0 ? "text-pitch-500" : "text-card-red"}`}>
                     {t.amount >= 0 ? "+" : ""}{formatCZK(t.amount)}
@@ -818,7 +818,7 @@ function HistorySection({ transactions, total, filter, onFilter }: {
                   <td className={`py-2 pr-2 text-right tabular-nums text-sm ${t.balanceAfter < 0 ? "text-card-red" : "text-muted"}`}>
                     {formatCZK(t.balanceAfter)}
                   </td>
-                  <td className="py-2 pr-4 sm:pr-5 text-right text-[11px] text-muted">{timeAgo(t.createdAt)}</td>
+                  <td className="py-2 pr-4 sm:pr-5 text-right text-micro text-muted">{timeAgo(t.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -838,9 +838,9 @@ function HistorySection({ transactions, total, filter, onFilter }: {
 function MetricCard({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) {
   return (
     <div className="card p-4 text-center">
-      <div className="text-[11px] text-muted uppercase tracking-wide mb-1">{label}</div>
+      <div className="text-micro text-muted uppercase tracking-wide mb-1">{label}</div>
       <div className={`font-heading font-[800] text-2xl tabular-nums ${color ?? "text-ink"}`}>{value}</div>
-      {sub && <div className="text-[11px] text-muted mt-0.5">{sub}</div>}
+      {sub && <div className="text-micro text-muted mt-0.5">{sub}</div>}
     </div>
   );
 }
@@ -849,8 +849,8 @@ function StatBox({ label, value, sub, colorRed }: { label: string; value: string
   return (
     <div className="bg-gray-50 rounded-soft p-3 text-center">
       <div className={`font-heading font-bold text-base sm:text-lg tabular-nums ${colorRed ? "text-card-red" : "text-ink"}`}>{value}</div>
-      <div className="text-[10px] text-muted uppercase tracking-wide mt-0.5">{label}</div>
-      {sub && <div className="text-[10px] text-muted mt-0.5">{sub}</div>}
+      <div className="text-micro text-muted uppercase tracking-wide mt-0.5">{label}</div>
+      {sub && <div className="text-micro text-muted mt-0.5">{sub}</div>}
     </div>
   );
 }

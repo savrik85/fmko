@@ -72,7 +72,7 @@ export function PlayerHero({
               ) : (
                 <div className="w-[72px] h-[86px] bg-gray-100 rounded-soft" />
               )}
-              <span className="text-[9px] font-heading font-bold text-muted uppercase tracking-wider">Na výměnu</span>
+              <span className="text-micro font-heading font-bold text-muted uppercase tracking-wider">Na výměnu</span>
               <span className="font-heading font-bold text-xs group-hover:text-pitch-500 transition-colors text-center max-w-[80px] truncate">
                 {offeredPlayer.first_name} {offeredPlayer.last_name}
               </span>
@@ -96,17 +96,17 @@ export function PlayerHero({
       <div className="flex gap-3 text-xs">
         {posSkills.map(([label, value]) => (
           <div key={label} className="flex flex-col items-center tabular-nums">
-            <span className="text-[10px] text-muted font-heading uppercase">{label}</span>
+            <span className="text-micro text-muted font-heading uppercase">{label}</span>
             <span className={`font-heading font-bold ${skillColor(value)}`}>{blurPrefix}{value}</span>
           </div>
         ))}
       </div>
       {!player.isOwn && (
-        <div className="text-[10px] italic text-muted">Hodnoty ze scoutingu, zaokrouhleno na 5</div>
+        <div className="text-micro italic text-muted">Hodnoty ze scoutingu, zaokrouhleno na 5</div>
       )}
 
       <div className="mt-2 text-center">
-        <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider">
+        <div className="text-micro font-heading font-bold text-muted uppercase tracking-wider">
           {offerType === "loan"
             ? `Hostování${loanDuration ? ` na ${loanDuration} dní` : ""}`
             : offeredPlayer ? "Nabídka + výměna" : "Aktuální nabídka"}

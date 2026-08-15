@@ -240,7 +240,7 @@ export function SeasonNumbersWidget({ data }: WidgetProps) {
           </li>
         )}
       </ul>
-      <div className="text-[11px] text-muted text-center">
+      <div className="text-micro text-muted text-center">
         {cislo != null ? `${cislo}. sezóna` : "Poslední dohraná sezóna"}
       </div>
     </div>
@@ -322,7 +322,7 @@ export function CleanSheetsWidget({ data, height }: WidgetProps) {
           href: `/dashboard/player/${p.playerId}`,
         }))}
       />
-      <div className="text-[11px] text-muted text-center">Čistá konta ze všech odchytaných zápasů.</div>
+      <div className="text-micro text-muted text-center">Čistá konta ze všech odchytaných zápasů.</div>
     </div>
   );
 }
@@ -359,7 +359,7 @@ export function DisciplineWidget({ data, height }: WidgetProps) {
           </li>
         ))}
       </ul>
-      <div className="text-[11px] text-muted text-center">Řazeno podle závažnosti — červená váží jako tři žluté.</div>
+      <div className="text-micro text-muted text-center">Řazeno podle závažnosti — červená váží jako tři žluté.</div>
     </div>
   );
 }

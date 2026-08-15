@@ -111,7 +111,7 @@ export function MatchBreakdown({ teamId, matchId }: Props) {
                 <div className="flex items-baseline gap-1.5 mb-1">
                   <span className="text-base">{FACTOR_EMOJI[f.type]}</span>
                   <span className="font-heading font-bold text-sm">{f.label}</span>
-                  <span className="ml-auto text-[10px] uppercase tracking-wide opacity-75">{IMPACT_LABEL[f.impact]}</span>
+                  <span className="ml-auto text-micro uppercase tracking-wide opacity-75">{IMPACT_LABEL[f.impact]}</span>
                 </div>
                 <p className="text-[12px] leading-relaxed">{f.description}</p>
               </div>
@@ -121,7 +121,7 @@ export function MatchBreakdown({ teamId, matchId }: Props) {
 
         {/* Bar chart síly po liniích */}
         <div className="pt-2 border-t border-gray-100">
-          <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">
+          <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1.5">
             Síla po liniích (průměrný rating)
           </div>
           <div className="space-y-1.5">
@@ -130,7 +130,7 @@ export function MatchBreakdown({ teamId, matchId }: Props) {
               const opp = summary.opponentStrength[line];
               return (
                 <div key={line}>
-                  <div className="flex items-baseline justify-between text-[11px] mb-0.5">
+                  <div className="flex items-baseline justify-between text-micro mb-0.5">
                     <span className="font-heading font-bold">{LINE_LABELS[line]}</span>
                     <span className="flex items-baseline gap-2 tabular-nums">
                       <span className="text-pitch-600 font-bold">{own.toFixed(1)}</span>
@@ -154,7 +154,7 @@ export function MatchBreakdown({ teamId, matchId }: Props) {
 
         {/* Tactic info — skryj pokud taktika neznáma (stare zapasy) */}
         {summary.ownTactic && summary.opponentTactic && (
-          <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-[11px]">
+          <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-micro">
             <span className="text-muted">
               Taktika: <span className="font-heading font-bold text-ink">{summary.ownTactic}</span>
               <span className="text-muted-light mx-1">vs</span>

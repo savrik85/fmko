@@ -119,7 +119,7 @@ function invertHex(hex: string): string {
 function ShowcaseFrame({ label, sublabel, children, className = "", onZoom }: { label: string; sublabel?: string; children: React.ReactNode; className?: string; onZoom?: () => void }) {
   return (
     <div className={`flex flex-col items-center h-full ${className}`}>
-      <div className="text-[11px] font-heading font-bold text-muted uppercase tracking-[0.18em] mb-3">{label}</div>
+      <div className="text-micro font-heading font-bold text-muted uppercase tracking-[0.18em] mb-3">{label}</div>
       <div
         className="relative w-full rounded-2xl p-6 sm:p-8 flex items-center justify-center shadow-inner flex-1"
         style={{
@@ -206,7 +206,7 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
         <div style={{ marginTop: -6 }}>
           <SocksPreview color={socksColor} trim={secondary} size={SOCKS_SIZE} />
         </div>
-        <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mt-2">Čelní</div>
+        <div className="text-micro font-heading font-bold text-muted uppercase tracking-wider mt-2">Čelní</div>
       </div>
       {/* Zadní */}
       <div className="flex flex-col items-center">
@@ -217,7 +217,7 @@ function JerseyFrontBack({ primary, secondary, pattern, sponsor, number, shortsC
         <div style={{ marginTop: -6 }}>
           <SocksPreview color={socksColor} trim={secondary} size={SOCKS_SIZE} />
         </div>
-        <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mt-2">Zadní</div>
+        <div className="text-micro font-heading font-bold text-muted uppercase tracking-wider mt-2">Zadní</div>
       </div>
     </div>
   );
@@ -267,7 +267,7 @@ function PatternPicker({ value, onChange, options, primary, secondary, kind }: {
             ) : (
               <BadgePreview primary={primary} secondary={secondary} pattern={opt.key as BadgePattern} initials="X" size={44} />
             )}
-            <span className={`text-[11px] font-medium leading-tight text-center ${active ? "text-pitch-700" : "text-muted"}`}>
+            <span className={`text-micro font-medium leading-tight text-center ${active ? "text-pitch-700" : "text-muted"}`}>
               {opt.label}
             </span>
           </button>
@@ -526,7 +526,7 @@ export default function DresPage() {
               width={120}
               height={36}
             />
-            <span className={`text-[11px] font-medium leading-tight text-center ${active ? "text-pitch-700" : "text-muted"}`}>
+            <span className={`text-micro font-medium leading-tight text-center ${active ? "text-pitch-700" : "text-muted"}`}>
               {opt.label}
             </span>
           </button>

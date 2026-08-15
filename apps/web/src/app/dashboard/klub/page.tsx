@@ -181,7 +181,7 @@ export default function KlubPage() {
                   pattern={club.jersey.pattern || "solid"}
                   size={64}
                 />
-                <span className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider">Domácí</span>
+                <span className="text-micro font-heading font-bold text-muted uppercase tracking-wider">Domácí</span>
               </div>
               {club.jersey.awayPrimary && (
                 <div className="flex flex-col items-center gap-1">
@@ -191,7 +191,7 @@ export default function KlubPage() {
                     pattern={club.jersey.awayPattern || "solid"}
                     size={64}
                   />
-                  <span className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider">Hostující</span>
+                  <span className="text-micro font-heading font-bold text-muted uppercase tracking-wider">Hostující</span>
                 </div>
               )}
             </div>

@@ -53,7 +53,7 @@ export function PageHeader({ name, detail, color, badge, children }: PageHeaderP
       <div className={`font-heading font-[800] text-2xl tabular-nums leading-none ${txt}`}>
         {ctx.leaguePosition != null ? `${ctx.leaguePosition}.` : "—"}
       </div>
-      <div className={`${boxLabel} text-[10px] font-heading font-bold uppercase mt-1`}>Místo v lize</div>
+      <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-1`}>Místo v lize</div>
     </Link>
   );
 
@@ -86,7 +86,7 @@ export function HeaderStat({ value, label, light }: { value: string | number; la
   return (
     <div className={`${light ? "bg-black/5" : "bg-white/10"} rounded-xl px-4 py-2 text-center min-w-[60px]`}>
       <div className={`font-heading font-[800] text-xl tabular-nums leading-none ${light ? "text-gray-900" : "text-white"}`}>{value}</div>
-      <div className={`${light ? "text-gray-400" : "text-white/50"} text-[10px] font-heading font-bold uppercase mt-1`}>{label}</div>
+      <div className={`${light ? "text-gray-400" : "text-white/50"} text-micro font-heading font-bold uppercase mt-1`}>{label}</div>
     </div>
   );
 }

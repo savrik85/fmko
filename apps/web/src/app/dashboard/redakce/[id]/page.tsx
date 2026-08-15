@@ -62,7 +62,7 @@ const RUBRIKA: Record<string, string> = {
 function Osa({ popis, hodnota }: { popis: string; hodnota: number }) {
   return (
     <div>
-      <div className="flex items-baseline justify-between text-[11px] mb-0.5">
+      <div className="flex items-baseline justify-between text-micro mb-0.5">
         <span className="uppercase tracking-[0.12em] font-heading font-bold text-muted">{popis}</span>
         <span className="font-heading font-bold tabular-nums">{hodnota}</span>
       </div>
@@ -119,7 +119,7 @@ export default function ProfilRedaktora() {
             <FaceAvatar faceConfig={j.avatar} size={132} className="border border-ink/40 bg-white shrink-0" />
           )}
           <div className="min-w-0">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-muted">
+            <div className="text-micro uppercase tracking-[0.2em] text-muted">
               {STYL_LABEL[j.style] ?? "Redakce"}
             </div>
             <h1 className="np-titulek text-3xl sm:text-4xl mt-0.5">{jmeno}</h1>
@@ -179,7 +179,7 @@ export default function ProfilRedaktora() {
                 href={`/dashboard/news?article=${c.id}`}
                 className="block pb-2.5 mb-2.5 border-b border-ink/10 break-inside-avoid-column hover:underline underline-offset-2"
               >
-                <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
+                <div className="text-micro uppercase tracking-[0.12em] text-muted">
                   {RUBRIKA[c.type] ?? c.type}{c.game_week ? ` · ${c.game_week}. kolo` : ""}
                 </div>
                 <div className="np-titulek text-[15px]">{c.headline}</div>

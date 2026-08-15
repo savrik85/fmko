@@ -183,7 +183,7 @@ export default function HymnaPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-heading font-bold text-base text-ink truncate">{a.title}</h3>
-                      {a.isSelected && <span className="text-[10px] font-bold bg-pitch-500 text-white px-2 py-0.5 rounded-full">AKTUÁLNÍ</span>}
+                      {a.isSelected && <span className="text-micro font-bold bg-pitch-500 text-white px-2 py-0.5 rounded-full">AKTUÁLNÍ</span>}
                     </div>
                     <div className="text-xs text-muted mt-0.5">
                       {STYLE_PRESETS.find((p) => p.value === a.style)?.label || a.style}

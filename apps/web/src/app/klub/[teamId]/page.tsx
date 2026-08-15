@@ -146,7 +146,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
 
         <div className="relative max-w-[1200px] mx-auto px-5 sm:px-10 pt-16 sm:pt-24 pb-24 sm:pb-32">
           <div className="flex items-center justify-between mb-10 sm:mb-16">
-            <div className={`text-[11px] sm:text-xs font-heading font-bold uppercase tracking-[0.3em] ${heroSoft}`}>
+            <div className={`text-micro sm:text-xs font-heading font-bold uppercase tracking-[0.3em] ${heroSoft}`}>
               Profil klubu · Prales
             </div>
             <ShareButton url={shareUrl} title={club.name} textClass={heroText} bgClass={`${chipBg} border ${chipBorder}`} />
@@ -205,7 +205,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
                   const isLastOdd = chips.length % 2 === 1 && i === chips.length - 1;
                   return (
                     <div key={c.label} className={`${chipBg} border ${chipBorder} backdrop-blur-sm rounded-2xl px-5 py-4 ${isLastOdd ? "col-span-2 sm:col-span-1" : ""}`}>
-                      <div className={`text-[10px] font-heading font-bold uppercase tracking-widest ${heroSoft} mb-1`}>{c.label}</div>
+                      <div className={`text-micro font-heading font-bold uppercase tracking-widest ${heroSoft} mb-1`}>{c.label}</div>
                       <div className={`${heroText} font-heading font-[900] text-2xl tabular-nums`}>{c.value}</div>
                       <div className={`${heroMuted} text-xs truncate`}>{c.sub}</div>
                     </div>
@@ -238,7 +238,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
       <section className="relative py-16 sm:py-24 overflow-hidden">
         <div className="max-w-[1200px] mx-auto px-5 sm:px-10">
           <div className="text-center mb-12">
-            <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3">Klubové barvy</div>
+            <div className="text-micro font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3">Klubové barvy</div>
             <h2 className="font-heading font-[900] text-3xl sm:text-5xl">Dres & znak</h2>
           </div>
 
@@ -254,7 +254,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
             <div className="relative flex items-end justify-center gap-6 sm:gap-20 flex-wrap" style={{ filter: "drop-shadow(0 25px 40px rgba(0,0,0,0.5))" }}>
               {/* Home */}
               <div className="flex flex-col items-center">
-                <div className="text-[10px] font-heading font-bold uppercase tracking-[0.25em] text-white/40 mb-4">Domácí</div>
+                <div className="text-micro font-heading font-bold uppercase tracking-[0.25em] text-white/40 mb-4">Domácí</div>
                 <div className="relative">
                   <JerseyPreview primary={club.jersey.homePrimary} secondary={club.jersey.homeSecondary} pattern={club.jersey.pattern || "solid"} size={160} />
                   <div className="absolute" style={{ top: "28%", right: "30%" }}>
@@ -287,7 +287,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
               {/* Away */}
               {(club.jersey.awayPrimary || club.jersey.awaySecondary) && (
                 <div className="flex flex-col items-center">
-                  <div className="text-[10px] font-heading font-bold uppercase tracking-[0.25em] text-white/40 mb-4">Hostující</div>
+                  <div className="text-micro font-heading font-bold uppercase tracking-[0.25em] text-white/40 mb-4">Hostující</div>
                   <div className="relative">
                     <JerseyPreview primary={club.jersey.awayPrimary || club.jersey.homePrimary} secondary={club.jersey.awaySecondary || club.jersey.homeSecondary} pattern={club.jersey.awayPattern || "solid"} size={160} />
                     <div className="absolute" style={{ top: "28%", right: "30%" }}>
@@ -312,7 +312,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
         <div className="max-w-[1200px] mx-auto px-5 sm:px-10">
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-10 items-start">
             <div className="lg:col-span-2">
-              <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3">Domov klubu</div>
+              <div className="text-micro font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3">Domov klubu</div>
               <h2 className="font-heading font-[900] text-3xl sm:text-5xl leading-[1.05]">
                 {club.stadium.name || "Bez názvu"}
               </h2>
@@ -321,7 +321,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
               )}
               {club.stadium.specialita && (
                 <div className="mt-6 p-5 rounded-2xl border border-white/10 bg-white/5">
-                  <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40 mb-2">{"\u{1F37A}"} U nás ochutnáš</div>
+                  <div className="text-micro font-heading font-bold uppercase tracking-widest text-white/40 mb-2">{"\u{1F37A}"} U nás ochutnáš</div>
                   <div className="text-white/90 text-lg">{club.stadium.specialita}</div>
                 </div>
               )}
@@ -338,7 +338,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
                   const isLastOdd = cards.length % 2 === 1 && i === cards.length - 1;
                   return (
                     <div key={c.label} className={`p-5 sm:p-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-transparent ${isLastOdd ? "col-span-2" : ""}`}>
-                      <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40 mb-2">{c.label}</div>
+                      <div className="text-micro font-heading font-bold uppercase tracking-widest text-white/40 mb-2">{c.label}</div>
                       <div className={`${c.big ? "text-3xl sm:text-4xl font-[900] tabular-nums" : "text-lg sm:text-xl font-bold"} font-heading`}>{c.value}</div>
                     </div>
                   );
@@ -346,7 +346,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
               })()}
               {club.stadium.namingSponsor && (
                 <div className="col-span-2 p-5 rounded-2xl border border-yellow-500/30 bg-yellow-500/5">
-                  <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-yellow-500/80 mb-1">Naming rights</div>
+                  <div className="text-micro font-heading font-bold uppercase tracking-widest text-yellow-500/80 mb-1">Naming rights</div>
                   <div className="text-yellow-100 font-heading font-bold">{club.stadium.namingSponsor}</div>
                 </div>
               )}
@@ -363,7 +363,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
           }} />
           <div className="relative max-w-[1000px] mx-auto px-5 sm:px-10">
             <div className="text-center mb-8">
-              <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3">Klubová hymna</div>
+              <div className="text-micro font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3">Klubová hymna</div>
               <h2 className="font-heading font-[900] text-3xl sm:text-5xl">{club.anthem.title || "Hymna"}</h2>
             </div>
             <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/5 to-transparent backdrop-blur p-6 sm:p-10">
@@ -390,7 +390,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
           <div className="max-w-[1200px] mx-auto px-5 sm:px-10">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center">
               <div className="order-2 lg:order-1">
-                <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3">Maskot</div>
+                <div className="text-micro font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3">Maskot</div>
                 <h2 className="font-heading font-[900] text-4xl sm:text-6xl leading-[1.05]">
                   {club.mascot.name || "Náš maskot"}
                 </h2>
@@ -426,7 +426,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
                   </div>
                 </div>
                 <div className="flex-1 min-w-0 text-center sm:text-left">
-                  <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-2">Trenér</div>
+                  <div className="text-micro font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-2">Trenér</div>
                   <h2 className="font-heading font-[900] text-3xl sm:text-5xl">{manager.name}</h2>
                   <div className="text-white/60 text-base sm:text-lg mt-2">
                     {manager.age} let{manager.birthplace ? ` · ${manager.birthplace}` : ""}
@@ -441,7 +441,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
                         const isLastOdd = presentAttrs.length % 2 === 1 && i === presentAttrs.length - 1;
                         return (
                           <div key={key} className={`bg-white/5 rounded-xl px-4 py-3 border border-white/5 ${isLastOdd ? "col-span-2 sm:col-span-1" : ""}`}>
-                            <div className="text-[10px] font-heading font-bold uppercase tracking-widest text-white/40">{ATTR_LABELS[key]}</div>
+                            <div className="text-micro font-heading font-bold uppercase tracking-widest text-white/40">{ATTR_LABELS[key]}</div>
                             <div className="flex items-center gap-2 mt-1">
                               <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
                                 <div className="h-full rounded-full" style={{ width: `${Math.min(100, (value as number))}%`, background: `linear-gradient(90deg, ${primary}, ${secondary})` }} />
@@ -464,7 +464,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
       {(club.identity.foundingStory || club.identity.colorsMeaning) && (
         <section className="py-16 sm:py-24">
           <div className="max-w-[900px] mx-auto px-5 sm:px-10">
-            <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3 text-center">Příběh klubu</div>
+            <div className="text-micro font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3 text-center">Příběh klubu</div>
             <h2 className="font-heading font-[900] text-3xl sm:text-5xl mb-10 text-center">Jak to začalo</h2>
             {club.identity.foundingStory && (
               <p className="text-lg sm:text-xl leading-relaxed whitespace-pre-line text-white/85">
@@ -478,7 +478,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
                     <div className="w-8 h-8 rounded-full shadow-lg" style={{ background: primary }} />
                     <div className="w-8 h-8 rounded-full shadow-lg" style={{ background: secondary }} />
                   </div>
-                  <div className="text-[11px] font-heading font-bold uppercase tracking-[0.3em] text-white/40">Význam barev</div>
+                  <div className="text-micro font-heading font-bold uppercase tracking-[0.3em] text-white/40">Význam barev</div>
                 </div>
                 <p className="text-white/85 text-lg italic leading-relaxed">{club.identity.colorsMeaning}</p>
               </div>

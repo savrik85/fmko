@@ -168,7 +168,7 @@ export default function MaskotPage() {
                       <div className="relative bg-gray-50 aspect-square">
                         <img src={m.imageUrl} alt={m.name} className="w-full h-full object-contain" />
                         {m.isSelected && (
-                          <span className="absolute top-2 left-2 text-[10px] font-bold bg-pitch-500 text-white px-2 py-0.5 rounded-full">AKTUÁLNÍ</span>
+                          <span className="absolute top-2 left-2 text-micro font-bold bg-pitch-500 text-white px-2 py-0.5 rounded-full">AKTUÁLNÍ</span>
                         )}
                       </div>
                     )}
@@ -236,7 +236,7 @@ export default function MaskotPage() {
                         active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
                       }`}>
                       <span className="text-2xl leading-none">{a.emoji}</span>
-                      <span className={`text-[10px] font-medium text-center ${active ? "text-pitch-700 font-bold" : "text-muted"}`}>{a.label}</span>
+                      <span className={`text-micro font-medium text-center ${active ? "text-pitch-700 font-bold" : "text-muted"}`}>{a.label}</span>
                     </button>
                   );
                 })}
@@ -254,7 +254,7 @@ export default function MaskotPage() {
                         active ? "border-pitch-500 bg-pitch-50 text-pitch-700 font-bold" : "border-gray-200 hover:border-gray-300 bg-white text-ink"
                       }`}>
                       <div>{s.label}</div>
-                      <div className={`text-[11px] ${active ? "text-pitch-600" : "text-muted"} font-normal`}>{s.desc}</div>
+                      <div className={`text-micro ${active ? "text-pitch-600" : "text-muted"} font-normal`}>{s.desc}</div>
                     </button>
                   );
                 })}

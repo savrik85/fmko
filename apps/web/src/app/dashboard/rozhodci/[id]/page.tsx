@@ -186,8 +186,8 @@ function Stat({ label, value, className = "", hint }: { label: string; value: st
   return (
     <div className="text-center rounded-soft bg-ink/[0.03] py-2 px-1">
       <div className={`font-heading font-bold text-base tabular-nums ${className}`}>{value}</div>
-      <div className="text-[11px] text-muted leading-tight">{label}</div>
-      {hint && <div className="text-[11px] text-muted leading-tight">{hint}</div>}
+      <div className="text-micro text-muted leading-tight">{label}</div>
+      {hint && <div className="text-micro text-muted leading-tight">{hint}</div>}
     </div>
   );
 }

@@ -25,7 +25,7 @@ export function StandingsWidget({ data, height }: WidgetProps) {
       <div className="overflow-x-auto -mx-4 sm:-mx-5">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-label border-b border-gray-200 text-[11px] uppercase tracking-wide">
+            <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
               <th className="pb-1.5 pl-4 sm:pl-5 pr-1 w-6">#</th>
               <th className="pb-1.5 pr-2">Tým</th>
               <th className="pb-1.5 pr-1 text-center w-8">Z</th>
@@ -99,7 +99,7 @@ function RecordTile({ value, label, className = "" }: { value: number; label: st
   return (
     <div className="bg-gray-50 rounded-soft py-1.5">
       <div className={`font-heading font-bold text-lg tabular-nums ${className}`}>{value}</div>
-      <div className="text-[11px] text-muted uppercase">{label}</div>
+      <div className="text-micro text-muted uppercase">{label}</div>
     </div>
   );
 }
@@ -344,7 +344,7 @@ export function CupProgressWidget({ data }: WidgetProps) {
           <li key={m.matchId} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
             <span className="text-sm text-muted w-24 shrink-0 truncate">{m.roundName}</span>
             <span className="text-sm font-heading font-bold flex-1 truncate">{m.opponent?.name ?? "—"}</span>
-            <span className="text-[11px] text-muted uppercase">{m.isHome ? "D" : "V"}</span>
+            <span className="text-micro text-muted uppercase">{m.isHome ? "D" : "V"}</span>
             {m.myScore != null && m.oppScore != null ? (
               <span className={`text-sm font-heading font-bold tabular-nums px-1.5 py-0.5 rounded ${
                 m.won ? "bg-pitch-50 text-pitch-600" : "bg-red-50 text-card-red"

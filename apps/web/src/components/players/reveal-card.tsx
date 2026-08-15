@@ -112,7 +112,7 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
         }}>
         <div className="text-center">
           <div className={`w-8 h-8 rounded-full border-2 animate-spin mx-auto mb-2 ${isCeleb ? "border-gold-500/40 border-t-gold-400" : "border-pitch-500/40 border-t-pitch-400"}`} />
-          <span className={`text-[10px] font-heading uppercase tracking-wider ${isCeleb ? "text-gold-500/60" : "text-pitch-500/40"}`}>
+          <span className={`text-micro font-heading uppercase tracking-wider ${isCeleb ? "text-gold-500/60" : "text-pitch-500/40"}`}>
             {isCeleb ? "Hvězda přichází..." : "Odhaluji..."}
           </span>
         </div>
@@ -187,7 +187,7 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
       {/* Celebrity badge */}
       {isCeleb && (
         <div className="text-center pb-1">
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-micro font-heading font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
             ⭐ Celebrita
           </span>
         </div>

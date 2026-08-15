@@ -69,7 +69,7 @@ export function BarChart({
             key={`${cat}-lbl-${i}`}
             // Dlouhý název se ořízne třemi tečkami, ne natvrdo uprostřed slova;
             // celý ho ukáže tooltip i tooltip samotného sloupce.
-            className="flex-1 min-w-0 text-center text-[11px] text-muted truncate"
+            className="flex-1 min-w-0 text-center text-micro text-muted truncate"
             title={cat}
           >
             {i % step === 0 ? cat : ""}

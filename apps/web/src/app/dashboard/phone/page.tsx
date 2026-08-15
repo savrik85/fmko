@@ -100,12 +100,12 @@ export default function PhonePage() {
                     <span className={`text-[13px] truncate ${conv.unreadCount > 0 ? "font-bold text-ink" : "font-medium text-ink"}`}>
                       {conv.title}
                       {conv.aiThreadActive && conv.aiThreadState?.awaiting === "coach" && (
-                        <span className="ml-1.5 inline-block bg-pitch-100 text-pitch-700 text-[9px] font-medium px-1.5 py-0.5 rounded-full align-middle">
+                        <span className="ml-1.5 inline-block bg-pitch-100 text-pitch-700 text-micro font-medium px-1.5 py-0.5 rounded-full align-middle">
                           čeká na odpověď
                         </span>
                       )}
                       {conv.aiThreadActive && conv.aiThreadState?.awaiting === "player" && (
-                        <span className="ml-1.5 inline-block bg-amber-100 text-amber-700 text-[9px] font-medium px-1.5 py-0.5 rounded-full align-middle">
+                        <span className="ml-1.5 inline-block bg-amber-100 text-amber-700 text-micro font-medium px-1.5 py-0.5 rounded-full align-middle">
                           píše…
                         </span>
                       )}

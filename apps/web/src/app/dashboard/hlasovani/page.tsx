@@ -119,7 +119,7 @@ function VoteCard({ vote, teamId, token, onVoted }: { vote: Vote; teamId: string
             if (group.length === 0) return null;
             return (
               <div key={side} className="flex items-start gap-2 flex-wrap">
-                <span className={`text-[11px] font-heading font-bold uppercase tracking-wide w-7 shrink-0 mt-1 ${side === "ano" ? "text-pitch-500" : "text-card-red"}`}>
+                <span className={`text-micro font-heading font-bold uppercase tracking-wide w-7 shrink-0 mt-1 ${side === "ano" ? "text-pitch-500" : "text-card-red"}`}>
                   {side}
                 </span>
                 {group.map((voter) => (
@@ -135,8 +135,8 @@ function VoteCard({ vote, teamId, token, onVoted }: { vote: Vote; teamId: string
                         {(voter.manager_name ?? voter.team_name)[0]}
                       </div>
                     )}
-                    <span className="text-[9px] text-muted text-center leading-tight line-clamp-1 w-full">{voter.manager_name ?? "—"}</span>
-                    <span className="text-[9px] font-heading font-bold text-ink text-center leading-tight line-clamp-2 w-full">{voter.team_name}</span>
+                    <span className="text-micro text-muted text-center leading-tight line-clamp-1 w-full">{voter.manager_name ?? "—"}</span>
+                    <span className="text-micro font-heading font-bold text-ink text-center leading-tight line-clamp-2 w-full">{voter.team_name}</span>
                   </Link>
                 ))}
               </div>

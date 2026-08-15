@@ -44,7 +44,7 @@ export function TeamSide({
 
   return (
     <div className={`flex flex-col ${alignItems} gap-2 min-w-0`}>
-      <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider">{label}</div>
+      <div className="text-micro font-heading font-bold text-muted uppercase tracking-wider">{label}</div>
       {hasAvatar ? (
         <FaceAvatar faceConfig={manager!.avatar} size={88} />
       ) : (

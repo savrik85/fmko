@@ -78,14 +78,14 @@ export default function MorePage() {
                   >
                     {item.icon}
                   </div>
-                  <span className="text-[11px] font-medium text-ink text-center leading-tight">{item.label}</span>
+                  <span className="text-micro font-medium text-ink text-center leading-tight">{item.label}</span>
                   {badge > 0 && (
                     <span className="absolute top-1 right-1 bg-amber-500 text-white text-[9px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">
                       {badge}
                     </span>
                   )}
                   {item.href === "/dashboard/novinky" && notesUnseen && (
-                    <span className="absolute top-1 right-1 bg-pitch-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                    <span className="absolute top-1 right-1 bg-pitch-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">
                       Nové
                     </span>
                   )}

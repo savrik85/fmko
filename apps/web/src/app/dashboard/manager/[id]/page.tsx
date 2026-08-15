@@ -120,7 +120,7 @@ export default function ManagerDetailPage() {
             <button onClick={() => setEditing(true)}
               className={`${boxBg} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0`}>
               <div className="text-xl leading-none">{"✏️"}</div>
-              <div className={`${txtLabel} text-[10px] font-heading font-bold uppercase mt-1`}>Upravit</div>
+              <div className={`${txtLabel} text-micro font-heading font-bold uppercase mt-1`}>Upravit</div>
             </button>
           )}
 
@@ -140,7 +140,7 @@ export default function ManagerDetailPage() {
             }}
               className={`${boxBg} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0`}>
               <div className="text-xl leading-none">{"\u{1F4AC}"}</div>
-              <div className={`${txtLabel} text-[10px] font-heading font-bold uppercase mt-1`}>Napsat</div>
+              <div className={`${txtLabel} text-micro font-heading font-bold uppercase mt-1`}>Napsat</div>
             </button>
           )}
         </div>
@@ -319,7 +319,7 @@ function AchievementsSection({ data }: { data: AchievementsPayload }) {
         const earned = list.filter((a) => a.earnedAt);
         return (
           <div key={tier} className="mt-3">
-            <div className="text-[10px] text-muted uppercase tracking-wide font-heading font-bold mb-1.5">{tc.label} ({earned.length}/{list.length})</div>
+            <div className="text-micro text-muted uppercase tracking-wide font-heading font-bold mb-1.5">{tc.label} ({earned.length}/{list.length})</div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
               {list.map((a) => {
                 const isEarned = !!a.earnedAt;
@@ -333,7 +333,7 @@ function AchievementsSection({ data }: { data: AchievementsPayload }) {
                     <div className="text-xl shrink-0 leading-none">{a.icon}</div>
                     <div className="min-w-0 flex-1">
                       <div className="font-heading font-bold text-xs truncate">{a.title}</div>
-                      <div className="text-[10px] text-muted leading-snug line-clamp-2">{a.desc}</div>
+                      <div className="text-micro text-muted leading-snug line-clamp-2">{a.desc}</div>
                     </div>
                   </div>
                 );
@@ -368,7 +368,7 @@ function AttrRow({ label, value, description }: { label: string; value: number; 
       <div className="h-2 rounded-full bg-gray-100 overflow-hidden mb-1">
         <div className="h-full rounded-full transition-all" style={{ width: `${value}%`, backgroundColor: barColor }} />
       </div>
-      <div className="text-[11px] text-muted">{description}</div>
+      <div className="text-micro text-muted">{description}</div>
     </div>
   );
 }

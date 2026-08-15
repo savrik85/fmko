@@ -151,7 +151,7 @@ export default function NapovedaPage() {
               <div key={key} className={`border rounded-soft p-3 ${styleBg}`}>
                 <div className="flex items-baseline justify-between mb-1">
                   <span className="font-heading font-bold text-base tabular-nums">{f.label}</span>
-                  <span className="text-[10px] uppercase tracking-wide text-muted">
+                  <span className="text-micro uppercase tracking-wide text-muted">
                     {f.style === "offensive" ? "Útočná" : f.style === "defensive" ? "Defenzivní" : "Vyrovnaná"}
                   </span>
                 </div>

@@ -46,7 +46,7 @@ function initials(name: string) {
 
 function TeamCell({ s, align, bold }: { s: Side | null; align: "left" | "right"; bold: boolean }) {
   const badge = (
-    <span className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-heading font-bold text-white shrink-0" style={{ background: s?.color || "#9aa18c" }}>
+    <span className="w-6 h-6 rounded-full flex items-center justify-center text-micro font-heading font-bold text-white shrink-0" style={{ background: s?.color || "#9aa18c" }}>
       {s ? initials(s.name) : "?"}
     </span>
   );
@@ -76,7 +76,7 @@ function TieRow({ m, mine }: { m: BracketMatch; mine: boolean }) {
         <TeamCell s={m.home} align="right" bold={homeWon} />
         <div className="shrink-0 w-14 text-center">
           {sim
-            ? <div className="font-heading font-[800] text-sm tabular-nums leading-none">{m.homeScore}:{m.awayScore}{pens && <div className="text-[9px] text-muted font-normal mt-0.5">pen {m.homePens}:{m.awayPens}</div>}</div>
+            ? <div className="font-heading font-[800] text-sm tabular-nums leading-none">{m.homeScore}:{m.awayScore}{pens && <div className="text-micro text-muted font-normal mt-0.5">pen {m.homePens}:{m.awayPens}</div>}</div>
             : <span className="text-xs text-muted font-heading">vs</span>}
         </div>
         <TeamCell s={m.away} align="left" bold={awayWon} />
@@ -93,7 +93,7 @@ function TieRow({ m, mine }: { m: BracketMatch; mine: boolean }) {
           <span className={`font-heading font-[800] text-sm tabular-nums shrink-0 w-5 text-right ${awayWon ? "text-ink" : "text-ink/60"}`}>{sim ? m.awayScore : "–"}</span>
         </div>
         {(pens || m.upset) && (
-          <div className="text-[11px] text-muted pl-8">
+          <div className="text-micro text-muted pl-8">
             {pens && <span>na penalty {m.homePens}:{m.awayPens}</span>}
             {m.upset && <span className={pens ? "ml-2" : ""}>🔥 překvapení</span>}
           </div>
@@ -185,19 +185,19 @@ export default function PoharPage() {
               return (
                 <div key={i} className="px-3 py-2.5 border-b border-gray-50 last:border-b-0">
                   {/* mobil: kolo + doma/venku nad soupeřem */}
-                  <div className="sm:hidden text-[11px] font-heading uppercase text-muted mb-1">
+                  <div className="sm:hidden text-micro font-heading uppercase text-muted mb-1">
                     {m.roundName} · {m.isHome ? "doma" : "venku"}
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="hidden sm:block text-[11px] font-heading uppercase text-muted w-24 shrink-0">{m.roundName}</span>
+                    <span className="hidden sm:block text-micro font-heading uppercase text-muted w-24 shrink-0">{m.roundName}</span>
                     <span className="hidden sm:block text-xs text-muted shrink-0 w-12">{m.isHome ? "doma" : "venku"}</span>
                     <span className="flex-1 min-w-0 text-base sm:text-sm font-bold truncate">
                       {m.opponent?.teamId ? <Link href={`/dashboard/team/${m.opponent.teamId}`} className="hover:underline">{m.opponent.name}</Link> : m.opponent?.cupTeamId ? <Link href={`/dashboard/pohar/tym/${m.opponent.cupTeamId}`} className={`hover:underline ${m.opponent.isBig ? "italic" : ""}`}>{m.opponent.name}</Link> : <span className={m.opponent?.isBig ? "italic" : ""}>{m.opponent?.name}</span>}
                     </span>
                     {m.status === "simulated" ? (
                       <>
-                        <span className="font-heading font-[800] text-sm tabular-nums shrink-0">{m.myScore}:{m.oppScore}{pen && <span className="text-[10px] text-muted font-normal"> (p {m.myPens}:{m.oppPens})</span>}</span>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${m.won ? "bg-pitch-50 text-pitch-600" : "bg-card-red/10 text-card-red"}`}>{m.won ? "POSTUP" : "KONEC"}</span>
+                        <span className="font-heading font-[800] text-sm tabular-nums shrink-0">{m.myScore}:{m.oppScore}{pen && <span className="text-micro text-muted font-normal"> (p {m.myPens}:{m.oppPens})</span>}</span>
+                        <span className={`text-micro font-bold px-1.5 py-0.5 rounded shrink-0 ${m.won ? "bg-pitch-50 text-pitch-600" : "bg-card-red/10 text-card-red"}`}>{m.won ? "POSTUP" : "KONEC"}</span>
                       </>
                     ) : (
                       <span className="text-xs shrink-0">

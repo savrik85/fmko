@@ -54,15 +54,15 @@ export default function NovaSezonaPage() {
         {/* Co tě čeká */}
         <div className="grid grid-cols-3 gap-2 mb-4">
           <div className="bg-white/10 rounded-xl p-3 text-center">
-            <div className="text-[10px] uppercase tracking-wider text-white/60">První zápas</div>
+            <div className="text-micro uppercase tracking-wider text-white/60">První zápas</div>
             <div className="font-heading font-bold mt-0.5">{fmtDate(data.firstMatch)}</div>
           </div>
           <div className="bg-white/10 rounded-xl p-3 text-center">
-            <div className="text-[10px] uppercase tracking-wider text-white/60">Kádr</div>
+            <div className="text-micro uppercase tracking-wider text-white/60">Kádr</div>
             <div className="font-heading font-bold mt-0.5">{data.squadSize} hráčů</div>
           </div>
           <div className="bg-white/10 rounded-xl p-3 text-center">
-            <div className="text-[10px] uppercase tracking-wider text-white/60">Pohár</div>
+            <div className="text-micro uppercase tracking-wider text-white/60">Pohár</div>
             <div className="font-heading font-bold mt-0.5">{data.cup ? `${data.cup.rounds} kol` : "—"}</div>
           </div>
         </div>

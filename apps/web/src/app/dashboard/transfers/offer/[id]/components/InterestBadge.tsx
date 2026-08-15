@@ -23,7 +23,7 @@ export function InterestBadge({ interest, size = "md" }: { interest: PlayerInter
   const [open, setOpen] = useState(false);
   const style = LEVEL_STYLES[interest.level] ?? LEVEL_STYLES[0];
   const hasFactors = !!interest.factors?.length;
-  const sizeCls = size === "sm" ? "text-[10px] px-2 py-0.5" : "text-xs px-2.5 py-1";
+  const sizeCls = size === "sm" ? "text-micro px-2 py-0.5" : "text-xs px-2.5 py-1";
 
   return (
     <div className="relative inline-flex flex-col items-center">
@@ -39,7 +39,7 @@ export function InterestBadge({ interest, size = "md" }: { interest: PlayerInter
       </button>
       {open && hasFactors && (
         <div className="absolute top-full mt-1.5 z-20 bg-white rounded-xl shadow-xl border border-gray-100 p-3 min-w-[200px]">
-          <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mb-1.5">Proč?</div>
+          <div className="text-micro font-heading font-bold text-muted uppercase tracking-wider mb-1.5">Proč?</div>
           <div className="space-y-1">
             {interest.factors!.map((f, i) => (
               <div key={i} className="flex items-center justify-between gap-3 text-xs">
@@ -50,7 +50,7 @@ export function InterestBadge({ interest, size = "md" }: { interest: PlayerInter
               </div>
             ))}
           </div>
-          <div className="text-[9px] text-muted mt-2">+ zvyšuje chuť odejít, − drží hráče doma</div>
+          <div className="text-micro text-muted mt-2">+ zvyšuje chuť odejít, − drží hráče doma</div>
         </div>
       )}
     </div>

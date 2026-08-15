@@ -54,7 +54,7 @@ export function ScorerRow({
       <div className="min-w-0 flex-1">
         <div className="font-heading font-bold text-sm truncate">
           {p.name}
-          {p.isDeparted && <span className="ml-1.5 text-[11px] text-muted uppercase font-normal">(bývalý)</span>}
+          {p.isDeparted && <span className="ml-1.5 text-micro text-muted uppercase font-normal">(bývalý)</span>}
         </div>
       </div>
       {children}
@@ -94,7 +94,7 @@ export function FormChip({ result }: { result: string }) {
   const cls = result === "W" ? "bg-pitch-500" : result === "L" ? "bg-card-red" : "bg-gray-400";
   const text = result === "W" ? "V" : result === "L" ? "P" : "R";
   return (
-    <span className={`w-6 h-6 rounded-control text-[11px] flex items-center justify-center font-bold text-white ${cls}`}>
+    <span className={`w-6 h-6 rounded-control text-micro flex items-center justify-center font-bold text-white ${cls}`}>
       {text}
     </span>
   );

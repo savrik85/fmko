@@ -38,7 +38,7 @@ export function HeatmapGrid({
         {cells.map((c) => {
           const obsah = (
             <span
-              className="aspect-square rounded-[4px] flex items-center justify-center text-[11px] font-heading font-bold"
+              className="aspect-square rounded-[4px] flex items-center justify-center text-micro font-heading font-bold"
               style={{ background: c.color, color: c.textColor ?? "#FFFFFF" }}
               title={c.tooltip}
             >

@@ -293,7 +293,7 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
       {/* Historie momentů */}
       {detail.history.length > 0 && (
         <div className="mt-4">
-          <div className="text-[10px] text-muted uppercase tracking-wide font-heading font-bold mb-1.5">
+          <div className="text-micro text-muted uppercase tracking-wide font-heading font-bold mb-1.5">
             Společná historie s trenérem {otherManagerName}
           </div>
           <div className="space-y-1.5 max-h-64 overflow-y-auto">

@@ -96,7 +96,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
 
           {/* Name */}
           <div>
-            <label className="block text-[11px] text-muted font-heading uppercase tracking-wide mb-1">
+            <label className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">
               Jméno trenéra
             </label>
             <input
@@ -107,7 +107,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
               className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500"
               placeholder="Jméno Příjmení"
             />
-            <div className="mt-1 flex items-baseline justify-between text-[10px]">
+            <div className="mt-1 flex items-baseline justify-between text-micro">
               {!nameValid && trimmedName.length === 0 ? (
                 <span className="text-card-red">Jméno nesmí být prázdné</span>
               ) : (
@@ -122,7 +122,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
           {/* Age + Birthplace — side by side */}
           <div className="flex gap-3">
             <div className="w-24 shrink-0">
-              <label className="block text-[11px] text-muted font-heading uppercase tracking-wide mb-1">
+              <label className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">
                 Věk
               </label>
               <input
@@ -134,12 +134,12 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
                 className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500 tabular-nums"
                 placeholder="40"
               />
-              <div className="mt-1 text-[10px] text-muted-light">
+              <div className="mt-1 text-micro text-muted-light">
                 {ageValid ? "18–80" : <span className="text-card-red">18–80 let</span>}
               </div>
             </div>
             <div className="flex-1 min-w-0">
-              <label className="block text-[11px] text-muted font-heading uppercase tracking-wide mb-1">
+              <label className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">
                 Bydliště
               </label>
               <input
@@ -150,7 +150,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
                 className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500"
                 placeholder="Strakonice"
               />
-              <div className="mt-1 flex items-baseline justify-between text-[10px]">
+              <div className="mt-1 flex items-baseline justify-between text-micro">
                 <span className="text-muted-light">max 50 znaků</span>
                 <span className="tabular-nums text-muted-light">{birthplace.length}/50</span>
               </div>
@@ -159,7 +159,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
 
           {/* Bio */}
           <div>
-            <label className="block text-[11px] text-muted font-heading uppercase tracking-wide mb-1">
+            <label className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">
               O sobě (volitelné)
             </label>
             <textarea
@@ -170,7 +170,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
               className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500 resize-none"
               placeholder="Filozofie, motto, něco o sobě..."
             />
-            <div className="mt-1 flex items-baseline justify-between text-[10px]">
+            <div className="mt-1 flex items-baseline justify-between text-micro">
               <span className="text-muted-light">max {BIO_MAX} znaků</span>
               <span className={`tabular-nums ${bio.length > BIO_MAX - 30 ? "text-amber-600" : "text-muted-light"}`}>
                 {bio.length}/{BIO_MAX}

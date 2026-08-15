@@ -382,7 +382,7 @@ export default function MatchDetailPage() {
                   <div className={`font-heading font-bold text-lg tabular-nums ${gradeColor(match.referee_grade)}`}>
                     {formatGrade(match.referee_grade, 1)}
                   </div>
-                  <div className="text-[11px] text-muted leading-tight">{gradeWord(match.referee_grade)} výkon</div>
+                  <div className="text-micro text-muted leading-tight">{gradeWord(match.referee_grade)} výkon</div>
                 </div>
               )}
             </div>
@@ -473,7 +473,7 @@ export default function MatchDetailPage() {
                 <span className="font-heading font-[800] text-3xl sm:text-4xl tabular-nums text-pitch-700">
                   {mvp.rating.toFixed(1)}
                 </span>
-                <span className="text-[10px] uppercase tracking-wide font-heading font-bold text-muted">rating</span>
+                <span className="text-micro uppercase tracking-wide font-heading font-bold text-muted">rating</span>
               </div>
             </div>
           </div>
@@ -606,7 +606,7 @@ export default function MatchDetailPage() {
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="font-heading font-bold text-sm">{label}</span>
                   {(data.formation || data.tactic) && (
-                    <span className="text-[11px] text-muted">
+                    <span className="text-micro text-muted">
                       {data.formation && <span className="font-heading font-bold mr-2">{data.formation}</span>}
                       {data.tactic && <span>{TACTIC_LABEL[data.tactic] ?? data.tactic}</span>}
                     </span>
@@ -619,7 +619,7 @@ export default function MatchDetailPage() {
                   return (
                     <div key={g.pos ?? `flat-${gi}`}>
                       {cfg && (
-                        <div className={`px-3 py-1 ${cfg.bg} ${cfg.text} text-[11px] font-heading font-bold uppercase tracking-wider`}>
+                        <div className={`px-3 py-1 ${cfg.bg} ${cfg.text} text-micro font-heading font-bold uppercase tracking-wider`}>
                           {cfg.label}
                         </div>
                       )}
@@ -640,7 +640,7 @@ export default function MatchDetailPage() {
                         const rowBorderClass = cfg ? cfg.border : (posConfig[p.position] ?? posConfig.MID).border;
                         return (
                         <div key={p.id} className={`flex items-center gap-2 px-3 py-1.5 border-l-3 ${rowBorderClass} ${isMvp ? "bg-gold-50/50 ring-1 ring-inset ring-gold-300" : ""}`}>
-                          <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-[11px] font-heading font-bold flex items-center justify-center tabular-nums">{p.squadNumber ?? "?"}</span>
+                          <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-micro font-heading font-bold flex items-center justify-center tabular-nums">{p.squadNumber ?? "?"}</span>
                           <span className="flex-1 min-w-0 truncate text-base leading-6">
                             {isMvp && <span className="text-sm mr-1 align-middle" title="Hráč zápasu">🏆</span>}
                             {p.id ? (
@@ -662,7 +662,7 @@ export default function MatchDetailPage() {
                             {s.yellow > 0 && <span className="text-xs ml-1 align-middle" title="Žlutá karta">🟨</span>}
                             {s.red > 0 && <span className="text-xs ml-1 align-middle" title="Červená karta">🟥</span>}
                             {s.subOutMin != null && (
-                              <span className="text-[11px] ml-1.5 align-middle text-red-600 font-heading font-bold inline-flex items-center gap-0.5" title={`Vystřídán v ${s.subOutMin}. minutě`}>
+                              <span className="text-micro ml-1.5 align-middle text-red-600 font-heading font-bold inline-flex items-center gap-0.5" title={`Vystřídán v ${s.subOutMin}. minutě`}>
                                 <span>↑</span><span className="tabular-nums">{s.subOutMin}&apos;</span>
                               </span>
                             )}
@@ -679,12 +679,12 @@ export default function MatchDetailPage() {
                 })}
                 {data.subs.length > 0 && (
                   <div>
-                    <div className="px-3 py-1 bg-gray-100 text-[11px] text-muted font-heading font-bold uppercase tracking-wider">Lavička</div>
+                    <div className="px-3 py-1 bg-gray-100 text-micro text-muted font-heading font-bold uppercase tracking-wider">Lavička</div>
                     {data.subs.map((p) => {
                       const s = statsFor(p.name);
                       return (
                       <div key={p.id} className="flex items-center gap-2 px-3 py-1 border-l-3 border-l-gray-300 text-muted">
-                        <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-[11px] font-heading font-bold flex items-center justify-center tabular-nums">{p.squadNumber ?? "?"}</span>
+                        <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-micro font-heading font-bold flex items-center justify-center tabular-nums">{p.squadNumber ?? "?"}</span>
                         <span className="flex-1 min-w-0 truncate leading-6">
                           {p.id ? (
                             <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
@@ -692,7 +692,7 @@ export default function MatchDetailPage() {
                             <span className="font-heading font-bold">{p.name}</span>
                           )}
                           {s.subInMin != null && (
-                            <span className="text-[11px] ml-1.5 align-middle text-pitch-600 font-heading font-bold inline-flex items-center gap-0.5" title={`Nastoupil v ${s.subInMin}. minutě`}>
+                            <span className="text-micro ml-1.5 align-middle text-pitch-600 font-heading font-bold inline-flex items-center gap-0.5" title={`Nastoupil v ${s.subInMin}. minutě`}>
                               <span>↓</span><span className="tabular-nums">{s.subInMin}&apos;</span>
                             </span>
                           )}
@@ -798,7 +798,7 @@ export default function MatchDetailPage() {
                       <div className="text-xs text-muted italic">Všichni dorazili</div>
                     ) : list.map((a, i) => (
                       <div key={i} className="flex items-start gap-2">
-                        <span className="text-[10px] font-heading font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 shrink-0 mt-0.5">{a.reason}</span>
+                        <span className="text-micro font-heading font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 shrink-0 mt-0.5">{a.reason}</span>
                         <div className="flex-1 min-w-0">
                           <div className="font-heading font-bold text-sm">{a.name}</div>
                           <div className="text-xs text-muted italic">„{a.smsText}"</div>
@@ -823,7 +823,7 @@ export default function MatchDetailPage() {
             <div className="flex items-center gap-3">
               <span className="text-base sm:text-lg shrink-0">😞</span>
               <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-heading font-bold uppercase tracking-wide text-muted">Zklamání zápasu</div>
+                <div className="text-micro font-heading font-bold uppercase tracking-wide text-muted">Zklamání zápasu</div>
                 <Link href={`/dashboard/player/${flop.id}`} className="block font-heading font-bold text-base hover:text-pitch-500 transition-colors truncate">
                   {flop.player.name}
                 </Link>

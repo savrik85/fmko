@@ -91,7 +91,7 @@ export function OfferTimeline({
                   <span className="text-2xl">👤</span>
                 )}
               </div>
-              <span className="text-[10px] font-heading font-bold text-muted uppercase tracking-tight text-center mt-1 leading-tight line-clamp-2">
+              <span className="text-micro font-heading font-bold text-muted uppercase tracking-tight text-center mt-1 leading-tight line-clamp-2">
                 {mgr?.name ?? e.team_name}
               </span>
             </div>
@@ -110,7 +110,7 @@ export function OfferTimeline({
               {e.message && (
                 <div className="text-sm italic text-ink mt-1.5 whitespace-pre-wrap break-words">&ldquo;{e.message}&rdquo;</div>
               )}
-              <div className="text-[11px] text-muted mt-1.5">{formatRelative(e.created_at)}</div>
+              <div className="text-micro text-muted mt-1.5">{formatRelative(e.created_at)}</div>
             </Bubble>
           </li>
         );

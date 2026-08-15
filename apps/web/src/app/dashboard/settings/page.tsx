@@ -205,7 +205,7 @@ export default function SettingsPage() {
                 {["min. 8 znaků", "malé písmeno", "velké písmeno", "číslo"].map((req) => {
                   const ok = !pwErrors.includes(req);
                   return (
-                    <span key={req} className={`text-[10px] px-1.5 py-0.5 rounded-full font-heading font-bold ${ok ? "bg-pitch-50 text-pitch-600" : "bg-gray-100 text-muted"}`}>
+                    <span key={req} className={`text-micro px-1.5 py-0.5 rounded-full font-heading font-bold ${ok ? "bg-pitch-50 text-pitch-600" : "bg-gray-100 text-muted"}`}>
                       {ok ? "✓" : "○"} {req}
                     </span>
                   );
@@ -268,7 +268,7 @@ export default function SettingsPage() {
           <>
             <div className="mx-5 mb-3 border-t border-gray-100" />
             <div className="px-5 pb-2">
-              <p className="text-[11px] text-muted uppercase font-heading font-bold tracking-wide mb-3">Co tě má budit</p>
+              <p className="text-micro text-muted uppercase font-heading font-bold tracking-wide mb-3">Co tě má budit</p>
               <div className="space-y-1">
                 {PREF_LABELS.map(({ key, icon, label, desc }) => (
                   <div
@@ -278,7 +278,7 @@ export default function SettingsPage() {
                     <span className="text-base w-6 text-center flex-shrink-0">{icon}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium leading-tight">{label}</p>
-                      <p className="text-[11px] text-muted leading-tight mt-0.5">{desc}</p>
+                      <p className="text-micro text-muted leading-tight mt-0.5">{desc}</p>
                     </div>
                     <button
                       onClick={() => savePrefs({ ...prefs, [key]: !prefs[key] })}
@@ -292,7 +292,7 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="px-5 pt-1 pb-4">
-              <p className="text-[10px] text-muted/60 leading-snug">
+              <p className="text-micro text-muted/60 leading-snug">
                 Vypnutí notifikací odhlásí toto zařízení. Ostatní zařízení nejsou ovlivněna.
               </p>
             </div>

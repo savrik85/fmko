@@ -315,19 +315,19 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
           initials={oppInitials} size={22} />
         <div className="flex-1 min-w-0">
           <div className="text-sm font-heading font-bold truncate">{opp.name}</div>
-          <div className="text-[11px] text-muted font-heading">{m.isHome ? "doma" : "venku"}</div>
+          <div className="text-micro text-muted font-heading">{m.isHome ? "doma" : "venku"}</div>
         </div>
         {isPlayed ? (
           <>
             <div className="shrink-0 font-heading font-[800] text-base tabular-nums">{m.homeScore}:{m.awayScore}</div>
-            <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${result.color}`}>
+            <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-micro font-bold ${result.color}`}>
               {result.label}
             </span>
           </>
         ) : (
           <div className="shrink-0 text-right">
             <div className="text-xs font-heading font-bold tabular-nums">{formatDate(m.scheduledAt)}</div>
-            <div className="text-[11px] text-muted font-heading tabular-nums">{formatTime(m.scheduledAt)}</div>
+            <div className="text-micro text-muted font-heading tabular-nums">{formatTime(m.scheduledAt)}</div>
           </div>
         )}
       </div>

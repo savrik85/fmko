@@ -63,7 +63,7 @@ export function BottomNav() {
               }`}
             >
               <span className="text-xl">{item.icon}</span>
-              <span className="text-[10px] font-medium">{item.label}</span>
+              <span className="text-micro font-medium">{item.label}</span>
               {item.badge != null && item.badge > 0 && (
                 <span className="absolute top-0 right-2 bg-card-red text-white text-[9px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">
                   {item.badge > 99 ? "99+" : item.badge}

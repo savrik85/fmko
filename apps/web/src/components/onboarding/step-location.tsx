@@ -152,7 +152,7 @@ export function StepLocation({ onSelect }: Props) {
               </div>
               <div className="text-right">
                 <div className={`font-heading font-bold text-lg ${r.players > 0 ? "text-pitch-500" : "text-muted-light"}`}>{r.players}</div>
-                <div className="text-[10px] text-muted">hráčů</div>
+                <div className="text-micro text-muted">hráčů</div>
               </div>
             </button>
           ))}
@@ -179,7 +179,7 @@ export function StepLocation({ onSelect }: Props) {
                 <div className="flex items-center gap-2">
                   <div className="font-heading font-bold text-base">{d.name}</div>
                   {d.isFull && (
-                    <span className="text-[10px] font-heading font-bold px-2 py-0.5 rounded-control bg-card-red/10 text-card-red whitespace-nowrap">
+                    <span className="text-micro font-heading font-bold px-2 py-0.5 rounded-control bg-card-red/10 text-card-red whitespace-nowrap">
                       Liga plná
                     </span>
                   )}
@@ -190,7 +190,7 @@ export function StepLocation({ onSelect }: Props) {
               </div>
               <div className="text-right shrink-0 ml-2">
                 <div className={`font-heading font-bold text-lg ${d.players > 0 ? "text-pitch-500" : "text-muted-light"}`}>{d.players}</div>
-                <div className="text-[10px] text-muted">hráčů</div>
+                <div className="text-micro text-muted">hráčů</div>
               </div>
             </button>
           ))}
@@ -221,10 +221,10 @@ export function StepLocation({ onSelect }: Props) {
                     {playerCount > 0 && (
                       <div className="text-center">
                         <div className="font-heading font-bold text-pitch-500 text-sm">{playerCount}</div>
-                        <div className="text-[9px] text-muted">hráčů</div>
+                        <div className="text-micro text-muted">hráčů</div>
                       </div>
                     )}
-                    <span className={`text-[10px] font-heading font-bold px-2 py-1 rounded-control ${badge.bg} ${badge.text}`}>
+                    <span className={`text-micro font-heading font-bold px-2 py-1 rounded-control ${badge.bg} ${badge.text}`}>
                       {badge.label}
                     </span>
                   </div>

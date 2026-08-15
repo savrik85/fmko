@@ -30,7 +30,7 @@ export function NewsWidget({ data, height }: WidgetProps) {
             <div className="min-w-0 flex-1">
               <div className="text-sm font-heading font-bold truncate">{article.headline}</div>
             </div>
-            <span className="text-[11px] text-muted shrink-0">{timeAgo(article.date)}</span>
+            <span className="text-micro text-muted shrink-0">{timeAgo(article.date)}</span>
           </Link>
         ))}
       </div>
@@ -61,7 +61,7 @@ export function AchievementsWidget({ data, teamId, height }: WidgetProps) {
               <div className="text-xl shrink-0 leading-none">{a.icon}</div>
               <div className="min-w-0 flex-1">
                 <div className={`font-heading font-bold text-sm truncate ${tierColor}`}>{a.title}</div>
-                <div className="text-[11px] text-muted mt-0.5">{timeAgo(a.earnedAt)}</div>
+                <div className="text-micro text-muted mt-0.5">{timeAgo(a.earnedAt)}</div>
               </div>
             </Link>
           );
@@ -116,7 +116,7 @@ export function EventsWidget({ data, height }: WidgetProps) {
           <li key={e.id} className="flex items-center gap-2.5 py-1.5 border-b border-gray-50 last:border-b-0">
             <span className="text-lg shrink-0">{e.icon ?? "📅"}</span>
             <span className="text-sm font-heading font-bold flex-1 truncate">{e.title ?? e.headline ?? "Událost"}</span>
-            {e.gameWeek != null && <span className="text-[11px] text-muted shrink-0">{e.gameWeek}. týden</span>}
+            {e.gameWeek != null && <span className="text-micro text-muted shrink-0">{e.gameWeek}. týden</span>}
           </li>
         ))}
       </ul>

@@ -337,7 +337,7 @@ export default function StadiumPage() {
                 sponsors={sponsorNames}
                 customization={stadium.customization}
               />
-              <div className="sm:hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-[10px] px-2 py-1 rounded pointer-events-none">
+              <div className="sm:hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-micro px-2 py-1 rounded pointer-events-none">
                 dva prsty pro rotaci/zoom
               </div>
             </div>
@@ -449,7 +449,7 @@ export default function StadiumPage() {
                     Uložit
                   </button>
                 </div>
-                <div className="text-[11px] text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 22 znaků). Barvu plachty a nápisu nastavíš výše u „Kotel plachta" / „Kotel nápis".</div>
+                <div className="text-micro text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 22 znaků). Barvu plachty a nápisu nastavíš výše u „Kotel plachta" / „Kotel nápis".</div>
               </div>
             )}
 

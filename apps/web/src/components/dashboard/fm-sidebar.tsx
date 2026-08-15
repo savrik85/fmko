@@ -132,7 +132,7 @@ export function FMSidebar() {
             return (
               <div key={group}>
                 {expanded && GROUP_LABELS[group] && (
-                  <div className="px-3 pt-3 pb-1 text-[9px] font-heading font-bold text-white/20 uppercase tracking-widest">
+                  <div className="px-3 pt-3 pb-1 text-micro font-heading font-bold text-white/20 uppercase tracking-widest">
                     {GROUP_LABELS[group]}
                   </div>
                 )}
@@ -166,16 +166,16 @@ export function FMSidebar() {
                         <span className="text-[13px] font-medium whitespace-nowrap leading-none">
                           {item.label}
                           {item.href === "/dashboard/novinky" && notesUnseen && (
-                            <span className="ml-1.5 bg-pitch-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Nové</span>
+                            <span className="ml-1.5 bg-pitch-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">Nové</span>
                           )}
                           {item.href === "/dashboard/phone" && unreadMessages > 0 && (
-                            <span className="ml-1.5 bg-card-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unreadMessages}</span>
+                            <span className="ml-1.5 bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{unreadMessages}</span>
                           )}
                           {item.href === "/dashboard/transfers" && incomingOffers > 0 && (
-                            <span className="ml-1.5 bg-card-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{incomingOffers}</span>
+                            <span className="ml-1.5 bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{incomingOffers}</span>
                           )}
                           {item.href === "/dashboard/hlasovani" && unvotedCount > 0 && (
-                            <span className="ml-1.5 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unvotedCount}</span>
+                            <span className="ml-1.5 bg-amber-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{unvotedCount}</span>
                           )}
                         </span>
                       )}

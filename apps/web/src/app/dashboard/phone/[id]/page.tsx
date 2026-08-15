@@ -310,7 +310,7 @@ export default function ConversationPage() {
                             {hasFaceAvatar ? (
                               <FaceAvatar faceConfig={avatar} size={32} className="rounded-full" />
                             ) : (
-                              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-heading font-bold text-[10px]">
+                              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-heading font-bold text-micro">
                                 {initialsFallback}
                               </div>
                             )}
@@ -333,7 +333,7 @@ export default function ConversationPage() {
                               : "bg-white shadow-sm rounded-bl-tight"
                           }`}>
                             <p className="whitespace-pre-wrap">{emoticonize(msg.body)}</p>
-                            <div className={`text-[9px] mt-0.5 ${isOwn ? "text-white/50" : "text-muted"} text-right`}>
+                            <div className={`text-micro mt-0.5 ${isOwn ? "text-white/50" : "text-muted"} text-right`}>
                               {formatTime(msg.sentAt)}
                             </div>
                           </div>
@@ -377,7 +377,7 @@ export default function ConversationPage() {
                               Otevřít rozhovor
                             </Link>
                           )}
-                          <div className={`text-[9px] mt-0.5 ${isUser ? "text-white/50" : "text-muted"} text-right`}>
+                          <div className={`text-micro mt-0.5 ${isUser ? "text-white/50" : "text-muted"} text-right`}>
                             {formatTime(msg.sentAt)}
                           </div>
                         </div>
@@ -408,18 +408,18 @@ export default function ConversationPage() {
       {!isGroup && unrest && unrest.level >= 40 && !aiThreadActive && (
         <div className="bg-orange-50 border-t border-orange-200 px-3 py-2 shrink-0">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-heading font-bold text-orange-700">
+            <span className="text-micro font-heading font-bold text-orange-700">
               😠 Nespokojený{unrest.teamName ? ` (nabídka od ${unrest.teamName})` : ""} — {unrest.level}/100
             </span>
           </div>
           {unrest.mood && (
-            <div className="text-[11px] italic text-orange-800/80 mb-1">&bdquo;{unrest.mood}&ldquo;</div>
+            <div className="text-micro italic text-orange-800/80 mb-1">&bdquo;{unrest.mood}&ldquo;</div>
           )}
-          <div className="text-[10px] font-heading font-bold text-orange-700/70 uppercase tracking-wide mb-1.5">🤝 Nabídni mu něco konkrétního:</div>
+          <div className="text-micro font-heading font-bold text-orange-700/70 uppercase tracking-wide mb-1.5">🤝 Nabídni mu něco konkrétního:</div>
           {unrestEffects && (
-            <div className="mb-1.5 bg-white rounded-soft px-2.5 py-1.5 text-[11px] text-gray-700 space-y-0.5">
+            <div className="mb-1.5 bg-white rounded-soft px-2.5 py-1.5 text-micro text-gray-700 space-y-0.5">
               {unrestEffects.map((ef, i) => <div key={i}>• {ef}</div>)}
-              <button onClick={() => setUnrestEffects(null)} className="text-[10px] text-muted underline">skrýt</button>
+              <button onClick={() => setUnrestEffects(null)} className="text-micro text-muted underline">skrýt</button>
             </div>
           )}
           <div className="flex flex-wrap gap-1.5">
@@ -429,7 +429,7 @@ export default function ConversationPage() {
                 onClick={() => handleUnrestAction(a.id)}
                 disabled={unrestBusy}
                 title={a.description}
-                className="text-[11px] font-heading font-bold bg-white border border-orange-300 text-orange-800 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors disabled:opacity-50"
+                className="text-micro font-heading font-bold bg-white border border-orange-300 text-orange-800 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors disabled:opacity-50"
               >
                 {a.label}
               </button>
@@ -447,7 +447,7 @@ export default function ConversationPage() {
         }`}>
           <div className="font-medium">💬 Konverzace ukončena</div>
           {aiThreadState.resolution?.summary && (
-            <div className="mt-0.5 text-[11px] opacity-80">{aiThreadState.resolution.summary}</div>
+            <div className="mt-0.5 text-micro opacity-80">{aiThreadState.resolution.summary}</div>
           )}
         </div>
       )}

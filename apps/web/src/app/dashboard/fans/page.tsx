@@ -513,7 +513,7 @@ export default function FansPage() {
               }`}
             >
               <span className="text-base leading-none">{t.icon}</span>
-              <span className="text-[11px] sm:text-sm leading-none">{t.label}</span>
+              <span className="text-micro sm:text-sm leading-none">{t.label}</span>
             </button>
           );
         })}
@@ -633,8 +633,8 @@ export default function FansPage() {
           const eb = fanbase.expectedBreakdown;
           const tierAtt = eb.hardcore + eb.regular + eb.casual;
           return (
-            <div className="mt-3 pt-3 border-t border-gray-100 text-[11px] text-muted">
-              <div className="font-heading font-bold text-[10px] uppercase tracking-wide text-muted/70 mb-1">
+            <div className="mt-3 pt-3 border-t border-gray-100 text-micro text-muted">
+              <div className="font-heading font-bold text-micro uppercase tracking-wide text-muted/70 mb-1">
                 Z čeho se očekávaná návštěva skládá
               </div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mb-2">
@@ -652,7 +652,7 @@ export default function FansPage() {
           );
         })()}
 
-        <div className="mt-2 text-[11px] text-muted text-center">
+        <div className="mt-2 text-micro text-muted text-center">
           {fanbase.homeVillage.name} ({fanbase.homeVillage.population.toLocaleString("cs")} obyv.) · kapacita {fanbase.capacity}
         </div>
       </div>
@@ -731,7 +731,7 @@ export default function FansPage() {
             </div>
           </div>
         </div>
-        <div className="mt-2 text-[11px] text-muted">
+        <div className="mt-2 text-micro text-muted">
           Po každém domácím zápase streak roste. Po dosažení prahu se část nižšího tieru promotne výš.
         </div>
       </div>
@@ -772,18 +772,18 @@ export default function FansPage() {
               <div className="grid grid-cols-3 gap-3 text-center text-sm">
                 <div>
                   <div className="font-heading font-bold text-xl tabular-nums text-pitch-600">{homeTot}</div>
-                  <div className="text-[11px] text-muted">{fanbase.homeVillage.name}</div>
-                  <div className="text-[10px] text-muted">vlastní vesnice</div>
+                  <div className="text-micro text-muted">{fanbase.homeVillage.name}</div>
+                  <div className="text-micro text-muted">vlastní vesnice</div>
                 </div>
                 <div>
                   <div className="font-heading font-bold text-xl tabular-nums text-gold-600">{promoTot}</div>
-                  <div className="text-[11px] text-muted">z propagace</div>
-                  <div className="text-[10px] text-muted">články ve zpravodaji</div>
+                  <div className="text-micro text-muted">z propagace</div>
+                  <div className="text-micro text-muted">články ve zpravodaji</div>
                 </div>
                 <div>
                   <div className="font-heading font-bold text-xl tabular-nums text-card-red">{satTot}</div>
-                  <div className="text-[11px] text-muted">spádové obce</div>
-                  <div className="text-[10px] text-muted">{fanbase.satellites.length} obcí</div>
+                  <div className="text-micro text-muted">spádové obce</div>
+                  <div className="text-micro text-muted">{fanbase.satellites.length} obcí</div>
                 </div>
               </div>
             </>
@@ -809,20 +809,20 @@ export default function FansPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="font-heading font-bold truncate">{s.villageName}</div>
-                    <div className="text-[10px] text-muted">
+                    <div className="text-micro text-muted">
                       {s.distanceKm} km · {s.population.toLocaleString("cs")} obyv. · konverze ×{s.conversionMod}
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="font-heading font-bold text-pitch-600">★ {total}</div>
-                    <div className="text-[10px] text-muted">streak {s.consecutiveBuses}</div>
+                    <div className="text-micro text-muted">streak {s.consecutiveBuses}</div>
                   </div>
                 </div>
               );
             })}
           </div>
         )}
-        <div className="mt-2 text-[11px] text-muted">
+        <div className="mt-2 text-micro text-muted">
           Bližší obce mají vyšší konverzi (3 km = ×1.2, 10 km = ×0.5). Lidi z blízka snadněji udělají z busu pravidelný návyk.
         </div>
       </div>
@@ -847,7 +847,7 @@ export default function FansPage() {
             </div>
           </div>
         </div>
-        <div className="mt-2 text-[11px] text-muted">
+        <div className="mt-2 text-micro text-muted">
           {fanbase.promo.consecutive >= 3
             ? "Propagací jsi získal stálé fans. Pokračuj!"
             : fanbase.promo.consecutive > 0
@@ -887,7 +887,7 @@ export default function FansPage() {
                   <div className="text-gold-600">🟧 Pravid.: {first.regular} → {last.regular}</div>
                   <div className="text-gold-500">🟨 Občas.: {first.casual} → {last.casual}</div>
                 </div>
-                <div className="mt-1 text-[11px] text-muted">
+                <div className="mt-1 text-micro text-muted">
                   Total: {first.totalLoyal} → {last.totalLoyal} ({last.totalLoyal - first.totalLoyal >= 0 ? "+" : ""}{last.totalLoyal - first.totalLoyal} stálých)
                 </div>
               </>
@@ -1380,7 +1380,7 @@ export default function FansPage() {
                           }`}
                         >
                           <div className="text-xs font-heading font-bold leading-tight truncate">{tier.label}</div>
-                          <div className={`text-[10px] tabular-nums mt-0.5 ${isActive ? "text-white/80" : "text-muted"}`}>{tier.wholesalePrice} Kč/ks</div>
+                          <div className={`text-micro tabular-nums mt-0.5 ${isActive ? "text-white/80" : "text-muted"}`}>{tier.wholesalePrice} Kč/ks</div>
                         </button>
                       );
                     })}

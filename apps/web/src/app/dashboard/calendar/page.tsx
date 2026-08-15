@@ -156,12 +156,12 @@ export default function CalendarPage() {
                 {/* Mobile: icons only centered */}
                 <div className="sm:hidden flex flex-col items-center gap-0.5">
                   {match && (
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${matchBg}`} title={matchTitle}>
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-micro ${matchBg}`} title={matchTitle}>
                       {matchIcon}
                     </span>
                   )}
                   {hasTraining && (
-                    <span className="relative w-5 h-5 rounded-full flex items-center justify-center text-[11px] bg-amber-50 text-amber-700" title={trainingTitle}>
+                    <span className="relative w-5 h-5 rounded-full flex items-center justify-center text-micro bg-amber-50 text-amber-700" title={trainingTitle}>
                       🏋️
                       {intens && (
                         <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ring-1 ring-white ${intens.dot}`} />
@@ -172,7 +172,7 @@ export default function CalendarPage() {
                 {/* Desktop: full label pills */}
                 <div className="hidden sm:block">
                   {match && (
-                    <div className={`text-[11px] font-heading font-bold leading-tight px-1.5 py-1 rounded truncate ${matchBg}`} title={matchTitle}>
+                    <div className={`text-micro font-heading font-bold leading-tight px-1.5 py-1 rounded truncate ${matchBg}`} title={matchTitle}>
                       {matchIcon} {matchLabel}
                       {match.status && match.status !== "Naplánováno" && (
                         <span className="ml-1 font-[800]">{match.status}</span>
@@ -180,7 +180,7 @@ export default function CalendarPage() {
                     </div>
                   )}
                   {hasTraining && (
-                    <div className="text-[11px] font-heading leading-tight px-1.5 py-1 rounded bg-amber-50 text-amber-700 flex items-center gap-1" title={trainingTitle}>
+                    <div className="text-micro font-heading leading-tight px-1.5 py-1 rounded bg-amber-50 text-amber-700 flex items-center gap-1" title={trainingTitle}>
                       <span className="truncate">🏋️ {trainingLabel}</span>
                       {intens && (
                         <span className={`ml-auto shrink-0 font-bold ${intens.cls}`}>{intens.short}</span>

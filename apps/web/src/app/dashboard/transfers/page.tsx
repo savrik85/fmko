@@ -160,7 +160,7 @@ function HeroTransfer({ t }: { t: TransfersOverview["biggest"][number] }) {
   return (
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-pitch-50 via-white to-amber-50 border border-pitch-200 shadow-sm">
       {/* Akcentová stuha */}
-      <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-pitch-500 text-white text-[10px] font-heading font-bold uppercase tracking-wider shadow-sm">
+      <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-pitch-500 text-white text-micro font-heading font-bold uppercase tracking-wider shadow-sm">
         <span aria-hidden>🏆</span>
         <span>Top transfer</span>
       </div>
@@ -236,14 +236,14 @@ function MidTransferCard({ rank, t }: { rank: number; t: TransfersOverview["bigg
           <div className="flex items-start justify-between gap-2 mb-1">
             <Link href={`/dashboard/player/${t.playerId}`} className="font-heading font-bold text-sm sm:text-base text-ink hover:text-pitch-500 truncate flex-1 min-w-0">
               {t.playerName}
-              {t.isCrossLeague && <span className="ml-1 text-[10px]">🔄</span>}
+              {t.isCrossLeague && <span className="ml-1 text-micro">🔄</span>}
             </Link>
-            <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-heading font-bold bg-gradient-to-br ${medal}`}>#{rank}</span>
+            <span className={`shrink-0 px-1.5 py-0.5 rounded text-micro font-heading font-bold bg-gradient-to-br ${medal}`}>#{rank}</span>
           </div>
           {(t.position || t.age) && (
             <div className="flex items-center gap-1.5 mb-1.5">
               {t.position && <PositionBadge position={t.position} />}
-              {t.age ? <span className="text-[11px] text-muted tabular-nums">{t.age}&nbsp;let</span> : null}
+              {t.age ? <span className="text-micro text-muted tabular-nums">{t.age}&nbsp;let</span> : null}
             </div>
           )}
           <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted mb-2 min-w-0">
@@ -286,14 +286,14 @@ function SpeculationCard({ s }: { s: NonNullable<TransfersOverview["speculations
             <Link href={`/dashboard/player/${s.playerId}`} className="font-heading font-bold text-sm sm:text-base text-ink hover:text-pitch-500 truncate">
               {s.playerName}
             </Link>
-            <span className="shrink-0 text-[10px] text-muted tabular-nums">{s.position}·{s.overallRating}</span>
+            <span className="shrink-0 text-micro text-muted tabular-nums">{s.position}·{s.overallRating}</span>
           </div>
           <div className="text-xs sm:text-sm text-muted mb-1.5 min-w-0">
             <ClubLink teamId={s.currentTeamId} name={s.currentTeamName} badge={s.currentTeamBadge} href={`/dashboard/team/${s.currentTeamId}`} bold={false} badgeSize={20} />
           </div>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1 min-w-0">
-              <span aria-hidden className="text-[11px]">👁️</span>
+              <span aria-hidden className="text-micro">👁️</span>
               {(s.watcherBadges && s.watcherBadges.length > 0 ? s.watcherBadges : []).slice(0, 5).map((b, i) => (
                 <span key={i} className="relative inline-block" title="Zájem skrytého klubu">
                   <ClubBadge badge={b} size={20} />
@@ -301,13 +301,13 @@ function SpeculationCard({ s }: { s: NonNullable<TransfersOverview["speculations
                 </span>
               ))}
               {s.watcherBadges && s.watcherBadges.length > 5 && (
-                <span className="text-[10px] text-muted font-heading font-bold ml-1">+{s.watcherBadges.length - 5}</span>
+                <span className="text-micro text-muted font-heading font-bold ml-1">+{s.watcherBadges.length - 5}</span>
               )}
               {(!s.watcherBadges || s.watcherBadges.length === 0) && (
-                <span className="text-[11px] text-amber-800 font-heading font-bold">{s.watcherCount} {s.watcherCount === 1 ? "tým" : s.watcherCount < 5 ? "týmy" : "týmů"}</span>
+                <span className="text-micro text-amber-800 font-heading font-bold">{s.watcherCount} {s.watcherCount === 1 ? "tým" : s.watcherCount < 5 ? "týmy" : "týmů"}</span>
               )}
             </div>
-            <span className="text-[10px] text-muted shrink-0">{relativeTimeCs(s.latestWatchedAt)}</span>
+            <span className="text-micro text-muted shrink-0">{relativeTimeCs(s.latestWatchedAt)}</span>
           </div>
         </div>
       </div>
@@ -333,8 +333,8 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
             {t.playerName}
           </Link>
           {t.position && <PositionBadge position={t.position} />}
-          {t.age ? <span className="text-[11px] text-muted tabular-nums shrink-0">{t.age}&nbsp;l.</span> : null}
-          {t.isCrossLeague && <span className="text-[10px] shrink-0">🔄</span>}
+          {t.age ? <span className="text-micro text-muted tabular-nums shrink-0">{t.age}&nbsp;l.</span> : null}
+          {t.isCrossLeague && <span className="text-micro shrink-0">🔄</span>}
         </div>
         <div className="flex items-center gap-1 text-xs text-muted mt-0.5 min-w-0">
           {t.joinType === "free_agent" || !t.fromTeam ? (
@@ -350,7 +350,7 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
         <div className="font-heading font-bold text-sm text-pitch-500 tabular-nums whitespace-nowrap">
           {t.joinType === "free_agent" ? <span className="text-amber-700">★&nbsp;ZDARMA</span> : t.fee > 0 ? `${t.fee.toLocaleString("cs")}` : "—"}
         </div>
-        {t.joinType !== "free_agent" && t.fee > 0 && <div className="text-[9px] text-muted leading-none">Kč</div>}
+        {t.joinType !== "free_agent" && t.fee > 0 && <div className="text-micro text-muted leading-none">Kč</div>}
       </div>
     </div>
   );
@@ -803,23 +803,23 @@ export default function TransfersPage() {
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 <div className="card p-3 text-center">
                   <div className="font-heading font-[800] text-xl sm:text-2xl tabular-nums text-pitch-500">{overview.stats.totalTransfers}</div>
-                  <div className="text-[10px] text-muted uppercase tracking-wide">Přestupů</div>
+                  <div className="text-micro text-muted uppercase tracking-wide">Přestupů</div>
                 </div>
                 <div className="card p-3 text-center">
                   <div className="font-heading font-[800] text-base sm:text-xl tabular-nums">{overview.stats.totalValue.toLocaleString("cs")}</div>
-                  <div className="text-[10px] text-muted uppercase tracking-wide">Celkem Kč</div>
+                  <div className="text-micro text-muted uppercase tracking-wide">Celkem Kč</div>
                 </div>
                 <div className="card p-3 text-center">
                   <div className="font-heading font-[800] text-base sm:text-xl tabular-nums">{overview.stats.avgFee.toLocaleString("cs")}</div>
-                  <div className="text-[10px] text-muted uppercase tracking-wide">Průměr Kč</div>
+                  <div className="text-micro text-muted uppercase tracking-wide">Průměr Kč</div>
                 </div>
                 <div className="card p-3 text-center">
                   <div className="font-heading font-[800] text-xl tabular-nums text-amber-600">{overview.stats.freeAgentSignings}</div>
-                  <div className="text-[10px] text-muted uppercase tracking-wide">Volní</div>
+                  <div className="text-micro text-muted uppercase tracking-wide">Volní</div>
                 </div>
                 <div className="card p-3 text-center">
                   <div className="font-heading font-[800] text-xl tabular-nums">{overview.stats.crossLeagueCount}</div>
-                  <div className="text-[10px] text-muted uppercase tracking-wide">Cross 🔄</div>
+                  <div className="text-micro text-muted uppercase tracking-wide">Cross 🔄</div>
                 </div>
               </div>
 
@@ -828,7 +828,7 @@ export default function TransfersPage() {
                 <div>
                   <div className="flex items-center justify-between mb-2 px-1">
                     <SectionLabel>Další přestupy roku</SectionLabel>
-                    <span className="text-[10px] text-muted uppercase tracking-wide">#2 – #{Math.min(overview.biggest.length, 5)}</span>
+                    <span className="text-micro text-muted uppercase tracking-wide">#2 – #{Math.min(overview.biggest.length, 5)}</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {overview.biggest.slice(1, 5).map((t, i) => (
@@ -858,7 +858,7 @@ export default function TransfersPage() {
                 <div>
                   <div className="flex items-center justify-between mb-2 px-1">
                     <SectionLabel>Spekulace</SectionLabel>
-                    <span className="text-[10px] sm:text-xs text-muted">Ve hledáčku jiných týmů</span>
+                    <span className="text-micro sm:text-xs text-muted">Ve hledáčku jiných týmů</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {overview.speculations.slice(0, 4).map((s) => (
@@ -1367,7 +1367,7 @@ export default function TransfersPage() {
                           <span className="font-heading font-bold text-base">{fa.firstName} {fa.lastName}{nationalityFlag(fa.nationality) && <span className="ml-1" title={fa.nationality}>{nationalityFlag(fa.nationality)}</span>}</span>
                           <PositionBadge position={fa.position as "GK" | "DEF" | "MID" | "FWD"} />
                           {fa.isCelebrity && (
-                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200">
+                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-micro font-heading font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200">
                               ⭐ {fa.personality?.celebrityType === "fallen_star" ? "Padlá hvězda" : fa.personality?.celebrityType === "glass_man" ? "Skleněný muž" : "Celebrita"}
                             </span>
                           )}
@@ -1851,12 +1851,12 @@ export default function TransfersPage() {
                           const blur = (v: number) => Math.round(v / 5) * 5;
                           const pos = o.position;
                           const labels: [string, string][] = pos === "GK" ? [["Bra", "goalkeeping"]] : pos === "DEF" ? [["Obr", "defense"],["Hl", "heading"],["Rch", "speed"]] : pos === "MID" ? [["Pas", "passing"],["Tch", "technique"],["Kre", "creativity"]] : [["Stř", "shooting"],["Rch", "speed"],["Tch", "technique"]];
-                          return <div className="flex gap-2 mt-0.5">{labels.map(([lbl, key]) => <span key={key} className={`text-[10px] tabular-nums ${skillColor(blur(ps[key] ?? 0))}`}>~{lbl} {blur(ps[key] ?? 0)}</span>)}</div>;
+                          return <div className="flex gap-2 mt-0.5">{labels.map(([lbl, key]) => <span key={key} className={`text-micro tabular-nums ${skillColor(blur(ps[key] ?? 0))}`}>~{lbl} {blur(ps[key] ?? 0)}</span>)}</div>;
                         })()}
                         <div className="text-sm">
                           <span className="font-heading font-bold">{o.from_team_name}</span>
                           {!!o.is_virtual && (
-                            <span className="ml-1.5 inline-block align-middle text-[10px] font-heading font-bold uppercase tracking-wide bg-ink/80 text-white rounded px-1.5 py-0.5">Cizí klub</span>
+                            <span className="ml-1.5 inline-block align-middle text-micro font-heading font-bold uppercase tracking-wide bg-ink/80 text-white rounded px-1.5 py-0.5">Cizí klub</span>
                           )}
                           <span className="text-muted"> nabízí </span>
                           {o.offer_type === "loan" ? (
@@ -1875,7 +1875,7 @@ export default function TransfersPage() {
                         )}
                         {o.player_interest != null && (
                           <div className="mt-1">
-                            <span className={`inline-flex items-center gap-1 rounded-full text-[10px] font-heading font-bold px-2 py-0.5 ${
+                            <span className={`inline-flex items-center gap-1 rounded-full text-micro font-heading font-bold px-2 py-0.5 ${
                               o.player_interest >= 3 ? "bg-red-50 text-red-700 border border-red-200"
                               : o.player_interest === 2 ? "bg-orange-50 text-orange-700 border border-orange-200"
                               : o.player_interest === 1 ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
@@ -1975,7 +1975,7 @@ export default function TransfersPage() {
                           const blur = (v: number) => Math.round(v / 5) * 5;
                           const pos = o.position;
                           const labels: [string, string][] = pos === "GK" ? [["Bra", "goalkeeping"]] : pos === "DEF" ? [["Obr", "defense"],["Hl", "heading"],["Rch", "speed"]] : pos === "MID" ? [["Pas", "passing"],["Tch", "technique"],["Kre", "creativity"]] : [["Stř", "shooting"],["Rch", "speed"],["Tch", "technique"]];
-                          return <div className="flex gap-2 mt-0.5">{labels.map(([lbl, key]) => <span key={key} className={`text-[10px] tabular-nums ${skillColor(blur(ps[key] ?? 0))}`}>~{lbl} {blur(ps[key] ?? 0)}</span>)}</div>;
+                          return <div className="flex gap-2 mt-0.5">{labels.map(([lbl, key]) => <span key={key} className={`text-micro tabular-nums ${skillColor(blur(ps[key] ?? 0))}`}>~{lbl} {blur(ps[key] ?? 0)}</span>)}</div>;
                         })()}
                         <div className="text-sm text-muted">
                           {o.offer_type === "loan" ? (

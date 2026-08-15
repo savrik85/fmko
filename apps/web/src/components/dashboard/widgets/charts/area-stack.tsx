@@ -83,7 +83,7 @@ export function AreaStack({
       </svg>
 
       {labels && labels.length > 1 && (
-        <div className="flex justify-between text-[11px] text-muted" style={{ paddingLeft: `${(PAD_L / W) * 100}%` }}>
+        <div className="flex justify-between text-micro text-muted" style={{ paddingLeft: `${(PAD_L / W) * 100}%` }}>
           <span>{labels[0]}</span>
           <span>{labels[labels.length - 1]}</span>
         </div>

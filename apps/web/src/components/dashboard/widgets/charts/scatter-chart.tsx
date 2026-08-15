@@ -109,7 +109,7 @@ export function ScatterChart({
         ))}
       </svg>
 
-      <div className="flex justify-between text-[11px] text-muted px-1">
+      <div className="flex justify-between text-micro text-muted px-1">
         <span>{yLabel} ↑</span>
         <span>{xLabel} →</span>
       </div>

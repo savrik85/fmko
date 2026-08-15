@@ -79,7 +79,7 @@ function MiniTile({ value, label, color, className = "" }: { value: string; labe
   return (
     <div className="bg-gray-50 rounded-soft p-2.5 text-center">
       <div className={`font-heading font-bold text-xl tabular-nums ${className}`} style={color ? { color } : undefined}>{value}</div>
-      <div className="text-[11px] text-muted uppercase">{label}</div>
+      <div className="text-micro text-muted uppercase">{label}</div>
     </div>
   );
 }
@@ -253,7 +253,7 @@ export function SquadValueWidget({ data, height }: WidgetProps) {
           href: `/dashboard/player/${p.id}`,
         }))}
       />
-      <div className="text-[11px] text-muted text-center">Odhad podle ratingu a věku, ne nabídková cena.</div>
+      <div className="text-micro text-muted text-center">Odhad podle ratingu a věku, ne nabídková cena.</div>
     </div>
   );
 }

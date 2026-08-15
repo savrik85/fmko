@@ -205,7 +205,7 @@ export function TrainingAttendanceWidget({ data, height }: WidgetProps) {
           href: `/dashboard/player/${p.playerId}`,
         }))}
       />
-      <div className="text-[11px] text-muted text-center">Nejhorší docházka v kádru.</div>
+      <div className="text-micro text-muted text-center">Nejhorší docházka v kádru.</div>
     </div>
   );
 }
@@ -230,7 +230,7 @@ export function BestAttendanceWidget({ data, height }: WidgetProps) {
           href: `/dashboard/player/${p.playerId}`,
         }))}
       />
-      <div className="text-[11px] text-muted text-center">Kdo na trénink chodí nejpoctivěji.</div>
+      <div className="text-micro text-muted text-center">Kdo na trénink chodí nejpoctivěji.</div>
     </div>
   );
 }
@@ -269,7 +269,7 @@ export function MostAbsentWidget({ data, height }: WidgetProps) {
           href: `/dashboard/player/${p.playerId}`,
         }))}
       />
-      <div className="text-[11px] text-muted text-center">
+      <div className="text-micro text-muted text-center">
         Ze {info?.matchesAvailable ?? 0} zápasů sezóny.
       </div>
     </div>
@@ -381,7 +381,7 @@ export function TrophiesWidget({ data, height }: WidgetProps) {
           <div className="text-2xl leading-none">{t.icon ?? "🏆"}</div>
           <div className="font-heading font-bold text-sm mt-1 truncate">{t.title ?? t.name ?? t.label ?? "Trofej"}</div>
           {(t.season ?? t.seasonNumber) != null && (
-            <div className="text-[11px] text-muted">{t.season ?? t.seasonNumber}. sezóna</div>
+            <div className="text-micro text-muted">{t.season ?? t.seasonNumber}. sezóna</div>
           )}
         </div>
       ))}

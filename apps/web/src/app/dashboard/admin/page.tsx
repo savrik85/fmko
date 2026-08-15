@@ -571,12 +571,12 @@ function UserManagement() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 text-left">
-              <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Email</th>
-              <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Tým</th>
-              <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Okres</th>
-              <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Admin</th>
-              <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Aktivita</th>
-              <th className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">Heslo</th>
+              <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Email</th>
+              <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Tým</th>
+              <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Okres</th>
+              <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Admin</th>
+              <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Aktivita</th>
+              <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Heslo</th>
             </tr>
           </thead>
           <tbody>
@@ -737,7 +737,7 @@ function SeedDataSection() {
             <div className="flex gap-2 mb-3 flex-wrap items-end">
               {colKeys.filter((k) => k !== "district" || !district).map((k) => (
                 <div key={k} className="flex-1 min-w-[120px]">
-                  <label className="text-[10px] text-muted uppercase">{cols[k]}</label>
+                  <label className="text-micro text-muted uppercase">{cols[k]}</label>
                   <input type="text" value={newRow[k] ?? ""} onChange={(e) => setNewRow({ ...newRow, [k]: e.target.value })}
                     className="w-full border border-gray-200 rounded px-2 py-1 text-sm" placeholder={cols[k]} />
                 </div>
@@ -751,7 +751,7 @@ function SeedDataSection() {
               <thead>
                 <tr className="border-b border-gray-200 text-left">
                   {colKeys.map((k) => (
-                    <th key={k} className="py-2 px-3 text-[10px] font-heading font-bold text-muted uppercase">{cols[k]}</th>
+                    <th key={k} className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">{cols[k]}</th>
                   ))}
                   {activeInfo?.editable && <th className="py-2 px-3 w-10" />}
                 </tr>

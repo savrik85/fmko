@@ -679,7 +679,7 @@ export default function ObecPage() {
                     <div className="text-right max-w-[180px]">
                       <span className="text-xs text-card-red">Odmítl pozvání</span>
                       {reason && (
-                        <div className="text-[10px] text-gray-500 italic mt-0.5 leading-tight">„{reason}"</div>
+                        <div className="text-micro text-gray-500 italic mt-0.5 leading-tight">„{reason}"</div>
                       )}
                     </div>
                   );
@@ -895,7 +895,7 @@ export default function ObecPage() {
                   {officials.map((o) => (
                     <th key={o.id} className="py-2 px-2 text-right whitespace-nowrap">
                       {ROLE_LABEL[o.role]}<br/>
-                      <span className="text-[10px] font-normal normal-case text-gray-400">
+                      <span className="text-micro font-normal normal-case text-gray-400">
                         {o.firstName.charAt(0)}. {o.lastName}
                       </span>
                     </th>

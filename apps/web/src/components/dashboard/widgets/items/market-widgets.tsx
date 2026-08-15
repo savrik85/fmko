@@ -13,7 +13,7 @@ const POSITION_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "Z
 
 function PosTag({ position }: { position: string }) {
   return (
-    <span className="text-[11px] font-heading font-bold uppercase text-muted w-8 shrink-0">
+    <span className="text-micro font-heading font-bold uppercase text-muted w-8 shrink-0">
       {POSITION_LABELS[position] ?? position}
     </span>
   );
@@ -46,7 +46,7 @@ export function FreeAgentsWidget({ data, height }: WidgetProps) {
             <PosTag position={a.position} />
             <div className="min-w-0 flex-1">
               <div className="font-heading font-bold text-sm truncate">{a.firstName} {a.lastName}</div>
-              <div className="text-[11px] text-muted truncate">
+              <div className="text-micro text-muted truncate">
                 {a.age} let{a.villageName ? ` · ${a.villageName}` : ""}
                 {a.distanceKm != null ? ` · ${Math.round(a.distanceKm)} km` : ""}
               </div>
@@ -82,7 +82,7 @@ export function MarketListingsWidget({ data, height }: WidgetProps) {
               <a href={`/dashboard/player/${l.playerId}`} className="font-heading font-bold text-sm truncate block hover:text-pitch-500 hover:underline transition-colors">
                 {l.playerName}
               </a>
-              <div className="text-[11px] text-muted truncate">{l.playerAge} let · {l.teamName}</div>
+              <div className="text-micro text-muted truncate">{l.playerAge} let · {l.teamName}</div>
             </div>
             <span className="text-sm font-heading font-bold tabular-nums shrink-0">{compactCZK(l.askingPrice)}</span>
             <Rating value={l.overallRating} />
@@ -117,7 +117,7 @@ export function LeagueTransfersWidget({ data, teamId, height }: WidgetProps) {
                   {t.fee > 0 ? compactCZK(t.fee) : "zdarma"}
                 </span>
               </div>
-              <div className="text-[11px] text-muted truncate">
+              <div className="text-micro text-muted truncate">
                 {t.fromTeam ?? "volný hráč"} <span className="text-muted-light">→</span>{" "}
                 {t.toTeamId ? <Link href={`/dashboard/team/${t.toTeamId}`} className="hover:text-pitch-500 transition-colors">{t.toTeam}</Link> : t.toTeam}
               </div>

@@ -734,7 +734,7 @@ export default function MatchReplayPage() {
                 <div className="px-3 py-2 font-heading font-bold text-sm flex items-center justify-between gap-2 flex-wrap" style={{ backgroundColor: `color-mix(in srgb, ${color} 8%, white)` }}>
                   <span>{name}</span>
                   {(data.formation || data.tactic) && (
-                    <span className="text-[11px] font-normal text-muted">
+                    <span className="text-micro font-normal text-muted">
                       {data.formation && <span className="font-bold mr-2">{data.formation}</span>}
                       {data.tactic && <span>{TACTIC_LABEL[data.tactic] ?? data.tactic}</span>}
                     </span>
@@ -744,7 +744,7 @@ export default function MatchReplayPage() {
                   const cfg = posStyle[g.pos] ?? posStyle.MID;
                   return (
                     <div key={g.pos}>
-                      <div className={`px-3 py-0.5 ${cfg.bg} ${cfg.text} text-[10px] font-heading font-bold uppercase tracking-wider`}>{cfg.label}</div>
+                      <div className={`px-3 py-0.5 ${cfg.bg} ${cfg.text} text-micro font-heading font-bold uppercase tracking-wider`}>{cfg.label}</div>
                       {g.players.map((p) => (
                         <div key={p.id || p.name} className={`flex items-center gap-2 px-3 py-1.5 border-l-3 ${cfg.border}`}>
                           <PositionBadge position={p.position} />
@@ -755,7 +755,7 @@ export default function MatchReplayPage() {
                             )}
                           </span>
                           {p.position !== p.naturalPosition && (
-                            <span className="text-amber-500 text-[10px]">({p.naturalPosition})</span>
+                            <span className="text-amber-500 text-micro">({p.naturalPosition})</span>
                           )}
                           {p.rating > 0 && <span className="text-sm font-heading tabular-nums text-muted">{p.rating}</span>}
                         </div>
@@ -765,7 +765,7 @@ export default function MatchReplayPage() {
                 })}
                 {data.subs.length > 0 && (
                   <>
-                    <div className="px-3 py-0.5 bg-gray-50 text-[10px] text-muted font-heading font-bold uppercase tracking-wider">Lavička</div>
+                    <div className="px-3 py-0.5 bg-gray-50 text-micro text-muted font-heading font-bold uppercase tracking-wider">Lavička</div>
                     {data.subs.map((p, i) => (
                       <div key={`s${i}`} className="flex items-center gap-2 px-3 py-1 border-l-3 border-l-gray-300 text-muted">
                         <PositionBadge position={p.position} />

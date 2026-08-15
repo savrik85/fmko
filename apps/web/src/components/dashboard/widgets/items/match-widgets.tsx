@@ -146,7 +146,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
       <div className="overflow-hidden rounded-xl border border-gray-100">
         <div className="bg-gradient-to-b from-[#1e2d1e] to-[#2a3f2a] px-4 py-5 text-white">
           <div className="text-center mb-4 flex items-center justify-center gap-2">
-            <span className="text-[11px] font-heading font-bold uppercase tracking-widest text-white/40">
+            <span className="text-micro font-heading font-bold uppercase tracking-widest text-white/40">
               {nextMatch.isCup ? (nextMatch.roundName ?? "🏆 Pohár") : nextMatch.round != null ? `${nextMatch.round}. kolo` : "Přátelák"}
             </span>
             {nextMatch.scheduledAt && gameDate && (() => {
@@ -155,7 +155,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
               return (
                 <>
                   <span className="text-white/20">•</span>
-                  <span className={`text-[11px] font-heading font-bold uppercase tracking-widest ${daysUntil === 0 ? "text-pitch-400" : "text-white/60"}`}>{label}</span>
+                  <span className={`text-micro font-heading font-bold uppercase tracking-widest ${daysUntil === 0 ? "text-pitch-400" : "text-white/60"}`}>{label}</span>
                 </>
               );
             })()}
@@ -183,9 +183,9 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
           </div>
           {nextMatch.round != null && (homeTeam.pos || awayTeam.pos) && (
             <div className="flex items-center gap-3 mt-2">
-              <div className="flex-1 text-center text-[11px] text-white/40 tabular-nums">{homeTeam.pos ? `${homeTeam.pos.position}. místo` : ""}</div>
+              <div className="flex-1 text-center text-micro text-white/40 tabular-nums">{homeTeam.pos ? `${homeTeam.pos.position}. místo` : ""}</div>
               <div className="shrink-0 w-10" />
-              <div className="flex-1 text-center text-[11px] text-white/40 tabular-nums">{awayTeam.pos ? `${awayTeam.pos.position}. místo` : ""}</div>
+              <div className="flex-1 text-center text-micro text-white/40 tabular-nums">{awayTeam.pos ? `${awayTeam.pos.position}. místo` : ""}</div>
             </div>
           )}
         </div>
@@ -195,7 +195,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
             <div className="flex-1 min-w-0 flex gap-1 justify-end overflow-hidden">
               {homeForm.form.slice(0, 5).map((f, i) => <MiniForm key={i} f={f} />)}
             </div>
-            <div className="shrink-0 w-12 text-center text-[11px] text-muted uppercase font-heading">Forma</div>
+            <div className="shrink-0 w-12 text-center text-micro text-muted uppercase font-heading">Forma</div>
             <div className="flex-1 min-w-0 flex gap-1 overflow-hidden">
               {awayForm.form.slice(0, 5).map((f, i) => <MiniForm key={i} f={f} />)}
             </div>
@@ -230,7 +230,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
                   <div key={s.label}>
                     <div className="flex items-center justify-between mb-1">
                       <span className={`text-sm font-heading font-bold tabular-nums ${hBetter ? "text-pitch-600" : aBetter ? "text-card-red" : "text-ink"}`}>{s.h}</span>
-                      <span className="text-[11px] text-muted uppercase font-heading">{s.label}</span>
+                      <span className="text-micro text-muted uppercase font-heading">{s.label}</span>
                       <span className={`text-sm font-heading font-bold tabular-nums ${aBetter ? "text-pitch-600" : hBetter ? "text-card-red" : "text-ink"}`}>{s.a}</span>
                     </div>
                     <div className="flex h-1.5 rounded-full overflow-hidden">
@@ -250,12 +250,12 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
               <span className="text-base">{preview.weather.icon}</span>
               <span>{preview.weather.temperature} °C</span>
               {(preview.weather.expected === "rain" || preview.weather.expected === "snow" || preview.weather.expected === "wind") && (
-                <span className="text-card-red text-[11px] font-heading font-bold">
+                <span className="text-card-red text-micro font-heading font-bold">
                   {preview.weather.expected === "rain" ? "-20 %" : preview.weather.expected === "snow" ? "-30 %" : "-10 %"}
                 </span>
               )}
             </div>
-            <span className="text-[11px] text-muted">{preview.venue.name}</span>
+            <span className="text-micro text-muted">{preview.venue.name}</span>
           </div>
         )}
 
@@ -281,7 +281,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
 
 function MiniForm({ f }: { f: string }) {
   return (
-    <span className={`shrink-0 w-5 h-5 rounded-control text-[11px] flex items-center justify-center font-bold text-white ${
+    <span className={`shrink-0 w-5 h-5 rounded-control text-micro flex items-center justify-center font-bold text-white ${
       f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-300"
     }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
   );
@@ -307,9 +307,9 @@ export function FixturesWidget({ data, height }: WidgetProps) {
               <Link key={m.id} href={`/dashboard/match?calendarId=${switchId}`} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 -mx-2 px-2 rounded transition-colors">
                 <span className="text-sm text-muted tabular-nums w-5">{m.round}.</span>
                 <span className="text-sm font-heading font-bold flex-1 truncate">{opp}</span>
-                <span className={`text-[11px] font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
+                <span className={`text-micro font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
                 <LineupFlag m={m} />
-                <span className="text-[11px] text-muted tabular-nums">{date}</span>
+                <span className="text-micro text-muted tabular-nums">{date}</span>
               </Link>
             );
           })}
@@ -326,15 +326,15 @@ export function FixturesWidget({ data, height }: WidgetProps) {
 
 function LineupFlag({ m }: { m: ScheduleMatch }) {
   if (m.presetSlot) {
-    return <span className="text-[11px] font-heading font-bold px-1.5 py-0.5 rounded bg-pitch-100 text-pitch-700">{m.presetSlot}</span>;
+    return <span className="text-micro font-heading font-bold px-1.5 py-0.5 rounded bg-pitch-100 text-pitch-700">{m.presetSlot}</span>;
   }
-  if (m.hasLineup) return <span className="text-[11px] text-pitch-600" title="Sestava nastavena">✓</span>;
+  if (m.hasLineup) return <span className="text-micro text-pitch-600" title="Sestava nastavena">✓</span>;
   if (m.isDefaultLineup) {
     return m.defaultPresetSlot
-      ? <span className="text-[11px] font-heading font-bold px-1.5 py-0.5 rounded bg-gray-100 text-muted" title="Výchozí sestava">{m.defaultPresetSlot}</span>
-      : <span className="text-[11px] text-muted" title="Použije se výchozí sestava">✓</span>;
+      ? <span className="text-micro font-heading font-bold px-1.5 py-0.5 rounded bg-gray-100 text-muted" title="Výchozí sestava">{m.defaultPresetSlot}</span>
+      : <span className="text-micro text-muted" title="Použije se výchozí sestava">✓</span>;
   }
-  return <span className="text-[11px] text-card-red font-bold" title="Bez sestavy — použije se auto">!</span>;
+  return <span className="text-micro text-card-red font-bold" title="Bez sestavy — použije se auto">!</span>;
 }
 
 // ── Poslední zápasy ─────────────────────────────────────────────────────────
@@ -350,7 +350,7 @@ export function RecentMatchesWidget({ data, height }: WidgetProps) {
       <div className="overflow-x-auto -mx-4 sm:-mx-5">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-label border-b border-gray-200 text-[11px] uppercase tracking-wide">
+            <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
               <th className="pb-2 pl-4 sm:pl-5 pr-2 w-10">Kolo</th>
               <th className="pb-2 pr-2">Soupeř</th>
               <th className="pb-2 pr-4 sm:pr-5 text-center w-20">Výsledek</th>
@@ -369,7 +369,7 @@ export function RecentMatchesWidget({ data, height }: WidgetProps) {
                         pattern={(m.opponentBadge as BadgePattern) || "shield"}
                         initials={initials(m.opponent ?? "")} size={20} />
                       <span className="font-heading font-bold text-ink truncate max-w-[200px]">{m.opponent}</span>
-                      <span className="text-[11px] text-muted uppercase">{m.isHome ? "D" : "V"}</span>
+                      <span className="text-micro text-muted uppercase">{m.isHome ? "D" : "V"}</span>
                     </a>
                   </td>
                   <td className="py-2 pr-4 sm:pr-5 text-center">

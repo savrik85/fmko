@@ -326,7 +326,7 @@ export default function TrainingPage() {
               <span className="text-xl shrink-0">{t.icon}</span>
               <div className="text-left min-w-0">
                 <div className="font-heading font-bold text-sm leading-tight">{t.label}</div>
-                <div className="text-[10px] text-muted leading-tight truncate">{t.skills}</div>
+                <div className="text-micro text-muted leading-tight truncate">{t.skills}</div>
               </div>
             </button>
           ))}
@@ -346,7 +346,7 @@ export default function TrainingPage() {
             jinak by šel klikat, ale nic by nedělal. */}
         <div className="flex gap-3 items-end">
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Přístup</div>
+            <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1.5">Přístup</div>
             <div className="flex rounded-xl bg-gray-50 p-0.5">
               {APPROACHES.map((a) => (
                 <button
@@ -366,7 +366,7 @@ export default function TrainingPage() {
           </div>
           {!trainingPlan && (
           <div className="shrink-0">
-            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Dnů týdně</div>
+            <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1.5">Dnů týdně</div>
             <div className="flex rounded-xl bg-gray-50 p-0.5">
               {(() => {
                 // Kolikrát tým trénuje = kolik má tréninkových dnů. Tlačítka jsou rychlý předvýběr
@@ -416,14 +416,14 @@ export default function TrainingPage() {
           return (
             <div>
               <div className="flex items-baseline justify-between mb-1.5">
-                <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Dny tréninku</div>
+                <div className="text-micro text-muted font-heading uppercase tracking-wide">Dny tréninku</div>
                 {isCustom ? (
                   <button
                     onClick={() => { setTrainingDays(null); setDirty(true); }}
-                    className="text-[10px] text-pitch-600 hover:underline font-heading"
+                    className="text-micro text-pitch-600 hover:underline font-heading"
                   >Vrátit na výchozí</button>
                 ) : (
-                  <span className="text-[10px] text-muted-light font-heading uppercase">Výchozí</span>
+                  <span className="text-micro text-muted-light font-heading uppercase">Výchozí</span>
                 )}
               </div>
               <div className="grid grid-cols-7 gap-1">
@@ -445,7 +445,7 @@ export default function TrainingPage() {
                   );
                 })}
               </div>
-              <div className="mt-2 text-[11px] text-muted leading-relaxed">
+              <div className="mt-2 text-micro text-muted leading-relaxed">
                 💡 Trénuje se v každý vybraný den včetně soboty a neděle — nic se samo neruší.{" "}
                 <strong className="text-pitch-700">Před zápasem uber sám:</strong>{" "}
                 dej tomu dni lehkou intenzitu, nebo pošli unavené hráče na volno.
@@ -460,7 +460,7 @@ export default function TrainingPage() {
         <div className="card p-4 sm:p-5">
           <div className="flex items-baseline justify-between">
             <SectionLabel>Co to přinese</SectionLabel>
-            <span className="text-[10px] text-muted font-heading uppercase tracking-wide">
+            <span className="text-micro text-muted font-heading uppercase tracking-wide">
               {forecast.daysPerWeek}× týdně · {forecast.squadSize} hráčů
             </span>
           </div>
@@ -470,25 +470,25 @@ export default function TrainingPage() {
               <div className="font-heading font-bold text-xl text-pitch-600">
                 +{forecast.expectedImprovementsPerWeek}
               </div>
-              <div className="text-[10px] text-muted font-heading uppercase tracking-wide">zlepšení/týden</div>
+              <div className="text-micro text-muted font-heading uppercase tracking-wide">zlepšení/týden</div>
             </div>
             <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
               <div className="font-heading font-bold text-xl text-pitch-600">
                 +{forecast.expectedImprovementsPerMonth}
               </div>
-              <div className="text-[10px] text-muted font-heading uppercase tracking-wide">za měsíc</div>
+              <div className="text-micro text-muted font-heading uppercase tracking-wide">za měsíc</div>
             </div>
             <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
               <div className="font-heading font-bold text-xl text-ink">
                 {forecast.monthlyCost.toLocaleString("cs")}
               </div>
-              <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Kč měsíčně</div>
+              <div className="text-micro text-muted font-heading uppercase tracking-wide">Kč měsíčně</div>
             </div>
           </div>
 
           {/* Jak kádru sedí zvolené tempo */}
           <div className="mt-3">
-            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Jak to kádru sedí</div>
+            <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1.5">Jak to kádru sedí</div>
             {(() => {
               const { content, overloaded, underused } = forecast.load;
               const total = Math.max(1, content + overloaded + underused);
@@ -525,7 +525,7 @@ export default function TrainingPage() {
           {/* Kdo a co k tomu růstu přispívá — trenér má největší páku, proto první */}
           {(forecast.managerImpact || (forecast.staffImpact?.length ?? 0) > 0 || (forecast.equipmentImpact?.length ?? 0) > 0) && (
             <div className="mt-3 pt-3 border-t border-gray-100">
-              <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-2">Kdo tomu pomáhá</div>
+              <div className="text-micro text-muted font-heading uppercase tracking-wide mb-2">Kdo tomu pomáhá</div>
 
               {forecast.managerImpact && (() => {
                 const mi = forecast.managerImpact;
@@ -543,7 +543,7 @@ export default function TrainingPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="font-heading font-bold text-sm leading-tight truncate">{mi.name}</div>
-                      <div className="text-[11px] text-muted leading-tight">
+                      <div className="text-micro text-muted leading-tight">
                         {mi.role}{mi.youthDetail ? ` · ${mi.youthDetail}` : ""}
                       </div>
                     </div>
@@ -569,7 +569,7 @@ export default function TrainingPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="font-heading font-bold text-sm leading-tight truncate">{st.name}</div>
-                      <div className="text-[11px] text-muted leading-tight">{st.role}</div>
+                      <div className="text-micro text-muted leading-tight">{st.role}</div>
                     </div>
                     <span className="shrink-0 text-xs font-heading font-bold text-pitch-600">{st.detail}</span>
                   </Link>
@@ -585,7 +585,7 @@ export default function TrainingPage() {
                   <div className="shrink-0 w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-base">🎒</div>
                   <div className="min-w-0 flex-1">
                     <div className="font-heading font-bold text-sm leading-tight truncate">{eq.label}</div>
-                    <div className="text-[11px] text-muted leading-tight">Vybavení</div>
+                    <div className="text-micro text-muted leading-tight">Vybavení</div>
                   </div>
                   <span className="shrink-0 text-xs font-heading font-bold text-pitch-600">{eq.detail}</span>
                 </Link>
@@ -595,7 +595,7 @@ export default function TrainingPage() {
 
           {forecast.strain.length > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-100">
-              <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Koho to nejvíc trápí</div>
+              <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1.5">Koho to nejvíc trápí</div>
               <div className="flex flex-wrap gap-1.5">
                 {forecast.strain.map((s) => (
                   <Link
@@ -720,16 +720,16 @@ export default function TrainingPage() {
                   </div>
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {totalUpgrades > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-[11px] font-heading font-bold">+{totalUpgrades} zlepšení</span>
+                      <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-micro font-heading font-bold">+{totalUpgrades} zlepšení</span>
                     )}
                     {result.teamChemistry > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-[11px] font-heading font-bold">🤝 +{result.teamChemistry} chemie</span>
+                      <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-micro font-heading font-bold">🤝 +{result.teamChemistry} chemie</span>
                     )}
                     {absentList.length > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-red-50 text-card-red text-[11px] font-heading font-bold">{absentList.length} chyběl{absentList.length === 1 ? "" : absentList.length < 5 ? "i" : "o"}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-red-50 text-card-red text-micro font-heading font-bold">{absentList.length} chyběl{absentList.length === 1 ? "" : absentList.length < 5 ? "i" : "o"}</span>
                     )}
                     {pct === 100 && (
-                      <span className="px-1.5 py-0.5 rounded bg-gold-300/20 text-gold-600 text-[11px] font-heading font-bold">Plná účast</span>
+                      <span className="px-1.5 py-0.5 rounded bg-gold-300/20 text-gold-600 text-micro font-heading font-bold">Plná účast</span>
                     )}
                   </div>
                 </div>
@@ -741,7 +741,7 @@ export default function TrainingPage() {
               {/* Jak hráčům sedí nastavená zátěž a přístup */}
               {result.moraleChanges && result.moraleChanges.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
-                  <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1.5">Nálada po tréninku</div>
+                  <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1.5">Nálada po tréninku</div>
                   <div className="space-y-1">
                     {result.moraleChanges.map((m, i) => (
                       <div key={`${m.playerId}-${i}`} className="flex items-center justify-between gap-3 text-sm">
@@ -769,7 +769,7 @@ export default function TrainingPage() {
             {(groupedPositive.length > 0 || groupedNegative.length > 0) && (
               <details className="card group">
                 <summary className="cursor-pointer select-none flex items-center gap-2 p-3 sm:p-4 font-heading font-bold text-sm text-pitch-600 hover:text-pitch-500 transition-colors">
-                  <span className="text-[10px] text-muted group-open:rotate-90 transition-transform">&#9654;</span>
+                  <span className="text-micro text-muted group-open:rotate-90 transition-transform">&#9654;</span>
                   Zlepšení ({totalUpgrades})
                   {groupedNegative.length > 0 && <span className="text-card-red font-normal text-xs ml-1">· {groupedNegative.length} pokles</span>}
                 </summary>
@@ -859,7 +859,7 @@ export default function TrainingPage() {
             {absentList.length > 0 && (
               <details className="card group">
                 <summary className="cursor-pointer select-none flex items-center gap-2 p-3 sm:p-4 font-heading font-bold text-sm text-card-red hover:text-red-600 transition-colors">
-                  <span className="text-[10px] text-muted group-open:rotate-90 transition-transform">&#9654;</span>
+                  <span className="text-micro text-muted group-open:rotate-90 transition-transform">&#9654;</span>
                   Omluvenky ({absentList.length})
                 </summary>
                 <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-0.5">
@@ -884,15 +884,15 @@ export default function TrainingPage() {
           <div className="grid grid-cols-3 gap-2">
             <div className="card p-3 text-center">
               <div className="font-heading font-[800] text-2xl tabular-nums text-pitch-500">{stats.totalImprovements}</div>
-              <div className="text-[10px] text-muted uppercase tracking-wide">Zlepšení</div>
+              <div className="text-micro text-muted uppercase tracking-wide">Zlepšení</div>
             </div>
             <div className="card p-3 text-center">
               <div className="font-heading font-[800] text-2xl tabular-nums text-card-red">{stats.totalDeclines}</div>
-              <div className="text-[10px] text-muted uppercase tracking-wide">Poklesů</div>
+              <div className="text-micro text-muted uppercase tracking-wide">Poklesů</div>
             </div>
             <div className="card p-3 text-center">
               <div className="font-heading font-[800] text-2xl tabular-nums">{stats.trainingSessions}</div>
-              <div className="text-[10px] text-muted uppercase tracking-wide">Tréninků</div>
+              <div className="text-micro text-muted uppercase tracking-wide">Tréninků</div>
             </div>
           </div>
 

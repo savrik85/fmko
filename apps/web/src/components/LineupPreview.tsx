@@ -131,14 +131,14 @@ export function LineupPreview({ teamId, matchId, formation, tactic, hardness, ca
       >
         <div>
           <div className="font-heading font-bold text-sm uppercase tracking-wide">Síla sestavy</div>
-          <div className="text-[10px] text-muted">
+          <div className="text-micro text-muted">
             {data?.opponent ? "Srovnání se soupeřem (jeho nejlepší 11)" : "Bez soupeře — jen vlastní síla"}
           </div>
         </div>
         <div className="flex items-center gap-2">
           {data && (
             <div className="text-right">
-              <div className="text-[10px] text-muted uppercase">Celkové</div>
+              <div className="text-micro text-muted uppercase">Celkové</div>
               <div className="font-heading font-bold text-xl tabular-nums text-pitch-600">{data.own.overall}</div>
             </div>
           )}
@@ -156,7 +156,7 @@ export function LineupPreview({ teamId, matchId, formation, tactic, hardness, ca
               const cmp = data.comparison?.perLine[line];
               return (
                 <div key={line}>
-                  <div className="flex items-baseline justify-between text-[11px] mb-0.5">
+                  <div className="flex items-baseline justify-between text-micro mb-0.5">
                     <span className="font-heading font-bold">{LINE_LABELS[line]}</span>
                     <span className="flex items-baseline gap-2 tabular-nums">
                       <span className="text-pitch-600 font-bold">{ownVal}</span>
@@ -164,7 +164,7 @@ export function LineupPreview({ teamId, matchId, formation, tactic, hardness, ca
                         <>
                           <span className="text-muted">vs</span>
                           <span className="text-muted">{oppVal}</span>
-                          {cmp && <span className={`text-[10px] uppercase font-bold ${COMPARISON_COLOR[cmp]}`}>{COMPARISON_LABEL[cmp]}</span>}
+                          {cmp && <span className={`text-micro uppercase font-bold ${COMPARISON_COLOR[cmp]}`}>{COMPARISON_LABEL[cmp]}</span>}
                         </>
                       )}
                     </span>
@@ -185,23 +185,23 @@ export function LineupPreview({ teamId, matchId, formation, tactic, hardness, ca
           </div>
 
           {/* Attack vs Defense summary */}
-          <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-2 text-[11px]">
+          <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-2 text-micro">
             <div className="flex items-center gap-2">
-              <span className="text-muted uppercase text-[10px]">Útok:</span>
+              <span className="text-muted uppercase text-micro">Útok:</span>
               <span className="font-heading font-bold tabular-nums">{data.own.attack}</span>
               {data.opponent && <span className="text-muted">vs {data.opponent.attack}</span>}
               {data.own.tacticEffect.attackMod !== 1.0 && (
-                <span className={`text-[10px] ${data.own.tacticEffect.attackMod > 1.0 ? "text-pitch-500" : "text-card-red"}`}>
+                <span className={`text-micro ${data.own.tacticEffect.attackMod > 1.0 ? "text-pitch-500" : "text-card-red"}`}>
                   {data.own.tacticEffect.attackMod > 1.0 ? "+" : ""}{Math.round((data.own.tacticEffect.attackMod - 1) * 100)}% taktika
                 </span>
               )}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-muted uppercase text-[10px]">Obrana:</span>
+              <span className="text-muted uppercase text-micro">Obrana:</span>
               <span className="font-heading font-bold tabular-nums">{data.own.defense}</span>
               {data.opponent && <span className="text-muted">vs {data.opponent.defense}</span>}
               {data.own.tacticEffect.defenseMod !== 1.0 && (
-                <span className={`text-[10px] ${data.own.tacticEffect.defenseMod > 1.0 ? "text-pitch-500" : "text-card-red"}`}>
+                <span className={`text-micro ${data.own.tacticEffect.defenseMod > 1.0 ? "text-pitch-500" : "text-card-red"}`}>
                   {data.own.tacticEffect.defenseMod > 1.0 ? "+" : ""}{Math.round((data.own.tacticEffect.defenseMod - 1) * 100)}% taktika
                 </span>
               )}
@@ -216,7 +216,7 @@ export function LineupPreview({ teamId, matchId, formation, tactic, hardness, ca
             </div>
           )}
           {data.own.notes.length > 0 && (
-            <ul className="mt-2 space-y-1 text-[11px] text-amber-700">
+            <ul className="mt-2 space-y-1 text-micro text-amber-700">
               {data.own.notes.map((note, i) => (
                 <li key={i} className="flex items-start gap-1.5">
                   <span>⚠️</span>

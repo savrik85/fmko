@@ -330,7 +330,7 @@ export default function PlayerDetailPage() {
   // Injury info (rendered as inline pill on both layouts)
   const injuryInfo = (player as unknown as { injury?: { daysRemaining: number; type?: string } | null }).injury ?? null;
   const injuryPill = injuryInfo ? (
-    <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-50 border border-red-300/30 rounded-control px-2 py-0.5 text-[11px] font-heading font-bold whitespace-nowrap">
+    <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-50 border border-red-300/30 rounded-control px-2 py-0.5 text-micro font-heading font-bold whitespace-nowrap">
       <span>🩹</span>
       <span>Zraněný · {injuryInfo.daysRemaining} {injuryInfo.daysRemaining === 1 ? "den" : "dní"}</span>
     </span>
@@ -339,7 +339,7 @@ export default function PlayerDetailPage() {
   // Absence info (trénink zmeškán, výmluva)
   const absenceInfo = (player as unknown as { absence?: { reason?: string; category?: string } | null }).absence ?? null;
   const absencePill = absenceInfo ? (
-    <span className="inline-flex items-center gap-1 bg-amber-500/20 text-amber-50 border border-amber-300/30 rounded-control px-2 py-0.5 text-[11px] font-heading font-bold whitespace-nowrap" title={absenceInfo.reason ?? ""}>
+    <span className="inline-flex items-center gap-1 bg-amber-500/20 text-amber-50 border border-amber-300/30 rounded-control px-2 py-0.5 text-micro font-heading font-bold whitespace-nowrap" title={absenceInfo.reason ?? ""}>
       <span>🚫</span>
       <span>Absence{absenceInfo.reason ? ` · ${absenceInfo.reason}` : ""}</span>
     </span>
@@ -350,7 +350,7 @@ export default function PlayerDetailPage() {
     ? ((player.lifeContext as unknown as { transferUnrest?: { level?: number; teamName?: string } })?.transferUnrest ?? null)
     : null;
   const unrestPill = unrestInfo && (unrestInfo.level ?? 0) >= 40 ? (
-    <span className="inline-flex items-center gap-1 bg-orange-500/25 text-orange-50 border border-orange-300/40 rounded-control px-2 py-0.5 text-[11px] font-heading font-bold whitespace-nowrap"
+    <span className="inline-flex items-center gap-1 bg-orange-500/25 text-orange-50 border border-orange-300/40 rounded-control px-2 py-0.5 text-micro font-heading font-bold whitespace-nowrap"
       title={unrestInfo.teamName ? `Trucuje po odmítnuté nabídce od ${unrestInfo.teamName}` : "Trucuje po odmítnuté nabídce"}>
       <span>😠</span>
       <span>Nespokojený · chce pryč</span>
@@ -409,17 +409,17 @@ export default function PlayerDetailPage() {
                 <div className={`font-heading font-extrabold text-lg tabular-nums leading-none ${cond.color}`}>
                   {player.lifeContext?.condition ?? 50}%
                 </div>
-                <div className={`${boxLabel} text-[9px] font-heading font-bold uppercase mt-0.5`}>Kondice</div>
+                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Kondice</div>
               </div>
               <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>
                 <div className="text-xl leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
-                <div className={`${boxLabel} text-[9px] font-heading font-bold uppercase mt-0.5`}>Morálka</div>
+                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Morálka</div>
               </div>
               <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>
                 <div className={`font-heading font-extrabold text-xl tabular-nums leading-none ${txt}`}>
                   {player.overall_rating}
                 </div>
-                <div className={`${boxLabel} text-[9px] font-heading font-bold uppercase mt-0.5`}>Rating</div>
+                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Rating</div>
               </div>
             </div>
             {allPlayers.length > 1 && (
@@ -478,15 +478,15 @@ export default function PlayerDetailPage() {
                 <div className={`font-heading font-extrabold text-base tabular-nums leading-none ${cond.color}`}>
                   {player.lifeContext?.condition ?? 50}%
                 </div>
-                <div className={`${boxLabel} text-[9px] font-heading font-bold uppercase mt-0.5`}>Kondice</div>
+                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Kondice</div>
               </div>
               <div className={`flex-1 ${boxBg} rounded-soft py-2 text-center`}>
                 <div className="text-lg leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
-                <div className={`${boxLabel} text-[9px] font-heading font-bold uppercase mt-0.5`}>Morálka</div>
+                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Morálka</div>
               </div>
               <div className={`flex-1 ${boxBg} rounded-soft py-2 text-center`}>
                 <div className={`font-heading font-extrabold text-base tabular-nums leading-none ${txt}`}>{player.overall_rating}</div>
-                <div className={`${boxLabel} text-[9px] font-heading font-bold uppercase mt-0.5`}>Rating</div>
+                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Rating</div>
               </div>
             </div>
           </div>
@@ -840,7 +840,7 @@ export default function PlayerDetailPage() {
           </div>
 
           <div className="mt-4 pt-3 border-t border-gray-100">
-            <div className="text-label text-[11px] uppercase tracking-wide mb-2">Fyzické</div>
+            <div className="text-label text-micro uppercase tracking-wide mb-2">Fyzické</div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-0">
               <AttrRow label="Výdrž" value={player.physical?.stamina ?? 0} importance={imp("stamina")} />
               <AttrRow label="Síla" value={player.physical?.strength ?? 0} importance={imp("strength")} />
@@ -849,7 +849,7 @@ export default function PlayerDetailPage() {
           </div>
 
           <p className="mt-3 pt-3 border-t border-gray-100 text-sm text-muted flex items-center gap-1.5">
-            <span className="text-pitch-500 text-[10px] leading-none" aria-hidden>●</span>
+            <span className="text-pitch-500 text-micro leading-none" aria-hidden>●</span>
             Zvýrazněné jsou klíčové pro {positionLabel(player.position)}.
           </p>
         </div>
@@ -898,7 +898,7 @@ export default function PlayerDetailPage() {
                     initials={(c.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={32} />
                   <div className="min-w-0 flex-1">
                     <div className="font-heading font-bold text-sm group-hover:underline truncate">{c.teamName}</div>
-                    <div className="text-[11px] text-muted">
+                    <div className="text-micro text-muted">
                       {c.isActive ? (
                         <span>Od sezóny {c.seasonNumber} &middot; <span className="text-pitch-500 font-bold">Aktivní</span></span>
                       ) : (
@@ -907,7 +907,7 @@ export default function PlayerDetailPage() {
                     </div>
                   </div>
                   <div className="shrink-0">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-heading font-bold ${
+                    <span className={`text-micro px-2 py-0.5 rounded-full font-heading font-bold ${
                       c.joinType === "generated" ? "bg-gray-100 text-muted"
                       : c.joinType === "transfer" ? "bg-blue-50 text-blue-600"
                       : c.joinType === "free_agent" ? "bg-green-50 text-green-600"
@@ -920,7 +920,7 @@ export default function PlayerDetailPage() {
                   </div>
                 </a>
                 {c.fee > 0 && (
-                  <div className="text-[10px] text-muted mt-1 ml-[42px]">Přestupní částka: {c.fee.toLocaleString("cs")} Kč</div>
+                  <div className="text-micro text-muted mt-1 ml-[42px]">Přestupní částka: {c.fee.toLocaleString("cs")} Kč</div>
                 )}
               </div>
             ))}
@@ -977,9 +977,9 @@ export default function PlayerDetailPage() {
                           {rel.relatedPlayerName}
                         </Link>
                         <PositionBadge position={rel.relatedPlayerPosition as "GK" | "DEF" | "MID" | "FWD"} />
-                        <span className="text-[10px] text-muted font-heading">· {rel.typeLabel}</span>
+                        <span className="text-micro text-muted font-heading">· {rel.typeLabel}</span>
                       </div>
-                      {rel.effect && <div className="text-[11px] text-muted italic ml-6 mt-0.5">{rel.effect}</div>}
+                      {rel.effect && <div className="text-micro text-muted italic ml-6 mt-0.5">{rel.effect}</div>}
                     </div>
                   );
                 })}
@@ -1042,9 +1042,9 @@ export default function PlayerDetailPage() {
                     <span className="flex items-center gap-0.5 text-xs">
                       <span className="text-muted truncate max-w-[60px]">{m.opponent ?? "—"}</span>
                     </span>
-                    <span className={`text-[11px] font-heading font-bold ${resultColor}`}>{resultLabel}</span>
+                    <span className={`text-micro font-heading font-bold ${resultColor}`}>{resultLabel}</span>
                     {(m.goals > 0 || m.assists > 0) && (
-                      <span className="text-[10px] text-muted">
+                      <span className="text-micro text-muted">
                         {m.goals > 0 && <>⚽{m.goals > 1 ? m.goals : ""}</>}
                         {m.assists > 0 && <> 👟{m.assists > 1 ? m.assists : ""}</>}
                       </span>
@@ -1145,7 +1145,7 @@ export default function PlayerDetailPage() {
                     <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
                       <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
                     </div>
-                    <span className="shrink-0 w-16 text-[11px] text-muted text-right font-heading">
+                    <span className="shrink-0 w-16 text-micro text-muted text-right font-heading">
                       Top {topPct}%
                     </span>
                   </div>
@@ -1232,7 +1232,7 @@ export default function PlayerDetailPage() {
                 <div key={s.label} className={`p-3 rounded-soft ${s.highlight ? "bg-pitch-50 border border-pitch-100" : "bg-gray-50"}`}>
                   <div className={`font-heading font-[800] text-2xl tabular-nums ${s.highlight ? "text-pitch-700" : "text-ink"}`}>{s.value}</div>
                   <div className="text-xs font-heading uppercase text-muted mt-0.5">{s.label}</div>
-                  {s.sub && <div className="text-[11px] text-muted mt-0.5">{s.sub}</div>}
+                  {s.sub && <div className="text-micro text-muted mt-0.5">{s.sub}</div>}
                 </div>
               ))}
             </div>
@@ -1272,7 +1272,7 @@ export default function PlayerDetailPage() {
               <div className="overflow-x-auto -mx-4 sm:-mx-5">
                 <table className="w-full text-sm min-w-[600px]">
                   <thead>
-                    <tr className="text-left text-label border-b border-gray-200 text-[11px] uppercase tracking-wide">
+                    <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
                       <th className="pb-2 pl-4 sm:pl-5 pr-2">Sezóna</th>
                       <th className="pb-2 pr-2">Klub</th>
                       <th className="pb-2 pr-2">Liga</th>
@@ -1358,7 +1358,7 @@ export default function PlayerDetailPage() {
           <div className="overflow-x-auto -mx-4 sm:-mx-5">
             <table className="w-full text-sm min-w-[760px]">
               <thead>
-                <tr className="text-left text-label border-b border-gray-200 text-[11px] uppercase tracking-wide">
+                <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
                   <th className="pb-2 pl-4 sm:pl-5 pr-2 w-12">Kolo</th>
                   <th className="pb-2 pr-2">Soupeř</th>
                   <th className="pb-2 pr-2 text-center w-20">Výsledek</th>
@@ -1395,7 +1395,7 @@ export default function PlayerDetailPage() {
                             pattern={(m.opponentBadge as BadgePattern) || "shield"}
                             initials={(m.opponent ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={20} />
                           <span className="font-heading font-bold text-ink truncate max-w-[180px]">{m.opponent ?? "Soupeř"}</span>
-                          <span className="text-[10px] text-muted uppercase">{m.isHome ? "D" : "V"}</span>
+                          <span className="text-micro text-muted uppercase">{m.isHome ? "D" : "V"}</span>
                           {isBest && <span title="Nejlepší rating sezóny" className="text-xs">🌟</span>}
                           {isWorst && <span title="Nejhorší rating sezóny" className="text-xs">😞</span>}
                         </a>
@@ -1468,7 +1468,7 @@ export default function PlayerDetailPage() {
               {/* Souhrnné karty: Tréninky + Zápasy */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="card p-4 sm:p-5">
-                  <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mb-2">{"\u{1F3CB}\u{FE0F}"} Tréninky</div>
+                  <div className="text-micro font-heading font-bold text-muted uppercase tracking-wider mb-2">{"\u{1F3CB}\u{FE0F}"} Tréninky</div>
                   <div className="flex items-baseline gap-2">
                     <span className="font-heading font-[800] text-3xl tabular-nums text-pitch-500">{attendance.training.pct}%</span>
                     <span className="text-sm text-muted">({attendance.training.attended}/{attendance.training.total})</span>
@@ -1482,7 +1482,7 @@ export default function PlayerDetailPage() {
                   </div>
                 </div>
                 <div className="card p-4 sm:p-5">
-                  <div className="text-[10px] font-heading font-bold text-muted uppercase tracking-wider mb-2">{"\u{26BD}"} Zápasy</div>
+                  <div className="text-micro font-heading font-bold text-muted uppercase tracking-wider mb-2">{"\u{26BD}"} Zápasy</div>
                   <div className="flex items-baseline gap-2">
                     <span className="font-heading font-[800] text-3xl tabular-nums text-pitch-500">{attendance.matches.played}</span>
                     <span className="text-sm text-muted">/ {attendance.matches.available}</span>
@@ -1517,7 +1517,7 @@ export default function PlayerDetailPage() {
                   return (
                     <div key={m.matchId} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-soft bg-gray-50/60 hover:bg-gray-50 transition-colors">
                       <div className="flex items-center gap-2 sm:w-[180px] shrink-0">
-                        <span className="text-[10px] font-heading font-bold text-muted uppercase tabular-nums shrink-0">
+                        <span className="text-micro font-heading font-bold text-muted uppercase tabular-nums shrink-0">
                           {m.round != null ? `${m.round}. kolo` : "—"}
                         </span>
                         <Link href={`/dashboard/match/${m.matchId}`} className="font-heading font-bold text-sm text-ink hover:text-pitch-500 truncate">
@@ -1717,7 +1717,7 @@ function AttrRow({ label, value, inverted, importance }: {
       }`}
     >
       <span className={`text-sm flex items-center gap-1.5 ${isKey ? "text-pitch-700 font-bold" : "text-ink-light"}`}>
-        {isKey && <span className="text-pitch-500 text-[10px] leading-none" aria-hidden>●</span>}
+        {isKey && <span className="text-pitch-500 text-micro leading-none" aria-hidden>●</span>}
         {label}
       </span>
       <span className={`inline-flex items-center justify-center w-8 h-6 rounded text-xs font-heading font-bold tabular-nums ${attrBg(colorValue)}`}>
@@ -1737,7 +1737,7 @@ function TraitRow({ label, value, inverted }: { label: string; value: number; in
       <span className="text-sm text-ink-light">{label}</span>
       <div className="flex items-center gap-2">
         <span className={`text-xs font-heading font-bold ${levelColor.color}`}>{levelLabel.label}</span>
-        <span className="text-[10px] text-muted tabular-nums w-5 text-right">{value}</span>
+        <span className="text-micro text-muted tabular-nums w-5 text-right">{value}</span>
       </div>
     </div>
   );
@@ -1747,7 +1747,7 @@ function StatBox({ label, value, color }: { label: string; value: number; color?
   return (
     <div className="text-center px-4 py-2 rounded-soft bg-gray-50 min-w-[70px]">
       <div className={`font-heading font-[800] text-2xl tabular-nums ${color ?? "text-ink"}`}>{value}</div>
-      <div className="text-label text-[10px] uppercase">{label}</div>
+      <div className="text-label text-micro uppercase">{label}</div>
     </div>
   );
 }
@@ -1843,10 +1843,10 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
                   const trainingLabel = TRAIN_TYPE_LABELS[entry.training_type] ?? entry.training_type;
                   return (
                     <tr key={i} className="border-b border-gray-50 last:border-b-0 align-top">
-                      <td className="py-1.5 pr-3 tabular-nums text-muted text-[11px] whitespace-nowrap">{date}</td>
+                      <td className="py-1.5 pr-3 tabular-nums text-muted text-micro whitespace-nowrap">{date}</td>
                       <td className="py-1.5 pr-3">
                         <div className="font-medium">{TRAIN_ATTR_LABELS[entry.attribute] ?? entry.attribute}</div>
-                        <div className="md:hidden text-[11px] text-muted leading-tight">{trainingLabel}</div>
+                        <div className="md:hidden text-micro text-muted leading-tight">{trainingLabel}</div>
                       </td>
                       <td className="py-1.5 pr-3 text-muted hidden md:table-cell">{trainingLabel}</td>
                       <td className="py-1.5 text-right whitespace-nowrap">
@@ -1958,13 +1958,13 @@ function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }
                   const date = new Date(dateSrc).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
                   return (
                     <tr key={entry.id} className="border-b border-gray-50 last:border-b-0 align-top">
-                      <td className="py-1.5 pr-3 tabular-nums text-muted text-[11px] whitespace-nowrap">{date}</td>
+                      <td className="py-1.5 pr-3 tabular-nums text-muted text-micro whitespace-nowrap">{date}</td>
                       <td className="py-1.5 pr-3">
                         <div className="whitespace-nowrap">
                           <span className="mr-1">{meta.icon}</span>
                           <span className="font-medium">{meta.label}</span>
                         </div>
-                        <div className="md:hidden text-[11px] text-muted leading-tight">{entry.description ?? ""}</div>
+                        <div className="md:hidden text-micro text-muted leading-tight">{entry.description ?? ""}</div>
                       </td>
                       <td className="py-1.5 pr-3 text-muted hidden md:table-cell">{entry.description ?? "—"}</td>
                       <td className="py-1.5 text-right whitespace-nowrap">

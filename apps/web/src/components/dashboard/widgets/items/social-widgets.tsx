@@ -31,12 +31,12 @@ export function RivalsWidget({ data, height }: WidgetProps) {
               <Link href={`/dashboard/team/${r.teamId}`} className="text-sm font-heading font-bold truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
                 {r.teamName}
               </Link>
-              <span className="text-[11px] text-muted shrink-0">{r.archetypeLabel}</span>
+              <span className="text-micro text-muted shrink-0">{r.archetypeLabel}</span>
             </div>
             <div className="text-sm text-muted mt-0.5">{r.label}</div>
             <div className="flex gap-2 mt-1">
               <div className="flex-1">
-                <div className="flex justify-between text-[11px] text-muted mb-0.5">
+                <div className="flex justify-between text-micro text-muted mb-0.5">
                   <span>Respekt</span><span className="tabular-nums">{r.respect}</span>
                 </div>
                 {/* Respekt jde od −100 do 100, proto se posouvá do kladné poloviny */}
@@ -48,7 +48,7 @@ export function RivalsWidget({ data, height }: WidgetProps) {
                 </div>
               </div>
               <div className="flex-1">
-                <div className="flex justify-between text-[11px] text-muted mb-0.5">
+                <div className="flex justify-between text-micro text-muted mb-0.5">
                   <span>Napětí</span><span className="tabular-nums">{r.heat}</span>
                 </div>
                 <div className="h-1.5 rounded-full" style={{ background: "#EFEBE3" }}>
@@ -62,7 +62,7 @@ export function RivalsWidget({ data, height }: WidgetProps) {
           </li>
         ))}
       </ul>
-      <div className="text-[11px] text-muted text-center">Napětí od 60 výš dělá z utkání derby.</div>
+      <div className="text-micro text-muted text-center">Napětí od 60 výš dělá z utkání derby.</div>
     </div>
   );
 }
@@ -106,7 +106,7 @@ export function SquadChemistryWidget({ data, height }: WidgetProps) {
                   <span className="text-muted font-normal"> a </span>
                   <a href={`/dashboard/player/${v.player_b_id}`} className="hover:text-pitch-500 hover:underline transition-colors">{v.player_b_name}</a>
                 </div>
-                <div className="text-[11px] text-muted">{popis.text}</div>
+                <div className="text-micro text-muted">{popis.text}</div>
               </div>
               <span
                 className="text-sm font-heading font-bold tabular-nums shrink-0"
@@ -185,7 +185,7 @@ export function SeasonProgressWidget({ data, height }: WidgetProps) {
             <li key={`${u.date}-${i}`} className="flex items-center gap-2 py-1 border-b border-gray-50 last:border-b-0">
               <span className="shrink-0">{u.type === "match" ? "⚽" : u.type === "training" ? "🏋️" : "📅"}</span>
               <span className="text-sm font-heading font-bold flex-1 truncate">{u.title}</span>
-              <span className="text-[11px] text-muted shrink-0 tabular-nums">
+              <span className="text-micro text-muted shrink-0 tabular-nums">
                 {new Date(u.date).toLocaleDateString("cs", { day: "numeric", month: "numeric" })}
               </span>
             </li>

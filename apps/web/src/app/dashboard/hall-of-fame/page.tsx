@@ -52,7 +52,7 @@ export default function HallOfFamePage() {
       <div className="card">
         <table className="w-full text-xs sm:text-sm">
           <thead>
-            <tr className="text-left text-label border-b border-gray-200 text-[10px] sm:text-[11px] uppercase tracking-wide">
+            <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
               <th className="py-2 sm:py-3 pl-2 sm:pl-4 pr-1 w-8 sm:w-12">#</th>
               <th className="py-2 sm:py-3 px-1 sm:px-2">Trenér</th>
               <th className="py-2 sm:py-3 px-1 sm:px-2">Tým</th>
@@ -86,7 +86,7 @@ export default function HallOfFamePage() {
                         {hasAvatar ? (
                           <FaceAvatar faceConfig={e.managerAvatar as Record<string, unknown>} size={24} className="shrink-0 bg-gray-100 rounded-full sm:!w-8 sm:!h-8" />
                         ) : (
-                          <div className="shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gray-200 flex items-center justify-center font-heading font-bold text-[10px] sm:text-xs text-muted">
+                          <div className="shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gray-200 flex items-center justify-center font-heading font-bold text-micro sm:text-xs text-muted">
                             {e.managerName[0]}
                           </div>
                         )}
@@ -107,7 +107,7 @@ export default function HallOfFamePage() {
                       />
                       <div className="min-w-0">
                         <div className="truncate font-heading font-bold text-xs sm:text-sm">{e.teamName}</div>
-                        {e.villageName && <div className="text-[9px] sm:text-[10px] text-muted truncate">{e.villageName}</div>}
+                        {e.villageName && <div className="text-micro text-muted truncate">{e.villageName}</div>}
                       </div>
                     </Link>
                   </td>

@@ -87,7 +87,7 @@ export default function RegisterPage() {
                   {["min. 8 znaků", "malé písmeno", "velké písmeno", "číslo"].map((req) => {
                     const ok = !pwErrors.includes(req);
                     return (
-                      <span key={req} className={`text-[10px] px-1.5 py-0.5 rounded-full font-heading font-bold ${ok ? "bg-pitch-500/20 text-pitch-300" : "bg-white/5 text-white/30"}`}>
+                      <span key={req} className={`text-micro px-1.5 py-0.5 rounded-full font-heading font-bold ${ok ? "bg-pitch-500/20 text-pitch-300" : "bg-white/5 text-white/30"}`}>
                         {ok ? "✓" : "○"} {req}
                       </span>
                     );

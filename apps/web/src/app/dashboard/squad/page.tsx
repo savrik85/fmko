@@ -309,19 +309,19 @@ export default function SquadPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <div className="card p-3 text-center">
           <div className="font-heading font-[800] text-2xl tabular-nums">{players.length}</div>
-          <div className="text-[10px] text-muted uppercase tracking-wide">Hráčů</div>
+          <div className="text-micro text-muted uppercase tracking-wide">Hráčů</div>
         </div>
         <div className="card p-3 text-center">
           <div className="font-heading font-[800] text-2xl tabular-nums">{avgRating}</div>
-          <div className="text-[10px] text-muted uppercase tracking-wide">Ø Rating</div>
+          <div className="text-micro text-muted uppercase tracking-wide">Ø Rating</div>
         </div>
         <div className="card p-3 text-center">
           <div className="font-heading font-[800] text-2xl tabular-nums">{avgAge}</div>
-          <div className="text-[10px] text-muted uppercase tracking-wide">Ø Věk</div>
+          <div className="text-micro text-muted uppercase tracking-wide">Ø Věk</div>
         </div>
         <div className="card p-3 text-center">
           <div className="font-heading font-[800] text-xl tabular-nums text-card-red">{totalWage.toLocaleString("cs")}</div>
-          <div className="text-[10px] text-muted uppercase tracking-wide">Mzdy Kč/týd</div>
+          <div className="text-micro text-muted uppercase tracking-wide">Mzdy Kč/týd</div>
         </div>
       </div>
 
@@ -349,7 +349,7 @@ export default function SquadPage() {
 
       {/* Position filter — segmented control */}
       <div className="card p-3">
-        <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-2">Filtr pozice</div>
+        <div className="text-micro text-muted font-heading uppercase tracking-wide mb-2">Filtr pozice</div>
         <div className="flex rounded-xl bg-gray-50 p-0.5 gap-0.5">
           {([
             ["all", "Vše", players.length],
@@ -368,7 +368,7 @@ export default function SquadPage() {
               }`}
             >
               <div className="text-xs sm:text-sm truncate">{label}</div>
-              <div className={`text-[10px] tabular-nums ${filter === pos ? "text-pitch-500" : "text-muted-light"}`}>{count}</div>
+              <div className={`text-micro tabular-nums ${filter === pos ? "text-pitch-500" : "text-muted-light"}`}>{count}</div>
             </button>
           ))}
         </div>
@@ -423,7 +423,7 @@ export default function SquadPage() {
                       {p.first_name} {p.last_name}
                     </Link>
                     {p.loan_from_team_id && (
-                      <span className="ml-1.5 text-[10px] bg-yellow-100 text-yellow-700 font-heading font-bold px-1.5 py-0.5 rounded-full">Host.</span>
+                      <span className="ml-1.5 text-micro bg-yellow-100 text-yellow-700 font-heading font-bold px-1.5 py-0.5 rounded-full">Host.</span>
                     )}
                     {(() => {
                       const inj = (p as unknown as { injury?: { type?: string; daysRemaining: number } | null }).injury;
@@ -431,7 +431,7 @@ export default function SquadPage() {
                       const daysLabel = inj.daysRemaining === 1 ? "den" : inj.daysRemaining < 5 ? "dny" : "dní";
                       const tip = `Zraněný${inj.type ? ` — ${inj.type}` : ""} · ${inj.daysRemaining} ${daysLabel} do návratu`;
                       return (
-                        <span className="ml-1.5 text-[10px] bg-red-100 text-red-700 font-heading font-bold px-1.5 py-0.5 rounded-full cursor-help" title={tip} aria-label={tip}>🩹</span>
+                        <span className="ml-1.5 text-micro bg-red-100 text-red-700 font-heading font-bold px-1.5 py-0.5 rounded-full cursor-help" title={tip} aria-label={tip}>🩹</span>
                       );
                     })()}
                     {(() => {
@@ -439,7 +439,7 @@ export default function SquadPage() {
                       if (!abs) return null;
                       const tip = `Chybí dnes${abs.reason ? ` — ${abs.reason}` : ""}`;
                       return (
-                        <span className="ml-1.5 text-[10px] bg-amber-100 text-amber-700 font-heading font-bold px-1.5 py-0.5 rounded-full cursor-help" title={tip} aria-label={tip}>🚫</span>
+                        <span className="ml-1.5 text-micro bg-amber-100 text-amber-700 font-heading font-bold px-1.5 py-0.5 rounded-full cursor-help" title={tip} aria-label={tip}>🚫</span>
                       );
                     })()}
                     {(lc as unknown as { hangover?: number | boolean } | undefined)?.hangover ? (
@@ -473,7 +473,7 @@ export default function SquadPage() {
                       <td className="py-2 px-1.5 text-center" title={`${relationLabel(rel)} (${rel}/100)`}>
                         <span className="inline-flex items-center gap-1 tabular-nums">
                           <span>{relationIcon(rel)}</span>
-                          <span className="text-[11px] text-muted">{rel}</span>
+                          <span className="text-micro text-muted">{rel}</span>
                         </span>
                       </td>
                     );
@@ -490,9 +490,9 @@ export default function SquadPage() {
 
       {/* Legenda — co znamenají barevné tečky u headerů */}
       {tab === "atributy" && (
-        <div className="card p-2.5 text-[11px] text-muted">
+        <div className="card p-2.5 text-micro text-muted">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="font-heading uppercase text-[10px] tracking-wide">Tečky u hlaviček:</span>
+            <span className="font-heading uppercase text-micro tracking-wide">Tečky u hlaviček:</span>
             <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-gold-500" /> Brankář</span>
             <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Obrana</span>
             <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-pitch-500" /> Záloha</span>
@@ -509,19 +509,19 @@ export default function SquadPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div className="card p-3 text-center">
               <div className="font-heading font-[800] text-2xl tabular-nums text-pitch-500">{totalGoals}</div>
-              <div className="text-[10px] text-muted uppercase tracking-wide">Góly</div>
+              <div className="text-micro text-muted uppercase tracking-wide">Góly</div>
             </div>
             <div className="card p-3 text-center">
               <div className="font-heading font-[800] text-2xl tabular-nums text-blue-500">{totalAssists}</div>
-              <div className="text-[10px] text-muted uppercase tracking-wide">Asistence</div>
+              <div className="text-micro text-muted uppercase tracking-wide">Asistence</div>
             </div>
             <div className="card p-3 text-center">
               <div className="font-heading font-[800] text-2xl tabular-nums text-amber-500">{totalYellow}</div>
-              <div className="text-[10px] text-muted uppercase tracking-wide">Žluté</div>
+              <div className="text-micro text-muted uppercase tracking-wide">Žluté</div>
             </div>
             <div className="card p-3 text-center">
               <div className="font-heading font-[800] text-2xl tabular-nums text-card-red">{totalRed}</div>
-              <div className="text-[10px] text-muted uppercase tracking-wide">Červené</div>
+              <div className="text-micro text-muted uppercase tracking-wide">Červené</div>
             </div>
           </div>
 
@@ -591,7 +591,7 @@ export default function SquadPage() {
       {/* TOP hráči — atributy + matchové */}
       {tab === "top" && (
         <>
-          <div className="text-[11px] font-heading font-bold text-muted uppercase tracking-wider mt-1">{"\u{1F3C5}"} Žebříčky kádru</div>
+          <div className="text-micro font-heading font-bold text-muted uppercase tracking-wider mt-1">{"\u{1F3C5}"} Žebříčky kádru</div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <PlayerTopList title={"\u{2B50} Nejvyšší rating"} items={topPlayerData.ratings} valueOf={(p) => p.overall_rating ?? 0} />
             <PlayerTopList title={"\u{1F525} Top kondice"} items={topPlayerData.condition.map((x) => x.p)} valueOf={(p) => `${(p.lifeContext as unknown as Record<string, number>)?.condition ?? 0}%`} />
@@ -611,7 +611,7 @@ export default function SquadPage() {
 
           {totalApps > 0 && (
             <>
-              <div className="text-[11px] font-heading font-bold text-muted uppercase tracking-wider mt-4">{"\u{26BD}"} Sezónní výkonnost</div>
+              <div className="text-micro font-heading font-bold text-muted uppercase tracking-wider mt-4">{"\u{26BD}"} Sezónní výkonnost</div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <TopList title={"\u{26BD} Nejlepší střelci"} items={topMatchData.scorers} valueOf={(s) => s.goals ?? 0} suffix="g" />
                 <TopList title={"\u{1F3AF} Nejlepší asistenti"} items={topMatchData.assists} valueOf={(s) => s.assists ?? 0} suffix="a" />

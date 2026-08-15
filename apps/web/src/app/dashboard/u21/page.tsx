@@ -321,13 +321,13 @@ export default function U21Page() {
                     <button
                       disabled={busy === p.id}
                       onClick={() => sendToU21(p.id, "permanent")}
-                      className="px-2 py-1 text-[11px] bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
+                      className="px-2 py-1 text-micro bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
                       title="Trvale do U21 dokud ho nepovoláš zpět"
                     >→ U21</button>
                     <button
                       disabled={busy === p.id}
                       onClick={() => sendToU21(p.id, "next_match")}
-                      className="px-2 py-1 text-[11px] bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
+                      className="px-2 py-1 text-micro bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
                       title="Jen na nejbližší U21 zápas, pak zpět"
                     >→ 1 zápas</button>
                   </div>
@@ -360,7 +360,7 @@ export default function U21Page() {
                       const u21Player = u21Players.find((x) => x.id === p.id);
                       if (u21Player) promoteToA(u21Player);
                     }}
-                    className="px-2 py-1 text-[11px] bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50"
+                    className="px-2 py-1 text-micro bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50"
                     title="Povolat do A-týmu"
                   >↑ A-tým</button>
                 )}
@@ -461,7 +461,7 @@ function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: Le
   return (
     <div className="card p-4 flex flex-col sm:flex-row items-center gap-4">
       <div className="flex-shrink-0 text-center sm:text-left">
-        <div className="text-[10px] uppercase tracking-widest text-muted font-heading">Nejbližší zápas</div>
+        <div className="text-micro uppercase tracking-widest text-muted font-heading">Nejbližší zápas</div>
         <div className="font-heading font-bold text-lg text-ink mt-0.5 capitalize">{dateLabel}</div>
         <div className="text-xs text-gray-500">
           Kolo {round.round}{timeLabel ? ` · ${timeLabel}` : ""}
@@ -717,10 +717,10 @@ function PlayerTable({
                 {(p.nextMatchReturn || overstayed) && (
                   <div className="mt-0.5 flex gap-1 flex-wrap">
                     {p.nextMatchReturn && (
-                      <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">↩ vrátí se</span>
+                      <span className="text-micro bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">↩ vrátí se</span>
                     )}
                     {overstayed && (
-                      <span className="text-[10px] bg-amber-300 text-amber-900 px-1.5 py-0.5 rounded">přestárlý</span>
+                      <span className="text-micro bg-amber-300 text-amber-900 px-1.5 py-0.5 rounded">přestárlý</span>
                     )}
                   </div>
                 )}

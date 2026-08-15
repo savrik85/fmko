@@ -247,7 +247,7 @@ function FacilityChip({ facility, level, color }: { facility: string; level: num
       }}
     >
       <div className="text-base leading-none">{cfg.icon}</div>
-      <div className="text-[9px] font-heading font-bold mt-0.5" style={{ color: readableOnLight(color) }}>{cfg.label}</div>
+      <div className="text-micro font-heading font-bold mt-0.5" style={{ color: readableOnLight(color) }}>{cfg.label}</div>
       <div className="flex gap-0.5 justify-center mt-0.5">
         {[1, 2, 3].map((l) => (
           <div key={l} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: l <= level ? color : "#ddd" }} />

@@ -135,7 +135,7 @@ export function WidgetFrame({
           takže každý ušetřený řádek je vidět jako kus náhledu navíc. */}
       <div className="shrink-0 flex items-center gap-x-4 gap-y-1.5 flex-wrap px-3 py-1.5 bg-pitch-50/60 border-b border-pitch-100">
         <div className="flex items-center gap-1" role="group" aria-label={`Šířka widgetu ${title}`}>
-          <span className="text-[11px] uppercase tracking-wide text-muted mr-0.5">Šířka</span>
+          <span className="text-micro uppercase tracking-wide text-muted mr-0.5">Šířka</span>
           {WIDTHS.map((w) => (
             <button
               key={w}
@@ -154,7 +154,7 @@ export function WidgetFrame({
         </div>
 
         <div className="flex items-center gap-1" role="group" aria-label={`Výška widgetu ${title}`}>
-          <span className="text-[11px] uppercase tracking-wide text-muted mr-0.5">Výška</span>
+          <span className="text-micro uppercase tracking-wide text-muted mr-0.5">Výška</span>
           {HEIGHT_OPTIONS.map((h) => (
             <button
               key={String(h.value)}

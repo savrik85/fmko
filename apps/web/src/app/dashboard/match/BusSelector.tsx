@@ -189,7 +189,7 @@ export function BusSelector({
         : "Neobjednáno · 3 zápasy v řadě = stálí fanoušci"}
       className="space-y-3"
     >
-      <div className="text-[10px] text-muted text-right -mt-1 mb-2">
+      <div className="text-micro text-muted text-right -mt-1 mb-2">
         3 zápasy v řadě = stálí fanoušci
       </div>
 
@@ -223,7 +223,7 @@ export function BusSelector({
       ) : (
         <>
           <div>
-            <label className="text-[10px] text-muted font-heading uppercase tracking-wide block mb-1">
+            <label className="text-micro text-muted font-heading uppercase tracking-wide block mb-1">
               Z které obce
             </label>
             <select
@@ -249,7 +249,7 @@ export function BusSelector({
           </div>
 
           <div>
-            <label className="text-[10px] text-muted font-heading uppercase tracking-wide block mb-1">
+            <label className="text-micro text-muted font-heading uppercase tracking-wide block mb-1">
               Velikost dopravního prostředku
             </label>
             <div className="grid grid-cols-3 gap-1.5">
@@ -267,14 +267,14 @@ export function BusSelector({
                   <div className="font-heading font-bold text-xs leading-tight">
                     {t.label}
                   </div>
-                  <div className="text-[10px] text-muted">{t.range}</div>
-                  <div className="text-[10px] text-pitch-600 font-heading font-bold mt-0.5">
+                  <div className="text-micro text-muted">{t.range}</div>
+                  <div className="text-micro text-pitch-600 font-heading font-bold mt-0.5">
                     {t.cost.toLocaleString("cs")} Kč
                   </div>
                 </button>
               ))}
             </div>
-            <div className="mt-1.5 text-[11px] text-muted italic">
+            <div className="mt-1.5 text-micro text-muted italic">
               {selectedTier.desc}
             </div>
           </div>

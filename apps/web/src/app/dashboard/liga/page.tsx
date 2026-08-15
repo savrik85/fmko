@@ -422,7 +422,7 @@ function PastSeasonView({ entry, myTeamId }: { entry: HistoryEntry; myTeamId: st
           <div className="flex flex-wrap gap-2">
             {a.bestEleven.map((p) => (
               <div key={p.playerId} className="bg-gray-50 rounded-soft px-3 py-1.5 text-sm">
-                <span className="text-[10px] font-heading font-bold text-pitch-600 uppercase mr-1.5">{p.position}</span>
+                <span className="text-micro font-heading font-bold text-pitch-600 uppercase mr-1.5">{p.position}</span>
                 <span className="font-heading font-bold">{p.name}</span>
                 <span className="text-muted text-xs"> · {p.teamName}</span>
               </div>
@@ -459,7 +459,7 @@ function PastTeamLink({ teamId, name, highlight }: { teamId?: string | null; nam
 function PastAward({ icon, label, reason, children }: { icon: string; label: string; reason?: string | null; children: React.ReactNode }) {
   return (
     <div className="bg-gray-50 rounded-soft px-3 py-2">
-      <div className="text-[10px] font-heading font-bold text-muted uppercase">{icon} {label}</div>
+      <div className="text-micro font-heading font-bold text-muted uppercase">{icon} {label}</div>
       <div className="text-base">{children}</div>
       {reason && <div className="text-xs text-muted mt-0.5 italic">„{reason}"</div>}
     </div>
@@ -469,7 +469,7 @@ function PastAward({ icon, label, reason, children }: { icon: string; label: str
 function PastStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="bg-gray-50 rounded-soft px-3 py-2">
-      <div className="text-[10px] font-heading font-bold text-muted uppercase">{label}</div>
+      <div className="text-micro font-heading font-bold text-muted uppercase">{label}</div>
       <div className="font-heading font-bold tabular-nums whitespace-nowrap">{value}</div>
       {sub && <div className="text-xs text-muted truncate">{sub}</div>}
     </div>
@@ -626,7 +626,7 @@ function StandingsTab({ standings, teamId }: { standings: Standing[]; teamId: st
                 <td className="py-3 px-1.5 hidden sm:table-cell">
                   <div className="flex gap-1 justify-center">
                     {(row.form ?? []).slice(0, 5).map((f, i) => (
-                      <div key={i} className={`w-5 h-5 rounded ${FORM_COLORS[f] ?? "bg-gray-200"} flex items-center justify-center text-white text-[10px] font-bold`}>
+                      <div key={i} className={`w-5 h-5 rounded ${FORM_COLORS[f] ?? "bg-gray-200"} flex items-center justify-center text-white text-micro font-bold`}>
                         {FORM_LABELS[f] ?? f}
                       </div>
                     ))}

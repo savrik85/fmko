@@ -626,8 +626,8 @@ function MatchPage() {
       {/* ═══ Presety A / B / C — taby ═══ */}
       <div className="card p-3">
         <div className="flex items-baseline justify-between mb-1">
-          <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Uložené sestavy</div>
-          <div className="text-[10px] text-muted">
+          <div className="text-micro text-muted font-heading uppercase tracking-wide">Uložené sestavy</div>
+          <div className="text-micro text-muted">
             {activePreset
               ? <>Vybrána <span className="font-bold text-pitch-600">Sestava {activePreset}</span> · {saved ? "použije se pro zápas" : "uložením se nasadí pro zápas"}</>
               : "Klik na sestavu = vybrat pro zápas"}
@@ -650,8 +650,8 @@ function MatchPage() {
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>Sestava {slot}</span>
-                    {filled && <span className={`text-[10px] ${active ? "opacity-90" : "opacity-70"}`}>{preset.formation}</span>}
-                    {!filled && <span className="text-[10px] opacity-70">prázdná</span>}
+                    {filled && <span className={`text-micro ${active ? "opacity-90" : "opacity-70"}`}>{preset.formation}</span>}
+                    {!filled && <span className="text-micro opacity-70">prázdná</span>}
                   </div>
                 </button>
               </div>
@@ -665,8 +665,8 @@ function MatchPage() {
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline justify-between mb-1">
-              <div className="text-[10px] text-muted font-heading uppercase tracking-wide">Formace <span className="text-muted-light normal-case">— najetím zjistíš detail</span></div>
-              <div className="text-[10px] font-heading">
+              <div className="text-micro text-muted font-heading uppercase tracking-wide">Formace <span className="text-muted-light normal-case">— najetím zjistíš detail</span></div>
+              <div className="text-micro font-heading">
                 Sehranost: <span className={`font-bold ${famColor(formationFam[formation] ?? 15)}`}>{Math.round(formationFam[formation] ?? 15)}</span>/100
               </div>
             </div>
@@ -685,7 +685,7 @@ function MatchPage() {
             </div>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] text-muted font-heading uppercase tracking-wide mb-1">Taktika</div>
+            <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1">Taktika</div>
             <div className="grid grid-cols-3 sm:grid-cols-6 rounded-xl bg-gray-50 p-0.5 gap-0.5">
               {TACTICS.map((t) => (
                 <button key={t.key} onClick={() => { setTactic(t.key); setSaved(false); }}
@@ -700,9 +700,9 @@ function MatchPage() {
         {/* Tvrdost hry — vlastní řádek, aby se třetí osa na desktopu nervala s formací a taktikou */}
         <div className="mt-2 pt-2 border-t border-gray-100">
           <div className="flex items-center justify-between gap-2 mb-1">
-            <span className="text-[10px] text-muted font-heading uppercase tracking-wide">Tvrdost hry</span>
+            <span className="text-micro text-muted font-heading uppercase tracking-wide">Tvrdost hry</span>
             {cardRisk && (
-              <span className="text-[11px] text-muted">
+              <span className="text-micro text-muted">
                 Riziko karet:{" "}
                 <span className={`font-heading font-bold ${
                   cardRisk.level === "vysoké" ? "text-card-red" : cardRisk.level === "střední" ? "text-gold-600" : "text-pitch-600"
@@ -721,13 +721,13 @@ function MatchPage() {
           </div>
           {/* Varování jen když má smysl — u benevolentního sudího by jen šumělo */}
           {hardness === "hard" && referee && referee.strictness >= 65 && (
-            <p className="text-[11px] text-card-red mt-1.5">
+            <p className="text-micro text-card-red mt-1.5">
               {referee.name} pískne i to, co jinde projde. Do těla u něj neznamená odebrané míče,
               ale přímáky pro soupeře a plný zápis.
             </p>
           )}
           {cardRisk && (
-            <p className="text-[11px] text-muted mt-1.5">
+            <p className="text-micro text-muted mt-1.5">
               Podle jeho metru a téhle sestavy čekej ~{cardRisk.cards.toFixed(1).replace(".", ",")} žluté
               a ~{cardRisk.reds.toFixed(2).replace(".", ",")} červené.
               {cardRisk.onEdge > 0 && (
@@ -746,24 +746,24 @@ function MatchPage() {
             type="button"
             onClick={() => setHintsOpen((v) => !v)}
             aria-expanded={hintsOpen}
-            className="w-full flex items-center justify-between gap-2 text-[11px] font-heading uppercase tracking-wide text-muted-light"
+            className="w-full flex items-center justify-between gap-2 text-micro font-heading uppercase tracking-wide text-muted-light"
           >
             <span>Co která volba znamená</span>
             <span className={`transition-transform ${hintsOpen ? "rotate-180" : ""}`} aria-hidden>▾</span>
           </button>
         </div>
         {hintsOpen && (
-        <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-[11px] leading-relaxed text-muted">
+        <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-micro leading-relaxed text-muted">
           <div>
-            <span className="font-heading uppercase text-[10px] tracking-wide text-muted-light">Formace: </span>
+            <span className="font-heading uppercase text-micro tracking-wide text-muted-light">Formace: </span>
             {getFormationTooltip(formation).replace(/^[^—]+— /, "")}
           </div>
           <div>
-            <span className="font-heading uppercase text-[10px] tracking-wide text-muted-light">Taktika: </span>
+            <span className="font-heading uppercase text-micro tracking-wide text-muted-light">Taktika: </span>
             {getTacticTooltip(tactic as TacticKey).replace(/^[^—]+— /, "")}
           </div>
           <div>
-            <span className="font-heading uppercase text-[10px] tracking-wide text-muted-light">Tvrdost: </span>
+            <span className="font-heading uppercase text-micro tracking-wide text-muted-light">Tvrdost: </span>
             {getHardnessTooltip(hardness).replace(/^[^—]+— /, "")}
           </div>
         </div>
@@ -914,7 +914,7 @@ function MatchPage() {
                             {isAbsent ? (
                               <div>
                                 <span className="font-heading font-bold text-sm line-through text-muted">{p.lastName}</span>
-                                <div className="text-[10px] text-muted italic">{(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : ((p as any).absenceSms ?? (p as any).absenceReason ?? "Nedostupný")}</div>
+                                <div className="text-micro text-muted italic">{(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : ((p as any).absenceSms ?? (p as any).absenceReason ?? "Nedostupný")}</div>
                               </div>
                             ) : (
                               <div>
@@ -984,7 +984,7 @@ function MatchPage() {
                                 <div className="text-xs text-muted">{player.firstName} · {player.age} let</div>
                               </div>
                               {captainId === player.id && (
-                                <span className="shrink-0 w-6 h-6 rounded-full text-[10px] font-heading font-[800] flex items-center justify-center bg-gold-500 text-white shadow-sm"
+                                <span className="shrink-0 w-6 h-6 rounded-full text-micro font-heading font-[800] flex items-center justify-center bg-gold-500 text-white shadow-sm"
                                   title="Kapitán — mění se níž v Rolích v týmu">C</span>
                               )}
                             </div>
@@ -1050,7 +1050,7 @@ function MatchPage() {
                             {isAbsent ? (
                               <div>
                                 <span className="font-heading font-bold text-sm leading-tight line-through text-muted">{p.lastName}</span>
-                                <div className="text-[10px] text-muted italic">{(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : ((p as any).absenceSms ?? (p as any).absenceReason ?? "Nedostupný")}</div>
+                                <div className="text-micro text-muted italic">{(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : ((p as any).absenceSms ?? (p as any).absenceReason ?? "Nedostupný")}</div>
                               </div>
                             ) : (
                               <div>
@@ -1101,7 +1101,7 @@ function MatchPage() {
         <div className="flex items-center gap-3">
           <div className="shrink-0 text-center">
             <div className={`font-heading font-[800] text-2xl tabular-nums ${chemColor}`}>{chemistry}</div>
-            <div className="text-[9px] text-muted font-heading uppercase">Chemie</div>
+            <div className="text-micro text-muted font-heading uppercase">Chemie</div>
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
@@ -1114,7 +1114,7 @@ function MatchPage() {
               <>
                 <div className="flex flex-wrap gap-1">
                   {relSummary.map((r) => (
-                    <span key={r.type} className={`text-[10px] font-heading font-bold px-1.5 py-0.5 rounded ${
+                    <span key={r.type} className={`text-micro font-heading font-bold px-1.5 py-0.5 rounded ${
                       r.type === "rivals" || r.type === "in_laws" ? "bg-red-50 text-card-red" : "bg-pitch-50 text-pitch-600"
                     }`}>
                       {REL_EMOJI[r.type]} {r.count}× {REL_LABEL[r.type]?.toLowerCase() ?? r.type}
@@ -1124,7 +1124,7 @@ function MatchPage() {
                 {/* Konkrétní páry a co dělají — číslo samo o sobě nic neříká */}
                 <div className="mt-1.5 space-y-0.5">
                   {chemPairs.map((p, i) => (
-                    <div key={i} className="text-[11px] text-muted leading-snug">
+                    <div key={i} className="text-micro text-muted leading-snug">
                       <span className="text-ink font-heading font-bold">{p.aName}</span>
                       {" a "}
                       <span className="text-ink font-heading font-bold">{p.bName}</span>
@@ -1135,7 +1135,7 @@ function MatchPage() {
               </>
             )}
             {relSummary.length === 0 && availablePairs.length > 0 && (
-              <div className="text-[11px] text-muted leading-snug">
+              <div className="text-micro text-muted leading-snug">
                 V základní jedenáctce se zatím nikdo blíž nezná — v kádru ale ano.
                 Postav je vedle sebe a chemie naskočí:
                 <span className="block mt-1">
@@ -1154,7 +1154,7 @@ function MatchPage() {
               </div>
             )}
             {relSummary.length === 0 && availablePairs.length === 0 && (
-              <div className="text-[11px] text-muted leading-snug">
+              <div className="text-micro text-muted leading-snug">
                 V kádru se zatím nikdo blíž nezná. Vazby vznikají samy, jak se soupiska mění —
                 nováček z vesnice si najde souseda, vrstevníka ze školy, kolegu z práce nebo
                 parťáka na pivo. Bratři a mentorské dvojice se objeví taky, jen vzácněji.
@@ -1331,7 +1331,7 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
                 title={`${a.nazev} — váha ${Math.round(a.vaha * 100)} %`}>
                 {a.zkratka}
                 {cfg.attrs.length > 1 && (
-                  <div className="text-[10px] font-normal leading-none">{Math.round(a.vaha * 100)}%</div>
+                  <div className="text-micro font-normal leading-none">{Math.round(a.vaha * 100)}%</div>
                 )}
               </th>
             ))}
