@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiAction, apiFetch, type Team } from "@/lib/api";
-import { Spinner, SectionLabel, useConfirm, LockDetail } from "@/components/ui";
+import { Spinner, SectionLabel, useConfirm, LockDetail, Tabs } from "@/components/ui";
 import { SellDialog } from "./SellDialog";
 import { BazarTab } from "./BazarTab";
 import {
@@ -246,16 +246,15 @@ function EquipmentPage() {
       />
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-surface rounded-xl p-1">
-        {([["mine", "Moje vybavení"], ["bazar", "Bazar"]] as Array<[Tab, string]>).map(([key, label]) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={`flex-1 py-2 text-sm font-heading font-bold rounded-soft transition-colors ${
-              tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
-            }`}>
-            {label}{key === "bazar" && bazarCount > 0 ? ` (${bazarCount})` : ""}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        ariaLabel="Vybavení"
+        items={[
+          { key: "mine", label: "Moje vybavení" },
+          { key: "bazar", label: "Bazar", count: bazarCount || null },
+        ]}
+      />
 
       {tab === "bazar" ? (
         <BazarTab

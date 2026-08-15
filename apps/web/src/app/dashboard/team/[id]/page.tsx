@@ -452,7 +452,7 @@ export default function TeamPage() {
           {/* Results */}
           <div className="card p-4 sm:p-5">
             <SectionLabel>Výsledky ({matchResults.matches.length})</SectionLabel>
-            <div className="overflow-x-auto -mx-4 sm:-mx-5">
+            <div className="overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
               <table className="w-full text-sm min-w-[480px]">
                 <thead>
                   <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
@@ -551,7 +551,7 @@ export default function TeamPage() {
 
         {/* Own team: FM-style detailed table (desktop), compact card list (mobile) */}
         {isOwnTeam && (
-          <div className="hidden md:block overflow-x-auto -mx-4 sm:-mx-5">
+          <div className="hidden md:block overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
             <table className="w-full text-sm min-w-[900px]">
               <thead>
                 <tr className="text-left border-b border-gray-200">

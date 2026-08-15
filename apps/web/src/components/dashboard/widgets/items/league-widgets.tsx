@@ -22,7 +22,7 @@ export function StandingsWidget({ data, height }: WidgetProps) {
 
   return (
     <>
-      <div className="overflow-x-auto -mx-4 sm:-mx-5">
+      <div className="overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader } from "@/components/ui";
+import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 // ═══ Types ═══
@@ -325,16 +325,18 @@ function LigaPage() {
       ) : (
       <>
       {/* Tabs — cizí liga: tabulka + zpravodaj, vlastní: plné menu */}
-      <div className="flex gap-1 bg-surface rounded-xl p-1">
-        {(isOtherLeague ? ["tabulka", "zpravodaj"] as Tab[] : ["tabulka", "rozpis", "vysledky", "statistiky"] as Tab[]).map((key) => (
-          <button key={key} onClick={() => changeTab(key)}
-            className={`flex-1 py-2.5 text-sm font-heading font-bold rounded-soft transition-colors ${
-              tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
-            }`}>
-            {{ tabulka: "Tabulka", rozpis: "Rozpis", vysledky: "Výsledky", statistiky: "Statistiky", zpravodaj: "Zpravodaj" }[key]}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={tab}
+        onChange={changeTab}
+        ariaLabel="Liga"
+        items={(isOtherLeague
+          ? (["tabulka", "zpravodaj"] as Tab[])
+          : (["tabulka", "rozpis", "vysledky", "statistiky"] as Tab[])
+        ).map((key) => ({
+          key,
+          label: { tabulka: "Tabulka", rozpis: "Rozpis", vysledky: "Výsledky", statistiky: "Statistiky", zpravodaj: "Zpravodaj" }[key],
+        }))}
+      />
 
       {/* Tab content */}
       {tab === "tabulka" && <StandingsTab standings={standings} teamId={teamId!} />}
@@ -387,7 +389,7 @@ function PastSeasonView({ entry, myTeamId }: { entry: HistoryEntry; myTeamId: st
 
       {/* Konečná tabulka */}
       {entry.finalStandings && entry.finalStandings.length > 0 && (
-        <div className="card overflow-x-auto">
+        <div className="card overflow-x-auto table-scroll">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b-2 border-gray-200 text-muted">
@@ -561,7 +563,7 @@ function StandingsTab({ standings, teamId }: { standings: Standing[]; teamId: st
   ];
 
   return (
-    <div className="card overflow-x-auto">
+    <div className="card overflow-x-auto table-scroll">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b-2 border-gray-200">

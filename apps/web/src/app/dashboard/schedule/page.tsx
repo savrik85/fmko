@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PageHeader, useConfirm } from "@/components/ui";
+import { Spinner, SectionLabel, BadgePreview, PageHeader, useConfirm, Tabs } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface ScheduleMatch {
@@ -167,19 +167,15 @@ export default function SchedulePage() {
     <div className="page-container space-y-5">
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-surface rounded-xl p-1">
-        {([["my", "Můj tým"], ["league", "Celá liga"]] as const).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`flex-1 py-2 text-sm font-heading font-bold rounded-soft transition-colors ${
-              tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        ariaLabel="Rozpis zápasů"
+        items={[
+          { key: "my", label: "Můj tým" },
+          { key: "league", label: "Celá liga" },
+        ]}
+      />
 
       {/* My team schedule */}
       {tab === "my" && (

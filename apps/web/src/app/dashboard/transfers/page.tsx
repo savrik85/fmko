@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
 import { nationalityFlag } from "@/lib/nationality";
-import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern } from "@/components/ui";
+import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam } from "@/components/ui";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { isLightColor } from "@/lib/team-color";
 
 type Tab = "overview" | "search" | "free_agents" | "market" | "offers" | "squad";
+// Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
+const TAB_KEYS = ["overview", "search", "free_agents", "market", "offers", "squad"] as const;
 
 interface TransfersOverview {
   stats: {
@@ -509,7 +511,7 @@ const SORT_OPTIONS: Array<{ value: FASortKey; label: string }> = [
 export default function TransfersPage() {
   const { teamId, primaryColor, gameDate } = useTeam();
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useTabParam(TAB_KEYS);
   const [overview, setOverview] = useState<TransfersOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -769,16 +771,12 @@ export default function TransfersPage() {
       )}
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-surface rounded-xl p-1">
-        {tabs.map(([key, label, count]) => (
-          <button key={key} onClick={() => { setTab(key); if (key === "search") loadSearch(); }}
-            className={`flex-1 py-2 text-sm font-heading font-bold rounded-soft transition-colors ${
-              tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
-            }`}>
-            {label}{count > 0 ? ` (${count})` : ""}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={tab}
+        onChange={(k) => { setTab(k); if (k === "search") loadSearch(); }}
+        ariaLabel="Přestupy"
+        items={tabs.map(([key, label, count]) => ({ key, label, count: count || null }))}
+      />
 
       {/* ═══ TAB: Přehled ═══ */}
       {tab === "overview" && (
@@ -2348,7 +2346,7 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
   return (
     <div>
       <SectionLabel>Hráči ({players.length})</SectionLabel>
-      <div className="card overflow-x-auto">
+      <div className="card overflow-x-auto table-scroll">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">

@@ -1083,7 +1083,7 @@ export default function PlayerDetailPage() {
                 Průměr: <span className="font-bold text-ink">{avg.toFixed(2)}</span>
               </div>
             </div>
-            <div className="overflow-x-auto -mx-4 sm:-mx-5 px-4 sm:px-5">
+            <div className="overflow-x-auto -mx-4 sm:-mx-5 px-4 sm:px-5 table-scroll">
               <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-w-[600px] h-[140px]" preserveAspectRatio="none">
                 {/* Y-axis gridlines */}
                 {yScale.map((r) => (
@@ -1269,7 +1269,7 @@ export default function PlayerDetailPage() {
 
             {/* Per-season table with team */}
             {careerStats.seasons.length > 0 && (
-              <div className="overflow-x-auto -mx-4 sm:-mx-5">
+              <div className="overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
                 <table className="w-full text-sm min-w-[600px]">
                   <thead>
                     <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
@@ -1355,7 +1355,7 @@ export default function PlayerDetailPage() {
               <Filter id="L" label="Prohry" count={lossesCount} color="bg-red-500" />
             </div>
           </div>
-          <div className="overflow-x-auto -mx-4 sm:-mx-5">
+          <div className="overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
             <table className="w-full text-sm min-w-[760px]">
               <thead>
                 <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { MANAGER_FANS, MANAGER_FANS_BANDS } from "@okresni-masina/shared";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError, type Team } from "@/lib/api";
-import { Spinner, SectionLabel, useConfirm } from "@/components/ui";
+import { Spinner, SectionLabel, useConfirm, Tabs } from "@/components/ui";
 import { BusSelector } from "../match/BusSelector";
 
 interface ScheduleMatch {
@@ -501,23 +501,12 @@ export default function FansPage() {
       {confirmDialog}
 
       {/* ═══ Tab nav ═══ */}
-      <div className="grid grid-cols-3 sm:flex sm:gap-1 gap-1 p-1 bg-gray-100 rounded-soft" style={{ gridTemplateColumns: `repeat(${visibleTabs.length}, minmax(0, 1fr))` }}>
-        {visibleTabs.map((t) => {
-          const active = t.key === currentTab;
-          return (
-            <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
-              className={`sm:flex-1 py-2 px-2 sm:px-3 rounded-control font-heading font-bold transition-colors flex items-center justify-center gap-1.5 ${
-                active ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink"
-              }`}
-            >
-              <span className="text-base leading-none">{t.icon}</span>
-              <span className="text-micro sm:text-sm leading-none">{t.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <Tabs
+        value={currentTab}
+        onChange={setActiveTab}
+        ariaLabel="Fanoušci"
+        items={visibleTabs.map((t) => ({ key: t.key, label: t.label, icon: t.icon }))}
+      />
 
       {currentTab === "fanbase" && fanbase && (<>
       {/* ═══ Jak to funguje — jednoduchý úvod ═══ */}

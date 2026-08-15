@@ -4,10 +4,12 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
-import { Spinner, PositionBadge } from "@/components/ui";
+import { Spinner, PositionBadge, Tabs, useTabParam } from "@/components/ui";
 import { ATTRIBUTE_INFO, getTooltip, type AttrKey, type Pos } from "@/lib/attribute-info";
 
 type Tab = "atributy" | "sezona" | "top" | "dochazka";
+// Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
+const TAB_KEYS = ["atributy", "sezona", "top", "dochazka"] as const;
 type PosFilter = "all" | "GK" | "DEF" | "MID" | "FWD";
 type SortKey = "name" | "pos" | "age" | "rat" | "spd" | "tec" | "sho" | "pas" | "hea" | "def" | "gk" | "sta" | "str" | "cond" | "mor" | "rel" | "wage";
 type StatsKey = "name" | "pos" | "apps" | "min" | "g" | "a" | "ga" | "y" | "r" | "cs" | "mom" | "avg";
@@ -148,7 +150,7 @@ export default function SquadPage() {
   const [team, setTeam] = useState<Team | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [seasonStats, setSeasonStats] = useState<PlayerSeasonStats[]>([]);
-  const [tab, setTab] = useState<Tab>("atributy");
+  const [tab, setTab] = useTabParam(TAB_KEYS);
   const [filter, setFilter] = useState<PosFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("rat");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -327,24 +329,17 @@ export default function SquadPage() {
 
       {/* Tabs */}
       <div className="card p-1.5">
-        <div className="flex rounded-soft bg-gray-50 p-0.5 gap-0.5">
-          {([
-            ["atributy", "Atributy", "\u{1F4CB}"],
-            ["sezona", "Sezóna", "\u{1F4CA}"],
-            ["top", "TOP", "\u{1F3C6}"],
-            ["dochazka", "Docházka", "\u{1F4C5}"],
-          ] as Array<[Tab, string, string]>).map(([k, label, icon]) => (
-            <button
-              key={k}
-              onClick={() => setTab(k)}
-              className={`flex-1 py-2 px-2 rounded-control text-center transition-all font-heading font-bold text-sm ${
-                tab === k ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"
-              }`}
-            >
-              <span className="mr-1.5">{icon}</span>{label}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          ariaLabel="Pohled na kádr"
+          items={[
+            { key: "atributy", label: "Atributy", icon: "\u{1F4CB}" },
+            { key: "sezona", label: "Sezóna", icon: "\u{1F4CA}" },
+            { key: "top", label: "TOP", icon: "\u{1F3C6}" },
+            { key: "dochazka", label: "Docházka", icon: "\u{1F4C5}" },
+          ]}
+        />
       </div>
 
       {/* Position filter — segmented control */}
@@ -376,7 +371,7 @@ export default function SquadPage() {
 
       {/* FM-style table — Atributy tab */}
       {tab === "atributy" && (
-      <div className="card overflow-x-auto">
+      <div className="card overflow-x-auto table-scroll">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b-2 border-gray-200">
@@ -530,7 +525,7 @@ export default function SquadPage() {
               {"\u{2139}\u{FE0F}"} Tým zatím neodehrál žádný zápas. Statistiky se naplní postupně po každém kole. <Link href="/dashboard/schedule" className="text-pitch-600 underline ml-1">Rozpis zápasů</Link>
             </div>
           )}
-          <div className="card overflow-x-auto">
+          <div className="card overflow-x-auto table-scroll">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b-2 border-gray-200">
@@ -687,7 +682,7 @@ function DochazkaTab({ rows, sortKey, sortDir, onSort }: {
           {"\u{2139}\u{FE0F}"} Tým zatím neodehrál žádný zápas. Tabulka zobrazí jen tréninkovou docházku.
         </div>
       )}
-      <div className="card overflow-x-auto">
+      <div className="card overflow-x-auto table-scroll">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b-2 border-gray-200">

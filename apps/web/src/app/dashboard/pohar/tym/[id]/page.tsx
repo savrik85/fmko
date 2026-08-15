@@ -115,7 +115,7 @@ export default function CupTeamDetailPage() {
       <div>
         <SectionLabel>Soupiska</SectionLabel>
         {data.squad.length > 0 ? (
-          <div className="card mt-2 overflow-x-auto">
+          <div className="card mt-2 overflow-x-auto table-scroll">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-muted uppercase font-heading">

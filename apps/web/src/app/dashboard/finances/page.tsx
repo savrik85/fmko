@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, PositionBadge } from "@/components/ui";
+import { Spinner, SectionLabel, PositionBadge, Tabs, useTabParam } from "@/components/ui";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Typy
@@ -58,6 +58,8 @@ interface LoanInfo {
 }
 
 type Tab = "overview" | "flows" | "forecast" | "loan";
+// Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
+const TAB_KEYS = ["overview", "flows", "forecast", "loan"] as const;
 type TxnFilter = "all" | "income" | "expense";
 type FlowSide = "income" | "expenses";
 
@@ -130,7 +132,7 @@ export default function FinancesPage() {
   const [txnFilter, setTxnFilter] = useState<TxnFilter>("all");
   const [txnTotal, setTxnTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useTabParam(TAB_KEYS);
   const [loanInfo, setLoanInfo] = useState<LoanInfo | null>(null);
 
   useEffect(() => {
@@ -209,21 +211,12 @@ export default function FinancesPage() {
       </div>
 
       {/* Tab bar — 4 taby, plně na šířku i na mobilu */}
-      <div className="grid grid-cols-4 gap-1 bg-surface rounded-xl p-1">
-        {tabs.map(([key, label, icon]) => (
-          <button
-            key={key}
-            onClick={() => { setTab(key); if (key === "loan") loadLoanInfo(); }}
-            className={`py-2 px-1 text-xs sm:text-sm font-heading font-bold rounded-soft transition-colors ${
-              tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
-            }`}
-          >
-            <span className="hidden sm:inline mr-1">{icon}</span>
-            <span className="sm:hidden block text-base leading-none mb-0.5">{icon}</span>
-            <span>{label}</span>
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={tab}
+        onChange={(k) => { setTab(k); if (k === "loan") loadLoanInfo(); }}
+        ariaLabel="Finance"
+        items={tabs.map(([key, label, icon]) => ({ key, label, icon }))}
+      />
 
       {tab === "overview" && (
         <OverviewTab
@@ -793,7 +786,7 @@ function HistorySection({ transactions, total, filter, onFilter }: {
       </div>
 
       {transactions.length > 0 ? (
-        <div className="overflow-x-auto -mx-4 sm:-mx-5">
+        <div className="overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
           <table className="w-full text-sm min-w-[500px]">
             <thead>
               <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">

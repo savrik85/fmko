@@ -4,7 +4,10 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, PageHeader } from "@/components/ui";
+import { Spinner, SectionLabel, PageHeader, Tabs, useTabParam } from "@/components/ui";
+
+// Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
+const TAB_KEYS = ["pavouk", "strelci"] as const;
 
 interface Side { name: string; color: string | null; isBig: boolean; teamId: string | null; strength: number; cupTeamId?: string }
 interface BracketMatch {
@@ -107,7 +110,7 @@ export default function PoharPage() {
   const { teamId } = useTeam();
   const [data, setData] = useState<CupData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"pavouk" | "strelci">("pavouk");
+  const [tab, setTab] = useTabParam(TAB_KEYS);
 
   useEffect(() => {
     if (!teamId) return;
@@ -220,16 +223,15 @@ export default function PoharPage() {
       )}
 
       {/* Taby — pavouk / střelci */}
-      <div className="flex gap-1 bg-surface rounded-xl p-1">
-        {(["pavouk", "strelci"] as const).map((key) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={`flex-1 py-2.5 text-sm font-heading font-bold rounded-soft transition-colors ${
-              tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
-            }`}>
-            {key === "pavouk" ? "🏆 Pavouk" : "⚽ Střelci"}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        ariaLabel="Pohár"
+        items={[
+          { key: "pavouk", label: "Pavouk", icon: "🏆" },
+          { key: "strelci", label: "Střelci", icon: "⚽" },
+        ]}
+      />
 
       {/* Střelci poháru */}
       {tab === "strelci" && (

@@ -567,7 +567,7 @@ function UserManagement() {
     <div className="card p-4">
       <SectionLabel>Uživatelé ({users.length})</SectionLabel>
       {status && <div className="text-sm font-heading font-bold text-pitch-500 mb-2">{status}</div>}
-      <div className="overflow-x-auto -mx-4">
+      <div className="overflow-x-auto -mx-4 table-scroll">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 text-left">
@@ -746,7 +746,7 @@ function SeedDataSection() {
             </div>
           )}
 
-          <div className="overflow-x-auto -mx-4">
+          <div className="overflow-x-auto -mx-4 table-scroll">
             <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="border-b border-gray-200 text-left">

@@ -605,6 +605,26 @@ body { touch-action: manipulation; }
   }
 }
 
+/* ── Široká tabulka na úzkém displeji ─────────────────────────────────────
+   Tabulka kádru má 17 sloupců a 735 px šířky; do 343 px se vejde necelá
+   polovina. Vodorovný scroll na dotyku nemá viditelný posuvník, takže bez
+   náznaku nikdo nepozná, že zbytek existuje.
+
+   Stín u kraje je čistě z pozadí, bez JS: dvojice `local` přechodů kryje
+   stín, dokud jsme na kraji, a `scroll` radiály ho ukážou, jakmile je kam
+   posunout. Zmizí sám, když se dojede na konec.
+
+   overscroll-behavior-x: contain — dotažení tabulky na kraj nesmí přepnout
+   na předchozí stránku v prohlížeči. */
+.table-scroll {
+  overscroll-behavior-x: contain;
+  background:
+    linear-gradient(to right, var(--color-surface) 30%, rgba(255,255,255,0)) left center / 28px 100% no-repeat local,
+    linear-gradient(to left, var(--color-surface) 30%, rgba(255,255,255,0)) right center / 28px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(26,23,20,0.13), rgba(26,23,20,0)) left center / 12px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(26,23,20,0.13), rgba(26,23,20,0)) right center / 12px 100% no-repeat scroll;
+}
+
 .divider { height: 1px; background: rgba(139,133,120,0.08); }
 
 .text-gradient-gold {

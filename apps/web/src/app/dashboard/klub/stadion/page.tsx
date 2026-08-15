@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, SectionLabel } from "@/components/ui";
+import { Spinner, Card, CardHeader, CardBody, SectionLabel, StickyActions } from "@/components/ui";
 
 const Stadium3D = dynamic(
   () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
@@ -248,7 +248,7 @@ export default function StadionPage() {
         </CardBody>
       </Card>
 
-      <div className="mt-6 sticky bottom-0 bg-paper/95 backdrop-blur-sm border-t border-gray-200 -mx-3 sm:-mx-8 px-3 sm:px-8 py-3 flex items-center justify-end gap-3">
+      <StickyActions>
         {savedAt && <span className="text-sm text-pitch-600 font-bold">{"\u{2705}"} Uloženo</span>}
         <button type="button" onClick={() => router.push("/dashboard/klub")}
           className="px-4 py-2 rounded-soft text-sm font-heading font-bold text-muted hover:text-ink">Zrušit</button>
@@ -256,7 +256,7 @@ export default function StadionPage() {
           className="px-6 py-2 rounded-soft text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 transition-colors">
           {saving ? "Ukládám..." : "Uložit"}
         </button>
-      </div>
+      </StickyActions>
     </div>
   );
 }

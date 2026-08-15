@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, PositionBadge, BadgePreview, useConfirm } from "@/components/ui";
+import { Spinner, PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import type { BadgePattern } from "@/components/ui";
 
@@ -86,6 +86,8 @@ interface LeagueRound {
 }
 
 type Tab = "kadr" | "tabulka" | "rozpis";
+// Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
+const TAB_KEYS = ["kadr", "tabulka", "rozpis"] as const;
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -110,7 +112,7 @@ function SectionTitle() {
 export default function U21Page() {
   const { teamId, gameDate: ctxGameDate } = useTeam();
   const { confirm, dialog: confirmDialog } = useConfirm();
-  const [tab, setTab] = useState<Tab>("kadr");
+  const [tab, setTab] = useTabParam(TAB_KEYS);
   const [u21TeamId, setU21TeamId] = useState<string | null>(null);
   const [u21LeagueId, setU21LeagueId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -272,25 +274,16 @@ export default function U21Page() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200">
-        {([
-          { id: "kadr", label: "Kádr" },
-          { id: "tabulka", label: "Tabulka" },
-          { id: "rozpis", label: "Rozpis" },
-        ] as Array<{ id: Tab; label: string }>).map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-              tab === t.id
-                ? "border-pitch-500 text-pitch-700"
-                : "border-transparent text-gray-500 hover:text-gray-800"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        ariaLabel="U21"
+        items={[
+          { key: "kadr", label: "Kádr" },
+          { key: "tabulka", label: "Tabulka" },
+          { key: "rozpis", label: "Rozpis" },
+        ]}
+      />
 
       {error && (
         <div className="card border-l-4 border-card-red bg-red-50 p-3 text-sm text-red-800">
@@ -547,7 +540,7 @@ function StandingsTable({ standings }: { standings: Standing[] }) {
   );
 
   return (
-    <div className="card overflow-x-auto">
+    <div className="card overflow-x-auto table-scroll">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">

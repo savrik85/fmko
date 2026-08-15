@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Spinner } from "@/components/ui";
+import { Spinner, Tabs, useTabParam } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import {
@@ -48,6 +48,8 @@ interface StaffMember {
 }
 
 type Tab = "team" | "market";
+// Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
+const TAB_KEYS = ["team", "market"] as const;
 
 const ATTR_ORDER: StaffAttributeKey[] = [
   "coaching", "medicine", "maintenance", "judgement", "communication", "work_rate", "charm",
@@ -100,7 +102,7 @@ function Avatar({ m, size = 48 }: { m: StaffMember; size?: number }) {
 export default function ZamestnanciPage() {
   const { teamId } = useTeam();
   const { confirm, dialog } = useConfirm();
-  const [tab, setTab] = useState<Tab>("team");
+  const [tab, setTab] = useTabParam(TAB_KEYS);
   const [loading, setLoading] = useState(true);
   const [hired, setHired] = useState<StaffMember[]>([]);
   const [market, setMarket] = useState<StaffMember[]>([]);
@@ -204,15 +206,12 @@ export default function ZamestnanciPage() {
     <>
       <div className="page-container space-y-4">
         {/* Tab bar */}
-        <div className="flex gap-1 bg-surface rounded-xl p-1">
-          {tabs.map(([key, label, count]) => (
-            <button key={key} onClick={() => setTab(key)}
-              className={`flex-1 py-2 text-sm font-heading font-bold rounded-soft transition-colors ${
-                tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"}`}>
-              {label}{count > 0 ? ` (${count})` : ""}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          ariaLabel="Zaměstnanci"
+          items={tabs.map(([key, label, count]) => ({ key, label, count: count || null }))}
+        />
 
         {tab === "team" && (
           <div className="space-y-5">

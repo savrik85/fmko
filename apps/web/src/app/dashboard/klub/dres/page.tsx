@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel, Modal } from "@/components/ui";
+import { Spinner, Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel, Modal, StickyActions } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { ClubScarf, SCARF_PATTERNS, type ScarfPattern } from "@/components/team/club-scarf";
 
@@ -608,7 +608,7 @@ export default function DresPage() {
       </div>
 
       {/* ═══ Save bar ═══ */}
-      <div className="mt-6 sticky bottom-0 bg-paper/95 backdrop-blur-sm border-t border-gray-200 -mx-3 sm:-mx-8 px-3 sm:px-8 py-3 flex items-center justify-end gap-3">
+      <StickyActions>
         {savedAt && (
           <span className="text-sm text-pitch-600 font-bold">{"\u{2705}"} Uloženo</span>
         )}
@@ -627,7 +627,7 @@ export default function DresPage() {
         >
           {saving ? "Ukládám..." : "Uložit"}
         </button>
-      </div>
+      </StickyActions>
 
       {/* ═══ Zoom modal — velký náhled dresu ═══ */}
       <Modal isOpen={zoomedKit !== null} onClose={() => setZoomedKit(null)} maxWidth="760px">
