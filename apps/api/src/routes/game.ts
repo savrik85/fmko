@@ -7088,6 +7088,40 @@ gameRouter.post("/admin/teams/:teamId/grant-budget", async (c) => {
   return c.json({ ok: true, teamId, amount: body.amount, balanceAfter });
 });
 
+// POST /api/game/delegate-referees — dodatečná delegace rozhodčích.
+// Denní tick deleguje jen na kolo za dva herní dny. Když se rozhodčí nasadí do
+// rozehrané sezóny (nebo tick kolo minul), tohle je dožene: bez parametrů projde
+// všechna nadcházející kola do dvou týdnů, s ?calendarId= jen to jedno.
+gameRouter.post("/game/delegate-referees", async (c) => {
+  const calendarId = c.req.query("calendarId");
+  const { delegateRefereesForCalendar } = await import("../referees/delegation");
+
+  if (calendarId) {
+    const n = await delegateRefereesForCalendar(c.env.DB, calendarId);
+    return c.json({ ok: true, delegated: n, calendars: 1 });
+  }
+
+  const gd = await c.env.DB.prepare("SELECT MAX(game_date) AS d FROM teams WHERE game_date IS NOT NULL")
+    .first<{ d: string | null }>();
+  if (!gd?.d) return c.json({ error: "Herní datum není nastavené" }, 400);
+
+  const cals = await c.env.DB.prepare(
+    `SELECT sc.id FROM season_calendar sc
+     WHERE sc.status = 'scheduled' AND sc.scheduled_at >= ? AND sc.scheduled_at <= datetime(?, '+14 days')
+       AND sc.season_number = (SELECT MAX(x.season_number) FROM season_calendar x WHERE x.league_id = sc.league_id)
+       AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id AND m.referee_id IS NULL)
+     ORDER BY sc.scheduled_at ASC`
+  ).bind(gd.d, gd.d).all<{ id: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "hledání kol k dodatečné delegaci", e); return null; });
+
+  let delegated = 0;
+  for (const row of cals?.results ?? []) {
+    delegated += await delegateRefereesForCalendar(c.env.DB, row.id)
+      .catch((e) => { logger.warn({ module: "game" }, `delegace kola ${row.id}`, e); return 0; });
+  }
+  return c.json({ ok: true, delegated, calendars: cals?.results.length ?? 0, gameDate: gd.d });
+});
+
 // POST /api/admin/end-season?force=1 — GLOBÁLNÍ chunkovaná orchestrace konce sezóny.
 // Zakončí celý ročník napříč všemi senior ligami + založí nový globální ročník.
 // Volat OPAKOVANĚ dokud allDone=true (admin tlačítko / curl loop). Jedna jednotka práce/invokaci.
