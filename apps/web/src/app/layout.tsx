@@ -88,7 +88,10 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
-      <body className="min-h-dvh">
+      {/* Bez min-h-dvh: výšku má body z globals.css a třída by mu navíc přidala
+          safe-area odsazení, které si aplikační obal uvnitř řeší sám. Součet
+          obojího dělal dokument vyšší než obrazovka a horní lišta odscrollovala. */}
+      <body>
         <TeamProvider>{children}</TeamProvider>
         <PushNotificationManager />
         <ErrorDialogProvider />

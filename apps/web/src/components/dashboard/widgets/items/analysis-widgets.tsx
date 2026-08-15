@@ -78,10 +78,15 @@ export function SeasonHeatmapWidget({ data }: WidgetProps) {
   return (
     <HeatmapGrid
       columns={10}
+      // Písmeno nese výsledek, tvar domácí/venku. Dřív to bylo obráceně —
+      // v políčku stálo D/V (doma/venku) a výsledek nesla jen barva, takže
+      // legenda vysvětlovala barvy, ne písmena, a pro červenozelenou vadu
+      // widget nenesl žádnou informaci.
       cells={matches.map((m) => ({
         key: m.id,
         color: barva(m.result),
-        text: m.isHome ? "D" : "V",
+        text: m.result === "W" ? "V" : m.result === "L" ? "P" : "R",
+        outline: !m.isHome,
         tooltip: `${m.round}. kolo · ${m.opponent} · ${m.homeScore}:${m.awayScore} (${m.isHome ? "doma" : "venku"})`,
         href: `/dashboard/match/${m.id}`,
       }))}
@@ -90,7 +95,7 @@ export function SeasonHeatmapWidget({ data }: WidgetProps) {
         { label: "Remíza", color: DIVERGING.neutral },
         { label: "Prohra", color: DIVERGING.negative },
       ]}
-      note={<>Písmeno v políčku je domácí nebo venkovní zápas. Nejdelší série výher: <span className="font-heading font-bold text-ink">{nej}</span></>}
+      note={<>Vyplněné políčko je zápas doma, obrysové venku. Nejdelší série výher: <span className="font-heading font-bold text-ink">{nej}</span></>}
     />
   );
 }

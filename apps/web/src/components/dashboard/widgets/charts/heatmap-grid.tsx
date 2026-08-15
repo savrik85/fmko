@@ -19,6 +19,13 @@ export interface HeatCell {
   textColor?: string;
   tooltip: string;
   href?: string;
+  /**
+   * Obrysová varianta — barva jde do rámečku a textu místo do výplně.
+   * Slouží k zakódování druhé, nezávislé vlastnosti tvarem, aby políčko
+   * neneslo dvě informace jen barvou. Červenozelený rozdíl je pro zhruba
+   * 6 % mužů nerozeznatelný a samotná barva by tam pak nenesla nic.
+   */
+  outline?: boolean;
 }
 
 export function HeatmapGrid({
@@ -39,7 +46,9 @@ export function HeatmapGrid({
           const obsah = (
             <span
               className="aspect-square rounded-[4px] flex items-center justify-center text-micro font-heading font-bold"
-              style={{ background: c.color, color: c.textColor ?? "#FFFFFF" }}
+              style={c.outline
+                ? { background: "transparent", color: c.color, boxShadow: `inset 0 0 0 2px ${c.color}` }
+                : { background: c.color, color: c.textColor ?? "#FFFFFF" }}
               title={c.tooltip}
             >
               {c.text}

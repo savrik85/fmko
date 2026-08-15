@@ -61,7 +61,7 @@ export default function MorePage() {
     <div className="page-container pb-24">
       {SECTIONS.map((section) => (
         <div key={section.title} className="mb-6">
-          <p className="text-xs font-heading font-bold text-muted uppercase tracking-wide mb-3 px-1">{section.title}</p>
+          <p className="text-xs font-heading font-bold text-muted uppercase tracking-wide mb-3 px-1 flex items-center gap-2 after:flex-1 after:h-px after:bg-line">{section.title}</p>
           <div className="grid grid-cols-4 gap-2">
             {section.items.map((item) => {
               const badge = item.href === "/dashboard/hlasovani" ? unvotedCount : 0;
@@ -69,12 +69,16 @@ export default function MorePage() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all active:scale-95"
-                  style={{ background: `${item.color}12` }}
+                  className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl transition-transform active:scale-95"
+                  /* Sytost byla 7 % a 12 % — při té se 25 dlaždic slilo do jedné
+                     bledé plochy a barevné kódování neneslo žádnou informaci.
+                     Na 14 % a 24 % už jdou skupiny od sebe rozeznat. */
+                  style={{ background: `${item.color}24` }}
                 >
                   <div
                     className="w-11 h-11 rounded-xl flex items-center justify-center text-xl"
-                    style={{ background: `${item.color}20` }}
+                    style={{ background: `${item.color}3D` }}
+                    aria-hidden="true"
                   >
                     {item.icon}
                   </div>

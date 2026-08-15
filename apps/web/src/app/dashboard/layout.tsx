@@ -52,7 +52,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {!isReplay && <FMTopBar />}
         <main className="flex-1 overflow-y-auto pb-20 sm:pb-0">
-          {!isDetailPage && !hasCustomHeader && <PageHeader />}
+          {/* Plná hlavička jen na Domů. Na podstránkách nesla pořád dokola název
+              týmu a pozici v lize — informaci, kterou hráč zná — a brala 87 px
+              z 844px displeje. Kompaktní varianta místo toho říká, kde je. */}
+          {!isDetailPage && !hasCustomHeader && <PageHeader compact={pathname !== "/dashboard"} />}
           {children}
         </main>
       </div>
