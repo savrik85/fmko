@@ -88,7 +88,7 @@ export default function AdminPage() {
           <div className="font-heading font-bold text-sm">+7 dní</div>
           <div className="text-sm text-muted">Denní + zápasy</div>
         </button>
-        <button onClick={() => { addLog("Reloading..."); window.location.reload(); }}
+        <button onClick={() => { addLog("Načítám znovu…"); window.location.reload(); }}
           className="card p-4 text-center hover:bg-gray-50 transition-colors">
           <div className="text-2xl mb-1">🔄</div>
           <div className="font-heading font-bold text-sm">Refresh</div>

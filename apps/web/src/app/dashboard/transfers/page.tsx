@@ -164,7 +164,7 @@ function HeroTransfer({ t }: { t: TransfersOverview["biggest"][number] }) {
       {/* Akcentová stuha */}
       <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-pitch-500 text-white text-micro font-heading font-bold uppercase tracking-wider shadow-sm">
         <span aria-hidden>🏆</span>
-        <span>Top transfer</span>
+        <span>Top přestup</span>
       </div>
 
       <div className="flex flex-col sm:flex-row items-stretch gap-4 sm:gap-6 p-4 sm:p-6 pt-12 sm:pt-6">

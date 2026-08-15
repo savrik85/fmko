@@ -102,12 +102,17 @@ export function Tabs<T extends string>({
   };
 
   return (
-    <div
-      role="tablist"
-      aria-label={ariaLabel}
-      onKeyDown={onKeyDown}
-      className={`flex gap-1 bg-surface rounded-card p-1 overflow-x-auto ${className}`}
-    >
+    <div className={`relative ${className}`}>
+      <div
+        role="tablist"
+        aria-label={ariaLabel}
+        onKeyDown={onKeyDown}
+        /* no-scrollbar: na dotyku je posuvník stejně překryvný a neviditelný,
+           na úzkém okně desktopu ale vykresloval šedý pruh přes celou šířku
+           pod záložkami. Že je kam scrollovat, říká uříznutý poslední popisek
+           a přechod u pravého kraje. */
+        className="flex gap-1 bg-surface rounded-card p-1 overflow-x-auto no-scrollbar [overscroll-behavior-x:contain]"
+      >
       {items.map((t) => {
         const isActive = t.key === value;
         return (
@@ -132,6 +137,11 @@ export function Tabs<T extends string>({
           </button>
         );
       })}
+      </div>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-1 right-1 w-6 rounded-r-card bg-gradient-to-l from-surface to-transparent"
+      />
     </div>
   );
 }

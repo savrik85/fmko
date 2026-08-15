@@ -625,6 +625,12 @@ body { touch-action: manipulation; }
     radial-gradient(farthest-side at 100% 50%, rgba(26,23,20,0.13), rgba(26,23,20,0)) right center / 12px 100% no-repeat scroll;
 }
 
+/* Skrytý posuvník pro vodorovné lišty (záložky, filtry). Na dotyku je
+   posuvník překryvný a stejně není vidět; na úzkém okně desktopu ale
+   vykresloval šedý pruh přes celou šířku. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 .divider { height: 1px; background: rgba(139,133,120,0.08); }
 
 .text-gradient-gold {
