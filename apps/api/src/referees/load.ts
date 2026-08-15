@@ -15,6 +15,8 @@ import { delegateRefereesForCalendar } from "./delegation";
 /** Profil uložený k zápasu — nese i věci, které engine nepotřebuje, ale UI ano. */
 export interface RefereeSnapshot extends RefereeProfile {
   nickname: string | null;
+  /** Kvůli rodu v textech — „klidná veteránka" místo „klidný veterán". */
+  gender: string;
   age: number;
   occupation: string;
   bio: string;
@@ -30,6 +32,7 @@ export interface LoadedReferee {
 const NEUTRAL_SNAPSHOT: RefereeSnapshot = {
   ...NEUTRAL_REFEREE,
   nickname: null,
+  gender: "m",
   age: 40,
   occupation: "",
   bio: "O tomhle sudím se toho moc neví.",
@@ -47,6 +50,7 @@ function toSnapshot(row: RefereeRow): RefereeSnapshot {
   return {
     ...rowToProfile(row),
     nickname: row.nickname,
+    gender: row.gender,
     age: row.age,
     occupation: row.occupation,
     bio: row.bio,

@@ -64,7 +64,9 @@ function refereeTrait(snapshot: Record<string, unknown> | null): string | null {
   if (cards >= 78) return "sahá do kapsy hned";
   if (advantage >= 75) return "rád pouští výhodu";
   if (strictness <= 35) return "nechá toho hodně být";
-  const label = typeof snapshot.archetype === "string" ? archetypeLabel(snapshot.archetype) : null;
+  const label = typeof snapshot.archetype === "string"
+    ? archetypeLabel(snapshot.archetype, typeof snapshot.gender === "string" ? snapshot.gender : null)
+    : null;
   return label ? `je známý jako ${label.toLowerCase()}` : "má svůj metr";
 }
 

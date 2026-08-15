@@ -34,7 +34,7 @@ function baseProfile(r: RefereeRow) {
     age: r.age,
     occupation: r.occupation,
     archetype: r.archetype,
-    archetypeLabel: archetypeLabel(r.archetype),
+    archetypeLabel: archetypeLabel(r.archetype, r.gender),
     bio: r.bio,
     hlaska: r.hlaska,
     strictness: r.strictness,

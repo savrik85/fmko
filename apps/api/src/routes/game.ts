@@ -3654,7 +3654,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
           age: refRow.age,
           occupation: refRow.occupation,
           archetype: refRow.archetype,
-          archetypeLabel: archetypeLabel(refRow.archetype as string),
+          archetypeLabel: archetypeLabel(refRow.archetype as string, refRow.gender as string | null),
           bio: refRow.bio,
           hlaska: refRow.hlaska,
           strictness: refRow.strictness,

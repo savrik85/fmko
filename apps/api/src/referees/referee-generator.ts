@@ -130,7 +130,9 @@ export function generateRefereePool(
       nickname: rng.random() < 0.55 ? rng.pick(NICKNAMES) : null,
       gender: isFemale ? "f" : "m",
       age,
-      occupation: rng.pick([...def.occupations]),
+      // Povolání, bio i hláška v rodě podle pohlaví — jinak by ženská sudí byla
+      // „klidný veterán, mistr odborného výcviku, hráči ho poslouchají".
+      occupation: rng.pick([...(isFemale ? def.occupationsF : def.occupations)]),
       archetype,
       strictness: inRange(rng, def.strictness),
       cardHappiness: inRange(rng, def.cardHappiness),
@@ -139,8 +141,8 @@ export function generateRefereePool(
       advantage: inRange(rng, def.advantage),
       fitness: inRange(rng, def.fitness),
       avatar,
-      bio: def.bio,
-      hlaska: def.hlaska,
+      bio: isFemale ? def.bioF : def.bio,
+      hlaska: isFemale ? def.hlaskaF : def.hlaska,
     });
   }
 

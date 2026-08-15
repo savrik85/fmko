@@ -72,6 +72,11 @@ export interface RefereeArchetypeDef {
   fitness: AxisRange;
   /** Civilní povolání — okresní sudí je amatér a tohle nese většinu humoru. */
   occupations: readonly string[];
+  /** Ženské tvary — sudí je stejně často žena a mužský rod u ní vypadá jako chyba. */
+  labelF: string;
+  bioF: string;
+  hlaskaF: string;
+  occupationsF: readonly string[];
 }
 
 export const REFEREE_ARCHETYPES = {
@@ -83,6 +88,10 @@ export const REFEREE_ARCHETYPES = {
     strictness: [45, 58], cardHappiness: [30, 45], experience: [82, 95],
     homeBias: [45, 55], advantage: [55, 75], fitness: [40, 60],
     occupations: ["mistr odborného výcviku", "vedoucí skladu", "údržbář v cukrovaru", "hasič z povolání"],
+    labelF: "Klidná veteránka",
+    bioF: "Dvacet sezón v okrese. Píská jen to podstatné a hráči ji poslouchají, protože ví, co dělá.",
+    hlaskaF: "Hrajeme dál, pánové.",
+    occupationsF: ["mistrová odborného výcviku", "vedoucí skladu", "údržbářka v cukrovaru", "hasička z povolání"],
   },
   pohodar: {
     label: "Pohodář",
@@ -92,6 +101,10 @@ export const REFEREE_ARCHETYPES = {
     strictness: [25, 40], cardHappiness: [20, 35], experience: [55, 75],
     homeBias: [45, 58], advantage: [78, 92], fitness: [45, 65],
     occupations: ["hospodský", "zahradník", "řidič autobusu", "instalatér", "prodavač v železářství"],
+    labelF: "Pohodářka",
+    bioF: "Nechává hrát, dokud teče krev. Divákům se to líbí, obráncům ještě víc.",
+    hlaskaF: "Výhoda, hrajte!",
+    occupationsF: ["hospodská", "zahradnice", "řidička autobusu", "instalatérka", "prodavačka v železářství"],
   },
   puntickar: {
     label: "Puntičkář",
@@ -101,6 +114,10 @@ export const REFEREE_ARCHETYPES = {
     strictness: [75, 88], cardHappiness: [50, 65], experience: [70, 88],
     homeBias: [45, 55], advantage: [15, 30], fitness: [55, 75],
     occupations: ["revizor MHD", "celník", "bankovní úředník", "kontrolor kvality", "geodet"],
+    labelF: "Puntičkářka",
+    bioF: "Metr má stejný pro obě strany a nehne s ním nikdo. Nesnáší ji oba tábory naráz.",
+    hlaskaF: "Pravidlo dvanáct, odstavec dvě.",
+    occupationsF: ["revizorka MHD", "celní úřednice", "bankovní úřednice", "kontrolorka kvality", "geodetka"],
   },
   bafunar: {
     label: "Bafuňář",
@@ -110,6 +127,10 @@ export const REFEREE_ARCHETYPES = {
     strictness: [35, 50], cardHappiness: [35, 50], experience: [55, 75],
     homeBias: [60, 75], advantage: [45, 65], fitness: [35, 55],
     occupations: ["obchodní zástupce", "pojišťovák", "realitní makléř", "vedoucí prodejny"],
+    labelF: "Bafuňářka",
+    bioF: "Zná všechny funkcionáře v okrese jménem a ráda se nechá pozvat na guláš.",
+    hlaskaF: "Po zápase to probereme u piva.",
+    occupationsF: ["obchodní zástupkyně", "pojišťovačka", "realitní makléřka", "vedoucí prodejny"],
   },
   ambiciozni: {
     label: "Ambiciózní",
@@ -119,6 +140,10 @@ export const REFEREE_ARCHETYPES = {
     strictness: [60, 75], cardHappiness: [65, 80], experience: [55, 75],
     homeBias: [35, 48], advantage: [25, 45], fitness: [80, 95],
     occupations: ["učitel tělocviku", "fitness trenér", "IT konzultant", "manažer pobočky"],
+    labelF: "Ambiciózní",
+    bioF: "Chce výš než okres, a tak si na každý zápas hraje na krajskou. Rozhoduje rychle a nahlas.",
+    hlaskaF: "Tady se hraje podle mě.",
+    occupationsF: ["učitelka tělocviku", "fitness trenérka", "IT konzultantka", "manažerka pobočky"],
   },
   zelenac: {
     label: "Zelenáč",
@@ -128,6 +153,10 @@ export const REFEREE_ARCHETYPES = {
     strictness: [55, 75], cardHappiness: [60, 80], experience: [8, 25],
     homeBias: [55, 75], advantage: [20, 40], fitness: [75, 92],
     occupations: ["student vysoké školy", "brigádník v marketu", "učeň automechanik", "voják z povolání"],
+    labelF: "Zelenáčka",
+    bioF: "Kurz má čerstvě z jara. Píská podle příručky a nechá se vykřičet.",
+    hlaskaF: "Já to mám v pravidlech, koukejte.",
+    occupationsF: ["studentka vysoké školy", "brigádnice v marketu", "učednice v autoservisu", "vojákyně z povolání"],
   },
   domaci_kamarad: {
     label: "Domácí kamarád",
@@ -137,6 +166,10 @@ export const REFEREE_ARCHETYPES = {
     strictness: [40, 60], cardHappiness: [45, 60], experience: [40, 65],
     homeBias: [78, 92], advantage: [35, 55], fitness: [45, 65],
     occupations: ["řezník", "pekař", "traktorista", "topenář", "provozní jídelny"],
+    labelF: "Domácí kamarádka",
+    bioF: "Po zápase sedává v domácí klubovně. Náhoda to prý není.",
+    hlaskaF: "Já to viděla jinak než vy, pane trenére.",
+    occupationsF: ["řeznice", "pekařka", "traktoristka", "topenářka", "provozní jídelny"],
   },
   ustvany: {
     label: "Uštvaný",
@@ -146,6 +179,10 @@ export const REFEREE_ARCHETYPES = {
     strictness: [45, 60], cardHappiness: [45, 60], experience: [40, 65],
     homeBias: [50, 65], advantage: [40, 60], fitness: [12, 30],
     occupations: ["skladník", "důchodce", "vrátný", "noční hlídač", "poštovní doručovatel"],
+    labelF: "Uštvaná",
+    bioF: "V první půli stíhá, ve druhé stojí na půlce a odhaduje. V devadesáté už chce jen domů.",
+    hlaskaF: "Já to odtud viděla dobře.",
+    occupationsF: ["skladnice", "důchodkyně", "vrátná", "noční hlídačka", "poštovní doručovatelka"],
   },
   piskavy_kohout: {
     label: "Pískavý kohout",
@@ -155,6 +192,10 @@ export const REFEREE_ARCHETYPES = {
     strictness: [82, 95], cardHappiness: [78, 92], experience: [30, 55],
     homeBias: [45, 60], advantage: [5, 20], fitness: [45, 65],
     occupations: ["strážník", "dispečer", "mistr na pile", "kontrolor jízdenek"],
+    labelF: "Pískavá siréna",
+    bioF: "Píská všechno, i to, co nikdo neviděl. Zápas s ní trvá o deset minut dýl.",
+    hlaskaF: "Pane, ještě slovo a jdete se osprchovat.",
+    occupationsF: ["strážnice", "dispečerka", "mistrová na pile", "kontrolorka jízdenek"],
   },
   kartovy_cvok: {
     label: "Kartový cvok",
@@ -164,6 +205,10 @@ export const REFEREE_ARCHETYPES = {
     strictness: [65, 80], cardHappiness: [88, 97], experience: [45, 70],
     homeBias: [45, 58], advantage: [10, 25], fitness: [50, 70],
     occupations: ["policista", "vězeňská služba", "exekutorský koncipient", "šéf ostrahy"],
+    labelF: "Kartová mašina",
+    bioF: "Do zápisu píše víc než do deníku. Rekord: devět žlutých v jednom poločase.",
+    hlaskaF: "Číslo osm, pojďte sem.",
+    occupationsF: ["policistka", "dozorkyně ve věznici", "exekutorská koncipientka", "šéfka ostrahy"],
   },
 } as const satisfies Record<string, RefereeArchetypeDef>;
 
@@ -183,8 +228,10 @@ export const REFEREE_POOL_MIX: readonly RefereeArchetype[] = [
   "domaci_kamarad", "piskavy_kohout", "kartovy_cvok",
 ];
 
-export function archetypeLabel(key: string): string {
-  return (REFEREE_ARCHETYPES as Record<string, RefereeArchetypeDef>)[key]?.label ?? "Rozhodčí";
+export function archetypeLabel(key: string, gender?: string | null): string {
+  const def = (REFEREE_ARCHETYPES as Record<string, RefereeArchetypeDef>)[key];
+  if (!def) return "Rozhodčí";
+  return gender === "f" ? def.labelF : def.label;
 }
 
 // ── Vzorce ───────────────────────────────────────────────────────────────────
