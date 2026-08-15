@@ -265,10 +265,12 @@ export default function TeamPage() {
                 </div>
               )}
             </div>
-            {/* Řádek 2: liga + staty + napsat */}
-            <div className="flex items-center justify-between mt-3">
+            {/* Řádek 2: liga + staty + napsat.
+                flex-wrap: na úzkém displeji se dlaždice zalomí pod odkaz na ligu.
+                Bez toho se „3. v Přebor Prahy" mačkalo do tří řádků. */}
+            <div className="flex flex-wrap items-center justify-between gap-y-2 mt-3">
               {leaguePos && leagueName ? (
-                <a href="/dashboard/liga" className={`${txtMuted} text-sm font-heading font-bold hover:opacity-80 transition-colors`}>
+                <a href="/dashboard/liga" className={`${txtMuted} text-sm font-heading font-bold whitespace-nowrap hover:opacity-80 transition-colors`}>
                   {leaguePos}. v {leagueName}
                 </a>
               ) : <span />}
