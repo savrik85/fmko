@@ -189,7 +189,7 @@ export default function IdentitaPage() {
         </CardBody>
       </Card>
 
-      <div className="mt-6 sticky bottom-0 bg-canvas/95 backdrop-blur-sm border-t border-gray-200 -mx-3 sm:-mx-8 px-3 sm:px-8 py-3 flex items-center justify-end gap-3">
+      <div className="mt-6 sticky bottom-0 bg-paper/95 backdrop-blur-sm border-t border-gray-200 -mx-3 sm:-mx-8 px-3 sm:px-8 py-3 flex items-center justify-end gap-3">
         {savedAt && <span className="text-sm text-pitch-600 font-bold">{"\u{2705}"} Uloženo</span>}
         <button type="button" onClick={() => router.push("/dashboard/klub")}
           className="px-4 py-2 rounded-lg text-sm font-heading font-bold text-muted hover:text-ink">Zrušit</button>

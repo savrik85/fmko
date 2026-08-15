@@ -187,14 +187,18 @@ export default function SettingsPage() {
 
         <h3 className="font-heading font-bold text-base mb-3">Změna hesla</h3>
         <form onSubmit={handleChange} className="space-y-3">
+          {/* Popisky svázané přes htmlFor a autoComplete pro správce hesel —
+              bez toho pole nikdo nevyplní ani nepřečte. */}
           <div>
-            <label className="text-xs text-muted uppercase font-heading font-bold block mb-1">Současné heslo</label>
-            <input type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)}
+            <label htmlFor="pw-current" className="text-xs text-muted uppercase font-heading font-bold block mb-1">Současné heslo</label>
+            <input id="pw-current" name="current-password" type="password" autoComplete="current-password"
+              value={currentPw} onChange={(e) => setCurrentPw(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-400" required />
           </div>
           <div>
-            <label className="text-xs text-muted uppercase font-heading font-bold block mb-1">Nové heslo</label>
-            <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)}
+            <label htmlFor="pw-new" className="text-xs text-muted uppercase font-heading font-bold block mb-1">Nové heslo</label>
+            <input id="pw-new" name="new-password" type="password" autoComplete="new-password"
+              value={newPw} onChange={(e) => setNewPw(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-400" required />
             {newPw && pwErrors.length > 0 && (
               <div className="flex gap-2 mt-1.5 flex-wrap">
@@ -210,8 +214,9 @@ export default function SettingsPage() {
             )}
           </div>
           <div>
-            <label className="text-xs text-muted uppercase font-heading font-bold block mb-1">Nové heslo znovu</label>
-            <input type="password" value={newPw2} onChange={(e) => setNewPw2(e.target.value)}
+            <label htmlFor="pw-new-2" className="text-xs text-muted uppercase font-heading font-bold block mb-1">Nové heslo znovu</label>
+            <input id="pw-new-2" name="new-password-confirm" type="password" autoComplete="new-password"
+              value={newPw2} onChange={(e) => setNewPw2(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-400" required />
             {pwMatch && <p className="text-card-red text-xs mt-1">Hesla se neshodují</p>}
           </div>

@@ -63,10 +63,15 @@ export default function LoginPage() {
         {/* Form */}
         <div className="animate-slide-up" style={{ animationDelay: "80ms" }}>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input variant="dark" label="Email" type="email" value={email}
+            {/* name + autoComplete: bez nich správce hesel přihlášení nevyplní.
+                Na mobilu je to ta nejdražší obrazovka v aplikaci. */}
+            <Input variant="dark" label="Email" type="email" name="email"
+              autoComplete="email" inputMode="email" spellCheck={false} autoCapitalize="none"
+              value={email}
               onChange={(e) => setEmail(e.target.value)} placeholder="tvuj@email.cz" required />
 
-            <Input variant="dark" label="Heslo" type="password" value={password}
+            <Input variant="dark" label="Heslo" type="password" name="password"
+              autoComplete="current-password" value={password}
               onChange={(e) => setPassword(e.target.value)} placeholder="Tvoje heslo" required />
 
             <ErrorBox message={error} variant="dark" />

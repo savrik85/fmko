@@ -223,15 +223,24 @@ body::before {
    CARDS
    ═══════════════════════════════════════════════ */
 
-.card {
-  background: var(--color-surface);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
-  overflow: hidden;
-}
+/* Karta patří do vrstvy `components` — bez ní je pravidlo nevrstvené a přebíjí
+   Tailwind utility, i když má stejnou specificitu. Kdo napsal `card overflow-x-auto`,
+   dostal `overflow: hidden` a tabulka se na mobilu useknula bez možnosti odscrollovat;
+   stejně tiše padaly i `card bg-amber-50` nebo `card hover:bg-gray-50`.
+   Ve vrstvě zůstává výchozí chování (ořez, bílé pozadí, poloměr) zachované — jen ho
+   jde na konkrétním místě přebít utilitou, což bylo vždycky záměrem autora.
+   Pozor: nic z tohohle bloku nepřesouvat ven, vrátil by se ten samý problém. */
+@layer components {
+  .card {
+    background: var(--color-surface);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
 
-.card-hover { transition: all 0.2s ease; cursor: pointer; }
-.card-hover:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+  .card-hover { transition: box-shadow 0.2s ease, transform 0.2s ease; cursor: pointer; }
+  .card-hover:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+}
 
 /* Standardní výška widgetu na dashboardu.
    Uplatní se až od velkého displeje — na mobilu je jeden sloupec, takže není
@@ -407,6 +416,40 @@ body::before {
    ═══════════════════════════════════════════════ */
 
 .tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* ── Klávesnicové zaměření ──
+   .btn i .input mají `outline: none` a nic za to nedávaly — kdo se pohybuje
+   tabulátorem, neviděl kde je. Element+pseudotřída má vyšší specificitu než
+   třída, takže tohle `.btn { outline: none }` spolehlivě přebije.
+   Pole (.input, .select) mají vlastní rámeček a záři, ta stačí — dvojitý
+   prstenec by na nich byl jen šum. */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 2px solid var(--color-pitch-400);
+  outline-offset: 2px;
+}
+/* Na tmavém podkladu (lišty, postranní menu, přihlašovací obrazovky) by zelená
+   zanikla. `.on-dark` nese horní lišta a spodní navigace. */
+.on-dark a:focus-visible,
+.on-dark button:focus-visible,
+.sidebar a:focus-visible,
+.sidebar button:focus-visible,
+.bg-auth a:focus-visible,
+.bg-auth button:focus-visible,
+.btn-primary-dark:focus-visible {
+  outline-color: #ffffff;
+}
+
+/* Bez tohohle spustí rychlé dvojí klepnutí na iOS i Androidu přiblížení stránky —
+   a v sestavě se na stejný slot klepe dvakrát po sobě. Pinch-to-zoom zůstává,
+   ruší se jen dvojklepnutí, proto to nedáváme na celý dokument. */
+a, button, [role="button"], input, select, textarea, label, summary {
+  touch-action: manipulation;
+}
+
 @media (pointer: coarse) { button, a, [role="button"] { min-height: 44px; } }
 /* Žebříčky statistik: dotykový cíl je celý řádek tabulky, ne jednotlivý odkaz. Bez tohohle
    dostane jméno hráče i název týmu po 44 px a řádek naroste na trojnásobek. */

@@ -71,11 +71,16 @@ export default function RegisterPage() {
           <p className="text-white/40 text-sm mb-8">Za minutu budeš mít svůj tým</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input variant="dark" label="Email" type="email" value={email}
+            {/* autoComplete="new-password" u obou polí — správce hesel pak nabídne
+                vygenerování a uložení. Bez toho nemá co vyplnit ani při přihlášení. */}
+            <Input variant="dark" label="Email" type="email" name="email"
+              autoComplete="email" inputMode="email" spellCheck={false} autoCapitalize="none"
+              value={email}
               onChange={(e) => setEmail(e.target.value)} placeholder="tvuj@email.cz" required />
 
             <div>
-              <Input variant="dark" label="Heslo" type="password" value={password}
+              <Input variant="dark" label="Heslo" type="password" name="new-password"
+                autoComplete="new-password" value={password}
                 onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 znaků, velké, malé, číslo" required />
               {password && pwErrors.length > 0 && (
                 <div className="flex gap-2 mt-1.5 flex-wrap">
@@ -92,7 +97,8 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <Input variant="dark" label="Heslo znovu" type="password" value={password2}
+              <Input variant="dark" label="Heslo znovu" type="password" name="new-password-confirm"
+                autoComplete="new-password" value={password2}
                 onChange={(e) => setPassword2(e.target.value)} placeholder="Zopakuj heslo" required />
               {pwMatch && (
                 <p className="text-card-red text-xs mt-1">Hesla se neshodují</p>

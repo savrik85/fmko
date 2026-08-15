@@ -46,7 +46,7 @@ export function FMTopBar() {
 
   return (
     <header
-      className="h-14 flex items-center pl-3 pr-4 sm:px-5 gap-3 sm:gap-4 shrink-0"
+      className="on-dark h-14 flex items-center pl-3 pr-4 sm:px-5 gap-3 sm:gap-4 shrink-0"
       style={{ background: "#1e2d1e" }}
     >
       {/* Back / Forward */}

@@ -781,7 +781,7 @@ function MatchPage() {
           ) : editSlot !== null ? (
             <span className="font-heading font-bold text-pitch-600">Vyber hráče ze seznamu vpravo</span>
           ) : (
-            <span className="text-ink/50">Klik na hráče = prohodit · Dvojklik = vybrat jiného</span>
+            <span className="text-ink/50">Klepni na hráče a pak na místo, kam ho přesunout · Dalším klepnutím na téhož hráče vybereš náhradu</span>
           )}
         </p>
         <div className="rounded-xl bg-pitch-400 overflow-hidden" style={{ aspectRatio: "5/6", padding: "2% 5%" }}>
@@ -858,7 +858,7 @@ function MatchPage() {
           ) : editSlot !== null ? (
             <span className="font-heading font-bold text-pitch-600">Vyber hráče ze seznamu vpravo</span>
           ) : (
-            <span className="text-ink/50">Klik na hráče = prohodit · Dvojklik = vybrat jiného</span>
+            <span className="text-ink/50">Klepni na hráče a pak na místo, kam ho přesunout · Dalším klepnutím na téhož hráče vybereš náhradu</span>
           )}
         </p>
         </div>
