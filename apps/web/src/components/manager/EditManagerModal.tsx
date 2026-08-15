@@ -4,7 +4,7 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import { apiFetch, type ManagerProfile } from "@/lib/api";
 import { generateManagerFace } from "@/lib/manager-avatar";
-import { Button } from "@/components/ui";
+import { Button, Sheet, IconButton } from "@/components/ui";
 
 const FaceAvatar = dynamic(
   () => import("@/components/players/face-avatar").then((m) => m.FaceAvatar),
@@ -66,16 +66,11 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal-content flex flex-col"
-        style={{ maxWidth: 480, maxHeight: "92vh", overflow: "hidden" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Sheet open onClose={onClose} maxWidth="480px" title="Upravit profil trenéra" className="flex flex-col">
         {/* Sticky header */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-gray-100 bg-paper">
           <h2 className="font-heading font-bold text-base sm:text-lg">Upravit profil trenéra</h2>
-          <button onClick={onClose} className="text-muted hover:text-ink text-xl leading-none w-8 h-8 flex items-center justify-center -mr-2">✕</button>
+          <IconButton label="Zavřít" onClick={onClose} className="-mr-2">✕</IconButton>
         </div>
 
         {/* Scrollable body */}
@@ -195,7 +190,6 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
             {saving ? "Ukládám..." : "Uložit"}
           </Button>
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
