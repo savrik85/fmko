@@ -179,7 +179,7 @@ export function StepLocation({ onSelect }: Props) {
                 <div className="flex items-center gap-2">
                   <div className="font-heading font-bold text-base">{d.name}</div>
                   {d.isFull && (
-                    <span className="text-[10px] font-heading font-bold px-2 py-0.5 rounded-md bg-card-red/10 text-card-red whitespace-nowrap">
+                    <span className="text-[10px] font-heading font-bold px-2 py-0.5 rounded-control bg-card-red/10 text-card-red whitespace-nowrap">
                       Liga plná
                     </span>
                   )}
@@ -224,7 +224,7 @@ export function StepLocation({ onSelect }: Props) {
                         <div className="text-[9px] text-muted">hráčů</div>
                       </div>
                     )}
-                    <span className={`text-[10px] font-heading font-bold px-2 py-1 rounded-md ${badge.bg} ${badge.text}`}>
+                    <span className={`text-[10px] font-heading font-bold px-2 py-1 rounded-control ${badge.bg} ${badge.text}`}>
                       {badge.label}
                     </span>
                   </div>

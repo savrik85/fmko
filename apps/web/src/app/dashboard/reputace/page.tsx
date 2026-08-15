@@ -229,7 +229,7 @@ export default function ReputacePage() {
         <SectionLabel>Co ti to odemkne</SectionLabel>
 
         {next ? (
-          <div className="rounded-lg p-4 mb-4 bg-pitch-50 border-l-2 border-pitch-500">
+          <div className="rounded-soft p-4 mb-4 bg-pitch-50 border-l-2 border-pitch-500">
             <div className="flex items-baseline justify-between gap-3 mb-3">
               <span className="font-heading font-bold text-base text-ink">{next.label}</span>
               <span className="text-sm text-muted whitespace-nowrap">na řadě</span>
@@ -248,7 +248,7 @@ export default function ReputacePage() {
             )}
           </div>
         ) : (
-          <div className="rounded-lg p-4 mb-4 bg-pitch-50 border-l-2 border-pitch-500 text-sm font-heading font-bold text-pitch-600">
+          <div className="rounded-soft p-4 mb-4 bg-pitch-50 border-l-2 border-pitch-500 text-sm font-heading font-bold text-pitch-600">
             Máš odemčené všechno. Reputace teď pracuje jen pro peníze a přestupy.
           </div>
         )}
@@ -257,7 +257,7 @@ export default function ReputacePage() {
           {data.unlocks.all.map((u) => (
             <div
               key={`${u.kind}-${u.level}`}
-              className={`rounded-lg border p-3 ${u.unlocked ? "border-gray-100 bg-gray-50" : "border-gray-200"}`}
+              className={`rounded-soft border p-3 ${u.unlocked ? "border-gray-100 bg-gray-50" : "border-gray-200"}`}
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className={`text-sm font-heading font-bold ${u.unlocked ? "text-muted" : "text-ink"}`}>
@@ -454,7 +454,7 @@ function ReputationScale({
 function ConditionTile({ label, need, have, missing }: { label: string; need: number; have: number; missing: number }) {
   const done = missing === 0;
   return (
-    <div className={`rounded-lg p-2.5 ${done ? "bg-white/60" : "bg-white"}`}>
+    <div className={`rounded-soft p-2.5 ${done ? "bg-white/60" : "bg-white"}`}>
       <div className="text-sm text-muted mb-0.5">{done ? "✓ " : ""}{label}</div>
       <div className="flex items-baseline gap-1.5">
         <span className={`font-heading font-bold text-xl tabular-nums ${done ? "text-pitch-600" : "text-card-red"}`}>

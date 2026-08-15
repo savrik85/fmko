@@ -501,14 +501,14 @@ export default function FansPage() {
       {confirmDialog}
 
       {/* ═══ Tab nav ═══ */}
-      <div className="grid grid-cols-3 sm:flex sm:gap-1 gap-1 p-1 bg-gray-100 rounded-lg" style={{ gridTemplateColumns: `repeat(${visibleTabs.length}, minmax(0, 1fr))` }}>
+      <div className="grid grid-cols-3 sm:flex sm:gap-1 gap-1 p-1 bg-gray-100 rounded-soft" style={{ gridTemplateColumns: `repeat(${visibleTabs.length}, minmax(0, 1fr))` }}>
         {visibleTabs.map((t) => {
           const active = t.key === currentTab;
           return (
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key)}
-              className={`sm:flex-1 py-2 px-2 sm:px-3 rounded-md font-heading font-bold transition-colors flex items-center justify-center gap-1.5 ${
+              className={`sm:flex-1 py-2 px-2 sm:px-3 rounded-control font-heading font-bold transition-colors flex items-center justify-center gap-1.5 ${
                 active ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink"
               }`}
             >
@@ -997,13 +997,13 @@ export default function FansPage() {
             max={500}
             value={ticketPriceDraft}
             onChange={(e) => setTicketPriceDraft(e.target.value)}
-            className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+            className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-soft text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
           />
           <span className="text-xs text-muted shrink-0">Kč</span>
           <button
             onClick={saveTicketPrice}
             disabled={acting === "ticket" || ticketPriceDraft === String(fans.baseTicketPrice)}
-            className={`shrink-0 py-1.5 px-4 rounded-lg text-xs font-heading font-bold transition-colors ${
+            className={`shrink-0 py-1.5 px-4 rounded-soft text-xs font-heading font-bold transition-colors ${
               acting === "ticket" || ticketPriceDraft === String(fans.baseTicketPrice)
                 ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                 : "bg-pitch-500 text-white hover:bg-pitch-600"
@@ -1118,7 +1118,7 @@ export default function FansPage() {
           </div>
 
           {/* — Z čeho se vliv počítá — */}
-          <div className="bg-gray-50 rounded-lg p-4 mb-4">
+          <div className="bg-gray-50 rounded-soft p-4 mb-4">
             <div className="text-sm font-heading font-bold text-ink mb-3">Z čeho se vliv počítá</div>
             <div className="space-y-3">
               {[
@@ -1286,7 +1286,7 @@ export default function FansPage() {
           <button
             onClick={() => switchMode("external")}
             disabled={concession.mode === "external" || !!acting}
-            className={`flex-1 py-2 px-3 rounded-lg text-sm font-heading font-bold transition-colors ${
+            className={`flex-1 py-2 px-3 rounded-soft text-sm font-heading font-bold transition-colors ${
               concession.mode === "external"
                 ? "bg-pitch-500 text-white"
                 : "bg-gray-100 text-ink hover:bg-gray-200"
@@ -1297,7 +1297,7 @@ export default function FansPage() {
           <button
             onClick={() => switchMode("self")}
             disabled={concession.mode === "self" || !concession.canSwitchToSelf || !!acting}
-            className={`flex-1 py-2 px-3 rounded-lg text-sm font-heading font-bold transition-colors ${
+            className={`flex-1 py-2 px-3 rounded-soft text-sm font-heading font-bold transition-colors ${
               concession.mode === "self"
                 ? "bg-pitch-500 text-white"
                 : !concession.canSwitchToSelf
@@ -1316,7 +1316,7 @@ export default function FansPage() {
         )}
 
         {concession.mode === "external" && (
-          <div className="bg-gray-50 rounded-lg p-3">
+          <div className="bg-gray-50 rounded-soft p-3">
             <div className="text-sm text-muted mb-1">
               {concession.refreshmentsLevel === 0
                 ? "Týdenní příjem z pronájmu plochy"
@@ -1335,7 +1335,7 @@ export default function FansPage() {
 
         {concession.mode === "self" && (
           <div className="space-y-3">
-            <div className="text-sm text-muted bg-gray-50 rounded-lg px-3 py-2.5">
+            <div className="text-sm text-muted bg-gray-50 rounded-soft px-3 py-2.5">
               Sklad se nečerpá automaticky — před každým domácím zápasem doplň zásoby. Bez zásob = nespokojení fanoušci.
             </div>
 
@@ -1348,7 +1348,7 @@ export default function FansPage() {
               const stockEmpty = p.stockQuantity === 0;
               const stockLow = p.stockQuantity > 0 && p.stockQuantity < 20;
               return (
-                <div key={p.key} className="border border-gray-100 rounded-lg p-3">
+                <div key={p.key} className="border border-gray-100 rounded-soft p-3">
                   {/* Header: ikona, název, aktuální tier, sklad */}
                   <div className="flex items-center gap-2.5 mb-3">
                     <span className="text-2xl">{PRODUCT_ICONS[p.key] ?? "🍽"}</span>
@@ -1397,13 +1397,13 @@ export default function FansPage() {
                       min={0}
                       value={priceDraft}
                       onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
-                      className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+                      className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-soft text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
                     />
                     <span className="text-xs text-muted shrink-0 w-3 text-center">Kč</span>
                     <button
                       onClick={() => saveSellPrice(p.key)}
                       disabled={acting === "price-" + p.key || priceDraft === String(p.sellPrice)}
-                      className={`shrink-0 w-[88px] py-1.5 px-2 rounded-lg text-xs font-heading font-bold transition-colors ${
+                      className={`shrink-0 w-[88px] py-1.5 px-2 rounded-soft text-xs font-heading font-bold transition-colors ${
                         acting === "price-" + p.key || priceDraft === String(p.sellPrice)
                           ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                           : "bg-pitch-500 text-white hover:bg-pitch-600"
@@ -1425,13 +1425,13 @@ export default function FansPage() {
                       placeholder="0"
                       value={qty}
                       onChange={(e) => setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))}
-                      className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+                      className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-soft text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
                     />
                     <span className="text-xs text-muted shrink-0 w-3 text-center">ks</span>
                     <button
                       onClick={() => doRestock(p.key)}
                       disabled={acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)}
-                      className={`shrink-0 w-[88px] py-1.5 px-2 rounded-lg text-xs font-heading font-bold transition-colors ${
+                      className={`shrink-0 w-[88px] py-1.5 px-2 rounded-soft text-xs font-heading font-bold transition-colors ${
                         acting === "restock-" + p.key || qtyNum <= 0 || isNaN(qtyNum)
                           ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                           : "bg-gold-500 text-white hover:bg-gold-600"
@@ -1464,19 +1464,19 @@ export default function FansPage() {
           ) : (<>
             {/* Souhrn */}
             <div className="grid grid-cols-3 gap-3 mb-4 pb-4 border-b border-gray-100">
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <div className="bg-gray-50 rounded-soft p-3 text-center">
                 <div className="text-xs text-muted uppercase mb-1">Celkový výnos</div>
                 <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">
                   {formatCZK(salesHistory.reduce((s, m) => s + m.totalRevenue, 0))}
                 </div>
               </div>
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <div className="bg-gray-50 rounded-soft p-3 text-center">
                 <div className="text-xs text-muted uppercase mb-1">Čistý zisk</div>
                 <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">
                   {formatCZK(salesHistory.reduce((s, m) => s + m.totalProfit, 0))}
                 </div>
               </div>
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <div className="bg-gray-50 rounded-soft p-3 text-center">
                 <div className="text-xs text-muted uppercase mb-1">Ø na zápas</div>
                 <div className="font-heading font-bold text-lg tabular-nums text-ink">
                   {formatCZK(Math.round(salesHistory.reduce((s, m) => s + m.totalProfit, 0) / salesHistory.length))}
@@ -1489,7 +1489,7 @@ export default function FansPage() {
               {salesHistory.map((m, idx) => {
                 const vysledek = resultLabel(m.result);
                 return (
-                  <div key={(m.matchId ?? "") + idx} className="border border-gray-100 rounded-lg p-3">
+                  <div key={(m.matchId ?? "") + idx} className="border border-gray-100 rounded-soft p-3">
                     <div className="flex items-center gap-2.5 mb-2">
                       <span className="shrink-0 text-lg" title={m.isCup ? "Pohárový zápas" : "Ligový zápas"}>
                         {m.isCup ? "🏆" : "⚽"}

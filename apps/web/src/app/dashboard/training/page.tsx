@@ -219,7 +219,7 @@ export default function TrainingPage() {
               setTrainingPlan(null);
               setDirty(true);
             }}
-            className={`flex-1 py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
+            className={`flex-1 py-2 text-sm font-heading font-bold rounded-soft transition-colors ${
               !trainingPlan ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
             }`}
           >
@@ -234,7 +234,7 @@ export default function TrainingPage() {
               setTrainingPlan(Object.fromEntries(days.map((d) => [d, { type, intensity: "normal" as TrainingIntensity }])));
               setDirty(true);
             }}
-            className={`flex-1 py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
+            className={`flex-1 py-2 text-sm font-heading font-bold rounded-soft transition-colors ${
               trainingPlan ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
             }`}
           >
@@ -264,7 +264,7 @@ export default function TrainingPage() {
                       setTrainingPlan(next);
                       setDirty(true);
                     }}
-                    className={`flex-1 min-w-0 px-2.5 py-2 rounded-lg border-2 bg-white text-sm font-heading transition-colors ${
+                    className={`flex-1 min-w-0 px-2.5 py-2 rounded-soft border-2 bg-white text-sm font-heading transition-colors ${
                       val ? "border-pitch-500/40 text-ink" : "border-gray-200 text-muted"
                     }`}
                   >
@@ -274,7 +274,7 @@ export default function TrainingPage() {
                     ))}
                   </select>
                   {/* Intenzita dne — u volna nedává smysl, tak je skrytá */}
-                  <div className={`flex rounded-lg bg-gray-50 p-0.5 shrink-0 ${day ? "" : "invisible"}`}>
+                  <div className={`flex rounded-soft bg-gray-50 p-0.5 shrink-0 ${day ? "" : "invisible"}`}>
                     {INTENSITIES.map((it) => (
                       <button
                         key={it.key}
@@ -284,7 +284,7 @@ export default function TrainingPage() {
                           setTrainingPlan({ ...trainingPlan, [d.num]: { ...day, intensity: it.key } });
                           setDirty(true);
                         }}
-                        className={`w-7 py-1.5 rounded-md text-center font-heading font-bold text-xs transition-all ${
+                        className={`w-7 py-1.5 rounded-control text-center font-heading font-bold text-xs transition-all ${
                           day?.intensity === it.key
                             ? it.key === "hard" ? "bg-white shadow-sm text-card-red"
                               : it.key === "light" ? "bg-white shadow-sm text-gold-600"
@@ -299,7 +299,7 @@ export default function TrainingPage() {
                 </div>
               );
             })}
-            <div className="text-xs text-muted bg-gray-50 rounded-lg px-3 py-2 mt-2">
+            <div className="text-xs text-muted bg-gray-50 rounded-soft px-3 py-2 mt-2">
               Každý den se trénuje to, co mu nastavíš. Dny označené jako volno se netrénují a neplatí se za ně.
               {" "}Intenzita: <strong className="text-gold-600">L</strong>ehký šetří síly (dobrý před zápasem),{" "}
               <strong className="text-pitch-600">N</strong>ormální, <strong className="text-card-red">T</strong>vrdý dá víc, ale hodně sebere.
@@ -334,7 +334,7 @@ export default function TrainingPage() {
         )}
 
         {/* Info about selected type + approach */}
-        <div className="text-xs text-muted bg-gray-50 rounded-lg px-3 py-2 space-y-1">
+        <div className="text-xs text-muted bg-gray-50 rounded-soft px-3 py-2 space-y-1">
           {!trainingPlan && (
             <div><span className="font-heading font-bold text-ink">{TRAINING_TYPES.find((t) => t.key === type)?.label}:</span> {TRAINING_TYPES.find((t) => t.key === type)?.desc}. Zlepšuje {TRAINING_TYPES.find((t) => t.key === type)?.skills}.</div>
           )}
@@ -352,7 +352,7 @@ export default function TrainingPage() {
                 <button
                   key={a.key}
                   onClick={() => { setApproach(a.key); setDirty(true); }}
-                  className={`flex-1 py-2 rounded-lg text-center transition-all text-sm font-heading font-bold ${
+                  className={`flex-1 py-2 rounded-soft text-center transition-all text-sm font-heading font-bold ${
                     approach === a.key
                       ? "bg-white shadow-sm text-pitch-600"
                       : "text-muted hover:text-ink"
@@ -377,7 +377,7 @@ export default function TrainingPage() {
                   <button
                     key={n}
                     onClick={() => { setTrainingDays(DAY_PRESET[n]); setSessions(n); setDirty(true); }}
-                    className={`w-7 py-2 rounded-lg text-center font-heading font-bold text-sm transition-all ${
+                    className={`w-7 py-2 rounded-soft text-center font-heading font-bold text-sm transition-all ${
                       current === n ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"
                     }`}
                   >
@@ -434,7 +434,7 @@ export default function TrainingPage() {
                       key={d.num}
                       onClick={() => toggleDay(d.num)}
                       title={d.full}
-                      className={`py-2.5 rounded-lg text-center font-heading font-bold text-sm transition-all border-2 ${
+                      className={`py-2.5 rounded-soft text-center font-heading font-bold text-sm transition-all border-2 ${
                         active
                           ? "border-pitch-500 bg-pitch-50/60 text-pitch-700"
                           : "border-transparent bg-gray-50 text-muted hover:text-ink"
@@ -512,7 +512,7 @@ export default function TrainingPage() {
 
           {/* Doporučení — jen když je co říct */}
           {(forecast.load.overloaded > forecast.load.content || forecast.load.underused > forecast.load.content) && (
-            <div className="mt-3 text-sm bg-gold-300/10 border border-gold-300/40 rounded-lg px-3 py-2">
+            <div className="mt-3 text-sm bg-gold-300/10 border border-gold-300/40 rounded-soft px-3 py-2">
               {forecast.load.overloaded > forecast.load.content ? (
                 <>Tempo je na tenhle kádr moc ostré — hráčům bude klesat nálada. Zkus ubrat den, nebo dej{" "}
                 <span className="font-heading font-bold">volno</span> unaveným.</>
@@ -536,7 +536,7 @@ export default function TrainingPage() {
                 return (
                   <Link
                     href="/dashboard/manager"
-                    className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-lg px-1 -mx-1 transition-colors"
+                    className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-soft px-1 -mx-1 transition-colors"
                   >
                     <div className="shrink-0 w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
                       {face ? <FaceAvatar faceConfig={face} size={34} /> : <span className="text-base">🧑‍🏫</span>}
@@ -562,7 +562,7 @@ export default function TrainingPage() {
                   <Link
                     key={st.staffId}
                     href="/dashboard/zamestnanci"
-                    className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-lg px-1 -mx-1 transition-colors"
+                    className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-soft px-1 -mx-1 transition-colors"
                   >
                     <div className="shrink-0 w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
                       {face ? <FaceAvatar faceConfig={face} size={34} /> : <span className="text-base">👔</span>}
@@ -580,7 +580,7 @@ export default function TrainingPage() {
                 <Link
                   key={eq.label}
                   href="/dashboard/equipment"
-                  className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-lg px-1 -mx-1 transition-colors"
+                  className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-soft px-1 -mx-1 transition-colors"
                 >
                   <div className="shrink-0 w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-base">🎒</div>
                   <div className="min-w-0 flex-1">
@@ -621,7 +621,7 @@ export default function TrainingPage() {
           Vybraní hráči dostanou od trenéra volno — nejbližší trénink vynechají. Neztratí kondici,
           ale ani se nezlepší. Po proběhnutí tréninku se volno automaticky zruší.
         </p>
-        <div className="mt-3 max-h-80 overflow-y-auto rounded-lg border border-gray-100 divide-y divide-gray-50">
+        <div className="mt-3 max-h-80 overflow-y-auto rounded-soft border border-gray-100 divide-y divide-gray-50">
           {squad.map((p) => {
             const checked = restIds.has(p.id);
             // Zraněnému nejde volno dát (netrénuje tak jako tak), ale dřív nastavené jde odvolat
@@ -705,7 +705,7 @@ export default function TrainingPage() {
             {/* ── Last training header ── */}
             <div className="card p-3 sm:p-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-pitch-500 flex items-center justify-center text-white text-base shrink-0">
+                <div className="w-9 h-9 rounded-soft bg-pitch-500 flex items-center justify-center text-white text-base shrink-0">
                   {trainingLabel?.icon ?? "🏃"}
                 </div>
                 <div className="flex-1 min-w-0">

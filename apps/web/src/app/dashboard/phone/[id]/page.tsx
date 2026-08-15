@@ -329,8 +329,8 @@ export default function ConversationPage() {
                           )}
                           <div className={`px-3 py-2 rounded-2xl text-[13px] leading-snug ${
                             isOwn
-                              ? "bg-pitch-500 text-white rounded-br-sm"
-                              : "bg-white shadow-sm rounded-bl-sm"
+                              ? "bg-pitch-500 text-white rounded-br-tight"
+                              : "bg-white shadow-sm rounded-bl-tight"
                           }`}>
                             <p className="whitespace-pre-wrap">{emoticonize(msg.body)}</p>
                             <div className={`text-[9px] mt-0.5 ${isOwn ? "text-white/50" : "text-muted"} text-right`}>
@@ -363,8 +363,8 @@ export default function ConversationPage() {
                         )}
                         <div className={`px-3 py-2 rounded-2xl text-[13px] leading-snug ${
                           isUser
-                            ? "bg-pitch-500 text-white rounded-br-sm"
-                            : "bg-white shadow-sm rounded-bl-sm"
+                            ? "bg-pitch-500 text-white rounded-br-tight"
+                            : "bg-white shadow-sm rounded-bl-tight"
                         }`}>
                           <p className="whitespace-pre-wrap">{emoticonize(msg.body)}</p>
                           {/* Žádost o rozhovor chodí SMS, ale formulář je na Událostech. */}
@@ -391,7 +391,7 @@ export default function ConversationPage() {
         )}
         {aiThreadActive && aiThreadState?.awaiting === "player" && (
           <div className="flex justify-start">
-            <div className="bg-white shadow-sm rounded-2xl rounded-bl-sm px-3 py-2 text-[12px] text-muted italic flex items-center gap-1.5">
+            <div className="bg-white shadow-sm rounded-2xl rounded-bl-tight px-3 py-2 text-[12px] text-muted italic flex items-center gap-1.5">
               <span className="inline-flex gap-0.5">
                 <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                 <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -417,7 +417,7 @@ export default function ConversationPage() {
           )}
           <div className="text-[10px] font-heading font-bold text-orange-700/70 uppercase tracking-wide mb-1.5">🤝 Nabídni mu něco konkrétního:</div>
           {unrestEffects && (
-            <div className="mb-1.5 bg-white rounded-lg px-2.5 py-1.5 text-[11px] text-gray-700 space-y-0.5">
+            <div className="mb-1.5 bg-white rounded-soft px-2.5 py-1.5 text-[11px] text-gray-700 space-y-0.5">
               {unrestEffects.map((ef, i) => <div key={i}>• {ef}</div>)}
               <button onClick={() => setUnrestEffects(null)} className="text-[10px] text-muted underline">skrýt</button>
             </div>

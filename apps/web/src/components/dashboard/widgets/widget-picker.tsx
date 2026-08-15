@@ -58,7 +58,7 @@ export function WidgetPicker({
             <button
               type="button"
               onClick={onClose}
-              className="shrink-0 w-9 h-9 rounded-lg text-muted hover:bg-black/5 transition-colors text-lg leading-none"
+              className="shrink-0 w-9 h-9 rounded-soft text-muted hover:bg-black/5 transition-colors text-lg leading-none"
               aria-label="Zavřít"
             >
               ✕
@@ -71,7 +71,7 @@ export function WidgetPicker({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Hledat widget…"
             aria-label="Hledat widget"
-            className="mt-3 w-full h-10 px-3 rounded-lg bg-white border border-gray-200 text-sm outline-none focus:border-pitch-400 transition-colors"
+            className="mt-3 w-full h-10 px-3 rounded-soft bg-white border border-gray-200 text-sm outline-none focus:border-pitch-400 transition-colors"
           />
 
           {/* Kategorie — na mobilu se posouvají do strany, nezalamují se do bloku */}
@@ -135,7 +135,7 @@ export function WidgetPicker({
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
+            className="px-5 py-2.5 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
           >
             Hotovo
           </button>

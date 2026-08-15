@@ -321,11 +321,11 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
   return (
     <div className="flex items-center gap-2.5 py-2 border-b border-gray-100 last:border-b-0">
       {hasAvatar ? (
-        <div className="shrink-0 rounded-lg overflow-hidden bg-gray-50">
+        <div className="shrink-0 rounded-soft overflow-hidden bg-gray-50">
           <FaceAvatar faceConfig={t.playerAvatar as Record<string, unknown>} size={32} />
         </div>
       ) : (
-        <div className="shrink-0 w-8 h-[38px] rounded-lg bg-gray-100" />
+        <div className="shrink-0 w-8 h-[38px] rounded-soft bg-gray-100" />
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -738,7 +738,7 @@ export default function TransfersPage() {
 
       {/* Player reveal overlay */}
       {revealPlayer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setRevealPlayer(null)}>
+        <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/70" onClick={() => setRevealPlayer(null)}>
           <div className="w-[320px]" onClick={(e) => e.stopPropagation()}>
             <PlayerRevealCard
               player={revealPlayer}
@@ -772,7 +772,7 @@ export default function TransfersPage() {
       <div className="flex gap-1 bg-surface rounded-xl p-1">
         {tabs.map(([key, label, count]) => (
           <button key={key} onClick={() => { setTab(key); if (key === "search") loadSearch(); }}
-            className={`flex-1 py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
+            className={`flex-1 py-2 text-sm font-heading font-bold rounded-soft transition-colors ${
               tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
             }`}>
             {label}{count > 0 ? ` (${count})` : ""}
@@ -984,7 +984,7 @@ export default function TransfersPage() {
                     <select
                       value={searchLeagueId}
                       onChange={(e) => { setSearchLeagueId(e.target.value); setSearchLoaded(false); setTimeout(() => loadSearch(e.target.value), 50); }}
-                      className="text-sm bg-white border border-gray-200 rounded-lg px-3 py-2 font-heading font-medium flex-1"
+                      className="text-sm bg-white border border-gray-200 rounded-soft px-3 py-2 font-heading font-medium flex-1"
                     >
                       <option value="">Moje liga</option>
                       {searchLeagues.map((l) => (
@@ -996,14 +996,14 @@ export default function TransfersPage() {
                 <input
                   type="text" placeholder="Hledat jméno hráče nebo název týmu..."
                   value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-heading text-sm focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
+                  className="w-full px-3 py-2.5 rounded-soft border border-gray-200 font-heading text-sm focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
                 />
                 <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-3 items-center">
                   <span className="text-sm text-muted font-heading font-bold">Pozice</span>
                   <div className="flex gap-1.5 flex-wrap">
                     {["all", "GK", "DEF", "MID", "FWD"].map((pos) => (
                       <button key={pos} onClick={() => setSearchPos(pos)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${searchPos === pos ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
+                        className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${searchPos === pos ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
                         {pos === "all" ? "Vše" : pos === "GK" ? "BRA" : pos === "DEF" ? "OBR" : pos === "MID" ? "ZÁL" : "ÚTO"}
                       </button>
                     ))}
@@ -1013,7 +1013,7 @@ export default function TransfersPage() {
                   <div className="flex gap-1.5 flex-wrap">
                     {[0, 30, 50, 60].map((v) => (
                       <button key={v} onClick={() => setSearchMinRating(v)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${searchMinRating === v ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
+                        className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${searchMinRating === v ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
                         {v === 0 ? "Vše" : `${v}+`}
                       </button>
                     ))}
@@ -1023,14 +1023,14 @@ export default function TransfersPage() {
                   <div className="flex gap-1.5 items-center flex-wrap">
                     <input type="number" value={searchAgeMin || ""} onChange={(e) => setSearchAgeMin(parseInt(e.target.value) || 0)}
                       placeholder="od" min={0} max={60}
-                      className="w-14 px-2 py-1.5 rounded-lg border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-1 focus:ring-pitch-500/30" />
+                      className="w-14 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-1 focus:ring-pitch-500/30" />
                     <span className="text-muted">–</span>
                     <input type="number" value={searchAgeMax < 99 ? searchAgeMax : ""} onChange={(e) => setSearchAgeMax(parseInt(e.target.value) || 99)}
                       placeholder="do" min={0} max={60}
-                      className="w-14 px-2 py-1.5 rounded-lg border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-1 focus:ring-pitch-500/30" />
+                      className="w-14 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-1 focus:ring-pitch-500/30" />
                     {[{l:"16-23",a:16,b:23},{l:"24-30",a:24,b:30},{l:"30+",a:30,b:99}].map(({l,a,b}) => (
                       <button key={l} onClick={() => { setSearchAgeMin(a); setSearchAgeMax(b); }}
-                        className={`px-2.5 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${searchAgeMin === a && searchAgeMax === b ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
+                        className={`px-2.5 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${searchAgeMin === a && searchAgeMax === b ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
                         {l}
                       </button>
                     ))}
@@ -1039,7 +1039,7 @@ export default function TransfersPage() {
                   <span className="text-sm text-muted font-heading font-bold">Řazení</span>
                   <div>
                     <select value={searchSort} onChange={(e) => setSearchSort(e.target.value)}
-                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-heading">
+                      className="px-3 py-1.5 rounded-soft border border-gray-200 text-sm font-heading">
                       <option value="rating">Rating (nejlepší)</option>
                       <option value="age">Věk (nejmladší)</option>
                       <option value="wage">Plat (nejnižší)</option>
@@ -1156,7 +1156,7 @@ export default function TransfersPage() {
                     <button
                       key={p.value}
                       onClick={() => setFilters((f) => ({ ...f, position: p.value }))}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${
+                      className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${
                         filters.position === p.value
                           ? "bg-pitch-500 text-white"
                           : "bg-surface text-muted hover:text-ink"
@@ -1176,14 +1176,14 @@ export default function TransfersPage() {
                     type="number" min={0} max={99} placeholder="Min"
                     value={filters.ratingMin || ""}
                     onChange={(e) => setFilters((f) => ({ ...f, ratingMin: parseInt(e.target.value) || 0 }))}
-                    className="w-20 px-2 py-1.5 rounded-lg border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                    className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
                   />
                   <span className="text-muted text-sm">—</span>
                   <input
                     type="number" min={0} max={99} placeholder="Max"
                     value={filters.ratingMax < 99 ? filters.ratingMax : ""}
                     onChange={(e) => setFilters((f) => ({ ...f, ratingMax: parseInt(e.target.value) || 99 }))}
-                    className="w-20 px-2 py-1.5 rounded-lg border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                    className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
                   />
                 </div>
                 <div className="flex gap-1.5 mt-1.5">
@@ -1209,14 +1209,14 @@ export default function TransfersPage() {
                     type="number" min={15} max={50} placeholder="Min"
                     value={filters.ageMin > 15 ? filters.ageMin : ""}
                     onChange={(e) => setFilters((f) => ({ ...f, ageMin: parseInt(e.target.value) || 15 }))}
-                    className="w-20 px-2 py-1.5 rounded-lg border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                    className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
                   />
                   <span className="text-muted text-sm">—</span>
                   <input
                     type="number" min={15} max={50} placeholder="Max"
                     value={filters.ageMax < 50 ? filters.ageMax : ""}
                     onChange={(e) => setFilters((f) => ({ ...f, ageMax: parseInt(e.target.value) || 50 }))}
-                    className="w-20 px-2 py-1.5 rounded-lg border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                    className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
                   />
                 </div>
               </div>
@@ -1228,7 +1228,7 @@ export default function TransfersPage() {
                   type="number" min={0} step={100} placeholder="Bez limitu"
                   value={filters.maxWage || ""}
                   onChange={(e) => setFilters((f) => ({ ...f, maxWage: parseInt(e.target.value) || 0 }))}
-                  className="w-32 px-2 py-1.5 rounded-lg border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                  className="w-32 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
                 />
               </div>
 
@@ -1256,7 +1256,7 @@ export default function TransfersPage() {
                           type="number" min={0} max={99} placeholder="0"
                           value={(filters[key] as number) || ""}
                           onChange={(e) => setFilters((f) => ({ ...f, [key]: parseInt(e.target.value) || 0 }))}
-                          className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                          className="w-full px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
                         />
                       </div>
                     ))}
@@ -1270,7 +1270,7 @@ export default function TransfersPage() {
                 <select
                   value={filters.sort}
                   onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value as FASortKey }))}
-                  className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-heading focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                  className="px-3 py-1.5 rounded-soft border border-gray-200 text-sm font-heading focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
                 >
                   {SORT_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
@@ -1280,11 +1280,11 @@ export default function TransfersPage() {
 
               {/* Actions row */}
               <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
-                <button onClick={resetFilters} className="py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                <button onClick={resetFilters} className="py-1.5 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                   Resetovat
                 </button>
                 {!showPresetInput ? (
-                  <button onClick={() => setShowPresetInput(true)} className="py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-pitch-50 text-pitch-600 hover:bg-pitch-100 transition-colors">
+                  <button onClick={() => setShowPresetInput(true)} className="py-1.5 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-50 text-pitch-600 hover:bg-pitch-100 transition-colors">
                     Uložit filtr
                   </button>
                 ) : (
@@ -1295,13 +1295,13 @@ export default function TransfersPage() {
                       onChange={(e) => setPresetName(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleSavePreset(); if (e.key === "Escape") setShowPresetInput(false); }}
                       placeholder="Název filtru"
-                      className="px-2 py-1 rounded-lg border border-gray-200 text-sm font-heading focus:outline-none focus:ring-2 focus:ring-pitch-500/30 w-32"
+                      className="px-2 py-1 rounded-soft border border-gray-200 text-sm font-heading focus:outline-none focus:ring-2 focus:ring-pitch-500/30 w-32"
                       autoFocus
                     />
-                    <button onClick={handleSavePreset} className="py-1 px-2.5 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                    <button onClick={handleSavePreset} className="py-1 px-2.5 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                       OK
                     </button>
-                    <button onClick={() => setShowPresetInput(false)} className="py-1 px-2 rounded-lg text-xs font-heading font-bold text-muted hover:bg-gray-100 transition-colors">
+                    <button onClick={() => setShowPresetInput(false)} className="py-1 px-2 rounded-soft text-xs font-heading font-bold text-muted hover:bg-gray-100 transition-colors">
                       ×
                     </button>
                   </div>
@@ -1315,7 +1315,7 @@ export default function TransfersPage() {
                     <button
                       key={i}
                       onClick={() => handleApplyPreset(p)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-heading font-bold bg-surface text-ink hover:bg-pitch-50 transition-colors group"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-soft text-xs font-heading font-bold bg-surface text-ink hover:bg-pitch-50 transition-colors group"
                     >
                       {p.name}
                       <span
@@ -1345,7 +1345,7 @@ export default function TransfersPage() {
             <div className="card p-6 text-center space-y-3">
               <p className="text-muted">{isFiltered ? "Žádní hráči neodpovídají filtrům." : "Žádní volní hráči nejsou k dispozici."}</p>
               {isFiltered && (
-                <button onClick={resetFilters} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                <button onClick={resetFilters} className="py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                   Resetovat filtry
                 </button>
               )}
@@ -1462,7 +1462,7 @@ export default function TransfersPage() {
                             await refresh();
                           }
                         }}
-                        className="shrink-0 py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
+                        className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
                       >
                         Podepsat
                       </button>
@@ -1533,12 +1533,12 @@ export default function TransfersPage() {
                       {l.myActiveOfferId ? (
                         <Link
                           href={`/dashboard/transfers/offer/${l.myActiveOfferId}`}
-                          className="shrink-0 py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors"
+                          className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors"
                         >
                           Probíhá jednání{l.myActiveOfferAmount ? ` (${formatCZK(l.myActiveOfferAmount)})` : ""} →
                         </Link>
                       ) : l.myBidAmount ? (
-                        <span className="shrink-0 py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-50 text-pitch-600">
+                        <span className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-50 text-pitch-600">
                           Nabídnuto {formatCZK(l.myBidAmount)}
                         </span>
                       ) : (
@@ -1576,7 +1576,7 @@ export default function TransfersPage() {
                               },
                             });
                           }}
-                          className="shrink-0 py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
+                          className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
                         >
                           Nabídnout
                         </button>
@@ -1615,7 +1615,7 @@ export default function TransfersPage() {
                           if (!teamId) return;
                           if (await apiAction(apiFetch(`/api/teams/${teamId}/listings/${l.id}`, { method: "DELETE" }), "Stažení inzerátu se nezdařilo")) await refresh();
                         }}
-                        className="shrink-0 py-1 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
+                        className="shrink-0 py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
                       >
                         Stáhnout
                       </button>
@@ -1634,13 +1634,13 @@ export default function TransfersPage() {
                                 const ok = await confirm({ title: `Přijmout nabídku ${formatCZK(b.amount)}?`, description: `Od: ${b.bidderName}`, confirmLabel: "Přijmout" });
                                 if (!ok || !teamId) return;
                                 if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
-                              }} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                              }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                                 Přijmout
                               </button>
                               <button onClick={async () => {
                                 if (!teamId) return;
                                 if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }), "Odmítnutí nabídky se nezdařilo")) await refresh();
-                              }} className="py-1 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                              }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                                 Odmítnout
                               </button>
                             </div>
@@ -1664,13 +1664,13 @@ export default function TransfersPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setOffersView("active")}
-              className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offersView === "active" ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}
+              className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${offersView === "active" ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}
             >
               Aktivní ({incoming.length + outgoing.length + playerOffers.length})
             </button>
             <button
               onClick={() => setOffersView("history")}
-              className={`px-3 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offersView === "history" ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}
+              className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${offersView === "history" ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}
             >
               Historie ({history.length})
             </button>
@@ -1802,7 +1802,7 @@ export default function TransfersPage() {
                                 showError("Přijetí nabídky se nezdařilo", (e as Error)?.message || "Zkus to prosím znovu.");
                               } finally { setPlayerOfferLoading(null); }
                             }}
-                            className="py-2 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors disabled:opacity-50">
+                            className="py-2 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors disabled:opacity-50">
                             {playerOfferLoading === o.id ? "..." : "Přijmout"}
                           </button>
                           <button
@@ -1814,7 +1814,7 @@ export default function TransfersPage() {
                               if (ok) await refresh();
                               setPlayerOfferLoading(null);
                             }}
-                            className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors disabled:opacity-50">
+                            className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors disabled:opacity-50">
                             Odmítnout
                           </button>
                         </div>
@@ -1891,7 +1891,7 @@ export default function TransfersPage() {
                         {o.on_turn === false && <div className="text-xs text-muted mt-1 italic">Čeká se na odpověď soupeře</div>}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
-                        <Link href={`/dashboard/transfers/offer/${o.id}`} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
+                        <Link href={`/dashboard/transfers/offer/${o.id}`} className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
                           Jednání →
                         </Link>
                         {o.on_turn !== false && (<>
@@ -1905,7 +1905,7 @@ export default function TransfersPage() {
                           const ok = await confirm({ title: `Přijmout ${formatCZK(amount)}?`, description: desc, confirmLabel: "Přijmout" });
                           if (!ok || !teamId) return;
                           if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
-                        }} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                        }} className="py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                           Přijmout
                         </button>
                         {!o.is_virtual && <button onClick={() => {
@@ -1925,13 +1925,13 @@ export default function TransfersPage() {
                               if (ok) await refresh();
                             },
                           });
-                        }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
+                        }} className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
                           Protinabídka
                         </button>}
                         <button onClick={async () => {
                           if (!teamId) return;
                           if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }), "Odmítnutí nabídky se nezdařilo")) await refresh();
-                        }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                        }} className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                           Odmítnout
                         </button>
                         </>)}
@@ -1940,7 +1940,7 @@ export default function TransfersPage() {
                           const ok = await confirm({ title: "Ukončit jednání?", description: `Jednání o ${o.first_name} ${o.last_name} bude zrušeno.`, confirmLabel: "Ukončit" });
                           if (!ok) return;
                           if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}`, { method: "DELETE" }), "Ukončení jednání se nezdařilo")) await refresh();
-                        }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                        }} className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                           Ukončit
                         </button>
                       </div>
@@ -2001,7 +2001,7 @@ export default function TransfersPage() {
                         )}
                       </div>
                       <div className="flex flex-wrap items-stretch gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
-                        <Link href={`/dashboard/transfers/offer/${o.id}`} className="inline-flex items-center justify-center py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
+                        <Link href={`/dashboard/transfers/offer/${o.id}`} className="inline-flex items-center justify-center py-1.5 px-3 rounded-soft text-xs font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
                           Jednání →
                         </Link>
                         {o.on_turn && (<>
@@ -2015,7 +2015,7 @@ export default function TransfersPage() {
                             const ok = await confirm({ title: `Přijmout protinabídku ${formatCZK(amount)}?`, description: desc, confirmLabel: "Přijmout" });
                             if (!ok || !teamId) return;
                             if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }), "Přijetí protinabídky se nezdařilo")) await refresh();
-                          }} className="inline-flex items-center justify-center py-1.5 px-4 rounded-lg text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                          }} className="inline-flex items-center justify-center py-1.5 px-4 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                             Přijmout
                           </button>
                           <button onClick={() => {
@@ -2035,7 +2035,7 @@ export default function TransfersPage() {
                                 if (ok) await refresh();
                               },
                             });
-                          }} className="inline-flex items-center justify-center py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
+                          }} className="inline-flex items-center justify-center py-1.5 px-3 rounded-soft text-xs font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
                             Protinabídka
                           </button>
                         </>)}
@@ -2045,7 +2045,7 @@ export default function TransfersPage() {
                         <button onClick={async () => {
                           if (!teamId) return;
                           if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}`, { method: "DELETE" }), "Stažení nabídky se nezdařilo")) await refresh();
-                        }} className="inline-flex items-center justify-center py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                        }} className="inline-flex items-center justify-center py-1.5 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                           Stáhnout
                         </button>
                       </div>
@@ -2094,7 +2094,7 @@ export default function TransfersPage() {
                               const ok = await confirm({ title: `Přijmout ${formatCZK(currentAmount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
                               if (!ok) return;
                               if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
-                            }} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                            }} className="py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                               Přijmout
                             </button>
                             <button onClick={() => {
@@ -2112,13 +2112,13 @@ export default function TransfersPage() {
                                   if (ok) await refresh();
                                 },
                               });
-                            }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
+                            }} className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
                               Protinabídka
                             </button>
                             <button onClick={async () => {
                               if (!teamId) return;
                               if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }), "Odmítnutí se nezdařilo")) await refresh();
-                            }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                            }} className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                               Odmítnout
                             </button>
                           </>)}
@@ -2166,7 +2166,7 @@ export default function TransfersPage() {
                               const ok = await confirm({ title: `Přijmout protinabídku ${formatCZK(currentAmount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
                               if (!ok) return;
                               if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
-                            }} className="py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                            }} className="py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                               Přijmout
                             </button>
                             <button onClick={() => {
@@ -2184,7 +2184,7 @@ export default function TransfersPage() {
                                   if (ok) await refresh();
                                 },
                               });
-                            }} className="py-1.5 px-3 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
+                            }} className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
                               Protinabídka
                             </button>
                           </>)}
@@ -2193,7 +2193,7 @@ export default function TransfersPage() {
                             const ok = await confirm({ title: "Stáhnout nabídku?", description: "Tvá nabídka bude zrušena.", confirmLabel: "Stáhnout", variant: "danger" });
                             if (!ok) return;
                             if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}`, { method: "DELETE" }), "Stažení se nezdařilo")) await refresh();
-                          }} className="py-1.5 px-3 rounded-lg text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                          }} className="py-1.5 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                             Stáhnout
                           </button>
                         </div>
@@ -2251,7 +2251,7 @@ export default function TransfersPage() {
                         if (!ok || !teamId) return;
                         if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${p.id}/terminate`, { method: "POST" }), "Ukončení hostování se nezdařilo")) await refresh();
                       }}
-                      className="shrink-0 py-1 px-3 rounded-lg text-xs font-heading font-bold bg-card-red/10 text-card-red hover:bg-card-red/20 transition-colors"
+                      className="shrink-0 py-1 px-3 rounded-soft text-xs font-heading font-bold bg-card-red/10 text-card-red hover:bg-card-red/20 transition-colors"
                     >
                       Ukončit
                     </button>
@@ -2448,7 +2448,7 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose }: {
   const [loading, setLoading] = useState(false);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40" onClick={onClose}>
       <div className="bg-white rounded-2xl w-[90vw] max-w-sm shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="p-5">
           <h3 className="font-heading font-bold text-lg">{title}</h3>

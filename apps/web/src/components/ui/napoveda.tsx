@@ -253,14 +253,14 @@ function HelpPanel({ help, onClose }: { help: HelpEntry; onClose: () => void }) 
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed bottom-[5.5rem] sm:bottom-20 left-3 right-3 sm:left-auto sm:right-4 z-50 sm:w-[360px] max-h-[55vh] sm:max-h-[70vh] overflow-y-auto rounded-xl bg-white shadow-2xl border border-gray-100 animate-slide-up">
+      <div className="fixed bottom-[5.5rem] sm:bottom-20 left-3 right-3 sm:left-auto sm:right-4 z-[var(--z-nav)] sm:w-[360px] max-h-[55vh] sm:max-h-[70vh] overflow-y-auto rounded-xl bg-white shadow-2xl border border-gray-100 animate-slide-up">
         <div className="sticky top-0 bg-pitch-700 text-white px-5 py-3 rounded-t-xl flex items-center gap-3">
           <span className="text-xl">{help.icon}</span>
           <span className="font-heading font-bold text-base">{help.title}</span>
         </div>
         <div className="px-5 py-4 space-y-3">
           {help.sections.map((s, i) => (
-            <div key={i} className={s.tip ? "bg-pitch-50 border border-pitch-200 rounded-lg px-3 py-2" : ""}>
+            <div key={i} className={s.tip ? "bg-pitch-50 border border-pitch-200 rounded-soft px-3 py-2" : ""}>
               {s.heading && (
                 <h4 className="font-heading font-bold text-sm text-pitch-700 mb-0.5">{s.heading}</h4>
               )}
@@ -283,7 +283,7 @@ function HelpButton({ open, onClick, className }: { open: boolean; onClick: () =
   return (
     <button
       onClick={onClick}
-      className={`fixed z-50 w-11 h-11 rounded-full bg-pitch-700 text-white shadow-lg hover:bg-pitch-600 transition-all flex items-center justify-center font-heading font-bold text-lg ${className ?? "bottom-24 sm:bottom-6 right-4"}`}
+      className={`fixed z-[var(--z-nav)] w-11 h-11 rounded-full bg-pitch-700 text-white shadow-lg hover:bg-pitch-600 transition-all flex items-center justify-center font-heading font-bold text-lg ${className ?? "bottom-24 sm:bottom-6 right-4"}`}
       title={open ? "Zavřít nápovědu" : "Nápověda"}
       aria-label={open ? "Zavřít nápovědu" : "Nápověda"}
     >

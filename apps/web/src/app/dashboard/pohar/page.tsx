@@ -70,7 +70,7 @@ function TieRow({ m, mine }: { m: BracketMatch; mine: boolean }) {
   const awayWon = sim && !homeWon;
   const pens = sim && m.homeScore === m.awayScore && m.homePens != null;
   return (
-    <div className={`rounded-lg border ${mine ? "border-pitch-300 bg-pitch-50" : "border-gray-100 bg-white"}`}>
+    <div className={`rounded-soft border ${mine ? "border-pitch-300 bg-pitch-50" : "border-gray-100 bg-white"}`}>
       {/* ≥sm: jeden řádek — domácí | skóre | hosté */}
       <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-2">
         <TeamCell s={m.home} align="right" bold={homeWon} />
@@ -223,7 +223,7 @@ export default function PoharPage() {
       <div className="flex gap-1 bg-surface rounded-xl p-1">
         {(["pavouk", "strelci"] as const).map((key) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`flex-1 py-2.5 text-sm font-heading font-bold rounded-lg transition-colors ${
+            className={`flex-1 py-2.5 text-sm font-heading font-bold rounded-soft transition-colors ${
               tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
             }`}>
             {key === "pavouk" ? "🏆 Pavouk" : "⚽ Střelci"}

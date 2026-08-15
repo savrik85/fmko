@@ -591,7 +591,7 @@ function PubAction({ teamId }: { teamId: string | null }) {
             </div>
             {available && !result ? (
               <button onClick={() => setOpen(!open)}
-                className="px-3 py-1.5 bg-amber-500 text-white rounded-lg font-heading font-bold text-xs shrink-0">
+                className="px-3 py-1.5 bg-amber-500 text-white rounded-soft font-heading font-bold text-xs shrink-0">
                 Do hospody
               </button>
             ) : (

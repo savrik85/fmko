@@ -19,7 +19,7 @@ export function Card({ variant = "default", hover = false, className = "", child
 
 export function CardHeader({ className = "", children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`px-5 py-4 border-b border-gray-100 ${className}`} {...props}>
+    <div className={`px-5 py-4 border-b border-line-soft ${className}`} {...props}>
       {children}
     </div>
   );

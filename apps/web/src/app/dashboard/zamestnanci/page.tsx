@@ -93,8 +93,8 @@ function AttrGrid({ m }: { m: StaffMember }) {
 function Avatar({ m, size = 48 }: { m: StaffMember; size?: number }) {
   const hasFace = m.avatar && typeof m.avatar === "object" && Object.keys(m.avatar).length > 2;
   return hasFace
-    ? <FaceAvatar faceConfig={m.avatar as Record<string, unknown>} size={size} className="rounded-lg bg-white" />
-    : <div className="rounded-lg bg-surface flex items-center justify-center font-heading font-bold" style={{ width: size, height: size }}>{m.firstName[0]}</div>;
+    ? <FaceAvatar faceConfig={m.avatar as Record<string, unknown>} size={size} className="rounded-soft bg-white" />
+    : <div className="rounded-soft bg-surface flex items-center justify-center font-heading font-bold" style={{ width: size, height: size }}>{m.firstName[0]}</div>;
 }
 
 export default function ZamestnanciPage() {
@@ -207,7 +207,7 @@ export default function ZamestnanciPage() {
         <div className="flex gap-1 bg-surface rounded-xl p-1">
           {tabs.map(([key, label, count]) => (
             <button key={key} onClick={() => setTab(key)}
-              className={`flex-1 py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
+              className={`flex-1 py-2 text-sm font-heading font-bold rounded-soft transition-colors ${
                 tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"}`}>
               {label}{count > 0 ? ` (${count})` : ""}
             </button>
@@ -264,7 +264,7 @@ export default function ZamestnanciPage() {
 
                           {/* Kurz */}
                           {m.courseAttribute ? (
-                            <div className="text-xs bg-gold-50 text-gold-700 rounded-lg px-3 py-2 font-heading">
+                            <div className="text-xs bg-gold-50 text-gold-700 rounded-soft px-3 py-2 font-heading">
                               🎓 Kurz {STAFF_ATTRIBUTE_LABELS[m.courseAttribute]} — zbývá {m.courseWeeksRemaining} {m.courseWeeksRemaining === 1 ? "týden" : (m.courseWeeksRemaining ?? 0) < 5 ? "týdny" : "týdnů"}
                             </div>
                           ) : m.courses && m.courses.length > 0 ? (
@@ -273,7 +273,7 @@ export default function ZamestnanciPage() {
                               <div className="mt-2 grid grid-cols-1 gap-1.5">
                                 {m.courses.map((q) => (
                                   <button key={q.attribute} onClick={() => doCourse(m, q)}
-                                    className="flex items-center justify-between gap-2 text-left rounded-lg border border-gray-100 px-2.5 py-1.5 hover:border-pitch-300 transition-colors">
+                                    className="flex items-center justify-between gap-2 text-left rounded-soft border border-gray-100 px-2.5 py-1.5 hover:border-pitch-300 transition-colors">
                                     <span className="font-heading">{STAFF_ATTRIBUTE_LABELS[q.attribute]} +{q.points}</span>
                                     <span className="text-muted tabular-nums">{q.weeks} týd · {czk(q.cost)}</span>
                                   </button>
@@ -289,7 +289,7 @@ export default function ZamestnanciPage() {
                               <select
                                 value=""
                                 onChange={(e) => { const r = e.target.value as StaffRole; if (r) doReassign(m, r); }}
-                                className="text-xs border border-gray-200 rounded-lg px-2 py-1 font-heading text-muted bg-white">
+                                className="text-xs border border-gray-200 rounded-soft px-2 py-1 font-heading text-muted bg-white">
                                 <option value="">Přeřadit…</option>
                                 {STAFF_ROLE_ORDER.filter((r) => r !== role && !occupiedRoles.has(r)).map((r) => (
                                   <option key={r} value={r}>{ROLE_DEFS[r].label} ({staffEffectiveness(m, r)}/20)</option>
@@ -325,7 +325,7 @@ export default function ZamestnanciPage() {
                   <select
                     value={marketRoleFilter}
                     onChange={(e) => setMarketRoleFilter(e.target.value as StaffRole | "all")}
-                    className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 font-heading bg-white flex-1 min-w-[10rem]">
+                    className="text-sm border border-gray-200 rounded-soft px-2.5 py-1.5 font-heading bg-white flex-1 min-w-[10rem]">
                     <option value="all">Všechny role ({market.length})</option>
                     {STAFF_ROLE_ORDER.map((r) => {
                       const n = market.filter((c) => c.profession === r).length;
@@ -363,7 +363,7 @@ export default function ZamestnanciPage() {
                       <select
                         value={selected}
                         onChange={(e) => setPickRole((p) => ({ ...p, [cand.id]: e.target.value as StaffRole }))}
-                        className="text-xs border border-gray-200 rounded-lg px-2 py-1 font-heading bg-white flex-1 min-w-[10rem]">
+                        className="text-xs border border-gray-200 rounded-soft px-2 py-1 font-heading bg-white flex-1 min-w-[10rem]">
                         {STAFF_ROLE_ORDER.map((r) => (
                           <option key={r} value={r} disabled={occupiedRoles.has(r)}>
                             {ROLE_DEFS[r].label} ({staffEffectiveness(cand, r)}/20){occupiedRoles.has(r) ? " — obsazeno" : ""}

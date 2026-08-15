@@ -43,10 +43,11 @@ export function ConfirmDialog({
   const isLoading = loading || confirming;
 
   return (
-    // z-70: nad spodní navigací (z-50) i nad .modal-backdrop (z-60). Při shodném
-    // z-indexu rozhodovalo pořadí v DOM a potvrzení otevřené nad modalem se schovalo
-    // za něj — klikání pak nemělo žádný efekt a čekající promise se nikdy nedokončil.
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={onCancel}>
+    // --z-dialog: nad spodní navigací (--z-nav) i nad plachtami (--z-sheet). Při
+    // shodném z-indexu rozhodovalo pořadí v DOM a potvrzení otevřené nad modalem se
+    // schovalo za něj — klikání pak nemělo žádný efekt a čekající promise se nikdy
+    // nedokončil. Hladiny jsou definované v globals.css.
+    <div className="fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center p-4" onClick={onCancel}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
 

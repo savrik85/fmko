@@ -159,14 +159,14 @@ function VoteCard({ vote, teamId, token, onVoted }: { vote: Vote; teamId: string
             <button
               onClick={() => castVote("ano")}
               disabled={voting}
-              className="px-4 py-1.5 bg-pitch-500 text-white rounded-lg font-heading font-bold text-sm hover:bg-pitch-600 disabled:opacity-50 transition-colors"
+              className="px-4 py-1.5 bg-pitch-500 text-white rounded-soft font-heading font-bold text-sm hover:bg-pitch-600 disabled:opacity-50 transition-colors"
             >
               ANO
             </button>
             <button
               onClick={() => castVote("ne")}
               disabled={voting}
-              className="px-4 py-1.5 bg-card-red text-white rounded-lg font-heading font-bold text-sm hover:opacity-80 disabled:opacity-50 transition-colors"
+              className="px-4 py-1.5 bg-card-red text-white rounded-soft font-heading font-bold text-sm hover:opacity-80 disabled:opacity-50 transition-colors"
             >
               NE
             </button>

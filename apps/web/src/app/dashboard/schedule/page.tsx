@@ -172,7 +172,7 @@ export default function SchedulePage() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`flex-1 py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
+            className={`flex-1 py-2 text-sm font-heading font-bold rounded-soft transition-colors ${
               tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
             }`}
           >
@@ -204,7 +204,7 @@ export default function SchedulePage() {
                   <button
                     onClick={() => promoteMatch(nextHome)}
                     disabled={acting}
-                    className="shrink-0 py-1.5 px-3 sm:py-2 sm:px-4 rounded-lg text-xs sm:text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 disabled:opacity-50 transition-colors"
+                    className="shrink-0 py-1.5 px-3 sm:py-2 sm:px-4 rounded-soft text-xs sm:text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 disabled:opacity-50 transition-colors"
                   >
                     {acting ? "..." : "Propagovat"}
                   </button>

@@ -49,7 +49,7 @@ export function RefereeCard({ referee, isHome }: Props) {
     >
       <div className="flex items-start gap-3">
         {referee.avatar && (
-          <FaceAvatar faceConfig={referee.avatar} size={56} className="border border-ink/20 bg-white shrink-0 rounded-lg" />
+          <FaceAvatar faceConfig={referee.avatar} size={56} className="border border-ink/20 bg-white shrink-0 rounded-soft" />
         )}
         <div className="min-w-0 flex-1">
           <Link href={`/dashboard/rozhodci/${referee.id}`} className="font-heading font-bold text-base hover:underline block truncate">
@@ -140,7 +140,7 @@ export function RefereeCard({ referee, isHome }: Props) {
 
 function Stat({ label, value, className = "", hint }: { label: string; value: string; className?: string; hint?: string }) {
   return (
-    <div className="text-center rounded-lg bg-ink/[0.03] py-2 px-1">
+    <div className="text-center rounded-soft bg-ink/[0.03] py-2 px-1">
       <div className={`font-heading font-bold text-base tabular-nums ${className}`}>{value}</div>
       <div className="text-[11px] text-muted leading-tight">{label}</div>
       {hint && <div className="text-[11px] text-muted leading-tight">{hint}</div>}

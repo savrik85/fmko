@@ -266,7 +266,7 @@ export default function HospodaPage() {
                 zastupitel_1: "Zastupitel", zastupitel_2: "Zastupitel",
               };
               return (
-                <div key={p.id} className="flex items-center gap-4 bg-amber-50/40 rounded-lg p-3">
+                <div key={p.id} className="flex items-center gap-4 bg-amber-50/40 rounded-soft p-3">
                   <FaceAvatar faceConfig={face} size={64} />
                   <div className="flex-1 min-w-0">
                     <div className="text-xs uppercase tracking-wider text-gray-500">{ROLE_LABEL[p.role] ?? "Zastupitel"}</div>
@@ -311,7 +311,7 @@ export default function HospodaPage() {
               const ringColor = i === 0 ? "ring-amber-400" : i === 1 ? "ring-gray-300" : "ring-orange-400";
               const avatar = avatarsById[d.id];
               return (
-                <Link key={d.id} href={`/dashboard/player/${d.id}`} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-pitch-50/50 transition-colors group">
+                <Link key={d.id} href={`/dashboard/player/${d.id}`} className="flex items-center gap-3 p-3 rounded-soft bg-gray-50 hover:bg-pitch-50/50 transition-colors group">
                   <div className="relative shrink-0">
                     {avatar
                       ? <FaceAvatar faceConfig={avatar} size={64} className={`rounded-full ring-2 ${ringColor} bg-white`} />

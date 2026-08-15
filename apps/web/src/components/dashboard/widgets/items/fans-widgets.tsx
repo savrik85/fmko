@@ -156,11 +156,11 @@ export function StadiumRadarWidget({ data }: WidgetProps) {
         <ChartEmpty>Stadion zatím nemá co vykreslit.</ChartEmpty>
       )}
       <div className="grid grid-cols-2 gap-2 text-sm">
-        <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+        <div className="bg-gray-50 rounded-soft p-2.5 text-center">
           <div className="font-heading font-bold text-lg tabular-nums">{stadium.capacity.toLocaleString("cs")}</div>
           <div className="text-[11px] text-muted uppercase">Kapacita</div>
         </div>
-        <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+        <div className="bg-gray-50 rounded-soft p-2.5 text-center">
           <div className="font-heading font-bold text-lg tabular-nums">{Math.round(stadium.pitchCondition)} %</div>
           <div className="text-[11px] text-muted uppercase">Stav hřiště</div>
         </div>

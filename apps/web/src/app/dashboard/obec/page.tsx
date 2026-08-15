@@ -608,7 +608,7 @@ export default function ObecPage() {
                 let face: Record<string, unknown> = {};
                 try { face = JSON.parse(p.face_config); } catch { face = {}; }
                 return (
-                  <div key={p.id} className="flex items-center gap-3 border border-amber-300 bg-amber-50/40 rounded-lg p-3">
+                  <div key={p.id} className="flex items-center gap-3 border border-amber-300 bg-amber-50/40 rounded-soft p-3">
                     <FaceAvatar faceConfig={face} size={64} />
                     <div className="flex-1 min-w-0">
                       <div className="text-xs uppercase tracking-wider text-gray-500">{ROLE_LABEL[p.role]}</div>
@@ -686,7 +686,7 @@ export default function ObecPage() {
                 }
 
                 return (
-                  <div key={o.id} className="border border-gray-200 rounded-lg p-3 flex items-center justify-between gap-3">
+                  <div key={o.id} className="border border-gray-200 rounded-soft p-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-xs uppercase tracking-wider text-gray-500">{ROLE_LABEL[o.role as OfficialRole]}</div>
                       <div className="text-sm font-semibold truncate">{o.first_name} {o.last_name}</div>
@@ -725,7 +725,7 @@ export default function ObecPage() {
           <CardBody>
             <div className="space-y-3">
               {investments.map((i) => (
-                <div key={i.id} className="border border-pitch-300 bg-pitch-50/30 rounded-lg p-3">
+                <div key={i.id} className="border border-pitch-300 bg-pitch-50/30 rounded-soft p-3">
                   <div className="flex justify-between items-start gap-3">
                     <div className="min-w-0">
                       <div className="font-semibold text-sm">{investmentTargetLabel(i.target_facility, i.type)}</div>
@@ -774,7 +774,7 @@ export default function ObecPage() {
           <CardBody>
             <div className="space-y-3">
               {petitions.map((p) => (
-                <div key={p.id} className="border border-amber-200 bg-amber-50/40 rounded-lg p-3">
+                <div key={p.id} className="border border-amber-200 bg-amber-50/40 rounded-soft p-3">
                   <div className="flex justify-between items-start gap-3">
                     <div className="min-w-0">
                       <div className="font-semibold text-sm">{p.title}</div>
@@ -830,7 +830,7 @@ export default function ObecPage() {
                 const isOpen = b.status === "open";
                 const isMine = b.taken_team_name && teams.find((t) => t.id === teamId)?.name === b.taken_team_name;
                 return (
-                  <div key={b.id} className={`border rounded-lg p-3 ${isOpen ? "border-pitch-300 bg-pitch-50/30" : "border-gray-200 bg-gray-50/40 opacity-80"}`}>
+                  <div key={b.id} className={`border rounded-soft p-3 ${isOpen ? "border-pitch-300 bg-pitch-50/30" : "border-gray-200 bg-gray-50/40 opacity-80"}`}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-sm">{b.title}</div>
@@ -998,15 +998,15 @@ export default function ObecPage() {
             ) : (
               <>
                 <div className="grid grid-cols-3 gap-3 mb-3 text-center">
-                  <div className="bg-gray-50 rounded-lg p-2">
+                  <div className="bg-gray-50 rounded-soft p-2">
                     <div className="text-2xl font-bold tabular-nums">{localPride.totalLocalCount}</div>
                     <div className="text-xs text-gray-500">rodáků v kádru</div>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-2">
+                  <div className="bg-gray-50 rounded-soft p-2">
                     <div className="text-2xl font-bold tabular-nums">{localPride.recentStartersTotal}</div>
                     <div className="text-xs text-gray-500">nastoupilo (90 dní)</div>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-2">
+                  <div className="bg-gray-50 rounded-soft p-2">
                     <div className="text-2xl font-bold tabular-nums">{localPride.avgRating ?? "—"}</div>
                     <div className="text-xs text-gray-500">průměrný rating</div>
                   </div>
@@ -1040,7 +1040,7 @@ export default function ObecPage() {
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[var(--z-sheet)] bg-gray-900 text-white px-4 py-2 rounded-soft shadow-lg text-sm">
           {toast}
         </div>
       )}
@@ -1125,7 +1125,7 @@ function BrigadeTakeDialog({ brigade, teamId, onClose, onSuccess }: BrigadeTakeD
           <div className="text-sm text-gray-600 mt-1">{brigade.description}</div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 text-sm bg-gray-50 rounded-lg p-3">
+        <div className="grid grid-cols-2 gap-3 text-sm bg-gray-50 rounded-soft p-3">
           <div>
             <div className="text-xs text-gray-500">Odměna</div>
             <div className="font-semibold text-pitch-700">+{brigade.reward_favor} přízeň obce</div>
@@ -1157,7 +1157,7 @@ function BrigadeTakeDialog({ brigade, teamId, onClose, onSuccess }: BrigadeTakeD
               Nemáš dost způsobilých hráčů (potřeba ≥ 60 kondice, bez zranění).
             </div>
           ) : (
-            <div className="max-h-72 overflow-y-auto border rounded-lg divide-y divide-gray-100">
+            <div className="max-h-72 overflow-y-auto border rounded-soft divide-y divide-gray-100">
               {eligible.map((p) => {
                 let lc: { condition?: number; morale?: number } = {};
                 try { lc = JSON.parse(p.life_context); } catch { lc = {}; }

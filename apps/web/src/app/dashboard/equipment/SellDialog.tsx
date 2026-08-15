@@ -59,7 +59,7 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
         </div>
 
         {worn && (
-          <div className="bg-gold-50 border border-gold-200 rounded-lg p-3 text-sm">
+          <div className="bg-gold-50 border border-gold-200 rounded-soft p-3 text-sm">
             <div className="text-ink">
               Opotřebené vybavení se prodává hůř. Oprava za{" "}
               <span className="font-heading font-bold">{formatCZK(repairCost)}</span> zvedne stav na 100 % a s ním i cenu.
@@ -67,7 +67,7 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
             <button
               onClick={() => onRepair(option.category)}
               disabled={busy}
-              className="mt-2 py-1.5 px-4 rounded-lg text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 disabled:bg-gray-100 disabled:text-gray-400 transition-colors"
+              className="mt-2 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 disabled:bg-gray-100 disabled:text-gray-400 transition-colors"
             >
               Nejdřív opravit
             </button>
@@ -85,7 +85,7 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
               min={option.bazarMin}
               step={100}
               onChange={(e) => setPrice(Number(e.target.value))}
-              className="w-40 border border-gray-300 rounded-lg px-3 py-2 text-base font-heading font-bold tabular-nums focus:outline-none focus:border-pitch-400"
+              className="w-40 border border-gray-300 rounded-soft px-3 py-2 text-base font-heading font-bold tabular-nums focus:outline-none focus:border-pitch-400"
             />
             <span className="text-base text-muted">Kč</span>
           </div>
@@ -119,7 +119,7 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
           <button
             onClick={() => onList(option.category, price)}
             disabled={busy || !priceValid}
-            className="w-full py-2.5 rounded-lg text-base font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+            className="w-full py-2.5 rounded-soft text-base font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
           >
             {busy ? "..." : "Vystavit v bazaru"}
           </button>
@@ -143,14 +143,14 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
                 <button
                   onClick={() => setPawnArmed(false)}
                   disabled={busy}
-                  className="flex-1 py-2.5 rounded-lg text-base font-heading font-bold border border-gray-300 text-muted hover:text-ink transition-colors"
+                  className="flex-1 py-2.5 rounded-soft text-base font-heading font-bold border border-gray-300 text-muted hover:text-ink transition-colors"
                 >
                   Radši ne
                 </button>
                 <button
                   onClick={() => onPawn(option.category)}
                   disabled={busy}
-                  className="flex-1 py-2.5 rounded-lg text-base font-heading font-bold bg-card-red text-white hover:opacity-90 disabled:bg-gray-100 disabled:text-gray-400 transition-opacity"
+                  className="flex-1 py-2.5 rounded-soft text-base font-heading font-bold bg-card-red text-white hover:opacity-90 disabled:bg-gray-100 disabled:text-gray-400 transition-opacity"
                 >
                   {busy ? "..." : `Zastavit za ${formatCZK(option.pawnQuote)}`}
                 </button>
@@ -160,7 +160,7 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
             <button
               onClick={() => setPawnArmed(true)}
               disabled={busy}
-              className="w-full py-2.5 rounded-lg text-base font-heading font-bold border-2 border-card-red text-card-red hover:bg-card-red hover:text-white disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent transition-colors"
+              className="w-full py-2.5 rounded-soft text-base font-heading font-bold border-2 border-card-red text-card-red hover:bg-card-red hover:text-white disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent transition-colors"
             >
               Do zastavárny
             </button>

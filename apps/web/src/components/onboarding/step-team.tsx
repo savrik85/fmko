@@ -270,7 +270,7 @@ export function StepTeam({ village, teamName, primaryColor: initialPrimary, seco
             <div className="grid grid-cols-5 gap-2">
               {JERSEY_PATTERNS.map((jp) => (
                 <button key={jp.id} onClick={() => setJerseyPattern(jp.id)}
-                  className={`p-1.5 rounded-lg transition-all border-2 flex flex-col items-center ${jerseyPattern === jp.id ? "border-pitch-500 bg-pitch-500/5" : "border-transparent bg-surface hover:border-pitch-500/20"}`}>
+                  className={`p-1.5 rounded-soft transition-all border-2 flex flex-col items-center ${jerseyPattern === jp.id ? "border-pitch-500 bg-pitch-500/5" : "border-transparent bg-surface hover:border-pitch-500/20"}`}>
                   <JerseyPreview primary={primaryColor} secondary={secondaryColor} pattern={jp.id} size={40} />
                   <span className="text-[9px] text-muted mt-1">{jp.label}</span>
                 </button>
@@ -284,7 +284,7 @@ export function StepTeam({ village, teamName, primaryColor: initialPrimary, seco
             <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
               {BADGE_PATTERNS.map((bp) => (
                 <button key={bp.id} onClick={() => setBadgePattern(bp.id)}
-                  className={`p-2 rounded-lg transition-all border-2 flex flex-col items-center ${badgePattern === bp.id ? "border-pitch-500 bg-pitch-500/5" : "border-transparent bg-surface hover:border-pitch-500/20"}`}>
+                  className={`p-2 rounded-soft transition-all border-2 flex flex-col items-center ${badgePattern === bp.id ? "border-pitch-500 bg-pitch-500/5" : "border-transparent bg-surface hover:border-pitch-500/20"}`}>
                   <BadgePreview primary={primaryColor} secondary={secondaryColor} pattern={bp.id} initials={initials} size={36} />
                   <span className="text-[9px] text-muted mt-1">{bp.label}</span>
                 </button>

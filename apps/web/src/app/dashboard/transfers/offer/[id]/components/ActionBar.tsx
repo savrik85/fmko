@@ -41,21 +41,21 @@ export function ActionBar({
           <button
             disabled={acceptDisabled}
             onClick={() => setDialog("accept")}
-            className="flex-1 sm:flex-none min-w-[140px] px-4 py-2.5 rounded-lg font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 sm:flex-none min-w-[140px] px-4 py-2.5 rounded-soft font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Přijmout {currentAmount > 0 ? `${currentAmount.toLocaleString("cs")} Kč` : "zdarma"}
           </button>
           {!hideCounter && (
           <button
             onClick={() => setDialog("counter")}
-            className="flex-1 sm:flex-none min-w-[120px] px-4 py-2.5 rounded-lg font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors"
+            className="flex-1 sm:flex-none min-w-[120px] px-4 py-2.5 rounded-soft font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors"
           >
             Protinabídka
           </button>
           )}
           <button
             onClick={() => setDialog("reject")}
-            className="flex-1 sm:flex-none min-w-[120px] px-4 py-2.5 rounded-lg font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
+            className="flex-1 sm:flex-none min-w-[120px] px-4 py-2.5 rounded-soft font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
           >
             Odmítnout
           </button>
@@ -115,7 +115,7 @@ function MessageDialog({ title, description, confirmLabel, confirmColor, onCance
       : "text-pitch-500 hover:bg-pitch-50";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center p-4" onClick={onCancel}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="p-5">
@@ -158,7 +158,7 @@ function CounterDialog({ initial, onCancel, onConfirm }: {
   const [loading, setLoading] = useState(false);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center p-4" onClick={onCancel}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="p-5">

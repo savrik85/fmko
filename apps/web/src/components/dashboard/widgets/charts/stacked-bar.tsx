@@ -36,19 +36,19 @@ export function StackedBar({
 
   if (total <= 0) {
     return (
-      <div className="rounded-md" style={{ height, background: "#EFEBE3" }} />
+      <div className="rounded-control" style={{ height, background: "#EFEBE3" }} />
     );
   }
 
   return (
     <div className="space-y-2">
-      <div className="flex rounded-md overflow-hidden" style={{ height, gap: 2, background: SURFACE }}>
+      <div className="flex rounded-control overflow-hidden" style={{ height, gap: 2, background: SURFACE }}>
         {visible.map((s) => {
           const pct = (s.value / total) * 100;
           return (
             <div
               key={s.label}
-              className="flex items-center justify-center first:rounded-l-md last:rounded-r-md"
+              className="flex items-center justify-center first:rounded-l-control last:rounded-r-control"
               style={{ width: `${pct}%`, background: s.color }}
               title={`${s.label}: ${formatValue(s.value)}`}
             >

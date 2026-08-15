@@ -138,11 +138,11 @@ export default function FriendlyPage() {
                     </div>
                     <div className="flex gap-2 shrink-0">
                       <button onClick={() => acceptChallenge(ch.id)} disabled={sending === ch.id}
-                        className="px-3 py-1.5 bg-pitch-500 text-white rounded-lg font-heading font-bold text-xs disabled:opacity-50">
+                        className="px-3 py-1.5 bg-pitch-500 text-white rounded-soft font-heading font-bold text-xs disabled:opacity-50">
                         Přijmout
                       </button>
                       <button onClick={() => declineChallenge(ch.id)} disabled={sending === ch.id}
-                        className="px-3 py-1.5 bg-gray-200 text-ink rounded-lg font-heading font-bold text-xs disabled:opacity-50">
+                        className="px-3 py-1.5 bg-gray-200 text-ink rounded-soft font-heading font-bold text-xs disabled:opacity-50">
                         Odmítnout
                       </button>
                     </div>
@@ -174,13 +174,13 @@ export default function FriendlyPage() {
                       </div>
                       {isAccepted && ch.matchId && (
                         <Link href={`/dashboard/match?calendarId=${ch.matchId}`}
-                          className="px-3 py-1.5 bg-pitch-500 text-white rounded-lg font-heading font-bold text-xs shrink-0">
+                          className="px-3 py-1.5 bg-pitch-500 text-white rounded-soft font-heading font-bold text-xs shrink-0">
                           Sestava ▶
                         </Link>
                       )}
                       {!isAccepted && (
                         <button onClick={() => cancelChallenge(ch.id)} disabled={sending === ch.id}
-                          className="px-3 py-1.5 bg-gray-200 text-ink rounded-lg font-heading font-bold text-xs disabled:opacity-50 shrink-0">
+                          className="px-3 py-1.5 bg-gray-200 text-ink rounded-soft font-heading font-bold text-xs disabled:opacity-50 shrink-0">
                           Zrušit
                         </button>
                       )}
@@ -224,7 +224,7 @@ export default function FriendlyPage() {
                       <div className="text-xs text-muted">{t.village}</div>
                     </div>
                     <button onClick={() => sendChallenge(t.id)} disabled={sending === t.id}
-                      className="px-3 py-1.5 bg-pitch-500 text-white rounded-lg font-heading font-bold text-xs disabled:opacity-50 shrink-0">
+                      className="px-3 py-1.5 bg-pitch-500 text-white rounded-soft font-heading font-bold text-xs disabled:opacity-50 shrink-0">
                       Vyzvat ⚽ · {slotLabel}
                     </button>
                   </div>

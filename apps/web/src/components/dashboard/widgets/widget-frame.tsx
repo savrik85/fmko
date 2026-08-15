@@ -104,7 +104,7 @@ export function WidgetFrame({
           disabled={isFirst}
           title="Posunout výš"
           aria-label={`Posunout ${title} výš`}
-          className="w-8 h-8 rounded-md bg-white text-ink hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-white transition-colors"
+          className="w-8 h-8 rounded-control bg-white text-ink hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-white transition-colors"
         >
           ↑
         </button>
@@ -115,7 +115,7 @@ export function WidgetFrame({
           disabled={isLast}
           title="Posunout níž"
           aria-label={`Posunout ${title} níž`}
-          className="w-8 h-8 rounded-md bg-white text-ink hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-white transition-colors"
+          className="w-8 h-8 rounded-control bg-white text-ink hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-white transition-colors"
         >
           ↓
         </button>
@@ -125,7 +125,7 @@ export function WidgetFrame({
           onClick={onRemove}
           title="Odebrat z dashboardu"
           aria-label={`Odebrat ${title}`}
-          className="w-8 h-8 rounded-md bg-white text-card-red hover:bg-red-50 transition-colors font-bold"
+          className="w-8 h-8 rounded-control bg-white text-card-red hover:bg-red-50 transition-colors font-bold"
         >
           ✕
         </button>
@@ -144,7 +144,7 @@ export function WidgetFrame({
               onClick={() => onWidth(w)}
               aria-pressed={width === w}
               title={`${w} ze 3 sloupců`}
-              className={`w-7 h-7 rounded-md text-sm font-heading font-bold transition-colors ${
+              className={`w-7 h-7 rounded-control text-sm font-heading font-bold transition-colors ${
                 width === w ? "bg-pitch-500 text-white" : "bg-white text-muted hover:bg-gray-100"
               }`}
             >
@@ -163,7 +163,7 @@ export function WidgetFrame({
               onClick={() => onHeight(h.value)}
               aria-pressed={height === h.value}
               title={h.title}
-              className={`w-7 h-7 rounded-md text-sm font-heading font-bold transition-colors ${
+              className={`w-7 h-7 rounded-control text-sm font-heading font-bold transition-colors ${
                 height === h.value ? "bg-pitch-500 text-white" : "bg-white text-muted hover:bg-gray-100"
               }`}
             >

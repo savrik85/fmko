@@ -41,7 +41,7 @@ const INVITE_LABEL: Record<string, { text: string; cls: string }> = {
   declined: { text: "Odmítl", cls: "text-card-red bg-red-50 border-red-200" },
 };
 
-const BTN = "text-sm font-heading font-bold px-3 py-2 rounded-lg border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
+const BTN = "text-sm font-heading font-bold px-3 py-2 rounded-soft border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
 
 export function StammtischCard({ teamId }: { teamId: string }) {
   const [info, setInfo] = useState<SocialInfo | null>(null);
@@ -133,14 +133,14 @@ export function StammtischCard({ teamId }: { teamId: string }) {
       <SectionLabel>Trenérský stůl v hospodě</SectionLabel>
 
       {feedback && (
-        <div className="mt-2 mb-3 text-sm bg-amber-50 border border-amber-200 rounded-lg p-3 leading-relaxed">{feedback}</div>
+        <div className="mt-2 mb-3 text-sm bg-amber-50 border border-amber-200 rounded-soft p-3 leading-relaxed">{feedback}</div>
       )}
 
       {/* Příchozí pozvánky od jiných trenérů */}
       {info.incomingInvites.length > 0 && (
         <div className="mb-3 space-y-2">
           {info.incomingInvites.map((inv) => (
-            <div key={inv.id} className="border border-amber-200 bg-amber-50 rounded-lg p-3 flex items-center gap-3 flex-wrap">
+            <div key={inv.id} className="border border-amber-200 bg-amber-50 rounded-soft p-3 flex items-center gap-3 flex-wrap">
               <span className="text-sm flex-1 min-w-[200px]">
                 🍻 Trenér <b>{inv.hostManager}</b> ({inv.hostTeam}) tě zve dnes večer na posezení s trenéry. Útratu platí on.
               </span>
@@ -167,7 +167,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
               ) : info.stammtisch.plannedInvites.map((inv) => {
                 const meta = INVITE_LABEL[inv.status] ?? { text: inv.status, cls: "text-muted bg-gray-50 border-gray-200" };
                 return (
-                  <div key={inv.teamId} className="flex items-center gap-2.5 py-1 px-2 rounded-md border border-gray-100">
+                  <div key={inv.teamId} className="flex items-center gap-2.5 py-1 px-2 rounded-control border border-gray-100">
                     <div className="min-w-0 flex-1">
                       <span className="font-heading font-bold text-sm">{inv.managerName}</span>
                       <span className="text-xs text-muted ml-2">{inv.teamName}</span>
@@ -203,7 +203,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
       </div>
 
       {picking && info.stammtisch.available && (
-        <div className="mt-3 border border-gray-100 rounded-lg p-3">
+        <div className="mt-3 border border-gray-100 rounded-soft p-3">
           <div className="text-xs text-muted uppercase tracking-wide font-heading font-bold mb-2">
             Koho pozvat? ({selected.size}/4) — zvou se jen lidští trenéři
           </div>
@@ -213,7 +213,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
           <div className="space-y-1 max-h-64 overflow-y-auto">
             {managers.filter((m) => !m.isAi).map((m) => (
               <label key={m.teamId}
-                className="flex items-center gap-2.5 py-1.5 px-2 rounded-md hover:bg-gray-50 cursor-pointer">
+                className="flex items-center gap-2.5 py-1.5 px-2 rounded-control hover:bg-gray-50 cursor-pointer">
                 <input type="checkbox" checked={selected.has(m.teamId)} onChange={() => toggle(m.teamId)}
                   disabled={!selected.has(m.teamId) && selected.size >= 4}
                   className="accent-green-700" />

@@ -58,7 +58,7 @@ export function TodayProgramWidget({ data }: WidgetProps) {
         </div>
       </div>
       {isMatchDay && (
-        <Link href="/dashboard/match" className="py-2 px-4 rounded-lg bg-pitch-500 text-white font-heading font-bold text-sm hover:bg-pitch-600 transition-colors">
+        <Link href="/dashboard/match" className="py-2 px-4 rounded-soft bg-pitch-500 text-white font-heading font-bold text-sm hover:bg-pitch-600 transition-colors">
           Sestava →
         </Link>
       )}
@@ -281,7 +281,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
 
 function MiniForm({ f }: { f: string }) {
   return (
-    <span className={`shrink-0 w-5 h-5 rounded-md text-[11px] flex items-center justify-center font-bold text-white ${
+    <span className={`shrink-0 w-5 h-5 rounded-control text-[11px] flex items-center justify-center font-bold text-white ${
       f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-300"
     }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
   );
@@ -373,7 +373,7 @@ export function RecentMatchesWidget({ data, height }: WidgetProps) {
                     </a>
                   </td>
                   <td className="py-2 pr-4 sm:pr-5 text-center">
-                    <a href={`/dashboard/match/${m.id}`} className={`inline-flex items-center px-2 py-0.5 rounded-md text-sm font-heading font-bold hover:opacity-80 transition-opacity ${resultBg} ${resultText}`}>
+                    <a href={`/dashboard/match/${m.id}`} className={`inline-flex items-center px-2 py-0.5 rounded-control text-sm font-heading font-bold hover:opacity-80 transition-opacity ${resultBg} ${resultText}`}>
                       {m.homeScore}:{m.awayScore}
                     </a>
                   </td>

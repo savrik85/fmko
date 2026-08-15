@@ -168,14 +168,14 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={resetToDefault}
-              className="px-3 py-1.5 rounded-lg text-sm font-heading font-bold text-muted hover:bg-gray-100 transition-colors"
+              className="px-3 py-1.5 rounded-soft text-sm font-heading font-bold text-muted hover:bg-gray-100 transition-colors"
             >
               Obnovit výchozí
             </button>
             <button
               type="button"
               onClick={cancelEditing}
-              className="px-3 py-1.5 rounded-lg text-sm font-heading font-bold text-muted hover:bg-gray-100 transition-colors"
+              className="px-3 py-1.5 rounded-soft text-sm font-heading font-bold text-muted hover:bg-gray-100 transition-colors"
             >
               Zrušit
             </button>
@@ -183,7 +183,7 @@ export default function DashboardPage() {
               type="button"
               onClick={save}
               disabled={saving}
-              className="px-4 py-1.5 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50 transition-colors"
+              className="px-4 py-1.5 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50 transition-colors"
             >
               {saving ? "Ukládám…" : "Hotovo"}
             </button>
@@ -192,7 +192,7 @@ export default function DashboardPage() {
           <button
             type="button"
             onClick={startEditing}
-            className="px-3 py-1.5 rounded-lg text-sm font-heading font-bold text-muted hover:bg-gray-100 transition-colors"
+            className="px-3 py-1.5 rounded-soft text-sm font-heading font-bold text-muted hover:bg-gray-100 transition-colors"
           >
             ⚙ Upravit dashboard
           </button>
@@ -209,7 +209,7 @@ export default function DashboardPage() {
           <button
             type="button"
             onClick={() => { if (!editing) startEditing(); setPickerOpen(true); }}
-            className="mt-4 px-4 py-2 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
+            className="mt-4 px-4 py-2 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
           >
             + Přidat widget
           </button>
@@ -278,7 +278,7 @@ export default function DashboardPage() {
           <button
             type="button"
             onClick={() => setPickerOpen(true)}
-            className="px-4 py-2.5 rounded-lg text-sm font-heading font-bold border-2 border-dashed border-pitch-300 text-pitch-600 hover:bg-pitch-50 transition-colors"
+            className="px-4 py-2.5 rounded-soft text-sm font-heading font-bold border-2 border-dashed border-pitch-300 text-pitch-600 hover:bg-pitch-50 transition-colors"
           >
             + Přidat widget
           </button>

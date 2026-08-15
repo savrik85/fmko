@@ -210,7 +210,7 @@ export function LineupPreview({ teamId, matchId, formation, tactic, hardness, ca
 
           {/* Recommendation + notes */}
           {data.recommendation && (
-            <div className="mt-3 px-3 py-2 rounded-lg bg-pitch-50 border border-pitch-200 text-[12px] text-pitch-800">
+            <div className="mt-3 px-3 py-2 rounded-soft bg-pitch-50 border border-pitch-200 text-[12px] text-pitch-800">
               <span className="font-heading font-bold mr-1">💡</span>
               {data.recommendation}
             </div>

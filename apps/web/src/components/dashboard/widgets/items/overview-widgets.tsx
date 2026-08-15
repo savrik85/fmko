@@ -56,7 +56,7 @@ export function AchievementsWidget({ data, teamId, height }: WidgetProps) {
             <Link
               key={a.key}
               href={`/dashboard/manager/${teamId}`}
-              className="flex items-center gap-2.5 py-1.5 px-1 hover:bg-gray-50/60 rounded-md transition-colors"
+              className="flex items-center gap-2.5 py-1.5 px-1 hover:bg-gray-50/60 rounded-control transition-colors"
             >
               <div className="text-xl shrink-0 leading-none">{a.icon}</div>
               <div className="min-w-0 flex-1">

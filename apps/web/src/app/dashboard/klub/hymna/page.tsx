@@ -163,7 +163,7 @@ export default function HymnaPage() {
         <h1 className="font-heading font-extrabold text-2xl text-ink mt-1">Klubová hymna</h1>
       </div>
 
-      <div className="mb-5 p-3 rounded-lg bg-gray-50 border border-gray-200 text-sm text-ink">
+      <div className="mb-5 p-3 rounded-soft bg-gray-50 border border-gray-200 text-sm text-ink">
         Na generování hymny máš {maxAttempts} pokusy. Rozmysli si text i styl — pokusy se neobnovují a mazání hymny z historie je nevrací zpět.
         Zbývá <span className="font-bold tabular-nums">{maxAttempts - attemptsUsed}/{maxAttempts}</span>.
       </div>
@@ -192,7 +192,7 @@ export default function HymnaPage() {
                   <div className="flex items-center gap-2 shrink-0">
                     {a.url && !a.isSelected && (
                       <button type="button" onClick={() => handleSelect(a.id)}
-                        className="text-xs font-heading font-bold text-pitch-600 hover:text-pitch-700 px-3 py-1.5 rounded-lg border border-pitch-200 hover:bg-pitch-50 transition-colors">
+                        className="text-xs font-heading font-bold text-pitch-600 hover:text-pitch-700 px-3 py-1.5 rounded-soft border border-pitch-200 hover:bg-pitch-50 transition-colors">
                         Vybrat
                       </button>
                     )}
@@ -215,7 +215,7 @@ export default function HymnaPage() {
                 )}
                 <details className="mt-3">
                   <summary className="text-xs text-muted cursor-pointer hover:text-ink">Text hymny</summary>
-                  <pre className="whitespace-pre-wrap text-xs text-ink font-mono bg-gray-50 rounded-lg p-3 mt-2 max-h-[200px] overflow-auto">{a.lyrics}</pre>
+                  <pre className="whitespace-pre-wrap text-xs text-ink font-mono bg-gray-50 rounded-soft p-3 mt-2 max-h-[200px] overflow-auto">{a.lyrics}</pre>
                 </details>
               </div>
             ))}
@@ -224,7 +224,7 @@ export default function HymnaPage() {
       )}
 
       {!canGenerate && (
-        <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+        <div className="mb-4 p-3 rounded-soft bg-amber-50 border border-amber-200 text-sm text-amber-800">
           Vyčerpal jsi všechny {maxAttempts} pokusy generace. Hymny v historii si můžeš nadále vybírat / mazat.
         </div>
       )}
@@ -240,13 +240,13 @@ export default function HymnaPage() {
             <CardBody className="flex flex-col gap-4">
               <div className="flex gap-2">
                 <button type="button" onClick={() => setLyricsMode("auto")}
-                  className={`flex-1 px-4 py-2 rounded-lg text-sm font-heading font-bold transition-colors ${
+                  className={`flex-1 px-4 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${
                     lyricsMode === "auto" ? "bg-pitch-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"
                   }`}>
                   {"\u{1F916}"} Automaticky
                 </button>
                 <button type="button" onClick={() => setLyricsMode("custom")}
-                  className={`flex-1 px-4 py-2 rounded-lg text-sm font-heading font-bold transition-colors ${
+                  className={`flex-1 px-4 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${
                     lyricsMode === "custom" ? "bg-pitch-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"
                   }`}>
                   {"\u{270F}️"} S vlastními slovy
@@ -259,14 +259,14 @@ export default function HymnaPage() {
                   <textarea value={hints} onChange={(e) => setHints(e.target.value.slice(0, 500))}
                     placeholder="Např.: Medvědi, hospoda U Lípy, nikdy nezapomeneme, bratři Novákové"
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-pitch-500 focus:outline-none resize-none" />
+                    className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none resize-none" />
                   <div className="text-xs text-muted mt-1">{hints.length}/500 znaků</div>
                 </div>
               )}
 
               <button type="button" onClick={handleGenerateLyrics}
                 disabled={generatingLyrics || (lyricsMode === "custom" && !hints.trim())}
-                className="px-6 py-2.5 rounded-lg text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 transition-colors self-start">
+                className="px-6 py-2.5 rounded-soft text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 transition-colors self-start">
                 {generatingLyrics ? "Generuji..." : title ? "Vygenerovat znovu" : "Vygenerovat text"}
               </button>
 
@@ -275,13 +275,13 @@ export default function HymnaPage() {
                   <div>
                     <SectionLabel>Název hymny</SectionLabel>
                     <input type="text" value={title} onChange={(e) => setTitle(e.target.value.slice(0, 100))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-pitch-500 focus:outline-none" />
+                      className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
                   </div>
                   <div>
                     <SectionLabel>Text (můžeš upravit)</SectionLabel>
                     <textarea value={lyrics} onChange={(e) => setLyrics(e.target.value.slice(0, 3000))}
                       rows={12}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:border-pitch-500 focus:outline-none resize-vertical" />
+                      className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm font-mono focus:border-pitch-500 focus:outline-none resize-vertical" />
                     <div className="text-xs text-muted mt-1">{lyrics.length}/3000 znaků</div>
                   </div>
                 </>
@@ -300,7 +300,7 @@ export default function HymnaPage() {
                   const active = style === preset.value;
                   return (
                     <button type="button" key={preset.value} onClick={() => setStyle(preset.value)}
-                      className={`px-3 py-2.5 rounded-lg text-sm text-left border-2 transition-all ${
+                      className={`px-3 py-2.5 rounded-soft text-sm text-left border-2 transition-all ${
                         active ? "border-pitch-500 bg-pitch-50 text-pitch-700 font-bold" : "border-gray-200 hover:border-gray-300 bg-white text-ink"
                       }`}>
                       {preset.label}
@@ -317,13 +317,13 @@ export default function HymnaPage() {
             </div>
             <button type="button" onClick={handleGenerateMusic}
               disabled={generatingMusic || !title.trim() || !lyrics.trim()}
-              className="px-6 py-3 rounded-lg text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 transition-colors">
+              className="px-6 py-3 rounded-soft text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 transition-colors">
               {generatingMusic ? "Odesílám..." : "\u{1F3A4} Vygenerovat hudbu"}
             </button>
           </div>
 
           {musicError && (
-            <div className="mt-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-800">
+            <div className="mt-3 p-3 rounded-soft bg-red-50 border border-red-200 text-sm text-red-800">
               {musicError}
             </div>
           )}

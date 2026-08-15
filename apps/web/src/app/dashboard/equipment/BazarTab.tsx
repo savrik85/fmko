@@ -61,7 +61,7 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw }: Pro
                 <button
                   onClick={() => onWithdraw(l)}
                   disabled={!!busy}
-                  className="shrink-0 py-1.5 px-4 rounded-lg text-sm font-heading font-bold border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50 transition-colors"
+                  className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50 transition-colors"
                 >
                   {busy === `w-${l.id}` ? "..." : "Stáhnout"}
                 </button>
@@ -76,13 +76,13 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw }: Pro
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setOnlyAvailable((v) => !v)}
-            className={`py-1.5 px-3 rounded-lg text-sm font-heading font-bold transition-colors ${
+            className={`py-1.5 px-3 rounded-soft text-sm font-heading font-bold transition-colors ${
               onlyAvailable ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"
             }`}
           >
             Jen co můžu koupit
           </button>
-          <div className="flex gap-1 bg-surface rounded-lg p-1 ml-auto">
+          <div className="flex gap-1 bg-surface rounded-soft p-1 ml-auto">
             {SORTS.map(([key, label]) => (
               <button
                 key={key}
@@ -176,7 +176,7 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw }: Pro
                     <button
                       onClick={() => onBuy(l)}
                       disabled={!canBuy || !!busy}
-                      className={`w-full mt-2 py-2 rounded-lg text-sm font-heading font-bold transition-colors ${
+                      className={`w-full mt-2 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${
                         canBuy ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
                       }`}
                     >

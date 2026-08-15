@@ -107,7 +107,7 @@ export function MatchBreakdown({ teamId, matchId }: Props) {
         {summary.factors.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {summary.factors.map((f, i) => (
-              <div key={i} className={`border rounded-lg p-2.5 ${IMPACT_COLOR[f.impact]}`}>
+              <div key={i} className={`border rounded-soft p-2.5 ${IMPACT_COLOR[f.impact]}`}>
                 <div className="flex items-baseline gap-1.5 mb-1">
                   <span className="text-base">{FACTOR_EMOJI[f.type]}</span>
                   <span className="font-heading font-bold text-sm">{f.label}</span>

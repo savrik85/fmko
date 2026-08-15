@@ -144,7 +144,7 @@ export default function MaskotPage() {
         <h1 className="font-heading font-extrabold text-2xl text-ink mt-1">Klubový maskot</h1>
       </div>
 
-      <div className="mb-5 p-3 rounded-lg bg-gray-50 border border-gray-200 text-sm text-ink">
+      <div className="mb-5 p-3 rounded-soft bg-gray-50 border border-gray-200 text-sm text-ink">
         Na generování maskota máš {maxAttempts} pokusy. Rozmysli si jméno, typ bytosti i styl — pokusy se neobnovují a mazání z historie je nevrací zpět.
         Zbývá <span className="font-bold tabular-nums">{maxAttempts - attemptsUsed}/{maxAttempts}</span>.
       </div>
@@ -181,13 +181,13 @@ export default function MaskotPage() {
                       <div className="flex items-center gap-2 mt-3">
                         {!m.isSelected && (
                           <button type="button" onClick={() => handleSelect(m.id)}
-                            className="flex-1 text-xs font-heading font-bold text-pitch-600 hover:text-pitch-700 px-3 py-1.5 rounded-lg border border-pitch-200 hover:bg-pitch-50 transition-colors">
+                            className="flex-1 text-xs font-heading font-bold text-pitch-600 hover:text-pitch-700 px-3 py-1.5 rounded-soft border border-pitch-200 hover:bg-pitch-50 transition-colors">
                             Vybrat
                           </button>
                         )}
                         {!m.story && (
                           <button type="button" onClick={() => handleGenerateStory(m.id)} disabled={storyLoading === m.id}
-                            className="flex-1 text-xs font-heading font-bold text-ink hover:text-pitch-600 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-pitch-50 transition-colors disabled:opacity-50">
+                            className="flex-1 text-xs font-heading font-bold text-ink hover:text-pitch-600 px-3 py-1.5 rounded-soft border border-gray-200 hover:bg-pitch-50 transition-colors disabled:opacity-50">
                             {storyLoading === m.id ? "..." : "+ Příběh"}
                           </button>
                         )}
@@ -206,7 +206,7 @@ export default function MaskotPage() {
       )}
 
       {!canGenerate && (
-        <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+        <div className="mb-4 p-3 rounded-soft bg-amber-50 border border-amber-200 text-sm text-amber-800">
           Vyčerpal jsi všechny {maxAttempts} pokusy generace. Maskoty v historii můžeš vybírat / mazat.
         </div>
       )}
@@ -222,7 +222,7 @@ export default function MaskotPage() {
               <SectionLabel>Jméno maskota</SectionLabel>
               <input type="text" value={name} onChange={(e) => setName(e.target.value.slice(0, 50))}
                 placeholder="např. Medvěd Bohuš, Ryska, Hot Pepper Joe"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-pitch-500 focus:outline-none" />
+                className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
             </div>
 
             <div>
@@ -232,7 +232,7 @@ export default function MaskotPage() {
                   const active = animal === a.value;
                   return (
                     <button type="button" key={a.value} onClick={() => setAnimal(a.value)}
-                      className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
+                      className={`flex flex-col items-center gap-1 p-2 rounded-soft border-2 transition-all ${
                         active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
                       }`}>
                       <span className="text-2xl leading-none">{a.emoji}</span>
@@ -250,7 +250,7 @@ export default function MaskotPage() {
                   const active = style === s.value;
                   return (
                     <button type="button" key={s.value} onClick={() => setStyle(s.value)}
-                      className={`px-3 py-2.5 rounded-lg text-sm text-left border-2 transition-all ${
+                      className={`px-3 py-2.5 rounded-soft text-sm text-left border-2 transition-all ${
                         active ? "border-pitch-500 bg-pitch-50 text-pitch-700 font-bold" : "border-gray-200 hover:border-gray-300 bg-white text-ink"
                       }`}>
                       <div>{s.label}</div>
@@ -263,12 +263,12 @@ export default function MaskotPage() {
 
             <button type="button" onClick={handleGenerate}
               disabled={generating || !name.trim()}
-              className="px-6 py-3 rounded-lg text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 transition-colors self-start">
+              className="px-6 py-3 rounded-soft text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 transition-colors self-start">
               {generating ? "Generuji obrázek... (5-10s)" : "\u{1F3A8} Vygenerovat maskota"}
             </button>
 
             {error && (
-              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-800">{error}</div>
+              <div className="p-3 rounded-soft bg-red-50 border border-red-200 text-sm text-red-800">{error}</div>
             )}
           </CardBody>
         </Card>

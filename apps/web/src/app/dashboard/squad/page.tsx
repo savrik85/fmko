@@ -327,7 +327,7 @@ export default function SquadPage() {
 
       {/* Tabs */}
       <div className="card p-1.5">
-        <div className="flex rounded-lg bg-gray-50 p-0.5 gap-0.5">
+        <div className="flex rounded-soft bg-gray-50 p-0.5 gap-0.5">
           {([
             ["atributy", "Atributy", "\u{1F4CB}"],
             ["sezona", "Sezóna", "\u{1F4CA}"],
@@ -337,7 +337,7 @@ export default function SquadPage() {
             <button
               key={k}
               onClick={() => setTab(k)}
-              className={`flex-1 py-2 px-2 rounded-md text-center transition-all font-heading font-bold text-sm ${
+              className={`flex-1 py-2 px-2 rounded-control text-center transition-all font-heading font-bold text-sm ${
                 tab === k ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"
               }`}
             >
@@ -361,7 +361,7 @@ export default function SquadPage() {
             <button
               key={pos}
               onClick={() => setFilter(pos)}
-              className={`flex-1 py-1.5 px-1 rounded-lg text-center transition-all font-heading font-bold ${
+              className={`flex-1 py-1.5 px-1 rounded-soft text-center transition-all font-heading font-bold ${
                 filter === pos
                   ? "bg-white shadow-sm text-pitch-600"
                   : "text-muted hover:text-ink"

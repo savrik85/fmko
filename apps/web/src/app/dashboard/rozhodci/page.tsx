@@ -59,7 +59,7 @@ export default function RozhodciPage() {
               {r.stats.matches > 0 ? i + 1 : "–"}
             </span>
             {r.avatar && (
-              <FaceAvatar faceConfig={r.avatar} size={40} className="border border-ink/20 bg-white shrink-0 rounded-lg" />
+              <FaceAvatar faceConfig={r.avatar} size={40} className="border border-ink/20 bg-white shrink-0 rounded-soft" />
             )}
             <div className="min-w-0 flex-1">
               <div className="font-heading font-bold text-base truncate">{r.name}</div>

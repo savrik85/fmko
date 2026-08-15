@@ -97,7 +97,7 @@ export function SeasonRecordWidget({ data }: WidgetProps) {
 
 function RecordTile({ value, label, className = "" }: { value: number; label: string; className?: string }) {
   return (
-    <div className="bg-gray-50 rounded-lg py-1.5">
+    <div className="bg-gray-50 rounded-soft py-1.5">
       <div className={`font-heading font-bold text-lg tabular-nums ${className}`}>{value}</div>
       <div className="text-[11px] text-muted uppercase">{label}</div>
     </div>

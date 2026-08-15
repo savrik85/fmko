@@ -194,13 +194,13 @@ export default function FinancesPage() {
             </div>
           </div>
           {data.purchaseBlocked && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-card-red max-w-sm">
+            <div className="bg-red-50 border border-red-200 rounded-soft px-3 py-2 text-xs text-card-red max-w-sm">
               <div className="font-heading font-bold mb-0.5">⛔ Nákupy blokovány</div>
               <div>Dokud rozpočet nevyrovnáš na nulu, nelze utrácet za přestupy, upgrady ani inzeráty.</div>
             </div>
           )}
           {data.loan && !data.purchaseBlocked && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-900">
+            <div className="bg-amber-50 border border-amber-200 rounded-soft px-3 py-2 text-xs text-amber-900">
               <div className="font-heading font-bold">Aktivní půjčka</div>
               <div>Zbývá {formatCZK(data.loan.remaining)} • {data.loan.installmentsRemaining} splátek</div>
             </div>
@@ -214,7 +214,7 @@ export default function FinancesPage() {
           <button
             key={key}
             onClick={() => { setTab(key); if (key === "loan") loadLoanInfo(); }}
-            className={`py-2 px-1 text-xs sm:text-sm font-heading font-bold rounded-lg transition-colors ${
+            className={`py-2 px-1 text-xs sm:text-sm font-heading font-bold rounded-soft transition-colors ${
               tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
             }`}
           >
@@ -349,7 +349,7 @@ function FlowsTab({ data }: { data: BudgetData }) {
       <div className="grid grid-cols-2 gap-1 bg-surface rounded-xl p-1">
         <button
           onClick={() => setSide("income")}
-          className={`py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
+          className={`py-2 text-sm font-heading font-bold rounded-soft transition-colors ${
             side === "income" ? "bg-white text-pitch-600 shadow-sm" : "text-muted"
           }`}
         >
@@ -357,7 +357,7 @@ function FlowsTab({ data }: { data: BudgetData }) {
         </button>
         <button
           onClick={() => setSide("expenses")}
-          className={`py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
+          className={`py-2 text-sm font-heading font-bold rounded-soft transition-colors ${
             side === "expenses" ? "bg-white text-pitch-600 shadow-sm" : "text-muted"
           }`}
         >
@@ -442,7 +442,7 @@ function FlowsTab({ data }: { data: BudgetData }) {
 
           <div className="card p-4 sm:p-5">
             <SectionLabel>Mzdový rozpočet ({data.playerCount} hráčů)</SectionLabel>
-            <div className="bg-gray-50 rounded-lg py-3 text-center my-3">
+            <div className="bg-gray-50 rounded-soft py-3 text-center my-3">
               <div className="font-heading font-bold text-2xl tabular-nums">{formatCZK(data.wageBill.weekly)}</div>
               <div className="text-[11px] text-muted uppercase tracking-wide">týdně</div>
             </div>
@@ -506,7 +506,7 @@ function ForecastTab({ data }: { data: BudgetData }) {
     <div className="space-y-5">
       <div className="card p-4 sm:p-5">
         <SectionLabel>Vývoj rozpočtu (16 týdnů)</SectionLabel>
-        <div className="mt-4 relative h-44 bg-gradient-to-b from-gray-50 to-white rounded-lg overflow-hidden">
+        <div className="mt-4 relative h-44 bg-gradient-to-b from-gray-50 to-white rounded-soft overflow-hidden">
           {(() => {
             const W = 100;
             const H = 100;
@@ -718,8 +718,8 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
               <StatBox label="Splátka / zápas" value={formatCZK(perMatch)} sub={`${info.remainingMatches} splátek`} />
             </div>
 
-            {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-card-red">{error}</div>}
-            {success && <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-pitch-600">{success}</div>}
+            {error && <div className="bg-red-50 border border-red-200 rounded-soft p-3 text-sm text-card-red">{error}</div>}
+            {success && <div className="bg-green-50 border border-green-200 rounded-soft p-3 text-sm text-pitch-600">{success}</div>}
 
             <button
               onClick={take}
@@ -847,7 +847,7 @@ function MetricCard({ label, value, color, sub }: { label: string; value: string
 
 function StatBox({ label, value, sub, colorRed }: { label: string; value: string; sub?: string; colorRed?: boolean }) {
   return (
-    <div className="bg-gray-50 rounded-lg p-3 text-center">
+    <div className="bg-gray-50 rounded-soft p-3 text-center">
       <div className={`font-heading font-bold text-base sm:text-lg tabular-nums ${colorRed ? "text-card-red" : "text-ink"}`}>{value}</div>
       <div className="text-[10px] text-muted uppercase tracking-wide mt-0.5">{label}</div>
       {sub && <div className="text-[10px] text-muted mt-0.5">{sub}</div>}

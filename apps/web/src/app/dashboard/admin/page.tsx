@@ -105,7 +105,7 @@ export default function AdminPage() {
       {/* Console output */}
       <div className="card p-4">
         <SectionLabel>Konzole</SectionLabel>
-        <div className="bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-lg max-h-[400px] overflow-y-auto">
+        <div className="bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-soft max-h-[400px] overflow-y-auto">
           {output.length === 0 ? (
             <div className="text-gray-500">Žádný výstup. Spusť akci výše.</div>
           ) : (
@@ -212,13 +212,13 @@ function SeasonEndSection() {
         <button
           onClick={run}
           disabled={running}
-          className="px-4 py-2 bg-pitch-500 text-white rounded-lg font-heading font-bold text-sm disabled:opacity-50"
+          className="px-4 py-2 bg-pitch-500 text-white rounded-soft font-heading font-bold text-sm disabled:opacity-50"
         >
           {running ? "Probíhá…" : "Ukončit sezónu"}
         </button>
       </div>
       {log.length > 0 && (
-        <div className="bg-gray-900 text-green-400 font-mono text-xs p-3 rounded-lg max-h-[300px] overflow-y-auto">
+        <div className="bg-gray-900 text-green-400 font-mono text-xs p-3 rounded-soft max-h-[300px] overflow-y-auto">
           {log.map((line, i) => <div key={i}>{line}</div>)}
         </div>
       )}
@@ -268,13 +268,13 @@ function MunicipalElectionsSection() {
         <button
           onClick={run}
           disabled={running}
-          className="px-4 py-2 bg-pitch-500 text-white rounded-lg font-heading font-bold text-sm disabled:opacity-50"
+          className="px-4 py-2 bg-pitch-500 text-white rounded-soft font-heading font-bold text-sm disabled:opacity-50"
         >
           {running ? "Probíhá…" : "Spustit volby"}
         </button>
       </div>
       {log.length > 0 && (
-        <div className="bg-gray-900 text-green-400 font-mono text-xs p-3 rounded-lg max-h-[300px] overflow-y-auto">
+        <div className="bg-gray-900 text-green-400 font-mono text-xs p-3 rounded-soft max-h-[300px] overflow-y-auto">
           {log.map((line, i) => <div key={i}>{line}</div>)}
         </div>
       )}
@@ -356,7 +356,7 @@ function VotesAdmin() {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Název usnesení (povinné)"
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-pitch-400"
+          className="w-full border border-gray-200 rounded-soft px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-pitch-400"
         />
         <div className="flex gap-3 items-end">
           <textarea
@@ -364,12 +364,12 @@ function VotesAdmin() {
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Popis (volitelné)"
             rows={2}
-            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-pitch-400"
+            className="flex-1 border border-gray-200 rounded-soft px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-pitch-400"
           />
           <button
             onClick={createVote}
             disabled={creating || !title.trim()}
-            className="px-4 py-2 bg-pitch-500 text-white rounded-lg font-heading font-bold text-sm disabled:opacity-50 shrink-0"
+            className="px-4 py-2 bg-pitch-500 text-white rounded-soft font-heading font-bold text-sm disabled:opacity-50 shrink-0"
           >
             Vytvořit
           </button>
@@ -390,7 +390,7 @@ function VotesAdmin() {
                 </div>
                 <button
                   onClick={() => closeVote(v.id)}
-                  className="shrink-0 text-xs px-3 py-1 rounded-lg border border-gray-200 text-gray-600 hover:bg-red-50 hover:border-card-red hover:text-card-red transition-colors font-heading font-bold"
+                  className="shrink-0 text-xs px-3 py-1 rounded-soft border border-gray-200 text-gray-600 hover:bg-red-50 hover:border-card-red hover:text-card-red transition-colors font-heading font-bold"
                 >
                   Ukončit
                 </button>
@@ -483,12 +483,12 @@ function BroadcastSection() {
           onChange={(e) => setMessage(e.target.value)}
           placeholder="Napište zprávu všem týmům..."
           rows={2}
-          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-pitch-400"
+          className="flex-1 border border-gray-200 rounded-soft px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-pitch-400"
         />
         <button
           onClick={send}
           disabled={sending || !message.trim()}
-          className="px-4 py-2 bg-pitch-500 text-white rounded-lg font-heading font-bold text-sm disabled:opacity-50 shrink-0"
+          className="px-4 py-2 bg-pitch-500 text-white rounded-soft font-heading font-bold text-sm disabled:opacity-50 shrink-0"
         >
           Rozeslat
         </button>
@@ -699,7 +699,7 @@ function SeedDataSection() {
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
         {tables.map((t) => (
           <button key={t.key} onClick={() => { setDistrict(""); loadTable(t.key); }}
-            className={`p-3 rounded-lg text-center transition-colors ${activeTable === t.key ? "bg-pitch-50 ring-1 ring-pitch-400" : "bg-gray-50 hover:bg-gray-100"}`}>
+            className={`p-3 rounded-soft text-center transition-colors ${activeTable === t.key ? "bg-pitch-50 ring-1 ring-pitch-400" : "bg-gray-50 hover:bg-gray-100"}`}>
             <div className="text-lg">{TABLE_ICONS[t.key] ?? "📄"}</div>
             <div className="font-heading font-bold text-xs mt-1">{t.label}</div>
             <div className="text-xs text-muted tabular-nums">{t.count}</div>
@@ -726,7 +726,7 @@ function SeedDataSection() {
             <span className="text-sm text-muted">{total} záznamů</span>
             {activeInfo?.editable && (
               <button onClick={() => setAdding(!adding)}
-                className="text-xs px-3 py-1 rounded-lg bg-pitch-500 text-white font-heading font-bold">
+                className="text-xs px-3 py-1 rounded-soft bg-pitch-500 text-white font-heading font-bold">
                 {adding ? "Zrušit" : "+ Přidat"}
               </button>
             )}

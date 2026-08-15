@@ -33,6 +33,50 @@
   --color-ink: #1A1714;
   --color-ink-light: #3D3830;
 
+  /* ── Neutrální rampa ──────────────────────────────────────────────────
+     POZOR: tohle přepisuje výchozí `gray-*` z Tailwindu. Je to záměr.
+     V kódu je přes 950 výskytů `gray-*` a Tailwindovy šedé jsou modravé
+     (odstín ~260), což se pralo s béžovým papírem — vypadalo to jako dvě
+     palety v jedné aplikaci. Přebarvením na jednom místě se sjednotí
+     všechny naráz a nemusí se sahat do 950 souborových míst.
+
+     Světlost (první číslo v oklch) je ponechaná přesně na Tailwindových
+     hodnotách. Kontrastní poměry se tím nemění ani o setinu — mění se jen
+     odstín ze studeného na teplý. Kdyby se to nelíbilo, stačí smazat
+     tenhle blok a vrátí se výchozí Tailwind.
+
+     Chroma je nižší než u barevných tokenů schválně: má to být neutrál
+     s nádechem, ne sépie. */
+  --color-gray-50:  oklch(98.5% 0.003 85);
+  --color-gray-100: oklch(96.7% 0.005 85);
+  --color-gray-200: oklch(92.8% 0.009 85);
+  --color-gray-300: oklch(87.2% 0.013 85);
+  --color-gray-400: oklch(70.7% 0.017 85);
+  --color-gray-500: oklch(55.1% 0.019 85);
+  --color-gray-600: oklch(44.6% 0.020 85);
+  --color-gray-700: oklch(37.3% 0.020 85);
+  --color-gray-800: oklch(27.8% 0.017 85);
+  --color-gray-900: oklch(21.0% 0.014 85);
+
+  /* ── Sémantické neutrály ──
+     Pro nový kód. Říkají roli, ne odstín — `border-line` se čte líp než
+     `border-gray-200` a při ladění palety se mění na jednom místě. */
+  --color-line: var(--color-gray-200);
+  --color-line-soft: var(--color-gray-100);
+  --color-line-strong: var(--color-gray-300);
+  --color-surface-2: var(--color-gray-50);
+  --color-surface-3: var(--color-gray-100);
+
+  /* ── Stavové barvy ──
+     Aliasy nad existujícími hodnotami, ať se nezavádí třetí paleta.
+     `-soft` varianty jsou podklady pro upozorňovací karty a štítky. */
+  --color-danger: #D94032;
+  --color-danger-soft: #FBEAE8;
+  --color-warn: #A87A12;
+  --color-warn-soft: #F7EFD9;
+  --color-success: #2D5F2D;
+  --color-success-soft: #E8F5E8;
+
   /* ── Rating colors ── */
   --color-rating-gold: #C4A035;
   --color-rating-good: #3A7A3A;
@@ -44,11 +88,27 @@
      fallback stacku). Natvrdo psané názvy tu být nesmí: lokální fonty se
      registrují pod vlastním jménem rodiny a "Outfit" by je minul. */
 
-  /* ── Radius ── */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-card: 14px;
-  --radius-lg: 20px;
+  /* ── Velikosti drobného textu ──
+     Tři velikosti místo rozsypaných text-[8px] až text-[11px]. Pod 11 px se
+     nejde — na telefonu na slunci to nikdo nepřečte.
+     Nejmenovat to `--text-label`: `.text-label` už je komponentní třída
+     v sekci TYPOGRAPHY SCALE a utilita by se s ní prala. */
+  --text-micro: 0.6875rem; /* 11 px — verzálkové štítky, jednotky, odznaky */
+  --text-meta: 0.8125rem;  /* 13 px — sekundární informace pod hlavním textem */
+  --text-body: 0.9375rem;  /* 15 px — běžný text v hustých výpisech */
+
+  /* ── Radius ──────────────────────────────────────────────────────────
+     Tailwindovu škálu (sm/md/lg/xl/2xl) tu ÚMYSLNĚ nepřepisujeme.
+     Dřív se přepisovala a vznikla nemonotonní škála: `rounded-lg` dávalo
+     20 px, ale `rounded-xl` jen 12 px a `rounded-2xl` 16 px — kdo sáhl po
+     „větším" zaoblení, dostal menší. Projektové hodnoty proto mají vlastní
+     jména a Tailwind škála zůstává nedotčená a rostoucí.
+
+     Nepřidávat sem `--radius-sm/md/lg/xl/2xl`, vrátí se ten samý zmatek. */
+  --radius-tight: 6px;    /* štítky, vnitřní proužky */
+  --radius-control: 10px; /* tlačítka, pole, selecty */
+  --radius-card: 14px;    /* karty a widgety */
+  --radius-soft: 20px;    /* plachty, modály, měkké boxy */
   --radius-full: 9999px;
 
   /* ── Shadows ── */
@@ -56,6 +116,22 @@
   --shadow-card: 0 2px 12px rgba(26, 23, 20, 0.07), 0 1px 3px rgba(26, 23, 20, 0.04);
   --shadow-hover: 0 8px 24px rgba(26, 23, 20, 0.10), 0 2px 6px rgba(26, 23, 20, 0.06);
   --shadow-modal: 0 24px 64px rgba(26, 23, 20, 0.20), 0 8px 20px rgba(26, 23, 20, 0.10);
+}
+
+/* ═══════════════════════════════════════════════
+   HLADINY VRSTVENÍ
+   Konec hodnot typu z-[9998]. Vyšší číslo = blíž k uživateli.
+   Píše se `z-[var(--z-sheet)]` — je to delší, ale při čtení kódu je hned
+   vidět, do které hladiny prvek patří, a přidat novou vrstvu jde jen tady.
+   z-index není v Tailwindu 4 tématizovaný namespace, proto obyčejný :root.
+   ═══════════════════════════════════════════════ */
+:root {
+  --z-nav: 50;    /* spodní navigace, postranní menu, nápověda */
+  --z-sheet: 60;  /* spodní plachty a modály */
+  --z-dialog: 70; /* potvrzovací dialogy nad plachtou */
+  --z-viewer: 90; /* celoobrazovkový prohlížeč stadionu */
+  --z-error: 100; /* chybový dialog — vždy nejvýš */
+  --z-grain: 200; /* papírové zrno přes celou plochu, pointer-events: none */
 }
 
 /* ═══════════════════════════════════════════════
@@ -98,7 +174,7 @@ body::before {
   inset: 0;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.015'/%3E%3C/svg%3E");
   pointer-events: none;
-  z-index: 9999;
+  z-index: var(--z-grain);
 }
 
 /* ═══════════════════════════════════════════════
@@ -140,7 +216,7 @@ body::before {
   color: var(--color-ink);
   background: var(--color-surface);
   border: 2px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   box-shadow: inset 0 2px 4px rgba(26,23,20,0.04), 0 0 0 1px rgba(139,133,120,0.15);
   outline: none;
   transition: all 0.2s ease;
@@ -167,7 +243,7 @@ body::before {
   color: var(--color-ink);
   background: var(--color-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='%238B8578'%3E%3Cpath d='M1 1l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 12px center;
   border: 1.5px solid rgba(139,133,120,0.2);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   outline: none;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -186,7 +262,7 @@ body::before {
   gap: 8px;
   font-family: var(--font-heading);
   font-weight: 700;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   cursor: pointer;
   transition: all 0.2s ease;
   border: none;
@@ -298,11 +374,11 @@ body::before {
    MODAL / BOTTOM SHEET
    ═══════════════════════════════════════════════ */
 
-/* z-index 60: nad spodní navigací (z-50), jinak by lišta překryla patičku
-   dialogu a tlačítka v ní by na mobilu nešla zmáčknout. Chybový dialog (z-100)
-   zůstává nad vším. */
+/* Hladina --z-sheet je nad spodní navigací (--z-nav), jinak by lišta překryla
+   patičku dialogu a tlačítka v ní by na mobilu nešla zmáčknout. Chybový dialog
+   (--z-error) zůstává nad vším. */
 .modal-backdrop {
-  position: fixed; inset: 0; z-index: 60;
+  position: fixed; inset: 0; z-index: var(--z-sheet);
   background: rgba(26,23,20,0.5);
   backdrop-filter: blur(4px);
   display: flex;
@@ -319,7 +395,7 @@ body::before {
   border-radius: 20px 20px 0 0;
   box-shadow: var(--shadow-modal);
 }
-@media (min-width: 640px) { .modal-content { max-width: 560px; border-radius: var(--radius-lg); } }
+@media (min-width: 640px) { .modal-content { max-width: 560px; border-radius: var(--radius-soft); } }
 @media (min-width: 768px) { .modal-content { max-width: 640px; } }
 
 /* ═══════════════════════════════════════════════
@@ -333,7 +409,7 @@ body::before {
 .sidebar-link {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 14px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   color: rgba(255,255,255,0.6);
   font-size: 1rem; font-weight: 500;
   transition: all 0.15s ease;
@@ -408,7 +484,7 @@ body::before {
   background: linear-gradient(90deg, rgba(139,133,120,0.06) 25%, rgba(139,133,120,0.12) 50%, rgba(139,133,120,0.06) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-tight);
 }
 
 /* ═══════════════════════════════════════════════
@@ -474,7 +550,8 @@ input[type="number"] { -moz-appearance: textfield; }
     right: 0;
     height: 80px;
     background: #1e2d1e;
-    z-index: 49;
+    /* Těsně pod spodní navigací — kryje jen přetažení pod viewportem. */
+    z-index: calc(var(--z-nav) - 1);
     pointer-events: none;
   }
 
@@ -525,7 +602,7 @@ input[type="number"] { -moz-appearance: textfield; }
   font-family: var(--font-body); color: white;
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.07);
-  border-radius: var(--radius-md); outline: none;
+  border-radius: var(--radius-control); outline: none;
   transition: all 0.2s ease;
 }
 .input-dark::placeholder { color: rgba(255,255,255,0.15); }
@@ -549,7 +626,7 @@ input[type="number"] { -moz-appearance: textfield; }
   background: rgba(255,255,255,0.03);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255,255,255,0.06);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-soft);
 }
 
 .divider-dark { height: 1px; background: rgba(255,255,255,0.06); }
@@ -560,14 +637,14 @@ input[type="number"] { -moz-appearance: textfield; }
 
 .error-box {
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 16px; border-radius: var(--radius-md);
+  padding: 12px 16px; border-radius: var(--radius-control);
   font-size: 0.875rem;
   background: rgba(217,64,50,0.06); border: 1px solid rgba(217,64,50,0.12);
   color: var(--color-card-red);
 }
 .error-box-dark {
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 16px; border-radius: var(--radius-md);
+  padding: 12px 16px; border-radius: var(--radius-control);
   font-size: 0.875rem;
   background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.1);
   color: #fca5a5;

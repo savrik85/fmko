@@ -291,7 +291,7 @@ function LigaPage() {
           <select
             value={selectedLeagueId ?? "own"}
             onChange={(e) => handleLeagueChange(e.target.value)}
-            className="text-sm bg-white border border-border rounded-lg px-3 py-2 font-medium"
+            className="text-sm bg-white border border-border rounded-soft px-3 py-2 font-medium"
           >
             <option value="own">Moje liga</option>
             {allLeagues.map((l) => (
@@ -308,7 +308,7 @@ function LigaPage() {
           <select
             value={seasonView === "current" ? "current" : String(seasonView)}
             onChange={(e) => setSeasonView(e.target.value === "current" ? "current" : Number(e.target.value))}
-            className="text-sm bg-white border border-border rounded-lg px-3 py-2 font-medium"
+            className="text-sm bg-white border border-border rounded-soft px-3 py-2 font-medium"
           >
             <option value="current">Aktuální{seasonNum ? ` (Sezóna ${seasonNum})` : ""}</option>
             {pastSeasons.map((h) => (
@@ -328,7 +328,7 @@ function LigaPage() {
       <div className="flex gap-1 bg-surface rounded-xl p-1">
         {(isOtherLeague ? ["tabulka", "zpravodaj"] as Tab[] : ["tabulka", "rozpis", "vysledky", "statistiky"] as Tab[]).map((key) => (
           <button key={key} onClick={() => changeTab(key)}
-            className={`flex-1 py-2.5 text-sm font-heading font-bold rounded-lg transition-colors ${
+            className={`flex-1 py-2.5 text-sm font-heading font-bold rounded-soft transition-colors ${
               tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
             }`}>
             {{ tabulka: "Tabulka", rozpis: "Rozpis", vysledky: "Výsledky", statistiky: "Statistiky", zpravodaj: "Zpravodaj" }[key]}
@@ -421,7 +421,7 @@ function PastSeasonView({ entry, myTeamId }: { entry: HistoryEntry; myTeamId: st
           <SectionLabel>Nejlepší jedenáctka</SectionLabel>
           <div className="flex flex-wrap gap-2">
             {a.bestEleven.map((p) => (
-              <div key={p.playerId} className="bg-gray-50 rounded-lg px-3 py-1.5 text-sm">
+              <div key={p.playerId} className="bg-gray-50 rounded-soft px-3 py-1.5 text-sm">
                 <span className="text-[10px] font-heading font-bold text-pitch-600 uppercase mr-1.5">{p.position}</span>
                 <span className="font-heading font-bold">{p.name}</span>
                 <span className="text-muted text-xs"> · {p.teamName}</span>
@@ -458,7 +458,7 @@ function PastTeamLink({ teamId, name, highlight }: { teamId?: string | null; nam
 
 function PastAward({ icon, label, reason, children }: { icon: string; label: string; reason?: string | null; children: React.ReactNode }) {
   return (
-    <div className="bg-gray-50 rounded-lg px-3 py-2">
+    <div className="bg-gray-50 rounded-soft px-3 py-2">
       <div className="text-[10px] font-heading font-bold text-muted uppercase">{icon} {label}</div>
       <div className="text-base">{children}</div>
       {reason && <div className="text-xs text-muted mt-0.5 italic">„{reason}"</div>}
@@ -468,7 +468,7 @@ function PastAward({ icon, label, reason, children }: { icon: string; label: str
 
 function PastStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="bg-gray-50 rounded-lg px-3 py-2">
+    <div className="bg-gray-50 rounded-soft px-3 py-2">
       <div className="text-[10px] font-heading font-bold text-muted uppercase">{label}</div>
       <div className="font-heading font-bold tabular-nums whitespace-nowrap">{value}</div>
       {sub && <div className="text-xs text-muted truncate">{sub}</div>}
@@ -769,7 +769,7 @@ function StatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean })
       <div className="flex gap-1 bg-surface rounded-xl p-1 overflow-x-auto">
         {visible.map((s) => (
           <button key={s.key} onClick={() => setSection(s.key)}
-            className={`flex-1 whitespace-nowrap px-3 py-2 rounded-lg text-sm font-heading font-bold transition-colors ${
+            className={`flex-1 whitespace-nowrap px-3 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${
               active === s.key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
             }`}
           >{s.label}</button>

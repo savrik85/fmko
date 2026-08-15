@@ -20,7 +20,7 @@ type Tab = "mine" | "bazar";
  * Jsou pod sebou ve sloupci, takže musí mít stejný tvar i šířku — jinak to
  * vypadá jako tři náhodná tlačítka místo jedné sady.
  */
-const CARD_BTN = "shrink-0 w-24 py-1.5 rounded-lg text-xs font-heading font-bold transition-colors text-center";
+const CARD_BTN = "shrink-0 w-24 py-1.5 rounded-soft text-xs font-heading font-bold transition-colors text-center";
 
 // useSearchParams (deep-link ?tab=bazar) musí být pod Suspense, jinak build padá
 // na prerenderu — stejný vzor jako liga/page.tsx:90.
@@ -249,7 +249,7 @@ function EquipmentPage() {
       <div className="flex gap-1 bg-surface rounded-xl p-1">
         {([["mine", "Moje vybavení"], ["bazar", "Bazar"]] as Array<[Tab, string]>).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`flex-1 py-2 text-sm font-heading font-bold rounded-lg transition-colors ${
+            className={`flex-1 py-2 text-sm font-heading font-bold rounded-soft transition-colors ${
               tab === key ? "bg-white text-pitch-600 shadow-sm" : "text-muted hover:text-ink"
             }`}>
             {label}{key === "bazar" && bazarCount > 0 ? ` (${bazarCount})` : ""}
@@ -286,7 +286,7 @@ function EquipmentPage() {
               <div className={bonusesOpen ? "block" : "hidden sm:block"}>
                 <div className="flex gap-3 flex-wrap">
                   {activeEffects.map((e) => (
-                    <div key={e.label} className="flex items-center gap-1.5 bg-pitch-50 text-pitch-700 px-3 py-1.5 rounded-lg">
+                    <div key={e.label} className="flex items-center gap-1.5 bg-pitch-50 text-pitch-700 px-3 py-1.5 rounded-soft">
                       <span className="text-sm">{e.icon}</span>
                       <span className="text-sm font-heading font-bold">{e.value}</span>
                       <span className="text-xs text-pitch-600">{e.label}</span>

@@ -27,7 +27,7 @@ export function RivalsWidget({ data, height }: WidgetProps) {
         {razeno.map((r) => (
           <li key={r.teamId}>
             <div className="flex items-baseline gap-2">
-              <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: r.primaryColor }} aria-hidden="true" />
+              <span className="w-2.5 h-2.5 rounded-tight shrink-0" style={{ background: r.primaryColor }} aria-hidden="true" />
               <Link href={`/dashboard/team/${r.teamId}`} className="text-sm font-heading font-bold truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
                 {r.teamName}
               </Link>

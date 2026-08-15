@@ -127,7 +127,7 @@ export function ClubScarf({
       style={containerStyle}
     >
       <div
-        className="absolute rounded-sm shadow-md"
+        className="absolute rounded-tight shadow-md"
         style={{
           left: fringeW,
           right: fringeW,

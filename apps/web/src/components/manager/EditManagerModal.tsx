@@ -8,7 +8,7 @@ import { Button } from "@/components/ui";
 
 const FaceAvatar = dynamic(
   () => import("@/components/players/face-avatar").then((m) => m.FaceAvatar),
-  { ssr: false, loading: () => <div style={{ width: 160, height: 192 }} className="bg-gray-100 rounded-lg animate-pulse" /> },
+  { ssr: false, loading: () => <div style={{ width: 160, height: 192 }} className="bg-gray-100 rounded-soft animate-pulse" /> },
 );
 
 interface Props {
@@ -104,7 +104,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={NAME_MAX}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-pitch-500"
+              className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500"
               placeholder="Jméno Příjmení"
             />
             <div className="mt-1 flex items-baseline justify-between text-[10px]">
@@ -131,7 +131,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
                 onChange={(e) => setAge(e.target.value)}
                 min={18}
                 max={80}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-pitch-500 tabular-nums"
+                className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500 tabular-nums"
                 placeholder="40"
               />
               <div className="mt-1 text-[10px] text-muted-light">
@@ -147,7 +147,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
                 value={birthplace}
                 onChange={(e) => setBirthplace(e.target.value)}
                 maxLength={50}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-pitch-500"
+                className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500"
                 placeholder="Strakonice"
               />
               <div className="mt-1 flex items-baseline justify-between text-[10px]">
@@ -167,7 +167,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
               onChange={(e) => setBio(e.target.value)}
               maxLength={BIO_MAX}
               rows={4}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-pitch-500 resize-none"
+              className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500 resize-none"
               placeholder="Filozofie, motto, něco o sobě..."
             />
             <div className="mt-1 flex items-baseline justify-between text-[10px]">
@@ -179,7 +179,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
           </div>
 
           {error && (
-            <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">
               {error}
             </div>
           )}

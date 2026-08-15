@@ -279,14 +279,14 @@ export default function MatchDetailPage() {
               skončila na "Zápas nemá záznam průběhu" — tlačítko v tom případě nenabízíme. */}
           {match.status === "simulated" && match.events.length > 0 && (
             <button onClick={() => router.push(`/dashboard/match/${matchId}/replay`)}
-              className="ml-auto px-3 py-1.5 rounded-lg text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-400 transition-colors shadow-md flex items-center gap-1.5">
+              className="ml-auto px-3 py-1.5 rounded-soft text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-400 transition-colors shadow-md flex items-center gap-1.5">
               <span className="text-base">▶</span> Přehrát zápas
             </button>
           )}
         </div>
 
         {match.isLocalDerby && (
-          <div className="mx-3 sm:mx-4 mt-1 mb-1 px-3 py-1.5 rounded-md text-center font-heading font-[800] text-xs sm:text-sm tracking-wide"
+          <div className="mx-3 sm:mx-4 mt-1 mb-1 px-3 py-1.5 rounded-control text-center font-heading font-[800] text-xs sm:text-sm tracking-wide"
             style={{ background: "linear-gradient(90deg, rgba(220,38,38,0.25), rgba(220,38,38,0.45), rgba(220,38,38,0.25))", color: "#fecaca", border: "1px solid rgba(220,38,38,0.5)" }}>
             🏘️ MÍSTNÍ DERBY
           </div>
@@ -514,7 +514,7 @@ export default function MatchDetailPage() {
                           {s.red > 0 && <span>· 🟥</span>}
                         </div>
                       </div>
-                      <span className={`shrink-0 px-2 py-1 rounded-md text-sm font-heading font-bold tabular-nums ${ratingColor}`}>
+                      <span className={`shrink-0 px-2 py-1 rounded-control text-sm font-heading font-bold tabular-nums ${ratingColor}`}>
                         {entry.rating.toFixed(1)}
                       </span>
                     </div>
@@ -544,13 +544,13 @@ export default function MatchDetailPage() {
             <span className="text-xs font-heading uppercase text-muted mr-2">Řadit:</span>
             <button
               onClick={() => setLineupSort("position")}
-              className={`px-2.5 py-1 rounded-md text-xs font-heading font-bold transition-colors ${
+              className={`px-2.5 py-1 rounded-control text-xs font-heading font-bold transition-colors ${
                 lineupSort === "position" ? "bg-pitch-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"
               }`}
             >Po pozicích</button>
             <button
               onClick={() => setLineupSort("rating")}
-              className={`px-2.5 py-1 rounded-md text-xs font-heading font-bold transition-colors ${
+              className={`px-2.5 py-1 rounded-control text-xs font-heading font-bold transition-colors ${
                 lineupSort === "rating" ? "bg-pitch-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"
               }`}
             >Dle hodnocení</button>
@@ -670,7 +670,7 @@ export default function MatchDetailPage() {
                           <div className="shrink-0 w-12 h-1.5 rounded-full bg-gray-100 overflow-hidden hidden sm:block" title={matchRating != null ? `Rating ${matchRating.toFixed(1)}/10` : "Bez ratingu"}>
                             <div className="h-full rounded-full transition-all" style={{ width: `${barPct}%`, backgroundColor: barColor }} />
                           </div>
-                          <span className={`shrink-0 px-2 py-0.5 rounded-md text-xs font-heading font-bold tabular-nums ${ratingColor}`} title="Hodnocení hráče v zápase">{matchRating != null ? matchRating.toFixed(1) : "—"}</span>
+                          <span className={`shrink-0 px-2 py-0.5 rounded-control text-xs font-heading font-bold tabular-nums ${ratingColor}`} title="Hodnocení hráče v zápase">{matchRating != null ? matchRating.toFixed(1) : "—"}</span>
                         </div>
                         );
                       })}
@@ -777,7 +777,7 @@ export default function MatchDetailPage() {
               <div className="space-y-2">
                 {legacy.map((a, i) => (
                   <div key={i} className="flex items-start gap-3">
-                    <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 shrink-0 mt-0.5">{a.reason}</span>
+                    <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-control bg-amber-500/15 text-amber-700 shrink-0 mt-0.5">{a.reason}</span>
                     <div className="flex-1 min-w-0">
                       <div className="font-heading font-bold text-sm">{a.name}</div>
                       <div className="text-xs text-muted italic">„{a.smsText}"</div>
@@ -834,7 +834,7 @@ export default function MatchDetailPage() {
                   {s.yellow > 0 && <span> · 🟨</span>}
                 </div>
               </div>
-              <span className="shrink-0 px-2 py-1 rounded-md text-sm font-heading font-bold tabular-nums bg-red-100 text-red-700">
+              <span className="shrink-0 px-2 py-1 rounded-control text-sm font-heading font-bold tabular-nums bg-red-100 text-red-700">
                 {flop.rating.toFixed(1)}
               </span>
             </div>
@@ -861,7 +861,7 @@ export default function MatchDetailPage() {
                 return (
                   <div key={i} className="flex items-start gap-3 px-4 sm:px-5 py-2.5 hover:bg-gray-50/50 transition-colors">
                     {minute && (
-                      <span className="shrink-0 min-w-[2.25rem] text-center inline-flex items-center justify-center h-6 px-1.5 rounded-md bg-pitch-50 text-pitch-700 text-xs font-heading font-bold tabular-nums">
+                      <span className="shrink-0 min-w-[2.25rem] text-center inline-flex items-center justify-center h-6 px-1.5 rounded-control bg-pitch-50 text-pitch-700 text-xs font-heading font-bold tabular-nums">
                         {minute}&apos;
                       </span>
                     )}
@@ -924,7 +924,7 @@ function EventRow({ event: e, hc, ac }: { event: MatchEvent; hc: string; ac: str
   }
 
   return (
-    <div className={`flex items-center gap-3 py-2 px-3 rounded-lg mb-1 ${bgColor}`}>
+    <div className={`flex items-center gap-3 py-2 px-3 rounded-soft mb-1 ${bgColor}`}>
       <span className="text-xs text-muted tabular-nums w-7 text-right font-heading font-bold">{e.minute}&apos;</span>
       <div className="w-1 h-6 rounded-full shrink-0" style={{ backgroundColor: teamColor }} />
       <span className="text-base shrink-0">{icon}</span>

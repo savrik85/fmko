@@ -83,11 +83,11 @@ export function Stadium3DViewer(props: Stadium3DViewerProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center">
+    <div className="fixed inset-0 z-[var(--z-viewer)] bg-black/95 flex items-center justify-center">
       {/* Close button */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 z-[101] w-12 h-12 rounded-full bg-white/15 hover:bg-white/30 text-white text-2xl font-bold flex items-center justify-center transition-colors backdrop-blur-sm"
+        className="absolute top-4 right-4 z-10 w-12 h-12 rounded-full bg-white/15 hover:bg-white/30 text-white text-2xl font-bold flex items-center justify-center transition-colors backdrop-blur-sm"
         aria-label="Zavřít"
       >
         ✕
@@ -95,7 +95,7 @@ export function Stadium3DViewer(props: Stadium3DViewerProps) {
 
       {/* Title */}
       {props.stadiumName && (
-        <div className="absolute top-4 left-4 z-[101] bg-white/15 backdrop-blur-sm rounded-lg px-4 py-2 text-white">
+        <div className="absolute top-4 left-4 z-10 bg-white/15 backdrop-blur-sm rounded-soft px-4 py-2 text-white">
           <div className="font-heading font-bold text-base">{props.stadiumName}</div>
         </div>
       )}
@@ -108,7 +108,7 @@ export function Stadium3DViewer(props: Stadium3DViewerProps) {
           <div className="text-sm opacity-80">Pro nejlepší zážitek otoč telefon do landscape režimu</div>
           <button
             onClick={onClose}
-            className="mt-6 px-6 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-bold transition-colors"
+            className="mt-6 px-6 py-2 bg-white/20 hover:bg-white/30 rounded-soft text-sm font-bold transition-colors"
           >
             Zrušit
           </button>

@@ -61,7 +61,7 @@ export function PlayerHero({
         {hasAvatar ? (
           <FaceAvatar faceConfig={player.avatar} size={140} />
         ) : (
-          <div className="w-[140px] h-[168px] bg-gray-100 rounded-lg" />
+          <div className="w-[140px] h-[168px] bg-gray-100 rounded-soft" />
         )}
         {offeredPlayer && (
           <>
@@ -70,7 +70,7 @@ export function PlayerHero({
               {swapHasAvatar ? (
                 <FaceAvatar faceConfig={offeredPlayer.avatar} size={72} />
               ) : (
-                <div className="w-[72px] h-[86px] bg-gray-100 rounded-lg" />
+                <div className="w-[72px] h-[86px] bg-gray-100 rounded-soft" />
               )}
               <span className="text-[9px] font-heading font-bold text-muted uppercase tracking-wider">Na výměnu</span>
               <span className="font-heading font-bold text-xs group-hover:text-pitch-500 transition-colors text-center max-w-[80px] truncate">

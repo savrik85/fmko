@@ -132,9 +132,9 @@ export default function WatchlistPage() {
                     {/* Avatar */}
                     <Link href={`/dashboard/player/${p.id}`} className="shrink-0">
                       {p.avatar && typeof p.avatar === "object" && Object.keys(p.avatar).length > 2 ? (
-                        <FaceAvatar faceConfig={p.avatar as any} size={48} className="rounded-lg" />
+                        <FaceAvatar faceConfig={p.avatar as any} size={48} className="rounded-soft" />
                       ) : (
-                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-lg font-bold border ${bestTextOn(teamColor) === "dark" ? "text-gray-900 border-gray-300" : "text-white border-transparent"}`} style={{ backgroundColor: teamColor }}>
+                        <div className={`w-12 h-12 rounded-soft flex items-center justify-center text-lg font-bold border ${bestTextOn(teamColor) === "dark" ? "text-gray-900 border-gray-300" : "text-white border-transparent"}`} style={{ backgroundColor: teamColor }}>
                           {p.firstName[0]}
                         </div>
                       )}
@@ -185,7 +185,7 @@ export default function WatchlistPage() {
                     {/* Rating + remove */}
                     <div className="shrink-0 flex flex-col items-end gap-1">
                       <span
-                        className={`px-2 py-1 rounded-lg font-heading font-bold text-sm tabular-nums tabular-nums border ${bestTextOn(teamColor) === "dark" ? "text-gray-900 border-gray-300" : "text-white border-transparent"}`}
+                        className={`px-2 py-1 rounded-soft font-heading font-bold text-sm tabular-nums tabular-nums border ${bestTextOn(teamColor) === "dark" ? "text-gray-900 border-gray-300" : "text-white border-transparent"}`}
                         style={{ backgroundColor: teamColor }}
                       >
                         {p.overallRating}

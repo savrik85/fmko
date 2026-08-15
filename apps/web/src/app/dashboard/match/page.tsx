@@ -574,7 +574,7 @@ function MatchPage() {
           <>
             {nextMatch.isLocalDerby && (
               <div
-                className="px-3 py-1.5 rounded-md text-center font-heading font-[800] text-sm tracking-wide"
+                className="px-3 py-1.5 rounded-control text-center font-heading font-[800] text-sm tracking-wide"
                 style={{ background: "linear-gradient(90deg, rgba(220,38,38,0.15), rgba(220,38,38,0.35), rgba(220,38,38,0.15))", color: "#b91c1c", border: "1px solid rgba(220,38,38,0.45)" }}
               >
                 🏘️ MÍSTNÍ DERBY
@@ -642,7 +642,7 @@ function MatchPage() {
               <div key={slot} className="relative">
                 <button
                   onClick={() => { onPresetClick(slot); setSaved(false); }}
-                  className={`w-full py-2 px-2 rounded-lg text-xs font-heading font-bold border-2 transition-all ${
+                  className={`w-full py-2 px-2 rounded-soft text-xs font-heading font-bold border-2 transition-all ${
                     active ? "bg-pitch-500 border-pitch-600 text-white shadow-md"
                     : filled ? "bg-cream border-pitch-300 text-ink hover:border-pitch-500"
                     : "bg-gray-50 border-gray-200 text-muted hover:bg-gray-100"
@@ -676,7 +676,7 @@ function MatchPage() {
                 return (
                   <button key={f} onClick={() => { setFormation(f); autoFill(players, f); }}
                     title={getFormationTooltip(f)}
-                    className={`py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all cursor-help ${formation === f ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                    className={`py-1.5 rounded-soft text-center text-xs font-heading font-bold transition-all cursor-help ${formation === f ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
                     {f}
                     <div className={`mt-0.5 h-1 rounded-full ${famBgColor(fam)}`} style={{ width: `${Math.max(8, fam)}%`, marginInline: "auto" }} />
                   </button>
@@ -690,7 +690,7 @@ function MatchPage() {
               {TACTICS.map((t) => (
                 <button key={t.key} onClick={() => { setTactic(t.key); setSaved(false); }}
                   title={getTacticTooltip(t.key as TacticKey)}
-                  className={`py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all cursor-help ${tactic === t.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                  className={`py-1.5 rounded-soft text-center text-xs font-heading font-bold transition-all cursor-help ${tactic === t.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
                   <span className="hidden sm:inline">{t.icon} </span>{t.label}
                 </button>
               ))}
@@ -714,7 +714,7 @@ function MatchPage() {
             {HARDNESS.map((h) => (
               <button key={h.key} onClick={() => { setHardness(h.key); setSaved(false); }}
                 title={getHardnessTooltip(h.key)}
-                className={`py-1.5 rounded-lg text-center text-xs font-heading font-bold transition-all cursor-help ${hardness === h.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                className={`py-1.5 rounded-soft text-center text-xs font-heading font-bold transition-all cursor-help ${hardness === h.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
                 <span className="hidden sm:inline">{h.icon} </span>{h.label}
               </button>
             ))}
@@ -1194,8 +1194,8 @@ function MatchPage() {
       {/* ═══ Mobile bottom sheet selector — rendered via portal to escape overflow ═══ */}
       {editSlot !== null && typeof document !== "undefined" && createPortal(
         <div className="lg:hidden">
-          <div className="fixed inset-0 z-[9998] bg-black/50" onClick={() => setEditSlot(null)} />
-          <div className="fixed bottom-0 left-0 right-0 z-[9999] bg-white rounded-t-2xl" style={{ maxHeight: "65vh" }}>
+          <div className="fixed inset-0 z-[var(--z-sheet)] bg-black/50" onClick={() => setEditSlot(null)} />
+          <div className="fixed bottom-0 left-0 right-0 z-[var(--z-sheet)] bg-white rounded-t-2xl" style={{ maxHeight: "65vh" }}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat — {slots[editSlot].pos}</span>
               <button onClick={() => setEditSlot(null)} className="w-8 h-8 flex items-center justify-center text-muted hover:text-ink text-xl">✕</button>

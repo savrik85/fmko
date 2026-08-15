@@ -296,7 +296,7 @@ export default function StadiumPage() {
         <div className="flex justify-end gap-2 mb-3">
           <button
             onClick={() => switchView("2d")}
-            className={`px-5 py-2 rounded-lg text-base font-heading font-bold transition-colors min-w-[64px] ${
+            className={`px-5 py-2 rounded-soft text-base font-heading font-bold transition-colors min-w-[64px] ${
               viewMode === "2d"
                 ? "bg-pitch-500 text-white"
                 : "bg-gray-100 text-muted hover:bg-gray-200"
@@ -306,7 +306,7 @@ export default function StadiumPage() {
           </button>
           <button
             onClick={() => switchView("3d")}
-            className={`px-5 py-2 rounded-lg text-base font-heading font-bold transition-colors min-w-[64px] ${
+            className={`px-5 py-2 rounded-soft text-base font-heading font-bold transition-colors min-w-[64px] ${
               viewMode === "3d"
                 ? "bg-pitch-500 text-white"
                 : "bg-gray-100 text-muted hover:bg-gray-200"
@@ -343,7 +343,7 @@ export default function StadiumPage() {
             </div>
             <button
               onClick={() => setViewerOpen(true)}
-              className="w-full py-2 bg-pitch-500 hover:bg-pitch-600 text-white rounded-lg text-sm font-heading font-bold transition-colors"
+              className="w-full py-2 bg-pitch-500 hover:bg-pitch-600 text-white rounded-soft text-sm font-heading font-bold transition-colors"
             >
               🔍 Prohlédnout v plné velikosti
             </button>
@@ -389,7 +389,7 @@ export default function StadiumPage() {
                   <button
                     key={field}
                     onClick={() => setOpenPicker(isActive ? null : field)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 transition-colors text-xs font-heading font-bold ${isActive ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-400 bg-white"}`}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-soft border-2 transition-colors text-xs font-heading font-bold ${isActive ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-400 bg-white"}`}
                   >
                     <span className="w-5 h-5 rounded border border-gray-300 shrink-0" style={{ backgroundColor: displayColor }} />
                     <span>{label}</span>
@@ -404,10 +404,10 @@ export default function StadiumPage() {
               if (!cf) return null;
               const current = stadium.customization[openPicker] as string | null;
               return (
-                <div className="p-3 bg-pitch-50 border-2 border-pitch-500 rounded-lg flex flex-wrap gap-3">
+                <div className="p-3 bg-pitch-50 border-2 border-pitch-500 rounded-soft flex flex-wrap gap-3">
                   <button
                     onClick={() => { handleCustomize(openPicker, null); setOpenPicker(null); }}
-                    className={`w-10 h-10 rounded-md border-2 flex items-center justify-center text-sm ${current === null ? "border-pitch-500" : "border-gray-300"}`}
+                    className={`w-10 h-10 rounded-control border-2 flex items-center justify-center text-sm ${current === null ? "border-pitch-500" : "border-gray-300"}`}
                     style={{ backgroundColor: cf.teamDefault ? (team?.primary_color ?? cf.defaultColor) : cf.defaultColor }}
                     title="Výchozí"
                   >
@@ -417,7 +417,7 @@ export default function StadiumPage() {
                     <button
                       key={c}
                       onClick={() => { handleCustomize(openPicker, c); setOpenPicker(null); }}
-                      className={`w-10 h-10 rounded-md border-2 ${current === c ? "border-pitch-500" : "border-gray-200 hover:border-gray-400"}`}
+                      className={`w-10 h-10 rounded-control border-2 ${current === c ? "border-pitch-500" : "border-gray-200 hover:border-gray-400"}`}
                       style={{ backgroundColor: c }}
                     />
                   ))}
@@ -436,7 +436,7 @@ export default function StadiumPage() {
                     value={ultrasDraft ?? stadium.customization.ultrasText ?? ""}
                     onChange={(e) => setUltrasDraft(e.target.value)}
                     placeholder="např. PRALES BOHDALEC"
-                    className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-heading uppercase"
+                    className="flex-1 min-w-0 border border-gray-200 rounded-soft px-3 py-1.5 text-sm font-heading uppercase"
                   />
                   <button
                     onClick={async () => {
@@ -477,7 +477,7 @@ export default function StadiumPage() {
                     <button
                       onClick={() => handleVisualUpgrade("scoreboard", u.label, u.cost)}
                       disabled={!canAfford || !!acting}
-                      className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-heading font-bold ${canAfford ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400"}`}
+                      className={`shrink-0 py-1.5 px-3 rounded-soft text-xs font-heading font-bold ${canAfford ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400"}`}
                     >
                       {acting === "visual-scoreboard" ? "..." : `${u.label} — ${formatCZK(u.cost)}`}
                     </button>
@@ -506,7 +506,7 @@ export default function StadiumPage() {
                     <button
                       onClick={() => handleVisualUpgrade("flag", u.label, u.cost)}
                       disabled={!canAfford || !!acting}
-                      className={`shrink-0 py-1.5 px-3 rounded-lg text-xs font-heading font-bold ${canAfford ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400"}`}
+                      className={`shrink-0 py-1.5 px-3 rounded-soft text-xs font-heading font-bold ${canAfford ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400"}`}
                     >
                       {acting === "visual-flag" ? "..." : `${u.label} — ${formatCZK(u.cost)}`}
                     </button>
@@ -568,7 +568,7 @@ export default function StadiumPage() {
                         setActing(null);
                       }}
                       disabled={!canAfford || !!acting}
-                      className={`shrink-0 py-1.5 px-4 rounded-lg text-sm font-heading font-bold transition-colors ${
+                      className={`shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold transition-colors ${
                         canAfford ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
                       }`}
                     >
@@ -612,7 +612,7 @@ export default function StadiumPage() {
                         setActing(null);
                       }}
                       disabled={!canAfford || !!acting}
-                      className={`shrink-0 py-1.5 px-4 rounded-lg text-sm font-heading font-bold transition-colors ${
+                      className={`shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold transition-colors ${
                         canAfford ? "bg-gold-500 text-white hover:bg-gold-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
                       }`}
                     >
@@ -663,7 +663,7 @@ export default function StadiumPage() {
                   <button
                     onClick={() => handleUpgrade(upgrade.facility, upgrade.label, upgrade.cost, upgrade.effect)}
                     disabled={!canUpgrade || !!acting}
-                    className={`shrink-0 py-1.5 px-4 rounded-lg text-sm font-heading font-bold transition-colors ${
+                    className={`shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold transition-colors ${
                       canUpgrade ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
                     }`}
                   >

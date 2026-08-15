@@ -130,7 +130,7 @@ export default function VisitStadiumPage() {
         </div>
         <button
           onClick={() => setViewerOpen(true)}
-          className="w-full mt-2 py-2 bg-pitch-500 hover:bg-pitch-600 text-white rounded-lg text-sm font-heading font-bold transition-colors"
+          className="w-full mt-2 py-2 bg-pitch-500 hover:bg-pitch-600 text-white rounded-soft text-sm font-heading font-bold transition-colors"
         >
           🔍 Prohlédnout v plné velikosti
         </button>

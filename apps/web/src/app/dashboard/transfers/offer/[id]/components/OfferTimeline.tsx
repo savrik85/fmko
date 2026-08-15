@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 
 const FaceAvatar = dynamic(
   () => import("@/components/players/face-avatar").then((m) => m.FaceAvatar),
-  { ssr: false, loading: () => <div style={{ width: 48, height: 58 }} className="bg-gray-100 rounded-lg animate-pulse" /> },
+  { ssr: false, loading: () => <div style={{ width: 48, height: 58 }} className="bg-gray-100 rounded-soft animate-pulse" /> },
 );
 
 export interface OfferEvent {

@@ -48,7 +48,7 @@ export function TeamSide({
       {hasAvatar ? (
         <FaceAvatar faceConfig={manager!.avatar} size={88} />
       ) : (
-        <div className="w-[88px] h-[106px] bg-gray-100 rounded-lg flex items-center justify-center text-white/40 text-3xl">👤</div>
+        <div className="w-[88px] h-[106px] bg-gray-100 rounded-soft flex items-center justify-center text-white/40 text-3xl">👤</div>
       )}
       <div className={`flex flex-col gap-1 ${isRight ? "items-end" : "items-start"} min-w-0 w-full`}>
         {/* Stránka trenéra bere v URL ID TÝMU, ne trenéra — manager.id vedl na neexistující tým. */}

@@ -330,7 +330,7 @@ export default function PlayerDetailPage() {
   // Injury info (rendered as inline pill on both layouts)
   const injuryInfo = (player as unknown as { injury?: { daysRemaining: number; type?: string } | null }).injury ?? null;
   const injuryPill = injuryInfo ? (
-    <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-50 border border-red-300/30 rounded-md px-2 py-0.5 text-[11px] font-heading font-bold whitespace-nowrap">
+    <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-50 border border-red-300/30 rounded-control px-2 py-0.5 text-[11px] font-heading font-bold whitespace-nowrap">
       <span>🩹</span>
       <span>Zraněný · {injuryInfo.daysRemaining} {injuryInfo.daysRemaining === 1 ? "den" : "dní"}</span>
     </span>
@@ -339,7 +339,7 @@ export default function PlayerDetailPage() {
   // Absence info (trénink zmeškán, výmluva)
   const absenceInfo = (player as unknown as { absence?: { reason?: string; category?: string } | null }).absence ?? null;
   const absencePill = absenceInfo ? (
-    <span className="inline-flex items-center gap-1 bg-amber-500/20 text-amber-50 border border-amber-300/30 rounded-md px-2 py-0.5 text-[11px] font-heading font-bold whitespace-nowrap" title={absenceInfo.reason ?? ""}>
+    <span className="inline-flex items-center gap-1 bg-amber-500/20 text-amber-50 border border-amber-300/30 rounded-control px-2 py-0.5 text-[11px] font-heading font-bold whitespace-nowrap" title={absenceInfo.reason ?? ""}>
       <span>🚫</span>
       <span>Absence{absenceInfo.reason ? ` · ${absenceInfo.reason}` : ""}</span>
     </span>
@@ -350,7 +350,7 @@ export default function PlayerDetailPage() {
     ? ((player.lifeContext as unknown as { transferUnrest?: { level?: number; teamName?: string } })?.transferUnrest ?? null)
     : null;
   const unrestPill = unrestInfo && (unrestInfo.level ?? 0) >= 40 ? (
-    <span className="inline-flex items-center gap-1 bg-orange-500/25 text-orange-50 border border-orange-300/40 rounded-md px-2 py-0.5 text-[11px] font-heading font-bold whitespace-nowrap"
+    <span className="inline-flex items-center gap-1 bg-orange-500/25 text-orange-50 border border-orange-300/40 rounded-control px-2 py-0.5 text-[11px] font-heading font-bold whitespace-nowrap"
       title={unrestInfo.teamName ? `Trucuje po odmítnuté nabídce od ${unrestInfo.teamName}` : "Trucuje po odmítnuté nabídce"}>
       <span>😠</span>
       <span>Nespokojený · chce pryč</span>
@@ -450,9 +450,9 @@ export default function PlayerDetailPage() {
               {allPlayers.length > 1 && (
                 <div className="flex gap-1.5 shrink-0">
                   <button onClick={() => prevPlayer && router.push(`/dashboard/player/${prevPlayer.id}`)}
-                    className={`w-8 h-8 rounded-lg ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9664;</button>
+                    className={`w-8 h-8 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9664;</button>
                   <button onClick={() => nextPlayer && router.push(`/dashboard/player/${nextPlayer.id}`)}
-                    className={`w-8 h-8 rounded-lg ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9654;</button>
+                    className={`w-8 h-8 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9654;</button>
                 </div>
               )}
             </div>
@@ -474,17 +474,17 @@ export default function PlayerDetailPage() {
             </div>
             {/* Řádek 3: staty přes celou šířku */}
             <div className="flex gap-2 mt-3">
-              <div className={`flex-1 ${boxBg} rounded-lg py-2 text-center`}>
+              <div className={`flex-1 ${boxBg} rounded-soft py-2 text-center`}>
                 <div className={`font-heading font-extrabold text-base tabular-nums leading-none ${cond.color}`}>
                   {player.lifeContext?.condition ?? 50}%
                 </div>
                 <div className={`${boxLabel} text-[9px] font-heading font-bold uppercase mt-0.5`}>Kondice</div>
               </div>
-              <div className={`flex-1 ${boxBg} rounded-lg py-2 text-center`}>
+              <div className={`flex-1 ${boxBg} rounded-soft py-2 text-center`}>
                 <div className="text-lg leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
                 <div className={`${boxLabel} text-[9px] font-heading font-bold uppercase mt-0.5`}>Morálka</div>
               </div>
-              <div className={`flex-1 ${boxBg} rounded-lg py-2 text-center`}>
+              <div className={`flex-1 ${boxBg} rounded-soft py-2 text-center`}>
                 <div className={`font-heading font-extrabold text-base tabular-nums leading-none ${txt}`}>{player.overall_rating}</div>
                 <div className={`${boxLabel} text-[9px] font-heading font-bold uppercase mt-0.5`}>Rating</div>
               </div>
@@ -600,13 +600,13 @@ export default function PlayerDetailPage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setOfferType("transfer")}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "transfer" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
+                    className={`px-4 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${offerType === "transfer" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
                   >
                     Trvalý přestup
                   </button>
                   <button
                     onClick={() => setOfferType("loan")}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-heading font-bold transition-colors ${offerType === "loan" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
+                    className={`px-4 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${offerType === "loan" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
                   >
                     Hostování
                   </button>
@@ -619,13 +619,13 @@ export default function PlayerDetailPage() {
                   <span className="font-heading uppercase tracking-wider opacity-70">Cíl:</span>
                   <button
                     onClick={() => setTargetSquad("senior")}
-                    className={`px-3 py-1 rounded-lg text-xs font-heading font-bold transition-colors ${targetSquad === "senior" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
+                    className={`px-3 py-1 rounded-soft text-xs font-heading font-bold transition-colors ${targetSquad === "senior" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
                   >
                     A-tým
                   </button>
                   <button
                     onClick={() => setTargetSquad("u21")}
-                    className={`px-3 py-1 rounded-lg text-xs font-heading font-bold transition-colors ${targetSquad === "u21" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
+                    className={`px-3 py-1 rounded-soft text-xs font-heading font-bold transition-colors ${targetSquad === "u21" ? (light ? "bg-black/20 text-gray-900" : "bg-white/20 text-white") : (light ? "bg-black/5 text-gray-500 hover:text-gray-700" : "bg-white/5 text-white/50 hover:text-white/80")}`}
                   >
                     U21
                   </button>
@@ -643,7 +643,7 @@ export default function PlayerDetailPage() {
                     value={offerAmount}
                     onChange={(e) => setOfferAmount(e.target.value.replace(/[^\d]/g, ""))}
                     placeholder={offerType === "loan" ? "0 = zdarma" : "např. 50000"}
-                    className={`w-full rounded-lg px-3 py-2 text-sm font-heading font-bold focus:outline-none ${light ? "bg-black/5 text-gray-900 placeholder:text-gray-400 border border-black/20 focus:border-black/40" : "bg-white/10 text-white placeholder:text-white/30 border border-white/20 focus:border-white/50"}`}
+                    className={`w-full rounded-soft px-3 py-2 text-sm font-heading font-bold focus:outline-none ${light ? "bg-black/5 text-gray-900 placeholder:text-gray-400 border border-black/20 focus:border-black/40" : "bg-white/10 text-white placeholder:text-white/30 border border-white/20 focus:border-white/50"}`}
                   />
                 </div>
                 {offerType === "loan" && (
@@ -652,7 +652,7 @@ export default function PlayerDetailPage() {
                     <select
                       value={loanDuration}
                       onChange={(e) => setLoanDuration(e.target.value)}
-                      className={`w-full rounded-lg px-3 py-2 text-sm font-heading font-bold focus:outline-none ${light ? "bg-black/5 text-gray-900 border border-black/20 focus:border-black/40" : "bg-white/10 text-white border border-white/20 focus:border-white/50"}`}
+                      className={`w-full rounded-soft px-3 py-2 text-sm font-heading font-bold focus:outline-none ${light ? "bg-black/5 text-gray-900 border border-black/20 focus:border-black/40" : "bg-white/10 text-white border border-white/20 focus:border-white/50"}`}
                     >
                       <option value="14" className="bg-gray-800 text-white">14 dní</option>
                       <option value="30" className="bg-gray-800 text-white">30 dní</option>
@@ -670,13 +670,13 @@ export default function PlayerDetailPage() {
                     value={offerMessage}
                     onChange={(e) => setOfferMessage(e.target.value)}
                     placeholder="Nabízím vám spolupráci..."
-                    className={`w-full rounded-lg px-3 py-2 text-sm focus:outline-none ${light ? "bg-black/5 text-gray-900 placeholder:text-gray-400 border border-black/20 focus:border-black/40" : "bg-white/10 text-white placeholder:text-white/30 border border-white/20 focus:border-white/50"}`}
+                    className={`w-full rounded-soft px-3 py-2 text-sm focus:outline-none ${light ? "bg-black/5 text-gray-900 placeholder:text-gray-400 border border-black/20 focus:border-black/40" : "bg-white/10 text-white placeholder:text-white/30 border border-white/20 focus:border-white/50"}`}
                   />
                 </div>
                 <button
                   onClick={sendOffer}
                   disabled={offerSending || (!offerAmount && offerType !== "loan")}
-                  className="bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 text-white font-heading font-bold text-sm px-5 py-2 rounded-lg transition-colors shrink-0"
+                  className="bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 text-white font-heading font-bold text-sm px-5 py-2 rounded-soft transition-colors shrink-0"
                 >
                   {offerSending ? "Odesílám..." : offerType === "loan" ? "Nabídnout hostování" : "Odeslat nabídku"}
                 </button>
@@ -692,7 +692,7 @@ export default function PlayerDetailPage() {
                     <select
                       value={offeredPlayerId ?? ""}
                       onChange={(e) => setOfferedPlayerId(e.target.value || null)}
-                      className={`flex-1 rounded-lg px-3 py-2 text-sm font-heading focus:outline-none ${light ? "bg-black/5 text-gray-900 border border-black/20 focus:border-black/40" : "bg-white/10 text-white border border-white/20 focus:border-white/50"}`}
+                      className={`flex-1 rounded-soft px-3 py-2 text-sm font-heading focus:outline-none ${light ? "bg-black/5 text-gray-900 border border-black/20 focus:border-black/40" : "bg-white/10 text-white border border-white/20 focus:border-white/50"}`}
                     >
                       <option value="" className="bg-gray-800 text-white">— bez výměny —</option>
                       {mySquad
@@ -706,7 +706,7 @@ export default function PlayerDetailPage() {
                     {offeredPlayerId && (
                       <button
                         onClick={() => setOfferedPlayerId(null)}
-                        className={`px-2 py-2 rounded-lg text-sm font-heading font-bold transition-colors ${light ? "bg-black/5 text-gray-600 hover:bg-black/10" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
+                        className={`px-2 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${light ? "bg-black/5 text-gray-600 hover:bg-black/10" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
                         title="Odstranit výměnu"
                       >
                         ✕
@@ -1034,9 +1034,9 @@ export default function PlayerDetailPage() {
                   <Link
                     key={m.matchId}
                     href={`/dashboard/match/${m.matchId}/replay`}
-                    className="flex flex-col items-center gap-1 px-2 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors min-w-[64px]"
+                    className="flex flex-col items-center gap-1 px-2 py-2 rounded-soft bg-gray-50 hover:bg-gray-100 transition-colors min-w-[64px]"
                   >
-                    <span className={`px-2 py-1 rounded-md text-base font-heading font-bold tabular-nums ${ratingBg}`}>
+                    <span className={`px-2 py-1 rounded-control text-base font-heading font-bold tabular-nums ${ratingBg}`}>
                       {m.rating.toFixed(1)}
                     </span>
                     <span className="flex items-center gap-0.5 text-xs">
@@ -1229,7 +1229,7 @@ export default function PlayerDetailPage() {
             <SectionLabel>{posTitle[pos] ?? "Sezónní přehled"}</SectionLabel>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {stats.map((s) => (
-                <div key={s.label} className={`p-3 rounded-lg ${s.highlight ? "bg-pitch-50 border border-pitch-100" : "bg-gray-50"}`}>
+                <div key={s.label} className={`p-3 rounded-soft ${s.highlight ? "bg-pitch-50 border border-pitch-100" : "bg-gray-50"}`}>
                   <div className={`font-heading font-[800] text-2xl tabular-nums ${s.highlight ? "text-pitch-700" : "text-ink"}`}>{s.value}</div>
                   <div className="text-xs font-heading uppercase text-muted mt-0.5">{s.label}</div>
                   {s.sub && <div className="text-[11px] text-muted mt-0.5">{s.sub}</div>}
@@ -1337,7 +1337,7 @@ export default function PlayerDetailPage() {
         const Filter = ({ id, label, count, color }: { id: typeof historyFilter; label: string; count: number; color: string }) => (
           <button
             onClick={() => setHistoryFilter(id)}
-            className={`px-2.5 py-1 rounded-md text-xs font-heading font-bold transition-colors ${
+            className={`px-2.5 py-1 rounded-control text-xs font-heading font-bold transition-colors ${
               historyFilter === id ? `${color} text-white` : "bg-gray-100 text-ink hover:bg-gray-200"
             }`}
           >
@@ -1401,7 +1401,7 @@ export default function PlayerDetailPage() {
                         </a>
                       </td>
                       <td className="py-2 pr-2 text-center">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-heading font-bold ${resultBg} ${resultText}`}>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-control text-xs font-heading font-bold ${resultBg} ${resultText}`}>
                           {m.homeScore}:{m.awayScore}
                         </span>
                       </td>
@@ -1515,7 +1515,7 @@ export default function PlayerDetailPage() {
                     : m.reason === "Nenominován" ? "bg-gray-50 text-gray-500 border-gray-200"
                     : "bg-blue-50 text-blue-700 border-blue-200";
                   return (
-                    <div key={m.matchId} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg bg-gray-50/60 hover:bg-gray-50 transition-colors">
+                    <div key={m.matchId} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-soft bg-gray-50/60 hover:bg-gray-50 transition-colors">
                       <div className="flex items-center gap-2 sm:w-[180px] shrink-0">
                         <span className="text-[10px] font-heading font-bold text-muted uppercase tabular-nums shrink-0">
                           {m.round != null ? `${m.round}. kolo` : "—"}
@@ -1567,7 +1567,7 @@ export default function PlayerDetailPage() {
           <div className="flex flex-wrap gap-2 mt-2">
             {((player as any).watchers as Array<{ id: string; name: string; primary_color: string; secondary_color: string; badge_pattern: string }>).map((w) => (
               <Link key={w.id} href={`/dashboard/team/${w.id}`}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gray-50 hover:bg-pitch-500/10 border border-gray-100 transition-colors">
+                className="flex items-center gap-1.5 px-2 py-1 rounded-soft bg-gray-50 hover:bg-pitch-500/10 border border-gray-100 transition-colors">
                 <BadgePreview
                   primary={w.primary_color || "#2D5F2D"}
                   secondary={w.secondary_color || "#FFF"}
@@ -1604,7 +1604,7 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
   const [price, setPrice] = useState(defaultPrice);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="p-5">
           <h3 className="font-heading font-bold text-lg">Nabídnout na trh</h3>
@@ -1619,7 +1619,7 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
               inputMode="numeric"
               value={price.toLocaleString("cs")}
               onChange={(e) => setPrice(parseInt(e.target.value.replace(/\D/g, "") || "0", 10))}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 font-heading font-bold text-lg tabular-nums focus:outline-none focus:border-pitch-500"
+              className="w-full px-3 py-2 rounded-soft border border-gray-200 font-heading font-bold text-lg tabular-nums focus:outline-none focus:border-pitch-500"
             />
             <div className="flex gap-2 mt-2">
               {[0.5, 1, 1.5, 2].map((mul) => (
@@ -1638,14 +1638,14 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
           <div className="flex gap-2 mt-5">
             <button
               onClick={onClose}
-              className="flex-1 py-2 rounded-lg text-sm font-heading font-bold bg-gray-100 hover:bg-gray-200 text-ink"
+              className="flex-1 py-2 rounded-soft text-sm font-heading font-bold bg-gray-100 hover:bg-gray-200 text-ink"
             >
               Zrušit
             </button>
             <button
               onClick={() => onConfirm(price)}
               disabled={loading || price <= 0}
-              className="flex-1 py-2 rounded-lg text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50"
+              className="flex-1 py-2 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50"
             >
               {loading ? "Ukládám..." : "Nabídnout"}
             </button>
@@ -1745,7 +1745,7 @@ function TraitRow({ label, value, inverted }: { label: string; value: number; in
 
 function StatBox({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
-    <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
+    <div className="text-center px-4 py-2 rounded-soft bg-gray-50 min-w-[70px]">
       <div className={`font-heading font-[800] text-2xl tabular-nums ${color ?? "text-ink"}`}>{value}</div>
       <div className="text-label text-[10px] uppercase">{label}</div>
     </div>
@@ -1811,16 +1811,16 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
       ) : (
         <>
           <div className="flex gap-3 flex-wrap mb-4">
-            <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
+            <div className="text-center px-4 py-2 rounded-soft bg-gray-50 min-w-[70px]">
               <div className="font-heading font-[800] text-2xl tabular-nums text-ink">{log.length}</div>
               <div className="text-xs text-muted uppercase">Změn</div>
             </div>
-            <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
+            <div className="text-center px-4 py-2 rounded-soft bg-gray-50 min-w-[70px]">
               <div className="font-heading font-[800] text-2xl tabular-nums text-pitch-500">{gains}</div>
               <div className="text-xs text-muted uppercase">Zlepšení</div>
             </div>
             {losses > 0 && (
-              <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
+              <div className="text-center px-4 py-2 rounded-soft bg-gray-50 min-w-[70px]">
                 <div className="font-heading font-[800] text-2xl tabular-nums text-card-red">{losses}</div>
                 <div className="text-xs text-muted uppercase">Pokles</div>
               </div>
@@ -1925,16 +1925,16 @@ function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }
       ) : (
         <>
           <div className="flex gap-3 flex-wrap mb-4">
-            <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
+            <div className="text-center px-4 py-2 rounded-soft bg-gray-50 min-w-[70px]">
               <div className="font-heading font-[800] text-2xl tabular-nums text-ink">{entries.length}</div>
               <div className="text-xs text-muted uppercase">Změn</div>
             </div>
-            <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
+            <div className="text-center px-4 py-2 rounded-soft bg-gray-50 min-w-[70px]">
               <div className="font-heading font-[800] text-2xl tabular-nums text-pitch-500">{gains}</div>
               <div className="text-xs text-muted uppercase">Nárůst</div>
             </div>
             {losses > 0 && (
-              <div className="text-center px-4 py-2 rounded-lg bg-gray-50 min-w-[70px]">
+              <div className="text-center px-4 py-2 rounded-soft bg-gray-50 min-w-[70px]">
                 <div className="font-heading font-[800] text-2xl tabular-nums text-card-red">{losses}</div>
                 <div className="text-xs text-muted uppercase">Pokles</div>
               </div>

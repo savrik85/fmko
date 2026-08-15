@@ -24,7 +24,7 @@ export function ChartLegend({ items, className = "" }: { items: LegendItem[]; cl
     <ul className={`flex flex-wrap gap-x-4 gap-y-1 ${className}`}>
       {items.map((it) => (
         <li key={it.label} className="flex items-center gap-1.5 text-sm text-muted">
-          <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: it.color }} aria-hidden="true" />
+          <span className="w-2.5 h-2.5 rounded-tight shrink-0" style={{ background: it.color }} aria-hidden="true" />
           <span>{it.label}</span>
           {it.value != null && <span className="font-heading font-bold text-ink tabular-nums">{it.value}</span>}
         </li>

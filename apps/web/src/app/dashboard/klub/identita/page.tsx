@@ -23,7 +23,7 @@ function AiButton({ onClick, loading, label = "Vygenerovat přes AI" }: { onClic
       type="button"
       onClick={onClick}
       disabled={loading}
-      className="text-xs font-heading font-bold text-pitch-600 hover:text-pitch-700 px-3 py-1.5 rounded-lg border border-pitch-200 hover:bg-pitch-50 transition-colors disabled:opacity-50"
+      className="text-xs font-heading font-bold text-pitch-600 hover:text-pitch-700 px-3 py-1.5 rounded-soft border border-pitch-200 hover:bg-pitch-50 transition-colors disabled:opacity-50"
     >
       {loading ? "Generuji..." : `\u{2728} ${label}`}
     </button>
@@ -124,14 +124,14 @@ export default function IdentitaPage() {
             <SectionLabel>Přezdívka klubu</SectionLabel>
             <input type="text" value={nickname} onChange={(e) => setNickname(e.target.value.slice(0, 40))}
               placeholder="např. Medvědi, Zelené pruhy, Šumavské psy"
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-pitch-500 focus:outline-none" />
+              className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
             <div className="text-xs text-muted mt-1">Jak týmu říkají fanoušci.</div>
           </div>
           <div>
             <SectionLabel>Rok založení klubu</SectionLabel>
             <input type="number" value={foundingYear} onChange={(e) => setFoundingYear(e.target.value.slice(0, 4))}
               placeholder="1923" min={1800} max={2100}
-              className="w-full sm:max-w-[160px] px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-pitch-500 focus:outline-none" />
+              className="w-full sm:max-w-[160px] px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
           </div>
         </CardBody>
       </Card>
@@ -148,7 +148,7 @@ export default function IdentitaPage() {
         <CardBody>
           <input type="text" value={motto} onChange={(e) => setMotto(e.target.value.slice(0, 120))}
             placeholder='např. "Síla z lesa", "Nikdy se nevzdáme"'
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-pitch-500 focus:outline-none" />
+            className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
           <div className="text-xs text-muted mt-1">{motto.length}/120 znaků</div>
         </CardBody>
       </Card>
@@ -166,7 +166,7 @@ export default function IdentitaPage() {
           <textarea value={foundingStory} onChange={(e) => setFoundingStory(e.target.value.slice(0, 2000))}
             placeholder="Jak klub vznikl. Kdo ho založil, kde, za jakých okolností..."
             rows={6}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-pitch-500 focus:outline-none resize-vertical" />
+            className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none resize-vertical" />
           <div className="text-xs text-muted mt-1">{foundingStory.length}/2000 znaků</div>
         </CardBody>
       </Card>
@@ -184,7 +184,7 @@ export default function IdentitaPage() {
           <textarea value={colorsMeaning} onChange={(e) => setColorsMeaning(e.target.value.slice(0, 500))}
             placeholder="Co klubové barvy symbolizují..."
             rows={3}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-pitch-500 focus:outline-none resize-vertical" />
+            className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none resize-vertical" />
           <div className="text-xs text-muted mt-1">{colorsMeaning.length}/500 znaků</div>
         </CardBody>
       </Card>
@@ -192,9 +192,9 @@ export default function IdentitaPage() {
       <div className="mt-6 sticky bottom-0 bg-paper/95 backdrop-blur-sm border-t border-gray-200 -mx-3 sm:-mx-8 px-3 sm:px-8 py-3 flex items-center justify-end gap-3">
         {savedAt && <span className="text-sm text-pitch-600 font-bold">{"\u{2705}"} Uloženo</span>}
         <button type="button" onClick={() => router.push("/dashboard/klub")}
-          className="px-4 py-2 rounded-lg text-sm font-heading font-bold text-muted hover:text-ink">Zrušit</button>
+          className="px-4 py-2 rounded-soft text-sm font-heading font-bold text-muted hover:text-ink">Zrušit</button>
         <button type="button" onClick={handleSave} disabled={saving}
-          className="px-6 py-2 rounded-lg text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 transition-colors">
+          className="px-6 py-2 rounded-soft text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 transition-colors">
           {saving ? "Ukládám..." : "Uložit"}
         </button>
       </div>

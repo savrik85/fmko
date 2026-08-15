@@ -193,13 +193,13 @@ export default function SettingsPage() {
             <label htmlFor="pw-current" className="text-xs text-muted uppercase font-heading font-bold block mb-1">Současné heslo</label>
             <input id="pw-current" name="current-password" type="password" autoComplete="current-password"
               value={currentPw} onChange={(e) => setCurrentPw(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-400" required />
+              className="w-full border border-gray-200 rounded-soft px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-400" required />
           </div>
           <div>
             <label htmlFor="pw-new" className="text-xs text-muted uppercase font-heading font-bold block mb-1">Nové heslo</label>
             <input id="pw-new" name="new-password" type="password" autoComplete="new-password"
               value={newPw} onChange={(e) => setNewPw(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-400" required />
+              className="w-full border border-gray-200 rounded-soft px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-400" required />
             {newPw && pwErrors.length > 0 && (
               <div className="flex gap-2 mt-1.5 flex-wrap">
                 {["min. 8 znaků", "malé písmeno", "velké písmeno", "číslo"].map((req) => {
@@ -217,18 +217,18 @@ export default function SettingsPage() {
             <label htmlFor="pw-new-2" className="text-xs text-muted uppercase font-heading font-bold block mb-1">Nové heslo znovu</label>
             <input id="pw-new-2" name="new-password-confirm" type="password" autoComplete="new-password"
               value={newPw2} onChange={(e) => setNewPw2(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-400" required />
+              className="w-full border border-gray-200 rounded-soft px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-400" required />
             {pwMatch && <p className="text-card-red text-xs mt-1">Hesla se neshodují</p>}
           </div>
 
           {status && (
-            <div className={`text-sm font-heading font-bold px-3 py-2 rounded-lg ${status.type === "ok" ? "bg-pitch-50 text-pitch-600" : "bg-red-50 text-card-red"}`}>
+            <div className={`text-sm font-heading font-bold px-3 py-2 rounded-soft ${status.type === "ok" ? "bg-pitch-50 text-pitch-600" : "bg-red-50 text-card-red"}`}>
               {status.msg}
             </div>
           )}
 
           <button type="submit" disabled={!canSubmit || saving}
-            className="w-full py-2 rounded-lg bg-pitch-500 text-white font-heading font-bold text-sm hover:bg-pitch-600 disabled:opacity-50 transition-colors">
+            className="w-full py-2 rounded-soft bg-pitch-500 text-white font-heading font-bold text-sm hover:bg-pitch-600 disabled:opacity-50 transition-colors">
             {saving ? "Ukládám..." : "Změnit heslo"}
           </button>
         </form>

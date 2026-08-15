@@ -511,7 +511,7 @@ export default function MatchReplayPage() {
 
           {/* GOAL: full overlay with CSS animation */}
           {flash === "goal" && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-md overflow-hidden" style={{ animation: "goalFlashBg 5s ease-out forwards" }}>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-control overflow-hidden" style={{ animation: "goalFlashBg 5s ease-out forwards" }}>
               <div className="font-heading font-[900] text-6xl sm:text-8xl text-white tracking-widest drop-shadow-[0_0_40px_rgba(74,222,128,0.9)]" style={{ animation: "goalTextPulse 0.7s ease-in-out 5" }}>
                 GÓÓÓL!
               </div>
@@ -520,7 +520,7 @@ export default function MatchReplayPage() {
 
           {/* CHANCE miss overlay */}
           {flash === "chance" && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-md" style={{ background: "rgba(220, 40, 40, 0.12)" }}>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-control" style={{ background: "rgba(220, 40, 40, 0.12)" }}>
               <div className="font-heading font-[900] text-5xl sm:text-6xl text-white tracking-widest drop-shadow-[0_0_20px_rgba(220,40,40,0.6)]" style={{ animation: "fadeIn 0.2s ease-out" }}>
                 MIMO!
               </div>
@@ -529,7 +529,7 @@ export default function MatchReplayPage() {
 
           {/* CARD overlay */}
           {flash === "card" && flashEvent && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-md" style={{ background: flashEvent.detail === "red" ? "rgba(220, 40, 40, 0.15)" : "rgba(245, 197, 66, 0.15)" }}>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-control" style={{ background: flashEvent.detail === "red" ? "rgba(220, 40, 40, 0.15)" : "rgba(245, 197, 66, 0.15)" }}>
               <div className="text-center">
                 <div className="font-heading font-[900] text-5xl sm:text-6xl tracking-widest drop-shadow-lg" style={{ color: flashEvent.detail === "red" ? "#ff4444" : "#F5C542", animation: "goalTextPulse 0.5s ease-in-out 2" }}>
                   {flashEvent.detail === "red" ? "ČERVENÁ!" : "ŽLUTÁ!"}
@@ -541,7 +541,7 @@ export default function MatchReplayPage() {
 
           {/* INJURY overlay */}
           {flash === "injury" && flashEvent && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-md" style={{ background: "rgba(220, 80, 40, 0.12)" }}>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-control" style={{ background: "rgba(220, 80, 40, 0.12)" }}>
               <div className="text-center">
                 <div className="font-heading font-[900] text-4xl sm:text-5xl text-red-400 tracking-widest drop-shadow-lg" style={{ animation: "fadeIn 0.3s ease-out" }}>
                   ZRANĚNÍ!
@@ -553,7 +553,7 @@ export default function MatchReplayPage() {
 
           {/* KICKOFF overlay */}
           {kickoff && !htPause && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-md" style={{ background: "rgba(0,0,0,0.5)" }}>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-control" style={{ background: "rgba(0,0,0,0.5)" }}>
               <div className="text-center" style={{ animation: "kickoffAnim 2.5s ease-out forwards" }}>
                 <div className="font-heading font-[900] text-5xl sm:text-7xl text-white tracking-[0.2em] drop-shadow-[0_0_30px_rgba(255,255,255,0.4)]">
                   VÝKOP
@@ -567,7 +567,7 @@ export default function MatchReplayPage() {
 
           {/* HALFTIME overlay */}
           {htPause && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-md" style={{ background: "rgba(0,0,0,0.4)" }}>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-control" style={{ background: "rgba(0,0,0,0.4)" }}>
               <div className="text-center">
                 <div className="font-heading font-[900] text-5xl sm:text-7xl text-white tracking-widest drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
                   POLOČAS
@@ -581,7 +581,7 @@ export default function MatchReplayPage() {
 
           {/* FULLTIME overlay */}
           {finished && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-md" style={{ background: "rgba(0,0,0,0.5)" }}>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-control" style={{ background: "rgba(0,0,0,0.5)" }}>
               <div className="text-center">
                 <div className="font-heading font-[900] text-4xl sm:text-6xl text-white tracking-widest drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
                   KONEC
@@ -595,7 +595,7 @@ export default function MatchReplayPage() {
 
           {/* ATTACKING overlay */}
           {flash === "attacking" && flashEvent && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-md" style={{ animation: "attackPulse 0.5s ease-in-out infinite" }}>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-control" style={{ animation: "attackPulse 0.5s ease-in-out infinite" }}>
               <div className="font-heading font-[900] text-5xl sm:text-7xl text-orange-400 tracking-widest drop-shadow-[0_0_30px_rgba(249,115,22,0.6)]" style={{ animation: "goalTextPulse 0.6s ease-in-out infinite" }}>
                 ŠANCE!
               </div>
@@ -606,12 +606,12 @@ export default function MatchReplayPage() {
         {/* Team labels under pitch */}
         <div className="flex justify-between px-4 pt-2">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: hc }} />
+            <div className="w-3 h-3 rounded-tight" style={{ backgroundColor: hc }} />
             <span className="font-heading font-bold text-white text-sm">{match.home_name}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="font-heading font-bold text-white text-sm">{match.away_name}</span>
-            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: ac }} />
+            <div className="w-3 h-3 rounded-tight" style={{ backgroundColor: ac }} />
           </div>
         </div>
 

@@ -19,7 +19,7 @@ export function MessageDialog({ title, description, confirmLabel, confirmColor, 
       : "text-pitch-500 hover:bg-pitch-50";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center p-4" onClick={onCancel}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="p-5">

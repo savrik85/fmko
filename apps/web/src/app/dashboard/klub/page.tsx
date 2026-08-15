@@ -69,7 +69,7 @@ function EmptyState({ children, action, href }: { children: React.ReactNode; act
       {href ? (
         <Link
           href={href}
-          className="px-4 py-2 rounded-lg text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 transition-colors"
+          className="px-4 py-2 rounded-soft text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 transition-colors"
         >
           {action}
         </Link>
@@ -78,7 +78,7 @@ function EmptyState({ children, action, href }: { children: React.ReactNode; act
           type="button"
           disabled
           title="Brzy — připravujeme v dalších krocích"
-          className="px-4 py-2 rounded-lg text-sm font-heading font-bold text-gray-400 bg-gray-100 cursor-not-allowed"
+          className="px-4 py-2 rounded-soft text-sm font-heading font-bold text-gray-400 bg-gray-100 cursor-not-allowed"
         >
           {action}
         </button>
@@ -207,7 +207,7 @@ export default function KlubPage() {
             <div className="text-sm text-muted mb-3">
               <div className="flex items-center gap-3 mb-2">
                 {club.mascot.imageUrl && (
-                  <img src={club.mascot.imageUrl} alt={club.mascot.name || "Maskot"} className="w-16 h-16 rounded-lg object-cover border border-gray-200" />
+                  <img src={club.mascot.imageUrl} alt={club.mascot.name || "Maskot"} className="w-16 h-16 rounded-soft object-cover border border-gray-200" />
                 )}
                 <div className="flex-1 min-w-0">
                   <div>Maskot: {club.mascot.name ? (
@@ -225,10 +225,10 @@ export default function KlubPage() {
               )}
             </div>
             <div className="flex gap-2">
-              <Link href="/dashboard/klub/hymna" className="flex-1 px-3 py-2 rounded-lg text-xs font-heading font-bold text-center text-white bg-pitch-500 hover:bg-pitch-600 transition-colors">
+              <Link href="/dashboard/klub/hymna" className="flex-1 px-3 py-2 rounded-soft text-xs font-heading font-bold text-center text-white bg-pitch-500 hover:bg-pitch-600 transition-colors">
                 {"\u{1F3B5}"} Hymna
               </Link>
-              <Link href="/dashboard/klub/maskot" className="flex-1 px-3 py-2 rounded-lg text-xs font-heading font-bold text-center text-white bg-pitch-500 hover:bg-pitch-600 transition-colors">
+              <Link href="/dashboard/klub/maskot" className="flex-1 px-3 py-2 rounded-soft text-xs font-heading font-bold text-center text-white bg-pitch-500 hover:bg-pitch-600 transition-colors">
                 {"\u{1F9F8}"} Maskot
               </Link>
             </div>

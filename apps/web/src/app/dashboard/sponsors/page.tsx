@@ -269,7 +269,7 @@ export default function SponsorsPage() {
                   Konkurenční nabídky — porovnej, jestli se vyplatí ukončit
                 </div>
                 {!data.canChangeMainSponsor && (
-                  <div className="mb-2 text-xs text-card-red bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  <div className="mb-2 text-xs text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">
                     Limit změny hlavního sponzora 1×/sezónu už vyčerpán — můžeš ukončit smlouvu, ale novou podepíšeš až příští sezónu.
                   </div>
                 )}
@@ -366,7 +366,7 @@ function ExpiredRenewCard({ contract, onRenew, acting }: { contract: ActiveContr
             <div className="text-sm text-muted">Smlouva vypršela s koncem sezóny — sponzor je připraven jednat o nové.</div>
           </div>
           <button onClick={onRenew} disabled={acting}
-            className="px-3 py-2 bg-pitch-500 text-white rounded-lg font-heading font-bold text-sm disabled:opacity-50 shrink-0">
+            className="px-3 py-2 bg-pitch-500 text-white rounded-soft font-heading font-bold text-sm disabled:opacity-50 shrink-0">
             🤝 Obnovit (+{formatCZK(Math.round(r.monthlyAmount / 4.3))}/týd · {r.seasons} sezóny)
           </button>
         </div>

@@ -30,7 +30,7 @@ export function StatTile({
   color?: string;
 }) {
   return (
-    <div className="bg-gray-50 rounded-lg p-3">
+    <div className="bg-gray-50 rounded-soft p-3">
       <div className="text-sm text-muted">{label}</div>
       <div className="flex items-end justify-between gap-2 mt-0.5">
         <span className="font-heading font-bold text-2xl leading-none" style={color ? { color } : undefined}>

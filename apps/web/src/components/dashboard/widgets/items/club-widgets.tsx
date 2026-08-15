@@ -377,7 +377,7 @@ export function TrophiesWidget({ data, height }: WidgetProps) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
       {trophies.slice(0, rowsForHeight(height, ROW_PX.rich) * 3).map((t, i) => (
-        <div key={i} className="bg-gray-50 rounded-lg p-2.5 text-center">
+        <div key={i} className="bg-gray-50 rounded-soft p-2.5 text-center">
           <div className="text-2xl leading-none">{t.icon ?? "🏆"}</div>
           <div className="font-heading font-bold text-sm mt-1 truncate">{t.title ?? t.name ?? t.label ?? "Trofej"}</div>
           {(t.season ?? t.seasonNumber) != null && (

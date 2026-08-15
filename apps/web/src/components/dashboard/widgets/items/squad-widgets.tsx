@@ -77,7 +77,7 @@ export function SquadStatusWidget({ data }: WidgetProps) {
 
 function MiniTile({ value, label, color, className = "" }: { value: string; label: string; color?: string; className?: string }) {
   return (
-    <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+    <div className="bg-gray-50 rounded-soft p-2.5 text-center">
       <div className={`font-heading font-bold text-xl tabular-nums ${className}`} style={color ? { color } : undefined}>{value}</div>
       <div className="text-[11px] text-muted uppercase">{label}</div>
     </div>

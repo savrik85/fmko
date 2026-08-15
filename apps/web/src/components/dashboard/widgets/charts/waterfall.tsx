@@ -56,9 +56,9 @@ export function Waterfall({
                 {kladny ? "+" : "−"}{formatValue(Math.abs(r.delta))}
               </span>
             </div>
-            <div className="h-2.5 rounded-sm relative" style={{ background: GRID }}>
+            <div className="h-2.5 rounded-tight relative" style={{ background: GRID }}>
               <div
-                className="absolute h-full rounded-sm"
+                className="absolute h-full rounded-tight"
                 style={{
                   left: `${pct(zacatek)}%`,
                   width: `${Math.max(1, pct(konec) - pct(zacatek))}%`,
@@ -81,9 +81,9 @@ export function Waterfall({
             {total >= 0 ? "+" : "−"}{formatValue(Math.abs(total))}
           </span>
         </div>
-        <div className="h-2.5 rounded-sm relative mt-0.5" style={{ background: GRID }}>
+        <div className="h-2.5 rounded-tight relative mt-0.5" style={{ background: GRID }}>
           <div
-            className="absolute h-full rounded-sm"
+            className="absolute h-full rounded-tight"
             style={{
               left: `${pct(Math.min(0, total))}%`,
               width: `${Math.max(1, pct(Math.max(0, total)) - pct(Math.min(0, total)))}%`,

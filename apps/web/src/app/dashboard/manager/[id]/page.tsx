@@ -326,7 +326,7 @@ function AchievementsSection({ data }: { data: AchievementsPayload }) {
                 return (
                   <div
                     key={a.key}
-                    className={`rounded-lg p-2.5 flex items-start gap-2 ${isEarned ? "" : "opacity-40 grayscale"}`}
+                    className={`rounded-soft p-2.5 flex items-start gap-2 ${isEarned ? "" : "opacity-40 grayscale"}`}
                     style={isEarned ? { borderLeft: `3px solid ${tc.border}`, background: tc.bg } : { background: "#f5f5f5" }}
                     title={a.desc}
                   >

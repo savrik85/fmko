@@ -94,7 +94,7 @@ export function FormChip({ result }: { result: string }) {
   const cls = result === "W" ? "bg-pitch-500" : result === "L" ? "bg-card-red" : "bg-gray-400";
   const text = result === "W" ? "V" : result === "L" ? "P" : "R";
   return (
-    <span className={`w-6 h-6 rounded-md text-[11px] flex items-center justify-center font-bold text-white ${cls}`}>
+    <span className={`w-6 h-6 rounded-control text-[11px] flex items-center justify-center font-bold text-white ${cls}`}>
       {text}
     </span>
   );

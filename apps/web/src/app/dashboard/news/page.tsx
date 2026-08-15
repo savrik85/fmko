@@ -204,8 +204,8 @@ export default function NewsPage() {
     if (el) {
       setTimeout(() => {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("ring-2", "ring-pitch-500", "ring-offset-2", "rounded-lg");
-        setTimeout(() => el.classList.remove("ring-2", "ring-pitch-500", "ring-offset-2", "rounded-lg"), 3000);
+        el.classList.add("ring-2", "ring-pitch-500", "ring-offset-2", "rounded-soft");
+        setTimeout(() => el.classList.remove("ring-2", "ring-pitch-500", "ring-offset-2", "rounded-soft"), 3000);
       }, 100);
     }
   }, [loading, articles]);

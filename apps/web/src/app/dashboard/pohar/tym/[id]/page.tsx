@@ -78,7 +78,7 @@ export default function CupTeamDetailPage() {
           </div>
         </div>
         <div className="text-center shrink-0">
-          <div className={`text-2xl font-heading font-[800] tabular-nums px-3 py-1.5 rounded-lg ${strengthColor(t.strength)}`}>{t.strength}</div>
+          <div className={`text-2xl font-heading font-[800] tabular-nums px-3 py-1.5 rounded-soft ${strengthColor(t.strength)}`}>{t.strength}</div>
           <div className="text-xs text-muted mt-1">{strengthLabel(t.strength)}</div>
         </div>
       </div>

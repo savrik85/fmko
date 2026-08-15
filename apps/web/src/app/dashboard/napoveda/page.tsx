@@ -92,7 +92,7 @@ export default function NapovedaPage() {
           {(Object.keys(TACTIC_INFO) as TacticKey[]).map((key) => {
             const t = TACTIC_INFO[key];
             return (
-              <div key={key} className="border border-gray-200 rounded-lg p-3">
+              <div key={key} className="border border-gray-200 rounded-soft p-3">
                 <div className="font-heading font-bold text-sm mb-1">{t.label}</div>
                 <p className="text-xs text-muted leading-relaxed">{t.description}</p>
               </div>
@@ -114,7 +114,7 @@ export default function NapovedaPage() {
           {(Object.keys(HARDNESS_INFO) as HardnessKey[]).map((key) => {
             const h = HARDNESS_INFO[key];
             return (
-              <div key={key} className="border border-gray-200 rounded-lg p-3">
+              <div key={key} className="border border-gray-200 rounded-soft p-3">
                 <div className="font-heading font-bold text-sm mb-1">{h.icon} {h.label}</div>
                 <p className="text-xs text-muted leading-relaxed">{h.description}</p>
               </div>
@@ -148,7 +148,7 @@ export default function NapovedaPage() {
               : f.style === "defensive" ? "bg-blue-50 border-blue-200"
               : "bg-gray-50 border-gray-200";
             return (
-              <div key={key} className={`border rounded-lg p-3 ${styleBg}`}>
+              <div key={key} className={`border rounded-soft p-3 ${styleBg}`}>
                 <div className="flex items-baseline justify-between mb-1">
                   <span className="font-heading font-bold text-base tabular-nums">{f.label}</span>
                   <span className="text-[10px] uppercase tracking-wide text-muted">
@@ -200,27 +200,27 @@ export default function NapovedaPage() {
           🧑‍💼 <span>Trenér a jeho vlastnosti</span>
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-          <div className="border border-gray-200 rounded-lg p-3">
+          <div className="border border-gray-200 rounded-soft p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Koučink</div>
             <p className="text-sm text-muted">Násobí šanci hráčů na zlepšení při tréninku — při hodnotě 40 je to 1,12×, při 80 už 1,44×.</p>
           </div>
-          <div className="border border-gray-200 rounded-lg p-3">
+          <div className="border border-gray-200 rounded-soft p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Motivace</div>
             <p className="text-sm text-muted">Před zápasem zvedne morálku všem hráčům v sestavě i na lavičce: při 40 o bod, při 60 o tři, při 80 o pět. Spolu s reputací určuje i to, jak trenéra berou fanoušci.</p>
           </div>
-          <div className="border border-gray-200 rounded-lg p-3">
+          <div className="border border-gray-200 rounded-soft p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Taktika</div>
             <p className="text-sm text-muted">Přidává celému kádru přihrávky a obranu: od hodnoty 60 o bod, od 80 o dva.</p>
           </div>
-          <div className="border border-gray-200 rounded-lg p-3">
+          <div className="border border-gray-200 rounded-soft p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Disciplína</div>
             <p className="text-sm text-muted">Trenér, který drží kázeň, dostane na trénink víc lidí — kolem hodnoty 40 je to neutrální, výš i níž to hýbe docházkou. Přísnost tréninku, která hráčům ubírá morálku, se nastavuje zvlášť na stránce Tréninky.</p>
           </div>
-          <div className="border border-gray-200 rounded-lg p-3">
+          <div className="border border-gray-200 rounded-soft p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Rozvoj mládeže</div>
             <p className="text-sm text-muted">Bonus k tréninku pro hráče do 22 let. Při hodnotě 60 je to +26 % k šanci na zlepšení.</p>
           </div>
-          <div className="border border-gray-200 rounded-lg p-3">
+          <div className="border border-gray-200 rounded-soft p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Reputace</div>
             <p className="text-sm text-muted">Co má trenér za sebou (15–75). Roste výhrami a umístěním na konci sezóny, klesá prohrami. Spolu s motivací určuje, jak ho berou fanoušci.</p>
           </div>
@@ -293,7 +293,7 @@ export default function NapovedaPage() {
           ⭐ <span>Dvě reputace — nepleť si je</span>
         </h2>
 
-        <div className="border border-gray-200 rounded-lg p-3">
+        <div className="border border-gray-200 rounded-soft p-3">
           <div className="font-heading font-bold text-base mb-1">Reputace klubu (0–100, start 50)</div>
           <p className="text-sm text-muted leading-relaxed mb-2">
             Jak moc se o klubu v okrese ví. Ovlivňuje návštěvnost, podporu místních podnikatelů
@@ -318,7 +318,7 @@ export default function NapovedaPage() {
           </p>
         </div>
 
-        <div className="border border-gray-200 rounded-lg p-3">
+        <div className="border border-gray-200 rounded-soft p-3">
           <div className="font-heading font-bold text-base mb-1">Reputace trenéra (15–75, start 30)</div>
           <p className="text-sm text-muted leading-relaxed">
             Tvoje osobní jméno v okrese, ne jméno klubu. <strong className="text-ink">Ta</strong> roste

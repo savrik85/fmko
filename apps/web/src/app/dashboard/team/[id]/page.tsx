@@ -259,9 +259,9 @@ export default function TeamPage() {
               {leagueTeams.length > 1 && (
                 <div className="flex gap-1.5 shrink-0">
                   <button onClick={() => prevTeam && router.push(`/dashboard/team/${prevTeam.id}`)}
-                    className={`w-8 h-8 rounded-lg ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9664;</button>
+                    className={`w-8 h-8 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9664;</button>
                   <button onClick={() => nextTeam && router.push(`/dashboard/team/${nextTeam.id}`)}
-                    className={`w-8 h-8 rounded-lg ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9654;</button>
+                    className={`w-8 h-8 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9654;</button>
                 </div>
               )}
             </div>
@@ -278,7 +278,7 @@ export default function TeamPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   title="Veřejný profil klubu"
-                  className={`${boxBg} ${boxBgHover} rounded-lg px-3 py-1.5 text-center transition-colors cursor-pointer`}
+                  className={`${boxBg} ${boxBgHover} rounded-soft px-3 py-1.5 text-center transition-colors cursor-pointer`}
                 >
                   <div className="text-base leading-none">{"\u{1F4C4}"}</div>
                   <div className={`${boxLabel} text-[8px] font-heading font-bold uppercase mt-0.5`}>Profil</div>
@@ -296,23 +296,23 @@ export default function TeamPage() {
                       showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
                     }
                   }}
-                    className={`${boxBg} ${boxBgHover} rounded-lg px-3 py-1.5 text-center transition-colors cursor-pointer`}>
+                    className={`${boxBg} ${boxBgHover} rounded-soft px-3 py-1.5 text-center transition-colors cursor-pointer`}>
                     <div className="text-base leading-none">💬</div>
                     <div className={`${boxLabel} text-[8px] font-heading font-bold uppercase mt-0.5`}>Napsat</div>
                   </button>
                 )}
-                <div className={`${boxBg} rounded-lg px-3 py-1.5 text-center`}>
+                <div className={`${boxBg} rounded-soft px-3 py-1.5 text-center`}>
                   <div className={`font-heading font-extrabold text-base tabular-nums leading-none ${txt}`}>{players.length}</div>
                   <div className={`${boxLabel} text-[8px] font-heading font-bold uppercase mt-0.5`}>Hráčů</div>
                 </div>
                 {isOwnTeam && (
-                  <div className={`${boxBg} rounded-lg px-3 py-1.5 text-center`}>
+                  <div className={`${boxBg} rounded-soft px-3 py-1.5 text-center`}>
                     <div className={`font-heading font-extrabold text-base tabular-nums leading-none ${txt}`}>{avgRating}</div>
                     <div className={`${boxLabel} text-[8px] font-heading font-bold uppercase mt-0.5`}>Rating</div>
                   </div>
                 )}
                 <button onClick={() => router.push(`/dashboard/team/${teamId}/stadium`)}
-                  className={`${boxBg} ${boxBgHover} rounded-lg px-3 py-1.5 text-center transition-colors cursor-pointer`}>
+                  className={`${boxBg} ${boxBgHover} rounded-soft px-3 py-1.5 text-center transition-colors cursor-pointer`}>
                   <div className="text-base leading-none">🏟</div>
                   <div className={`${boxLabel} text-[8px] font-heading font-bold uppercase mt-0.5`}>Stadion</div>
                 </button>
@@ -399,21 +399,21 @@ export default function TeamPage() {
             <div className="space-y-3">
               <div className="flex items-center gap-1.5">
                 {matchResults.form.map((f, i) => (
-                  <span key={i} className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-heading font-bold text-white ${
+                  <span key={i} className={`w-7 h-7 rounded-control flex items-center justify-center text-xs font-heading font-bold text-white ${
                     f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
                   }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
                 ))}
               </div>
               <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-gray-50 rounded-lg py-2">
+                <div className="bg-gray-50 rounded-soft py-2">
                   <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">{matchResults.summary.wins}</div>
                   <div className="text-[10px] text-muted uppercase">Výhry</div>
                 </div>
-                <div className="bg-gray-50 rounded-lg py-2">
+                <div className="bg-gray-50 rounded-soft py-2">
                   <div className="font-heading font-bold text-lg tabular-nums">{matchResults.summary.draws}</div>
                   <div className="text-[10px] text-muted uppercase">Remízy</div>
                 </div>
-                <div className="bg-gray-50 rounded-lg py-2">
+                <div className="bg-gray-50 rounded-soft py-2">
                   <div className="font-heading font-bold text-lg tabular-nums text-card-red">{matchResults.summary.losses}</div>
                   <div className="text-[10px] text-muted uppercase">Prohry</div>
                 </div>
@@ -477,7 +477,7 @@ export default function TeamPage() {
                           </a>
                         </td>
                         <td className="py-2 pr-2 text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-heading font-bold ${resultBg} ${resultText}`}>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-control text-xs font-heading font-bold ${resultBg} ${resultText}`}>
                             {m.homeScore}:{m.awayScore}
                           </span>
                         </td>
@@ -667,7 +667,7 @@ export default function TeamPage() {
                       <span key={a.key} className={`w-6 text-center py-0.5 rounded ${attrColor(a.value)}`} title={a.label}>{a.value}</span>
                     ))}
                   </div>
-                  <span className={`px-2 py-1 rounded-lg font-heading font-bold text-sm tabular-nums ml-1 ${onColorText}`} style={{ backgroundColor: color }}>
+                  <span className={`px-2 py-1 rounded-soft font-heading font-bold text-sm tabular-nums ml-1 ${onColorText}`} style={{ backgroundColor: color }}>
                     {ratingValue}
                   </span>
                 </div>
