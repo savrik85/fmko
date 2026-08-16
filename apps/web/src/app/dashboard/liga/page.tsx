@@ -312,7 +312,7 @@ function LigaPage() {
             onChange={(e) => setSeasonView(e.target.value === "current" ? "current" : Number(e.target.value))}
             className="select w-full"
           >
-            <option value="current">Aktuální{seasonNum ? ` (Sezóna ${seasonNum})` : ""}</option>
+            <option value="current">Aktuální</option>
             {pastSeasons.map((h) => (
               <option key={h.id} value={h.seasonNumber}>Sezóna {h.seasonNumber} (archiv)</option>
             ))}

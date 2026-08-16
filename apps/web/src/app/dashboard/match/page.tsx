@@ -630,7 +630,7 @@ function MatchPage() {
           <div className="text-micro text-muted">
             {activePreset
               ? <>Vybrána <span className="font-bold text-pitch-600">Sestava {activePreset}</span> · {saved ? "použije se pro zápas" : "uložením se nasadí pro zápas"}</>
-              : "Klik na sestavu = vybrat pro zápas"}
+              : "Klepnutím vybereš sestavu"}
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -783,7 +783,7 @@ function MatchPage() {
           ) : editSlot !== null ? (
             <span className="font-heading font-bold text-pitch-600">Vyber hráče ze seznamu vpravo</span>
           ) : (
-            <span className="text-ink/50">Klepni na hráče a pak na místo, kam ho přesunout · Dalším klepnutím na téhož hráče vybereš náhradu</span>
+            <span className="text-ink/50">Klepni na hráče, pak na cílové místo · Znovu na něj = náhradník</span>
           )}
         </p>
         <div className="rounded-xl bg-pitch-400 overflow-hidden" style={{ aspectRatio: "5/6", padding: "2% 5%" }}>
@@ -860,7 +860,7 @@ function MatchPage() {
           ) : editSlot !== null ? (
             <span className="font-heading font-bold text-pitch-600">Vyber hráče ze seznamu vpravo</span>
           ) : (
-            <span className="text-ink/50">Klepni na hráče a pak na místo, kam ho přesunout · Dalším klepnutím na téhož hráče vybereš náhradu</span>
+            <span className="text-ink/50">Klepni na hráče, pak na cílové místo · Znovu na něj = náhradník</span>
           )}
         </p>
         </div>
