@@ -644,7 +644,7 @@ function MatchPage() {
                   onClick={() => { onPresetClick(slot); setSaved(false); }}
                   className={`w-full py-2 px-2 rounded-soft text-xs font-heading font-bold border-2 transition-all ${
                     active ? "bg-pitch-500 border-pitch-600 text-white shadow-md"
-                    : filled ? "bg-cream border-pitch-300 text-ink hover:border-pitch-500"
+                    : filled ? "bg-gold-50 border-pitch-300 text-ink hover:border-pitch-500"
                     : "bg-gray-50 border-gray-200 text-muted hover:bg-gray-100"
                   }`}
                 >

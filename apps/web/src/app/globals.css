@@ -18,10 +18,18 @@
   --color-pitch-800: #0D220D;
   --color-pitch-900: #061106;
 
+  /* Zlatá — chyběly světlé odstíny a 700. Kód je používal (bg-gold-50 na 13
+     místech, text-gold-700 na 7), jenže Tailwind nedefinovaný odstín vůbec
+     nevygeneruje: pozadí zůstalo průhledné a text zdědil inkoustovou černou.
+     Vypadalo to jako obyčejná bílá karta místo zvýrazněné. */
+  --color-gold-50: #FBF6E6;
+  --color-gold-100: #F6EDCA;
+  --color-gold-200: #EBDDA2;
   --color-gold-300: #F0D060;
   --color-gold-400: #D4B445;
   --color-gold-500: #C4A035;
   --color-gold-600: #A88A2A;
+  --color-gold-700: #866D1E;
 
   --color-card-red: #D94032;
   --color-card-yellow: #F5C542;

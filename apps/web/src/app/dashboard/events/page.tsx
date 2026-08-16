@@ -338,7 +338,7 @@ export default function EventsPage() {
                     {iv.questions.map((q, i) => (
                       <div key={i}>
                         {jePo && ctx?.opponentStatement && iv.topics?.[i] === "vyrok_soupere" && (
-                          <blockquote className="mb-2 border-l-4 border-sand-300 pl-3 text-sm italic text-ink-light">
+                          <blockquote className="mb-2 border-l-4 border-line-strong pl-3 text-sm italic text-ink-light">
                             „{ctx.opponentStatement.quote}"
                             {ctx.opponentManagerName && (
                               <span className="not-italic text-xs text-muted block mt-0.5">— {ctx.opponentManagerName}, před zápasem</span>
@@ -352,7 +352,7 @@ export default function EventsPage() {
                           maxLength={500}
                           rows={3}
                           placeholder="Vaše odpověď..."
-                          className="w-full rounded-xl border border-sand-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-500/30 resize-none"
+                          className="w-full rounded-xl border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-500/30 resize-none"
                         />
                         <div className="text-right text-xs text-muted mt-0.5">{(answers[i] ?? "").length}/500</div>
                       </div>

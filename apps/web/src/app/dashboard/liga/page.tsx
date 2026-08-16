@@ -283,15 +283,17 @@ function LigaPage() {
     <div className="page-container space-y-5">
 
       {/* Přepínače — liga + sezóna na jednom řádku */}
+      {/* Dva sloupce: na 375 px se popisek + select vedle sebe nevesly
+          a každý filtr zabral celý řádek, tedy ~110 px než začal obsah. */}
       {(allLeagues.length > 1 || pastSeasons.length > 0) && (
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+      <div className="grid grid-cols-2 gap-3 items-end">
       {allLeagues.length > 1 && (
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted font-medium">Liga:</span>
+        <div className="min-w-0">
+          <span className="block text-micro text-muted font-heading font-bold uppercase tracking-wide mb-1">Liga</span>
           <select
             value={selectedLeagueId ?? "own"}
             onChange={(e) => handleLeagueChange(e.target.value)}
-            className="text-sm bg-white border border-border rounded-soft px-3 py-2 font-medium"
+            className="select w-full"
           >
             <option value="own">Moje liga</option>
             {allLeagues.map((l) => (
@@ -303,12 +305,12 @@ function LigaPage() {
 
       {/* Season picker — listování minulých sezón této ligy */}
       {pastSeasons.length > 0 && (
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted font-medium">Sezóna:</span>
+        <div className="min-w-0">
+          <span className="block text-micro text-muted font-heading font-bold uppercase tracking-wide mb-1">Sezóna</span>
           <select
             value={seasonView === "current" ? "current" : String(seasonView)}
             onChange={(e) => setSeasonView(e.target.value === "current" ? "current" : Number(e.target.value))}
-            className="text-sm bg-white border border-border rounded-soft px-3 py-2 font-medium"
+            className="select w-full"
           >
             <option value="current">Aktuální{seasonNum ? ` (Sezóna ${seasonNum})` : ""}</option>
             {pastSeasons.map((h) => (
