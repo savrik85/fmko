@@ -416,6 +416,44 @@ function ulozHledani(v: UlozeneHledani) {
   }
 }
 
+
+/**
+ * Řádek filtru: krátký popisek vlevo, pilulky vpravo.
+ *
+ * Popisek musí být — „30+" znamená u ratingu i u věku něco jiného. Je ale
+ * úzký (56 px) a pilulky se posouvají do strany, takže se nic nezalomí
+ * ani na 375 px. Dřív byly filtry pod sebou v panelu vysokém 780 px
+ * a výsledky člověk na telefonu vůbec neviděl.
+ */
+function FiltrRadek({ popisek, volby, aktivni, vyber }: {
+  popisek: string;
+  volby: Array<{ k: string; l: string }>;
+  aktivni: string;
+  vyber: (k: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-14 shrink-0 text-micro text-muted font-heading font-bold uppercase tracking-wide">
+        {popisek}
+      </span>
+      <div className="flex gap-1.5 overflow-x-auto no-scrollbar -my-0.5 py-0.5" role="group" aria-label={popisek}>
+        {volby.map(({ k, l }) => (
+          <button
+            key={k}
+            onClick={() => vyber(k)}
+            aria-pressed={aktivni === k}
+            className={`shrink-0 px-3 min-h-9 rounded-control text-sm font-heading font-bold transition-colors ${
+              aktivni === k ? "bg-pitch-500 text-white" : "bg-surface-2 text-muted hover:text-ink"
+            }`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function skillColor(v: number): string {
   if (v >= 70) return "text-pitch-500 font-bold";
   if (v >= 55) return "text-pitch-700";
@@ -775,12 +813,11 @@ export default function TransfersPage() {
       minRating: searchMinRating, ageMin: searchAgeMin, ageMax: searchAgeMax, leagueId: searchLeagueId });
   }, [searchQuery, searchPos, searchSort, searchMinRating, searchAgeMin, searchAgeMax, searchLeagueId]);
 
-  // Kolik filtrů je aktivních — číslo na tlačítku Filtry
-  const pocetFiltru =
-    (searchPos !== "all" ? 1 : 0) +
-    (searchMinRating > 0 ? 1 : 0) +
-    (searchAgeMin > 0 || searchAgeMax < 99 ? 1 : 0) +
-    (searchLeagueId ? 1 : 0);
+  // Rating, věk a pozice jsou vidět nahoře, takže se do počtu na tlačítku
+  // nepočítají — to hlásí jen to, co je schované v plachtě.
+  const pocetDalsich =
+    (searchLeagueId ? 1 : 0) +
+    (searchSort !== "rating" ? 1 : 0);
 
   const filteredSearch = useMemo(() => {
     let list = searchPlayers;
@@ -1055,45 +1092,64 @@ export default function TransfersPage() {
           {!searchLoaded && <div className="flex justify-center py-8"><Spinner /></div>}
           {searchLoaded && (
             <>
-              {/* Hledání a pozice zůstávají nahoře, zbytek jde do plachty.
-                  Dřív zabral celý panel filtrů ~780 px a výsledky byly úplně
-                  pod ohybem — na telefonu jsi po otevření záložky neviděl
-                  ani jednoho hráče. */}
+              {/* Rating a věk jsou při shánění hráče důležitější než jméno,
+                  takže jsou nahoře jako pilulky vedle pozice. Jméno zůstává,
+                  ale menší. Každý řádek se posouvá do strany, nic se nezalomí. */}
               <div className="flex gap-2">
                 <input
-                  type="search" placeholder="Hledat hráče nebo tým…"
+                  type="search" placeholder="Jméno hráče nebo týmu…"
                   value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                  aria-label="Hledat hráče nebo tým"
-                  className="input flex-1 min-w-0 !py-2.5"
+                  aria-label="Hledat podle jména hráče nebo týmu"
+                  className="input flex-1 min-w-0 !py-1.5 !text-sm"
                 />
                 <button
                   onClick={() => setFiltrOtevren(true)}
+                  aria-label="Další filtry"
                   className={`shrink-0 px-3 rounded-control font-heading font-bold text-sm transition-colors ${
-                    pocetFiltru > 0 ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"
+                    pocetDalsich > 0 ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"
                   }`}
                 >
-                  Filtry{pocetFiltru > 0 ? ` (${pocetFiltru})` : ""}
+                  Víc{pocetDalsich > 0 ? ` (${pocetDalsich})` : ""}
                 </button>
               </div>
 
-              {/* Pozice je zdaleka nejpoužívanější filtr, zůstává po ruce.
-                  Vodorovný posun místo zalomení na dva řádky. */}
-              <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1">
-                {["all", "GK", "DEF", "MID", "FWD"].map((pos) => (
-                  <button key={pos} onClick={() => setSearchPos(pos)}
-                    className={`shrink-0 px-3 min-h-9 rounded-control text-sm font-heading font-bold transition-colors ${searchPos === pos ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"}`}>
-                    {pos === "all" ? "Vše" : pos === "GK" ? "BRA" : pos === "DEF" ? "OBR" : pos === "MID" ? "ZÁL" : "ÚTO"}
-                  </button>
-                ))}
+              <div className="card px-3 py-2 space-y-1.5">
+                <FiltrRadek
+                  popisek="Rating"
+                  volby={[
+                    { k: "0", l: "Vše" }, { k: "30", l: "30+" }, { k: "50", l: "50+" },
+                    { k: "60", l: "60+" }, { k: "70", l: "70+" },
+                  ]}
+                  aktivni={String(searchMinRating)}
+                  vyber={(k) => setSearchMinRating(Number(k))}
+                />
+                <FiltrRadek
+                  popisek="Věk"
+                  volby={[
+                    { k: "0-99", l: "Vše" }, { k: "16-21", l: "do 21" }, { k: "16-23", l: "16–23" },
+                    { k: "24-30", l: "24–30" }, { k: "31-99", l: "31+" },
+                  ]}
+                  aktivni={`${searchAgeMin}-${searchAgeMax}`}
+                  vyber={(k) => { const [a, b] = k.split("-"); setSearchAgeMin(Number(a)); setSearchAgeMax(Number(b)); }}
+                />
+                <FiltrRadek
+                  popisek="Pozice"
+                  volby={[
+                    { k: "all", l: "Vše" }, { k: "GK", l: "BRA" }, { k: "DEF", l: "OBR" },
+                    { k: "MID", l: "ZÁL" }, { k: "FWD", l: "ÚTO" },
+                  ]}
+                  aktivni={searchPos}
+                  vyber={setSearchPos}
+                />
               </div>
 
               <Sheet open={filtrOtevren} onClose={() => setFiltrOtevren(false)} title="Filtry hledání">
                 <div className="px-5 pb-5 pt-3 space-y-5">
                   <div className="flex items-center justify-between">
                     <h2 className="font-heading font-bold text-lg">Filtry</h2>
-                    {pocetFiltru > 0 && (
+                    {(pocetDalsich > 0 || searchPos !== "all" || searchMinRating > 0 || searchAgeMin > 0 || searchAgeMax < 99) && (
                       <button
-                        onClick={() => { setSearchPos("all"); setSearchMinRating(0); setSearchAgeMin(0); setSearchAgeMax(99); setSearchQuery(""); }}
+                        onClick={() => { setSearchPos("all"); setSearchMinRating(0); setSearchAgeMin(0); setSearchAgeMax(99); setSearchQuery(""); setSearchSort("rating"); }}
                         className="text-sm font-heading font-bold text-card-red"
                       >
                         Zrušit vše
@@ -1118,38 +1174,15 @@ export default function TransfersPage() {
                   )}
 
                   <div>
-                    <span className="block text-micro text-muted font-heading font-bold uppercase tracking-wide mb-1.5">Minimální rating</span>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {[0, 30, 50, 60].map((v) => (
-                        <button key={v} onClick={() => setSearchMinRating(v)}
-                          className={`px-3 min-h-11 rounded-control text-sm font-heading font-bold transition-colors ${searchMinRating === v ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"}`}>
-                          {v === 0 ? "Vše" : `${v}+`}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="block text-micro text-muted font-heading font-bold uppercase tracking-wide mb-1.5">Věk</span>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {[{l:"16–23",a:16,b:23},{l:"24–30",a:24,b:30},{l:"30+",a:30,b:99}].map(({l,a,b}) => (
-                        <button key={l} onClick={() => { setSearchAgeMin(a); setSearchAgeMax(b); }}
-                          className={`px-3 min-h-11 rounded-control text-sm font-heading font-bold transition-colors ${searchAgeMin === a && searchAgeMax === b ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"}`}>
-                          {l}
-                        </button>
-                      ))}
-                    </div>
-                    {/* Vlastní rozsah na vlastním řádku — vedle přednastavených
-                        se na 375 px nevešel a lámal se uprostřed. */}
-                    <div className="flex gap-1.5 items-center mt-1.5">
-                      <span className="text-micro text-muted shrink-0">nebo přesně</span>
+                    <span className="block text-micro text-muted font-heading font-bold uppercase tracking-wide mb-1.5">Přesný rozsah věku</span>
+                    <div className="flex gap-1.5 items-center">
                       <input type="number" value={searchAgeMin || ""} onChange={(e) => setSearchAgeMin(parseInt(e.target.value) || 0)}
                         placeholder="od" min={0} max={60} aria-label="Věk od"
-                        className="w-16 px-2 min-h-11 rounded-control border border-line text-sm font-heading tabular-nums text-center" />
+                        className="w-20 px-2 min-h-11 rounded-control border border-line text-sm font-heading tabular-nums text-center" />
                       <span className="text-muted">–</span>
                       <input type="number" value={searchAgeMax < 99 ? searchAgeMax : ""} onChange={(e) => setSearchAgeMax(parseInt(e.target.value) || 99)}
                         placeholder="do" min={0} max={60} aria-label="Věk do"
-                        className="w-16 px-2 min-h-11 rounded-control border border-line text-sm font-heading tabular-nums text-center" />
+                        className="w-20 px-2 min-h-11 rounded-control border border-line text-sm font-heading tabular-nums text-center" />
                     </div>
                   </div>
 
