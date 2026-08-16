@@ -37,6 +37,47 @@ crons = [
   "5 16 * * *",
 ]
 
+# ── Fronty (produkce) ──
+# Jedna zpráva = jedna liga = jedna invokace s vlastním rozpočtem CPU a subrequestů.
+# max_concurrency drží počet souběžných konzumerů nízko, aby se hrdlo jen nepřesunulo
+# z workeru na D1 (viz docs/analyza-fronty-2026-08-16.md, riziko 4.3).
+[[queues.producers]]
+binding = "MATCH_QUEUE"
+queue = "prales-match-rounds"
+
+[[queues.producers]]
+binding = "REPORTS_QUEUE"
+queue = "prales-reports"
+
+[[queues.consumers]]
+queue = "prales-match-rounds"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+max_concurrency = 3
+dead_letter_queue = "prales-match-dlq"
+
+[[queues.consumers]]
+queue = "prales-reports"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+max_concurrency = 2
+dead_letter_queue = "prales-reports-dlq"
+
+# DLQ konzumeři — selhání se jen zaznamená do queue_failures, ať nezmizí potichu.
+[[queues.consumers]]
+queue = "prales-match-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 0
+
+[[queues.consumers]]
+queue = "prales-reports-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 0
+
 [[routes]]
 pattern = "api.prales.fun"
 custom_domain = true
@@ -71,5 +112,44 @@ id = "f2900579992a4a8da17986f9b7d83f01"
 binding = "SEED_DATA"
 bucket_name = "prales-seed"
 
+# ── Fronty (testing) ──
+# VLASTNÍ fronty, jinak by si prostředí lezla do zelí (test konzumer by bral prod zprávy).
+[[env.testing.queues.producers]]
+binding = "MATCH_QUEUE"
+queue = "prales-match-rounds-test"
+
+[[env.testing.queues.producers]]
+binding = "REPORTS_QUEUE"
+queue = "prales-reports-test"
+
+[[env.testing.queues.consumers]]
+queue = "prales-match-rounds-test"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+max_concurrency = 2
+dead_letter_queue = "prales-match-dlq-test"
+
+[[env.testing.queues.consumers]]
+queue = "prales-reports-test"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+max_concurrency = 2
+dead_letter_queue = "prales-reports-dlq-test"
+
+[[env.testing.queues.consumers]]
+queue = "prales-match-dlq-test"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 0
+
+[[env.testing.queues.consumers]]
+queue = "prales-reports-dlq-test"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 0
+
+# Testing crony NEMÁ — všechno se spouští ručně přes admin endpointy.
 [env.testing.triggers]
 crons = []
