@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTeam } from "@/context/team-context";
-import { apiFetch } from "@/lib/api";
 import { hasUnseenNotes } from "@/data/release-notes";
 
 const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string; label: string; color: string }> }> = [
@@ -45,17 +44,13 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
 ];
 
 export default function MorePage() {
-  const { logout, token } = useTeam();
-  const [unvotedCount, setUnvotedCount] = useState(0);
+  const { logout } = useTeam();
   const [notesUnseen, setNotesUnseen] = useState(false);
 
+  // Odznak „Nové" u novinek — přehodnotit při každém otevření stránky.
   useEffect(() => {
-    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-    apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers })
-      .then((votes) => setUnvotedCount(votes.filter((v) => v.status === "open" && v.my_answer === null).length))
-      .catch((e) => console.error("fetch votes:", e));
     setNotesUnseen(hasUnseenNotes());
-  }, [token]);
+  }, []);
 
   return (
     <div className="page-container pb-24">
@@ -64,7 +59,7 @@ export default function MorePage() {
           <p className="text-xs font-heading font-bold text-muted uppercase tracking-wide mb-3 px-1 flex items-center gap-2 after:flex-1 after:h-px after:bg-line">{section.title}</p>
           <div className="grid grid-cols-4 gap-2">
             {section.items.map((item) => {
-              const badge = item.href === "/dashboard/hlasovani" ? unvotedCount : 0;
+
               return (
                 <Link
                   key={item.href}
@@ -83,11 +78,6 @@ export default function MorePage() {
                     {item.icon}
                   </div>
                   <span className="text-micro font-medium text-ink text-center leading-tight">{item.label}</span>
-                  {badge > 0 && (
-                    <span className="absolute top-1 right-1 bg-amber-500 text-white text-[9px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">
-                      {badge}
-                    </span>
-                  )}
                   {item.href === "/dashboard/novinky" && notesUnseen && (
                     <span className="absolute top-1 right-1 bg-pitch-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">
                       Nové

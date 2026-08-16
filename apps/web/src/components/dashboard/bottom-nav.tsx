@@ -49,9 +49,10 @@ export function BottomNav() {
     <nav className="on-dark fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden" style={{ background: "#1e2d1e", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
       <div className="flex justify-around items-center h-16 px-2">
         {items.map((item) => {
+          // Větev pro položku „Kádr" tu byla i poté, co ji z lišty vyhodili —
+          // nikdy se nevyhodnotila. Kádr je dnes pod Více.
           const isActive = pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(item.href)) ||
-            (item.label === "Kádr" && (pathname.startsWith("/dashboard/team") || pathname.startsWith("/dashboard/squad")));
+            (item.href !== "/dashboard" && pathname.startsWith(item.href));
           return (
             <Link
               key={item.label}
