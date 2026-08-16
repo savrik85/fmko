@@ -96,7 +96,9 @@ export function BottomNav() {
           : "env(safe-area-inset-bottom, 0px)",
       }}
     >
-      <div className="flex justify-around items-center h-16 px-2">
+      {/* h-14 misto h-16: rám bral 167 px z 844. Ikona i popisek se do 56 px
+          vejdou (28 + 2 + 14 + 8 odsazení = 52). */}
+      <div className="flex justify-around items-center h-14 px-2">
         {items.map((item) => {
           // Větev pro položku „Kádr" tu byla i poté, co ji z lišty vyhodili —
           // nikdy se nevyhodnotila. Kádr je dnes pod Více.
