@@ -383,6 +383,11 @@ const KLIC_HLEDANI = "prales_transfers_search";
  *  není levná — bez stropu se na telefonu scrollovalo po sekundách. */
 const VYPIS_MAX = 60;
 
+/** „Zobrazit 1 hráče" / „2 hráče" / „5 hráčů" — ne „1 hráčů". */
+function hraciTvar(n: number): string {
+  return n >= 1 && n <= 4 ? "hráče" : "hráčů";
+}
+
 type UlozeneHledani = {
   query: string; pos: string; sort: string;
   minRating: number; ageMin: number; ageMax: number; leagueId: string;
@@ -1126,14 +1131,18 @@ export default function TransfersPage() {
 
                   <div>
                     <span className="block text-micro text-muted font-heading font-bold uppercase tracking-wide mb-1.5">Věk</span>
-                    <div className="flex gap-1.5 flex-wrap items-center">
+                    <div className="flex gap-1.5 flex-wrap">
                       {[{l:"16–23",a:16,b:23},{l:"24–30",a:24,b:30},{l:"30+",a:30,b:99}].map(({l,a,b}) => (
                         <button key={l} onClick={() => { setSearchAgeMin(a); setSearchAgeMax(b); }}
                           className={`px-3 min-h-11 rounded-control text-sm font-heading font-bold transition-colors ${searchAgeMin === a && searchAgeMax === b ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"}`}>
                           {l}
                         </button>
                       ))}
-                      <span className="text-micro text-muted mx-1">nebo</span>
+                    </div>
+                    {/* Vlastní rozsah na vlastním řádku — vedle přednastavených
+                        se na 375 px nevešel a lámal se uprostřed. */}
+                    <div className="flex gap-1.5 items-center mt-1.5">
+                      <span className="text-micro text-muted shrink-0">nebo přesně</span>
                       <input type="number" value={searchAgeMin || ""} onChange={(e) => setSearchAgeMin(parseInt(e.target.value) || 0)}
                         placeholder="od" min={0} max={60} aria-label="Věk od"
                         className="w-16 px-2 min-h-11 rounded-control border border-line text-sm font-heading tabular-nums text-center" />
@@ -1155,7 +1164,7 @@ export default function TransfersPage() {
                   </div>
 
                   <Button variant="primary" size="lg" className="w-full" onClick={() => setFiltrOtevren(false)}>
-                    Zobrazit {filteredSearch.length} hráčů
+                    Zobrazit {filteredSearch.length} {hraciTvar(filteredSearch.length)}
                   </Button>
                 </div>
               </Sheet>
