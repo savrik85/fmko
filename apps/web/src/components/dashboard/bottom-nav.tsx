@@ -85,7 +85,7 @@ export function BottomNav() {
     <nav
       className="on-dark fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden"
       style={{
-        background: "#1e2d1e",
+        background: "var(--color-chrome)",
         paddingBottom: pokryvaSpodek ? "env(safe-area-inset-bottom, 0px)" : "0px",
       }}
     >

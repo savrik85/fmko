@@ -19,7 +19,7 @@ export function FMTopBar() {
   return (
     <header
       className="on-dark h-14 flex items-center pl-1 pr-3 sm:px-5 gap-2 sm:gap-4 shrink-0"
-      style={{ background: "#1e2d1e" }}
+      style={{ background: "var(--color-chrome)" }}
     >
       <div className="flex items-center gap-1 shrink-0">
         <button
