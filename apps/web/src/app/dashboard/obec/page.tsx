@@ -263,10 +263,14 @@ function favorLabel(favor: number): string {
 function FavorBar({ value, label }: { value: number; label?: string }) {
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-gray-600">{label ?? "Přízeň"}</span>
-        <span className="font-semibold tabular-nums">{value}/100</span>
-      </div>
+      {/* Popisek i cislo se skryji, kdyz je label prazdny — volajici uz
+          hodnotu vypsal velkym pismem nad pruhem a opakovala se dvakrat. */}
+      {label !== "" && (
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-gray-600">{label ?? "Přízeň"}</span>
+          <span className="font-semibold tabular-nums">{value}/100</span>
+        </div>
+      )}
       <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
         <div className={`h-full ${favorColor(value)}`} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
       </div>

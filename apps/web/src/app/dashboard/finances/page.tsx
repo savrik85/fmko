@@ -250,7 +250,10 @@ function OverviewTab({ data, transactions, txnTotal, txnFilter, onFilter }: {
   const topExp = topExpenseItems(data);
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      {/* Dve karty na radek na mobilu: pri trech se do 110 px nevesla ani
+          castka („+7 275" / „Kč" na dva radky) ani popisek. Bilance je
+          nejdulezitejsi, takze dostane cely druhy radek. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
         <MetricCard label="Příjmy / týd" value={`+${formatCZK(data.weekly.income.total)}`} color="text-pitch-500" />
         <MetricCard
           label="Výdaje / týd"
@@ -261,6 +264,7 @@ function OverviewTab({ data, transactions, txnTotal, txnFilter, onFilter }: {
           label="Bilance"
           value={`${isPositive ? "+" : ""}${formatCZK(data.weekly.netWithLoan)}`}
           color={isPositive ? "text-pitch-500" : "text-card-red"}
+          className="col-span-2 sm:col-span-1"
         />
       </div>
 
@@ -828,11 +832,13 @@ function HistorySection({ transactions, total, filter, onFilter }: {
 // Sdílené komponenty
 // ────────────────────────────────────────────────────────────────────────────
 
-function MetricCard({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) {
+function MetricCard({ label, value, color, sub, className = "" }: { label: string; value: string; color?: string; sub?: string; className?: string }) {
   return (
-    <div className="card p-4 text-center">
-      <div className="text-micro text-muted uppercase tracking-wide mb-1">{label}</div>
-      <div className={`font-heading font-[800] text-2xl tabular-nums ${color ?? "text-ink"}`}>{value}</div>
+    <div className={`card p-3 sm:p-4 text-center ${className}`}>
+      {/* whitespace-nowrap + mensi pismo na mobilu: „+7 275 Kč" se jinak
+          lamalo tak, ze „Kč" spadlo na vlastni radek. */}
+      <div className="text-micro text-muted uppercase tracking-wide mb-1 whitespace-nowrap">{label}</div>
+      <div className={`font-heading font-[800] text-xl sm:text-2xl tabular-nums whitespace-nowrap ${color ?? "text-ink"}`}>{value}</div>
       {sub && <div className="text-micro text-muted mt-0.5">{sub}</div>}
     </div>
   );

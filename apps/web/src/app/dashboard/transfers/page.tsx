@@ -199,7 +199,10 @@ function HeroTransfer({ t }: { t: TransfersOverview["biggest"][number] }) {
           </div>
 
           {/* Trasa přestupu */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {/* Bez flex-wrap: pri zalomeni zustala sipka viset za prvnim klubem
+              a cil skoncil na dalsim radku, takze to necetlo jako trasa.
+              Nazvy klubu se radeji orizli. */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {t.fromTeam ? (
               <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/dashboard/team/${t.fromTeamId}` : null} textSize="md" badgeSize={32} />
             ) : (

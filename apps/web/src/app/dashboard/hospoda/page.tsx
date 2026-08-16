@@ -243,7 +243,7 @@ export default function HospodaPage() {
                 <h1 className="font-heading font-[800] text-2xl sm:text-3xl leading-none text-ink">U nás v hospodě</h1>
                 <p className="text-sm text-muted mt-1">Kdo tam byl, co se dělo, co to stálo.</p>
               </div>
-              <Link href="/dashboard" className="text-sm font-heading font-bold text-pitch-500 hover:text-pitch-600 whitespace-nowrap shrink-0">← Dashboard</Link>
+              <Link href="/dashboard" className="text-sm font-heading font-bold text-pitch-500 hover:text-pitch-600 whitespace-nowrap shrink-0">← Domů</Link>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 interface HelpSection {
@@ -279,13 +279,42 @@ function HelpPanel({ help, onClose }: { help: HelpEntry; onClose: () => void }) 
   );
 }
 
+/**
+ * Plovoucí tlačítko nápovědy se při scrollování ztlumí.
+ *
+ * Sedí v pravém dolním rohu nad obsahem, takže při čtení seznamu překrývalo
+ * pravý okraj řádků — v Financích třeba zakrývalo částku u „Dotace obce".
+ * Během scrollu je průhledné a nekliká, po zastavení se zase objeví.
+ */
+function useSkryjPriScrollu() {
+  const [scrolluje, setScrolluje] = useState(false);
+  useEffect(() => {
+    const el = document.querySelector("main");
+    if (!el) return;
+    let t: ReturnType<typeof setTimeout>;
+    const onScroll = () => {
+      setScrolluje(true);
+      clearTimeout(t);
+      t = setTimeout(() => setScrolluje(false), 600);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => { el.removeEventListener("scroll", onScroll); clearTimeout(t); };
+  }, []);
+  return scrolluje;
+}
+
 function HelpButton({ open, onClick, className }: { open: boolean; onClick: () => void; className?: string }) {
+  const scrolluje = useSkryjPriScrollu();
+  const skryt = scrolluje && !open;
   return (
     <button
       onClick={onClick}
-      className={`fixed z-[var(--z-nav)] w-11 h-11 rounded-full bg-pitch-700 text-white shadow-lg hover:bg-pitch-600 transition-all flex items-center justify-center font-heading font-bold text-lg ${className ?? "bottom-24 sm:bottom-6 right-4"}`}
+      className={`fixed z-[var(--z-nav)] w-11 h-11 rounded-full bg-pitch-700 text-white shadow-lg hover:bg-pitch-600 flex items-center justify-center font-heading font-bold text-lg transition-[opacity,background-color] duration-200 ${
+        skryt ? "opacity-0 pointer-events-none" : "opacity-100"
+      } ${className ?? "bottom-24 sm:bottom-6 right-4"}`}
       title={open ? "Zavřít nápovědu" : "Nápověda"}
       aria-label={open ? "Zavřít nápovědu" : "Nápověda"}
+      aria-hidden={skryt}
     >
       {open ? "✕" : "?"}
     </button>

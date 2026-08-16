@@ -648,8 +648,10 @@ function MatchPage() {
                     : "bg-gray-50 border-gray-200 text-muted hover:bg-gray-100"
                   }`}
                 >
-                  <div className="flex items-center justify-center gap-1">
-                    <span>Sestava {slot}</span>
+                  {/* flex-col: na 375 px se „Sestava A" a stav vedle sebe nevesly
+                      a nazev se lamal na dva radky. Pod sebou to sedi. */}
+                  <div className="flex flex-col items-center leading-tight">
+                    <span className="whitespace-nowrap">Sestava {slot}</span>
                     {filled && <span className={`text-micro ${active ? "opacity-90" : "opacity-70"}`}>{preset.formation}</span>}
                     {!filled && <span className="text-micro opacity-70">prázdná</span>}
                   </div>
@@ -665,7 +667,7 @@ function MatchPage() {
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline justify-between mb-1">
-              <div className="text-micro text-muted font-heading uppercase tracking-wide">Formace <span className="text-muted-light normal-case">— najetím zjistíš detail</span></div>
+              <div className="text-micro text-muted font-heading uppercase tracking-wide">Formace</div>
               <div className="text-micro font-heading">
                 Sehranost: <span className={`font-bold ${famColor(formationFam[formation] ?? 15)}`}>{Math.round(formationFam[formation] ?? 15)}</span>/100
               </div>
