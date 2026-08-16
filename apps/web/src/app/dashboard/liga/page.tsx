@@ -279,7 +279,7 @@ function LigaPage() {
 
   return (
     <>
-    <PageHeader name={displayName} detail={ctx.district ? `Okres ${ctx.district}` : undefined} badge={null}>{null}</PageHeader>
+    <PageHeader compact name={displayName} detail={ctx.district ? `Okres ${ctx.district}` : undefined} badge={null}>{null}</PageHeader>
     <div className="page-container space-y-5">
 
       {/* Přepínače — liga + sezóna na jednom řádku */}

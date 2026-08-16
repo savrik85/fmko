@@ -64,10 +64,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             vypadalo to jako zúžená hlavička se světlým proužkem vpravo.
             Na dotyku je posuvník překryvný, takže se tam nic neztrácí. */}
         <main className="flex-1 overflow-y-auto no-scrollbar pb-20 sm:pb-0 bg-paper">
-          {/* Plná hlavička jen na Domů. Na podstránkách nesla pořád dokola název
-              týmu a pozici v lize — informaci, kterou hráč zná — a brala 87 px
-              z 844px displeje. Kompaktní varianta místo toho říká, kde je. */}
-          {!isDetailPage && !hasCustomHeader && <PageHeader compact={pathname !== "/dashboard"} />}
+          {/* Kompaktní hlavička všude. Plná opakovala název týmu a pozici
+              v lize na každé obrazovce a brala 87 px z 844px displeje; navíc
+              se výška hlavičky měnila podle stránky a působilo to neuceleně. */}
+          {!isDetailPage && !hasCustomHeader && <PageHeader compact />}
           {children}
         </main>
       </div>

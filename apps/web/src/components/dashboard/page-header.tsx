@@ -56,19 +56,25 @@ export function PageHeader({ name, detail, color, badge, children, compact }: Pa
     ) : null;
 
   // ── Kompaktní varianta ──
-  // Nese jedinou věc, kterou hráč na podstránce potřebuje: kde je. Plná
-  // hlavička opakovala název týmu a pozici v lize na každé obrazovce —
-  // informaci, kterou zná. Tohle ušetří zhruba 45 px z 844px displeje.
+  // Používá se na všech stránkách. Plná hlavička opakovala název týmu
+  // a pozici v lize na každé obrazovce — informaci, kterou hráč zná —
+  // a brala 87 px z 844px displeje. Tahle bere 42.
+  //
+  // Když stránka předá `name` (Liga, Rozpis, Pohár), má přednost před
+  // názvem odvozeným z adresy: „Přebor Prahy — Sezóna 3" řekne víc než
+  // „Liga". Stejně tak `badge={null}` a `children={null}` se respektují,
+  // aby si tyhle stránky mohly znak i pravý štítek odepřít.
   if (compact) {
-    const title = pageTitleFor(pathname) || displayName;
+    const title = name || pageTitleFor(pathname) || displayName;
+    const znak = badge === null ? null : makeBadge(26);
     return (
       <div className="hero-gradient py-2 px-4 sm:px-8" style={{ backgroundColor: bg }}>
         <div className="flex items-center gap-3 min-w-0">
-          <div className="shrink-0">{makeBadge(26)}</div>
+          {znak && <div className="shrink-0">{znak}</div>}
           <h1 className={`font-heading font-[800] ${txt} text-lg sm:text-xl leading-none truncate flex-1 min-w-0`}>
             {title}
           </h1>
-          {ctx.leaguePosition != null && (
+          {children !== null && ctx.leaguePosition != null && (
             /* items-center + leading-none na obou: při items-baseline měl
                popisek výchozí řádkování 17 px proti 16 px čísla, takže seděl
                o 3 px níž a chip vypadal rozhozeně. */

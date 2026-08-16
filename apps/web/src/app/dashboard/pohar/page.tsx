@@ -126,7 +126,7 @@ export default function PoharPage() {
   if (!data?.cup) {
     return (
       <>
-        <PageHeader name="Pohár" detail="Celorepublikový amatérský pohár">{null}</PageHeader>
+        <PageHeader compact name="Pohár" detail="Celorepublikový amatérský pohár">{null}</PageHeader>
         <div className="page-container space-y-5">
           <div className="card p-8 text-center text-muted">Celorepublikový pohár zatím nezačal. Rozlosuje se v průběhu sezóny.</div>
         </div>
@@ -142,7 +142,7 @@ export default function PoharPage() {
 
   return (
     <>
-      <PageHeader name={cup.name} detail={`Sezóna ${cup.seasonNumber} · ${cup.status === "finished" ? "ukončeno" : `${rounds.find((r) => r.round === cup.currentRound)?.roundName ?? "probíhá"}`} · ${rounds[0]?.matches.length ? rounds[0].matches.length * 2 : ""} týmů`}>{null}</PageHeader>
+      <PageHeader compact name={cup.name} detail={`Sezóna ${cup.seasonNumber} · ${cup.status === "finished" ? "ukončeno" : `${rounds.find((r) => r.round === cup.currentRound)?.roundName ?? "probíhá"}`} · ${rounds[0]?.matches.length ? rounds[0].matches.length * 2 : ""} týmů`}>{null}</PageHeader>
       <div className="page-container space-y-5">
 
       {/* Vítěz (stejný highlight jako jinde v projektu) */}

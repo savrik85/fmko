@@ -163,7 +163,7 @@ export default function SchedulePage() {
   return (
     <>
       {confirmDialog}
-      <PageHeader name={leagueName || "Rozpis zápasů"} detail={`${played.length} odehráno · ${upcoming.length} zbývá`}>{null}</PageHeader>
+      <PageHeader compact name={leagueName || "Rozpis zápasů"} detail={`${played.length} odehráno · ${upcoming.length} zbývá`}>{null}</PageHeader>
     <div className="page-container space-y-5">
 
       {/* Tabs */}
