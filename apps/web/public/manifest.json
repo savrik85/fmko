@@ -5,10 +5,13 @@
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#153615",
+  "background_color": "#1e2d1e",
   "theme_color": "#153615",
   "lang": "cs",
-  "categories": ["games", "sports"],
+  "categories": [
+    "games",
+    "sports"
+  ],
   "icons": [
     {
       "src": "/icon-192.png",

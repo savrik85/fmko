@@ -7,9 +7,45 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { hasUnseenNotes } from "@/data/release-notes";
 
+/**
+ * Sahá viewport až na spodek displeje?
+ *
+ * Na starších instalacích PWA na ploše iOS neuplatní `viewport-fit=cover`,
+ * i když je v HTML — konfiguraci si zapamatuje při přidání ikony. Webview pak
+ * dostane výšku `obrazovka − horní inset` (naměřeno 797 proti 844) a pod ním
+ * zůstane mrtvý pruh, který kreslí `background_color` z manifestu.
+ *
+ * V takovém stavu už home indikátor leží v tom mrtvém pruhu, ne nad obsahem.
+ * Rezervovat na něj ještě `env(safe-area-inset-bottom)` uvnitř lišty znamená
+ * počítat ho dvakrát — popisky pak plavaly 81 px nad spodkem displeje.
+ *
+ * Když je instalace v pořádku (innerHeight == screen.height), vrací true
+ * a chování zůstává beze změny.
+ */
+function usePokryvaSpodek(): boolean {
+  const [pokryva, setPokryva] = useState(true);
+  useEffect(() => {
+    const zmer = () => {
+      // Jen na výšku — na šířku se rozměry porovnávat nedají.
+      const naVysku = window.innerHeight > window.innerWidth;
+      if (!naVysku || !window.screen?.height) { setPokryva(true); return; }
+      setPokryva(window.innerHeight >= window.screen.height - 4);
+    };
+    zmer();
+    window.addEventListener("resize", zmer);
+    window.addEventListener("orientationchange", zmer);
+    return () => {
+      window.removeEventListener("resize", zmer);
+      window.removeEventListener("orientationchange", zmer);
+    };
+  }, []);
+  return pokryva;
+}
+
 export function BottomNav() {
   const pathname = usePathname();
   const { teamId, token } = useTeam();
+  const pokryvaSpodek = usePokryvaSpodek();
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unvotedCount, setUnvotedCount] = useState(0);
   const [notesUnseen, setNotesUnseen] = useState(false);
@@ -46,7 +82,13 @@ export function BottomNav() {
   ];
 
   return (
-    <nav className="on-dark fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden" style={{ background: "#1e2d1e", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+    <nav
+      className="on-dark fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden"
+      style={{
+        background: "#1e2d1e",
+        paddingBottom: pokryvaSpodek ? "env(safe-area-inset-bottom, 0px)" : "0px",
+      }}
+    >
       <div className="flex justify-around items-center h-16 px-2">
         {items.map((item) => {
           // Větev pro položku „Kádr" tu byla i poté, co ji z lišty vyhodili —
