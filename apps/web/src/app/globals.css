@@ -527,10 +527,25 @@ a, button, [role="button"], input, select, textarea, label, summary {
   touch-action: manipulation;
 }
 
-@media (pointer: coarse) { button, a, [role="button"] { min-height: 44px; } }
-/* Žebříčky statistik: dotykový cíl je celý řádek tabulky, ne jednotlivý odkaz. Bez tohohle
-   dostane jméno hráče i název týmu po 44 px a řádek naroste na trojnásobek. */
-@media (pointer: coarse) { .stat-table a { min-height: 0; } }
+/* ── Dotykový cíl ─────────────────────────────────────────────────────────
+   Pravidlo platí na tlačítka, NE na odkazy.
+
+   Dřív tu bylo `button, a, [role="button"]` a nafukovalo to úplně všechno:
+   odkazy uvnitř věty, jména v tabulkách (proto musela vzniknout výjimka
+   pro .stat-table) i drobné štítky v lištách s pevnou výškou. Kompaktní
+   hlavička stránky kvůli tomu na telefonu narostla ze 43 na 60 px — na
+   desktopu to nebylo vidět, protože tam je `pointer: fine` a pravidlo
+   se vůbec neuplatní.
+
+   Odkaz je často kus textu, ne ovládací prvek. Odkazy, které ovládacím
+   prvkem jsou (dlaždice, položky navigace, karty), mají vlastní odsazení
+   a na 44 px se dostanou samy. */
+@media (pointer: coarse) {
+  button,
+  [role="button"] {
+    min-height: 44px;
+  }
+}
 
 /* Hide browser default number input spinners */
 input[type="number"]::-webkit-inner-spin-button,

@@ -69,12 +69,15 @@ export function PageHeader({ name, detail, color, badge, children, compact }: Pa
             {title}
           </h1>
           {ctx.leaguePosition != null && (
+            /* items-center + leading-none na obou: při items-baseline měl
+               popisek výchozí řádkování 17 px proti 16 px čísla, takže seděl
+               o 3 px níž a chip vypadal rozhozeně. */
             <Link
               href="/dashboard/liga"
-              className={`${boxBg} ${boxBgHover} shrink-0 rounded-control px-2.5 py-1 transition-colors flex items-baseline gap-1`}
+              className={`${boxBg} ${boxBgHover} shrink-0 rounded-control px-2.5 py-1.5 transition-colors flex items-center gap-1`}
             >
               <span className={`font-heading font-[800] text-base tabular-nums leading-none ${txt}`}>{ctx.leaguePosition}.</span>
-              <span className={`${boxLabel} text-micro font-heading font-bold uppercase`}>v lize</span>
+              <span className={`${boxLabel} text-micro font-heading font-bold uppercase leading-none`}>v lize</span>
             </Link>
           )}
         </div>
