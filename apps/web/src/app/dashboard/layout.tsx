@@ -58,7 +58,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {isReplay && (
           <div className="shrink-0" style={{ height: "env(safe-area-inset-top, 0px)", background: "var(--color-chrome)" }} />
         )}
-        <main className="flex-1 overflow-y-auto pb-20 sm:pb-0 bg-paper">
+{/* no-scrollbar: `main` je scrollovací plocha a klasický posuvník si
+            ukrajoval 15 px šířky. Hlavička stránky uvnitř pak končila 15 px
+            před pravým okrajem, kdežto horní lišta nad ní šla až ke kraji —
+            vypadalo to jako zúžená hlavička se světlým proužkem vpravo.
+            Na dotyku je posuvník překryvný, takže se tam nic neztrácí. */}
+        <main className="flex-1 overflow-y-auto no-scrollbar pb-20 sm:pb-0 bg-paper">
           {/* Plná hlavička jen na Domů. Na podstránkách nesla pořád dokola název
               týmu a pozici v lize — informaci, kterou hráč zná — a brala 87 px
               z 844px displeje. Kompaktní varianta místo toho říká, kde je. */}
