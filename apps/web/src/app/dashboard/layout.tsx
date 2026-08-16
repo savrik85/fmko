@@ -44,13 +44,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .catch((e) => console.error("fetch unseen-match:", e));
   }, [teamId, pathname]);
 
+  // Podklad obalu je barva rámu, ne papír: `.h-dvh` má na mobilu padding-top
+  // pro status bar a v tom odsazení prosvítalo béžové pozadí jako světlý pruh
+  // nad zelenou lištou. Obsah uvnitř má papír vlastní (bg-paper na <main>).
   return (
-    <div className="h-dvh flex bg-paper overflow-hidden">
+    <div className="h-dvh flex bg-[var(--color-chrome)] overflow-hidden">
       <FMSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {!isReplay && <FMTopBar />}
-        <main className="flex-1 overflow-y-auto pb-20 sm:pb-0">
+        {/* Přehrávání zápasu horní lištu skrývá — bez ní by obsah lezl pod
+            status bar, protože odsazení nese právě ona. */}
+        {isReplay && (
+          <div className="shrink-0" style={{ height: "env(safe-area-inset-top, 0px)", background: "var(--color-chrome)" }} />
+        )}
+        <main className="flex-1 overflow-y-auto pb-20 sm:pb-0 bg-paper">
           {/* Plná hlavička jen na Domů. Na podstránkách nesla pořád dokola název
               týmu a pozici v lize — informaci, kterou hráč zná — a brala 87 px
               z 844px displeje. Kompaktní varianta místo toho říká, kde je. */}

@@ -598,8 +598,14 @@ input[type="number"] { -moz-appearance: textfield; }
      odscrollovat a horní lišta odjela pryč. V PWA to byl nejotravnější bug,
      protože stačilo omylem táhnout prstem po hlavičce.
      Odsazení proto patří jen na aplikační obal, ne na body — `body` má výšku
-     z pravidla `body { min-height: 100dvh }` a třídu min-h-dvh mít nemá. */
-  .h-dvh { padding-top: env(safe-area-inset-top, 0px); }
+     z pravidla `body { min-height: 100dvh }` a třídu min-h-dvh mít nemá.
+
+     Aplikační obal (.h-dvh) tu odsazení ÚMYSLNĚ nemá. Mělo ho a v tom
+     odsazení prosvítal světlý pruh nad zelenou lištou — 47 px displeje
+     zabraných na nic. Horní inset si teď bere sama horní lišta jako svůj
+     padding, takže její zelená sahá až pod status bar a obsah začíná hned
+     pod ní. Stránky mimo dashboard (přihlášení, onboarding) pořád používají
+     .min-h-dvh, protože vlastní lištu nemají. */
   .min-h-dvh {
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);

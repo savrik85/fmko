@@ -18,8 +18,14 @@ export function FMTopBar() {
 
   return (
     <header
-      className="on-dark h-14 flex items-center pl-1 pr-3 sm:px-5 gap-2 sm:gap-4 shrink-0"
-      style={{ background: "var(--color-chrome)" }}
+      /* h-14 je vyska obsahu; horni inset se pricita jako padding, aby zelena
+         sahala pod status bar a nevznikal nad listou svetly pruh. */
+      className="on-dark flex items-center pl-1 pr-3 sm:px-5 gap-2 sm:gap-4 shrink-0"
+      style={{
+        background: "var(--color-chrome)",
+        height: "calc(3.5rem + env(safe-area-inset-top, 0px))",
+        paddingTop: "env(safe-area-inset-top, 0px)",
+      }}
     >
       <div className="flex items-center gap-1 shrink-0">
         <button
