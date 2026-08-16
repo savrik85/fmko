@@ -150,7 +150,9 @@ function FancyArrow({ size = "sm" }: { size?: "xs" | "sm" | "md" | "lg" }) {
 function FreeAgentLabel({ size = "sm" }: { size?: "sm" | "md" | "lg" }) {
   const cls = size === "lg" ? "text-base" : size === "md" ? "text-sm" : "text-xs sm:text-sm";
   return (
-    <span className={`inline-flex items-center gap-1.5 font-heading font-bold italic text-amber-700 ${cls}`}>
+    /* whitespace-nowrap: ve stísněném řádku se „Volný hráč" lámalo na dvě řádky
+       a celý řádek přestupu tím narostl o 16 px. */
+    <span className={`inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap font-heading font-bold italic text-amber-700 ${cls}`}>
       <span aria-hidden>★</span>Volný hráč
     </span>
   );
@@ -321,7 +323,12 @@ function SpeculationCard({ s }: { s: NonNullable<TransfersOverview["speculations
 function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
   const hasAvatar = t.playerAvatar && Object.keys(t.playerAvatar).length > 0;
   return (
-    <div className="flex items-center gap-2.5 py-2 border-b border-gray-100 last:border-b-0">
+    /* items-start, ne items-center: prostřední sloupec je dvouřádkový, takže
+       se cena centrovala proti jeho středu a končila 17 px pod jménem —
+       vypadalo to, že patří k řádku pod ním. Cena je proto na lince se
+       jménem; druhý řádek (odkud → kam) tím dostal celou šířku a názvy
+       klubů se ořezávají mnohem míň. */
+    <div className="flex items-start gap-2.5 py-2 border-b border-gray-100 last:border-b-0">
       {hasAvatar ? (
         <div className="shrink-0 rounded-soft overflow-hidden bg-gray-50">
           <FaceAvatar faceConfig={t.playerAvatar as Record<string, unknown>} size={32} />
@@ -337,6 +344,13 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
           {t.position && <PositionBadge position={t.position} />}
           {t.age ? <span className="text-micro text-muted tabular-nums shrink-0">{t.age}&nbsp;l.</span> : null}
           {t.isCrossLeague && <span className="text-micro shrink-0">🔄</span>}
+          <span className="ml-auto shrink-0 font-heading font-bold text-sm text-pitch-500 tabular-nums whitespace-nowrap">
+            {t.joinType === "free_agent" ? (
+              <span className="text-amber-700">★&nbsp;ZDARMA</span>
+            ) : t.fee > 0 ? (
+              <>{t.fee.toLocaleString("cs")}&nbsp;<span className="text-micro text-muted">Kč</span></>
+            ) : "—"}
+          </span>
         </div>
         <div className="flex items-center gap-1 text-xs text-muted mt-0.5 min-w-0">
           {t.joinType === "free_agent" || !t.fromTeam ? (
@@ -347,12 +361,6 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
           <FancyArrow size="xs" />
           <ClubLink teamId={t.toVirtual ? null : t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={t.toVirtual ? null : `/dashboard/team/${t.toTeamId}`} bold={false} />
         </div>
-      </div>
-      <div className="shrink-0 text-right">
-        <div className="font-heading font-bold text-sm text-pitch-500 tabular-nums whitespace-nowrap">
-          {t.joinType === "free_agent" ? <span className="text-amber-700">★&nbsp;ZDARMA</span> : t.fee > 0 ? `${t.fee.toLocaleString("cs")}` : "—"}
-        </div>
-        {t.joinType !== "free_agent" && t.fee > 0 && <div className="text-micro text-muted leading-none">Kč</div>}
       </div>
     </div>
   );
