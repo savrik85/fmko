@@ -1301,15 +1301,27 @@ export default function TransfersPage() {
       {/* ═══ TAB: Volní hráči ═══ */}
       {tab === "free_agents" && (
         <div className="space-y-3">
-          {/* Filter toggle button (sticky on mobile) */}
-          <button
-            onClick={() => setFilterOpen(!filterOpen)}
-            className={`w-full py-2.5 rounded-xl font-heading font-bold text-sm transition-colors ${
-              filterOpen ? "bg-pitch-500 text-white" : "bg-white text-ink border border-gray-200"
-            }`}
-          >
-            Filtrovat{activeCount > 0 ? ` (${activeCount})` : ""}
-          </button>
+          {/* Počet nalezených a přepínač filtrů na jednom řádku. Filtrovat
+              bylo přes celou šířku a bralo 60 px hned pod záložkami, přestože
+              je to jen přepínač — stejný jako „Víc" v Hledání. */}
+          <div className="flex items-center justify-between gap-2">
+            <SectionLabel>
+              Volní hráči v okresu{" "}
+              {isFiltered
+                ? `(${filteredAgents.length} z ${freeAgents.length} ${hraciTvar(freeAgents.length)})`
+                : `(${freeAgents.length} ${hraciTvar(freeAgents.length)})`
+              }
+            </SectionLabel>
+            <button
+              onClick={() => setFilterOpen(!filterOpen)}
+              aria-expanded={filterOpen}
+              className={`shrink-0 px-3 min-h-9 rounded-control font-heading font-bold text-sm transition-colors ${
+                filterOpen || activeCount > 0 ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"
+              }`}
+            >
+              Filtrovat{activeCount > 0 ? ` (${activeCount})` : ""}
+            </button>
+          </div>
 
           {/* Filter panel */}
           <div className={`overflow-hidden transition-all duration-300 ${filterOpen ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"}`}>
@@ -1497,15 +1509,6 @@ export default function TransfersPage() {
             </div>
           </div>
 
-          {/* Result count */}
-          <SectionLabel>
-            Volní hráči v okresu{" "}
-            {isFiltered
-              ? `(${filteredAgents.length} z ${freeAgents.length} hráčů)`
-              : `(${freeAgents.length} hráčů)`
-            }
-          </SectionLabel>
-
           {/* Free agent cards */}
           {filteredAgents.length === 0 ? (
             <div className="card p-6 text-center space-y-3">
@@ -1533,16 +1536,24 @@ export default function TransfersPage() {
                           : <span className="font-heading font-bold text-sm text-muted">{fa.firstName[0]}{fa.lastName[0]}</span>}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5 flex-wrap pr-24">
-                          <span className="font-heading font-bold text-base">{fa.firstName} {fa.lastName}{nationalityFlag(fa.nationality) && <span className="ml-1" title={fa.nationality}>{nationalityFlag(fa.nationality)}</span>}</span>
+                        {/* Jméno má vlastní řádek a odznak s věkem a ratingem
+                            druhý. Dřív byly všechny v jednom `flex-wrap` a
+                            zalomení záviselo na délce jména — „Daniel Svoboda"
+                            vytlačil odznak dolů a jeho karta byla o 4 px vyšší
+                            než sousední. Teď mají všechny stejnou výšku. */}
+                        <div className="truncate font-heading font-bold text-base pr-24">
+                          {fa.firstName} {fa.lastName}
+                          {nationalityFlag(fa.nationality) && <span className="ml-1" title={fa.nationality}>{nationalityFlag(fa.nationality)}</span>}
+                        </div>
+                        <div className="flex items-center gap-2 mb-0.5 pr-24 overflow-hidden">
                           <PositionBadge position={fa.position as "GK" | "DEF" | "MID" | "FWD"} />
+                          <span className="text-sm text-muted whitespace-nowrap">{fa.age} let</span>
+                          <span className="text-sm font-heading font-bold tabular-nums">{fa.overallRating}</span>
                           {fa.isCelebrity && (
-                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-micro font-heading font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200">
+                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-micro font-heading font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200 truncate">
                               ⭐ {fa.personality?.celebrityType === "fallen_star" ? "Padlá hvězda" : fa.personality?.celebrityType === "glass_man" ? "Skleněný muž" : "Celebrita"}
                             </span>
                           )}
-                          <span className="text-sm text-muted">{fa.age} let</span>
-                          <span className="text-sm font-heading font-bold tabular-nums">{fa.overallRating}</span>
                         </div>
                         {/* Údaje na jednom řádku oddělené tečkami. Dřív měly
                             vlastní řádek každý (povolání / mzda / km + obec)
