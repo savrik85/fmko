@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
 import { nationalityFlag } from "@/lib/nationality";
-import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam } from "@/components/ui";
+import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, Button } from "@/components/ui";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { isLightColor } from "@/lib/team-color";
@@ -369,6 +369,48 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
   );
 }
 
+
+/**
+ * Filtry hledání přežijí odchod na profil hráče a návrat zpět.
+ *
+ * Záložka je v adrese (?tab=search), ale filtry byly v useState — po návratu
+ * se stránka namountovala znovu a hledání bylo prázdné. sessionStorage stačí:
+ * drží to po dobu relace, nešpiní adresu a přežije i obnovení stránky.
+ */
+const KLIC_HLEDANI = "prales_transfers_search";
+
+/** Kolik hráčů se vypíše najednou. Liga jich má stovky a karta s dovednostmi
+ *  není levná — bez stropu se na telefonu scrollovalo po sekundách. */
+const VYPIS_MAX = 60;
+
+type UlozeneHledani = {
+  query: string; pos: string; sort: string;
+  minRating: number; ageMin: number; ageMax: number; leagueId: string;
+};
+
+const VYCHOZI_HLEDANI: UlozeneHledani = {
+  query: "", pos: "all", sort: "rating", minRating: 0, ageMin: 0, ageMax: 99, leagueId: "",
+};
+
+function nactiHledani(): UlozeneHledani {
+  if (typeof window === "undefined") return VYCHOZI_HLEDANI;
+  try {
+    const raw = sessionStorage.getItem(KLIC_HLEDANI);
+    return raw ? { ...VYCHOZI_HLEDANI, ...JSON.parse(raw) } : VYCHOZI_HLEDANI;
+  } catch (e) {
+    console.error("nacteni ulozeneho hledani:", e);
+    return VYCHOZI_HLEDANI;
+  }
+}
+
+function ulozHledani(v: UlozeneHledani) {
+  try {
+    sessionStorage.setItem(KLIC_HLEDANI, JSON.stringify(v));
+  } catch (e) {
+    console.error("ulozeni hledani:", e);
+  }
+}
+
 function skillColor(v: number): string {
   if (v >= 70) return "text-pitch-500 font-bold";
   if (v >= 55) return "text-pitch-700";
@@ -669,17 +711,21 @@ export default function TransfersPage() {
   }
   const [searchPlayers, setSearchPlayers] = useState<SearchPlayer[]>([]);
   const [searchLoaded, setSearchLoaded] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchPos, setSearchPos] = useState<string>("all");
-  const [searchSort, setSearchSort] = useState<string>("rating");
-  const [searchMinRating, setSearchMinRating] = useState(0);
-  const [searchAgeMin, setSearchAgeMin] = useState(0);
-  const [searchAgeMax, setSearchAgeMax] = useState(99);
+  // Filtry se pamatují na dobu relace. Bez toho stačilo kliknout na hráče
+  // a vrátit se zpět, aby bylo hledání prázdné a muselo se zadat znovu.
+  const ulozene = nactiHledani();
+  const [searchQuery, setSearchQuery] = useState(ulozene.query);
+  const [searchPos, setSearchPos] = useState<string>(ulozene.pos);
+  const [searchSort, setSearchSort] = useState<string>(ulozene.sort);
+  const [searchMinRating, setSearchMinRating] = useState(ulozene.minRating);
+  const [searchAgeMin, setSearchAgeMin] = useState(ulozene.ageMin);
+  const [searchAgeMax, setSearchAgeMax] = useState(ulozene.ageMax);
+  const [filtrOtevren, setFiltrOtevren] = useState(false);
   const [searchExpandedSkills, setSearchExpandedSkills] = useState<Set<string>>(new Set());
 
   // League picker for search
   const [searchLeagues, setSearchLeagues] = useState<Array<{ id: string; name: string; team_count: number }>>([]);
-  const [searchLeagueId, setSearchLeagueId] = useState<string>("");
+  const [searchLeagueId, setSearchLeagueId] = useState<string>(ulozene.leagueId);
 
   useEffect(() => {
     apiFetch<{ leagues: Array<{ id: string; name: string; team_count: number }> }>("/api/leagues")
@@ -710,6 +756,26 @@ export default function TransfersPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, myLeagueId]);
+
+  // Seznam hráčů se dřív načítal jen při kliknutí na záložku. Kdo se vrátil
+  // zpět z profilu hráče, přistál na ?tab=search a zůstal navěky na spinneru.
+  useEffect(() => {
+    if (tab === "search" && teamId && !searchLoaded) loadSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, teamId, searchLoaded]);
+
+  // Uložit filtry, ať přežijí odchod na profil a návrat
+  useEffect(() => {
+    ulozHledani({ query: searchQuery, pos: searchPos, sort: searchSort,
+      minRating: searchMinRating, ageMin: searchAgeMin, ageMax: searchAgeMax, leagueId: searchLeagueId });
+  }, [searchQuery, searchPos, searchSort, searchMinRating, searchAgeMin, searchAgeMax, searchLeagueId]);
+
+  // Kolik filtrů je aktivních — číslo na tlačítku Filtry
+  const pocetFiltru =
+    (searchPos !== "all" ? 1 : 0) +
+    (searchMinRating > 0 ? 1 : 0) +
+    (searchAgeMin > 0 || searchAgeMax < 99 ? 1 : 0) +
+    (searchLeagueId ? 1 : 0);
 
   const filteredSearch = useMemo(() => {
     let list = searchPlayers;
@@ -984,79 +1050,115 @@ export default function TransfersPage() {
           {!searchLoaded && <div className="flex justify-center py-8"><Spinner /></div>}
           {searchLoaded && (
             <>
-              {/* Search + filters — always visible */}
-              <div className="card p-4 space-y-4">
-                {/* League picker for cross-league search */}
-                {searchLeagues.length > 1 && (
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-muted font-heading font-bold">Liga</span>
-                    <select
-                      value={searchLeagueId}
-                      onChange={(e) => { setSearchLeagueId(e.target.value); setSearchLoaded(false); setTimeout(() => loadSearch(e.target.value), 50); }}
-                      className="text-sm bg-white border border-gray-200 rounded-soft px-3 py-2 font-heading font-medium flex-1"
-                    >
-                      <option value="">Moje liga</option>
-                      {searchLeagues.map((l) => (
-                        <option key={l.id} value={l.id}>{l.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+              {/* Hledání a pozice zůstávají nahoře, zbytek jde do plachty.
+                  Dřív zabral celý panel filtrů ~780 px a výsledky byly úplně
+                  pod ohybem — na telefonu jsi po otevření záložky neviděl
+                  ani jednoho hráče. */}
+              <div className="flex gap-2">
                 <input
-                  type="text" placeholder="Hledat jméno hráče nebo název týmu..."
+                  type="search" placeholder="Hledat hráče nebo tým…"
                   value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-soft border border-gray-200 font-heading text-sm focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
+                  aria-label="Hledat hráče nebo tým"
+                  className="input flex-1 min-w-0 !py-2.5"
                 />
-                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-3 items-center">
-                  <span className="text-sm text-muted font-heading font-bold">Pozice</span>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {["all", "GK", "DEF", "MID", "FWD"].map((pos) => (
-                      <button key={pos} onClick={() => setSearchPos(pos)}
-                        className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${searchPos === pos ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
-                        {pos === "all" ? "Vše" : pos === "GK" ? "BRA" : pos === "DEF" ? "OBR" : pos === "MID" ? "ZÁL" : "ÚTO"}
+                <button
+                  onClick={() => setFiltrOtevren(true)}
+                  className={`shrink-0 px-3 rounded-control font-heading font-bold text-sm transition-colors ${
+                    pocetFiltru > 0 ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"
+                  }`}
+                >
+                  Filtry{pocetFiltru > 0 ? ` (${pocetFiltru})` : ""}
+                </button>
+              </div>
+
+              {/* Pozice je zdaleka nejpoužívanější filtr, zůstává po ruce.
+                  Vodorovný posun místo zalomení na dva řádky. */}
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1">
+                {["all", "GK", "DEF", "MID", "FWD"].map((pos) => (
+                  <button key={pos} onClick={() => setSearchPos(pos)}
+                    className={`shrink-0 px-3 min-h-9 rounded-control text-sm font-heading font-bold transition-colors ${searchPos === pos ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"}`}>
+                    {pos === "all" ? "Vše" : pos === "GK" ? "BRA" : pos === "DEF" ? "OBR" : pos === "MID" ? "ZÁL" : "ÚTO"}
+                  </button>
+                ))}
+              </div>
+
+              <Sheet open={filtrOtevren} onClose={() => setFiltrOtevren(false)} title="Filtry hledání">
+                <div className="px-5 pb-5 pt-3 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <h2 className="font-heading font-bold text-lg">Filtry</h2>
+                    {pocetFiltru > 0 && (
+                      <button
+                        onClick={() => { setSearchPos("all"); setSearchMinRating(0); setSearchAgeMin(0); setSearchAgeMax(99); setSearchQuery(""); }}
+                        className="text-sm font-heading font-bold text-card-red"
+                      >
+                        Zrušit vše
                       </button>
-                    ))}
+                    )}
                   </div>
 
-                  <span className="text-sm text-muted font-heading font-bold">Rating</span>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {[0, 30, 50, 60].map((v) => (
-                      <button key={v} onClick={() => setSearchMinRating(v)}
-                        className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${searchMinRating === v ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
-                        {v === 0 ? "Vše" : `${v}+`}
-                      </button>
-                    ))}
-                  </div>
+                  {searchLeagues.length > 1 && (
+                    <div>
+                      <span className="block text-micro text-muted font-heading font-bold uppercase tracking-wide mb-1.5">Liga</span>
+                      <select
+                        value={searchLeagueId}
+                        onChange={(e) => { setSearchLeagueId(e.target.value); setSearchLoaded(false); setTimeout(() => loadSearch(e.target.value), 50); }}
+                        className="select w-full"
+                      >
+                        <option value="">Moje liga</option>
+                        {searchLeagues.map((l) => (
+                          <option key={l.id} value={l.id}>{l.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
-                  <span className="text-sm text-muted font-heading font-bold">Věk</span>
-                  <div className="flex gap-1.5 items-center flex-wrap">
-                    <input type="number" value={searchAgeMin || ""} onChange={(e) => setSearchAgeMin(parseInt(e.target.value) || 0)}
-                      placeholder="od" min={0} max={60}
-                      className="w-14 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-1 focus:ring-pitch-500/30" />
-                    <span className="text-muted">–</span>
-                    <input type="number" value={searchAgeMax < 99 ? searchAgeMax : ""} onChange={(e) => setSearchAgeMax(parseInt(e.target.value) || 99)}
-                      placeholder="do" min={0} max={60}
-                      className="w-14 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-1 focus:ring-pitch-500/30" />
-                    {[{l:"16-23",a:16,b:23},{l:"24-30",a:24,b:30},{l:"30+",a:30,b:99}].map(({l,a,b}) => (
-                      <button key={l} onClick={() => { setSearchAgeMin(a); setSearchAgeMax(b); }}
-                        className={`px-2.5 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${searchAgeMin === a && searchAgeMax === b ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
-                        {l}
-                      </button>
-                    ))}
-                  </div>
-
-                  <span className="text-sm text-muted font-heading font-bold">Řazení</span>
                   <div>
-                    <select value={searchSort} onChange={(e) => setSearchSort(e.target.value)}
-                      className="px-3 py-1.5 rounded-soft border border-gray-200 text-sm font-heading">
+                    <span className="block text-micro text-muted font-heading font-bold uppercase tracking-wide mb-1.5">Minimální rating</span>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {[0, 30, 50, 60].map((v) => (
+                        <button key={v} onClick={() => setSearchMinRating(v)}
+                          className={`px-3 min-h-11 rounded-control text-sm font-heading font-bold transition-colors ${searchMinRating === v ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"}`}>
+                          {v === 0 ? "Vše" : `${v}+`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="block text-micro text-muted font-heading font-bold uppercase tracking-wide mb-1.5">Věk</span>
+                    <div className="flex gap-1.5 flex-wrap items-center">
+                      {[{l:"16–23",a:16,b:23},{l:"24–30",a:24,b:30},{l:"30+",a:30,b:99}].map(({l,a,b}) => (
+                        <button key={l} onClick={() => { setSearchAgeMin(a); setSearchAgeMax(b); }}
+                          className={`px-3 min-h-11 rounded-control text-sm font-heading font-bold transition-colors ${searchAgeMin === a && searchAgeMax === b ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"}`}>
+                          {l}
+                        </button>
+                      ))}
+                      <span className="text-micro text-muted mx-1">nebo</span>
+                      <input type="number" value={searchAgeMin || ""} onChange={(e) => setSearchAgeMin(parseInt(e.target.value) || 0)}
+                        placeholder="od" min={0} max={60} aria-label="Věk od"
+                        className="w-16 px-2 min-h-11 rounded-control border border-line text-sm font-heading tabular-nums text-center" />
+                      <span className="text-muted">–</span>
+                      <input type="number" value={searchAgeMax < 99 ? searchAgeMax : ""} onChange={(e) => setSearchAgeMax(parseInt(e.target.value) || 99)}
+                        placeholder="do" min={0} max={60} aria-label="Věk do"
+                        className="w-16 px-2 min-h-11 rounded-control border border-line text-sm font-heading tabular-nums text-center" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="block text-micro text-muted font-heading font-bold uppercase tracking-wide mb-1.5">Řazení</span>
+                    <select value={searchSort} onChange={(e) => setSearchSort(e.target.value)} className="select w-full">
                       <option value="rating">Rating (nejlepší)</option>
                       <option value="age">Věk (nejmladší)</option>
                       <option value="wage">Plat (nejnižší)</option>
-                      <option value="name">Jméno (A-Z)</option>
+                      <option value="name">Jméno (A–Z)</option>
                     </select>
                   </div>
+
+                  <Button variant="primary" size="lg" className="w-full" onClick={() => setFiltrOtevren(false)}>
+                    Zobrazit {filteredSearch.length} hráčů
+                  </Button>
                 </div>
-              </div>
+              </Sheet>
             </>
           )}
 
@@ -1064,12 +1166,23 @@ export default function TransfersPage() {
             <p className="text-xs text-amber-600 italic px-1">⚠ Dovednosti cizích hráčů jsou pouze orientační — přesné hodnoty znáš jen u svého týmu.</p>
           )}
 
-          {/* Results — only when user has set a filter */}
-          {searchLoaded && (searchQuery.trim() !== "" || searchPos !== "all" || searchMinRating > 0 || searchAgeMin > 0 || searchAgeMax < 99) && (
+          {/* Výsledky se dřív ukázaly až po nastavení filtru, takže po otevření
+              záložky byla obrazovka prázdná s výzvou „zadej něco". Teď je
+              seznam vidět hned; delší se ořízne a řekne o tom. */}
+          {searchLoaded && (
             <>
-              <div className="text-xs text-muted font-heading px-1">{filteredSearch.length} z {searchPlayers.length} hráčů</div>
+              <div className="flex items-baseline justify-between px-1">
+                <span className="text-micro text-muted font-heading uppercase tracking-wide">
+                  {filteredSearch.length === searchPlayers.length
+                    ? `${filteredSearch.length} hráčů`
+                    : `${filteredSearch.length} z ${searchPlayers.length} hráčů`}
+                </span>
+                {filteredSearch.length > VYPIS_MAX && (
+                  <span className="text-micro text-muted">zobrazeno prvních {VYPIS_MAX}</span>
+                )}
+              </div>
               <div className="space-y-2">
-                {filteredSearch.map((p) => {
+                {filteredSearch.slice(0, VYPIS_MAX).map((p) => {
                   const isExpanded = searchExpandedSkills.has(p.id);
                   return (
                     <div key={p.id} className={`card p-3 ${p.isOwnTeam ? "ring-1 ring-pitch-500/20" : ""}`}>
@@ -1135,8 +1248,10 @@ export default function TransfersPage() {
             </>
           )}
 
-          {searchLoaded && searchQuery.trim() === "" && searchPos === "all" && searchMinRating === 0 && (
-            <div className="card p-6 text-center text-muted">Zadej jméno, vyber pozici nebo nastav minimální rating pro vyhledání hráčů.</div>
+          {searchLoaded && filteredSearch.length === 0 && (
+            <div className="card p-6 text-center text-muted">
+              Žádný hráč neodpovídá filtrům. Zkus je zmírnit nebo hledat jiné jméno.
+            </div>
           )}
         </div>
       )}
