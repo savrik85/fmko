@@ -8,28 +8,30 @@ import { apiFetch } from "@/lib/api";
 import { hasUnseenNotes } from "@/data/release-notes";
 
 /**
- * Sahá viewport až na spodek displeje?
+ * O kolik je layoutový viewport kratší než displej.
  *
- * Na starších instalacích PWA na ploše iOS neuplatní `viewport-fit=cover`,
- * i když je v HTML — konfiguraci si zapamatuje při přidání ikony. Webview pak
- * dostane výšku `obrazovka − horní inset` (naměřeno 797 proti 844) a pod ním
- * zůstane mrtvý pruh, který kreslí `background_color` z manifestu.
+ * Naměřeno na zařízení: `innerHeight` 797, `screen.height` 844. Rozdíl 47 px.
+ * `position: fixed; bottom: 0` se ukotví na 797, ale plocha, kterou dokument
+ * vybarvuje, sahá až do 844 — pod lištou proto zůstával béžový pruh v barvě
+ * `--color-paper`. Že je béžový, a ne bílý, je důkaz, že ho kreslí náš
+ * dokument; iOS by tuhle barvu nevymyslel.
  *
- * V takovém stavu už home indikátor leží v tom mrtvém pruhu, ne nad obsahem.
- * Rezervovat na něj ještě `env(safe-area-inset-bottom)` uvnitř lišty znamená
- * počítat ho dvakrát — popisky pak plavaly 81 px nad spodkem displeje.
+ * Lišta se proto posune o ten rozdíl níž (`bottom: -47px`) a stejnou hodnotu
+ * dostane jako spodní odsazení, takže popisky zůstanou, kde byly, a zelená
+ * se protáhne až ke spodní hraně displeje.
  *
- * Když je instalace v pořádku (innerHeight == screen.height), vrací true
- * a chování zůstává beze změny.
+ * Když viewport sedí (innerHeight == screen.height), vrací 0 a nic se nemění.
  */
-function usePokryvaSpodek(): boolean {
-  const [pokryva, setPokryva] = useState(true);
+function useSchodekViewportu(): number {
+  const [schodek, setSchodek] = useState(0);
   useEffect(() => {
     const zmer = () => {
-      // Jen na výšku — na šířku se rozměry porovnávat nedají.
+      // Jen na výšku — na šířku se rozměry takhle porovnávat nedají.
       const naVysku = window.innerHeight > window.innerWidth;
-      if (!naVysku || !window.screen?.height) { setPokryva(true); return; }
-      setPokryva(window.innerHeight >= window.screen.height - 4);
+      if (!naVysku || !window.screen?.height) { setSchodek(0); return; }
+      const rozdil = Math.round(window.screen.height - window.innerHeight);
+      // Nad 200 px už to nebude safe-area, ale něco jiného (klávesnice apod.).
+      setSchodek(rozdil > 4 && rozdil < 200 ? rozdil : 0);
     };
     zmer();
     window.addEventListener("resize", zmer);
@@ -39,13 +41,13 @@ function usePokryvaSpodek(): boolean {
       window.removeEventListener("orientationchange", zmer);
     };
   }, []);
-  return pokryva;
+  return schodek;
 }
 
 export function BottomNav() {
   const pathname = usePathname();
   const { teamId, token } = useTeam();
-  const pokryvaSpodek = usePokryvaSpodek();
+  const schodek = useSchodekViewportu();
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unvotedCount, setUnvotedCount] = useState(0);
   const [notesUnseen, setNotesUnseen] = useState(false);
@@ -86,7 +88,12 @@ export function BottomNav() {
       className="on-dark fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden"
       style={{
         background: "var(--color-chrome)",
-        paddingBottom: pokryvaSpodek ? "env(safe-area-inset-bottom, 0px)" : "0px",
+        bottom: schodek ? `-${schodek}px` : 0,
+        // Schodek se přičte jako odsazení, aby popisky zůstaly na místě
+        // a dolů se protáhla jen zelená.
+        paddingBottom: schodek
+          ? `${schodek}px`
+          : "env(safe-area-inset-bottom, 0px)",
       }}
     >
       <div className="flex justify-around items-center h-16 px-2">
