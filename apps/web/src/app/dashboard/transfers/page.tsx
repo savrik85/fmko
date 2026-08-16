@@ -1521,11 +1521,11 @@ export default function TransfersPage() {
               {filteredAgents.map((fa) => {
                 const isExpanded = expandedSkills.has(fa.id);
                 return (
-                  <div key={fa.id} className={`card p-4 ${fa.isCelebrity ? "ring-2 ring-gold-400 bg-amber-50/30" : ""}`}>
-                    <div className="flex items-start gap-3">
-                      <div className="shrink-0 w-11 h-11 rounded-full bg-gray-100">
+                  <div key={fa.id} className={`card p-3 ${fa.isCelebrity ? "ring-2 ring-gold-400 bg-amber-50/30" : ""}`}>
+                    <div className="flex items-start gap-2.5">
+                      <div className="shrink-0 w-10 h-10 rounded-full bg-gray-100 overflow-hidden">
                         {fa.avatar && Object.keys(fa.avatar).length > 0
-                          ? <FaceAvatar faceConfig={fa.avatar} size={44} className="rounded-full" />
+                          ? <FaceAvatar faceConfig={fa.avatar} size={40} className="rounded-full" />
                           : <div className="w-full h-full flex items-center justify-center font-heading font-bold text-sm text-muted">{fa.firstName[0]}{fa.lastName[0]}</div>}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -1540,21 +1540,28 @@ export default function TransfersPage() {
                           <span className="text-sm text-muted">{fa.age} let</span>
                           <span className="text-sm font-heading font-bold tabular-nums">{fa.overallRating}</span>
                         </div>
-                        <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted">
-                          <span>{fa.occupation}</span>
-                          <span>Mzda: <span className="font-heading font-bold text-ink">{formatCZK(fa.weeklyWage)}/týd</span></span>
-                          {fa.distanceKm !== null && <span>{fa.distanceKm} km</span>}
-                          {fa.villageName && <span>{fa.villageName}</span>}
-                          {fa.source === "released" && <span className="text-gold-600">Propuštěn</span>}
+                        {/* Údaje na jednom řádku oddělené tečkami. Dřív měly
+                            vlastní řádek každý (povolání / mzda / km + obec)
+                            a karta kvůli tomu měřila skoro 190 px. */}
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 min-w-0 text-sm text-muted truncate">
+                            {fa.occupation}
+                            {" · "}<span className="font-heading font-bold text-ink">{formatCZK(fa.weeklyWage)}/týd</span>
+                            {fa.distanceKm !== null && <>{" · "}{fa.distanceKm} km</>}
+                            {fa.villageName && <>{" · "}{fa.villageName}</>}
+                            {fa.source === "released" && <>{" · "}<span className="text-gold-600">Propuštěn</span></>}
+                          </div>
+                          {/* Rozbalení dovedností jako šipka — textové tlačítko
+                              mělo na dotyku vlastní řádek 44 px navíc. */}
+                          <button
+                            onClick={() => toggleSkills(fa.id)}
+                            aria-label={isExpanded ? "Skrýt dovednosti" : "Zobrazit dovednosti"}
+                            aria-expanded={isExpanded}
+                            className="shrink-0 min-w-11 min-h-11 -my-2 flex items-center justify-center text-pitch-500 hover:text-pitch-600 transition-colors"
+                          >
+                            <span aria-hidden="true" className="text-xs">{isExpanded ? "▲" : "▼"}</span>
+                          </button>
                         </div>
-
-                        {/* Expandable skills */}
-                        <button
-                          onClick={() => toggleSkills(fa.id)}
-                          className="text-sm font-heading font-bold text-pitch-500 hover:text-pitch-600 transition-colors mt-1.5"
-                        >
-                          {isExpanded ? "Dovednosti ▲" : "Dovednosti ▼"}
-                        </button>
                         {isExpanded && (
                           <div className="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 text-sm tabular-nums">
                             {fa.position === "GK" && (
@@ -1628,7 +1635,7 @@ export default function TransfersPage() {
                             await refresh();
                           }
                         }}
-                        className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
+                        className="shrink-0 px-3 min-h-9 rounded-control text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
                       >
                         Podepsat
                       </button>
