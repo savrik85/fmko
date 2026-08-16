@@ -8,7 +8,6 @@ import { BottomNav } from "@/components/dashboard/bottom-nav";
 import { NotificationTitle } from "@/components/dashboard/notification-title";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { AnnouncementDialog } from "@/components/dashboard/announcement-dialog";
-import { SafeAreaDiag } from "@/components/dashboard/safe-area-diag";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 
@@ -69,7 +68,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         style={{ height: "env(safe-area-inset-bottom, 0px)", background: "var(--color-chrome)" }}
       />
       <BottomNav />
-      <SafeAreaDiag />
       <NotificationTitle />
       {/* Jednorázové oznámení všem manažerům — při přehrávání zápasu neruší. */}
       {!isReplay && <AnnouncementDialog />}
