@@ -86,7 +86,7 @@ export function OfferTimeline({
             <div className="shrink-0 flex flex-col items-center w-14">
               <div className="rounded-full overflow-hidden w-12 h-12 bg-paper ring-2 ring-white shadow-sm flex items-center justify-center">
                 {hasAvatar ? (
-                  <FaceAvatar faceConfig={mgr!.avatar} size={48} />
+                  <FaceAvatar faceConfig={mgr!.avatar} size={40} />
                 ) : (
                   <span className="text-2xl">👤</span>
                 )}

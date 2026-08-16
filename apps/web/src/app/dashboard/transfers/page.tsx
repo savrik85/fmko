@@ -1523,10 +1523,14 @@ export default function TransfersPage() {
                 return (
                   <div key={fa.id} className={`card relative p-3 ${fa.isCelebrity ? "ring-2 ring-gold-400 bg-amber-50/30" : ""}`}>
                     <div className="flex items-start gap-2.5">
-                      <div className="shrink-0 w-10 h-10 rounded-full bg-gray-100 overflow-hidden">
+                      {/* FaceAvatar se vykresluje na výšku size × 1,2. Do 40px
+                          kolečka proto patří size 33, ne 40 — jinak se ořízne
+                          brada. Stejné pravidlo platí všude, kde je avatar
+                          v kolečku s pevnou velikostí. */}
+                      <div className="shrink-0 w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
                         {fa.avatar && Object.keys(fa.avatar).length > 0
-                          ? <FaceAvatar faceConfig={fa.avatar} size={40} className="rounded-full" />
-                          : <div className="w-full h-full flex items-center justify-center font-heading font-bold text-sm text-muted">{fa.firstName[0]}{fa.lastName[0]}</div>}
+                          ? <FaceAvatar faceConfig={fa.avatar} size={33} />
+                          : <span className="font-heading font-bold text-sm text-muted">{fa.firstName[0]}{fa.lastName[0]}</span>}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5 flex-wrap pr-24">

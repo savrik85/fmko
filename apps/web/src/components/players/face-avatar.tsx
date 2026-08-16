@@ -9,6 +9,11 @@ interface FaceAvatarProps {
   className?: string;
 }
 
+/**
+ * POZOR na velikost: obličej se vykresluje na výšku `size × 1,2`, ne
+ * čtvercově. Do kolečka nebo čtverce o straně B proto patří
+ * `size = B / 1.2` — s `size = B` se ořízne brada.
+ */
 export function FaceAvatar({ faceConfig, size = 80, className = "" }: FaceAvatarProps) {
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);

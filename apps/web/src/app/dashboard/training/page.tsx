@@ -539,7 +539,7 @@ export default function TrainingPage() {
                     className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-soft px-1 -mx-1 transition-colors"
                   >
                     <div className="shrink-0 w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                      {face ? <FaceAvatar faceConfig={face} size={34} /> : <span className="text-base">🧑‍🏫</span>}
+                      {face ? <FaceAvatar faceConfig={face} size={30} /> : <span className="text-base">🧑‍🏫</span>}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="font-heading font-bold text-sm leading-tight truncate">{mi.name}</div>
@@ -565,7 +565,7 @@ export default function TrainingPage() {
                     className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-soft px-1 -mx-1 transition-colors"
                   >
                     <div className="shrink-0 w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                      {face ? <FaceAvatar faceConfig={face} size={34} /> : <span className="text-base">👔</span>}
+                      {face ? <FaceAvatar faceConfig={face} size={30} /> : <span className="text-base">👔</span>}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="font-heading font-bold text-sm leading-tight truncate">{st.name}</div>
