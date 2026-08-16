@@ -1521,7 +1521,7 @@ export default function TransfersPage() {
               {filteredAgents.map((fa) => {
                 const isExpanded = expandedSkills.has(fa.id);
                 return (
-                  <div key={fa.id} className={`card p-3 ${fa.isCelebrity ? "ring-2 ring-gold-400 bg-amber-50/30" : ""}`}>
+                  <div key={fa.id} className={`card relative p-3 ${fa.isCelebrity ? "ring-2 ring-gold-400 bg-amber-50/30" : ""}`}>
                     <div className="flex items-start gap-2.5">
                       <div className="shrink-0 w-10 h-10 rounded-full bg-gray-100 overflow-hidden">
                         {fa.avatar && Object.keys(fa.avatar).length > 0
@@ -1529,7 +1529,7 @@ export default function TransfersPage() {
                           : <div className="w-full h-full flex items-center justify-center font-heading font-bold text-sm text-muted">{fa.firstName[0]}{fa.lastName[0]}</div>}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap pr-24">
                           <span className="font-heading font-bold text-base">{fa.firstName} {fa.lastName}{nationalityFlag(fa.nationality) && <span className="ml-1" title={fa.nationality}>{nationalityFlag(fa.nationality)}</span>}</span>
                           <PositionBadge position={fa.position as "GK" | "DEF" | "MID" | "FWD"} />
                           {fa.isCelebrity && (
@@ -1635,7 +1635,7 @@ export default function TransfersPage() {
                             await refresh();
                           }
                         }}
-                        className="shrink-0 px-3 min-h-9 rounded-control text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
+                        className="absolute top-3 right-3 px-3 min-h-9 rounded-control text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
                       >
                         Podepsat
                       </button>
