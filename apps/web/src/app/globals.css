@@ -174,7 +174,13 @@ html {
 body {
   font-family: var(--font-body);
   font-weight: 450;
-  background-color: var(--color-paper);
+  /* Barva rámu, ne papír.
+     Layoutový viewport je na iOS kratší než plocha, kterou dokument
+     vybarvuje (naměřeno 797 proti 844), a `position: fixed` se ukotví
+     na těch 797 — spodní lišta se tedy níž protáhnout nedá, ořízne se.
+     Zbylý pruh proto kreslí právě `body`, a dokud byl béžový, byl pod
+     lištou vidět světlý pruh. Papír si nese `<main>` a kořeny stránek. */
+  background-color: var(--color-chrome);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

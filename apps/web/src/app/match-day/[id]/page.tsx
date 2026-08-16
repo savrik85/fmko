@@ -73,7 +73,7 @@ export default function MatchDayPage() {
     window.location.href = `/dashboard/match/${matchId}`;
   };
 
-  if (loading) return <div className="flex items-center justify-center min-h-dvh"><Spinner size="lg" /></div>;
+  if (loading) return <div className="flex items-center justify-center min-h-dvh bg-paper"><Spinner size="lg" /></div>;
   if (!match) return null;
 
   const hc = match.home_color;

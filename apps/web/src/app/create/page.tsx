@@ -51,7 +51,7 @@ export default function CreatePage() {
   }
 
   return (
-    <main className="min-h-dvh p-6 max-w-lg mx-auto">
+    <main className="min-h-dvh bg-paper p-6 max-w-lg mx-auto">
       <h1 className="text-h1 text-pitch-500 mb-6">Založit tým</h1>
 
       {/* Step 1: Select village */}
