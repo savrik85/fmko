@@ -22,6 +22,13 @@ export type MatchQueueMessage =
       leagueId: string;
       gameDate: string;
       enqueuedAt: string;
+    }
+  | {
+      /** Denní tick pro všechny týmy jedné ligy (finance, trénink, kabina, zprávy). */
+      kind: "league_day";
+      leagueId: string;
+      gameDate: string;
+      enqueuedAt: string;
     };
 
 /** Zprávy fronty na AI články (REPORTS_QUEUE). */

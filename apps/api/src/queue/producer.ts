@@ -82,6 +82,58 @@ export async function enqueueMatchTick(env: Bindings): Promise<EnqueueResult> {
 }
 
 /**
+ * Zařadí per-team zpracování herního dne — jedna zpráva na ligu.
+ *
+ * Týmy bez ligy se zpracují rovnou tady: je jich pár a nedá se pro ně sestavit
+ * rozumný klíč zprávy. Kdyby jich přibylo, ukáže to log níž.
+ */
+export async function enqueueTeamDays(
+  env: Bindings,
+  gameDate: string,
+  teams: Array<Record<string, unknown>>,
+): Promise<{ leagues: number; looseTeams: number }> {
+  const queue = env.MATCH_QUEUE;
+  if (!queue) {
+    logger.error({ module: "queue-producer" }, "MATCH_QUEUE binding chybí — denní tick nezařazen");
+    return { leagues: 0, looseTeams: 0 };
+  }
+
+  const leagueIds = new Set<string>();
+  const loose: Array<Record<string, unknown>> = [];
+  for (const team of teams) {
+    const leagueId = team.league_id as string | null;
+    if (leagueId) leagueIds.add(leagueId);
+    else loose.push(team);
+  }
+
+  const enqueuedAt = new Date().toISOString();
+  const messages: MatchQueueMessage[] = [...leagueIds].map((leagueId) => ({
+    kind: "league_day",
+    leagueId,
+    gameDate,
+    enqueuedAt,
+  }));
+  const sent = await sendChunked(queue, messages, "league_day");
+
+  if (loose.length > 0) {
+    if (loose.length > 50) {
+      logger.warn(
+        { module: "queue-producer" },
+        `${loose.length} týmů bez ligy se zpracovává v jedné invokaci — zvážit vlastní typ zprávy`,
+      );
+    }
+    const { processTeamDay } = await import("../season/team-day");
+    for (const team of loose) {
+      await processTeamDay(env, team, gameDate, { claim: true }).catch((e) =>
+        logger.error({ module: "queue-producer" }, `tým bez ligy ${String(team.id)} selhal`, e),
+      );
+    }
+  }
+
+  return { leagues: sent, looseTeams: loose.length };
+}
+
+/**
  * Zařadí předzápasové články (matchday preview) — dřív sériová smyčka s jedním
  * voláním Gemini na ligu v jedné invokaci (index.ts).
  */

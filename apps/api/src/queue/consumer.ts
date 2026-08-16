@@ -59,6 +59,16 @@ async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<void
       return;
     }
 
+    case "league_day": {
+      const { processLeagueDay } = await import("../season/team-day");
+      const result = await processLeagueDay(env, body.leagueId, body.gameDate);
+      logger.info(
+        { module: "queue-consumer" },
+        `league_day ${body.leagueId}: ${result.teams} týmů zpracováno, ${result.skipped} přeskočeno, ${result.durationMs} ms`,
+      );
+      return;
+    }
+
     // ── fronta článků ──
     case "round_report": {
       if (!env.GEMINI_API_KEY) {
