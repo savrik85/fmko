@@ -7,7 +7,6 @@ import { FMTopBar } from "@/components/dashboard/fm-topbar";
 import { BottomNav } from "@/components/dashboard/bottom-nav";
 import { NotificationTitle } from "@/components/dashboard/notification-title";
 import { PageHeader } from "@/components/dashboard/page-header";
-import { Napoveda } from "@/components/ui/napoveda";
 import { AnnouncementDialog } from "@/components/dashboard/announcement-dialog";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
@@ -69,7 +68,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         style={{ height: "env(safe-area-inset-bottom, 0px)", background: "#1e2d1e" }}
       />
       <BottomNav />
-      <Napoveda />
       <NotificationTitle />
       {/* Jednorázové oznámení všem manažerům — při přehrávání zápasu neruší. */}
       {!isReplay && <AnnouncementDialog />}

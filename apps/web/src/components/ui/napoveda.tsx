@@ -253,7 +253,10 @@ function HelpPanel({ help, onClose }: { help: HelpEntry; onClose: () => void }) 
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed bottom-[5.5rem] sm:bottom-20 left-3 right-3 sm:left-auto sm:right-4 z-[var(--z-nav)] sm:w-[360px] max-h-[55vh] sm:max-h-[70vh] overflow-y-auto rounded-xl bg-white shadow-2xl border border-gray-100 animate-slide-up">
+      {/* Na mobilu spodní plachta, na desktopu panel pod horní lištou —
+          tam, kde tlačítko nově je. Dřív visel v pravém dolním rohu
+          u plovoucího kolečka. */}
+      <div className="fixed bottom-[5.5rem] sm:bottom-auto sm:top-16 left-3 right-3 sm:left-auto sm:right-4 z-[var(--z-nav)] sm:w-[360px] max-h-[55vh] sm:max-h-[70vh] overflow-y-auto overscroll-contain rounded-xl bg-white shadow-2xl border border-gray-100 animate-slide-up">
         <div className="sticky top-0 bg-pitch-700 text-white px-5 py-3 rounded-t-xl flex items-center gap-3">
           <span className="text-xl">{help.icon}</span>
           <span className="font-heading font-bold text-base">{help.title}</span>
@@ -280,41 +283,37 @@ function HelpPanel({ help, onClose }: { help: HelpEntry; onClose: () => void }) 
 }
 
 /**
- * Plovoucí tlačítko nápovědy se při scrollování ztlumí.
+ * Tlačítko nápovědy.
  *
- * Sedí v pravém dolním rohu nad obsahem, takže při čtení seznamu překrývalo
- * pravý okraj řádků — v Financích třeba zakrývalo částku u „Dotace obce".
- * Během scrollu je průhledné a nekliká, po zastavení se zase objeví.
+ * `bar` — sedí v horní liště. Plovoucí kolečko v pravém dolním rohu
+ * překrývalo pravý okraj obsahu (ve Financích zakrývalo částku u „Dotace
+ * obce") a překrývalo by ho i po ztlumení při scrollu, protože v klidu
+ * je vidět. V liště nepřekáží nikdy a je stejně po ruce.
+ *
+ * `floating` — zůstává pro onboarding, kde horní lišta není.
  */
-function useSkryjPriScrollu() {
-  const [scrolluje, setScrolluje] = useState(false);
-  useEffect(() => {
-    const el = document.querySelector("main");
-    if (!el) return;
-    let t: ReturnType<typeof setTimeout>;
-    const onScroll = () => {
-      setScrolluje(true);
-      clearTimeout(t);
-      t = setTimeout(() => setScrolluje(false), 600);
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => { el.removeEventListener("scroll", onScroll); clearTimeout(t); };
-  }, []);
-  return scrolluje;
-}
-
-function HelpButton({ open, onClick, className }: { open: boolean; onClick: () => void; className?: string }) {
-  const scrolluje = useSkryjPriScrollu();
-  const skryt = scrolluje && !open;
+function HelpButton({
+  open,
+  onClick,
+  variant = "floating",
+  className,
+}: {
+  open: boolean;
+  onClick: () => void;
+  variant?: "bar" | "floating";
+  className?: string;
+}) {
+  const spolecne = "flex items-center justify-center font-heading font-bold rounded-full transition-colors";
+  const styl =
+    variant === "bar"
+      ? "w-8 h-8 text-base bg-white/10 text-white/70 hover:bg-white/20 hover:text-white shrink-0"
+      : `fixed z-[var(--z-nav)] w-11 h-11 text-lg bg-pitch-700 text-white shadow-lg hover:bg-pitch-600 ${className ?? "bottom-24 sm:bottom-6 right-4"}`;
   return (
     <button
       onClick={onClick}
-      className={`fixed z-[var(--z-nav)] w-11 h-11 rounded-full bg-pitch-700 text-white shadow-lg hover:bg-pitch-600 flex items-center justify-center font-heading font-bold text-lg transition-[opacity,background-color] duration-200 ${
-        skryt ? "opacity-0 pointer-events-none" : "opacity-100"
-      } ${className ?? "bottom-24 sm:bottom-6 right-4"}`}
+      className={`${spolecne} ${styl}`}
       title={open ? "Zavřít nápovědu" : "Nápověda"}
       aria-label={open ? "Zavřít nápovědu" : "Nápověda"}
-      aria-hidden={skryt}
     >
       {open ? "✕" : "?"}
     </button>
@@ -331,7 +330,7 @@ export function Napoveda() {
 
   return (
     <>
-      <HelpButton open={open} onClick={() => setOpen(!open)} />
+      <HelpButton open={open} onClick={() => setOpen(!open)} variant="bar" />
       {open && <HelpPanel help={help} onClose={() => setOpen(false)} />}
     </>
   );

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
+import { Napoveda } from "@/components/ui/napoveda";
 
 /**
  * Horní lišta = navigace a peníze. Nic víc.
@@ -36,6 +37,8 @@ export function FMTopBar() {
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M7 4l5 5-5 5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </button>
       </div>
+
+      <Napoveda />
 
       <div className="flex-1 min-w-0" />
 
