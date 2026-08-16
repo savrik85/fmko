@@ -88,18 +88,20 @@ export function BottomNav() {
       className="on-dark fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden"
       style={{
         background: "var(--color-chrome)",
-        bottom: schodek ? `-${schodek}px` : 0,
-        // Odsazení je vždy jen safe-area (oblast home indikátoru, 34 px),
-        // ne celý schodek. Se schodkem 47 px byla lišta 103 px vysoká
-        // a ikony seděly v horní půlce; teď je 90 px a obsah končí 34 px
-        // nad hranou displeje, jak to má nativní lišta. Zelená sahá až dolů
-        // díky zápornému `bottom`, ne díky odsazení.
-        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        // Lišta zůstává ukotvená na spodku viewportu. Posouvat ji níž
+        // (`bottom: -47px`) nejde — `fixed` prvky se na iOS ořežou na
+        // layoutový viewport, takže se tím jen odřízly popisky. Zelenou pod
+        // hranicí kreslí `body`, které má barvu rámu.
+        bottom: 0,
+        // Když je pod viewportem schodek, leží home indikátor v něm a odsazení
+        // uvnitř lišty by ho rezervovalo podruhé — obsah by plaval vysoko.
+        paddingBottom: schodek ? "0px" : "env(safe-area-inset-bottom, 0px)",
       }}
     >
-      {/* h-14 misto h-16: rám bral 167 px z 844. Ikona i popisek se do 56 px
-          vejdou (28 + 2 + 14 + 8 odsazení = 52). */}
-      <div className="flex justify-around items-center h-14 px-2">
+      {/* Vizuální lišta je obsah + schodek pod viewportem (u tebe 47 px).
+          Při 56 px obsahu vycházela na 103 px a ikony seděly v horní třetině.
+          48 px dá 95 px celkem, což je blízko nativní liště. */}
+      <div className="flex justify-around items-center h-12 px-2">
         {items.map((item) => {
           // Větev pro položku „Kádr" tu byla i poté, co ji z lišty vyhodili —
           // nikdy se nevyhodnotila. Kádr je dnes pod Více.
@@ -109,14 +111,14 @@ export function BottomNav() {
             <Link
               key={item.label}
               href={item.href}
-              className={`relative flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-soft transition-colors min-w-[56px] ${
+              className={`relative flex flex-col items-center justify-center gap-0.5 px-3 rounded-soft transition-colors min-w-[56px] ${
                 isActive
                   ? "text-white"
                   : "text-white/50 hover:text-white"
               }`}
             >
-              <span className="text-xl">{item.icon}</span>
-              <span className="text-micro font-medium">{item.label}</span>
+              <span className="text-lg leading-none">{item.icon}</span>
+              <span className="text-micro font-medium leading-none">{item.label}</span>
               {item.badge != null && item.badge > 0 && (
                 <span className="absolute top-0 right-2 bg-card-red text-white text-[9px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">
                   {item.badge > 99 ? "99+" : item.badge}
