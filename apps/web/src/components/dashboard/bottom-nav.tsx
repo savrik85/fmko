@@ -89,11 +89,12 @@ export function BottomNav() {
       style={{
         background: "var(--color-chrome)",
         bottom: schodek ? `-${schodek}px` : 0,
-        // Schodek se přičte jako odsazení, aby popisky zůstaly na místě
-        // a dolů se protáhla jen zelená.
-        paddingBottom: schodek
-          ? `${schodek}px`
-          : "env(safe-area-inset-bottom, 0px)",
+        // Odsazení je vždy jen safe-area (oblast home indikátoru, 34 px),
+        // ne celý schodek. Se schodkem 47 px byla lišta 103 px vysoká
+        // a ikony seděly v horní půlce; teď je 90 px a obsah končí 34 px
+        // nad hranou displeje, jak to má nativní lišta. Zelená sahá až dolů
+        // díky zápornému `bottom`, ne díky odsazení.
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}
     >
       {/* h-14 misto h-16: rám bral 167 px z 844. Ikona i popisek se do 56 px
