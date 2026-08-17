@@ -13,6 +13,10 @@ const KVOTY: Record<string, number> = {
   transfer: 9,
   interview: 8,
   player_interview: 6,
+  // Pozápasový rozhovor může vzniknout každému lidskému týmu v lize, takže kvóta
+  // musí pokrýt celé kolo. S výchozí dvojkou se vlastní článek nedostal ani do
+  // novin vlastního klubu.
+  post_match_interview: 16,
   promotion: 3,
   // Kotel se vykresluje jako plnohodnotný blok s fotkami a rubrika renderuje
   // všechno, co dostane — víc než jeden report by znamenal dva vedle sebe.
@@ -39,6 +43,7 @@ export const NEWS_ICONS: Record<string, string> = {
   promotion: "\u{1F4E2}",
   interview: "\u{1F399}️",
   player_interview: "\u{1F3A4}",
+  post_match_interview: "\u{1F4F0}",
   manager_feud: "\u{1F5E3}️",
   season_wrap: "\u{1F3C1}",
   season_opener: "\u{1F3BA}",

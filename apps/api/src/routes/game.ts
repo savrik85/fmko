@@ -6782,6 +6782,9 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
       .bind(pmNewsId, interviewId).run()
       .catch((e) => logger.warn({ module: "game.ts" }, "odkaz na pozápasový článek", e));
 
+    const { notifyPostMatchArticle } = await import("../news/post-match-interview");
+    await notifyPostMatchArticle(c.env.DB, teamId, generated.headline);
+
     return c.json({ ok: true, newsId: pmNewsId, effects: applied });
   }
 

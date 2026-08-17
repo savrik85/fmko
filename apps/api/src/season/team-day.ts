@@ -267,6 +267,8 @@ export async function processTeamDay(
             }), pm.game_week, red?.id ?? null).run();
             await env.DB.prepare("UPDATE coach_interviews SET article_news_id = ? WHERE id = ?")
               .bind(nid, pm.id).run();
+            const { notifyPostMatchArticle } = await import("../news/post-match-interview");
+            await notifyPostMatchArticle(env.DB, teamId, art.headline);
             logger.info({ module: "daily-tick", teamId }, "pozápasový článek dopsán při retry");
           }
         }

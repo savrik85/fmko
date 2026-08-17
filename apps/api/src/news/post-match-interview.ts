@@ -347,6 +347,45 @@ async function notifyPostMatchInterview(db: D1Database, teamId: string, ctx: Pos
   }
 }
 
+/**
+ * SMS o tom, že rozhovor vyšel v novinách.
+ *
+ * Chodí jen tomu klubu, jehož trenér mluvil. Round summary i rozhovor s hráčem
+ * rozesílají vydání celé lize, protože vzniká jeden článek na kolo — pozápasových
+ * je nově až čtrnáct, takže by z broadcastu bylo dvě stě zpráv za kolo.
+ */
+export async function notifyPostMatchArticle(
+  db: D1Database, teamId: string, headline: string,
+): Promise<void> {
+  try {
+    const convTitle = "Redakce Zpravodaje";
+    let convId: string | null = null;
+    const existing = await db.prepare(
+      "SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ? LIMIT 1"
+    ).bind(teamId, convTitle).first<{ id: string }>();
+    if (existing) {
+      convId = existing.id;
+    } else {
+      convId = crypto.randomUUID();
+      await db.prepare(
+        `INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_at, created_at)
+         VALUES (?, ?, 'system', ?, 0, 0, strftime('%Y-%m-%dT%H:%M:%SZ','now'), strftime('%Y-%m-%dT%H:%M:%SZ','now'))`
+      ).bind(convId, teamId, convTitle).run();
+    }
+
+    const body = `📰 Tvůj rozhovor vyšel ve Zpravodaji: „${headline}"`;
+    await db.prepare(
+      `INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at)
+       VALUES (?, ?, 'system', 'Redakce Zpravodaje', ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))`
+    ).bind(crypto.randomUUID(), convId, body).run();
+    await db.prepare(
+      "UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?"
+    ).bind(body.slice(0, 100), convId).run();
+  } catch (e) {
+    logger.warn({ module: M }, "notifikace o vydaném pozápasovém článku", e);
+  }
+}
+
 // ── Článek a dopady ──────────────────────────────────────────────────────────
 
 export interface PostMatchArticle {
