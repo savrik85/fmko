@@ -441,3 +441,67 @@ To je samostatný tiket — architektura front na něm nezávisí.
   `prales-match-dlq`, `prales-reports-dlq` + čtyři `-test` varianty.
 - Migrace: `0146_queue_failures`, `0147_team_day_log`, `0148_queue_runs`
   (aplikované na `prales-db-test`, na prod ZATÍM NE).
+
+---
+
+## 10. Crony na testingu + Workers AI (2026-08-17)
+
+### 10.1 Plán účtu — ověřeno, ne odhadnuto
+
+Přes Cloudflare API (`/accounts/{id}/workers/scripts/{name}/schedules`) napříč všemi
+8 workery účtu AutomatGuru: **8 běžících cronů** (prales-api 7, fitness-trener 1).
+Limit Free je 5/účet, Paid 250/účet → **účet je na Workers Paid**. Potvrzuje to
+i `default_usage_model: "standard"` a paměť (upgrade 2026-04-20).
+
+Pravidlo „testing MUSÍ mít `crons = []`" vzniklo kvůli Free limitu a je zastaralé.
+Zrušeno, testing dostal všech 7 cronů → 15 z 250.
+
+### 10.2 Proč to neohrozí produkci
+
+| Co | Sdílené? | Riziko |
+|---|---|---|
+| Deploy | ne — `main`→prod, `testing`→`--env testing` (`ci.yml`) | žádné |
+| Worker, D1, KV, fronty | ne, vlastní pro každé prostředí | žádné |
+| Cron limit | 15 z 250 | žádné |
+| R2 `prales-seed` | **ano**, ale zapisují jen uživatelské routy (hymny, maskoti) | stav existoval už dřív |
+| `GEMINI_API_KEY` | vlastní secret slot, hodnota se z wranglera nepřečte | ⚠️ vyřešeno přepínačem |
+
+### 10.3 Přepínač `ai_provider`
+
+`gemini` (DEFAULT) | `workers-ai` | `off`. Aplikuje se na vstupu `scheduled()`
+a `queue()`. Pro `off` se vyprázdní Gemini klíč a generátory spadnou do svých
+existujících skip větví — bez zásahu do dvanácti míst, která na produkci fungují.
+
+Ověřeno: se `off` proběhly 4 ligy, `round_results` +4 (generuje kód), ale
+`ai_report` i `ultras_report` beze změny → **nula volání Gemini**.
+
+### 10.4 Výběr modelu — srovnání na českém promptu
+
+| Model | Výsledek |
+|---|---|
+| `@cf/meta/llama-4-scout-17b-16e-instruct` | ✅ správné skloňování („nad Rapidem Tvrzice"), čisté 4 věty |
+| `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | ❌ chybná shoda („přidala Petr Kraus"), text zdvojený, meta-poznámka |
+| `@cf/mistralai/mistral-small-3.1-24b-instruct` | ~ použitelná čeština, rozbitá struktura |
+| `gpt-oss-120b`, `glm-5.2`, `gemma-4-26b` | ❌ reasoning modely, celý budget na vnitřní úvahu, prázdný obsah |
+
+Zapojeno do `ai-reporter`, `ultras-report`, `matchday-preview` (ty pohání fronta).
+Bez předaného kontextu se chovají přesně jako dřív.
+
+**Reálný výstup z produkčního promptu** (Workers AI, testing):
+> „Déšť opět prověřil odolnost našich mladých fotbalistů… vysoká výhra TJ Včelná U21
+> nad Hvězdou Olešník U21 5:0."
+
+Kvalita je pro testovací prostředí víc než dost. Drobné vady: „v 3. kole" místo
+„ve 3. kole", jednou špatně skloněné příjmení. Pro produkci bych to nenasazoval.
+
+Cena: 10 000 Neuronů/den zdarma. Pozn.: dokumentace **netvrdí**, že se Workers AI
+platí z běžných účetních kreditů — zmiňuje jen samostatné AI Gateway credits.
+
+### 10.5 Co zůstává neověřené
+
+1. **`matchday_preview` přes frontu** — producent ověřen, konzumer ne. Žádná liga
+   nemá kolo naplánované přesně na aktuální herní den, takže se nemá co zařadit.
+   Ověří se sám, až cron `0 6` narazí na den s kolem.
+2. **Zátěž na 20+ ligách** — konzistence naměřená přes 6 lig, ne přes 20+.
+3. **Obal `scheduled()`** — vnitřek ověřen přes admin endpointy, samotný cron
+   na testu poprvé vystřelí v `0 14 UTC`.
