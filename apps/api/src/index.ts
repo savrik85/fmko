@@ -38,6 +38,12 @@ export type Bindings = {
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
   VAPID_SUBJECT: string;
+  /**
+   * Základ Cloudflare AI Gateway pro Gemini. Když chybí, volá se Google přímo
+   * (dosavadní chování). Nastavuje se jako secret, aby v konfiguraci nefiguroval
+   * account id.
+   */
+  AI_GATEWAY_URL?: string;
   SUNO_API_KEY?: string;
   REPLICATE_API_TOKEN?: string;
   API_BASE_URL?: string;
@@ -46,6 +52,13 @@ export type Bindings = {
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.use("*", cors({ origin: "*" }));
+
+// AI Gateway se nastavuje jednou na vstupu; bez proměnné se volá Google přímo.
+app.use("*", async (c, next) => {
+  const { configureAiGateway } = await import("./news/gemini-helper");
+  configureAiGateway(c.env.AI_GATEWAY_URL);
+  return next();
+});
 
 // Global error handler — structured JSON logging, bez expose interních detailů klientovi.
 app.onError((err, c) => {
@@ -105,6 +118,8 @@ export default {
     // Bez tohohle by testovací crony ujídaly produkční kvótu každý den. Default je
     // "gemini", takže bez klíče v KV se nic nemění.
     const { applyAiProvider } = await import("./lib/ai-provider");
+    const { configureAiGateway } = await import("./news/gemini-helper");
+    configureAiGateway(env.AI_GATEWAY_URL);
     const aiSwitch = await applyAiProvider(env);
     env = aiSwitch.env;
     if (aiSwitch.provider !== "gemini") log("info", `AI poskytovatel: ${aiSwitch.provider}`);
@@ -254,6 +269,19 @@ export default {
       }
     }
 
+    // ── HLÍDAČ: 6:00 UTC — kontrola, že se v noci opravdu něco stalo ──
+    // Cloudflare umí upozornit na chybu, ne na ticho. Tohle hlídá ticho:
+    // neproběhlé kolo, zaseklá kola, dead-letter frontu, rostoucí backlog.
+    if (cron === "0 6 * * *") {
+      try {
+        const { runWatchdogAndAlert } = await import("./lib/watchdog");
+        const r = await runWatchdogAndAlert(env);
+        log(r.ok ? "info" : "error", `hlídač: ${r.ok ? "v pořádku" : r.problemy.map((p) => p.kod).join(", ")}`);
+      } catch (e: any) {
+        log("error", "hlídač selhal", e);
+      }
+    }
+
     // ── MATCHDAY PREVIEW: 6:00 UTC (8:00 CEST) — článek před kolem ──
     // Izolovaný od daily i match ticku — selhání neohrozí ostatní.
     // V režimu "queue" se jen zařadí zprávy (jeden článek = jedna invokace),
@@ -325,6 +353,8 @@ export default {
     // Stejný přepínač jako u cronu — konzumer generuje články, takže bez něj
     // by testing na produkční kvótu sáhl právě tudy.
     const { applyAiProvider } = await import("./lib/ai-provider");
+    const { configureAiGateway } = await import("./news/gemini-helper");
+    configureAiGateway(env.AI_GATEWAY_URL);
     const { env: aiEnv } = await applyAiProvider(env);
     await handleQueueBatch(batch, aiEnv, ctx);
   },

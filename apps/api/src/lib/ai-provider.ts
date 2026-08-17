@@ -48,6 +48,8 @@ export interface AiContext {
   provider: AiProvider;
   ai?: Ai;
   geminiApiKey?: string;
+  /** Základ AI Gateway; když chybí, jde se na Google přímo. */
+  gatewayUrl?: string;
 }
 
 export interface GenerateOpts {
@@ -106,6 +108,7 @@ export async function generateText(
     json: opts.json,
     safetySettings: opts.safetySettings,
     module: mod,
+    gatewayUrl: ctx.gatewayUrl,
   });
 }
 
@@ -114,11 +117,13 @@ export async function aiContextFromEnv(env: {
   CACHE_KV?: KVNamespace;
   GEMINI_API_KEY?: string;
   AI?: Ai;
+  AI_GATEWAY_URL?: string;
 }): Promise<AiContext> {
   return {
     provider: await readAiProvider(env.CACHE_KV),
     ai: env.AI,
     geminiApiKey: env.GEMINI_API_KEY,
+    gatewayUrl: env.AI_GATEWAY_URL,
   };
 }
 

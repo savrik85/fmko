@@ -8741,6 +8741,20 @@ gameRouter.get("/admin/queue/profile", async (c) => {
   return c.json({ ok: true, vzorkuBehu: rows.results.length, faze });
 });
 
+// GET /api/admin/watchdog — ruční spuštění hlídače (bez rozesílání notifikací)
+gameRouter.get("/admin/watchdog", async (c) => {
+  const { runWatchdog } = await import("../lib/watchdog");
+  const r = await runWatchdog(c.env);
+  return c.json({ zdrave: r.ok, problemy: r.problemy });
+});
+
+// POST /api/admin/watchdog/test — hlídač VČETNĚ notifikací, na ověření že alerting funguje
+gameRouter.post("/admin/watchdog/test", async (c) => {
+  const { runWatchdogAndAlert } = await import("../lib/watchdog");
+  const r = await runWatchdogAndAlert(c.env);
+  return c.json({ zdrave: r.ok, problemy: r.problemy, notifikaceOdeslany: !r.ok });
+});
+
 // GET /api/admin/queue/failures — zprávy, které skončily v dead-letter frontě.
 // Bez tohohle liga vypadne potichu a nikdo se to nedozví.
 gameRouter.get("/admin/queue/failures", async (c) => {
