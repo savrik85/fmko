@@ -120,6 +120,13 @@ bucket_name = "prales-seed"
 [env.testing.ai]
 binding = "AI"
 
+# ── Workers Logs ──
+# Bez tohohle nejsou vidět invokace cronu ani konzumera fronty (`wrangler tail`
+# je nezachytí) a jediná viditelnost je to, co si aplikace sama zapíše do D1.
+# Zapnuto 2026-08-17 kvůli sledování frontové architektury před nasazením na prod.
+[env.testing.observability]
+enabled = true
+
 # ── Fronty (testing) ──
 # VLASTNÍ fronty, jinak by si prostředí lezla do zelí (test konzumer by bral prod zprávy).
 [[env.testing.queues.producers]]
