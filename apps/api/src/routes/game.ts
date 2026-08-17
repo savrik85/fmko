@@ -8641,12 +8641,24 @@ gameRouter.get("/admin/health", async (c) => {
     "stuck",
   );
   // Nedohraná kola, jejichž termín už nastal — když tohle roste den po dni, tick nestíhá.
+  // JOIN na leagues je nutný: kalendáře osiřelých lig producent nikdy nezařadí
+  // (findLeaguesWithDueRound taky joinuje), takže by trvale nafukovaly signál.
   const backlog = await one<{ n: number }>(
     `SELECT COUNT(*) AS n FROM season_calendar sc
+       JOIN leagues l ON l.id = sc.league_id
       WHERE sc.status = 'scheduled'
         AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar x WHERE x.league_id = sc.league_id)
         AND sc.scheduled_at <= (SELECT MAX(game_date) FROM teams t WHERE t.league_id = sc.league_id)`,
     "backlog",
+  );
+  // Osiřelé ligy: týmy i kalendáře odkazují na ligu, která v `leagues` neexistuje.
+  // Takové týmy dostávají denní tick, ale jejich kola se NIKDY neodehrají.
+  const orphans = await one<{ ligy: number; tymy: number; kola: number }>(
+    `SELECT
+       (SELECT COUNT(DISTINCT league_id) FROM teams WHERE league_id IS NOT NULL AND league_id NOT IN (SELECT id FROM leagues)) AS ligy,
+       (SELECT COUNT(*) FROM teams WHERE league_id IS NOT NULL AND league_id NOT IN (SELECT id FROM leagues)) AS tymy,
+       (SELECT COUNT(*) FROM season_calendar WHERE league_id NOT IN (SELECT id FROM leagues)) AS kola`,
+    "orphans",
   );
   const clock = await one<{ game_date: string | null; offset_days: number | null }>(
     "SELECT (SELECT MAX(game_date) FROM teams) AS game_date, (SELECT offset_days FROM game_clock WHERE id = 1) AS offset_days",
@@ -8667,6 +8679,7 @@ gameRouter.get("/admin/health", async (c) => {
     { nazev: "chybné běhy za 3 dny", hodnota: errors?.n ?? -1, ok: (errors?.n ?? 1) === 0, popis: "výjimka v konzumeru" },
     { nazev: "zaseklá kola", hodnota: stuck?.n ?? -1, ok: (stuck?.n ?? 1) === 0, popis: "lineup_locked mimo běžící tick" },
     { nazev: "nedohraná splatná kola", hodnota: backlog?.n ?? -1, ok: (backlog?.n ?? 99) < 10, popis: "když roste den po dni, tick nestíhá" },
+    { nazev: "osiřelé ligy", hodnota: orphans?.ligy ?? -1, ok: (orphans?.ligy ?? 1) === 0, popis: "týmy bez ligy v `leagues` — dostávají denní tick, ale nikdy nehrají" },
   ];
 
   const verdikt = kontroly.every((k) => k.ok) ? "ok" : "pozor";
@@ -8681,6 +8694,7 @@ gameRouter.get("/admin/health", async (c) => {
       maxMs: rounds24?.max ?? null,
     },
     posledniKolo: { trvaniMs: lastRound?.trvani ?? null, kdy: lastRound?.kdy ?? null },
+    osirele: { ligy: orphans?.ligy ?? 0, tymy: orphans?.tymy ?? 0, kola: orphans?.kola ?? 0 },
     kontroly,
   });
 });
