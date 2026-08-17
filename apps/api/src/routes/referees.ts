@@ -139,6 +139,57 @@ refereesRouter.get("/teams/:teamId/referees", async (c) => {
   return c.json(await poolOverview(c.env.DB, team.district));
 });
 
+// ── Disciplinární komise ──
+
+/**
+ * Listina pokut okresu. Vlastní tabulku pokuty nemají — účtují se rovnou do
+ * `transactions`, takže se sem sbírají odtamtud:
+ *   - `disciplinary_fine` — výroky o rozhodčím v pozápasovém rozhovoru
+ *   - záporná `event` transakce se slovem „pokuta" v popisu — svazové pokuty
+ *     z mezikolových událostí (pozdní soupiska, neuklizené kabiny…)
+ * Typ transakce nemá index, proto pevný LIMIT — listina se stejně čte odshora.
+ */
+refereesRouter.get("/teams/:teamId/disciplinary", async (c) => {
+  const team = await c.env.DB.prepare(
+    "SELECT v.district AS district FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?"
+  ).bind(c.req.param("teamId")).first<{ district: string }>()
+    .catch((e) => { logger.warn({ module: "referees" }, "okres týmu pro disciplinárku", e); return null; });
+  if (!team?.district) return c.json({ error: "Tým nemá okres" }, 404);
+
+  const rows = await c.env.DB.prepare(
+    `SELECT tr.id, tr.team_id, t.name AS team_name, tr.type, tr.amount, tr.description,
+            tr.game_date, tr.created_at
+     FROM transactions tr
+     JOIN teams t ON t.id = tr.team_id
+     JOIN villages v ON v.id = t.village_id
+     WHERE v.district = ? AND tr.amount < 0
+       AND (tr.type = 'disciplinary_fine' OR tr.description LIKE '%okuta%')
+     ORDER BY tr.created_at DESC
+     LIMIT 80`
+  ).bind(team.district).all<{
+    id: string; team_id: string; team_name: string; type: string;
+    amount: number; description: string; game_date: string; created_at: string;
+  }>().catch((e) => { logger.warn({ module: "referees" }, "načtení pokut", e); return null; });
+
+  const fines = (rows?.results ?? []).map((r) => ({
+    id: r.id,
+    teamId: r.team_id,
+    teamName: r.team_name,
+    // Za co: pokuta komise za výroky, nebo administrativní pokuta od svazu.
+    kind: r.type === "disciplinary_fine" ? "rozhovor" : "svaz",
+    amount: Math.abs(r.amount),
+    reason: r.description,
+    gameDate: r.game_date,
+    createdAt: r.created_at,
+  }));
+
+  return c.json({
+    district: team.district,
+    fines,
+    total: fines.reduce((s, f) => s + f.amount, 0),
+  });
+});
+
 // ── Detail rozhodčího ──
 refereesRouter.get("/referees/:refereeId", async (c) => {
   const refereeId = c.req.param("refereeId");
