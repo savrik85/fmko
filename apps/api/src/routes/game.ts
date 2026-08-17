@@ -8555,6 +8555,37 @@ gameRouter.post("/admin/queue/run-league", async (c) => {
   return c.json({ ok: true, result });
 });
 
+// GET /api/admin/queue/runs[?kind=league_round&limit=50] — měření běhů z fronty.
+// lag_ms = jak dlouho zpráva čekala ve frontě, duration_ms = jak dlouho trvalo zpracování.
+// Bez rozlišení těch dvou se nedá říct, jestli je pomalá fronta nebo samotná práce.
+gameRouter.get("/admin/queue/runs", async (c) => {
+  const kind = c.req.query("kind");
+  const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+  const base =
+    "SELECT kind, league_id, status, matches, queries, duration_ms, attempts, lag_ms, created_at FROM queue_runs";
+  const stmt = kind
+    ? c.env.DB.prepare(`${base} WHERE kind = ? ORDER BY created_at DESC LIMIT ?`).bind(kind, limit)
+    : c.env.DB.prepare(`${base} ORDER BY created_at DESC LIMIT ?`).bind(limit);
+  const rows = await stmt.all().catch((e) => {
+    logger.warn({ module: "game" }, "queue_runs select", e);
+    return { results: [] };
+  });
+
+  // Souhrn per typ zprávy — přímý podklad pro tvrzení "práce na ligu je konstantní".
+  const summary = await c.env.DB.prepare(
+    `SELECT kind, COUNT(*) AS pocet, AVG(duration_ms) AS prumer_ms, MIN(duration_ms) AS min_ms,
+            MAX(duration_ms) AS max_ms, AVG(queries) AS prumer_dotazu, AVG(lag_ms) AS prumer_lag_ms
+       FROM queue_runs GROUP BY kind`,
+  )
+    .all()
+    .catch((e) => {
+      logger.warn({ module: "game" }, "queue_runs summary", e);
+      return { results: [] };
+    });
+
+  return c.json({ ok: true, summary: summary.results, runs: rows.results });
+});
+
 // GET /api/admin/queue/failures — zprávy, které skončily v dead-letter frontě.
 // Bez tohohle liga vypadne potichu a nikdo se to nedozví.
 gameRouter.get("/admin/queue/failures", async (c) => {

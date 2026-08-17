@@ -24,18 +24,59 @@ export async function handleQueueBatch(
 
   for (const message of batch.messages) {
     const body = message.body;
+    const startedAt = Date.now();
+    const lagMs = body?.enqueuedAt ? startedAt - Date.parse(body.enqueuedAt) : null;
     try {
-      await handleMessage(body, env);
+      const outcome = await handleMessage(body, env);
+      await recordRun(env, body, message.attempts, lagMs, Date.now() - startedAt, outcome);
       message.ack();
     } catch (e) {
       // retry() vrátí JEN tuhle zprávu; po vyčerpání max_retries spadne do DLQ.
       logger.error({ module: "queue-consumer" }, `zpráva ${body?.kind ?? "?"} selhala (pokus ${message.attempts})`, e);
+      await recordRun(env, body, message.attempts, lagMs, Date.now() - startedAt, { status: "error" });
       message.retry();
     }
   }
 }
 
-async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<void> {
+interface RunOutcome {
+  status: string;
+  matches?: number;
+  queries?: number;
+}
+
+/**
+ * Zapíše měření běhu. Selhání zápisu NESMÍ shodit zpracování — je to jen telemetrie,
+ * proto se chyba loguje a jde se dál.
+ */
+async function recordRun(
+  env: Bindings,
+  body: AnyQueueMessage,
+  attempts: number,
+  lagMs: number | null,
+  durationMs: number,
+  outcome: RunOutcome,
+): Promise<void> {
+  const leagueId = body && "leagueId" in body ? (body as { leagueId?: string }).leagueId ?? null : null;
+  await env.DB.prepare(
+    "INSERT INTO queue_runs (id, kind, league_id, status, matches, queries, duration_ms, attempts, lag_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))",
+  )
+    .bind(
+      crypto.randomUUID(),
+      body?.kind ?? "unknown",
+      leagueId,
+      outcome.status,
+      outcome.matches ?? null,
+      outcome.queries ?? null,
+      durationMs,
+      attempts,
+      lagMs,
+    )
+    .run()
+    .catch((e) => logger.warn({ module: "queue-consumer" }, "zápis queue_runs selhal", e));
+}
+
+async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<RunOutcome> {
   switch (body.kind) {
     // ── zápasová fronta ──
     case "league_round": {
@@ -47,7 +88,7 @@ async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<void
         { module: "queue-consumer" },
         `league_round ${body.leagueId}: ${result.status}, ${result.matches} zápasů, ${result.queries} dotazů, ${result.durationMs} ms`,
       );
-      return;
+      return { status: result.status, matches: result.matches, queries: result.queries };
     }
 
     case "league_maintenance": {
@@ -56,7 +97,7 @@ async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<void
         { module: "queue-consumer" },
         `league_maintenance ${body.leagueId}: celebrity=${result.celebritySpawned} listings=${result.listings}, ${result.queries} dotazů, ${result.durationMs} ms`,
       );
-      return;
+      return { status: "done", queries: result.queries };
     }
 
     case "league_day": {
@@ -66,14 +107,14 @@ async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<void
         { module: "queue-consumer" },
         `league_day ${body.leagueId}: ${result.teams} týmů zpracováno, ${result.skipped} přeskočeno, ${result.durationMs} ms`,
       );
-      return;
+      return { status: result.teams > 0 ? "done" : "skipped", matches: result.teams };
     }
 
     // ── fronta článků ──
     case "round_report": {
       if (!env.GEMINI_API_KEY) {
         logger.warn({ module: "queue-consumer" }, "round_report bez GEMINI_API_KEY — přeskočeno");
-        return;
+        return { status: "skipped" };
       }
       const { generateAiRoundReport } = await import("../news/ai-reporter");
       await generateAiRoundReport(
@@ -84,34 +125,34 @@ async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<void
         body.gameWeek,
         body.standingsBefore as never,
       );
-      return;
+      return { status: "done" };
     }
 
     case "ultras_report": {
       if (!env.GEMINI_API_KEY) {
         logger.warn({ module: "queue-consumer" }, "ultras_report bez GEMINI_API_KEY — přeskočeno");
-        return;
+        return { status: "skipped" };
       }
       const { generateUltrasReport } = await import("../news/ultras-report");
       await generateUltrasReport(env.DB, env.GEMINI_API_KEY, body.calendarId);
-      return;
+      return { status: "done" };
     }
 
     case "matchday_preview": {
       if (!env.GEMINI_API_KEY) {
         logger.warn({ module: "queue-consumer" }, "matchday_preview bez GEMINI_API_KEY — přeskočeno");
-        return;
+        return { status: "skipped" };
       }
       const { generateMatchdayPreview } = await import("../news/matchday-preview");
       await generateMatchdayPreview(env.DB, env.GEMINI_API_KEY, body.leagueId, body.calendarId);
-      return;
+      return { status: "done" };
     }
 
     default: {
       // Neznámý typ zprávy — ack, ne retry. Retry by ji jen posílal dokola.
       const unknown = body as { kind?: string };
       logger.error({ module: "queue-consumer" }, `neznámý typ zprávy: ${unknown?.kind ?? "undefined"}`);
-      return;
+      return { status: "unknown" };
     }
   }
 }
