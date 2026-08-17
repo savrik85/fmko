@@ -65,86 +65,136 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="page-container space-y-5">
+    <div className="page-container space-y-3 pb-24">
       <SectionLabel>Administrace</SectionLabel>
 
-      {/* Stav zpracování — první věc, kterou chceš vidět */}
+      {/* Stav zpracování — jediná sekce otevřená rovnou. Když je zelená,
+          zbytek stránky nemusíš vůbec rozbalovat. */}
       <ProvozSection />
 
-      {/* Actions */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <button onClick={advanceDay} disabled={running}
-          className="card p-4 text-center hover:bg-gray-50 transition-colors disabled:opacity-50">
-          <div className="text-2xl mb-1">⏭️</div>
-          <div className="font-heading font-bold text-sm">+1 den</div>
-          <div className="text-sm text-muted">Denní tick</div>
-        </button>
-        <button onClick={runMatches} disabled={running}
-          className="card p-4 text-center hover:bg-gray-50 transition-colors disabled:opacity-50">
-          <div className="text-2xl mb-1">⚽</div>
-          <div className="font-heading font-bold text-sm">Zápasy</div>
-          <div className="text-sm text-muted">18:00 tick</div>
-        </button>
-        <button onClick={advanceWeek} disabled={running}
-          className="card p-4 text-center hover:bg-gray-50 transition-colors disabled:opacity-50">
-          <div className="text-2xl mb-1">⏩</div>
-          <div className="font-heading font-bold text-sm">+7 dní</div>
-          <div className="text-sm text-muted">Denní + zápasy</div>
-        </button>
-        <button onClick={() => { addLog("Načítám znovu…"); window.location.reload(); }}
-          className="card p-4 text-center hover:bg-gray-50 transition-colors">
-          <div className="text-2xl mb-1">🔄</div>
-          <div className="font-heading font-bold text-sm">Refresh</div>
-          <div className="text-sm text-muted">Reload stránky</div>
-        </button>
+      <Rozbalovaci nazev="Herní čas" ikona="⏭️" popis="Posun dne, zápasový tick, konzole">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <button onClick={advanceDay} disabled={running}
+            className="card p-4 text-center hover:bg-gray-50 transition-colors disabled:opacity-50">
+            <div className="text-2xl mb-1">⏭️</div>
+            <div className="font-heading font-bold text-base">+1 den</div>
+            <div className="text-sm text-muted">Denní tick</div>
+          </button>
+          <button onClick={runMatches} disabled={running}
+            className="card p-4 text-center hover:bg-gray-50 transition-colors disabled:opacity-50">
+            <div className="text-2xl mb-1">⚽</div>
+            <div className="font-heading font-bold text-base">Zápasy</div>
+            <div className="text-sm text-muted">18:00 tick</div>
+          </button>
+          <button onClick={advanceWeek} disabled={running}
+            className="card p-4 text-center hover:bg-gray-50 transition-colors disabled:opacity-50">
+            <div className="text-2xl mb-1">⏩</div>
+            <div className="font-heading font-bold text-base">+7 dní</div>
+            <div className="text-sm text-muted">Denní + zápasy</div>
+          </button>
+          <button onClick={() => { addLog("Načítám znovu…"); window.location.reload(); }}
+            className="card p-4 text-center hover:bg-gray-50 transition-colors">
+            <div className="text-2xl mb-1">🔄</div>
+            <div className="font-heading font-bold text-base">Refresh</div>
+            <div className="text-sm text-muted">Reload stránky</div>
+          </button>
+        </div>
+
+        <div className="card p-4 mt-3">
+          <SectionLabel>Konzole</SectionLabel>
+          <div className="bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-soft max-h-[320px] overflow-y-auto overflow-x-auto">
+            {output.length === 0 ? (
+              <div className="text-gray-500">Žádný výstup. Spusť akci výše.</div>
+            ) : (
+              output.map((line, i) => <div key={i} className="whitespace-pre-wrap break-words">{line}</div>)
+            )}
+          </div>
+        </div>
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Sezóna" ikona="🏁" popis="Zakončení ročníku">
+        <SeasonEndSection />
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Obec a hlasování" ikona="🗳️" popis="Komunální volby, Sněm Pralesu">
+        <div className="space-y-3">
+          <MunicipalElectionsSection />
+          <VotesAdmin />
+        </div>
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Zpráva všem" ikona="📢" popis="Předseda Přeboru">
+        <BroadcastSection />
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Uživatelé" ikona="👥" popis="Účty a hesla">
+        <UserManagement />
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Seed data" ikona="🌱" popis="Příjmení, sponzoři, komentáře">
+        <SeedDataSection />
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Systém" ikona="ℹ️" popis="Prostředí a identifikátory">
+        <div className="card p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div className="break-all"><span className="text-muted">Team ID:</span> <span className="font-mono">{teamId ?? "—"}</span></div>
+            <div className="break-all"><span className="text-muted">API:</span> <span className="font-mono">{process.env.NEXT_PUBLIC_API_URL ?? "localhost:8787"}</span></div>
+            <div><span className="text-muted">Prostředí:</span> <span className="font-mono">{(process.env.NEXT_PUBLIC_API_URL ?? "").includes("test") ? "testing" : process.env.NODE_ENV}</span></div>
+            <div><span className="text-muted">Admin:</span> <span className="font-mono text-pitch-500">ano</span></div>
+          </div>
+        </div>
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Nebezpečné" ikona="🗑️" popis="Mazání dat">
         <button onClick={wipePlayers}
-          className="card p-4 text-center hover:bg-red-50 transition-colors">
+          className="card p-4 w-full text-center hover:bg-red-50 transition-colors">
           <div className="text-2xl mb-1">🗑️</div>
-          <div className="font-heading font-bold text-sm text-card-red">Wipe DB</div>
-          <div className="text-sm text-muted">Smazat data</div>
+          <div className="font-heading font-bold text-base text-card-red">Wipe DB</div>
+          <div className="text-sm text-muted">Smazat všechna herní data</div>
         </button>
-      </div>
+      </Rozbalovaci>
+    </div>
+  );
+}
 
-      {/* Console output */}
-      <div className="card p-4">
-        <SectionLabel>Konzole</SectionLabel>
-        <div className="bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-soft max-h-[400px] overflow-y-auto">
-          {output.length === 0 ? (
-            <div className="text-gray-500">Žádný výstup. Spusť akci výše.</div>
-          ) : (
-            output.map((line, i) => <div key={i}>{line}</div>)
-          )}
-        </div>
-      </div>
+/**
+ * Rozbalovací sekce administrace.
+ *
+ * Stránka narostla na deset sekcí pod sebou a na mobilu se v ní nedalo nic najít —
+ * než člověk doscrolloval k uživatelům, projel půl obrazovky seed dat. Teď je
+ * otevřený jen Provoz; zbytek se rozbalí, až je potřeba.
+ */
+function Rozbalovaci({
+  nazev,
+  ikona,
+  popis,
+  children,
+}: {
+  nazev: string;
+  ikona: string;
+  popis?: string;
+  children: React.ReactNode;
+}) {
+  const [otevreno, setOtevreno] = useState(false);
 
-      {/* Zakončení sezóny */}
-      <SeasonEndSection />
-
-      {/* Komunální volby */}
-      <MunicipalElectionsSection />
-
-      {/* Hlasování */}
-      <VotesAdmin />
-
-      {/* Broadcast */}
-      <BroadcastSection />
-
-      {/* User Management */}
-      <UserManagement />
-
-      {/* Seed Data Management */}
-      <SeedDataSection />
-
-      {/* Info */}
-      <div className="card p-4">
-        <SectionLabel>Systém</SectionLabel>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><span className="text-muted">Team ID:</span> <span className="font-mono">{teamId ?? "—"}</span></div>
-          <div><span className="text-muted">API:</span> <span className="font-mono">{process.env.NEXT_PUBLIC_API_URL ?? "localhost:8787"}</span></div>
-          <div><span className="text-muted">Env:</span> <span className="font-mono">{(process.env.NEXT_PUBLIC_API_URL ?? "").includes("test") ? "testing" : process.env.NODE_ENV}</span></div>
-          <div><span className="text-muted">Admin:</span> <span className="font-mono text-pitch-500">true</span></div>
-        </div>
-      </div>
+  return (
+    <div>
+      <button
+        onClick={() => setOtevreno((o) => !o)}
+        aria-expanded={otevreno}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-soft bg-white border border-line text-left transition-colors hover:bg-gray-50 active:scale-[0.99]"
+      >
+        <span className="flex items-center gap-3 min-w-0">
+          <span className="text-xl shrink-0" aria-hidden="true">{ikona}</span>
+          <span className="min-w-0">
+            <span className="block font-heading font-bold text-base truncate">{nazev}</span>
+            {popis && <span className="block text-sm text-muted truncate">{popis}</span>}
+          </span>
+        </span>
+        <span className="text-muted text-lg shrink-0" aria-hidden="true">{otevreno ? "▾" : "▸"}</span>
+      </button>
+      {otevreno && <div className="mt-3">{children}</div>}
     </div>
   );
 }

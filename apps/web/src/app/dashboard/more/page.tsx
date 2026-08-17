@@ -44,7 +44,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
 ];
 
 export default function MorePage() {
-  const { logout } = useTeam();
+  const { logout, isAdmin } = useTeam();
   const [notesUnseen, setNotesUnseen] = useState(false);
 
   // Odznak „Nové" u novinek — přehodnotit při každém otevření stránky.
@@ -89,6 +89,30 @@ export default function MorePage() {
           </div>
         </div>
       ))}
+      {/* Administrace — jen pro adminy. Do spodní lišty se nevešla (má 5 položek
+          a nemá růst), takže patří sem, kde je zbytek rozcestníku. */}
+      {isAdmin && (
+        <div className="mb-6">
+          <p className="text-xs font-heading font-bold text-muted uppercase tracking-wide mb-3 px-1 flex items-center gap-2 after:flex-1 after:h-px after:bg-line">Správa</p>
+          <div className="grid grid-cols-4 gap-2">
+            <Link
+              href="/dashboard/admin"
+              className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl transition-transform active:scale-95"
+              style={{ background: "#8B451324" }}
+            >
+              <div
+                className="w-11 h-11 rounded-xl flex items-center justify-center text-xl"
+                style={{ background: "#8B45133D" }}
+                aria-hidden="true"
+              >
+                🛠️
+              </div>
+              <span className="text-micro font-medium text-ink text-center leading-tight">Administrace</span>
+            </Link>
+          </div>
+        </div>
+      )}
+
       <button onClick={logout}
         className="w-full mt-6 py-3 rounded-xl text-center text-sm font-heading font-bold text-card-red bg-red-50 hover:bg-red-100 transition-colors">
         🚪 Odhlásit se
