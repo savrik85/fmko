@@ -162,8 +162,11 @@ refereesRouter.get("/teams/:teamId/disciplinary", async (c) => {
      FROM transactions tr
      JOIN teams t ON t.id = tr.team_id
      JOIN villages v ON v.id = t.village_id
+     LEFT JOIN leagues l ON l.id = t.league_id
      WHERE v.district = ? AND tr.amount < 0
        AND (tr.type = 'disciplinary_fine' OR tr.description LIKE '%okuta%')
+       -- Áčka, ne rezervy: U21 má vlastní soutěž a do listiny okresu nepatří.
+       AND COALESCE(l.league_type, '') != 'u21'
      ORDER BY tr.created_at DESC
      LIMIT 80`
   ).bind(team.district).all<{

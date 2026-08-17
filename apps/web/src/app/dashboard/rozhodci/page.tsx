@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { Spinner, SectionLabel, Tabs, useTabParam } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { DisciplinaryPanel } from "@/components/referees/disciplinary-panel";
 import {
   formatGrade, gradeColor, gradeWord,
   type RefereeProfileView, type RefereeStatsView,
@@ -13,8 +14,12 @@ import {
 
 type RefereeRow = RefereeProfileView & { stats: RefereeStatsView };
 
+const ZALOZKY = ["komise", "disciplinarka"] as const;
+type Zalozka = (typeof ZALOZKY)[number];
+
 export default function RozhodciPage() {
   const { teamId } = useTeam();
+  const [tab, setTab] = useTabParam<Zalozka>(ZALOZKY);
   const [rows, setRows] = useState<RefereeRow[]>([]);
   const [district, setDistrict] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -33,19 +38,27 @@ export default function RozhodciPage() {
 
   return (
     <div className="page-container pb-24">
-      <h1 className="font-heading font-bold text-2xl mb-1">Rozhodčí</h1>
+      <h1 className="font-heading font-bold text-2xl mb-3">Rozhodčí</h1>
+
+      <Tabs
+        items={[
+          { key: "komise", label: "Rozhodčí", icon: "\u{1F3C3}" },
+          { key: "disciplinarka", label: "Disciplinárka", icon: "⚖️" },
+        ]}
+        value={tab}
+        onChange={setTab}
+        ariaLabel="Sekce komise"
+        className="mb-4"
+      />
+
+      {tab === "disciplinarka" ? (
+        <DisciplinaryPanel teamId={teamId} />
+      ) : (
+      <>
       <p className="text-sm text-muted mb-4">
         Komise rozhodčích okresu {district || "—"}. Známka 1–5 se počítá za každý odpískaný zápas
         podle toho, jak ho sudí zvládl — čím níž v tabulce, tím hůř.
       </p>
-
-      <Link href="/dashboard/rozhodci/disciplinarka" className="card card-hover p-3 mb-4 flex items-center gap-3">
-        <span className="text-base shrink-0">⚖️</span>
-        <div className="min-w-0">
-          <div className="font-heading font-bold text-base">Disciplinární komise</div>
-          <div className="text-sm text-muted">Pokuty klubům a za co padly</div>
-        </div>
-      </Link>
 
       {odpiskali.length === 0 && (
         <div className="card p-4 mb-4">
@@ -93,6 +106,8 @@ export default function RozhodciPage() {
           </Link>
         ))}
       </div>
+      </>
+      )}
     </div>
   );
 }
