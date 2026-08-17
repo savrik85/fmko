@@ -36,6 +36,8 @@ export interface LeagueRoundResult {
   queries: number;
   /** Rozpad na fáze — kde se těch ~2000 dotazů na kolo reálně utratí. */
   phases: PhaseMark[];
+  /** Nejčastější dotazy — který příkaz se opakuje stokrát. */
+  topQueries: Array<{ sql: string; count: number }>;
 }
 
 export interface PhaseMark {
@@ -84,12 +86,16 @@ export interface LeagueRoundOpts {
  * Obalí D1 a počítá `prepare()` volání. Slouží jen k měření — bez něj není
  * jak doložit, že zpracování jedné ligy nezávisí na počtu lig (test T6).
  */
-function countingDb(db: D1Database, counter: { n: number }): D1Database {
+function countingDb(db: D1Database, counter: { n: number; hist: Map<string, number> }): D1Database {
   return new Proxy(db, {
     get(target, prop, receiver) {
       if (prop === "prepare") {
         return (query: string) => {
           counter.n++;
+          // Histogram podle normalizovaného tvaru dotazu — ukáže, který příkaz
+          // se opakuje stokrát. Bez toho se dá jen hádat, kde se dotazy utrácí.
+          const key = query.replace(/\s+/g, " ").trim().slice(0, 70);
+          counter.hist.set(key, (counter.hist.get(key) ?? 0) + 1);
           return target.prepare(query);
         };
       }
@@ -158,7 +164,7 @@ export async function processLeagueRound(
   opts: LeagueRoundOpts = {},
 ): Promise<LeagueRoundResult> {
   const startedAt = Date.now();
-  const counter = { n: 0 };
+  const counter = { n: 0, hist: new Map<string, number>() };
   const db = countingDb(env.DB, counter);
 
   const prof = makeProfiler(counter);
@@ -170,6 +176,10 @@ export async function processLeagueRound(
     durationMs: Date.now() - startedAt,
     queries: counter.n,
     phases: prof.marks,
+    topQueries: [...counter.hist.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([sql, count]) => ({ sql, count })),
   });
 
   const gameDate = await readLeagueGameDate(db, leagueId);
@@ -686,7 +696,7 @@ export async function processLeagueMaintenance(
   leagueId: string,
 ): Promise<{ celebritySpawned: boolean; listings: number; durationMs: number; queries: number }> {
   const startedAt = Date.now();
-  const counter = { n: 0 };
+  const counter = { n: 0, hist: new Map<string, number>() };
   const db = countingDb(env.DB, counter);
   let celebritySpawned = false;
   let listings = 0;
