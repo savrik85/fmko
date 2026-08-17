@@ -998,6 +998,12 @@ export async function executeDailyTick(
       .bind(cutoff.toISOString())
       .run()
       .catch((e) => logger.warn({ module: "daily-tick" }, "úklid team_day_log", e));
+
+    // Totéž pro telemetrii běhů z fronty — přibývá jí pár desítek řádků denně,
+    // což při delším sledování zbytečně roste. 30 dní historie na analýzu stačí.
+    await env.DB.prepare("DELETE FROM queue_runs WHERE created_at < datetime('now', '-30 days')")
+      .run()
+      .catch((e) => logger.warn({ module: "daily-tick" }, "úklid queue_runs", e));
   }
 
   // ── Player offer generation (organické nabídky — hospodský, kamarád, dorost, starosta) ──
