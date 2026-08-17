@@ -8,6 +8,18 @@ import { SectionLabel } from "@/components/ui";
 interface SeedTable { key: string; label: string; count: number; editable: boolean; districts?: string[] }
 interface SeedRow { [key: string]: unknown }
 
+/**
+ * Potvrzení pro akce, které zasahují do hry ostatním lidem.
+ *
+ * Tahle tlačítka se dřív spouštěla na jedno kliknutí — u posunu dne dokonce
+ * hned vedle neškodného „Refresh". Stačilo minout a posunul se herní den celé
+ * hře; vrátit to jde jen přes Time Travel, což znamená vzít VŠEM hráčům
+ * odehraný den. Totéž platí pro rozeslání zprávy všem nebo reset cizího hesla.
+ */
+function potvrd(nazev: string, dopad: string): boolean {
+  return confirm(`${nazev}\n\n${dopad}\n\nTOHLE NEJDE VZÍT ZPĚT. Pokračovat?`);
+}
+
 export default function AdminPage() {
   const { isAdmin, teamId, token } = useTeam();
   const [output, setOutput] = useState<string[]>([]);
@@ -24,6 +36,10 @@ export default function AdminPage() {
   const authH: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
   const advanceDay = async () => {
+    if (!potvrd(
+      "Posunout herní den o 1 den dopředu?",
+      "Proběhnou tréninky, finance a zprávy pro VŠECHNY týmy ve hře.",
+    )) return;
     setRunning(true);
     addLog("Spouštím denní tick (posunutí dne, tréninky, zprávy)...");
     try {
@@ -35,6 +51,10 @@ export default function AdminPage() {
   };
 
   const runMatches = async () => {
+    if (!potvrd(
+      "Odsimulovat zápasové kolo?",
+      "Odehrají se zápasy, zaúčtují se finance (vstupné, prémie) a rozešlou se notifikace hráčům.",
+    )) return;
     setRunning(true);
     addLog("Spouštím zápasový tick (18:00 simulace)...");
     try {
@@ -46,6 +66,10 @@ export default function AdminPage() {
   };
 
   const advanceWeek = async () => {
+    if (!potvrd(
+      "Spustit 7 herních dní za sebou?",
+      "Sedmkrát denní tick i zápasový tick. Největší zásah, jaký odsud jde udělat — trvá minuty a posune hru o týden.",
+    )) return;
     setRunning(true);
     addLog("Spouštím 7 dní (denní tick + zápasový tick)...");
     for (let i = 0; i < 7; i++) {
@@ -60,7 +84,7 @@ export default function AdminPage() {
   };
 
   const wipePlayers = async () => {
-    if (!confirm("Opravdu smazat všechna herní data?")) return;
+    if (!potvrd("Smazat všechna herní data?", "Týmy, hráči, zápasy, finance — všechno.")) return;
     addLog("Toto vyžaduje přímý přístup k DB — použij CLI");
   };
 
@@ -365,6 +389,7 @@ function VotesAdmin() {
 
   const createVote = async () => {
     if (!title.trim()) return;
+    if (!potvrd("Vypsat hlasování Sněmu?", `Otevře se všem manažerům jako „${title.trim().slice(0, 120)}".`)) return;
     setCreating(true);
     try {
       await fetch(`${API}/api/admin/votes`, {
@@ -385,6 +410,7 @@ function VotesAdmin() {
   };
 
   const closeVote = async (voteId: string) => {
+    if (!potvrd("Uzavřít hlasování?", "Vyhodnotí se výsledek a nikdo už nebude moct hlasovat.")) return;
     try {
       await fetch(`${API}/api/admin/votes/${voteId}/close`, {
         method: "POST",
@@ -483,6 +509,10 @@ function BroadcastSection() {
 
   const send = async () => {
     if (!message.trim()) return;
+    if (!potvrd(
+      "Rozeslat zprávu všem týmům?",
+      `Dorazí VŠEM hráčům ve hře jako zpráva od Předsedy Přeboru:\n\n„${message.trim().slice(0, 160)}${message.trim().length > 160 ? "…" : ""}"`,
+    )) return;
     setSending(true);
     try {
       const res = await fetch(`${API}/api/admin/broadcast`, {
@@ -604,6 +634,7 @@ function UserManagement() {
 
   const resetPassword = async (userId: string) => {
     if (!newPw) return;
+    if (!potvrd("Změnit heslo tomuhle uživateli?", "Původní heslo přestane platit a musíš mu nové sdělit ty.")) return;
     const res = await apiFetch<{ ok?: boolean; error?: string }>("/auth/admin/change-password", {
       method: "POST", headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify({ userId, newPassword: newPw }),
