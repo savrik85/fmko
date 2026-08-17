@@ -505,3 +505,21 @@ platí z běžných účetních kreditů — zmiňuje jen samostatné AI Gateway
 2. **Zátěž na 20+ ligách** — konzistence naměřená přes 6 lig, ne přes 20+.
 3. **Obal `scheduled()`** — vnitřek ověřen přes admin endpointy, samotný cron
    na testu poprvé vystřelí v `0 14 UTC`.
+
+### 10.6 Workers Logs — pozor na CI token
+
+Observability (`[env.testing.observability] enabled = true`) **nasadí jen lokální
+`wrangler deploy`, ne CI**. Verze wrangleru je v obou případech stejná (4.76.0),
+takže rozdíl je v oprávnění API tokenu, kterým deployuje GitHub Actions.
+
+Důsledek: po každém CI deployi je potřeba ověřit, jestli observability drží:
+
+```
+curl -s -H "Authorization: Bearer $TOK" \
+  "https://api.cloudflare.com/client/v4/accounts/$ACC/workers/scripts/prales-api-test/script-settings" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['result'].get('observability'))"
+```
+
+Bez observability nejsou vidět invokace cronu ani konzumera fronty — `wrangler tail`
+je nezachytí. Jediná zbývající viditelnost je tabulka `queue_runs`, kterou si píše
+aplikace sama.
