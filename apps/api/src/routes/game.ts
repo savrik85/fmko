@@ -8609,6 +8609,124 @@ gameRouter.get("/admin/queue/runs", async (c) => {
   return c.json({ ok: true, summary: summary.results, runs: rows.results });
 });
 
+// GET /api/admin/health — jeden pohled na to, jestli je zpracování zdravé.
+// Vznikl pro sledování testingu před nasazením front na produkci: bez něj by se
+// muselo lovit v pěti tabulkách. Každý signál má vlastní verdikt, ať je vidět CO je špatně.
+gameRouter.get("/admin/health", async (c) => {
+  const { readMatchTickMode } = await import("../queue/messages");
+  const { readAiProvider } = await import("../lib/ai-provider");
+
+  const one = async <T>(sql: string, popis: string): Promise<T | null> =>
+    c.env.DB.prepare(sql).first<T>().catch((e) => {
+      logger.warn({ module: "game" }, `health: ${popis}`, e);
+      return null;
+    });
+
+  const [mode, aiProvider] = await Promise.all([
+    readMatchTickMode(c.env.CACHE_KV),
+    readAiProvider(c.env.CACHE_KV),
+  ]);
+
+  const dlq = await one<{ n: number }>("SELECT COUNT(*) AS n FROM queue_failures WHERE resolved = 0", "dlq");
+  const retries = await one<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM queue_runs WHERE attempts > 1 AND created_at > datetime('now', '-3 days')",
+    "retries",
+  );
+  const errors = await one<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM queue_runs WHERE status = 'error' AND created_at > datetime('now', '-3 days')",
+    "errors",
+  );
+  const stuck = await one<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM season_calendar WHERE status = 'lineup_locked'",
+    "stuck",
+  );
+  // Nedohraná kola, jejichž termín už nastal — když tohle roste den po dni, tick nestíhá.
+  const backlog = await one<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM season_calendar sc
+      WHERE sc.status = 'scheduled'
+        AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar x WHERE x.league_id = sc.league_id)
+        AND sc.scheduled_at <= (SELECT MAX(game_date) FROM teams t WHERE t.league_id = sc.league_id)`,
+    "backlog",
+  );
+  const clock = await one<{ game_date: string | null; offset_days: number | null }>(
+    "SELECT (SELECT MAX(game_date) FROM teams) AS game_date, (SELECT offset_days FROM game_clock WHERE id = 1) AS offset_days",
+    "clock",
+  );
+  const lastRound = await one<{ trvani: number | null; kdy: string | null }>(
+    "SELECT duration_ms AS trvani, created_at AS kdy FROM queue_runs WHERE kind = 'league_round' AND status = 'done' ORDER BY created_at DESC LIMIT 1",
+    "lastRound",
+  );
+  const rounds24 = await one<{ n: number; prumer: number | null; max: number | null }>(
+    "SELECT COUNT(*) AS n, AVG(duration_ms) AS prumer, MAX(duration_ms) AS max FROM queue_runs WHERE kind = 'league_round' AND status = 'done' AND created_at > datetime('now', '-1 day')",
+    "rounds24",
+  );
+
+  const kontroly = [
+    { nazev: "dead-letter fronta", hodnota: dlq?.n ?? -1, ok: (dlq?.n ?? 1) === 0, popis: "zprávy, které selhaly i po retry" },
+    { nazev: "retry za 3 dny", hodnota: retries?.n ?? -1, ok: (retries?.n ?? 1) === 0, popis: "opakované doručení = něco padá" },
+    { nazev: "chybné běhy za 3 dny", hodnota: errors?.n ?? -1, ok: (errors?.n ?? 1) === 0, popis: "výjimka v konzumeru" },
+    { nazev: "zaseklá kola", hodnota: stuck?.n ?? -1, ok: (stuck?.n ?? 1) === 0, popis: "lineup_locked mimo běžící tick" },
+    { nazev: "nedohraná splatná kola", hodnota: backlog?.n ?? -1, ok: (backlog?.n ?? 99) < 10, popis: "když roste den po dni, tick nestíhá" },
+  ];
+
+  const verdikt = kontroly.every((k) => k.ok) ? "ok" : "pozor";
+  return c.json({
+    ok: true,
+    verdikt,
+    rezim: { zpracovani: mode, aiPoskytovatel: aiProvider },
+    hodiny: { herniDatum: clock?.game_date ?? null, offsetDnu: clock?.offset_days ?? null },
+    kola24h: {
+      pocet: rounds24?.n ?? 0,
+      prumerMs: rounds24?.prumer ? Math.round(rounds24.prumer) : null,
+      maxMs: rounds24?.max ?? null,
+    },
+    posledniKolo: { trvaniMs: lastRound?.trvani ?? null, kdy: lastRound?.kdy ?? null },
+    kontroly,
+  });
+});
+
+// GET /api/admin/queue/profile — kde se utratí dotazy na jedno kolo (průměr přes poslední běhy)
+gameRouter.get("/admin/queue/profile", async (c) => {
+  const rows = await c.env.DB.prepare(
+    "SELECT phases, queries, duration_ms FROM queue_runs WHERE kind = 'league_round' AND status = 'done' AND phases IS NOT NULL ORDER BY created_at DESC LIMIT 20",
+  )
+    .all<{ phases: string; queries: number; duration_ms: number }>()
+    .catch((e) => {
+      logger.warn({ module: "game" }, "queue profile select", e);
+      return { results: [] as Array<{ phases: string; queries: number; duration_ms: number }> };
+    });
+
+  const soucty = new Map<string, { queries: number; ms: number; n: number }>();
+  for (const row of rows.results) {
+    let parsed: Array<{ name: string; ms: number; queries: number }>;
+    try {
+      parsed = JSON.parse(row.phases);
+    } catch (e) {
+      logger.warn({ module: "game" }, "profile: rozbitý JSON fází", e);
+      continue;
+    }
+    for (const f of parsed) {
+      const acc = soucty.get(f.name) ?? { queries: 0, ms: 0, n: 0 };
+      acc.queries += f.queries;
+      acc.ms += f.ms;
+      acc.n += 1;
+      soucty.set(f.name, acc);
+    }
+  }
+
+  const celkemDotazu = [...soucty.values()].reduce((a, v) => a + v.queries, 0) || 1;
+  const faze = [...soucty.entries()]
+    .map(([name, v]) => ({
+      faze: name,
+      prumerDotazu: Math.round(v.queries / v.n),
+      prumerMs: Math.round(v.ms / v.n),
+      podilDotazu: `${Math.round((v.queries / celkemDotazu) * 100)} %`,
+    }))
+    .sort((a, b) => b.prumerDotazu - a.prumerDotazu);
+
+  return c.json({ ok: true, vzorkuBehu: rows.results.length, faze });
+});
+
 // GET /api/admin/queue/failures — zprávy, které skončily v dead-letter frontě.
 // Bez tohohle liga vypadne potichu a nikdo se to nedozví.
 gameRouter.get("/admin/queue/failures", async (c) => {

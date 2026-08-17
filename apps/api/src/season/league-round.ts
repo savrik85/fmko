@@ -34,6 +34,34 @@ export interface LeagueRoundResult {
   durationMs: number;
   /** Počet D1 dotazů — totéž. */
   queries: number;
+  /** Rozpad na fáze — kde se těch ~2000 dotazů na kolo reálně utratí. */
+  phases: PhaseMark[];
+}
+
+export interface PhaseMark {
+  name: string;
+  ms: number;
+  queries: number;
+}
+
+/**
+ * Měří dobu a počet dotazů mezi značkami. Existuje proto, že celkové číslo
+ * (2000 dotazů / kolo) říká, že je to moc, ale ne kde. Bez rozpadu by se
+ * optimalizovalo poslepu.
+ */
+function makeProfiler(counter: { n: number }) {
+  const marks: PhaseMark[] = [];
+  let lastMs = Date.now();
+  let lastQueries = 0;
+  return {
+    marks,
+    mark(name: string): void {
+      const now = Date.now();
+      marks.push({ name, ms: now - lastMs, queries: counter.n - lastQueries });
+      lastMs = now;
+      lastQueries = counter.n;
+    },
+  };
 }
 
 export interface LeagueRoundOpts {
@@ -133,6 +161,7 @@ export async function processLeagueRound(
   const counter = { n: 0 };
   const db = countingDb(env.DB, counter);
 
+  const prof = makeProfiler(counter);
   const done = (status: LeagueRoundStatus, matches: number, calendarId?: string): LeagueRoundResult => ({
     status,
     leagueId,
@@ -140,6 +169,7 @@ export async function processLeagueRound(
     matches,
     durationMs: Date.now() - startedAt,
     queries: counter.n,
+    phases: prof.marks,
   });
 
   const gameDate = await readLeagueGameDate(db, leagueId);
@@ -181,6 +211,8 @@ export async function processLeagueRound(
     return done("skipped", 0, calendarId);
   }
 
+  prof.mark("lock");
+
   // Snapshot tabulky PŘED kolem (pro AI reportera)
   const { calculateStandings } = await import("../stats/standings");
   const standingsBefore: StandingEntry[] = await calculateStandings(db, leagueId);
@@ -190,9 +222,13 @@ export async function processLeagueRound(
     .bind(calendarId)
     .run();
 
+  prof.mark("tabulka");
+
   const { runScheduledMatches } = await import("../multiplayer/match-runner");
   const results = await runScheduledMatches(db, calendarId, env.GEMINI_API_KEY);
   await db.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?").bind(calendarId).run();
+
+  prof.mark("simulace");
 
   // Po U21 kole: vrátit hráče s next_match_return zpět do A-týmu
   try {
@@ -232,22 +268,31 @@ export async function processLeagueRound(
     logger.warn({ module: "league-round" }, "post-match interview cleanup", e);
   }
 
+  prof.mark("u21+rozhovory");
+
   if (results.length > 0) {
     const calRow = await db.prepare("SELECT game_week FROM season_calendar WHERE id = ?").bind(calendarId).first<{ game_week: number }>();
     const gameWeek = calRow?.game_week ?? 0;
 
     await writeRoundSummaryNews(db, leagueId, calendarId, gameWeek);
+    prof.mark("zpravodaj");
     await sendMatchResultNotifications(env, db, results);
+    prof.mark("notifikace");
     await dispatchRoundReports(env, leagueId, calendarId, gameWeek, standingsBefore, opts);
+    prof.mark("reporty");
     await runBetweenRoundEvents(db, results, gameWeek);
+    prof.mark("udalosti-mezi-koly");
     await runAdhocEvents(env, db, leagueId, gameWeek);
+    prof.mark("adhoc-udalosti");
     await cleanupMatchDayConversations(db, calendarId);
+    prof.mark("uklid-konverzaci");
   }
 
   const result = done("done", results.length, calendarId);
   logger.info(
     { module: "league-round" },
-    `liga ${leagueId}: ${result.matches} zápasů, ${result.queries} dotazů, ${result.durationMs} ms`,
+    `liga ${leagueId}: ${result.matches} zápasů, ${result.queries} dotazů, ${result.durationMs} ms | ` +
+      result.phases.map((p) => `${p.name}=${p.queries}q/${p.ms}ms`).join(" "),
   );
   return result;
 }

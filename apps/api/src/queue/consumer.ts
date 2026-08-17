@@ -43,6 +43,7 @@ interface RunOutcome {
   status: string;
   matches?: number;
   queries?: number;
+  phases?: Array<{ name: string; ms: number; queries: number }>;
 }
 
 /**
@@ -59,7 +60,7 @@ async function recordRun(
 ): Promise<void> {
   const leagueId = body && "leagueId" in body ? (body as { leagueId?: string }).leagueId ?? null : null;
   await env.DB.prepare(
-    "INSERT INTO queue_runs (id, kind, league_id, status, matches, queries, duration_ms, attempts, lag_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))",
+    "INSERT INTO queue_runs (id, kind, league_id, status, matches, queries, duration_ms, attempts, lag_ms, phases, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))",
   )
     .bind(
       crypto.randomUUID(),
@@ -71,6 +72,7 @@ async function recordRun(
       durationMs,
       attempts,
       lagMs,
+      outcome.phases ? JSON.stringify(outcome.phases) : null,
     )
     .run()
     .catch((e) => logger.warn({ module: "queue-consumer" }, "zápis queue_runs selhal", e));
@@ -112,7 +114,7 @@ async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<RunO
         { module: "queue-consumer" },
         `league_round ${body.leagueId}: ${result.status}, ${result.matches} zápasů, ${result.queries} dotazů, ${result.durationMs} ms`,
       );
-      return { status: result.status, matches: result.matches, queries: result.queries };
+      return { status: result.status, matches: result.matches, queries: result.queries, phases: result.phases };
     }
 
     case "league_maintenance": {
