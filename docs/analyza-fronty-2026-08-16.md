@@ -506,13 +506,17 @@ platí z běžných účetních kreditů — zmiňuje jen samostatné AI Gateway
 3. **Obal `scheduled()`** — vnitřek ověřen přes admin endpointy, samotný cron
    na testu poprvé vystřelí v `0 14 UTC`.
 
-### 10.6 Workers Logs — pozor na CI token
+### 10.6 Workers Logs — zapnuto, ale první CI deploy je nezapnul
 
-Observability (`[env.testing.observability] enabled = true`) **nasadí jen lokální
-`wrangler deploy`, ne CI**. Verze wrangleru je v obou případech stejná (4.76.0),
-takže rozdíl je v oprávnění API tokenu, kterým deployuje GitHub Actions.
+Observability (`[env.testing.observability] enabled = true`) se po **prvním** CI
+deployi nepropsala (`script-settings` vracelo `observability: null`), i když blok
+v `wrangler.toml` byl. Lokální `wrangler deploy --env testing` ji zapnul a
+**následující CI deploy ji už zachoval**. Verze wrangleru je v obou případech
+stejná (4.76.0), takže to nebyl rozdíl verzí; příčina prvního selhání zůstala
+neobjasněná — nejspíš přechodná.
 
-Důsledek: po každém CI deployi je potřeba ověřit, jestli observability drží:
+Praktický závěr: po zapnutí observability v konfiguraci **ověřit, že se opravdu
+propsala**, a případně jednou nasadit lokálně:
 
 ```
 curl -s -H "Authorization: Bearer $TOK" \
