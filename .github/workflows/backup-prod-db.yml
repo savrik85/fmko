@@ -1,0 +1,79 @@
+name: Záloha produkční DB
+
+# Proč to existuje, když D1 má Time Travel:
+#   Time Travel umí obnovit k libovolné minutě za posledních 30 dní, zdarma a automaticky.
+#   Nepokrývá ale tři věci, kvůli kterým je tenhle export potřeba:
+#     1. retenci nad 30 dní
+#     2. obnovu do JINÉ databáze — Time Travel přepisuje na místě a neumí klonovat,
+#        takže klon prod → test se bez exportu neobejde
+#     3. smazání databáze jako takové
+#
+# Ruční spuštění: Actions → „Záloha produkční DB" → Run workflow.
+
+on:
+  schedule:
+    # 01:20 UTC — mimo všechny herní crony (3, 5, 6, 10, 14, 16 UTC),
+    # aby export nečetl databázi uprostřed zápasového nebo denního ticku.
+    - cron: "20 1 * * *"
+  workflow_dispatch:
+
+# Dvě zálohy najednou nedávají smysl a jen by se praly o stejný soubor.
+concurrency:
+  group: backup-prod-db
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Export produkční D1
+        working-directory: apps/api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          STAMP=$(date -u +%Y-%m-%d)
+          npx wrangler d1 export prales-db-prod --remote --output "prod-$STAMP.sql"
+          ls -lh "prod-$STAMP.sql"
+          # Prázdný nebo pahýlovitý export je horší než žádný — tvářil by se jako záloha.
+          SIZE=$(stat -c%s "prod-$STAMP.sql")
+          if [ "$SIZE" -lt 1000000 ]; then
+            echo "CHYBA: export má jen $SIZE B, což na produkční databázi nesedí"
+            exit 1
+          fi
+          gzip -9 "prod-$STAMP.sql"
+          ls -lh "prod-$STAMP.sql.gz"
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+
+      - name: Nahrát do R2
+        working-directory: apps/api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx wrangler r2 object put "prales-backups/denni/prod-$STAMP.sql.gz" \
+            --file "prod-$STAMP.sql.gz" --remote
+          # První v měsíci se ukládá i do dlouhodobé složky — denní se po 35 dnech mažou.
+          if [ "$(date -u +%d)" = "01" ]; then
+            npx wrangler r2 object put "prales-backups/mesicni/prod-$STAMP.sql.gz" \
+              --file "prod-$STAMP.sql.gz" --remote
+          fi
+
+      - name: Ověřit, že záloha v R2 opravdu je
+        working-directory: apps/api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx wrangler r2 object get "prales-backups/denni/prod-$STAMP.sql.gz" \
+            --file /tmp/overeni.gz --remote
+          gzip -t /tmp/overeni.gz
+          echo "OK — záloha v R2 existuje a gzip je neporušený ($(stat -c%s /tmp/overeni.gz) B)"
