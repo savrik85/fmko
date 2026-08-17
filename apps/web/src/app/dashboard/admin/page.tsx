@@ -68,6 +68,9 @@ export default function AdminPage() {
     <div className="page-container space-y-5">
       <SectionLabel>Administrace</SectionLabel>
 
+      {/* Stav zpracování — první věc, kterou chceš vidět */}
+      <ProvozSection />
+
       {/* Actions */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <button onClick={advanceDay} disabled={running}
@@ -791,6 +794,147 @@ function SeedDataSection() {
               </tbody>
             </table>
           </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Provoz — jestli zpracování hry běží, jak má.
+//
+// Vzniklo proto, že hlídač i měření byly dostupné jen jako JSON endpointy
+// s tokenem. To se v praxi nikdo koukat nebude, takže by se problém stejně
+// zjistil až od naštvaného hráče. Tohle je jedno místo, kam se dá mrknout.
+// ────────────────────────────────────────────────────────────────────────────
+
+interface Kontrola { nazev: string; hodnota: number | string; ok: boolean; popis: string }
+interface Zdravi {
+  verdikt: string;
+  rezim: { zpracovani: string; aiPoskytovatel: string };
+  hodiny: { herniDatum: string | null; offsetDnu: number | null };
+  kola24h: { pocet: number; prumerMs: number | null; maxMs: number | null };
+  posledniKolo: { trvaniMs: number | null; kdy: string | null };
+  osirele?: { ligy: number; tymy: number; kola: number };
+  kontroly: Kontrola[];
+}
+
+function ProvozSection() {
+  const { token } = useTeam();
+  const [data, setData] = useState<Zdravi | null>(null);
+  const [chyba, setChyba] = useState<string | null>(null);
+  const [nacita, setNacita] = useState(true);
+
+  const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+
+  const nacti = async () => {
+    setNacita(true);
+    setChyba(null);
+    try {
+      const res = await fetch(`${API}/api/admin/health`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setData(await res.json());
+    } catch (e: any) {
+      setChyba(e.message ?? "nepodařilo se načíst");
+      console.error("načtení stavu provozu:", e);
+    }
+    setNacita(false);
+  };
+
+  useEffect(() => {
+    if (!token) return;
+    nacti();
+    // Obnova jednou za minutu — tick trvá minuty, častěji nemá co přibýt.
+    const t = setInterval(nacti, 60_000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const vteriny = (ms: number | null) => (ms == null ? "—" : `${Math.round(ms / 1000)} s`);
+
+  // Osiřelé ligy hlásíme, ale nebarvíme celý panel načerveno — je to známý
+  // pozůstatek testování, ne porucha zpracování.
+  const vazneProblemy = (data?.kontroly ?? []).filter((k) => !k.ok && k.nazev !== "osiřelé ligy");
+  const vseOk = data != null && vazneProblemy.length === 0;
+
+  return (
+    <div className="card p-4 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <SectionLabel>Provoz</SectionLabel>
+        <button
+          onClick={nacti}
+          disabled={nacita}
+          className="text-sm text-muted underline disabled:opacity-50"
+        >
+          {nacita ? "Načítám…" : "Obnovit"}
+        </button>
+      </div>
+
+      {chyba && (
+        <div className="text-card-red font-heading font-bold text-base">
+          Stav se nepodařilo načíst: {chyba}
+        </div>
+      )}
+
+      {data && (
+        <>
+          <div
+            className={`rounded-soft p-4 text-center ${
+              vseOk ? "bg-green-50 text-green-800" : "bg-red-50 text-card-red"
+            }`}
+          >
+            <div className="text-3xl mb-1">{vseOk ? "✅" : "⚠️"}</div>
+            <div className="font-heading font-bold text-xl">
+              {vseOk ? "Zpracování běží v pořádku" : `Něco nesedí (${vazneProblemy.length})`}
+            </div>
+            <div className="text-sm mt-1">
+              Herní den {data.hodiny.herniDatum?.slice(0, 10) ?? "—"} · režim {data.rezim.zpracovani} ·
+              AI {data.rezim.aiPoskytovatel}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="bg-gray-50 rounded-soft p-3">
+              <div className="font-heading font-bold text-xl">{data.kola24h.pocet}</div>
+              <div className="text-sm text-muted">kol za 24 h</div>
+            </div>
+            <div className="bg-gray-50 rounded-soft p-3">
+              <div className="font-heading font-bold text-xl">{vteriny(data.kola24h.prumerMs)}</div>
+              <div className="text-sm text-muted">průměr na kolo</div>
+            </div>
+            <div className="bg-gray-50 rounded-soft p-3">
+              <div className="font-heading font-bold text-xl">{vteriny(data.posledniKolo.trvaniMs)}</div>
+              <div className="text-sm text-muted">poslední kolo</div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {data.kontroly.map((k) => (
+              <div
+                key={k.nazev}
+                className="flex items-start justify-between gap-3 border-b border-gray-100 pb-2 last:border-0"
+              >
+                <div className="min-w-0">
+                  <div className="font-heading font-bold text-base">
+                    {k.ok ? "✅" : "⚠️"} {k.nazev}
+                  </div>
+                  <div className="text-sm text-muted">{k.popis}</div>
+                </div>
+                <div className={`font-heading font-bold text-lg shrink-0 ${k.ok ? "" : "text-card-red"}`}>
+                  {k.hodnota}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {data.osirele && data.osirele.ligy > 0 && (
+            <div className="text-sm text-muted">
+              Osiřelá data: {data.osirele.ligy} lig, {data.osirele.tymy} týmů, {data.osirele.kola} kol.
+              Pozůstatek testování — na zpracování nemá vliv.
+            </div>
+          )}
         </>
       )}
     </div>
