@@ -8527,21 +8527,24 @@ gameRouter.post("/admin/queue/enqueue-previews", async (c) => {
 // Pošle TUTÉŽ zprávu vícekrát — přímý test idempotence (fronty doručují "aspoň jednou").
 // Očekávané chování: první zpráva kolo odsimuluje, další skončí jako "skipped"
 // a finance se NEZDVOJÍ. Regrese na incident 2026-04.
+// ?gameDate=... podvrhne herní datum → ověření, že zastaralá zpráva se zahodí (stale).
+// ?kind=selftest_fail pošle zprávu, která vždy selže → ověření retry + DLQ.
 gameRouter.post("/admin/queue/send-duplicate", async (c) => {
   const leagueId = c.req.query("leagueId");
   const times = Math.min(Number(c.req.query("times") ?? 2), 10);
+  const kind = c.req.query("kind") === "selftest_fail" ? "selftest_fail" : "league_round";
   if (!leagueId) return c.json({ error: "leagueId je povinné" }, 400);
   if (!c.env.MATCH_QUEUE) return c.json({ error: "MATCH_QUEUE binding chybí" }, 500);
 
   const { readLeagueGameDate } = await import("../season/league-round");
-  const gameDate = await readLeagueGameDate(c.env.DB, leagueId);
+  const gameDate = c.req.query("gameDate") ?? (await readLeagueGameDate(c.env.DB, leagueId));
   if (!gameDate) return c.json({ error: "liga nemá herní datum" }, 400);
 
   const enqueuedAt = new Date().toISOString();
   for (let i = 0; i < times; i++) {
-    await c.env.MATCH_QUEUE.send({ kind: "league_round", leagueId, gameDate, enqueuedAt });
+    await c.env.MATCH_QUEUE.send({ kind, leagueId, gameDate, enqueuedAt } as never);
   }
-  return c.json({ ok: true, leagueId, gameDate, sent: times });
+  return c.json({ ok: true, kind, leagueId, gameDate, sent: times });
 });
 
 // POST /api/admin/queue/run-league?leagueId=X — synchronní zpracování jedné ligy.

@@ -29,6 +29,17 @@ export type MatchQueueMessage =
       leagueId: string;
       gameDate: string;
       enqueuedAt: string;
+    }
+  | {
+      /**
+       * Zpráva, která vždy selže. Slouží VÝHRADNĚ k ověření retry + DLQ na testingu.
+       * Nesahá na herní data — jediný její následek je záznam v queue_failures.
+       * Bez ní by se cesta selhání dala testovat jen rozbitím reálné ligy.
+       */
+      kind: "selftest_fail";
+      leagueId: string;
+      gameDate: string;
+      enqueuedAt: string;
     };
 
 /** Zprávy fronty na AI články (REPORTS_QUEUE). */

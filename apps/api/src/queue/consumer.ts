@@ -110,6 +110,12 @@ async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<RunO
       return { status: result.teams > 0 ? "done" : "skipped", matches: result.teams };
     }
 
+    case "selftest_fail": {
+      // Ověření retry + DLQ. Musí HODIT, aby se uplatnil max_retries a zpráva
+      // po vyčerpání pokusů spadla do dead-letter fronty.
+      throw new Error(`selftest_fail: záměrné selhání pro ligu ${body.leagueId}`);
+    }
+
     // ── fronta článků ──
     case "round_report": {
       if (!env.GEMINI_API_KEY) {
