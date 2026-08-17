@@ -39,6 +39,14 @@ export default function RozhodciPage() {
         podle toho, jak ho sudí zvládl — čím níž v tabulce, tím hůř.
       </p>
 
+      <Link href="/dashboard/rozhodci/disciplinarka" className="card card-hover p-3 mb-4 flex items-center gap-3">
+        <span className="text-base shrink-0">⚖️</span>
+        <div className="min-w-0">
+          <div className="font-heading font-bold text-base">Disciplinární komise</div>
+          <div className="text-sm text-muted">Pokuty klubům a za co padly</div>
+        </div>
+      </Link>
+
       {odpiskali.length === 0 && (
         <div className="card p-4 mb-4">
           <p className="text-sm">
