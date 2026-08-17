@@ -1,8 +1,11 @@
 # Analýza: Cloudflare Queues pro libovolný počet lig
 
-**Datum:** 2026-08-16
+**Datum:** 2026-08-16, výsledky měření doplněny 2026-08-17
 **Cíl:** umožnit neomezený počet lig bez přetečení limitů workeru
-**Stav:** návrh — čeká na schválení, nic není implementováno
+**Stav:** IMPLEMENTOVÁNO a ověřeno na testingu (fáze 0–4). Produkce jede dál na
+staré cestě — přepínač `match_tick_mode` v CACHE_KV je bez klíče, tedy `loop`.
+
+> Naměřené výsledky a co z nich plyne jsou v kapitole 9 na konci.
 
 ---
 
@@ -354,3 +357,87 @@ notifikace doručená → tabulka sedí. Screenshot.
 | 4 — preview do fronty | malá |
 
 Doporučené pořadí: 0 → 1 → ověřit na testu → 2 → 3 → 4.
+
+---
+
+## 9. Naměřené výsledky (testing, 2026-08-17)
+
+Prostředí: `prales-db-test`, 6 lig (+2 osiřelé league_id), 113 týmů, 49 lidských.
+
+### 9.1 Zátěž na jednu ligu je konstantní — hlavní tvrzení potvrzeno
+
+| Typ zprávy | Běhů | Doba | Dotazů do D1 |
+|---|---|---|---|
+| `league_round` (odsimulování kola) | 4 reálné | **282–342 s** | **1969–2188** |
+| `league_round` bez splatného kola | 2 | 0,4 s | 2 |
+| `league_day` (denní tick, 14 týmů) | 7 | 5–33 s | — |
+| `league_maintenance` | 8 | 0,7–1,1 s | 4–5 |
+| `round_report` (Gemini) | 4 | 8,8–18,6 s | — |
+| `ultras_report` (Gemini) | 3 | 3,9–4,7 s | — |
+
+Rozptyl mezi ligami je malý a **nezávisí na tom, kolik lig systém má** — což je
+přesně to, co fronta měla zařídit. Producent (cron) doběhne za sekundu:
+6 zpráv na kola + 8 údržbových odešle jedním voláním.
+
+### 9.2 Odkud se bral původní strop
+
+Jedno kolo = **~2000 dotazů a ~5 minut**. Ve staré cestě běžely všechny ligy
+v JEDNÉ invokaci, takže 6 lig = ~12 000 dotazů a ~30 minut v jednom běhu. Proto
+byly natvrdo vyloučené České Budějovice a proto tick padal celý, ne po ligách.
+Komentář v `index.ts` byl přesný.
+
+Ve frontovém režimu se odbavily i obě budějovické ligy — vyloučení podle jména
+už není potřeba.
+
+### 9.3 Ověřené testy
+
+| Test | Výsledek |
+|---|---|
+| T1 idempotence locku (unit) | ✅ 15 testů |
+| T2 producent (unit) | ✅ zpráva nenese `calendarId` |
+| T3 shoda staré a nové cesty | ✅ +1 kolo, +7 zápasů, +44 transakcí — shodně |
+| **T4 duplicitní doručení** | ✅ **3× tatáž zpráva = +1 kolo, +7 zápasů, +44 transakcí. Finance se NEZDVOJILY.** |
+| T5 izolace selhání | ✅ 4 pokusy → DLQ → `queue_failures`; ostatní ligy dokončeny normálně |
+| T6 zátěž a měření | ✅ viz 9.1 |
+| T7 zastaralá zpráva | ✅ podvržené staré datum → `stale` za 0,2 s, kolo nezamčeno |
+| T8 frontend (MCP browser) | ✅ match-day, tabulka (Sezóna 3, 14 týmů), AI článek ze fronty |
+| T9 API | ✅ standings 14 týmů, 6× `ai_report` + 6× `ultras_report` |
+| Idempotence denního ticku | ✅ druhý běh na tentýž den: 8× `skipped`, 0 změn ve financích |
+| Rollback na `loop` | ✅ starý režim funguje, posune den, nezapisuje nároky |
+
+### 9.4 Co měření odhalilo navíc — omezení propustnosti
+
+Fronta odstranila **selhání**, ale nezrychlila práci. Při `max_concurrency = 3`
+a ~5 min na ligu vychází celý zápasový tick zhruba na:
+
+```
+doba ticku ≈ počet_lig × 5 min / max_concurrency
+```
+
+- 6 lig → ~10 min (dnes)
+- 50 lig → ~1,4 hod
+- 100 lig → ~2,8 hod
+
+Pro „libovolný počet lig" to znamená, že **žádná liga nespadne**, ale při stovkách
+lig se kola dohrávají postupně, ne všechna v 18:00. Až to začne vadit, jsou dvě
+páky, v tomhle pořadí:
+
+1. **Zvýšit `max_concurrency`** — nejlevnější, ale naráží na D1 (riziko 4.3).
+   Zvyšovat po krocích a měřit `queue_runs`.
+2. **Zlevnit samotné kolo** — 2000 dotazů na 7 zápasů je hodně. Uvnitř jsou N+1
+   smyčky (notifikace a události mezi koly dotazují per zápas a per hráč).
+   Dávkové dotazy by to srazily řádově a pomohly by i staré cestě.
+
+To je samostatný tiket — architektura front na něm nezávisí.
+
+### 9.5 Provozní poznámky
+
+- Přepínač: `GET/POST /api/admin/queue/mode?mode=queue|loop`
+- Měření: `GET /api/admin/queue/runs` (souhrn + posledních N běhů)
+- DLQ: `GET /api/admin/queue/failures`
+- Ruční spuštění: `POST /api/admin/queue/enqueue-match-tick`, `.../enqueue-previews`
+- Testovací nástroje: `POST /api/admin/queue/send-duplicate?leagueId=&times=&kind=&gameDate=`
+- Fronty vytvořené na účtu: `prales-match-rounds`, `prales-reports`,
+  `prales-match-dlq`, `prales-reports-dlq` + čtyři `-test` varianty.
+- Migrace: `0146_queue_failures`, `0147_team_day_log`, `0148_queue_runs`
+  (aplikované na `prales-db-test`, na prod ZATÍM NE).
