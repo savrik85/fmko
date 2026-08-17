@@ -98,6 +98,15 @@ export default {
     };
     log("info", `trigger: cron=${cron || "manual"}`);
 
+    // ── Přepínač poskytovatele AI ──
+    // Testing má od 2026-08-17 vlastní crony a sdílí s produkcí hodnotu GEMINI_API_KEY.
+    // Bez tohohle by testovací crony ujídaly produkční kvótu každý den. Default je
+    // "gemini", takže bez klíče v KV se nic nemění.
+    const { applyAiProvider } = await import("./lib/ai-provider");
+    const aiSwitch = await applyAiProvider(env);
+    env = aiSwitch.env;
+    if (aiSwitch.provider !== "gemini") log("info", `AI poskytovatel: ${aiSwitch.provider}`);
+
     // ── DAILY TICK: 4:00 CET (3:00 UTC) — posouvá dny, tréninky, zprávy ──
     // Manuální trigger (!cron) spustí denní tick + zápasový tick
     if (cron === "0 3 * * *" || !cron) {
@@ -311,6 +320,10 @@ export default {
       await handleDeadLetterBatch(batch, env);
       return;
     }
-    await handleQueueBatch(batch, env, ctx);
+    // Stejný přepínač jako u cronu — konzumer generuje články, takže bez něj
+    // by testing na produkční kvótu sáhl právě tudy.
+    const { applyAiProvider } = await import("./lib/ai-provider");
+    const { env: aiEnv } = await applyAiProvider(env);
+    await handleQueueBatch(batch, aiEnv, ctx);
   },
 };

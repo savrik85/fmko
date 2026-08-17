@@ -150,6 +150,23 @@ max_batch_size = 10
 max_batch_timeout = 30
 max_retries = 0
 
-# Testing crony NEMÁ — všechno se spouští ručně přes admin endpointy.
+# ── Crony (testing) ──
+# Zrcadlo produkce, aby se testovací prostředí chovalo jako zmenšená produkce.
+#
+# Dřív tu bylo `crons = []` s pravidlem „testing crony nemá" — důvodem byl limit
+# cronů na Free plánu (5/účet). Ověřeno 2026-08-17: účet je na Workers Paid
+# (limit 250/účet) a napříč všemi workery jich běželo 8, takže prostor je volný.
+#
+# POZOR: testing sdílí s produkcí hodnotu GEMINI_API_KEY. Aby testovací crony
+# neujídaly produkční kvótu, drží se přepínač `ai_provider` v testing CACHE_KV
+# na "off" (nebo "workers-ai"). Default je "gemini", takže produkce je nedotčená.
 [env.testing.triggers]
-crons = []
+crons = [
+  "0 3 * * *",
+  "0 5 * * *",
+  "0 6 * * *",
+  "0 10 * * *",
+  "0 14 * * *",
+  "0 16 * * *",
+  "5 16 * * *",
+]

@@ -8509,6 +8509,26 @@ gameRouter.post("/admin/queue/mode", async (c) => {
   return c.json({ ok: true, mode });
 });
 
+// GET /api/admin/ai-provider — kdo generuje AI texty (gemini | workers-ai | off)
+gameRouter.get("/admin/ai-provider", async (c) => {
+  const { readAiProvider, AI_PROVIDER_KEY } = await import("../lib/ai-provider");
+  const provider = await readAiProvider(c.env.CACHE_KV);
+  return c.json({ ok: true, provider, key: AI_PROVIDER_KEY, geminiKeySet: !!c.env.GEMINI_API_KEY });
+});
+
+// POST /api/admin/ai-provider?provider=gemini|workers-ai|off
+// "off" na testingu chrání produkční Gemini kvótu — obě prostředí sdílejí hodnotu klíče.
+gameRouter.post("/admin/ai-provider", async (c) => {
+  const provider = c.req.query("provider");
+  if (provider !== "gemini" && provider !== "workers-ai" && provider !== "off") {
+    return c.json({ error: "provider musí být 'gemini', 'workers-ai' nebo 'off'" }, 400);
+  }
+  const { AI_PROVIDER_KEY } = await import("../lib/ai-provider");
+  await c.env.CACHE_KV.put(AI_PROVIDER_KEY, provider);
+  logger.info({ module: "game" }, `AI poskytovatel přepnut na "${provider}"`);
+  return c.json({ ok: true, provider });
+});
+
 // POST /api/admin/queue/enqueue-match-tick — ruční spuštění producenta zápasového ticku
 gameRouter.post("/admin/queue/enqueue-match-tick", async (c) => {
   const { enqueueMatchTick } = await import("../queue/producer");
