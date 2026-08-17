@@ -645,11 +645,32 @@ function UserManagement() {
     setTimeout(() => setStatus(""), 3000);
   };
 
+  /**
+   * Smazání účtu. Tlačítko se ukazuje JEN u účtů bez týmu — účet s týmem drží
+   * hráče, zápasy i finance a jeho smazání by nechalo osiřelá data. Serverová
+   * strana to hlídá znovu, tohle je jen aby na tlačítko nešlo omylem sáhnout.
+   */
+  const smazUcet = async (userId: string, email: string) => {
+    if (!potvrd(`Smazat účet ${email}?`, "Účet nemá tým, takže se smaže jen přihlašovací záznam.")) return;
+    const res = await apiFetch<{ ok?: boolean; error?: string; smazano?: string }>(
+      `/auth/admin/users/${userId}`,
+      { method: "DELETE", headers: authHeaders },
+    ).catch((e) => {
+      console.error("smazání účtu:", e);
+      return { error: "Nepodařilo se smazat" } as { ok?: boolean; error?: string; smazano?: string };
+    });
+    setStatus(res.ok ? `Účet ${res.smazano} smazán` : (res.error ?? "Chyba"));
+    if (res.ok) await loadUsers();
+    setTimeout(() => setStatus(""), 4000);
+  };
+
+  const bezTymu = users.filter((u) => !u.team_name).length;
+
   if (!loaded) return null;
 
   return (
     <div className="card p-4">
-      <SectionLabel>Uživatelé ({users.length})</SectionLabel>
+      <SectionLabel>Uživatelé ({users.length}{bezTymu > 0 ? `, z toho ${bezTymu} bez týmu` : ""})</SectionLabel>
       {status && <div className="text-sm font-heading font-bold text-pitch-500 mb-2">{status}</div>}
       <div className="overflow-x-auto -mx-4 table-scroll">
         <table className="w-full text-sm">
@@ -660,7 +681,7 @@ function UserManagement() {
               <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Okres</th>
               <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Admin</th>
               <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Aktivita</th>
-              <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Heslo</th>
+              <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Akce</th>
             </tr>
           </thead>
           <tbody>
@@ -680,7 +701,13 @@ function UserManagement() {
                       <button onClick={() => { setResetId(null); setNewPw(""); }} className="text-xs text-muted">✕</button>
                     </div>
                   ) : (
-                    <button onClick={() => setResetId(u.id)} className="text-xs text-pitch-600 hover:underline">Změnit</button>
+                    <div className="flex gap-3 items-center">
+                      <button onClick={() => setResetId(u.id)} className="text-sm text-pitch-600 hover:underline">Změnit</button>
+                      {/* Jen účty bez týmu — u účtu s týmem by mazání nechalo osiřelá data. */}
+                      {!u.team_name && (
+                        <button onClick={() => smazUcet(u.id, u.email)} className="text-sm text-card-red hover:underline">Smazat</button>
+                      )}
+                    </div>
                   )}
                 </td>
               </tr>

@@ -340,10 +340,67 @@ authRouter.get("/admin/users", async (c) => {
   if (!admin?.is_admin) return c.json({ error: "Přístup odepřen" }, 403);
 
   const users = await c.env.DB.prepare(
-    "SELECT u.id, u.email, u.is_admin, u.last_login_at, u.last_activity_at, u.created_at, t.name as team_name, v.district FROM users u LEFT JOIN teams t ON t.user_id = u.id AND t.name NOT LIKE 'DELETED%' LEFT JOIN villages v ON t.village_id = v.id WHERE u.id != 'ai' ORDER BY u.email"
+    // U21 tým se váže na stejného uživatele jako jeho A-tým (parent_team_id),
+    // takže bez tohohle filtru měl každý manažer v seznamu DVA řádky — na testu
+    // 59 řádků na 38 uživatelů. Na U21 se nikdo zvlášť nepřihlašuje, takže
+    // relevantní je vždycky A-tým.
+    "SELECT u.id, u.email, u.is_admin, u.last_login_at, u.last_activity_at, u.created_at, t.name as team_name, v.district FROM users u LEFT JOIN teams t ON t.user_id = u.id AND t.name NOT LIKE 'DELETED%' AND t.parent_team_id IS NULL LEFT JOIN villages v ON t.village_id = v.id WHERE u.id != 'ai' ORDER BY u.email"
   ).all();
 
   return c.json(users.results);
+});
+
+/**
+ * DELETE /auth/admin/users/:userId — smazání účtu.
+ *
+ * ZÁMĚRNĚ jen pro účty BEZ TÝMU. Účet s týmem drží hráče, zápasy, finance
+ * i historii; jeho smazání by znamenalo kaskádu přes desítky tabulek a osiřelá
+ * data (přesně to, co po nepovedeném wipe zůstalo v testovací databázi).
+ * Na takový případ je správná cesta tým převést nebo označit jako opuštěný,
+ * ne mazat účet z administrace.
+ *
+ * Na uživatele se váží jen tabulky `teams` a `managers` — když nemá tým,
+ * nemá ani manažera, takže stačí smazat řádek v `users`.
+ */
+authRouter.delete("/admin/users/:userId", async (c) => {
+  const token = getTokenFromRequest(c);
+  if (!token) return c.json({ error: "Nepřihlášen" }, 401);
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return c.json({ error: "Neplatná session" }, 401);
+
+  const admin = await c.env.DB.prepare("SELECT is_admin FROM users WHERE id = ?")
+    .bind(session.userId).first<{ is_admin: number }>();
+  if (!admin?.is_admin) return c.json({ error: "Přístup odepřen" }, 403);
+
+  const userId = c.req.param("userId");
+  if (userId === "ai") return c.json({ error: "Systémový účet 'ai' smazat nelze" }, 400);
+  if (userId === session.userId) return c.json({ error: "Vlastní účet smazat nelze" }, 400);
+
+  const user = await c.env.DB.prepare("SELECT id, email FROM users WHERE id = ?")
+    .bind(userId).first<{ id: string; email: string }>();
+  if (!user) return c.json({ error: "Účet neexistuje" }, 404);
+
+  // Rozhodující pojistka. Počítají se VŠECHNY týmy včetně U21 a DELETED —
+  // kdyby se filtrovaly jako v seznamu, dal by se smazat účet, který tým má.
+  const tymy = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM teams WHERE user_id = ?")
+    .bind(userId).first<{ n: number }>();
+  if ((tymy?.n ?? 0) > 0) {
+    return c.json({ error: `Účet má ${tymy?.n} tým(y) — smazat jde jen účet bez týmu` }, 400);
+  }
+
+  const manazeri = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM managers WHERE user_id = ?")
+    .bind(userId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: "auth" }, "kontrola manažerů při mazání účtu", e); return null; });
+  if ((manazeri?.n ?? 0) > 0) {
+    return c.json({ error: "Účet má navázaného manažera — smazat nelze" }, 400);
+  }
+
+  await c.env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId).run();
+  logger.info({ module: "auth" }, `admin smazal účet bez týmu: ${user.email}`);
+
+  // Pozn.: session v KV se nemaže — nejde je podle uživatele dohledat. Vyprší
+  // sama (30 dní) a bez týmu se s ní stejně nedá nic dělat.
+  return c.json({ ok: true, smazano: user.email });
 });
 
 export { authRouter };
