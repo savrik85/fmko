@@ -5,10 +5,14 @@
  * trenéra — a co trenér o sudím řekne, si sudí zapamatuje do příštího vzájemného
  * zápasu.
  *
- * Rozhovor NEVZNIKÁ po každém zápase. Hráč už dnes dostává předzápasový rozhovor
- * každé kolo plus hráčské chaty; další povinné klikání by feature spíš uškodilo.
- * Musí být o čem mluvit — sporná situace, červená, penalta, hodně karet, výrok
- * soupeře nebo výprask.
+ * Rozhovor dostane KAŽDÝ lidský tým po KAŽDÉM odehraném zápase. Původní varianta
+ * dávala nejvýš dva rozhovory na kolo a ligu a vyžadovala „hook" (sporná situace,
+ * červená, výprask), což v lize se čtrnácti lidskými týmy znamenalo řadu jednou za
+ * sedm kol — hráči to připadalo jako rozbitá funkce, ne jako střídmost.
+ *
+ * Jediná zbývající brzda je `MAX_PENDING`: komu se hromadí neodpovězené pozápasové
+ * rozhovory, nedostane další, dokud staré nevyprší. Bez toho by neaktivnímu hráči
+ * narůstala nekonečná fronta.
  */
 
 import { createRng } from "../generators/rng";
@@ -26,10 +30,24 @@ import { archetypeLabel } from "../engine/referee";
 
 const M = "post-match-interview";
 
-/** Nejvýš dva rozhovory na kolo a ligu — zbytek by se slil do šumu. */
-const MAX_PER_ROUND = 2;
-/** Kolik pending rozhovorů smí mít tým naráz, než mu přestaneme přidávat další. */
+/**
+ * Kolik NEODPOVĚZENÝCH pozápasových rozhovorů smí mít tým naráz. Počítají se jen
+ * pozápasové — předzápasový rozhovor ani sezónní ohlédnutí nesmí post-match blokovat,
+ * což dřív dělaly (dotaz nefiltroval `kind`).
+ */
 const MAX_PENDING = 2;
+
+/**
+ * Kolika rozhovorům v kole přeformuluje otázky Gemini. Zbytek jede na šablonách
+ * z post-match-questions.ts, které jsou plnohodnotné a deterministické.
+ *
+ * Strop existuje kvůli času: rozhovory se zakládají uvnitř běhu match-runneru, který
+ * v sedmičlenné lize sám trvá ~5 minut. Dvaadvacet volání Gemini navíc by běh
+ * protáhlo natolik, že by hrozilo přerušení workeru — a nedokončený běh znamená, že
+ * zbytek týmů nedostane rozhovor vůbec. Přednost mají zápasy se spornou situací,
+ * kde je přeformulování nejvíc vidět.
+ */
+const AI_POLISH_PER_ROUND = 6;
 
 interface MatchRow {
   id: string;
@@ -140,16 +158,6 @@ async function buildContext(db: D1Database, m: MatchRow, teamId: string): Promis
   };
 }
 
-/** Je o čem mluvit? Bez háku rozhovor nevzniká. */
-function hasHook(c: PostMatchContext): boolean {
-  return !!c.incident
-    || c.ownReds + c.oppReds > 0
-    || c.ownCards + c.oppCards >= 5
-    || c.ownPenalties + c.oppPenalties > 0
-    || !!c.opponentStatement
-    || Math.abs(c.ownScore - c.oppScore) >= 3;
-}
-
 // ── Otázky ───────────────────────────────────────────────────────────────────
 
 /**
@@ -226,36 +234,22 @@ export async function tryCreatePostMatchInterviews(
   }
   if (candidates.length === 0) return { created: 0 };
 
-  // Kdo byl nejdéle bez pozápasového rozhovoru, jde první.
-  const lastAsked = new Map<string, string>();
-  for (const c of candidates) {
-    const row = await db.prepare(
-      "SELECT MAX(created_at) AS last FROM coach_interviews WHERE team_id = ? AND kind = 'post_match'"
-    ).bind(c.teamId).first<{ last: string | null }>()
-      .catch((e) => { logger.warn({ module: M }, "poslední pozápasový rozhovor týmu", e); return null; });
-    lastAsked.set(c.teamId, row?.last ?? "");
-  }
-  candidates.sort((a, b) => (lastAsked.get(a.teamId) ?? "").localeCompare(lastAsked.get(b.teamId) ?? ""));
+  // Sporné situace dopředu — jen kvůli rozdělení volání Gemini. Rozhovor vznikne
+  // všem kandidátům bez ohledu na pořadí.
+  candidates.sort((a, b) => Number(!!b.match.referee_incidents) - Number(!!a.match.referee_incidents));
 
   let created = 0;
+  let aiPolished = 0;
   for (const { match, teamId } of candidates) {
-    if (created >= MAX_PER_ROUND) break;
     try {
+      // Jen pozápasové: předzápasový rozhovor běží každé kolo, takže při počítání
+      // všech pending by post-match nevznikl skoro nikdy.
       const pending = await db.prepare(
-        "SELECT COUNT(*) AS c FROM coach_interviews WHERE team_id = ? AND status = 'pending'"
+        "SELECT COUNT(*) AS c FROM coach_interviews WHERE team_id = ? AND kind = 'post_match' AND status = 'pending'"
       ).bind(teamId).first<{ c: number }>();
       if ((pending?.c ?? 0) >= MAX_PENDING) continue;
 
-      // Kdo poslední dva pozápasové rozhovory ignoroval, dostane pauzu.
-      const ignored = await db.prepare(
-        `SELECT status FROM coach_interviews WHERE team_id = ? AND kind = 'post_match'
-         ORDER BY created_at DESC LIMIT 2`
-      ).bind(teamId).all<{ status: string }>();
-      const rows = ignored.results ?? [];
-      if (rows.length === 2 && rows.every((r) => r.status === "expired" || r.status === "declined")) continue;
-
       const ctx = await buildContext(db, match, teamId);
-      if (!hasHook(ctx)) continue;
 
       const manager = await db.prepare("SELECT id FROM managers WHERE team_id = ? LIMIT 1")
         .bind(teamId).first<{ id: string }>();
@@ -264,7 +258,7 @@ export async function tryCreatePostMatchInterviews(
       const skeleton = buildFallbackQuestions(ctx);
       let questions = skeleton.map((q) => q.question);
 
-      if (apiKey) {
+      if (apiKey && aiPolished < AI_POLISH_PER_ROUND) {
         const { redaktorProRubriku, sentimentKeKlubu, pokynyProRedaktora } = await import("./journalists");
         const redaktor = await redaktorProRubriku(db, match.league_id, "interview", teamId)
           .catch((e) => { logger.warn({ module: M }, "redaktor pro pozápasový rozhovor", e); return null; });
@@ -272,6 +266,9 @@ export async function tryCreatePostMatchInterviews(
           const sentiment = await sentimentKeKlubu(db, redaktor.id, teamId);
           const polished = await polishQuestions(apiKey, ctx, skeleton, pokynyProRedaktora(redaktor, sentiment))
             .catch((e) => { logger.warn({ module: M }, "přeformulování otázek", e); return null; });
+          // Strop se počítá za odeslané volání, ne za úspěch — při výpadku Gemini
+          // nemá smysl zkoušet totéž u zbývajících týmů a topit v tom čas běhu.
+          aiPolished++;
           if (polished) questions = polished;
         }
       }
@@ -295,8 +292,8 @@ export async function tryCreatePostMatchInterviews(
         JSON.stringify(ctx),
         expiresAt,
       ).run();
-      // OR IGNORE mlčí — bez kontroly by opakovaný běh poslal druhou SMS
-      // a snědl slot z limitu na kolo, aniž by rozhovor vznikl.
+      // OR IGNORE mlčí — bez kontroly by opakovaný běh (recoverStuckRounds, ruční
+      // dogenerování) poslal druhou SMS, aniž by rozhovor vznikl.
       if (vlozeno.meta.changes !== 1) continue;
 
       await notifyPostMatchInterview(db, teamId, ctx);

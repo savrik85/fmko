@@ -7001,6 +7001,40 @@ gameRouter.post("/admin/generate-player-interview", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+// POST /api/admin/generate-post-match-interviews?calendarId=X — dožene pozápasové
+// rozhovory za kolo, které je odsimulované, ale rozhovory u něj chybí (starší běh je
+// zastavil na limitu, nebo se běh přerušil). Idempotentní: UNIQUE index na
+// (team_id, match_calendar_id, kind) druhý rozhovor ani druhou SMS nepustí.
+// Bez calendarId vezme nejnovější odsimulované kolo z každé ligy.
+gameRouter.post("/admin/generate-post-match-interviews", async (c) => {
+  const calendarId = c.req.query("calendarId");
+  const { tryCreatePostMatchInterviews } = await import("../news/post-match-interview");
+
+  const calendars: string[] = [];
+  if (calendarId) {
+    calendars.push(calendarId);
+  } else {
+    const rows = await c.env.DB.prepare(
+      `SELECT id FROM season_calendar sc WHERE status = 'simulated'
+         AND scheduled_at = (SELECT MAX(scheduled_at) FROM season_calendar
+                             WHERE league_id = sc.league_id AND status = 'simulated')`
+    ).all<{ id: string }>().catch((e) => {
+      logger.warn({ module: "game.ts" }, "poslední odsimulovaná kola", e);
+      return { results: [] };
+    });
+    calendars.push(...(rows.results ?? []).map((r) => r.id));
+  }
+
+  const summary: Array<{ calendarId: string; created: number }> = [];
+  for (const id of calendars) {
+    const r = await tryCreatePostMatchInterviews(c.env.DB, c.env.GEMINI_API_KEY, id)
+      .catch((e) => { logger.warn({ module: "game.ts" }, `dogenerování rozhovorů ${id}`, e); return { created: 0 }; });
+    summary.push({ calendarId: id, created: r.created });
+  }
+
+  return c.json({ ok: true, calendars: calendars.length, created: summary.reduce((s, x) => s + x.created, 0), summary });
+});
+
 // POST /api/admin/teams/:teamId/grant-budget — admin korekce rozpočtu (refundy apod.)
 // Body: { amount: number, reason: string }. Jde přes recordTransaction (audit + balance_after).
 gameRouter.post("/admin/teams/:teamId/grant-budget", async (c) => {
