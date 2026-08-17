@@ -12,6 +12,8 @@ export interface GeminiOpts {
   temperature?: number;
   /** Vynutit JSON výstup (responseMimeType: application/json). */
   json?: boolean;
+  /** Volnější filtry — texty plachet kotle bývají provokativní a model by odpověď utnul. */
+  safetySettings?: unknown[];
   module?: string;
 }
 
@@ -28,6 +30,7 @@ export async function callGemini(apiKey: string, prompt: string, opts: GeminiOpt
         thinkingConfig: { thinkingBudget: 0 },
         ...(opts.json ? { responseMimeType: "application/json" } : {}),
       },
+      ...(opts.safetySettings ? { safetySettings: opts.safetySettings } : {}),
     }),
   }).catch((e) => { logger.warn({ module: mod }, "gemini fetch failed", e); return null; });
 

@@ -2,6 +2,7 @@
 // Rubrika "Prales Ultras" — fan-voice hodnocení atmosféry kola + výběr kotlů pro galerii fotek.
 // Model: ai-reporter.ts (inline Gemini fetch, volný text, 1. řádek = headline).
 import { logger } from "../lib/logger";
+import type { AiContext } from "../lib/ai-provider";
 import { calculateFacilityEffects } from "../stadium/stadium-generator";
 
 export interface UltrasPhoto {
@@ -126,6 +127,7 @@ export async function generateUltrasReport(
   db: D1Database,
   geminiApiKey: string,
   calendarId: string,
+  aiCtx?: AiContext,
 ): Promise<{ newsId: string | null; photos: number; skipped: boolean }> {
   // 1. Odvodit league_id, game_week, season_number z kalendáře.
   const cal = await db
@@ -199,7 +201,7 @@ export async function generateUltrasReport(
   // 5. Článek přes Gemini (fallback při selhání).
   let article = "";
   try {
-    article = await callGeminiUltras(geminiApiKey, gameWeek, homeMatches, photos,
+    article = await callUltrasModel(aiCtx ?? { provider: "gemini", geminiApiKey }, gameWeek, homeMatches, photos,
       redaktor ? pokynyProRedaktora(redaktor) : undefined);
   } catch (e) {
     logger.warn({ module: "ultras-report" }, "gemini failed, using fallback", e);
@@ -251,8 +253,8 @@ function fullnessDesc(fillPct: number): string {
   return "skoro prázdno";
 }
 
-async function callGeminiUltras(
-  apiKey: string,
+async function callUltrasModel(
+  aiCtx: AiContext,
   gameWeek: number,
   homeMatches: HomeMatch[],
   photos: UltrasPhoto[],
@@ -289,34 +291,20 @@ ${galleryNote}
 
 Formát: PRVNÍ ŘÁDEK je úderný titulek (bez markdownu). Další řádky jsou tělo článku. V těle smíš zvýraznit **tučně** názvy týmů a klíčová čísla. Piš česky.`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 2048, temperature: 0.6, thinkingConfig: { thinkingBudget: 0 } },
-        // Texty plachet píšou hráči a bývají provokativní — jinak model odpověď utne.
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
-        ],
-      }),
-    },
-  );
-  if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
-  const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
-    promptFeedback?: { blockReason?: string };
-  };
-  const parts = data.candidates?.[0]?.content?.parts ?? [];
-  const text = parts.filter((p) => !p.thought).map((p) => p.text ?? "").join("");
-  if (!text) {
-    const why = data.promptFeedback?.blockReason ?? data.candidates?.[0]?.finishReason ?? "unknown";
-    throw new Error(`Gemini empty response (${why})`);
-  }
+  const { generateText } = await import("../lib/ai-provider");
+  const text = await generateText(aiCtx, prompt, {
+    maxTokens: 2048,
+    temperature: 0.6,
+    module: "ultras-report",
+    // Texty plachet píšou hráči a bývají provokativní — jinak model odpověď utne.
+    safetySettings: [
+      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
+    ],
+  });
+  // Házíme dál — volající to chytá a použije fallback text.
+  if (!text) throw new Error("generátor vrátil prázdnou odpověď");
   return text;
 }

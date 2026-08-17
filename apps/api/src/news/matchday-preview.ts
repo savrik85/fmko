@@ -6,6 +6,7 @@
 
 import { calculateStandings, type StandingEntry } from "../stats/standings";
 import { logger } from "../lib/logger";
+import type { AiContext } from "../lib/ai-provider";
 import { VILLAGE_FLAVOR } from "./ai-reporter";
 import { loadPreMatchStatement } from "./ai-prematch-statement";
 
@@ -142,6 +143,7 @@ export async function generateMatchdayPreview(
   geminiApiKey: string,
   leagueId: string,
   calendarId: string,
+  aiCtx?: AiContext,
 ): Promise<void> {
   // Info o lize + game_week (nejdřív, pro idempotency check)
   const calInfoEarly = await db.prepare(
@@ -364,30 +366,13 @@ Styl:
 - ${localFlavor}
 - Nemusíš popsat každý zápas podrobně — vyber ty nejlákavější`;
 
-  // Volání Gemini
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 2048, temperature: 0.4, thinkingConfig: { thinkingBudget: 0 } },
-      }),
-    },
-  ).catch((e) => { logger.warn({ module: "matchday-preview" }, "gemini fetch failed", e); return null; });
-
-  if (!res || !res.ok) {
-    const errBody = res ? await res.text().catch(() => "") : "";
-    logger.warn({ module: "matchday-preview" }, `Gemini error: ${res?.status ?? "no response"} — ${errBody.slice(0, 200)}`);
-    return;
-  }
-
-  const json = await res.json() as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
-  };
-  const parts = json.candidates?.[0]?.content?.parts ?? [];
-  const text = parts.filter((p) => !p.thought).map((p) => p.text ?? "").join("");
+  // Generování textu — poskytovatele určuje přepínač ai_provider.
+  const { generateText } = await import("../lib/ai-provider");
+  const text = await generateText(
+    aiCtx ?? { provider: "gemini", geminiApiKey },
+    prompt,
+    { maxTokens: 2048, temperature: 0.4, module: "matchday-preview" },
+  );
   if (!text) {
     logger.warn({ module: "matchday-preview" }, "Gemini returned empty");
     return;

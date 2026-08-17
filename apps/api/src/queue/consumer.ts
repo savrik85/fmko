@@ -76,6 +76,30 @@ async function recordRun(
     .catch((e) => logger.warn({ module: "queue-consumer" }, "zápis queue_runs selhal", e));
 }
 
+/**
+ * Kontext pro generování textu, nebo null když se generovat nemá.
+ *
+ * Kontroluje se poskytovatel, ne holý Gemini klíč — jinak by režim "workers-ai"
+ * bez nastaveného Gemini klíče články tiše přeskakoval.
+ */
+async function aiCtxOrSkip(env: Bindings, kind: string) {
+  const { aiContextFromEnv } = await import("../lib/ai-provider");
+  const ctx = await aiContextFromEnv(env);
+  if (ctx.provider === "off") {
+    logger.info({ module: "queue-consumer" }, `${kind}: ai_provider=off — přeskočeno`);
+    return null;
+  }
+  if (ctx.provider === "gemini" && !ctx.geminiApiKey) {
+    logger.warn({ module: "queue-consumer" }, `${kind}: chybí GEMINI_API_KEY — přeskočeno`);
+    return null;
+  }
+  if (ctx.provider === "workers-ai" && !ctx.ai) {
+    logger.warn({ module: "queue-consumer" }, `${kind}: chybí binding AI — přeskočeno`);
+    return null;
+  }
+  return ctx;
+}
+
 async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<RunOutcome> {
   switch (body.kind) {
     // ── zápasová fronta ──
@@ -118,10 +142,8 @@ async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<RunO
 
     // ── fronta článků ──
     case "round_report": {
-      if (!env.GEMINI_API_KEY) {
-        logger.warn({ module: "queue-consumer" }, "round_report bez GEMINI_API_KEY — přeskočeno");
-        return { status: "skipped" };
-      }
+      const ctx = await aiCtxOrSkip(env, "round_report");
+      if (!ctx) return { status: "skipped" };
       const { generateAiRoundReport } = await import("../news/ai-reporter");
       await generateAiRoundReport(
         env.DB,
@@ -130,27 +152,24 @@ async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<RunO
         body.calendarId,
         body.gameWeek,
         body.standingsBefore as never,
+        ctx,
       );
       return { status: "done" };
     }
 
     case "ultras_report": {
-      if (!env.GEMINI_API_KEY) {
-        logger.warn({ module: "queue-consumer" }, "ultras_report bez GEMINI_API_KEY — přeskočeno");
-        return { status: "skipped" };
-      }
+      const ctx = await aiCtxOrSkip(env, "ultras_report");
+      if (!ctx) return { status: "skipped" };
       const { generateUltrasReport } = await import("../news/ultras-report");
-      await generateUltrasReport(env.DB, env.GEMINI_API_KEY, body.calendarId);
+      await generateUltrasReport(env.DB, env.GEMINI_API_KEY, body.calendarId, ctx);
       return { status: "done" };
     }
 
     case "matchday_preview": {
-      if (!env.GEMINI_API_KEY) {
-        logger.warn({ module: "queue-consumer" }, "matchday_preview bez GEMINI_API_KEY — přeskočeno");
-        return { status: "skipped" };
-      }
+      const ctx = await aiCtxOrSkip(env, "matchday_preview");
+      if (!ctx) return { status: "skipped" };
       const { generateMatchdayPreview } = await import("../news/matchday-preview");
-      await generateMatchdayPreview(env.DB, env.GEMINI_API_KEY, body.leagueId, body.calendarId);
+      await generateMatchdayPreview(env.DB, env.GEMINI_API_KEY, body.leagueId, body.calendarId, ctx);
       return { status: "done" };
     }
 

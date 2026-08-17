@@ -32,6 +32,8 @@ export type Bindings = {
    */
   MATCH_QUEUE?: Queue<MatchQueueMessage>;
   REPORTS_QUEUE?: Queue<ReportQueueMessage>;
+  /** Workers AI — používá se jen když je ai_provider = "workers-ai" (dnes testing). */
+  AI?: Ai;
   GEMINI_API_KEY: string;
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;

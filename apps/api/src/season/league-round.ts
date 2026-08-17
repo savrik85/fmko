@@ -346,7 +346,16 @@ async function dispatchRoundReports(
   standingsBefore: StandingEntry[],
   opts: LeagueRoundOpts,
 ): Promise<void> {
-  if (!env.GEMINI_API_KEY) return;
+  // Rozhoduje poskytovatel, ne holý Gemini klíč — v režimu "workers-ai" se články
+  // generují i bez něj, v režimu "off" se nezařadí vůbec (a fronta zůstane prázdná).
+  const { readAiProvider } = await import("../lib/ai-provider");
+  const provider = await readAiProvider(env.CACHE_KV);
+  if (provider === "off") return;
+  if (provider === "gemini" && !env.GEMINI_API_KEY) return;
+  if (provider === "workers-ai" && !env.AI) {
+    logger.warn({ module: "league-round" }, "provider=workers-ai, ale binding AI chybí — články nezařazeny");
+    return;
+  }
   const enqueuedAt = new Date().toISOString();
 
   if (opts.reportsQueue) {
