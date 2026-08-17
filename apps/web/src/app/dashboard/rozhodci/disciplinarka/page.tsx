@@ -17,6 +17,22 @@ interface Fine {
   createdAt: string;
 }
 
+/**
+ * Stupně vítězů černé listiny. Barva jde inline, ne přes Tailwind třídu —
+ * zlatá/stříbrná/bronzová nejsou tokeny palety, takže by se utility nevygenerovala.
+ */
+const MEDAILE = [
+  { emoji: "\u{1F947}", barva: "#C4A035" },
+  { emoji: "\u{1F948}", barva: "#B5AFA5" },
+  { emoji: "\u{1F949}", barva: "#A87A12" },
+];
+
+/** České skloňování — „1 pokuta", „3 pokuty", „5 pokut". */
+function pocetPokut(n: number): string {
+  if (n === 1) return "pokuta";
+  return n < 5 ? "pokuty" : "pokut";
+}
+
 /** Herní datum bez času — pokuta se váže ke dni, ne k minutě zaúčtování. */
 function denPokuty(gameDate: string): string {
   const d = new Date(gameDate);
@@ -86,24 +102,52 @@ export default function DisciplinarkaPage() {
             </div>
           </div>
 
-          <SectionLabel>Kdo zaplatil nejvíc</SectionLabel>
-          <div className="space-y-2 mb-6">
-            {podleTymu.map((t) => (
-              <div key={t.teamId} className="card p-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
+          <SectionLabel>Černá listina okresu</SectionLabel>
+          <div className="space-y-2 mb-4">
+            {podleTymu.slice(0, 3).map((t, i) => (
+              <div
+                key={t.teamId}
+                className="card p-3 flex items-center gap-3 border-l-4"
+                style={{ borderLeftColor: MEDAILE[i].barva }}
+              >
+                <span className="text-xl shrink-0">{MEDAILE[i].emoji}</span>
+                <div className="min-w-0 flex-1">
                   <EntityLink type="team" id={t.teamId} className="font-heading font-bold text-base">
                     {t.teamName}
                   </EntityLink>
                   <div className="text-sm text-muted">
-                    {t.count}× {t.count === 1 ? "pokuta" : t.count < 5 ? "pokuty" : "pokut"}
+                    {t.count}× {pocetPokut(t.count)}
                   </div>
                 </div>
-                <div className="font-heading font-bold text-base tabular-nums text-card-red shrink-0">
+                <div className="font-heading font-bold text-lg tabular-nums text-card-red shrink-0">
                   −{t.sum.toLocaleString("cs")} Kč
                 </div>
               </div>
             ))}
           </div>
+
+          {podleTymu.length > 3 && (
+            <div className="space-y-2 mb-6">
+              {podleTymu.slice(3).map((t, i) => (
+                <div key={t.teamId} className="card p-3 flex items-center gap-3">
+                  <span className="font-heading font-bold text-base text-muted w-6 text-right tabular-nums shrink-0">
+                    {i + 4}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <EntityLink type="team" id={t.teamId} className="font-heading font-bold text-base">
+                      {t.teamName}
+                    </EntityLink>
+                    <div className="text-sm text-muted">
+                      {t.count}× {pocetPokut(t.count)}
+                    </div>
+                  </div>
+                  <div className="font-heading font-bold text-base tabular-nums text-card-red shrink-0">
+                    −{t.sum.toLocaleString("cs")} Kč
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <SectionLabel>Listina pokut</SectionLabel>
           <div className="space-y-2">
