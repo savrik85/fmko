@@ -4323,6 +4323,11 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
     "SELECT p.*, t.name as team_name, t.league_id, v.district FROM players p JOIN teams t ON p.team_id = t.id JOIN villages v ON t.village_id = v.id WHERE p.id = ? AND p.team_id = ?"
   ).bind(playerId, teamId).first<Record<string, unknown>>();
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
+  // Hostující hráč patří jinému klubu — propuštěním by skončil mezi volnými hráči
+  // a kmenový klub by o něj nadobro přišel. Stejná ochrana jako u vylistování na trh.
+  if (player.loan_from_team_id) {
+    return c.json({ error: "Hostující hráč nemůže být propuštěn — patří jinému klubu" }, 400);
+  }
 
   // Idempotency: zamezit duplicitám při double-click
   const existingFa = await c.env.DB.prepare(
