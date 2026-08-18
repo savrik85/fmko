@@ -818,8 +818,100 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   }
   const mostActive = [...activeMap.values()].sort((a, b) => b.total - a.total).slice(0, 5);
 
-  // Recent 20
-  const recent = leagueTransfers.slice(0, 20);
+  // ── Hostování do výpisu posledních pohybů ──
+  // Vlastní dotaz, ne rozšíření `leagueTransfers`: statistiky nad ním (objem, největší
+  // přestupy, nejlepší prodejci) mají zůstat o placených přestupech. Hostování se
+  // přidává až do výpisu posledních pohybů.
+  //
+  // Kmenový klub: u běžícího hostování je v players.loan_from_team_id; když už
+  // skončilo, hráč je zpátky doma, takže se vezme jeho aktivní nehostovací smlouva.
+  const loansRes = await c.env.DB.prepare(
+    `SELECT
+       pc.player_id, pc.team_id as to_team_id, pc.fee, pc.joined_at, pc.is_active, pc.left_at,
+       p.first_name, p.last_name, p.avatar as player_avatar, p.age, p.position,
+       t_to.name as to_team_name, t_to.league_id as to_league_id,
+       t_to.badge_primary_color as to_badge_primary, t_to.badge_secondary_color as to_badge_secondary,
+       t_to.badge_pattern as to_badge_pattern, t_to.badge_initials as to_badge_initials, t_to.badge_symbol as to_badge_symbol,
+       t_to.primary_color as to_primary_color, t_to.secondary_color as to_secondary_color,
+       COALESCE(p.loan_from_team_id, (
+         SELECT pc3.team_id FROM player_contracts pc3
+         WHERE pc3.player_id = pc.player_id AND pc3.join_type != 'loan' AND pc3.is_active = 1
+         ORDER BY pc3.joined_at DESC LIMIT 1
+       )) as from_team_id
+     FROM player_contracts pc
+     JOIN players p ON pc.player_id = p.id
+     JOIN teams t_to ON pc.team_id = t_to.id
+     WHERE pc.join_type = 'loan'
+     ORDER BY pc.joined_at DESC
+     LIMIT 40`
+  ).all().catch((e) => { logger.warn({ module: "league" }, "fetch loans for overview", e); return { results: [] }; });
+
+  const loanFromIds = Array.from(new Set((loansRes.results as any[]).map((r) => r.from_team_id).filter(Boolean)));
+  const chybejici = loanFromIds.filter((id) => !fromTeamsMap[id as string]);
+  if (chybejici.length > 0) {
+    const ph = chybejici.map(() => "?").join(",");
+    const rows = await c.env.DB.prepare(
+      `SELECT id, name, league_id, badge_primary_color, badge_secondary_color, badge_pattern, badge_initials, badge_symbol, primary_color, secondary_color FROM teams WHERE id IN (${ph})`
+    ).bind(...chybejici).all().catch((e) => { logger.warn({ module: "league" }, "fetch loan from teams", e); return { results: [] }; });
+    for (const r of rows.results as any[]) {
+      fromTeamsMap[r.id] = {
+        name: r.name, leagueId: r.league_id,
+        badgePrimary: r.badge_primary_color ?? r.primary_color,
+        badgeSecondary: r.badge_secondary_color ?? r.secondary_color,
+        badgePattern: r.badge_pattern,
+        badgeInitials: r.badge_initials ?? deriveInitials(r.name),
+        badgeSymbol: r.badge_symbol,
+      };
+    }
+  }
+
+  const leagueLoans = (loansRes.results as any[])
+    .filter((r) => {
+      const toInLeague = r.to_league_id === leagueId;
+      const fromInLeague = r.from_team_id && fromTeamsMap[r.from_team_id]?.leagueId === leagueId;
+      return toInLeague || fromInLeague;
+    })
+    .map((r) => {
+      const fromTeam = r.from_team_id ? fromTeamsMap[r.from_team_id] : null;
+      const avatar = (() => { try { return JSON.parse(r.player_avatar as string); } catch (e) { logger.warn({ module: "league" }, `parse player avatar: ${e}`); return {}; } })();
+      return {
+        playerId: r.player_id as string,
+        playerName: `${r.first_name} ${r.last_name}`,
+        playerAvatar: avatar,
+        age: (r.age as number) ?? 0,
+        position: (r.position as string) ?? "",
+        fromTeamId: r.from_team_id as string | null,
+        fromTeam: fromTeam?.name ?? null,
+        fromTeamBadge: fromTeam ? {
+          primary: fromTeam.badgePrimary ?? "#374151",
+          secondary: fromTeam.badgeSecondary ?? "#9ca3af",
+          pattern: fromTeam.badgePattern ?? "shield",
+          initials: fromTeam.badgeInitials ?? "?",
+          symbol: fromTeam.badgeSymbol ?? null,
+        } : null,
+        toTeamId: r.to_team_id as string,
+        toTeam: r.to_team_name as string,
+        toTeamBadge: {
+          primary: (r.to_badge_primary as string | null) ?? (r.to_primary_color as string | null) ?? "#374151",
+          secondary: (r.to_badge_secondary as string | null) ?? (r.to_secondary_color as string | null) ?? "#9ca3af",
+          pattern: (r.to_badge_pattern as string | null) ?? "shield",
+          initials: (r.to_badge_initials as string | null) ?? deriveInitials(r.to_team_name as string),
+          symbol: (r.to_badge_symbol as string | null) ?? null,
+        },
+        fee: (r.fee as number) ?? 0,
+        date: r.joined_at as string,
+        isCrossLeague: false,
+        joinType: "loan",
+        toVirtual: false,
+        /** Doběhlé hostování — hráč je už zpátky doma. */
+        loanEnded: (r.is_active as number) === 0,
+      };
+    });
+
+  // Recent 20 — přestupy a hostování v jedné časové ose.
+  const recent = [...leagueTransfers, ...leagueLoans]
+    .sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")))
+    .slice(0, 20);
 
   // Spekulace — 5 nejnověji watched hráčů z týmů v této lize (sledování od jiných týmů)
   const speculationsRes = await c.env.DB.prepare(
