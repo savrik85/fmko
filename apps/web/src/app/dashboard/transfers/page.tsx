@@ -28,7 +28,7 @@ interface TransfersOverview {
   topSellers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; earned: number; count: number }>;
   topBuyers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; spent: number; count: number }>;
   mostActive: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; in: number; out: number; total: number }>;
-  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean; joinType?: string; toVirtual?: boolean }>;
+  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean; joinType?: string; toVirtual?: boolean; loanEnded?: boolean }>;
   speculations?: Array<{
     playerId: string;
     playerName: string;
@@ -348,7 +348,13 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
           {t.age ? <span className="text-micro text-muted tabular-nums shrink-0">{t.age}&nbsp;l.</span> : null}
           {t.isCrossLeague && <span className="text-micro shrink-0">🔄</span>}
           <span className="ml-auto shrink-0 font-heading font-bold text-sm text-pitch-500 tabular-nums whitespace-nowrap">
-            {t.joinType === "free_agent" ? (
+            {t.joinType === "loan" ? (
+              /* Hostování není prodej — cena by se pletla s přestupní částkou. */
+              <span className="text-yellow-700">
+                🤝&nbsp;{t.loanEnded ? "HOSTOVÁNÍ SKONČILO" : "HOSTOVÁNÍ"}
+                {t.fee > 0 ? <span className="text-muted">&nbsp;· {t.fee.toLocaleString("cs")}&nbsp;Kč</span> : null}
+              </span>
+            ) : t.joinType === "free_agent" ? (
               <span className="text-amber-700">★&nbsp;ZDARMA</span>
             ) : t.fee > 0 ? (
               <>{t.fee.toLocaleString("cs")}&nbsp;<span className="text-micro text-muted">Kč</span></>
@@ -356,7 +362,12 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
           </span>
         </div>
         <div className="flex items-center gap-1 text-xs text-muted mt-0.5 min-w-0">
-          {t.joinType === "free_agent" || !t.fromTeam ? (
+          {/* U hostování „odkud" znamená kmenový klub, ne pool volných hráčů. */}
+          {!t.fromTeam ? (
+            t.joinType === "loan"
+              ? <span className="text-muted shrink-0">kmenový klub neznámý</span>
+              : <FreeAgentLabel />
+          ) : t.joinType === "free_agent" ? (
             <FreeAgentLabel />
           ) : (
             <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/dashboard/team/${t.fromTeamId}` : null} bold={false} />
