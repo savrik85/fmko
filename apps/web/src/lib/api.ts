@@ -121,6 +121,18 @@ export interface Player {
   commute_km?: number;
   loan_from_team_id?: string | null;
   loan_until?: string | null;
+  /** Detail hostování z detailu hráče — kdo hráče vlastní, kde hraje a kdy se vrací. */
+  loan?: {
+    ownerTeamId: string; ownerTeamName: string;
+    borrowerTeamId: string; borrowerTeamName: string;
+    until: string; daysLeft: number; fee: number;
+    /** Dívá se kmenový klub hráče. */
+    isParentClub: boolean;
+    /** Dívá se klub, u kterého hráč zrovna hostuje. */
+    isBorrower: boolean;
+    /** Povolat zpět jde jen z kmenového klubu a jen u hostování zdarma. */
+    canRecall: boolean;
+  } | null;
   squad_number?: number | null;
   weekly_wage?: number | null;
   is_celebrity?: number;

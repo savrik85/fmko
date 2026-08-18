@@ -604,6 +604,12 @@ const SORT_OPTIONS: Array<{ value: FASortKey; label: string }> = [
   { value: "distance", label: "Vzdálenost" },
 ];
 
+/** „za 1 den", „za 3 dny", „za 5 dní" — u hostování se to píše ve větě. */
+function dnySlovem(n: number): string {
+  if (n === 1) return "den";
+  return n < 5 ? "dny" : "dní";
+}
+
 export default function TransfersPage() {
   const { teamId, primaryColor, gameDate } = useTeam();
   const router = useRouter();
@@ -631,8 +637,8 @@ export default function TransfersPage() {
   const [offersView, setOffersView] = useState<"active" | "history">("active");
   const [myLeagueId, setMyLeagueId] = useState<string | null>(null);
   // Loans
-  const [loanedOut, setLoanedOut] = useState<Array<{ id: string; first_name: string; last_name: string; position: string; age: number; overall_rating: number; loan_until: string; loan_team_name: string }>>([]);
-  const [loanedIn, setLoanedIn] = useState<Array<{ id: string; first_name: string; last_name: string; position: string; age: number; overall_rating: number; loan_until: string; owner_team_name: string }>>([]);
+  const [loanedOut, setLoanedOut] = useState<Array<{ id: string; first_name: string; last_name: string; position: string; age: number; overall_rating: number; loan_until: string; loan_team_name: string; loan_fee: number; days_left: number }>>([]);
+  const [loanedIn, setLoanedIn] = useState<Array<{ id: string; first_name: string; last_name: string; position: string; age: number; overall_rating: number; loan_until: string; owner_team_name: string; loan_fee: number; days_left: number }>>([]);
   // Squad
   const [players, setPlayers] = useState<Player[]>([]);
   // Price dialog
@@ -2399,15 +2405,37 @@ export default function TransfersPage() {
               <SectionLabel>Na hostování (odchozí)</SectionLabel>
               <div className="space-y-2">
                 {loanedOut.map((p) => (
-                  <div key={p.id} className="card p-3 flex items-center gap-3">
-                    <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-sm hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                  <div key={p.id} className="card p-3 flex items-center gap-3 flex-wrap">
+                    <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
                       {p.first_name} {p.last_name}
                     </Link>
                     <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
                     <span className="text-sm text-muted">→ {p.loan_team_name}</span>
-                    <span className="ml-auto text-xs text-yellow-600 font-heading font-bold">
-                      do {new Date(p.loan_until).toLocaleDateString("cs")}
+                    <span className="ml-auto text-sm text-yellow-600 font-heading font-bold">
+                      {p.days_left > 0 ? `zpět za ${p.days_left} ${dnySlovem(p.days_left)}` : "vrací se"}
+                      {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
                     </span>
+                    {/* Povolat zpět jde jen u hostování zdarma — u placeného si klub dobu zaplatil. */}
+                    {p.loan_fee === 0 ? (
+                      <button
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: "Povolat hráče zpět?",
+                            description: `${p.first_name} ${p.last_name} se ihned vrátí z ${p.loan_team_name} do tvého kádru.`,
+                            confirmLabel: "Povolat zpět",
+                          });
+                          if (!ok || !teamId) return;
+                          if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${p.id}/recall`, { method: "POST" }), "Povolání hráče zpět se nezdařilo")) await refresh();
+                        }}
+                        className="shrink-0 py-1 px-3 rounded-soft text-sm font-heading font-bold bg-pitch-500/10 text-pitch-600 hover:bg-pitch-500/20 transition-colors"
+                      >
+                        Povolat zpět
+                      </button>
+                    ) : (
+                      <span className="shrink-0 text-sm text-muted">
+                        placené ({p.loan_fee.toLocaleString("cs")} Kč)
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2421,13 +2449,14 @@ export default function TransfersPage() {
               <div className="space-y-2">
                 {loanedIn.map((p) => (
                   <div key={p.id} className="card p-3 flex items-center gap-3 flex-wrap">
-                    <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-sm hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                    <Link href={`/dashboard/player/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
                       {p.first_name} {p.last_name}
                     </Link>
                     <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
                     <span className="text-sm text-muted">z {p.owner_team_name}</span>
-                    <span className="ml-auto text-xs text-yellow-600 font-heading font-bold">
-                      do {new Date(p.loan_until).toLocaleDateString("cs")}
+                    <span className="ml-auto text-sm text-yellow-600 font-heading font-bold">
+                      {p.days_left > 0 ? `končí za ${p.days_left} ${dnySlovem(p.days_left)}` : "končí dnes"}
+                      {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
                     </span>
                     <button
                       onClick={async () => {

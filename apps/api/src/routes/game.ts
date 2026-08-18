@@ -5644,16 +5644,41 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
      ORDER BY COALESCE(to2.resolved_at, to2.created_at) DESC
      LIMIT 50`
   ).bind(teamId, teamId).all();
-  // Include loaned-out players
+  // Hostování — odchozí i příchozí. `loan_fee` z aktivní smlouvy rozhoduje, jestli
+  // smí kmenový klub hráče povolat zpět; `days_left` se počítá v HERNÍM čase, protože
+  // v něm se zapisuje loan_until (viz daily-tick).
   const loanedOut = await c.env.DB.prepare(
-    `SELECT p.id, p.first_name, p.last_name, p.position, p.age, p.overall_rating, p.loan_until, t.name as loan_team_name
-     FROM players p JOIN teams t ON p.team_id = t.id WHERE p.loan_from_team_id = ?`
+    `SELECT p.id, p.first_name, p.last_name, p.position, p.age, p.overall_rating, p.loan_until,
+            t.name as loan_team_name, COALESCE(pc.fee, 0) AS loan_fee
+     FROM players p
+     JOIN teams t ON p.team_id = t.id
+     LEFT JOIN player_contracts pc ON pc.player_id = p.id AND pc.team_id = p.team_id
+       AND pc.join_type = 'loan' AND pc.is_active = 1
+     WHERE p.loan_from_team_id = ?`
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch loaned out", e); return { results: [] }; });
   // Include loaned-in players
   const loanedIn = await c.env.DB.prepare(
-    `SELECT p.id, p.first_name, p.last_name, p.position, p.age, p.overall_rating, p.loan_until, t.name as owner_team_name
-     FROM players p JOIN teams t ON p.loan_from_team_id = t.id WHERE p.team_id = ? AND p.loan_from_team_id IS NOT NULL`
+    `SELECT p.id, p.first_name, p.last_name, p.position, p.age, p.overall_rating, p.loan_until,
+            t.name as owner_team_name, COALESCE(pc.fee, 0) AS loan_fee
+     FROM players p
+     JOIN teams t ON p.loan_from_team_id = t.id
+     LEFT JOIN player_contracts pc ON pc.player_id = p.id AND pc.team_id = p.team_id
+       AND pc.join_type = 'loan' AND pc.is_active = 1
+     WHERE p.team_id = ? AND p.loan_from_team_id IS NOT NULL`
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch loaned in", e); return { results: [] }; });
+
+  const hodinyTymu = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ game_date: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "herní datum pro hostování", e); return null; });
+  const dnesHerne = new Date(hodinyTymu?.game_date ?? new Date().toISOString()).getTime();
+  const sDnyDoNavratu = (rows: Record<string, unknown>[]) => rows.map((r) => ({
+    ...r,
+    days_left: r.loan_until
+      ? Math.max(0, Math.ceil((new Date(r.loan_until as string).getTime() - dnesHerne) / 86400000))
+      : 0,
+  }));
+  loanedOut.results = sDnyDoNavratu(loanedOut.results as Record<string, unknown>[]);
+  loanedIn.results = sDnyDoNavratu(loanedIn.results as Record<string, unknown>[]);
 
   // on_turn = jsem na tahu (poslední akce nebyla moje). Pro starší nabídky kde last_action_by = NULL
   // použijeme fallback: pro incoming nabídky je na tahu seller (teamId === to_team_id) pokud status=pending,
@@ -6301,53 +6326,106 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
 });
 
 // Předčasné ukončení hostování — hráč se ihned vrací do původního klubu
+/**
+ * Vrátí hostujícího hráče kmenovému klubu — společné jádro pro obě strany.
+ *
+ * Hostující klub hostování ukončí, kmenový klub si hráče povolá zpět. Liší se jen
+ * `leave_type` a texty SMS; přesun, uzavření smlouvy, přepočet dojíždění i novinka
+ * ve Zpravodaji jsou stejné, tak ať nejsou napsané dvakrát.
+ */
+async function vratZHostovani(
+  db: D1Database,
+  player: {
+    id: string; first_name: string; last_name: string; age: number;
+    position: string; team_id: string; loan_from_team_id: string;
+  },
+  iniciator: "hostujici" | "kmenovy",
+): Promise<void> {
+  const borrowerTeamId = player.team_id;
+  const ownerTeamId = player.loan_from_team_id;
+  const gameDate = (await db.prepare("SELECT game_date FROM teams WHERE id = ?")
+    .bind(borrowerTeamId).first<{ game_date: string }>())?.game_date ?? new Date().toISOString();
+
+  await db.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL WHERE id = ?")
+    .bind(ownerTeamId, player.id).run();
+
+  await db.prepare(
+    "UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = ? WHERE player_id = ? AND team_id = ? AND is_active = 1"
+  ).bind(gameDate, iniciator === "kmenovy" ? "loan_recalled" : "loan_terminated", player.id, borrowerTeamId)
+    .run().catch((e) => logger.warn({ module: "game" }, "close loan contract failed", e));
+
+  await onPlayerTransferred(db, player.id, ownerTeamId);
+
+  const borrower = await db.prepare("SELECT name FROM teams WHERE id = ?").bind(borrowerTeamId).first<{ name: string }>();
+  const owner = await db.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(ownerTeamId).first<{ name: string; league_id: string }>();
+  const pName = `${player.first_name} ${player.last_name}`;
+
+  const { createTransferNews } = await import("../transfers/transfer-news");
+  await createTransferNews(db, owner?.league_id ?? "", null, "loan_return", {
+    playerName: pName, playerAge: player.age,
+    playerPosition: player.position, teamName: owner?.name ?? "",
+    fromTeamName: borrower?.name, toTeamName: owner?.name, fee: 0,
+  }).catch((e) => logger.warn({ module: "game" }, "create loan return news", e));
+
+  const role = "Sportovní ředitel";
+  const [proHostujici, proKmenovy] = iniciator === "kmenovy"
+    ? [`📤 ${owner?.name ?? "Kmenový klub"} si povolal ${pName} zpět z hostování. Hráč u tebe končí.`,
+       `📥 Povolal jsi ${pName} zpět z hostování v ${borrower?.name ?? "klubu"}. Hráč je zpátky v kádru.`]
+    : [`📤 Hostování ${pName} bylo předčasně ukončeno. Hráč se vrátil do ${owner?.name ?? "původního klubu"}.`,
+       `📥 ${borrower?.name ?? "Klub"} předčasně ukončil hostování ${pName}. Hráč je zpět u tebe.`];
+
+  await sendPhoneSMS(db, borrowerTeamId, role, role, proHostujici)
+    .catch((e) => logger.warn({ module: "game" }, "sms hostujicimu klubu", e));
+  await sendPhoneSMS(db, ownerTeamId, role, role, proKmenovy)
+    .catch((e) => logger.warn({ module: "game" }, "sms kmenovemu klubu", e));
+}
+
+/** Načte hráče v podobě, kterou `vratZHostovani` potřebuje. */
+async function nactiHostujicihoHrace(db: D1Database, playerId: string) {
+  return db.prepare(
+    "SELECT id, first_name, last_name, age, position, team_id, loan_from_team_id FROM players WHERE id = ?"
+  ).bind(playerId).first<{
+    id: string; first_name: string; last_name: string; age: number;
+    position: string; team_id: string; loan_from_team_id: string | null;
+  }>();
+}
+
+// POST /teams/:teamId/loans/:playerId/terminate — hostující klub posílá hráče domů.
 gameRouter.post("/teams/:teamId/loans/:playerId/terminate", async (c) => {
   const teamId = c.req.param("teamId");
-  const playerId = c.req.param("playerId");
-
-  const player = await c.env.DB.prepare(
-    "SELECT id, first_name, last_name, age, position, team_id, loan_from_team_id FROM players WHERE id = ?"
-  ).bind(playerId).first<Record<string, unknown>>();
+  const player = await nactiHostujicihoHrace(c.env.DB, c.req.param("playerId"));
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
   if (player.team_id !== teamId) return c.json({ error: "Hráč není ve tvém klubu" }, 403);
   if (!player.loan_from_team_id) return c.json({ error: "Hráč není na hostování" }, 400);
 
-  const ownerTeamId = player.loan_from_team_id as string;
-  const gameDate = (await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>())?.game_date ?? new Date().toISOString();
+  await vratZHostovani(c.env.DB, { ...player, loan_from_team_id: player.loan_from_team_id }, "hostujici");
+  return c.json({ ok: true });
+});
 
-  // Vrátit hráče do původního týmu
-  await c.env.DB.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL WHERE id = ?")
-    .bind(ownerTeamId, playerId).run();
+// POST /teams/:teamId/loans/:playerId/recall — kmenový klub si bere hráče zpět.
+//
+// Jen u hostování zdarma. Za zaplacené hostování si klub koupil hráče na dohodnutou
+// dobu; vzít mu ho uprostřed by znamenalo řešit vracení poplatku, a to je jednání
+// mezi kluby, ne tlačítko.
+gameRouter.post("/teams/:teamId/loans/:playerId/recall", async (c) => {
+  const teamId = c.req.param("teamId");
+  const player = await nactiHostujicihoHrace(c.env.DB, c.req.param("playerId"));
+  if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
+  if (!player.loan_from_team_id) return c.json({ error: "Hráč není na hostování" }, 400);
+  if (player.loan_from_team_id !== teamId) return c.json({ error: "Nejsi kmenový klub hráče" }, 403);
 
-  // Uzavřít loan kontrakt
-  await c.env.DB.prepare("UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'loan_terminated' WHERE player_id = ? AND team_id = ? AND is_active = 1")
-    .bind(gameDate, playerId, teamId).run()
-    .catch((e) => logger.warn({ module: "game" }, "close loan contract failed", e));
+  const smlouva = await c.env.DB.prepare(
+    "SELECT fee FROM player_contracts WHERE player_id = ? AND team_id = ? AND join_type = 'loan' AND is_active = 1 ORDER BY joined_at DESC LIMIT 1"
+  ).bind(player.id, player.team_id).first<{ fee: number | null }>()
+    .catch((e) => { logger.warn({ module: "game" }, "poplatek za hostovani", e); return null; });
+  const poplatek = smlouva?.fee ?? 0;
+  if (poplatek > 0) {
+    return c.json({
+      error: `Hostování bylo za ${poplatek.toLocaleString("cs")} Kč. Předčasně povolat jde jen hráče, který šel zadarmo.`,
+    }, 400);
+  }
 
-  // Update commute + reset squad number
-  await onPlayerTransferred(c.env.DB, playerId, ownerTeamId);
-
-  const borrower = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>();
-  const owner = await c.env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(ownerTeamId).first<{ name: string; league_id: string }>();
-  const pName = `${player.first_name} ${player.last_name}`;
-
-  // News event
-  const { createTransferNews } = await import("../transfers/transfer-news");
-  await createTransferNews(c.env.DB, owner?.league_id ?? "", null, "loan_return", {
-    playerName: pName, playerAge: player.age as number,
-    playerPosition: player.position as string, teamName: owner?.name ?? "",
-    fromTeamName: borrower?.name, toTeamName: owner?.name, fee: 0,
-  }).catch((e) => logger.warn({ module: "game" }, "create loan return news", e));
-
-  // SMS oběma stranám
-  const role = "Sportovní ředitel";
-  await sendPhoneSMS(c.env.DB, teamId, role, role,
-    `📤 Hostování ${pName} bylo předčasně ukončeno. Hráč se vrátil do ${owner?.name ?? "původního klubu"}.`
-  ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
-  await sendPhoneSMS(c.env.DB, ownerTeamId, role, role,
-    `📥 ${borrower?.name ?? "Klub"} předčasně ukončil hostování ${pName}. Hráč je zpět u tebe.`
-  ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
-
+  await vratZHostovani(c.env.DB, { ...player, loan_from_team_id: player.loan_from_team_id }, "kmenovy");
   return c.json({ ok: true });
 });
 
