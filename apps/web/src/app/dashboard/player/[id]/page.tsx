@@ -291,7 +291,11 @@ export default function PlayerDetailPage() {
   const isMyU21Player = playerTeam?.team_type === "u21" && playerTeam?.parent_team_id === teamId;
   const isOwnPlayer = player?.team_id === teamId || isMyU21Player;
   const isLoanedToUs = isOwnPlayer && !!player?.loan_from_team_id;
-  const isForeignHumanPlayer = !isOwnPlayer && playerTeam && playerTeam.user_id !== "ai";
+  // Kmenový klub hráče, který zrovna hostuje jinde. Formálně to není hráč „u nás",
+  // takže bez téhle výjimky by na svého hráče nabízel přestup a přidával si ho do
+  // sledovaných — obojí sám sobě.
+  const jsemKmenovyKlub = !!player?.loan?.isParentClub;
+  const isForeignHumanPlayer = !isOwnPlayer && !jsemKmenovyKlub && playerTeam && playerTeam.user_id !== "ai";
   const canSendOffer = isForeignHumanPlayer || isLoanedToUs;
 
   async function sendOffer() {
@@ -588,7 +592,7 @@ export default function PlayerDetailPage() {
                   </button>
                 )}
                 {/* Sledovat — for any non-own player */}
-                {!isOwnPlayer && (
+                {!isOwnPlayer && !jsemKmenovyKlub && (
                   <button onClick={toggleWatch} disabled={watchLoading}
                     className={`${btnBase} disabled:opacity-50 ${isWatched ? btnWatched : btnNeutral}`}>
                     {isWatched ? "★ Sleduji" : "☆ Sledovat"}
