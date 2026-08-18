@@ -991,13 +991,16 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
   if (!row) return c.json({ error: "Player not found" }, 404);
 
   const isOwn = row.team_id === teamId;
+  // Kmenový klub hráče na hostování — pořád je to jeho hráč, takže žádné rozmazávání
+  // atributů. Akce v UI ale zůstávají na `isOwn`, ten hráč teď hraje jinde.
+  const isParentClub = !!row.loan_from_team_id && row.loan_from_team_id === teamId;
   const skills = JSON.parse(row.skills as string);
   const physical = JSON.parse(row.physical as string);
   const personality = JSON.parse(row.personality as string);
   const lifeContext = JSON.parse(row.life_context as string);
 
   // Foreign players: round attributes to nearest 5, hide personality details
-  if (!isOwn) {
+  if (!isOwn && !isParentClub) {
     const blur = (v: number) => Math.round(v / 5) * 5;
     for (const k of Object.keys(skills)) { if (typeof skills[k] === "number") skills[k] = blur(skills[k]); }
     for (const k of Object.keys(physical)) { if (typeof physical[k] === "number") physical[k] = blur(physical[k]); }
@@ -1043,9 +1046,48 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     }
   }
 
+  // Hostování — kdo hráče vlastní, kde hraje a kolik dní do návratu. Počítá se
+  // v HERNÍM čase (loan_until se zapisuje herním datem, viz daily-tick), jinak by
+  // při offsetu vycházel nesmyslný počet dní.
+  let loan: {
+    ownerTeamId: string; ownerTeamName: string;
+    borrowerTeamId: string; borrowerTeamName: string;
+    until: string; daysLeft: number; fee: number;
+    isParentClub: boolean; isBorrower: boolean; canRecall: boolean;
+  } | null = null;
+  if (row.loan_from_team_id) {
+    const ownerTeamId = row.loan_from_team_id as string;
+    const borrowerTeamId = row.team_id as string;
+    const [owner, borrower, clock, smlouva] = await Promise.all([
+      c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(ownerTeamId).first<{ name: string }>(),
+      c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(borrowerTeamId).first<{ name: string }>(),
+      c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>(),
+      c.env.DB.prepare(
+        "SELECT fee FROM player_contracts WHERE player_id = ? AND team_id = ? AND join_type = 'loan' AND is_active = 1 ORDER BY joined_at DESC LIMIT 1"
+      ).bind(row.id as string, borrowerTeamId).first<{ fee: number | null }>(),
+    ]).catch((e) => { logger.warn({ module: "teams" }, "údaje o hostování", e); return [null, null, null, null] as const; });
+
+    const until = (row.loan_until as string | null) ?? null;
+    const dnesHerne = clock?.game_date ?? new Date().toISOString();
+    const zbyva = until
+      ? Math.max(0, Math.ceil((new Date(until).getTime() - new Date(dnesHerne).getTime()) / 86400000))
+      : 0;
+    const fee = smlouva?.fee ?? 0;
+    loan = {
+      ownerTeamId, ownerTeamName: owner?.name ?? "",
+      borrowerTeamId, borrowerTeamName: borrower?.name ?? "",
+      until: until ?? "", daysLeft: zbyva, fee,
+      isParentClub, isBorrower: isOwn,
+      // Povolat zpět smí jen kmenový klub a jen když hostování nic nestálo.
+      canRecall: isParentClub && fee === 0,
+    };
+  }
+
   return c.json({
     ...row,
     isOwn,
+    isParentClub,
+    loan,
     skills,
     physical,
     personality,

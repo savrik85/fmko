@@ -74,6 +74,12 @@ function sideLabel(side?: string): string {
 
 /* ── Page ── */
 
+/** „za 1 den", „za 3 dny", „za 5 dní" — pruh o hostování to potřebuje ve větě. */
+function dnySlovem(n: number): string {
+  if (n === 1) return "den";
+  return n < 5 ? "dny" : "dní";
+}
+
 export default function PlayerDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -491,6 +497,34 @@ export default function PlayerDetailPage() {
             </div>
           </div>
 
+          {/* ─── Hostování — kdo hráče vlastní a kdy se vrací ───
+               Pruh vidí obě strany: kmenový klub, že jeho hráč hostuje jinde,
+               i klub, který si ho půjčil. Hlavička sama o sobě ukazuje jen tým,
+               ve kterém hráč zrovna hraje, což u hostování mate. */}
+          {player.loan && (player.loan.isParentClub || player.loan.isBorrower) && (
+            <div className={`mt-3 ${boxBg} rounded-xl px-3 py-2.5`}>
+              <div className={`font-heading font-bold text-sm ${txt}`}>
+                {player.loan.isParentClub
+                  ? `🤝 Tvůj hráč — hostuje v ${player.loan.borrowerTeamName}`
+                  : `🤝 Hráč patří klubu ${player.loan.ownerTeamName}`}
+              </div>
+              <div className={`${txtMuted} text-sm mt-0.5`}>
+                {player.loan.daysLeft > 0
+                  ? `Vrátí se za ${player.loan.daysLeft} ${dnySlovem(player.loan.daysLeft)}`
+                  : "Vrací se v nejbližším zpracování dne"}
+                {player.loan.until ? ` · ${new Date(player.loan.until).toLocaleDateString("cs")}` : ""}
+                {player.loan.fee > 0
+                  ? ` · hostování za ${player.loan.fee.toLocaleString("cs")} Kč`
+                  : " · hostování zdarma"}
+              </div>
+              {player.loan.isParentClub && !player.loan.canRecall && (
+                <div className={`${txtMuted} text-sm mt-1`}>
+                  Placené hostování se předčasně ukončit nedá — dohodnutou dobu si klub zaplatil.
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ─── Action row — same styling mobile + desktop ─── */}
           {(() => {
             const btnBase = `flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5`;
@@ -514,6 +548,25 @@ export default function PlayerDetailPage() {
                   <button onClick={() => { if (isLoanedToUs) setOfferType("transfer"); setOfferOpen(!offerOpen); }}
                     className={`${btnBase} ${offerOpen ? btnNeutralActive : btnNeutral}`}>
                     {offerOpen ? "✕ Zavřít" : isLoanedToUs ? "💰 Odkoupit" : "🤝 Nabídka"}
+                  </button>
+                )}
+                {/* Povolat zpět — kmenový klub u hostování zdarma */}
+                {player.loan?.canRecall && (
+                  <button onClick={async () => {
+                    if (!teamId || !player) return;
+                    const ok = await confirm({
+                      title: "Povolat hráče zpět?",
+                      description: `${player.first_name} ${player.last_name} se ihned vrátí z hostování v ${player.loan?.borrowerTeamName ?? "klubu"} do tvého kádru.`,
+                      confirmLabel: "Povolat zpět",
+                    });
+                    if (!ok) return;
+                    if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${player.id}/recall`, { method: "POST" }), "Povolání hráče zpět se nezdařilo")) {
+                      router.refresh();
+                      window.location.reload();
+                    }
+                  }}
+                    className={`${btnBase} min-w-[150px] ${btnNeutral}`}>
+                    📥 Povolat zpět
                   </button>
                 )}
                 {/* Ukončit hostování — jen pokud je hráč u nás na hostování */}
