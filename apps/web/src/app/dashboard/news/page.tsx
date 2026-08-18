@@ -492,8 +492,12 @@ export default function NewsPage() {
             </section>
           ))}
 
-          {/* ═══ Po zápase ═══ */}
-          {postMatchArticles.length > 0 && (
+          {/* ═══ Rozhovorové rubriky ═══
+              Pořadí není pevné — nahoru jde ta, ve které vyšel nejčerstvější
+              článek. Natvrdo dané pořadí znamenalo, že po kole bez pozápasových
+              rozhovorů viselo nad čerstvými rozhovory kola staré vydání. */}
+          {[
+            { klic: "po-zapase", datum: postMatchArticles[0]?.date, node: postMatchArticles.length > 0 && (
             <section className="border-t border-ink/20 pt-6">
               <Kicker>🗣️ {postMatchArticles.length === 1 ? "Po zápase" : "Ohlasy po zápase"}</Kicker>
               <div className="divide-y divide-ink/10">
@@ -521,10 +525,8 @@ export default function NewsPage() {
                 })}
               </div>
             </section>
-          )}
-
-          {/* ═══ Rozhovory s trenéry ═══ */}
-          {currentWeekInterviews.length > 0 && (
+          ) },
+            { klic: "treneri", datum: currentWeekInterviews[0]?.date, node: currentWeekInterviews.length > 0 && (
             <section className="border-t border-ink/20 pt-6">
               <Kicker>🎙️ {currentWeekInterviews.length === 1 ? "Rozhovor kola" : "Rozhovory kola"}</Kicker>
               <div className="divide-y divide-ink/10">
@@ -550,10 +552,8 @@ export default function NewsPage() {
                 })}
               </div>
             </section>
-          )}
-
-          {/* ═══ Rozhovory s hráči ═══ */}
-          {currentPlayerInterviews.length > 0 && (
+          ) },
+            { klic: "hraci", datum: currentPlayerInterviews[0]?.date, node: currentPlayerInterviews.length > 0 && (
             <section className="border-t border-ink/20 pt-6">
               <Kicker>🎤 {currentPlayerInterviews.length === 1 ? "Rozhovor s hráčem" : "Rozhovory s hráči"}</Kicker>
               <div className="divide-y divide-ink/10">
@@ -579,7 +579,11 @@ export default function NewsPage() {
                 })}
               </div>
             </section>
-          )}
+          ) },
+          ]
+            .filter((r) => r.node)
+            .sort((a, b) => new Date(b.datum ?? 0).getTime() - new Date(a.datum ?? 0).getTime())
+            .map((r) => <Fragment key={r.klic}>{r.node}</Fragment>)}
 
           {/* ═══ Přestupy — krátké zprávy ve sloupcích ═══ */}
           {transferArticles.length > 0 && (
