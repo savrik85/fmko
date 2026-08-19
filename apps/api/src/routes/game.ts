@@ -2917,10 +2917,19 @@ gameRouter.post("/game/staff-tick", async (c) => {
   return c.json({ ok: true, type: "staff", result });
 });
 
-// POST /api/game/run-matches — simulace zápasů, max 1 liga za invokaci
+// POST /api/game/run-matches[?leagueId=X] — simulace zápasů.
+//
+// Volá TUTÉŽ processLeagueRound() jako cron i konzumer fronty. Dřív tu byla čtvrtá
+// kopie zpracování kola, která se od cronu lišila (chyběly události mezi koly
+// i notifikace a hlavně filtr na aktuální sezónu, takže uměla odsimulovat kolo
+// ze staré sezóny). Tím je ta divergence pryč a ruční test na testingu dělá
+// bit po bitu totéž co produkční fronta.
 gameRouter.post("/game/run-matches", async (c) => {
-  const { runScheduledMatches, recoverStuckRounds } = await import("../multiplayer/match-runner");
+  const { recoverStuckRounds } = await import("../multiplayer/match-runner");
+  const { findLeaguesWithDueRound, processLeagueRound } = await import("../season/league-round");
   const targetLeagueId = c.req.query("leagueId");
+  // ?all=1 zpracuje všechny splatné ligy; bez něj se drží původní chování (jedna liga).
+  const processAll = c.req.query("all") === "1";
 
   // Recovery: dohraj kola uvízlá v 'lineup_locked' (simulace spadla v půlce). Bez tohoto
   // by endpoint i cron locked kolo ignorovaly (hledají jen 'scheduled') a liga by stála.
@@ -2929,99 +2938,27 @@ gameRouter.post("/game/run-matches", async (c) => {
     recoveredRounds = await recoverStuckRounds(c.env.DB, c.env.GEMINI_API_KEY);
   } catch (e) { logger.warn({ module: "game" }, "stuck round recovery failed", e); }
 
-  const leagueRows = await c.env.DB.prepare(
-    "SELECT DISTINCT t.league_id, MIN(t.game_date) as game_date FROM teams t WHERE t.league_id IS NOT NULL AND t.game_date IS NOT NULL GROUP BY t.league_id"
-  ).all();
+  const due = await findLeaguesWithDueRound(c.env.DB);
+  const targets = targetLeagueId ? due.filter((d) => d.leagueId === targetLeagueId) : due;
 
   let totalMatches = 0;
   let processedLeague: string | null = null;
+  const rounds: Array<{ leagueId: string; status: string; matches: number; durationMs: number; queries: number }> = [];
 
-  for (const row of leagueRows.results) {
-    const gameDate = row.game_date as string | null;
-    const leagueId = row.league_id as string | null;
-    if (!gameDate || !leagueId) continue;
-    if (targetLeagueId && leagueId !== targetLeagueId) continue;
-
-    const gd = new Date(gameDate);
-    const dayEnd = new Date(gd); dayEnd.setUTCHours(23, 59, 59, 999);
-
-    const matchCal = await c.env.DB.prepare(
-      "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
-    ).bind(leagueId, dayEnd.toISOString()).first<{ id: string }>();
-
-    if (matchCal) {
-      if (processedLeague && !targetLeagueId) break;
-
-      // Atomický lock: zabrání souběžnému cronu / endpointu zpracovat stejné kolo.
-      const lockResult = await c.env.DB.prepare(
-        "UPDATE season_calendar SET status = 'lineup_locked' WHERE id = ? AND status = 'scheduled'"
-      ).bind(matchCal.id).run();
-      if (lockResult.meta.changes === 0) continue;
-
-      const { calculateStandings } = await import("../stats/standings");
-      const standingsBefore = await calculateStandings(c.env.DB, leagueId);
-
-      await c.env.DB.prepare("UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'")
-        .bind(matchCal.id).run();
-      const results = await runScheduledMatches(c.env.DB, matchCal.id, c.env.GEMINI_API_KEY);
-      await c.env.DB.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
-        .bind(matchCal.id).run();
-      totalMatches += results.length;
-
-      if (results.length > 0) {
-        try {
-          const calRow = await c.env.DB.prepare("SELECT game_week FROM season_calendar WHERE id = ?")
-            .bind(matchCal.id).first<{ game_week: number }>();
-          const gameWeek = calRow?.game_week ?? 0;
-          const matchRows = await c.env.DB.prepare(
-            "SELECT m.home_score, m.away_score, t1.name as home_name, t2.name as away_name FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND m.status = 'simulated'"
-          ).bind(matchCal.id).all();
-          const lines: string[] = [];
-          for (const r of matchRows.results) {
-            const hs = r.home_score as number; const as_ = r.away_score as number;
-            const hn = r.home_name as string; const an = r.away_name as string;
-            if (hs > as_) lines.push(`${hn} porazil ${an} ${hs}:${as_}`);
-            else if (hs < as_) lines.push(`${an} zvítězil nad ${hn} ${as_}:${hs}`);
-            else lines.push(`${hn} remizoval s ${an} ${hs}:${as_}`);
-          }
-          await c.env.DB.prepare("INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'round_results', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
-            .bind(crypto.randomUUID(), leagueId, `${gameWeek}. kolo: přehled výsledků`, lines.join(". ") + ".", gameWeek).run();
-
-          if (c.env.GEMINI_API_KEY) {
-            try {
-              const { generateAiRoundReport } = await import("../news/ai-reporter");
-              await generateAiRoundReport(c.env.DB, c.env.GEMINI_API_KEY, leagueId, matchCal.id, gameWeek, standingsBefore);
-            } catch (e: any) {
-              logger.warn({ module: "game" }, `AI reporter error: ${e.message}`);
-            }
-            try {
-              const { generateUltrasReport } = await import("../news/ultras-report");
-              await generateUltrasReport(c.env.DB, c.env.GEMINI_API_KEY, matchCal.id);
-            } catch (e: any) {
-              logger.warn({ module: "game" }, `ultras report error: ${e.message}`);
-            }
-          }
-          try {
-            const { pickRandomAdhocEvent } = await import("../season/seasonal-events");
-            const { createRng } = await import("../generators/rng");
-            const humanTeams = await c.env.DB.prepare(
-              "SELECT t.id, t.league_id, v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.league_id = ? AND t.user_id <> 'ai'"
-            ).bind(leagueId).all();
-            for (const ht of humanTeams.results) {
-              const adhocRng = createRng(cryptoSeed());
-              const adhocEvent = pickRandomAdhocEvent(adhocRng, gameWeek, ht.district as string);
-              if (adhocEvent) {
-                await c.env.DB.prepare(
-                  "INSERT INTO seasonal_events (id, team_id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
-                ).bind(crypto.randomUUID(), ht.id, ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
-                  JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), String(await activeSeasonNumber(c.env.DB)), adhocEvent.gameWeek
-                ).run().catch((e: any) => logger.warn({ module: "game" }, `ad-hoc event insert: ${e.message}`));
-              }
-            }
-          } catch (e: any) { logger.warn({ module: "game" }, `ad-hoc events: ${e.message}`); }
-        } catch (e: any) { logger.warn({ module: "game" }, `news generation: ${e.message}`); }
-      }
-      processedLeague = leagueId;
+  for (const lg of targets) {
+    const result = await processLeagueRound(c.env, lg.leagueId);
+    rounds.push({
+      leagueId: result.leagueId,
+      status: result.status,
+      matches: result.matches,
+      durationMs: result.durationMs,
+      queries: result.queries,
+    });
+    totalMatches += result.matches;
+    if (result.status === "done") {
+      processedLeague = result.leagueId;
+      // Původní chování: bez ?leagueId a bez ?all zpracuj jen první ligu s kolem.
+      if (!targetLeagueId && !processAll) break;
     }
   }
 
@@ -3034,7 +2971,7 @@ gameRouter.post("/game/run-matches", async (c) => {
 
   // Collect debug from global
   const debugLogs = (globalThis as any).__lineupDebug ?? [];
-  return c.json({ ok: true, type: "matches", totalMatches, processedLeague, recoveredRounds, debug: debugLogs });
+  return c.json({ ok: true, type: "matches", totalMatches, processedLeague, rounds, recoveredRounds, debug: debugLogs });
 });
 
 // POST /api/game/generate-round-report?calendarId=X
@@ -3822,7 +3759,7 @@ gameRouter.post("/teams/:teamId/lineup-preview", async (c) => {
     // Kdo je jednu žlutou od stopky — nejkonkrétnější důvod, proč hrát na férovku.
     const seasonRow = await c.env.DB.prepare(
       "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
-    ).first<{ id: string }>().catch(() => null);
+    ).first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "aktivní sezóna pro karetní hranu", e); return null; });
     const edgeRow = seasonRow ? await c.env.DB.prepare(
       `SELECT COUNT(*) AS c FROM player_stats
        WHERE team_id = ? AND season_id = ? AND yellow_cards % 4 = 3 AND player_id IN (${placeholders})`
@@ -8657,6 +8594,299 @@ gameRouter.post("/admin/news/:newsId/regenerate-interview", async (c) => {
     .catch((e) => { logger.warn({ module: "game" }, "regenerate-interview update", e); });
 
   return c.json({ ok: true, newsId, headline: newHeadline, articlePreview: result.body.slice(0, 200) });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FRONTY — ovládání a diagnostika
+//
+// Testing nemá crony (`[env.testing.triggers] crons = []`), takže se všechno
+// spouští odsud. Viz docs/analyza-fronty-2026-08-16.md, kapitola 6.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/admin/queue/mode — jaký režim zpracování zápasového ticku je aktivní
+gameRouter.get("/admin/queue/mode", async (c) => {
+  const { readMatchTickMode, MATCH_TICK_MODE_KEY } = await import("../queue/messages");
+  const mode = await readMatchTickMode(c.env.CACHE_KV);
+  return c.json({
+    ok: true,
+    mode,
+    key: MATCH_TICK_MODE_KEY,
+    matchQueueBound: !!c.env.MATCH_QUEUE,
+    reportsQueueBound: !!c.env.REPORTS_QUEUE,
+  });
+});
+
+// POST /api/admin/queue/mode?mode=queue|loop — přepnutí režimu.
+// Rollback frontového režimu = přepnutí zpátky na "loop", bez deploye.
+gameRouter.post("/admin/queue/mode", async (c) => {
+  const mode = c.req.query("mode");
+  if (mode !== "queue" && mode !== "loop") {
+    return c.json({ error: "mode musí být 'queue' nebo 'loop'" }, 400);
+  }
+  const { MATCH_TICK_MODE_KEY } = await import("../queue/messages");
+  await c.env.CACHE_KV.put(MATCH_TICK_MODE_KEY, mode);
+  logger.info({ module: "game" }, `režim zápasového ticku přepnut na "${mode}"`);
+  return c.json({ ok: true, mode });
+});
+
+// GET /api/admin/ai-provider — kdo generuje AI texty (gemini | workers-ai | off)
+gameRouter.get("/admin/ai-provider", async (c) => {
+  const { readAiProvider, AI_PROVIDER_KEY } = await import("../lib/ai-provider");
+  const provider = await readAiProvider(c.env.CACHE_KV);
+  return c.json({ ok: true, provider, key: AI_PROVIDER_KEY, geminiKeySet: !!c.env.GEMINI_API_KEY });
+});
+
+// POST /api/admin/ai-provider?provider=gemini|workers-ai|off
+// "off" na testingu chrání produkční Gemini kvótu — obě prostředí sdílejí hodnotu klíče.
+gameRouter.post("/admin/ai-provider", async (c) => {
+  const provider = c.req.query("provider");
+  if (provider !== "gemini" && provider !== "workers-ai" && provider !== "off") {
+    return c.json({ error: "provider musí být 'gemini', 'workers-ai' nebo 'off'" }, 400);
+  }
+  const { AI_PROVIDER_KEY } = await import("../lib/ai-provider");
+  await c.env.CACHE_KV.put(AI_PROVIDER_KEY, provider);
+  logger.info({ module: "game" }, `AI poskytovatel přepnut na "${provider}"`);
+  return c.json({ ok: true, provider });
+});
+
+// POST /api/admin/queue/enqueue-match-tick — ruční spuštění producenta zápasového ticku
+gameRouter.post("/admin/queue/enqueue-match-tick", async (c) => {
+  const { enqueueMatchTick } = await import("../queue/producer");
+  const result = await enqueueMatchTick(c.env);
+  return c.json({ ok: true, ...result });
+});
+
+// POST /api/admin/queue/enqueue-previews — ruční spuštění producenta předzápasových článků
+gameRouter.post("/admin/queue/enqueue-previews", async (c) => {
+  const { enqueueMatchdayPreviews } = await import("../queue/producer");
+  const queued = await enqueueMatchdayPreviews(c.env);
+  return c.json({ ok: true, queued });
+});
+
+// POST /api/admin/queue/send-duplicate?leagueId=X&times=2
+// Pošle TUTÉŽ zprávu vícekrát — přímý test idempotence (fronty doručují "aspoň jednou").
+// Očekávané chování: první zpráva kolo odsimuluje, další skončí jako "skipped"
+// a finance se NEZDVOJÍ. Regrese na incident 2026-04.
+// ?gameDate=... podvrhne herní datum → ověření, že zastaralá zpráva se zahodí (stale).
+// ?kind=selftest_fail pošle zprávu, která vždy selže → ověření retry + DLQ.
+gameRouter.post("/admin/queue/send-duplicate", async (c) => {
+  const leagueId = c.req.query("leagueId");
+  const times = Math.min(Number(c.req.query("times") ?? 2), 10);
+  const kind = c.req.query("kind") === "selftest_fail" ? "selftest_fail" : "league_round";
+  if (!leagueId) return c.json({ error: "leagueId je povinné" }, 400);
+  if (!c.env.MATCH_QUEUE) return c.json({ error: "MATCH_QUEUE binding chybí" }, 500);
+
+  const { readLeagueGameDate } = await import("../season/league-round");
+  const gameDate = c.req.query("gameDate") ?? (await readLeagueGameDate(c.env.DB, leagueId));
+  if (!gameDate) return c.json({ error: "liga nemá herní datum" }, 400);
+
+  const enqueuedAt = new Date().toISOString();
+  for (let i = 0; i < times; i++) {
+    await c.env.MATCH_QUEUE.send({ kind, leagueId, gameDate, enqueuedAt } as never);
+  }
+  return c.json({ ok: true, kind, leagueId, gameDate, sent: times });
+});
+
+// POST /api/admin/queue/run-league?leagueId=X — synchronní zpracování jedné ligy.
+// Obchází frontu, ale volá TUTÉŽ funkci. Slouží k měření (durationMs, queries)
+// a k porovnání staré a nové cesty.
+gameRouter.post("/admin/queue/run-league", async (c) => {
+  const leagueId = c.req.query("leagueId");
+  if (!leagueId) return c.json({ error: "leagueId je povinné" }, 400);
+  const { processLeagueRound } = await import("../season/league-round");
+  const result = await processLeagueRound(c.env, leagueId);
+  return c.json({ ok: true, result });
+});
+
+// GET /api/admin/queue/runs[?kind=league_round&limit=50] — měření běhů z fronty.
+// lag_ms = jak dlouho zpráva čekala ve frontě, duration_ms = jak dlouho trvalo zpracování.
+// Bez rozlišení těch dvou se nedá říct, jestli je pomalá fronta nebo samotná práce.
+gameRouter.get("/admin/queue/runs", async (c) => {
+  const kind = c.req.query("kind");
+  const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+  const base =
+    "SELECT kind, league_id, status, matches, queries, duration_ms, attempts, lag_ms, created_at FROM queue_runs";
+  const stmt = kind
+    ? c.env.DB.prepare(`${base} WHERE kind = ? ORDER BY created_at DESC LIMIT ?`).bind(kind, limit)
+    : c.env.DB.prepare(`${base} ORDER BY created_at DESC LIMIT ?`).bind(limit);
+  const rows = await stmt.all().catch((e) => {
+    logger.warn({ module: "game" }, "queue_runs select", e);
+    return { results: [] };
+  });
+
+  // Souhrn per typ zprávy — přímý podklad pro tvrzení "práce na ligu je konstantní".
+  const summary = await c.env.DB.prepare(
+    `SELECT kind, COUNT(*) AS pocet, AVG(duration_ms) AS prumer_ms, MIN(duration_ms) AS min_ms,
+            MAX(duration_ms) AS max_ms, AVG(queries) AS prumer_dotazu, AVG(lag_ms) AS prumer_lag_ms
+       FROM queue_runs GROUP BY kind`,
+  )
+    .all()
+    .catch((e) => {
+      logger.warn({ module: "game" }, "queue_runs summary", e);
+      return { results: [] };
+    });
+
+  return c.json({ ok: true, summary: summary.results, runs: rows.results });
+});
+
+// GET /api/admin/health — jeden pohled na to, jestli je zpracování zdravé.
+// Vznikl pro sledování testingu před nasazením front na produkci: bez něj by se
+// muselo lovit v pěti tabulkách. Každý signál má vlastní verdikt, ať je vidět CO je špatně.
+gameRouter.get("/admin/health", async (c) => {
+  const { readMatchTickMode } = await import("../queue/messages");
+  const { readAiProvider } = await import("../lib/ai-provider");
+
+  const one = async <T>(sql: string, popis: string): Promise<T | null> =>
+    c.env.DB.prepare(sql).first<T>().catch((e) => {
+      logger.warn({ module: "game" }, `health: ${popis}`, e);
+      return null;
+    });
+
+  const [mode, aiProvider] = await Promise.all([
+    readMatchTickMode(c.env.CACHE_KV),
+    readAiProvider(c.env.CACHE_KV),
+  ]);
+
+  const dlq = await one<{ n: number }>("SELECT COUNT(*) AS n FROM queue_failures WHERE resolved = 0", "dlq");
+  const retries = await one<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM queue_runs WHERE attempts > 1 AND created_at > datetime('now', '-3 days')",
+    "retries",
+  );
+  const errors = await one<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM queue_runs WHERE status = 'error' AND created_at > datetime('now', '-3 days')",
+    "errors",
+  );
+  const stuck = await one<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM season_calendar WHERE status = 'lineup_locked'",
+    "stuck",
+  );
+  // Nedohraná kola, jejichž termín už nastal — když tohle roste den po dni, tick nestíhá.
+  // JOIN na leagues je nutný: kalendáře osiřelých lig producent nikdy nezařadí
+  // (findLeaguesWithDueRound taky joinuje), takže by trvale nafukovaly signál.
+  const backlog = await one<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM season_calendar sc
+       JOIN leagues l ON l.id = sc.league_id
+      WHERE sc.status = 'scheduled'
+        AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar x WHERE x.league_id = sc.league_id)
+        AND sc.scheduled_at <= (SELECT MAX(game_date) FROM teams t WHERE t.league_id = sc.league_id)`,
+    "backlog",
+  );
+  // Osiřelé ligy: týmy i kalendáře odkazují na ligu, která v `leagues` neexistuje.
+  // Takové týmy dostávají denní tick, ale jejich kola se NIKDY neodehrají.
+  const orphans = await one<{ ligy: number; tymy: number; kola: number }>(
+    `SELECT
+       (SELECT COUNT(DISTINCT league_id) FROM teams WHERE league_id IS NOT NULL AND league_id NOT IN (SELECT id FROM leagues)) AS ligy,
+       (SELECT COUNT(*) FROM teams WHERE league_id IS NOT NULL AND league_id NOT IN (SELECT id FROM leagues)) AS tymy,
+       (SELECT COUNT(*) FROM season_calendar WHERE league_id NOT IN (SELECT id FROM leagues)) AS kola`,
+    "orphans",
+  );
+  const clock = await one<{ game_date: string | null; offset_days: number | null }>(
+    "SELECT (SELECT MAX(game_date) FROM teams) AS game_date, (SELECT offset_days FROM game_clock WHERE id = 1) AS offset_days",
+    "clock",
+  );
+  const lastRound = await one<{ trvani: number | null; kdy: string | null }>(
+    "SELECT duration_ms AS trvani, created_at AS kdy FROM queue_runs WHERE kind = 'league_round' AND status = 'done' ORDER BY created_at DESC LIMIT 1",
+    "lastRound",
+  );
+  const rounds24 = await one<{ n: number; prumer: number | null; max: number | null }>(
+    "SELECT COUNT(*) AS n, AVG(duration_ms) AS prumer, MAX(duration_ms) AS max FROM queue_runs WHERE kind = 'league_round' AND status = 'done' AND created_at > datetime('now', '-1 day')",
+    "rounds24",
+  );
+
+  const kontroly = [
+    { nazev: "dead-letter fronta", hodnota: dlq?.n ?? -1, ok: (dlq?.n ?? 1) === 0, popis: "zprávy, které selhaly i po retry" },
+    { nazev: "retry za 3 dny", hodnota: retries?.n ?? -1, ok: (retries?.n ?? 1) === 0, popis: "opakované doručení = něco padá" },
+    { nazev: "chybné běhy za 3 dny", hodnota: errors?.n ?? -1, ok: (errors?.n ?? 1) === 0, popis: "výjimka v konzumeru" },
+    { nazev: "zaseklá kola", hodnota: stuck?.n ?? -1, ok: (stuck?.n ?? 1) === 0, popis: "lineup_locked mimo běžící tick" },
+    { nazev: "nedohraná splatná kola", hodnota: backlog?.n ?? -1, ok: (backlog?.n ?? 99) < 10, popis: "když roste den po dni, tick nestíhá" },
+    { nazev: "osiřelé ligy", hodnota: orphans?.ligy ?? -1, ok: (orphans?.ligy ?? 1) === 0, popis: "týmy bez ligy v `leagues` — dostávají denní tick, ale nikdy nehrají" },
+  ];
+
+  const verdikt = kontroly.every((k) => k.ok) ? "ok" : "pozor";
+  return c.json({
+    ok: true,
+    verdikt,
+    rezim: { zpracovani: mode, aiPoskytovatel: aiProvider },
+    hodiny: { herniDatum: clock?.game_date ?? null, offsetDnu: clock?.offset_days ?? null },
+    kola24h: {
+      pocet: rounds24?.n ?? 0,
+      prumerMs: rounds24?.prumer ? Math.round(rounds24.prumer) : null,
+      maxMs: rounds24?.max ?? null,
+    },
+    posledniKolo: { trvaniMs: lastRound?.trvani ?? null, kdy: lastRound?.kdy ?? null },
+    osirele: { ligy: orphans?.ligy ?? 0, tymy: orphans?.tymy ?? 0, kola: orphans?.kola ?? 0 },
+    kontroly,
+  });
+});
+
+// GET /api/admin/queue/profile — kde se utratí dotazy na jedno kolo (průměr přes poslední běhy)
+gameRouter.get("/admin/queue/profile", async (c) => {
+  const rows = await c.env.DB.prepare(
+    "SELECT phases, queries, duration_ms FROM queue_runs WHERE kind = 'league_round' AND status = 'done' AND phases IS NOT NULL ORDER BY created_at DESC LIMIT 20",
+  )
+    .all<{ phases: string; queries: number; duration_ms: number }>()
+    .catch((e) => {
+      logger.warn({ module: "game" }, "queue profile select", e);
+      return { results: [] as Array<{ phases: string; queries: number; duration_ms: number }> };
+    });
+
+  const soucty = new Map<string, { queries: number; ms: number; n: number }>();
+  for (const row of rows.results) {
+    let parsed: Array<{ name: string; ms: number; queries: number }>;
+    try {
+      parsed = JSON.parse(row.phases);
+    } catch (e) {
+      logger.warn({ module: "game" }, "profile: rozbitý JSON fází", e);
+      continue;
+    }
+    for (const f of parsed) {
+      const acc = soucty.get(f.name) ?? { queries: 0, ms: 0, n: 0 };
+      acc.queries += f.queries;
+      acc.ms += f.ms;
+      acc.n += 1;
+      soucty.set(f.name, acc);
+    }
+  }
+
+  const celkemDotazu = [...soucty.values()].reduce((a, v) => a + v.queries, 0) || 1;
+  const faze = [...soucty.entries()]
+    .map(([name, v]) => ({
+      faze: name,
+      prumerDotazu: Math.round(v.queries / v.n),
+      prumerMs: Math.round(v.ms / v.n),
+      podilDotazu: `${Math.round((v.queries / celkemDotazu) * 100)} %`,
+    }))
+    .sort((a, b) => b.prumerDotazu - a.prumerDotazu);
+
+  return c.json({ ok: true, vzorkuBehu: rows.results.length, faze });
+});
+
+// GET /api/admin/watchdog — ruční spuštění hlídače (bez rozesílání notifikací)
+gameRouter.get("/admin/watchdog", async (c) => {
+  const { runWatchdog } = await import("../lib/watchdog");
+  const r = await runWatchdog(c.env);
+  return c.json({ zdrave: r.ok, problemy: r.problemy });
+});
+
+// POST /api/admin/watchdog/test — hlídač VČETNĚ notifikací, na ověření že alerting funguje
+gameRouter.post("/admin/watchdog/test", async (c) => {
+  const { runWatchdogAndAlert } = await import("../lib/watchdog");
+  const r = await runWatchdogAndAlert(c.env);
+  return c.json({ zdrave: r.ok, problemy: r.problemy, notifikaceOdeslany: !r.ok });
+});
+
+// GET /api/admin/queue/failures — zprávy, které skončily v dead-letter frontě.
+// Bez tohohle liga vypadne potichu a nikdo se to nedozví.
+gameRouter.get("/admin/queue/failures", async (c) => {
+  const rows = await c.env.DB.prepare(
+    "SELECT id, queue_name, message_kind, league_id, attempts, substr(payload, 1, 300) AS payload, resolved, created_at FROM queue_failures ORDER BY created_at DESC LIMIT 50",
+  )
+    .all()
+    .catch((e) => {
+      logger.warn({ module: "game" }, "queue_failures select", e);
+      return { results: [] };
+    });
+  return c.json({ ok: true, count: rows.results.length, failures: rows.results });
 });
 
 export { gameRouter };

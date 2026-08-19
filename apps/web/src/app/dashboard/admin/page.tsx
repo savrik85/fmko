@@ -8,6 +8,18 @@ import { SectionLabel } from "@/components/ui";
 interface SeedTable { key: string; label: string; count: number; editable: boolean; districts?: string[] }
 interface SeedRow { [key: string]: unknown }
 
+/**
+ * Potvrzení pro akce, které zasahují do hry ostatním lidem.
+ *
+ * Tahle tlačítka se dřív spouštěla na jedno kliknutí — u posunu dne dokonce
+ * hned vedle neškodného „Refresh". Stačilo minout a posunul se herní den celé
+ * hře; vrátit to jde jen přes Time Travel, což znamená vzít VŠEM hráčům
+ * odehraný den. Totéž platí pro rozeslání zprávy všem nebo reset cizího hesla.
+ */
+function potvrd(nazev: string, dopad: string): boolean {
+  return confirm(`${nazev}\n\n${dopad}\n\nTOHLE NEJDE VZÍT ZPĚT. Pokračovat?`);
+}
+
 export default function AdminPage() {
   const { isAdmin, teamId, token } = useTeam();
   const [output, setOutput] = useState<string[]>([]);
@@ -24,6 +36,10 @@ export default function AdminPage() {
   const authH: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
   const advanceDay = async () => {
+    if (!potvrd(
+      "Posunout herní den o 1 den dopředu?",
+      "Proběhnou tréninky, finance a zprávy pro VŠECHNY týmy ve hře.",
+    )) return;
     setRunning(true);
     addLog("Spouštím denní tick (posunutí dne, tréninky, zprávy)...");
     try {
@@ -35,6 +51,10 @@ export default function AdminPage() {
   };
 
   const runMatches = async () => {
+    if (!potvrd(
+      "Odsimulovat zápasové kolo?",
+      "Odehrají se zápasy, zaúčtují se finance (vstupné, prémie) a rozešlou se notifikace hráčům.",
+    )) return;
     setRunning(true);
     addLog("Spouštím zápasový tick (18:00 simulace)...");
     try {
@@ -46,6 +66,10 @@ export default function AdminPage() {
   };
 
   const advanceWeek = async () => {
+    if (!potvrd(
+      "Spustit 7 herních dní za sebou?",
+      "Sedmkrát denní tick i zápasový tick. Největší zásah, jaký odsud jde udělat — trvá minuty a posune hru o týden.",
+    )) return;
     setRunning(true);
     addLog("Spouštím 7 dní (denní tick + zápasový tick)...");
     for (let i = 0; i < 7; i++) {
@@ -60,88 +84,141 @@ export default function AdminPage() {
   };
 
   const wipePlayers = async () => {
-    if (!confirm("Opravdu smazat všechna herní data?")) return;
+    if (!potvrd("Smazat všechna herní data?", "Týmy, hráči, zápasy, finance — všechno.")) return;
     addLog("Toto vyžaduje přímý přístup k DB — použij CLI");
   };
 
   return (
-    <div className="page-container space-y-5">
+    <div className="page-container space-y-3 pb-24">
       <SectionLabel>Administrace</SectionLabel>
 
-      {/* Actions */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <button onClick={advanceDay} disabled={running}
-          className="card p-4 text-center hover:bg-gray-50 transition-colors disabled:opacity-50">
-          <div className="text-2xl mb-1">⏭️</div>
-          <div className="font-heading font-bold text-sm">+1 den</div>
-          <div className="text-sm text-muted">Denní tick</div>
-        </button>
-        <button onClick={runMatches} disabled={running}
-          className="card p-4 text-center hover:bg-gray-50 transition-colors disabled:opacity-50">
-          <div className="text-2xl mb-1">⚽</div>
-          <div className="font-heading font-bold text-sm">Zápasy</div>
-          <div className="text-sm text-muted">18:00 tick</div>
-        </button>
-        <button onClick={advanceWeek} disabled={running}
-          className="card p-4 text-center hover:bg-gray-50 transition-colors disabled:opacity-50">
-          <div className="text-2xl mb-1">⏩</div>
-          <div className="font-heading font-bold text-sm">+7 dní</div>
-          <div className="text-sm text-muted">Denní + zápasy</div>
-        </button>
-        <button onClick={() => { addLog("Načítám znovu…"); window.location.reload(); }}
-          className="card p-4 text-center hover:bg-gray-50 transition-colors">
-          <div className="text-2xl mb-1">🔄</div>
-          <div className="font-heading font-bold text-sm">Refresh</div>
-          <div className="text-sm text-muted">Reload stránky</div>
-        </button>
+      {/* Stav zpracování — jediná sekce otevřená rovnou. Když je zelená,
+          zbytek stránky nemusíš vůbec rozbalovat. */}
+      <ProvozSection />
+
+      <Rozbalovaci nazev="Herní čas" ikona="⏭️" popis="Posun dne, zápasový tick, konzole">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <button onClick={advanceDay} disabled={running}
+            className="card p-4 text-center hover:bg-gray-50 transition-colors disabled:opacity-50">
+            <div className="text-2xl mb-1">⏭️</div>
+            <div className="font-heading font-bold text-base">+1 den</div>
+            <div className="text-sm text-muted">Denní tick</div>
+          </button>
+          <button onClick={runMatches} disabled={running}
+            className="card p-4 text-center hover:bg-gray-50 transition-colors disabled:opacity-50">
+            <div className="text-2xl mb-1">⚽</div>
+            <div className="font-heading font-bold text-base">Zápasy</div>
+            <div className="text-sm text-muted">18:00 tick</div>
+          </button>
+          <button onClick={advanceWeek} disabled={running}
+            className="card p-4 text-center hover:bg-gray-50 transition-colors disabled:opacity-50">
+            <div className="text-2xl mb-1">⏩</div>
+            <div className="font-heading font-bold text-base">+7 dní</div>
+            <div className="text-sm text-muted">Denní + zápasy</div>
+          </button>
+          <button onClick={() => { addLog("Načítám znovu…"); window.location.reload(); }}
+            className="card p-4 text-center hover:bg-gray-50 transition-colors">
+            <div className="text-2xl mb-1">🔄</div>
+            <div className="font-heading font-bold text-base">Refresh</div>
+            <div className="text-sm text-muted">Reload stránky</div>
+          </button>
+        </div>
+
+        <div className="card p-4 mt-3">
+          <SectionLabel>Konzole</SectionLabel>
+          <div className="bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-soft max-h-[320px] overflow-y-auto overflow-x-auto">
+            {output.length === 0 ? (
+              <div className="text-gray-500">Žádný výstup. Spusť akci výše.</div>
+            ) : (
+              output.map((line, i) => <div key={i} className="whitespace-pre-wrap break-words">{line}</div>)
+            )}
+          </div>
+        </div>
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Sezóna" ikona="🏁" popis="Zakončení ročníku">
+        <SeasonEndSection />
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Obec a hlasování" ikona="🗳️" popis="Komunální volby, Sněm Pralesu">
+        <div className="space-y-3">
+          <MunicipalElectionsSection />
+          <VotesAdmin />
+        </div>
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Zpráva všem" ikona="📢" popis="Předseda Přeboru">
+        <BroadcastSection />
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Uživatelé" ikona="👥" popis="Účty a hesla">
+        <UserManagement />
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Seed data" ikona="🌱" popis="Příjmení, sponzoři, komentáře">
+        <SeedDataSection />
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Systém" ikona="ℹ️" popis="Prostředí a identifikátory">
+        <div className="card p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div className="break-all"><span className="text-muted">Team ID:</span> <span className="font-mono">{teamId ?? "—"}</span></div>
+            <div className="break-all"><span className="text-muted">API:</span> <span className="font-mono">{process.env.NEXT_PUBLIC_API_URL ?? "localhost:8787"}</span></div>
+            <div><span className="text-muted">Prostředí:</span> <span className="font-mono">{(process.env.NEXT_PUBLIC_API_URL ?? "").includes("test") ? "testing" : process.env.NODE_ENV}</span></div>
+            <div><span className="text-muted">Admin:</span> <span className="font-mono text-pitch-500">ano</span></div>
+          </div>
+        </div>
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Nebezpečné" ikona="🗑️" popis="Mazání dat">
         <button onClick={wipePlayers}
-          className="card p-4 text-center hover:bg-red-50 transition-colors">
+          className="card p-4 w-full text-center hover:bg-red-50 transition-colors">
           <div className="text-2xl mb-1">🗑️</div>
-          <div className="font-heading font-bold text-sm text-card-red">Wipe DB</div>
-          <div className="text-sm text-muted">Smazat data</div>
+          <div className="font-heading font-bold text-base text-card-red">Wipe DB</div>
+          <div className="text-sm text-muted">Smazat všechna herní data</div>
         </button>
-      </div>
+      </Rozbalovaci>
+    </div>
+  );
+}
 
-      {/* Console output */}
-      <div className="card p-4">
-        <SectionLabel>Konzole</SectionLabel>
-        <div className="bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-soft max-h-[400px] overflow-y-auto">
-          {output.length === 0 ? (
-            <div className="text-gray-500">Žádný výstup. Spusť akci výše.</div>
-          ) : (
-            output.map((line, i) => <div key={i}>{line}</div>)
-          )}
-        </div>
-      </div>
+/**
+ * Rozbalovací sekce administrace.
+ *
+ * Stránka narostla na deset sekcí pod sebou a na mobilu se v ní nedalo nic najít —
+ * než člověk doscrolloval k uživatelům, projel půl obrazovky seed dat. Teď je
+ * otevřený jen Provoz; zbytek se rozbalí, až je potřeba.
+ */
+function Rozbalovaci({
+  nazev,
+  ikona,
+  popis,
+  children,
+}: {
+  nazev: string;
+  ikona: string;
+  popis?: string;
+  children: React.ReactNode;
+}) {
+  const [otevreno, setOtevreno] = useState(false);
 
-      {/* Zakončení sezóny */}
-      <SeasonEndSection />
-
-      {/* Komunální volby */}
-      <MunicipalElectionsSection />
-
-      {/* Hlasování */}
-      <VotesAdmin />
-
-      {/* Broadcast */}
-      <BroadcastSection />
-
-      {/* User Management */}
-      <UserManagement />
-
-      {/* Seed Data Management */}
-      <SeedDataSection />
-
-      {/* Info */}
-      <div className="card p-4">
-        <SectionLabel>Systém</SectionLabel>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><span className="text-muted">Team ID:</span> <span className="font-mono">{teamId ?? "—"}</span></div>
-          <div><span className="text-muted">API:</span> <span className="font-mono">{process.env.NEXT_PUBLIC_API_URL ?? "localhost:8787"}</span></div>
-          <div><span className="text-muted">Env:</span> <span className="font-mono">{(process.env.NEXT_PUBLIC_API_URL ?? "").includes("test") ? "testing" : process.env.NODE_ENV}</span></div>
-          <div><span className="text-muted">Admin:</span> <span className="font-mono text-pitch-500">true</span></div>
-        </div>
-      </div>
+  return (
+    <div>
+      <button
+        onClick={() => setOtevreno((o) => !o)}
+        aria-expanded={otevreno}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-soft bg-white border border-line text-left transition-colors hover:bg-gray-50 active:scale-[0.99]"
+      >
+        <span className="flex items-center gap-3 min-w-0">
+          <span className="text-xl shrink-0" aria-hidden="true">{ikona}</span>
+          <span className="min-w-0">
+            <span className="block font-heading font-bold text-base truncate">{nazev}</span>
+            {popis && <span className="block text-sm text-muted truncate">{popis}</span>}
+          </span>
+        </span>
+        <span className="text-muted text-lg shrink-0" aria-hidden="true">{otevreno ? "▾" : "▸"}</span>
+      </button>
+      {otevreno && <div className="mt-3">{children}</div>}
     </div>
   );
 }
@@ -312,6 +389,7 @@ function VotesAdmin() {
 
   const createVote = async () => {
     if (!title.trim()) return;
+    if (!potvrd("Vypsat hlasování Sněmu?", `Otevře se všem manažerům jako „${title.trim().slice(0, 120)}".`)) return;
     setCreating(true);
     try {
       await fetch(`${API}/api/admin/votes`, {
@@ -332,6 +410,7 @@ function VotesAdmin() {
   };
 
   const closeVote = async (voteId: string) => {
+    if (!potvrd("Uzavřít hlasování?", "Vyhodnotí se výsledek a nikdo už nebude moct hlasovat.")) return;
     try {
       await fetch(`${API}/api/admin/votes/${voteId}/close`, {
         method: "POST",
@@ -430,6 +509,10 @@ function BroadcastSection() {
 
   const send = async () => {
     if (!message.trim()) return;
+    if (!potvrd(
+      "Rozeslat zprávu všem týmům?",
+      `Dorazí VŠEM hráčům ve hře jako zpráva od Předsedy Přeboru:\n\n„${message.trim().slice(0, 160)}${message.trim().length > 160 ? "…" : ""}"`,
+    )) return;
     setSending(true);
     try {
       const res = await fetch(`${API}/api/admin/broadcast`, {
@@ -551,6 +634,7 @@ function UserManagement() {
 
   const resetPassword = async (userId: string) => {
     if (!newPw) return;
+    if (!potvrd("Změnit heslo tomuhle uživateli?", "Původní heslo přestane platit a musíš mu nové sdělit ty.")) return;
     const res = await apiFetch<{ ok?: boolean; error?: string }>("/auth/admin/change-password", {
       method: "POST", headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify({ userId, newPassword: newPw }),
@@ -561,11 +645,32 @@ function UserManagement() {
     setTimeout(() => setStatus(""), 3000);
   };
 
+  /**
+   * Smazání účtu. Tlačítko se ukazuje JEN u účtů bez týmu — účet s týmem drží
+   * hráče, zápasy i finance a jeho smazání by nechalo osiřelá data. Serverová
+   * strana to hlídá znovu, tohle je jen aby na tlačítko nešlo omylem sáhnout.
+   */
+  const smazUcet = async (userId: string, email: string) => {
+    if (!potvrd(`Smazat účet ${email}?`, "Účet nemá tým, takže se smaže jen přihlašovací záznam.")) return;
+    const res = await apiFetch<{ ok?: boolean; error?: string; smazano?: string }>(
+      `/auth/admin/users/${userId}`,
+      { method: "DELETE", headers: authHeaders },
+    ).catch((e) => {
+      console.error("smazání účtu:", e);
+      return { error: "Nepodařilo se smazat" } as { ok?: boolean; error?: string; smazano?: string };
+    });
+    setStatus(res.ok ? `Účet ${res.smazano} smazán` : (res.error ?? "Chyba"));
+    if (res.ok) await loadUsers();
+    setTimeout(() => setStatus(""), 4000);
+  };
+
+  const bezTymu = users.filter((u) => !u.team_name).length;
+
   if (!loaded) return null;
 
   return (
     <div className="card p-4">
-      <SectionLabel>Uživatelé ({users.length})</SectionLabel>
+      <SectionLabel>Uživatelé ({users.length}{bezTymu > 0 ? `, z toho ${bezTymu} bez týmu` : ""})</SectionLabel>
       {status && <div className="text-sm font-heading font-bold text-pitch-500 mb-2">{status}</div>}
       <div className="overflow-x-auto -mx-4 table-scroll">
         <table className="w-full text-sm">
@@ -576,7 +681,7 @@ function UserManagement() {
               <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Okres</th>
               <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Admin</th>
               <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Aktivita</th>
-              <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Heslo</th>
+              <th className="py-2 px-3 text-micro font-heading font-bold text-muted uppercase">Akce</th>
             </tr>
           </thead>
           <tbody>
@@ -596,7 +701,13 @@ function UserManagement() {
                       <button onClick={() => { setResetId(null); setNewPw(""); }} className="text-xs text-muted">✕</button>
                     </div>
                   ) : (
-                    <button onClick={() => setResetId(u.id)} className="text-xs text-pitch-600 hover:underline">Změnit</button>
+                    <div className="flex gap-3 items-center">
+                      <button onClick={() => setResetId(u.id)} className="text-sm text-pitch-600 hover:underline">Změnit</button>
+                      {/* Jen účty bez týmu — u účtu s týmem by mazání nechalo osiřelá data. */}
+                      {!u.team_name && (
+                        <button onClick={() => smazUcet(u.id, u.email)} className="text-sm text-card-red hover:underline">Smazat</button>
+                      )}
+                    </div>
                   )}
                 </td>
               </tr>
@@ -791,6 +902,147 @@ function SeedDataSection() {
               </tbody>
             </table>
           </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Provoz — jestli zpracování hry běží, jak má.
+//
+// Vzniklo proto, že hlídač i měření byly dostupné jen jako JSON endpointy
+// s tokenem. To se v praxi nikdo koukat nebude, takže by se problém stejně
+// zjistil až od naštvaného hráče. Tohle je jedno místo, kam se dá mrknout.
+// ────────────────────────────────────────────────────────────────────────────
+
+interface Kontrola { nazev: string; hodnota: number | string; ok: boolean; popis: string }
+interface Zdravi {
+  verdikt: string;
+  rezim: { zpracovani: string; aiPoskytovatel: string };
+  hodiny: { herniDatum: string | null; offsetDnu: number | null };
+  kola24h: { pocet: number; prumerMs: number | null; maxMs: number | null };
+  posledniKolo: { trvaniMs: number | null; kdy: string | null };
+  osirele?: { ligy: number; tymy: number; kola: number };
+  kontroly: Kontrola[];
+}
+
+function ProvozSection() {
+  const { token } = useTeam();
+  const [data, setData] = useState<Zdravi | null>(null);
+  const [chyba, setChyba] = useState<string | null>(null);
+  const [nacita, setNacita] = useState(true);
+
+  const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+
+  const nacti = async () => {
+    setNacita(true);
+    setChyba(null);
+    try {
+      const res = await fetch(`${API}/api/admin/health`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setData(await res.json());
+    } catch (e: any) {
+      setChyba(e.message ?? "nepodařilo se načíst");
+      console.error("načtení stavu provozu:", e);
+    }
+    setNacita(false);
+  };
+
+  useEffect(() => {
+    if (!token) return;
+    nacti();
+    // Obnova jednou za minutu — tick trvá minuty, častěji nemá co přibýt.
+    const t = setInterval(nacti, 60_000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const vteriny = (ms: number | null) => (ms == null ? "—" : `${Math.round(ms / 1000)} s`);
+
+  // Osiřelé ligy hlásíme, ale nebarvíme celý panel načerveno — je to známý
+  // pozůstatek testování, ne porucha zpracování.
+  const vazneProblemy = (data?.kontroly ?? []).filter((k) => !k.ok && k.nazev !== "osiřelé ligy");
+  const vseOk = data != null && vazneProblemy.length === 0;
+
+  return (
+    <div className="card p-4 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <SectionLabel>Provoz</SectionLabel>
+        <button
+          onClick={nacti}
+          disabled={nacita}
+          className="text-sm text-muted underline disabled:opacity-50"
+        >
+          {nacita ? "Načítám…" : "Obnovit"}
+        </button>
+      </div>
+
+      {chyba && (
+        <div className="text-card-red font-heading font-bold text-base">
+          Stav se nepodařilo načíst: {chyba}
+        </div>
+      )}
+
+      {data && (
+        <>
+          <div
+            className={`rounded-soft p-4 text-center ${
+              vseOk ? "bg-green-50 text-green-800" : "bg-red-50 text-card-red"
+            }`}
+          >
+            <div className="text-3xl mb-1">{vseOk ? "✅" : "⚠️"}</div>
+            <div className="font-heading font-bold text-xl">
+              {vseOk ? "Zpracování běží v pořádku" : `Něco nesedí (${vazneProblemy.length})`}
+            </div>
+            <div className="text-sm mt-1">
+              Herní den {data.hodiny.herniDatum?.slice(0, 10) ?? "—"} · režim {data.rezim.zpracovani} ·
+              AI {data.rezim.aiPoskytovatel}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="bg-gray-50 rounded-soft p-3">
+              <div className="font-heading font-bold text-xl">{data.kola24h.pocet}</div>
+              <div className="text-sm text-muted">kol za 24 h</div>
+            </div>
+            <div className="bg-gray-50 rounded-soft p-3">
+              <div className="font-heading font-bold text-xl">{vteriny(data.kola24h.prumerMs)}</div>
+              <div className="text-sm text-muted">průměr na kolo</div>
+            </div>
+            <div className="bg-gray-50 rounded-soft p-3">
+              <div className="font-heading font-bold text-xl">{vteriny(data.posledniKolo.trvaniMs)}</div>
+              <div className="text-sm text-muted">poslední kolo</div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {data.kontroly.map((k) => (
+              <div
+                key={k.nazev}
+                className="flex items-start justify-between gap-3 border-b border-gray-100 pb-2 last:border-0"
+              >
+                <div className="min-w-0">
+                  <div className="font-heading font-bold text-base">
+                    {k.ok ? "✅" : "⚠️"} {k.nazev}
+                  </div>
+                  <div className="text-sm text-muted">{k.popis}</div>
+                </div>
+                <div className={`font-heading font-bold text-lg shrink-0 ${k.ok ? "" : "text-card-red"}`}>
+                  {k.hodnota}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {data.osirele && data.osirele.ligy > 0 && (
+            <div className="text-sm text-muted">
+              Osiřelá data: {data.osirele.ligy} lig, {data.osirele.tymy} týmů, {data.osirele.kola} kol.
+              Pozůstatek testování — na zpracování nemá vliv.
+            </div>
+          )}
         </>
       )}
     </div>

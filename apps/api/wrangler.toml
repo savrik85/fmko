@@ -26,6 +26,11 @@ id = "6f565d070b8b4b7aa2d17009f484ec16"
 binding = "SEED_DATA"
 bucket_name = "prales-seed"
 
+# Workers AI — binding je k dispozici v obou prostředích, ale volá se jen když
+# je přepínač ai_provider nastavený na "workers-ai". Produkce jede na Gemini.
+[ai]
+binding = "AI"
+
 [triggers]
 crons = [
   "0 3 * * *",
@@ -36,6 +41,47 @@ crons = [
   "0 16 * * *",
   "5 16 * * *",
 ]
+
+# ── Fronty (produkce) ──
+# Jedna zpráva = jedna liga = jedna invokace s vlastním rozpočtem CPU a subrequestů.
+# max_concurrency drží počet souběžných konzumerů nízko, aby se hrdlo jen nepřesunulo
+# z workeru na D1 (viz docs/analyza-fronty-2026-08-16.md, riziko 4.3).
+[[queues.producers]]
+binding = "MATCH_QUEUE"
+queue = "prales-match-rounds"
+
+[[queues.producers]]
+binding = "REPORTS_QUEUE"
+queue = "prales-reports"
+
+[[queues.consumers]]
+queue = "prales-match-rounds"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+max_concurrency = 3
+dead_letter_queue = "prales-match-dlq"
+
+[[queues.consumers]]
+queue = "prales-reports"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+max_concurrency = 2
+dead_letter_queue = "prales-reports-dlq"
+
+# DLQ konzumeři — selhání se jen zaznamená do queue_failures, ať nezmizí potichu.
+[[queues.consumers]]
+queue = "prales-match-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 0
+
+[[queues.consumers]]
+queue = "prales-reports-dlq"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 0
 
 [[routes]]
 pattern = "api.prales.fun"
@@ -71,5 +117,71 @@ id = "f2900579992a4a8da17986f9b7d83f01"
 binding = "SEED_DATA"
 bucket_name = "prales-seed"
 
+[env.testing.ai]
+binding = "AI"
+
+# ── Workers Logs ──
+# Bez tohohle nejsou vidět invokace cronu ani konzumera fronty (`wrangler tail`
+# je nezachytí) a jediná viditelnost je to, co si aplikace sama zapíše do D1.
+# Zapnuto 2026-08-17 kvůli sledování frontové architektury před nasazením na prod.
+[env.testing.observability]
+enabled = true
+
+# ── Fronty (testing) ──
+# VLASTNÍ fronty, jinak by si prostředí lezla do zelí (test konzumer by bral prod zprávy).
+[[env.testing.queues.producers]]
+binding = "MATCH_QUEUE"
+queue = "prales-match-rounds-test"
+
+[[env.testing.queues.producers]]
+binding = "REPORTS_QUEUE"
+queue = "prales-reports-test"
+
+[[env.testing.queues.consumers]]
+queue = "prales-match-rounds-test"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+max_concurrency = 2
+dead_letter_queue = "prales-match-dlq-test"
+
+[[env.testing.queues.consumers]]
+queue = "prales-reports-test"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+max_concurrency = 2
+dead_letter_queue = "prales-reports-dlq-test"
+
+[[env.testing.queues.consumers]]
+queue = "prales-match-dlq-test"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 0
+
+[[env.testing.queues.consumers]]
+queue = "prales-reports-dlq-test"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 0
+
+# ── Crony (testing) ──
+# Zrcadlo produkce, aby se testovací prostředí chovalo jako zmenšená produkce.
+#
+# Dřív tu bylo `crons = []` s pravidlem „testing crony nemá" — důvodem byl limit
+# cronů na Free plánu (5/účet). Ověřeno 2026-08-17: účet je na Workers Paid
+# (limit 250/účet) a napříč všemi workery jich běželo 8, takže prostor je volný.
+#
+# POZOR: testing sdílí s produkcí hodnotu GEMINI_API_KEY. Aby testovací crony
+# neujídaly produkční kvótu, drží se přepínač `ai_provider` v testing CACHE_KV
+# na "off" (nebo "workers-ai"). Default je "gemini", takže produkce je nedotčená.
 [env.testing.triggers]
-crons = []
+crons = [
+  "0 3 * * *",
+  "0 5 * * *",
+  "0 6 * * *",
+  "0 10 * * *",
+  "0 14 * * *",
+  "0 16 * * *",
+  "5 16 * * *",
+]

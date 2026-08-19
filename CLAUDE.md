@@ -117,8 +117,15 @@ npx wrangler d1 execute prales-db-test --remote --file /tmp/query.sql
 
 ### Cron triggers
 - **Plán: Workers Paid ($5/měs)** — limit **250 cron triggers/účet**, prostor je volný
-- Produkce (`wrangler.toml` top level): aktuálně 3 crony (0 3 *, 0 16 *, 5 16 *) — můžeš přidávat další
-- Testing (`[env.testing.triggers]`): **MUSÍ BÝT** `crons = []` — testing env crony nemá
+- Produkce (`wrangler.toml` top level): **7 cronů** (0 3, 0 5, 0 6, 0 10, 0 14, 0 16, 5 16) — můžeš přidávat další
+- Testing (`[env.testing.triggers]`): **od 2026-08-17 zrcadlí produkci — 7 cronů**.
+  Dřívější pravidlo `crons = []` vzniklo kvůli limitu Free plánu (5/účet) a je zastaralé.
+  Ověřeno přes Cloudflare API: účet je na Workers Paid, napříč workery běželo 8 cronů,
+  po přidání testingu je jich 15 z 250.
+- ⚠️ **Testing sdílí s produkcí hodnotu `GEMINI_API_KEY`.** Aby testovací crony neujídaly
+  produkční kvótu, drží se přepínač `ai_provider` v testing CACHE_KV na `off`
+  (nebo `workers-ai`). Default je `gemini`, takže produkce je nedotčená.
+  Přepnutí: `POST /api/admin/ai-provider?provider=off|gemini|workers-ai`
 - Před přidáním cronu zkontroluj že není už stejný (nebo podobný) jinde
 
 ### D1 migrace
@@ -127,7 +134,7 @@ npx wrangler d1 execute prales-db-test --remote --file /tmp/query.sql
 - Prod: jen po výslovném souhlasu
 
 ### Deploy failures
-- `cron triggers exceeded limit` → zkontrolovat `[env.testing.triggers]` crons = []
+- `cron triggers exceeded limit` → sečíst crony přes VŠECHNY workery účtu (limit 250), ne jen prales-api
 - `rows_read exceeded` → D1 query čte příliš dat, zoptimalizovat nebo index
 - `FK constraint failed` → orphan data, postupně mazat reference přes všechny tabulky
 

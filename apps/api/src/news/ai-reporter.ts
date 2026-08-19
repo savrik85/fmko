@@ -4,6 +4,7 @@
 
 import { calculateStandings, type StandingEntry } from "../stats/standings";
 import { logger } from "../lib/logger";
+import type { AiContext } from "../lib/ai-provider";
 
 interface MatchEvent {
   minute: number;
@@ -82,6 +83,7 @@ export async function generateAiRoundReport(
   calendarId: string,
   gameWeek: number,
   standingsBefore: StandingEntry[],
+  aiCtx?: AiContext,
 ): Promise<void> {
   // 1. Zápasy kola s názvy týmů, obcí a flavor facts
   const matchRows = await db.prepare(
@@ -373,34 +375,16 @@ Styl:
 - Pokud u zápasu vidíš "VIP na tribuně: ..." znamená to, že na zápasu byl spatřen představitel obce, kterého klub pozval. ZMIŇ ho v reportu konkrétním jménem a rolí (např. "Na tribuně byl spatřen starosta Křiž" / "Místostarosta Novák potleskem ocenil výhru domácích"). Jejich osobnostní typ (sportovec/podnikatel/aktivista/tradicionalista/populista) můžeš využít k zabarvení komentáře — sportovec se rozčiluje nad faulem, podnikatel počítá tržby z bufetu, tradicionalista vzpomíná na staré časy.
 - U některých zápasů vidíš "zajímavosti OBEC: ...". Jsou to reálné fakty (památky, slavní rodáci, místní tradice). Smíš je v článku **občas** zmínit pro místní kolorit, když do textu přirozeně zapadnou (např. "v obci Bohumilice, kde 1829 vyorali meteorit, dnes vyorali tři body" / "u břevnovského Hostince U Kaštanu, kde se v 19. století zakládala soc. dem., dnes domácí oslavovali výhru"). Nikdy nezmiňuj všechny fakty mechanicky a nevymýšlej souvislosti, které tam nejsou.`;
 
-  // Volání Gemini
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 2048, temperature: 0.6, thinkingConfig: { thinkingBudget: 0 } },
-      }),
-    },
+  // Generování textu — poskytovatele určuje přepínač ai_provider.
+  // Bez aiCtx se chová přesně jako dřív (Gemini s předaným klíčem).
+  const { generateText } = await import("../lib/ai-provider");
+  const text = await generateText(
+    aiCtx ?? { provider: "gemini", geminiApiKey },
+    prompt,
+    { maxTokens: 2048, temperature: 0.6, module: "ai-reporter" },
   );
-
-  if (!res.ok) {
-    const errBody = await res.text().catch(() => "");
-    logger.warn({ module: "ai-reporter" }, `Gemini API error: ${res.status} ${res.statusText} — ${errBody.slice(0, 200)}`);
-    return;
-  }
-
-  const json = await res.json() as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
-  };
-
-  // Filter out "thinking" parts (Gemini 2.5 feature) and concatenate text
-  const parts = json.candidates?.[0]?.content?.parts ?? [];
-  const text = parts.filter((p) => !p.thought).map((p) => p.text ?? "").join("");
   if (!text) {
-    logger.warn({ module: "ai-reporter" }, "Gemini returned empty response");
+    logger.warn({ module: "ai-reporter" }, "generátor vrátil prázdnou odpověď");
     return;
   }
 
