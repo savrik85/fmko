@@ -91,8 +91,34 @@ export async function loadRefereeForMatch(
     return { profile: NEUTRAL_REFEREE, snapshot: NEUTRAL_SNAPSHOT };
   }
 
-  const snapshot = toSnapshot(row);
-  return { profile: rowToProfile(row), snapshot };
+  // Sudí, který v tenhle herní den píská druhý zápas, jde do něj utahaný.
+  // Vzniká to jen tam, kde si soutěž listinu sama zkrátila vyškrtnutím — a je to
+  // celý smysl té brzdy: vyhodit kartového cvoka znamená koupit si unavené sudí.
+  const tired = await pískáDnesVíckrát(db, matchId, row.id);
+  const eff = tired ? { ...row, fitness: Math.max(0, row.fitness - 20) } : row;
+  if (tired) {
+    logger.info({ module: "referees" }, `rozhodčí ${row.id} píská v jednom dni další zápas — kondice −20`);
+  }
+
+  const snapshot = toSnapshot(eff);
+  return { profile: rowToProfile(eff), snapshot };
+}
+
+/** Má tenhle sudí v týž herní den ještě jiný zápas? */
+async function pískáDnesVíckrát(
+  db: D1Database, matchId: string, refereeId: string,
+): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT COUNT(*) AS n FROM matches m
+       JOIN season_calendar sc ON sc.id = m.calendar_id
+      WHERE m.referee_id = ? AND m.id != ?
+        AND sc.scheduled_at IN (
+          SELECT sc2.scheduled_at FROM matches m2
+            JOIN season_calendar sc2 ON sc2.id = m2.calendar_id
+           WHERE m2.id = ?)`
+  ).bind(refereeId, matchId, matchId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: "referees" }, "kontrola dvojího pískání", e); return null; });
+  return (row?.n ?? 0) > 0;
 }
 
 /**

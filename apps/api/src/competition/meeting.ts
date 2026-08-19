@@ -37,6 +37,7 @@ interface OpenProposal {
   quorum: number;
   proposed_by_team_id: string;
   target_team_id: string | null;
+  payload: string;
   deposit: number;
   effective_from_season: number | null;
 }
@@ -88,7 +89,7 @@ export async function runOneMeeting(
   // Prázdné zasedání každý týden je nejrychlejší způsob, jak samospráva zevšední.
   const open = await db.prepare(
     `SELECT id, league_id, season_number, kind, title, gesce, majority, quorum,
-            proposed_by_team_id, target_team_id, deposit, effective_from_season
+            proposed_by_team_id, target_team_id, payload, deposit, effective_from_season
        FROM competition_proposals
       WHERE league_id = ? AND status = 'open' AND opened_game_date < ?
       ORDER BY created_at ASC`
@@ -239,10 +240,11 @@ async function closeProposal(
 
   if (!locked || (locked.meta?.changes ?? 0) === 0) return null;
 
-  // Kauce se vrací jen za přijatý návrh. Sazebníkové změny se aplikují až při
-  // rolloveru — competition_rules se mid-season zásadně needitují.
-  if (status === "passed" && p.deposit > 0) {
-    await refundDeposit(db, p, gameDate);
+  // Sazebníkové změny se aplikují až při rolloveru — competition_rules se mid-season
+  // zásadně needitují. Okamžitý dopad mají jen sankce, odvolání a bany rozhodčích.
+  if (status === "passed") {
+    await applyImmediateEffect(db, p, gameDate);
+    if (p.deposit > 0) await refundDeposit(db, p, gameDate);
   }
 
   return {
@@ -257,6 +259,50 @@ async function closeProposal(
  * kauce do ní při podání přitekla, takže odchází stejnou cestou zpátky.
  * Obě strany mají vlastní reference_id, takže opakovaný běh nepřipíše nic navíc.
  */
+/**
+ * Důsledky návrhů, které platí okamžitě. Sazebník sem nepatří — ten čeká na rollover.
+ * Každá větev má vlastní idempotenci uvnitř, takže opakované volání nic nezdvojí.
+ */
+async function applyImmediateEffect(
+  db: D1Database, p: OpenProposal, gameDate: string,
+): Promise<void> {
+  let payload: Record<string, unknown> = {};
+  try { payload = JSON.parse(p.payload || "{}") as Record<string, unknown>; }
+  catch (e) { logger.warn({ module: M }, `payload návrhu ${p.id} nejde přečíst`, e); return; }
+
+  try {
+    if (p.kind === "sanction" && p.target_team_id) {
+      const { issueSanction } = await import("./discipline");
+      await issueSanction(db, {
+        leagueId: p.league_id, seasonNumber: p.season_number, teamId: p.target_team_id,
+        amount: Number(payload.amount) || 0, kind: String(payload.offence ?? "other"),
+        reason: String(payload.reason ?? p.title), evidence: (payload.evidence as string) ?? null,
+        issuedBy: "vote", issuedByTeamId: p.proposed_by_team_id, proposalId: p.id, gameDate,
+      });
+      return;
+    }
+
+    if (p.kind === "appeal" && payload.sanctionId) {
+      const { refundSanction } = await import("./discipline");
+      await refundSanction(db, String(payload.sanctionId), gameDate);
+      return;
+    }
+
+    if (p.kind === "referee_ban" && payload.refereeId) {
+      const { applyRefereeBan } = await import("./referee-bans");
+      await applyRefereeBan(db, {
+        leagueId: p.league_id, seasonNumber: p.season_number,
+        refereeId: String(payload.refereeId), reason: String(payload.reason ?? p.title),
+        source: "snem", proposalId: p.id, gameDate,
+      });
+      return;
+    }
+  } catch (e) {
+    // Efekt nesmí shodit celé zasedání — návrh zůstane přijatý a chyba je v logu.
+    logger.error({ module: M }, `aplikace důsledku návrhu ${p.id} (${p.kind}) selhala`, e);
+  }
+}
+
 async function refundDeposit(db: D1Database, p: OpenProposal, gameDate: string): Promise<void> {
   const refId = `dep-refund-${p.id}`;
   const out = await recordCompetitionEntry(db, {

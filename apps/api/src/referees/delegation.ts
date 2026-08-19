@@ -163,10 +163,33 @@ async function loadState(
 
 /** Přidělí rozhodčí všem dosud nedelegovaným zápasům jednoho kola. */
 async function delegateCalendar(db: D1Database, cal: CalendarRow): Promise<number> {
-  const pool = await ensureReferees(db, cal.district);
-  if (pool.length === 0) {
+  const full = await ensureReferees(db, cal.district);
+  if (full.length === 0) {
     logger.warn({ module: "referees" }, `okres ${cal.district} nemá rozhodčí — delegace přeskočena`);
     return 0;
+  }
+
+  // Soutěž si mohla některé sudí vyškrtnout z listiny. Ban je per soutěž — pool
+  // patří okresu a sdílí ho i U21, která o vyškrtnutí nehlasovala.
+  //
+  // Pojistka: kdyby po filtru zbyla necelá polovina, ban se ignoruje a jen se
+  // zaloguje. Prázdná listina by delegaci shodila do nouzového ventilu a jeden
+  // sudí by pískal celé kolo.
+  let pool = full;
+  try {
+    const { bannedIds } = await import("../competition/referee-bans");
+    const bans = await bannedIds(db, cal.league_id, cal.season_number);
+    if (bans.size > 0) {
+      const filtered = full.filter((r) => !bans.has(r.id));
+      if (filtered.length >= Math.max(2, Math.ceil(full.length / 2))) {
+        pool = filtered;
+      } else {
+        logger.warn({ module: "referees" },
+          `soutěž ${cal.league_id} má tolik banů, že by na listině zbylo ${filtered.length} z ${full.length} — bany ignorovány`);
+      }
+    }
+  } catch (e) {
+    logger.warn({ module: "referees" }, "filtr vyškrtnutých rozhodčích", e);
   }
 
   const matchRows = await db.prepare(

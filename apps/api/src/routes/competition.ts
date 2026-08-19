@@ -18,6 +18,13 @@ import {
 } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
 import { canRunFor, openElections, rolesFor } from "../competition/officials";
+import {
+  CHAIR_FINE_LIMIT, FINE_MAX, FINE_MIN, OFFENCES,
+  canChairFine, canFine, collectEvidence, issueSanction,
+} from "../competition/discipline";
+import {
+  MIN_ACTIVE_REFEREES, canBanReferee, refereeStandings,
+} from "../competition/referee-bans";
 import { proposalTitle, validateProposal, voterStats } from "../competition/proposals";
 import {
   checkBudget, freeBalance, outstandingCommitments, placementReward, subsidyFor, teamImpact,
@@ -558,6 +565,306 @@ competitionRouter.post("/admin/competition/:leagueId/enable", async (c) => {
     entryFeesCollected: collected, electionsOpened,
     balance: await readBalance(c.env.DB, leagueId),
   });
+});
+
+// ── Disciplinární rada ──────────────────────────────────────────────────────
+competitionRouter.get("/competition/:leagueId/discipline", async (c) => {
+  const leagueId = c.req.param("leagueId");
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const clubs = await c.env.DB.prepare(
+    `SELECT t.id, t.name, m.name AS manager_name, m.avatar AS manager_avatar
+       FROM teams t LEFT JOIN managers m ON m.team_id = t.id
+      WHERE t.league_id = ? ORDER BY t.name`
+  ).bind(leagueId).all<{ id: string; name: string; manager_name: string | null; manager_avatar: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "kluby soutěže", e); return { results: [] }; });
+
+  // Důkazy se sbírají pro každý klub zvlášť — formulář pak nenabídne skutek,
+  // který se nedá doložit.
+  const targets = [];
+  for (const club of clubs.results) {
+    targets.push({
+      teamId: club.id, teamName: club.name,
+      managerName: club.manager_name,
+      managerAvatar: safeJson(club.manager_avatar),
+      evidence: await collectEvidence(c.env.DB, club.id),
+    });
+  }
+
+  const sanctions = await c.env.DB.prepare(
+    `SELECT s.*, t.name AS team_name, m.name AS manager_name
+       FROM competition_sanctions s
+       JOIN teams t ON t.id = s.team_id
+       LEFT JOIN managers m ON m.team_id = s.team_id
+      WHERE s.league_id = ? AND s.season_number = ?
+      ORDER BY s.created_at DESC LIMIT 40`
+  ).bind(leagueId, meta.season_number).all<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: M }, "seznam sankcí", e); return { results: [] }; });
+
+  return c.json({
+    offences: Object.values(OFFENCES).map((o) => ({
+      kind: o.kind, label: o.label, evidenceLabel: o.evidenceLabel,
+      majority: o.majority, freeText: !!o.freeText,
+    })),
+    limits: { min: FINE_MIN, max: FINE_MAX, chairLimit: CHAIR_FINE_LIMIT },
+    targets,
+    sanctions: sanctions.results.map((s) => ({
+      id: s.id, teamId: s.team_id, teamName: s.team_name, managerName: s.manager_name,
+      kind: s.kind, amount: s.amount, reason: s.reason, evidence: s.evidence,
+      issuedBy: s.issued_by, status: s.status, gameDate: s.game_date,
+    })),
+  });
+});
+
+competitionRouter.post("/teams/:teamId/competition/sanctions", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ targetTeamId?: string; offence?: string; amount?: number; note?: string }>()
+    .catch(() => null);
+  if (!body?.targetTeamId || !body.offence) return c.json({ error: "Chybí klub nebo skutek" }, 400);
+
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const gov = await loadGovernance(c.env.DB, leagueId);
+  if (!gov?.enabled) return c.json({ error: "Tahle soutěž zatím samosprávu nemá." }, 403);
+
+  const voters = await voterStats(c.env.DB, leagueId);
+  if (!voters.voters.includes(teamId)) {
+    return c.json({ error: "Tvůj klub nemá v téhle soutěži hlasovací právo." }, 403);
+  }
+  if (body.targetTeamId === teamId) {
+    return c.json({ error: "Návrh na pokutu pro vlastní klub podat nejde." }, 400);
+  }
+
+  const offence = OFFENCES[body.offence];
+  if (!offence) return c.json({ error: "Neznámý skutek" }, 400);
+
+  const amount = Math.round(Number(body.amount));
+  if (!Number.isFinite(amount) || amount < FINE_MIN || amount > FINE_MAX) {
+    return c.json({ error: `Pokuta musí být mezi ${FINE_MIN.toLocaleString("cs")} a ${FINE_MAX.toLocaleString("cs")} Kč.` }, 400);
+  }
+
+  const allowed = await canFine(c.env.DB, leagueId, body.targetTeamId, meta.season_number, body.offence);
+  if (!allowed.ok) return c.json({ error: allowed.reason }, 409);
+
+  // Bez důkazu se dá podat jen volná položka — a ta má tvrdší podmínky.
+  let evidence: string | null = null;
+  if (!offence.freeText) {
+    const found = (await collectEvidence(c.env.DB, body.targetTeamId)).find((e) => e.kind === body.offence);
+    if (!found) return c.json({ error: "Tenhle skutek se u toho klubu nedá doložit." }, 400);
+    evidence = found.detail;
+  } else if (!body.note || body.note.trim().length < 10) {
+    return c.json({ error: "U nesportovního chování musíš napsat, co se stalo (aspoň 10 znaků)." }, 400);
+  }
+
+  const target = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
+    .bind(body.targetTeamId).first<{ name: string }>().catch(() => null);
+  const gameDate = await currentGameDate(c.env.DB, teamId);
+  const id = crypto.randomUUID();
+  const reason = offence.freeText ? (body.note ?? "").slice(0, 200) : offence.label;
+
+  await c.env.DB.prepare(
+    `INSERT INTO competition_proposals
+      (id, league_id, season_number, kind, gesce, title, body, payload, proposed_by_team_id,
+       target_team_id, evidence, majority, quorum, opened_game_date, deposit)
+     VALUES (?,?,?,'sanction','disciplinarni',?,?,?,?,?,?,?,?,?,?)`
+  ).bind(
+    id, leagueId, meta.season_number,
+    `Pokuta ${amount.toLocaleString("cs")} Kč — ${target?.name ?? "klub"} (${offence.label})`,
+    reason,
+    JSON.stringify({ offence: body.offence, amount, evidence, reason }),
+    teamId, body.targetTeamId, evidence, offence.majority, 0.5, gameDate, PROPOSAL_DEPOSIT,
+  ).run();
+
+  const { recordTransaction } = await import("../season/finance-processor");
+  await recordTransaction(
+    c.env.DB, teamId, "competition_deposit", -PROPOSAL_DEPOSIT,
+    "Kauce za návrh na pokutu", gameDate, `dep-${id}`,
+  ).catch((e) => logger.warn({ module: M }, "stržení kauce", e));
+  await recordCompetitionEntry(c.env.DB, {
+    leagueId, seasonNumber: meta.season_number, type: "deposit",
+    amount: PROPOSAL_DEPOSIT, description: "Kauce za návrh na pokutu",
+    teamId, gameDate, referenceId: `dep-${id}`,
+  });
+
+  return c.json({ ok: true, id, evidence });
+});
+
+/** Obhajoba dotčeného klubu — visí nad hlasovacími tlačítky a jde do zápisu. */
+competitionRouter.post("/teams/:teamId/competition/proposals/:id/defence", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ text?: string }>().catch(() => null);
+  const text = (body?.text ?? "").trim().slice(0, 150);
+  if (!text) return c.json({ error: "Obhajoba nesmí být prázdná." }, 400);
+
+  const res = await c.env.DB.prepare(
+    "UPDATE competition_proposals SET defence = ? WHERE id = ? AND target_team_id = ? AND status = 'open'"
+  ).bind(text, c.req.param("id"), teamId).run()
+    .catch((e) => { logger.warn({ module: M }, "zápis obhajoby", e); return null; });
+  if (!res || (res.meta?.changes ?? 0) === 0) {
+    return c.json({ error: "Obhajobu můžeš napsat jen k otevřenému návrhu, který se týká tvého klubu." }, 409);
+  }
+  return c.json({ ok: true, text });
+});
+
+/** Odvolání proti uložené pokutě — otevře nový bod na programu. */
+competitionRouter.post("/teams/:teamId/competition/sanctions/:id/appeal", async (c) => {
+  const teamId = c.req.param("teamId");
+  const sanctionId = c.req.param("id");
+
+  const s = await c.env.DB.prepare(
+    "SELECT * FROM competition_sanctions WHERE id = ? AND team_id = ?"
+  ).bind(sanctionId, teamId).first<{
+    id: string; league_id: string; season_number: number; amount: number; reason: string; status: string;
+  }>().catch((e) => { logger.warn({ module: M }, "sankce k odvolání", e); return null; });
+  if (!s) return c.json({ error: "Taková pokuta u tvého klubu není." }, 404);
+  if (s.status !== "issued") return c.json({ error: "Proti téhle pokutě se už odvolat nedá." }, 409);
+
+  const gameDate = await currentGameDate(c.env.DB, teamId);
+  const id = crypto.randomUUID();
+
+  await c.env.DB.prepare(
+    `INSERT INTO competition_proposals
+      (id, league_id, season_number, kind, gesce, title, body, payload, proposed_by_team_id,
+       majority, quorum, opened_game_date, deposit)
+     VALUES (?,?,?,'appeal','disciplinarni',?,?,?,?,?,?,?,0)`
+  ).bind(
+    id, s.league_id, s.season_number,
+    `Odvolání proti pokutě ${s.amount.toLocaleString("cs")} Kč`,
+    s.reason, JSON.stringify({ sanctionId: s.id }), teamId, 0.5, 0.5, gameDate,
+  ).run();
+
+  await c.env.DB.prepare("UPDATE competition_sanctions SET status = 'appealed', appeal_proposal_id = ? WHERE id = ?")
+    .bind(id, sanctionId).run()
+    .catch((e) => logger.warn({ module: M }, "označení sankce jako odvolané", e));
+
+  // Odvolání je zadarmo — trestat obranu kaucí by bylo proti smyslu.
+  return c.json({ ok: true, id });
+});
+
+/** Pokuta uložená předsedou disciplinární rady bez hlasování. */
+competitionRouter.post("/teams/:teamId/competition/sanctions/direct", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ targetTeamId?: string; offence?: string; amount?: number; note?: string }>()
+    .catch(() => null);
+  if (!body?.targetTeamId || !body.offence) return c.json({ error: "Chybí klub nebo skutek" }, 400);
+
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const amount = Math.round(Number(body.amount));
+  const chair = await canChairFine(c.env.DB, leagueId, teamId, body.targetTeamId, meta.season_number, amount);
+  if (!chair.ok) return c.json({ error: chair.reason }, 403);
+
+  const allowed = await canFine(c.env.DB, leagueId, body.targetTeamId, meta.season_number, body.offence);
+  if (!allowed.ok) return c.json({ error: allowed.reason }, 409);
+
+  const offence = OFFENCES[body.offence];
+  if (!offence) return c.json({ error: "Neznámý skutek" }, 400);
+
+  let evidence: string | null = null;
+  if (!offence.freeText) {
+    const found = (await collectEvidence(c.env.DB, body.targetTeamId)).find((e) => e.kind === body.offence);
+    if (!found) return c.json({ error: "Tenhle skutek se u toho klubu nedá doložit." }, 400);
+    evidence = found.detail;
+  }
+
+  const gameDate = await currentGameDate(c.env.DB, teamId);
+  const id = await issueSanction(c.env.DB, {
+    leagueId, seasonNumber: meta.season_number, teamId: body.targetTeamId, amount,
+    kind: body.offence, reason: offence.freeText ? (body.note ?? offence.label).slice(0, 200) : offence.label,
+    evidence, issuedBy: "chair", issuedByTeamId: teamId, proposalId: null, gameDate,
+  });
+  if (!id) return c.json({ error: "Pokutu se nepodařilo uložit." }, 500);
+
+  await c.env.DB.prepare(
+    `UPDATE competition_officials SET used_fines = used_fines + 1
+      WHERE league_id = ? AND role = 'disciplinarni' AND team_id = ? AND season_number = ? AND status = 'active'`
+  ).bind(leagueId, teamId, meta.season_number).run()
+    .catch((e) => logger.warn({ module: M }, "čerpání pravomoci předsedy", e));
+
+  return c.json({ ok: true, id });
+});
+
+// ── Komise rozhodčích ───────────────────────────────────────────────────────
+competitionRouter.get("/competition/:leagueId/referees", async (c) => {
+  const leagueId = c.req.param("leagueId");
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const standings = await refereeStandings(c.env.DB, leagueId, meta.season_number, meta.district);
+  const check = await canBanReferee(c.env.DB, leagueId, meta.season_number, meta.district);
+
+  return c.json({
+    minList: MIN_ACTIVE_REFEREES,
+    canBan: check.ok, banReason: check.reason ?? null, usable: check.usable ?? standings.length,
+    referees: standings,
+  });
+});
+
+competitionRouter.post("/teams/:teamId/competition/referee-bans", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ refereeId?: string; note?: string }>().catch(() => null);
+  if (!body?.refereeId) return c.json({ error: "Chybí rozhodčí" }, 400);
+
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const voters = await voterStats(c.env.DB, leagueId);
+  if (!voters.voters.includes(teamId)) {
+    return c.json({ error: "Tvůj klub nemá v téhle soutěži hlasovací právo." }, 403);
+  }
+
+  const check = await canBanReferee(c.env.DB, leagueId, meta.season_number, meta.district);
+  if (!check.ok) return c.json({ error: check.reason }, 409);
+
+  const already = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM competition_proposals WHERE league_id = ? AND kind = 'referee_ban' AND status = 'open'"
+  ).bind(leagueId).first<{ n: number }>().catch(() => null);
+  if ((already?.n ?? 0) > 0) {
+    return c.json({ error: "Jeden návrh na vyškrtnutí už na programu je." }, 409);
+  }
+
+  const standings = await refereeStandings(c.env.DB, leagueId, meta.season_number, meta.district);
+  const ref = standings.find((r) => r.refereeId === body.refereeId);
+  if (!ref) return c.json({ error: "Takový rozhodčí na listině není." }, 404);
+
+  const gameDate = await currentGameDate(c.env.DB, teamId);
+  const id = crypto.randomUUID();
+  const note = (body.note ?? "").slice(0, 200);
+
+  await c.env.DB.prepare(
+    `INSERT INTO competition_proposals
+      (id, league_id, season_number, kind, gesce, title, body, payload, proposed_by_team_id,
+       majority, quorum, opened_game_date, deposit, evidence)
+     VALUES (?,?,?,'referee_ban','rozhodcich',?,?,?,?,?,?,?,?,?)`
+  ).bind(
+    id, leagueId, meta.season_number,
+    `Vyškrtnutí rozhodčího ${ref.name} z listiny`,
+    note, JSON.stringify({ refereeId: ref.refereeId, refereeName: ref.name, reason: note }),
+    teamId, 2 / 3, 0.5, gameDate, PROPOSAL_DEPOSIT,
+    ref.avgGrade !== null ? `Průměrná známka ${ref.avgGrade.toFixed(2)} z ${ref.matches} zápasů.` : null,
+  ).run();
+
+  const { recordTransaction } = await import("../season/finance-processor");
+  await recordTransaction(
+    c.env.DB, teamId, "competition_deposit", -PROPOSAL_DEPOSIT,
+    "Kauce za návrh na vyškrtnutí rozhodčího", gameDate, `dep-${id}`,
+  ).catch((e) => logger.warn({ module: M }, "stržení kauce", e));
+  await recordCompetitionEntry(c.env.DB, {
+    leagueId, seasonNumber: meta.season_number, type: "deposit",
+    amount: PROPOSAL_DEPOSIT, description: "Kauce za návrh na vyškrtnutí rozhodčího",
+    teamId, gameDate, referenceId: `dep-${id}`,
+  });
+
+  return c.json({ ok: true, id });
 });
 
 // ── Volby předsedů ──────────────────────────────────────────────────────────
