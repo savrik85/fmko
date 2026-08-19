@@ -20,19 +20,20 @@ interface ProposalKind {
 }
 
 interface Official {
-  role: string; roleLabel: string; teamId: string; teamName: string; status: string;
+  role: string; roleLabel: string; teamId: string; teamName: string;
+  managerName: string | null; status: string;
 }
 
 interface RoleSlot {
   role: string; label: string;
-  holder: { teamId: string; teamName: string } | null;
+  holder: { teamId: string; teamName: string; managerName: string | null } | null;
 }
 
 interface Election {
   id: string; role: string; roleLabel: string; status: string;
-  winnerTeamId: string | null; winnerName: string | null;
+  winnerTeamId: string | null; winnerName: string | null; winnerManager: string | null;
   votesCast: number; resultNote: string | null;
-  candidates: Array<{ teamId: string; teamName: string }>;
+  candidates: Array<{ teamId: string; teamName: string; managerName: string | null }>;
   myVote: string | null;
 }
 
@@ -400,7 +401,10 @@ function GesceHeader({ gesce, state }: { gesce: string; state: State }) {
       {slot && (
         <div>
           {slot.holder ? (
-            <>Vede <EntityLink type="team" id={slot.holder.teamId}>{slot.holder.teamName}</EntityLink></>
+            <>
+              Vede <strong>{slot.holder.managerName ?? "neznámý trenér"}</strong>{" "}
+              (<EntityLink type="team" id={slot.holder.teamId}>{slot.holder.teamName}</EntityLink>)
+            </>
           ) : (
             <span className="text-muted">Odbor je neobsazený — o všem rozhoduje hlasování klubů.</span>
           )}
@@ -642,9 +646,14 @@ function VedeniTab({ state, elections, teamId, onChanged }: {
           <div key={r.role} className="flex items-baseline justify-between gap-3 text-sm">
             <span className="text-muted">{r.label}</span>
             <span>
-              {r.holder
-                ? <EntityLink type="team" id={r.holder.teamId}>{r.holder.teamName}</EntityLink>
-                : <span className="text-muted">neobsazeno</span>}
+              {r.holder ? (
+                <>
+                  {r.holder.managerName ?? "neznámý trenér"}{" "}
+                  <span className="text-muted">
+                    (<EntityLink type="team" id={r.holder.teamId}>{r.holder.teamName}</EntityLink>)
+                  </span>
+                </>
+              ) : <span className="text-muted">neobsazeno</span>}
               {state.officials.find((o) => o.role === r.role)?.status === "suspended" && (
                 <span className="text-danger"> · pozastaven</span>
               )}
@@ -662,8 +671,8 @@ function VedeniTab({ state, elections, teamId, onChanged }: {
         <div className="card p-4 space-y-4">
           <SectionLabel>Probíhající volby</SectionLabel>
           <p className="text-sm text-muted">
-            Volba je tajná — neuvidí se ani po uzavření, kdo koho volil. Kandidovat může každý
-            klub s hlasovacím právem, ale jen na jednu funkci.
+            Kandidují trenéři, ne kluby. Volba je tajná — neuvidí se ani po uzavření, kdo koho
+            volil. Kandidovat může každý trenér s hlasovacím právem, ale jen na jednu funkci.
           </p>
           {openElections.map((e) => {
             const jsemKandidat = e.candidates.some((k) => k.teamId === teamId);
@@ -676,7 +685,12 @@ function VedeniTab({ state, elections, teamId, onChanged }: {
                   <div className="space-y-1">
                     {e.candidates.map((k) => (
                       <div key={k.teamId} className="flex items-center justify-between gap-3 text-sm">
-                        <EntityLink type="team" id={k.teamId}>{k.teamName}</EntityLink>
+                        <span>
+                          {k.managerName ?? "neznámý trenér"}{" "}
+                          <span className="text-muted">
+                            (<EntityLink type="team" id={k.teamId}>{k.teamName}</EntityLink>)
+                          </span>
+                        </span>
                         <button
                           className={`btn ${e.myVote === k.teamId ? "btn-primary" : "btn-secondary"}`}
                           onClick={() => voteFor(e.id, k.teamId)}
@@ -705,9 +719,14 @@ function VedeniTab({ state, elections, teamId, onChanged }: {
           {elections.filter((e) => e.status !== "open").map((e) => (
             <div key={e.id} className="text-sm">
               <span className="text-muted">{e.roleLabel}: </span>
-              {e.winnerTeamId
-                ? <EntityLink type="team" id={e.winnerTeamId}>{e.winnerName ?? "?"}</EntityLink>
-                : "neobsazeno"}
+              {e.winnerTeamId ? (
+                <>
+                  {e.winnerManager ?? "neznámý trenér"}{" "}
+                  <span className="text-muted">
+                    (<EntityLink type="team" id={e.winnerTeamId}>{e.winnerName ?? "?"}</EntityLink>)
+                  </span>
+                </>
+              ) : "neobsazeno"}
               {e.resultNote && <span className="text-muted"> — {e.resultNote}</span>}
             </div>
           ))}

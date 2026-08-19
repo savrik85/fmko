@@ -89,10 +89,12 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
   ]);
 
   const officials = await c.env.DB.prepare(
-    `SELECT o.role, o.team_id, o.status, t.name AS team_name
-       FROM competition_officials o JOIN teams t ON t.id = o.team_id
+    `SELECT o.role, o.team_id, o.status, t.name AS team_name, m.name AS manager_name
+       FROM competition_officials o
+       JOIN teams t ON t.id = o.team_id
+       LEFT JOIN managers m ON m.team_id = o.team_id
       WHERE o.league_id = ? AND o.season_number = ? AND o.status IN ('active','suspended')`
-  ).bind(leagueId, meta.season_number).all<{ role: string; team_id: string; status: string; team_name: string }>()
+  ).bind(leagueId, meta.season_number).all<{ role: string; team_id: string; status: string; team_name: string; manager_name: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "funkcionáři", e); return { results: [] }; });
 
   const stats = await voterStats(c.env.DB, leagueId);
@@ -129,14 +131,16 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
     officials: officials.results.map((o) => ({
       role: o.role,
       roleLabel: ROLE_LABEL[o.role as OfficialRole] ?? o.role,
-      teamId: o.team_id, teamName: o.team_name, status: o.status,
+      teamId: o.team_id, teamName: o.team_name, managerName: o.manager_name, status: o.status,
     })),
     // Které odbory v soutěži téhle velikosti vůbec existují.
     roles: rolesFor(humans).map((role) => {
       const holder = officials.results.find((o) => o.role === role);
       return {
         role, label: ROLE_LABEL[role],
-        holder: holder ? { teamId: holder.team_id, teamName: holder.team_name } : null,
+        holder: holder
+          ? { teamId: holder.team_id, teamName: holder.team_name, managerName: holder.manager_name }
+          : null,
       };
     }),
     proposalKinds: Object.entries(PROPOSAL_KINDS).map(([kind, s]) => ({
@@ -563,25 +567,33 @@ competitionRouter.get("/competition/:leagueId/elections", async (c) => {
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
   const rows = await c.env.DB.prepare(
-    `SELECT e.*, t.name AS winner_name FROM competition_elections e
+    `SELECT e.*, t.name AS winner_name, m.name AS winner_manager
+       FROM competition_elections e
        LEFT JOIN teams t ON t.id = e.winner_team_id
+       LEFT JOIN managers m ON m.team_id = e.winner_team_id
       WHERE e.league_id = ? AND e.season_number = ?
       ORDER BY CASE WHEN e.status = 'open' THEN 0 ELSE 1 END, e.role`
   ).bind(leagueId, meta.season_number).all<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: M }, "seznam voleb", e); return { results: [] }; });
 
   const ids = rows.results.map((r) => r.id as string);
-  const candidates: Record<string, Array<{ teamId: string; teamName: string }>> = {};
+  // Kandidují TRENÉŘI, ne kluby — klub je jen adresa, na které se dá zastihnout.
+  // V datech zůstává klíčem team_id (jeden trenér = jeden klub), zobrazuje se jméno.
+  const candidates: Record<string, Array<{ teamId: string; teamName: string; managerName: string | null }>> = {};
   if (ids.length > 0) {
     const cr = await c.env.DB.prepare(
-      `SELECT c.election_id, c.team_id, t.name FROM competition_candidacies c
+      `SELECT c.election_id, c.team_id, t.name AS team_name, m.name AS manager_name
+         FROM competition_candidacies c
          JOIN teams t ON t.id = c.team_id
+         LEFT JOIN managers m ON m.team_id = t.id
         WHERE c.election_id IN (${ids.map(() => "?").join(",")}) AND c.withdrawn = 0
-        ORDER BY t.name`
-    ).bind(...ids).all<{ election_id: string; team_id: string; name: string }>()
+        ORDER BY m.name, t.name`
+    ).bind(...ids).all<{ election_id: string; team_id: string; team_name: string; manager_name: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "kandidáti", e); return { results: [] }; });
     for (const r of cr.results) {
-      (candidates[r.election_id] ??= []).push({ teamId: r.team_id, teamName: r.name });
+      (candidates[r.election_id] ??= []).push({
+        teamId: r.team_id, teamName: r.team_name, managerName: r.manager_name,
+      });
     }
   }
 
@@ -603,6 +615,7 @@ competitionRouter.get("/competition/:leagueId/elections", async (c) => {
       roleLabel: ROLE_LABEL[e.role as OfficialRole] ?? e.role,
       status: e.status,
       winnerTeamId: e.winner_team_id, winnerName: e.winner_name,
+      winnerManager: e.winner_manager,
       votesCast: e.votes_cast, resultNote: e.result_note,
       candidates: candidates[e.id as string] ?? [],
       myVote: myVote[e.id as string] ?? null,
