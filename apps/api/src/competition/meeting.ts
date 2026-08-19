@@ -17,7 +17,7 @@
 
 import { logger } from "../lib/logger";
 import { sendSystemSMS } from "../messaging/system-sms";
-import { PROPOSAL_KINDS, SIMPLE_MAJORITY } from "./defaults";
+import { PROPOSAL_KINDS, ROLE_LABEL, SIMPLE_MAJORITY } from "./defaults";
 import { recomputeBalance, recordCompetitionEntry } from "./ledger";
 import { resolveElections } from "./officials";
 import { voterStats } from "./proposals";
@@ -127,9 +127,14 @@ export async function runOneMeeting(
   const elections = await resolveElections(db, leagueId, meta.season_number, gameDate);
   for (const e of elections) {
     results.push({
-      kind: "election", title: `Volba: ${e.role}`, status: e.winnerTeamId ? "passed" : "no_quorum",
+      kind: "election",
+      title: `Volba: ${ROLE_LABEL[e.role] ?? e.role}`,
+      status: e.winnerTeamId ? "passed" : "no_quorum",
       resultNote: e.note, winnerTeamId: e.winnerTeamId,
     } as unknown as Record<string, unknown>);
+    // Volba je plnohodnotný bod programu — musí se počítat do zápisu stejně jako návrh.
+    closedCount++;
+    if (e.winnerTeamId) passedCount++;
   }
 
   const balance = await recomputeBalance(db, leagueId, gameDate);
