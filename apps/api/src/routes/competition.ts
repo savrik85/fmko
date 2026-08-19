@@ -51,6 +51,25 @@ const MANAGER_NAME = (alias: string) =>
 const MANAGER_AVATAR = (alias: string) =>
   `(SELECT mm.avatar FROM managers mm WHERE mm.team_id = ${alias} ORDER BY mm.created_at LIMIT 1)`;
 
+/**
+ * Patří tenhle klub přihlášenému uživateli?
+ *
+ * `requireTeamOwnership` vědomě propouští GET, protože drtivá většina čtení
+ * v aplikaci je veřejná. Kabinet vedení ale veřejný není — bez téhle kontroly
+ * by si ho přečetl kdokoli, komu stačí opsat cizí teamId z URL. Ověřeno.
+ */
+async function ownsTeam(c: { env: Bindings; req: Request }, teamId: string): Promise<boolean> {
+  const token = getTokenFromRequest(c as never);
+  if (!token) return false;
+  const session = await getSession(c.env.SESSION_KV, token)
+    .catch((e) => { logger.warn({ module: M }, "načtení session", e); return null; });
+  if (!session) return false;
+  const own = await c.env.DB.prepare("SELECT id FROM teams WHERE id = ? AND user_id = ?")
+    .bind(teamId, session.userId).first<{ id: string }>()
+    .catch((e) => { logger.warn({ module: M }, "ověření vlastnictví klubu", e); return null; });
+  return !!own;
+}
+
 /** Tým přihlášeného uživatele, nebo null. Token je u čtecích endpointů nepovinný. */
 async function currentTeam(c: { env: Bindings; req: Request }): Promise<string | null> {
   const token = getTokenFromRequest(c as never);
@@ -929,6 +948,8 @@ competitionRouter.post("/teams/:teamId/competition/officials/:role/suspend", asy
 // neztrácí — dokud ho kluby neodvolají, do vedení pořád patří.
 competitionRouter.get("/teams/:teamId/competition/board", async (c) => {
   const teamId = c.req.param("teamId");
+  // Neveřejné vlákno — čte ho jen majitel klubu, který v grémiu sedí.
+  if (!(await ownsTeam(c as never, teamId))) return c.json({ error: "Přístup odepřen" }, 403);
   const leagueId = await leagueOfTeam(c.env.DB, teamId);
   if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
