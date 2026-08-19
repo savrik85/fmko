@@ -180,3 +180,44 @@ export function payoutRatio(available: number, required: number): number {
   if (available >= required) return 1;
   return Math.max(0, available / required);
 }
+
+/** Zaokrouhlení dolů na stovky — pokrácené odměny nemají končit na drobných. */
+const roundDown100 = (v: number) => Math.max(0, Math.floor(v / 100) * 100);
+
+export interface ScaledRewards {
+  /** Násobič 0–1; 1 znamená plnou výplatu. */
+  ratio: number;
+  /** Kolik dostane který tým, klíčem je teamId. */
+  rewards: Map<string, number>;
+  /** Součet vyplacených odměn — nikdy nepřekročí dostupný zůstatek. */
+  total: number;
+  /** Kolik by odměny stály při plné výplatě. */
+  required: number;
+}
+
+/**
+ * Rozdělení odměn za umístění včetně poměrného krácení, když pokladna nestačí.
+ *
+ * Krátí se VŠEM stejným poměrem a poměr se počítá dopředu z celé tabulky, takže
+ * nezáleží na pořadí zpracování — první tým nevyčerpá pokladnu na úkor posledního.
+ * Zaokrouhlování jde dolů, takže součet nikdy nepřeleze dostupný zůstatek.
+ */
+export function scaledRewards(
+  rules: CompetitionRules,
+  entries: Array<{ teamId: string; pos: number }>,
+  level: string,
+  available: number,
+): ScaledRewards {
+  const full = entries.map((e) => ({ teamId: e.teamId, amount: placementReward(rules, e.pos, level) }));
+  const required = full.reduce((s, f) => s + f.amount, 0);
+  const ratio = payoutRatio(available, required);
+
+  const rewards = new Map<string, number>();
+  let total = 0;
+  for (const f of full) {
+    const amount = ratio < 1 ? roundDown100(f.amount * ratio) : f.amount;
+    rewards.set(f.teamId, amount);
+    total += amount;
+  }
+  return { ratio, rewards, total, required };
+}

@@ -184,7 +184,7 @@ async function runWrapPhase(
         const levelRow = await db.prepare("SELECT level FROM leagues WHERE id = ?").bind(leagueId).first<{ level: string }>();
         if (!levelRow?.level) throw new Error(`rewards: nelze načíst level ligy ${leagueId}`);
         const gameDate = await getGameDate(db, leagueId);
-        await applySeasonRewards(db, standings, seasonNumber, gameDate, levelRow.level);
+        await applySeasonRewards(db, standings, seasonNumber, gameDate, levelRow.level, leagueId);
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
       }

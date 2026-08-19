@@ -3,7 +3,7 @@ import { DEFAULT_RULES, type CompetitionRules } from "./defaults";
 import {
   matchCount, placementSum, placementReward, expectedBonusPerMatch, worstBonusPerMatch,
   projectSeasonCost, subsidyFor, checkBudget, teamImpact, payoutRatio,
-  outstandingCommitments, freeBalance,
+  outstandingCommitments, freeBalance, scaledRewards,
 } from "./projection";
 
 const R = DEFAULT_RULES as unknown as CompetitionRules;
@@ -154,6 +154,45 @@ describe("projekce rozpočtu soutěže", () => {
     // S volným zůstatkem (letošní odměny se teprve vyplatí) neprojde.
     const free = freeBalance(balance, R, 14, "okresni_prebor", 0);
     expect(checkBudget({ rules: greedy, teams: 14, level: "okresni_prebor", balance: free }).ok).toBe(false);
+  });
+
+  it("při dostatku peněz se odměny neškrtí", () => {
+    const table = Array.from({ length: 14 }, (_, i) => ({ teamId: `t${i}`, pos: i + 1 }));
+    const out = scaledRewards(R, table, "okresni_prebor", 1_000_000);
+    expect(out.ratio).toBe(1);
+    expect(out.total).toBe(717_015);
+    expect(out.rewards.get("t0")).toBe(150_000);
+  });
+
+  it("krácení nikdy nevyplatí víc, než je v pokladně", () => {
+    const table = Array.from({ length: 14 }, (_, i) => ({ teamId: `t${i}`, pos: i + 1 }));
+    for (const balance of [0, 1, 12_345, 250_000, 717_014]) {
+      const out = scaledRewards(R, table, "okresni_prebor", balance);
+      expect(out.total).toBeLessThanOrEqual(balance);
+      expect(out.ratio).toBeLessThan(1);
+    }
+  });
+
+  it("krácení zasáhne všechny stejným poměrem a zachová pořadí", () => {
+    const table = Array.from({ length: 14 }, (_, i) => ({ teamId: `t${i}`, pos: i + 1 }));
+    const out = scaledRewards(R, table, "okresni_prebor", 358_500);   // zhruba polovina
+    expect(out.ratio).toBeCloseTo(0.5, 2);
+
+    const amounts = table.map((t) => out.rewards.get(t.teamId)!);
+    for (let i = 1; i < amounts.length; i++) {
+      expect(amounts[i]).toBeLessThanOrEqual(amounts[i - 1]);   // první místo pořád bere nejvíc
+    }
+    // Zaokrouhluje se dolů na stovky, takže o pár desetikorun níž než přesná polovina.
+    expect(amounts[0]).toBeGreaterThan(74_000);
+    expect(amounts[0]).toBeLessThanOrEqual(75_000);
+    expect(amounts[0] % 100).toBe(0);
+  });
+
+  it("prázdná pokladna nevyplatí nic, ale nespadne", () => {
+    const table = [{ teamId: "a", pos: 1 }, { teamId: "b", pos: 2 }];
+    const out = scaledRewards(R, table, "okresni_prebor", -50_000);
+    expect(out.total).toBe(0);
+    expect(out.rewards.get("a")).toBe(0);
   });
 
   it("krácení odměn je poměrné a nikdy záporné", () => {
