@@ -504,7 +504,15 @@ export async function applyPostMatchInterviewEffects(
   const opakovana = safeParse<{ rozhodci?: { postoj?: string } }>(predchozi?.analysis ?? null, {})
     .rozhodci?.postoj === "kritika";
 
-  const eff = effectsFor(stance.postoj, stance.sila, opakovana);
+  // Sazebník pokut si odhlasovala soutěž. Bez samosprávy zůstává násobič 1.
+  const { resolveRules } = await import("../competition/rules");
+  const seasonRow = await db.prepare(
+    "SELECT MAX(season_number) AS n FROM season_calendar WHERE league_id = ?"
+  ).bind(interview.league_id).first<{ n: number | null }>()
+    .catch((e) => { logger.warn({ module: M }, "sezóna ligy pro sazebník pokut", e); return null; });
+  const compRules = await resolveRules(db, interview.league_id, seasonRow?.n ?? null);
+
+  const eff = effectsFor(stance.postoj, stance.sila, opakovana, compRules.fine_mult);
 
   // Pokuta: deterministická podle rozhovoru, aby opakované volání nedalo jinou částku.
   const rng = createRng(seedFromString(`fine-${interview.id}`));
@@ -570,6 +578,18 @@ export async function applyPostMatchInterviewEffects(
         gameDate?.game_date ?? new Date().toISOString(),
         `fine-${interview.id}`,
       );
+      // Pokuta přiteče do pokladny soutěže — dřív mizela do vzduchu.
+      // Stejné reference_id jako u transakce klubu, takže obojí drží na jednom klíči.
+      const { recordCompetitionEntry } = await import("../competition/ledger");
+      await recordCompetitionEntry(db, {
+        leagueId: interview.league_id, seasonNumber: seasonRow?.n ?? 0,
+        type: "fine_referee", amount: fine,
+        description: "Pokuta za výroky o rozhodčím",
+        teamId: interview.team_id,
+        gameDate: gameDate?.game_date ?? new Date().toISOString(),
+        referenceId: `fine-${interview.id}`,
+      });
+
       const { sendSystemSMS } = await import("../messaging/system-sms");
       await sendSystemSMS(db, interview.team_id, "Disciplinární komise OFS",
         `Za výroky o rozhodčím v okresním zpravodaji vám byla uložena pokuta ${fine.toLocaleString("cs")} Kč.`)

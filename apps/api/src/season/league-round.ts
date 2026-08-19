@@ -294,7 +294,7 @@ export async function processLeagueRound(
     prof.mark("notifikace");
     await dispatchRoundReports(env, leagueId, calendarId, gameWeek, standingsBefore, opts);
     prof.mark("reporty");
-    await runBetweenRoundEvents(db, results, gameWeek);
+    await runBetweenRoundEvents(db, results, gameWeek, leagueId, calendarId);
     prof.mark("udalosti-mezi-koly");
     await runAdhocEvents(env, db, leagueId, gameWeek);
     prof.mark("adhoc-udalosti");
@@ -456,12 +456,27 @@ async function runBetweenRoundEvents(
   db: D1Database,
   results: Array<{ matchId: string; matchType: string; homeScore: number; awayScore: number }>,
   gameWeek: number,
+  leagueId?: string,
+  calendarId?: string,
 ): Promise<void> {
   try {
     const { generateBetweenRoundEvents } = await import("../events/between-rounds");
     const { createRng, cryptoSeed } = await import("../generators/rng");
     const { recordTransaction } = await import("./finance-processor");
     const brRng = createRng(cryptoSeed());
+
+    // Sazebník soutěže — jednou na kolo. Bez samosprávy zůstane null a pokuty
+    // se účtují v dosavadní výši a nikam neplynou.
+    const { loadCompetitionContext } = await import("../competition/rules");
+    const seasonRow = leagueId
+      ? await db.prepare("SELECT MAX(season_number) AS n FROM season_calendar WHERE league_id = ?")
+          .bind(leagueId).first<{ n: number | null }>()
+          .catch(() => null)
+      : null;
+    const compCtx = leagueId && seasonRow?.n
+      ? await loadCompetitionContext(db, leagueId, seasonRow.n)
+      : null;
+    const compRules = compCtx?.rules ?? null;
 
     for (const mr of results) {
       if (mr.matchType === "ai_vs_ai") continue;
@@ -518,9 +533,24 @@ async function runBetweenRoundEvents(
               .catch((e) => logger.warn({ module: "league-round" }, "morale effect failed", e));
           }
           if (eff.type === "budget" && eff.value) {
-            await recordTransaction(db, humanTeamId, "event", eff.value, ev.title, td?.game_date ?? new Date().toISOString()).catch((e) =>
+            // Svazovou pokutu škáluje sazebník soutěže a její výnos plyne do pokladny.
+            // Ostatní peněžní události se soutěže netýkají a jdou beze změny.
+            const scaled = eff.toLeague && compRules
+              ? -Math.round(Math.abs(eff.value) * compRules.fine_mult)
+              : eff.value;
+            const eventGameDate = td?.game_date ?? new Date().toISOString();
+            await recordTransaction(db, humanTeamId, "event", scaled, ev.title, eventGameDate).catch((e) =>
               logger.warn({ module: "league-round" }, "budget effect failed", e),
             );
+            if (eff.toLeague && compRules && compCtx) {
+              const { recordCompetitionEntry } = await import("../competition/ledger");
+              await recordCompetitionEntry(db, {
+                leagueId: compCtx.leagueId, seasonNumber: compCtx.seasonNumber,
+                type: "fine_admin", amount: Math.abs(scaled), description: ev.title,
+                teamId: humanTeamId, gameDate: eventGameDate,
+                referenceId: `adm-${calendarId}-${humanTeamId}`,
+              });
+            }
           }
           // Pozn.: žádné pravidlo v EVENT_RULES dnes reputační efekt negeneruje
           // (reputace je tam jen vstup). Větev držíme přepojenou na helper, aby

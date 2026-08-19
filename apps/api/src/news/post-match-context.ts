@@ -171,8 +171,15 @@ export interface InterviewEffects {
 /**
  * Tabulka dopadů. Asymetrie je záměrná — urážka bolí víc, než pochvala pomůže,
  * což odpovídá tomu, jak s reputací zachází zbytek hry.
+ *
+ * `fineMult` je sazebník pokut odhlasovaný soutěží (0,5×–2,0×). Škáluje VÝHRADNĚ
+ * `fineBase`, ne šanci — soutěž rozhoduje o výši trestu, ne o tom, co je prohřešek.
+ * Je to čtvrtý nepovinný parametr schválně: nové pole ve výstupu by rozbilo
+ * `toEqual` v post-match-interview.test.ts.
  */
-export function effectsFor(postoj: Postoj, sila: number, opakovanaKritika: boolean): InterviewEffects {
+export function effectsFor(
+  postoj: Postoj, sila: number, opakovanaKritika: boolean, fineMult = 1,
+): InterviewEffects {
   const s = Math.max(0, Math.min(3, sila));
 
   if (postoj === "kritika" && s > 0) {
@@ -181,7 +188,7 @@ export function effectsFor(postoj: Postoj, sila: number, opakovanaKritika: boole
     return {
       refereeRespect: -(4 + 4 * s),
       fineChance: 0.25 * s,
-      fineBase: 600 + 300 * s,
+      fineBase: Math.round((600 + 300 * s) * fineMult),
       squadMorale: half(2 + s),
       fans: half(2 * s),
       reputation: s >= 2 ? -1 : 0,
