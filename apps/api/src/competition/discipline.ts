@@ -161,9 +161,12 @@ export async function canFine(
   const offence = OFFENCES[kind];
   if (!offence) return { ok: false, reason: "Neznámý skutek." };
 
+  // Pokuty z kontroly pravidel se do stropu nepočítají — jinak by stačilo dvakrát
+  // porušit pravidlo a klub by byl na zbytek sezóny nedotknutelný pro hlasování.
   const issued = await db.prepare(
     `SELECT COUNT(*) AS n FROM competition_sanctions
-      WHERE league_id = ? AND team_id = ? AND season_number = ? AND status IN ('issued','appealed','paid')`
+      WHERE league_id = ? AND team_id = ? AND season_number = ?
+        AND status IN ('issued','appealed','paid') AND issued_by IN ('vote','chair')`
   ).bind(leagueId, targetTeamId, seasonNumber).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, "počet pokut klubu", e); return null; });
   if ((issued?.n ?? 0) >= MAX_FINES_PER_TEAM) {
@@ -201,10 +204,15 @@ export interface IssueSanctionOpts {
   kind: string;
   reason: string;
   evidence: string | null;
-  issuedBy: "vote" | "chair";
+  issuedBy: "vote" | "chair" | "rule";
   issuedByTeamId: string | null;
   proposalId: string | null;
   gameDate: string;
+  /**
+   * Stabilní klíč pro pokuty, které padají samy (kontrola pravidel). Bez něj by
+   * opakovaný běh téhož zasedání udělil pokutu podruhé.
+   */
+  referenceId?: string | null;
 }
 
 /**
@@ -219,16 +227,18 @@ export async function issueSanction(db: D1Database, opts: IssueSanctionOpts): Pr
   if (amount <= 0) return null;
 
   const res = await db.prepare(
-    `INSERT INTO competition_sanctions
+    `INSERT OR IGNORE INTO competition_sanctions
       (id, league_id, season_number, team_id, kind, amount, reason, evidence,
-       issued_by, issued_by_team_id, proposal_id, appeal_deadline_gd, game_date)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       issued_by, issued_by_team_id, proposal_id, appeal_deadline_gd, game_date, reference_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).bind(
     id, opts.leagueId, opts.seasonNumber, opts.teamId, opts.kind, amount,
     opts.reason, opts.evidence, opts.issuedBy, opts.issuedByTeamId,
-    opts.proposalId, null, opts.gameDate,
+    opts.proposalId, null, opts.gameDate, opts.referenceId ?? null,
   ).run().catch((e) => { logger.error({ module: M }, "zápis sankce", e); return null; });
   if (!res) return null;
+  // Klíč už v tabulce byl — tuhle pokutu někdo udělil dřív a peníze se hnuly s ní.
+  if ((res.meta?.changes ?? 0) === 0) return null;
 
   const { recordTransaction } = await import("../season/finance-processor");
   await recordTransaction(

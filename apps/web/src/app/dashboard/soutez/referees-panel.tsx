@@ -86,7 +86,7 @@ export function RefereesPanel({ data, state, teamId, myOpen, onChanged }: {
                 </div>
                 {state.enabled && !r.banned && data.canBan && teamId && !myOpen && (
                   <button className="btn btn-md btn-secondary" onClick={() => setBanTarget(r)}>
-                    Vyškrtnout
+                    Navrhnout vyškrtnutí
                   </button>
                 )}
               </div>
@@ -127,9 +127,12 @@ function BanForm({ referee, teamId, deposit, onClose, onSaved }: {
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Vyškrtnutí rozhodčího">
+    <Modal isOpen onClose={onClose} title="Návrh na vyškrtnutí rozhodčího" zavritKlikemVedle={false}>
       <div className="p-5 space-y-4">
-        <div className="text-lg font-heading">Vyškrtnout {referee.name}?</div>
+        <div className="text-lg font-heading">Navrhnout vyškrtnutí — {referee.name}</div>
+        <p className="text-sm text-muted">
+          Sám ho nevyškrtneš. Návrh půjde na nejbližší zasedání a rozhodnou o něm kluby.
+        </p>
 
         <div className="rounded-lg p-3 text-sm space-y-1" style={{ background: "var(--color-paper)" }}>
           <div>Odpískal {referee.matches} zápasů, průměrná známka{" "}

@@ -72,12 +72,36 @@ export function PokladnaPanel({ state, ledger }: {
         <Row label="Klíč rozdělení odměn" value={state.rules.place_decay.toFixed(2)} />
         <Row label="Startovné" value={czk(state.rules.entry_fee)} />
         <Row label="Odměna rozhodčímu za zápas" value={czk(state.rules.referee_fee)} />
-        <Row label="Sazebník pokut" value={`${state.rules.fine_mult.toFixed(1)}×`} />
         <Row label="Meziligový poplatek" value={`${state.rules.interleague_fee_pct} %`} />
         <Row label="Odvod ze vstupného" value={`${state.rules.levy_gate_pct} %`} />
         <Row label="Odvod z občerstvení" value={`${state.rules.levy_concession_pct} %`} />
         <Row label="Odvod z přestupů v soutěži" value={`${state.rules.levy_transfer_pct} %`} />
         <Row label="Odvod z pohárových odměn" value={`${state.rules.levy_cup_pct} %`} />
+      </div>
+
+      <div className="card p-5">
+        <Ornament>Pokuty, které padají samy</Ornament>
+        <p className="text-sm text-muted mb-2">
+          Tyhle částky nikdo neschvaluje po jedné — udělí se automaticky a rovnou putují do pokladny.
+        </p>
+        <Row label="Za kritiku rozhodčího" value={czk(state.rules.fine_referee_abuse)} />
+        <Row label="Za nepořádek (svazová)" value={czk(state.rules.fine_admin)} />
+        <Row label="Za porušení pravidla soutěže" value={czk(state.rules.fine_rule)} />
+      </div>
+
+      <div className="card p-5">
+        <Ornament>Pravidla soutěže</Ornament>
+        <p className="text-sm text-muted mb-2">
+          Kontrola běží před každým zasedáním a co najde, jde rovnou do zápisu.
+        </p>
+        <Row label="Transfery mezi kluby stejného majitele"
+          value={state.rules.ban_own_owner_transfers ? "zakázané" : "povolené"} />
+        <Row label="Minimální stav hřiště"
+          value={state.rules.min_pitch_condition > 0 ? `${state.rules.min_pitch_condition} ze 100` : "nehlídá se"} />
+        <Row label="Nejméně hráčů na soupisce"
+          value={state.rules.squad_min > 0 ? String(state.rules.squad_min) : "bez omezení"} />
+        <Row label="Nejvíc hráčů na soupisce"
+          value={state.rules.squad_max > 0 ? String(state.rules.squad_max) : "bez omezení"} />
       </div>
 
       {ledger && ledger.summary.length > 0 && (
@@ -164,7 +188,8 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
           {(state.roles ?? []).map((r) => {
             const suspended = state.officials.find((o) => o.role === r.role)?.status === "suspended";
             return (
-              <div key={r.role} className="flex items-center gap-3">
+              <div key={r.role} className="space-y-2">
+                <div className="flex items-center gap-3">
                 <Portrait avatar={r.holder ? avatars[r.holder.teamId] : null} name={r.holder?.managerName} size={48}
                   ring={r.holder ? GOLD : "var(--color-muted-light)"} />
                 <div className="min-w-0 flex-1">
@@ -188,6 +213,24 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
                     Pozastavit
                   </button>
                 )}
+                </div>
+
+                {/* Co ta funkce spravuje a co doopravdy smí — ať se nikdo neptá,
+                    proč tam někdo sedí. Text jde ze serveru, aby v UI nemohla
+                    viset pravomoc, kterou kód neumí. */}
+                <div className="rounded-lg p-3 text-sm" style={{ background: "var(--color-paper)" }}>
+                  <div className="font-semibold">Co má na starost</div>
+                  <p className="text-muted mt-0.5">{r.agenda}</p>
+                  <div className="font-semibold mt-2">Co smí</div>
+                  <ul className="mt-0.5 space-y-1">
+                    {r.powers.map((v, i) => (
+                      <li key={i} className="text-muted flex gap-2">
+                        <span aria-hidden="true" style={{ color: GOLD }}>◆</span>
+                        <span className="min-w-0">{v}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             );
           })}
@@ -330,7 +373,7 @@ function SuspendForm({ role, teamId, onClose, onSaved }: {
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Pozastavit pravomoc">
+    <Modal isOpen onClose={onClose} title="Pozastavit pravomoc" zavritKlikemVedle={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">Pozastavit pravomoc — {role.label}</div>
 

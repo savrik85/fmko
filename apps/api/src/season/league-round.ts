@@ -533,10 +533,13 @@ async function runBetweenRoundEvents(
               .catch((e) => logger.warn({ module: "league-round" }, "morale effect failed", e));
           }
           if (eff.type === "budget" && eff.value) {
-            // Svazovou pokutu škáluje sazebník soutěže a její výnos plyne do pokladny.
+            // Svazovou pokutu určuje sazba odhlasovaná soutěží a její výnos plyne
+            // do pokladny. Událost si nese vlastní částku z rozsahu 300–1500 Kč;
+            // ta se převede na stejné místo v rozsahu odvozeném ze sazby, takže
+            // při výchozích 900 Kč vyjdou přesně původní čísla.
             // Ostatní peněžní události se soutěže netýkají a jdou beze změny.
             const scaled = eff.toLeague && compRules
-              ? -Math.round(Math.abs(eff.value) * compRules.fine_mult)
+              ? -Math.round(Math.abs(eff.value) * (compRules.fine_admin / 900))
               : eff.value;
             const eventGameDate = td?.game_date ?? new Date().toISOString();
             await recordTransaction(db, humanTeamId, "event", scaled, ev.title, eventGameDate).catch((e) =>

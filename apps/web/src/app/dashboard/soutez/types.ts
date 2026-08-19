@@ -6,11 +6,18 @@ export interface Rules {
   interleague_fee_pct: number; ban_own_owner_transfers: number;
   levy_concession_pct: number; levy_gate_pct: number;
   levy_transfer_pct: number; levy_cup_pct: number;
+  fine_referee_abuse: number; fine_admin: number; fine_rule: number;
+  min_pitch_condition: number; squad_min: number; squad_max: number;
 }
+
+export type ProposalUnit = "czk" | "pct" | "switch" | "ratio" | "count";
 
 export interface ProposalKind {
   kind: string; label: string; gesce: string; majority: number;
   min: number | null; max: number | null; nextSeason: boolean; current: number | null;
+  unit: ProposalUnit;
+  note: string | null;
+  counted: [string, string, string] | null;
 }
 
 export interface Official {
@@ -20,6 +27,7 @@ export interface Official {
 
 export interface RoleSlot {
   role: string; label: string;
+  agenda: string; powers: string[];
   holder: { teamId: string; teamName: string; managerName: string | null; status: string } | null;
 }
 

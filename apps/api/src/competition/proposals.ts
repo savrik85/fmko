@@ -152,18 +152,33 @@ export async function validateProposal(opts: {
   };
 }
 
+/**
+ * Hodnota návrhu v řeči, kterou hráč čte. Řídí se výhradně jednotkou ze
+ * specifikace, ne názvem typu — jinak by každý nový návrh potřeboval vlastní
+ * větev a vypínač by se zase ptal číslem.
+ */
+export function formatRuleValue(kind: string, v: number): string {
+  const spec = PROPOSAL_KINDS[kind];
+  switch (spec?.unit) {
+    case "switch": return v ? "zavést" : "zrušit";
+    case "pct": return `${v} %`;
+    case "ratio": return v.toFixed(2);
+    case "count": {
+      if (v === 0) return "bez omezení";
+      const [one, few, many] = spec.counted ?? ["", "", ""];
+      const slovo = v === 1 ? one : v <= 4 ? few : many;
+      return slovo ? `${v} ${slovo}` : String(v);
+    }
+    default: return `${Math.round(v).toLocaleString("cs")} Kč`;
+  }
+}
+
 /** Čitelný titulek návrhu — do zápisu i do seznamu. */
 export function proposalTitle(kind: string, value: number, current: number): string {
   const spec = PROPOSAL_KINDS[kind];
   if (!spec) return "Návrh";
-  const fmt = (v: number) => {
-    if (kind === "place_decay") return v.toFixed(2);
-    if (kind === "fine_mult") return `${v.toFixed(1)}×`;
-    if (kind.endsWith("_pct")) return `${v} %`;
-    if (kind === "ban_own_owner_transfers") return v ? "zavést" : "zrušit";
-    return `${Math.round(v).toLocaleString("cs")} Kč`;
-  };
-  if (kind === "ban_own_owner_transfers") return `${spec.label} — ${fmt(value)}`;
+  const fmt = (v: number) => formatRuleValue(kind, v);
+  if (spec.unit === "switch") return `${spec.label} — ${fmt(value)}`;
   return `${spec.label}: ${fmt(current)} → ${fmt(value)}`;
 }
 

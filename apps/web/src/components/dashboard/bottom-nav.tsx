@@ -51,6 +51,7 @@ export function BottomNav() {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unvotedCount, setUnvotedCount] = useState(0);
   const [notesUnseen, setNotesUnseen] = useState(false);
+  const [gremiumCount, setGremiumCount] = useState(0);
 
   useEffect(() => {
     if (!teamId) return;
@@ -62,6 +63,11 @@ export function BottomNav() {
       apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers })
         .then((votes) => setUnvotedCount(votes.filter((v) => v.status === "open" && v.my_answer === null).length))
         .catch((e) => console.error("fetch votes:", e));
+      // Grémium je taky pod Více — bez tohohle by hráč na mobilu neviděl,
+      // že se o něčem hlasuje a zasedání mu propadne.
+      apiFetch<{ toVote: number }>(`/api/teams/${teamId}/competition/pending`)
+        .then((p) => setGremiumCount(p.toVote ?? 0))
+        .catch((e) => console.error("fetch gremium pending:", e));
     };
     fetchUnread();
     const interval = setInterval(fetchUnread, 30000);
@@ -80,7 +86,7 @@ export function BottomNav() {
     { href: "/dashboard/liga", label: "Liga", icon: "🏆" },
     // Novinky se schovávají pod Více, takže se musí připočíst sem — jinak by
     // hráč na mobilu neměl jak poznat, že něco nového vyšlo.
-    { href: "/dashboard/more", label: "Více", icon: "⚙", badge: unvotedCount + (notesUnseen ? 1 : 0) },
+    { href: "/dashboard/more", label: "Více", icon: "⚙", badge: unvotedCount + gremiumCount + (notesUnseen ? 1 : 0) },
   ];
 
   return (

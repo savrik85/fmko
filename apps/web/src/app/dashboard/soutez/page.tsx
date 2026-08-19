@@ -22,7 +22,8 @@ import { PokladnaPanel, VedeniPanel, ZapisyPanel } from "./panels";
 import { DisciplinePanel } from "./discipline";
 import { RefereesPanel } from "./referees-panel";
 import type {
-  BoardData, DisciplineData, Election, LedgerEntry, Meeting, Proposal, RefereeData, State,
+  BoardData, DisciplineData, Election, LedgerEntry, Meeting, Proposal, ProposalKind,
+  RefereeData, State,
 } from "./types";
 
 const TAB_KEYS = ["zasedani", "pokladna", "vedeni", "zapisy"] as const;
@@ -65,12 +66,23 @@ const ROLE_OF_GESCE: Record<string, string> = {
 
 const ANSWER_LABEL: Record<string, string> = { pro: "Pro", proti: "Proti", zdrzel: "Zdržel se" };
 
-function fmtValue(kind: string, v: number): string {
-  if (kind === "place_decay") return v.toFixed(2);
-  if (kind === "fine_mult") return `${v.toFixed(1)}×`;
-  if (kind.endsWith("_pct")) return `${v} %`;
-  if (kind === "ban_own_owner_transfers") return v ? "zavést" : "zrušit";
-  return czk(v);
+/**
+ * Hodnota návrhu v řeči, kterou hráč čte. Zrcadlí formatRuleValue na serveru —
+ * řídí se jednotkou, ne názvem typu, jinak by se vypínač zase ptal číslem.
+ */
+function fmtValue(spec: ProposalKind | undefined, v: number): string {
+  switch (spec?.unit) {
+    case "switch": return v ? "zavést" : "zrušit";
+    case "pct": return `${v} %`;
+    case "ratio": return v.toFixed(2);
+    case "count": {
+      if (v === 0) return "bez omezení";
+      const [one, few, many] = spec.counted ?? ["", "", ""];
+      const slovo = v === 1 ? one : v <= 4 ? few : many;
+      return slovo ? `${v} ${slovo}` : String(v);
+    }
+    default: return czk(v);
+  }
 }
 
 export default function SoutezPage() {
@@ -604,7 +616,7 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Nový návrh">
+    <Modal isOpen onClose={onClose} title="Nový návrh" zavritKlikemVedle={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">Nový návrh {GESCE_KOMU[gesce]}</div>
 
@@ -617,16 +629,43 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
 
         {spec && (
           <div>
-            <label className="text-sm text-muted">
-              Nová hodnota
-              {spec.min !== null && spec.max !== null && ` (${fmtValue(kind, spec.min)} – ${fmtValue(kind, spec.max)})`}
-            </label>
-            <input className="input w-full mt-1 tabular-nums" type="number"
-              step={kind === "place_decay" ? "0.01" : kind === "fine_mult" ? "0.1" : "1"}
-              value={value} onChange={(e) => setValue(e.target.value)} />
-            <div className="text-sm text-muted mt-1">
-              Teď platí {fmtValue(kind, spec.current ?? 0)}
-              {spec.nextSeason && " · změna se projeví až od příští sezóny"}
+            {spec.note && <p className="text-sm text-muted mb-2">{spec.note}</p>}
+
+            {spec.unit === "switch" ? (
+              <>
+                <label className="text-sm text-muted">Co se má stát</label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  {[
+                    { v: "1", label: "Zavést pravidlo" },
+                    { v: "0", label: "Zrušit pravidlo" },
+                  ].map((o) => (
+                    <button key={o.v} type="button"
+                      className={`btn btn-lg ${value === o.v ? "btn-primary" : "btn-secondary"}`}
+                      onClick={() => setValue(o.v)}>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <label className="text-sm text-muted">
+                  Nová hodnota
+                  {spec.min !== null && spec.max !== null
+                    && ` (${fmtValue(spec, spec.min)} – ${fmtValue(spec, spec.max)})`}
+                </label>
+                <input className="input w-full mt-1 tabular-nums" type="number"
+                  step={spec.unit === "ratio" ? "0.01" : "1"}
+                  min={spec.min ?? undefined} max={spec.max ?? undefined}
+                  value={value} onChange={(e) => setValue(e.target.value)} />
+              </>
+            )}
+
+            <div className="text-sm text-muted mt-2">
+              Teď platí {fmtValue(spec, spec.current ?? 0)}
+              {spec.nextSeason
+                ? " · změna se projeví až od příští sezóny"
+                : " · změna platí hned po zasedání"}
               {spec.majority > 0.5 && " · potřeba dvoutřetinová většina"}
             </div>
           </div>

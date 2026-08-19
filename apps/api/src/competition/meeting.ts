@@ -17,7 +17,7 @@
 
 import { logger } from "../lib/logger";
 import { sendSystemSMS } from "../messaging/system-sms";
-import { PROPOSAL_KINDS, ROLE_LABEL, SIMPLE_MAJORITY } from "./defaults";
+import { DEFAULT_RULES, PROPOSAL_KINDS, ROLE_LABEL, SIMPLE_MAJORITY } from "./defaults";
 import { recomputeBalance, recordCompetitionEntry } from "./ledger";
 import { presidentOf, recallOfficial, resolveElections, restoreOfficial } from "./officials";
 import { voterStats } from "./proposals";
@@ -137,6 +137,25 @@ export async function runOneMeeting(
     // Volba je plnohodnotný bod programu — musí se počítat do zápisu stejně jako návrh.
     closedCount++;
     if (e.winnerTeamId) passedCount++;
+  }
+
+  // Kontrola pravidel, která si soutěž odhlasovala. Až po uzavření návrhů —
+  // pravidlo přijaté právě teď se tak vymáhá až od příštího zasedání a klub má
+  // týden na to, aby se přizpůsobil.
+  const { resolveRules } = await import("./rules");
+  const rules = await resolveRules(db, leagueId, meta.season_number);
+  const { runCompliance } = await import("./compliance");
+  const porusení = await runCompliance(db, { leagueId, seasonNumber: meta.season_number, rules, gameDate })
+    .catch((e) => { logger.warn({ module: M }, `kontrola pravidel ${leagueId}`, e); return []; });
+  for (const h of porusení) {
+    results.push({
+      kind: "compliance",
+      title: `${h.reason} — ${h.teamName}`,
+      status: rules.fine_rule > 0 ? "passed" : "no_quorum",
+      resultNote: rules.fine_rule > 0
+        ? `${h.detail} Pokuta ${rules.fine_rule.toLocaleString("cs")} Kč.`
+        : `${h.detail} Sazba pokuty je nula, takže zůstalo u napomenutí.`,
+    } as unknown as Record<string, unknown>);
   }
 
   const balance = await recomputeBalance(db, leagueId, gameDate);
@@ -329,6 +348,23 @@ async function applyImmediateEffect(
         refereeId: String(payload.refereeId), reason: String(payload.reason ?? p.title),
         source: "snem", proposalId: p.id, gameDate,
       });
+      return;
+    }
+
+    // Pravidla soutěže (zákaz transferů, stav hřiště, velikost soupisky) platí
+    // hned — nejsou to peníze, takže na rollover čekat nemusí. Název sloupce jde
+    // výhradně z katalogu PROPOSAL_KINDS, nikdy z požadavku.
+    const spec = PROPOSAL_KINDS[p.kind];
+    if (spec?.rulesField && !spec.nextSeason && typeof payload.value === "number") {
+      const field = spec.rulesField;
+      if (!(field in DEFAULT_RULES)) {
+        logger.error({ module: M }, `návrh ${p.kind} míří na neznámé pravidlo ${field}`);
+        return;
+      }
+      await db.prepare(
+        `UPDATE competition_rules SET ${field} = ? WHERE league_id = ? AND season_number = ?`
+      ).bind(payload.value, p.league_id, p.season_number).run();
+      logger.info({ module: M }, `soutěž ${p.league_id}: ${field} = ${payload.value}`);
       return;
     }
   } catch (e) {

@@ -154,20 +154,17 @@ async function buildRules(
   const teams = await countAllClubs(db, leagueId);
   const subsidy = subsidyFor(teams, level);
 
+  // Sloupce se skládají z DEFAULT_RULES, ne ručním výčtem: nové pravidlo se pak
+  // nedá zapomenout dopsat sem a tiše propadnout na výchozí hodnotu.
+  const fields = Object.keys(DEFAULT_RULES) as Array<keyof CompetitionRules>;
+  const cols = ["id", "league_id", "season_number", ...fields, "subsidy_total", "source_proposals"];
   await db.prepare(
-    `INSERT OR IGNORE INTO competition_rules
-      (id, league_id, season_number, win_bonus, draw_bonus, place_top, place_decay, place_floor,
-       entry_fee, referee_fee, fine_mult, interleague_fee_pct, ban_own_owner_transfers,
-       levy_concession_pct, levy_gate_pct, levy_transfer_pct, levy_cup_pct,
-       subsidy_total, source_proposals)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    `INSERT OR IGNORE INTO competition_rules (${cols.join(", ")})
+     VALUES (${cols.map(() => "?").join(",")})`
   ).bind(
     crypto.randomUUID(), leagueId, newSeason,
-    base.win_bonus, base.draw_bonus, base.place_top, base.place_decay, base.place_floor,
-    base.entry_fee, base.referee_fee, base.fine_mult, base.interleague_fee_pct,
-    base.ban_own_owner_transfers, base.levy_concession_pct, base.levy_gate_pct,
-    base.levy_transfer_pct, base.levy_cup_pct, subsidy,
-    JSON.stringify(changes.map((ch) => ch.kind)),
+    ...fields.map((f) => base[f]),
+    subsidy, JSON.stringify(changes.map((ch) => ch.kind)),
   ).run();
 
   if (changes.length > 0) {

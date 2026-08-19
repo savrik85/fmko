@@ -23,6 +23,7 @@ export function Sheet({
   title,
   maxWidth = "560px",
   className = "",
+  zavritKlikemVedle = true,
 }: {
   open: boolean;
   onClose: () => void;
@@ -31,6 +32,11 @@ export function Sheet({
   title?: string;
   maxWidth?: string;
   className?: string;
+  /**
+   * Zavřít kliknutím vedle plachty. U formulářů se vypíná — jeden vedlejší klik
+   * by zahodil rozepsaný návrh a hráč by nepochopil, kam se mu poděl.
+   */
+  zavritKlikemVedle?: boolean;
 }) {
   const vratitFokusNa = useRef<HTMLElement | null>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -62,7 +68,7 @@ export function Sheet({
   return (
     <div
       className="fixed inset-0 z-[var(--z-sheet)] flex items-end sm:items-center justify-center"
-      onClick={onClose}
+      onClick={zavritKlikemVedle ? onClose : undefined}
     >
       <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" aria-hidden="true" />
       <div

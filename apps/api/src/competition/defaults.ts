@@ -25,6 +25,16 @@ export const DEFAULT_RULES = {
   levy_gate_pct: 0,
   levy_transfer_pct: 0,
   levy_cup_pct: 0,
+  // Konkrétní výše strojově udělovaných pokut. Nahrazují násobič fine_mult:
+  // o trestu se hlasuje částkou, ne koeficientem. Hodnoty jsou nastavené tak,
+  // aby se bez samosprávy nezměnilo dnešní chování ani o korunu.
+  fine_referee_abuse: 1_200,
+  fine_admin: 900,
+  fine_rule: 1_000,
+  // Pravidla soutěže. 0 = vypnuto, takže spuštění samosprávy nikomu nic nestrhne.
+  min_pitch_condition: 0,
+  squad_min: 0,
+  squad_max: 0,
 } as const;
 
 export type CompetitionRules = { -readonly [K in keyof typeof DEFAULT_RULES]: number };
@@ -91,6 +101,54 @@ export const ROLE_LABEL: Record<OfficialRole, string> = {
   rozhodcich: "Komisař rozhodčích",
 };
 
+/**
+ * Co která funkce spravuje a co smí. Jediný zdroj — čte to UI i zápis, takže
+ * v soutěži nemůže viset pravomoc, kterou kód neumí. Když sem něco přibude,
+ * musí k tomu existovat endpoint.
+ */
+export const ROLE_SCOPE: Record<OfficialRole, {
+  gesce: Gesce;
+  agenda: string;
+  powers: string[];
+}> = {
+  predseda: {
+    gesce: "soutez",
+    agenda: "Pravidla soutěže — zákaz transferů mezi kluby stejného majitele, stav hřiště, velikost soupisky.",
+    powers: [
+      "Při rovnosti hlasů rozhoduje jeho hlas.",
+      "Zastupuje každou neobsazenou funkci a čerpá u ní vlastní počítadlo.",
+      "Jednou za sezónu pozastaví pravomoc jinému předsedovi — tím rovnou otevře hlasování o jeho odvolání. Když neprojde, pravomoc se vrátí a prezident přijde o pět bodů reputace.",
+      "Je nadřízený ostatním předsedům.",
+    ],
+  },
+  hospodarska: {
+    gesce: "hospodarska",
+    agenda: "Odměny za zápasy i za umístění, startovné, odvody z tržeb a meziligové poplatky.",
+    powers: [
+      "Vidí projekci rozpočtu na příští sezónu i rozpis závazků rozehrané sezóny.",
+      "Návrhy v jeho gesci mění peníze celé soutěže — platí vždy až od příští sezóny.",
+    ],
+  },
+  disciplinarni: {
+    gesce: "disciplinarni",
+    agenda: "Pokuty klubům a výše trestů, které padají samy — za kritiku rozhodčího, za nepořádek, za porušení pravidla soutěže.",
+    powers: [
+      "Uloží pokutu sám, bez hlasování, do 3 000 Kč a nejvýš čtyřikrát za sezónu.",
+      "Vlastnímu klubu pokutu uložit nemůže, ani klubu, se kterým má vyhrocený vztah.",
+      "Klub se proti každé jeho pokutě může odvolat k zasedání.",
+    ],
+  },
+  rozhodcich: {
+    gesce: "rozhodcich",
+    agenda: "Listina rozhodčích okresu a jejich odměna za odpískaný zápas.",
+    powers: [
+      "Vyškrtne rozhodčího sám, bez hlasování — jednou za sezónu.",
+      "Vidí známky rozhodčích a to, jak si soutěž stojí s minimální velikostí listiny.",
+      "Vyškrtnutý sudí se po sezóně vrátí a bude si pamatovat, kdo ho škrtl.",
+    ],
+  },
+};
+
 /** Název celého orgánu. */
 export const BODY_NAME = "Grémium soutěže";
 
@@ -102,6 +160,15 @@ export const GESCE_ROLE: Record<Exclude<Gesce, "zadna">, OfficialRole> = {
   rozhodcich: "rozhodcich",
 };
 
+/**
+ * Jak se hodnota návrhu píše a zadává.
+ *
+ * Bez tohohle se vypínač ptal číslem („Nová hodnota (zrušit – zavést): 0"),
+ * což nikdo nepochopil. Formulář i titulek návrhu se řídí výhradně jednotkou,
+ * ne názvem typu.
+ */
+export type ProposalUnit = "czk" | "pct" | "switch" | "ratio" | "count";
+
 export interface ProposalSpec {
   /** Klíč do competition_rules, pokud návrh mění sazebník. */
   rulesField?: keyof CompetitionRules;
@@ -112,25 +179,42 @@ export interface ProposalSpec {
   nextSeason: boolean;
   min?: number;
   max?: number;
+  unit: ProposalUnit;
+  /** Co ta hodnota v praxi znamená — jde do formuláře i do karty návrhu. */
+  note?: string;
+  /** Jednotka pro počty: „hráč / hráči / hráčů". */
+  counted?: [string, string, string];
 }
 
 /**
  * Katalog typů návrhů. Rozsahy jsou tvrdé — server je ořezává nezávisle na UI.
  */
 export const PROPOSAL_KINDS: Record<string, ProposalSpec> = {
-  win_bonus: { rulesField: "win_bonus", gesce: "hospodarska", label: "Odměna za výhru", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 3000 },
-  draw_bonus: { rulesField: "draw_bonus", gesce: "hospodarska", label: "Odměna za remízu", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 1000 },
-  place_top: { rulesField: "place_top", gesce: "hospodarska", label: "Odměna za 1. místo", majority: SIMPLE_MAJORITY, nextSeason: true, min: 50_000, max: 250_000 },
-  place_decay: { rulesField: "place_decay", gesce: "hospodarska", label: "Klíč rozdělení odměn", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0.7, max: 0.95 },
-  entry_fee: { rulesField: "entry_fee", gesce: "hospodarska", label: "Startovné", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 60_000 },
-  referee_fee: { rulesField: "referee_fee", gesce: "rozhodcich", label: "Odměna rozhodčím za zápas", majority: SIMPLE_MAJORITY, nextSeason: true, min: 600, max: 2500 },
-  fine_mult: { rulesField: "fine_mult", gesce: "disciplinarni", label: "Sazebník pokut", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0.5, max: 2.0 },
-  interleague_fee_pct: { rulesField: "interleague_fee_pct", gesce: "hospodarska", label: "Meziligový přestupní poplatek", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 50 },
-  levy_concession_pct: { rulesField: "levy_concession_pct", gesce: "hospodarska", label: "Odvod z občerstvení", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 10 },
-  levy_gate_pct: { rulesField: "levy_gate_pct", gesce: "hospodarska", label: "Odvod ze vstupného", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 10 },
-  levy_transfer_pct: { rulesField: "levy_transfer_pct", gesce: "hospodarska", label: "Odvod z přestupu uvnitř soutěže", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 10 },
-  levy_cup_pct: { rulesField: "levy_cup_pct", gesce: "hospodarska", label: "Odvod z pohárových odměn", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 20 },
-  ban_own_owner_transfers: { rulesField: "ban_own_owner_transfers", gesce: "soutez", label: "Zákaz transferů mezi kluby stejného majitele", majority: QUALIFIED_MAJORITY, nextSeason: true, min: 0, max: 1 },
+  // ── Generální sekretář: peníze ───────────────────────────────────────────
+  win_bonus: { rulesField: "win_bonus", gesce: "hospodarska", label: "Odměna za výhru", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 3000, unit: "czk" },
+  draw_bonus: { rulesField: "draw_bonus", gesce: "hospodarska", label: "Odměna za remízu", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 1000, unit: "czk" },
+  place_top: { rulesField: "place_top", gesce: "hospodarska", label: "Odměna za 1. místo", majority: SIMPLE_MAJORITY, nextSeason: true, min: 50_000, max: 250_000, unit: "czk" },
+  place_decay: { rulesField: "place_decay", gesce: "hospodarska", label: "Klíč rozdělení odměn", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0.7, max: 0.95, unit: "ratio", note: "Čím nižší číslo, tím strmější rozdíl mezi prvním a posledním." },
+  entry_fee: { rulesField: "entry_fee", gesce: "hospodarska", label: "Startovné", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 60_000, unit: "czk" },
+  interleague_fee_pct: { rulesField: "interleague_fee_pct", gesce: "hospodarska", label: "Meziligový přestupní poplatek", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 50, unit: "pct" },
+  levy_concession_pct: { rulesField: "levy_concession_pct", gesce: "hospodarska", label: "Odvod z občerstvení", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 10, unit: "pct" },
+  levy_gate_pct: { rulesField: "levy_gate_pct", gesce: "hospodarska", label: "Odvod ze vstupného", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 10, unit: "pct" },
+  levy_transfer_pct: { rulesField: "levy_transfer_pct", gesce: "hospodarska", label: "Odvod z přestupu uvnitř soutěže", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 10, unit: "pct" },
+  levy_cup_pct: { rulesField: "levy_cup_pct", gesce: "hospodarska", label: "Odvod z pohárových odměn", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 20, unit: "pct" },
+
+  // ── Komisař rozhodčích ───────────────────────────────────────────────────
+  referee_fee: { rulesField: "referee_fee", gesce: "rozhodcich", label: "Odměna rozhodčím za zápas", majority: SIMPLE_MAJORITY, nextSeason: true, min: 600, max: 2500, unit: "czk" },
+
+  // ── Disciplinární rada: výše pokut, které padají samy ────────────────────
+  fine_referee_abuse: { rulesField: "fine_referee_abuse", gesce: "disciplinarni", label: "Pokuta za kritiku rozhodčího", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 6000, unit: "czk", note: "Sazba za středně ostrou kritiku v pozápasovém rozhovoru. Mírnější stojí tři čtvrtiny, ta nejostřejší o čtvrtinu víc." },
+  fine_admin: { rulesField: "fine_admin", gesce: "disciplinarni", label: "Svazová pokuta za nepořádek", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 5000, unit: "czk", note: "Pozdní soupiska, neuklizené kabiny, nedodaný zápis. Skutečná částka kolísá kolem sazby." },
+  fine_rule: { rulesField: "fine_rule", gesce: "disciplinarni", label: "Pokuta za porušení pravidla soutěže", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 8000, unit: "czk", note: "Platí na pravidla, která si soutěž odhlasovala — stav hřiště a velikost soupisky. Kontrola běží před každým zasedáním." },
+
+  // ── Prezident soutěže: pravidla soutěže ──────────────────────────────────
+  ban_own_owner_transfers: { rulesField: "ban_own_owner_transfers", gesce: "soutez", label: "Zákaz transferů mezi kluby stejného majitele", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 1, unit: "switch", note: "Obchod projde, ale objeví se na programu nejbližšího zasedání jako disciplinární bod." },
+  min_pitch_condition: { rulesField: "min_pitch_condition", gesce: "soutez", label: "Minimální stav hřiště", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 60, unit: "count", counted: ["bod", "body", "bodů"], note: "Kdo pod tuhle hranici spadne, dostane pokutu za porušení pravidla. Nula znamená, že se stav hřiště nehlídá." },
+  squad_min: { rulesField: "squad_min", gesce: "soutez", label: "Minimální počet hráčů na soupisce", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 18, unit: "count", counted: ["hráč", "hráči", "hráčů"], note: "Proti klubům, které pustí kádr pod hranici únosnosti. Nula znamená bez omezení." },
+  squad_max: { rulesField: "squad_max", gesce: "soutez", label: "Maximální počet hráčů na soupisce", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 40, unit: "count", counted: ["hráč", "hráči", "hráčů"], note: "Proti hromadění hráčů na lavici. Nula znamená bez omezení." },
 };
 
 /** Sazebníkové návrhy, u kterých se musí ověřit projekce rozpočtu. */

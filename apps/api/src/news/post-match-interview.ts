@@ -504,7 +504,7 @@ export async function applyPostMatchInterviewEffects(
   const opakovana = safeParse<{ rozhodci?: { postoj?: string } }>(predchozi?.analysis ?? null, {})
     .rozhodci?.postoj === "kritika";
 
-  // Sazebník pokut si odhlasovala soutěž. Bez samosprávy zůstává násobič 1.
+  // Sazbu pokuty za kritiku rozhodčího si odhlasovala soutěž. Bez samosprávy platí výchozí.
   const { resolveRules } = await import("../competition/rules");
   const seasonRow = await db.prepare(
     "SELECT MAX(season_number) AS n FROM season_calendar WHERE league_id = ?"
@@ -512,7 +512,7 @@ export async function applyPostMatchInterviewEffects(
     .catch((e) => { logger.warn({ module: M }, "sezóna ligy pro sazebník pokut", e); return null; });
   const compRules = await resolveRules(db, interview.league_id, seasonRow?.n ?? null);
 
-  const eff = effectsFor(stance.postoj, stance.sila, opakovana, compRules.fine_mult);
+  const eff = effectsFor(stance.postoj, stance.sila, opakovana, compRules.fine_referee_abuse);
 
   // Pokuta: deterministická podle rozhovoru, aby opakované volání nedalo jinou částku.
   const rng = createRng(seedFromString(`fine-${interview.id}`));
