@@ -702,7 +702,11 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
         <div className="flex gap-2">
           <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
           <button className="btn btn-lg btn-primary flex-1" onClick={submit} disabled={saving || !kind || !zmeneno}>
-            {saving ? "Podávám…" : zmeneno ? "Podat návrh" : "Změň hodnotu"}
+            {saving
+              ? "Podávám…"
+              : zmeneno
+                ? "Podat návrh"
+                : spec?.unit === "switch" ? "Tohle už platí" : "Změň hodnotu"}
           </button>
         </div>
       </div>
