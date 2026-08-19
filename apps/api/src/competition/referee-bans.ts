@@ -36,15 +36,20 @@ export interface BanCheck { ok: boolean; reason?: string; usable?: number }
 export async function canBanReferee(
   db: D1Database, leagueId: string, seasonNumber: number, district: string,
 ): Promise<BanCheck> {
+  // Počet použitelných se počítá vždycky — i když ban stejně neprojde, UI ho ukazuje.
+  const usable = await countUsable(db, leagueId, seasonNumber, district);
+
   const used = await db.prepare(
     "SELECT COUNT(*) AS n FROM competition_referee_bans WHERE league_id = ? AND season_number = ?"
   ).bind(leagueId, seasonNumber).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, "počet banů", e); return null; });
   if ((used?.n ?? 0) >= MAX_BANS_PER_SEASON) {
-    return { ok: false, reason: "Letos už soutěž jednoho rozhodčího vyškrtla. Víc jich za sezónu nejde." };
+    return {
+      ok: false, usable,
+      reason: "Letos už soutěž jednoho rozhodčího vyškrtla. Víc jich za sezónu nejde.",
+    };
   }
 
-  const usable = await countUsable(db, leagueId, seasonNumber, district);
   if (usable - 1 < MIN_ACTIVE_REFEREES) {
     return {
       ok: false, usable,
