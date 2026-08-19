@@ -158,7 +158,10 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
       return {
         role, label: ROLE_LABEL[role],
         holder: holder
-          ? { teamId: holder.team_id, teamName: holder.team_name, managerName: holder.manager_name }
+          ? {
+              teamId: holder.team_id, teamName: holder.team_name,
+              managerName: holder.manager_name, status: holder.status,
+            }
           : null,
       };
     }),

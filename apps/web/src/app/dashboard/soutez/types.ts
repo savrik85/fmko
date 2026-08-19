@@ -20,7 +20,7 @@ export interface Official {
 
 export interface RoleSlot {
   role: string; label: string;
-  holder: { teamId: string; teamName: string; managerName: string | null } | null;
+  holder: { teamId: string; teamName: string; managerName: string | null; status: string } | null;
 }
 
 export interface State {
@@ -86,7 +86,11 @@ export interface Meeting {
   id: string; gameDate: string; seasonNumber: number; closed: number; passed: number;
   balanceAfter: number | null;
   attendance: { voters?: number; active?: number; quorum?: number };
-  items: Array<{ title: string; status: string; pro: number; proti: number; zdrzel: number }>;
+  items: Array<{
+    kind?: string; title: string; status: string;
+    pro?: number; proti?: number; zdrzel?: number;
+    resultNote?: string | null;
+  }>;
 }
 
 export interface EvidenceItem { kind: string; label: string; detail: string }

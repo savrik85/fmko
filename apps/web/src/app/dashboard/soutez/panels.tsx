@@ -438,14 +438,22 @@ export function ZapisyPanel({ meetings }: { meetings: Meeting[] }) {
           <Ornament right={czk(m.balanceAfter)}>Zasedání {formatDate(m.gameDate)}</Ornament>
           <div className="text-sm text-muted mb-2">
             Projednáno {m.closed}, přijato {m.passed}
-            {m.attendance?.quorum ? ` · kvórum ${m.attendance.quorum} z ${m.attendance.active ?? "?"} aktivních` : ""}
+            {m.attendance?.quorum
+              ? ` · k usnesení bylo potřeba ${m.attendance.quorum} ${plural(m.attendance.quorum, "hlas", "hlasy", "hlasů")}, aktivních klubů ${m.attendance.active ?? 0}`
+              : ""}
           </div>
           <div className="divide-y" style={{ borderColor: "var(--color-line)" }}>
             {m.items?.map((it, i) => (
               <div key={i} className="flex items-start justify-between gap-3 py-2">
-                <div className="text-sm min-w-0 break-words">{it.title}</div>
+                <div className="text-sm min-w-0 break-words">
+                  {it.title}
+                  {/* Volba je tajná — do zápisu jde jen jméno vítěze, nikdy poměr hlasů. */}
+                  {it.resultNote && <div className="text-muted break-words">{it.resultNote}</div>}
+                </div>
                 <div className="text-sm tabular-nums text-muted shrink-0">
-                  {it.pro}:{it.proti}{it.zdrzel ? ` (${it.zdrzel})` : ""}
+                  {typeof it.pro === "number" && typeof it.proti === "number"
+                    ? `${it.pro}:${it.proti}${it.zdrzel ? ` (${it.zdrzel})` : ""}`
+                    : it.status === "passed" ? "zvoleno" : "nerozhodnuto"}
                 </div>
               </div>
             ))}

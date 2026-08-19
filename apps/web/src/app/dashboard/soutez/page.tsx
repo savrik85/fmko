@@ -410,7 +410,11 @@ function GesceHeader({ gesce, state, avatars }: {
           {slot.holder ? (
             <PersonLine managerName={slot.holder.managerName}
               teamId={slot.holder.teamId} teamName={slot.holder.teamName}
-              note={slot.label.toLowerCase()} />
+              note={
+                slot.holder.status === "suspended"
+                  ? <span className="text-danger">pravomoc pozastavena — odbor vede prezident</span>
+                  : slot.label.toLowerCase()
+              } />
           ) : (
             <div className="text-sm text-muted">
               Odbor nemá zvoleného vedoucího ({slot.label.toLowerCase()}) — rozhoduje o něm
