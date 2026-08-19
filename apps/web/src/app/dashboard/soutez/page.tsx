@@ -114,6 +114,15 @@ const GESCE_LABEL: Record<string, string> = {
   zadna: "Ostatní",
 };
 
+/** Druhý pád do vět typu „podat návrh do…". Bez toho vzniká „do odboru hospodářská". */
+const GESCE_DO: Record<string, string> = {
+  soutez: "do vedení soutěže",
+  hospodarska: "do hospodářské komise",
+  disciplinarni: "do disciplinární komise",
+  rozhodcich: "do komise rozhodčích",
+  zadna: "mimo odbory",
+};
+
 const GESCE_POPIS: Record<string, string> = {
   soutez: "Pravidla soutěže, sponzor a personální věci.",
   hospodarska: "Rozpočet, odměny, startovné, odvody a dotace klubům.",
@@ -329,7 +338,7 @@ export default function SoutezPage() {
           {state.enabled && gesce !== "zadna" && (
             <>
               <button className="btn btn-primary w-full" onClick={() => setFormOpen(true)}>
-                Podat návrh do odboru {GESCE_LABEL[gesce].toLowerCase()}
+                Podat návrh {GESCE_DO[gesce]}
               </button>
               <p className="text-sm text-muted">
                 Za podání se skládá kauce {czk(state.deposit)}. Vrátí se, když návrh projde.
@@ -797,7 +806,7 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
   return (
     <Modal isOpen onClose={onClose} title="Nový návrh">
       <div className="space-y-4">
-        <div className="text-lg font-heading">Nový návrh — {GESCE_LABEL[gesce].toLowerCase()}</div>
+        <div className="text-lg font-heading">Nový návrh {GESCE_DO[gesce]}</div>
         <div>
           <label className="text-sm text-muted">Čeho se návrh týká</label>
           <select className="select w-full mt-1" value={kind} onChange={(e) => setKind(e.target.value)}>
