@@ -115,17 +115,31 @@ export async function canRunFor(
   }
 
   const att = await attendanceOf(db, leagueId, teamId);
-  if (att.of > 0 && att.present / att.of < MIN_ATTENDANCE_RATIO) {
+  if (!meetsAttendance(att)) {
     return {
       ok: false, attendance: att,
-      reason: `Na kandidaturu je potřeba účast aspoň ${Math.round(MIN_ATTENDANCE_RATIO * 100)} % schůzí. Ty máš ${att.present} z ${att.of}.`,
+      reason: `Na kandidaturu je potřeba účast aspoň ${Math.round(MIN_ATTENDANCE_RATIO * 100)} %`
+        + ` z posledních ${ATTENDANCE_WINDOW} zasedání. Ty máš ${att.present} z ${att.of}.`,
     };
   }
 
   return { ok: true, attendance: att };
 }
 
-/** Na kolika z posledních schůzí klub odhlasoval aspoň jeden bod. */
+/**
+ * Splňuje klub docházkovou podmínku pro kandidaturu?
+ *
+ * Podmínka se zapne AŽ po plném okně zasedání. Na začátku sezóny — a hned po
+ * zapnutí samosprávy — žádné zasedání neproběhlo, takže by jinak zablokovala
+ * kandidaturu úplně všem a soutěž by nikdy nedostala vedení. Kdo přijde později,
+ * má taky pět zasedání na to, aby se ukázal.
+ */
+export function meetsAttendance(att: { present: number; of: number }): boolean {
+  if (att.of < ATTENDANCE_WINDOW) return true;
+  return att.present / att.of >= MIN_ATTENDANCE_RATIO;
+}
+
+/** Na kolika z posledních zasedání klub odhlasoval aspoň jeden bod. */
 export async function attendanceOf(
   db: D1Database, leagueId: string, teamId: string,
 ): Promise<{ present: number; of: number }> {
