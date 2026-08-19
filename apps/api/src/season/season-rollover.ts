@@ -96,6 +96,21 @@ export async function rolloverAllLeagues(
     logger.error({ module: "season-rollover" }, "sponsor contracts rollover", e);
   }
 
+  // 4c. Samospráva soutěží — sazebník na novou sezónu z odhlasovaných návrhů,
+  // svazová dotace, startovné, vypořádání sponzora a konec mandátů.
+  //
+  // Pozice je zvolená schválně: běží až po repointu leagues.season_id a nastavení
+  // teams.game_date (krok 3) a po vypořádání sponzorských smluv klubů, ale ještě
+  // před uvítáním do nové sezóny, aby obrazovka /nova-sezona mohla zmínit rozpočet.
+  try {
+    const { applyGovernanceRollover } = await import("../competition/rollover");
+    const g = await applyGovernanceRollover(db, newNum, startIso);
+    if (g.leagues > 0) {
+      logger.info({ module: "season-rollover" },
+        `samospráva: ${g.leagues} soutěží, ${g.enabled} zapnuto, ${g.disabled} vypnuto, startovné od ${g.feesCollected} klubů`);
+    }
+  } catch (e) { logger.error({ module: "season-rollover" }, "rollover samosprávy soutěží selhal", e); }
+
   // 5. Celorepublikový pohár pro novou sezónu (kola na soboty, finále na konci ligy).
   try {
     const { createCup } = await import("../cup/cup");
