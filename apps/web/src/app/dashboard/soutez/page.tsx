@@ -23,6 +23,19 @@ interface Official {
   role: string; roleLabel: string; teamId: string; teamName: string; status: string;
 }
 
+interface RoleSlot {
+  role: string; label: string;
+  holder: { teamId: string; teamName: string } | null;
+}
+
+interface Election {
+  id: string; role: string; roleLabel: string; status: string;
+  winnerTeamId: string | null; winnerName: string | null;
+  votesCast: number; resultNote: string | null;
+  candidates: Array<{ teamId: string; teamName: string }>;
+  myVote: string | null;
+}
+
 interface State {
   league: { id: string; name: string; district: string; level: string; seasonNumber: number; sponsoredName: string | null };
   enabled: boolean;
@@ -40,6 +53,7 @@ interface State {
   activeVoters: number;
   quorumNeeded: number;
   officials: Official[];
+  roles: RoleSlot[];
   proposalKinds: ProposalKind[];
   deposit: number;
 }
@@ -89,6 +103,30 @@ const LEDGER_LABEL: Record<string, string> = {
 
 const ANSWER_LABEL: Record<string, string> = { pro: "Pro", proti: "Proti", zdrzel: "Zdržel se" };
 
+/** Odbory. Pořadí určuje pořadí záložek; „zadna" je koš pro návrhy mimo gesce. */
+const GESCE_ORDER = ["soutez", "hospodarska", "disciplinarni", "rozhodcich", "zadna"] as const;
+
+const GESCE_LABEL: Record<string, string> = {
+  soutez: "Vedení soutěže",
+  hospodarska: "Hospodářská",
+  disciplinarni: "Disciplinární",
+  rozhodcich: "Komise rozhodčích",
+  zadna: "Ostatní",
+};
+
+const GESCE_POPIS: Record<string, string> = {
+  soutez: "Pravidla soutěže, sponzor a personální věci.",
+  hospodarska: "Rozpočet, odměny, startovné, odvody a dotace klubům.",
+  disciplinarni: "Pokuty, sazebník trestů a odvolání proti nim.",
+  rozhodcich: "Listina rozhodčích a jejich odměna za zápas.",
+  zadna: "Návrhy, které nespadají pod žádný odbor.",
+};
+
+const ROLE_OF_GESCE: Record<string, string> = {
+  soutez: "predseda", hospodarska: "hospodarska",
+  disciplinarni: "disciplinarni", rozhodcich: "rozhodcich",
+};
+
 function czk(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";
   return `${Math.round(n).toLocaleString("cs")} Kč`;
@@ -123,6 +161,8 @@ export default function SoutezPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
+  const [gesce, setGesce] = useState<string>("hospodarska");
+  const [elections, setElections] = useState<Election[]>([]);
 
   const leagueId = state?.league.id ?? null;
 
@@ -140,8 +180,16 @@ export default function SoutezPage() {
       .catch((e) => console.error("načtení návrhů:", e));
   }, [leagueId]);
 
+  const loadElections = useCallback(() => {
+    if (!leagueId) return;
+    apiFetch<{ elections: Election[] }>(`/api/competition/${leagueId}/elections`)
+      .then((d) => setElections(d.elections ?? []))
+      .catch((e) => console.error("načtení voleb:", e));
+  }, [leagueId]);
+
   useEffect(loadState, [loadState]);
   useEffect(loadProposals, [loadProposals]);
+  useEffect(loadElections, [loadElections]);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -155,8 +203,24 @@ export default function SoutezPage() {
     }
   }, [tab, leagueId, ledger, meetings.length]);
 
-  const open = useMemo(() => proposals.filter((p) => p.status === "open"), [proposals]);
-  const closed = useMemo(() => proposals.filter((p) => p.status !== "open"), [proposals]);
+  // Odbory, které v soutěži téhle velikosti existují. „Ostatní" se ukáže jen tehdy,
+  // když v něm opravdu nějaký návrh je — prázdná záložka nikoho nezajímá.
+  const gesceList = useMemo(() => {
+    const existing = new Set((state?.roles ?? []).map((r) => r.role));
+    const withProposals = new Set(proposals.map((p) => p.gesce));
+    return GESCE_ORDER.filter((g) =>
+      (ROLE_OF_GESCE[g] && existing.has(ROLE_OF_GESCE[g])) || withProposals.has(g));
+  }, [state?.roles, proposals]);
+
+  useEffect(() => {
+    if (gesceList.length > 0 && !gesceList.includes(gesce as never)) setGesce(gesceList[0]);
+  }, [gesceList, gesce]);
+
+  const open = useMemo(
+    () => proposals.filter((p) => p.status === "open" && p.gesce === gesce), [proposals, gesce]);
+  const closed = useMemo(
+    () => proposals.filter((p) => p.status !== "open" && p.gesce === gesce), [proposals, gesce]);
+  const openAll = useMemo(() => proposals.filter((p) => p.status === "open"), [proposals]);
 
   const vote = async (proposalId: string, answer: string) => {
     if (!teamId) return;
@@ -216,7 +280,7 @@ export default function SoutezPage() {
 
       <Tabs
         items={[
-          { key: "schuze", label: "Schůze", count: open.length || null },
+          { key: "schuze", label: "Schůze", count: openAll.length || null },
           { key: "pokladna", label: "Pokladna" },
           { key: "vedeni", label: "Vedení" },
           { key: "zapisy", label: "Zápisy" },
@@ -236,9 +300,22 @@ export default function SoutezPage() {
             </p>
           </div>
 
+          {/* Program je rozdělený po odborech — každý má vlastní agendu i předsedu. */}
+          <Tabs
+            items={gesceList.map((g) => ({
+              key: g,
+              label: GESCE_LABEL[g],
+              count: proposals.filter((p) => p.status === "open" && p.gesce === g).length || null,
+            }))}
+            value={gesce}
+            onChange={setGesce}
+          />
+
+          <GesceHeader gesce={gesce} state={state} />
+
           {open.length === 0 && (
             <div className="card p-4 text-base text-muted">
-              Na programu nejsou žádné body. Schůze bez návrhu se nekoná.
+              V tomhle odboru není na programu žádný bod.
             </div>
           )}
 
@@ -249,15 +326,15 @@ export default function SoutezPage() {
             />
           ))}
 
-          {state.enabled && (
-            <button className="btn btn-primary w-full" onClick={() => setFormOpen(true)}>
-              Podat návrh
-            </button>
-          )}
-          {state.enabled && (
-            <p className="text-sm text-muted">
-              Za podání se skládá kauce {czk(state.deposit)}. Vrátí se, když návrh projde.
-            </p>
+          {state.enabled && gesce !== "zadna" && (
+            <>
+              <button className="btn btn-primary w-full" onClick={() => setFormOpen(true)}>
+                Podat návrh do odboru {GESCE_LABEL[gesce].toLowerCase()}
+              </button>
+              <p className="text-sm text-muted">
+                Za podání se skládá kauce {czk(state.deposit)}. Vrátí se, když návrh projde.
+              </p>
+            </>
           )}
 
           {closed.length > 0 && (
@@ -273,7 +350,12 @@ export default function SoutezPage() {
 
       {tab === "pokladna" && <PokladnaTab state={state} ledger={ledger} />}
 
-      {tab === "vedeni" && <VedeniTab state={state} />}
+      {tab === "vedeni" && (
+        <VedeniTab
+          state={state} elections={elections} teamId={teamId}
+          onChanged={() => { loadElections(); loadState(); }}
+        />
+      )}
 
       {tab === "zapisy" && <ZapisyTab meetings={meetings} />}
 
@@ -281,9 +363,30 @@ export default function SoutezPage() {
         <ProposalForm
           teamId={teamId}
           state={state}
+          gesce={gesce}
           onClose={() => setFormOpen(false)}
           onSaved={() => { setFormOpen(false); loadProposals(); loadState(); }}
         />
+      )}
+    </div>
+  );
+}
+
+// ── Hlavička odboru: kdo ho vede a co pod něj spadá ──
+function GesceHeader({ gesce, state }: { gesce: string; state: State }) {
+  const slot = state.roles?.find((r) => r.role === ROLE_OF_GESCE[gesce]);
+  return (
+    <div className="card p-4 text-sm space-y-1">
+      <div className="font-semibold text-base">{GESCE_LABEL[gesce]}</div>
+      <p className="text-muted">{GESCE_POPIS[gesce]}</p>
+      {slot && (
+        <div>
+          {slot.holder ? (
+            <>Vede <EntityLink type="team" id={slot.holder.teamId}>{slot.holder.teamName}</EntityLink></>
+          ) : (
+            <span className="text-muted">Odbor nemá předsedu — o všem rozhoduje hlasování klubů.</span>
+          )}
+        </div>
       )}
     </div>
   );
@@ -484,28 +587,114 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 }
 
 // ── Vedení ──
-function VedeniTab({ state }: { state: State }) {
+function VedeniTab({ state, elections, teamId, onChanged }: {
+  state: State; elections: Election[]; teamId: string | null; onChanged: () => void;
+}) {
+  const openElections = elections.filter((e) => e.status === "open");
+
+  const candidate = async (id: string, on: boolean) => {
+    if (!teamId) return;
+    const ok = await apiAction(
+      apiFetch(`/api/teams/${teamId}/competition/elections/${id}/candidacy`, {
+        method: on ? "POST" : "DELETE",
+      }),
+      on ? "Kandidaturu se nepodařilo podat" : "Kandidaturu se nepodařilo stáhnout",
+    );
+    if (ok) onChanged();
+  };
+
+  const voteFor = async (id: string, candidateTeamId: string) => {
+    if (!teamId) return;
+    const ok = await apiAction(
+      apiFetch(`/api/teams/${teamId}/competition/elections/${id}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateTeamId }),
+      }),
+      "Hlas se nepodařilo odevzdat",
+    );
+    if (ok) onChanged();
+  };
+
   return (
     <div className="space-y-4">
       <div className="card p-4 space-y-2">
-        <SectionLabel>Vedení soutěže</SectionLabel>
-        {state.officials.length === 0 ? (
-          <p className="text-sm text-muted">
-            Zatím se nevolilo. Funkce se obsazují při přechodu na novou sezónu; do té doby o všem
-            rozhodují kluby hlasováním.
-          </p>
-        ) : (
-          state.officials.map((o) => (
-            <div key={o.role} className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="text-muted">{o.roleLabel}</span>
-              <span>
-                <EntityLink type="team" id={o.teamId}>{o.teamName}</EntityLink>
-                {o.status === "suspended" && <span className="text-danger"> · pozastaven</span>}
-              </span>
-            </div>
-          ))
-        )}
+        <SectionLabel>Odbory a jejich předsedové</SectionLabel>
+        {(state.roles ?? []).map((r) => (
+          <div key={r.role} className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="text-muted">{r.label}</span>
+            <span>
+              {r.holder
+                ? <EntityLink type="team" id={r.holder.teamId}>{r.holder.teamName}</EntityLink>
+                : <span className="text-muted">neobsazeno</span>}
+              {state.officials.find((o) => o.role === r.role)?.status === "suspended" && (
+                <span className="text-danger"> · pozastaven</span>
+              )}
+            </span>
+          </div>
+        ))}
+        <p className="text-sm text-muted pt-1">
+          Soutěž s devíti a více kluby s trenérem má všechny čtyři odbory. Menší jen předsedu
+          soutěže a hospodářskou komisi — pokuty i škrtání rozhodčích se tam řeší vždycky hlasováním.
+          Jeden klub může zastávat nejvýš jednu funkci.
+        </p>
       </div>
+
+      {openElections.length > 0 && (
+        <div className="card p-4 space-y-4">
+          <SectionLabel>Probíhající volby</SectionLabel>
+          <p className="text-sm text-muted">
+            Volba je tajná — neuvidí se ani po uzavření, kdo koho volil. Kandidovat může klub
+            s účastí aspoň 60 % posledních schůzí, a jen na jednu funkci.
+          </p>
+          {openElections.map((e) => {
+            const jsemKandidat = e.candidates.some((k) => k.teamId === teamId);
+            return (
+              <div key={e.id} className="border-t border-gray-100 pt-3 space-y-2">
+                <div className="text-base font-semibold">{e.roleLabel}</div>
+                {e.candidates.length === 0 ? (
+                  <p className="text-sm text-muted">Zatím nikdo nekandiduje.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {e.candidates.map((k) => (
+                      <div key={k.teamId} className="flex items-center justify-between gap-3 text-sm">
+                        <EntityLink type="team" id={k.teamId}>{k.teamName}</EntityLink>
+                        <button
+                          className={`btn ${e.myVote === k.teamId ? "btn-primary" : "btn-secondary"}`}
+                          onClick={() => voteFor(e.id, k.teamId)}
+                        >
+                          {e.myVote === k.teamId ? "Tvůj hlas" : "Volit"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button
+                  className={`btn w-full ${jsemKandidat ? "btn-ghost" : "btn-secondary"}`}
+                  onClick={() => candidate(e.id, !jsemKandidat)}
+                >
+                  {jsemKandidat ? "Stáhnout kandidaturu" : "Kandidovat"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {elections.some((e) => e.status !== "open") && (
+        <div className="card p-4 space-y-2">
+          <SectionLabel>Výsledky voleb</SectionLabel>
+          {elections.filter((e) => e.status !== "open").map((e) => (
+            <div key={e.id} className="text-sm">
+              <span className="text-muted">{e.roleLabel}: </span>
+              {e.winnerTeamId
+                ? <EntityLink type="team" id={e.winnerTeamId}>{e.winnerName ?? "?"}</EntityLink>
+                : "neobsazeno"}
+              {e.resultNote && <span className="text-muted"> — {e.resultNote}</span>}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="card p-4 space-y-2">
         <SectionLabel>Hlasování</SectionLabel>
@@ -560,21 +749,25 @@ function formatDate(v: string): string {
 }
 
 // ── Formulář návrhu ──
-function ProposalForm({ teamId, state, onClose, onSaved }: {
-  teamId: string; state: State; onClose: () => void; onSaved: () => void;
+function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
+  teamId: string; state: State; gesce: string; onClose: () => void; onSaved: () => void;
 }) {
-  const [kind, setKind] = useState(state.proposalKinds[0]?.kind ?? "");
-  const spec = state.proposalKinds.find((k) => k.kind === kind);
+  // Formulář nabízí jen typy spadající pod otevřený odbor — návrh na pokutu
+  // se nemá dát podat z hospodářské komise.
+  const kinds = useMemo(
+    () => state.proposalKinds.filter((k) => k.gesce === gesce), [state.proposalKinds, gesce]);
+  const [kind, setKind] = useState(kinds[0]?.kind ?? "");
+  const spec = kinds.find((k) => k.kind === kind);
   const [value, setValue] = useState<string>(String(spec?.current ?? 0));
   const [body, setBody] = useState("");
   const [impact, setImpact] = useState<Impact | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const s = state.proposalKinds.find((k) => k.kind === kind);
+    const s = kinds.find((k) => k.kind === kind);
     setValue(String(s?.current ?? 0));
     setImpact(null);
-  }, [kind, state.proposalKinds]);
+  }, [kind, kinds]);
 
   useEffect(() => {
     const v = Number(value);
@@ -604,11 +797,11 @@ function ProposalForm({ teamId, state, onClose, onSaved }: {
   return (
     <Modal isOpen onClose={onClose} title="Nový návrh">
       <div className="space-y-4">
-        <div className="text-lg font-heading">Nový návrh na schůzi</div>
+        <div className="text-lg font-heading">Nový návrh — {GESCE_LABEL[gesce].toLowerCase()}</div>
         <div>
           <label className="text-sm text-muted">Čeho se návrh týká</label>
           <select className="select w-full mt-1" value={kind} onChange={(e) => setKind(e.target.value)}>
-            {state.proposalKinds.map((k) => (
+            {kinds.map((k) => (
               <option key={k.kind} value={k.kind}>{k.label}</option>
             ))}
           </select>
