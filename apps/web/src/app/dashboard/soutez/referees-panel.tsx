@@ -11,7 +11,7 @@
 import { useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { Modal } from "@/components/ui";
-import { Empty, Ornament, czk } from "./ui";
+import { Empty, OpenProposalNote, Ornament, czk } from "./ui";
 import type { RefereeData, RefereeRow, State } from "./types";
 
 function gradeColor(g: number | null): string {
@@ -22,8 +22,9 @@ function gradeColor(g: number | null): string {
   return "#A32B1F";
 }
 
-export function RefereesPanel({ data, state, teamId, onChanged }: {
-  data: RefereeData | null; state: State; teamId: string | null; onChanged: () => void;
+export function RefereesPanel({ data, state, teamId, myOpen, onChanged }: {
+  data: RefereeData | null; state: State; teamId: string | null;
+  myOpen: { title: string } | null; onChanged: () => void;
 }) {
   const [banTarget, setBanTarget] = useState<RefereeRow | null>(null);
   if (!data) return <Empty>Načítám listinu rozhodčích…</Empty>;
@@ -44,6 +45,8 @@ export function RefereesPanel({ data, state, teamId, onChanged }: {
           <div className="text-sm mt-2" style={{ color: "#A32B1F" }}>{data.banReason}</div>
         )}
       </div>
+
+      {state.enabled && teamId && myOpen && <OpenProposalNote p={myOpen} />}
 
       {flagged.length > 0 && (
         <div className="card p-5" style={{ background: "#FBEAE8" }}>
@@ -81,7 +84,7 @@ export function RefereesPanel({ data, state, teamId, onChanged }: {
                 <div className="text-lg font-heading tabular-nums" style={{ color: gradeColor(r.avgGrade) }}>
                   {r.avgGrade !== null ? r.avgGrade.toFixed(2) : "—"}
                 </div>
-                {state.enabled && !r.banned && data.canBan && teamId && (
+                {state.enabled && !r.banned && data.canBan && teamId && !myOpen && (
                   <button className="btn btn-md btn-secondary" onClick={() => setBanTarget(r)}>
                     Vyškrtnout
                   </button>

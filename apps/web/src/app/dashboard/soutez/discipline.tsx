@@ -10,12 +10,12 @@
 import React, { useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { Modal } from "@/components/ui";
-import { Empty, Ornament, PersonLine, Portrait, StatusPill, czk } from "./ui";
+import { Empty, OpenProposalNote, Ornament, PersonLine, Portrait, StatusPill, czk } from "./ui";
 import type { DisciplineData, Sanction, State } from "./types";
 
-export function DisciplinePanel({ data, state, teamId, isChair, onChanged }: {
+export function DisciplinePanel({ data, state, teamId, isChair, myOpen, onChanged }: {
   data: DisciplineData | null; state: State; teamId: string | null;
-  isChair: boolean; onChanged: () => void;
+  isChair: boolean; myOpen: { title: string } | null; onChanged: () => void;
 }) {
   const [formOpen, setFormOpen] = useState(false);
   if (!data) return <Empty>Načítám disciplinární agendu…</Empty>;
@@ -43,9 +43,11 @@ export function DisciplinePanel({ data, state, teamId, isChair, onChanged }: {
       </div>
 
       {state.enabled && teamId && (
-        <button className="btn btn-lg btn-primary w-full" onClick={() => setFormOpen(true)}>
-          Podat návrh na pokutu
-        </button>
+        myOpen ? <OpenProposalNote p={myOpen} /> : (
+          <button className="btn btn-lg btn-primary w-full" onClick={() => setFormOpen(true)}>
+            Podat návrh na pokutu
+          </button>
+        )
       )}
 
       {mine.length > 0 && (
@@ -135,9 +137,12 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
   const chosen = targets.find((t) => t.teamId === target);
 
   // Nabízí se jen doložitelné skutky plus volná položka.
+  // Doložené skutky napřed — volná položka je až poslední možnost, protože
+  // potřebuje dvoutřetinovou většinu a navrhovatel u ní riskuje kauci.
   const options = useMemo(() => {
     const evidenced = new Set((chosen?.evidence ?? []).map((e) => e.kind));
-    return data.offences.filter((o) => o.freeText || evidenced.has(o.kind));
+    const list = data.offences.filter((o) => o.freeText || evidenced.has(o.kind));
+    return [...list.filter((o) => !o.freeText), ...list.filter((o) => o.freeText)];
   }, [chosen, data.offences]);
 
   const [offence, setOffence] = useState(options[0]?.kind ?? "other");
@@ -146,9 +151,17 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
   const [direct, setDirect] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Po přepnutí klubu se skutek překlopí na ten doložený. Bez toho by u klubu
+  // s důkazem zůstala vybraná volná položka a hráč by si zbytečně přitížil.
+  const lastTarget = React.useRef(target);
   React.useEffect(() => {
-    if (!options.some((o) => o.kind === offence)) setOffence(options[0]?.kind ?? "other");
-  }, [options, offence]);
+    if (lastTarget.current !== target) {
+      lastTarget.current = target;
+      setOffence(options[0]?.kind ?? "other");
+    } else if (!options.some((o) => o.kind === offence)) {
+      setOffence(options[0]?.kind ?? "other");
+    }
+  }, [target, options, offence]);
 
   const spec = data.offences.find((o) => o.kind === offence);
   const evidence = chosen?.evidence.find((e) => e.kind === offence);
@@ -179,7 +192,8 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
           <select className="select w-full mt-1" value={target} onChange={(e) => setTarget(e.target.value)}>
             {targets.map((t) => (
               <option key={t.teamId} value={t.teamId}>
-                {t.managerName ?? "?"} ({t.teamName}){t.evidence.length > 0 ? ` — ${t.evidence.length}×` : ""}
+                {t.managerName ? `${t.managerName} (${t.teamName})` : t.teamName}
+                {t.evidence.length > 0 ? ` — ${t.evidence.length}×` : ""}
               </option>
             ))}
           </select>
@@ -187,8 +201,8 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
 
         {chosen && (
           <div className="flex items-center gap-3 rounded-lg p-3" style={{ background: "var(--color-paper)" }}>
-            <Portrait avatar={chosen.managerAvatar} name={chosen.managerName} size={44} />
-            <PersonLine managerName={chosen.managerName} teamId={chosen.teamId} teamName={chosen.teamName} />
+            <Portrait avatar={chosen.managerAvatar} name={chosen.managerName ?? chosen.teamName} size={44} />
+            <PersonLine managerName={chosen.managerName ?? "Klub bez trenéra"} teamId={chosen.teamId} teamName={chosen.teamName} />
           </div>
         )}
 

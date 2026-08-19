@@ -150,3 +150,18 @@ export function StatusPill({ status }: { status: string }) {
     </span>
   );
 }
+
+/**
+ * Klub smí mít na programu jen jeden návrh. Místo tlačítka, které by skončilo
+ * chybou 409, se ukáže, čím to je.
+ */
+export function OpenProposalNote({ p }: { p: { title: string } }) {
+  return (
+    <div className="card p-5 text-sm" style={{ background: "var(--color-paper)" }}>
+      <div className="font-semibold text-base">Na programu už jeden návrh máš.</div>
+      <p className="mt-1 text-muted break-words">
+        „{p.title}“ — další podáš, až se o něm bude hlasovat. Stáhnout ho můžeš u samotného návrhu.
+      </p>
+    </div>
+  );
+}

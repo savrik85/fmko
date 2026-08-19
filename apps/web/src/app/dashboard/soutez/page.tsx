@@ -16,7 +16,7 @@ import { useTeam } from "@/context/team-context";
 import { apiAction, apiFetch } from "@/lib/api";
 import { EntityLink, Modal, Spinner, Tabs, useTabParam } from "@/components/ui";
 import {
-  Empty, GOLD, Ornament, PersonLine, Portrait, Row, StatusPill, czk, plural, signed,
+  Empty, GOLD, OpenProposalNote, Ornament, PersonLine, Portrait, Row, StatusPill, czk, plural, signed,
 } from "./ui";
 import { PokladnaPanel, VedeniPanel, ZapisyPanel } from "./panels";
 import { DisciplinePanel } from "./discipline";
@@ -190,6 +190,13 @@ export default function SoutezPage() {
     () => proposals.filter((p) => p.status !== "open" && p.gesce === gesce), [proposals, gesce]);
   const openAll = useMemo(() => proposals.filter((p) => p.status === "open"), [proposals]);
 
+  // Server pustí na program jen jeden návrh od klubu. Tlačítko proto musí zmizet,
+  // jinak by hráč vyplnil formulář a odpovědí by mu bylo 409.
+  const myOpen = useMemo(
+    () => openAll.find((p) => p.proposedByTeamId === teamId) ?? null,
+    [openAll, teamId],
+  );
+
   const isChair = useMemo(
     () => !!state?.officials.find((o) => o.role === "disciplinarni" && o.teamId === teamId && o.status === "active"),
     [state, teamId]);
@@ -313,12 +320,12 @@ export default function SoutezPage() {
           {gesce === "disciplinarni" && (
             <DisciplinePanel
               data={discipline} state={state} teamId={teamId}
-              isChair={isChair} onChanged={refreshAll}
+              isChair={isChair} myOpen={myOpen} onChanged={refreshAll}
             />
           )}
 
           {gesce === "rozhodcich" && (
-            <RefereesPanel data={referees} state={state} teamId={teamId} onChanged={refreshAll} />
+            <RefereesPanel data={referees} state={state} teamId={teamId} myOpen={myOpen} onChanged={refreshAll} />
           )}
 
           {open.length === 0 ? (
@@ -331,14 +338,18 @@ export default function SoutezPage() {
           )}
 
           {state.enabled && gesce !== "zadna" && gesce !== "disciplinarni" && gesce !== "rozhodcich" && (
-            <>
-              <button className="btn btn-lg btn-primary w-full" onClick={() => setFormOpen(true)}>
-                Podat návrh {GESCE_KOMU[gesce]}
-              </button>
-              <p className="text-sm text-muted">
-                Za podání se skládá kauce {czk(state.deposit)}. Vrátí se, když návrh projde.
-              </p>
-            </>
+            myOpen ? (
+              <OpenProposalNote p={myOpen} />
+            ) : (
+              <>
+                <button className="btn btn-lg btn-primary w-full" onClick={() => setFormOpen(true)}>
+                  Podat návrh {GESCE_KOMU[gesce]}
+                </button>
+                <p className="text-sm text-muted">
+                  Za podání se skládá kauce {czk(state.deposit)}. Vrátí se, když návrh projde.
+                </p>
+              </>
+            )
           )}
 
           {closed.length > 0 && (
