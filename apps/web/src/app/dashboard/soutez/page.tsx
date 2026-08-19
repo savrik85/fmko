@@ -30,6 +30,9 @@ interface State {
   humanClubs: number;
   totalClubs: number;
   balance: number;
+  freeBalance: number;
+  outstanding: { placement: number; bonus: number; referees: number; total: number };
+  playedMatches: number;
   subsidy: number;
   rules: Rules;
   projection: { cost: { placement: number; bonus: number; referees: number; total: number }; income: number; projected: number; ok: boolean };
@@ -375,9 +378,18 @@ function PokladnaTab({ state, ledger }: { state: State; ledger: { entries: Ledge
   const p = state.projection;
   return (
     <div className="space-y-4">
-      <div className="card p-4">
+      <div className="card p-4 space-y-2">
         <SectionLabel>Zůstatek</SectionLabel>
-        <div className="text-2xl font-heading tabular-nums mt-1">{czk(state.balance)}</div>
+        <div className="text-2xl font-heading tabular-nums">{czk(state.balance)}</div>
+        <Row label="Závazky rozehrané sezóny" value={signed(-state.outstanding.total)} />
+        <div className="border-t border-gray-200 pt-2">
+          <Row label="Volných peněz" value={czk(state.freeBalance)} strong />
+        </div>
+        <p className="text-sm text-muted">
+          Odměny za umístění se vyplácejí až po posledním kole, takže část zůstatku je už fakticky
+          utracená. Trvalé zvýšení sazeb se posuzuje jen proti volným penězům — z jednorázového
+          přebytku se nedá platit něco, co poběží každou sezónu.
+        </p>
       </div>
 
       <div className="card p-4 space-y-2">

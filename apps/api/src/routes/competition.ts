@@ -18,9 +18,11 @@ import {
 } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
 import { proposalTitle, validateProposal, voterStats } from "../competition/proposals";
-import { checkBudget, placementReward, subsidyFor, teamImpact } from "../competition/projection";
 import {
-  countAllClubs, countHumanClubs, loadGovernance, loadLeagueMeta, resolveRules,
+  checkBudget, freeBalance, outstandingCommitments, placementReward, subsidyFor, teamImpact,
+} from "../competition/projection";
+import {
+  countAllClubs, countHumanClubs, loadGovernance, loadLeagueMeta, playedMatches, resolveRules,
 } from "../competition/rules";
 
 const M = "competition";
@@ -93,7 +95,10 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
     .catch((e) => { logger.warn({ module: M }, "funkcionáři", e); return { results: [] }; });
 
   const stats = await voterStats(c.env.DB, leagueId);
-  const projection = checkBudget({ rules, teams, level: meta.level, balance });
+  const played = await playedMatches(c.env.DB, leagueId);
+  const outstanding = outstandingCommitments(rules, teams, meta.level, played);
+  const free = freeBalance(balance, rules, teams, meta.level, played);
+  const projection = checkBudget({ rules, teams, level: meta.level, balance: free });
 
   return c.json({
     league: {
@@ -107,6 +112,9 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
     humanClubs: humans,
     totalClubs: teams,
     balance,
+    freeBalance: free,
+    outstanding,
+    playedMatches: played,
     subsidy: subsidyFor(teams, meta.level),
     rules,
     defaults: DEFAULT_RULES,
@@ -340,10 +348,16 @@ competitionRouter.post("/teams/:teamId/competition/proposals", async (c) => {
   }
 
   const rules = await resolveRules(c.env.DB, leagueId, meta.season_number);
-  const balance = await readBalance(c.env.DB, leagueId);
+  const teamsInLeague = await countAllClubs(c.env.DB, leagueId);
+  const played = await playedMatches(c.env.DB, leagueId);
+  // Do stropu vstupuje jen VOLNÝ zůstatek — letošní odměny za umístění se z pokladny
+  // teprve zaplatí, takže se z nich nesmí financovat trvalé zvýšení sazeb.
+  const free = freeBalance(
+    await readBalance(c.env.DB, leagueId), rules, teamsInLeague, meta.level, played,
+  );
   const v = await validateProposal({
     db: c.env.DB, leagueId, level: meta.level, seasonNumber: meta.season_number,
-    currentRules: rules, balance, kind: body.kind, value: Number(body.value),
+    currentRules: rules, balance: free, kind: body.kind, value: Number(body.value),
   });
   if (!v.ok) return c.json({ error: v.error }, 400);
 

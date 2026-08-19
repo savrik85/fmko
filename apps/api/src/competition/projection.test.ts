@@ -3,6 +3,7 @@ import { DEFAULT_RULES, type CompetitionRules, MIN_RESERVE } from "./defaults";
 import {
   matchCount, placementSum, placementReward, expectedBonusPerMatch, worstBonusPerMatch,
   projectSeasonCost, subsidyFor, checkBudget, teamImpact, payoutRatio,
+  outstandingCommitments, freeBalance,
 } from "./projection";
 
 const R = DEFAULT_RULES as unknown as CompetitionRules;
@@ -102,6 +103,38 @@ describe("projekce rozpočtu soutěže", () => {
     const tail = { teams: 14, level: "okresni_prebor", expectedPos: 13, expectedWins: 5, expectedDraws: 5 };
     expect(teamImpact({ ...leader, rules: richer }).net).toBeGreaterThan(teamImpact({ ...leader, rules: R }).net);
     expect(teamImpact({ ...tail, rules: richer }).net).toBeLessThan(teamImpact({ ...tail, rules: R }).net);
+  });
+
+  it("závazky rozehrané sezóny klesají s počtem odehraných zápasů", () => {
+    const start = outstandingCommitments(R, 14, "okresni_prebor", 0);
+    const half = outstandingCommitments(R, 14, "okresni_prebor", 91);
+    const end = outstandingCommitments(R, 14, "okresni_prebor", 182);
+
+    // Na začátku sezóny visí celý náklad, na konci už jen odměny za umístění.
+    expect(start.total).toBe(projectSeasonCost(R, 14, "okresni_prebor", true).total);
+    expect(end.total).toBe(717_015);
+    expect(half.total).toBeGreaterThan(end.total);
+    expect(half.total).toBeLessThan(start.total);
+  });
+
+  it("volný zůstatek nepočítá peníze, které se letos ještě rozdají", () => {
+    // Pokladna právě dostala celou dotaci a nic z ní zatím neutratila.
+    const balance = subsidyFor(14, "okresni_prebor") + 14 * R.entry_fee;
+    const free = freeBalance(balance, R, 14, "okresni_prebor", 0);
+    expect(free).toBeLessThan(balance);
+    expect(free).toBe(balance - outstandingCommitments(R, 14, "okresni_prebor", 0).total);
+  });
+
+  it("plná pokladna v půlce sezóny neuživí trvalé zdražení odměn", () => {
+    const balance = subsidyFor(14, "okresni_prebor") + 14 * R.entry_fee;
+    const greedy = rules({ place_top: 250_000 });
+
+    // Hrubý zůstatek by návrh pustil — a to je právě ta past.
+    expect(checkBudget({ rules: greedy, teams: 14, level: "okresni_prebor", balance }).ok).toBe(true);
+
+    // S volným zůstatkem (letošní odměny se teprve vyplatí) neprojde.
+    const free = freeBalance(balance, R, 14, "okresni_prebor", 0);
+    expect(checkBudget({ rules: greedy, teams: 14, level: "okresni_prebor", balance: free }).ok).toBe(false);
   });
 
   it("krácení odměn je poměrné a nikdy záporné", () => {

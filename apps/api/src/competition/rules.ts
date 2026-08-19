@@ -132,6 +132,21 @@ export async function meetsThreshold(db: D1Database, leagueId: string): Promise<
   return (await countHumanClubs(db, leagueId)) >= MIN_HUMAN_CLUBS;
 }
 
+/**
+ * Kolik zápasů má soutěž v aktuální sezóně odehráno. Filtr na sezónu je stejný
+ * jako v calculateStandings — league_id se napříč sezónami recykluje.
+ */
+export async function playedMatches(db: D1Database, leagueId: string): Promise<number> {
+  const row = await db.prepare(
+    `SELECT COUNT(*) AS n FROM matches m
+       JOIN season_calendar sc ON sc.id = m.calendar_id
+      WHERE m.league_id = ? AND m.status = 'simulated'
+        AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)`
+  ).bind(leagueId, leagueId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, `odehrané zápasy ligy ${leagueId}`, e); return null; });
+  return row?.n ?? 0;
+}
+
 export interface LeagueMeta {
   id: string;
   name: string;

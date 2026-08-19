@@ -82,6 +82,31 @@ export function subsidyFor(teams: number, level: string): number {
   return Math.round(SUBSIDY_CUSHION * (base.total - fees));
 }
 
+/**
+ * Závazky rozehrané sezóny, které pokladna teprve zaplatí.
+ *
+ * Odměny za umístění se vyplácejí až po posledním kole, takže i v polovině sezóny
+ * leží v pokladně peníze, které už jsou fakticky utracené. Bez tohohle odpočtu by
+ * projekce brala celý zůstatek jako volný a soutěž by si mohla odhlasovat trvalé
+ * zvýšení odměn z peněz, které za měsíc stejně rozdá.
+ */
+export function outstandingCommitments(
+  rules: CompetitionRules, teams: number, level: string, matchesPlayed: number,
+): SeasonCost {
+  const remaining = Math.max(0, matchCount(teams) - Math.max(0, matchesPlayed));
+  const placement = placementSum(rules, teams, level);
+  const bonus = Math.round(remaining * worstBonusPerMatch(rules));
+  const referees = remaining * rules.referee_fee;
+  return { placement, bonus, referees, total: placement + bonus + referees };
+}
+
+/** Část pokladny, se kterou se dá počítat pro příští sezónu. Nikdy nejde pod nulu. */
+export function freeBalance(
+  balance: number, rules: CompetitionRules, teams: number, level: string, matchesPlayed: number,
+): number {
+  return balance - outstandingCommitments(rules, teams, level, matchesPlayed).total;
+}
+
 export interface BudgetCheck {
   ok: boolean;
   /** Kolik pokladně bude chybět (kladné číslo), nebo 0. */
@@ -103,6 +128,7 @@ export function checkBudget(opts: {
   rules: CompetitionRules;
   teams: number;
   level: string;
+  /** VOLNÝ zůstatek — co v pokladně zbude po dohrání rozehrané sezóny (viz freeBalance). */
   balance: number;
   sponsor?: number;
 }): BudgetCheck {
