@@ -37,7 +37,7 @@ export function DisciplinePanel({ data, state, teamId, isChair, onChanged }: {
         </div>
         <p className="text-sm text-muted mt-3">
           Návrh jde podat jen na skutek, který se dá doložit z dat. Důkaz uvidí všichni
-          hlasující. Jeden klub schytá nejvýš {2} pokuty za sezónu a o vlastní pokutě nehlasuje —
+          hlasující. Jeden klub schytá nejvýš dvě pokuty za sezónu a o vlastní pokutě nehlasuje —
           místo toho má právo na obhajobu.
         </p>
       </div>
