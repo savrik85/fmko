@@ -15,10 +15,15 @@ import { recordCompetitionEntry } from "./ledger";
 
 const M = "competition-referee-bans";
 
-/** Pod tenhle počet použitelných sudích se listina nesmí dostat. */
+/**
+ * Pod tenhle počet použitelných sudích se listina nesmí dostat.
+ *
+ * Je to JEDINÁ brzda vyškrtávání a má mechanický důvod: sedm ligových zápasů plus
+ * U21 v týž den potřebuje dost sudích. Pod dvanáct se delegace propadne do nouzového
+ * ventilu a jeden sudí odpíská dva zápasy denně. Kolik jich soutěž vyhodí, dokud se
+ * do limitu vejde, je její věc.
+ */
 export const MIN_ACTIVE_REFEREES = 12;
-/** Kolik sudích smí soutěž za sezónu vyškrtnout. Pravomoc komisaře čerpá týž slot. */
-export const MAX_BANS_PER_SEASON = 1;
 /** Průměrná známka, od které se sudí objeví na programu sám. */
 export const AUTO_PROPOSAL_GRADE = 4.0;
 /** Kolik zápasů musí mít odpískaných, než se ta známka bere vážně. */
@@ -29,26 +34,14 @@ export interface BanCheck { ok: boolean; reason?: string; usable?: number }
 /**
  * Smí soutěž vyškrtnout dalšího sudího?
  *
- * Dvě brzdy: sezónní strop a minimální velikost listiny. Bez té druhé by šlo
- * pool vyprázdnit tak, že by delegace spadla do nouzového ventilu a jeden sudí
- * by pískal dva zápasy denně.
+ * Jediná podmínka je velikost listiny — viz MIN_ACTIVE_REFEREES. Žádný sezónní
+ * strop: když se soutěž shodne, že jí čtyři sudí nesedí, je to její rozhodnutí
+ * a zaplatí za něj unavenými rozhodčími.
  */
 export async function canBanReferee(
   db: D1Database, leagueId: string, seasonNumber: number, district: string,
 ): Promise<BanCheck> {
-  // Počet použitelných se počítá vždycky — i když ban stejně neprojde, UI ho ukazuje.
   const usable = await countUsable(db, leagueId, seasonNumber, district);
-
-  const used = await db.prepare(
-    "SELECT COUNT(*) AS n FROM competition_referee_bans WHERE league_id = ? AND season_number = ?"
-  ).bind(leagueId, seasonNumber).first<{ n: number }>()
-    .catch((e) => { logger.warn({ module: M }, "počet banů", e); return null; });
-  if ((used?.n ?? 0) >= MAX_BANS_PER_SEASON) {
-    return {
-      ok: false, usable,
-      reason: "Letos už soutěž jednoho rozhodčího vyškrtla. Víc jich za sezónu nejde.",
-    };
-  }
 
   if (usable - 1 < MIN_ACTIVE_REFEREES) {
     return {

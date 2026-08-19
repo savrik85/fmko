@@ -171,7 +171,7 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
 
   return (
     <Modal isOpen onClose={onClose} title="Návrh na pokutu">
-      <div className="space-y-4">
+      <div className="p-5 space-y-4">
         <div className="text-lg font-heading">Návrh na pokutu</div>
 
         <div>

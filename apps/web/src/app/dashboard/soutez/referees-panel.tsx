@@ -37,8 +37,8 @@ export function RefereesPanel({ data, state, teamId, onChanged }: {
         <p className="text-sm text-muted">
           Listinu sdílí celý okres včetně U21. Vyškrtnutí platí jen pro tuhle soutěž a jen
           do konce sezóny — pak se sudí vrátí, a bude si pamatovat, kdo zvedl ruku.
-          Minimum je {data.minList} rozhodčích; listina se po vyškrtnutí nedoplňuje, takže
-          kdo pak píská dvakrát v jednom dni, jde do zápasu unavený.
+          Vyškrtnout jich jde kolik chcete, dokud na listině zbyde aspoň {data.minList};
+          nedoplňuje se, takže kdo pak píská dvakrát v jednom dni, jde do zápasu unavený.
         </p>
         {!data.canBan && data.banReason && (
           <div className="text-sm mt-2" style={{ color: "#A32B1F" }}>{data.banReason}</div>
@@ -125,7 +125,7 @@ function BanForm({ referee, teamId, deposit, onClose, onSaved }: {
 
   return (
     <Modal isOpen onClose={onClose} title="Vyškrtnutí rozhodčího">
-      <div className="space-y-4">
+      <div className="p-5 space-y-4">
         <div className="text-lg font-heading">Vyškrtnout {referee.name}?</div>
 
         <div className="rounded-lg p-3 text-sm space-y-1" style={{ background: "var(--color-paper)" }}>
@@ -135,8 +135,7 @@ function BanForm({ referee, teamId, deposit, onClose, onSaved }: {
             </strong>
           </div>
           <div className="text-muted">
-            Návrh potřebuje dvoutřetinovou většinu. Soutěž může za sezónu vyškrtnout
-            jen jednoho sudího.
+            Návrh potřebuje dvoutřetinovou většinu.
           </div>
         </div>
 

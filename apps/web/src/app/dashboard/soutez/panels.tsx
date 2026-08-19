@@ -205,18 +205,23 @@ export function VedeniPanel({ state, elections, avatars, teamId, onChanged }: {
                     const mine = e.myVote === k.teamId;
                     return (
                       <div key={k.teamId}
-                        className="flex items-center gap-3 rounded-lg p-2"
-                        style={{ background: mine ? "rgba(196,160,53,0.14)" : "var(--color-surface)" }}>
-                        <Portrait avatar={avatars[k.teamId]} name={k.managerName} size={40} ring={mine ? GOLD : "var(--color-muted-light)"} />
+                        className="flex items-center gap-3 rounded-lg p-3"
+                        style={{
+                          background: mine ? "rgba(196,160,53,0.14)" : "var(--color-surface)",
+                          boxShadow: mine ? `inset 0 0 0 1px ${GOLD}` : "inset 0 0 0 1px var(--color-line)",
+                        }}>
+                        <Portrait avatar={avatars[k.teamId]} name={k.managerName} size={40}
+                          ring={mine ? GOLD : "var(--color-muted-light)"} />
                         <div className="min-w-0 flex-1">
                           <PersonLine managerName={k.managerName} teamId={k.teamId} teamName={k.teamName} />
                         </div>
                         <button
                           className={`btn shrink-0 ${mine ? "btn-primary" : "btn-secondary"}`}
+                          style={{ minWidth: 108 }}
                           disabled={busy === e.id}
                           onClick={() => vote(e.id, k.teamId)}
                         >
-                          {mine ? "Tvůj hlas" : "Dát hlas"}
+                          {mine ? "✓ Tvůj hlas" : "Dát hlas"}
                         </button>
                       </div>
                     );

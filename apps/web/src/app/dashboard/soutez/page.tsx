@@ -30,27 +30,32 @@ const TAB_KEYS = ["zasedani", "pokladna", "vedeni", "zapisy"] as const;
 /** Pořadí určuje pořadí podzáložek. „zadna" je koš pro návrhy mimo gesce. */
 const GESCE_ORDER = ["soutez", "hospodarska", "disciplinarni", "rozhodcich", "zadna"] as const;
 
+/**
+ * Záložky se jmenují podle toho, CO SE V NICH ŘEŠÍ, ne podle úřadu. Tituly jako
+ * „Prezidium" nebo „Sekretariát" znějí vznešeně, ale nikdo z nich nepozná, kam
+ * patří návrh na startovné. Vznešené názvy zůstávají u lidí a v hlavičce odboru.
+ */
 const GESCE_LABEL: Record<string, string> = {
-  soutez: "Grémium", hospodarska: "Sekretariát",
-  disciplinarni: "Disciplinární", rozhodcich: "Rozhodčí", zadna: "Ostatní",
+  soutez: "Pravidla", hospodarska: "Peníze",
+  disciplinarni: "Tresty", rozhodcich: "Rozhodčí", zadna: "Ostatní",
 };
 
 const GESCE_PLNY: Record<string, string> = {
-  soutez: "Grémium soutěže", hospodarska: "Generální sekretariát",
+  soutez: "Prezidium soutěže", hospodarska: "Generální sekretariát",
   disciplinarni: "Disciplinární rada", rozhodcich: "Komise rozhodčích", zadna: "Ostatní",
 };
 
 const GESCE_POPIS: Record<string, string> = {
-  soutez: "Pravidla soutěže, sponzor a personální věci.",
-  hospodarska: "Rozpočet, odměny, startovné, odvody a dotace klubům.",
-  disciplinarni: "Pokuty, sazebník trestů a odvolání proti nim.",
-  rozhodcich: "Listina rozhodčích a jejich odměna za zápas.",
+  soutez: "Pravidla soutěže, přijetí sponzora a personální věci.",
+  hospodarska: "Odměny za zápasy i za umístění, startovné, odvody z tržeb a dotace klubům.",
+  disciplinarni: "Pokuty klubům, sazebník trestů a odvolání proti nim.",
+  rozhodcich: "Listina rozhodčích a jejich odměna za odpískaný zápas.",
   zadna: "Návrhy, které nespadají pod žádný odbor.",
 };
 
 /** Komu se návrh podává — třetí pád, ať věta drží pohromadě. */
 const GESCE_KOMU: Record<string, string> = {
-  soutez: "grémiu soutěže", hospodarska: "generálnímu sekretáři",
+  soutez: "prezidiu soutěže", hospodarska: "generálnímu sekretáři",
   disciplinarni: "disciplinární radě", rozhodcich: "komisaři rozhodčích", zadna: "mimo odbory",
 };
 
@@ -217,7 +222,9 @@ export default function SoutezPage() {
   const displayName = state.league.sponsoredName ?? state.league.name;
 
   return (
-    <div className="page-container space-y-4 pb-10">
+    // Grémium se čte jako dokument, ne jako tabulka. Bez stropu šířky se na širokém
+    // okně roztáhnou tlačítka i řádky kandidátů přes 1 280 px a stránka vypadá prázdně.
+    <div className="page-container space-y-4 pb-10" style={{ maxWidth: 820 }}>
       {/* Hlavička — slavnostní, ale mobilně krotká */}
       <div className="card overflow-hidden">
         <div className="h-1" style={{ background: `linear-gradient(90deg, ${GOLD}, #866D1E)` }} />
@@ -371,10 +378,12 @@ function GesceHeader({ gesce, state, avatars }: {
             ring={slot.holder ? GOLD : "var(--color-muted-light)"} />
           {slot.holder ? (
             <PersonLine managerName={slot.holder.managerName}
-              teamId={slot.holder.teamId} teamName={slot.holder.teamName} note="vede odbor" />
+              teamId={slot.holder.teamId} teamName={slot.holder.teamName}
+              note={slot.label.toLowerCase()} />
           ) : (
             <div className="text-sm text-muted">
-              Odbor je neobsazený — o všem rozhoduje hlasování klubů.
+              Odbor nemá zvoleného vedoucího ({slot.label.toLowerCase()}) — rozhoduje o něm
+              hlasování klubů.
             </div>
           )}
         </div>
@@ -522,6 +531,9 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
   const [kind, setKind] = useState(kinds[0]?.kind ?? "");
   const spec = kinds.find((k) => k.kind === kind);
   const [value, setValue] = useState<string>(String(spec?.current ?? 0));
+  // Formulář se otevírá s platnou hodnotou, takže dokud s ní nikdo nehne, byla by
+  // kalkulačka samá nula — a to vypadá jako rozbitá stránka, ne jako informace.
+  const zmeneno = Number(value) !== (spec?.current ?? 0);
   const [body, setBody] = useState("");
   const [impact, setImpact] = useState<Impact | null>(null);
   const [saving, setSaving] = useState(false);
@@ -558,7 +570,7 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
 
   return (
     <Modal isOpen onClose={onClose} title="Nový návrh">
-      <div className="space-y-4">
+      <div className="p-5 space-y-4">
         <div className="text-lg font-heading">Nový návrh {GESCE_KOMU[gesce]}</div>
 
         <div>
@@ -585,7 +597,7 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
           </div>
         )}
 
-        {impact && (
+        {impact && zmeneno && (
           <div className="rounded-lg p-3 text-sm space-y-1" style={{ background: "var(--color-paper)" }}>
             <div className="font-semibold">Dopad na tvůj klub při současné formě</div>
             <div className="text-muted">
@@ -615,8 +627,8 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
 
         <div className="flex gap-2">
           <button className="btn btn-secondary flex-1" onClick={onClose}>Zrušit</button>
-          <button className="btn btn-primary flex-1" onClick={submit} disabled={saving || !kind}>
-            {saving ? "Podávám…" : "Podat návrh"}
+          <button className="btn btn-primary flex-1" onClick={submit} disabled={saving || !kind || !zmeneno}>
+            {saving ? "Podávám…" : zmeneno ? "Podat návrh" : "Změň hodnotu"}
           </button>
         </div>
       </div>
