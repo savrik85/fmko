@@ -503,4 +503,25 @@ competitionRouter.post("/admin/competition/:leagueId/enable", async (c) => {
   return c.json({ ok: true, humanClubs: humans, totalClubs: teams, subsidy, balance: await readBalance(c.env.DB, leagueId) });
 });
 
+/**
+ * Ruční svolání schůze. Za provozu ji spouští denní tick ve středu; tenhle
+ * endpoint existuje pro ověřování a pro případ, kdy tick schůzi zmešká.
+ * Idempotence je stejná jako u ticku — druhé volání týž herní den nic neudělá.
+ */
+competitionRouter.post("/admin/competition/:leagueId/meeting", async (c) => {
+  const leagueId = c.req.param("leagueId");
+  const gameDate = await c.env.DB.prepare(
+    "SELECT MAX(game_date) AS d FROM teams WHERE league_id = ?"
+  ).bind(leagueId).first<{ d: string | null }>().then((r) => r?.d)
+    .catch((e) => { logger.warn({ module: M }, "herní datum ligy", e); return null; });
+  if (!gameDate) return c.json({ error: "Soutěž nemá herní datum" }, 400);
+
+  const { runOneMeeting } = await import("../competition/meeting");
+  const out = await runOneMeeting(c.env.DB, leagueId, gameDate);
+  if (!out) {
+    return c.json({ ok: true, held: false, reason: "Žádný bod na programu, nebo dnes už schůze proběhla." });
+  }
+  return c.json({ ok: true, held: true, ...out });
+});
+
 export default competitionRouter;

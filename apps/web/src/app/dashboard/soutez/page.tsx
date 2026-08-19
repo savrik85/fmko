@@ -585,6 +585,7 @@ function ProposalForm({ teamId, state, onClose, onSaved }: {
   return (
     <Modal isOpen onClose={onClose} title="Nový návrh">
       <div className="space-y-4">
+        <div className="text-lg font-heading">Nový návrh na schůzi</div>
         <div>
           <label className="text-sm text-muted">Čeho se návrh týká</label>
           <select className="select w-full mt-1" value={kind} onChange={(e) => setKind(e.target.value)}>
