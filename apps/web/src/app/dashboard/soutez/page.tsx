@@ -144,12 +144,16 @@ export default function SoutezPage() {
     return out;
   }, [discipline]);
 
+  /**
+   * Odbory se ukazují VŽDY, i když v malé soutěži nemají voleného předsedu —
+   * agenda existuje tak jako tak a rozhoduje o ní hlasování. Kdyby se záložka
+   * objevila až s prvním návrhem, nešel by ten první návrh nikde podat.
+   * „Ostatní" je jediná výjimka: bez obsahu je prázdná záložka jen na obtíž.
+   */
   const gesceList = useMemo(() => {
-    const existing = new Set((state?.roles ?? []).map((r) => r.role));
     const withProposals = new Set(proposals.map((p) => p.gesce));
-    return GESCE_ORDER.filter((g) =>
-      (ROLE_OF_GESCE[g] && existing.has(ROLE_OF_GESCE[g])) || withProposals.has(g));
-  }, [state?.roles, proposals]);
+    return GESCE_ORDER.filter((g) => g !== "zadna" || withProposals.has(g));
+  }, [proposals]);
 
   useEffect(() => {
     if (gesceList.length > 0 && !gesceList.includes(gesce as never)) setGesce(gesceList[0]);
