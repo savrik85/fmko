@@ -39,6 +39,15 @@ const competitionRouter = new Hono<{ Bindings: Bindings }>();
 competitionRouter.use("/teams/:teamId/competition/*", requireTeamOwnership);
 competitionRouter.use("/admin/competition/*", requireAdmin);
 
+/**
+ * Jméno trenéra klubu. ZÁMĚRNĚ poddotaz, ne JOIN: v datech existují týmy se dvěma
+ * řádky v `managers` a JOIN by takový klub v každém seznamu zdvojil.
+ */
+const MANAGER_NAME = (alias: string) =>
+  `(SELECT mm.name FROM managers mm WHERE mm.team_id = ${alias} ORDER BY mm.created_at LIMIT 1)`;
+const MANAGER_AVATAR = (alias: string) =>
+  `(SELECT mm.avatar FROM managers mm WHERE mm.team_id = ${alias} ORDER BY mm.created_at LIMIT 1)`;
+
 /** Tým přihlášeného uživatele, nebo null. Token je u čtecích endpointů nepovinný. */
 async function currentTeam(c: { env: Bindings; req: Request }): Promise<string | null> {
   const token = getTokenFromRequest(c as never);
@@ -96,10 +105,10 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
   ]);
 
   const officials = await c.env.DB.prepare(
-    `SELECT o.role, o.team_id, o.status, t.name AS team_name, m.name AS manager_name
+    `SELECT o.role, o.team_id, o.status, t.name AS team_name,
+            ${MANAGER_NAME("o.team_id")} AS manager_name
        FROM competition_officials o
        JOIN teams t ON t.id = o.team_id
-       LEFT JOIN managers m ON m.team_id = o.team_id
       WHERE o.league_id = ? AND o.season_number = ? AND o.status IN ('active','suspended')`
   ).bind(leagueId, meta.season_number).all<{ role: string; team_id: string; status: string; team_name: string; manager_name: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "funkcionáři", e); return { results: [] }; });
@@ -574,9 +583,10 @@ competitionRouter.get("/competition/:leagueId/discipline", async (c) => {
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
   const clubs = await c.env.DB.prepare(
-    `SELECT t.id, t.name, m.name AS manager_name, m.avatar AS manager_avatar
-       FROM teams t LEFT JOIN managers m ON m.team_id = t.id
-      WHERE t.league_id = ? ORDER BY t.name`
+    `SELECT t.id, t.name,
+            ${MANAGER_NAME("t.id")} AS manager_name,
+            ${MANAGER_AVATAR("t.id")} AS manager_avatar
+       FROM teams t WHERE t.league_id = ? ORDER BY t.name`
   ).bind(leagueId).all<{ id: string; name: string; manager_name: string | null; manager_avatar: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "kluby soutěže", e); return { results: [] }; });
 
@@ -593,10 +603,9 @@ competitionRouter.get("/competition/:leagueId/discipline", async (c) => {
   }
 
   const sanctions = await c.env.DB.prepare(
-    `SELECT s.*, t.name AS team_name, m.name AS manager_name
+    `SELECT s.*, t.name AS team_name, ${MANAGER_NAME("s.team_id")} AS manager_name
        FROM competition_sanctions s
        JOIN teams t ON t.id = s.team_id
-       LEFT JOIN managers m ON m.team_id = s.team_id
       WHERE s.league_id = ? AND s.season_number = ?
       ORDER BY s.created_at DESC LIMIT 40`
   ).bind(leagueId, meta.season_number).all<Record<string, unknown>>()
@@ -874,10 +883,9 @@ competitionRouter.get("/competition/:leagueId/elections", async (c) => {
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
   const rows = await c.env.DB.prepare(
-    `SELECT e.*, t.name AS winner_name, m.name AS winner_manager
+    `SELECT e.*, t.name AS winner_name, ${MANAGER_NAME("e.winner_team_id")} AS winner_manager
        FROM competition_elections e
        LEFT JOIN teams t ON t.id = e.winner_team_id
-       LEFT JOIN managers m ON m.team_id = e.winner_team_id
       WHERE e.league_id = ? AND e.season_number = ?
       ORDER BY CASE WHEN e.status = 'open' THEN 0 ELSE 1 END, e.role`
   ).bind(leagueId, meta.season_number).all<Record<string, unknown>>()
@@ -889,12 +897,12 @@ competitionRouter.get("/competition/:leagueId/elections", async (c) => {
   const candidates: Record<string, Array<{ teamId: string; teamName: string; managerName: string | null }>> = {};
   if (ids.length > 0) {
     const cr = await c.env.DB.prepare(
-      `SELECT c.election_id, c.team_id, t.name AS team_name, m.name AS manager_name
+      `SELECT c.election_id, c.team_id, t.name AS team_name,
+              ${MANAGER_NAME("c.team_id")} AS manager_name
          FROM competition_candidacies c
          JOIN teams t ON t.id = c.team_id
-         LEFT JOIN managers m ON m.team_id = t.id
         WHERE c.election_id IN (${ids.map(() => "?").join(",")}) AND c.withdrawn = 0
-        ORDER BY m.name, t.name`
+        ORDER BY manager_name, t.name`
     ).bind(...ids).all<{ election_id: string; team_id: string; team_name: string; manager_name: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "kandidáti", e); return { results: [] }; });
     for (const r of cr.results) {
