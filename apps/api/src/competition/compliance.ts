@@ -1,10 +1,13 @@
 /**
  * Kontrola pravidel, která si soutěž sama odhlasovala.
  *
- * Běží jednou týdně před zasedáním. Proč zrovna tam: zasedání je jediné místo
- * v celé samosprávě, které je idempotentní na úrovni celého běhu, takže se
- * pokuta nemůže udělit dvakrát, i kdyby fronta doručila tick opakovaně. Navíc
- * to sedí na fikci — funkcionáři si projdou soutěž a co najdou, jde na stůl.
+ * Běží jednou týdně před zasedáním — funkcionáři si projdou soutěž a co najdou,
+ * jde na stůl. Porušené pravidlo je plnohodnotný bod programu, takže se kvůli
+ * němu zasedání sejde, i kdyby jinak nebylo o čem.
+ *
+ * Kontrola je rozdělená na čtení a trest schválně: čtení musí proběhnout dřív,
+ * než se rozhodne, jestli se zasedání koná, a taky dřív, než se uzavřou návrhy —
+ * pravidlo přijaté právě teď se tak vymáhá až od příštího týdne.
  *
  * Každé pravidlo je vypnuté (0), dokud si ho kluby neodhlasují. Soutěž se
  * zapnutou samosprávou a nedotčeným sazebníkem tedy nikomu nic nestrhne.
@@ -81,40 +84,45 @@ export function findViolations(teams: TeamState[], rules: CompetitionRules): Com
 }
 
 /**
- * Projde soutěž a udělí pokuty za porušená pravidla.
- *
- * Vrací, co se našlo, aby to šlo napsat do zápisu. Když je sazba pokuty nula,
- * kontrola proběhne a do zápisu se zapíše, ale peníze se nehýbou — kluby si
- * můžou pravidlo zavést dřív, než se dohodnou na trestu.
+ * Co se v soutěži právě porušuje. Čte, nic nemění — proto se smí zavolat před
+ * rozhodnutím, jestli se zasedání vůbec koná. Porušené pravidlo je totiž bod
+ * programu stejně jako návrh; bez toho by se pravidla vymáhala jen v týdnech,
+ * kdy někdo něco navrhl, což by z nich udělalo loterii.
  */
-export async function runCompliance(db: D1Database, opts: {
+export async function collectCompliance(
+  db: D1Database, leagueId: string, rules: CompetitionRules,
+): Promise<ComplianceHit[]> {
+  const nicSeNehlida = rules.min_pitch_condition <= 0 && rules.squad_min <= 0 && rules.squad_max <= 0;
+  if (nicSeNehlida) return [];
+  return findViolations(await loadTeams(db, leagueId), rules);
+}
+
+/**
+ * Udělí pokuty za nalezená porušení.
+ *
+ * Když je sazba nula, kontrola proběhla a do zápisu se zapíše, ale peníze se
+ * nehýbou — kluby si můžou pravidlo zavést dřív, než se dohodnou na trestu.
+ * Idempotence stojí na klíči sankce: opakovaný běh téhož zasedání nepřipíše nic,
+ * příští týden se pokuta udělí znovu.
+ */
+export async function punishCompliance(db: D1Database, opts: {
   leagueId: string;
   seasonNumber: number;
   rules: CompetitionRules;
   gameDate: string;
-}): Promise<ComplianceHit[]> {
-  const { rules } = opts;
-  const nicSeNehlida = rules.min_pitch_condition <= 0 && rules.squad_min <= 0 && rules.squad_max <= 0;
-  if (nicSeNehlida) return [];
+  hits: ComplianceHit[];
+}): Promise<void> {
+  if (opts.hits.length === 0 || opts.rules.fine_rule <= 0) return;
 
-  const teams = await loadTeams(db, opts.leagueId);
-  const hits = findViolations(teams, rules);
-  if (hits.length === 0) return [];
-
-  if (rules.fine_rule > 0) {
-    for (const h of hits) {
-      // reference_id nese herní datum kontroly, takže opakovaný běh téhož
-      // zasedání nepřipíše nic navíc, ale příští týden se pokuta udělí znovu.
-      await issueSanction(db, {
-        leagueId: opts.leagueId, seasonNumber: opts.seasonNumber, teamId: h.teamId,
-        amount: rules.fine_rule, kind: "rule", reason: h.reason, evidence: h.detail,
-        issuedBy: "rule", issuedByTeamId: null,
-        proposalId: null, gameDate: opts.gameDate,
-        referenceId: `rule-${opts.leagueId}-${h.teamId}-${h.reason}-${opts.gameDate.slice(0, 10)}`,
-      }).catch((e) => logger.warn({ module: M }, `pokuta za pravidlo klubu ${h.teamId}`, e));
-    }
+  for (const h of opts.hits) {
+    await issueSanction(db, {
+      leagueId: opts.leagueId, seasonNumber: opts.seasonNumber, teamId: h.teamId,
+      amount: opts.rules.fine_rule, kind: "rule", reason: h.reason, evidence: h.detail,
+      issuedBy: "rule", issuedByTeamId: null,
+      proposalId: null, gameDate: opts.gameDate,
+      referenceId: `rule-${opts.leagueId}-${h.teamId}-${h.reason}-${opts.gameDate.slice(0, 10)}`,
+    }).catch((e) => logger.warn({ module: M }, `pokuta za pravidlo klubu ${h.teamId}`, e));
   }
 
-  logger.info({ module: M }, `soutěž ${opts.leagueId}: kontrola pravidel našla ${hits.length} porušení`);
-  return hits;
+  logger.info({ module: M }, `soutěž ${opts.leagueId}: pokuta za ${opts.hits.length} porušení pravidel`);
 }

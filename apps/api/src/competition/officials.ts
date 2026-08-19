@@ -308,9 +308,9 @@ export async function suspendOfficial(db: D1Database, opts: {
   if (!pres || pres.team_id !== opts.presidentTeamId) {
     return { ok: false, reason: "Tuhle pravomoc má jen prezident soutěže." };
   }
-  if (pres.used_suspend >= 1) {
-    return { ok: false, reason: "Pozastavit pravomoc smíš jednou za sezónu. Letos už jsi to udělal." };
-  }
+  // Sezónní strop tu vědomě NENÍ. Brzdou je cena: každé pozastavení otevře
+  // hlasování o odvolání, a když neprojde, prezident přijde o pět bodů reputace.
+  // Kdo si vyřizuje účty, odnese si to sám — počítat mu to navíc nemusíme.
 
   const target = await db.prepare(
     `SELECT team_id FROM competition_officials

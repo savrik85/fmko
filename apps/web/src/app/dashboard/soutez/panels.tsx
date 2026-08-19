@@ -145,7 +145,7 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
   avatars: Record<string, Record<string, unknown> | null>;
   board: BoardData | null;
   teamId: string | null; onChanged: () => void;
-  onPost: (text: string) => Promise<void>;
+  onPost: (text: string, scope: "kabinet" | "verejne") => Promise<void>;
 }) {
   const open = elections.filter((e) => e.status === "open");
   const done = elections.filter((e) => e.status !== "open");
@@ -206,8 +206,7 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
                     </div>
                   )}
                 </div>
-                {jsemPrezident && r.holder && r.role !== "predseda" && !suspended
-                  && state.presidentUsedSuspend < 1 && (
+                {jsemPrezident && r.holder && r.role !== "predseda" && !suspended && (
                   <button className="btn btn-md btn-secondary shrink-0"
                     onClick={() => setSuspendRole({ role: r.role, label: r.label })}>
                     Pozastavit
@@ -238,12 +237,9 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
 
         {jsemPrezident && (
           <div className="mt-4 rounded-lg p-3 text-sm" style={{ background: "rgba(196,160,53,0.14)" }}>
-            <div className="font-semibold">
-              Jsi prezident soutěže.
-              {state.presidentUsedSuspend >= 1 && " Pozastavení pravomoci máš pro letošek vyčerpané."}
-            </div>
+            <div className="font-semibold">Jsi prezident soutěže.</div>
             Při rovnosti hlasů rozhoduje tvůj hlas, zastupuješ každou neobsazenou funkci
-            a jednou za sezónu můžeš jinému předsedovi pozastavit pravomoc — tím rovnou
+            a kdykoli můžeš jinému předsedovi pozastavit pravomoc — tím rovnou
             otevřeš hlasování o jeho odvolání. Když neprojde, pravomoc se mu vrátí
             a ty přijdeš o pět bodů reputace.
           </div>
@@ -322,7 +318,27 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
       )}
 
       {board?.seat && (
-        <Kabinet board={board} teamId={teamId} avatars={avatars} onPost={onPost} />
+        <Vlakno
+          title="Kabinet"
+          right={board.seat.roleLabel}
+          subtitle="Neveřejné vlákno vedení soutěže. Kluby ho nevidí a v zápisu ze zasedání se neobjeví."
+          messages={board.messages} maxLength={board.maxLength}
+          canPost placeholder="Napiš ostatním do vedení…"
+          teamId={teamId} avatars={avatars}
+          onPost={(t) => onPost(t, "kabinet")}
+        />
+      )}
+
+      {board && (
+        <Vlakno
+          title="Stížnosti a vzkazy"
+          subtitle="Veřejná nástěnka soutěže. Čte ji každý klub včetně toho, kterého se stížnost týká."
+          messages={board.publicMessages} maxLength={board.maxLength}
+          canPost={board.canPost}
+          placeholder="Co ti v soutěži vadí? Uvidí to všichni…"
+          teamId={teamId} avatars={avatars}
+          onPost={(t) => onPost(t, "verejne")}
+        />
       )}
 
       {done.length > 0 && (
@@ -381,7 +397,7 @@ function SuspendForm({ role, teamId, onClose, onSaved }: {
           <div className="font-semibold">Není to jen tak.</div>
           Pravomoc mu odebereš okamžitě, ale zároveň se tím otevře hlasování o jeho
           odvolání. Když kluby odvolání neschválí, pravomoc se mu vrátí a ty přijdeš
-          o pět bodů reputace. Udělat to můžeš jednou za sezónu.
+          o pět bodů reputace.
         </div>
 
         <div>
@@ -404,11 +420,47 @@ function SuspendForm({ role, teamId, onClose, onSaved }: {
 }
 
 /**
- * Kabinet — interní vlákno vedení. Zobrazuje se jen tomu, kdo v soutěži zastává
- * funkci; kdo ji nemá, o něm ani neví.
+ * Soukromá schránka odboru — stížnost nebo nápad adresovaný jednomu předsedovi.
+ *
+ * Zobrazuje se na záložce odboru. Vzkazy jsou už ořezané serverem: obyčejný klub
+ * vidí jen svoje, předseda odboru a prezident vidí všechny.
  */
-function Kabinet({ board, teamId, avatars, onPost }: {
-  board: BoardData; teamId: string | null;
+export function OdborInbox({ roleKey, roleLabel, messages, maxLength, canPost,
+  teamId, avatars, onPost }: {
+  roleKey: string; roleLabel: string;
+  messages: BoardData["messages"]; maxLength: number; canPost: boolean;
+  teamId: string | null;
+  avatars: Record<string, Record<string, unknown> | null>;
+  onPost: (text: string) => Promise<void>;
+}) {
+  return (
+    <Vlakno
+      title="Vzkazy odboru"
+      right={roleLabel || undefined}
+      subtitle={
+        `Soukromá linka na ${roleLabel ? roleLabel.toLowerCase() : "vedoucího odboru"}. `
+        + "Čte to on a prezident soutěže — ostatní kluby ne. Sem patří stížnost nebo nápad, "
+        + "který ještě nemá být návrhem na zasedání."
+      }
+      messages={messages} maxLength={maxLength}
+      canPost={canPost}
+      placeholder="Co ti vadí, nebo co bys zlepšil?"
+      teamId={teamId} avatars={avatars} onPost={onPost}
+      key={roleKey}
+    />
+  );
+}
+
+/**
+ * Vlákno soutěže. Tři podoby téhož: neveřejný kabinet vedení, veřejná nástěnka
+ * a soukromá schránka jednoho odboru. Liší se jen publikem.
+ */
+function Vlakno({ title, subtitle, right, messages, maxLength, canPost, placeholder,
+  teamId, avatars, onPost }: {
+  title: string; subtitle: string; right?: string;
+  messages: BoardData["messages"]; maxLength: number;
+  canPost: boolean; placeholder: string;
+  teamId: string | null;
   avatars: Record<string, Record<string, unknown> | null>;
   onPost: (text: string) => Promise<void>;
 }) {
@@ -426,16 +478,14 @@ function Kabinet({ board, teamId, avatars, onPost }: {
 
   return (
     <div className="card p-5" style={{ background: "var(--color-paper)" }}>
-      <Ornament right={board.seat ? board.seat.roleLabel : undefined}>Kabinet</Ornament>
-      <p className="text-sm text-muted -mt-1">
-        Neveřejné vlákno vedení soutěže. Kluby ho nevidí a v zápisu ze zasedání se neobjeví.
-      </p>
+      <Ornament right={right}>{title}</Ornament>
+      <p className="text-sm text-muted -mt-1">{subtitle}</p>
 
       <div className="mt-4 space-y-3">
-        {board.messages.length === 0 && (
+        {messages.length === 0 && (
           <div className="text-sm text-muted">Zatím tu nikdo nic nenapsal.</div>
         )}
-        {board.messages.map((m) => {
+        {messages.map((m) => {
           const mine = m.teamId === teamId;
           return (
             <div key={m.id} className="flex gap-3">
@@ -458,19 +508,21 @@ function Kabinet({ board, teamId, avatars, onPost }: {
         })}
       </div>
 
-      <div className="mt-4">
-        <textarea className="input w-full" rows={3} maxLength={board.maxLength}
-          value={text} onChange={(e) => setText(e.target.value)}
-          placeholder="Napiš ostatním do vedení…" />
-        <div className="flex items-center justify-between gap-3 mt-2">
-          <span className="text-xs text-muted tabular-nums">
-            {text.length} / {board.maxLength}
-          </span>
-          <button className="btn btn-md btn-primary" disabled={saving || !text.trim()} onClick={send}>
-            {saving ? "Odesílám…" : "Odeslat"}
-          </button>
+      {canPost && (
+        <div className="mt-4">
+          <textarea className="input w-full" rows={3} maxLength={maxLength}
+            value={text} onChange={(e) => setText(e.target.value)}
+            placeholder={placeholder} />
+          <div className="flex items-center justify-between gap-3 mt-2">
+            <span className="text-sm text-muted tabular-nums">
+              {text.length} / {maxLength}
+            </span>
+            <button className="btn btn-md btn-primary" disabled={saving || !text.trim()} onClick={send}>
+              {saving ? "Odesílám…" : "Odeslat"}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

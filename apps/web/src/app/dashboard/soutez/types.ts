@@ -136,12 +136,18 @@ export interface RefereeData {
 
 export interface BoardMessage {
   id: string; teamId: string; senderName: string; senderRole: string;
-  body: string; sentAt: string;
+  body: string; sentAt: string; targetRole?: string | null;
 }
 
 export interface BoardData {
   seat: { role: string; roleLabel: string; status: string } | null;
   messages: BoardMessage[];
+  /** Veřejná nástěnka — vidí ji každý klub, i ten bez funkce. */
+  publicMessages: BoardMessage[];
+  /** Smí tenhle klub na nástěnku psát? (jen kluby s hlasovacím právem) */
+  canPost: boolean;
+  /** Soukromé vzkazy odborům, už ořezané na to, co smíš vidět. */
+  inbox: Record<string, BoardMessage[]>;
   unread: number;
   maxLength: number;
 }

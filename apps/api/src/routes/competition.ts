@@ -19,7 +19,7 @@ import {
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
 import { actsFor, canRunFor, openElections, presidentOf, rolesFor, suspendOfficial } from "../competition/officials";
 import {
-  BOARD_MESSAGE_MAX, listMessages, markRead, postMessage, seatOf, unreadCount,
+  BOARD_MESSAGE_MAX, listForRole, listMessages, markRead, postMessage, seatOf, unreadCount,
 } from "../competition/board";
 import {
   CHAIR_FINE_LIMIT, FINE_MAX, FINE_MIN, OFFENCES,
@@ -174,8 +174,8 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
       roleLabel: ROLE_LABEL[o.role as OfficialRole] ?? o.role,
       teamId: o.team_id, teamName: o.team_name, managerName: o.manager_name, status: o.status,
     })),
-    // Pozastavit pravomoc smí prezident jednou za sezónu — bez toho by UI nabízelo
-    // tlačítko, které vždycky skončí chybou.
+    // Kolikrát už prezident pravomoc pozastavil. Strop na to není, ale číslo je
+    // vidět — ať kluby poznají prezidenta, který si vyřizuje účty.
     presidentUsedSuspend:
       officials.results.find((o) => o.role === "predseda")?.used_suspend ?? 0,
     // Které odbory v soutěži téhle velikosti vůbec existují.
@@ -959,11 +959,11 @@ competitionRouter.post("/teams/:teamId/competition/referee-bans", async (c) => {
 });
 
 /**
- * Komisař rozhodčích škrtne sudího sám, bez hlasování — jednou za sezónu.
+ * Komisař rozhodčích škrtne sudího sám, bez hlasování.
  *
- * Zrcadlí pravomoc předsedy disciplinární rady: rychlé rozhodnutí v gesci, ale
- * spotřebuje jediný sezónní slot a nese ho jménem. Minimální velikost listiny
- * platí i pro něj — na tom se ušetřit nedá.
+ * Sezónní strop tu vědomě NENÍ — stejně jako u vyškrtnutí hlasováním. Brzdou je
+ * minimální velikost listiny a to, že se vyškrtnutý sudí po sezóně vrátí
+ * a pamatuje si, kdo ho škrtl.
  */
 competitionRouter.post("/teams/:teamId/competition/referee-bans/direct", async (c) => {
   const teamId = c.req.param("teamId");
@@ -992,9 +992,6 @@ competitionRouter.post("/teams/:teamId/competition/referee-bans/direct", async (
     .first<{ used_ban: number }>()
     .catch((e) => { logger.warn({ module: M }, "čerpání pravomoci komisaře", e); return null; });
   if (!slot) return c.json({ error: "Tuhle pravomoc má jen komisař rozhodčích." }, 403);
-  if (slot.used_ban >= 1) {
-    return c.json({ error: "Letos jsi tuhle pravomoc vyčerpal. Dál už jen přes zasedání." }, 403);
-  }
 
   const check = await canBanReferee(c.env.DB, leagueId, meta.season_number, meta.district);
   if (!check.ok) return c.json({ error: check.reason }, 409);
@@ -1056,21 +1053,44 @@ competitionRouter.get("/teams/:teamId/competition/board", async (c) => {
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
+  // Nástěnku vidí každý klub soutěže, kabinet jen ten, kdo v grémiu sedí,
+  // a vzkazy odboru jen jeho předseda, prezident a odesílatel.
   const seat = await seatOf(c.env.DB, leagueId, teamId, meta.season_number);
-  if (!seat) return c.json({ seat: null, messages: [], unread: 0, maxLength: BOARD_MESSAGE_MAX });
+  const publicMessages = await listMessages(c.env.DB, leagueId, "verejne");
+  const voters = await voterStats(c.env.DB, leagueId);
+  const humans = await countHumanClubs(c.env.DB, leagueId);
 
-  const messages = await listMessages(c.env.DB, leagueId);
+  const inbox: Record<string, unknown[]> = {};
+  for (const role of rolesFor(humans)) {
+    inbox[role] = await listForRole(c.env.DB, {
+      leagueId, role, viewerTeamId: teamId,
+      viewerSeesAll: seat?.role === "predseda" || seat?.role === role,
+    });
+  }
+
+  const base = {
+    publicMessages, inbox,
+    canPost: voters.voters.includes(teamId),
+    maxLength: BOARD_MESSAGE_MAX,
+  };
+
+  if (!seat) return c.json({ ...base, seat: null, messages: [], unread: 0 });
+
+  const messages = await listMessages(c.env.DB, leagueId, "kabinet");
   const unread = await unreadCount(c.env.DB, leagueId, teamId);
   await markRead(c.env.DB, leagueId, teamId);
 
-  return c.json({ seat, messages, unread, maxLength: BOARD_MESSAGE_MAX });
+  return c.json({ ...base, seat, messages, unread });
 });
 
 competitionRouter.post("/teams/:teamId/competition/board", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ text?: string }>().catch(() => null);
+  const body = await c.req.json<{ text?: string; scope?: string; targetRole?: string }>().catch(() => null);
   const text = (body?.text ?? "").trim();
   if (!text) return c.json({ error: "Zpráva nesmí být prázdná." }, 400);
+  const scope = body?.scope === "verejne" ? "verejne"
+    : body?.scope === "odbor" ? "odbor" : "kabinet";
+  const targetRole = body?.targetRole as OfficialRole | undefined;
 
   const leagueId = await leagueOfTeam(c.env.DB, teamId);
   if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
@@ -1078,16 +1098,36 @@ competitionRouter.post("/teams/:teamId/competition/board", async (c) => {
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
   const seat = await seatOf(c.env.DB, leagueId, teamId, meta.season_number);
-  if (!seat) return c.json({ error: "Do kabinetu píše jen vedení soutěže." }, 403);
+  if (scope === "kabinet" && !seat) {
+    return c.json({ error: "Do kabinetu píše jen vedení soutěže." }, 403);
+  }
+  if (scope === "verejne" || scope === "odbor") {
+    // Na nástěnku i odboru píše každý klub s hlasovacím právem — stížnost je jeho
+    // zbraň, i když v grémiu nesedí. AI kluby se do soutěže nepletou.
+    const voters = await voterStats(c.env.DB, leagueId);
+    if (!voters.voters.includes(teamId)) {
+      return c.json({ error: "Tvůj klub nemá v téhle soutěži hlasovací právo." }, 403);
+    }
+  }
+  if (scope === "odbor") {
+    const humans = await countHumanClubs(c.env.DB, leagueId);
+    if (!targetRole || !rolesFor(humans).includes(targetRole)) {
+      return c.json({ error: "Takový odbor v téhle soutěži není." }, 400);
+    }
+  }
 
-  const mgr = await c.env.DB.prepare(
-    "SELECT name FROM managers WHERE team_id = ? ORDER BY created_at LIMIT 1"
-  ).bind(teamId).first<{ name: string | null }>()
+  const who = await c.env.DB.prepare(
+    `SELECT t.name AS team_name, ${MANAGER_NAME("t.id")} AS manager_name
+       FROM teams t WHERE t.id = ?`
+  ).bind(teamId).first<{ team_name: string; manager_name: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "jméno pisatele", e); return null; });
 
   const id = await postMessage(c.env.DB, {
     leagueId, seasonNumber: meta.season_number, teamId,
-    senderName: mgr?.name ?? "neznámý trenér", seat, body: text,
+    senderName: who?.manager_name ?? "neznámý trenér",
+    teamName: who?.team_name ?? "klub", scope, seat,
+    targetRole: scope === "odbor" ? targetRole : null,
+    body: text,
   });
   if (!id) return c.json({ error: "Zprávu se nepodařilo uložit." }, 500);
   return c.json({ ok: true, id });

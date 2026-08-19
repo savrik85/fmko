@@ -117,7 +117,7 @@ export const ROLE_SCOPE: Record<OfficialRole, {
     powers: [
       "Při rovnosti hlasů rozhoduje jeho hlas.",
       "Zastupuje každou neobsazenou funkci a čerpá u ní vlastní počítadlo.",
-      "Jednou za sezónu pozastaví pravomoc jinému předsedovi — tím rovnou otevře hlasování o jeho odvolání. Když neprojde, pravomoc se vrátí a prezident přijde o pět bodů reputace.",
+      "Pozastaví pravomoc jinému předsedovi — tím rovnou otevře hlasování o jeho odvolání. Když neprojde, pravomoc se vrátí a prezident přijde o pět bodů reputace.",
       "Je nadřízený ostatním předsedům.",
     ],
   },
@@ -142,7 +142,7 @@ export const ROLE_SCOPE: Record<OfficialRole, {
     gesce: "rozhodcich",
     agenda: "Listina rozhodčích okresu a jejich odměna za odpískaný zápas.",
     powers: [
-      "Vyškrtne rozhodčího sám, bez hlasování — jednou za sezónu.",
+      "Vyškrtne rozhodčího sám, bez hlasování. Jediná brzda je minimální velikost listiny.",
       "Vidí známky rozhodčích a to, jak si soutěž stojí s minimální velikostí listiny.",
       "Vyškrtnutý sudí se po sezóně vrátí a bude si pamatovat, kdo ho škrtl.",
     ],

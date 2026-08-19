@@ -18,7 +18,7 @@ import { EntityLink, Modal, Spinner, Tabs, useTabParam } from "@/components/ui";
 import {
   Empty, GOLD, OpenProposalNote, Ornament, PersonLine, Portrait, Row, StatusPill, czk, plural, signed,
 } from "./ui";
-import { PokladnaPanel, VedeniPanel, ZapisyPanel } from "./panels";
+import { OdborInbox, PokladnaPanel, VedeniPanel, ZapisyPanel } from "./panels";
 import { DisciplinePanel } from "./discipline";
 import { RefereesPanel } from "./referees-panel";
 import type {
@@ -136,12 +136,14 @@ export default function SoutezPage() {
       .then(setBoard).catch((e) => console.error("načtení kabinetu:", e));
   }, [teamId]);
 
-  const postToBoard = useCallback(async (text: string) => {
+  const postToBoard = useCallback(async (
+    text: string, scope: "kabinet" | "verejne" | "odbor", targetRole?: string,
+  ) => {
     if (!teamId) return;
     const ok = await apiAction(
       apiFetch(`/api/teams/${teamId}/competition/board`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, scope, targetRole }),
       }),
       "Zprávu se nepodařilo odeslat",
     );
@@ -338,6 +340,19 @@ export default function SoutezPage() {
 
           {gesce === "rozhodcich" && (
             <RefereesPanel data={referees} state={state} teamId={teamId} myOpen={myOpen} onChanged={refreshAll} />
+          )}
+
+          {board && ROLE_OF_GESCE[gesce] && (
+            <OdborInbox
+              roleKey={ROLE_OF_GESCE[gesce]}
+              roleLabel={state.roles?.find((r) => r.role === ROLE_OF_GESCE[gesce])?.label ?? ""}
+              messages={board.inbox?.[ROLE_OF_GESCE[gesce]] ?? []}
+              maxLength={board.maxLength}
+              canPost={board.canPost}
+              teamId={teamId}
+              avatars={avatars}
+              onPost={(t) => postToBoard(t, "odbor", ROLE_OF_GESCE[gesce])}
+            />
           )}
 
           {open.length === 0 ? (

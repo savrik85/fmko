@@ -137,13 +137,25 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
   const chosen = targets.find((t) => t.teamId === target);
 
   // Nabízí se jen doložitelné skutky plus volná položka.
-  // Doložené skutky napřed — volná položka je až poslední možnost, protože
-  // potřebuje dvoutřetinovou většinu a navrhovatel u ní riskuje kauci.
+  // V nabídce jsou VŠECHNY skutky, jen ty nedoložitelné nejdou vybrat. Dřív se
+  // schovávaly a u klubu bez důkazu zbylo v seznamu jediné „nesportovní chování",
+  // což vypadalo jako rozbitá stránka — ne jako pravidlo.
+  const evidenced = useMemo(
+    () => new Set((chosen?.evidence ?? []).map((e) => e.kind)), [chosen]);
+
+  // Doložené napřed — volná položka je až poslední možnost, protože potřebuje
+  // dvoutřetinovou většinu a navrhovatel u ní riskuje kauci.
   const options = useMemo(() => {
-    const evidenced = new Set((chosen?.evidence ?? []).map((e) => e.kind));
-    const list = data.offences.filter((o) => o.freeText || evidenced.has(o.kind));
-    return [...list.filter((o) => !o.freeText), ...list.filter((o) => o.freeText)];
-  }, [chosen, data.offences]);
+    const lze = data.offences.filter((o) => evidenced.has(o.kind));
+    const volna = data.offences.filter((o) => o.freeText);
+    const nelze = data.offences.filter((o) => !o.freeText && !evidenced.has(o.kind));
+    return [...lze, ...volna, ...nelze];
+  }, [evidenced, data.offences]);
+
+  const lzeVybrat = (kind: string) =>
+    evidenced.has(kind) || data.offences.find((o) => o.kind === kind)?.freeText === true;
+
+  const nicNelzeDolozit = evidenced.size === 0;
 
   const [offence, setOffence] = useState(options[0]?.kind ?? "other");
   const [amount, setAmount] = useState(String(data.limits.min));
@@ -155,12 +167,14 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
   // s důkazem zůstala vybraná volná položka a hráč by si zbytečně přitížil.
   const lastTarget = React.useRef(target);
   React.useEffect(() => {
+    const prvniMozny = options.find((o) => lzeVybrat(o.kind))?.kind ?? "other";
     if (lastTarget.current !== target) {
       lastTarget.current = target;
-      setOffence(options[0]?.kind ?? "other");
-    } else if (!options.some((o) => o.kind === offence)) {
-      setOffence(options[0]?.kind ?? "other");
+      setOffence(prvniMozny);
+    } else if (!lzeVybrat(offence)) {
+      setOffence(prvniMozny);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, options, offence]);
 
   const spec = data.offences.find((o) => o.kind === offence);
@@ -210,9 +224,17 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
           <label className="text-sm text-muted">Skutek</label>
           <select className="select w-full mt-1" value={offence} onChange={(e) => setOffence(e.target.value)}>
             {options.map((o) => (
-              <option key={o.kind} value={o.kind}>{o.label}</option>
+              <option key={o.kind} value={o.kind} disabled={!lzeVybrat(o.kind)}>
+                {o.label}{lzeVybrat(o.kind) ? "" : ` — u tohohle klubu nedoložíš (${o.evidenceLabel})`}
+              </option>
             ))}
           </select>
+          {nicNelzeDolozit && (
+            <div className="text-sm text-muted mt-1">
+              Tenhle klub nemá v datech nic, co by šlo doložit. Zbývá nesportovní chování —
+              tam ale rozhoduje zasedání a při neúspěchu přijdeš o kauci.
+            </div>
+          )}
           {evidence
             ? <div className="text-sm mt-1">Doloženo: {evidence.detail}</div>
             : spec?.freeText

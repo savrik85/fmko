@@ -101,7 +101,17 @@ export async function runOneMeeting(
   ).bind(leagueId, gameDate).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, `splatné volby ${leagueId}`, e); return null; });
 
-  if (open.results.length === 0 && (dueElections?.n ?? 0) === 0) return null;
+  // Porušené pravidlo je bod programu jako každý jiný — kdyby se kontrola dělala
+  // až za touhle branou, vymáhala by se pravidla jen v týdnech, kdy někdo něco
+  // navrhl. Čte se před uzavřením návrhů, takže pravidlo přijaté dnes platí
+  // až od příštího týdne a klub má čas se přizpůsobit.
+  const { resolveRules } = await import("./rules");
+  const rules = await resolveRules(db, leagueId, meta.season_number);
+  const { collectCompliance } = await import("./compliance");
+  const porusení = await collectCompliance(db, leagueId, rules)
+    .catch((e) => { logger.warn({ module: M }, `kontrola pravidel ${leagueId}`, e); return []; });
+
+  if (open.results.length === 0 && (dueElections?.n ?? 0) === 0 && porusení.length === 0) return null;
 
   // Claim celé schůze. changes === 0 znamená, že dnes už proběhla.
   const claim = await db.prepare(
@@ -139,14 +149,10 @@ export async function runOneMeeting(
     if (e.winnerTeamId) passedCount++;
   }
 
-  // Kontrola pravidel, která si soutěž odhlasovala. Až po uzavření návrhů —
-  // pravidlo přijaté právě teď se tak vymáhá až od příštího zasedání a klub má
-  // týden na to, aby se přizpůsobil.
-  const { resolveRules } = await import("./rules");
-  const rules = await resolveRules(db, leagueId, meta.season_number);
-  const { runCompliance } = await import("./compliance");
-  const porusení = await runCompliance(db, { leagueId, seasonNumber: meta.season_number, rules, gameDate })
-    .catch((e) => { logger.warn({ module: M }, `kontrola pravidel ${leagueId}`, e); return []; });
+  const { punishCompliance } = await import("./compliance");
+  await punishCompliance(db, {
+    leagueId, seasonNumber: meta.season_number, rules, gameDate, hits: porusení,
+  }).catch((e) => logger.warn({ module: M }, `pokuty za pravidla ${leagueId}`, e));
   for (const h of porusení) {
     results.push({
       kind: "compliance",
@@ -156,6 +162,7 @@ export async function runOneMeeting(
         ? `${h.detail} Pokuta ${rules.fine_rule.toLocaleString("cs")} Kč.`
         : `${h.detail} Sazba pokuty je nula, takže zůstalo u napomenutí.`,
     } as unknown as Record<string, unknown>);
+    closedCount++;
   }
 
   const balance = await recomputeBalance(db, leagueId, gameDate);
