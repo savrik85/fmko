@@ -43,7 +43,7 @@ export function DisciplinePanel({ data, state, teamId, isChair, onChanged }: {
       </div>
 
       {state.enabled && teamId && (
-        <button className="btn btn-primary w-full" onClick={() => setFormOpen(true)}>
+        <button className="btn btn-lg btn-primary w-full" onClick={() => setFormOpen(true)}>
           Podat návrh na pokutu
         </button>
       )}
@@ -115,7 +115,7 @@ function SanctionRow({ s, teamId, onChanged, canAppeal }: {
         {s.issuedBy === "chair" ? "Uložil předseda disciplinární rady" : "Rozhodlo zasedání grémia"}
       </div>
       {canAppeal && s.status === "issued" && (
-        <button className="btn btn-secondary w-full mt-2" disabled={busy} onClick={appeal}>
+        <button className="btn btn-md btn-secondary w-full mt-2" disabled={busy} onClick={appeal}>
           Odvolat se
         </button>
       )}
@@ -235,8 +235,8 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
         )}
 
         <div className="flex gap-2">
-          <button className="btn btn-secondary flex-1" onClick={onClose}>Zrušit</button>
-          <button className="btn btn-primary flex-1" disabled={saving || !target} onClick={submit}>
+          <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
+          <button className="btn btn-lg btn-primary flex-1" disabled={saving || !target} onClick={submit}>
             {saving ? "Odesílám…" : direct ? "Uložit pokutu" : "Podat návrh"}
           </button>
         </div>

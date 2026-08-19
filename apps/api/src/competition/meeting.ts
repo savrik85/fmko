@@ -19,7 +19,7 @@ import { logger } from "../lib/logger";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { PROPOSAL_KINDS, ROLE_LABEL, SIMPLE_MAJORITY } from "./defaults";
 import { recomputeBalance, recordCompetitionEntry } from "./ledger";
-import { resolveElections } from "./officials";
+import { presidentOf, recallOfficial, resolveElections, restoreOfficial } from "./officials";
 import { voterStats } from "./proposals";
 import { loadLeagueMeta } from "./rules";
 
@@ -112,11 +112,12 @@ export async function runOneMeeting(
   if (!claim || (claim.meta?.changes ?? 0) === 0) return null;
 
   const stats = await voterStats(db, leagueId);
+  const president = await presidentOf(db, leagueId, meta.season_number);
   const results: Array<Record<string, unknown>> = [];
   let closedCount = 0, passedCount = 0;
 
   for (const p of open.results) {
-    const decided = await closeProposal(db, p, gameDate, stats.quorumNeeded, stats.voters.length);
+    const decided = await closeProposal(db, p, gameDate, stats.quorumNeeded, stats.voters.length, president?.teamId ?? null);
     if (!decided) continue;   // jiný běh ho mezitím uzavřel
     closedCount++;
     if (decided.status === "passed") passedCount++;
@@ -165,7 +166,7 @@ export async function runOneMeeting(
 }
 
 /**
- * Prostá většina = ostře víc hlasů pro než proti (rovnost tedy neprojde).
+ * Prostá většina = ostře víc hlasů pro než proti (při rovnosti rozhoduje prezident).
  * Kvalifikovaná = aspoň dvě třetiny rozhodujících hlasů, přesná dvoutřetina stačí.
  * Počítá se v celých číslech, aby na 8:4 nezáleželo na zaokrouhlení dvou třetin.
  */
@@ -196,7 +197,14 @@ interface DecidedProposal {
  */
 async function closeProposal(
   db: D1Database, p: OpenProposal, gameDate: string, quorumNeeded: number, voters: number,
+  presidentTeamId: string | null,
 ): Promise<DecidedProposal | null> {
+  const presidentVote = presidentTeamId
+    ? (await db.prepare("SELECT answer FROM competition_ballots WHERE proposal_id = ? AND team_id = ?")
+        .bind(p.id, presidentTeamId).first<{ answer: string }>()
+        .catch((e) => { logger.warn({ module: M }, "hlas prezidenta", e); return null; }))?.answer ?? null
+    : null;
+
   const tally = await db.prepare(
     `SELECT
        SUM(CASE WHEN answer = 'pro' THEN 1 ELSE 0 END)    AS pro,
@@ -223,9 +231,17 @@ async function closeProposal(
   } else if (hasMajority(pro, proti, p.majority)) {
     status = "passed";
     note = `Přijato ${pro}:${proti}${zdrzel ? ` (${zdrzel} se zdrželo)` : ""}.`;
+  } else if (pro === proti && pro > 0 && p.majority <= SIMPLE_MAJORITY && presidentVote) {
+    // Rovnost rozetne prezident soutěže. Je to jeho nadřízenost v praxi:
+    // nehlasuje dvakrát, ale jeho hlas rozhoduje, když se grémium nedohodne.
+    const forIt = presidentVote === "pro";
+    status = forIt ? "passed" : "rejected";
+    note = `${forIt ? "Přijato" : "Zamítnuto"} ${pro}:${proti} — při rovnosti rozhodl prezident soutěže.`;
   } else {
     status = "rejected";
-    note = `Zamítnuto ${pro}:${proti}${zdrzel ? ` (${zdrzel} se zdrželo)` : ""}.`;
+    note = pro === proti && pro > 0
+      ? `Zamítnuto ${pro}:${proti} — rovnost hlasů a prezident nehlasoval.`
+      : `Zamítnuto ${pro}:${proti}${zdrzel ? ` (${zdrzel} se zdrželo)` : ""}.`;
   }
 
   // Atomický lock: jen ten běh, který změní řádek, smí aplikovat důsledky.
@@ -239,6 +255,19 @@ async function closeProposal(
     .catch((e) => { logger.warn({ module: M }, `uzavření návrhu ${p.id}`, e); return null; });
 
   if (!locked || (locked.meta?.changes ?? 0) === 0) return null;
+
+  // Odvolání neprošlo → pozastavená pravomoc se vrací a prezident za to zaplatí.
+  if (p.kind === "recall" && status !== "passed") {
+    try {
+      const payload = JSON.parse(p.payload || "{}") as { role?: string };
+      if (payload.role) {
+        await restoreOfficial(db, p.league_id, payload.role as never, p.season_number,
+          p.proposed_by_team_id, gameDate);
+      }
+    } catch (e) {
+      logger.warn({ module: M }, `navrácení pravomoci u návrhu ${p.id}`, e);
+    }
+  }
 
   // Sazebníkové změny se aplikují až při rolloveru — competition_rules se mid-season
   // zásadně needitují. Okamžitý dopad mají jen sankce, odvolání a bany rozhodčích.
@@ -285,6 +314,11 @@ async function applyImmediateEffect(
     if (p.kind === "appeal" && payload.sanctionId) {
       const { refundSanction } = await import("./discipline");
       await refundSanction(db, String(payload.sanctionId), gameDate);
+      return;
+    }
+
+    if (p.kind === "recall" && payload.role) {
+      await recallOfficial(db, p.league_id, payload.role as never, p.season_number, gameDate);
       return;
     }
 

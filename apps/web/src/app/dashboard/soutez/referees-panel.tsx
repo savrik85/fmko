@@ -82,7 +82,7 @@ export function RefereesPanel({ data, state, teamId, onChanged }: {
                   {r.avgGrade !== null ? r.avgGrade.toFixed(2) : "—"}
                 </div>
                 {state.enabled && !r.banned && data.canBan && teamId && (
-                  <button className="btn btn-secondary" onClick={() => setBanTarget(r)}>
+                  <button className="btn btn-md btn-secondary" onClick={() => setBanTarget(r)}>
                     Vyškrtnout
                   </button>
                 )}
@@ -156,8 +156,8 @@ function BanForm({ referee, teamId, deposit, onClose, onSaved }: {
         <p className="text-sm text-muted">Za podání se skládá kauce {czk(deposit)}.</p>
 
         <div className="flex gap-2">
-          <button className="btn btn-secondary flex-1" onClick={onClose}>Zrušit</button>
-          <button className="btn btn-primary flex-1" disabled={saving} onClick={submit}>
+          <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
+          <button className="btn btn-lg btn-primary flex-1" disabled={saving} onClick={submit}>
             {saving ? "Odesílám…" : "Podat návrh"}
           </button>
         </div>

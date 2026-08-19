@@ -17,7 +17,7 @@ import {
   type CompetitionRules, type OfficialRole,
 } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
-import { canRunFor, openElections, rolesFor } from "../competition/officials";
+import { actsFor, canRunFor, openElections, presidentOf, rolesFor, suspendOfficial } from "../competition/officials";
 import {
   BOARD_MESSAGE_MAX, listMessages, markRead, postMessage, seatOf, unreadCount,
 } from "../competition/board";
@@ -162,6 +162,7 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
           : null,
       };
     }),
+    presidentTeamId: (await presidentOf(c.env.DB, leagueId, meta.season_number))?.teamId ?? null,
     proposalKinds: Object.entries(PROPOSAL_KINDS).map(([kind, s]) => ({
       kind, label: s.label, gesce: s.gesce, majority: s.majority,
       min: s.min ?? null, max: s.max ?? null,
@@ -772,8 +773,12 @@ competitionRouter.post("/teams/:teamId/competition/sanctions/direct", async (c) 
   const govDirect = await loadGovernance(c.env.DB, leagueId);
   if (!govDirect?.enabled) return c.json({ error: "Tahle soutěž zatím samosprávu nemá." }, 403);
 
+  // Prezident zastupuje neobsazenou disciplinární radu — nadřízenost v praxi.
+  const act = await actsFor(c.env.DB, leagueId, teamId, "disciplinarni", meta.season_number);
+  if (!act.ok) return c.json({ error: act.reason }, 403);
+
   const amount = Math.round(Number(body.amount));
-  const chair = await canChairFine(c.env.DB, leagueId, teamId, body.targetTeamId, meta.season_number, amount);
+  const chair = await canChairFine(c.env.DB, leagueId, teamId, body.targetTeamId, meta.season_number, amount, act.asPresident);
   if (!chair.ok) return c.json({ error: chair.reason }, 403);
 
   const allowed = await canFine(c.env.DB, leagueId, body.targetTeamId, meta.season_number, body.offence);
@@ -799,8 +804,8 @@ competitionRouter.post("/teams/:teamId/competition/sanctions/direct", async (c) 
 
   await c.env.DB.prepare(
     `UPDATE competition_officials SET used_fines = used_fines + 1
-      WHERE league_id = ? AND role = 'disciplinarni' AND team_id = ? AND season_number = ? AND status = 'active'`
-  ).bind(leagueId, teamId, meta.season_number).run()
+      WHERE league_id = ? AND role = ? AND team_id = ? AND season_number = ? AND status = 'active'`
+  ).bind(leagueId, act.asPresident ? "predseda" : "disciplinarni", teamId, meta.season_number).run()
     .catch((e) => logger.warn({ module: M }, "čerpání pravomoci předsedy", e));
 
   return c.json({ ok: true, id });
@@ -883,6 +888,30 @@ competitionRouter.post("/teams/:teamId/competition/referee-bans", async (c) => {
   });
 
   return c.json({ ok: true, id });
+});
+
+// ── Pravomoci prezidenta ────────────────────────────────────────────────────
+competitionRouter.post("/teams/:teamId/competition/officials/:role/suspend", async (c) => {
+  const teamId = c.req.param("teamId");
+  const role = c.req.param("role");
+  const body = await c.req.json<{ reason?: string }>().catch(() => null);
+  const reason = (body?.reason ?? "").trim();
+  if (reason.length < 10) {
+    return c.json({ error: "Napiš, proč mu pravomoc bereš (aspoň 10 znaků). Uvidí to celé grémium." }, 400);
+  }
+
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const gameDate = await currentGameDate(c.env.DB, teamId);
+  const out = await suspendOfficial(c.env.DB, {
+    leagueId, seasonNumber: meta.season_number, presidentTeamId: teamId,
+    role: role as never, reason, gameDate,
+  });
+  if (!out.ok) return c.json({ error: out.reason }, 403);
+  return c.json({ ok: true, proposalId: out.proposalId });
 });
 
 // ── Kabinet — interní vlákno vedení ─────────────────────────────────────────

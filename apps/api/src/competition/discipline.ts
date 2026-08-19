@@ -326,7 +326,7 @@ export async function refundSanction(
  */
 export async function canChairFine(
   db: D1Database, leagueId: string, chairTeamId: string, targetTeamId: string,
-  seasonNumber: number, amount: number,
+  seasonNumber: number, amount: number, asPresident = false,
 ): Promise<FineCheck> {
   if (chairTeamId === targetTeamId) {
     return { ok: false, reason: "Vlastní klub potrestat nemůžeš. Podej návrh a nech rozhodnout zasedání." };
@@ -335,10 +335,12 @@ export async function canChairFine(
     return { ok: false, reason: `Sám můžeš uložit nejvýš ${CHAIR_FINE_LIMIT.toLocaleString("cs")} Kč. Vyšší pokuta patří na zasedání.` };
   }
 
+  // Prezident, který zastupuje neobsazenou disciplinárku, čerpá vlastní počítadlo.
+  const role = asPresident ? "predseda" : "disciplinarni";
   const used = await db.prepare(
     `SELECT used_fines FROM competition_officials
-      WHERE league_id = ? AND role = 'disciplinarni' AND team_id = ? AND season_number = ? AND status = 'active'`
-  ).bind(leagueId, chairTeamId, seasonNumber).first<{ used_fines: number }>()
+      WHERE league_id = ? AND role = ? AND team_id = ? AND season_number = ? AND status = 'active'`
+  ).bind(leagueId, role, chairTeamId, seasonNumber).first<{ used_fines: number }>()
     .catch((e) => { logger.warn({ module: M }, "čerpání pravomoci", e); return null; });
   if (!used) return { ok: false, reason: "Tuhle pravomoc má jen předseda disciplinární rady." };
   if (used.used_fines >= CHAIR_FINE_COUNT) {

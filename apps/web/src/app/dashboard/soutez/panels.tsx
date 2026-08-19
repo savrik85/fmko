@@ -9,6 +9,7 @@
 
 import { useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
+import { Modal } from "@/components/ui";
 import { EntityLink } from "@/components/ui";
 import {
   Empty, GOLD, Ornament, PersonLine, Portrait, Row, czk, formatDate, plural, signed,
@@ -125,6 +126,10 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
   const open = elections.filter((e) => e.status === "open");
   const done = elections.filter((e) => e.status !== "open");
   const [busy, setBusy] = useState<string | null>(null);
+  const [suspendRole, setSuspendRole] = useState<{ role: string; label: string } | null>(null);
+
+  /** Prezident je nadřízený ostatním předsedům — pozastavení vidí jen on. */
+  const jsemPrezident = !!teamId && state.presidentTeamId === teamId;
 
   const candidate = async (id: string, on: boolean) => {
     if (!teamId) return;
@@ -171,13 +176,31 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
                       note={suspended ? <span className="text-danger">pravomoc pozastavena</span> : undefined}
                     />
                   ) : (
-                    <div className="text-base text-muted">neobsazeno</div>
+                    <div className="text-base text-muted">
+                      neobsazeno{jsemPrezident ? " — zastupuješ ji" : ""}
+                    </div>
                   )}
                 </div>
+                {jsemPrezident && r.holder && r.role !== "predseda" && !suspended && (
+                  <button className="btn btn-md btn-secondary shrink-0"
+                    onClick={() => setSuspendRole({ role: r.role, label: r.label })}>
+                    Pozastavit
+                  </button>
+                )}
               </div>
             );
           })}
         </div>
+
+        {jsemPrezident && (
+          <div className="mt-4 rounded-lg p-3 text-sm" style={{ background: "rgba(196,160,53,0.14)" }}>
+            <div className="font-semibold">Jsi prezident soutěže.</div>
+            Při rovnosti hlasů rozhoduje tvůj hlas, zastupuješ každou neobsazenou funkci
+            a jednou za sezónu můžeš jinému předsedovi pozastavit pravomoc — tím rovnou
+            otevřeš hlasování o jeho odvolání. Když neprojde, pravomoc se mu vrátí
+            a ty přijdeš o pět bodů reputace.
+          </div>
+        )}
         <p className="text-sm text-muted mt-4">
           Soutěž s devíti a více kluby s trenérem má všechny čtyři odbory. Menší jen prezidenta
           a generálního sekretáře — pokuty i škrtání rozhodčích se tam řeší vždycky hlasováním.
@@ -218,7 +241,7 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
                           <PersonLine managerName={k.managerName} teamId={k.teamId} teamName={k.teamName} />
                         </div>
                         <button
-                          className={`btn shrink-0 ${mine ? "btn-primary" : "btn-secondary"}`}
+                          className={`btn btn-md shrink-0 ${mine ? "btn-primary" : "btn-secondary"}`}
                           style={{ minWidth: 108 }}
                           disabled={busy === e.id}
                           onClick={() => vote(e.id, k.teamId)}
@@ -231,7 +254,7 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
                 </div>
 
                 <button
-                  className={`btn w-full mt-3 ${jsemKandidat ? "btn-ghost" : "btn-secondary"}`}
+                  className={`btn btn-lg w-full mt-3 ${jsemKandidat ? "btn-ghost" : "btn-secondary"}`}
                   disabled={busy === e.id}
                   onClick={() => candidate(e.id, !jsemKandidat)}
                 >
@@ -241,6 +264,14 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
             );
           })}
         </div>
+      )}
+
+      {suspendRole && teamId && (
+        <SuspendForm
+          role={suspendRole} teamId={teamId}
+          onClose={() => setSuspendRole(null)}
+          onSaved={() => { setSuspendRole(null); onChanged(); }}
+        />
       )}
 
       {board?.seat && (
@@ -270,6 +301,58 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
         </div>
       )}
     </div>
+  );
+}
+
+/** Pozastavení pravomoci jinému předsedovi — nese riziko, tak ať je to vidět. */
+function SuspendForm({ role, teamId, onClose, onSaved }: {
+  role: { role: string; label: string }; teamId: string;
+  onClose: () => void; onSaved: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    const ok = await apiAction(
+      apiFetch(`/api/teams/${teamId}/competition/officials/${role.role}/suspend`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      }),
+      "Pravomoc se nepodařilo pozastavit",
+    );
+    setSaving(false);
+    if (ok) onSaved();
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title="Pozastavit pravomoc">
+      <div className="p-5 space-y-4">
+        <div className="text-lg font-heading">Pozastavit pravomoc — {role.label}</div>
+
+        <div className="rounded-lg p-3 text-sm" style={{ background: "#FBEAE8" }}>
+          <div className="font-semibold">Není to jen tak.</div>
+          Pravomoc mu odebereš okamžitě, ale zároveň se tím otevře hlasování o jeho
+          odvolání. Když kluby odvolání neschválí, pravomoc se mu vrátí a ty přijdeš
+          o pět bodů reputace. Udělat to můžeš jednou za sezónu.
+        </div>
+
+        <div>
+          <label className="text-sm text-muted">Proč mu pravomoc bereš</label>
+          <textarea className="input w-full mt-1" rows={3} maxLength={300}
+            value={reason} onChange={(e) => setReason(e.target.value)}
+            placeholder="Uvidí to celé grémium i on sám." />
+        </div>
+
+        <div className="flex gap-2">
+          <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
+          <button className="btn btn-lg btn-primary flex-1"
+            disabled={saving || reason.trim().length < 10} onClick={submit}>
+            {saving ? "Odesílám…" : "Pozastavit"}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -336,7 +419,7 @@ function Kabinet({ board, teamId, avatars, onPost }: {
           <span className="text-xs text-muted tabular-nums">
             {text.length} / {board.maxLength}
           </span>
-          <button className="btn btn-primary" disabled={saving || !text.trim()} onClick={send}>
+          <button className="btn btn-md btn-primary" disabled={saving || !text.trim()} onClick={send}>
             {saving ? "Odesílám…" : "Odeslat"}
           </button>
         </div>

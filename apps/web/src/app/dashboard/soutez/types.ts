@@ -47,6 +47,7 @@ export interface State {
   quorumNeeded: number;
   officials: Official[];
   roles: RoleSlot[];
+  presidentTeamId: string | null;
   proposalKinds: ProposalKind[];
   deposit: number;
 }

@@ -210,3 +210,187 @@ export async function applyTermReputation(
     logger.warn({ module: M }, `reputace za funkci ${role}`, e);
   }
 }
+
+/**
+ * Prezident soutěže je nadřízený ostatním předsedům. Nadřízenost není titul,
+ * ale tři konkrétní pravomoci:
+ *
+ *  1. při rovnosti hlasů rozhoduje on (viz hasMajority v meeting.ts),
+ *  2. může jinému předsedovi pozastavit pravomoc — a tím rovnou otevřít
+ *     hlasování o jeho odvolání,
+ *  3. zastupuje každou neobsazenou funkci, takže soutěž nezůstane bez rozhodnutí.
+ *
+ * Pozastavení je jednorázové za sezónu a nese riziko: když kluby odvolání
+ * neschválí, pravomoc se vrátí a prezident vypadá, že si vyřizoval účty.
+ */
+
+/** Kdo je prezident soutěže — nebo null, když je funkce neobsazená. */
+export async function presidentOf(
+  db: D1Database, leagueId: string, seasonNumber: number,
+): Promise<{ teamId: string; status: string } | null> {
+  const row = await db.prepare(
+    `SELECT team_id, status FROM competition_officials
+      WHERE league_id = ? AND role = 'predseda' AND season_number = ? AND status = 'active'`
+  ).bind(leagueId, seasonNumber).first<{ team_id: string; status: string }>()
+    .catch((e) => { logger.warn({ module: M }, "prezident soutěže", e); return null; });
+  return row ? { teamId: row.team_id, status: row.status } : null;
+}
+
+/**
+ * Smí tenhle klub jednat v dané gesci?
+ *
+ * Buď je jejím předsedou, nebo je prezident a funkce je neobsazená. Prezident
+ * NEPŘEBÍRÁ pravomoc obsazené funkce — to už by nebyla nadřízenost, ale diktatura.
+ */
+export async function actsFor(
+  db: D1Database, leagueId: string, teamId: string, role: OfficialRole, seasonNumber: number,
+): Promise<{ ok: boolean; asPresident: boolean; reason?: string }> {
+  const holder = await db.prepare(
+    `SELECT team_id, status FROM competition_officials
+      WHERE league_id = ? AND role = ? AND season_number = ? AND status IN ('active','suspended')`
+  ).bind(leagueId, role, seasonNumber).first<{ team_id: string; status: string }>()
+    .catch((e) => { logger.warn({ module: M }, `držitel funkce ${role}`, e); return null; });
+
+  if (holder?.team_id === teamId) {
+    if (holder.status === "suspended") {
+      return { ok: false, asPresident: false, reason: "Prezident ti pravomoc pozastavil. Rozhodne o tom nejbližší zasedání." };
+    }
+    return { ok: true, asPresident: false };
+  }
+
+  if (holder) {
+    return { ok: false, asPresident: false, reason: `Tuhle pravomoc má ${ROLE_LABEL[role]}.` };
+  }
+
+  const president = await presidentOf(db, leagueId, seasonNumber);
+  if (president?.teamId === teamId) return { ok: true, asPresident: true };
+
+  return {
+    ok: false, asPresident: false,
+    reason: `Funkce ${ROLE_LABEL[role]} je neobsazená — zastupuje ji prezident soutěže.`,
+  };
+}
+
+export interface SuspendResult { ok: boolean; reason?: string; proposalId?: string }
+
+/**
+ * Prezident pozastaví pravomoc jinému předsedovi a tím otevře hlasování o odvolání.
+ * Do rozhodnutí zasedání ten předseda nesmí jednat, ale zůstává ve vedení a hlasuje.
+ */
+export async function suspendOfficial(db: D1Database, opts: {
+  leagueId: string; seasonNumber: number; presidentTeamId: string;
+  role: OfficialRole; reason: string; gameDate: string;
+}): Promise<SuspendResult> {
+  if (opts.role === "predseda") {
+    return { ok: false, reason: "Sám sebe pozastavit nemůžeš. Odvolat prezidenta můžou jen kluby." };
+  }
+
+  const pres = await db.prepare(
+    `SELECT team_id, used_suspend FROM competition_officials
+      WHERE league_id = ? AND role = 'predseda' AND season_number = ? AND status = 'active'`
+  ).bind(opts.leagueId, opts.seasonNumber).first<{ team_id: string; used_suspend: number }>()
+    .catch((e) => { logger.warn({ module: M }, "prezident", e); return null; });
+
+  if (!pres || pres.team_id !== opts.presidentTeamId) {
+    return { ok: false, reason: "Tuhle pravomoc má jen prezident soutěže." };
+  }
+  if (pres.used_suspend >= 1) {
+    return { ok: false, reason: "Pozastavit pravomoc smíš jednou za sezónu. Letos už jsi to udělal." };
+  }
+
+  const target = await db.prepare(
+    `SELECT team_id FROM competition_officials
+      WHERE league_id = ? AND role = ? AND season_number = ? AND status = 'active'`
+  ).bind(opts.leagueId, opts.role, opts.seasonNumber).first<{ team_id: string }>()
+    .catch((e) => { logger.warn({ module: M }, "držitel funkce", e); return null; });
+  if (!target) return { ok: false, reason: "Tahle funkce není obsazená." };
+
+  const locked = await db.prepare(
+    `UPDATE competition_officials SET status = 'suspended'
+      WHERE league_id = ? AND role = ? AND season_number = ? AND status = 'active'`
+  ).bind(opts.leagueId, opts.role, opts.seasonNumber).run()
+    .catch((e) => { logger.error({ module: M }, "pozastavení pravomoci", e); return null; });
+  if (!locked || (locked.meta?.changes ?? 0) === 0) {
+    return { ok: false, reason: "Pravomoc se nepodařilo pozastavit." };
+  }
+
+  await db.prepare(
+    `UPDATE competition_officials SET used_suspend = used_suspend + 1
+      WHERE league_id = ? AND role = 'predseda' AND season_number = ? AND status = 'active'`
+  ).bind(opts.leagueId, opts.seasonNumber).run()
+    .catch((e) => logger.warn({ module: M }, "čerpání pozastavení", e));
+
+  // Pozastavení samo o sobě nestačí — musí o něm rozhodnout zasedání.
+  const proposalId = crypto.randomUUID();
+  await db.prepare(
+    `INSERT INTO competition_proposals
+      (id, league_id, season_number, kind, gesce, title, body, payload, proposed_by_team_id,
+       target_team_id, majority, quorum, opened_game_date, deposit)
+     VALUES (?,?,?,'recall','soutez',?,?,?,?,?,?,?,?,0)`
+  ).bind(
+    proposalId, opts.leagueId, opts.seasonNumber,
+    `Odvolání z funkce ${ROLE_LABEL[opts.role]}`,
+    opts.reason.slice(0, 300),
+    JSON.stringify({ role: opts.role, targetTeamId: target.team_id }),
+    opts.presidentTeamId, target.team_id, 2 / 3, 0.5, opts.gameDate,
+  ).run().catch((e) => { logger.error({ module: M }, "návrh na odvolání", e); return null; });
+
+  try {
+    const { sendSystemSMS } = await import("../messaging/system-sms");
+    await sendSystemSMS(db, target.team_id, "Sekretariát grémia",
+      `Prezident soutěže ti pozastavil pravomoc ${ROLE_LABEL[opts.role]}. `
+      + `O odvolání z funkce rozhodne nejbližší zasedání grémia. Do té doby nejednáš, ale hlasuješ.`);
+  } catch (e) {
+    logger.warn({ module: M }, "SMS o pozastavení", e);
+  }
+
+  logger.info({ module: M }, `soutěž ${opts.leagueId}: prezident pozastavil ${opts.role}`);
+  return { ok: true, proposalId };
+}
+
+/** Odvolání prošlo — funkce se uvolní a mandát se zapíše jako odvolaný. */
+export async function recallOfficial(
+  db: D1Database, leagueId: string, role: OfficialRole, seasonNumber: number, gameDate: string,
+): Promise<boolean> {
+  const holder = await db.prepare(
+    `SELECT team_id FROM competition_officials
+      WHERE league_id = ? AND role = ? AND season_number = ? AND status IN ('active','suspended')`
+  ).bind(leagueId, role, seasonNumber).first<{ team_id: string }>()
+    .catch(() => null);
+  if (!holder) return false;
+
+  const res = await db.prepare(
+    `UPDATE competition_officials SET status = 'recalled', ended_game_date = ?
+      WHERE league_id = ? AND role = ? AND season_number = ? AND status IN ('active','suspended')`
+  ).bind(gameDate, leagueId, role, seasonNumber).run()
+    .catch((e) => { logger.error({ module: M }, "odvolání funkcionáře", e); return null; });
+  if (!res || (res.meta?.changes ?? 0) === 0) return false;
+
+  await applyTermReputation(db, holder.team_id, "recalled", role, seasonNumber, gameDate);
+  await openElections(db, leagueId, seasonNumber, gameDate);
+  return true;
+}
+
+/** Odvolání neprošlo — pravomoc se vrací a prezident za to zaplatí reputací. */
+export async function restoreOfficial(
+  db: D1Database, leagueId: string, role: OfficialRole, seasonNumber: number,
+  presidentTeamId: string | null, gameDate: string,
+): Promise<void> {
+  await db.prepare(
+    `UPDATE competition_officials SET status = 'active'
+      WHERE league_id = ? AND role = ? AND season_number = ? AND status = 'suspended'`
+  ).bind(leagueId, role, seasonNumber).run()
+    .catch((e) => logger.warn({ module: M }, "navrácení pravomoci", e));
+
+  if (!presidentTeamId) return;
+  try {
+    const { applyManagerAttrDelta } = await import("../lib/manager-attrs");
+    await applyManagerAttrDelta(
+      db, presidentTeamId, "reputation", -5, "competition_office",
+      `Neúspěšné pozastavení pravomoci (${ROLE_LABEL[role]})`,
+      { referenceId: `suspend-fail-${seasonNumber}-${role}-${leagueId}`, gameDate },
+    );
+  } catch (e) {
+    logger.warn({ module: M }, "reputace za neúspěšné pozastavení", e);
+  }
+}

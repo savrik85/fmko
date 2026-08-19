@@ -31,18 +31,17 @@ const TAB_KEYS = ["zasedani", "pokladna", "vedeni", "zapisy"] as const;
 const GESCE_ORDER = ["soutez", "hospodarska", "disciplinarni", "rozhodcich", "zadna"] as const;
 
 /**
- * Záložky se jmenují podle toho, CO SE V NICH ŘEŠÍ, ne podle úřadu. Tituly jako
- * „Prezidium" nebo „Sekretariát" znějí vznešeně, ale nikdo z nich nepozná, kam
- * patří návrh na startovné. Vznešené názvy zůstávají u lidí a v hlavičce odboru.
+ * Záložky nesou jméno funkce, která odbor vede — zkrácené, aby se čtyři vešly
+ * na mobil vedle sebe. Plný titul i s agendou je v hlavičce odboru pod nimi.
  */
 const GESCE_LABEL: Record<string, string> = {
-  soutez: "Pravidla", hospodarska: "Peníze",
-  disciplinarni: "Tresty", rozhodcich: "Rozhodčí", zadna: "Ostatní",
+  soutez: "Prezident", hospodarska: "Sekretář",
+  disciplinarni: "Disciplinárka", rozhodcich: "Rozhodčí", zadna: "Ostatní",
 };
 
 const GESCE_PLNY: Record<string, string> = {
-  soutez: "Prezidium soutěže", hospodarska: "Generální sekretariát",
-  disciplinarni: "Disciplinární rada", rozhodcich: "Komise rozhodčích", zadna: "Ostatní",
+  soutez: "Prezident soutěže", hospodarska: "Generální sekretář",
+  disciplinarni: "Předseda disciplinární rady", rozhodcich: "Komisař rozhodčích", zadna: "Ostatní",
 };
 
 const GESCE_POPIS: Record<string, string> = {
@@ -55,8 +54,8 @@ const GESCE_POPIS: Record<string, string> = {
 
 /** Komu se návrh podává — třetí pád, ať věta drží pohromadě. */
 const GESCE_KOMU: Record<string, string> = {
-  soutez: "prezidiu soutěže", hospodarska: "generálnímu sekretáři",
-  disciplinarni: "disciplinární radě", rozhodcich: "komisaři rozhodčích", zadna: "mimo odbory",
+  soutez: "prezidentovi soutěže", hospodarska: "generálnímu sekretáři",
+  disciplinarni: "předsedovi disciplinární rady", rozhodcich: "komisaři rozhodčích", zadna: "mimo odbory",
 };
 
 const ROLE_OF_GESCE: Record<string, string> = {
@@ -333,7 +332,7 @@ export default function SoutezPage() {
 
           {state.enabled && gesce !== "zadna" && gesce !== "disciplinarni" && gesce !== "rozhodcich" && (
             <>
-              <button className="btn btn-primary w-full" onClick={() => setFormOpen(true)}>
+              <button className="btn btn-lg btn-primary w-full" onClick={() => setFormOpen(true)}>
                 Podat návrh {GESCE_KOMU[gesce]}
               </button>
               <p className="text-sm text-muted">
@@ -479,7 +478,7 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
                     <textarea className="input w-full" rows={2} maxLength={150}
                       value={defence} onChange={(e) => setDefence(e.target.value)}
                       placeholder="Co na svou obranu…" />
-                    <button className="btn btn-secondary w-full"
+                    <button className="btn btn-lg btn-secondary w-full"
                       disabled={!defence.trim()} onClick={() => onDefend(p.id, defence)}>
                       Odeslat obhajobu
                     </button>
@@ -490,7 +489,7 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
               <div className="grid grid-cols-3 gap-2">
                 {(["pro", "proti", "zdrzel"] as const).map((a) => (
                   <button key={a} onClick={() => onVote(p.id, a)}
-                    className={`btn ${p.myAnswer === a ? "btn-primary" : "btn-secondary"}`}>
+                    className={`btn btn-md ${p.myAnswer === a ? "btn-primary" : "btn-secondary"}`}>
                     {ANSWER_LABEL[a]}
                   </button>
                 ))}
@@ -503,7 +502,7 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
               </div>
             )}
             {mine && (
-              <button className="btn btn-ghost w-full" onClick={() => onWithdraw(p.id)}>
+              <button className="btn btn-md btn-ghost w-full" onClick={() => onWithdraw(p.id)}>
                 Stáhnout návrh
               </button>
             )}
@@ -647,8 +646,8 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
         </p>
 
         <div className="flex gap-2">
-          <button className="btn btn-secondary flex-1" onClick={onClose}>Zrušit</button>
-          <button className="btn btn-primary flex-1" onClick={submit} disabled={saving || !kind || !zmeneno}>
+          <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
+          <button className="btn btn-lg btn-primary flex-1" onClick={submit} disabled={saving || !kind || !zmeneno}>
             {saving ? "Podávám…" : zmeneno ? "Podat návrh" : "Změň hodnotu"}
           </button>
         </div>
