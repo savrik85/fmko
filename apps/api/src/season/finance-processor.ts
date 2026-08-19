@@ -51,6 +51,12 @@ export type TransactionType =
   // Pokuta disciplinární komise za výroky o rozhodčím. ZÁMĚRNĚ není v PURCHASE_TYPES —
   // musí se strhnout i při záporném rozpočtu, jinak by BUDGET_BLOCKED shodil uložení rozhovoru.
   | "disciplinary_fine"
+  // Startovné do soutěže a kauce za návrh na schůzi vedení soutěže. Stejně jako
+  // disciplinary_fine ZÁMĚRNĚ nejsou v PURCHASE_TYPES — nezaplatit je nejde,
+  // musí se strhnout i při záporném rozpočtu.
+  | "competition_fee"
+  | "competition_deposit"
+  | "competition_grant"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */

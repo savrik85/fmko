@@ -121,21 +121,25 @@ export async function readLeagueGameDate(db: D1Database, leagueId: string): Prom
 /**
  * Ligy, které mají dnes naplánované kolo. Používá producent fronty i stará smyčka.
  *
- * `legacyExcludeNameLike` existuje JEN pro starou smyčku (režim "loop"), kde se natvrdo
+ * `legacyExcludeDistrictLike` existuje JEN pro starou smyčku (režim "loop"), kde se natvrdo
  * vylučovaly České Budějovice, protože 6 lig přeteklo limit workeru. Ve frontovém režimu
  * se nepředává — každá liga má vlastní invokaci, takže obcházení limitu není potřeba.
  * Až padne stará cesta (fáze 2), zmizí i tenhle parametr.
  */
 export async function findLeaguesWithDueRound(
   db: D1Database,
-  opts: { legacyExcludeNameLike?: string } = {},
+  opts: { legacyExcludeDistrictLike?: string } = {},
 ): Promise<Array<{ leagueId: string; gameDate: string }>> {
-  const exclude = opts.legacyExcludeNameLike;
+  // Filtruje se podle OKRESU, ne podle názvu ligy. Název je proměnlivý — soutěž se
+  // po přijetí sponzora přejmenuje (např. na „Gambrinus liga") a filtr na jméno by
+  // tiše přestal platit; tick by přetekl limit workeru a neodsimuloval by NIC.
+  // `leagues.district` se naopak nemění nikdy (U21 ho jen rozšiřuje o sufix " U21").
+  const exclude = opts.legacyExcludeDistrictLike;
   const stmt = db.prepare(
     `SELECT t.league_id AS league_id, MAX(t.game_date) AS max_game_date
        FROM teams t JOIN leagues l ON t.league_id = l.id
       WHERE t.league_id IS NOT NULL AND t.game_date IS NOT NULL
-        ${exclude ? "AND l.name NOT LIKE ?" : ""}
+        ${exclude ? "AND l.district NOT LIKE ?" : ""}
       GROUP BY t.league_id`,
   );
   const rows = await (exclude ? stmt.bind(exclude) : stmt).all<{

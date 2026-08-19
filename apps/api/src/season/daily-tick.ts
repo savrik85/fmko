@@ -9,6 +9,7 @@ import { createRng } from "../generators/rng";
 import { simulateTraining, trainingTypeLabel } from "./training";
 import { trainingExperienceChance } from "../skills/training";
 import { logger } from "../lib/logger";
+import { MEETING_DAY_OF_WEEK } from "../competition/defaults";
 import { overallRatingFromFlat } from "../skills/generator";
 
 export interface DailyTickEvent {
@@ -961,6 +962,25 @@ export async function executeDailyTick(
       const said = await publishAiPreMatchStatements(env.DB, from.toISOString(), to.toISOString());
       if (said > 0) logger.info({ module: "ai-statement" }, `${said} předzápasových výroků`);
     } catch (e) { logger.warn({ module: "ai-statement" }, "předzápasové výroky selhaly", e); }
+
+    // ── Schůze vedení soutěže (středa) ──
+    // Středa je jediný den bez kolize: liga hraje pondělí a čtvrtek, pohár v sobotu
+    // (cup.ts snapuje kola na sobotu), vesnický týdenní cyklus běží v pondělí a delegace
+    // rozhodčích míří ve středu na pátek, kde se nehraje.
+    //
+    // Spouštěčem je DEN V TÝDNU, ne uložený timestamp: rollover nuluje game_clock.offset_days
+    // a herní datum skočí o desítky dní zpět, takže absolutní „next_meeting_at <= dnes"
+    // by po přechodu sezóny nemuselo nikdy nastat.
+    if (dayOfWeek === MEETING_DAY_OF_WEEK) {
+      try {
+        const { runCompetitionMeetings } = await import("../competition/meeting");
+        const r = await runCompetitionMeetings(env.DB, globalGameDate);
+        if (r.meetings > 0) {
+          logger.info({ module: "competition" },
+            `schůze: ${r.meetings} soutěží, ${r.closed} bodů projednáno, ${r.passed} přijato`);
+        }
+      } catch (e) { logger.error({ module: "competition" }, "schůze vedení soutěže selhala", e); }
+    }
   }
   // (Chybějící game_clock už je zalogováno jako error na začátku ticku.)
 

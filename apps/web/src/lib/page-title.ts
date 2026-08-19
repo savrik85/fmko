@@ -44,6 +44,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/dashboard/u21": "U21",
   "/dashboard/pohar": "Pohár",
   "/dashboard/rozhodci": "Rozhodčí",
+  "/dashboard/soutez": "Vedení soutěže",
   "/dashboard/more": "Více",
   "/dashboard/napoveda": "Nápověda",
   "/dashboard/app": "Nainstaluj",
