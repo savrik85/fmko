@@ -342,19 +342,6 @@ export default function SoutezPage() {
             <RefereesPanel data={referees} state={state} teamId={teamId} myOpen={myOpen} onChanged={refreshAll} />
           )}
 
-          {board && ROLE_OF_GESCE[gesce] && (
-            <OdborInbox
-              roleKey={ROLE_OF_GESCE[gesce]}
-              roleLabel={state.roles?.find((r) => r.role === ROLE_OF_GESCE[gesce])?.label ?? ""}
-              messages={board.inbox?.[ROLE_OF_GESCE[gesce]] ?? []}
-              maxLength={board.maxLength}
-              canPost={board.canPost}
-              teamId={teamId}
-              avatars={avatars}
-              onPost={(t) => postToBoard(t, "odbor", ROLE_OF_GESCE[gesce])}
-            />
-          )}
-
           {open.length === 0 ? (
             <Empty>V tomhle odboru není na programu žádný bod.</Empty>
           ) : (
@@ -377,6 +364,19 @@ export default function SoutezPage() {
                 </p>
               </>
             )
+          )}
+
+          {board && ROLE_OF_GESCE[gesce] && (
+            <OdborInbox
+              roleKey={ROLE_OF_GESCE[gesce]}
+              roleLabel={state.roles?.find((r) => r.role === ROLE_OF_GESCE[gesce])?.label ?? ""}
+              messages={board.inbox?.[ROLE_OF_GESCE[gesce]] ?? []}
+              maxLength={board.maxLength}
+              canPost={board.canPost}
+              teamId={teamId}
+              avatars={avatars}
+              onPost={(t) => postToBoard(t, "odbor", ROLE_OF_GESCE[gesce])}
+            />
           )}
 
           {closed.length > 0 && (
