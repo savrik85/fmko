@@ -79,12 +79,20 @@ export const QUALIFIED_MAJORITY = 2 / 3;
 export type Gesce = "soutez" | "hospodarska" | "disciplinarni" | "rozhodcich" | "zadna";
 export type OfficialRole = "predseda" | "hospodarska" | "disciplinarni" | "rozhodcich";
 
+/**
+ * Tituly jsou schválně o číslo nabubřelejší, než na okresní přebor patří —
+ * přesně tak, jak se okresní funkcionáři sami berou. Kódy rolí zůstávají
+ * beze změny, mění se jen to, co vidí hráč.
+ */
 export const ROLE_LABEL: Record<OfficialRole, string> = {
-  predseda: "Předseda soutěže",
-  hospodarska: "Předseda hospodářské komise",
-  disciplinarni: "Předseda disciplinární komise",
-  rozhodcich: "Předseda komise rozhodčích",
+  predseda: "Prezident soutěže",
+  hospodarska: "Generální sekretář",
+  disciplinarni: "Předseda disciplinární rady",
+  rozhodcich: "Komisař rozhodčích",
 };
+
+/** Název celého orgánu. */
+export const BODY_NAME = "Grémium soutěže";
 
 /** Která gesce patří které funkci. Předseda soutěže zastupuje neobsazené. */
 export const GESCE_ROLE: Record<Exclude<Gesce, "zadna">, OfficialRole> = {

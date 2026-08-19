@@ -107,19 +107,28 @@ const ANSWER_LABEL: Record<string, string> = { pro: "Pro", proti: "Proti", zdrze
 const GESCE_ORDER = ["soutez", "hospodarska", "disciplinarni", "rozhodcich", "zadna"] as const;
 
 const GESCE_LABEL: Record<string, string> = {
-  soutez: "Vedení soutěže",
-  hospodarska: "Hospodářská",
+  soutez: "Grémium",
+  hospodarska: "Sekretariát",
   disciplinarni: "Disciplinární",
+  rozhodcich: "Rozhodčí",
+  zadna: "Ostatní",
+};
+
+/** Plný název odboru do nadpisu — v záložce se nevejde. */
+const GESCE_PLNY: Record<string, string> = {
+  soutez: "Grémium soutěže",
+  hospodarska: "Generální sekretariát",
+  disciplinarni: "Disciplinární rada",
   rozhodcich: "Komise rozhodčích",
   zadna: "Ostatní",
 };
 
-/** Druhý pád do vět typu „podat návrh do…". Bez toho vzniká „do odboru hospodářská". */
-const GESCE_DO: Record<string, string> = {
-  soutez: "do vedení soutěže",
-  hospodarska: "do hospodářské komise",
-  disciplinarni: "do disciplinární komise",
-  rozhodcich: "do komise rozhodčích",
+/** Komu se návrh podává — třetí pád, ať věta drží pohromadě. */
+const GESCE_KOMU: Record<string, string> = {
+  soutez: "grémiu soutěže",
+  hospodarska: "generálnímu sekretáři",
+  disciplinarni: "disciplinární radě",
+  rozhodcich: "komisaři rozhodčích",
   zadna: "mimo odbory",
 };
 
@@ -289,7 +298,7 @@ export default function SoutezPage() {
 
       <Tabs
         items={[
-          { key: "schuze", label: "Schůze", count: openAll.length || null },
+          { key: "schuze", label: "Zasedání", count: openAll.length || null },
           { key: "pokladna", label: "Pokladna" },
           { key: "vedeni", label: "Vedení" },
           { key: "zapisy", label: "Zápisy" },
@@ -301,9 +310,9 @@ export default function SoutezPage() {
       {tab === "schuze" && (
         <div className="space-y-4">
           <div className="card p-4 text-sm">
-            <div className="font-semibold text-base">Schůze se koná každou středu.</div>
+            <div className="font-semibold text-base">Grémium zasedá každou středu.</div>
             <p className="mt-1 text-muted">
-              Návrhy i hlasy můžeš podávat kdykoli až do jejího zahájení. Během schůze vidíš jen kolik
+              Návrhy i hlasy můžeš podávat kdykoli až do jeho zahájení. Během zasedání vidíš jen kolik
               klubů už hlasovalo — kdo jak hlasoval se odkryje až v zápisu. Změny odměn a sazeb platí
               vždy až od příští sezóny, nikdy na rozehranou.
             </p>
@@ -338,7 +347,7 @@ export default function SoutezPage() {
           {state.enabled && gesce !== "zadna" && (
             <>
               <button className="btn btn-primary w-full" onClick={() => setFormOpen(true)}>
-                Podat návrh {GESCE_DO[gesce]}
+                Podat návrh {GESCE_KOMU[gesce]}
               </button>
               <p className="text-sm text-muted">
                 Za podání se skládá kauce {czk(state.deposit)}. Vrátí se, když návrh projde.
@@ -386,14 +395,14 @@ function GesceHeader({ gesce, state }: { gesce: string; state: State }) {
   const slot = state.roles?.find((r) => r.role === ROLE_OF_GESCE[gesce]);
   return (
     <div className="card p-4 text-sm space-y-1">
-      <div className="font-semibold text-base">{GESCE_LABEL[gesce]}</div>
+      <div className="font-semibold text-base">{GESCE_PLNY[gesce]}</div>
       <p className="text-muted">{GESCE_POPIS[gesce]}</p>
       {slot && (
         <div>
           {slot.holder ? (
             <>Vede <EntityLink type="team" id={slot.holder.teamId}>{slot.holder.teamName}</EntityLink></>
           ) : (
-            <span className="text-muted">Odbor nemá předsedu — o všem rozhoduje hlasování klubů.</span>
+            <span className="text-muted">Odbor je neobsazený — o všem rozhoduje hlasování klubů.</span>
           )}
         </div>
       )}
@@ -654,7 +663,7 @@ function VedeniTab({ state, elections, teamId, onChanged }: {
           <SectionLabel>Probíhající volby</SectionLabel>
           <p className="text-sm text-muted">
             Volba je tajná — neuvidí se ani po uzavření, kdo koho volil. Kandidovat může klub
-            s účastí aspoň 60 % posledních schůzí, a jen na jednu funkci.
+            s účastí aspoň 60 % posledních zasedání, a jen na jednu funkci.
           </p>
           {openElections.map((e) => {
             const jsemKandidat = e.candidates.some((k) => k.teamId === teamId);
@@ -711,7 +720,7 @@ function VedeniTab({ state, elections, teamId, onChanged }: {
         <Row label="Z toho aktivních" value={String(state.activeVoters)} />
         <Row label="Kvórum" value={`${state.quorumNeeded} ${plural(state.quorumNeeded, "hlas", "hlasy", "hlasů")}`} />
         <p className="text-sm text-muted pt-1">
-          Aktivní je klub, který hlasoval aspoň na jedné ze tří posledních schůzí. Kdo nehlasuje,
+          Aktivní je klub, který hlasoval aspoň na jednom ze tří posledních zasedání. Kdo nehlasuje,
           kvórum neblokuje — ale jakmile se vrátí, hlas má hned.
         </p>
       </div>
@@ -722,14 +731,14 @@ function VedeniTab({ state, elections, teamId, onChanged }: {
 // ── Zápisy ──
 function ZapisyTab({ meetings }: { meetings: Meeting[] }) {
   if (meetings.length === 0) {
-    return <div className="card p-4 text-base text-muted">Zatím se žádná schůze nekonala.</div>;
+    return <div className="card p-4 text-base text-muted">Grémium se zatím nesešlo.</div>;
   }
   return (
     <div className="space-y-4">
       {meetings.map((m) => (
         <div key={m.id} className="card p-4 space-y-2">
           <div className="flex items-baseline justify-between gap-3">
-            <div className="text-base font-semibold">Schůze {formatDate(m.gameDate)}</div>
+            <div className="text-base font-semibold">Zasedání {formatDate(m.gameDate)}</div>
             <div className="text-sm text-muted tabular-nums">{czk(m.balanceAfter)}</div>
           </div>
           <div className="text-sm text-muted">
@@ -806,7 +815,7 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
   return (
     <Modal isOpen onClose={onClose} title="Nový návrh">
       <div className="space-y-4">
-        <div className="text-lg font-heading">Nový návrh {GESCE_DO[gesce]}</div>
+        <div className="text-lg font-heading">Nový návrh {GESCE_KOMU[gesce]}</div>
         <div>
           <label className="text-sm text-muted">Čeho se návrh týká</label>
           <select className="select w-full mt-1" value={kind} onChange={(e) => setKind(e.target.value)}>

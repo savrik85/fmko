@@ -1,5 +1,5 @@
 /**
- * Vedení soutěže — pokladna, návrhy, hlasování, zápisy ze schůzí.
+ * Grémium soutěže — pokladna, návrhy, hlasování, volby a zápisy ze zasedání.
  *
  * Hlasování je během otevřené schůze SKRYTÉ: klient se dozví jen kolik klubů už
  * hlasovalo, ne poměr ani jména. Po uzavření se zápis odkryje jmenovitě. Kdyby byl

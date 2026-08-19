@@ -1,5 +1,5 @@
 /**
- * Týdenní schůze vedení soutěže.
+ * Týdenní zasedání grémia soutěže.
  *
  * Běží ve středu z denního ticku. Středa je jediný den bez kolize: liga hraje
  * pondělí a čtvrtek, pohár v sobotu, vesnický týdenní cyklus v pondělí a delegace
@@ -24,7 +24,7 @@ import { voterStats } from "./proposals";
 import { loadLeagueMeta } from "./rules";
 
 const M = "competition-meeting";
-const SMS_ROLE = "Sekretariát soutěže";
+const SMS_ROLE = "Sekretariát grémia";
 
 interface OpenProposal {
   id: string;
@@ -295,8 +295,8 @@ async function notifyMeeting(
 
   const n = results.length;
   const bodu = n === 1 ? "bod" : n <= 4 ? "body" : "bodů";
-  const body = `Schůze vedení soutěže (${leagueName}) projednala ${n} ${bodu}: `
-    + `${parts.join(", ") || "bez rozhodnutí"}. Zápis najdeš v sekci Vedení soutěže.`;
+  const body = `Zasedání grémia soutěže (${leagueName}) projednalo ${n} ${bodu}: `
+    + `${parts.join(", ") || "bez rozhodnutí"}. Zápis najdeš v sekci Grémium.`;
 
   for (const teamId of voters) {
     await sendSystemSMS(db, teamId, SMS_ROLE, body)
