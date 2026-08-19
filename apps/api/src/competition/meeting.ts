@@ -272,9 +272,10 @@ async function notifyMeeting(
   if (rejected) parts.push(`${rejected} zamítnuto`);
   if (noQuorum) parts.push(`${noQuorum} neusnášeníschopné`);
 
-  const body = `Schůze vedení soutěže (${leagueName}) projednala ${results.length} `
-    + `${results.length === 1 ? "bod" : results.length < 5 ? "body" : "bodů"}: ${parts.join(", ") || "bez rozhodnutí"}. `
-    + `Zápis najdeš v sekci Soutěž.`;
+  const n = results.length;
+  const bodu = n === 1 ? "bod" : n <= 4 ? "body" : "bodů";
+  const body = `Schůze vedení soutěže (${leagueName}) projednala ${n} ${bodu}: `
+    + `${parts.join(", ") || "bez rozhodnutí"}. Zápis najdeš v sekci Vedení soutěže.`;
 
   for (const teamId of voters) {
     await sendSystemSMS(db, teamId, SMS_ROLE, body)

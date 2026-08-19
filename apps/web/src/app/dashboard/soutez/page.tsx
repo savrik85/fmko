@@ -94,6 +94,13 @@ function czk(n: number | null | undefined): string {
   return `${Math.round(n).toLocaleString("cs")} Kč`;
 }
 
+/** České skloňování po číslovce: 1 hlas, 2–4 hlasy, 5+ hlasů. */
+function plural(n: number, one: string, few: string, many: string): string {
+  if (n === 1) return one;
+  if (n >= 2 && n <= 4) return few;
+  return many;
+}
+
 function signed(n: number): string {
   if (n === 0) return "0 Kč";
   return `${n > 0 ? "+" : "−"}${Math.abs(Math.round(n)).toLocaleString("cs")} Kč`;
@@ -193,7 +200,7 @@ export default function SoutezPage() {
           <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
             <span>Pokladna <strong className="tabular-nums">{czk(state.balance)}</strong></span>
             <span>Hlasovacích klubů <strong className="tabular-nums">{state.voters}</strong></span>
-            <span>Kvórum <strong className="tabular-nums">{state.quorumNeeded}</strong> hlasů</span>
+            <span>Kvórum <strong className="tabular-nums">{state.quorumNeeded}</strong> {plural(state.quorumNeeded, "hlas", "hlasy", "hlasů")}</span>
           </div>
         ) : (
           <div className="mt-3 text-sm">
@@ -324,7 +331,7 @@ function ProposalCard({ p, myTeamId, onVote, onWithdraw, canVote }: {
 
       {p.status === "open" ? (
         <>
-          <div className="text-sm text-muted">Hlasovalo {p.castCount} klubů.</div>
+          <div className="text-sm text-muted">Hlasovalo {p.castCount} {plural(p.castCount, "klub", "kluby", "klubů")}.</div>
           {canVote && (
             <div className="flex gap-2 pt-1">
               {(["pro", "proti", "zdrzel"] as const).map((a) => (
@@ -504,7 +511,7 @@ function VedeniTab({ state }: { state: State }) {
         <SectionLabel>Hlasování</SectionLabel>
         <Row label="Klubů s hlasovacím právem" value={String(state.voters)} />
         <Row label="Z toho aktivních" value={String(state.activeVoters)} />
-        <Row label="Kvórum" value={`${state.quorumNeeded} hlasů`} />
+        <Row label="Kvórum" value={`${state.quorumNeeded} ${plural(state.quorumNeeded, "hlas", "hlasy", "hlasů")}`} />
         <p className="text-sm text-muted pt-1">
           Aktivní je klub, který hlasoval aspoň na jedné ze tří posledních schůzí. Kdo nehlasuje,
           kvórum neblokuje — ale jakmile se vrátí, hlas má hned.
