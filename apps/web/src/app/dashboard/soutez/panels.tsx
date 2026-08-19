@@ -158,7 +158,7 @@ export function VedeniPanel({ state, elections, avatars, teamId, onChanged }: {
             const suspended = state.officials.find((o) => o.role === r.role)?.status === "suspended";
             return (
               <div key={r.role} className="flex items-center gap-3">
-                <Portrait avatar={r.holder ? avatars[r.holder.teamId] : null} size={48}
+                <Portrait avatar={r.holder ? avatars[r.holder.teamId] : null} name={r.holder?.managerName} size={48}
                   ring={r.holder ? GOLD : "var(--color-muted-light)"} />
                 <div className="min-w-0 flex-1">
                   <div className="section-label mb-0" style={{ fontSize: "0.6875rem" }}>{r.label}</div>
@@ -207,7 +207,7 @@ export function VedeniPanel({ state, elections, avatars, teamId, onChanged }: {
                       <div key={k.teamId}
                         className="flex items-center gap-3 rounded-lg p-2"
                         style={{ background: mine ? "rgba(196,160,53,0.14)" : "var(--color-surface)" }}>
-                        <Portrait avatar={avatars[k.teamId]} size={40} ring={mine ? GOLD : "var(--color-muted-light)"} />
+                        <Portrait avatar={avatars[k.teamId]} name={k.managerName} size={40} ring={mine ? GOLD : "var(--color-muted-light)"} />
                         <div className="min-w-0 flex-1">
                           <PersonLine managerName={k.managerName} teamId={k.teamId} teamName={k.teamName} />
                         </div>
@@ -242,7 +242,7 @@ export function VedeniPanel({ state, elections, avatars, teamId, onChanged }: {
           <div className="space-y-3">
             {done.map((e) => (
               <div key={e.id} className="flex items-center gap-3">
-                <Portrait avatar={e.winnerTeamId ? avatars[e.winnerTeamId] : null} size={40}
+                <Portrait avatar={e.winnerTeamId ? avatars[e.winnerTeamId] : null} name={e.winnerManager} size={40}
                   ring={e.winnerTeamId ? GOLD : "var(--color-muted-light)"} />
                 <div className="min-w-0 flex-1">
                   <div className="section-label mb-0" style={{ fontSize: "0.6875rem" }}>{e.roleLabel}</div>

@@ -363,7 +363,7 @@ function GesceHeader({ gesce, state, avatars }: {
       <p className="text-sm text-muted mt-0.5">{GESCE_POPIS[gesce]}</p>
       {slot && (
         <div className="mt-3 flex items-center gap-3">
-          <Portrait avatar={slot.holder ? avatars[slot.holder.teamId] : null} size={44}
+          <Portrait avatar={slot.holder ? avatars[slot.holder.teamId] : null} name={slot.holder?.managerName} size={44}
             ring={slot.holder ? GOLD : "var(--color-muted-light)"} />
           {slot.holder ? (
             <PersonLine managerName={slot.holder.managerName}
@@ -404,7 +404,7 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
         </div>
 
         <div className="flex items-center gap-2 text-sm text-muted">
-          <Portrait avatar={avatars[p.proposedByTeamId]} size={28} ring="var(--color-muted-light)" />
+          <Portrait avatar={avatars[p.proposedByTeamId]} name={p.proposerName} size={28} ring="var(--color-muted-light)" />
           <div className="min-w-0 break-words">
             Navrhuje {p.proposerName
               ? <EntityLink type="team" id={p.proposedByTeamId}>{p.proposerName}</EntityLink>

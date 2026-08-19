@@ -49,12 +49,23 @@ export function Ornament({ children, right }: { children: React.ReactNode; right
   );
 }
 
-/** Portrét trenéra. Do kolečka o straně B patří size = B / 1,2, jinak se ořízne brada. */
-export function Portrait({ avatar, size = 44, ring = GOLD }: {
+/**
+ * Portrét trenéra. Do kolečka o straně B patří size = B / 1,2, jinak se ořízne brada.
+ *
+ * Prázdný objekt `{}` je platný JSON, ale facesjs z něj nic nevykreslí a zůstane
+ * díra — v datech takoví trenéři existují. Bere se proto jako chybějící avatar
+ * a místo něj se ukáže iniciála.
+ */
+export function Portrait({ avatar, name, size = 44, ring = GOLD }: {
   avatar: Record<string, unknown> | null | undefined;
+  /** Jméno pro iniciálu, když avatar chybí. */
+  name?: string | null;
   size?: number;
   ring?: string;
 }) {
+  const usable = !!avatar && Object.keys(avatar).length > 2;
+  const initial = (name ?? "").trim().charAt(0).toUpperCase();
+
   return (
     <div
       className="rounded-full overflow-hidden shrink-0 flex items-end justify-center"
@@ -64,9 +75,16 @@ export function Portrait({ avatar, size = 44, ring = GOLD }: {
         boxShadow: `inset 0 0 0 2px ${ring}`,
       }}
     >
-      {avatar
-        ? <FaceAvatar faceConfig={avatar} size={size / 1.2} />
-        : <span className="text-muted" style={{ fontSize: size * 0.4, lineHeight: `${size}px` }}>?</span>}
+      {usable ? (
+        <FaceAvatar faceConfig={avatar} size={size / 1.2} />
+      ) : (
+        <span
+          className="font-heading"
+          style={{ fontSize: size * 0.42, lineHeight: `${size}px`, color: "var(--color-gold-700)" }}
+        >
+          {initial || "?"}
+        </span>
+      )}
     </div>
   );
 }
