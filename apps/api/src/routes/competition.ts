@@ -17,9 +17,7 @@ import {
   type CompetitionRules, type OfficialRole,
 } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
-import {
-  attendanceOf, canRunFor, loadOfficials, openElections, rolesFor,
-} from "../competition/officials";
+import { canRunFor, openElections, rolesFor } from "../competition/officials";
 import { proposalTitle, validateProposal, voterStats } from "../competition/proposals";
 import {
   checkBudget, freeBalance, outstandingCommitments, placementReward, subsidyFor, teamImpact,
@@ -636,7 +634,7 @@ competitionRouter.post("/teams/:teamId/competition/elections/:id/candidacy", asy
   ).bind(electionId, electionId).run()
     .catch((e) => logger.warn({ module: M }, "počet kandidátů", e));
 
-  return c.json({ ok: true, attendance: check.attendance });
+  return c.json({ ok: true });
 });
 
 competitionRouter.delete("/teams/:teamId/competition/elections/:id/candidacy", async (c) => {
@@ -695,7 +693,7 @@ competitionRouter.get("/teams/:teamId/competition/candidacy-check", async (c) =>
     const r = await canRunFor(c.env.DB, leagueId, teamId, role, meta.season_number);
     out[role] = { ok: r.ok, reason: r.reason };
   }
-  return c.json({ attendance: await attendanceOf(c.env.DB, leagueId, teamId), roles: out });
+  return c.json({ roles: out });
 });
 
 competitionRouter.post("/admin/competition/:leagueId/elections", async (c) => {

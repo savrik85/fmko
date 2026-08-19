@@ -5,9 +5,8 @@
  * neodkrývá, kdo koho volil. Kdyby bylo vidět, nikdo nepůjde proti favoritovi
  * a každá volba dopadne jednomyslně.
  *
- * Docházka je jediná vstupenka do kandidatury: kdo se o soutěž nezajímá, nemá ji
- * řídit. Práh se počítá z posledních schůzí, ne z celé historie, aby se dal
- * vrátit i klub, který chvíli chyběl.
+ * Kandidovat může každý klub s hlasovacím právem. Jediné omezení je, že jeden klub
+ * může zastávat nejvýš jednu funkci — o zbytku rozhodnou voliči.
  */
 
 import { logger } from "../lib/logger";
@@ -15,11 +14,6 @@ import { FULL_BOARD_CLUBS, ROLE_LABEL, type OfficialRole } from "./defaults";
 import { countHumanClubs, listVoters } from "./rules";
 
 const M = "competition-officials";
-
-/** Kolik posledních schůzí se dívá na docházku kandidáta. */
-const ATTENDANCE_WINDOW = 5;
-/** Kolik z nich musel klub odhlasovat, aby mohl kandidovat. */
-const MIN_ATTENDANCE_RATIO = 0.6;
 
 /** Funkce, které v soutěži té velikosti vůbec existují. */
 export function rolesFor(humanClubs: number): OfficialRole[] {
@@ -79,11 +73,10 @@ export async function openElections(
 export interface CandidacyCheck {
   ok: boolean;
   reason?: string;
-  attendance?: { present: number; of: number };
 }
 
 /**
- * Smí klub kandidovat? Tři podmínky, každá se svým důvodem, ať UI ví, co říct.
+ * Smí klub kandidovat? Dvě podmínky, každá se svým důvodem, ať UI ví, co říct.
  */
 export async function canRunFor(
   db: D1Database, leagueId: string, teamId: string, role: OfficialRole, seasonNumber: number,
@@ -114,52 +107,7 @@ export async function canRunFor(
     return { ok: false, reason: `Už kandiduješ na ${ROLE_LABEL[elsewhere.role as OfficialRole]}. Nejdřív tu kandidaturu stáhni.` };
   }
 
-  const att = await attendanceOf(db, leagueId, teamId);
-  if (!meetsAttendance(att)) {
-    return {
-      ok: false, attendance: att,
-      reason: `Na kandidaturu je potřeba účast aspoň ${Math.round(MIN_ATTENDANCE_RATIO * 100)} %`
-        + ` z posledních ${ATTENDANCE_WINDOW} zasedání. Ty máš ${att.present} z ${att.of}.`,
-    };
-  }
-
-  return { ok: true, attendance: att };
-}
-
-/**
- * Splňuje klub docházkovou podmínku pro kandidaturu?
- *
- * Podmínka se zapne AŽ po plném okně zasedání. Na začátku sezóny — a hned po
- * zapnutí samosprávy — žádné zasedání neproběhlo, takže by jinak zablokovala
- * kandidaturu úplně všem a soutěž by nikdy nedostala vedení. Kdo přijde později,
- * má taky pět zasedání na to, aby se ukázal.
- */
-export function meetsAttendance(att: { present: number; of: number }): boolean {
-  if (att.of < ATTENDANCE_WINDOW) return true;
-  return att.present / att.of >= MIN_ATTENDANCE_RATIO;
-}
-
-/** Na kolika z posledních zasedání klub odhlasoval aspoň jeden bod. */
-export async function attendanceOf(
-  db: D1Database, leagueId: string, teamId: string,
-): Promise<{ present: number; of: number }> {
-  const meetings = await db.prepare(
-    "SELECT game_date FROM competition_meetings WHERE league_id = ? ORDER BY game_date DESC LIMIT ?"
-  ).bind(leagueId, ATTENDANCE_WINDOW).all<{ game_date: string }>()
-    .catch((e) => { logger.warn({ module: M }, "historie schůzí", e); return { results: [] }; });
-
-  const dates = meetings.results.map((r) => r.game_date);
-  if (dates.length === 0) return { present: 0, of: 0 };
-
-  const row = await db.prepare(
-    `SELECT COUNT(DISTINCT p.closed_game_date) AS n
-       FROM competition_ballots b JOIN competition_proposals p ON p.id = b.proposal_id
-      WHERE p.league_id = ? AND b.team_id = ?
-        AND p.closed_game_date IN (${dates.map(() => "?").join(",")})`
-  ).bind(leagueId, teamId, ...dates).first<{ n: number }>()
-    .catch((e) => { logger.warn({ module: M }, "docházka klubu", e); return null; });
-
-  return { present: row?.n ?? 0, of: dates.length };
+  return { ok: true };
 }
 
 /**

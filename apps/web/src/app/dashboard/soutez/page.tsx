@@ -662,8 +662,8 @@ function VedeniTab({ state, elections, teamId, onChanged }: {
         <div className="card p-4 space-y-4">
           <SectionLabel>Probíhající volby</SectionLabel>
           <p className="text-sm text-muted">
-            Volba je tajná — neuvidí se ani po uzavření, kdo koho volil. Kandidovat může klub
-            s účastí aspoň 60 % posledních zasedání, a jen na jednu funkci.
+            Volba je tajná — neuvidí se ani po uzavření, kdo koho volil. Kandidovat může každý
+            klub s hlasovacím právem, ale jen na jednu funkci.
           </p>
           {openElections.map((e) => {
             const jsemKandidat = e.candidates.some((k) => k.teamId === teamId);
