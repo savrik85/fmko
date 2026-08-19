@@ -1,5 +1,7 @@
 import { logger } from "../lib/logger";
 import type { Weather } from "../engine/types";
+import { recordCompetitionEntry } from "../competition/ledger";
+import type { CompetitionRules } from "../competition/defaults";
 /**
  * Centrální finanční procesor — jediný způsob jak měnit rozpočet týmu.
  * Každá změna se zaznamená do transaction ledgeru.
@@ -282,9 +284,55 @@ export async function processWeeklyFinances(
 }
 
 /**
+ * Odvod z klubové tržby do pokladny soutěže.
+ *
+ * Sazby jsou výchozí nula, takže dokud si je kluby neodhlasují, tahle funkce nic
+ * nedělá. Odvod se strhne klubu jako výdaj a současně přiteče soutěži — obojí pod
+ * stejným reference_id, aby opakované doručení z fronty nezaúčtovalo nic dvakrát.
+ */
+async function collectLevy(
+  db: D1Database,
+  league: MatchCompetitionContext | null,
+  teamId: string,
+  gameDate: string,
+  type: "levy_gate" | "levy_concession",
+  pct: number,
+  base: number,
+  description: string,
+  referenceId: string,
+): Promise<void> {
+  if (!league || pct <= 0 || base <= 0) return;
+  const amount = Math.round(base * pct / 100);
+  if (amount <= 0) return;
+
+  const entry = await recordCompetitionEntry(db, {
+    leagueId: league.leagueId, seasonNumber: league.seasonNumber, type,
+    amount, description, teamId, gameDate, referenceId,
+  });
+  if (!entry.written) return;   // už zaúčtováno dřív
+
+  await recordTransaction(db, teamId, "competition_fee", -amount,
+    `${description} (${pct} %)`, gameDate, referenceId);
+}
+
+/**
+ * Kontext soutěže se samosprávou. Načítá se JEDNOU na kolo v match-runneru a předává
+ * se sem — kdyby si ho tahalo každé volání samo, je to 14 dotazů na kolo navíc.
+ *
+ * Když chybí (pohár, přátelák, liga bez samosprávy, recovery endpoint), spadne
+ * všechno níž na hodnoty, které měl kód natvrdo před zavedením samosprávy.
+ */
+export interface MatchCompetitionContext {
+  leagueId: string;
+  seasonNumber: number;
+  rules: CompetitionRules;
+}
+
+/**
  * Zápasové finance — volá se z match-runneru po každém zápase.
  *
  * @param opponentReputation Reputace soupeře (pro satisfaction expectations calc). Nepovinné — default 50.
+ * @param comp Soutěž se samosprávou; bez ní se sazby berou z dosavadních konstant.
  */
 export async function processMatchDayFinances(
   db: D1Database,
@@ -297,7 +345,10 @@ export async function processMatchDayFinances(
   opponentReputation: number = 50,
   isFriendly: boolean = false,
   weather: Weather = "cloudy",
+  comp?: MatchCompetitionContext | null,
 ): Promise<void> {
+  /** Soutěž platí a inkasuje jen u ostrých ligových zápasů. */
+  const league = !isFriendly && comp ? comp : null;
   // Get village info for ticket price calculation
   const team = await db.prepare(
     "SELECT v.size FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
@@ -370,6 +421,9 @@ export async function processMatchDayFinances(
     await recordTransaction(db, teamId, "match_income", ticketIncome,
       `Vstupné: ${payingAttendance} × ${ticketPrice} Kč${fenceNote}`, gameDate, matchId);
 
+    await collectLevy(db, league, teamId, gameDate, "levy_gate",
+      league?.rules.levy_gate_pct ?? 0, ticketIncome, "Odvod ze vstupného", `ilg-${matchId}`);
+
     // Tombola — jediné vybavení, které vydělává. Jede uvnitř stejné větve jako
     // vstupné (jen doma a jen když někdo přišel). Losy se ale prodávají všem, kdo
     // dorazili, ne jen platícím: kdo proleze dírou v plotě, si los stejně koupí.
@@ -407,11 +461,15 @@ export async function processMatchDayFinances(
 
       // Persist per-produkt sales pro historii prodejů
       const { getWholesalePrice } = await import("./concession-catalog");
+      // Odvod se počítá z čistého zisku, ne z tržby — klub s tenkou marží by jinak
+      // odváděl víc, než na bufetu vydělá.
+      let concessionProfit = 0;
       for (const p of sale.products) {
         if (p.qualityLevel <= 0) continue;
         const wholesale = getWholesalePrice(p.key, p.qualityLevel);
         const revenue = p.sold * p.sellPrice;
         const profit = revenue - p.sold * wholesale;
+        concessionProfit += profit;
         await db.prepare(
           `INSERT INTO concession_match_sales
            (id, team_id, match_id, gamedate, product_key, quality_level, sell_price, wholesale_price, sold_count, revenue, profit, stockout, attendance)
@@ -432,15 +490,30 @@ export async function processMatchDayFinances(
           attendance,
         ).run().catch((e) => logger.warn({ module: "finance" }, "concession sales insert", e));
       }
+
+      await collectLevy(db, league, teamId, gameDate, "levy_concession",
+        league?.rules.levy_concession_pct ?? 0, concessionProfit,
+        "Odvod z občerstvení", `ilc-${matchId}-${teamId}`);
     }
     // External mode: income je čistě týdenní přes computeExternalWeeklyConcession,
     // per-match accounting zde odstraněn aby nedocházelo k dvojitému započítání.
+    // Odvod se proto u externího provozovatele nevybírá — klub z pronájmu nemá
+    // per-zápas marži, ze které by odváděl.
 
-    // Home team: referee costs (ne u přáteláků)
+    // Rozhodčí. V soutěži se samosprávou ho platí SOUTĚŽ ze své pokladny — klub za něj
+    // nedá nic a místo toho odvádí startovné. Bez samosprávy platí pořadatel jako dřív.
     if (!isFriendly) {
-      const refereeCost = 800 + Math.round(Math.random() * 700);
-      await recordTransaction(db, teamId, "match_expense", -refereeCost,
-        `Rozhodčí`, gameDate, matchId);
+      if (league) {
+        await recordCompetitionEntry(db, {
+          leagueId: league.leagueId, seasonNumber: league.seasonNumber, type: "referee_fee",
+          amount: -league.rules.referee_fee, description: "Odměna rozhodčímu za zápas",
+          teamId: null, gameDate, referenceId: `ref-${matchId}`,
+        });
+      } else {
+        const refereeCost = 800 + Math.round(Math.random() * 700);
+        await recordTransaction(db, teamId, "match_expense", -refereeCost,
+          `Rozhodčí`, gameDate, matchId);
+      }
     }
   }
 
@@ -469,7 +542,9 @@ export async function processMatchDayFinances(
       ? Math.round(sponsors.results.reduce((s, sp) => s + ((sp.win_bonus as number) ?? 0), 0) * 0.3)
       : 0;
 
-  const leagueBonus = result === "win" ? 500 : result === "draw" ? 150 : 0;
+  const winBonus = league?.rules.win_bonus ?? 500;
+  const drawBonus = league?.rules.draw_bonus ?? 150;
+  const leagueBonus = result === "win" ? winBonus : result === "draw" ? drawBonus : 0;
   const fanBase = category === "vesnice" ? 50 : category === "obec" ? 100 : 200;
   const fanBonus = result === "win" ? fanBase : result === "draw" ? Math.round(fanBase * 0.5) : 0;
 
@@ -479,6 +554,15 @@ export async function processMatchDayFinances(
     await recordTransaction(db, teamId, "match_reward", totalReward,
       `Bonusy za ${resultLabel}${sponsorBonus > 0 ? ` (sponzoři ${sponsorBonus} Kč)` : ""}`,
       gameDate, matchId);
+  }
+
+  // Prémii platí soutěž. Sponzorský ani fanouškovský bonus ne — ty jdou mimo pokladnu.
+  if (league && leagueBonus > 0) {
+    await recordCompetitionEntry(db, {
+      leagueId: league.leagueId, seasonNumber: league.seasonNumber, type: "match_bonus",
+      amount: -leagueBonus, description: `Prémie za ${result === "win" ? "výhru" : "remízu"}`,
+      teamId, gameDate, referenceId: `mb-${matchId}-${teamId}`,
+    });
   }
 
   // Satisfaction delta — aplikuje se i pro venkovní zápas (fanoušci sledují výsledek)
