@@ -126,11 +126,12 @@ export async function validateProposal(opts: {
       rules: proposed, teams, level: opts.level, balance: opts.balance,
     });
     if (!check.ok) {
-      return {
-        ok: false,
-        error: `Návrh nelze podat — pokladně by chybělo ${czk(check.deficit)}. `
-          + `Zvedněte startovné na ${czk(check.requiredEntryFee)}, nebo sežeňte sponzora.`,
-      };
+      // U návrhu na startovné by věta „zvedněte startovné" zněla jako výsměch —
+      // navrhovatel ho zvedá právě teď, jen málo.
+      const rada = opts.kind === "entry_fee"
+        ? `Aby to vyšlo, muselo by být aspoň ${czk(check.requiredEntryFee)}.`
+        : `Zvedněte startovné na ${czk(check.requiredEntryFee)}, nebo sežeňte sponzora.`;
+      return { ok: false, error: `Návrh nelze podat — pokladně by chybělo ${czk(check.deficit)}. ${rada}` };
     }
     const current = checkBudget({ rules: opts.currentRules, teams, level: opts.level, balance: opts.balance });
     const delta = check.projected - current.projected;

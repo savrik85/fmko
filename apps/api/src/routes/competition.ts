@@ -514,7 +514,34 @@ competitionRouter.post("/admin/competition/:leagueId/enable", async (c) => {
     gameDate, referenceId: `sub-${leagueId}-${meta.season_number}`,
   });
 
-  return c.json({ ok: true, humanClubs: humans, totalClubs: teams, subsidy, balance: await readBalance(c.env.DB, leagueId) });
+  // Startovné se vybírá stejně jako při rolloveru — bez něj by pokladna vypadala
+  // chudší, než ve skutečnosti bude, a rozpočtový strop by zbytečně kousal.
+  const clubs = await c.env.DB.prepare("SELECT id FROM teams WHERE league_id = ?")
+    .bind(leagueId).all<{ id: string }>()
+    .catch((e) => { logger.warn({ module: M }, "kluby soutěže", e); return { results: [] }; });
+
+  const { recordTransaction } = await import("../season/finance-processor");
+  let collected = 0;
+  for (const club of clubs.results) {
+    const refId = `fee-${meta.season_number}-${club.id}`;
+    const entry = await recordCompetitionEntry(c.env.DB, {
+      leagueId, seasonNumber: meta.season_number, type: "entry_fee",
+      amount: DEFAULT_RULES.entry_fee, description: "Startovné do soutěže",
+      teamId: club.id, gameDate, referenceId: refId,
+    });
+    if (!entry.written) continue;   // už zaplaceno v dřívějším běhu
+    collected++;
+    await recordTransaction(
+      c.env.DB, club.id, "competition_fee", -DEFAULT_RULES.entry_fee,
+      `Startovné do soutěže (${meta.season_number}. sezóna)`, gameDate, refId,
+    ).catch((e) => logger.warn({ module: M }, `startovné klubu ${club.id}`, e));
+  }
+
+  return c.json({
+    ok: true, humanClubs: humans, totalClubs: teams, subsidy,
+    entryFeesCollected: collected,
+    balance: await readBalance(c.env.DB, leagueId),
+  });
 });
 
 /**
