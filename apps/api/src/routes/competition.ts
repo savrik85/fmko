@@ -17,6 +17,9 @@ import {
   type CompetitionRules, type OfficialRole,
 } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
+import {
+  attendanceOf, canRunFor, loadOfficials, openElections, rolesFor,
+} from "../competition/officials";
 import { proposalTitle, validateProposal, voterStats } from "../competition/proposals";
 import {
   checkBudget, freeBalance, outstandingCommitments, placementReward, subsidyFor, teamImpact,
@@ -130,6 +133,14 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
       roleLabel: ROLE_LABEL[o.role as OfficialRole] ?? o.role,
       teamId: o.team_id, teamName: o.team_name, status: o.status,
     })),
+    // Které odbory v soutěži téhle velikosti vůbec existují.
+    roles: rolesFor(humans).map((role) => {
+      const holder = officials.results.find((o) => o.role === role);
+      return {
+        role, label: ROLE_LABEL[role],
+        holder: holder ? { teamId: holder.team_id, teamName: holder.team_name } : null,
+      };
+    }),
     proposalKinds: Object.entries(PROPOSAL_KINDS).map(([kind, s]) => ({
       kind, label: s.label, gesce: s.gesce, majority: s.majority,
       min: s.min ?? null, max: s.max ?? null,
@@ -537,11 +548,165 @@ competitionRouter.post("/admin/competition/:leagueId/enable", async (c) => {
     ).catch((e) => logger.warn({ module: M }, `startovné klubu ${club.id}`, e));
   }
 
+  // Bez vyhlášených voleb by soutěž zůstala napořád bez vedení.
+  const electionsOpened = await openElections(c.env.DB, leagueId, meta.season_number, gameDate);
+
   return c.json({
     ok: true, humanClubs: humans, totalClubs: teams, subsidy,
-    entryFeesCollected: collected,
+    entryFeesCollected: collected, electionsOpened,
     balance: await readBalance(c.env.DB, leagueId),
   });
+});
+
+// ── Volby předsedů ──────────────────────────────────────────────────────────
+competitionRouter.get("/competition/:leagueId/elections", async (c) => {
+  const leagueId = c.req.param("leagueId");
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const rows = await c.env.DB.prepare(
+    `SELECT e.*, t.name AS winner_name FROM competition_elections e
+       LEFT JOIN teams t ON t.id = e.winner_team_id
+      WHERE e.league_id = ? AND e.season_number = ?
+      ORDER BY CASE WHEN e.status = 'open' THEN 0 ELSE 1 END, e.role`
+  ).bind(leagueId, meta.season_number).all<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: M }, "seznam voleb", e); return { results: [] }; });
+
+  const ids = rows.results.map((r) => r.id as string);
+  const candidates: Record<string, Array<{ teamId: string; teamName: string }>> = {};
+  if (ids.length > 0) {
+    const cr = await c.env.DB.prepare(
+      `SELECT c.election_id, c.team_id, t.name FROM competition_candidacies c
+         JOIN teams t ON t.id = c.team_id
+        WHERE c.election_id IN (${ids.map(() => "?").join(",")}) AND c.withdrawn = 0
+        ORDER BY t.name`
+    ).bind(...ids).all<{ election_id: string; team_id: string; name: string }>()
+      .catch((e) => { logger.warn({ module: M }, "kandidáti", e); return { results: [] }; });
+    for (const r of cr.results) {
+      (candidates[r.election_id] ??= []).push({ teamId: r.team_id, teamName: r.name });
+    }
+  }
+
+  // Vlastní hlas vidí jen ten, kdo ho odevzdal. Volba je tajná i po uzavření.
+  const myTeam = await currentTeam(c as never);
+  const myVote: Record<string, string> = {};
+  if (myTeam && ids.length > 0) {
+    const mv = await c.env.DB.prepare(
+      `SELECT election_id, candidate_team_id FROM competition_election_ballots
+        WHERE team_id = ? AND election_id IN (${ids.map(() => "?").join(",")})`
+    ).bind(myTeam, ...ids).all<{ election_id: string; candidate_team_id: string }>()
+      .catch((e) => { logger.warn({ module: M }, "můj hlas ve volbě", e); return { results: [] }; });
+    for (const r of mv.results) myVote[r.election_id] = r.candidate_team_id;
+  }
+
+  return c.json({
+    elections: rows.results.map((e) => ({
+      id: e.id, role: e.role,
+      roleLabel: ROLE_LABEL[e.role as OfficialRole] ?? e.role,
+      status: e.status,
+      winnerTeamId: e.winner_team_id, winnerName: e.winner_name,
+      votesCast: e.votes_cast, resultNote: e.result_note,
+      candidates: candidates[e.id as string] ?? [],
+      myVote: myVote[e.id as string] ?? null,
+    })),
+  });
+});
+
+competitionRouter.post("/teams/:teamId/competition/elections/:id/candidacy", async (c) => {
+  const teamId = c.req.param("teamId");
+  const electionId = c.req.param("id");
+
+  const el = await c.env.DB.prepare(
+    "SELECT league_id, role, season_number, status FROM competition_elections WHERE id = ?"
+  ).bind(electionId).first<{ league_id: string; role: string; season_number: number; status: string }>()
+    .catch((e) => { logger.warn({ module: M }, "volba", e); return null; });
+  if (!el) return c.json({ error: "Volba nenalezena" }, 404);
+  if (el.status !== "open") return c.json({ error: "Volba už je uzavřená." }, 409);
+
+  const check = await canRunFor(c.env.DB, el.league_id, teamId, el.role as OfficialRole, el.season_number);
+  if (!check.ok) return c.json({ error: check.reason }, 403);
+
+  await c.env.DB.prepare(
+    `INSERT INTO competition_candidacies (id, election_id, team_id) VALUES (?,?,?)
+     ON CONFLICT(election_id, team_id) DO UPDATE SET withdrawn = 0`
+  ).bind(crypto.randomUUID(), electionId, teamId).run();
+
+  await c.env.DB.prepare(
+    "UPDATE competition_elections SET candidates = (SELECT COUNT(*) FROM competition_candidacies WHERE election_id = ? AND withdrawn = 0) WHERE id = ?"
+  ).bind(electionId, electionId).run()
+    .catch((e) => logger.warn({ module: M }, "počet kandidátů", e));
+
+  return c.json({ ok: true, attendance: check.attendance });
+});
+
+competitionRouter.delete("/teams/:teamId/competition/elections/:id/candidacy", async (c) => {
+  const res = await c.env.DB.prepare(
+    "UPDATE competition_candidacies SET withdrawn = 1 WHERE election_id = ? AND team_id = ?"
+  ).bind(c.req.param("id"), c.req.param("teamId")).run()
+    .catch((e) => { logger.warn({ module: M }, "stažení kandidatury", e); return null; });
+  if (!res || (res.meta?.changes ?? 0) === 0) return c.json({ error: "Kandidaturu nemáš podanou." }, 409);
+  return c.json({ ok: true });
+});
+
+competitionRouter.post("/teams/:teamId/competition/elections/:id/vote", async (c) => {
+  const teamId = c.req.param("teamId");
+  const electionId = c.req.param("id");
+  const body = await c.req.json<{ candidateTeamId?: string }>().catch(() => null);
+  if (!body?.candidateTeamId) return c.json({ error: "Chybí kandidát" }, 400);
+
+  const el = await c.env.DB.prepare(
+    "SELECT league_id, status FROM competition_elections WHERE id = ?"
+  ).bind(electionId).first<{ league_id: string; status: string }>()
+    .catch((e) => { logger.warn({ module: M }, "volba", e); return null; });
+  if (!el) return c.json({ error: "Volba nenalezena" }, 404);
+  if (el.status !== "open") return c.json({ error: "Volba už je uzavřená." }, 409);
+
+  const voters = await voterStats(c.env.DB, el.league_id);
+  if (!voters.voters.includes(teamId)) {
+    return c.json({ error: "Tvůj klub nemá v téhle soutěži hlasovací právo." }, 403);
+  }
+
+  const isCandidate = await c.env.DB.prepare(
+    "SELECT 1 FROM competition_candidacies WHERE election_id = ? AND team_id = ? AND withdrawn = 0"
+  ).bind(electionId, body.candidateTeamId).first()
+    .catch((e) => { logger.warn({ module: M }, "ověření kandidáta", e); return null; });
+  if (!isCandidate) return c.json({ error: "Tenhle klub ve volbě nekandiduje." }, 400);
+
+  await c.env.DB.prepare(
+    `INSERT INTO competition_election_ballots (id, election_id, team_id, candidate_team_id)
+     VALUES (?,?,?,?)
+     ON CONFLICT(election_id, team_id) DO UPDATE SET candidate_team_id = excluded.candidate_team_id,
+       voted_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')`
+  ).bind(crypto.randomUUID(), electionId, teamId, body.candidateTeamId).run();
+
+  return c.json({ ok: true });
+});
+
+competitionRouter.get("/teams/:teamId/competition/candidacy-check", async (c) => {
+  const teamId = c.req.param("teamId");
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const humans = await countHumanClubs(c.env.DB, leagueId);
+  const out: Record<string, { ok: boolean; reason?: string }> = {};
+  for (const role of rolesFor(humans)) {
+    const r = await canRunFor(c.env.DB, leagueId, teamId, role, meta.season_number);
+    out[role] = { ok: r.ok, reason: r.reason };
+  }
+  return c.json({ attendance: await attendanceOf(c.env.DB, leagueId, teamId), roles: out });
+});
+
+competitionRouter.post("/admin/competition/:leagueId/elections", async (c) => {
+  const leagueId = c.req.param("leagueId");
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+  const gameDate = await c.env.DB.prepare("SELECT MAX(game_date) AS d FROM teams WHERE league_id = ?")
+    .bind(leagueId).first<{ d: string | null }>().then((r) => r?.d ?? new Date().toISOString())
+    .catch(() => new Date().toISOString());
+  const opened = await openElections(c.env.DB, leagueId, meta.season_number, gameDate);
+  return c.json({ ok: true, opened });
 });
 
 /**

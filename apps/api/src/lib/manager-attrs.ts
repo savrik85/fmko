@@ -28,6 +28,8 @@ export type ManagerAttrSource =
   | "cup"
   | "party"
   | "season_dev"
+  // Funkce ve vedení soutěže — odsloužený mandát, odvolání, demise.
+  | "competition_office"
   | "admin";
 
 /** České názvy do popisků a UI. */

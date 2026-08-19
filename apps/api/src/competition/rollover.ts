@@ -14,6 +14,7 @@
 import { logger } from "../lib/logger";
 import { DEFAULT_RULES, MIN_HUMAN_CLUBS, type CompetitionRules } from "./defaults";
 import { recomputeBalance, recordCompetitionEntry } from "./ledger";
+import { applyTermReputation, openElections } from "./officials";
 import { subsidyFor } from "./projection";
 import { applyPassedToRules } from "./proposals";
 import { countAllClubs, countHumanClubs, loadGovernance, loadRules } from "./rules";
@@ -118,7 +119,8 @@ async function rolloverOne(
   await buildRules(db, leagueId, level, newSeason);
   await collectMoney(db, leagueId, level, newSeason, startDate, out);
   await settleSponsor(db, leagueId, newSeason, startDate);
-  await endOfficialTerms(db, leagueId, newSeason);
+  await endOfficialTerms(db, leagueId, newSeason, startDate);
+  await openElections(db, leagueId, newSeason, startDate);
   await restampDeadlines(db, leagueId, startDate);
   await recomputeBalance(db, leagueId, startDate);
   return true;
@@ -247,13 +249,31 @@ async function settleSponsor(
   logger.info({ module: M }, `soutěž ${leagueId}: sponzor ${gov.sponsor_name} skončil, název se vrátil`);
 }
 
-/** Mandáty končí s sezónou; nové se volí na prvních schůzích. */
-async function endOfficialTerms(db: D1Database, leagueId: string, newSeason: number): Promise<void> {
+/**
+ * Mandáty končí se sezónou; nové se volí na prvních schůzích té další.
+ * Odsloužený mandát je jediná odměna, kterou funkcionář dostane — +6 reputace
+ * a řádek v profilu manažera. Nikdo nedělá bafuňáře pro peníze.
+ */
+async function endOfficialTerms(
+  db: D1Database, leagueId: string, newSeason: number, gameDate: string,
+): Promise<void> {
+  const ending = await db.prepare(
+    `SELECT team_id, role, season_number FROM competition_officials
+      WHERE league_id = ? AND season_number < ? AND status = 'active'`
+  ).bind(leagueId, newSeason).all<{ team_id: string; role: string; season_number: number }>()
+    .catch((e) => { logger.warn({ module: M }, `mandáty ke konci ${leagueId}`, e); return { results: [] }; });
+
   await db.prepare(
-    `UPDATE competition_officials SET status = 'term_ended'
+    `UPDATE competition_officials SET status = 'term_ended', ended_game_date = ?
       WHERE league_id = ? AND season_number < ? AND status IN ('active','suspended')`
-  ).bind(leagueId, newSeason).run()
+  ).bind(gameDate, leagueId, newSeason).run()
     .catch((e) => logger.warn({ module: M }, `ukončení mandátů ${leagueId}`, e));
+
+  for (const o of ending.results) {
+    await applyTermReputation(
+      db, o.team_id, "term_ended", o.role as never, o.season_number, gameDate,
+    );
+  }
 }
 
 /**

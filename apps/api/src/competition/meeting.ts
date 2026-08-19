@@ -19,6 +19,7 @@ import { logger } from "../lib/logger";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { PROPOSAL_KINDS, SIMPLE_MAJORITY } from "./defaults";
 import { recomputeBalance, recordCompetitionEntry } from "./ledger";
+import { resolveElections } from "./officials";
 import { voterStats } from "./proposals";
 import { loadLeagueMeta } from "./rules";
 
@@ -83,8 +84,8 @@ export async function runOneMeeting(
   const meta = await loadLeagueMeta(db, leagueId);
   if (!meta) return null;
 
-  // Schůze se koná, jen když je na programu aspoň jeden bod. Prázdné zasedání
-  // každý týden je nejrychlejší způsob, jak lidem samospráva zevšední.
+  // Schůze se koná, jen když je na programu aspoň jeden bod — návrh nebo volba.
+  // Prázdné zasedání každý týden je nejrychlejší způsob, jak samospráva zevšední.
   const open = await db.prepare(
     `SELECT id, league_id, season_number, kind, title, gesce, majority, quorum,
             proposed_by_team_id, target_team_id, deposit, effective_from_season
@@ -94,7 +95,12 @@ export async function runOneMeeting(
   ).bind(leagueId, gameDate).all<OpenProposal>()
     .catch((e) => { logger.warn({ module: M }, `otevřené návrhy ${leagueId}`, e); return { results: [] }; });
 
-  if (open.results.length === 0) return null;
+  const dueElections = await db.prepare(
+    "SELECT COUNT(*) AS n FROM competition_elections WHERE league_id = ? AND status = 'open' AND opened_game_date < ?"
+  ).bind(leagueId, gameDate).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, `splatné volby ${leagueId}`, e); return null; });
+
+  if (open.results.length === 0 && (dueElections?.n ?? 0) === 0) return null;
 
   // Claim celé schůze. changes === 0 znamená, že dnes už proběhla.
   const claim = await db.prepare(
@@ -114,6 +120,16 @@ export async function runOneMeeting(
     closedCount++;
     if (decided.status === "passed") passedCount++;
     results.push(decided as unknown as Record<string, unknown>);
+  }
+
+  // Volby se vyhodnocují na stejné schůzi jako návrhy. Tajné zůstávají i potom —
+  // do zápisu jde jen jméno vítěze a poměr, nikdy kdo koho volil.
+  const elections = await resolveElections(db, leagueId, meta.season_number, gameDate);
+  for (const e of elections) {
+    results.push({
+      kind: "election", title: `Volba: ${e.role}`, status: e.winnerTeamId ? "passed" : "no_quorum",
+      resultNote: e.note, winnerTeamId: e.winnerTeamId,
+    } as unknown as Record<string, unknown>);
   }
 
   const balance = await recomputeBalance(db, leagueId, gameDate);
