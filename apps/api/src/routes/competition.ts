@@ -766,6 +766,9 @@ competitionRouter.post("/teams/:teamId/competition/sanctions/direct", async (c) 
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
+  const govDirect = await loadGovernance(c.env.DB, leagueId);
+  if (!govDirect?.enabled) return c.json({ error: "Tahle soutěž zatím samosprávu nemá." }, 403);
+
   const amount = Math.round(Number(body.amount));
   const chair = await canChairFine(c.env.DB, leagueId, teamId, body.targetTeamId, meta.season_number, amount);
   if (!chair.ok) return c.json({ error: chair.reason }, 403);
@@ -825,6 +828,9 @@ competitionRouter.post("/teams/:teamId/competition/referee-bans", async (c) => {
   if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const gov = await loadGovernance(c.env.DB, leagueId);
+  if (!gov?.enabled) return c.json({ error: "Tahle soutěž zatím samosprávu nemá." }, 403);
 
   const voters = await voterStats(c.env.DB, leagueId);
   if (!voters.voters.includes(teamId)) {
