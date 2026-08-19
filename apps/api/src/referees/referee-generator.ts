@@ -203,12 +203,19 @@ export function rowToProfile(r: RefereeRow): RefereeProfile {
 export async function ensureReferees(db: D1Database, district: string): Promise<RefereeRow[]> {
   const base = normalizeDistrict(district);
 
+  // O tom, jestli je potřeba pool zakládat, rozhoduje počet ŘÁDKŮ, ne počet aktivních
+  // sudích. Kdyby se počítali jen aktivní, stačilo by jednoho vyškrtnout a podmínka níž
+  // by byla trvale nesplněná: spustila by se plná generace poolu + batch patnácti
+  // statementů při KAŽDÉ delegaci, `INSERT OR IGNORE` na deterministická ID by nic
+  // nevložilo a listina by se stejně nikdy nedoplnila.
   const existing = await db.prepare(
-    "SELECT * FROM referees WHERE district = ? AND status = 'active' ORDER BY id"
+    "SELECT * FROM referees WHERE district = ? ORDER BY id"
   ).bind(base).all<RefereeRow>()
     .catch((e) => { logger.warn({ module: "referees" }, `načtení poolu okresu ${base}`, e); return null; });
 
-  if (existing && existing.results.length >= REFEREES_PER_DISTRICT) return existing.results;
+  if (existing && existing.results.length >= REFEREES_PER_DISTRICT) {
+    return existing.results.filter((r) => r.status === "active");
+  }
 
   const districtData = await getDistrictDataFromDB(db, base);
   const pool = generateRefereePool(base, districtData.surnames);
