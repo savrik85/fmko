@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_RULES, type CompetitionRules, MIN_RESERVE } from "./defaults";
+import { DEFAULT_RULES, type CompetitionRules } from "./defaults";
 import {
   matchCount, placementSum, placementReward, expectedBonusPerMatch, worstBonusPerMatch,
   projectSeasonCost, subsidyFor, checkBudget, teamImpact, payoutRatio,
@@ -58,10 +58,29 @@ describe("projekce rozpočtu soutěže", () => {
     expect(subsidyFor(14, "krajsky_prebor")).toBeGreaterThan(subsidyFor(14, "okresni_prebor"));
   });
 
-  it("výchozí sazby projdou rozpočtovým stropem", () => {
-    const check = checkBudget({ rules: R, teams: 14, level: "okresni_prebor", balance: MIN_RESERVE });
+  it("výchozí sazby projdou stropem i s nulovým volným zůstatkem", () => {
+    const check = checkBudget({ rules: R, teams: 14, level: "okresni_prebor", balance: 0 });
     expect(check.ok).toBe(true);
     expect(check.deficit).toBe(0);
+  });
+
+  it("na začátku sezóny je volný zůstatek malý, ale kladný — a strop projde", () => {
+    const balance = subsidyFor(14, "okresni_prebor") + 14 * R.entry_fee;
+    const free = freeBalance(balance, R, 14, "okresni_prebor", 0);
+    expect(free).toBeGreaterThan(0);
+    expect(checkBudget({ rules: R, teams: 14, level: "okresni_prebor", balance: free }).ok).toBe(true);
+  });
+
+  it("zvýšení odměny za výhru se musí zaplatit vyšším startovným", () => {
+    const balance = subsidyFor(14, "okresni_prebor") + 14 * R.entry_fee;
+    const free = freeBalance(balance, R, 14, "okresni_prebor", 0);
+    const richer = rules({ win_bonus: 900 });
+    const check = checkBudget({ rules: richer, teams: 14, level: "okresni_prebor", balance: free });
+    expect(check.ok).toBe(false);
+    expect(check.requiredEntryFee).toBeGreaterThan(R.entry_fee);
+
+    const fixed = rules({ win_bonus: 900, entry_fee: check.requiredEntryFee });
+    expect(checkBudget({ rules: fixed, teams: 14, level: "okresni_prebor", balance: free }).ok).toBe(true);
   });
 
   it("přestřelený návrh strop neprojde a řekne, kolik chybí", () => {

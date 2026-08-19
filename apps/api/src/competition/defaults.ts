@@ -47,8 +47,16 @@ export const FULL_BOARD_CLUBS = 9;
 /** Den schůze: středa. Liga hraje po+čt, pohár v sobotu, vesnický cyklus v pondělí. */
 export const MEETING_DAY_OF_WEEK = 3;
 
-/** Rezerva, kterou musí projekce rozpočtu na příští sezónu ustát. */
-export const MIN_RESERVE = 100_000;
+/**
+ * Rezerva, kterou musí projekce rozpočtu na příští sezónu ustát.
+ *
+ * Je nula ZÁMĚRNĚ: bezpečnostní polštář je už zabudovaný ve vzorci svazové dotace
+ * (SUBSIDY_CUSHION), který drží výchozí bilanci na +2,7 %. Samostatná rezerva navrch
+ * by ho počítala podruhé — a protože výchozí sazby dávají přebytek jen kolem 15 000 Kč,
+ * jakákoli rezerva vyšší než to by zablokovala i návrh, který nic nemění.
+ * Pravidlo tedy zní prostě: pokladna nesmí jít do mínusu.
+ */
+export const MIN_RESERVE = 0;
 
 /** Polštář ve vzorci svazové dotace — drží výchozí bilanci lehce kladnou. */
 export const SUBSIDY_CUSHION = 1.03;
