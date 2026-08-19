@@ -181,7 +181,8 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
                     </div>
                   )}
                 </div>
-                {jsemPrezident && r.holder && r.role !== "predseda" && !suspended && (
+                {jsemPrezident && r.holder && r.role !== "predseda" && !suspended
+                  && state.presidentUsedSuspend < 1 && (
                   <button className="btn btn-md btn-secondary shrink-0"
                     onClick={() => setSuspendRole({ role: r.role, label: r.label })}>
                     Pozastavit
@@ -194,7 +195,10 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
 
         {jsemPrezident && (
           <div className="mt-4 rounded-lg p-3 text-sm" style={{ background: "rgba(196,160,53,0.14)" }}>
-            <div className="font-semibold">Jsi prezident soutěže.</div>
+            <div className="font-semibold">
+              Jsi prezident soutěže.
+              {state.presidentUsedSuspend >= 1 && " Pozastavení pravomoci máš pro letošek vyčerpané."}
+            </div>
             Při rovnosti hlasů rozhoduje tvůj hlas, zastupuješ každou neobsazenou funkci
             a jednou za sezónu můžeš jinému předsedovi pozastavit pravomoc — tím rovnou
             otevřeš hlasování o jeho odvolání. Když neprojde, pravomoc se mu vrátí

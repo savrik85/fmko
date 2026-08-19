@@ -108,12 +108,15 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
   ]);
 
   const officials = await c.env.DB.prepare(
-    `SELECT o.role, o.team_id, o.status, t.name AS team_name,
+    `SELECT o.role, o.team_id, o.status, o.used_suspend, t.name AS team_name,
             ${MANAGER_NAME("o.team_id")} AS manager_name
        FROM competition_officials o
        JOIN teams t ON t.id = o.team_id
       WHERE o.league_id = ? AND o.season_number = ? AND o.status IN ('active','suspended')`
-  ).bind(leagueId, meta.season_number).all<{ role: string; team_id: string; status: string; team_name: string; manager_name: string | null }>()
+  ).bind(leagueId, meta.season_number).all<{
+    role: string; team_id: string; status: string; used_suspend: number;
+    team_name: string; manager_name: string | null;
+  }>()
     .catch((e) => { logger.warn({ module: M }, "funkcionáři", e); return { results: [] }; });
 
   const stats = await voterStats(c.env.DB, leagueId);
@@ -152,6 +155,10 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
       roleLabel: ROLE_LABEL[o.role as OfficialRole] ?? o.role,
       teamId: o.team_id, teamName: o.team_name, managerName: o.manager_name, status: o.status,
     })),
+    // Pozastavit pravomoc smí prezident jednou za sezónu — bez toho by UI nabízelo
+    // tlačítko, které vždycky skončí chybou.
+    presidentUsedSuspend:
+      officials.results.find((o) => o.role === "predseda")?.used_suspend ?? 0,
     // Které odbory v soutěži téhle velikosti vůbec existují.
     roles: rolesFor(humans).map((role) => {
       const holder = officials.results.find((o) => o.role === role);

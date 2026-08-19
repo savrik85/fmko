@@ -48,6 +48,7 @@ export interface State {
   officials: Official[];
   roles: RoleSlot[];
   presidentTeamId: string | null;
+  presidentUsedSuspend: number;
   proposalKinds: ProposalKind[];
   deposit: number;
 }
