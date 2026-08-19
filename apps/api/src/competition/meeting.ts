@@ -18,7 +18,7 @@
 import { logger } from "../lib/logger";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { PROPOSAL_KINDS, SIMPLE_MAJORITY } from "./defaults";
-import { recomputeBalance } from "./ledger";
+import { recomputeBalance, recordCompetitionEntry } from "./ledger";
 import { voterStats } from "./proposals";
 import { loadLeagueMeta } from "./rules";
 
@@ -27,6 +27,8 @@ const SMS_ROLE = "Sekretariát soutěže";
 
 interface OpenProposal {
   id: string;
+  league_id: string;
+  season_number: number;
   kind: string;
   title: string;
   gesce: string;
@@ -84,8 +86,8 @@ export async function runOneMeeting(
   // Schůze se koná, jen když je na programu aspoň jeden bod. Prázdné zasedání
   // každý týden je nejrychlejší způsob, jak lidem samospráva zevšední.
   const open = await db.prepare(
-    `SELECT id, kind, title, gesce, majority, quorum, proposed_by_team_id,
-            target_team_id, deposit, effective_from_season
+    `SELECT id, league_id, season_number, kind, title, gesce, majority, quorum,
+            proposed_by_team_id, target_team_id, deposit, effective_from_season
        FROM competition_proposals
       WHERE league_id = ? AND status = 'open' AND opened_game_date < ?
       ORDER BY created_at ASC`
@@ -229,15 +231,29 @@ async function closeProposal(
   };
 }
 
+/**
+ * Vrátí kauci navrhovateli. Peníze musí ubýt POKLADNĚ, ne vzniknout z ničeho —
+ * kauce do ní při podání přitekla, takže odchází stejnou cestou zpátky.
+ * Obě strany mají vlastní reference_id, takže opakovaný běh nepřipíše nic navíc.
+ */
 async function refundDeposit(db: D1Database, p: OpenProposal, gameDate: string): Promise<void> {
+  const refId = `dep-refund-${p.id}`;
+  const out = await recordCompetitionEntry(db, {
+    leagueId: p.league_id, seasonNumber: p.season_number, type: "deposit",
+    amount: -p.deposit, description: "Vrácení kauce za přijatý návrh",
+    teamId: p.proposed_by_team_id, gameDate, referenceId: refId,
+  });
+  // Pokladna kauci vrací jen jednou; když už zápis existoval, klub ji taky dostal.
+  if (!out.written) return;
+
   try {
     const { recordTransaction } = await import("../season/finance-processor");
     await recordTransaction(
       db, p.proposed_by_team_id, "competition_deposit", p.deposit,
-      "Vrácení kauce za přijatý návrh", gameDate, `dep-refund-${p.id}`,
+      "Vrácení kauce za přijatý návrh", gameDate, refId,
     );
   } catch (e) {
-    logger.warn({ module: M }, `vrácení kauce za návrh ${p.id}`, e);
+    logger.error({ module: M }, `kauce odešla z pokladny, ale klubu ${p.proposed_by_team_id} se nepřipsala (návrh ${p.id})`, e);
   }
 }
 
