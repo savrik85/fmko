@@ -111,7 +111,7 @@ export async function collectEvidence(
   if (reds && reds.n >= RED_CARD_THRESHOLD) {
     out.push({
       kind: "cards", label: OFFENCES.cards.label,
-      detail: `${reds.n} červených karet v sezóně.`,
+      detail: `${reds.n} ${reds.n < 5 ? "červené karty" : "červených karet"} v sezóně.`,
     });
   }
 

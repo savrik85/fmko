@@ -129,23 +129,37 @@ export async function resolveElections(
   const out: Array<{ role: OfficialRole; winnerTeamId: string | null; note: string }> = [];
 
   for (const el of due.results) {
+    // Reputace i jméno se berou poddotazem, NIKDY přes JOIN na managers: tým může
+    // mít v tabulce dva řádky (existuje takový), join by každý hlas zdvojil a
+    // kandidát z takového klubu by vyhrál každou volbu. Ověřeno na testovací DB.
     const tally = await db.prepare(
       `SELECT b.candidate_team_id AS team_id, COUNT(*) AS votes,
-              COALESCE(m.reputation, 0) AS rep
+              COALESCE((SELECT m.reputation FROM managers m
+                         WHERE m.team_id = b.candidate_team_id
+                         ORDER BY m.created_at LIMIT 1), 0) AS rep,
+              (SELECT m.name FROM managers m
+                WHERE m.team_id = b.candidate_team_id
+                ORDER BY m.created_at LIMIT 1) AS manager_name,
+              (SELECT t.name FROM teams t WHERE t.id = b.candidate_team_id) AS team_name
          FROM competition_election_ballots b
-         LEFT JOIN managers m ON m.team_id = b.candidate_team_id
         WHERE b.election_id = ?
         GROUP BY b.candidate_team_id
         ORDER BY votes DESC, rep DESC, b.candidate_team_id ASC`
-    ).bind(el.id).all<{ team_id: string; votes: number; rep: number }>()
+    ).bind(el.id).all<{
+      team_id: string; votes: number; rep: number;
+      manager_name: string | null; team_name: string | null;
+    }>()
       .catch((e) => { logger.warn({ module: M }, `sečtení voleb ${el.id}`, e); return { results: [] }; });
 
     const totalVotes = tally.results.reduce((s, r) => s + r.votes, 0);
     const winner = tally.results[0] ?? null;
 
     const status = winner ? "decided" : "failed";
+    // Volba je tajná, ale kdo ji vyhrál se v zápisu tají těžko — a hráč to chce vědět.
     const note = winner
-      ? `Zvolen ${winner.votes} z ${totalVotes} hlasů.`
+      ? `Zvolen ${winner.manager_name ?? winner.team_name ?? "neznámý trenér"}`
+        + `${winner.manager_name && winner.team_name ? ` (${winner.team_name})` : ""}`
+        + ` — ${winner.votes} z ${totalVotes} ${totalVotes === 1 ? "hlasu" : "hlasů"}.`
       : "Nikdo nekandidoval — funkce zůstává neobsazená.";
 
     // Atomický lock: efekt smí aplikovat jen ten běh, který volby opravdu uzavřel.
