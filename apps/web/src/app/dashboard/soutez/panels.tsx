@@ -13,7 +13,7 @@ import { EntityLink } from "@/components/ui";
 import {
   Empty, GOLD, Ornament, PersonLine, Portrait, Row, czk, formatDate, plural, signed,
 } from "./ui";
-import type { Election, LedgerEntry, Meeting, State } from "./types";
+import type { BoardData, Election, LedgerEntry, Meeting, State } from "./types";
 
 const LEDGER_LABEL: Record<string, string> = {
   subsidy: "Svazová dotace", entry_fee: "Startovné", sponsor: "Sponzor",
@@ -115,10 +115,12 @@ export function PokladnaPanel({ state, ledger }: {
 }
 
 // ── Vedení a volby ──────────────────────────────────────────────────────────
-export function VedeniPanel({ state, elections, avatars, teamId, onChanged }: {
+export function VedeniPanel({ state, elections, avatars, board, teamId, onChanged, onPost }: {
   state: State; elections: Election[];
   avatars: Record<string, Record<string, unknown> | null>;
+  board: BoardData | null;
   teamId: string | null; onChanged: () => void;
+  onPost: (text: string) => Promise<void>;
 }) {
   const open = elections.filter((e) => e.status === "open");
   const done = elections.filter((e) => e.status !== "open");
@@ -241,6 +243,10 @@ export function VedeniPanel({ state, elections, avatars, teamId, onChanged }: {
         </div>
       )}
 
+      {board?.seat && (
+        <Kabinet board={board} teamId={teamId} avatars={avatars} onPost={onPost} />
+      )}
+
       {done.length > 0 && (
         <div className="card p-5">
           <Ornament>Výsledky voleb</Ornament>
@@ -263,6 +269,78 @@ export function VedeniPanel({ state, elections, avatars, teamId, onChanged }: {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Kabinet — interní vlákno vedení. Zobrazuje se jen tomu, kdo v soutěži zastává
+ * funkci; kdo ji nemá, o něm ani neví.
+ */
+function Kabinet({ board, teamId, avatars, onPost }: {
+  board: BoardData; teamId: string | null;
+  avatars: Record<string, Record<string, unknown> | null>;
+  onPost: (text: string) => Promise<void>;
+}) {
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const send = async () => {
+    const t = text.trim();
+    if (!t) return;
+    setSaving(true);
+    await onPost(t);
+    setSaving(false);
+    setText("");
+  };
+
+  return (
+    <div className="card p-5" style={{ background: "var(--color-paper)" }}>
+      <Ornament right={board.seat ? board.seat.roleLabel : undefined}>Kabinet</Ornament>
+      <p className="text-sm text-muted -mt-1">
+        Neveřejné vlákno vedení soutěže. Kluby ho nevidí a v zápisu ze zasedání se neobjeví.
+      </p>
+
+      <div className="mt-4 space-y-3">
+        {board.messages.length === 0 && (
+          <div className="text-sm text-muted">Zatím tu nikdo nic nenapsal.</div>
+        )}
+        {board.messages.map((m) => {
+          const mine = m.teamId === teamId;
+          return (
+            <div key={m.id} className="flex gap-3">
+              <Portrait avatar={avatars[m.teamId]} name={m.senderName} size={34}
+                ring={mine ? GOLD : "var(--color-muted-light)"} />
+              <div className="min-w-0 flex-1 rounded-lg p-3"
+                style={{
+                  background: "var(--color-surface)",
+                  boxShadow: mine ? `inset 0 0 0 1px ${GOLD}` : "inset 0 0 0 1px var(--color-line)",
+                }}>
+                <div className="text-sm font-semibold break-words">
+                  {m.senderName}
+                  <span className="text-muted font-normal"> · {m.senderRole}</span>
+                </div>
+                <div className="text-sm mt-0.5 whitespace-pre-wrap break-words">{m.body}</div>
+                <div className="text-xs text-muted mt-1">{formatDate(m.sentAt)}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4">
+        <textarea className="input w-full" rows={3} maxLength={board.maxLength}
+          value={text} onChange={(e) => setText(e.target.value)}
+          placeholder="Napiš ostatním do vedení…" />
+        <div className="flex items-center justify-between gap-3 mt-2">
+          <span className="text-xs text-muted tabular-nums">
+            {text.length} / {board.maxLength}
+          </span>
+          <button className="btn btn-primary" disabled={saving || !text.trim()} onClick={send}>
+            {saving ? "Odesílám…" : "Odeslat"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

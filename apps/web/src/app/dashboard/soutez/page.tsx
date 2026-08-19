@@ -22,7 +22,7 @@ import { PokladnaPanel, VedeniPanel, ZapisyPanel } from "./panels";
 import { DisciplinePanel } from "./discipline";
 import { RefereesPanel } from "./referees-panel";
 import type {
-  DisciplineData, Election, LedgerEntry, Meeting, Proposal, RefereeData, State,
+  BoardData, DisciplineData, Election, LedgerEntry, Meeting, Proposal, RefereeData, State,
 } from "./types";
 
 const TAB_KEYS = ["zasedani", "pokladna", "vedeni", "zapisy"] as const;
@@ -84,6 +84,7 @@ export default function SoutezPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [discipline, setDiscipline] = useState<DisciplineData | null>(null);
   const [referees, setReferees] = useState<RefereeData | null>(null);
+  const [board, setBoard] = useState<BoardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [gesce, setGesce] = useState<string>("hospodarska");
@@ -117,6 +118,25 @@ export default function SoutezPage() {
       .then(setDiscipline).catch((e) => console.error("načtení disciplinárky:", e));
   }, [leagueId]);
 
+  /** Kabinet vidí jen ten, kdo má funkci — server u ostatních vrátí seat: null. */
+  const loadBoard = useCallback(() => {
+    if (!teamId) return;
+    apiFetch<BoardData>(`/api/teams/${teamId}/competition/board`)
+      .then(setBoard).catch((e) => console.error("načtení kabinetu:", e));
+  }, [teamId]);
+
+  const postToBoard = useCallback(async (text: string) => {
+    if (!teamId) return;
+    const ok = await apiAction(
+      apiFetch(`/api/teams/${teamId}/competition/board`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      }),
+      "Zprávu se nepodařilo odeslat",
+    );
+    if (ok) loadBoard();
+  }, [teamId, loadBoard]);
+
   const loadReferees = useCallback(() => {
     if (!leagueId) return;
     apiFetch<RefereeData>(`/api/competition/${leagueId}/referees`)
@@ -128,6 +148,7 @@ export default function SoutezPage() {
   useEffect(loadElections, [loadElections]);
   // Disciplinárka nese avatary všech trenérů, takže se hodí i pro volby a vedení.
   useEffect(loadDiscipline, [loadDiscipline]);
+  useEffect(loadBoard, [loadBoard]);
 
   useEffect(() => {
     if (!leagueId) return;
@@ -175,9 +196,9 @@ export default function SoutezPage() {
     [state, teamId]);
 
   const refreshAll = useCallback(() => {
-    loadState(); loadProposals(); loadElections(); loadDiscipline();
+    loadState(); loadProposals(); loadElections(); loadDiscipline(); loadBoard();
     if (referees) loadReferees();
-  }, [loadState, loadProposals, loadElections, loadDiscipline, loadReferees, referees]);
+  }, [loadState, loadProposals, loadElections, loadDiscipline, loadBoard, loadReferees, referees]);
 
   const vote = async (proposalId: string, answer: string) => {
     if (!teamId) return;
@@ -339,7 +360,7 @@ export default function SoutezPage() {
 
       {tab === "vedeni" && (
         <VedeniPanel state={state} elections={elections} avatars={avatars}
-          teamId={teamId} onChanged={refreshAll} />
+          board={board} teamId={teamId} onChanged={refreshAll} onPost={postToBoard} />
       )}
 
       {tab === "zapisy" && <ZapisyPanel meetings={meetings} />}

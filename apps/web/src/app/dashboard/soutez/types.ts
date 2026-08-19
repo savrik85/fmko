@@ -119,3 +119,15 @@ export interface RefereeData {
   minList: number; canBan: boolean; banReason: string | null; usable: number;
   referees: RefereeRow[];
 }
+
+export interface BoardMessage {
+  id: string; teamId: string; senderName: string; senderRole: string;
+  body: string; sentAt: string;
+}
+
+export interface BoardData {
+  seat: { role: string; roleLabel: string; status: string } | null;
+  messages: BoardMessage[];
+  unread: number;
+  maxLength: number;
+}

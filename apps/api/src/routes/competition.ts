@@ -19,6 +19,9 @@ import {
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
 import { canRunFor, openElections, rolesFor } from "../competition/officials";
 import {
+  BOARD_MESSAGE_MAX, listMessages, markRead, postMessage, seatOf, unreadCount,
+} from "../competition/board";
+import {
   CHAIR_FINE_LIMIT, FINE_MAX, FINE_MIN, OFFENCES,
   canChairFine, canFine, collectEvidence, issueSanction,
 } from "../competition/discipline";
@@ -879,6 +882,53 @@ competitionRouter.post("/teams/:teamId/competition/referee-bans", async (c) => {
     teamId, gameDate, referenceId: `dep-${id}`,
   });
 
+  return c.json({ ok: true, id });
+});
+
+// ── Kabinet — interní vlákno vedení ─────────────────────────────────────────
+// Čte i píše JEN ten, kdo v soutěži zastává funkci. Pozastavený předseda přístup
+// neztrácí — dokud ho kluby neodvolají, do vedení pořád patří.
+competitionRouter.get("/teams/:teamId/competition/board", async (c) => {
+  const teamId = c.req.param("teamId");
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const seat = await seatOf(c.env.DB, leagueId, teamId, meta.season_number);
+  if (!seat) return c.json({ seat: null, messages: [], unread: 0, maxLength: BOARD_MESSAGE_MAX });
+
+  const messages = await listMessages(c.env.DB, leagueId);
+  const unread = await unreadCount(c.env.DB, leagueId, teamId);
+  await markRead(c.env.DB, leagueId, teamId);
+
+  return c.json({ seat, messages, unread, maxLength: BOARD_MESSAGE_MAX });
+});
+
+competitionRouter.post("/teams/:teamId/competition/board", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ text?: string }>().catch(() => null);
+  const text = (body?.text ?? "").trim();
+  if (!text) return c.json({ error: "Zpráva nesmí být prázdná." }, 400);
+
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const seat = await seatOf(c.env.DB, leagueId, teamId, meta.season_number);
+  if (!seat) return c.json({ error: "Do kabinetu píše jen vedení soutěže." }, 403);
+
+  const mgr = await c.env.DB.prepare(
+    "SELECT name FROM managers WHERE team_id = ? ORDER BY created_at LIMIT 1"
+  ).bind(teamId).first<{ name: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "jméno pisatele", e); return null; });
+
+  const id = await postMessage(c.env.DB, {
+    leagueId, seasonNumber: meta.season_number, teamId,
+    senderName: mgr?.name ?? "neznámý trenér", seat, body: text,
+  });
+  if (!id) return c.json({ error: "Zprávu se nepodařilo uložit." }, 500);
   return c.json({ ok: true, id });
 });
 
