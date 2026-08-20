@@ -240,6 +240,15 @@ export async function updateSatisfaction(db: D1Database, opts: {
     .catch((e) => { logger.warn({ module: M }, "spokojenost sponzora", e); return null; });
   if (!gov?.sponsor_name) return null;
 
+  // Sponzor podepsaný na dnešním zasedání nemůže odnést pokuty, které padly
+  // na témže zasedání — podepisoval se do stavu, jaký byl, ne do toho po něm.
+  const dnesPodepsan = await db.prepare(
+    `SELECT 1 FROM competition_proposals
+      WHERE league_id = ? AND kind = 'sponsor' AND status = 'passed' AND closed_game_date = ?`
+  ).bind(opts.leagueId, opts.gameDate).first()
+    .catch((e) => { logger.warn({ module: M }, "čerstvý podpis sponzora", e); return null; });
+  if (dnesPodepsan) return gov.sponsor_satisfaction;
+
   const sankce = await db.prepare(
     `SELECT COUNT(*) AS n FROM competition_sanctions
       WHERE league_id = ? AND game_date = ? AND status IN ('issued','appealed')`
