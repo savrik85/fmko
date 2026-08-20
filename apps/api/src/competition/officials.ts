@@ -167,7 +167,9 @@ export function electionNote(
       : "Nikdo nekandidoval — funkce zůstává neobsazená.";
   }
 
-  return `Zvolen ${winner.votes} z ${platnychHlasu} `
+  // „Získal", ne „Zvolen": v zápisu tomu předchází jméno se slovem Zvolen a stálo
+  // by tam dvakrát. Samostatně pod jménem v UI to čte stejně dobře.
+  return `Získal ${winner.votes} z ${platnychHlasu} `
     + `${platnychHlasu === 1 ? "hlasu" : "hlasů"}.${dovetek}`;
 }
 

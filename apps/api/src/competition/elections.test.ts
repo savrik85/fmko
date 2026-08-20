@@ -5,17 +5,17 @@ const vitez = (votes: number) => ({ votes });
 
 describe("věta o výsledku volby", () => {
   it("napíše poměr hlasů, ale ne jméno — to se vypisuje zvlášť", () => {
-    expect(electionNote(vitez(3), 5, 0)).toBe("Zvolen 3 z 5 hlasů.");
+    expect(electionNote(vitez(3), 5, 0)).toBe("Získal 3 z 5 hlasů.");
   });
 
   it("jediný hlas skloňuje", () => {
-    expect(electionNote(vitez(1), 1, 0)).toBe("Zvolen 1 z 1 hlasu.");
+    expect(electionNote(vitez(1), 1, 0)).toBe("Získal 1 z 1 hlasu.");
   });
 
   it("hlásí propadlé hlasy po odstoupení kandidáta", () => {
     // Bez tohohle by čísla v zápisu nesouhlasila s tím, kolik klubů hlasovalo.
     expect(electionNote(vitez(2), 3, 1))
-      .toBe("Zvolen 2 z 3 hlasů. 1 hlas propadl — kandidát odstoupil.");
+      .toBe("Získal 2 z 3 hlasů. 1 hlas propadl — kandidát odstoupil.");
     expect(electionNote(vitez(2), 3, 3)).toContain("3 hlasy propadly");
     expect(electionNote(vitez(2), 3, 7)).toContain("7 hlasů propadlo");
   });
