@@ -12,7 +12,7 @@ import { apiAction, apiFetch } from "@/lib/api";
 import { Modal } from "@/components/ui";
 import { EntityLink } from "@/components/ui";
 import {
-  Empty, GOLD, Ornament, PersonLine, Portrait, Row, czk, formatDate, plural, signed,
+  Empty, GOLD, GOLD_SOFT, Ornament, PersonLine, Portrait, Row, czk, formatDate, plural, signed,
 } from "./ui";
 import type { BoardData, Election, LedgerEntry, Meeting, State } from "./types";
 
@@ -151,6 +151,7 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
   const done = elections.filter((e) => e.status !== "open");
   const [busy, setBusy] = useState<string | null>(null);
   const [suspendRole, setSuspendRole] = useState<{ role: string; label: string } | null>(null);
+  const [resignRole, setResignRole] = useState<{ role: string; label: string } | null>(null);
 
   /** Prezident je nadřízený ostatním předsedům — pozastavení vidí jen on. */
   const jsemPrezident = !!teamId && state.presidentTeamId === teamId;
@@ -212,6 +213,12 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
                     Pozastavit
                   </button>
                 )}
+                {r.holder?.teamId === teamId && (
+                  <button className="btn btn-md btn-secondary shrink-0"
+                    onClick={() => setResignRole({ role: r.role, label: r.label })}>
+                    Rezignovat
+                  </button>
+                )}
                 </div>
 
                 {/* Co ta funkce spravuje a co doopravdy smí — ať se nikdo neptá,
@@ -253,19 +260,43 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
 
       {open.length > 0 && (
         <div className="card p-5 space-y-5">
-          <Ornament>Probíhající volby</Ornament>
-          <p className="text-sm text-muted -mt-2">
-            Kandidují trenéři, ne kluby. Volba je tajná — neuvidí se ani po uzavření, kdo koho volil.
-          </p>
+          <Ornament>Volba grémia</Ornament>
+
+          {/* Volební řád. Pravidla musí být vidět dřív, než se hlasuje — jinak se
+              hráč ptá pokaždé znovu a hlasuje naslepo. */}
+          <div className="rounded-lg p-4" style={{ background: "rgba(196,160,53,0.10)" }}>
+            <div className="section-label mb-2" style={{ color: "var(--color-gold-700)" }}>Volební řád</div>
+            <ul className="space-y-1.5 text-sm">
+              {[
+                "Kandidují trenéři, ne kluby. Jeden trenér smí zastávat nejvýš jednu funkci — a kandidovat taky jen na jednu.",
+                "Hlasuje se do zahájení středečního zasedání. Do té chvíle můžeš hlas kdykoli změnit i stáhnout kandidaturu.",
+                "Volba je tajná. Svůj hlas vidíš jen ty, a nezveřejní se ani po uzavření — do zápisu jde jen jméno zvoleného a poměr hlasů.",
+                "Volit sám sebe smíš. Kdo kandiduje, hlasuje jako každý jiný.",
+                "Vyhrává prostá většina odevzdaných hlasů. Při rovnosti rozhoduje vyšší reputace trenéra.",
+                "Hlas pro kandidáta, který mezitím odstoupil, propadá.",
+                "Když nikdo nekandiduje, funkce zůstane neobsazená a na nejbližším zasedání se vypíše znovu.",
+              ].map((v, i) => (
+                <li key={i} className="flex gap-2">
+                  <span aria-hidden="true" style={{ color: GOLD }}>◆</span>
+                  <span className="min-w-0">{v}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
           {open.map((e) => {
             const jsemKandidat = e.candidates.some((k) => k.teamId === teamId);
             return (
-              <div key={e.id} className="rounded-lg p-4" style={{ background: "var(--color-paper)" }}>
-                <div className="text-lg font-heading">{e.roleLabel}</div>
+              <div key={e.id} className="rounded-lg overflow-hidden"
+                style={{ background: "var(--color-paper)", boxShadow: `inset 0 0 0 1px ${GOLD_SOFT}` }}>
+                <div className="h-1" style={{ background: `linear-gradient(90deg, ${GOLD}, transparent)` }} />
+                <div className="p-4">
+                <div className="text-xl font-heading">{e.roleLabel}</div>
                 <div className="text-sm text-muted mb-3">
                   {e.candidates.length === 0
                     ? "Zatím nikdo nekandiduje."
                     : `${e.candidates.length} ${plural(e.candidates.length, "kandidát", "kandidáti", "kandidátů")}`}
+                  {e.votesCast > 0
+                    && ` · hlasovalo ${e.votesCast} ${plural(e.votesCast, "klub", "kluby", "klubů")}`}
                 </div>
 
                 <div className="space-y-2">
@@ -303,6 +334,7 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
                 >
                   {jsemKandidat ? "Stáhnout kandidaturu" : "Kandidovat"}
                 </button>
+                </div>
               </div>
             );
           })}
@@ -314,6 +346,15 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
           role={suspendRole} teamId={teamId}
           onClose={() => setSuspendRole(null)}
           onSaved={() => { setSuspendRole(null); onChanged(); }}
+        />
+      )}
+
+      {resignRole && teamId && (
+        <ResignForm
+          role={resignRole} teamId={teamId}
+          hrozbaOdvolani={state.officials.some((o) => o.role === resignRole.role && o.status === "suspended")}
+          onClose={() => setResignRole(null)}
+          onSaved={() => { setResignRole(null); onChanged(); }}
         />
       )}
 
@@ -412,6 +453,60 @@ function SuspendForm({ role, teamId, onClose, onSaved }: {
           <button className="btn btn-lg btn-primary flex-1"
             disabled={saving || reason.trim().length < 10} onClick={submit}>
             {saving ? "Odesílám…" : "Pozastavit"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Demise. Bez hlasování a hned, ale s cenou — a ta se musí říct dopředu, ne až
+ * v odpovědi serveru.
+ */
+function ResignForm({ role, teamId, hrozbaOdvolani, onClose, onSaved }: {
+  role: { role: string; label: string }; teamId: string;
+  hrozbaOdvolani: boolean;
+  onClose: () => void; onSaved: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    const ok = await apiAction(
+      apiFetch(`/api/teams/${teamId}/competition/officials/${role.role}/resign`, { method: "POST" }),
+      "Demisi se nepodařilo podat",
+    );
+    setSaving(false);
+    if (ok) onSaved();
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title="Rezignovat na funkci" zavritKlikemVedle={false}>
+      <div className="p-5 space-y-4">
+        <div className="text-lg font-heading">Rezignovat — {role.label}</div>
+
+        <p className="text-sm">
+          Funkce se uvolní okamžitě, bez hlasování. Do nejbližšího zasedání ji zastupuje
+          prezident soutěže, pak se na ni vypíše doplňovací volba.
+        </p>
+
+        <div className="rounded-lg p-3 text-sm" style={{ background: "#FBEAE8" }}>
+          <div className="font-semibold">Zpátky to nejde.</div>
+          Na tuhle funkci už letos kandidovat nemůžeš. Odchod v první půlce sezóny stojí
+          tři body reputace; kdo odslouží půlku, odchází bez postihu.
+          {hrozbaOdvolani && (
+            <div className="mt-2 font-semibold">
+              Zrovna teď se o tvém odvolání hlasuje — demise se proto počítá jako odvolání
+              a přijdeš o deset bodů reputace.
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
+          <button className="btn btn-lg btn-primary flex-1" disabled={saving} onClick={submit}>
+            {saving ? "Odesílám…" : "Rezignovat"}
           </button>
         </div>
       </div>

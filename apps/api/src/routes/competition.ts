@@ -17,7 +17,9 @@ import {
   type CompetitionRules, type OfficialRole,
 } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
-import { actsFor, canRunFor, openElections, presidentOf, rolesFor, suspendOfficial } from "../competition/officials";
+import {
+  actsFor, canRunFor, openElections, presidentOf, resignOfficial, rolesFor, suspendOfficial,
+} from "../competition/officials";
 import {
   BOARD_MESSAGE_MAX, listForRole, listMessages, markRead, postMessage, seatOf, unreadCount,
 } from "../competition/board";
@@ -1041,6 +1043,29 @@ competitionRouter.post("/teams/:teamId/competition/officials/:role/suspend", asy
   return c.json({ ok: true, proposalId: out.proposalId });
 });
 
+/**
+ * Demise. Bez hlasování a hned — jen ten, kdo funkci sám zastává.
+ *
+ * Kdo rezignuje ve chvíli, kdy už se o jeho odvolání hlasuje, odchází se stejným
+ * postihem jako odvolaný; odpověď to říká na rovinu, ať to hráč vidí i potom.
+ */
+competitionRouter.post("/teams/:teamId/competition/officials/:role/resign", async (c) => {
+  const teamId = c.req.param("teamId");
+  const role = c.req.param("role") as OfficialRole;
+
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const gameDate = await currentGameDate(c.env.DB, teamId);
+  const out = await resignOfficial(c.env.DB, {
+    leagueId, seasonNumber: meta.season_number, teamId, role, gameDate,
+  });
+  if (!out.ok) return c.json({ error: out.reason }, 403);
+  return c.json({ ok: true, jakoOdvolani: !!out.jakoOdvolani });
+});
+
 // ── Kabinet — interní vlákno vedení ─────────────────────────────────────────
 // Čte i píše JEN ten, kdo v soutěži zastává funkci. Pozastavený předseda přístup
 // neztrácí — dokud ho kluby neodvolají, do vedení pořád patří.
@@ -1169,6 +1194,18 @@ competitionRouter.get("/competition/:leagueId/elections", async (c) => {
     }
   }
 
+  // Účast: kolik klubů už hlasovalo. Číslo ano, jména ne — stejně jako u návrhů.
+  // U uzavřené volby je v řádku, u otevřené se musí spočítat živě.
+  const turnout: Record<string, number> = {};
+  if (ids.length > 0) {
+    const tr = await c.env.DB.prepare(
+      `SELECT election_id, COUNT(*) AS n FROM competition_election_ballots
+        WHERE election_id IN (${ids.map(() => "?").join(",")}) GROUP BY election_id`
+    ).bind(...ids).all<{ election_id: string; n: number }>()
+      .catch((e) => { logger.warn({ module: M }, "účast ve volbě", e); return { results: [] }; });
+    for (const r of tr.results) turnout[r.election_id] = r.n;
+  }
+
   // Vlastní hlas vidí jen ten, kdo ho odevzdal. Volba je tajná i po uzavření.
   const myTeam = await currentTeam(c as never);
   const myVote: Record<string, string> = {};
@@ -1188,7 +1225,8 @@ competitionRouter.get("/competition/:leagueId/elections", async (c) => {
       status: e.status,
       winnerTeamId: e.winner_team_id, winnerName: e.winner_name,
       winnerManager: e.winner_manager,
-      votesCast: e.votes_cast, resultNote: e.result_note,
+      votesCast: turnout[e.id as string] ?? e.votes_cast,
+      resultNote: e.result_note,
       candidates: candidates[e.id as string] ?? [],
       myVote: myVote[e.id as string] ?? null,
     })),

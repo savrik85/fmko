@@ -167,9 +167,23 @@ export async function runOneMeeting(
     closedCount++;
   }
 
-  // Doplňovací volby na funkce, které zůstaly neobsazené — po neúspěšné volbě
-  // i po odvolání. Vyhlásí se dnes, hlasuje se do příštího zasedání.
-  const { openElections } = await import("./officials");
+  // Funkce po klubech, které mezitím osiřely. Musí se uvolnit dřív, než se
+  // vyhlašují doplňovací volby — jinak by se na ně letos už nedostalo.
+  const { openElections, vacateAbandonedSeats } = await import("./officials");
+  const opustene = await vacateAbandonedSeats(db, leagueId, meta.season_number, gameDate)
+    .catch((e) => { logger.warn({ module: M }, `osiřelé funkce ${leagueId}`, e); return []; });
+  for (const o of opustene) {
+    results.push({
+      kind: "vacated",
+      title: `Uvolněna funkce ${ROLE_LABEL[o.role]}`,
+      status: "passed",
+      resultNote: `${o.teamName} zůstal bez trenéra. Funkci převezme doplňovací volba.`,
+    } as unknown as Record<string, unknown>);
+    closedCount++;
+  }
+
+  // Doplňovací volby na funkce, které zůstaly neobsazené — po neúspěšné volbě,
+  // po odvolání i po demisi. Vyhlásí se dnes, hlasuje se do příštího zasedání.
   await openElections(db, leagueId, meta.season_number, gameDate)
     .catch((e) => logger.warn({ module: M }, `doplňovací volby ${leagueId}`, e));
 

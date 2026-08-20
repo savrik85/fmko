@@ -130,6 +130,21 @@ export async function canRunFor(
     return { ok: false, reason: `Tvůj klub už zastává funkci ${ROLE_LABEL[holds.role as OfficialRole]}. Jeden klub může mít nejvýš jednu.` };
   }
 
+  // Kdo z funkce odešel sám, nemůže se na ni tutéž sezónu vrátit. Jinak by
+  // demise byla úhybný manévr před hlasováním o odvolání: rezignuju, počkám
+  // na doplňovací volbu a jsem zpátky bez škrábnutí.
+  const resigned = await db.prepare(
+    `SELECT 1 FROM competition_officials
+      WHERE league_id = ? AND team_id = ? AND role = ? AND season_number = ? AND status = 'resigned'`
+  ).bind(leagueId, teamId, role, seasonNumber).first()
+    .catch((e) => { logger.warn({ module: M }, "dřívější demise", e); return null; });
+  if (resigned) {
+    return {
+      ok: false,
+      reason: `Na funkci ${ROLE_LABEL[role]} jsi letos rezignoval. Kandidovat na ni můžeš zase až příští sezónu.`,
+    };
+  }
+
   const elsewhere = await db.prepare(
     `SELECT e.role FROM competition_candidacies c
        JOIN competition_elections e ON e.id = c.election_id
@@ -300,8 +315,13 @@ export async function loadOfficials(
 export async function applyTermReputation(
   db: D1Database, teamId: string, outcome: "term_ended" | "recalled" | "resigned",
   role: OfficialRole, seasonNumber: number, gameDate: string,
+  /** Odsloužil aspoň půlku sezóny? Pak dobrovolná demise nestojí nic. */
+  odslouzilPulku = false,
 ): Promise<void> {
-  const delta = outcome === "term_ended" ? 6 : outcome === "recalled" ? -10 : -3;
+  const delta = outcome === "term_ended" ? 6
+    : outcome === "recalled" ? -10
+    : odslouzilPulku ? 0 : -3;
+  if (delta === 0) return;
   try {
     const { applyManagerAttrDelta } = await import("../lib/manager-attrs");
     await applyManagerAttrDelta(
@@ -472,6 +492,140 @@ export async function recallOfficial(
   await applyTermReputation(db, holder.team_id, "recalled", role, seasonNumber, gameDate);
   await openElections(db, leagueId, seasonNumber, gameDate);
   return true;
+}
+
+/**
+ * Uvolní funkce po klubech, které mezitím osiřely.
+ *
+ * Když majitel přestane hrát, tým přejde na `user_id = 'ai'` — a AI klub nemá
+ * v soutěži hlasovací právo, natož aby jí předsedal. Kontroluje se na každém
+ * zasedání, protože jinde by se na to nepřišlo.
+ */
+export async function vacateAbandonedSeats(
+  db: D1Database, leagueId: string, seasonNumber: number, gameDate: string,
+): Promise<Array<{ role: OfficialRole; teamName: string }>> {
+  const opusteni = await db.prepare(
+    `SELECT o.role, t.name AS team_name
+       FROM competition_officials o
+       JOIN teams t ON t.id = o.team_id
+      WHERE o.league_id = ? AND o.season_number = ? AND o.status IN ('active','suspended')
+        AND t.user_id = 'ai'`
+  ).bind(leagueId, seasonNumber).all<{ role: string; team_name: string }>()
+    .catch((e) => { logger.warn({ module: M }, "osiřelé funkce", e); return { results: [] }; });
+
+  const out: Array<{ role: OfficialRole; teamName: string }> = [];
+  for (const r of opusteni.results) {
+    const res = await db.prepare(
+      `UPDATE competition_officials SET status = 'term_ended', ended_game_date = ?
+        WHERE league_id = ? AND role = ? AND season_number = ? AND status IN ('active','suspended')`
+    ).bind(gameDate, leagueId, r.role, seasonNumber).run()
+      .catch((e) => { logger.warn({ module: M }, `uvolnění funkce ${r.role}`, e); return null; });
+    if (!res || (res.meta?.changes ?? 0) === 0) continue;
+
+    // Žádný reputační postih — trenér, který přestal hrát, si ho nezaslouží
+    // ani nepřečte. Funkce se prostě uvolní.
+    out.push({ role: r.role as OfficialRole, teamName: r.team_name });
+    logger.info({ module: M }, `soutěž ${leagueId}: ${ROLE_LABEL[r.role as OfficialRole]} uvolněn — klub bez trenéra`);
+  }
+
+  if (out.length > 0) await openElections(db, leagueId, seasonNumber, gameDate);
+  return out;
+}
+
+export interface ResignResult {
+  ok: boolean;
+  reason?: string;
+  /** Demise podaná pod hrozbou odvolání se počítá jako odvolání. */
+  jakoOdvolani?: boolean;
+}
+
+/**
+ * Demise. Okamžitá a bez hlasování — držet někoho ve funkci násilím nedává smysl.
+ *
+ * Dvě pojistky, bez kterých by byla únikovou cestou:
+ *  1. Kdo rezignuje potom, co už se o jeho odvolání hlasuje, odchází se stejným
+ *     postihem jako odvolaný. Jinak by před každým hlasováním prostě rezignoval.
+ *  2. Na tutéž funkci nemůže tutéž sezónu znovu kandidovat (viz canRunFor).
+ *
+ * Funkce zůstane neobsazená do nejbližšího zasedání, kde proběhne doplňovací
+ * volba; do té doby ji zastupuje prezident soutěže.
+ */
+export async function resignOfficial(db: D1Database, opts: {
+  leagueId: string;
+  seasonNumber: number;
+  teamId: string;
+  role: OfficialRole;
+  gameDate: string;
+}): Promise<ResignResult> {
+  const holder = await db.prepare(
+    `SELECT team_id, elected_game_date FROM competition_officials
+      WHERE league_id = ? AND role = ? AND season_number = ? AND status IN ('active','suspended')`
+  ).bind(opts.leagueId, opts.role, opts.seasonNumber)
+    .first<{ team_id: string; elected_game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "držitel funkce při demisi", e); return null; });
+
+  if (!holder) return { ok: false, reason: "Tahle funkce není obsazená." };
+  if (holder.team_id !== opts.teamId) {
+    return { ok: false, reason: "Rezignovat můžeš jen z funkce, kterou sám zastáváš." };
+  }
+
+  // Běží o něm hlasování o odvolání? Pak je demise útěk a stojí stejně.
+  const podHrozbou = await db.prepare(
+    `SELECT 1 FROM competition_proposals
+      WHERE league_id = ? AND kind = 'recall' AND status = 'open' AND target_team_id = ?`
+  ).bind(opts.leagueId, opts.teamId).first()
+    .catch((e) => { logger.warn({ module: M }, "otevřené odvolání", e); return null; });
+
+  const res = await db.prepare(
+    `UPDATE competition_officials SET status = 'resigned', ended_game_date = ?
+      WHERE league_id = ? AND role = ? AND season_number = ? AND status IN ('active','suspended')`
+  ).bind(opts.gameDate, opts.leagueId, opts.role, opts.seasonNumber).run()
+    .catch((e) => { logger.error({ module: M }, "demise funkcionáře", e); return null; });
+  if (!res || (res.meta?.changes ?? 0) === 0) {
+    return { ok: false, reason: "Demisi se nepodařilo podat." };
+  }
+
+  await applyTermReputation(
+    db, opts.teamId, podHrozbou ? "recalled" : "resigned",
+    opts.role, opts.seasonNumber, opts.gameDate,
+    !podHrozbou && await odslouzilPulkuSezony(db, opts.leagueId, holder.elected_game_date, opts.gameDate),
+  );
+
+  // Otevřené hlasování o odvolání pozbylo smyslu — už není koho odvolávat.
+  await db.prepare(
+    `UPDATE competition_proposals
+        SET status = 'withdrawn', closed_game_date = ?, result_note = 'Předseda rezignoval dřív, než se o odvolání hlasovalo.'
+      WHERE league_id = ? AND kind = 'recall' AND status = 'open' AND target_team_id = ?`
+  ).bind(opts.gameDate, opts.leagueId, opts.teamId).run()
+    .catch((e) => logger.warn({ module: M }, "uzavření odvolání po demisi", e));
+
+  await openElections(db, opts.leagueId, opts.seasonNumber, opts.gameDate);
+
+  logger.info(
+    { module: M },
+    `soutěž ${opts.leagueId}: ${ROLE_LABEL[opts.role]} — demise ${opts.teamId}${podHrozbou ? " pod hrozbou odvolání" : ""}`,
+  );
+  return { ok: true, jakoOdvolani: !!podHrozbou };
+}
+
+/**
+ * Odsloužil aspoň půlku sezóny? Měří se v odehraných kolech soutěže, ne v datech —
+ * herní hodiny se při rolloveru nulují a absolutní datum by přestalo dávat smysl.
+ */
+async function odslouzilPulkuSezony(
+  db: D1Database, leagueId: string, od: string | null, gameDate: string,
+): Promise<boolean> {
+  if (!od) return false;
+  const row = await db.prepare(
+    `SELECT COUNT(*) AS vse,
+            SUM(CASE WHEN scheduled_at <= ? THEN 1 ELSE 0 END) AS pred,
+            SUM(CASE WHEN scheduled_at <= ? THEN 1 ELSE 0 END) AS ted
+       FROM season_calendar WHERE league_id = ?`
+  ).bind(od, gameDate, leagueId).first<{ vse: number; pred: number | null; ted: number | null }>()
+    .catch((e) => { logger.warn({ module: M }, "délka mandátu", e); return null; });
+  if (!row || row.vse === 0) return false;
+  const odslouzeno = (row.ted ?? 0) - (row.pred ?? 0);
+  return odslouzeno * 2 >= row.vse;
 }
 
 /** Odvolání neprošlo — pravomoc se vrací a prezident za to zaplatí reputací. */
