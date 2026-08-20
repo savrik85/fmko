@@ -261,6 +261,16 @@ async function endOfficialTerms(
       db, o.team_id, "term_ended", o.role as never, o.season_number, gameDate,
     );
   }
+
+  // Volby, které se do konce sezóny nestihly rozhodnout, propadají spolu s ní.
+  // Bez tohohle by v tabulce navěky visely otevřené volby do minulé sezóny.
+  await db.prepare(
+    `UPDATE competition_elections
+        SET status = 'failed', closed_game_date = ?,
+            result_note = 'Volba nebyla uzavřena do konce sezóny a propadla.'
+      WHERE league_id = ? AND season_number < ? AND status = 'open'`
+  ).bind(gameDate, leagueId, newSeason).run()
+    .catch((e) => logger.warn({ module: M }, `uzavření starých voleb ${leagueId}`, e));
 }
 
 /**
