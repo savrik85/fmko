@@ -7,14 +7,14 @@
  * akce jsou přes celou šířku a dlouhá jména se lámou.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { Modal } from "@/components/ui";
 import { EntityLink } from "@/components/ui";
 import {
   Empty, GOLD, GOLD_SOFT, Ornament, PersonLine, Portrait, Row, czk, formatDate, plural, signed,
 } from "./ui";
-import type { BoardData, Election, LedgerEntry, Meeting, State } from "./types";
+import type { BoardData, Election, LedgerEntry, Meeting, Rules, State } from "./types";
 
 const LEDGER_LABEL: Record<string, string> = {
   subsidy: "Svazová dotace", entry_fee: "Startovné", sponsor: "Sponzor",
@@ -32,6 +32,33 @@ export function PokladnaPanel({ state, ledger }: {
   ledger: { entries: LedgerEntry[]; summary: Array<{ type: string; total: number }> } | null;
 }) {
   const p = state.projection;
+
+  // Co už je odhlasované a od příští sezóny se změní. Bez toho hráč koukal na
+  // sazebník, který za pár týdnů neplatí, a nechápal, proč strop nesedí.
+  const zmeny = useMemo(() => {
+    const next = state.nextRules;
+    if (!next) return [];
+    const popis: Array<[keyof Rules, string, (v: number) => string]> = [
+      ["win_bonus", "Odměna za výhru", czk],
+      ["draw_bonus", "Odměna za remízu", czk],
+      ["place_top", "Odměna za 1. místo", czk],
+      ["place_decay", "Klíč rozdělení odměn", (v) => v.toFixed(2)],
+      ["entry_fee", "Startovné", czk],
+      ["referee_fee", "Odměna rozhodčímu za zápas", czk],
+      ["fine_referee_abuse", "Pokuta za kritiku rozhodčího", czk],
+      ["fine_admin", "Svazová pokuta", czk],
+      ["fine_rule", "Pokuta za porušení pravidla", czk],
+      ["interleague_fee_pct", "Meziligový poplatek", (v) => `${v} %`],
+      ["levy_gate_pct", "Odvod ze vstupného", (v) => `${v} %`],
+      ["levy_concession_pct", "Odvod z občerstvení", (v) => `${v} %`],
+      ["levy_transfer_pct", "Odvod z přestupů v soutěži", (v) => `${v} %`],
+      ["levy_cup_pct", "Odvod z pohárových odměn", (v) => `${v} %`],
+    ];
+    return popis
+      .filter(([k]) => next[k] !== state.rules[k])
+      .map(([k, label, fmt]) => ({ label, ted: fmt(state.rules[k]), pak: fmt(next[k]) }));
+  }, [state.rules, state.nextRules]);
+
   return (
     <div className="space-y-4">
       <div className="card p-5" style={{ background: "var(--color-paper)" }}>
@@ -78,6 +105,18 @@ export function PokladnaPanel({ state, ledger }: {
         <Row label="Odvod z přestupů v soutěži" value={`${state.rules.levy_transfer_pct} %`} />
         <Row label="Odvod z pohárových odměn" value={`${state.rules.levy_cup_pct} %`} />
       </div>
+
+      {zmeny.length > 0 && (
+        <div className="card p-5" style={{ background: "rgba(196,160,53,0.10)" }}>
+          <Ornament>Od příští sezóny</Ornament>
+          <p className="text-sm text-muted mb-2">
+            Tohle už kluby odhlasovaly. Rozpočet s tím počítá, i když to zatím neplatí.
+          </p>
+          {zmeny.map((z) => (
+            <Row key={z.label} label={z.label} value={`${z.ted} → ${z.pak}`} />
+          ))}
+        </div>
+      )}
 
       <div className="card p-5">
         <Ornament>Pokuty, které padají samy</Ornament>

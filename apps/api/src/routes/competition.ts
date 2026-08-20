@@ -30,7 +30,9 @@ import {
 import {
   MIN_ACTIVE_REFEREES, canBanReferee, refereeStandings,
 } from "../competition/referee-bans";
-import { proposalTitle, validateProposal, voterStats } from "../competition/proposals";
+import {
+  nextSeasonRules, proposalTitle, validateProposal, voterStats,
+} from "../competition/proposals";
 import {
   checkBudget, freeBalance, outstandingCommitments, placementReward, subsidyFor, teamImpact,
 } from "../competition/projection";
@@ -144,7 +146,10 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
   const played = await playedMatches(c.env.DB, leagueId);
   const outstanding = outstandingCommitments(rules, teams, meta.level, played);
   const free = freeBalance(balance, rules, teams, meta.level, played);
-  const projection = checkBudget({ rules, teams, level: meta.level, balance: free });
+  // Projekce i strop musí počítat se sazebníkem, který bude PŘÍŠTÍ sezónu platit,
+  // ne s dnešním — jinak by o už odhlasovaných změnách nevěděly.
+  const pristiRules = await nextSeasonRules(c.env.DB, leagueId, rules, meta.season_number + 1);
+  const projection = checkBudget({ rules: pristiRules, teams, level: meta.level, balance: free });
 
   return c.json({
     league: {
@@ -163,6 +168,8 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
     playedMatches: played,
     subsidy: subsidyFor(teams, meta.level),
     rules,
+    // Co bude platit příští sezónu, až se přijaté návrhy promítnou.
+    nextRules: pristiRules,
     defaults: DEFAULT_RULES,
     projection: {
       cost: projection.cost, income: projection.income,
@@ -460,9 +467,13 @@ competitionRouter.post("/teams/:teamId/competition/proposals", async (c) => {
   const free = freeBalance(
     await readBalance(c.env.DB, leagueId), rules, teamsInLeague, meta.level, played,
   );
+  // Základ stropu je sazebník příští sezóny, ne ten dnešní: co už kluby
+  // odhlasovaly, rozpočet zatěžuje, i když to zatím neplatí.
+  const baseRules = await nextSeasonRules(c.env.DB, leagueId, rules, meta.season_number + 1);
   const v = await validateProposal({
     db: c.env.DB, leagueId, level: meta.level, seasonNumber: meta.season_number,
-    currentRules: rules, balance: free, kind: body.kind, value: Number(body.value),
+    currentRules: rules, budgetBase: baseRules,
+    balance: free, kind: body.kind, value: Number(body.value),
   });
   if (!v.ok) return c.json({ error: v.error }, 400);
 

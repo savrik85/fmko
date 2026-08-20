@@ -16,7 +16,7 @@ import { DEFAULT_RULES, MIN_HUMAN_CLUBS, type CompetitionRules } from "./default
 import { recomputeBalance, recordCompetitionEntry } from "./ledger";
 import { applyTermReputation, openElections } from "./officials";
 import { subsidyFor } from "./projection";
-import { applyPassedToRules } from "./proposals";
+import { nextSeasonRules } from "./proposals";
 import { countAllClubs, countHumanClubs, loadGovernance, loadRules } from "./rules";
 
 const M = "competition-rollover";
@@ -133,23 +133,13 @@ async function buildRules(
   const previous = await loadRules(db, leagueId, newSeason - 1);
   let base: CompetitionRules = previous ?? ({ ...DEFAULT_RULES } as CompetitionRules);
 
-  const passed = await db.prepare(
-    `SELECT kind, payload FROM competition_proposals
-      WHERE league_id = ? AND status = 'passed' AND effective_from_season = ?
-      ORDER BY closed_at ASC`
-  ).bind(leagueId, newSeason).all<{ kind: string; payload: string }>()
-    .catch((e) => { logger.warn({ module: M }, `schválené návrhy ${leagueId}`, e); return { results: [] }; });
-
-  const changes: Array<{ kind: string; value: number }> = [];
-  for (const row of passed.results) {
-    try {
-      const payload = JSON.parse(row.payload) as { value?: number };
-      if (typeof payload.value === "number") changes.push({ kind: row.kind, value: payload.value });
-    } catch (e) {
-      logger.warn({ module: M }, `payload návrhu ${row.kind} v lize ${leagueId} nejde přečíst`, e);
-    }
-  }
-  base = applyPassedToRules(base, changes);
+  // Stejná funkce, jakou používá strop rozpočtu — jinak by se projekce a
+  // skutečnost rozešly a strop by přestal být stropem.
+  const pred = base;
+  base = await nextSeasonRules(db, leagueId, base, newSeason);
+  const changes = (Object.keys(DEFAULT_RULES) as Array<keyof CompetitionRules>)
+    .filter((f) => base[f] !== pred[f])
+    .map((f) => ({ kind: String(f), value: base[f] }));
 
   const teams = await countAllClubs(db, leagueId);
   const subsidy = subsidyFor(teams, level);

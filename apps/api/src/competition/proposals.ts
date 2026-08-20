@@ -99,7 +99,14 @@ export async function validateProposal(opts: {
   leagueId: string;
   level: string;
   seasonNumber: number;
+  /** Sazebník, který platí teď — proti němu se pozná, že návrh nic nemění. */
   currentRules: CompetitionRules;
+  /**
+   * Základ pro rozpočtový strop: sazebník příští sezóny včetně už přijatých
+   * návrhů. Když chybí, spadne se na `currentRules` — tak to dělá jediný
+   * volající bez samosprávy.
+   */
+  budgetBase?: CompetitionRules;
   balance: number;
   kind: string;
   value: number;
@@ -121,7 +128,8 @@ export async function validateProposal(opts: {
   let budgetNote: string | null = null;
   if (BUDGET_KINDS.has(opts.kind) && spec.rulesField) {
     const teams = await countAllClubs(opts.db, opts.leagueId);
-    const proposed: CompetitionRules = { ...opts.currentRules, [spec.rulesField]: opts.value };
+    const zaklad = opts.budgetBase ?? opts.currentRules;
+    const proposed: CompetitionRules = { ...zaklad, [spec.rulesField]: opts.value };
     const check = checkBudget({
       rules: proposed, teams, level: opts.level, balance: opts.balance,
     });
@@ -133,7 +141,7 @@ export async function validateProposal(opts: {
         : `Zvedněte startovné na ${czk(check.requiredEntryFee)}, nebo sežeňte sponzora.`;
       return { ok: false, error: `Návrh nelze podat — pokladně by chybělo ${czk(check.deficit)}. ${rada}` };
     }
-    const current = checkBudget({ rules: opts.currentRules, teams, level: opts.level, balance: opts.balance });
+    const current = checkBudget({ rules: zaklad, teams, level: opts.level, balance: opts.balance });
     const delta = check.projected - current.projected;
     budgetNote = delta === 0
       ? "Na rozpočet soutěže to nemá vliv."
@@ -183,6 +191,38 @@ export function proposalTitle(kind: string, value: number, current: number): str
 }
 
 /** Sazebník po aplikaci schválených návrhů — používá rollover. */
+/**
+ * Sazebník, který bude platit PŘÍŠTÍ sezónu: dnešní plus všechno, co už kluby
+ * odhlasovaly s účinností od ní.
+ *
+ * Bez tohohle se strop rozpočtu i projekce počítaly ze zastaralého základu:
+ * klub si odhlasoval dražší odměnu za výhru, projekce o ní nevěděla a další
+ * návrh se posuzoval, jako by se nic nestalo. Několik jednotlivě průchozích
+ * návrhů tak dohromady přejelo rozpočet. Rollover používá stejnou funkci,
+ * takže strop počítá přesně s tím, co pak opravdu nastane.
+ */
+export async function nextSeasonRules(
+  db: D1Database, leagueId: string, base: CompetitionRules, forSeason: number,
+): Promise<CompetitionRules> {
+  const passed = await db.prepare(
+    `SELECT kind, payload FROM competition_proposals
+      WHERE league_id = ? AND status = 'passed' AND effective_from_season = ?
+      ORDER BY closed_at ASC`
+  ).bind(leagueId, forSeason).all<{ kind: string; payload: string }>()
+    .catch((e) => { logger.warn({ module: M }, `schválené návrhy ${leagueId}`, e); return { results: [] }; });
+
+  const changes: Array<{ kind: string; value: number }> = [];
+  for (const row of passed.results) {
+    try {
+      const payload = JSON.parse(row.payload) as { value?: number };
+      if (typeof payload.value === "number") changes.push({ kind: row.kind, value: payload.value });
+    } catch (e) {
+      logger.warn({ module: M }, `payload návrhu ${row.kind} v lize ${leagueId} nejde přečíst`, e);
+    }
+  }
+  return applyPassedToRules(base, changes);
+}
+
 export function applyPassedToRules(
   base: CompetitionRules, passed: Array<{ kind: string; value: number }>,
 ): CompetitionRules {

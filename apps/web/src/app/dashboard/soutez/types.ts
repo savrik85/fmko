@@ -46,6 +46,8 @@ export interface State {
   playedMatches: number;
   subsidy: number;
   rules: Rules;
+  /** Co bude platit příští sezónu, až se přijaté návrhy promítnou. */
+  nextRules: Rules;
   projection: {
     cost: { placement: number; bonus: number; referees: number; total: number };
     income: number; projected: number; ok: boolean;
