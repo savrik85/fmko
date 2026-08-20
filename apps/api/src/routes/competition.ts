@@ -1444,6 +1444,25 @@ competitionRouter.post("/admin/competition/:leagueId/elections", async (c) => {
  * endpoint existuje pro ověřování a pro případ, kdy tick schůzi zmešká.
  * Idempotence je stejná jako u ticku — druhé volání týž herní den nic neudělá.
  */
+/** Ruční vypsání sponzorských nabídek. Za provozu je vypisuje rollover. */
+competitionRouter.post("/admin/competition/:leagueId/sponsor-offers", async (c) => {
+  const leagueId = c.req.param("leagueId");
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const gameDate = await c.env.DB.prepare("SELECT MAX(game_date) AS d FROM teams WHERE league_id = ?")
+    .bind(leagueId).first<{ d: string | null }>().then((r) => r?.d)
+    .catch(() => null);
+
+  const { generateOffers } = await import("../competition/sponsors");
+  const humans = await countHumanClubs(c.env.DB, leagueId);
+  const opened = await generateOffers(c.env.DB, {
+    leagueId, district: meta.district, seasonNumber: meta.season_number,
+    humanClubs: humans, gameDate: gameDate ?? new Date().toISOString(),
+  });
+  return c.json({ ok: true, opened });
+});
+
 competitionRouter.post("/admin/competition/:leagueId/meeting", async (c) => {
   const leagueId = c.req.param("leagueId");
   const gameDate = await c.env.DB.prepare(
