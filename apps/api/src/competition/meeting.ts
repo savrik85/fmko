@@ -165,6 +165,12 @@ export async function runOneMeeting(
     closedCount++;
   }
 
+  // Doplňovací volby na funkce, které zůstaly neobsazené — po neúspěšné volbě
+  // i po odvolání. Vyhlásí se dnes, hlasuje se do příštího zasedání.
+  const { openElections } = await import("./officials");
+  await openElections(db, leagueId, meta.season_number, gameDate)
+    .catch((e) => logger.warn({ module: M }, `doplňovací volby ${leagueId}`, e));
+
   const balance = await recomputeBalance(db, leagueId, gameDate);
   const attendance = {
     voters: stats.voters.length,

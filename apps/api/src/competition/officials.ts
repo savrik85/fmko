@@ -39,7 +39,13 @@ export interface ElectionRow {
 
 /**
  * Vyhlásí volby pro všechny neobsazené funkce dané sezóny.
- * Idempotentní přes UNIQUE(league_id, role, season_number).
+ *
+ * Na jednu funkci a sezónu je v tabulce jediný řádek (UNIQUE), takže samotný
+ * INSERT OR IGNORE by doplňovací volbu nikdy nevyhlásil: funkce, na kterou nikdo
+ * nekandidoval, ani ta po odvolání předsedy, by zůstala prázdná do konce sezóny.
+ * Uzavřená volba se proto u neobsazené funkce otevře znovu — a začíná načisto,
+ * bez starých kandidatur a hlasů, jinak by se do doplňovací volby přelily hlasy
+ * z té minulé.
  */
 export async function openElections(
   db: D1Database, leagueId: string, seasonNumber: number, gameDate: string,
@@ -61,7 +67,35 @@ export async function openElections(
         (id, league_id, role, season_number, opened_game_date) VALUES (?,?,?,?,?)`
     ).bind(crypto.randomUUID(), leagueId, role, seasonNumber, gameDate).run()
       .catch((e) => { logger.warn({ module: M }, `vyhlášení voleb ${role}`, e); return null; });
-    if ((res?.meta?.changes ?? 0) > 0) opened++;
+    if ((res?.meta?.changes ?? 0) > 0) { opened++; continue; }
+
+    // Řádek už existuje. Běží-li volba, není co dělat; uzavřená se u neobsazené
+    // funkce otevře znovu jako doplňovací.
+    const existing = await db.prepare(
+      "SELECT id, status FROM competition_elections WHERE league_id = ? AND role = ? AND season_number = ?"
+    ).bind(leagueId, role, seasonNumber).first<{ id: string; status: string }>()
+      .catch((e) => { logger.warn({ module: M }, `stav voleb ${role}`, e); return null; });
+    if (!existing || existing.status === "open") continue;
+
+    const revived = await db.prepare(
+      `UPDATE competition_elections
+          SET status = 'open', opened_game_date = ?, closed_game_date = NULL,
+              winner_team_id = NULL, candidates = 0, votes_cast = 0, result_note = NULL
+        WHERE id = ? AND status != 'open'`
+    ).bind(gameDate, existing.id).run()
+      .catch((e) => { logger.warn({ module: M }, `doplňovací volba ${role}`, e); return null; });
+    if (!revived || (revived.meta?.changes ?? 0) === 0) continue;
+
+    // Načisto: staré hlasy ani kandidatury do doplňovací volby nepatří.
+    await db.prepare("DELETE FROM competition_election_ballots WHERE election_id = ?")
+      .bind(existing.id).run()
+      .catch((e) => logger.warn({ module: M }, `úklid hlasů ${role}`, e));
+    await db.prepare("DELETE FROM competition_candidacies WHERE election_id = ?")
+      .bind(existing.id).run()
+      .catch((e) => logger.warn({ module: M }, `úklid kandidatur ${role}`, e));
+
+    opened++;
+    logger.info({ module: M }, `soutěž ${leagueId}: doplňovací volba na ${ROLE_LABEL[role]}`);
   }
 
   if (opened > 0) {
